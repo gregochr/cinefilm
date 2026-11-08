@@ -42,9 +42,13 @@ Never done by a session: creating or deleting tags, pushing to `main`, force-pus
 ## Gates (gate on exit codes, never on a grep of output)
 
 ```bash
-cd backend && ./mvnw clean verify --batch-mode --no-transfer-progress   # CI backend job
+cd backend && ./mvnw clean verify --batch-mode --no-transfer-progress -Dtest='!**/integration/**' -DfailIfNoSpecifiedTests=false   # local backend gate (no Docker here)
 cd frontend && npm run lint && npm test && npm run build                # CI frontend job
 ```
+
+The Mac has no Docker, so the local backend gate excludes the `integration` package (Testcontainers on Postgres 17).
+CI's backend job runs the full `./mvnw clean verify` including those tests, and is the only merge proof for
+migrations; locally, also boot the `dev` profile against Homebrew Postgres (`docs/engineering/dev-and-testing.md`).
 
 ## Cross-cutting invariants
 

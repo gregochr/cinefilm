@@ -15,7 +15,7 @@ API and the frontend's data layer must stay separate from the UI.
 | Part | Choice |
 |---|---|
 | Backend | Java 25, Spring Boot 4.1.2, Maven wrapper (`backend/mvnw`), package `gregochr.cinefilm` |
-| Persistence | Spring Data JPA, Flyway migrations, H2 file database (`./data/cinefilm`) for now; PostgreSQL-compatible SQL only |
+| Persistence | Spring Data JPA, Flyway migrations (Flyway owns the schema). PostgreSQL 17 in production and dev, H2 in-memory for the fast test suite only; migrations target PostgreSQL |
 | Frontend | React 19, Vite, React Router, plain JavaScript (ES modules), plain CSS on `design/tokens.css` (no Tailwind: the tokens *are* the design system) |
 | Fonts | Self-hosted via `@fontsource/instrument-serif`, `@fontsource/inter`, `@fontsource/ibm-plex-mono` |
 | Tests | Backend: JUnit 5, Spring Boot test slices, MockMvc, AssertJ. Frontend: Vitest + Testing Library + jsdom |

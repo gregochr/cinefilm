@@ -17,5 +17,5 @@ Reviewers (human, Codex, Claude) check every PR against these.
    never a path from the request.
 7. **Changelog.** Every PR adds one `changelog.d/YYYYMMDD-<slug>.md` file per change.
 
-Deliberate decisions (don't flag): plain CSS on tokens instead of Tailwind; plain JavaScript in the frontend; H2 in
-phase 1; Admin is a placeholder until phase 2.
+Deliberate decisions (don't flag): plain CSS on tokens instead of Tailwind; plain JavaScript in the frontend; H2 for the fast test suite only (migrations target PostgreSQL);
+Admin is a placeholder until phase 2.
