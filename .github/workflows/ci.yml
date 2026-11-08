@@ -58,31 +58,12 @@ jobs:
             exit 0
           fi
 
-          BASE='${{ github.event.pull_request.base.sha }}'
-          HEAD='${{ github.event.pull_request.head.sha }}'
-          CHANGED=$(git diff --name-only "$BASE" "$HEAD" || true)
-
-          if [ -z "$CHANGED" ]; then
-            echo "Empty diff — running the full suite rather than guessing."
-            echo "docs_only=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "Changed files:"
-          echo "$CHANGED" | sed 's/^/  /'
-
-          # Documentation is *.md anywhere (changelog.d/ entries included), or anything under docs/.
-          # Deliberately narrow: .github/workflows/** is code, and so is everything else.
-          NON_DOC=$(echo "$CHANGED" | grep -vE '(^docs/|\.md$)' || true)
-
-          if [ -z "$NON_DOC" ]; then
-            echo "Documentation only — the suite proves nothing here, skipping it."
-            echo "docs_only=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Non-documentation paths present:"
-            echo "$NON_DOC" | sed 's/^/  /'
-            echo "docs_only=false" >> "$GITHUB_OUTPUT"
-          fi
+          # The classification lives in scripts/ci-docs-only.sh (tested by scripts/test/ci-docs-only.test.sh):
+          # documentation is *.md anywhere or anything under docs/; renames count as delete + add so moving
+          # code into docs/ is still code. Prints docs_only=true|false; any doubt is false.
+          bash scripts/ci-docs-only.sh \
+            '${{ github.event.pull_request.base.sha }}' \
+            '${{ github.event.pull_request.head.sha }}' >> "$GITHUB_OUTPUT"
 
   # ── Backend ──────────────────────────────────────────────────────────────────
   # Required job name — stable string, read by dependabot-auto-merge.yml.
@@ -271,6 +252,40 @@ jobs:
       - name: Build
         if: needs.changes.outputs.docs_only != 'true'
         run: cd frontend && npm run build
+
+      - name: Documentation-only change — suite skipped
+        if: needs.changes.outputs.docs_only == 'true'
+        run: |
+          echo "Every changed path is documentation (*.md or docs/**)."
+          echo "The suite was skipped deliberately — see the 'Detect docs-only change' job."
+          echo "This check reports success so a required check is satisfied."
+
+  # ── Shell scripts ────────────────────────────────────────────────────────────
+  # ShellCheck proves the scripts parse and are tidy; the tests (scripts/test/*.test.sh) run the real
+  # scripts against stub npx/sleep on PATH and throwaway git repos, so npm-audit.sh's retry rules and
+  # ci-docs-only.sh's classification are proven, not assumed. No network, a few seconds.
+  # Required job name — stable string. Step-level `if:` and a skipped echo step like every job here.
+  shell:
+    needs: changes
+    name: Shell — ShellCheck & script tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        if: needs.changes.outputs.docs_only != 'true'
+
+      # PINNED, and not to the runner's preinstalled shellcheck: "green locally" must say something about CI.
+      # -o check-unassigned-uppercase: SC2154 is off by default for uppercase names.
+      - name: ShellCheck (pinned, with unassigned-uppercase detection)
+        if: needs.changes.outputs.docs_only != 'true'
+        run: |
+          docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.11.0 \
+            -x -o check-unassigned-uppercase scripts/*.sh scripts/test/*.sh
+
+      - name: Run scripts/test/*.test.sh
+        if: needs.changes.outputs.docs_only != 'true'
+        run: bash scripts/test/run-all.sh
 
       - name: Documentation-only change — suite skipped
         if: needs.changes.outputs.docs_only == 'true'

@@ -123,7 +123,7 @@ jobs:
           if awk -F'\t' '$3 == "failure" || $3 == "cancelled" || $3 == "timed_out" || $3 == "action_required" { found = 1 } END { exit !found }' <<<"$RUNS"; then
             skip "A check-run on $HEAD_SHA failed, was cancelled, timed out or needs action."
           fi
-          for NAME in "Backend — Build, Test & Coverage" "Frontend — Lint, Test & Build"; do
+          for NAME in "Backend — Build, Test & Coverage" "Frontend — Lint, Test & Build" "Shell — ShellCheck & script tests"; do
             if ! awk -F'\t' -v n="$NAME" '$1 == n && $3 == "success" { found = 1 } END { exit !found }' <<<"$RUNS"; then
               skip "The CI check-run '$NAME' did not succeed on $HEAD_SHA."
             fi

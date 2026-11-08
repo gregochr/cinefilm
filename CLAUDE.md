@@ -53,7 +53,7 @@ cd frontend && npm run lint && npm run test:coverage && ../scripts/npm-audit.sh 
 ```
 
 CI (`.github/workflows/ci.yml`) also requires, on PRs, 90% of changed lines covered on both sides (diff-cover; see
-`dev-and-testing.md` "CI workflows"). Required checks: `Backend — Build, Test & Coverage`, `Frontend — Lint, Test & Build`.
+`dev-and-testing.md` "CI workflows"). Required checks: `Backend — Build, Test & Coverage`, `Frontend — Lint, Test & Build`, `Shell — ShellCheck & script tests`.
 
 The Mac has no Docker, so the local backend gate excludes the `integration` package (Testcontainers on Postgres 17).
 CI's backend job runs the full `./mvnw clean verify` including those tests, and is the only merge proof for

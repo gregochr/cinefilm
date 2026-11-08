@@ -159,11 +159,12 @@ cancels superseded runs of the same ref.
 |---|---|---|
 | `changes` | `Detect docs-only change` | Classifies the PR diff. |
 | `backend` | `Backend — Build, Test & Coverage` | `./mvnw clean verify` in full (Checkstyle, tests incl. Testcontainers integration, JaCoCo per class and bundle, SpotBugs + FindSecBugs), then the integration test count, then on PRs diff-cover at 90% of changed `backend/src/main` lines (JaCoCo XML). Uploads the JaCoCo and SpotBugs reports. 20 min timeout. |
+| `shell` | `Shell — ShellCheck & script tests` | Pinned ShellCheck v0.11.0 (`-o check-unassigned-uppercase`) over `scripts/*.sh` and `scripts/test/*.sh`, then `bash scripts/test/run-all.sh`: the tests stub `npx`/`sleep` on PATH to prove `npm-audit.sh` (clean passes, findings fail without retry, transport errors retry with 15s/30s backoff, exhausted retries fail) and run `ci-docs-only.sh` against throwaway git repos. Run both locally the same way. |
 | `frontend` | `Frontend — Lint, Test & Build` | `npm ci`, `npm run lint`, `npm run test:coverage` (95/90 per file plus the global floor), on PRs diff-cover at 90% of changed `frontend/src` lines (lcov, with the `SF:` prefix rewrite), `scripts/npm-audit.sh frontend high`, `npm run build`. 20 min timeout. |
 
 **Docs-only path.** There are deliberately no `paths:` filters: a workflow filtered out by path never reports, and a
 check that never reports cannot be satisfied. Instead both jobs always run; when every changed file is `docs/**` or
-`*.md` (changelog entries included) the `changes` job outputs `docs_only=true` and every real step is skipped by a
+`*.md` (changelog entries included) `scripts/ci-docs-only.sh` (diffing with `--no-renames`, so moving code into `docs/x.md` still counts as code) outputs `docs_only=true` and every real step is skipped by a
 step-level `if:`, leaving one echo step, so both checks go green in seconds. It is fail-safe: anything but a
 non-empty all-docs pull request diff (push, dispatch, call, empty diff, any other path including
 `.github/workflows/**`) runs everything.
@@ -193,7 +194,7 @@ unattended workflow and comments on it for later failures. Nothing calls it yet:
 
 Copied from CineLight. Job `label` (on the PR event) adds `automerge-ok` to minor and patch Dependabot PRs and removes
 it from majors. Job `merge` (on `workflow_run` of `CI`) squash-merges only when the label is present, the head has not
-moved, both required check-runs above succeeded, no other check-run on the head failed, and CI ran against the
+moved, all three required check-runs above succeeded, no other check-run on the head failed, and CI ran against the
 current `main`; the merge is pinned to the head commit and then dispatches `ci.yml` on `main`. Major updates are never
 merged automatically.
 
