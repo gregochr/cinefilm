@@ -20,7 +20,7 @@ export default function Art({
   const classes = `art art--${kind} ${className}`.trim();
   if (url) {
     return (
-      <div className={classes}>
+      <div className={classes} data-testid="art">
         <img className="art__img" src={url} alt="" loading="lazy" decoding="async" />
         {children}
       </div>
@@ -29,6 +29,7 @@ export default function Art({
   return (
     <div
       className={`${classes} art--placeholder`}
+      data-testid="art"
       style={{ background: placeholderColor(id, title) }}
     >
       {showTitle && kind === 'poster' ? <span className="art__title">{title}</span> : null}

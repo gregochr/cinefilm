@@ -34,7 +34,11 @@ export function ContinueCard({ film }) {
     <Link to={`/films/${film.id}`} className="continue-card" aria-label={`${film.title}, ${left}`}>
       <Art kind="still" path={film.backdropPath} id={film.id} title={film.title}>
         <span className="continue-card__track" aria-hidden="true">
-          <span className="continue-card__fill" style={{ width: `${pct}%` }} />
+          <span
+            className="continue-card__fill"
+            data-testid="continue-fill"
+            style={{ width: `${pct}%` }}
+          />
         </span>
       </Art>
       <span className="continue-card__meta">

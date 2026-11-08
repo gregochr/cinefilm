@@ -235,12 +235,8 @@ describe('Session expiry', () => {
 describe('Player', () => {
   const openPlayer = async (path = '/films/1/play?edition=11') => {
     const fetchMock = installFetch();
-    const { container } = renderApp(path);
-    const video = await waitFor(() => {
-      const el = container.querySelector('video');
-      expect(el).not.toBeNull();
-      return el;
-    });
+    renderApp(path);
+    const video = await screen.findByTestId('player-video');
     fireEvent.loadedMetadata(video);
     return { video, fetchMock, player: screen.getByRole('region', { name: 'Video player' }) };
   };
