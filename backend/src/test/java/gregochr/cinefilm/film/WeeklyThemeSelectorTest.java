@@ -145,6 +145,8 @@ class WeeklyThemeSelectorTest {
                 default -> {
                     sawDirector = true;
                     assertThat(theme.title()).isEqualTo("This week: films by " + theme.value());
+                    assertThat(theme.films()).isNotEmpty().allMatch(f -> f.getCredits().stream().anyMatch(
+                        c -> c.getRole() == CreditRole.DIRECTOR && c.getPerson().getName().equals(theme.value())));
                 }
             }
         }
@@ -171,5 +173,44 @@ class WeeklyThemeSelectorTest {
         assertThat(theme.title()).isEqualTo("This week: your library");
         assertThat(theme.films()).hasSize(2);
         assertThat(WeeklyThemeSelector.choose(LocalDate.of(2026, 11, 9), List.of()).films()).isEmpty();
+    }
+
+    @Test
+    void anActorWithFiveFilmsIsNotADirectorTheme() {
+        Person actor = person(900L, "Prolific Actor");
+        List<Film> library = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            Film film = mk(1960 + i * 20, "Director " + i, "Genre " + i);
+            credit(film, actor, CreditRole.CAST, "Role", 1);
+            library.add(film);
+        }
+        for (int week = 0; week < 104; week++) {
+            WeeklyTheme theme = WeeklyThemeSelector.choose(LocalDate.of(2026, 1, 5).plusWeeks(week), library);
+            assertThat(theme.value()).isNotEqualTo("Prolific Actor");
+        }
+    }
+
+    @Test
+    void aDirectorThemeDoesNotIncludeFilmsWhereThePersonOnlyActed() {
+        Person loach = person(901L, "Ken Loach");
+        List<Film> library = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            Film film = film(id++, "Directed " + i, 1950 + i * 10, NOW, "Genre " + i);
+            credit(film, loach, CreditRole.DIRECTOR, null, 0);
+            library.add(film);
+        }
+        Film acted = film(id++, "Acted In", 1999, NOW, "Other");
+        credit(acted, loach, CreditRole.CAST, "Cameo", 1);
+        library.add(acted);
+        library.add(film(id++, "No Credits", 2001, NOW, "Other"));
+        boolean sawDirectorTheme = false;
+        for (int week = 0; week < 104; week++) {
+            WeeklyTheme theme = WeeklyThemeSelector.choose(LocalDate.of(2026, 1, 5).plusWeeks(week), library);
+            if ("director".equals(theme.kind())) {
+                sawDirectorTheme = true;
+                assertThat(theme.films()).hasSize(5).doesNotContain(acted);
+            }
+        }
+        assertThat(sawDirectorTheme).isTrue();
     }
 }

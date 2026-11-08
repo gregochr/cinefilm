@@ -169,8 +169,10 @@ Mutating production code to prove a test can fail is encouraged. Restoring it is
   delete any uncommitted change in the file, usually the very change under test.
 - Back up with `cp` and restore with `cp`, or commit first, or mutate in a separate worktree.
 - Confirm the restore: `git diff` on the file shows exactly the change you started with.
-- PIT (weekly mutation testing) arrives in phase 5 of `ci-test-deploy-plan.md`; it is why the services need unit
-  tests of their own: full-context tests are too slow to kill mutants.
+- PIT (weekly, `pitest.yml`) does this at scale: it must stay at or above `mutationThreshold` in `pom.xml` (floor 97,
+  measured 97.95% on 2026-11-08). A surviving mutant in a rule (watched, weekly theme, sort/search) is a missing test:
+  add the assertion that would have caught it rather than lowering the floor. Scores, survivors and how to run it:
+  `dev-and-testing.md` "Mutation testing".
 
 ## What not to do (backend)
 
@@ -406,9 +408,14 @@ diff-cover==10.0.0` then, from the repo root, `sed 's#^SF:#SF:frontend/#' fronte
 rewrite is required: lcov paths are relative to `frontend/`, and without it nothing matches and the check passes
 vacuously. Output goes to the ignored `frontend/coverage/`.
 
-## Mutation-checking a test without destroying work
+## Mutation testing and mutation-checking a test without destroying work
 
-Mutating production code to prove a test can fail is encouraged. Restoring it is where work gets lost.
+Stryker (weekly, `stryker.yml`) mutates the non-JSX logic (`src/player`, `src/api`, `src/state`, `placeholder.js`,
+`useSlashFocus.js`) and fails under `STRYKER_BREAK` 95 (measured 95.56% on 2026-11-08). A surviving mutant in a rule
+(resume, keymap, time, api client, session) is a missing assertion: add it, do not lower the floor. Scores, survivors
+and how to run it: `dev-and-testing.md` "Mutation testing".
+
+Mutating production code by hand to prove a test can fail is also encouraged. Restoring it is where work gets lost.
 
 - **Never restore with `git checkout -- <path>`, `git restore` or `git stash`.** They revert to HEAD and silently
   delete any uncommitted change in the file, usually the very change under test.

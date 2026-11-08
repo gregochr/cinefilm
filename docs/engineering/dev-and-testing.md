@@ -126,6 +126,65 @@ Break the production code on purpose to prove a test can fail. Never restore wit
 very change under test. Back the file up with `cp` and restore with `cp`, or commit first, or mutate in a separate
 worktree, and confirm with `git diff` that the file is exactly as you started.
 
+## Mutation testing
+
+Coverage says a line ran; mutation testing says a test would notice if it were wrong. Two weekly workflows mutate the
+code and report how many mutants the tests kill. Neither is a PR gate. Each has a score floor and a red run opens a
+`ci-failure` issue (`ci-failure-issue.yml`).
+
+| | Backend (PIT) | Frontend (Stryker) |
+|---|---|---|
+| Workflow | `pitest.yml`, Mondays 06:30 UTC | `stryker.yml`, Wednesdays 03:30 UTC |
+| Mutated | `gregochr.cinefilm.*` minus `config.*`, `seed.*`, `*Dtos*`, `*Controller`, `CineFilmApplication` | `src/player/*.js`, `src/api/*.js` (not `fixtureServer.js`), `src/state/*.js`, `src/components/placeholder.js`, `src/components/useSlashFocus.js` |
+| Tests that kill | Unit, MockMvc/`@WebMvcTest` and `ApiTestBase` (H2) tests; the Testcontainers `integration` package is excluded (same locally and in CI so scores compare) | The whole Vitest suite (per-test coverage), `pool: 'forks'` |
+| Floor | `mutationThreshold` 97 in `backend/pom.xml` | `STRYKER_BREAK` 95 in `stryker.yml` (`thresholds.break`) |
+| First measured (2026-11-08) | 96.25% (282 of 293 mutants killed) | 92.22% (498 of 540) |
+| After the first new tests | 97.95% (287 of 293) | 95.56% (516 of 540) |
+| Runtime (one job, no shards) | about 5 minutes on a laptop | about 10 minutes on a laptop (3-minute dry run, then mutants) |
+| Report artifact | `pitest-report` (`pit-reports/`) | `stryker-report` (`mutation.html`) and `stryker-incremental` |
+
+Run them locally (neither needs Docker):
+
+```bash
+cd backend && ./mvnw test-compile org.pitest:pitest-maven:mutationCoverage    # report: backend/target/pit-reports/index.html
+cd frontend && npm run test:mutation                                          # report: frontend/reports/mutation/mutation.html
+```
+
+Rules:
+
+- **Floors only ratchet up.** A floor is the measured score rounded down. When a run scores a whole point higher,
+  raise the floor in the same PR; never lower one without the owner's say-so. A new class or file should arrive with
+  tests that kill its mutants, not with a lower floor.
+- **Never switch Stryker to `inPlace`** (it would mutate your working tree and a killed run leaves it mutated). The
+  default sandbox copies the project into `frontend/.stryker-tmp/` and mutates the copy; no test reads outside
+  `frontend/`, so none is needed. Interrupt a run with SIGINT (Ctrl-C), not SIGKILL, so it cleans up.
+  `frontend/reports/` and `.stryker-tmp/` are git-ignored.
+- **Stryker's incremental file** (`reports/stryker-incremental.json`) lets a run re-test only what changed. It cannot
+  see changes to `setup.js`, `vite.config.js` or dependencies, so the workflow forces a full run on the first
+  scheduled run of each month; force one yourself with `npx stryker run --force`. The workflow keeps the file as an
+  artifact between runs (not `actions/cache`, which evicts after 7 days).
+- **`@stryker-mutator/core` and `vitest-runner` are pinned to the same exact version**; Dependabot bumps them as one
+  `stryker` group.
+- **PIT's mutators are the defaults; Stryker excludes `StringLiteral` and ignores static mutants** (module-level
+  tables re-run every covering test and string literals are mostly labels).
+- If PIT approaches 20 minutes, first exclude `*ApiTest` and rely on the service unit tests, then shard by package as
+  goldenhour's `pitest.yml` does.
+
+### Known survivors (2026-11-08), not worth a test
+
+- `WatchedRule.isWatched`, `threshold >= 0` to `> 0`: equivalent, the threshold is never 0 (a marker is positive and
+  the 92% fallback of a positive runtime is at least 1).
+- `SecurityConfig` and `CsrfHeaderFilter` `setCharacterEncoding(UTF-8)`: JSON responses carry UTF-8 anyway in the
+  mock layer; the visible header is unchanged.
+- `SecurityConfig.securityFilterChain` and `unauthorizedJson` null returns: PIT credits them to tests that never
+  exercise the returned object; the security rules themselves (401, 403, route drift) are pinned by
+  `RouteSecurityDriftTest`, `CsrfHeaderFilterTest` and the controller tests.
+- `BrowseRules.matchesSearch`, `q == null` conditional (line 72): not understood yet; the null-query path is tested
+  (`BrowseRulesTest.searchMatchesTitleActorAndDirectorCaseInsensitively`). Look at it when the floor next moves.
+- Frontend: React effect dependency arrays (`[]` to `["Stryker was here"]`) and `n + 1` to `n - 1` in tick counters
+  are equivalent behaviour, and the `autohide`/`exitReport`/`usePlayback` ref-update effects are covered only through
+  the rendered player. Killing those needs timing tests that pin implementation, not behaviour.
+
 ## UI work: review cadence
 
 Adapted from goldenhour. Every code commit that touches the UI is built, tested, adversarially reviewed against the
@@ -187,8 +246,14 @@ retries on registry transport errors only (never on a finding). Run it locally t
 ### `ci-failure-issue.yml` — CI failure issue
 
 A reusable workflow (`workflow_call`, input `workflow-name`) that opens one `ci-failure` issue per failing
-unattended workflow and comments on it for later failures. Nothing calls it yet: the weekly mutation workflows
-(phase 5) will, from a final job with `if: failure() || cancelled()`.
+unattended workflow and comments on it for later failures. `pitest.yml` and `stryker.yml` call it from a final
+`notify-failure` job that runs when the mutation job fails or is cancelled (a timeout ends as `cancelled`).
+
+### `pitest.yml` and `stryker.yml` — weekly mutation testing
+
+Scheduled (Monday 06:30 UTC and Wednesday 03:30 UTC) and `workflow_dispatch`; one job each, on `ubuntu-latest`. They
+do not call `ci.yml` and are not PR gates. Each writes its score to the run summary and uploads its HTML report. See
+"Mutation testing" above.
 
 ### `dependabot-auto-merge.yml` — Dependabot auto-merge
 
@@ -200,5 +265,5 @@ merged automatically.
 
 ### `dependabot.yml`
 
-Weekly (Monday): Maven (`/backend`), npm (`/frontend`, with `vitest` and `@vitest/*` grouped so they bump together)
+Weekly (Monday): Maven (`/backend`), npm (`/frontend`, with `vitest` and `@vitest/*` grouped, and `@stryker-mutator/*` grouped, so each family bumps together)
 and GitHub Actions.

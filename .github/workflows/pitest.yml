@@ -1,0 +1,81 @@
+name: PIT Mutation Testing
+
+# Weekly mutation testing of the backend (backend/pom.xml, pitest plugin). Never a PR gate: a run that scores
+# under mutationThreshold, or that fails or is cancelled, opens an issue through ci-failure-issue.yml.
+# Docs: docs/engineering/dev-and-testing.md ("Mutation testing").
+#
+# RUNNER. ubuntu-latest. The Testcontainers `integration` package is excluded in pom.xml (same as locally, so
+# scores compare), which means no Docker is needed; the MockMvc/@WebMvcTest/ApiTestBase tests are included.
+#
+# SHAPE. One job, no shards: CineFilm is ~55 classes. Revisit (goldenhour's plan/shard layout) if a run
+# approaches 20 minutes.
+#
+# TIMEOUTS. The job is capped below GitHub's 360-minute limit and the PIT step below the job, so the summary and
+# report upload still run when PIT is cut off. A timed-out job ends as `cancelled`, not `failure`, so
+# notify-failure fires on either result.
+
+on:
+  schedule:
+    - cron: '30 6 * * MON'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pitest:
+    name: PIT mutation testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run PIT mutation testing
+        id: pitest
+        # Shorter than the job's timeout so the summary and upload steps below always get to run.
+        timeout-minutes: 80
+        run: |
+          set -o pipefail
+          chmod +x backend/mvnw
+          cd backend
+          ./mvnw test-compile org.pitest:pitest-maven:mutationCoverage --batch-mode --no-transfer-progress 2>&1 | tee pitest-output.log
+        # The tee'd log is read by the next step; PIT's own exit code (threshold, red suite) is this step's result.
+
+      - name: Write the score to the summary
+        if: always()
+        run: |
+          log=backend/pitest-output.log
+          [ -f "$log" ] || exit 0
+          mutations=$(grep -oE 'Generated [0-9]+ mutations Killed [0-9]+ \([0-9]+%\)' "$log" | tail -1 || true)
+          strength=$(grep -oE 'Test strength [0-9]+%' "$log" | tail -1 || true)
+          coverage=$(grep -oE 'Line Coverage \(for mutated classes only\): [0-9]+/[0-9]+ \([0-9]+%\)' "$log" | tail -1 || true)
+          {
+            echo "### PIT mutation testing"
+            echo
+            echo "${mutations:-No mutation summary found (the run did not finish).}"
+            [ -n "$strength" ] && echo "- ${strength}"
+            [ -n "$coverage" ] && echo "- ${coverage}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload PIT report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pitest-report
+          path: backend/target/pit-reports/
+          if-no-files-found: ignore
+
+  notify-failure:
+    needs: [pitest]
+    if: ${{ always() && (needs.pitest.result == 'failure' || needs.pitest.result == 'cancelled') }}
+    permissions:
+      issues: write
+    uses: ./.github/workflows/ci-failure-issue.yml
+    with:
+      workflow-name: PIT Mutation Testing

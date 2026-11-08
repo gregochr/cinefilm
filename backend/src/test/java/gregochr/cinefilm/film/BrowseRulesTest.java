@@ -158,6 +158,13 @@ class BrowseRulesTest {
     }
 
     @Test
+    void sameTitleSortsByYearAscending() {
+        List<FilmView> all = List.of(filmView("Dune", 2021, 1), filmView("Dune", 1984, 2));
+        assertThat(BrowseRules.filterAndSort(all, new LibraryQuery(null, "title", null, null, null, null)).stream()
+            .map(v -> v.film().getYear())).containsExactly(1984, 2021);
+    }
+
+    @Test
     void sortsByYearAscendingThenTitle() {
         List<FilmView> all = List.of(filmView("Taxi Driver", 1976, 1), filmView("The Third Man", 1949, 2),
             filmView("The Conversation", 1974, 3), filmView("Chinatown", 1974, 4));

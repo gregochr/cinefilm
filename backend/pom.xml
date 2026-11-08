@@ -22,6 +22,10 @@
         <!-- Tags excluded from every build. real-api (live third-party calls such as TMDB) runs only from its own
              workflow: -Dsurefire.excludedGroups= -Dgroups=real-api -->
         <surefire.excludedGroups>real-api</surefire.excludedGroups>
+        <!-- PIT target classes (comma-separated globs). `*` matches dots too. Excluded below: config.* (wiring),
+             seed.* (dev data), *Dtos* (records), *Controller (covered by MockMvc, poor mutation targets), the
+             application class. -->
+        <pit.targetClasses>gregochr.cinefilm.*</pit.targetClasses>
     </properties>
 
     <dependencies>
@@ -66,6 +70,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- JUnit Platform Launcher: required by PIT (must align with junit-platform-engine; Boot manages it). -->
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -332,6 +342,65 @@
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+
+            <!-- PIT mutation testing, weekly (.github/workflows/pitest.yml), never a PR gate. Run it locally with
+                 `./mvnw test-compile org.pitest:pitest-maven:mutationCoverage`. See docs/engineering/dev-and-testing.md
+                 ("Mutation testing"). mutationThreshold is the floor: the first measured score rounded down. Raise
+                 it, never lower it without the owner. -->
+            <plugin>
+                <groupId>org.pitest</groupId>
+                <artifactId>pitest-maven</artifactId>
+                <version>1.30.1</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.pitest</groupId>
+                        <artifactId>pitest-junit5-plugin</artifactId>
+                        <version>1.2.3</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <targetClasses>${pit.targetClasses}</targetClasses>
+                    <excludedClasses>
+                        <param>gregochr.cinefilm.CineFilmApplication</param>
+                        <param>gregochr.cinefilm.config.*</param>
+                        <param>gregochr.cinefilm.seed.*</param>
+                        <param>*Dtos*</param>
+                        <param>*Controller</param>
+                    </excludedClasses>
+                    <targetTests>
+                        <param>gregochr.cinefilm.*</param>
+                    </targetTests>
+                    <!-- The Testcontainers tests need Docker (absent on the dev Mac) and are slow; PIT would rerun them
+                         per mutant. Same exclusion locally and in CI so the score is comparable. -->
+                    <excludedTestClasses>
+                        <param>gregochr.cinefilm.integration.*</param>
+                    </excludedTestClasses>
+                    <excludedGroups>
+                        <param>real-api</param>
+                    </excludedGroups>
+                    <mutators>
+                        <mutator>DEFAULTS</mutator>
+                    </mutators>
+                    <!-- Measured 2026-11-08: 97.95% (287/293 mutants killed), floor rounded down. -->
+                    <mutationThreshold>97</mutationThreshold>
+                    <parseSurefireConfig>false</parseSurefireConfig>
+                    <timeoutConstant>10000</timeoutConstant>
+                    <threads>4</threads>
+                    <outputFormats>
+                        <outputFormat>HTML</outputFormat>
+                        <outputFormat>XML</outputFormat>
+                    </outputFormats>
+                    <jvmArgs>
+                        <jvmArg>-Dnet.bytebuddy.experimental=true</jvmArg>
+                        <jvmArg>--add-opens</jvmArg>
+                        <jvmArg>java.base/java.lang=ALL-UNNAMED</jvmArg>
+                        <jvmArg>--add-opens</jvmArg>
+                        <jvmArg>java.base/java.lang.reflect=ALL-UNNAMED</jvmArg>
+                        <jvmArg>--add-opens</jvmArg>
+                        <jvmArg>java.base/java.util=ALL-UNNAMED</jvmArg>
+                    </jvmArgs>
+                </configuration>
             </plugin>
         </plugins>
     </build>

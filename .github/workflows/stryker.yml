@@ -1,0 +1,153 @@
+name: Stryker Mutation Testing
+
+# Weekly mutation testing of the frontend's non-JSX logic (frontend/stryker.config.mjs), the counterpart of
+# pitest.yml. Never a PR gate: a run that scores under the floor, or that fails or is cancelled, opens an issue
+# through ci-failure-issue.yml. The floor is STRYKER_BREAK below (the first measured score rounded down).
+# Raise it, never lower it without the owner's say-so.
+# Docs: docs/engineering/dev-and-testing.md ("Mutation testing").
+#
+# SHAPE. One job, no shards: the mutated surface is ~1.4k lines.
+#
+# INCREMENTAL STATE rides in artifacts, not actions/cache: GitHub evicts caches unused for 7 days, which is
+# exactly the weekly boundary. Each run downloads the previous completed run's artifact (whatever its
+# conclusion) and uploads its own with `if: always()`, kept for 30 days. Incremental mode cannot see changes to
+# setup.js, vite.config.js or dependency bumps, so a run is forced (`--force`) on request and on the first
+# scheduled run of each month (day of month <= 7).
+
+on:
+  schedule:
+    - cron: '30 3 * * WED'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Re-test every mutant (stryker --force) instead of reusing the previous results
+        type: boolean
+        default: false
+
+concurrency:
+  group: stryker-mutation-testing
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # The score floor (thresholds.break in stryker.config.mjs reads STRYKER_BREAK). Measured 2026-11-08: 95.56%,
+  # rounded down.
+  STRYKER_BREAK: '95'
+
+jobs:
+  stryker:
+    name: Stryker mutation testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read   # gh run list / download of the previous run's incremental artifact
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Fetch the previous run's incremental state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          mkdir -p reports
+          # The last 10 COMPLETED runs on main, newest first, whatever their conclusion. The newest may have
+          # no artifact (run cancelled, timed out before uploading), so walk back to the first that does.
+          ids=$(gh run list --workflow stryker.yml --branch main --status completed --limit 10 \
+            --json databaseId --jq '.[].databaseId' || true)
+          for id in $ids; do
+            rm -rf prev-incremental
+            if gh run download "$id" --name stryker-incremental --dir prev-incremental; then
+              mv prev-incremental/stryker-incremental.json reports/stryker-incremental.json
+              echo "Reusing incremental state from run $id."
+              exit 0
+            fi
+          done
+          echo "No usable incremental artifact: starting from scratch."
+
+      - name: Decide whether to force a full re-test
+        id: force
+        env:
+          EVENT: ${{ github.event_name }}
+          FORCE_INPUT: ${{ inputs.force }}
+        run: |
+          force=false
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "$FORCE_INPUT" = "true" ]; then
+            force=true
+          elif [ "$EVENT" = "schedule" ] && [ "$(date -u +%-d)" -le 7 ]; then
+            force=true   # monthly: config, setup and dependency changes are invisible to incremental mode
+          fi
+          echo "force=$force" >> "$GITHUB_OUTPUT"
+          echo "Forced full re-test: $force"
+
+      - name: Run Stryker
+        # Shorter than the job's timeout so the summary and upload steps below always get to run.
+        timeout-minutes: 80
+        env:
+          FORCE: ${{ steps.force.outputs.force }}
+        run: |
+          args=()
+          if [ "$FORCE" = "true" ]; then args+=(--force); fi
+          npx stryker run "${args[@]}"
+
+      - name: Summarise
+        if: always()
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const out = process.env.GITHUB_STEP_SUMMARY;
+            let body = "No mutation report was produced (the run did not finish).\n";
+            try {
+              const report = JSON.parse(fs.readFileSync("reports/mutation/mutation.json", "utf8"));
+              const n = {};
+              for (const f of Object.values(report.files)) {
+                for (const m of f.mutants) n[m.status] = (n[m.status] || 0) + 1;
+              }
+              const c = (s) => n[s] || 0;
+              const detected = c("Killed") + c("Timeout");
+              const valid = detected + c("Survived") + c("NoCoverage");
+              const score = valid ? ((100 * detected) / valid).toFixed(2) : "n/a";
+              body = `Score **${score}%**: ${c("Killed")} killed, ${c("Survived")} survived, ` +
+                `${c("Timeout")} timed out, ${c("NoCoverage")} no coverage, ${c("Ignored")} ignored. ` +
+                `Floor ${process.env.STRYKER_BREAK}%.\n`;
+            } catch (e) { /* keep the default body */ }
+            fs.appendFileSync(out, "### Stryker mutation testing\n\n" + body);
+          '
+
+      - name: Upload the incremental state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stryker-incremental
+          path: frontend/reports/stryker-incremental.json
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Upload the mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stryker-report
+          path: frontend/reports/mutation/
+          if-no-files-found: ignore
+
+  notify-failure:
+    needs: [stryker]
+    if: ${{ always() && (needs.stryker.result == 'failure' || needs.stryker.result == 'cancelled') }}
+    permissions:
+      issues: write
+    uses: ./.github/workflows/ci-failure-issue.yml
+    with:
+      workflow-name: Stryker Mutation Testing
