@@ -1,0 +1,273 @@
+{
+  "total": 23,
+  "films": [
+    {
+      "id": 1,
+      "title": "Heat",
+      "year": 1995,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": {
+        "positionMs": 3871000,
+        "runtimeMs": 10200000,
+        "editionId": 11
+      },
+      "director": "Michael Mann"
+    },
+    {
+      "id": 2,
+      "title": "Arrival",
+      "year": 2016,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": {
+        "positionMs": 3600000,
+        "runtimeMs": 6960000,
+        "editionId": 21
+      },
+      "director": "Denis Villeneuve"
+    },
+    {
+      "id": 3,
+      "title": "Chinatown",
+      "year": 1974,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": {
+        "positionMs": 1100000,
+        "runtimeMs": 7800000,
+        "editionId": 31
+      },
+      "director": "Roman Polanski"
+    },
+    {
+      "id": 4,
+      "title": "Paris, Texas",
+      "year": 1984,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": {
+        "positionMs": 3400000,
+        "runtimeMs": 7200000,
+        "editionId": 41
+      },
+      "director": null
+    },
+    {
+      "id": 5,
+      "title": "Moon",
+      "year": 2009,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": {
+        "positionMs": 5100000,
+        "runtimeMs": 5820000,
+        "editionId": 51
+      },
+      "director": null
+    },
+    {
+      "id": 6,
+      "title": "Blade Runner",
+      "year": 1982,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": true,
+      "progress": null,
+      "director": "Ridley Scott"
+    },
+    {
+      "id": 7,
+      "title": "Alien",
+      "year": 1979,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": true,
+      "progress": null,
+      "director": "Ridley Scott"
+    },
+    {
+      "id": 100,
+      "title": "Zodiac",
+      "year": 2007,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null
+    },
+    {
+      "id": 101,
+      "title": "Local Hero",
+      "year": 1983,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null
+    },
+    {
+      "id": 102,
+      "title": "In the Mood for Love",
+      "year": 2000,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null
+    },
+    {
+      "id": 103,
+      "title": "The Conversation",
+      "year": 1974,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null
+    },
+    {
+      "id": 104,
+      "title": "Spirited Away",
+      "year": 2001,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null
+    },
+    {
+      "id": 105,
+      "title": "Drive",
+      "year": 2011,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null
+    },
+    {
+      "id": 106,
+      "title": "The Third Man",
+      "year": 1949,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null
+    },
+    {
+      "id": 107,
+      "title": "Brief Encounter",
+      "year": 1945,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null
+    },
+    {
+      "id": 108,
+      "title": "Lost in Translation",
+      "year": 2003,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null
+    },
+    {
+      "id": 109,
+      "title": "Withnail and I",
+      "year": 1987,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null
+    },
+    {
+      "id": 110,
+      "title": "The Long Good Friday",
+      "year": 1980,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null
+    },
+    {
+      "id": 111,
+      "title": "Kes",
+      "year": 1969,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null
+    },
+    {
+      "id": 112,
+      "title": "The Conversation",
+      "year": 1974,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null
+    },
+    {
+      "id": 113,
+      "title": "Taxi Driver",
+      "year": 1976,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null
+    },
+    {
+      "id": 114,
+      "title": "Don't Look Now",
+      "year": 1973,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null
+    },
+    {
+      "id": 115,
+      "title": "The Wicker Man",
+      "year": 1973,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null
+    }
+  ],
+  "facets": {
+    "genres": ["Crime", "Drama", "Sci-fi", "Thriller"],
+    "decades": [1940, 1950, 1970, 1980, 1990, 2000, 2010],
+    "collections": [
+      {
+        "id": 1,
+        "name": "Alien"
+      },
+      {
+        "id": 2,
+        "name": "Blade Runner"
+      },
+      {
+        "id": 3,
+        "name": "Three Colours"
+      }
+    ]
+  }
+}

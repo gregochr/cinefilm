@@ -1,0 +1,37 @@
+{
+  "id": 11,
+  "name": "Robert De Niro",
+  "profilePath": null,
+  "films": [
+    {
+      "film": {
+        "id": 1,
+        "title": "Heat",
+        "year": 1995,
+        "posterPath": null,
+        "backdropPath": null,
+        "watched": false,
+        "progress": {
+          "positionMs": 3871000,
+          "runtimeMs": 10200000,
+          "editionId": 11
+        },
+        "director": "Michael Mann"
+      },
+      "roles": ["as Neil McCauley"]
+    },
+    {
+      "film": {
+        "id": 116,
+        "title": "Taxi Driver",
+        "year": 1976,
+        "posterPath": null,
+        "backdropPath": null,
+        "watched": false,
+        "progress": null,
+        "director": null
+      },
+      "roles": ["as Travis Bickle"]
+    }
+  ]
+}
