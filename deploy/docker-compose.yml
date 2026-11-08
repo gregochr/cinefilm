@@ -1,0 +1,70 @@
+# CineFilm production stack on dockermacmini. Delivered to ~/cinefilm/docker-compose.yml by scripts/deploy.sh;
+# run it only through that script (it exports CINEFILM_VERSION and passes ~/cinefilm/.env). Operations: docs/engineering/operations.md
+name: cinefilm
+
+services:
+  cinefilm-db:
+    image: postgres:17
+    container_name: cinefilm-db
+    environment:
+      POSTGRES_DB: cinefilm
+      POSTGRES_USER: ${CINEFILM_DB_USER:?set CINEFILM_DB_USER in ~/cinefilm/.env}
+      POSTGRES_PASSWORD: ${CINEFILM_DB_PASSWORD:?set CINEFILM_DB_PASSWORD in ~/cinefilm/.env}
+    volumes:
+      - /home/gregochr/cinefilm-data/postgres:/var/lib/postgresql/data
+    # No published port: only the cinefilm container reaches it, over the compose network.
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d cinefilm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  cinefilm:
+    image: ghcr.io/gregochr/cinefilm:${CINEFILM_VERSION:?CINEFILM_VERSION is set by scripts/deploy.sh}
+    container_name: cinefilm
+    env_file:
+      - ./.env
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      CINEFILM_DB_URL: jdbc:postgresql://cinefilm-db:5432/cinefilm
+      TZ: Europe/London
+      # TODO(owner): dockermacmini's RAM is not known yet and it is shared with goldenhour. Revisit mem_limit and
+      # MaxRAMPercentage once `free -h` is known (and again when ffmpeg/transcoding lands).
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
+    mem_limit: 1g
+    # Published on loopback only; `tailscale serve` is the way in.
+    ports:
+      - "127.0.0.1:8086:8080"
+    volumes:
+      # Films: ONLY the Movies folder of workhorse's disk, mounted read-only on the host (operations.md).
+      # rslave so a share that mounts after the container starts still appears inside it.
+      - type: bind
+        source: /mnt/workhorse-films
+        target: /media
+        read_only: true
+        bind:
+          propagation: rslave
+      - /home/gregochr/cinefilm-data/logs:/app/logs
+      - /home/gregochr/cinefilm-data/cache:/app/cache
+    depends_on:
+      cinefilm-db:
+        condition: service_healthy
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health/container >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

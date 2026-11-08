@@ -24,3 +24,6 @@ frontend/.stryker-tmp/
 
 # Claude
 .claude/worktrees/
+
+# The SPA build copied in by the Dockerfile at package time
+backend/src/main/resources/static/

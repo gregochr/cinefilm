@@ -281,11 +281,59 @@ jobs:
         if: needs.changes.outputs.docs_only != 'true'
         run: |
           docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.11.0 \
-            -x -o check-unassigned-uppercase scripts/*.sh scripts/test/*.sh
+            -x -o check-unassigned-uppercase scripts/*.sh scripts/lib/*.sh scripts/test/*.sh
 
       - name: Run scripts/test/*.test.sh
         if: needs.changes.outputs.docs_only != 'true'
         run: bash scripts/test/run-all.sh
+
+      - name: Documentation-only change — suite skipped
+        if: needs.changes.outputs.docs_only == 'true'
+        run: |
+          echo "Every changed path is documentation (*.md or docs/**)."
+          echo "The suite was skipped deliberately — see the 'Detect docs-only change' job."
+          echo "This check reports success so a required check is satisfied."
+
+  # ── Docker image ─────────────────────────────────────────────────────────────
+  # Builds the one production image (SPA + jar + ffmpeg runtime) WITHOUT pushing, so a broken Dockerfile fails a PR
+  # rather than a release (deploy.yml reuses this workflow and then builds and pushes for real). Then smoke-checks
+  # the image: non-root, ffmpeg/ffprobe/vainfo present. Same docs-only guard as every job.
+  docker:
+    needs: changes
+    name: Docker — image builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        if: needs.changes.outputs.docs_only != 'true'
+
+      - uses: docker/setup-buildx-action@v3
+        if: needs.changes.outputs.docs_only != 'true'
+
+      - name: Build the image (no push)
+        if: needs.changes.outputs.docs_only != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: cinefilm:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Check the image
+        if: needs.changes.outputs.docs_only != 'true'
+        run: |
+          set -euo pipefail
+          docker image ls cinefilm:ci
+          size="$(docker image inspect cinefilm:ci --format '{{.Size}}')"
+          echo "Image size: $((size / 1024 / 1024)) MiB" | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$(docker run --rm --entrypoint id cinefilm:ci -u)" = "1001" ]
+          docker run --rm --entrypoint ffmpeg cinefilm:ci -version > /dev/null
+          docker run --rm --entrypoint ffprobe cinefilm:ci -version > /dev/null
+          docker run --rm --entrypoint which cinefilm:ci vainfo
+          docker run --rm --entrypoint sh cinefilm:ci -c 'ls /app/app.jar && date +%Z'
 
       - name: Documentation-only change — suite skipped
         if: needs.changes.outputs.docs_only == 'true'

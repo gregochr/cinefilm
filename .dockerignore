@@ -1,0 +1,17 @@
+.git
+.github
+.claude
+.idea
+docs
+changelog.d
+deploy
+scripts
+**/node_modules
+**/target
+frontend/dist
+frontend/coverage
+frontend/reports
+frontend/.stryker-tmp
+backend/src/main/resources/static
+.env
+.env.*

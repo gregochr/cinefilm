@@ -1,0 +1,99 @@
+name: Deploy
+
+# Tag v* -> CI (reused) -> build and push the image to GHCR -> deploy on dockermacmini's own self-hosted runner
+# (label cinefilm-prod) by running scripts/deploy.sh directly. No SSH. Operations: docs/engineering/operations.md
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run CI
+    uses: ./.github/workflows/ci.yml
+
+  build-and-push:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}
+            GIT_COMMIT_SHA=${{ github.sha }}
+          tags: |
+            ghcr.io/gregochr/cinefilm:${{ github.ref_name }}
+            ghcr.io/gregochr/cinefilm:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to dockermacmini
+    runs-on: [self-hosted, cinefilm-prod]
+    needs: build-and-push
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    # One deploy at a time, queued and never cancelled: cancelling half way through `up` is the state this job
+    # exists to avoid.
+    concurrency:
+      group: cinefilm-prod-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Note the post-deploy smoke configuration
+        env:
+          SMOKE_ENFORCE: ${{ vars.SMOKE_ENFORCE }}
+        run: |
+          if [ "$SMOKE_ENFORCE" = "true" ]; then
+            echo "- Post-deploy smoke: ENFORCED. A broken release is rolled back (image only; the database is never restored)." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Post-deploy smoke: REPORT-ONLY (repository variable SMOKE_ENFORCE is not 'true'). A failure fails this job but nothing is rolled back." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # The package is private: log the host's Docker in with the job token (read-only), no long-lived PAT.
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy
+        env:
+          SMOKE_ENFORCE: ${{ vars.SMOKE_ENFORCE }}
+        run: bash scripts/deploy.sh "$GITHUB_REF_NAME"
+
+  notify-failure:
+    needs: [test, build-and-push, deploy]
+    if: failure()
+    permissions:
+      issues: write
+    uses: ./.github/workflows/ci-failure-issue.yml
+    with:
+      workflow-name: Deploy to dockermacmini
