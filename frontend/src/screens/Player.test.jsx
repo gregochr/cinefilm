@@ -700,12 +700,12 @@ describe('Player subtitle tracks', () => {
   });
 
   const trackNamed = (label) =>
-    [...document.querySelectorAll('track')].find((t) => t.getAttribute('label') === label);
+    screen.getAllByTestId('subtitle-track').find((t) => t.getAttribute('label') === label);
   const mode = (label) => trackNamed(label).track.mode;
 
   it('adds a subtitles <track> for each embedded stream, pointing at its WebVTT', async () => {
     await openPlayer();
-    const tracks = [...document.querySelectorAll('track')];
+    const tracks = screen.getAllByTestId('subtitle-track');
     expect(tracks).toHaveLength(2);
     expect(tracks.map((t) => t.getAttribute('kind'))).toEqual(['subtitles', 'subtitles']);
     expect(tracks.map((t) => t.getAttribute('label'))).toEqual(['English', 'English (forced)']);
@@ -717,7 +717,7 @@ describe('Player subtitle tracks', () => {
 
   it('adds no tracks for a film with no subtitle streams', async () => {
     await openPlayer('/films/8/play?edition=71');
-    expect(document.querySelectorAll('track')).toHaveLength(0);
+    expect(screen.queryAllByTestId('subtitle-track')).toHaveLength(0);
   });
 
   it('adds no tracks when the edition has no file to read them from', async () => {
@@ -727,7 +727,7 @@ describe('Player subtitle tracks', () => {
         f.editions[0].file = null;
       }),
     );
-    expect(document.querySelectorAll('track')).toHaveLength(0);
+    expect(screen.queryAllByTestId('subtitle-track')).toHaveLength(0);
   });
 
   it('turns the forced track on by itself when Subtitles is Off (decision 6)', async () => {

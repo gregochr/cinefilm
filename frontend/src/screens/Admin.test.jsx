@@ -24,14 +24,17 @@ describe('Admin: Library scan panel', () => {
     expect(within(panel).getByText('08 Nov 12:41 · 2 new, 0 missing')).toBeInTheDocument();
     expect(within(panel).getByText('Idle')).toBeInTheDocument();
     const counts = within(panel).getByRole('list', { name: 'Library counts' });
-    const tile = (label) => within(counts).getByText(label).parentElement;
-    expect(tile('Films')).toHaveTextContent('538');
-    expect(tile('New')).toHaveTextContent('2');
-    expect(tile('Missing')).toHaveTextContent('0');
-    expect(tile('Protected')).toHaveTextContent('1');
-    expect(tile('Needs conversion')).toHaveTextContent('3');
-    expect(tile('Need a match')).toHaveTextContent('2');
-    expect(within(counts).queryByText('Unreadable')).not.toBeInTheDocument();
+    const tiles = within(counts)
+      .getAllByRole('listitem')
+      .map((item) => item.textContent);
+    expect(tiles).toEqual([
+      'Films538',
+      'New2',
+      'Missing0',
+      'Protected1',
+      'Needs conversion3',
+      'Need a match2',
+    ]);
     expect(within(panel).getByRole('button', { name: 'Scan now' })).toBeEnabled();
   });
 
@@ -71,7 +74,8 @@ describe('Admin: Library scan panel', () => {
         : null,
     );
     renderApp('/admin');
-    expect((await screen.findByText('Unreadable')).parentElement).toHaveTextContent('4');
+    const counts = await screen.findByRole('list', { name: 'Library counts' });
+    expect(within(counts).getAllByRole('listitem').at(-1)).toHaveTextContent('Unreadable4');
   });
 
   it('Scan now starts a scan, and the panel shows live progress with the button disabled', async () => {
@@ -350,9 +354,11 @@ describe('Admin: page', () => {
           })
         : null,
     );
-    const { container } = renderApp('/admin');
+    renderApp('/admin');
     expect(await screen.findByText('<img src=x onerror=alert(1)> (1969)')).toBeInTheDocument();
-    expect(container.querySelector('img')).toBeNull();
-    expect(container.querySelector('b')).toBeNull();
+    expect(screen.getByText('<b>bold</b>.m4v')).toBeInTheDocument();
+    expect(screen.getAllByRole('img').map((img) => img.getAttribute('aria-label'))).toEqual([
+      'TMDB',
+    ]);
   });
 });

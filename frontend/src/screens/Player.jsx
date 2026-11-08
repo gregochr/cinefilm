@@ -367,6 +367,7 @@ function PlayerView({ film, edition, startAtZero }) {
                   else trackRefs.current.delete(streamKey(stream));
                 }}
                 kind="subtitles"
+                data-testid="subtitle-track"
                 label={subtitleLabel(stream)}
                 src={mediaFilesApi.subtitleUrl(edition.file.id, stream.index)}
               />
