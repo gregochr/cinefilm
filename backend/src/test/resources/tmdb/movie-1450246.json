@@ -1,0 +1,259 @@
+{
+ "adult": false,
+ "backdrop_path": null,
+ "belongs_to_collection": null,
+ "budget": 0,
+ "genres": [
+  {
+   "id": 10402,
+   "name": "Music"
+  },
+  {
+   "id": 35,
+   "name": "Comedy"
+  },
+  {
+   "id": 10751,
+   "name": "Family"
+  },
+  {
+   "id": 10770,
+   "name": "TV Movie"
+  }
+ ],
+ "homepage": "",
+ "id": 1450246,
+ "imdb_id": "tt0433326",
+ "origin_country": [
+  "US"
+ ],
+ "original_language": "en",
+ "original_title": "Aladdin",
+ "overview": "In ancient China, an aimless young man falls in love with the Emperor's beautiful daughter, and goes on a journey with his supposedly long-lost uncle in search of riches. CBS presentation of the Prince Street Players' Aladdin adaptation.",
+ "popularity": 1.77,
+ "poster_path": "/9D8oC83uTuBh1YRvjoP5h48Gpn2.jpg",
+ "production_companies": [
+  {
+   "id": 256607,
+   "logo_path": null,
+   "name": "Prince Street Productions",
+   "origin_country": ""
+  },
+  {
+   "id": 4898,
+   "logo_path": "/nm8d7P7MJNiBLdgIzUK0gkuEA4r.png",
+   "name": "CBS",
+   "origin_country": "US"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "US",
+   "name": "United States of America"
+  }
+ ],
+ "release_date": "1967-12-06",
+ "revenue": 0,
+ "runtime": 52,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  }
+ ],
+ "status": "Released",
+ "tagline": "",
+ "title": "Aladdin",
+ "video": false,
+ "vote_average": 9.3,
+ "vote_count": 3,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 5311413,
+    "known_for_department": "Acting",
+    "name": "Fred Grades",
+    "original_name": "Fred Grades",
+    "popularity": 0.0463,
+    "profile_path": null,
+    "cast_id": 1,
+    "character": "Aladdin",
+    "credit_id": "67d8a5642a086852b2858e94",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 3303449,
+    "known_for_department": "Acting",
+    "name": "Victoria Mallory",
+    "original_name": "Victoria Mallory",
+    "popularity": 0.2349,
+    "profile_path": null,
+    "cast_id": 2,
+    "character": "Princess Mei Ling",
+    "credit_id": "67d8a582a7f1f7ac1c858e9f",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 2229858,
+    "known_for_department": "Acting",
+    "name": "Avril Gentles",
+    "original_name": "Avril Gentles",
+    "popularity": 0.0907,
+    "profile_path": null,
+    "cast_id": 3,
+    "character": "Aladdin's Mother",
+    "credit_id": "67d8a59ac451c49d27ee97e7",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 3716665,
+    "known_for_department": "Acting",
+    "name": "David Lile",
+    "original_name": "David Lile",
+    "popularity": 0.5723,
+    "profile_path": null,
+    "cast_id": 4,
+    "character": "Emperor of China",
+    "credit_id": "67d8a5acee370afa15a730fb",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 1747350,
+    "known_for_department": "Acting",
+    "name": "Robert Dagney",
+    "original_name": "Robert Dagney",
+    "popularity": 0.1245,
+    "profile_path": null,
+    "cast_id": 5,
+    "character": "Evil Magician",
+    "credit_id": "67d8a5c2ee370afa15a73112",
+    "order": 4
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 2887811,
+    "known_for_department": "Acting",
+    "name": "Will B. Able",
+    "original_name": "Will B. Able",
+    "popularity": 0.6551,
+    "profile_path": null,
+    "cast_id": 6,
+    "character": "Genie of the Lamp / Genie of the Ring",
+    "credit_id": "67d8a5df4f0246de39ee97a5",
+    "order": 5
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 5311421,
+    "known_for_department": "Acting",
+    "name": "Graziella Able",
+    "original_name": "Graziella Able",
+    "popularity": 0.5208,
+    "profile_path": null,
+    "cast_id": 7,
+    "character": "Fatima the Dancing Doll",
+    "credit_id": "67d8a5f5c4c2b520a0858e84",
+    "order": 6
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 5311422,
+    "known_for_department": "Acting",
+    "name": "Don Liberto",
+    "original_name": "Don Liberto",
+    "popularity": 0.0767,
+    "profile_path": null,
+    "cast_id": 8,
+    "character": "Stage Manager",
+    "credit_id": "67d8a6132a086852b2858ec2",
+    "order": 7
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 5311423,
+    "known_for_department": "Acting",
+    "name": "Marcie Stringer",
+    "original_name": "Marcie Stringer",
+    "popularity": 0.0618,
+    "profile_path": null,
+    "cast_id": 9,
+    "character": "First Lady",
+    "credit_id": "67d8a627ee370afa15a7316d",
+    "order": 8
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 171551,
+    "known_for_department": "Acting",
+    "name": "Luce Ennis",
+    "original_name": "Luce Ennis",
+    "popularity": 0.1029,
+    "profile_path": null,
+    "cast_id": 10,
+    "character": "Second Lady",
+    "credit_id": "67d8a63dee370afa15a7317a",
+    "order": 9
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 5311424,
+    "known_for_department": "Acting",
+    "name": "George Gugleotti",
+    "original_name": "George Gugleotti",
+    "popularity": 0.0254,
+    "profile_path": null,
+    "cast_id": 11,
+    "character": "First Boy",
+    "credit_id": "67d8a6502a086852b2858ee5",
+    "order": 10
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 5311425,
+    "known_for_department": "Acting",
+    "name": "Darrell J. Askey",
+    "original_name": "Darrell J. Askey",
+    "popularity": 0.0295,
+    "profile_path": null,
+    "cast_id": 12,
+    "character": "Second Boy",
+    "credit_id": "67d8a65fee370afa15a731ad",
+    "order": 11
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1247056,
+    "known_for_department": "Directing",
+    "name": "Nick Havinga",
+    "original_name": "Nick Havinga",
+    "popularity": 0.2547,
+    "profile_path": null,
+    "credit_id": "67d8a698fa6dabaac3ee9783",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

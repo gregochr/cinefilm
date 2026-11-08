@@ -5,6 +5,8 @@ import heat from '../test/fixtures/film-heat.json';
 import bladeRunner from '../test/fixtures/film-blade-runner.json';
 import wickerMan from '../test/fixtures/film-wicker-man.json';
 import person from '../test/fixtures/person.json';
+import adminScan from '../test/fixtures/admin-scan.json';
+import adminAttention from '../test/fixtures/admin-attention.json';
 import collection from '../test/fixtures/collection.json';
 
 const details = { 1: heat, 6: bladeRunner, 8: wickerMan };
@@ -32,6 +34,8 @@ export async function handle(method, path, body) {
   const route = url.pathname;
   if (route === '/api/session') return method === 'GET' ? { authenticated: true } : { ok: true };
   if (route === '/api/home') return home;
+  if (route === '/api/admin/scan') return adminScan;
+  if (route === '/api/admin/attention') return adminAttention;
   if (route === '/api/films') return listFilms(url.searchParams);
   let match = route.match(/^\/api\/films\/(\d+)$/);
   if (match) return details[match[1]] || heat;

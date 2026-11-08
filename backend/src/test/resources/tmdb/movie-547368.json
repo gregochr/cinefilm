@@ -1,0 +1,153 @@
+{
+ "adult": false,
+ "backdrop_path": "/5Mh054CU9hTBuAwpnz6nfBQsRwR.jpg",
+ "belongs_to_collection": null,
+ "budget": 0,
+ "genres": [
+  {
+   "id": 12,
+   "name": "Adventure"
+  },
+  {
+   "id": 10751,
+   "name": "Family"
+  }
+ ],
+ "homepage": "",
+ "id": 547368,
+ "imdb_id": "tt0262381",
+ "origin_country": [
+  "SU"
+ ],
+ "original_language": "ru",
+ "original_title": "\u0414\u043e\u043c \u043d\u0430 \u0434\u044e\u043d\u0430\u0445",
+ "overview": "Remote house on the dunes hides many secrets... Based on Robert Louis Stevenson novel.",
+ "popularity": 0.2879,
+ "poster_path": "/8cItZo53lxXN4kgTOEnDFvOhzhJ.jpg",
+ "production_companies": [
+  {
+   "id": 11436,
+   "logo_path": "/zvvXyn4CvHqmBX7X6zdbDOCGG3M.png",
+   "name": "Sverdlovsk Film Studio",
+   "origin_country": "SU"
+  },
+  {
+   "id": 14620,
+   "logo_path": "/zbQk1aw57z6LUOSQzb0MoZDLiUz.png",
+   "name": "Gosteleradio USSR",
+   "origin_country": "SU"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "SU",
+   "name": "Soviet Union"
+  }
+ ],
+ "release_date": "1984-09-01",
+ "revenue": 0,
+ "runtime": 0,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "Russian",
+   "iso_639_1": "ru",
+   "name": "P\u0443\u0441\u0441\u043a\u0438\u0439"
+  }
+ ],
+ "status": "Released",
+ "tagline": "",
+ "title": "House on the Dunes",
+ "video": false,
+ "vote_average": 7.0,
+ "vote_count": 2,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 935886,
+    "known_for_department": "Acting",
+    "name": "Nikolay Kochegarov",
+    "original_name": "\u041d\u0438\u043a\u043e\u043b\u0430\u0439 \u041a\u043e\u0447\u0435\u0433\u0430\u0440\u043e\u0432",
+    "popularity": 0.3012,
+    "profile_path": "/r8wIrg5nuf5YS9rr0HF6PgHpLxF.jpg",
+    "cast_id": 6,
+    "character": "\u0420\u043e\u0431\u0435\u0440\u0442 \u041d\u043e\u0440\u0441\u043c\u043e\u0440",
+    "credit_id": "66bcf2fc2c8795dd4cebe0e1",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 549541,
+    "known_for_department": "Acting",
+    "name": "Eduard Martsevich",
+    "original_name": "\u042d\u0434\u0443\u0430\u0440\u0434 \u041c\u0430\u0440\u0446\u0435\u0432\u0438\u0447",
+    "popularity": 0.3973,
+    "profile_path": "/9QHrWP8L6cDjotqVWgG8gmfM9Nv.jpg",
+    "cast_id": 1,
+    "character": "\u0425\u044d\u0434\u0434\u043b\u0441\u0442\u043e\u043d",
+    "credit_id": "5b95691e925141432b021ffe",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 273965,
+    "known_for_department": "Acting",
+    "name": "Anzhelika Nevolina",
+    "original_name": "\u0410\u043d\u0436\u0435\u043b\u0438\u043a\u0430 \u041d\u0435\u0432\u043e\u043b\u0438\u043d\u0430",
+    "popularity": 0.2509,
+    "profile_path": "/mosYp0ZCBfUrU8R955q9hIcz5uB.jpg",
+    "cast_id": 3,
+    "character": "\u041a\u043b\u0430\u0440\u0430",
+    "credit_id": "5b956c46c3a3685688021b86",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 2477209,
+    "known_for_department": "Acting",
+    "name": "Alexandr Ryazantsev",
+    "original_name": "\u0410\u043b\u0435\u043a\u0441\u0430\u043d\u0434\u0440 \u0420\u044f\u0437\u0430\u043d\u0446\u0435\u0432",
+    "popularity": 0.381,
+    "profile_path": "/puX1pzzPGfoJYk89n2fjCaNreWW.jpg",
+    "cast_id": 4,
+    "character": "Frank Kesselis",
+    "credit_id": "5debaee432489b0012bf99ad",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 2037030,
+    "known_for_department": "Acting",
+    "name": "Tatyana Kuznetsova",
+    "original_name": "\u0422\u0430\u0442\u044c\u044f\u043d\u0430 \u041a\u0443\u0437\u043d\u0435\u0446\u043e\u0432\u0430",
+    "popularity": 0.5357,
+    "profile_path": "/ivsEX7BG6Z5UsiBux3BVVywDIHB.jpg",
+    "cast_id": 5,
+    "character": "\u042d\u043b\u0438\u0441",
+    "credit_id": "65fe9481197de40186184138",
+    "order": 4
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1721240,
+    "known_for_department": "Directing",
+    "name": "Dmitry Salynsky",
+    "original_name": "\u0414\u043c\u0438\u0442\u0440\u0438\u0439 \u0421\u0430\u043b\u044b\u043d\u0441\u043a\u0438\u0439",
+    "popularity": 0.2189,
+    "profile_path": "/1hi0PFRGIasM1UFTKM8sNAbkYZ5.jpg",
+    "credit_id": "5b9569e30e0a261982025475",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

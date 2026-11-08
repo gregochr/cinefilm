@@ -1,0 +1,149 @@
+{
+ "adult": false,
+ "backdrop_path": null,
+ "belongs_to_collection": null,
+ "budget": 0,
+ "genres": [
+  {
+   "id": 12,
+   "name": "Adventure"
+  }
+ ],
+ "homepage": "",
+ "id": 633787,
+ "imdb_id": null,
+ "origin_country": [
+  "RU"
+ ],
+ "original_language": "ru",
+ "original_title": "\u0417\u043e\u043b\u043e\u0442\u0430\u044f \u0434\u044e\u043d\u0430",
+ "overview": "A fascinating story about three teenagers who found an ancient medallion of the Teutonic Order in the basements of a former German hospital in Kaliningrad (formerly Konigsberg). A story that gradually develops into a dangerous and mystical adventure, with chases, struggle, constant risk. The children will have to solve the mystery of the amber medallion, find the treasure, save the girl and make their choice. And, of course, this is a film about the first youthful love.",
+ "popularity": 0.3284,
+ "poster_path": "/piX74vNjTslY2aUdJXvocZSlVjv.jpg",
+ "production_companies": [
+  {
+   "id": 123360,
+   "logo_path": null,
+   "name": "TogFilm",
+   "origin_country": "RU"
+  },
+  {
+   "id": 170208,
+   "logo_path": "/8qh5BEyKYOQ0e81LPbvWHQvyOy5.png",
+   "name": "Lenfilm",
+   "origin_country": "RU"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "RU",
+   "name": "Russia"
+  }
+ ],
+ "release_date": "2021-08-28",
+ "revenue": 0,
+ "runtime": 90,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "Russian",
+   "iso_639_1": "ru",
+   "name": "P\u0443\u0441\u0441\u043a\u0438\u0439"
+  }
+ ],
+ "status": "Released",
+ "tagline": "",
+ "title": "Golden Dune",
+ "video": false,
+ "vote_average": 4.8,
+ "vote_count": 4,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 3206596,
+    "known_for_department": "Acting",
+    "name": "Alyona Dolgolenko",
+    "original_name": "\u0410\u043b\u0451\u043d\u0430 \u0414\u043e\u043b\u0433\u043e\u043b\u0435\u043d\u043a\u043e",
+    "popularity": 0.3032,
+    "profile_path": "/uCIJObduzApw0uQSvbAtjwI4Tj9.jpg",
+    "cast_id": 9,
+    "character": "",
+    "credit_id": "6120c24b3a4a12002f5157f4",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 3206597,
+    "known_for_department": "Acting",
+    "name": "Maxim Fesenko",
+    "original_name": "Maxim Fesenko",
+    "popularity": 0.0598,
+    "profile_path": null,
+    "cast_id": 10,
+    "character": "",
+    "credit_id": "6120c2c52dc44e005c68d92b",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 3206598,
+    "known_for_department": "Acting",
+    "name": "Gleb Bulgakov",
+    "original_name": "Gleb Bulgakov",
+    "popularity": 0.2798,
+    "profile_path": null,
+    "cast_id": 11,
+    "character": "",
+    "credit_id": "6120c2e0719aeb004591ffeb",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 3206600,
+    "known_for_department": "Acting",
+    "name": "Michael Bats",
+    "original_name": "Michael Bats",
+    "popularity": 0.1664,
+    "profile_path": null,
+    "cast_id": 12,
+    "character": "",
+    "credit_id": "6120c3400f2fbd0048108260",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 3206602,
+    "known_for_department": "Acting",
+    "name": "Igor Shalimov",
+    "original_name": "Igor Shalimov",
+    "popularity": 0.1218,
+    "profile_path": null,
+    "cast_id": 13,
+    "character": "",
+    "credit_id": "6120c3552e069700459eadd8",
+    "order": 4
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1816056,
+    "known_for_department": "Directing",
+    "name": "Stanislav Lebedev",
+    "original_name": "\u0421\u0442\u0430\u043d\u0438\u0441\u043b\u0430\u0432 \u041b\u0435\u0431\u0435\u0434\u0435\u0432",
+    "popularity": 0.1105,
+    "profile_path": null,
+    "credit_id": "5d89e186172d7f001f4dd3e0",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

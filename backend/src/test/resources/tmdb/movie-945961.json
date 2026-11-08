@@ -1,0 +1,278 @@
+{
+ "adult": false,
+ "backdrop_path": "/iYqSQaWDttQIQzsxg9xHyg0bttG.jpg",
+ "belongs_to_collection": {
+  "id": 1434946,
+  "name": "Alien: Romulus Collection",
+  "poster_path": "/pJdItyeP5Ep5oYoqHlPpX4BEnPC.jpg",
+  "backdrop_path": "/nklXuO1cBEViut27TpChoKIzyI5.jpg"
+ },
+ "budget": 80000000,
+ "genres": [
+  {
+   "id": 27,
+   "name": "Horror"
+  },
+  {
+   "id": 878,
+   "name": "Science Fiction"
+  }
+ ],
+ "homepage": "https://www.20thcenturystudios.com/movies/alien-romulus",
+ "id": 945961,
+ "imdb_id": "tt18412256",
+ "origin_country": [
+  "US"
+ ],
+ "original_language": "en",
+ "original_title": "Alien: Romulus",
+ "overview": "While scavenging the deep ends of a derelict space station, a group of young space colonizers come face to face with the most terrifying life form in the universe.",
+ "popularity": 16.2911,
+ "poster_path": "/2uSWRTtCG336nuBiG8jOTEUKSy8.jpg",
+ "production_companies": [
+  {
+   "id": 127928,
+   "logo_path": "/h0rjX5vjW5r8yEnUBStFarjcLT4.png",
+   "name": "20th Century Studios",
+   "origin_country": "US"
+  },
+  {
+   "id": 221347,
+   "logo_path": "/6Ry6uNBaa0IbbSs1XYIgX5DkA9r.png",
+   "name": "Scott Free Productions",
+   "origin_country": "US"
+  },
+  {
+   "id": 401,
+   "logo_path": "/t7mM3DvQ9MwDT3YzMCBrkWpWiiz.png",
+   "name": "Brandywine Productions",
+   "origin_country": "US"
+  },
+  {
+   "id": 22213,
+   "logo_path": "/qx9K6bFWJupwde0xQDwOvXkOaL8.png",
+   "name": "TSG Entertainment",
+   "origin_country": "US"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "US",
+   "name": "United States of America"
+  }
+ ],
+ "release_date": "2024-08-13",
+ "revenue": 350865342,
+ "runtime": 119,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "Danish",
+   "iso_639_1": "da",
+   "name": "Dansk"
+  },
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  },
+  {
+   "english_name": "Dutch",
+   "iso_639_1": "nl",
+   "name": "Nederlands"
+  }
+ ],
+ "status": "Released",
+ "tagline": "In space, no one can hear you.",
+ "title": "Alien: Romulus",
+ "video": false,
+ "vote_average": 7.155,
+ "vote_count": 5045,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 1683343,
+    "known_for_department": "Acting",
+    "name": "Cailee Spaeny",
+    "original_name": "Cailee Spaeny",
+    "popularity": 3.9062,
+    "profile_path": "/6gUzyMnwo7TjZA7E1Amd1GI8JGw.jpg",
+    "cast_id": 4,
+    "character": "Rain",
+    "credit_id": "63904e44bc8abc13d787a6aa",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 2761308,
+    "known_for_department": "Acting",
+    "name": "David Jonsson",
+    "original_name": "David Jonsson",
+    "popularity": 1.2355,
+    "profile_path": "/2ZZNGZw57KKMrVIr27g7W16G0jV.jpg",
+    "cast_id": 16,
+    "character": "Andy",
+    "credit_id": "6402785bc7176d008189d0fc",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 2164506,
+    "known_for_department": "Acting",
+    "name": "Archie Renaux",
+    "original_name": "Archie Renaux",
+    "popularity": 2.4545,
+    "profile_path": "/uTd18t2VJovN2jSJyhuG8Yy3PV6.jpg",
+    "cast_id": 15,
+    "character": "Tyler",
+    "credit_id": "640277f4278d8a385d1d2259",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 1428070,
+    "known_for_department": "Acting",
+    "name": "Isabela Merced",
+    "original_name": "Isabela Merced",
+    "popularity": 5.6577,
+    "profile_path": "/7O5GWIH8IHwU4kGZIhC3JkGDiZr.jpg",
+    "cast_id": 6,
+    "character": "Kay",
+    "credit_id": "6400fde7c7176d007980eaa4",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 2304140,
+    "known_for_department": "Acting",
+    "name": "Spike Fearn",
+    "original_name": "Spike Fearn",
+    "popularity": 1.166,
+    "profile_path": "/o1WcXkDdlN5wdL5WIuGXNpNouZ9.jpg",
+    "cast_id": 17,
+    "character": "Bjorn",
+    "credit_id": "64027867c7176d008518319b",
+    "order": 4
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 3948018,
+    "known_for_department": "Acting",
+    "name": "Aileen Wu",
+    "original_name": "Aileen Wu",
+    "popularity": 0.4766,
+    "profile_path": "/yRMY9MWcPp0PDTDj6iOWvIqBe7f.jpg",
+    "cast_id": 18,
+    "character": "Navarro",
+    "credit_id": "64027877c7176d00db5a9d1e",
+    "order": 5
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 1737976,
+    "known_for_department": "Acting",
+    "name": "Rosie Ede",
+    "original_name": "Rosie Ede",
+    "popularity": 0.3072,
+    "profile_path": "/h6HTwvixLAq9HMGVyoAlWwahuA0.jpg",
+    "cast_id": 71,
+    "character": "WY Officer",
+    "credit_id": "66a1f57ea830bd008f08875b",
+    "order": 6
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 4848544,
+    "known_for_department": "Acting",
+    "name": "Soma Simon",
+    "original_name": "Soma Simon",
+    "popularity": 0.2805,
+    "profile_path": null,
+    "cast_id": 72,
+    "character": "10-Year-Old Punk #1",
+    "credit_id": "66a1f593b05de1a415f78c76",
+    "order": 7
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 4848546,
+    "known_for_department": "Acting",
+    "name": "Bence Okeke",
+    "original_name": "Bence Okeke",
+    "popularity": 0.2257,
+    "profile_path": null,
+    "cast_id": 73,
+    "character": "10-Year-Old Punk #2",
+    "credit_id": "66a1f5a1f7a114a083e0ff3d",
+    "order": 8
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 4848547,
+    "known_for_department": "Acting",
+    "name": "Viktor Orizu",
+    "original_name": "Viktor Orizu",
+    "popularity": 0.1644,
+    "profile_path": null,
+    "cast_id": 74,
+    "character": "10-Year-Old Punk #3",
+    "credit_id": "66a1f5adeb0f6b71d2088776",
+    "order": 9
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 4848549,
+    "known_for_department": "Acting",
+    "name": "Robert Bobroczkyi",
+    "original_name": "Robert Bobroczkyi",
+    "popularity": 1.0192,
+    "profile_path": "/3SK7NuuBKR5PSJwsQ7HO4qHIM9C.jpg",
+    "cast_id": 75,
+    "character": "Offspring",
+    "credit_id": "66a1f5c6e455b7e8af18e4aa",
+    "order": 10
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 3958162,
+    "known_for_department": "Acting",
+    "name": "Trevor Newlin",
+    "original_name": "Trevor Newlin",
+    "popularity": 0.3786,
+    "profile_path": "/3TcnxO2PSErW5WsOUcM5HHiqd3I.jpg",
+    "cast_id": 76,
+    "character": "Xenomorph",
+    "credit_id": "66a1f5ceaeee0716d014d9a7",
+    "order": 11
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 932248,
+    "known_for_department": "Directing",
+    "name": "Fede \u00c1lvarez",
+    "original_name": "Fede \u00c1lvarez",
+    "popularity": 0.8884,
+    "profile_path": "/1LULCZie16dlfQKDpZYrQDAVzEk.jpg",
+    "credit_id": "6222914b9f1be7006b8ed9bb",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

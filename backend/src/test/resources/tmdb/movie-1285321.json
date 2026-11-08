@@ -1,0 +1,245 @@
+{
+ "adult": false,
+ "backdrop_path": "/p3rtTCpejKR3UyFEIBkoVokBZeE.jpg",
+ "belongs_to_collection": null,
+ "budget": 0,
+ "genres": [
+  {
+   "id": 99,
+   "name": "Documentary"
+  },
+  {
+   "id": 27,
+   "name": "Horror"
+  }
+ ],
+ "homepage": "https://www.kickstarter.com/projects/drjustinhardy/wickermania?ref=project_build",
+ "id": 1285321,
+ "imdb_id": "tt32582337",
+ "origin_country": [
+  "GB"
+ ],
+ "original_language": "en",
+ "original_title": "Children of The Wicker Man",
+ "overview": "Fifty years after The Wicker Man, director Robin Hardy\u2019s lost papers resurface, prompting his sons Justin and Dominic to explore the legacy of the cult classic, and their father. Together, they uncover the truth behind Robin\u2019s role in the film and confront the complexities of independent filmmaking, family, and myth.",
+ "popularity": 0.8784,
+ "poster_path": "/cGALR5w2wkKteIXHmGrA1NSaSbt.jpg",
+ "production_companies": [
+  {
+   "id": 14085,
+   "logo_path": null,
+   "name": "Hardy Pictures",
+   "origin_country": "GB"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "GB",
+   "name": "United Kingdom"
+  }
+ ],
+ "release_date": "2026-10-23",
+ "revenue": 0,
+ "runtime": 92,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  }
+ ],
+ "status": "Released",
+ "tagline": "",
+ "title": "Children of The Wicker Man",
+ "video": false,
+ "vote_average": 0.0,
+ "vote_count": 0,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 152183,
+    "known_for_department": "Directing",
+    "name": "Justin Hardy",
+    "original_name": "Justin Hardy",
+    "popularity": 0.3961,
+    "profile_path": "/rlXDKpg3YZhFIvYwqd7oRTvuYd0.jpg",
+    "cast_id": 4,
+    "character": "Self",
+    "credit_id": "66d727183c3afa17288183f9",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 4934778,
+    "known_for_department": "Directing",
+    "name": "Dominic Hardy",
+    "original_name": "Dominic Hardy",
+    "popularity": 0.238,
+    "profile_path": "/yvn6TJvXcnXeCFLW46siyKqLhyp.jpg",
+    "cast_id": 10,
+    "character": "Self",
+    "credit_id": "66e06fbbc4f7daefb56ccb0a",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 62972,
+    "known_for_department": "Acting",
+    "name": "Tim Plester",
+    "original_name": "Tim Plester",
+    "popularity": 0.5771,
+    "profile_path": "/a66p9DDwRSQFRZcDn3sDLsGb8zu.jpg",
+    "cast_id": 8,
+    "character": "Self",
+    "credit_id": "66d727b473f2ceb0db8ddcc5",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 1942179,
+    "known_for_department": "Sound",
+    "name": "Gary Carpenter",
+    "original_name": "Gary Carpenter",
+    "popularity": 0.0982,
+    "profile_path": "/7LkbICMatTjKtfRuUQIM1CD3Whn.jpg",
+    "cast_id": 11,
+    "character": "Self",
+    "credit_id": "66f98401140fbf6a1a5f7efb",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 229385,
+    "known_for_department": "Production",
+    "name": "Peter Snell",
+    "original_name": "Peter Snell",
+    "popularity": 0.2443,
+    "profile_path": "/v7h4PRyTJ4o3yCefgzHKeZ52286.jpg",
+    "cast_id": 12,
+    "character": "Self",
+    "credit_id": "66f9840f271200492ecc5f17",
+    "order": 4
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 961303,
+    "known_for_department": "Art",
+    "name": "Seamus Flannery",
+    "original_name": "Seamus Flannery",
+    "popularity": 0.1687,
+    "profile_path": "/4qN6jFmxV08NAqBVZRnPYzMEGVM.jpg",
+    "cast_id": 13,
+    "character": "Self",
+    "credit_id": "66f9841a271200492ecc5f1c",
+    "order": 5
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 4970410,
+    "known_for_department": "Acting",
+    "name": "Victoria Webster",
+    "original_name": "Victoria Webster",
+    "popularity": 0.0871,
+    "profile_path": null,
+    "cast_id": 14,
+    "character": "Self",
+    "credit_id": "66f984420f6fa2cfce5f78b5",
+    "order": 6
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1547309,
+    "known_for_department": "Sound",
+    "name": "Mark Ulano",
+    "original_name": "Mark Ulano",
+    "popularity": 0.391,
+    "profile_path": "/b1NgERFBk7nuLkc4PD3cpmf6JWM.jpg",
+    "cast_id": 15,
+    "character": "Self",
+    "credit_id": "66f9844d140fbf6a1a5f7f18",
+    "order": 7
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 104795,
+    "known_for_department": "Acting",
+    "name": "Bill Paterson",
+    "original_name": "Bill Paterson",
+    "popularity": 1.3077,
+    "profile_path": "/mk5vpYLmER7asqOhEwVKXD3P3YE.jpg",
+    "cast_id": 7,
+    "character": "Self",
+    "credit_id": "66d727aa32de65fadd9d3683",
+    "order": 8
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 4970414,
+    "known_for_department": "Acting",
+    "name": "Barbara Callan",
+    "original_name": "Barbara Callan",
+    "popularity": 0.0442,
+    "profile_path": null,
+    "cast_id": 16,
+    "character": "Self",
+    "credit_id": "66f984731a9c9188fecc646b",
+    "order": 9
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 2562238,
+    "known_for_department": "Acting",
+    "name": "Vic Pratt",
+    "original_name": "Vic Pratt",
+    "popularity": 0.0941,
+    "profile_path": "/1ap8pOytP1eQbJuQ6c94w88Nixv.jpg",
+    "cast_id": 17,
+    "character": "Self",
+    "credit_id": "66f98481f5d56e9ed8a25911",
+    "order": 10
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 3765338,
+    "known_for_department": "Acting",
+    "name": "William Fowler",
+    "original_name": "William Fowler",
+    "popularity": 0.0365,
+    "profile_path": null,
+    "cast_id": 18,
+    "character": "Self",
+    "credit_id": "66f984961a9c9188fecc6483",
+    "order": 11
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 152183,
+    "known_for_department": "Directing",
+    "name": "Justin Hardy",
+    "original_name": "Justin Hardy",
+    "popularity": 0.3961,
+    "profile_path": "/rlXDKpg3YZhFIvYwqd7oRTvuYd0.jpg",
+    "credit_id": "66be5fabc246ddca7e9ca0d0",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

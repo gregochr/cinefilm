@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { EmptyLibrary, ErrorState, NoResults } from './StateMessages.jsx';
 
 describe('EmptyLibrary', () => {
-  it('invites the user to import from Plex or scan a folder, both through Admin', () => {
+  it("invites the user to import from Plex or scan a folder, both leading to Admin's Scan now", () => {
     render(
       <MemoryRouter>
         <EmptyLibrary />
@@ -14,9 +14,12 @@ describe('EmptyLibrary', () => {
     expect(screen.getByRole('heading', { name: 'The house lights are up' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Import from Plex' })).toHaveAttribute(
       'href',
-      '/admin',
+      '/admin#library-scan',
     );
-    expect(screen.getByRole('link', { name: 'Scan a folder' })).toHaveAttribute('href', '/admin');
+    expect(screen.getByRole('link', { name: 'Scan a folder' })).toHaveAttribute(
+      'href',
+      '/admin#library-scan',
+    );
   });
 });
 

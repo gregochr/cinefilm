@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { imageUrl } from './images.js';
 import {
+  adminApi,
   collectionsApi,
   editionsApi,
   filmsApi,
   homeApi,
+  mediaFilesApi,
   peopleApi,
   sessionApi,
 } from './resources.js';
@@ -91,5 +93,19 @@ describe('image URLs', () => {
   it('has no URL for an empty path', () => {
     expect(imageUrl('')).toBeNull();
     expect(imageUrl(undefined)).toBeNull();
+  });
+
+  it('reads the scan status and attention list, and starts a scan with POST', async () => {
+    const last = stubFetch();
+    await adminApi.scan();
+    expect(last()).toMatchObject({ path: '/api/admin/scan', method: 'GET' });
+    await adminApi.startScan();
+    expect(last()).toEqual({ path: '/api/admin/scan', method: 'POST', body: undefined });
+    await adminApi.attention();
+    expect(last()).toMatchObject({ path: '/api/admin/attention', method: 'GET' });
+  });
+
+  it('builds the WebVTT url of a subtitle stream from the media file id and stream index', () => {
+    expect(mediaFilesApi.subtitleUrl(501, 3)).toBe('/api/media-files/501/subtitles/3.vtt');
   });
 });

@@ -37,6 +37,7 @@
       "positionMs": 0,
       "watched": false,
       "file": {
+        "id": 801,
         "videoCodec": "HEVC",
         "height": 1080,
         "audioSummary": "2.0",

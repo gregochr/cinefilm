@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
 
 afterEach(() => {
@@ -678,5 +678,114 @@ describe('Player and the session', () => {
     const put = fetchMock.mock.calls.find((c) => c[0] === '/api/editions/11/progress');
     expect(JSON.parse(put[1].body)).toEqual({ positionMs: 100000 });
     expect(put[1].keepalive).toBe(true);
+  });
+});
+
+describe('Player subtitle tracks', () => {
+  // jsdom has no TextTrack, so give every <track> a stand-in that remembers its mode.
+  const modes = new WeakMap();
+  const original = Object.getOwnPropertyDescriptor(HTMLTrackElement.prototype, 'track');
+  beforeEach(() => {
+    Object.defineProperty(HTMLTrackElement.prototype, 'track', {
+      configurable: true,
+      get() {
+        if (!modes.has(this)) modes.set(this, { mode: 'disabled' });
+        return modes.get(this);
+      },
+    });
+  });
+  afterEach(() => {
+    if (original) Object.defineProperty(HTMLTrackElement.prototype, 'track', original);
+    else delete HTMLTrackElement.prototype.track;
+  });
+
+  const trackNamed = (label) =>
+    [...document.querySelectorAll('track')].find((t) => t.getAttribute('label') === label);
+  const mode = (label) => trackNamed(label).track.mode;
+
+  it('adds a subtitles <track> for each embedded stream, pointing at its WebVTT', async () => {
+    await openPlayer();
+    const tracks = [...document.querySelectorAll('track')];
+    expect(tracks).toHaveLength(2);
+    expect(tracks.map((t) => t.getAttribute('kind'))).toEqual(['subtitles', 'subtitles']);
+    expect(tracks.map((t) => t.getAttribute('label'))).toEqual(['English', 'English (forced)']);
+    expect(tracks.map((t) => t.getAttribute('src'))).toEqual([
+      '/api/media-files/501/subtitles/3.vtt',
+      '/api/media-files/501/subtitles/4.vtt',
+    ]);
+  });
+
+  it('adds no tracks for a film with no subtitle streams', async () => {
+    await openPlayer('/films/8/play?edition=71');
+    expect(document.querySelectorAll('track')).toHaveLength(0);
+  });
+
+  it('adds no tracks when the edition has no file to read them from', async () => {
+    await openPlayer(
+      '/films/1/play?edition=11',
+      heatWith((f) => {
+        f.editions[0].file = null;
+      }),
+    );
+    expect(document.querySelectorAll('track')).toHaveLength(0);
+  });
+
+  it('turns the forced track on by itself when Subtitles is Off (decision 6)', async () => {
+    await openPlayer();
+    expect(mode('English (forced)')).toBe('showing');
+    expect(mode('English')).toBe('disabled');
+  });
+
+  it('shows nothing when Subtitles is Off and the film has no forced track', async () => {
+    await openPlayer(
+      '/films/1/play?edition=11',
+      heatWith((f) => {
+        f.editions[0].subtitleStreams = f.editions[0].subtitleStreams.filter((s) => !s.forced);
+      }),
+    );
+    expect(mode('English')).toBe('disabled');
+  });
+
+  it('choosing full English replaces the forced track, and going back to Off brings it back', async () => {
+    await openPlayer();
+    await userEvent.click(screen.getByRole('button', { name: 'Audio and subtitles' }));
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: 'Subtitles' })).getByRole('menuitemradio', {
+        name: /^English$/,
+      }),
+    );
+    expect(mode('English')).toBe('showing');
+    expect(mode('English (forced)')).toBe('disabled');
+
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: 'Subtitles' })).getByRole('menuitemradio', {
+        name: /^Off/,
+      }),
+    );
+    expect(mode('English')).toBe('disabled');
+    expect(mode('English (forced)')).toBe('showing');
+  });
+
+  it('shows the remembered track', async () => {
+    await openPlayer(
+      '/films/1/play?edition=11',
+      heatWith((f) => {
+        f.preferences.subtitle = 113;
+      }),
+    );
+    expect(mode('English')).toBe('showing');
+    expect(mode('English (forced)')).toBe('disabled');
+  });
+
+  it('the C key moves the showing track along with the choice', async () => {
+    const { player } = await openPlayer();
+    fireEvent.keyDown(player, { key: 'c' });
+    expect(mode('English')).toBe('showing');
+    fireEvent.keyDown(player, { key: 'c' });
+    expect(mode('English (forced)')).toBe('showing');
+    expect(mode('English')).toBe('disabled');
+    fireEvent.keyDown(player, { key: 'c' });
+    expect(mode('English')).toBe('disabled');
+    expect(mode('English (forced)')).toBe('showing');
   });
 });

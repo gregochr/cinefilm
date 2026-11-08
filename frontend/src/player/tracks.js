@@ -36,6 +36,22 @@ export function nextSubtitle(streams = [], current = SUBTITLE_OFF) {
   return values[(at + 1) % values.length];
 }
 
+const isEnglishOrUnlabelled = (stream) => !stream.language || /^english$/i.test(stream.language);
+
+/**
+ * The subtitle stream key that should be showing. A chosen stream shows. When Subtitles is Off the
+ * forced English track (language unknown counts) shows by itself, because forced tracks translate
+ * the foreign-language lines a film expects you not to understand (decision 6). Otherwise none.
+ */
+export function activeSubtitleKey(streams = [], choice = SUBTITLE_OFF) {
+  if (choice !== SUBTITLE_OFF) {
+    const chosen = streams.find((s) => String(streamKey(s)) === String(choice));
+    return chosen ? streamKey(chosen) : null;
+  }
+  const forced = streams.find((s) => s.forced && isEnglishOrUnlabelled(s));
+  return forced ? streamKey(forced) : null;
+}
+
 export function formatBitrate(bps) {
   if (!bps) return '';
   const mbps = bps / 1_000_000;

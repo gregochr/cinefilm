@@ -541,7 +541,7 @@ phase 5).
 - `docker-compose.yml`: `name: cinefilm`; `cinefilm-db` (no `ports:`, bind mount
   `/home/gregochr/cinefilm-data/postgres`, `pg_isready` healthcheck, json-file log rotation); `cinefilm`
   (`127.0.0.1:8086:8080`, `env_file: ./.env` holding `CINEFILM_PASSWORD` and `POSTGRES_PASSWORD`, later
-  `TMDB_API_KEY`; `SPRING_PROFILES_ACTIVE=prod`; `TZ`; `mem_limit` and `-XX:MaxRAMPercentage` so a 2012 mini shared
+  `TMDB_READ_TOKEN`; `SPRING_PROFILES_ACTIVE=prod`; `TZ`; `mem_limit` and `-XX:MaxRAMPercentage` so a 2012 mini shared
   with goldenhour cannot be starved (D20); the media mount in long syntax `type: bind, source:
   /mnt/workhorse-films, target: /media, read_only: true, bind: { propagation: rslave }` so a share that mounts after
   the container starts still appears inside it; cache and logs volumes; `stop_grace_period`; healthcheck). A
@@ -626,7 +626,7 @@ SSH key from dockermacmini to workhorse for the off-box rsync, D14, D19.
 ### Later, with the product phases (not in this series)
 
 - **Product phase 2 (TMDB)**: `@Tag("real-api")` TMDB client tests excluded by default; copy CineLight's
-  `real-api-smoke.yml` (weekly, fails if 0 tests ran), secret `TMDB_API_KEY`; WireMock or `MockRestServiceServer`
+  `real-api-smoke.yml` (weekly, fails if 0 tests ran), secret `TMDB_READ_TOKEN`; WireMock or `MockRestServiceServer`
   for the deterministic tests. The **scanner must treat a missing mount or missing sentinel as "library
   unavailable", never as "every film deleted"** — a named test.
 - **Product phase 3 (workers)**: `ghcr.io/gregochr/cinefilm-worker` built in `deploy.yml`; the dockermacmini worker

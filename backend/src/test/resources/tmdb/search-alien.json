@@ -1,0 +1,170 @@
+{
+ "page": 1,
+ "results": [
+  {
+   "adult": false,
+   "backdrop_path": "/AmR3JG1VQVxU8TfAvljUhfSFUOx.jpg",
+   "genre_ids": [
+    27,
+    878
+   ],
+   "id": 348,
+   "title": "Alien",
+   "original_language": "en",
+   "original_title": "Alien",
+   "overview": "During its return to the earth, commercial spaceship Nostromo intercepts a distress signal from a distant planet. When a three-member team of the crew discovers a chamber containing thousands of eggs on the planet, a creature inside one of the eggs attacks an explorer. The entire crew is unaware of the impending nightmare set to descend upon them when the alien parasite planted inside its unfortunate host is birthed.",
+   "popularity": 22.6455,
+   "poster_path": "/vfrQk5IPloGg1v9Rzbh2Eg3VGyM.jpg",
+   "release_date": "1979-05-25",
+   "softcore": false,
+   "video": false,
+   "vote_average": 8.176,
+   "vote_count": 17098
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/iYqSQaWDttQIQzsxg9xHyg0bttG.jpg",
+   "genre_ids": [
+    27,
+    878
+   ],
+   "id": 945961,
+   "title": "Alien: Romulus",
+   "original_language": "en",
+   "original_title": "Alien: Romulus",
+   "overview": "While scavenging the deep ends of a derelict space station, a group of young space colonizers come face to face with the most terrifying life form in the universe.",
+   "popularity": 16.2911,
+   "poster_path": "/2uSWRTtCG336nuBiG8jOTEUKSy8.jpg",
+   "release_date": "2024-08-13",
+   "softcore": false,
+   "video": false,
+   "vote_average": 7.155,
+   "vote_count": 5045
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/lU0zVj8KcQVkPczdGGraYGiRC72.jpg",
+   "genre_ids": [
+    878,
+    28,
+    27
+   ],
+   "id": 8077,
+   "title": "Alien\u00b3",
+   "original_language": "en",
+   "original_title": "Alien\u00b3",
+   "overview": "After escaping with Newt and Hicks from the alien planet, Ripley crash lands on Fiorina 161, a prison planet and host to a correctional facility. Unfortunately, although Newt and Hicks do not survive the crash, a more unwelcome visitor does. The prison does not allow weapons of any kind, and with aid being a long time away, the prisoners must simply survive in any way they can.",
+   "popularity": 7.9856,
+   "poster_path": "/xh5wI0UoW7DfS1IyLy3d2CgrCEP.jpg",
+   "release_date": "1992-05-22",
+   "softcore": false,
+   "video": false,
+   "vote_average": 6.388,
+   "vote_count": 6698
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/iXXPaQPfQowpQ5UvhsHLj9BgFhe.jpg",
+   "genre_ids": [
+    27,
+    878
+   ],
+   "id": 126889,
+   "title": "Alien: Covenant",
+   "original_language": "en",
+   "original_title": "Alien: Covenant",
+   "overview": "The crew of the colony ship Covenant, bound for a remote planet on the far side of the galaxy, discovers what they think is an uncharted paradise but is actually a dark, dangerous world.",
+   "popularity": 11.1604,
+   "poster_path": "/zecMELPbU5YMQpC81Z8ImaaXuf9.jpg",
+   "release_date": "2017-05-09",
+   "softcore": false,
+   "video": false,
+   "vote_average": 6.193,
+   "vote_count": 9797
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/ikr0UILfvRerzMNoBTtJtyuWAEV.jpg",
+   "genre_ids": [
+    878,
+    27,
+    28
+   ],
+   "id": 8078,
+   "title": "Alien Resurrection",
+   "original_language": "en",
+   "original_title": "Alien Resurrection",
+   "overview": "Two hundred years after Lt. Ripley died, a group of scientists clone her, hoping to breed the ultimate weapon. But the new Ripley is full of surprises \u2026 as are the new aliens. Ripley must team with a band of smugglers to keep the creatures from reaching Earth.",
+   "popularity": 7.073,
+   "poster_path": "/9aRDMlU5Zwpysilm0WCWzU2PCFv.jpg",
+   "release_date": "1997-11-12",
+   "softcore": false,
+   "video": false,
+   "vote_average": 6.171,
+   "vote_count": 5860
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/taFnafHKcVacP8RApee1qJVt5iU.jpg",
+   "genre_ids": [
+    18,
+    80
+   ],
+   "id": 647003,
+   "title": "Alien Nights",
+   "original_language": "pt",
+   "original_title": "Noites Alien\u00edgenas",
+   "overview": "Rio Branco, Acre, an Amazon city near the border with Peru and Bolivia, has been suffering the violent impacts of recent changes in trafficking routes, which have arrived with violence in the Brazilian Amazon. In this scenario, the lives of three young childhood friends intertwine and ultimately, they find themselves in a common tragedy.",
+   "popularity": 1.8246,
+   "poster_path": "/rkwOj1Ex2EjgYkfkuXbjr9lRsxU.jpg",
+   "release_date": "2023-03-23",
+   "softcore": false,
+   "video": false,
+   "vote_average": 6.8,
+   "vote_count": 15
+  },
+  {
+   "adult": false,
+   "backdrop_path": null,
+   "genre_ids": [
+    878,
+    10770
+   ],
+   "id": 52477,
+   "title": "Alien Cargo",
+   "original_language": "en",
+   "original_title": "Alien Cargo",
+   "overview": "After eight months of hyper-sleep, when Christopher 'Chris' McNiel (Jason London) and Theta Kaplan (Missy Crider) of a Mars cargo transport ship the Solar System Shipping Vessel No.17 (Triple S-17) awaken, they find out something has gone terribly wrong. They've woken up from hyper-sleep almost ten months past their scheduled time, find the ship's internals badly damaged, off course and almost no fuel. What's more, it's discovered the first shift killed each other. As the plot unfolds, something truly evil is discovered on board - an alien biological life form which can psychologically manipulate humans.",
+   "popularity": 2.3026,
+   "poster_path": "/nGktETuqS4qKkPYH90FmPNIvVqq.jpg",
+   "release_date": "1999-01-28",
+   "softcore": false,
+   "video": false,
+   "vote_average": 5.857,
+   "vote_count": 21
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/wDhUsYN1Yk2wQufyFIq7gwIBlsq.jpg",
+   "genre_ids": [
+    18,
+    27,
+    878
+   ],
+   "id": 588207,
+   "title": "Alien: Containment",
+   "original_language": "en",
+   "original_title": "Alien: Containment",
+   "overview": "Aboard a small escape pod, four survivors try to discover what caused the destruction of their spaceship.",
+   "popularity": 2.4998,
+   "poster_path": "/Au2rDB47SuP0U0y3MV8awoCO8qd.jpg",
+   "release_date": "2019-03-15",
+   "softcore": false,
+   "video": false,
+   "vote_average": 6.115,
+   "vote_count": 65
+  }
+ ],
+ "total_pages": 68,
+ "total_results": 1346
+}

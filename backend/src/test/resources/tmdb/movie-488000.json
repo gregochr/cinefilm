@@ -1,0 +1,111 @@
+{
+ "adult": false,
+ "backdrop_path": "/gDxAYG596pEnovPMFwACWIBOwOp.jpg",
+ "belongs_to_collection": null,
+ "budget": 0,
+ "genres": [
+  {
+   "id": 99,
+   "name": "Documentary"
+  },
+  {
+   "id": 10770,
+   "name": "TV Movie"
+  }
+ ],
+ "homepage": "",
+ "id": 488000,
+ "imdb_id": "tt0087614",
+ "origin_country": [
+  "FR"
+ ],
+ "original_language": "fr",
+ "original_title": "Lettre d'une cin\u00e9aste: Chantal Akerman",
+ "overview": "A filmmaker\u2019s self-portrait, asking hard questions of herself and of us. Invoking Aurore Cl\u00e9ment as a kind of stand-in or proxy, a glamorous counterpart to Akerman who sports a drawn-on moustache. What is cinema for? Who is it for? If the Mosaic prohibition on making graven images includes film images, then where does that leave a Jewish filmmaker?",
+ "popularity": 0.6785,
+ "poster_path": "/4iHUsXhUSW4akPddsYqPOiXo2Bp.jpg",
+ "production_companies": [
+  {
+   "id": 10645,
+   "logo_path": null,
+   "name": "Paradise Films",
+   "origin_country": "BE"
+  },
+  {
+   "id": 11359,
+   "logo_path": "/aqWJRi66t2oMPMmC60CdK9I3WQd.png",
+   "name": "France 2",
+   "origin_country": "FR"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "FR",
+   "name": "France"
+  }
+ ],
+ "release_date": "1984-11-19",
+ "revenue": 0,
+ "runtime": 8,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "French",
+   "iso_639_1": "fr",
+   "name": "Fran\u00e7ais"
+  }
+ ],
+ "status": "Released",
+ "tagline": "",
+ "title": "Letter from a Filmmaker: Chantal Akerman",
+ "video": false,
+ "vote_average": 6.8,
+ "vote_count": 6,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 130030,
+    "known_for_department": "Directing",
+    "name": "Chantal Akerman",
+    "original_name": "Chantal Akerman",
+    "popularity": 0.9902,
+    "profile_path": "/yQH1lbMA56PKy88LE4o9gryvVK1.jpg",
+    "cast_id": 0,
+    "character": "Self",
+    "credit_id": "5a11e22ac3a3686289056679",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 9893,
+    "known_for_department": "Acting",
+    "name": "Aurore Cl\u00e9ment",
+    "original_name": "Aurore Cl\u00e9ment",
+    "popularity": 0.9136,
+    "profile_path": "/mS97i9fMcFAu1RqYbFlh3g4JdE4.jpg",
+    "cast_id": 1,
+    "character": "Self",
+    "credit_id": "5a11e232c3a368628305a942",
+    "order": 1
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 130030,
+    "known_for_department": "Directing",
+    "name": "Chantal Akerman",
+    "original_name": "Chantal Akerman",
+    "popularity": 0.9902,
+    "profile_path": "/yQH1lbMA56PKy88LE4o9gryvVK1.jpg",
+    "credit_id": "5a11e23f92514138f6057c7a",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

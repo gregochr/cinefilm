@@ -320,21 +320,21 @@
                                         </limit>
                                     </limits>
                                 </rule>
-                                <!-- Bundle floor: the measured total (99.723% lines, 99.127% branches on the local gate,
-                                     2026-11-08), rounded down to one decimal place. Ratchet: raise it when coverage
-                                     rises, never lower it without the owner. -->
+                                <!-- Bundle floor: the measured total (99.89% lines, 99.87% branches on the local gate, after the
+                                     library scan, 2026-11-08), rounded down to one decimal place. Ratchet: raise it
+                                     when coverage rises, never lower it without the owner. -->
                                 <rule>
                                     <element>BUNDLE</element>
                                     <limits>
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.997</minimum>
+                                            <minimum>0.998</minimum>
                                         </limit>
                                         <limit>
                                             <counter>BRANCH</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.991</minimum>
+                                            <minimum>0.998</minimum>
                                         </limit>
                                     </limits>
                                 </rule>
@@ -382,8 +382,8 @@
                     <mutators>
                         <mutator>DEFAULTS</mutator>
                     </mutators>
-                    <!-- Measured 2026-11-08: 97.95% (287/293 mutants killed), floor rounded down. -->
-                    <mutationThreshold>97</mutationThreshold>
+                    <!-- Measured 2026-11-08 after the library scan: 98.62% (857/869 mutants killed), floor rounded down. -->
+                    <mutationThreshold>98</mutationThreshold>
                     <parseSurefireConfig>false</parseSurefireConfig>
                     <timeoutConstant>10000</timeoutConstant>
                     <threads>4</threads>

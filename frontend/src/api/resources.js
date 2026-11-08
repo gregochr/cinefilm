@@ -39,3 +39,14 @@ export const sessionApi = {
   signIn: (password) => post('/api/session', { password }),
   signOut: () => del('/api/session'),
 };
+
+export const adminApi = {
+  scan: (options) => get('/api/admin/scan', options),
+  startScan: () => post('/api/admin/scan'),
+  attention: (options) => get('/api/admin/attention', options),
+};
+
+export const mediaFilesApi = {
+  /** The WebVTT of an embedded subtitle stream (`index` is the stream index in the file). */
+  subtitleUrl: (fileId, index) => `/api/media-files/${fileId}/subtitles/${index}.vtt`,
+};

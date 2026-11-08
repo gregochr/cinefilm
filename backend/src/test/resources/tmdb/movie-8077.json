@@ -1,0 +1,260 @@
+{
+ "adult": false,
+ "backdrop_path": "/lU0zVj8KcQVkPczdGGraYGiRC72.jpg",
+ "belongs_to_collection": {
+  "id": 8091,
+  "name": "Alien Collection",
+  "poster_path": "/gWFHIY77cRVoBRGERwMHqpD27gc.jpg",
+  "backdrop_path": "/6X42JnSMdo3dPAswOHUuvebdTq7.jpg"
+ },
+ "budget": 50000000,
+ "genres": [
+  {
+   "id": 878,
+   "name": "Science Fiction"
+  },
+  {
+   "id": 28,
+   "name": "Action"
+  },
+  {
+   "id": 27,
+   "name": "Horror"
+  }
+ ],
+ "homepage": "https://www.20thcenturystudios.com/movies/alien-3",
+ "id": 8077,
+ "imdb_id": "tt0103644",
+ "origin_country": [
+  "US"
+ ],
+ "original_language": "en",
+ "original_title": "Alien\u00b3",
+ "overview": "After escaping with Newt and Hicks from the alien planet, Ripley crash lands on Fiorina 161, a prison planet and host to a correctional facility. Unfortunately, although Newt and Hicks do not survive the crash, a more unwelcome visitor does. The prison does not allow weapons of any kind, and with aid being a long time away, the prisoners must simply survive in any way they can.",
+ "popularity": 7.9856,
+ "poster_path": "/xh5wI0UoW7DfS1IyLy3d2CgrCEP.jpg",
+ "production_companies": [
+  {
+   "id": 25,
+   "logo_path": "/nM2MfoMqzJQRiSynsDabOtFKetD.png",
+   "name": "20th Century Fox",
+   "origin_country": "US"
+  },
+  {
+   "id": 401,
+   "logo_path": "/t7mM3DvQ9MwDT3YzMCBrkWpWiiz.png",
+   "name": "Brandywine Productions",
+   "origin_country": "US"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "US",
+   "name": "United States of America"
+  }
+ ],
+ "release_date": "1992-05-22",
+ "revenue": 159773545,
+ "runtime": 114,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  }
+ ],
+ "status": "Released",
+ "tagline": "3 times the suspense. 3 times the danger. 3 times the terror",
+ "title": "Alien\u00b3",
+ "video": false,
+ "vote_average": 6.388,
+ "vote_count": 6698,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 10205,
+    "known_for_department": "Acting",
+    "name": "Sigourney Weaver",
+    "original_name": "Sigourney Weaver",
+    "popularity": 4.13,
+    "profile_path": "/wTSnfktNBLd6kwQxgvkqYw6vEon.jpg",
+    "cast_id": 1,
+    "character": "Ripley",
+    "credit_id": "52fe4491c3a36847f809d8a7",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 17764,
+    "known_for_department": "Acting",
+    "name": "Charles S. Dutton",
+    "original_name": "Charles S. Dutton",
+    "popularity": 1.383,
+    "profile_path": "/eNLs4JLILqSY50Tq5QMkrlBxD0H.jpg",
+    "cast_id": 3,
+    "character": "Dillon",
+    "credit_id": "52fe4491c3a36847f809d8b1",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 4391,
+    "known_for_department": "Acting",
+    "name": "Charles Dance",
+    "original_name": "Charles Dance",
+    "popularity": 3.685,
+    "profile_path": "/28ElvRC5ftOSzZBFM0cn4XrwH36.jpg",
+    "cast_id": 4,
+    "character": "Clemens",
+    "credit_id": "52fe4491c3a36847f809d8b5",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 47654,
+    "known_for_department": "Acting",
+    "name": "Paul McGann",
+    "original_name": "Paul McGann",
+    "popularity": 1.5714,
+    "profile_path": "/4NAtQI30CAaJuQRiot9twe7J9t9.jpg",
+    "cast_id": 7,
+    "character": "Golic",
+    "credit_id": "52fe4491c3a36847f809d8c1",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 14468,
+    "known_for_department": "Acting",
+    "name": "Brian Glover",
+    "original_name": "Brian Glover",
+    "popularity": 0.8066,
+    "profile_path": "/hDdYu0Jfw1pMZrRayeqbjyZ6K1w.jpg",
+    "cast_id": 15,
+    "character": "Andrews",
+    "credit_id": "52fe4491c3a36847f809d8eb",
+    "order": 4
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 53916,
+    "known_for_department": "Acting",
+    "name": "Ralph Brown",
+    "original_name": "Ralph Brown",
+    "popularity": 0.891,
+    "profile_path": "/20VVWsUZHmTmN80xgHyy6LAFDuC.jpg",
+    "cast_id": 6,
+    "character": "Aaron",
+    "credit_id": "52fe4491c3a36847f809d8bd",
+    "order": 5
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 53917,
+    "known_for_department": "Acting",
+    "name": "Danny Webb",
+    "original_name": "Danny Webb",
+    "popularity": 1.4515,
+    "profile_path": "/e7OhVUIsfGWYIrYxwD1KEWF7afP.jpg",
+    "cast_id": 8,
+    "character": "Morse",
+    "credit_id": "52fe4491c3a36847f809d8c5",
+    "order": 6
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 145531,
+    "known_for_department": "Acting",
+    "name": "Christopher John Fields",
+    "original_name": "Christopher John Fields",
+    "popularity": 0.6684,
+    "profile_path": "/3ASDmbBZQnk526pPeNtb8LOJXBX.jpg",
+    "cast_id": 19,
+    "character": "Rains",
+    "credit_id": "52fe4491c3a36847f809d8f7",
+    "order": 7
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 7497,
+    "known_for_department": "Acting",
+    "name": "Holt McCallany",
+    "original_name": "Holt McCallany",
+    "popularity": 3.1014,
+    "profile_path": "/b1FEXFQ8ZnvXhVrMqCv5mTJ8aW3.jpg",
+    "cast_id": 31,
+    "character": "Junior",
+    "credit_id": "52fe4491c3a36847f809d927",
+    "order": 8
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 2714,
+    "known_for_department": "Acting",
+    "name": "Lance Henriksen",
+    "original_name": "Lance Henriksen",
+    "popularity": 2.4669,
+    "profile_path": "/1PkFmD5HdjmRa2DumtwINnnAjTH.jpg",
+    "cast_id": 9,
+    "character": "Bishop II",
+    "credit_id": "52fe4491c3a36847f809d8c9",
+    "order": 9
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 8399,
+    "known_for_department": "Acting",
+    "name": "Christopher Fairbank",
+    "original_name": "Christopher Fairbank",
+    "popularity": 0.9668,
+    "profile_path": "/6bO8JmhkC0GzU4gIBdSMY48E3CD.jpg",
+    "cast_id": 22,
+    "character": "Murphy",
+    "credit_id": "52fe4491c3a36847f809d903",
+    "order": 10
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 127166,
+    "known_for_department": "Acting",
+    "name": "Carl Chase",
+    "original_name": "Carl Chase",
+    "popularity": 0.4292,
+    "profile_path": "/aIGqwYzkq2pwTE4J4HzW2fse1so.jpg",
+    "cast_id": 28,
+    "character": "Frank",
+    "credit_id": "52fe4491c3a36847f809d91b",
+    "order": 11
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 7467,
+    "known_for_department": "Directing",
+    "name": "David Fincher",
+    "original_name": "David Fincher",
+    "popularity": 3.304,
+    "profile_path": "/tpEczFclQZeKAiCeKZZ0adRvtfz.jpg",
+    "credit_id": "52fe4491c3a36847f809d8ad",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

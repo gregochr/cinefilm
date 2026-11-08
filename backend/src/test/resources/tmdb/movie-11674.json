@@ -1,0 +1,266 @@
+{
+ "adult": false,
+ "backdrop_path": "/yqh3mb9jd3GTTs09ZlnW4mxS95z.jpg",
+ "belongs_to_collection": {
+  "id": 124916,
+  "name": "101 Dalmatians (Live-Action) Collection",
+  "poster_path": "/s58J9ZFuGvwTxcfiwzr1gLFxo7y.jpg",
+  "backdrop_path": "/eTaNHqpi7VldgcrDetfTzk4FeDi.jpg"
+ },
+ "budget": 54000000,
+ "genres": [
+  {
+   "id": 10751,
+   "name": "Family"
+  },
+  {
+   "id": 35,
+   "name": "Comedy"
+  }
+ ],
+ "homepage": "",
+ "id": 11674,
+ "imdb_id": "tt0115433",
+ "origin_country": [
+  "US"
+ ],
+ "original_language": "en",
+ "original_title": "101 Dalmatians",
+ "overview": "An evil, high-fashion designer plots to steal Dalmatian puppies in order to make an extravagant fur coat, but instead creates an extravagant mess.",
+ "popularity": 9.2056,
+ "poster_path": "/8o2ADoAyG796UwTjwBFjPyBz0yG.jpg",
+ "production_companies": [
+  {
+   "id": 2173,
+   "logo_path": "/tvcLdY0u2hJjacYkoItfEuUNt4k.png",
+   "name": "Great Oaks Entertainment",
+   "origin_country": "US"
+  },
+  {
+   "id": 2,
+   "logo_path": "/wdrCwmRnLFJhEoH8GSfymY85KHT.png",
+   "name": "Walt Disney Pictures",
+   "origin_country": "US"
+  },
+  {
+   "id": 176668,
+   "logo_path": null,
+   "name": "Wizzer Productions",
+   "origin_country": ""
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "GB",
+   "name": "United Kingdom"
+  },
+  {
+   "iso_3166_1": "US",
+   "name": "United States of America"
+  }
+ ],
+ "release_date": "1996-11-27",
+ "revenue": 320689294,
+ "runtime": 103,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  }
+ ],
+ "status": "Released",
+ "tagline": "So many dogs. So little time.",
+ "title": "101 Dalmatians",
+ "video": false,
+ "vote_average": 5.944,
+ "vote_count": 3773,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 515,
+    "known_for_department": "Acting",
+    "name": "Glenn Close",
+    "original_name": "Glenn Close",
+    "popularity": 4.5508,
+    "profile_path": "/4VHZ1GfLwN7MUgApy0LCBzdDF9L.jpg",
+    "cast_id": 10,
+    "character": "Cruella de Vil",
+    "credit_id": "52fe44769251416c75035a2b",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 8447,
+    "known_for_department": "Acting",
+    "name": "Jeff Daniels",
+    "original_name": "Jeff Daniels",
+    "popularity": 1.7824,
+    "profile_path": "/r0mkZJZnTSJO3HJRsMW5HtszxE8.jpg",
+    "cast_id": 11,
+    "character": "Roger",
+    "credit_id": "52fe44769251416c75035a2f",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 20810,
+    "known_for_department": "Acting",
+    "name": "Joely Richardson",
+    "original_name": "Joely Richardson",
+    "popularity": 3.834,
+    "profile_path": "/yv6aLd1TY06HUJqZshEfs8j5twD.jpg",
+    "cast_id": 12,
+    "character": "Anita",
+    "credit_id": "52fe44769251416c75035a33",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 23709,
+    "known_for_department": "Acting",
+    "name": "Joan Plowright",
+    "original_name": "Joan Plowright",
+    "popularity": 0.9623,
+    "profile_path": "/un5wsOnz22Rvl82niE0LGAVxggQ.jpg",
+    "cast_id": 13,
+    "character": "Nanny",
+    "credit_id": "52fe44769251416c75035a37",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 41419,
+    "known_for_department": "Acting",
+    "name": "Hugh Laurie",
+    "original_name": "Hugh Laurie",
+    "popularity": 3.7584,
+    "profile_path": "/akArncggHnusP5jxzMBKmJDRrMo.jpg",
+    "cast_id": 14,
+    "character": "Jasper",
+    "credit_id": "52fe44769251416c75035a3b",
+    "order": 4
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 20999,
+    "known_for_department": "Acting",
+    "name": "Mark Williams",
+    "original_name": "Mark Williams",
+    "popularity": 2.3334,
+    "profile_path": "/gdlEDhxSmPv3hWHbpTuwCI5Jrtk.jpg",
+    "cast_id": 18,
+    "character": "Horace",
+    "credit_id": "5a4e310a0e0a26480b00b422",
+    "order": 5
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 940,
+    "known_for_department": "Acting",
+    "name": "John Shrapnel",
+    "original_name": "John Shrapnel",
+    "popularity": 0.6613,
+    "profile_path": "/A4Wmltbkz3sz79GcBkLeTqwfkvE.jpg",
+    "cast_id": 19,
+    "character": "Skinner",
+    "credit_id": "5a4e3126925141734300a913",
+    "order": 6
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 41043,
+    "known_for_department": "Acting",
+    "name": "Tim McInnerny",
+    "original_name": "Tim McInnerny",
+    "popularity": 2.0457,
+    "profile_path": "/c2LODB0Lf9vXoEq5gHXCorYkkt2.jpg",
+    "cast_id": 20,
+    "character": "Alonzo",
+    "credit_id": "5a4e3148c3a3683b7d00a5e4",
+    "order": 7
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 67028,
+    "known_for_department": "Acting",
+    "name": "Hugh Fraser",
+    "original_name": "Hugh Fraser",
+    "popularity": 1.1839,
+    "profile_path": "/reQgxV9DPvYWwicHIYsppn40mPt.jpg",
+    "cast_id": 21,
+    "character": "Frederick",
+    "credit_id": "5a4e318c0e0a26481a00ad2e",
+    "order": 8
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 2845670,
+    "known_for_department": "Acting",
+    "name": "Zohren Weiss",
+    "original_name": "Zohren Weiss",
+    "popularity": 0.2506,
+    "profile_path": "/xJC8cdFcKZZoa1rfijSnhucQ2Ck.jpg",
+    "cast_id": 32,
+    "character": "Herbert",
+    "credit_id": "5fa57ec71d820f0042c0803a",
+    "order": 9
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 4138254,
+    "known_for_department": "Acting",
+    "name": "Mark Haddigan",
+    "original_name": "Mark Haddigan",
+    "popularity": 0.0562,
+    "profile_path": null,
+    "cast_id": 39,
+    "character": "Alan",
+    "credit_id": "649e5a40091e62012d9ea75e",
+    "order": 10
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 115283,
+    "known_for_department": "Acting",
+    "name": "Michael Percival",
+    "original_name": "Michael Percival",
+    "popularity": 0.5276,
+    "profile_path": "/mYjwg4JgZ9rbc0yI2Rxn1XBjZyg.jpg",
+    "cast_id": 25,
+    "character": "Police Inspector",
+    "credit_id": "5f02c14a15959f00375ad507",
+    "order": 11
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 18356,
+    "known_for_department": "Directing",
+    "name": "Stephen Herek",
+    "original_name": "Stephen Herek",
+    "popularity": 0.8145,
+    "profile_path": "/ni2MxgHBvzzYj9OzHpQ3yHkar79.jpg",
+    "credit_id": "52fe44769251416c750359f7",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

@@ -12,6 +12,7 @@ import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaKind;
 import gregochr.cinefilm.film.SubtitleStream;
+import gregochr.cinefilm.library.LibraryRoot;
 import gregochr.cinefilm.person.Person;
 import gregochr.cinefilm.person.PersonRepository;
 import gregochr.cinefilm.playback.PlaybackState;
@@ -19,6 +20,7 @@ import gregochr.cinefilm.playback.PlaybackStateRepository;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -40,7 +42,7 @@ public class DevSeed implements ApplicationRunner {
 
     private static final Logger LOG = LoggerFactory.getLogger(DevSeed.class);
     private static final long MINUTE = 60_000L;
-    private static final String PLACEHOLDER_DIR = "/nonexistent/cinefilm-sample/";
+    private static final String PLACEHOLDER_DIR = "cinefilm-sample/";
 
     private final FilmRepository films;
     private final PersonRepository people;
@@ -48,14 +50,16 @@ public class DevSeed implements ApplicationRunner {
     private final PlaybackStateRepository states;
     private final Clock clock;
     private final String sampleVideo;
+    private final LibraryRoot root;
 
     private final Map<String, Person> personCache = new HashMap<>();
     private Instant now;
 
     /** Creates the seeder over the repositories, the application clock and the optional sample video path. */
     public DevSeed(FilmRepository films, PersonRepository people, FilmCollectionRepository collections,
-                   PlaybackStateRepository states, Clock clock,
+                   PlaybackStateRepository states, Clock clock, LibraryRoot root,
                    @Value("${cinefilm.sample-video:}") String sampleVideo) {
+        this.root = root;
         this.films = films;
         this.people = people;
         this.collections = collections;
@@ -252,6 +256,21 @@ public class DevSeed implements ApplicationRunner {
         return film;
     }
 
+    /** Media paths are relative to the library root; a sample video outside the root cannot be served. */
+    private String mediaPath(Film film, Edition edition) {
+        if (sampleVideo.isBlank()) {
+            return PLACEHOLDER_DIR + film.getSortTitle().replaceAll("[^a-z0-9]+", "-") + "-" + edition.getYear()
+                + ".mp4";
+        }
+        Path sample = Path.of(sampleVideo).toAbsolutePath().normalize();
+        if (sample.startsWith(root.root())) {
+            return root.relativize(sample);
+        }
+        LOG.warn("CINEFILM_SAMPLE_VIDEO is outside the library root {}; set CINEFILM_LIBRARY_ROOT to its folder",
+            root.root());
+        return sample.getFileName().toString();
+    }
+
     private Edition edition(Film film, String name, int year, int minutes, String note, Long marker,
                             boolean subtitles, boolean commentary) {
         Edition edition = new Edition();
@@ -263,9 +282,7 @@ public class DevSeed implements ApplicationRunner {
         edition.setCreditsMarkerMs(marker);
         MediaFile file = new MediaFile();
         file.setEdition(edition);
-        file.setPath(sampleVideo.isBlank()
-            ? PLACEHOLDER_DIR + film.getSortTitle().replaceAll("[^a-z0-9]+", "-") + "-" + edition.getYear() + ".mp4"
-            : sampleVideo);
+        file.setPath(mediaPath(film, edition));
         file.setKind(MediaKind.ORIGINAL);
         file.setContainer("mp4");
         file.setVideoCodec("HEVC");

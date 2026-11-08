@@ -52,6 +52,16 @@ public class Edition {
     @OrderBy("id")
     private List<MediaFile> mediaFiles = new ArrayList<>();
 
+    /**
+     * True when the edition's original file is missing from disk or cannot be direct-played, so the edition must not
+     * be offered. An edition with no original file row at all is not hidden here (it only has pre-made renditions).
+     */
+    public boolean hiddenFromBrowse() {
+        MediaFile original = originalFile();
+        return original != null && (original.getPresence() != Presence.PRESENT
+            || original.getPlayability() != Playability.PLAYABLE);
+    }
+
     /** The original (direct-play) file, if the edition has one. */
     public MediaFile originalFile() {
         return mediaFiles.stream().filter(f -> f.getKind() == MediaKind.ORIGINAL).findFirst().orElse(null);

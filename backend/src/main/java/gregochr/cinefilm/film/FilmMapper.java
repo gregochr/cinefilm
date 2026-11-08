@@ -47,7 +47,8 @@ public final class FilmMapper {
             film.getGenres().stream().sorted().toList(), collection,
             view.directors().stream().map(FilmMapper::personRef).toList(),
             view.cast().stream().map(c -> new CastEntry(personRef(c.getPerson()), c.getCharacter())).toList(),
-            film.getEditions().stream().map(e -> edition(e, view.state(e))).toList(), preferences);
+            film.getEditions().stream().filter(e -> !e.hiddenFromBrowse()).map(e -> edition(e, view.state(e)))
+                .toList(), preferences);
     }
 
     private static EditionDto edition(Edition edition, Optional<PlaybackState> state) {
@@ -74,7 +75,8 @@ public final class FilmMapper {
             .or(() -> original.getAudioStreams().stream().findFirst())
             .map(AudioStream::getChannels)
             .orElse(null);
-        return new FileInfo(original.getVideoCodec(), original.getHeight(), summary, original.getAddedAt());
+        return new FileInfo(original.getId(), original.getVideoCodec(), original.getHeight(), summary,
+            original.getAddedAt());
     }
 
     /** Phase 1: only auto and original are available; lower qualities are listed as unavailable. */

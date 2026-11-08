@@ -1,0 +1,260 @@
+{
+ "adult": false,
+ "backdrop_path": "/i5E9H7Ik0u61ylDDTbmUpTL3Yw.jpg",
+ "belongs_to_collection": {
+  "id": 726871,
+  "name": "Dune Collection",
+  "poster_path": "/lxIGYkpvYjLtYtZH684AQft0FhD.jpg",
+  "backdrop_path": "/fahk0Fu7VUUfK6IkTt1R3waOD9F.jpg"
+ },
+ "budget": 200000000,
+ "genres": [
+  {
+   "id": 878,
+   "name": "Science Fiction"
+  },
+  {
+   "id": 12,
+   "name": "Adventure"
+  }
+ ],
+ "homepage": "https://www.dunemovie.com",
+ "id": 1170608,
+ "imdb_id": "tt31378509",
+ "origin_country": [
+  "US"
+ ],
+ "original_language": "en",
+ "original_title": "Dune: Part Three",
+ "overview": "Nearly two decades after he seized control of the Imperium, Paul Atreides is now a ruthless Emperor, and must face the consequences of his reign as old allies return, terrifying new threats emerge, and betrayal lurks in every shadow. Haunted by visions of Imperial collapse and the reappearance of his long-lost love, Paul is drawn into a sweeping conspiracy, with Chani at the heart of its unfolding mystery. As enemies close in, Paul must confront the true cost of power and the fate of those he loves the most.",
+ "popularity": 25.8537,
+ "poster_path": "/glt0v4I89rMWstDNCaFXc5SNyO1.jpg",
+ "production_companies": [
+  {
+   "id": 923,
+   "logo_path": "/5UQsZrfbfG2dYJbx8DxfoTr2Bvu.png",
+   "name": "Legendary Pictures",
+   "origin_country": "US"
+  },
+  {
+   "id": 6736,
+   "logo_path": "/cD0sxmCrppVSInHrOJn7B1dSFlm.png",
+   "name": "Image Nation Studios",
+   "origin_country": "AE"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "US",
+   "name": "United States of America"
+  },
+  {
+   "iso_3166_1": "AE",
+   "name": "United Arab Emirates"
+  }
+ ],
+ "release_date": "2026-12-15",
+ "revenue": 0,
+ "runtime": 150,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  }
+ ],
+ "status": "Post Production",
+ "tagline": "The epic conclusion.",
+ "title": "Dune: Part Three",
+ "video": false,
+ "vote_average": 0.0,
+ "vote_count": 0,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1190668,
+    "known_for_department": "Acting",
+    "name": "Timoth\u00e9e Chalamet",
+    "original_name": "Timoth\u00e9e Chalamet",
+    "popularity": 8.7869,
+    "profile_path": "/dFxpwRpmzpVfP1zjluH68DeQhyj.jpg",
+    "cast_id": 27,
+    "character": "Paul Atreides",
+    "credit_id": "65f3819f293835014a27a333",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 505710,
+    "known_for_department": "Acting",
+    "name": "Zendaya",
+    "original_name": "Zendaya",
+    "popularity": 13.0042,
+    "profile_path": "/1qup8tSt95HLbcy2c2xrx4iJNxv.jpg",
+    "cast_id": 41,
+    "character": "Chani",
+    "credit_id": "6770d0011f2c5d93019287e6",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 117642,
+    "known_for_department": "Acting",
+    "name": "Jason Momoa",
+    "original_name": "Jason Momoa",
+    "popularity": 8.0623,
+    "profile_path": "/3troAR6QbSb6nUFMDu61YCCWLKa.jpg",
+    "cast_id": 42,
+    "character": "Hayt",
+    "credit_id": "67ead808e6a855588454947c",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 1373737,
+    "known_for_department": "Acting",
+    "name": "Florence Pugh",
+    "original_name": "Florence Pugh",
+    "popularity": 11.3162,
+    "profile_path": "/1QfiLnofJFlOJOLCWaxyDpIN03v.jpg",
+    "cast_id": 39,
+    "character": "Princess Irulan",
+    "credit_id": "6762dd84178bde9bac4a2bec",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 933238,
+    "known_for_department": "Acting",
+    "name": "Rebecca Ferguson",
+    "original_name": "Rebecca Ferguson",
+    "popularity": 9.629,
+    "profile_path": "/ty8ZPzaCBBlqIr5qzpOXI24iC8j.jpg",
+    "cast_id": 64,
+    "character": "Lady Jessica",
+    "credit_id": "68e5388a8dba4d8e56bda196",
+    "order": 4
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 4812,
+    "known_for_department": "Acting",
+    "name": "Isaach de Bankol\u00e9",
+    "original_name": "Isaach de Bankol\u00e9",
+    "popularity": 0.8906,
+    "profile_path": "/aGjABQBgTA3tduuh54hzWx0aQ44.jpg",
+    "cast_id": 188,
+    "character": "Farok",
+    "credit_id": "69b899754d3bc35add5a7d26",
+    "order": 5
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 44079,
+    "known_for_department": "Acting",
+    "name": "Charlotte Rampling",
+    "original_name": "Charlotte Rampling",
+    "popularity": 2.4569,
+    "profile_path": "/7fhg5FCcl0VfYERP5D0unpybqgx.jpg",
+    "cast_id": 201,
+    "character": "Reverend Mother Mohiam",
+    "credit_id": "69b9c85e4de5c720ab21e4d0",
+    "order": 6
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 1397778,
+    "known_for_department": "Acting",
+    "name": "Anya Taylor-Joy",
+    "original_name": "Anya Taylor-Joy",
+    "popularity": 9.8439,
+    "profile_path": "/qYNofOjlRke2MlJVihmJmEdQI4v.jpg",
+    "cast_id": 40,
+    "character": "Alia Atreides",
+    "credit_id": "6762dd9467c96321804a2a4c",
+    "order": 7
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 11288,
+    "known_for_department": "Acting",
+    "name": "Robert Pattinson",
+    "original_name": "Robert Pattinson",
+    "popularity": 11.2787,
+    "profile_path": "/3qZ09UE7lN6AtorfXFRYpEtSY93.jpg",
+    "cast_id": 45,
+    "character": "Scytale",
+    "credit_id": "67f58d9d6c3583c975999331",
+    "order": 8
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 3810,
+    "known_for_department": "Acting",
+    "name": "Javier Bardem",
+    "original_name": "Javier Bardem",
+    "popularity": 4.3517,
+    "profile_path": "/zfRID0jx8DKBluPGU9xtk9sZWUt.jpg",
+    "cast_id": 184,
+    "character": "Stilgar",
+    "credit_id": "69a53b43d4c72c3b85c4bbd9",
+    "order": 9
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1722814,
+    "known_for_department": "Acting",
+    "name": "Nakoa-Wolf Momoa",
+    "original_name": "Nakoa-Wolf Momoa",
+    "popularity": 0.6807,
+    "profile_path": "/y5dhw5L3M0ZVgaJm7qA67cQGOsJ.jpg",
+    "cast_id": 53,
+    "character": "Leto II",
+    "credit_id": "6850a422f8c28c82aeb6dde8",
+    "order": 10
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 4070075,
+    "known_for_department": "Acting",
+    "name": "Ida Brooke",
+    "original_name": "Ida Brooke",
+    "popularity": 0.4696,
+    "profile_path": "/e9kGzuYnYRMvRcPo0tBmIV2Phhy.jpg",
+    "cast_id": 54,
+    "character": "Ghanima",
+    "credit_id": "6850a44a2edcd941c3ec9144",
+    "order": 11
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 137427,
+    "known_for_department": "Directing",
+    "name": "Denis Villeneuve",
+    "original_name": "Denis Villeneuve",
+    "popularity": 4.0757,
+    "profile_path": "/xzQYqb4nR8xT7Zdw5itbEL9K3fd.jpg",
+    "credit_id": "64ebf39945819900e35398f5",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

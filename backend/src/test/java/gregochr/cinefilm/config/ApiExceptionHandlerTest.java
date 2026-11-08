@@ -47,4 +47,13 @@ class ApiExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).containsExactly(Map.entry("error", "Invalid request"));
     }
+
+    @Test
+    void conflictIs409WithTheMessageAsTheError() {
+        ResponseEntity<Map<String, String>> response = handler.conflict(
+            new ConflictException("A scan is already running"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).containsExactly(Map.entry("error", "A scan is already running"));
+    }
 }

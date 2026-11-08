@@ -1,0 +1,260 @@
+{
+ "adult": false,
+ "backdrop_path": "/ikr0UILfvRerzMNoBTtJtyuWAEV.jpg",
+ "belongs_to_collection": {
+  "id": 8091,
+  "name": "Alien Collection",
+  "poster_path": "/gWFHIY77cRVoBRGERwMHqpD27gc.jpg",
+  "backdrop_path": "/6X42JnSMdo3dPAswOHUuvebdTq7.jpg"
+ },
+ "budget": 70000000,
+ "genres": [
+  {
+   "id": 878,
+   "name": "Science Fiction"
+  },
+  {
+   "id": 27,
+   "name": "Horror"
+  },
+  {
+   "id": 28,
+   "name": "Action"
+  }
+ ],
+ "homepage": "https://www.20thcenturystudios.com/movies/alien-resurrection",
+ "id": 8078,
+ "imdb_id": "tt0118583",
+ "origin_country": [
+  "US"
+ ],
+ "original_language": "en",
+ "original_title": "Alien Resurrection",
+ "overview": "Two hundred years after Lt. Ripley died, a group of scientists clone her, hoping to breed the ultimate weapon. But the new Ripley is full of surprises \u2026 as are the new aliens. Ripley must team with a band of smugglers to keep the creatures from reaching Earth.",
+ "popularity": 7.073,
+ "poster_path": "/9aRDMlU5Zwpysilm0WCWzU2PCFv.jpg",
+ "production_companies": [
+  {
+   "id": 25,
+   "logo_path": "/nM2MfoMqzJQRiSynsDabOtFKetD.png",
+   "name": "20th Century Fox",
+   "origin_country": "US"
+  },
+  {
+   "id": 401,
+   "logo_path": "/t7mM3DvQ9MwDT3YzMCBrkWpWiiz.png",
+   "name": "Brandywine Productions",
+   "origin_country": "US"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "US",
+   "name": "United States of America"
+  }
+ ],
+ "release_date": "1997-11-12",
+ "revenue": 162000000,
+ "runtime": 109,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  }
+ ],
+ "status": "Released",
+ "tagline": "It's already too late.",
+ "title": "Alien Resurrection",
+ "video": false,
+ "vote_average": 6.171,
+ "vote_count": 5860,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 10205,
+    "known_for_department": "Acting",
+    "name": "Sigourney Weaver",
+    "original_name": "Sigourney Weaver",
+    "popularity": 4.13,
+    "profile_path": "/wTSnfktNBLd6kwQxgvkqYw6vEon.jpg",
+    "cast_id": 1,
+    "character": "Ripley",
+    "credit_id": "52fe4492c3a36847f809d98b",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 1920,
+    "known_for_department": "Acting",
+    "name": "Winona Ryder",
+    "original_name": "Winona Ryder",
+    "popularity": 4.745,
+    "profile_path": "/8RVrlgtua8b53wmK7oZAAkm0N5O.jpg",
+    "cast_id": 5,
+    "character": "Call",
+    "credit_id": "52fe4492c3a36847f809d9a1",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 2413,
+    "known_for_department": "Acting",
+    "name": "Dominique Pinon",
+    "original_name": "Dominique Pinon",
+    "popularity": 0.8055,
+    "profile_path": "/rIPUhNwGSglgKLgMQWz0JNCqIzf.jpg",
+    "cast_id": 6,
+    "character": "Vriess",
+    "credit_id": "52fe4492c3a36847f809d9a5",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 2372,
+    "known_for_department": "Acting",
+    "name": "Ron Perlman",
+    "original_name": "Ron Perlman",
+    "popularity": 4.4916,
+    "profile_path": "/nfky6J9ueey1gMdWMNU9k9YdfGP.jpg",
+    "cast_id": 7,
+    "character": "Johner",
+    "credit_id": "52fe4492c3a36847f809d9a9",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 40276,
+    "known_for_department": "Acting",
+    "name": "Gary Dourdan",
+    "original_name": "Gary Dourdan",
+    "popularity": 1.232,
+    "profile_path": "/xsxjlW98I8ml4FCHV040b3XaBOi.jpg",
+    "cast_id": 10,
+    "character": "Christie",
+    "credit_id": "52fe4492c3a36847f809d9b5",
+    "order": 4
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 7486,
+    "known_for_department": "Acting",
+    "name": "Michael Wincott",
+    "original_name": "Michael Wincott",
+    "popularity": 1.5041,
+    "profile_path": "/z6FtWACKaIivi0khxM6vEHoUH0.jpg",
+    "cast_id": 8,
+    "character": "Elgyn",
+    "credit_id": "52fe4492c3a36847f809d9ad",
+    "order": 5
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 170146,
+    "known_for_department": "Acting",
+    "name": "Kim Flowers",
+    "original_name": "Kim Flowers",
+    "popularity": 0.4302,
+    "profile_path": "/lntMwiai5rL0Prr7DxOk724KnsN.jpg",
+    "cast_id": 77,
+    "character": "Hillard",
+    "credit_id": "568abc34c3a368227b02090b",
+    "order": 6
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 6486,
+    "known_for_department": "Acting",
+    "name": "Dan Hedaya",
+    "original_name": "Dan Hedaya",
+    "popularity": 1.6391,
+    "profile_path": "/evL3mV8hNIjZOb1XG3qtgmiTgS5.jpg",
+    "cast_id": 11,
+    "character": "General Perez",
+    "credit_id": "52fe4492c3a36847f809d9b9",
+    "order": 7
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 5169,
+    "known_for_department": "Acting",
+    "name": "J.E. Freeman",
+    "original_name": "J.E. Freeman",
+    "popularity": 0.6356,
+    "profile_path": "/75VHiPXkan70jXZF247yOCdCROV.jpg",
+    "cast_id": 19,
+    "character": "Dr. Wren",
+    "credit_id": "52fe4492c3a36847f809d9e3",
+    "order": 8
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1370,
+    "known_for_department": "Acting",
+    "name": "Brad Dourif",
+    "original_name": "Brad Dourif",
+    "popularity": 3.0572,
+    "profile_path": "/ex7AmuHM3owhUetYZAyOmN1ehWS.jpg",
+    "cast_id": 9,
+    "character": "Gediman",
+    "credit_id": "52fe4492c3a36847f809d9b1",
+    "order": 9
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 58650,
+    "known_for_department": "Acting",
+    "name": "Raymond Cruz",
+    "original_name": "Raymond Cruz",
+    "popularity": 1.8577,
+    "profile_path": "/ndhc53yEQeeFn01QoOxtPa6GroU.jpg",
+    "cast_id": 13,
+    "character": "Distephano",
+    "credit_id": "52fe4492c3a36847f809d9c1",
+    "order": 10
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 2221,
+    "known_for_department": "Acting",
+    "name": "Leland Orser",
+    "original_name": "Leland Orser",
+    "popularity": 1.1876,
+    "profile_path": "/vvVcWhActW8k2gQz95UatVP4Duf.jpg",
+    "cast_id": 12,
+    "character": "Purvis",
+    "credit_id": "52fe4492c3a36847f809d9bd",
+    "order": 11
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 2419,
+    "known_for_department": "Directing",
+    "name": "Jean-Pierre Jeunet",
+    "original_name": "Jean-Pierre Jeunet",
+    "popularity": 0.7733,
+    "profile_path": "/4DhPaNaxYnkgxVJHVLyL5gKmKpG.jpg",
+    "credit_id": "52fe4492c3a36847f809d991",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

@@ -88,6 +88,16 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
+      # The library scan's real-tool test (RealToolsTest) generates a clip with ffmpeg, probes it with ffprobe and
+      # extracts its mov_text subtitle to WebVTT. It skips itself where the tools are missing (the dev Mac), so the
+      # install must be here for it to count.
+      - name: Install ffmpeg
+        if: needs.changes.outputs.docs_only != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          ffprobe -version | head -1
+
       # The full verify includes the integration package (Testcontainers Postgres 17; ubuntu runners
       # ship Docker), plus Checkstyle, JaCoCo per-class and bundle checks, and SpotBugs + FindSecBugs.
       - name: Build, test, and verify coverage

@@ -26,10 +26,13 @@ public class LibraryLoader {
         return views(films.findAll());
     }
 
-    /** Wraps the given films with the current playback state. */
+    /**
+     * Wraps the given films with the current playback state. Films whose files are all missing, protected or
+     * awaiting conversion are left out: they are Admin's business, not browse's.
+     */
     public List<FilmView> views(Collection<Film> list) {
         Map<Long, PlaybackState> byEdition = new HashMap<>();
         states.findAll().forEach(s -> byEdition.put(s.getEditionId(), s));
-        return list.stream().map(f -> new FilmView(f, byEdition)).toList();
+        return list.stream().filter(Film::browsable).map(f -> new FilmView(f, byEdition)).toList();
     }
 }

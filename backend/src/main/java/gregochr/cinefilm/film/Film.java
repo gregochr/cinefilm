@@ -6,6 +6,8 @@ import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -72,6 +74,19 @@ public class Film {
     @OneToMany(mappedBy = "film", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sequence")
     private List<Credit> credits = new ArrayList<>();
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private MatchStatus matchStatus = MatchStatus.MATCHED;
+
+    /** JSON list of the top TMDB candidates while {@link #matchStatus} is NEEDS_MATCH; otherwise null. */
+    @Column(length = 8000)
+    private String matchCandidates;
+
+    /** A film shows in browse unless every one of its editions is missing from disk or cannot be played. */
+    public boolean browsable() {
+        return editions.isEmpty() || editions.stream().anyMatch(e -> !e.hiddenFromBrowse());
+    }
 
     /** Sets the title and derives {@link #sortTitle} from it. */
     public void setTitleAndSort(String newTitle) {

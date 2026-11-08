@@ -1,0 +1,203 @@
+{
+ "adult": false,
+ "backdrop_path": "/dMERTVrObB7TkRVIFmcndR2sZFH.jpg",
+ "belongs_to_collection": null,
+ "budget": 15000000,
+ "genres": [
+  {
+   "id": 53,
+   "name": "Thriller"
+  },
+  {
+   "id": 878,
+   "name": "Science Fiction"
+  },
+  {
+   "id": 18,
+   "name": "Drama"
+  },
+  {
+   "id": 27,
+   "name": "Horror"
+  }
+ ],
+ "homepage": "https://www.paramountpictures.com/movies/10-cloverfield-lane",
+ "id": 333371,
+ "imdb_id": "tt1179933",
+ "origin_country": [
+  "US"
+ ],
+ "original_language": "en",
+ "original_title": "10 Cloverfield Lane",
+ "overview": "After a catastrophic car crash, a young woman wakes up in a survivalist's underground bunker, where he claims to have saved her from an apocalyptic attack that has left the outside world uninhabitable.",
+ "popularity": 6.9903,
+ "poster_path": "/q8A39vcBDruhvoDTJd6L8a4lnTi.jpg",
+ "production_companies": [
+  {
+   "id": 11461,
+   "logo_path": "/p9FoEt5shEKRWRKVIlvFaEmRnun.png",
+   "name": "Bad Robot",
+   "origin_country": "US"
+  },
+  {
+   "id": 4,
+   "logo_path": "/jay6WcMgagAklUt7i9Euwj1pzTF.png",
+   "name": "Paramount Pictures",
+   "origin_country": "US"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "US",
+   "name": "United States of America"
+  }
+ ],
+ "release_date": "2016-03-10",
+ "revenue": 110216998,
+ "runtime": 104,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  }
+ ],
+ "status": "Released",
+ "tagline": "Monsters come in many forms.",
+ "title": "10 Cloverfield Lane",
+ "video": false,
+ "vote_average": 7.012,
+ "vote_count": 9052,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1230,
+    "known_for_department": "Acting",
+    "name": "John Goodman",
+    "original_name": "John Goodman",
+    "popularity": 4.4855,
+    "profile_path": "/yyYqoyKHO7hE1zpgEV2XlqYWcNV.jpg",
+    "cast_id": 3,
+    "character": "Howard",
+    "credit_id": "551875599251412b6d002f73",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 17628,
+    "known_for_department": "Acting",
+    "name": "Mary Elizabeth Winstead",
+    "original_name": "Mary Elizabeth Winstead",
+    "popularity": 5.242,
+    "profile_path": "/vQn6IGsClpyhV6KTba9EDqSK7e2.jpg",
+    "cast_id": 2,
+    "character": "Michelle",
+    "credit_id": "551875529251416f0d004ce1",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 17487,
+    "known_for_department": "Acting",
+    "name": "John Gallagher Jr.",
+    "original_name": "John Gallagher Jr.",
+    "popularity": 1.6674,
+    "profile_path": "/e4eEg5lH6Yk0OkpieUoUYdzl2Ui.jpg",
+    "cast_id": 4,
+    "character": "Emmett",
+    "credit_id": "551875619251416f0d004ce3",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 60881,
+    "known_for_department": "Acting",
+    "name": "Douglas M. Griffin",
+    "original_name": "Douglas M. Griffin",
+    "popularity": 0.376,
+    "profile_path": "/nCq4E6erWLPxC5woxQJu46mqyr.jpg",
+    "cast_id": 6,
+    "character": "Driver",
+    "credit_id": "55c137f69251410f2a003030",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 8269,
+    "known_for_department": "Acting",
+    "name": "Suzanne Cryer",
+    "original_name": "Suzanne Cryer",
+    "popularity": 1.0672,
+    "profile_path": "/hVqmp8WX9hRhZ3qE6ndk7PfkFDJ.jpg",
+    "cast_id": 75,
+    "character": "Woman",
+    "credit_id": "5c8822e19251410ceabfa680",
+    "order": 4
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 51329,
+    "known_for_department": "Acting",
+    "name": "Bradley Cooper",
+    "original_name": "Bradley Cooper",
+    "popularity": 4.7913,
+    "profile_path": "/5Dhy50qOMOHfR1NZifKIfffjV9X.jpg",
+    "cast_id": 13,
+    "character": "Ben (voice)",
+    "credit_id": "56e0c631925141088c000343",
+    "order": 5
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 66655,
+    "known_for_department": "Acting",
+    "name": "Sumalee Montano",
+    "original_name": "Sumalee Montano",
+    "popularity": 0.6189,
+    "profile_path": "/cqkKL8hTGglY1n0DRrDmsfvwpDx.jpg",
+    "cast_id": 76,
+    "character": "Voice on Radio (voice)",
+    "credit_id": "5c882310c3a368645d09c976",
+    "order": 6
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 2204366,
+    "known_for_department": "Acting",
+    "name": "Frank Mottek",
+    "original_name": "Frank Mottek",
+    "popularity": 0.1164,
+    "profile_path": "/3N8Tt05dxyJJx7gwg134IslFHYr.jpg",
+    "cast_id": 77,
+    "character": "Radio Broadcaster (voice)",
+    "credit_id": "5c88233e0e0a260434c0850f",
+    "order": 7
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 568322,
+    "known_for_department": "Directing",
+    "name": "Dan Trachtenberg",
+    "original_name": "Dan Trachtenberg",
+    "popularity": 0.9283,
+    "profile_path": "/crABZLMi5SAz7rKm0wV6JUOeKs5.jpg",
+    "credit_id": "5518752ac3a36862f9004962",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

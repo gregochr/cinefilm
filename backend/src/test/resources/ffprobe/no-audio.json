@@ -1,0 +1,7 @@
+{
+    "streams": [
+        {"index": 0, "codec_name": "av1", "codec_type": "video", "codec_tag_string": "av01", "width": 1920,
+         "height": 1080, "bit_rate": "4000000", "duration": "600.5"}
+    ],
+    "format": {"format_name": "matroska,webm", "tags": {"title": "Silent Film", "date": "1925"}}
+}

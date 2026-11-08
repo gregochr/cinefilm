@@ -1,0 +1,277 @@
+{
+ "adult": false,
+ "backdrop_path": "/vhuNTct6wQKcaV0U8aUXLVvjetU.jpg",
+ "belongs_to_collection": {
+  "id": 100693,
+  "name": "101 Dalmatians (Animated) Collection",
+  "poster_path": "/dFGiyqS7rgbI6Wtu9cloSMlIaVb.jpg",
+  "backdrop_path": "/b7EHS608P5Z98d6ldv4g5J83JQq.jpg"
+ },
+ "budget": 0,
+ "genres": [
+  {
+   "id": 10751,
+   "name": "Family"
+  },
+  {
+   "id": 16,
+   "name": "Animation"
+  },
+  {
+   "id": 12,
+   "name": "Adventure"
+  },
+  {
+   "id": 35,
+   "name": "Comedy"
+  }
+ ],
+ "homepage": "",
+ "id": 13654,
+ "imdb_id": "tt0324941",
+ "origin_country": [
+  "US"
+ ],
+ "original_language": "en",
+ "original_title": "101 Dalmatians II: Patch's London Adventure",
+ "overview": "Being one of 101 takes its toll on Patch, who doesn't feel unique. When he's accidentally left behind on moving day, he meets his idol, Thunderbolt, who enlists him on a publicity campaign.",
+ "popularity": 3.7542,
+ "poster_path": "/uB0DQU4Cog8tYrkiOEVTmDw6Qnn.jpg",
+ "production_companies": [
+  {
+   "id": 3475,
+   "logo_path": "/jTPNzDEn7eHmp3nEXEEtkHm6jLg.png",
+   "name": "Disney Television Animation",
+   "origin_country": "US"
+  },
+  {
+   "id": 5391,
+   "logo_path": "/o5AcK10ViutenSa4XTD18ClCEWe.png",
+   "name": "DisneyToon Studios",
+   "origin_country": "US"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "US",
+   "name": "United States of America"
+  }
+ ],
+ "release_date": "2003-03-02",
+ "revenue": 0,
+ "runtime": 74,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  }
+ ],
+ "status": "Released",
+ "tagline": "A new hero unleashed.",
+ "title": "101 Dalmatians II: Patch's London Adventure",
+ "video": false,
+ "vote_average": 6.0,
+ "vote_count": 1275,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 13473,
+    "known_for_department": "Acting",
+    "name": "Barry Bostwick",
+    "original_name": "Barry Bostwick",
+    "popularity": 1.338,
+    "profile_path": "/z2jlL5g5PMxelSHMXFF03fTSsLl.jpg",
+    "cast_id": 3,
+    "character": "Thunderbolt (voice)",
+    "credit_id": "52fe45889251416c75059bc3",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1206,
+    "known_for_department": "Acting",
+    "name": "Jason Alexander",
+    "original_name": "Jason Alexander",
+    "popularity": 2.5999,
+    "profile_path": "/qRezZ2yhM2bmBERt7jVcxo8RVSA.jpg",
+    "cast_id": 4,
+    "character": "Lightning (voice)",
+    "credit_id": "52fe45889251416c75059bc7",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 519,
+    "known_for_department": "Acting",
+    "name": "Martin Short",
+    "original_name": "Martin Short",
+    "popularity": 2.1019,
+    "profile_path": "/vWoZIOk7K8TSKu1IN90akswsWjZ.jpg",
+    "cast_id": 5,
+    "character": "Lars (voice)",
+    "credit_id": "52fe45889251416c75059bcb",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1253195,
+    "known_for_department": "Acting",
+    "name": "Bobby Lockwood",
+    "original_name": "Bobby Lockwood",
+    "popularity": 0.4328,
+    "profile_path": "/umELfjA9r3N6YXwREFvUcXHQJt2.jpg",
+    "cast_id": 6,
+    "character": "Patch (voice)",
+    "credit_id": "543fcddc0e0a2651d5000026",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 89042,
+    "known_for_department": "Acting",
+    "name": "Susanne Blakeslee",
+    "original_name": "Susanne Blakeslee",
+    "popularity": 0.5171,
+    "profile_path": "/5s4vquKADCS90iOiEwgCTZkaQjX.jpg",
+    "cast_id": 7,
+    "character": "Cruella (voice)",
+    "credit_id": "543fcdf3c3a36840f500002e",
+    "order": 4
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 54447,
+    "known_for_department": "Acting",
+    "name": "Samuel West",
+    "original_name": "Samuel West",
+    "popularity": 2.6246,
+    "profile_path": "/bn1nd5zERi5wyHcA1YMGvrHAD5L.jpg",
+    "cast_id": 8,
+    "character": "Pongo (voice)",
+    "credit_id": "543fce080e0a2651c7000034",
+    "order": 5
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 34521,
+    "known_for_department": "Acting",
+    "name": "Maurice LaMarche",
+    "original_name": "Maurice LaMarche",
+    "popularity": 1.6263,
+    "profile_path": "/qCiL3EYAhLcNo0rNj5pczWo9MwG.jpg",
+    "cast_id": 27,
+    "character": "Horace (voice)",
+    "credit_id": "5443df4a0e0a26634d005265",
+    "order": 6
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 34982,
+    "known_for_department": "Acting",
+    "name": "Jeff Bennett",
+    "original_name": "Jeff Bennett",
+    "popularity": 3.3037,
+    "profile_path": "/6Fq3Q1e0Oz0j2J2fnFSl7fKCHd9.jpg",
+    "cast_id": 10,
+    "character": "Jasper (voice)",
+    "credit_id": "543fcee30e0a2651d9000045",
+    "order": 7
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 63978,
+    "known_for_department": "Acting",
+    "name": "Jodi Benson",
+    "original_name": "Jodi Benson",
+    "popularity": 1.2165,
+    "profile_path": "/4mxtuq3mXLZwPKbI7t0KFxf0PRW.jpg",
+    "cast_id": 11,
+    "character": "Anita (voice)",
+    "credit_id": "543fcef6c3a3684104000038",
+    "order": 8
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 997860,
+    "known_for_department": "Acting",
+    "name": "Tim Bentinck",
+    "original_name": "Tim Bentinck",
+    "popularity": 0.3738,
+    "profile_path": "/yg2EErH28vqi6O1FH9DwJt0w7fu.jpg",
+    "cast_id": 12,
+    "character": "Roger (voice)",
+    "credit_id": "543fcf0cc3a36840fd000051",
+    "order": 9
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 60739,
+    "known_for_department": "Acting",
+    "name": "Kath Soucie",
+    "original_name": "Kath Soucie",
+    "popularity": 2.1268,
+    "profile_path": "/dSE1JtsdA1aSgIIw415bsXtmkPg.jpg",
+    "cast_id": 13,
+    "character": "Perdita (voice)",
+    "credit_id": "543fcf6cc3a36840f5000059",
+    "order": 10
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 97170,
+    "known_for_department": "Acting",
+    "name": "Mary MacLeod",
+    "original_name": "Mary MacLeod",
+    "popularity": 0.2078,
+    "profile_path": null,
+    "cast_id": 14,
+    "character": "Nanny (voice)",
+    "credit_id": "543fcf7ec3a3684110000061",
+    "order": 11
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 60725,
+    "known_for_department": "Directing",
+    "name": "Jim Kammerud",
+    "original_name": "Jim Kammerud",
+    "popularity": 0.2909,
+    "profile_path": null,
+    "credit_id": "52fe45889251416c75059bb9",
+    "department": "Directing",
+    "job": "Director"
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 137903,
+    "known_for_department": "Directing",
+    "name": "Brian Smith",
+    "original_name": "Brian Smith",
+    "popularity": 0.2772,
+    "profile_path": "/88bawdhMcIXTMpscmW01NYh6BkN.jpg",
+    "credit_id": "52fe45889251416c75059bbf",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

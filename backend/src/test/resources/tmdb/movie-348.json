@@ -1,0 +1,229 @@
+{
+ "adult": false,
+ "backdrop_path": "/AmR3JG1VQVxU8TfAvljUhfSFUOx.jpg",
+ "belongs_to_collection": {
+  "id": 8091,
+  "name": "Alien Collection",
+  "poster_path": "/gWFHIY77cRVoBRGERwMHqpD27gc.jpg",
+  "backdrop_path": "/6X42JnSMdo3dPAswOHUuvebdTq7.jpg"
+ },
+ "budget": 11000000,
+ "genres": [
+  {
+   "id": 27,
+   "name": "Horror"
+  },
+  {
+   "id": 878,
+   "name": "Science Fiction"
+  }
+ ],
+ "homepage": "https://www.20thcenturystudios.com/movies/alien",
+ "id": 348,
+ "imdb_id": "tt0078748",
+ "origin_country": [
+  "US"
+ ],
+ "original_language": "en",
+ "original_title": "Alien",
+ "overview": "During its return to the earth, commercial spaceship Nostromo intercepts a distress signal from a distant planet. When a three-member team of the crew discovers a chamber containing thousands of eggs on the planet, a creature inside one of the eggs attacks an explorer. The entire crew is unaware of the impending nightmare set to descend upon them when the alien parasite planted inside its unfortunate host is birthed.",
+ "popularity": 22.6455,
+ "poster_path": "/vfrQk5IPloGg1v9Rzbh2Eg3VGyM.jpg",
+ "production_companies": [
+  {
+   "id": 401,
+   "logo_path": "/t7mM3DvQ9MwDT3YzMCBrkWpWiiz.png",
+   "name": "Brandywine Productions",
+   "origin_country": "US"
+  },
+  {
+   "id": 276266,
+   "logo_path": null,
+   "name": "Twentieth Century-Fox Productions",
+   "origin_country": "GB"
+  },
+  {
+   "id": 276267,
+   "logo_path": null,
+   "name": "Ronald Shusett Productions",
+   "origin_country": "US"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "US",
+   "name": "United States of America"
+  },
+  {
+   "iso_3166_1": "GB",
+   "name": "United Kingdom"
+  }
+ ],
+ "release_date": "1979-05-25",
+ "revenue": 104931801,
+ "runtime": 117,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  },
+  {
+   "english_name": "Spanish",
+   "iso_639_1": "es",
+   "name": "Espa\u00f1ol"
+  }
+ ],
+ "status": "Released",
+ "tagline": "In space no one can hear you scream.",
+ "title": "Alien",
+ "video": false,
+ "vote_average": 8.176,
+ "vote_count": 17096,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 4139,
+    "known_for_department": "Acting",
+    "name": "Tom Skerritt",
+    "original_name": "Tom Skerritt",
+    "popularity": 3.4235,
+    "profile_path": "/oWFCyBLm1lsbsbT5Nmx3SPMaqFZ.jpg",
+    "cast_id": 108,
+    "character": "Dallas",
+    "credit_id": "66185dd1ea84c7017d55f034",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 10205,
+    "known_for_department": "Acting",
+    "name": "Sigourney Weaver",
+    "original_name": "Sigourney Weaver",
+    "popularity": 4.13,
+    "profile_path": "/wTSnfktNBLd6kwQxgvkqYw6vEon.jpg",
+    "cast_id": 4,
+    "character": "Ripley",
+    "credit_id": "52fe423bc3a36847f800e125",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 5047,
+    "known_for_department": "Acting",
+    "name": "Veronica Cartwright",
+    "original_name": "Veronica Cartwright",
+    "popularity": 2.1716,
+    "profile_path": "/1CiknHO8ssMM4bWPsIMMzCTVHeB.jpg",
+    "cast_id": 102,
+    "character": "Lambert",
+    "credit_id": "66185d6baf3da6017c17fa55",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 5048,
+    "known_for_department": "Acting",
+    "name": "Harry Dean Stanton",
+    "original_name": "Harry Dean Stanton",
+    "popularity": 1.9415,
+    "profile_path": "/9zOTpVMwMHNjPFBNoPy9vOBT1NC.jpg",
+    "cast_id": 106,
+    "character": "Brett",
+    "credit_id": "66185dbbea84c7017d55f028",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 5049,
+    "known_for_department": "Acting",
+    "name": "John Hurt",
+    "original_name": "John Hurt",
+    "popularity": 4.3288,
+    "profile_path": "/bjNSzt1d7uK3q5PbtFXUJrRt4qg.jpg",
+    "cast_id": 107,
+    "character": "Kane",
+    "credit_id": "66185dc5ea84c7016455eefe",
+    "order": 4
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 65,
+    "known_for_department": "Acting",
+    "name": "Ian Holm",
+    "original_name": "Ian Holm",
+    "popularity": 2.0798,
+    "profile_path": "/cOJDgvgj4nMec6Inzj1H5nugTO5.jpg",
+    "cast_id": 103,
+    "character": "Ash",
+    "credit_id": "66185d7866e469014bbbd962",
+    "order": 5
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 5050,
+    "known_for_department": "Acting",
+    "name": "Yaphet Kotto",
+    "original_name": "Yaphet Kotto",
+    "popularity": 1.375,
+    "profile_path": "/f0jquWLj22hvYf6PTIggdolhiDx.jpg",
+    "cast_id": 101,
+    "character": "Parker",
+    "credit_id": "66185d534da3d40130915567",
+    "order": 6
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 5051,
+    "known_for_department": "Acting",
+    "name": "Bolaji Badejo",
+    "original_name": "Bolaji Badejo",
+    "popularity": 0.4241,
+    "profile_path": "/7ddxWlDIOVKBK6TjP66vb9Qp3MW.jpg",
+    "cast_id": 104,
+    "character": "Alien",
+    "credit_id": "66185d9fb9a0bd017c109f87",
+    "order": 7
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 5052,
+    "known_for_department": "Acting",
+    "name": "Helen Horton",
+    "original_name": "Helen Horton",
+    "popularity": 1.0238,
+    "profile_path": "/ghK0UV1cMPThtRmx5vn9dbDwRYb.jpg",
+    "cast_id": 105,
+    "character": "Mother (voice)",
+    "credit_id": "66185daee4c9eb017c29ffcd",
+    "order": 8
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 578,
+    "known_for_department": "Directing",
+    "name": "Ridley Scott",
+    "original_name": "Ridley Scott",
+    "popularity": 4.7243,
+    "profile_path": "/zABJmN9opmqD4orWl3KSdCaSo7Q.jpg",
+    "credit_id": "52fe423bc3a36847f800e117",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

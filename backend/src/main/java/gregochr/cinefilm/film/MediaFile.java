@@ -64,6 +64,17 @@ public class MediaFile {
     @Column(nullable = false)
     private Instant addedAt;
 
+    /** The file's last-modified time when last scanned; with the size it tells a rescan the file changed. */
+    private Instant modifiedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Presence presence = Presence.PRESENT;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Playability playability = Playability.PLAYABLE;
+
     @OneToMany(mappedBy = "mediaFile", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("id")
     private List<AudioStream> audioStreams = new ArrayList<>();

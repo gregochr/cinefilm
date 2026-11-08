@@ -1,0 +1,256 @@
+{
+ "adult": false,
+ "backdrop_path": "/9YhcK0LSe9xWvIV6zgNZGDA7ZIb.jpg",
+ "belongs_to_collection": null,
+ "budget": 0,
+ "genres": [
+  {
+   "id": 18,
+   "name": "Drama"
+  },
+  {
+   "id": 10749,
+   "name": "Romance"
+  }
+ ],
+ "homepage": "",
+ "id": 161285,
+ "imdb_id": "tt0111786",
+ "origin_country": [
+  "CN",
+  "HK"
+ ],
+ "original_language": "zh",
+ "original_title": "\u9633\u5149\u707f\u70c2\u7684\u65e5\u5b50",
+ "overview": "Beijing, 1970s. The Cultural Revolution has driven most adults to the provinces leaving 14-year-old Monkey and his pals with free rein over the city. They hang around, get up to no good, and discover that unsolvable mystery known as \"girls.\"",
+ "popularity": 3.1659,
+ "poster_path": "/mP4fVBlum5D4Fmx6z1f1qDb9SH9.jpg",
+ "production_companies": [
+  {
+   "id": 97000,
+   "logo_path": null,
+   "name": "Dragon Film",
+   "origin_country": ""
+  },
+  {
+   "id": 2269,
+   "logo_path": null,
+   "name": "China Film Co-Production",
+   "origin_country": "CN"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "CN",
+   "name": "China"
+  },
+  {
+   "iso_3166_1": "HK",
+   "name": "Hong Kong"
+  }
+ ],
+ "release_date": "1994-09-01",
+ "revenue": 0,
+ "runtime": 141,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "Mandarin",
+   "iso_639_1": "zh",
+   "name": "\u666e\u901a\u8bdd"
+  }
+ ],
+ "status": "Released",
+ "tagline": "A Revolutionary Childhood.",
+ "title": "In the Heat of the Sun",
+ "video": false,
+ "vote_average": 7.8,
+ "vote_count": 151,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 83634,
+    "known_for_department": "Acting",
+    "name": "Xia Yu",
+    "original_name": "\u590f\u96e8",
+    "popularity": 1.2968,
+    "profile_path": "/nfFHGduBwyaqpwwCgtwBUbhPVDF.jpg",
+    "cast_id": 9,
+    "character": "Ma Xiaojun",
+    "credit_id": "52fe4c41c3a36847f8225361",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 998494,
+    "known_for_department": "Acting",
+    "name": "Ning Jing",
+    "original_name": "\u5b81\u9759",
+    "popularity": 0.9033,
+    "profile_path": "/2QbkQcIVtGgWEOkjEGRIOr17BV4.jpg",
+    "cast_id": 3,
+    "character": "Mi Lan",
+    "credit_id": "52fe4c41c3a36847f822533f",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1170661,
+    "known_for_department": "Acting",
+    "name": "Geng Le",
+    "original_name": "\u803f\u4e50",
+    "popularity": 1.6407,
+    "profile_path": "/xOk9yi03ZqoYuWfmKuf5MRdjmLT.jpg",
+    "cast_id": 11,
+    "character": "Liu Yiku",
+    "credit_id": "52fe4c41c3a36847f8225365",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 134122,
+    "known_for_department": "Acting",
+    "name": "Tao Hong",
+    "original_name": "\u9676\u8679",
+    "popularity": 1.1828,
+    "profile_path": "/5vcoA0drnyv9HdRcKasHWtNYLr7.jpg",
+    "cast_id": 16,
+    "character": "Yu Beipei",
+    "credit_id": "530f4d619251417355000b46",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 1118783,
+    "known_for_department": "Acting",
+    "name": "Siqin Gaowa",
+    "original_name": "\u65af\u7434\u9ad8\u5a03",
+    "popularity": 1.1358,
+    "profile_path": "/j5qdKqbAtzMq2m6VQAgDsc0d7yo.jpg",
+    "cast_id": 14,
+    "character": "Mother",
+    "credit_id": "52fe4c41c3a36847f8225371",
+    "order": 4
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 77303,
+    "known_for_department": "Acting",
+    "name": "Wang Xueqi",
+    "original_name": "\u738b\u5b66\u573b",
+    "popularity": 1.6335,
+    "profile_path": "/6ZWonDufaYcVeMmv1ZD8MZZZDeM.jpg",
+    "cast_id": 19,
+    "character": "Father",
+    "credit_id": "5a004c0fc3a36868930645ea",
+    "order": 5
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1287732,
+    "known_for_department": "Directing",
+    "name": "Feng Xiaogang",
+    "original_name": "\u51af\u5c0f\u521a",
+    "popularity": 1.5803,
+    "profile_path": "/lOzjy8W2JxlOF4vBtL3Ev7uXdpV.jpg",
+    "cast_id": 15,
+    "character": "Mr. Hu",
+    "credit_id": "52fe4c41c3a36847f8225375",
+    "order": 6
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1170662,
+    "known_for_department": "Acting",
+    "name": "Liu Xiaoning",
+    "original_name": "\u5218\u5c0f\u5b81",
+    "popularity": 0.5305,
+    "profile_path": "/hfHAKbj7B1LqjHQtmmuCAPzvEeF.jpg",
+    "cast_id": 13,
+    "character": "Adult Liu Yiku",
+    "credit_id": "52fe4c41c3a36847f822536d",
+    "order": 7
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 77301,
+    "known_for_department": "Acting",
+    "name": "Jiang Wen",
+    "original_name": "Jiang Wen",
+    "popularity": 1.1534,
+    "profile_path": "/u6VjywO6Z8nTqPGgFu7V6NDs1xj.jpg",
+    "cast_id": 12,
+    "character": "Adult Ma Xiaojun",
+    "credit_id": "52fe4c41c3a36847f8225369",
+    "order": 8
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 122223,
+    "known_for_department": "Writing",
+    "name": "Wang Shuo",
+    "original_name": "\u738b\u6714",
+    "popularity": 0.5349,
+    "profile_path": "/iDfaEojh3jdTpWIKH2dTauO2h0d.jpg",
+    "cast_id": 18,
+    "character": "Small-time Conman",
+    "credit_id": "5a004bff92514146bd0623ac",
+    "order": 9
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1888244,
+    "known_for_department": "Acting",
+    "name": "Yao Er-ga",
+    "original_name": "Yao Er-Ga",
+    "popularity": 0.2238,
+    "profile_path": "/uRmVedBjqGlZdav1UA5YxDm0QI2.jpg",
+    "cast_id": 24,
+    "character": "Fat Fool",
+    "credit_id": "642599dea3e4ba0095f1c9cf",
+    "order": 10
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 143824,
+    "known_for_department": "Acting",
+    "name": "Zuo Xiaoqing",
+    "original_name": "\u5de6\u5c0f\u9752",
+    "popularity": 1.0357,
+    "profile_path": "/5Ar0HaoKWpxxItnjY8XVBiNiNxv.jpg",
+    "cast_id": 36,
+    "character": "Zhang Xiaomei",
+    "credit_id": "65f75f56e194b00149bdac53",
+    "order": 11
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 77301,
+    "known_for_department": "Acting",
+    "name": "Jiang Wen",
+    "original_name": "Jiang Wen",
+    "popularity": 1.1534,
+    "profile_path": "/u6VjywO6Z8nTqPGgFu7V6NDs1xj.jpg",
+    "credit_id": "52fe4c41c3a36847f822533b",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

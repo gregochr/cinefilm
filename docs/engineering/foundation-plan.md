@@ -91,6 +91,10 @@ All JSON. All routes under `/api`. Times are milliseconds. All routes except `/a
 | `POST /api/editions/{id}/watched` body `{ watched: boolean }` | `{ watched }` (watched=false also resets position to 0) |
 | `PUT /api/films/{id}/preferences` body `{ editionId?, quality?, audioStreamId?, subtitle? }` | the stored preferences |
 | `GET /api/editions/{id}/stream` | the ORIGINAL MediaFile bytes, honouring `Range` (206 partial content), correct `Content-Type` |
+| `GET /api/media-files/{id}/subtitles/{streamIndex}.vtt` | WebVTT (`text/vtt;charset=UTF-8`) of an embedded text subtitle stream of the media file (`file.id` on an edition), extracted with `ffmpeg` on first request and cached under `CINEFILM_CACHE_DIR`; 404 for an unknown file or stream, a file that is gone, or a failed extraction |
+| `GET /api/admin/scan` | `ScanStatus`: the Library scan panel, polled while a scan runs |
+| `POST /api/admin/scan` | starts a scan: 202 and the `ScanStatus`; 409 `{ "error": "A scan is already running" }` when one runs |
+| `GET /api/admin/attention` | `{ items: AttentionItem[] }`: Films needing attention |
 | `GET /actuator/health`, `GET /actuator/health/container`, `GET /actuator/info` | Not under `/api`, open to a signed-out caller, and the only Actuator endpoints exposed (all others 404). `health` is `{status}` only; `health/container` (database + ping, status only) is the Docker healthcheck and deploy smoke probe; `info` carries `git.commit.id.full` of the running build |
 | `GET/POST/DELETE /api/session` | `GET`: 200 `{authenticated:true}` when signed in, 401 `{authenticated:false}` when not; `POST { password }`: 200 and cookie, 401 on a wrong password; `DELETE`: sign out (200) |
 
@@ -98,7 +102,7 @@ All JSON. All routes under `/api`. Times are milliseconds. All routes except `/a
 
 **CollectionCard** (Home): `{ id, name, posterPath, ownedCount, totalCount, posterPaths: (string|null)[] }`, `posterPaths` = up to 3 owned films' poster paths for the fanned posters.
 
-**FilmDetail:** FilmCard fields plus `{ overview, genres, collection: {id,name}|null, directors: Person[], cast: [{ person, character }], editions: [{ id, name, year, runtimeMs, note, creditsMarkerMs (nullable), positionMs, watched, file: { videoCodec, height, audioSummary, addedAt }, audioStreams, subtitleStreams, qualities: [{ id: "auto"\|"original"\|"1080p"\|"720p"\|"480p", bitrate, premade, available }] }], preferences: { editionId, quality, audioStreamId, subtitle } }`
+**FilmDetail:** FilmCard fields plus `{ overview, genres, collection: {id,name}|null, directors: Person[], cast: [{ person, character }], editions: [{ id, name, year, runtimeMs, note, creditsMarkerMs (nullable), positionMs, watched, file: { id, videoCodec, height, audioSummary, addedAt }, audioStreams, subtitleStreams, qualities: [{ id: "auto"\|"original"\|"1080p"\|"720p"\|"480p", bitrate, premade, available }] }], preferences: { editionId, quality, audioStreamId, subtitle } }`
 
 In phase 1 `qualities` lists only `auto` and `original` as available; lower qualities appear with
 `available: false` until phase 3.
@@ -216,8 +220,9 @@ Consequences for the design:
   2018 Intel Mac mini (owner believes the last Intel model; 8th-gen Core, UHD 630 + T2), whose media engine
   decodes and encodes both H.264 and HEVC in hardware, so it handles the HEVC and 4K sources dockermacmini can't. Pre-made versions
   (decision 15) of HEVC films are better made there.
-- **TMDB:** free for personal, non-commercial use; the owner creates an account and a developer API key, supplied as
-  `TMDB_API_KEY` (phase 2). TMDB's terms require crediting TMDB (a logo and notice in Admin / About).
+- **TMDB:** free for personal, non-commercial use; the owner creates an account and uses the **Read Access Token**,
+  supplied as `TMDB_READ_TOKEN` and sent as `Authorization: Bearer`, never in a URL (library scan, below). TMDB's
+  terms require crediting TMDB (a logo and notice in Admin).
 
 ## Open questions for the owner
 
@@ -240,3 +245,34 @@ None outstanding for the topology. workhorse is always on, so the film share is 
   restart is in progress again. "Not watched in years" is unchanged. `continueWatching` omits the `hero` film.
 - Errors are JSON `{ "error": "..." }`: 400 invalid input, 401 signed out, 403 missing `X-CineFilm: 1` on a
   mutating request, 404 unknown id.
+
+## Library scan and direct play of the real films (phase 2, first slice)
+
+Plan: `library-scan-plan.md`. What the API and the model now carry:
+
+- **Library root.** `cinefilm.library.root` (env `CINEFILM_LIBRARY_ROOT`, default `/media`). `MediaFile.path` is stored
+  **relative to the root** (forward slashes) and resolved only by `LibraryRoot.resolveFile`, which refuses `..`,
+  absolute paths and symlinks that leave the root (SECURITY.md rule 3). The stream and subtitle endpoints, and the
+  scanner, use it; nothing else reads media.
+- **Model additions (Flyway V2, expand-only).** `MediaFile.modifiedAt`, `presence` (`PRESENT` | `MISSING`),
+  `playability` (`PLAYABLE` | `PROTECTED` | `NEEDS_CONVERSION` | `UNREADABLE`); `Film.matchStatus` (`MATCHED` |
+  `NEEDS_MATCH` | `PENDING`) and `matchCandidates` (JSON, top five TMDB candidates); table `scan_run`. A film is
+  **browsable** (Home, Library, Person, Collection, detail) unless every edition's original file is missing or not
+  playable: such films appear only in Admin, and a missing file keeps its Film, Edition and watch history.
+  `AudioStream.index` and `SubtitleStream.index` are ffprobe's stream indexes in the file; `year` is `0` for an
+  unmatched film whose year is unknown.
+- **Scan rules.** Walks the root for `.m4v .mp4 .mov` (playable) and `.avi .mkv` (needs conversion), skipping hidden
+  and `._*` files. A file is identified by its relative path; a rescan updates changed files, adds new ones, follows a
+  rename (same size and modified time, old path gone) keeping the edition, and marks vanished files `MISSING`. A walk
+  that finds nothing while files are known is treated as an unmounted share and marks nothing missing. A TMDB outage
+  leaves a film `PENDING` (title from the file) and it is retried by the next scan.
+- **`ScanStatus`:** `{ running, folder, progress: { processed, total, current } | null, lastScan: { startedAt,
+  finishedAt, trigger: "startup"|"nightly"|"admin", filesSeen, newFiles, missingFiles, error } | null, counts: {
+  films, newFiles, missing, protectedFiles, needsConversion, needsMatch, unreadable } }`.
+- **`AttentionItem`:** `{ kind: "needs-match"|"protected"|"needs-conversion"|"unreadable"|"multiple-files", filmId,
+  title, year | null, detail, files: string[], candidates: [{ tmdbId, title, year, runtimeMinutes, posterPath }] }`
+  (`candidates` only for `needs-match`). Fix match, the action on a candidate, is the next slice.
+- **Scheduling.** At start-up when the library has no films, nightly 04:30 `cinefilm.time-zone`, and from Admin. One
+  scan at a time.
+- **Config.** `CINEFILM_LIBRARY_ROOT`, `CINEFILM_CACHE_DIR` (default `/var/lib/cinefilm/cache`), `TMDB_READ_TOKEN`
+  (empty disables TMDB: films are added with the file's own title and stay `PENDING`).

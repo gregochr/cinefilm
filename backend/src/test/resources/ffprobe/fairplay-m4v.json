@@ -1,0 +1,29 @@
+{
+    "streams": [
+        {
+            "index": 0,
+            "codec_name": "h264",
+            "codec_type": "video",
+            "codec_tag_string": "drmi",
+            "width": 1280,
+            "height": 720,
+            "disposition": {"default": 1, "forced": 0},
+            "tags": {"language": "eng"}
+        },
+        {
+            "index": 1,
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "codec_tag_string": "drms",
+            "channels": 2,
+            "disposition": {"default": 1, "forced": 0},
+            "tags": {"language": "eng"}
+        }
+    ],
+    "format": {
+        "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+        "duration": "5400.100000",
+        "bit_rate": "3200000",
+        "tags": {"title": "Protected Film", "©day": "2008"}
+    }
+}

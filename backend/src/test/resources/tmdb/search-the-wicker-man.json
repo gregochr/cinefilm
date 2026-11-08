@@ -1,0 +1,163 @@
+{
+ "page": 1,
+ "results": [
+  {
+   "adult": false,
+   "backdrop_path": "/qhPuXbHCIbE94doMxYsY2W3wMry.jpg",
+   "genre_ids": [
+    27
+   ],
+   "id": 16307,
+   "title": "The Wicker Man",
+   "original_language": "en",
+   "original_title": "The Wicker Man",
+   "overview": "Police sergeant Neil Howie is called to an island village in search of a missing girl whom the locals claim never existed. The investigation is further complicated as Howie\u2019s religious views clash with those of the island\u2019s residents.",
+   "popularity": 5.0869,
+   "poster_path": "/wwtrXRL8SiOWxhwLEvw7iBgYh0g.jpg",
+   "release_date": "1973-12-06",
+   "softcore": false,
+   "video": false,
+   "vote_average": 7.329,
+   "vote_count": 1769
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/7t1ZMaVY92KqkaxJtRO89tARg6V.jpg",
+   "genre_ids": [
+    27,
+    9648,
+    53
+   ],
+   "id": 9708,
+   "title": "The Wicker Man",
+   "original_language": "en",
+   "original_title": "The Wicker Man",
+   "overview": "A sheriff investigating the disappearance of a young girl from a small island discovers there's a larger mystery to solve among the island's secretive, neo-pagan community.",
+   "popularity": 3.7455,
+   "poster_path": "/xsHrmfgDcEk5fGhSiieKvrDuofq.jpg",
+   "release_date": "2006-08-31",
+   "softcore": false,
+   "video": false,
+   "vote_average": 4.344,
+   "vote_count": 1486
+  },
+  {
+   "adult": false,
+   "backdrop_path": null,
+   "genre_ids": [
+    99
+   ],
+   "id": 714455,
+   "title": "The Wicker Man Enigma",
+   "original_language": "en",
+   "original_title": "The Wicker Man Enigma",
+   "overview": "Cast and crew members come together to discuss the troubled production and distribution of The Wicker Man in 1973.",
+   "popularity": 0.5098,
+   "poster_path": "/paD8MRn1UC75aTJEEZYZOQPyDod.jpg",
+   "release_date": "2001-10-01",
+   "softcore": false,
+   "video": false,
+   "vote_average": 6.2,
+   "vote_count": 5
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/p3rtTCpejKR3UyFEIBkoVokBZeE.jpg",
+   "genre_ids": [
+    99,
+    27
+   ],
+   "id": 1285321,
+   "title": "Children of The Wicker Man",
+   "original_language": "en",
+   "original_title": "Children of The Wicker Man",
+   "overview": "Fifty years after The Wicker Man, director Robin Hardy\u2019s lost papers resurface, prompting his sons Justin and Dominic to explore the legacy of the cult classic, and their father. Together, they uncover the truth behind Robin\u2019s role in the film and confront the complexities of independent filmmaking, family, and myth.",
+   "popularity": 0.8784,
+   "poster_path": "/cGALR5w2wkKteIXHmGrA1NSaSbt.jpg",
+   "release_date": "2026-10-23",
+   "softcore": false,
+   "video": false,
+   "vote_average": 0.0,
+   "vote_count": 0
+  },
+  {
+   "adult": false,
+   "backdrop_path": null,
+   "genre_ids": [
+    99
+   ],
+   "id": 1144215,
+   "title": "Worshiping The Wicker Man",
+   "original_language": "en",
+   "original_title": "Worshiping The Wicker Man",
+   "overview": "Famous fans talk about 1973's The Wicker Man and how it has influenced their work.",
+   "popularity": 0.3573,
+   "poster_path": "/vASMNnGgKxEiPLJnjVDyjzGrRP7.jpg",
+   "release_date": "2013-10-14",
+   "softcore": false,
+   "video": false,
+   "vote_average": 0.0,
+   "vote_count": 0
+  },
+  {
+   "adult": false,
+   "backdrop_path": null,
+   "genre_ids": [
+    99
+   ],
+   "id": 1285161,
+   "title": "The Wicker Man at 50",
+   "original_language": "en",
+   "original_title": "The Wicker Man at 50",
+   "overview": "Justin Hardy, the son of the films Director, Robin Hardy talks to various experts about his father's film",
+   "popularity": 0.3712,
+   "poster_path": "/pkr85NfX3H2yllEauMXZfI3ggvI.jpg",
+   "release_date": "2023-09-25",
+   "softcore": false,
+   "video": false,
+   "vote_average": 0.0,
+   "vote_count": 0
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/qsaGPR2RdqelIEvy7cKzmc9DOZs.jpg",
+   "genre_ids": [
+    99,
+    10770
+   ],
+   "id": 1215408,
+   "title": "Ex-S: The Wicker Man",
+   "original_language": "en",
+   "original_title": "Ex-S: The Wicker Man",
+   "overview": "Cast and crew discuss the 1973 film The Wicker Man, directed by Robin Hardy.",
+   "popularity": 0.8162,
+   "poster_path": "/b2oaHLEsFkIHxLYYRz1HiRLOUt0.jpg",
+   "release_date": "1998-12-16",
+   "softcore": false,
+   "video": false,
+   "vote_average": 8.3,
+   "vote_count": 3
+  },
+  {
+   "adult": false,
+   "backdrop_path": null,
+   "genre_ids": [
+    99
+   ],
+   "id": 1144218,
+   "title": "The Music of 'The Wicker Man'",
+   "original_language": "en",
+   "original_title": "The Music of 'The Wicker Man'",
+   "overview": "Gary Carpenter discusses how the music in The Wicker Man was created.",
+   "popularity": 0.3091,
+   "poster_path": "/mj9DXia93nRkf6G4whAXsQU3Jk.jpg",
+   "release_date": "2013-10-14",
+   "softcore": false,
+   "video": false,
+   "vote_average": 0.0,
+   "vote_count": 0
+  }
+ ],
+ "total_pages": 1,
+ "total_results": 10
+}

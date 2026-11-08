@@ -9,10 +9,10 @@ export function EmptyLibrary() {
         point CineFilm at a folder.
       </p>
       <div className="state__actions">
-        <ButtonLink variant="primary" to="/admin">
+        <ButtonLink variant="primary" to="/admin#library-scan">
           Import from Plex
         </ButtonLink>
-        <ButtonLink to="/admin">Scan a folder</ButtonLink>
+        <ButtonLink to="/admin#library-scan">Scan a folder</ButtonLink>
       </div>
     </div>
   );

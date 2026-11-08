@@ -1,0 +1,259 @@
+{
+ "adult": false,
+ "backdrop_path": "/rVqY0Bo4Npf6EIONUROxjYAJfmD.jpg",
+ "belongs_to_collection": null,
+ "budget": 183000000,
+ "genres": [
+  {
+   "id": 12,
+   "name": "Adventure"
+  },
+  {
+   "id": 14,
+   "name": "Fantasy"
+  },
+  {
+   "id": 10749,
+   "name": "Romance"
+  },
+  {
+   "id": 10751,
+   "name": "Family"
+  }
+ ],
+ "homepage": "https://movies.disney.com/aladdin-2019",
+ "id": 420817,
+ "imdb_id": "tt6139732",
+ "origin_country": [
+  "US"
+ ],
+ "original_language": "en",
+ "original_title": "Aladdin",
+ "overview": "A kindhearted street urchin named Aladdin embarks on a magical adventure after finding a lamp that releases a wisecracking genie while a power-hungry Grand Vizier vies for the same lamp that has the power to make their deepest wishes come true.",
+ "popularity": 9.5287,
+ "poster_path": "/ykUEbfpkf8d0w49pHh0AD2KrT52.jpg",
+ "production_companies": [
+  {
+   "id": 2,
+   "logo_path": "/wdrCwmRnLFJhEoH8GSfymY85KHT.png",
+   "name": "Walt Disney Pictures",
+   "origin_country": "US"
+  },
+  {
+   "id": 118854,
+   "logo_path": "/g9LPNlQFoDcHjfnvrEqFmeIaDrZ.png",
+   "name": "Rideback",
+   "origin_country": "US"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "US",
+   "name": "United States of America"
+  }
+ ],
+ "release_date": "2019-05-22",
+ "revenue": 1054304000,
+ "runtime": 127,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  }
+ ],
+ "status": "Released",
+ "tagline": "Choose wisely.",
+ "title": "Aladdin",
+ "video": false,
+ "vote_average": 7.074,
+ "vote_count": 10906,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1515478,
+    "known_for_department": "Acting",
+    "name": "Mena Massoud",
+    "original_name": "Mena Massoud",
+    "popularity": 1.4554,
+    "profile_path": "/3Ng1Cxcln1tAMcgBY8L6aXNgGdV.jpg",
+    "cast_id": 10,
+    "character": "Aladdin",
+    "credit_id": "596a620fc3a36813850008df",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 2888,
+    "known_for_department": "Acting",
+    "name": "Will Smith",
+    "original_name": "Will Smith",
+    "popularity": 6.4069,
+    "profile_path": "/8TlKqbXYgHmmaEoPBJ7djJ8Rxxa.jpg",
+    "cast_id": 1,
+    "character": "Genie / Mariner",
+    "credit_id": "58f991d0925141588d004052",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 240724,
+    "known_for_department": "Acting",
+    "name": "Naomi Scott",
+    "original_name": "Naomi Scott",
+    "popularity": 3.969,
+    "profile_path": "/knSGMaEaH6CZaYw7GQpvxyJcsz7.jpg",
+    "cast_id": 9,
+    "character": "Jasmine",
+    "credit_id": "596a61f4c3a368375700b890",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 935235,
+    "known_for_department": "Acting",
+    "name": "Marwan Kenzari",
+    "original_name": "Marwan Kenzari",
+    "popularity": 1.212,
+    "profile_path": "/66903sgNtyzHN0Mi3D88UYgbH86.jpg",
+    "cast_id": 23,
+    "character": "Jafar",
+    "credit_id": "59856db3925141438101bb87",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 103330,
+    "known_for_department": "Acting",
+    "name": "Navid Negahban",
+    "original_name": "Navid Negahban",
+    "popularity": 1.2003,
+    "profile_path": "/pWi5tINf4mDvTYbNKZDJPODYKra.jpg",
+    "cast_id": 30,
+    "character": "Sultan",
+    "credit_id": "5c2b78f992514122ae6c88e6",
+    "order": 4
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 476163,
+    "known_for_department": "Acting",
+    "name": "Nasim Pedrad",
+    "original_name": "Nasim Pedrad",
+    "popularity": 1.1442,
+    "profile_path": "/vsTcEjvHi6CpkRPiASOfYXl2bNq.jpg",
+    "cast_id": 24,
+    "character": "Dalia",
+    "credit_id": "59856dd2c3a36874bc01c062",
+    "order": 5
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 141034,
+    "known_for_department": "Acting",
+    "name": "Billy Magnussen",
+    "original_name": "Billy Magnussen",
+    "popularity": 2.3064,
+    "profile_path": "/ugyx7Wn2uAWsNlR5eX4yWFsGV2Y.jpg",
+    "cast_id": 25,
+    "character": "Prince Anders",
+    "credit_id": "59b0e2d692514107af07f379",
+    "order": 6
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 35434,
+    "known_for_department": "Acting",
+    "name": "Numan Acar",
+    "original_name": "Numan Acar",
+    "popularity": 1.4861,
+    "profile_path": "/krAYCiFQGreNOOqtTLX3v6TlHk5.jpg",
+    "cast_id": 31,
+    "character": "Hakim",
+    "credit_id": "5c2b79160e0a2655f03909c0",
+    "order": 7
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1804409,
+    "known_for_department": "Acting",
+    "name": "Jordan A. Nash",
+    "original_name": "Jordan A. Nash",
+    "popularity": 0.2727,
+    "profile_path": "/t9iKbfK5V7pGYpqQUyPiuzLqSZ7.jpg",
+    "cast_id": 56,
+    "character": "Omar",
+    "credit_id": "5cea6c9fc3a36827b81ec0bc",
+    "order": 8
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 2321764,
+    "known_for_department": "Acting",
+    "name": "Taliyah Blair",
+    "original_name": "Taliyah Blair",
+    "popularity": 0.3815,
+    "profile_path": "/v61pxofOiz8O7Qp8wKWXp54V1tM.jpg",
+    "cast_id": 57,
+    "character": "Lian",
+    "credit_id": "5cea6cbb0e0a266683cc9dec",
+    "order": 9
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 2321766,
+    "known_for_department": "Acting",
+    "name": "Aubrey Lin",
+    "original_name": "Aubrey Lin",
+    "popularity": 0.1388,
+    "profile_path": "/N2xi1ATnbpJC2SsDz0wtMQ5PB1.jpg",
+    "cast_id": 58,
+    "character": "Omi",
+    "credit_id": "5cea6cd70e0a26643fcc733f",
+    "order": 10
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1771325,
+    "known_for_department": "Acting",
+    "name": "Amir Boutrous",
+    "original_name": "Amir Boutrous",
+    "popularity": 1.2583,
+    "profile_path": "/rtIdTRX7Pn7JY073FZN99DrWiu.jpg",
+    "cast_id": 59,
+    "character": "Jamal",
+    "credit_id": "5cea6cef0e0a261bbbcc97b4",
+    "order": 11
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 956,
+    "known_for_department": "Directing",
+    "name": "Guy Ritchie",
+    "original_name": "Guy Ritchie",
+    "popularity": 5.954,
+    "profile_path": "/9pLUnjMgIEWXi0mlHYzie9cKUTD.jpg",
+    "credit_id": "5c7268aac3a3685a401538ae",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

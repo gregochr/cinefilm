@@ -1,5 +1,6 @@
 package gregochr.cinefilm.film;
 
+import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.collection;
@@ -135,6 +136,17 @@ class FilmServiceTest {
     void detailOfAnUnknownFilmIsNotFound() {
         assertThatThrownBy(() -> service.detail(404L))
             .isInstanceOf(NotFoundException.class)
+            .hasMessage("No such film");
+    }
+
+    @Test
+    void aFilmWhoseFilesAreAllMissingHasNoDetailPage() {
+        Film gone = owned(9L, "Gone", 2000);
+        gone.getEditions().get(0).getMediaFiles().clear();
+        file(gone.getEditions().get(0), "gone.m4v").setPresence(Presence.MISSING);
+        when(films.findById(9L)).thenReturn(Optional.of(gone));
+
+        assertThatThrownBy(() -> service.detail(9L)).isInstanceOf(NotFoundException.class)
             .hasMessage("No such film");
     }
 }

@@ -4,21 +4,27 @@ import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.MediaFile;
+import gregochr.cinefilm.film.Playability;
+import gregochr.cinefilm.library.LibraryRoot;
 import java.nio.file.Files;
-import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Resolves the file to stream for an edition. The path always comes from the database, never from a request. */
+/**
+ * Resolves the file to stream for an edition. The path always comes from the database and is resolved under the
+ * library root; a path that escapes it (a {@code ..} segment, an absolute path, a symlink out) is never served.
+ */
 @Service
 public class StreamService {
 
     private final EditionRepository editions;
+    private final LibraryRoot root;
 
-    /** Creates the service over the edition repository. */
-    public StreamService(EditionRepository editions) {
+    /** Creates the service over the edition repository and the library root. */
+    public StreamService(EditionRepository editions, LibraryRoot root) {
         this.editions = editions;
+        this.root = root;
     }
 
     /** The readable original file of the edition; 404 if the edition, its file or the file on disk is missing. */
@@ -29,14 +35,10 @@ public class StreamService {
         if (original == null) {
             throw new NotFoundException("Edition has no original file");
         }
-        try {
-            Path path = Path.of(original.getPath());
-            if (!Files.isRegularFile(path) || !Files.isReadable(path)) {
-                throw new NotFoundException("Media file is not available");
-            }
-            return path;
-        } catch (InvalidPathException e) {
+        if (original.getPlayability() != Playability.PLAYABLE) {
             throw new NotFoundException("Media file is not available");
         }
+        return root.resolveFile(original.getPath()).filter(Files::isReadable)
+            .orElseThrow(() -> new NotFoundException("Media file is not available"));
     }
 }
