@@ -102,6 +102,15 @@ release v0.1.1
 assert_eq "a newer version after an existing tag: exit 0" "0" "$RC"
 assert_eq "origin has both tags" "v0.1.0 v0.1.1 " "$(remote_tags)"
 
+# --- regression: no tag and a long history (>20 commits) must not die of SIGPIPE under pipefail -----------------------------
+new_world
+(cd "$W/work" && for i in $(seq 1 25); do echo "$i" > "f$i"; git add "f$i"; git commit -q -m "commit $i"; done && git push -q origin main)
+release v0.1.0
+assert_eq "long history, no tag: exit 0" "0" "$RC"
+assert_contains "long history, no tag: prints the commit list" "$OUT" "commit 25"
+assert_contains "long history, no tag: reaches the tagging step" "$OUT" "Tagging v0.1.0"
+assert_eq "long history, no tag: tag pushed" "v0.1.0 " "$(remote_tags)"
+
 # --- failures after tagging ----------------------------------------------------------------------------------------------------
 new_world
 printf '#!/bin/sh\nexit 1\n' > "$W/origin.git/hooks/pre-receive"; chmod +x "$W/origin.git/hooks/pre-receive"
