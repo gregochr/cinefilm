@@ -30,9 +30,13 @@ files or workflows itself. Docs (this file, `docs/`, `AGENTS.md`) may be written
    until green; the planner reviews the diff read-only and sends fixes back to Sonnet.
 3. **Commit** on a feature branch (conventional commit, changelog entry).
 4. **Push and open a ready PR** (not a draft) against `main`.
-5. **Wait for CI (and Codex, if enabled on this repo), fix what they find** through Sonnet, push again.
-6. **Merge (squash) only when CI is green** on the exact head commit:
-   `gh pr merge --squash --match-head-commit <sha>`.
+5. **Wait for CI and Codex, fix what they find** through Sonnet, push again. Codex reviews a PR when it opens and
+   on an `@codex review` comment, not on later pushes: after a fix push, comment `@codex review`. 👀 means running
+   (never merge on it), 👍 is a clean review, comments are findings. Until Codex is enabled on this repo, CI alone
+   gates.
+6. **Merge (squash) when CI is green and Codex has given 👍 on the exact head commit**, re-reading both just
+   before: `gh pr merge --squash --match-head-commit <sha>`. **The owner does not review PRs** (owner, 2026-11-08):
+   the planner merges each phase itself once these gates pass, without asking.
 7. Multi-phase plans repeat 2–6 per phase, each branched from the updated `main`.
 
 Never done by a session: creating or deleting tags, pushing to `main`, force-pushing a shared branch.
@@ -43,7 +47,7 @@ Never done by a session: creating or deleting tags, pushing to `main`, force-pus
 
 ```bash
 cd backend && ./mvnw clean verify --batch-mode --no-transfer-progress -Dtest='!**/integration/**' -DfailIfNoSpecifiedTests=false   # local backend gate (no Docker here)
-cd frontend && npm run lint && npm test && npm run build                # CI frontend job
+cd frontend && npm run lint && npm run test:coverage && npm run build   # CI frontend job (95/90 per file)
 ```
 
 The Mac has no Docker, so the local backend gate excludes the `integration` package (Testcontainers on Postgres 17).
