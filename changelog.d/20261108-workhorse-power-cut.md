@@ -1,0 +1,1 @@
+- docs(ops): workhorse power-cut recovery: Energy settings and `AutomountDisksWithoutUserLogin` so the film share returns from the login window; Tailscale name `study`.
