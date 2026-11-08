@@ -140,7 +140,8 @@ code and report how many mutants the tests kill. Neither is a PR gate. Each has 
 | Floor | `mutationThreshold` 97 in `backend/pom.xml` | `STRYKER_BREAK` 95 in `stryker.yml` (`thresholds.break`) |
 | First measured (2026-11-08) | 96.25% (282 of 293 mutants killed) | 92.22% (498 of 540) |
 | After the first new tests | 97.95% (287 of 293) | 95.56% (516 of 540) |
-| Runtime (one job, no shards) | about 5 minutes on a laptop | about 10 minutes on a laptop (3-minute dry run, then mutants) |
+| Runtime (one job, no shards) | about 5 minutes on a laptop and on the runner | about 10 minutes on a laptop, 28 minutes on the runner (3-minute dry run, then mutants) |
+| First runner run (2026-11-08) | 97.95%, same as local | 96.30% (4 mutants time out on the runner and count as killed, so the score varies a little with load; the floor has room) |
 | Report artifact | `pitest-report` (`pit-reports/`) | `stryker-report` (`mutation.html`) and `stryker-incremental` |
 
 Run them locally (neither needs Docker):
