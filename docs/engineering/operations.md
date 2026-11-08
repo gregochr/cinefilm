@@ -10,19 +10,26 @@ avoids goldenhour's). Backups, backup verification and the daily health workflow
 |---|---|
 | Host | dockermacmini (Ubuntu), shared with goldenhour production |
 | Image | `ghcr.io/gregochr/cinefilm:vX.Y.Z` (also `:latest`), one image: Spring Boot serves the SPA |
-| Containers | `cinefilm-db` (postgres:17, no published port), `cinefilm` (`127.0.0.1:8086` to 8080) |
+| Containers | `cinefilm-db` (postgres:17, no published port), `cinefilm` (`127.0.0.1:8090` to 8080; 8086 is used by vbgone on dockermacmini) |
 | Compose | `~/cinefilm/docker-compose.yml` (copied from `deploy/` by every deploy), project `cinefilm`, secrets in `~/cinefilm/.env` |
 | Data | `/home/gregochr/cinefilm-data/{postgres,logs,cache}` (owned by uid 1001, except `postgres`, which Postgres owns); `cache` is the container's `/app/cache`, the application's default `CINEFILM_CACHE_DIR` (generated WebVTT subtitles), kept in step by `scripts/test/config-agreement.test.sh` |
 | Pre-release dumps | `/home/gregochr/cinefilm-backups/pre-release/` (10 newest kept) |
 | Media | workhorse share `Movies`, mounted read-only at `/mnt/workhorse-films`, seen in the container as `/media` |
-| Remote access | `tailscale serve` to `127.0.0.1:8086` (HTTPS with a real certificate, tailnet only) |
+| Remote access | `tailscale serve` to `127.0.0.1:8090` (HTTPS with a real certificate, tailnet only) |
 | Runner | second GitHub runner `~/actions-runner-cinefilm`, label `cinefilm-prod`, service |
 | State files | `~/cinefilm/.deployed-version`, `~/cinefilm/.previous-version` (written by the deploy scripts) |
 
-TODO(owner): find out dockermacmini's RAM (`free -h`) and free disk. The container is capped at `mem_limit: 1g` with
-`-XX:MaxRAMPercentage=75` in `deploy/docker-compose.yml` until then; revisit it before ffmpeg/transcoding lands.
+RAM is 15 GiB and the root disk is 98 G with only about 5.8 G free (94% used). Host ports in use: 22 53 80 5050 5432
+5433 8081-8087 9000 (8086 is vbgone's frontend, hence CineFilm on 8090). Port 443 is free and no `tailscale serve`
+config exists yet. RAM is not a constraint: the container stays capped at `mem_limit: 1g` with
+`-XX:MaxRAMPercentage=75` in `deploy/docker-compose.yml`; revisit it before ffmpeg/transcoding lands. Disk is: see the
+warning in the host setup below.
 
 ## One-time host setup (owner, on dockermacmini unless stated)
+
+> **WARNING: free disk space before the first deploy.** The root disk is 94% full (about 5.8 G free) and the image
+> pull plus Postgres need room. Free space first with `docker image prune -a` and `docker builder prune`. Do **not**
+> run `docker volume prune`: it could delete other projects' data (goldenhour's volumes).
 
 ### 1. Check what Tailscale already serves, and the Docker group
 
@@ -35,8 +42,8 @@ groups                        # must include docker
 ### 2. Directories
 
 ```bash
-sudo mkdir -p /home/gregochr/cinefilm-data/{postgres,logs,cache} /home/gregochr/cinefilm-backups/pre-release
-sudo chown -R 1001:1001 /home/gregochr/cinefilm-data/logs /home/gregochr/cinefilm-data/cache
+sudo mkdir -p /home/gregochr/cinefilm-data/{postgres,logs,cache,artwork} /home/gregochr/cinefilm-backups/pre-release
+sudo chown -R 1001:1001 /home/gregochr/cinefilm-data/logs /home/gregochr/cinefilm-data/cache /home/gregochr/cinefilm-data/artwork
 sudo chown gregochr:gregochr /home/gregochr/cinefilm-backups /home/gregochr/cinefilm-backups/pre-release
 mkdir -p ~/cinefilm
 ```
@@ -48,11 +55,16 @@ mkdir -p ~/cinefilm
 ```bash
 cd ~/cinefilm
 # Get deploy/.env.example from the repo (browser: raw file on GitHub, or copy it over from your Mac with scp).
-cp .env.example .env && chmod 600 .env
+# ~/cinefilm/.env may already exist (it holds PLEX_TOKEN): NEVER overwrite it with `cp .env.example .env`.
+# Append only the keys that are missing and keep what is there.
+touch .env && chmod 600 .env
 DBPW="$(openssl rand -hex 24)"; PW="$(openssl rand -base64 24 | tr -d '\n')"
-sed -i "s|^CINEFILM_DB_PASSWORD=.*|CINEFILM_DB_PASSWORD=${DBPW}|; s|^CINEFILM_PASSWORD=.*|CINEFILM_PASSWORD=${PW}|" .env
-echo "Sign-in password: ${PW}"       # note it in your password manager, then clear the terminal
+grep -q '^CINEFILM_DB_PASSWORD=' .env || echo "CINEFILM_DB_PASSWORD=${DBPW}" >> .env
+grep -q '^CINEFILM_PASSWORD=' .env || { echo "CINEFILM_PASSWORD=${PW}" >> .env; echo "Sign-in password: ${PW}"; }   # note it in your password manager, then clear the terminal
+grep -q '^TMDB_READ_TOKEN=' .env || echo "TMDB_READ_TOKEN=" >> .env
 ```
+
+Compare the result with `deploy/.env.example` for any other keys it lists.
 
 `TMDB_READ_TOKEN` stays empty until the TMDB phase. Never commit `.env`; never paste it anywhere.
 
@@ -144,12 +156,13 @@ sudo tee /root/.smb-workhorse >/dev/null <<'EOF'
 username=cinefilm
 password=<THE-PASSWORD-YOU-SET-ON-WORKHORSE>
 EOF
-echo '//Study.local/Movies /mnt/workhorse-films cifs ro,credentials=/root/.smb-workhorse,vers=3.0,uid=1001,gid=1001,_netdev,nofail,x-systemd.automount 0 0' | sudo tee -a /etc/fstab
+echo '//192.168.0.101/Movies /mnt/workhorse-films cifs ro,credentials=/root/.smb-workhorse,vers=3.0,uid=1001,gid=1001,_netdev,nofail,x-systemd.automount 0 0' | sudo tee -a /etc/fstab
 sudo systemctl daemon-reload
 ls /mnt/workhorse-films
 ```
 
-If `Study.local` does not resolve on Ubuntu, use workhorse's LAN IP or its Tailscale name in the fstab line.
+`Study.local` does not resolve on dockermacmini, so the fstab line uses workhorse's LAN IP `192.168.0.101`. It is the LAN
+address on purpose: it keeps working when workhorse's Tailscale app is logged out after a power cut.
 
 The `touch` check below only proves the Linux mount is `ro`. The share's own read-only flag is proved by step 5's
 `sharing -l` and step 7's test from a Mac; both layers must hold.
@@ -172,10 +185,10 @@ Enable MagicDNS and HTTPS certificates in the Tailscale admin console (DNS page)
 according to `tailscale serve status` from step 1:
 
 ```bash
-# 443 is free:
-sudo tailscale serve --bg --https=443 http://127.0.0.1:8086
+# 443 is free on dockermacmini (checked; no serve config exists yet):
+sudo tailscale serve --bg --https=443 http://127.0.0.1:8090
 # 443 is already used by goldenhour (do NOT replace it): use 8443 instead
-sudo tailscale serve --bg --https=8443 http://127.0.0.1:8086
+sudo tailscale serve --bg --https=8443 http://127.0.0.1:8090
 
 tailscale serve status        # shows the URL
 ```
@@ -206,7 +219,7 @@ CI (reused, includes `Docker — image builds`), build and push to GHCR, then on
 1. guards (a database must exist at `$CINEFILM_DATA_DIR/postgres`, default `/home/gregochr/cinefilm-data`, once something was deployed before);
 2. `pg_dump` (starting `cinefilm-db` first if it is stopped on an existing deployment; skipped only on a genuine first deploy) of the live database into `cinefilm-backups/pre-release/<version>-<timestamp>.dump` (a failed dump stops the deploy);
 3. pull the image, `docker compose up -d`, wait for the container to be healthy;
-4. smoke on `http://127.0.0.1:8086`: `/actuator/health` 200 UP, `/` serves the SPA, `/api/home` is 401 JSON, `/actuator/info` reports the tagged commit;
+4. smoke on `http://127.0.0.1:8090`: `/actuator/health` 200 UP, `/` serves the SPA, `/api/home` is 401 JSON, `/actuator/info` reports the tagged commit;
 5. smoke failed and `SMOKE_ENFORCE=true`: automatic image-only rollback (below). Otherwise the job just fails and says so.
 
 Changelog promotion (`changelog.d/` into `CHANGELOG.md`) is not automated yet.
@@ -250,7 +263,7 @@ cd ~/cinefilm && export CINEFILM_VERSION=$(cat .deployed-version)
 docker compose ps
 docker compose logs -f cinefilm
 docker compose restart cinefilm
-curl -s http://127.0.0.1:8086/actuator/health
+curl -s http://127.0.0.1:8090/actuator/health
 ```
 
 ## Deferred (not built yet)
