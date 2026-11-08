@@ -7,6 +7,7 @@
 #   GET /actuator/health   200 and "UP"
 #   GET /                  200, HTML, the SPA shell (<div id="root">)
 #   GET /api/home          401 with a JSON body (signed out)
+#   GET /actuator/info     only when EXPECT_COMMIT is set: reports "commit":"<EXPECT_COMMIT>" (the running build)
 #
 # Exit codes: 0 passed, 1 the release is broken (a probe failed), 4 misconfigured (no curl, bad URL).
 # Each probe is tried up to SMOKE_ATTEMPTS times (default 3, SMOKE_RETRY_SLEEP seconds apart) so a slow first
@@ -54,6 +55,10 @@ probe() {
 probe "health" "/actuator/health" 200 '"UP"'
 probe "spa index" "/" 200 '<div id="root">' "text/html"
 probe "auth boundary" "/api/home" 401 '"error"' "json"
+# The running build is the release: /actuator/info reports the commit the image was built from (GIT_COMMIT_SHA).
+if [ -n "${EXPECT_COMMIT:-}" ]; then
+    probe "running build" "/actuator/info" 200 "\"commit\":\"${EXPECT_COMMIT}\""
+fi
 
 if [ "$failures" -gt 0 ]; then
     echo "smoke: ${failures} probe(s) failed" >&2

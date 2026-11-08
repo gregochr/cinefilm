@@ -62,6 +62,19 @@ good; rm "$TMP/stub/_actuator_health.code"
 out="$(run http://x)"; rc=$?
 assert_eq "no answer at all: exit 1" "1" "$rc"
 
+SHA=0123456789abcdef0123456789abcdef01234567
+good; serve "_actuator_info" 200 application/json "{\"build\":{\"commit\":\"${SHA}\"}}"
+out="$(EXPECT_COMMIT=$SHA run http://x)"; rc=$?
+assert_eq "running build matches the expected commit: exit 0" "0" "$rc"
+
+serve "_actuator_info" 200 application/json '{"build":{"commit":"ffffffffffffffffffffffffffffffffffffffff"}}'
+out="$(EXPECT_COMMIT=$SHA run http://x)"; rc=$?
+assert_eq "running build is a different commit: exit 1" "1" "$rc"
+assert_contains "names the build probe" "$out" "running build"
+
+out="$(run http://x)"; rc=$?
+assert_eq "no EXPECT_COMMIT: the commit is not checked" "0" "$rc"
+
 out="$(run ftp://x)"; rc=$?
 assert_eq "bad URL: exit 4" "4" "$rc"
 

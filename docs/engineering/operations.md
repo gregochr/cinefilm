@@ -161,10 +161,10 @@ scripts/release.sh v0.1.0      # or without an argument for a 1/2/3 patch/minor/
 It checks you are on a clean, in-sync `main`, tags, pushes the tag and watches the **Deploy** workflow:
 CI (reused, includes `Docker — image builds`), build and push to GHCR, then on dockermacmini `scripts/deploy.sh`:
 
-1. guards (a database must exist at `cinefilm-data/postgres` once something was deployed before);
-2. `pg_dump` of the live database into `cinefilm-backups/pre-release/<version>-<timestamp>.dump` (a failed dump stops the deploy);
+1. guards (a database must exist at `$CINEFILM_DATA_DIR/postgres`, default `/home/gregochr/cinefilm-data`, once something was deployed before);
+2. `pg_dump` (starting `cinefilm-db` first if it is stopped on an existing deployment; skipped only on a genuine first deploy) of the live database into `cinefilm-backups/pre-release/<version>-<timestamp>.dump` (a failed dump stops the deploy);
 3. pull the image, `docker compose up -d`, wait for the container to be healthy;
-4. smoke on `http://127.0.0.1:8086`: `/actuator/health` 200 UP, `/` serves the SPA, `/api/home` is 401 JSON;
+4. smoke on `http://127.0.0.1:8086`: `/actuator/health` 200 UP, `/` serves the SPA, `/api/home` is 401 JSON, `/actuator/info` reports the tagged commit;
 5. smoke failed and `SMOKE_ENFORCE=true`: automatic image-only rollback (below). Otherwise the job just fails and says so.
 
 Changelog promotion (`changelog.d/` into `CHANGELOG.md`) is not automated yet.
@@ -213,6 +213,6 @@ curl -s http://127.0.0.1:8086/actuator/health
 
 ## Deferred (not built yet)
 
-Playwright E2E and axe a11y in CI, ZAP, deploy-script dry-run tests against a stub docker, release changelog
-promotion, `/actuator/info` commit check in the smoke, nightly backups with verification and the daily health workflow
+Playwright E2E and axe a11y in CI, ZAP, release changelog
+promotion, nightly backups with verification and the daily health workflow
 (phase 9), the `cinefilm-worker` service.

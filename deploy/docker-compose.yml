@@ -11,7 +11,7 @@ services:
       POSTGRES_USER: ${CINEFILM_DB_USER:?set CINEFILM_DB_USER in ~/cinefilm/.env}
       POSTGRES_PASSWORD: ${CINEFILM_DB_PASSWORD:?set CINEFILM_DB_PASSWORD in ~/cinefilm/.env}
     volumes:
-      - /home/gregochr/cinefilm-data/postgres:/var/lib/postgresql/data
+      - ${CINEFILM_DATA_DIR:-/home/gregochr/cinefilm-data}/postgres:/var/lib/postgresql/data
     # No published port: only the cinefilm container reaches it, over the compose network.
     restart: unless-stopped
     healthcheck:
@@ -50,8 +50,8 @@ services:
         read_only: true
         bind:
           propagation: rslave
-      - /home/gregochr/cinefilm-data/logs:/app/logs
-      - /home/gregochr/cinefilm-data/cache:/app/cache
+      - ${CINEFILM_DATA_DIR:-/home/gregochr/cinefilm-data}/logs:/app/logs
+      - ${CINEFILM_DATA_DIR:-/home/gregochr/cinefilm-data}/cache:/app/cache
     depends_on:
       cinefilm-db:
         condition: service_healthy

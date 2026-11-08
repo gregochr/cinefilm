@@ -47,6 +47,13 @@ class ActuatorTest {
             .andExpect(jsonPath("$.git.commit.id.full").value(matchesPattern("[0-9a-f]{40}")));
     }
 
+    @Test
+    void infoSaysUnknownForTheCommitWhenTheVariableIsNotSet() throws Exception {
+        mvc.perform(get("/actuator/info"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.build.commit").value("unknown"));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"env", "beans", "metrics", "configprops", "mappings", "heapdump", "loggers"})
     void everyOtherActuatorEndpointIsNotExposed(String endpoint) throws Exception {

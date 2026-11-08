@@ -3,13 +3,15 @@
 # a checkout of the tag (no SSH). The image must already be in GHCR and the runner logged in to it.
 #
 # Usage: scripts/deploy.sh vX.Y.Z
-# Env:   SMOKE_ENFORCE=true   roll back (image only) when the smoke says the release is broken; else report-only
-#        DEPLOY_HOME (~/cinefilm), DATA_DIR (/home/gregochr/cinefilm-data), BACKUP_DIR (/home/gregochr/cinefilm-backups)
+# Env:   SMOKE_ENFORCE=true   roll back (image only) when the release is broken; else report-only
+#        EXPECT_COMMIT=<sha>  the smoke also checks /actuator/info reports this commit (deploy.yml passes github.sha)
+#        DEPLOY_HOME (~/cinefilm), CINEFILM_DATA_DIR (/home/gregochr/cinefilm-data, the same variable and default as
+#        deploy/docker-compose.yml), BACKUP_DIR (/home/gregochr/cinefilm-backups)
 #
 # Order: guards -> pre-release pg_dump -> pull -> up -d -> wait healthy -> smoke -> rollback decision.
 # Exit:  0 deployed and verified; 1 broken release (rolled back => see auto-rollback.sh exit); 3 inconclusive or
 #        infrastructure (pull failed, ...); 4 smoke misconfigured; 2 manual action needed after a failed rollback.
-# This script never writes under /mnt/workhorse-films (the media mount is read-only and not touched here).
+# This script never writes under /mnt/workhorse-films: the media mount is only ever probed with `mountpoint` and `ls`.
 
 set -euo pipefail
 
@@ -24,23 +26,25 @@ if ! is_valid_version "$VERSION"; then
 fi
 
 export DEPLOY_HOME="${DEPLOY_HOME:-$HOME/cinefilm}"
-export DATA_DIR="${DATA_DIR:-/home/gregochr/cinefilm-data}"
+export CINEFILM_DATA_DIR="${CINEFILM_DATA_DIR:-$CINEFILM_DATA_DIR_DEFAULT}"
 export BACKUP_DIR="${BACKUP_DIR:-/home/gregochr/cinefilm-backups}"
+export EXPECT_COMMIT="${EXPECT_COMMIT:-}"
 SMOKE_ENFORCE="${SMOKE_ENFORCE:-}"
+SMOKE_SCRIPT="${SMOKE_SCRIPT:-${SCRIPT_DIR}/post-deploy-smoke.sh}"
+export SMOKE_SCRIPT
 
 if [ ! -f "${DEPLOY_HOME}/.env" ]; then
     echo "ERROR: ${DEPLOY_HOME}/.env is missing: create it from deploy/.env.example (docs/engineering/operations.md)." >&2
     exit 4
 fi
 
-mkdir -p "${DATA_DIR}"/{postgres,logs,cache} "${BACKUP_DIR}/pre-release"
+mkdir -p "${CINEFILM_DATA_DIR}"/{postgres,logs,cache} "${BACKUP_DIR}/pre-release"
 PREVIOUS="$(cat "${DEPLOY_HOME}/.deployed-version" 2>/dev/null || true)"
 
 # Guard: a previous deploy exists, so the Postgres data directory must hold a database. Pointed at an empty
-# directory Postgres silently runs initdb and the app comes up healthy against an EMPTY database. (The host user
-# cannot read the mode-700 directory, hence the throwaway container.)
-if [ -n "$PREVIOUS" ] && ! docker run --rm -v "${DATA_DIR}/postgres:/d:ro" alpine test -f /d/PG_VERSION 2>/dev/null; then
-    echo "ERROR: ${DATA_DIR}/postgres holds no Postgres data (no PG_VERSION) but ${PREVIOUS} was deployed before." >&2
+# directory Postgres silently runs initdb and the app comes up healthy against an EMPTY database.
+if [ -n "$PREVIOUS" ] && ! pgdata_has_database "${CINEFILM_DATA_DIR}/postgres"; then
+    echo "ERROR: ${CINEFILM_DATA_DIR}/postgres holds no Postgres data (no PG_VERSION) but ${PREVIOUS} was deployed before." >&2
     echo "       Starting would create an EMPTY database. Find the data before deploying." >&2
     exit 1
 fi
@@ -52,7 +56,7 @@ if ! mountpoint -q /mnt/workhorse-films 2>/dev/null; then
     echo "WARNING: /mnt/workhorse-films is not mounted: CineFilm will start with an empty library (operations.md)." >&2
 fi
 
-# Dump BEFORE anything changes.
+# Dump BEFORE anything changes. A failed dump (or no way to take one on an existing deployment) stops the deploy.
 bash "${SCRIPT_DIR}/pre-release-backup.sh" "$VERSION"
 
 cp "${SCRIPT_DIR}/../deploy/docker-compose.yml" "${DEPLOY_HOME}/docker-compose.yml"
@@ -66,15 +70,19 @@ fi
 if [ -n "$PREVIOUS" ] && [ "$PREVIOUS" != "$VERSION" ]; then
     echo "$PREVIOUS" > "${DEPLOY_HOME}/.previous-version"
 fi
-dc up -d
-echo "$VERSION" > "${DEPLOY_HOME}/.deployed-version"
 
-# ---- Everything from here on is AFTER `up`: only these steps can cause a rollback. ----
+# ---- Everything from here on is AFTER the pull: only these steps can cause a rollback. ----
 check_rc=0
-if ! wait_healthy cinefilm 180; then
-    check_rc=1
+if dc up -d; then
+    echo "$VERSION" > "${DEPLOY_HOME}/.deployed-version"
+    if ! wait_healthy cinefilm 180; then
+        check_rc=1
+    else
+        bash "$SMOKE_SCRIPT" || check_rc=$?
+    fi
 else
-    bash "${SCRIPT_DIR}/post-deploy-smoke.sh" || check_rc=$?
+    echo "ERROR: docker compose up failed." >&2
+    check_rc=1
 fi
 
 if [ "$check_rc" -eq 0 ]; then

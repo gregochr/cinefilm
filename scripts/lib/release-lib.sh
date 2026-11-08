@@ -45,7 +45,16 @@ rollback_decision() {
     fi
 }
 
-# ---- Host helpers (call docker; used by deploy.sh and auto-rollback.sh, not unit-tested) ----
+# The data root; deploy/docker-compose.yml uses the same variable and default (scripts/test/deploy.test.sh checks).
+export CINEFILM_DATA_DIR_DEFAULT=/home/gregochr/cinefilm-data
+
+# ---- Host helpers (call docker; exercised by scripts/test/deploy.test.sh against a stub docker) ----
+
+# pgdata_has_database DIR: true when DIR holds a Postgres data directory (PG_VERSION). The directory is mode 700 and
+# owned by the container's postgres user, hence the throwaway container.
+pgdata_has_database() {
+    docker run --rm -v "$1:/d:ro" alpine test -f /d/PG_VERSION >/dev/null 2>&1
+}
 
 # dc ARGS...: docker compose against the deployed stack in $DEPLOY_HOME. CINEFILM_VERSION must be exported.
 dc() {

@@ -87,6 +87,8 @@ jobs:
       - name: Deploy
         env:
           SMOKE_ENFORCE: ${{ vars.SMOKE_ENFORCE }}
+          # The smoke checks /actuator/info reports this commit (the image was built with GIT_COMMIT_SHA=github.sha).
+          EXPECT_COMMIT: ${{ github.sha }}
         run: bash scripts/deploy.sh "$GITHUB_REF_NAME"
 
   notify-failure:

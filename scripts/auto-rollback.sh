@@ -17,6 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 FAILED="${1:-unknown}"
 export DEPLOY_HOME="${DEPLOY_HOME:-$HOME/cinefilm}"
+export CINEFILM_DATA_DIR="${CINEFILM_DATA_DIR:-$CINEFILM_DATA_DIR_DEFAULT}"
 
 PREVIOUS="$(cat "${DEPLOY_HOME}/.previous-version" 2>/dev/null || true)"
 if ! is_valid_version "$PREVIOUS"; then
@@ -36,7 +37,7 @@ if ! dc up -d --no-deps --force-recreate cinefilm; then
 fi
 echo "$PREVIOUS" > "${DEPLOY_HOME}/.deployed-version"
 
-if wait_healthy cinefilm 180 && bash "${SCRIPT_DIR}/post-deploy-smoke.sh"; then
+if wait_healthy cinefilm 180 && EXPECT_COMMIT="" bash "${SMOKE_SCRIPT:-${SCRIPT_DIR}/post-deploy-smoke.sh}"; then
     echo "ROLLBACK: ${PREVIOUS} is running and verified. ${FAILED} remains a FAILED release."
     exit 1
 fi
