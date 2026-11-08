@@ -45,6 +45,21 @@ class SessionCookieTest {
     }
 
     @Test
+    void signInBehindTheHttpsProxyGetsASecureCookie() throws Exception {
+        HttpResponse<String> response = HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create(
+                "http://127.0.0.1:" + port + "/api/session"))
+            .header("Content-Type", "application/json")
+            .header("X-CineFilm", "1")
+            .header("X-Forwarded-Proto", "https")
+            .POST(HttpRequest.BodyPublishers.ofString("{\"password\":\"sesame\"}")).build(),
+            HttpResponse.BodyHandlers.ofString());
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.headers().allValues("Set-Cookie")).singleElement().satisfies(cookie ->
+            assertThat(cookie).contains("Secure").contains("HttpOnly").contains("SameSite=Lax"));
+    }
+
+    @Test
     void unauthenticatedRequestOverHttpGets401NotARedirect() throws Exception {
         HttpClient client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build();
         HttpResponse<String> response = client.send(HttpRequest.newBuilder(URI.create(

@@ -16,6 +16,7 @@ Everything else goes in `docs/engineering/`:
 | Screen targets and exact values | `docs/design/handover/screens/*.png`, `docs/design/handover/reference-markup/*.dc.html` |
 | Test standards (backend and frontend), coverage floors | `docs/engineering/test-standards.md` |
 | Dev setup, build ladder, gates, review cadence | `docs/engineering/dev-and-testing.md` |
+| Production host setup, release, rollback (dockermacmini, Tailscale, SMB media) | `docs/engineering/operations.md` |
 | Code review rules | `AGENTS.md` |
 
 ---
