@@ -27,6 +27,7 @@ public class CollectionService {
     private final FilmRepository films;
     private final LibraryLoader loader;
 
+    /** Creates the service over its repositories and the library loader. */
     public CollectionService(FilmCollectionRepository collections, FilmRepository films, LibraryLoader loader) {
         this.collections = collections;
         this.films = films;

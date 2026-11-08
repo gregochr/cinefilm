@@ -2,6 +2,7 @@ package gregochr.cinefilm.film;
 
 import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
+import static gregochr.cinefilm.TestData.ZONE;
 import static gregochr.cinefilm.TestData.collection;
 import static gregochr.cinefilm.TestData.credit;
 import static gregochr.cinefilm.TestData.edition;
@@ -89,7 +90,7 @@ class BrowseRulesTest {
         FilmView importedLongAgo = withState(filmView("Brief Encounter", 1945, 900), 0, true, null, ago(9 * 365));
 
         List<FilmView> result = BrowseRules.notWatchedInYears(
-            List.of(sixYears, fourYears, unwatchedOld, tenYears, neverTouched, importedLongAgo), NOW);
+            List.of(sixYears, fourYears, unwatchedOld, tenYears, neverTouched, importedLongAgo), NOW, ZONE);
 
         assertThat(result).extracting(v -> v.film().getTitle())
             .containsExactly("Kes", "Brief Encounter", "Withnail");
@@ -103,16 +104,16 @@ class BrowseRulesTest {
         FilmView view = view(film, state(finalCut, 117 * MIN, true, ago(2730), ago(2730)),
             state(theatrical, 5 * MIN, false, ago(3), null));
 
-        assertThat(BrowseRules.notWatchedInYears(List.of(view), NOW)).isEmpty();
+        assertThat(BrowseRules.notWatchedInYears(List.of(view), NOW, ZONE)).isEmpty();
     }
 
     @Test
     void fiveYearBoundaryIsCalendarYears() {
-        Instant justOver = NOW.atZone(java.time.ZoneOffset.UTC).minusYears(5).minusDays(1).toInstant();
-        Instant justUnder = NOW.atZone(java.time.ZoneOffset.UTC).minusYears(5).plusDays(1).toInstant();
+        Instant justOver = NOW.atZone(ZONE).minusYears(5).minusDays(1).toInstant();
+        Instant justUnder = NOW.atZone(ZONE).minusYears(5).plusDays(1).toInstant();
         FilmView over = withState(filmView("Over", 2000, 900), 100 * MIN, true, justOver, null);
         FilmView under = withState(filmView("Under", 2000, 900), 100 * MIN, true, justUnder, null);
-        assertThat(BrowseRules.notWatchedInYears(List.of(over, under), NOW))
+        assertThat(BrowseRules.notWatchedInYears(List.of(over, under), NOW, ZONE))
             .extracting(v -> v.film().getTitle()).containsExactly("Over");
     }
 

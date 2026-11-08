@@ -1,6 +1,7 @@
 package gregochr.cinefilm.person;
 
 import static gregochr.cinefilm.TestData.MIN;
+import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.credit;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.film;
@@ -12,13 +13,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import gregochr.cinefilm.ApiTestBase;
 import gregochr.cinefilm.film.CreditRole;
 import gregochr.cinefilm.film.Film;
-import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class PersonApiTest extends ApiTestBase {
 
     private Film add(String title, int year) {
-        Film film = film(null, title, year, Instant.now());
+        Film film = film(null, title, year, NOW);
         edition(film, null, "Theatrical Cut", 100 * MIN, null);
         return film;
     }
@@ -81,6 +81,6 @@ class PersonApiTest extends ApiTestBase {
     void unknownPersonIs404() throws Exception {
         mvc.perform(get("/api/people/{id}", 424242))
             .andExpect(status().isNotFound())
-            .andExpect(jsonPath("$.error").exists());
+            .andExpect(jsonPath("$.error").value("No such person"));
     }
 }

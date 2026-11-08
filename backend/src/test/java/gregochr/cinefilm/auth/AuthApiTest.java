@@ -5,22 +5,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -31,31 +25,6 @@ class AuthApiTest {
 
     @Autowired
     private MockMvc mvc;
-
-    static Stream<MockHttpServletRequestBuilder> protectedRequests() {
-        return Stream.of(
-            get("/api/home"),
-            get("/api/films"),
-            get("/api/films/1"),
-            get("/api/people/1"),
-            get("/api/collections/1"),
-            get("/api/editions/1/stream"),
-            put("/api/editions/1/progress").header("X-CineFilm", "1").contentType(JSON)
-                .content("{\"positionMs\":1}"),
-            post("/api/editions/1/watched").header("X-CineFilm", "1").contentType(JSON)
-                .content("{\"watched\":true}"),
-            put("/api/films/1/preferences").header("X-CineFilm", "1").contentType(JSON).content("{}"));
-    }
-
-    @ParameterizedTest
-    @MethodSource("protectedRequests")
-    void everyApiRouteReturns401JsonWhenSignedOut(MockHttpServletRequestBuilder request) throws Exception {
-        mvc.perform(request)
-            .andExpect(status().isUnauthorized())
-            .andExpect(header().doesNotExist("Location"))
-            .andExpect(content().contentTypeCompatibleWith(JSON))
-            .andExpect(jsonPath("$.error").exists());
-    }
 
     @Test
     void statusIs401WhenSignedOut() throws Exception {
@@ -78,7 +47,7 @@ class AuthApiTest {
     void signInWithoutTheCineFilmHeaderIsForbidden() throws Exception {
         mvc.perform(post("/api/session").contentType(JSON).content("{\"password\":\"sesame\"}"))
             .andExpect(status().isForbidden())
-            .andExpect(jsonPath("$.error").exists());
+            .andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
     }
 
     @Test

@@ -30,6 +30,7 @@ public class PlaybackState {
 
     private Instant lastPlayedAt;
 
+    /** Creates an unplayed, unwatched state for an edition. */
     public PlaybackState(Long editionId) {
         this.editionId = editionId;
     }

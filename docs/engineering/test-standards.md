@@ -4,8 +4,8 @@ Adapted from goldenhour's `docs/engineering/test-improvement-standards.md` and `
 CineLight's `test-standards.md` (2026-11-08). Read the section for the side you are working on before you write or
 change a test.
 
-- **Backend:** its section arrives with phase 2 of `ci-test-deploy-plan.md`.
-- **Frontend:** below.
+- **Backend:** the "Backend" section below (JUnit 5, Mockito, MockMvc, Testcontainers).
+- **Frontend:** the "Frontend" section after it.
 
 ## Philosophy (both sides)
 
@@ -25,6 +25,160 @@ Three questions every test must answer:
 **The handover is the spec.** Tests assert what `docs/design/handover/README.md` promises: copy, aria roles and
 states (§7), keyboard behaviour, the numbered decisions. They do not assert class names, hook call counts or
 component structure.
+
+---
+
+# Backend
+
+JUnit 5, Mockito (strict stubs), AssertJ, Spring's MockMvc and `@WebMvcTest`, Testcontainers for the CI-only
+integration package. Tests mirror the main packages (`gregochr.cinefilm.playback.PlaybackService` →
+`.../playback/PlaybackServiceTest`); shared builders and the clock live in `gregochr.cinefilm.TestData`. Run the
+local gate and read `dev-and-testing.md` for the build ladder.
+
+## Which kind of test
+
+| Kind | Use it for | Name | Runs |
+|---|---|---|---|
+| **Unit** (`@ExtendWith(MockitoExtension.class)` or plain construction) | every service, rule, mapper and filter: the behaviour, its boundaries and its error messages | `XxxTest` | every build, locally |
+| **Controller slice** (`@WebMvcTest(XController.class)` + `@Import(SecurityConfig.class)` + `@MockitoBean` service) | the HTTP contract of one controller: which request values reach the service, the status and body shape, the 401 and missing-header cases | `XxxControllerTest` | every build, locally |
+| **API test** (`ApiTestBase`: full `@SpringBootTest`, MockMvc, H2, rolled back per test) | the contract end to end across service, JPA and JSON for a feature | `XxxApiTest` | every build, locally |
+| **Whole-app guards** (`RouteSecurityDriftTest`, `ActuatorTest`, `SessionCookieTest`, `DevSeedTest`, `DevSeedSampleVideoTest`) | things only the full context can show: routes, security chain, cookie attributes, the seed | named for the guard | every build, locally |
+| **Integration** (`integration/` package, `IntegrationTestBase`, Postgres 17 Testcontainers) | Flyway migrations and queries on real PostgreSQL | `XxxIntegrationTest` | **CI only** (the Mac has no Docker) |
+
+Rule: **every service has a unit test class of its own**, and a behaviour is tested at the lowest level that can
+show it. An HTTP test is not a substitute for a service test (the service test is cheap, exact and kills mutants;
+the HTTP test proves the wiring). Keep the API tests, they are the contract the frontend and any future native
+client depend on. A new `@SpringBootTest` needs a reason a slice or a unit test cannot serve.
+
+## Smells to eliminate
+
+1. **`any()` in `verify()`.** Assert the exact argument, or capture it with `ArgumentCaptor` and assert its fields.
+   `verify(preferences).rememberLastEdition(FILM_ID, WITHOUT_MARKER)`, never `verify(preferences).rememberLastEdition(any(), any())`.
+2. **`any()` in `when()` where the input is knowable.** Stub with the real argument so a wrong argument fails the
+   test. The one exception is a stub whose argument is the thing under construction (see `loaderWrapsFilms` in
+   `PersonServiceTest`).
+3. **`lenient()` stubs.** If Mockito reports a stub as unnecessary, delete it or fix the test; do not silence it.
+   Stub inside the test that needs it, not in `@BeforeEach`.
+4. **Missing boundaries.** Every threshold gets a test one below, exactly at and one above: the watched rule
+   (`90 * MIN - 1` and `90 * MIN`), the 30-day recently-added window, the five-calendar-year cutoff, `positionMs`
+   0 and -1, the five films a theme needs. "Boundary" for time means milliseconds, not days.
+5. **`@SpringBootTest` where a unit test will do.**
+6. **Time** (below).
+7. **Existence instead of value.** `jsonPath("$.error").exists()` proves nothing. **Assert the exact error body**:
+   `jsonPath("$.error").value("No such film")`. Every 4xx assertion carries the `$.error` text; the 401 body is
+   `Authentication required`, the missing CSRF header body is `Missing X-CineFilm header`, a malformed body or id is
+   `Invalid request`. Likewise assert `positionMs`, ids and dates against the value the fixture set, not that a key
+   is present. (Server-generated ids are the one fair `exists()`.)
+8. **Assertions on implementation.** Do not assert how many times a repository was called, in what order, or that a
+   private helper ran. Assert the result and the saved state.
+
+## Time
+
+- Production code reads the time only through the injected `java.time.Clock`. No `Instant.now()`,
+  `LocalDate.now()`, `Clock.systemDefaultZone()` or `ZoneId.systemDefault()` in `src/main` (`LocalDate.now(clock)`
+  is fine). The application zone is `Europe/London`, set explicitly in `application.properties`
+  (`cinefilm.time-zone`), so a container in UTC behaves the same as the dev Mac.
+- **Every test uses `TestData.CLOCK`**: 2024-03-31T23:30:00Z in `Europe/London`. It is chosen so it can never be the
+  day the suite runs (the mutation these tests exist to catch is "the code ignores the injected clock", and code
+  that reads the real date passes a fixture only on the day it was written), and it sits on two edges at once: in
+  UTC it is Sunday 31 March (ISO week 2024-W13), but British Summer Time began 23 hours earlier, so in London it is
+  already Monday 1 April, 00:30 (week key 202414) and the weekly theme has rolled over. A test that reads the UTC
+  date, or the machine's zone, gets the wrong theme.
+- Full-context tests get that clock from `TestClockConfig` (profile `test`, `@Primary`); unit tests pass
+  `TestData.CLOCK` to the constructor; `TestData.NOW` and `TestData.ZONE` are the instant and zone of it. Express
+  fixture times as offsets from `NOW` (`NOW.minus(Duration.ofDays(30))`).
+- **No `Instant.now()` and no `Clock.systemDefaultZone()` in a test.** A test that needs a different instant builds
+  its own `Clock.fixed(...)` in the zone it is testing, and picks dates that exercise an edge: an ISO-week rollover
+  (2024-12-30 is already week 2025-W01), a 53-week year (2020-12-31 and 2021-01-03 are 2020-W53), the BST changeover.
+- No `Thread.sleep()`. Inject a clock or a scheduler you control.
+
+## Security: the route-drift test
+
+`RouteSecurityDriftTest` discovers every mapped `/api/**` route from Spring's handler mappings and fails when any
+route other than the three session endpoints (`GET`, `POST`, `DELETE /api/session`) answers a signed-out caller with
+anything but the `401` JSON `Authentication required`. It needs no maintenance: a new controller route is picked up
+automatically, and an unprotected one fails the build. The same file proves the discovery is not vacuous (it lists
+the known routes) and that, signed in, the same requests get past security. If you add a route that must be open,
+add it to `SESSION_ROUTES` **and** say why in the PR; the owner reviews that line. Controller slices still carry
+their own 401 and missing-header cases (AGENTS.md rule 5).
+
+## Tags
+
+| Tag | Meaning | Runs |
+|---|---|---|
+| *(none)* | Unit, slice, API test | every build |
+| `real-api` | calls a live third-party service (TMDB, later) | never by default: `surefire.excludedGroups=real-api`; run with `-Dsurefire.excludedGroups= -Dgroups=real-api` from its own workflow |
+
+The `integration` package is excluded by path (`-Dtest='!**/integration/**'`), not by tag, because the local gate
+has to leave out a package, not a label.
+
+## Coverage gates
+
+`./mvnw clean verify` runs JaCoCo's `check` after the tests, goldenhour's numbers:
+
+1. **Per class: 95% lines and 90% branches** for every class under `gregochr.cinefilm`, no exclusions. The old
+   blanket exclusions of `CineFilmApplication` and `seed/**` are gone: the application class is covered by
+   `CineFilmApplicationTest` (`main` hands its class and arguments to Spring) and `DevSeed` by `DevSeedTest`.
+2. **A bundle floor at the measured total**, rounded down to one decimal place: **99.7% lines, 99.1% branches**
+   (measured 2026-11-08 on the local gate: 99.723% lines, 99.127% branches). Ratchet: raise it when coverage rises.
+3. **One per-class override**, with its reason in `backend/pom.xml`: `auth.PasswordChecker` is held to 85% lines and
+   100% branches because the `NoSuchAlgorithmException` catch after a SHA-256 lookup (2 of 14 lines) cannot run on
+   any JVM. Measured 12/14 lines.
+
+Lowest classes today (line / branch): `PasswordChecker` 85.7% / 100% (the override), `WeeklyThemeSelector` 100% /
+94.4% (17 of 18 branches), `BrowseRules` 100% / 97.6% (41 of 42); every other class is 100% / 100%. `DevSeed` is
+100% / 100% since `DevSeedSampleVideoTest` boots it with `cinefilm.sample-video` set.
+
+**Integration tests and the gate.** The per-class rule is computed on the unit and slice suite alone (that is what the
+local gate runs), so every class already clears 95/90 without the Testcontainers classes. CI runs everything, so its
+figures can only be higher; the floors are set on the local numbers so a PR is never green locally and red in CI. If
+a class ever needs an integration test to reach 95/90, do what goldenhour does: write the class its own unit test
+anyway, and only if that is impossible give it a per-class rule at the local figure with the reason beside it.
+
+**Ratchet rule: raise the numbers when coverage rises; never lower them without the owner's say-so.** Never add an
+exclusion or an override to fit a change; write the test. An override is for a line that truly cannot run, written at
+the measured figure with the line and reason in an XML comment.
+
+## SpotBugs and FindSecBugs
+
+Effort Max, threshold High, FindSecBugs 1.14.0, bound to `verify`: any High-confidence finding fails the build. The
+exclude file `backend/spotbugs-exclude.xml` holds the false positives, each `<Match>` preceded by a comment saying
+why this code is safe. Fix the code first; suppress only a finding that cannot be a bug here, never to get a build
+through, and never with `@SuppressFBWarnings` without the same justification.
+
+## Checkstyle
+
+Javadoc on every public type, method and constructor in `src/main` (a one-line summary is enough; `@param` and
+`@return` are optional, but a tag you write must be valid); tests are exempt from the Javadoc check and from nothing
+else. 4-space indentation (wrapped lines at least 4 further in), 120 columns, no unused or star imports.
+
+## Process for a new class or a change
+
+1. Read the class under test first, and the tests next to it.
+2. Write the unit test of the behaviour and its boundaries, with exact values and exact error messages.
+3. Add or extend the slice test if the HTTP contract changed, and the API test if the end-to-end shape changed;
+   update `foundation-plan.md` when a request or response shape changes (AGENTS.md rule 4).
+4. Run the local gate (`dev-and-testing.md`), exit code 0. Look at `target/site/jacoco` for the classes you touched.
+5. Prove a new test can fail: mutate the code in a copy and watch it go red (see below).
+
+## Mutation-checking a test without destroying work
+
+Mutating production code to prove a test can fail is encouraged. Restoring it is where work gets lost.
+
+- **Never restore with `git checkout -- <path>`, `git restore` or `git stash`.** They revert to HEAD and silently
+  delete any uncommitted change in the file, usually the very change under test.
+- Back up with `cp` and restore with `cp`, or commit first, or mutate in a separate worktree.
+- Confirm the restore: `git diff` on the file shows exactly the change you started with.
+- PIT (weekly mutation testing) arrives in phase 5 of `ci-test-deploy-plan.md`; it is why the services need unit
+  tests of their own: full-context tests are too slow to kill mutants.
+
+## What not to do (backend)
+
+- Do not add tests that assert nothing meaningful (a constructor sets a field) to move a coverage number.
+- Do not add `@Disabled` tests or `lenient()` stubs: fix them or delete them.
+- Do not test private methods directly; test through the public API.
+- Do not read the real clock in a test, or depend on the machine's time zone or locale.
+- Do not weaken a test, an assertion, an exclusion or a threshold to make a gate pass. Fix the code, or ask the owner.
 
 ---
 

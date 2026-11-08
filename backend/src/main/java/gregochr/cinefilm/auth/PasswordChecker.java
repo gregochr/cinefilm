@@ -21,6 +21,7 @@ public class PasswordChecker {
     private final String password;
     private final boolean fromFallback;
 
+    /** Creates the checker; a blank configured password selects the insecure development fallback. */
     public PasswordChecker(@Value("${cinefilm.password:}") String configured) {
         this.fromFallback = configured == null || configured.isBlank();
         this.password = fromFallback ? FALLBACK : configured;

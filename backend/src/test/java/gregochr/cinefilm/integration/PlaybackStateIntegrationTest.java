@@ -1,6 +1,7 @@
 package gregochr.cinefilm.integration;
 
 import static gregochr.cinefilm.TestData.MIN;
+import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
@@ -14,7 +15,6 @@ import gregochr.cinefilm.film.FilmPreferenceRepository;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.playback.PlaybackState;
 import gregochr.cinefilm.playback.PlaybackStateRepository;
-import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,7 +45,7 @@ class PlaybackStateIntegrationTest extends IntegrationTestBase {
         preferences.deleteAll();
         states.deleteAll();
         films.deleteAll();
-        Film film = film(null, "Blade Runner", 1982, Instant.now(), "Sci-fi");
+        Film film = film(null, "Blade Runner", 1982, NOW, "Sci-fi");
         Edition edition = edition(film, null, "The Final Cut", 100 * MIN, 90 * MIN);
         file(edition, "/nowhere/final.mp4");
         films.save(film);

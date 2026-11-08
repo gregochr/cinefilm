@@ -16,6 +16,7 @@ public class StreamService {
 
     private final EditionRepository editions;
 
+    /** Creates the service over the edition repository. */
     public StreamService(EditionRepository editions) {
         this.editions = editions;
     }

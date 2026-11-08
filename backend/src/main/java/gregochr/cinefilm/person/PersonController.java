@@ -11,6 +11,7 @@ public class PersonController {
 
     private final PersonService service;
 
+    /** Creates the controller over the person service. */
     public PersonController(PersonService service) {
         this.service = service;
     }

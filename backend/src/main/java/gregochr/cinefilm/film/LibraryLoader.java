@@ -15,6 +15,7 @@ public class LibraryLoader {
     private final FilmRepository films;
     private final PlaybackStateRepository states;
 
+    /** Creates the loader over the film and playback state repositories. */
     public LibraryLoader(FilmRepository films, PlaybackStateRepository states) {
         this.films = films;
         this.states = states;

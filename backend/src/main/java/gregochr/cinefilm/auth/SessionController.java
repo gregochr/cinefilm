@@ -34,6 +34,7 @@ public class SessionController {
     private final PasswordChecker passwords;
     private final HttpSessionSecurityContextRepository contexts = new HttpSessionSecurityContextRepository();
 
+    /** Creates the controller over the password checker. */
     public SessionController(PasswordChecker passwords) {
         this.passwords = passwords;
     }

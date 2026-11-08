@@ -81,6 +81,21 @@ class WeeklyThemeSelectorTest {
     }
 
     @Test
+    void theLastMondayOfDecemberCanAlreadyBelongToNextYearsFirstWeek() {
+        assertThat(WeeklyThemeSelector.weekKey(LocalDate.of(2024, 12, 29))).isEqualTo(202452);
+        assertThat(WeeklyThemeSelector.weekKey(LocalDate.of(2024, 12, 30))).isEqualTo(202501);
+        assertThat(WeeklyThemeSelector.weekKey(LocalDate.of(2025, 12, 28))).isEqualTo(202552);
+        assertThat(WeeklyThemeSelector.weekKey(LocalDate.of(2025, 12, 29))).isEqualTo(202601);
+    }
+
+    @Test
+    void aFiftyThreeWeekYearEndsOnItsOwnSundayAndTheNextYearStartsOnMonday() {
+        assertThat(WeeklyThemeSelector.weekKey(LocalDate.of(2020, 12, 31))).isEqualTo(202053);
+        assertThat(WeeklyThemeSelector.weekKey(LocalDate.of(2021, 1, 3))).isEqualTo(202053);
+        assertThat(WeeklyThemeSelector.weekKey(LocalDate.of(2021, 1, 4))).isEqualTo(202101);
+    }
+
+    @Test
     void theThemeChangesAcrossWeeksAndCoversEveryKindEventually() {
         List<Film> library = library();
         Set<String> kinds = new HashSet<>();

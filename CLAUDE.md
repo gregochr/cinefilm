@@ -14,6 +14,8 @@ Everything else goes in `docs/engineering/`:
 | Architecture, domain model, API contract, phases and roadmap | `docs/engineering/foundation-plan.md` |
 | The UX spec (visual language, screens, behaviour, decisions) | `docs/design/handover/README.md` |
 | Screen targets and exact values | `docs/design/handover/screens/*.png`, `docs/design/handover/reference-markup/*.dc.html` |
+| Test standards (backend and frontend), coverage floors | `docs/engineering/test-standards.md` |
+| Dev setup, build ladder, gates, review cadence | `docs/engineering/dev-and-testing.md` |
 | Code review rules | `AGENTS.md` |
 
 ---

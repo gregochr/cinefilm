@@ -3,7 +3,7 @@ package gregochr.cinefilm.film;
 import gregochr.cinefilm.config.BadRequestException;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -39,9 +39,9 @@ public final class BrowseRules {
             .toList();
     }
 
-    /** Watched films whose last activity was more than five years ago, oldest first. */
-    public static List<FilmView> notWatchedInYears(List<FilmView> views, Instant now) {
-        Instant cutoff = now.atZone(ZoneOffset.UTC).minusYears(STALE_YEARS).toInstant();
+    /** Watched films whose last activity was more than five calendar years ago in {@code zone}, oldest first. */
+    public static List<FilmView> notWatchedInYears(List<FilmView> views, Instant now, ZoneId zone) {
+        Instant cutoff = now.atZone(zone).minusYears(STALE_YEARS).toInstant();
         return views.stream()
             .filter(FilmView::watched)
             .filter(v -> v.lastActivityAt() != null && v.lastActivityAt().isBefore(cutoff))

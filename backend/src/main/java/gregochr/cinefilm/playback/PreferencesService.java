@@ -26,6 +26,7 @@ public class PreferencesService {
     private final FilmRepository films;
     private final FilmPreferenceRepository preferences;
 
+    /** Creates the service over the film and preference repositories. */
     public PreferencesService(FilmRepository films, FilmPreferenceRepository preferences) {
         this.films = films;
         this.preferences = preferences;

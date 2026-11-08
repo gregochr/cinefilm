@@ -10,6 +10,7 @@ public class HomeController {
 
     private final HomeService service;
 
+    /** Creates the controller over the Home service. */
     public HomeController(HomeService service) {
         this.service = service;
     }

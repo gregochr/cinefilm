@@ -26,6 +26,7 @@ public class PersonService {
     private final CreditRepository credits;
     private final LibraryLoader loader;
 
+    /** Creates the service over its repositories and the library loader. */
     public PersonService(PersonRepository people, CreditRepository credits, LibraryLoader loader) {
         this.people = people;
         this.credits = credits;

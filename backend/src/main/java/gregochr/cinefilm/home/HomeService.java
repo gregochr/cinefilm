@@ -28,6 +28,7 @@ public class HomeService {
     private final CollectionService collections;
     private final Clock clock;
 
+    /** Creates the service over its collaborators and the application clock. */
     public HomeService(LibraryLoader loader, CollectionService collections, Clock clock) {
         this.loader = loader;
         this.collections = collections;
@@ -49,7 +50,7 @@ public class HomeService {
             continueWatching.isEmpty() ? null : continueWatching.get(0),
             continueWatching.isEmpty() ? continueWatching : continueWatching.subList(1, continueWatching.size()),
             cards(BrowseRules.recentlyAdded(library, clock.instant())),
-            cards(BrowseRules.notWatchedInYears(library, clock.instant())),
+            cards(BrowseRules.notWatchedInYears(library, clock.instant(), clock.getZone())),
             new ThemeDto(theme.title(), theme.caption(), theme.kind(), theme.value(), themeFilms),
             collections.cards(library));
     }
