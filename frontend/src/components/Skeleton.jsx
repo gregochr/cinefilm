@@ -1,11 +1,22 @@
 /** Static skeleton blocks (no shimmer) at the real layout's sizes. */
 export function SkeletonBlock({ className = '', style }) {
-  return <div className={`skeleton ${className}`.trim()} style={style} aria-hidden="true" />;
+  return (
+    <div
+      className={`skeleton ${className}`.trim()}
+      style={style}
+      aria-hidden="true"
+      data-testid="skeleton"
+    />
+  );
 }
 
 export function SkeletonRow({ count = 7, variant = 'posters' }) {
   return (
-    <div className={`row__grid row__grid--${variant}`} aria-hidden="true">
+    <div
+      className={`row__grid row__grid--${variant}`}
+      aria-hidden="true"
+      data-testid="skeleton-row"
+    >
       {Array.from({ length: count }, (_, i) => (
         <SkeletonBlock
           key={i}

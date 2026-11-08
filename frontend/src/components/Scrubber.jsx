@@ -69,6 +69,7 @@ export default function Scrubber({ positionMs, durationMs, bufferedMs = 0, onSee
       <div className="scrubber__track" ref={track}>
         <div
           className="scrubber__buffered"
+          data-testid="scrubber-buffered"
           style={{ width: `${fraction(bufferedMs, durationMs) * 100}%` }}
         />
         <div

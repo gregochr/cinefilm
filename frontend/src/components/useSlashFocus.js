@@ -3,7 +3,9 @@ import { useEffect } from 'react';
 export function isTypingTarget(target) {
   if (!target || !target.tagName) return false;
   const tag = target.tagName.toLowerCase();
-  return tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable;
+  return (
+    tag === 'input' || tag === 'textarea' || tag === 'select' || Boolean(target.isContentEditable)
+  );
 }
 
 /** Pressing "/" focuses the page's search field (marked data-global-search) when not typing. */

@@ -29,7 +29,7 @@ export default function CollectionCard({ collection }) {
           );
         })}
       </span>
-      <span className="collection-card__name">{collection.name}</span>
+      <span className="collection-card__name">{collection.name}</span>{' '}
       <span className="collection-card__count">{count}</span>
     </Link>
   );

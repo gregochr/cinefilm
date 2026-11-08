@@ -325,6 +325,7 @@ function PlayerView({ film, edition, startAtZero }) {
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
       <video
         ref={videoRef}
+        data-testid="player-video"
         className="player__video"
         src={editionsApi.streamUrl(edition.id)}
         playsInline
