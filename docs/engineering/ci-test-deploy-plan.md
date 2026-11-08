@@ -203,7 +203,7 @@ session cookie gets `Secure`.
 
 | Thing | goldenhour uses | CineFilm uses |
 |---|---|---|
-| Host ports | 80 (frontend), 8082 (backend), 5432 (db) | app `127.0.0.1:8086 → 8080` (behind `tailscale serve`); **db publishes no port** |
+| Host ports | 80 (frontend), 8082 (backend), 5432 (db) | app `127.0.0.1:8090 → 8080` (behind `tailscale serve`); **db publishes no port** |
 | Containers | `goldenhour-db/-backend/-frontend`, `pentest-*`, `backup-verify-db` | `cinefilm-db`, `cinefilm`, later `cinefilm-worker`; scratch `cinefilm-backup-verify-db` |
 | Compose project | `~/goldenhour` | `~/cinefilm`, with `name: cinefilm` set in the file |
 | Data | `/home/gregochr/goldenhour-data/{postgres,logs}` | `/home/gregochr/cinefilm-data/{postgres,logs,cache,transcode}` |
@@ -540,7 +540,7 @@ phase 5).
   no long-lived PAT on the host. Pinned digests stay local for rollback.
 - `docker-compose.yml`: `name: cinefilm`; `cinefilm-db` (no `ports:`, bind mount
   `/home/gregochr/cinefilm-data/postgres`, `pg_isready` healthcheck, json-file log rotation); `cinefilm`
-  (`127.0.0.1:8086:8080`, `env_file: ./.env` holding `CINEFILM_PASSWORD` and `POSTGRES_PASSWORD`, later
+  (`127.0.0.1:8090:8080`, `env_file: ./.env` holding `CINEFILM_PASSWORD` and `POSTGRES_PASSWORD`, later
   `TMDB_READ_TOKEN`; `SPRING_PROFILES_ACTIVE=prod`; `TZ`; `mem_limit` and `-XX:MaxRAMPercentage` so a 2012 mini shared
   with goldenhour cannot be starved (D20); the media mount in long syntax `type: bind, source:
   /mnt/workhorse-films, target: /media, read_only: true, bind: { propagation: rslave }` so a share that mounts after
@@ -552,7 +552,7 @@ phase 5).
   `mountpoint -q /mnt/workhorse-films` and a sentinel file `/mnt/workhorse-films/.cinefilm-library` present —
   missing is a warning on deploy (exit 3 class, never a rollback), because the app is still useful without it, but
   it is recorded in the summary.
-- `post-deploy-smoke.sh` probes via `http://127.0.0.1:8086` and the Tailscale HTTPS name: `GET /` is 200 HTML with
+- `post-deploy-smoke.sh` probes via `http://127.0.0.1:8090` and the Tailscale HTTPS name: `GET /` is 200 HTML with
   hashed assets all 200; `/actuator/health/container` UP; `GET /api/session` 401 `{"authenticated":false}`; `POST
   /api/session` without `X-CineFilm` is 403; `/actuator/info` `git.commit.id` matches the tag; logged-in probes
   (sign in with `CINEFILM_PASSWORD` read from `~/cinefilm/.env` on the host — no smoke secret needed — then `GET
@@ -581,7 +581,7 @@ stubs in the shell tests; first real deploy by the owner tagging `v0.1.0` with `
    (uid/gid = the container user); create `.cinefilm-library` at the share root.
 3. `~/cinefilm/.env` with `CINEFILM_PASSWORD` and `POSTGRES_PASSWORD` (mode 600), and
    `/home/gregochr/cinefilm-data/{postgres,logs,cache,transcode}`.
-4. `tailscale serve --bg --https=<port> http://127.0.0.1:8086` and the chosen hostname (D10, D11); MagicDNS/HTTPS
+4. `tailscale serve --bg --https=<port> http://127.0.0.1:8090` and the chosen hostname (D10, D11); MagicDNS/HTTPS
    certificates enabled in the tailnet.
 5. Repository variable `SMOKE_ENFORCE`; Actions permission for `GITHUB_TOKEN` to read packages (default).
 6. RAM size of dockermacmini and free disk for cache/transcode (D20).
@@ -676,7 +676,7 @@ RAM and disk, needed for phase 8) and D22 (the owner creates an NVD API key befo
 | D8 | Playwright browsers: WebKit + Chromium, or Chromium only like goldenhour? | WebKit + Chromium (Safari is the primary client). |
 | D9 | One container with Spring serving the SPA, or goldenhour's nginx + backend pair? | One container. |
 | D10 | Remote access: Tailscale `serve` (HTTPS on the tailnet) or something else? | Tailscale serve. |
-| D11 | Host port and URL: `127.0.0.1:8086` behind `tailscale serve` on HTTPS port 443 (is 443 on the tailnet name free?) or another port; the hostname to use. | 8086 + 443 if free. |
+| D11 | Host port and URL: `127.0.0.1:8090` behind `tailscale serve` on HTTPS port 443 (is 443 on the tailnet name free?) or another port; the hostname to use. | 8090 + 443 if free. |
 | D12 | Deploy mechanism: CineFilm's own self-hosted runner on dockermacmini running the script directly (no SSH), or goldenhour's SSH-from-runner? | Own runner, no SSH. |
 | D13 | `SMOKE_ENFORCE` (automatic image rollback on a broken release) on from the first release or after a report-only release? | Report-only for `v0.1.0`, then `true`. |
 | D14 | Backup retention and off-box destination. | goldenhour's 7 daily + 4 weekly; rsync to workhorse's internal disk. |

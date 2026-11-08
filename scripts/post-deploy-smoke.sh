@@ -1,7 +1,7 @@
 #!/bin/bash
 # Post-deploy smoke for CineFilm: is the release answering, and is the auth boundary intact?
 #
-# Usage: scripts/post-deploy-smoke.sh [BASE_URL]      (default http://127.0.0.1:8086, the loopback publish)
+# Usage: scripts/post-deploy-smoke.sh [BASE_URL]      (default http://127.0.0.1:8090, the loopback publish)
 #
 # Probes (read-only HTTP; nothing here touches /mnt/workhorse-films or the database):
 #   GET /actuator/health   200 and "UP"
@@ -15,7 +15,7 @@
 
 set -uo pipefail
 
-BASE_URL="${1:-http://127.0.0.1:8086}"
+BASE_URL="${1:-http://127.0.0.1:8090}"
 ATTEMPTS="${SMOKE_ATTEMPTS:-3}"
 RETRY_SLEEP="${SMOKE_RETRY_SLEEP:-3}"
 

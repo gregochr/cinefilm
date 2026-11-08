@@ -49,4 +49,11 @@ case "$cache_default" in
     *) bad "the cache folder '$cache_default' is outside /app" ;;
 esac
 
+# The published host port in compose and the smoke script's default base URL must agree (the deploy smokes the loopback publish).
+SMOKE="$REPO/scripts/post-deploy-smoke.sh"
+compose_port="$(grep -E '"127\.0\.0\.1:[0-9]+:8080"' "$COMPOSE" | head -1 | sed -E 's/.*"127\.0\.0\.1:([0-9]+):8080".*/\1/')"
+smoke_port="$(grep -E '^BASE_URL=' "$SMOKE" | head -1 | sed -E 's/.*127\.0\.0\.1:([0-9]+).*/\1/')"
+assert_eq "compose publishes the host port on loopback" "8090" "$compose_port"
+assert_eq "the smoke script's default base URL uses the compose host port" "$compose_port" "$smoke_port"
+
 finish_tests

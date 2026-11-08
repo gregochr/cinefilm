@@ -40,7 +40,7 @@ services:
     mem_limit: 1g
     # Published on loopback only; `tailscale serve` is the way in.
     ports:
-      - "127.0.0.1:8086:8080"
+      - "127.0.0.1:8090:8080"
     volumes:
       # Films: ONLY the Movies folder of workhorse's disk, mounted read-only on the host (operations.md).
       # rslave so a share that mounts after the container starts still appears inside it.
