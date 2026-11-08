@@ -31,7 +31,7 @@ the owner's tailnet through `tailscale serve`. Films are read from a read-only S
 4. **External processes.** `ffmpeg`/`ffprobe` (phase 2+) are invoked with argument arrays, never a shell string, with
    timeouts and resource limits; file names are never interpolated into a command line. Treat probe output as
    untrusted input.
-5. **Secrets.** `CINEFILM_PASSWORD`, `CINEFILM_DB_*`, `TMDB_API_KEY`, Plex tokens and the CineLight credentials come
+5. **Secrets.** `CINEFILM_PASSWORD`, `CINEFILM_DB_*`, `TMDB_READ_TOKEN`, Plex tokens and the CineLight credentials come
    from the environment, never from the repo, and never reach the browser, API responses, logs, error messages or
    `/actuator`. Only `health` and `info` are exposed by actuator.
 6. **Network exposure.** The app binds to `127.0.0.1` on the host and is published only via `tailscale serve`. The

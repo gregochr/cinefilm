@@ -52,7 +52,7 @@ Editions grouping, Fix match UI, scrubber sprites and transcoding come later.
 7. **Subtitles.** Embedded `mov_text` subtitles aren't exposed by Safari for a custom player. Add
    `GET /api/media-files/{id}/subtitles/{streamIndex}.vtt`: extract with `ffmpeg` (argument array, timeout) to
    WebVTT on first request, cache under `cinefilm.cache.dir` (env `CINEFILM_CACHE_DIR`, prod
-   `/var/lib/cinefilm/cache`), serve with `text/vtt`. The player adds `<track kind="subtitles">` elements for the
+   `/app/cache`), serve with `text/vtt`. The player adds `<track kind="subtitles">` elements for the
    film's subtitle streams and applies decision 6 (forced track auto-on when Subtitles is Off). Films with no
    subtitle streams keep the "None for this film" state.
 8. **Scheduling and triggers.** Scan on startup when the library is empty, nightly at 04:30 Europe/London (not

@@ -41,7 +41,7 @@ public final class TestData {
     private TestData() {
     }
 
-    public static Film film(Long id, String title, int year, Instant addedAt, String... genres) {
+    public static Film film(Long id, String title, Integer year, Instant addedAt, String... genres) {
         Film film = new Film();
         film.setId(id);
         film.setTitleAndSort(title);

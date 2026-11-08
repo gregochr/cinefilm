@@ -1,0 +1,80 @@
+{
+ "adult": false,
+ "backdrop_path": null,
+ "belongs_to_collection": null,
+ "budget": 0,
+ "genres": [
+  {
+   "id": 16,
+   "name": "Animation"
+  },
+  {
+   "id": 9648,
+   "name": "Mystery"
+  },
+  {
+   "id": 53,
+   "name": "Thriller"
+  }
+ ],
+ "homepage": "https://www.kecskemetfilm.hu/en/filmek/rovidfilm/dune",
+ "id": 697620,
+ "imdb_id": "tt12451788",
+ "origin_country": [
+  "HU"
+ ],
+ "original_language": "hu",
+ "original_title": "D\u0171ne",
+ "overview": "Sounds as witnesses. They blurr into memories, half-dreams, it is undecided if they are real or not. A fluctuation between imagination and reality.",
+ "popularity": 0.551,
+ "poster_path": "/CecUPdnnP22wV1NoRFQaG231zj.jpg",
+ "production_companies": [
+  {
+   "id": 132865,
+   "logo_path": null,
+   "name": "Kecskem\u00e9tfilm",
+   "origin_country": "HU"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "HU",
+   "name": "Hungary"
+  }
+ ],
+ "release_date": "2020-06-15",
+ "revenue": 0,
+ "runtime": 4,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "No Language",
+   "iso_639_1": "xx",
+   "name": "No Language"
+  }
+ ],
+ "status": "Released",
+ "tagline": "",
+ "title": "Dune",
+ "video": false,
+ "vote_average": 7.4,
+ "vote_count": 37,
+ "credits": {
+  "cast": [],
+  "crew": [
+   {
+    "adult": true,
+    "gender": 2,
+    "id": 2616298,
+    "known_for_department": "Directing",
+    "name": "G\u00e1bor Ulrich",
+    "original_name": "G\u00e1bor Ulrich",
+    "popularity": 0.0,
+    "profile_path": "/o4hucvDGeAWH6WjgnxMVMH7pItq.jpg",
+    "credit_id": "5ea68f6635c30a0024bfde58",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

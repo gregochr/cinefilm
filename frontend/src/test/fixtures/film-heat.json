@@ -73,6 +73,7 @@
       "positionMs": 3871000,
       "watched": false,
       "file": {
+        "id": 501,
         "videoCodec": "HEVC",
         "height": 1080,
         "audioSummary": "5.1",

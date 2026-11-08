@@ -13,10 +13,13 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.annotation.Transactional;
 
-/** With {@code cinefilm.sample-video} set, every seeded edition plays that one real file instead of a placeholder. */
+/**
+ * With {@code cinefilm.sample-video} set, every seeded edition plays that one real file (stored relative to the library
+ * root) instead of a placeholder.
+ */
 @SpringBootTest
 @ActiveProfiles({"dev", "test"})
-@TestPropertySource(properties = "cinefilm.sample-video=/media/sample.mp4")
+@TestPropertySource(properties = {"cinefilm.sample-video=/media/sample.mp4", "cinefilm.library.root=/media"})
 @Transactional
 class DevSeedSampleVideoTest {
 
@@ -30,6 +33,6 @@ class DevSeedSampleVideoTest {
         assertThat(library).isNotEmpty();
         assertThat(library.stream().flatMap(f -> f.getEditions().stream()).map(Edition::originalFile))
             .isNotEmpty()
-            .allSatisfy(file -> assertThat(file.getPath()).isEqualTo("/media/sample.mp4"));
+            .allSatisfy(file -> assertThat(file.getPath()).isEqualTo("sample.mp4"));
     }
 }

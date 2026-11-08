@@ -14,22 +14,12 @@ describe('App routes', () => {
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
 
-  it('the Admin placeholder lists the panels the handover describes', () => {
+  it('the Admin route shows the Library scan and Films needing attention panels', async () => {
     installFetch();
     renderApp('/admin');
     expect(screen.getByRole('heading', { level: 1, name: 'Admin' })).toBeInTheDocument();
-    expect(
-      screen.getByText('Admin arrives with the real library in a later phase.'),
-    ).toBeInTheDocument();
-    for (const panel of [
-      'Plex import',
-      'Library scan',
-      'Transcode worker',
-      'Pre-made versions',
-      'Films needing attention',
-      'Fix match',
-    ]) {
-      expect(screen.getByRole('heading', { level: 2, name: panel })).toBeInTheDocument();
+    for (const panel of ['Library scan', 'Films needing attention']) {
+      expect(await screen.findByRole('heading', { level: 2, name: panel })).toBeInTheDocument();
     }
   });
 

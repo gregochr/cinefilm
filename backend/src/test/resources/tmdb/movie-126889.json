@@ -1,0 +1,267 @@
+{
+ "adult": false,
+ "backdrop_path": "/iXXPaQPfQowpQ5UvhsHLj9BgFhe.jpg",
+ "belongs_to_collection": {
+  "id": 135416,
+  "name": "Prometheus Collection",
+  "poster_path": "/ormwCxyrBJGQmuMfE6diUnZV12R.jpg",
+  "backdrop_path": "/cK83Pq8SJoeSTnLJucr8IWn35KF.jpg"
+ },
+ "budget": 97000000,
+ "genres": [
+  {
+   "id": 27,
+   "name": "Horror"
+  },
+  {
+   "id": 878,
+   "name": "Science Fiction"
+  }
+ ],
+ "homepage": "https://www.20thcenturystudios.com/movies/alien-covenant",
+ "id": 126889,
+ "imdb_id": "tt2316204",
+ "origin_country": [
+  "US"
+ ],
+ "original_language": "en",
+ "original_title": "Alien: Covenant",
+ "overview": "The crew of the colony ship Covenant, bound for a remote planet on the far side of the galaxy, discovers what they think is an uncharted paradise but is actually a dark, dangerous world.",
+ "popularity": 11.1604,
+ "poster_path": "/zecMELPbU5YMQpC81Z8ImaaXuf9.jpg",
+ "production_companies": [
+  {
+   "id": 25,
+   "logo_path": "/nM2MfoMqzJQRiSynsDabOtFKetD.png",
+   "name": "20th Century Fox",
+   "origin_country": "US"
+  },
+  {
+   "id": 401,
+   "logo_path": "/t7mM3DvQ9MwDT3YzMCBrkWpWiiz.png",
+   "name": "Brandywine Productions",
+   "origin_country": "US"
+  },
+  {
+   "id": 221347,
+   "logo_path": "/6Ry6uNBaa0IbbSs1XYIgX5DkA9r.png",
+   "name": "Scott Free Productions",
+   "origin_country": "US"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "US",
+   "name": "United States of America"
+  }
+ ],
+ "release_date": "2017-05-09",
+ "revenue": 240891763,
+ "runtime": 122,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  },
+  {
+   "english_name": "German",
+   "iso_639_1": "de",
+   "name": "Deutsch"
+  }
+ ],
+ "status": "Released",
+ "tagline": "The path to paradise begins in hell.",
+ "title": "Alien: Covenant",
+ "video": false,
+ "vote_average": 6.193,
+ "vote_count": 9797,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 17288,
+    "known_for_department": "Acting",
+    "name": "Michael Fassbender",
+    "original_name": "Michael Fassbender",
+    "popularity": 5.9625,
+    "profile_path": "/xvbnUiB2ZBR3QIt595OzNy657Vw.jpg",
+    "cast_id": 2,
+    "character": "David / Walter",
+    "credit_id": "52fe4ae9c3a368484e16d6c5",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 77795,
+    "known_for_department": "Acting",
+    "name": "Katherine Waterston",
+    "original_name": "Katherine Waterston",
+    "popularity": 2.5653,
+    "profile_path": "/zaqbXjr5jE1DnEoyAHokUDoCKOM.jpg",
+    "cast_id": 5,
+    "character": "Daniels",
+    "credit_id": "575d8477c3a3681318002756",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 8289,
+    "known_for_department": "Acting",
+    "name": "Billy Crudup",
+    "original_name": "Billy Crudup",
+    "popularity": 2.6892,
+    "profile_path": "/4kHvUUVFMW8GJTHJtoAiskqhcyO.jpg",
+    "cast_id": 4,
+    "character": "Oram",
+    "credit_id": "575d846b9251412443002880",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 62862,
+    "known_for_department": "Acting",
+    "name": "Danny McBride",
+    "original_name": "Danny McBride",
+    "popularity": 2.3592,
+    "profile_path": "/sVFPzl2t5QlGudQKWAszIWZCXZv.jpg",
+    "cast_id": 3,
+    "character": "Tennessee",
+    "credit_id": "575d8465c3a36836e5000211",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 76961,
+    "known_for_department": "Acting",
+    "name": "Demi\u00e1n Bichir",
+    "original_name": "Demi\u00e1n Bichir",
+    "popularity": 1.3515,
+    "profile_path": "/pnp0AGmWu9yaT8HSyYG9VFhYw45.jpg",
+    "cast_id": 7,
+    "character": "Lope",
+    "credit_id": "575d8485c3a3681351002d99",
+    "order": 4
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 37158,
+    "known_for_department": "Acting",
+    "name": "Carmen Ejogo",
+    "original_name": "Carmen Ejogo",
+    "popularity": 1.9649,
+    "profile_path": "/b2qi5NxOwoxK67LPz0MjVwjRcFp.jpg",
+    "cast_id": 8,
+    "character": "Karine",
+    "credit_id": "575d848bc3a36837310001f8",
+    "order": 5
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 181081,
+    "known_for_department": "Acting",
+    "name": "Jussie Smollett",
+    "original_name": "Jussie Smollett",
+    "popularity": 0.7102,
+    "profile_path": "/Mhecg0ylH55rTdC48SyX5IxjGM.jpg",
+    "cast_id": 6,
+    "character": "Ricks",
+    "credit_id": "575d847ec3a3681351002d97",
+    "order": 6
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 1486488,
+    "known_for_department": "Acting",
+    "name": "Callie Hernandez",
+    "original_name": "Callie Hernandez",
+    "popularity": 0.6609,
+    "profile_path": "/doMXlhTAYCy8gH43yYA6m9ymxhd.jpg",
+    "cast_id": 10,
+    "character": "Upworth",
+    "credit_id": "575d849cc3a36837910001d0",
+    "order": 7
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 139150,
+    "known_for_department": "Acting",
+    "name": "Amy Seimetz",
+    "original_name": "Amy Seimetz",
+    "popularity": 1.0382,
+    "profile_path": "/qa7vCi7TViddGjuYEszLdi8DRqN.jpg",
+    "cast_id": 9,
+    "character": "Faris",
+    "credit_id": "575d8492c3a36837310001fa",
+    "order": 8
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 37290,
+    "known_for_department": "Acting",
+    "name": "Nathaniel Dean",
+    "original_name": "Nathaniel Dean",
+    "popularity": 0.5404,
+    "profile_path": "/akebwx7M4HJc3q2UnC6mKymKlkO.jpg",
+    "cast_id": 57,
+    "character": "Hallett",
+    "credit_id": "57df5c1dc3a368129800bc30",
+    "order": 9
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1527210,
+    "known_for_department": "Acting",
+    "name": "Alexander England",
+    "original_name": "Alexander England",
+    "popularity": 0.8503,
+    "profile_path": "/rgJQnVdTG9ruE0kSj1QdzxKOyVI.jpg",
+    "cast_id": 11,
+    "character": "Ankor",
+    "credit_id": "575d84aa925141042300019a",
+    "order": 10
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1371541,
+    "known_for_department": "Acting",
+    "name": "Benjamin Rigby",
+    "original_name": "Benjamin Rigby",
+    "popularity": 0.9539,
+    "profile_path": "/le5qTKDolOJBZ5mWjnx5QwNbCPA.jpg",
+    "cast_id": 12,
+    "character": "Ledward",
+    "credit_id": "575d84b39251415dd20035c9",
+    "order": 11
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 578,
+    "known_for_department": "Directing",
+    "name": "Ridley Scott",
+    "original_name": "Ridley Scott",
+    "popularity": 4.7243,
+    "profile_path": "/zABJmN9opmqD4orWl3KSdCaSo7Q.jpg",
+    "credit_id": "52fe4ae9c3a368484e16d6c1",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

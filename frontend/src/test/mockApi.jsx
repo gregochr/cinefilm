@@ -8,6 +8,8 @@ import films from './fixtures/films.json';
 import bladeRunner from './fixtures/film-blade-runner.json';
 import heat from './fixtures/film-heat.json';
 import wickerMan from './fixtures/film-wicker-man.json';
+import adminAttention from './fixtures/admin-attention.json';
+import adminScan from './fixtures/admin-scan.json';
 import home from './fixtures/home.json';
 import person from './fixtures/person.json';
 
@@ -20,6 +22,8 @@ export const fixtures = {
   wickerMan,
   person,
   collection,
+  adminScan,
+  adminAttention,
 };
 
 const json = (data, status = 200) =>
@@ -47,6 +51,10 @@ export function defaultRoute(method, url) {
   if (/\/progress$/.test(path)) return json({ positionMs: 0, watched: false });
   if (/\/watched$/.test(path)) return json({ watched: true });
   if (/\/preferences$/.test(path)) return json({});
+  if (path === '/api/admin/scan') {
+    return method === 'POST' ? json({ ...adminScan, running: true }, 202) : json(adminScan);
+  }
+  if (path === '/api/admin/attention') return json(adminAttention);
   if (path === '/api/session') return json({ authenticated: true });
   return json(null, 404);
 }

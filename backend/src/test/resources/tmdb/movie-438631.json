@@ -1,0 +1,250 @@
+{
+ "adult": false,
+ "backdrop_path": "/qVgZu5BTx6pu4owCvVOm4zjTfOi.jpg",
+ "belongs_to_collection": {
+  "id": 726871,
+  "name": "Dune Collection",
+  "poster_path": "/lxIGYkpvYjLtYtZH684AQft0FhD.jpg",
+  "backdrop_path": "/fahk0Fu7VUUfK6IkTt1R3waOD9F.jpg"
+ },
+ "budget": 165000000,
+ "genres": [
+  {
+   "id": 878,
+   "name": "Science Fiction"
+  },
+  {
+   "id": 12,
+   "name": "Adventure"
+  }
+ ],
+ "homepage": "https://www.warnerbros.com/movies/dune",
+ "id": 438631,
+ "imdb_id": "tt1160419",
+ "origin_country": [
+  "US"
+ ],
+ "original_language": "en",
+ "original_title": "Dune",
+ "overview": "Paul Atreides, a brilliant and gifted young man born into a great destiny beyond his understanding, must travel to the most dangerous planet in the universe to ensure the future of his family and his people. As malevolent forces explode into conflict over the planet's exclusive supply of the most precious resource in existence - a commodity capable of unlocking humanity's greatest potential - only those who can conquer their fear will survive.",
+ "popularity": 39.0945,
+ "poster_path": "/v1tRXZ4JtD2Iv6fjkPvT4GiwslV.jpg",
+ "production_companies": [
+  {
+   "id": 923,
+   "logo_path": "/5UQsZrfbfG2dYJbx8DxfoTr2Bvu.png",
+   "name": "Legendary Pictures",
+   "origin_country": "US"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "US",
+   "name": "United States of America"
+  }
+ ],
+ "release_date": "2021-09-15",
+ "revenue": 410668500,
+ "runtime": 155,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  }
+ ],
+ "status": "Released",
+ "tagline": "It begins.",
+ "title": "Dune",
+ "video": false,
+ "vote_average": 7.787,
+ "vote_count": 15908,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1190668,
+    "known_for_department": "Acting",
+    "name": "Timoth\u00e9e Chalamet",
+    "original_name": "Timoth\u00e9e Chalamet",
+    "popularity": 8.7869,
+    "profile_path": "/dFxpwRpmzpVfP1zjluH68DeQhyj.jpg",
+    "cast_id": 13,
+    "character": "Paul Atreides",
+    "credit_id": "5b4d01bac3a36823d803cd45",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 933238,
+    "known_for_department": "Acting",
+    "name": "Rebecca Ferguson",
+    "original_name": "Rebecca Ferguson",
+    "popularity": 9.629,
+    "profile_path": "/ty8ZPzaCBBlqIr5qzpOXI24iC8j.jpg",
+    "cast_id": 14,
+    "character": "Lady Jessica Atreides",
+    "credit_id": "5b90742fc3a368222e002f41",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 25072,
+    "known_for_department": "Acting",
+    "name": "Oscar Isaac",
+    "original_name": "Oscar Isaac",
+    "popularity": 5.0973,
+    "profile_path": "/dW5U5yrIIPmMjRThR9KT2xH6nTz.jpg",
+    "cast_id": 53,
+    "character": "Duke Leto Atreides",
+    "credit_id": "5c50bc070e0a2612cccedcb3",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 117642,
+    "known_for_department": "Acting",
+    "name": "Jason Momoa",
+    "original_name": "Jason Momoa",
+    "popularity": 8.0623,
+    "profile_path": "/3troAR6QbSb6nUFMDu61YCCWLKa.jpg",
+    "cast_id": 75,
+    "character": "Duncan Idaho",
+    "credit_id": "5c6610319251412fc6017577",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1640,
+    "known_for_department": "Acting",
+    "name": "Stellan Skarsg\u00e5rd",
+    "original_name": "Stellan Skarsg\u00e5rd",
+    "popularity": 3.7105,
+    "profile_path": "/mW7xmtGV4y79kQGn0zkKVGDMAmw.jpg",
+    "cast_id": 31,
+    "character": "Baron Vladimir Harkonnen",
+    "credit_id": "5c364b61c3a368273c1c5fee",
+    "order": 4
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 196179,
+    "known_for_department": "Acting",
+    "name": "Stephen McKinley Henderson",
+    "original_name": "Stephen McKinley Henderson",
+    "popularity": 1.1219,
+    "profile_path": "/z2weSPo4sdMNj47tP5o0me41r2z.jpg",
+    "cast_id": 209,
+    "character": "Thufir Hawat",
+    "credit_id": "61468a6985c0a20043d24c95",
+    "order": 5
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 16851,
+    "known_for_department": "Acting",
+    "name": "Josh Brolin",
+    "original_name": "Josh Brolin",
+    "popularity": 7.2538,
+    "profile_path": "/7QpneI3HoZCCDVPyWx3p3t7yeo7.jpg",
+    "cast_id": 73,
+    "character": "Gurney Halleck",
+    "credit_id": "5c64750d9251412fb4feec3e",
+    "order": 6
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 3810,
+    "known_for_department": "Acting",
+    "name": "Javier Bardem",
+    "original_name": "Javier Bardem",
+    "popularity": 4.3517,
+    "profile_path": "/zfRID0jx8DKBluPGU9xtk9sZWUt.jpg",
+    "cast_id": 55,
+    "character": "Stilgar",
+    "credit_id": "5c55434c0e0a26567ac66f76",
+    "order": 7
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 195666,
+    "known_for_department": "Acting",
+    "name": "Sharon Duncan-Brewster",
+    "original_name": "Sharon Duncan-Brewster",
+    "popularity": 1.1106,
+    "profile_path": "/gp5h6rOrqBrIGgID4AMd58O6Ow6.jpg",
+    "cast_id": 160,
+    "character": "Dr. Liet Kynes",
+    "credit_id": "5e37991c4ca676001252ea99",
+    "order": 8
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1622,
+    "known_for_department": "Acting",
+    "name": "Chang Chen",
+    "original_name": "\u5f35\u9707",
+    "popularity": 2.4149,
+    "profile_path": "/tkROVkn6yoqF3AcQ4hneOursHXR.jpg",
+    "cast_id": 103,
+    "character": "Dr. Wellington Yueh",
+    "credit_id": "5c8e6e129251410ff4a1c158",
+    "order": 9
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 543530,
+    "known_for_department": "Acting",
+    "name": "Dave Bautista",
+    "original_name": "Dave Bautista",
+    "popularity": 4.9148,
+    "profile_path": "/snk6JiXOOoRjPtHU5VMoy6qbd32.jpg",
+    "cast_id": 30,
+    "character": "Beast Rabban Harkonnen",
+    "credit_id": "5c342d10c3a36851f8b52ac9",
+    "order": 10
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 83854,
+    "known_for_department": "Acting",
+    "name": "David Dastmalchian",
+    "original_name": "David Dastmalchian",
+    "popularity": 2.6458,
+    "profile_path": "/eLafwcpL64CqzwjjSgKpO7Rv4ae.jpg",
+    "cast_id": 77,
+    "character": "Piter de Vries",
+    "credit_id": "5c6c967b0e0a261e069f48b6",
+    "order": 11
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 137427,
+    "known_for_department": "Directing",
+    "name": "Denis Villeneuve",
+    "original_name": "Denis Villeneuve",
+    "popularity": 4.0757,
+    "profile_path": "/xzQYqb4nR8xT7Zdw5itbEL9K3fd.jpg",
+    "credit_id": "58920db99251412dd10093b4",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

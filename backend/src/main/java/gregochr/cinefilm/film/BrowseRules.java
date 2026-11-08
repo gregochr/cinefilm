@@ -59,7 +59,8 @@ public final class BrowseRules {
         return views.stream()
             .filter(v -> matchesSearch(v, query.q()))
             .filter(v -> query.genre() == null || query.genre().isBlank() || hasGenre(v, query.genre()))
-            .filter(v -> query.decade() == null || v.film().getYear() / 10 * 10 == query.decade())
+            .filter(v -> query.decade() == null || v.film().getYear() != null
+                && v.film().getYear() / 10 * 10 == query.decade())
             .filter(v -> query.collection() == null || (v.film().getCollection() != null
                 && Objects.equals(v.film().getCollection().getId(), query.collection())))
             .filter(v -> "all".equals(show) || v.watched() == "watched".equals(show))
@@ -83,13 +84,21 @@ public final class BrowseRules {
         return view.film().getGenres().stream().anyMatch(g -> g.equalsIgnoreCase(genre.strip()));
     }
 
+    /** Oldest first; a film with no known year goes last. */
+    public static final Comparator<FilmView> BY_YEAR = Comparator.comparing((FilmView v) -> v.film().getYear(),
+        Comparator.nullsLast(Comparator.<Integer>naturalOrder()));
+
+    /** Newest first; a film with no known year goes last. */
+    public static final Comparator<FilmView> NEWEST_FIRST = Comparator.comparing((FilmView v) -> v.film().getYear(),
+        Comparator.nullsLast(Comparator.<Integer>reverseOrder()));
+
     private static Comparator<FilmView> comparator(String sort) {
         String key = sort == null || sort.isBlank() ? "added" : sort.toLowerCase(Locale.ROOT);
         Comparator<FilmView> byTitle = Comparator.comparing((FilmView v) -> v.film().getSortTitle())
-            .thenComparing(v -> v.film().getYear());
+            .thenComparing(BY_YEAR);
         return switch (key) {
             case "title" -> byTitle;
-            case "year" -> Comparator.comparingInt((FilmView v) -> v.film().getYear()).thenComparing(byTitle);
+            case "year" -> BY_YEAR.thenComparing(byTitle);
             case "added" -> Comparator.comparing((FilmView v) -> v.film().getAddedAt()).reversed()
                 .thenComparing(byTitle);
             default -> throw new BadRequestException("sort must be title, year or added");

@@ -102,4 +102,9 @@ describe('fixture server', () => {
   it('answers null for anything else', async () => {
     expect(await call('GET', '/api/nothing')).toBeNull();
   });
+
+  it('serves the Admin scan status and attention list', async () => {
+    expect((await call('GET', '/api/admin/scan')).folder).toBe('/media');
+    expect((await call('GET', '/api/admin/attention')).items.length).toBeGreaterThan(0);
+  });
 });

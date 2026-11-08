@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { joinMeta } from '../state/titles.js';
 import { Link, useParams } from 'react-router-dom';
 import { BACKDROP_SIZE, POSTER_SIZE_LARGE } from '../api/images.js';
 import Art from '../components/Art.jsx';
@@ -12,6 +13,8 @@ import {
   SUBTITLE_OFF,
   audioText,
   qualityName,
+  resolveAudioChoice,
+  resolveSubtitleChoice,
   streamKey,
   subtitleOptions,
 } from '../player/tracks.js';
@@ -51,9 +54,7 @@ function EditionPicker({ editions, value, onChange }) {
               />
               <span className="edition__name">{e.name}</span>
             </span>
-            <span className="edition__meta">
-              {e.year} &middot; {formatRuntime(e.runtimeMs)}
-            </span>
+            <span className="edition__meta">{joinMeta(e.year, formatRuntime(e.runtimeMs))}</span>
             {e.note ? <span className="edition__note">{e.note}</span> : null}
           </label>
         ))}
@@ -89,7 +90,7 @@ export default function FilmDetail() {
 
   const qualityValue = quality ?? prefs.quality ?? 'auto';
   const audioValue = (() => {
-    const wanted = audio ?? prefs.audioStreamId;
+    const wanted = audio ?? resolveAudioChoice(film.editions, edition, prefs.audioStreamId);
     if (edition.audioStreams.some((s) => String(streamKey(s)) === String(wanted)))
       return String(wanted);
     const fallback = edition.audioStreams.find((s) => s.isDefault) || edition.audioStreams[0];
@@ -97,7 +98,9 @@ export default function FilmDetail() {
   })();
   const subtitleChoices = subtitleOptions(edition.subtitleStreams);
   const hasForced = edition.subtitleStreams.some((s) => s.forced);
-  const subtitleValue = String(subtitle ?? prefs.subtitle ?? SUBTITLE_OFF);
+  const subtitleValue = String(
+    subtitle ?? resolveSubtitleChoice(film.editions, edition, prefs.subtitle),
+  );
 
   const pickEdition = (editionId) => {
     setPickedEdition(editionId);
@@ -110,7 +113,7 @@ export default function FilmDetail() {
     : `Play${multi ? ` ${edition.name}` : ''}`;
 
   const meta = [
-    <span key="y">{film.year}</span>,
+    film.year ? <span key="y">{film.year}</span> : null,
     <span key="r">{formatRuntime(edition.runtimeMs)}</span>,
     film.genres?.length ? <span key="g">{film.genres.join(', ')}</span> : null,
     film.collection ? (

@@ -4,14 +4,13 @@ import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.Credit;
 import gregochr.cinefilm.film.CreditRepository;
 import gregochr.cinefilm.film.CreditRole;
+import gregochr.cinefilm.film.BrowseRules;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmMapper;
-import gregochr.cinefilm.film.FilmView;
 import gregochr.cinefilm.film.LibraryLoader;
 import gregochr.cinefilm.person.PersonDtos.PersonFilm;
 import gregochr.cinefilm.person.PersonDtos.PersonPage;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,7 +41,7 @@ public class PersonService {
             rolesByFilm.computeIfAbsent(credit.getFilm(), f -> new ArrayList<>()).add(describe(credit));
         }
         List<PersonFilm> films = loader.views(rolesByFilm.keySet()).stream()
-            .sorted(Comparator.comparingInt((FilmView v) -> v.film().getYear()).reversed()
+            .sorted(BrowseRules.NEWEST_FIRST
                 .thenComparing(v -> v.film().getSortTitle()))
             .map(v -> new PersonFilm(FilmMapper.card(v), rolesByFilm.get(v.film())))
             .toList();

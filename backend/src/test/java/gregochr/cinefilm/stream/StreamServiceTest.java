@@ -16,6 +16,8 @@ import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaKind;
+import gregochr.cinefilm.film.Playability;
+import gregochr.cinefilm.library.LibraryRoot;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,7 +45,7 @@ class StreamServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new StreamService(editions);
+        service = new StreamService(editions, new LibraryRoot(dir.toString()));
         Film film = film(4L, "Heat", 1995, NOW);
         edition = edition(film, EDITION_ID, "Theatrical Cut", 100 * MIN, null);
     }
@@ -52,9 +54,9 @@ class StreamServiceTest {
         when(editions.findById(EDITION_ID)).thenReturn(Optional.of(edition));
     }
 
-    private void original(String path) {
+    private MediaFile original(String path) {
         known();
-        file(edition, path);
+        return file(edition, path);
     }
 
     @Test
@@ -67,7 +69,7 @@ class StreamServiceTest {
     @Test
     void anEditionWithoutAnOriginalFileIsNotFound() {
         known();
-        MediaFile premade = file(edition, dir.resolve("t.mp4").toString());
+        MediaFile premade = file(edition, "t.mp4");
         premade.setKind(MediaKind.PREMADE_720);
 
         assertThatThrownBy(() -> service.originalPath(EDITION_ID))
@@ -76,16 +78,16 @@ class StreamServiceTest {
     }
 
     @Test
-    void aReadableRegularFileIsReturnedAsThePathStoredInTheDatabase() throws IOException {
+    void aReadableRegularFileIsResolvedUnderTheLibraryRoot() throws IOException {
         Path video = Files.writeString(dir.resolve("heat.mp4"), "frames");
-        original(video.toString());
+        original("heat.mp4");
 
-        assertThat(service.originalPath(EDITION_ID)).isEqualTo(video);
+        assertThat(service.originalPath(EDITION_ID).toRealPath()).isEqualTo(video.toRealPath());
     }
 
     @Test
     void aMissingFileOnDiskIsNotFound() {
-        original(dir.resolve("gone.mp4").toString());
+        original("gone.mp4");
 
         assertThatThrownBy(() -> service.originalPath(EDITION_ID))
             .isInstanceOf(NotFoundException.class)
@@ -94,7 +96,7 @@ class StreamServiceTest {
 
     @Test
     void aDirectoryIsNotServed() {
-        original(dir.toString());
+        original(".");
 
         assertThatThrownBy(() -> service.originalPath(EDITION_ID))
             .isInstanceOf(NotFoundException.class)
@@ -106,7 +108,7 @@ class StreamServiceTest {
         Path video = Files.writeString(dir.resolve("locked.mp4"), "frames");
         assertThat(video.toFile().setReadable(false)).isTrue();
         assumeFalse(Files.isReadable(video), "running as a user that ignores file permissions");
-        original(video.toString());
+        original("locked.mp4");
 
         assertThatThrownBy(() -> service.originalPath(EDITION_ID))
             .isInstanceOf(NotFoundException.class)
@@ -115,7 +117,56 @@ class StreamServiceTest {
 
     @Test
     void aPathThatIsNotAValidFileNameIsNotFoundRatherThanAServerError() {
-        original("/media/bad\0name.mp4");
+        original("bad\0name.mp4");
+
+        assertThatThrownBy(() -> service.originalPath(EDITION_ID))
+            .isInstanceOf(NotFoundException.class)
+            .hasMessage("Media file is not available");
+    }
+
+    @Test
+    void aParentTraversalOutOfTheRootIsNotFoundEvenWhenTheFileExists() throws IOException {
+        Path outside = Files.writeString(dir.resolveSibling(dir.getFileName() + "-secret.mp4"), "secret");
+        try {
+            original("../" + outside.getFileName());
+
+            assertThatThrownBy(() -> service.originalPath(EDITION_ID))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessage("Media file is not available");
+        } finally {
+            Files.deleteIfExists(outside);
+        }
+    }
+
+    @Test
+    void anAbsolutePathIsNotFoundEvenWhenTheFileExists() throws IOException {
+        Path video = Files.writeString(dir.resolve("abs.mp4"), "frames");
+        original(video.toString());
+
+        assertThatThrownBy(() -> service.originalPath(EDITION_ID))
+            .isInstanceOf(NotFoundException.class)
+            .hasMessage("Media file is not available");
+    }
+
+    @Test
+    void aSymlinkPointingOutOfTheRootIsNotFound() throws IOException {
+        Path outside = Files.writeString(dir.resolveSibling(dir.getFileName() + "-target.mp4"), "secret");
+        try {
+            Files.createSymbolicLink(dir.resolve("link.mp4"), outside);
+            original("link.mp4");
+
+            assertThatThrownBy(() -> service.originalPath(EDITION_ID))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessage("Media file is not available");
+        } finally {
+            Files.deleteIfExists(outside);
+        }
+    }
+
+    @Test
+    void aFileThatCannotBePlayedIsNotServed() throws IOException {
+        Files.writeString(dir.resolve("drm.m4v"), "protected");
+        original("drm.m4v").setPlayability(Playability.PROTECTED);
 
         assertThatThrownBy(() -> service.originalPath(EDITION_ID))
             .isInstanceOf(NotFoundException.class)

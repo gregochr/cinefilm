@@ -38,4 +38,23 @@ class FilmMapperTest {
     void anEditionWithoutAFileHasNoFileSummary() {
         assertThat(FilmMapper.detail(view(film), null).editions().get(0).file()).isNull();
     }
+
+    @Test
+    void theFileSummaryCarriesTheMediaFileIdTheSubtitleUrlsAreBuiltFrom() {
+        file(edition, "heat.mp4").setId(77L);
+
+        assertThat(FilmMapper.detail(view(film), null).editions().get(0).file().id()).isEqualTo(77L);
+    }
+
+    @Test
+    void anEditionWhoseFileIsMissingOrCannotBePlayedIsNotOffered() {
+        Edition missing = edition(film, 11L, "Missing cut", 100 * MIN, null);
+        file(missing, "gone.mp4").setPresence(Presence.MISSING);
+        Edition drm = edition(film, 12L, "Protected cut", 100 * MIN, null);
+        file(drm, "drm.m4v").setPlayability(Playability.PROTECTED);
+        file(edition, "heat.mp4");
+
+        assertThat(FilmMapper.detail(view(film), null).editions()).extracting(FilmDtos.EditionDto::name)
+            .containsExactly("Theatrical");
+    }
 }

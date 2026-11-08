@@ -1,0 +1,55 @@
+{
+  "items": [
+    {
+      "kind": "needs-match",
+      "filmId": 31,
+      "title": "The Wicker Man",
+      "year": null,
+      "detail": "2 possible matches",
+      "files": ["The Wicker Man.m4v"],
+      "candidates": [
+        {
+          "tmdbId": 16307,
+          "title": "The Wicker Man",
+          "year": 1973,
+          "runtimeMinutes": 93,
+          "posterPath": "/a.jpg"
+        },
+        {
+          "tmdbId": 9708,
+          "title": "The Wicker Man",
+          "year": 2006,
+          "runtimeMinutes": 102,
+          "posterPath": null
+        }
+      ]
+    },
+    {
+      "kind": "protected",
+      "filmId": 32,
+      "title": "Kes",
+      "year": 1969,
+      "detail": "Protected by FairPlay, so it can't be played",
+      "files": ["Kes.m4v"],
+      "candidates": []
+    },
+    {
+      "kind": "needs-conversion",
+      "filmId": 33,
+      "title": "Alien",
+      "year": 1979,
+      "detail": "Needs converting to MP4 before it can be played",
+      "files": ["Alien.avi"],
+      "candidates": []
+    },
+    {
+      "kind": "multiple-files",
+      "filmId": 6,
+      "title": "Blade Runner",
+      "year": 1982,
+      "detail": "3 files match one film",
+      "files": ["Blade Runner.m4v", "Blade Runner Final Cut.m4v", "Blade Runner Directors Cut.m4v"],
+      "candidates": []
+    }
+  ]
+}

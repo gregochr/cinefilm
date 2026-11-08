@@ -108,6 +108,7 @@ their own 401 and missing-header cases (AGENTS.md rule 5).
 |---|---|---|
 | *(none)* | Unit, slice, API test | every build |
 | `real-api` | calls a live third-party service (TMDB, later) | never by default: `surefire.excludedGroups=real-api`; run with `-Dsurefire.excludedGroups= -Dgroups=real-api` from its own workflow |
+| `real-tools` | runs the real `ffprobe` and `ffmpeg` (`RealToolsTest`) | every build, but it skips itself (assumption) when the tools are not on the PATH, as on the dev Mac; CI installs ffmpeg so it runs there |
 
 The `integration` package is excluded by path (`-Dtest='!**/integration/**'`), not by tag, because the local gate
 has to leave out a package, not a label.
@@ -119,15 +120,16 @@ has to leave out a package, not a label.
 1. **Per class: 95% lines and 90% branches** for every class under `gregochr.cinefilm`, no exclusions. The old
    blanket exclusions of `CineFilmApplication` and `seed/**` are gone: the application class is covered by
    `CineFilmApplicationTest` (`main` hands its class and arguments to Spring) and `DevSeed` by `DevSeedTest`.
-2. **A bundle floor at the measured total**, rounded down to one decimal place: **99.7% lines, 99.1% branches**
-   (measured 2026-11-08 on the local gate: 99.723% lines, 99.127% branches). Ratchet: raise it when coverage rises.
+2. **A bundle floor at the measured total**, rounded down to one decimal place: **99.8% lines, 99.8% branches**
+   (measured 2026-11-08 on the local gate after the library scan: 99.89% lines, 99.87% branches; it was 99.7% and
+   99.1% before). Ratchet: raise it when coverage rises.
 3. **One per-class override**, with its reason in `backend/pom.xml`: `auth.PasswordChecker` is held to 85% lines and
    100% branches because the `NoSuchAlgorithmException` catch after a SHA-256 lookup (2 of 14 lines) cannot run on
    any JVM. Measured 12/14 lines.
 
-Lowest classes today (line / branch): `PasswordChecker` 85.7% / 100% (the override), `WeeklyThemeSelector` 100% /
-94.4% (17 of 18 branches), `BrowseRules` 100% / 97.6% (41 of 42); every other class is 100% / 100%. `DevSeed` is
-100% / 100% since `DevSeedSampleVideoTest` boots it with `cinefilm.sample-video` set.
+Lowest classes today (line / branch): `PasswordChecker` 85.7% / 100% (the override) and `BrowseRules` 100% / 97.6%
+(41 of 42 branches); every other class, including the whole `library`, `tmdb` and `subtitle` packages, is 100% / 100%.
+`DevSeed` is 100% / 100% since `DevSeedSampleVideoTest` boots it with `cinefilm.sample-video` set.
 
 **Integration tests and the gate.** The per-class rule is computed on the unit and slice suite alone (that is what the
 local gate runs), so every class already clears 95/90 without the Testcontainers classes. CI runs everything, so its
@@ -169,8 +171,8 @@ Mutating production code to prove a test can fail is encouraged. Restoring it is
   delete any uncommitted change in the file, usually the very change under test.
 - Back up with `cp` and restore with `cp`, or commit first, or mutate in a separate worktree.
 - Confirm the restore: `git diff` on the file shows exactly the change you started with.
-- PIT (weekly, `pitest.yml`) does this at scale: it must stay at or above `mutationThreshold` in `pom.xml` (floor 97,
-  measured 97.95% on 2026-11-08). A surviving mutant in a rule (watched, weekly theme, sort/search) is a missing test:
+- PIT (weekly, `pitest.yml`) does this at scale: it must stay at or above `mutationThreshold` in `pom.xml` (floor 98,
+  measured 98.62% on 2026-11-08). A surviving mutant in a rule (watched, weekly theme, sort/search) is a missing test:
   add the assertion that would have caught it rather than lowering the floor. Scores, survivors and how to run it:
   `dev-and-testing.md` "Mutation testing".
 

@@ -14,7 +14,7 @@ public final class FilmDtos {
     }
 
     /** The compact film representation used in rows and grids. */
-    public record FilmCard(Long id, String title, int year, String posterPath, String backdropPath,
+    public record FilmCard(Long id, String title, Integer year, String posterPath, String backdropPath,
                            boolean watched, Progress progress, String director) {
     }
 
@@ -31,7 +31,7 @@ public final class FilmDtos {
     }
 
     /** The original file of an edition, summarised for the "file line". */
-    public record FileInfo(String videoCodec, Integer height, String audioSummary, Instant addedAt) {
+    public record FileInfo(Long id, String videoCodec, Integer height, String audioSummary, Instant addedAt) {
     }
 
     /** An audio track. */
@@ -59,7 +59,7 @@ public final class FilmDtos {
     }
 
     /** The film detail page. */
-    public record FilmDetail(Long id, String title, int year, String posterPath, String backdropPath,
+    public record FilmDetail(Long id, String title, Integer year, String posterPath, String backdropPath,
                              boolean watched, Progress progress, String director, String overview,
                              List<String> genres, CollectionRef collection, List<PersonRef> directors,
                              List<CastEntry> cast, List<EditionDto> editions, Preferences preferences) {

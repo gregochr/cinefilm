@@ -1,0 +1,49 @@
+{
+ "page": 1,
+ "results": [
+  {
+   "adult": false,
+   "backdrop_path": "/eqZ5t82asfprFcNS56eVruNT5G5.jpg",
+   "genre_ids": [
+    10751,
+    35
+   ],
+   "id": 10481,
+   "title": "102 Dalmatians",
+   "original_language": "en",
+   "original_title": "102 Dalmatians",
+   "overview": "Get ready for a howling good time as an all new assortment of irresistible animal heroes are unleashed in this great family tail! In an unlikely alliance, the outrageous Waddlesworth - a parrot who thinks he's a Rottweiler - teams up with Oddball - an un-marked Dalmatian puppy eager to earn her spots! Together they embark on a laugh-packed quest to outwit the ever-scheming Cruella De Vil.",
+   "popularity": 3.4777,
+   "poster_path": "/ueE6u2GTECzGBtas6PFx7wwi9y0.jpg",
+   "release_date": "2000-10-07",
+   "softcore": false,
+   "video": false,
+   "vote_average": 5.5,
+   "vote_count": 1525
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/vhuNTct6wQKcaV0U8aUXLVvjetU.jpg",
+   "genre_ids": [
+    10751,
+    16,
+    12,
+    35
+   ],
+   "id": 13654,
+   "title": "101 Dalmatians II: Patch's London Adventure",
+   "original_language": "en",
+   "original_title": "101 Dalmatians II: Patch's London Adventure",
+   "overview": "Being one of 101 takes its toll on Patch, who doesn't feel unique. When he's accidentally left behind on moving day, he meets his idol, Thunderbolt, who enlists him on a publicity campaign.",
+   "popularity": 3.7542,
+   "poster_path": "/uB0DQU4Cog8tYrkiOEVTmDw6Qnn.jpg",
+   "release_date": "2003-03-02",
+   "softcore": false,
+   "video": false,
+   "vote_average": 6.0,
+   "vote_count": 1275
+  }
+ ],
+ "total_pages": 1,
+ "total_results": 2
+}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { SESSION_EXPIRED_EVENT, SIGNED_IN_EVENT } from '../api/client.js';
-import { editionsApi } from '../api/resources.js';
+import { editionsApi, mediaFilesApi } from '../api/resources.js';
 import { Button } from '../components/Button.jsx';
 import {
   BackIcon,
@@ -31,10 +31,14 @@ import { hasReachedEnd, resumePosition } from '../player/resume.js';
 import { formatClock, formatRemaining } from '../player/time.js';
 import {
   SUBTITLE_OFF,
+  activeSubtitleKey,
   indicatorText,
   nextSubtitle,
   qualityName,
+  resolveAudioChoice,
+  resolveSubtitleChoice,
   streamKey,
+  subtitleLabel,
   subtitleOptions,
 } from '../player/tracks.js';
 import { useFilm } from '../state/useFilms.js';
@@ -87,6 +91,7 @@ function PlayerView({ film, edition, startAtZero }) {
   const positionRef = useRef(0);
   const wasPlayingBeforeExpiry = useRef(false);
   const lastPoke = useRef(0);
+  const trackRefs = useRef(new Map());
   const prefs = film.preferences || {};
 
   const [playing, setPlaying] = useState(false);
@@ -102,14 +107,15 @@ function PlayerView({ film, edition, startAtZero }) {
   const [toast, setToast] = useState(null);
   const [quality, setQuality] = useState(prefs.quality || 'auto');
   const [audio, setAudio] = useState(() => {
-    const preferred = edition.audioStreams.find(
-      (s) => String(streamKey(s)) === String(prefs.audioStreamId),
-    );
+    const preferredKey = resolveAudioChoice(film.editions, edition, prefs.audioStreamId);
+    const preferred = edition.audioStreams.find((s) => streamKey(s) === preferredKey);
     const fallback = edition.audioStreams.find((s) => s.isDefault) || edition.audioStreams[0];
     const chosen = preferred || fallback;
     return chosen ? streamKey(chosen) : null;
   });
-  const [subtitle, setSubtitle] = useState(prefs.subtitle ?? SUBTITLE_OFF);
+  const [subtitle, setSubtitle] = useState(() =>
+    resolveSubtitleChoice(film.editions, edition, prefs.subtitle),
+  );
 
   const hasSubtitles = edition.subtitleStreams.length > 0;
   const atEnd = hasReachedEnd(positionMs, durationMs, edition.creditsMarkerMs);
@@ -128,6 +134,17 @@ function PlayerView({ film, edition, startAtZero }) {
   useEffect(() => {
     containerRef.current?.focus();
   }, []);
+
+  // Show the chosen subtitle track, or the forced one when Subtitles is Off. Tracks that are not showing stay
+  // disabled, so the browser only fetches (and the server only extracts) a track when it is wanted.
+  useEffect(() => {
+    const showing = activeSubtitleKey(edition.subtitleStreams, subtitle);
+    edition.subtitleStreams.forEach((stream) => {
+      const key = streamKey(stream);
+      const track = trackRefs.current.get(key)?.track;
+      if (track) track.mode = key === showing ? 'showing' : 'disabled';
+    });
+  }, [edition.subtitleStreams, subtitle]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -321,7 +338,7 @@ function PlayerView({ film, edition, startAtZero }) {
       onMouseMove={onPointerActivity}
       onPointerDown={onPointerActivity}
     >
-      {/* No captions endpoint yet in phase 1, so there is no track to attach. */}
+      {/* The subtitle <track>s are children (kind="subtitles"); the lint rule only recognises captions. */}
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
       <video
         ref={videoRef}
@@ -343,7 +360,23 @@ function PlayerView({ film, edition, startAtZero }) {
           setPlaying(false);
           setPositionMs(durationMs);
         }}
-      />
+      >
+        {edition.file
+          ? edition.subtitleStreams.map((stream) => (
+              <track
+                key={streamKey(stream)}
+                ref={(element) => {
+                  if (element) trackRefs.current.set(streamKey(stream), element);
+                  else trackRefs.current.delete(streamKey(stream));
+                }}
+                kind="subtitles"
+                data-testid="subtitle-track"
+                label={subtitleLabel(stream)}
+                src={mediaFilesApi.subtitleUrl(edition.file.id, stream.index)}
+              />
+            ))
+          : null}
+      </video>
       <button
         type="button"
         className="player__surface"
@@ -368,7 +401,9 @@ function PlayerView({ film, edition, startAtZero }) {
           </Button>
           <div className="player__title">
             <span className="player__name">{film.title}</span>
-            <span className="player__year">{edition.year ?? film.year}</span>
+            {(edition.year ?? film.year) ? (
+              <span className="player__year">{edition.year ?? film.year}</span>
+            ) : null}
           </div>
           <div className="player__spacer" />
           <IndicatorPill text={indicatorText(quality)} />

@@ -24,8 +24,12 @@ Configuration comes from the environment, never from committed files:
 | `CINEFILM_DB_URL` | `jdbc:postgresql://localhost:5432/cinefilm` | required |
 | `CINEFILM_DB_USER` | `cinefilm` | required |
 | `CINEFILM_DB_PASSWORD` | `cinefilm` | required |
+| `CINEFILM_LIBRARY_ROOT` | `/media` | the films folder (read-only mount); media paths are stored relative to it |
+| `CINEFILM_CACHE_DIR` | `$TMPDIR/cinefilm-cache` | `/app/cache` by default (the deploy mounts the writable cache there; checked by `scripts/test/config-agreement.test.sh`); generated WebVTT subtitles live here |
+| `TMDB_READ_TOKEN` | empty (TMDB off) | the owner's TMDB Read Access Token (sent as a Bearer header, never logged) |
 
-The prod profile has no fallbacks, so a missing value fails start-up. The dev profile applies every Flyway migration
+The prod profile has no fallbacks for the database values, so a missing one fails start-up. The library values have
+defaults; `ffprobe` and `ffmpeg` must be on the PATH (`brew install ffmpeg` on a Mac) for a real scan. The dev profile applies every Flyway migration
 to the real database and seeds the sample library when the database has no films. To start over:
 `dropdb cinefilm && scripts/dev-db.sh`.
 
@@ -37,7 +41,14 @@ to the real database and seeds the sample library when the database has no films
   Testcontainers then remains the only migration proof (it already is the authoritative one).
 - **Integration suite** (`gregochr.cinefilm.integration`, classes extending `IntegrationTestBase`). A Testcontainers
   `postgres:17-alpine`, Flyway migrations on an empty database, Hibernate `ddl-auto=validate`. Covers the migrations,
-  the library queries on the dev seed and playback state persistence.
+  the library queries on the dev seed, playback state persistence and the library scan's V2 columns, queries and
+  bulk edition move.
+- **Library scan tests.** ffprobe parsing runs on recorded-shape JSON in `src/test/resources/ffprobe`; the TMDB client
+  and matcher run on responses recorded from the live API in `src/test/resources/tmdb` (`TmdbFixtures` serves them;
+  an unrecorded search answers with no results). To record more, call the API once with the token from your
+  environment, keep the JSON, and never write the token down. `RealToolsTest` runs the real `ffprobe`/`ffmpeg` and
+  skips itself when they are not on the PATH (CI installs ffmpeg). Tests that scan use the shared
+  `${java.io.tmpdir}/cinefilm-test-library` folder (`cinefilm.library.root` in the test profile) and clean it.
 
 **No Docker on the dev Mac**, so Testcontainers cannot run locally. The local gate excludes the package:
 
@@ -137,7 +148,7 @@ code and report how many mutants the tests kill. Neither is a PR gate. Each has 
 | Workflow | `pitest.yml`, Mondays 06:30 UTC | `stryker.yml`, Wednesdays 03:30 UTC |
 | Mutated | `gregochr.cinefilm.*` minus `config.*`, `seed.*`, `*Dtos*`, `*Controller`, `CineFilmApplication` | `src/player/*.js`, `src/api/*.js` (not `fixtureServer.js`), `src/state/*.js`, `src/components/placeholder.js`, `src/components/useSlashFocus.js` |
 | Tests that kill | Unit, MockMvc/`@WebMvcTest` and `ApiTestBase` (H2) tests; the Testcontainers `integration` package is excluded (same locally and in CI so scores compare) | The whole Vitest suite (per-test coverage), `pool: 'forks'` |
-| Floor | `mutationThreshold` 97 in `backend/pom.xml` | `STRYKER_BREAK` 95 in `stryker.yml` (`thresholds.break`) |
+| Floor | `mutationThreshold` 98 in `backend/pom.xml` (98.62%, 857 of 869, after the library scan) | `STRYKER_BREAK` 95 in `stryker.yml` (`thresholds.break`) |
 | First measured (2026-11-08) | 96.25% (282 of 293 mutants killed) | 92.22% (498 of 540) |
 | After the first new tests | 97.95% (287 of 293) | 95.56% (516 of 540) |
 | Runtime (one job, no shards) | about 5 minutes on a laptop and on the runner | about 10 minutes on a laptop, 28 minutes on the runner (3-minute dry run, then mutants) |

@@ -1,0 +1,23 @@
+{
+  "running": false,
+  "folder": "/media",
+  "progress": null,
+  "lastScan": {
+    "startedAt": "2026-11-08T12:40:02Z",
+    "finishedAt": "2026-11-08T12:41:10Z",
+    "trigger": "nightly",
+    "filesSeen": 541,
+    "newFiles": 2,
+    "missingFiles": 0,
+    "error": null
+  },
+  "counts": {
+    "films": 538,
+    "newFiles": 2,
+    "missing": 0,
+    "protectedFiles": 1,
+    "needsConversion": 3,
+    "needsMatch": 2,
+    "unreadable": 0
+  }
+}

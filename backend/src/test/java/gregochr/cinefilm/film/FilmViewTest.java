@@ -84,4 +84,32 @@ class FilmViewTest {
         assertThat(view.directorNames()).isEqualTo("Michael Mann");
         assertThat(view.cast()).hasSize(1);
     }
+
+    @Test
+    void anEditionWhoseFileIsMissingIsNotTheLastPlayedOneButItsStoredHistoryStays() {
+        Instant earlier = NOW.minus(Duration.ofDays(3));
+        MediaFile gone = gregochr.cinefilm.TestData.file(theatrical, "gone.m4v");
+        gone.setPresence(Presence.MISSING);
+        gregochr.cinefilm.TestData.file(finalCut, "here.m4v");
+        var view = view(blade, state(finalCut, 30 * MIN, false, earlier, null),
+            state(theatrical, 10 * MIN, false, NOW, null));
+
+        assertThat(view.lastPlayedEdition()).contains(finalCut);
+        assertThat(view.progress()).hasValueSatisfying(p -> {
+            assertThat(p.editionId()).isEqualTo(10L);
+            assertThat(p.positionMs()).isEqualTo(30 * MIN);
+        });
+        assertThat(view.state(theatrical).orElseThrow().getPositionMs()).isEqualTo(10 * MIN);
+    }
+
+    @Test
+    void whenTheOnlyPlayedEditionIsUnavailableThereIsNoProgressToAdvertise() {
+        gregochr.cinefilm.TestData.file(theatrical, "drm.m4v").setPlayability(Playability.PROTECTED);
+        gregochr.cinefilm.TestData.file(finalCut, "here.m4v");
+        var view = view(blade, state(theatrical, 10 * MIN, false, NOW, null));
+
+        assertThat(view.lastPlayedEdition()).isEmpty();
+        assertThat(view.progress()).isEmpty();
+        assertThat(view.lastPlayedAt()).isNull();
+    }
 }

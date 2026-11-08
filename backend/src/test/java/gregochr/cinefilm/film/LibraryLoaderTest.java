@@ -1,5 +1,6 @@
 package gregochr.cinefilm.film;
 
+import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.edition;
@@ -71,5 +72,25 @@ class LibraryLoaderTest {
         when(states.findAll()).thenReturn(List.of());
 
         assertThat(loader.loadAll()).isEmpty();
+    }
+
+    @Test
+    void filmsWhoseOnlyFileIsMissingProtectedOrAwaitingConversionAreLeftOutOfBrowse() {
+        Film missing = film(3L, "Missing", 2000, NOW);
+        file(edition(missing, 30L, "Original", 90 * MIN, null), "m.m4v").setPresence(Presence.MISSING);
+        Film drm = film(4L, "Drm", 2000, NOW);
+        file(edition(drm, 40L, "Original", 90 * MIN, null), "d.m4v").setPlayability(Playability.PROTECTED);
+        Film avi = film(5L, "Avi", 2000, NOW);
+        file(edition(avi, 50L, "Original", 90 * MIN, null), "a.avi").setPlayability(Playability.NEEDS_CONVERSION);
+        Film broken = film(6L, "Broken", 2000, NOW);
+        file(edition(broken, 60L, "Original", 90 * MIN, null), "b.m4v").setPlayability(Playability.UNREADABLE);
+        Film fine = film(7L, "Fine", 2000, NOW);
+        file(edition(fine, 70L, "Original", 90 * MIN, null), "f.m4v");
+        when(films.findAll()).thenReturn(List.of(heat, missing, drm, avi, broken, fine));
+        when(states.findAll()).thenReturn(List.of());
+
+        assertThat(loader.loadAll()).extracting(v -> v.film().getTitle()).containsExactly("Heat", "Fine");
+        assertThat(loader.views(List.of(missing, fine))).extracting(v -> v.film().getTitle())
+            .containsExactly("Fine");
     }
 }

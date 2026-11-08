@@ -1,0 +1,266 @@
+{
+ "adult": false,
+ "backdrop_path": "/4H4RAeeykpi0ijvu3wYgV346y06.jpg",
+ "belongs_to_collection": {
+  "id": 982426,
+  "name": "The Life of a Nation Collection",
+  "poster_path": null,
+  "backdrop_path": null
+ },
+ "budget": 100000,
+ "genres": [
+  {
+   "id": 18,
+   "name": "Drama"
+  },
+  {
+   "id": 36,
+   "name": "History"
+  },
+  {
+   "id": 10752,
+   "name": "War"
+  }
+ ],
+ "homepage": "",
+ "id": 618,
+ "imdb_id": "tt0004972",
+ "origin_country": [
+  "US"
+ ],
+ "original_language": "en",
+ "original_title": "The Birth of a Nation",
+ "overview": "Two families, abolitionist Northerners the Stonemans and Southern landowners the Camerons, intertwine. When Confederate colonel Ben Cameron is captured in battle, nurse Elsie Stoneman petitions for his pardon. In Reconstruction-era South Carolina, Cameron founds the Ku Klux Klan, battling Elsie's congressman father and his African-American prot\u00e9g\u00e9, Silas Lynch.",
+ "popularity": 2.7234,
+ "poster_path": "/f9MkgI1ObRVvJwWgJyWtRbgyWng.jpg",
+ "production_companies": [
+  {
+   "id": 161894,
+   "logo_path": null,
+   "name": "Epoch Film Co.",
+   "origin_country": ""
+  },
+  {
+   "id": 4759,
+   "logo_path": null,
+   "name": "D.W. Griffith Productions",
+   "origin_country": "US"
+  },
+  {
+   "id": 19239,
+   "logo_path": null,
+   "name": "Epoch Productions",
+   "origin_country": ""
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "US",
+   "name": "United States of America"
+  }
+ ],
+ "release_date": "1915-03-08",
+ "revenue": 100000000,
+ "runtime": 195,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "No Language",
+   "iso_639_1": "xx",
+   "name": "No Language"
+  }
+ ],
+ "status": "Released",
+ "tagline": "The Fiery Cross of the Ku Klux Klan!",
+ "title": "The Birth of a Nation",
+ "video": false,
+ "vote_average": 5.9,
+ "vote_count": 623,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 8828,
+    "known_for_department": "Acting",
+    "name": "Lillian Gish",
+    "original_name": "Lillian Gish",
+    "popularity": 0.8557,
+    "profile_path": "/xUBj1vajDHS8GntuBzhpztRMVy4.jpg",
+    "cast_id": 16,
+    "character": "Stoneman's Daughter Elsie",
+    "credit_id": "52fe425ec3a36847f8019077",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 8829,
+    "known_for_department": "Acting",
+    "name": "Mae Marsh",
+    "original_name": "Mae Marsh",
+    "popularity": 0.8,
+    "profile_path": "/1PDFSBQCwJ1yteuffEJgwSrAVra.jpg",
+    "cast_id": 17,
+    "character": "Flora Cameron",
+    "credit_id": "52fe425ec3a36847f801907b",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 8830,
+    "known_for_department": "Acting",
+    "name": "Henry B. Walthall",
+    "original_name": "Henry B. Walthall",
+    "popularity": 0.4325,
+    "profile_path": "/v8G0OotHtSpp4iB2CBwWl9LFVkW.jpg",
+    "cast_id": 18,
+    "character": "Col. Ben Cameron",
+    "credit_id": "52fe425ec3a36847f801907f",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 8831,
+    "known_for_department": "Acting",
+    "name": "Miriam Cooper",
+    "original_name": "Miriam Cooper",
+    "popularity": 0.2583,
+    "profile_path": "/kJtdYZYTJV51qPleIMeKvdv2WHh.jpg",
+    "cast_id": 19,
+    "character": "Margaret Cameron",
+    "credit_id": "52fe425ec3a36847f8019083",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 8832,
+    "known_for_department": "Acting",
+    "name": "Mary Alden",
+    "original_name": "Mary Alden",
+    "popularity": 0.4983,
+    "profile_path": "/5pKYYHf6h7aiEJ8mFom39ihPY9m.jpg",
+    "cast_id": 20,
+    "character": "Stoneman's Housekeeper Lydia",
+    "credit_id": "52fe425ec3a36847f8019087",
+    "order": 4
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 8833,
+    "known_for_department": "Acting",
+    "name": "Ralph Lewis",
+    "original_name": "Ralph Lewis",
+    "popularity": 0.3466,
+    "profile_path": "/hcZEuTJlj57Eapbtp103IMq7DVP.jpg",
+    "cast_id": 21,
+    "character": "Leader of the House Hon. Austin Stoneman",
+    "credit_id": "52fe425ec3a36847f801908b",
+    "order": 5
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 8837,
+    "known_for_department": "Acting",
+    "name": "George Siegmann",
+    "original_name": "George Siegmann",
+    "popularity": 0.3015,
+    "profile_path": "/ekmTjMAXd71x4KSrFVfkc90vzDP.jpg",
+    "cast_id": 26,
+    "character": "Lieut. Governor Silas Lynch",
+    "credit_id": "52fe425ec3a36847f801909f",
+    "order": 6
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 100245,
+    "known_for_department": "Acting",
+    "name": "Walter Long",
+    "original_name": "Walter Long",
+    "popularity": 0.358,
+    "profile_path": "/oS2Ip4I7H5MQhKQcTNXVqMK62Im.jpg",
+    "cast_id": 38,
+    "character": "Gus",
+    "credit_id": "59d42b41c3a368451b008bd3",
+    "order": 7
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 29950,
+    "known_for_department": "Acting",
+    "name": "Robert Harron",
+    "original_name": "Robert Harron",
+    "popularity": 0.4193,
+    "profile_path": "/8uqveFAwItcd5Ty2OEMPM37bbZb.jpg",
+    "cast_id": 39,
+    "character": "Tod",
+    "credit_id": "59d42b529251414b70009a58",
+    "order": 8
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 148791,
+    "known_for_department": "Acting",
+    "name": "Wallace Reid",
+    "original_name": "Wallace Reid",
+    "popularity": 0.338,
+    "profile_path": "/dE0MD7mJe8VmRIxoxvfTyqrAl3p.jpg",
+    "cast_id": 40,
+    "character": "Jeff, the Blacksmith",
+    "credit_id": "59d42b629251414b99009a04",
+    "order": 9
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 8820,
+    "known_for_department": "Directing",
+    "name": "Joseph Henabery",
+    "original_name": "Joseph Henabery",
+    "popularity": 0.9062,
+    "profile_path": "/ti6CoHJsNO7D0MSlxDZS1Gw1sWx.jpg",
+    "cast_id": 22,
+    "character": "Abraham Lincoln",
+    "credit_id": "52fe425ec3a36847f801908f",
+    "order": 10
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 8838,
+    "known_for_department": "Directing",
+    "name": "Elmer Clifton",
+    "original_name": "Elmer Clifton",
+    "popularity": 0.733,
+    "profile_path": "/v0q6wQawRIosMPcL2NqxdMEvANO.jpg",
+    "cast_id": 27,
+    "character": "Stoneman's Elder Son Phil",
+    "credit_id": "52fe425ec3a36847f80190a3",
+    "order": 11
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 100036,
+    "known_for_department": "Directing",
+    "name": "D.W. Griffith",
+    "original_name": "D.W. Griffith",
+    "popularity": 0.975,
+    "profile_path": "/6cYHbhRqThsvZ2yPsvFX3FuXu5k.jpg",
+    "credit_id": "5e92503cfcb8cc0015862e7d",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

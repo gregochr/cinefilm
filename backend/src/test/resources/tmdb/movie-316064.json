@@ -1,0 +1,148 @@
+{
+ "adult": false,
+ "backdrop_path": null,
+ "belongs_to_collection": null,
+ "budget": 0,
+ "genres": [],
+ "homepage": "",
+ "id": 316064,
+ "imdb_id": "tt0362294",
+ "origin_country": [
+  "FR"
+ ],
+ "original_language": "fr",
+ "original_title": "Voyage d'une main",
+ "overview": "In Voyage of a Hand, Ruiz constructs another of his concentric labyrinths that hits us right in the multifaceted center of our confusion. We might decide that what we receive was a story full of intentions; or we might decide that it was a spineless joke empty of sense or direction. In any case, it will be difficult to deny the acid sense of humor that animates the film.",
+ "popularity": 0.4493,
+ "poster_path": null,
+ "production_companies": [
+  {
+   "id": 16180,
+   "logo_path": "/tE5t6MnMhvyc34beR4Qf6hM2c5K.png",
+   "name": "INA",
+   "origin_country": "FR"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "FR",
+   "name": "France"
+  }
+ ],
+ "release_date": "1984-07-18",
+ "revenue": 0,
+ "runtime": 25,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "German",
+   "iso_639_1": "de",
+   "name": "Deutsch"
+  },
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  },
+  {
+   "english_name": "French",
+   "iso_639_1": "fr",
+   "name": "Fran\u00e7ais"
+  }
+ ],
+ "status": "Released",
+ "tagline": "",
+ "title": "Voyage of a Hand",
+ "video": false,
+ "vote_average": 6.2,
+ "vote_count": 9,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 1159389,
+    "known_for_department": "Acting",
+    "name": "Franck Oger",
+    "original_name": "Franck Oger",
+    "popularity": 0.1314,
+    "profile_path": null,
+    "cast_id": 1,
+    "character": "",
+    "credit_id": "56cf07499251413e680024b7",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 239222,
+    "known_for_department": "Acting",
+    "name": "Nad\u00e8ge Clair",
+    "original_name": "Nad\u00e8ge Clair",
+    "popularity": 0.1369,
+    "profile_path": "/tsrRgh9oDif7vFwlM9mqKOBfOZs.jpg",
+    "cast_id": 2,
+    "character": "",
+    "credit_id": "56cf07529251413e6d0024c6",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 140057,
+    "known_for_department": "Acting",
+    "name": "Camila Mora-Scheihing",
+    "original_name": "Camila Mora-Scheihing",
+    "popularity": 0.1397,
+    "profile_path": null,
+    "cast_id": 3,
+    "character": "",
+    "credit_id": "56cf07609251413e5c0025f7",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 1582674,
+    "known_for_department": "Acting",
+    "name": "Martine Odile",
+    "original_name": "Martine Odile",
+    "popularity": 0.277,
+    "profile_path": null,
+    "cast_id": 4,
+    "character": "",
+    "credit_id": "56cf076a9251413e5f002361",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 134464,
+    "known_for_department": "Editing",
+    "name": "Valeria Sarmiento",
+    "original_name": "Valeria Sarmiento",
+    "popularity": 0.2374,
+    "profile_path": "/heyXSDnTvdX3wVLbfwE2Qtclf2S.jpg",
+    "cast_id": 5,
+    "character": "",
+    "credit_id": "56cf0779925141642e001f09",
+    "order": 4
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 121585,
+    "known_for_department": "Directing",
+    "name": "Ra\u00fal Ruiz",
+    "original_name": "Ra\u00fal Ruiz",
+    "popularity": 0.5773,
+    "profile_path": "/gsJkcICbmk1GCi3EkDkxE6qZcpe.jpg",
+    "credit_id": "54ac820a92514116dc00021b",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

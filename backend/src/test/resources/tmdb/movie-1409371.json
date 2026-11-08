@@ -1,0 +1,199 @@
+{
+ "adult": false,
+ "backdrop_path": null,
+ "belongs_to_collection": null,
+ "budget": 0,
+ "genres": [
+  {
+   "id": 16,
+   "name": "Animation"
+  },
+  {
+   "id": 10751,
+   "name": "Family"
+  }
+ ],
+ "homepage": "",
+ "id": 1409371,
+ "imdb_id": null,
+ "origin_country": [
+  "US"
+ ],
+ "original_language": "en",
+ "original_title": "101 Dalmatians Christmas",
+ "overview": "In Disney's fourth adaptation of Charles Dickens' A Christmas Carol, Cruella de Vil appears in the role of Scrooge, Jasper and Horace as Marley, Cadpig as the ghost of Christmas Past, Rolly as the ghost of Christmas Present, and Spot as the ghost of Christmas Yet To Come.",
+ "popularity": 1.4512,
+ "poster_path": "/v2Ro8XPGgvWuY8QCA94X9N9GjNy.jpg",
+ "production_companies": [],
+ "production_countries": [],
+ "release_date": "1998-10-06",
+ "revenue": 0,
+ "runtime": 44,
+ "softcore": false,
+ "spoken_languages": [],
+ "status": "Released",
+ "tagline": "",
+ "title": "101 Dalmatians Christmas",
+ "video": false,
+ "vote_average": 6.0,
+ "vote_count": 1,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 60739,
+    "known_for_department": "Acting",
+    "name": "Kath Soucie",
+    "original_name": "Kath Soucie",
+    "popularity": 2.1268,
+    "profile_path": "/dSE1JtsdA1aSgIIw415bsXtmkPg.jpg",
+    "cast_id": 1,
+    "character": "Cadpig/Rolly/Anita Dearly",
+    "credit_id": "6771b48c5f1c4fa473616171",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 15762,
+    "known_for_department": "Acting",
+    "name": "Tara Strong",
+    "original_name": "Tara Strong",
+    "popularity": 3.1904,
+    "profile_path": "/Cm3X7CCSuYbjW1ZKJ8vxCj4SI7.jpg",
+    "cast_id": 2,
+    "character": "Spot",
+    "credit_id": "6771b49fe9cac07ec4129df0",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 34982,
+    "known_for_department": "Acting",
+    "name": "Jeff Bennett",
+    "original_name": "Jeff Bennett",
+    "popularity": 3.3037,
+    "profile_path": "/6Fq3Q1e0Oz0j2J2fnFSl7fKCHd9.jpg",
+    "cast_id": 3,
+    "character": "Roger Dearly",
+    "credit_id": "6771b4c6769852f2901309e8",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 60741,
+    "known_for_department": "Acting",
+    "name": "April Winchell",
+    "original_name": "April Winchell",
+    "popularity": 0.7372,
+    "profile_path": "/twx3xkmvRAuHHJp3xUd1sbxTZRS.jpg",
+    "cast_id": 4,
+    "character": "Cruella de Vil",
+    "credit_id": "6771b4de769852f2901309f1",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 190254,
+    "known_for_department": "Acting",
+    "name": "Kevin Schon",
+    "original_name": "Kevin Schon",
+    "popularity": 0.3712,
+    "profile_path": "/cqMh5iClrOHgEOjiJHJJ5PyFPqZ.jpg",
+    "cast_id": 5,
+    "character": "Pongo",
+    "credit_id": "6771b4ea05c46ab3fc928b71",
+    "order": 4
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 15831,
+    "known_for_department": "Acting",
+    "name": "Frank Welker",
+    "original_name": "Frank Welker",
+    "popularity": 3.0588,
+    "profile_path": "/aC37aQtsfZZDZN5y3paDTLJJHCi.jpg",
+    "cast_id": 6,
+    "character": "Scorch",
+    "credit_id": "6771b4fc769852f290130a0d",
+    "order": 5
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 66071,
+    "known_for_department": "Acting",
+    "name": "Charlotte Rae",
+    "original_name": "Charlotte Rae",
+    "popularity": 1.3442,
+    "profile_path": "/9ZM9GjGHd8JuPH3l8SJn6w3jUnE.jpg",
+    "cast_id": 7,
+    "character": "Nanny",
+    "credit_id": "6771b5091f2c5d930192ac23",
+    "order": 6
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 21731,
+    "known_for_department": "Acting",
+    "name": "Michael McKean",
+    "original_name": "Michael McKean",
+    "popularity": 2.9065,
+    "profile_path": "/xuEZeuylzznJcf0nDs1RlvuzaPr.jpg",
+    "cast_id": 8,
+    "character": "Jasper Badun",
+    "credit_id": "6771b51a769852f290130a22",
+    "order": 7
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 78619,
+    "known_for_department": "Acting",
+    "name": "David L. Lander",
+    "original_name": "David L. Lander",
+    "popularity": 1.309,
+    "profile_path": "/2cacF83gTLlFYcWaOWLA6emOInN.jpg",
+    "cast_id": 9,
+    "character": "Horace Badun",
+    "credit_id": "6771b529e9cac07ec4129e11",
+    "order": 8
+   },
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 5147949,
+    "known_for_department": "Acting",
+    "name": "Pam Dawber",
+    "original_name": "Pam Dawber",
+    "popularity": 0.0491,
+    "profile_path": null,
+    "cast_id": 10,
+    "character": "Perdy",
+    "credit_id": "6771b575769852f290130a39",
+    "order": 9
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 56851,
+    "known_for_department": "Directing",
+    "name": "Victor Cook",
+    "original_name": "Victor Cook",
+    "popularity": 0.3889,
+    "profile_path": "/wGVULDUmlIzlBc8s37xyLQU39Ah.jpg",
+    "credit_id": "6771b5937d1bc87de7617d3c",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

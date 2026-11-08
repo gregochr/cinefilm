@@ -1,0 +1,249 @@
+{
+ "adult": false,
+ "backdrop_path": "/5wJ2tckpvwcxGCAgZiccodwEJpf.jpg",
+ "belongs_to_collection": null,
+ "budget": 40000000,
+ "genres": [
+  {
+   "id": 28,
+   "name": "Action"
+  },
+  {
+   "id": 878,
+   "name": "Science Fiction"
+  },
+  {
+   "id": 12,
+   "name": "Adventure"
+  }
+ ],
+ "homepage": "",
+ "id": 841,
+ "imdb_id": "tt0087182",
+ "origin_country": [
+  "US"
+ ],
+ "original_language": "en",
+ "original_title": "Dune",
+ "overview": "In the year 10,191, the most precious substance in the universe is the spice Melange. The spice extends life. The spice expands consciousness. The spice is vital to space travel.  The spice exists on only one planet in the entire universe, the vast desert planet Arrakis, also known as Dune.  Its native inhabitants, the Fremen, have long held a prophecy that a man would come, a messiah who would lead them to true freedom.",
+ "popularity": 12.138,
+ "poster_path": "/4kJmUCE7mkVJjXa7A0g2rY4IGTm.jpg",
+ "production_companies": [
+  {
+   "id": 10308,
+   "logo_path": "/5AEHeflZe2YavcjL0s99gJA8csi.png",
+   "name": "The De Laurentiis Company",
+   "origin_country": "US"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "US",
+   "name": "United States of America"
+  }
+ ],
+ "release_date": "1984-12-14",
+ "revenue": 31502434,
+ "runtime": 136,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  }
+ ],
+ "status": "Released",
+ "tagline": "A world beyond your experience, beyond your imagination.",
+ "title": "Dune",
+ "video": false,
+ "vote_average": 6.2,
+ "vote_count": 3606,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 6677,
+    "known_for_department": "Acting",
+    "name": "Kyle MacLachlan",
+    "original_name": "Kyle MacLachlan",
+    "popularity": 3.3126,
+    "profile_path": "/7gNyx8fYAUdOp2jpCEH3dyFbeV.jpg",
+    "cast_id": 23,
+    "character": "Paul Atreides",
+    "credit_id": "52fe427fc3a36847f8023661",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 12513,
+    "known_for_department": "Acting",
+    "name": "Francesca Annis",
+    "original_name": "Francesca Annis",
+    "popularity": 1.502,
+    "profile_path": "/rtbYkuenkq8Kfc5LwzWYtVD3eNH.jpg",
+    "cast_id": 16,
+    "character": "Lady Jessica",
+    "credit_id": "52fe427fc3a36847f8023645",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 2387,
+    "known_for_department": "Acting",
+    "name": "Patrick Stewart",
+    "original_name": "Patrick Stewart",
+    "popularity": 6.796,
+    "profile_path": "/ufqtnLh3JJjPbEgxEag3MM5nZyv.jpg",
+    "cast_id": 31,
+    "character": "Gurney Halleck",
+    "credit_id": "52fe427fc3a36847f8023681",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 12516,
+    "known_for_department": "Acting",
+    "name": "Linda Hunt",
+    "original_name": "Linda Hunt",
+    "popularity": 2.3221,
+    "profile_path": "/leiVNArKBQTmE5ROovNJWiW9kfk.jpg",
+    "cast_id": 20,
+    "character": "Shadout Mapes",
+    "credit_id": "52fe427fc3a36847f8023655",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 12515,
+    "known_for_department": "Acting",
+    "name": "Jos\u00e9 Ferrer",
+    "original_name": "Jos\u00e9 Ferrer",
+    "popularity": 0.7799,
+    "profile_path": "/mMOxqZz7Te7SHTd7AGqpjyyykb7.jpg",
+    "cast_id": 19,
+    "character": "Padisha Emperor Shaddam IV",
+    "credit_id": "52fe427fc3a36847f8023651",
+    "order": 4
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 12517,
+    "known_for_department": "Acting",
+    "name": "Freddie Jones",
+    "original_name": "Freddie Jones",
+    "popularity": 1.0273,
+    "profile_path": "/mWozC9kZFNhxoRSCBvmykROmMGB.jpg",
+    "cast_id": 21,
+    "character": "Thufir Hawat",
+    "credit_id": "52fe427fc3a36847f8023659",
+    "order": 5
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 1370,
+    "known_for_department": "Acting",
+    "name": "Brad Dourif",
+    "original_name": "Brad Dourif",
+    "popularity": 3.0572,
+    "profile_path": "/ex7AmuHM3owhUetYZAyOmN1ehWS.jpg",
+    "cast_id": 18,
+    "character": "Piter De Vries",
+    "credit_id": "52fe427fc3a36847f802364d",
+    "order": 6
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 12518,
+    "known_for_department": "Acting",
+    "name": "Richard Jordan",
+    "original_name": "Richard Jordan",
+    "popularity": 1.2216,
+    "profile_path": "/qrrpdZYy6cLLBUrrA6AqyWJKa0w.jpg",
+    "cast_id": 22,
+    "character": "Duncan Idaho",
+    "credit_id": "52fe427fc3a36847f802365d",
+    "order": 7
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 12519,
+    "known_for_department": "Acting",
+    "name": "Virginia Madsen",
+    "original_name": "Virginia Madsen",
+    "popularity": 2.6634,
+    "profile_path": "/2u72BF7i189nAcX1kEJLjGMsb0c.jpg",
+    "cast_id": 24,
+    "character": "Princess Irulan",
+    "credit_id": "52fe427fc3a36847f8023665",
+    "order": 8
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 12520,
+    "known_for_department": "Acting",
+    "name": "Silvana Mangano",
+    "original_name": "Silvana Mangano",
+    "popularity": 1.0682,
+    "profile_path": "/6BaomIelsdXJkqfByoB25ZOp09b.jpg",
+    "cast_id": 25,
+    "character": "Reverend Mother Ramallo",
+    "credit_id": "52fe427fc3a36847f8023669",
+    "order": 9
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 5616,
+    "known_for_department": "Acting",
+    "name": "Everett McGill",
+    "original_name": "Everett McGill",
+    "popularity": 1.3288,
+    "profile_path": "/nc3IMwRItjFzScYdJWR7MT9p5cW.jpg",
+    "cast_id": 26,
+    "character": "Stilgar",
+    "credit_id": "52fe427fc3a36847f802366d",
+    "order": 10
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 982,
+    "known_for_department": "Acting",
+    "name": "Sting",
+    "original_name": "Sting",
+    "popularity": 1.9414,
+    "profile_path": "/zKlFqVNMDwiGL95r1UUw3I1sK08.jpg",
+    "cast_id": 32,
+    "character": "Feyd Rautha",
+    "credit_id": "52fe427fc3a36847f8023685",
+    "order": 11
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 5602,
+    "known_for_department": "Directing",
+    "name": "David Lynch",
+    "original_name": "David Lynch",
+    "popularity": 2.685,
+    "profile_path": "/wwBzRDoIW6Ld64h6OkQ6ImCZKsR.jpg",
+    "credit_id": "52fe427fc3a36847f80235ed",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

@@ -1,0 +1,86 @@
+{
+ "adult": false,
+ "backdrop_path": null,
+ "belongs_to_collection": null,
+ "budget": 0,
+ "genres": [
+  {
+   "id": 10751,
+   "name": "Family"
+  },
+  {
+   "id": 10402,
+   "name": "Music"
+  }
+ ],
+ "homepage": "",
+ "id": 328644,
+ "imdb_id": null,
+ "origin_country": [
+  "US"
+ ],
+ "original_language": "en",
+ "original_title": "Disney Sing-Along Songs: 101 Dalmatians",
+ "overview": "It's the day of the annual Bow-Wow Ball at the Dalmatian Plantation! Pongo, Perdita, and Nanny do their best to keep your favorite puppies from Disney's live-action hit, 101 Dalmatians, out of trouble before their friends arrive for the big party. Features a song from Disney's animated classic 101 Dalmatians.",
+ "popularity": 0.4047,
+ "poster_path": "/9ek6fQROn3JuFol2WVhTx9QM09X.jpg",
+ "production_companies": [
+  {
+   "id": 202408,
+   "logo_path": null,
+   "name": "Gregory Sills Productions",
+   "origin_country": "US"
+  }
+ ],
+ "production_countries": [],
+ "release_date": "1996-01-03",
+ "revenue": 0,
+ "runtime": 30,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  }
+ ],
+ "status": "Released",
+ "tagline": "",
+ "title": "Disney Sing-Along Songs: Pongo & Perdita",
+ "video": true,
+ "vote_average": 9.0,
+ "vote_count": 5,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 0,
+    "id": 982179,
+    "known_for_department": "Acting",
+    "name": "Bren McKinley",
+    "original_name": "Bren McKinley",
+    "popularity": 0.4758,
+    "profile_path": null,
+    "cast_id": 1,
+    "character": "Nanny",
+    "credit_id": "65ef6312af58cb01862c3943",
+    "order": 0
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 163539,
+    "known_for_department": "Directing",
+    "name": "Michael Dimich",
+    "original_name": "Michael Dimich",
+    "popularity": 0.3129,
+    "profile_path": null,
+    "credit_id": "65ef6bed1b7c590162b0eded",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}

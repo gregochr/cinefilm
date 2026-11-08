@@ -15,13 +15,16 @@ import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaKind;
+import gregochr.cinefilm.library.LibraryRoot;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.AfterEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.FileSystemUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -29,20 +32,33 @@ class StreamApiTest extends ApiTestBase {
 
     private static final String CONTENT = "0123456789abcdefghijklmnopqrstuvwxyz";
 
-    @TempDir
-    Path dir;
+    @Autowired
+    private LibraryRoot libraryRoot;
+
+    private Path dir;
 
     private Path video;
     private Edition edition;
 
     @BeforeEach
     void data() throws IOException {
+        Files.createDirectories(libraryRoot.root());
+        dir = Files.createTempDirectory(libraryRoot.root(), "stream");
         video = dir.resolve("film.mp4");
         Files.writeString(video, CONTENT, StandardCharsets.UTF_8);
         Film film = film(null, "Heat", 1995, NOW);
         edition = edition(film, null, "Theatrical Cut", 100 * MIN, null);
-        file(edition, video.toString());
+        file(edition, rel(video));
         save(film);
+    }
+
+    @AfterEach
+    void cleanUp() throws IOException {
+        FileSystemUtils.deleteRecursively(dir);
+    }
+
+    private String rel(Path file) {
+        return libraryRoot.relativize(file);
     }
 
     private String url() {
@@ -103,7 +119,7 @@ class StreamApiTest extends ApiTestBase {
     void editionWithoutAnOriginalFileIs404() throws Exception {
         Film film = film(null, "No File", 2000, NOW);
         Edition bare = edition(film, null, "Theatrical Cut", 90 * MIN, null);
-        MediaFile premade = file(bare, video.toString());
+        MediaFile premade = file(bare, rel(video));
         premade.setKind(MediaKind.PREMADE_720);
         save(film);
         mvc.perform(get("/api/editions/{id}/stream", bare.getId())).andExpect(status().isNotFound())
@@ -114,7 +130,7 @@ class StreamApiTest extends ApiTestBase {
     void databasePathThatIsMissingOnDiskIs404() throws Exception {
         Film film = film(null, "Gone", 2000, NOW);
         Edition gone = edition(film, null, "Theatrical Cut", 90 * MIN, null);
-        file(gone, dir.resolve("deleted.mp4").toString());
+        file(gone, rel(dir.resolve("deleted.mp4")));
         save(film);
         mvc.perform(get("/api/editions/{id}/stream", gone.getId())).andExpect(status().isNotFound())
             .andExpect(jsonPath("$.error").value("Media file is not available"));
@@ -124,7 +140,7 @@ class StreamApiTest extends ApiTestBase {
     void aDirectoryOrInvalidPathInTheDatabaseIs404() throws Exception {
         Film film = film(null, "Weird", 2000, NOW);
         Edition directory = edition(film, null, "Theatrical Cut", 90 * MIN, null);
-        file(directory, dir.toString());
+        file(directory, rel(dir));
         Edition invalid = edition(film, null, "Other Cut", 90 * MIN, null);
         file(invalid, "bad\u0000path.mp4");
         save(film);
@@ -156,9 +172,9 @@ class StreamApiTest extends ApiTestBase {
         Path second = Files.writeString(dir.resolve("second.mkv"), "second edition");
         Film film = film(null, "Two Cuts", 2000, NOW);
         Edition one = edition(film, null, "A", 90 * MIN, null);
-        file(one, video.toString());
+        file(one, rel(video));
         Edition two = edition(film, null, "B", 90 * MIN, null);
-        file(two, second.toString());
+        file(two, rel(second));
         save(film);
 
         assertThat(mvc.perform(get("/api/editions/{id}/stream", one.getId())).andReturn().getResponse()
@@ -174,7 +190,7 @@ class StreamApiTest extends ApiTestBase {
         Path blob = Files.writeString(dir.resolve("movie.zzzunknown"), "bytes");
         Film film = film(null, "Blob", 2000, NOW);
         Edition blobEdition = edition(film, null, "A", 90 * MIN, null);
-        file(blobEdition, blob.toString());
+        file(blobEdition, rel(blob));
         save(film);
         mvc.perform(get("/api/editions/{id}/stream", blobEdition.getId()))
             .andExpect(header().string(HttpHeaders.CONTENT_TYPE, "application/octet-stream"));

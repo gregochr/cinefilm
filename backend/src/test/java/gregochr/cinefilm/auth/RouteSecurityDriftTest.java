@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import gregochr.cinefilm.library.ScanService;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -15,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpMethod;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -32,6 +34,10 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class RouteSecurityDriftTest {
+
+    /** The signed-in sweep calls POST /api/admin/scan: a real scan must not start from a security test. */
+    @MockitoBean
+    private ScanService scans;
 
     /** Routes that may be called signed out: sign in, check status, sign out. */
     private static final Set<String> SESSION_ROUTES = Set.of(
@@ -81,7 +87,8 @@ class RouteSecurityDriftTest {
             "GET /api/collections/{id}", "GET /api/editions/{id}/stream",
             "PUT /api/editions/{id}/progress", "POST /api/editions/{id}/watched",
             "PUT /api/films/{id}/preferences", "GET /api/session", "POST /api/session",
-            "DELETE /api/session");
+            "DELETE /api/session", "GET /api/admin/scan", "POST /api/admin/scan", "GET /api/admin/attention",
+            "GET /api/media-files/{id}/subtitles/{streamIndex}.vtt");
     }
 
     @Test

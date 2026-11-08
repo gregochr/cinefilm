@@ -21,9 +21,13 @@ public record FilmView(Film film, Map<Long, PlaybackState> states) {
         return film.getEditions().stream().anyMatch(e -> state(e).map(PlaybackState::isWatched).orElse(false));
     }
 
-    /** The edition with the most recent {@code lastPlayedAt}. */
+    /**
+     * The available edition with the most recent {@code lastPlayedAt}. An edition whose file is missing or cannot be
+     * played is skipped (its stored history stays), so a card never advertises a position the player cannot open.
+     */
     public Optional<Edition> lastPlayedEdition() {
         return film.getEditions().stream()
+            .filter(e -> !e.hiddenFromBrowse())
             .filter(e -> state(e).map(PlaybackState::getLastPlayedAt).isPresent())
             .max(Comparator.comparing((Edition e) -> state(e).orElseThrow().getLastPlayedAt()));
     }

@@ -1,0 +1,256 @@
+{
+ "adult": false,
+ "backdrop_path": "/eqZ5t82asfprFcNS56eVruNT5G5.jpg",
+ "belongs_to_collection": {
+  "id": 124916,
+  "name": "101 Dalmatians (Live-Action) Collection",
+  "poster_path": "/s58J9ZFuGvwTxcfiwzr1gLFxo7y.jpg",
+  "backdrop_path": "/eTaNHqpi7VldgcrDetfTzk4FeDi.jpg"
+ },
+ "budget": 85000000,
+ "genres": [
+  {
+   "id": 10751,
+   "name": "Family"
+  },
+  {
+   "id": 35,
+   "name": "Comedy"
+  }
+ ],
+ "homepage": "",
+ "id": 10481,
+ "imdb_id": "tt0211181",
+ "origin_country": [
+  "US"
+ ],
+ "original_language": "en",
+ "original_title": "102 Dalmatians",
+ "overview": "Get ready for a howling good time as an all new assortment of irresistible animal heroes are unleashed in this great family tail! In an unlikely alliance, the outrageous Waddlesworth - a parrot who thinks he's a Rottweiler - teams up with Oddball - an un-marked Dalmatian puppy eager to earn her spots! Together they embark on a laugh-packed quest to outwit the ever-scheming Cruella De Vil.",
+ "popularity": 3.4777,
+ "poster_path": "/ueE6u2GTECzGBtas6PFx7wwi9y0.jpg",
+ "production_companies": [
+  {
+   "id": 2,
+   "logo_path": "/wdrCwmRnLFJhEoH8GSfymY85KHT.png",
+   "name": "Walt Disney Pictures",
+   "origin_country": "US"
+  },
+  {
+   "id": 8768,
+   "logo_path": null,
+   "name": "Edward S. Feldman Productions",
+   "origin_country": ""
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "US",
+   "name": "United States of America"
+  }
+ ],
+ "release_date": "2000-10-07",
+ "revenue": 183611771,
+ "runtime": 100,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  }
+ ],
+ "status": "Released",
+ "tagline": "Meet Two Unlikely Heroes With A Bone To Pick.",
+ "title": "102 Dalmatians",
+ "video": false,
+ "vote_average": 5.5,
+ "vote_count": 1525,
+ "credits": {
+  "cast": [
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 515,
+    "known_for_department": "Acting",
+    "name": "Glenn Close",
+    "original_name": "Glenn Close",
+    "popularity": 4.5508,
+    "profile_path": "/4VHZ1GfLwN7MUgApy0LCBzdDF9L.jpg",
+    "cast_id": 1,
+    "character": "Cruella de Vil",
+    "credit_id": "52fe43789251416c750119ad",
+    "order": 0
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 16927,
+    "known_for_department": "Acting",
+    "name": "G\u00e9rard Depardieu",
+    "original_name": "G\u00e9rard Depardieu",
+    "popularity": 2.4112,
+    "profile_path": "/pOpHfkYRhFJiKAiIycdguQPYfem.jpg",
+    "cast_id": 11,
+    "character": "Jean Pierre Le Pelt",
+    "credit_id": "52fe43789251416c750119e1",
+    "order": 1
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 65524,
+    "known_for_department": "Acting",
+    "name": "Ioan Gruffudd",
+    "original_name": "Ioan Gruffudd",
+    "popularity": 2.5346,
+    "profile_path": "/h2pg2XwJPcOWotHgiohXjEZUBLa.jpg",
+    "cast_id": 2,
+    "character": "Kevin Shepherd",
+    "credit_id": "52fe43789251416c750119b1",
+    "order": 2
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 65535,
+    "known_for_department": "Acting",
+    "name": "Alice Evans",
+    "original_name": "Alice Evans",
+    "popularity": 0.9224,
+    "profile_path": "/bnqD4yDORWpJg8uQjwsngZjZdgd.jpg",
+    "cast_id": 3,
+    "character": "Chloe Simon",
+    "credit_id": "52fe43789251416c750119b5",
+    "order": 3
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 41043,
+    "known_for_department": "Acting",
+    "name": "Tim McInnerny",
+    "original_name": "Tim McInnerny",
+    "popularity": 2.0457,
+    "profile_path": "/c2LODB0Lf9vXoEq5gHXCorYkkt2.jpg",
+    "cast_id": 4,
+    "character": "Alonzo",
+    "credit_id": "52fe43789251416c750119b9",
+    "order": 4
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 10713,
+    "known_for_department": "Acting",
+    "name": "Eric Idle",
+    "original_name": "Eric Idle",
+    "popularity": 1.2039,
+    "profile_path": "/1Vj7Lvrl8OHby7AeOK1Z07JyeMp.jpg",
+    "cast_id": 23,
+    "character": "Waddlesworth (voice)",
+    "credit_id": "5e7b6a09eec4f30014a9a7c0",
+    "order": 5
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 72315,
+    "known_for_department": "Acting",
+    "name": "Ben Crompton",
+    "original_name": "Ben Crompton",
+    "popularity": 1.1835,
+    "profile_path": "/tsHOfCvdONdzVun4xaWGE4a8t8S.jpg",
+    "cast_id": 24,
+    "character": "Ewan",
+    "credit_id": "5ef6b87027d9cc0039ab4998",
+    "order": 6
+   },
+   {
+    "adult": false,
+    "gender": 1,
+    "id": 133498,
+    "known_for_department": "Acting",
+    "name": "Carol MacReady",
+    "original_name": "Carol MacReady",
+    "popularity": 0.3681,
+    "profile_path": null,
+    "cast_id": 25,
+    "character": "Agnes",
+    "credit_id": "5ef6b87ac7176d0037a44d94",
+    "order": 7
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 385,
+    "known_for_department": "Acting",
+    "name": "Ian Richardson",
+    "original_name": "Ian Richardson",
+    "popularity": 0.9444,
+    "profile_path": "/e90jCJwnzjnxXstcdPrVZOtLUpp.jpg",
+    "cast_id": 26,
+    "character": "Mr. Torte",
+    "credit_id": "5ef6b887c8113d00355fd7ed",
+    "order": 8
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 20070,
+    "known_for_department": "Acting",
+    "name": "Jim Carter",
+    "original_name": "Jim Carter",
+    "popularity": 1.1898,
+    "profile_path": "/okiL3gc0mNqP0kPfMQHHvFjKnHb.jpg",
+    "cast_id": 27,
+    "character": "Detective Armstrong",
+    "credit_id": "5ef6b89dbfeb8b003ae13e62",
+    "order": 9
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 5319,
+    "known_for_department": "Acting",
+    "name": "Ron Cook",
+    "original_name": "Ron Cook",
+    "popularity": 1.0629,
+    "profile_path": "/gRHsTI9gwajULovSd2TVHROEEMj.jpg",
+    "cast_id": 28,
+    "character": "Mr. Button",
+    "credit_id": "5ef6b8ad27d9cc0037ad8567",
+    "order": 10
+   },
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 35257,
+    "known_for_department": "Acting",
+    "name": "Timothy West",
+    "original_name": "Timothy West",
+    "popularity": 0.8369,
+    "profile_path": "/33jpCMYzJoQ9RXQzzzNhocfIAez.jpg",
+    "cast_id": 29,
+    "character": "Judge",
+    "credit_id": "5ef6b8bbc8113d003760b3b0",
+    "order": 11
+   }
+  ],
+  "crew": [
+   {
+    "adult": false,
+    "gender": 2,
+    "id": 15775,
+    "known_for_department": "Directing",
+    "name": "Kevin Lima",
+    "original_name": "Kevin Lima",
+    "popularity": 0.5923,
+    "profile_path": "/kNqnN6z8S6DcfSTBDQ4G8pYXb3S.jpg",
+    "credit_id": "52fe43789251416c750119bf",
+    "department": "Directing",
+    "job": "Director"
+   }
+  ]
+ }
+}
