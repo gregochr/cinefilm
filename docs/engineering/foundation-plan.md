@@ -174,14 +174,50 @@ The "Dim the lights" switch is stored in the play request (`?dim=0`) and has no 
 - **Phase 5 — ship.** Spring serves the SPA, Docker image, deploy target, backups, HTTPS behind the VPN, the undrawn
   mobile screens polished, Apple TV focus-navigation groundwork.
 
+## Deployment topology (owner, 2026-11-08)
+
+| Machine | Role |
+|---|---|
+| **dockermacmini** (Mac mini running Ubuntu, Docker) | The default home: runs CineFilm (server + SPA) in Docker, and the default transcode worker. |
+| **workhorse** (Mac mini 2018, Intel, macOS, always on) | The films live on an external USB-C disk attached to it. Fallback transcode worker. |
+
+Consequences for the design:
+
+- **Media over the network.** workhorse shares the film disk read-only (SMB); dockermacmini mounts it on the Ubuntu
+  host (`/etc/fstab`, `cifs`) and passes it into the container as a read-only volume (`/media`). The scanner and
+  direct play read through that mount. Paths in the database are stored relative to a configured library root, so
+  the mount point can change.
+- **The transcode worker is its own process**, not a thread in the server, so the same worker can run in two
+  places. Each worker registers with the server, sends a heartbeat with its capacity (active sessions and encode
+  speed as a multiple of real time) and pulls jobs.
+- **Failover:** the server sends a transcode to the dockermacmini worker by default and to the workhorse worker when
+  dockermacmini is offline or can't keep up (speed below ~1.1× real time, or all its slots busy). Admin's
+  Transcode worker panel shows both. "Worker offline" in the UI (§4) means *no* worker is online.
+- **Hardware encoding.** dockermacmini is a Late 2012 Mac mini (`Macmini6,2`, Core i7-3615QM, Ivy Bridge, HD
+  Graphics 4000) with `/dev/dri/renderD128` exposed. Its Quick Sync can **encode and decode H.264** through VAAPI,
+  but it has **no HEVC support**, and Ivy Bridge needs the legacy `i965` VAAPI driver (`i965-va-driver`), not
+  `intel-media-va-driver`. Confirmed on the host with `vainfo` (2026-11-08): `iHD` fails to
+  initialise, `i965` loads and offers H.264 Baseline/Main/High encode (`VAEntrypointEncSlice`). The worker container
+  sets `LIBVA_DRIVER_NAME=i965` and gets `--device /dev/dri` and the `render` group; ffmpeg encodes with
+  `h264_vaapi`. Consequences:
+  - H.264 sources: hardware decode + hardware encode, comfortably faster than real time.
+  - HEVC sources (many rips are 1080p HEVC): software decode on four 2012 cores + hardware H.264 encode. About one
+    1080p stream at a time; 4K HEVC will not keep up and fails over to workhorse.
+  - Safari plays HEVC natively, so at home "Original" direct-plays and needs no worker at all. Transcoding is for
+    remote/slow links and pre-made versions.
+  The workhorse worker runs natively under macOS (a launchd service running the worker jar), not in Docker, so it
+  can use `h264_videotoolbox`/`hevc_videotoolbox`, and it reads the films from its own disk. workhorse is the
+  2018 Intel Mac mini (owner believes the last Intel model; 8th-gen Core, UHD 630 + T2), whose media engine
+  decodes and encodes both H.264 and HEVC in hardware, so it handles the HEVC and 4K sources dockermacmini can't. Pre-made versions
+  (decision 15) of HEVC films are better made there.
+- **TMDB:** free for personal, non-commercial use; the owner creates an account and a developer API key, supplied as
+  `TMDB_API_KEY` (phase 2). TMDB's terms require crediting TMDB (a logo and notice in Admin / About).
+
 ## Open questions for the owner
 
-1. Where do the films live (NAS path / mount), and where will CineFilm run (same Mac mini / NAS / a server)? Needed
-   for phase 2 and 5.
-2. Does the transcode worker run on the same machine as the server or a separate, more powerful one?
-3. TMDB API key: the owner supplies it as `TMDB_API_KEY` (phase 2).
+None outstanding for the topology. workhorse is always on, so the film share is always available.
 
-### API details settled in phase 1A
+## API details settled in phase 1A
 
 - Streams: `audioStreams[]` = `{ id, index, language, channels, codec, title, isDefault, safariPlayable }`,
   `subtitleStreams[]` = `{ id, index, language, forced, title, format }`; `id` is the database id.
