@@ -173,9 +173,12 @@ The "Dim the lights" switch is stored in the play request (`?dim=0`) and has no 
 - **Phase 5 — ship.** Production polish: the undrawn mobile screens (Library, Person, Admin), Apple TV
   focus-navigation groundwork. (Packaging, deploy, backups and HTTPS behind Tailscale moved to
   `ci-test-deploy-plan.md` phases 7–9, which land before product phase 2.)
-- **Phase 6 — CineLight (last, owner 2026-11-08).** Tell CineLight about play / pause / stop with the `dim` flag
-  (decision 8); the contract is agreed with the CineLight repo. Until then the "Dim the lights" switch is shown and
-  stored but has no effect.
+- **Phase 6 — CineLight (last, owner 2026-11-08).** CineFilm emits **Plex-compatible webhooks** — an HTTP POST,
+  not Kafka — to a configured URL (`CINEFILM_WEBHOOK_URLS`): `media.play`, `media.pause`, `media.resume`,
+  `media.stop` and `media.scrobble` (sent when the film is marked watched at the credits marker / 92%), in Plex's
+  multipart `payload` format. CineLight already consumes exactly these on `POST /plex`, so what the lights do is
+  CineLight's concern, not CineFilm's. Sending is fire-and-forget: a failed webhook logs and never affects
+  playback. "Dim the lights" off adds a skip flag to the payload for that playback (decision 8).
 
 ## Deployment topology (owner, 2026-11-08)
 
