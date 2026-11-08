@@ -63,11 +63,11 @@ out="$(run http://x)"; rc=$?
 assert_eq "no answer at all: exit 1" "1" "$rc"
 
 SHA=0123456789abcdef0123456789abcdef01234567
-good; serve "_actuator_info" 200 application/json "{\"build\":{\"commit\":\"${SHA}\"}}"
+good; serve "_actuator_info" 200 application/json "{\"git\":{\"commit\":{\"id\":{\"full\":\"${SHA}\"}}}}"
 out="$(EXPECT_COMMIT=$SHA run http://x)"; rc=$?
 assert_eq "running build matches the expected commit: exit 0" "0" "$rc"
 
-serve "_actuator_info" 200 application/json '{"build":{"commit":"ffffffffffffffffffffffffffffffffffffffff"}}'
+serve "_actuator_info" 200 application/json '{"git":{"commit":{"id":{"full":"ffffffffffffffffffffffffffffffffffffffff"}}}}'
 out="$(EXPECT_COMMIT=$SHA run http://x)"; rc=$?
 assert_eq "running build is a different commit: exit 1" "1" "$rc"
 assert_contains "names the build probe" "$out" "running build"

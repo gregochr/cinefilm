@@ -319,6 +319,8 @@ jobs:
           push: false
           load: true
           tags: cinefilm:ci
+          build-args: |
+            GIT_COMMIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -334,6 +336,13 @@ jobs:
           docker run --rm --entrypoint ffprobe cinefilm:ci -version > /dev/null
           docker run --rm --entrypoint which cinefilm:ci vainfo
           docker run --rm --entrypoint sh cinefilm:ci -c 'ls /app/app.jar && date +%Z'
+          # /actuator/info reads git.properties from the jar: prove it is there with the commit the image was built from.
+          cid="$(docker create cinefilm:ci)"
+          docker cp "$cid:/app/app.jar" "$RUNNER_TEMP/app.jar"
+          docker rm "$cid" > /dev/null
+          unzip -p "$RUNNER_TEMP/app.jar" BOOT-INF/classes/git.properties | tee "$RUNNER_TEMP/git.properties"
+          grep -qx "git.commit.id.full=${{ github.sha }}" "$RUNNER_TEMP/git.properties"
+          unzip -p "$RUNNER_TEMP/app.jar" BOOT-INF/classes/static/index.html | grep -q '<div id="root">'
 
       - name: Documentation-only change — suite skipped
         if: needs.changes.outputs.docs_only == 'true'

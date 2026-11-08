@@ -50,7 +50,10 @@ git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null && die "tag ${VERSIO
 
 echo "Tagging ${VERSION} at $(git rev-parse --short HEAD) and pushing."
 git tag -a "$VERSION" -m "Release ${VERSION}"
-git push origin "$VERSION"
+if ! git push origin "$VERSION"; then
+    git tag -d "$VERSION" >/dev/null
+    die "pushing ${VERSION} failed; the local tag was removed, nothing was released"
+fi
 
 if command -v gh >/dev/null 2>&1; then
     echo "Waiting for the Deploy run..."
