@@ -23,6 +23,11 @@ the owner's tailnet through `tailscale serve`. Films are read from a read-only S
 3. **File access.** The stream endpoint and anything else that reads media serve only paths stored in the database,
    resolved under the configured library root, never a path, filename or URL taken from the request. Reject `..`,
    symlinks out of the root, and absolute paths from imports. The media mount is read-only; nothing writes to it.
+   **Only `/Volumes/Media Library/Movies` is ever shared from workhorse** (a dedicated read-only SMB share). The
+   rest of that disk, above all **`Pictures`** (irreplaceable to the owner) and the personal documents, must never be
+   shared, mounted, scanned or written by CineFilm, its scripts or its CI. Read-only is enforced three times: the SMB
+   share, the `ro` cifs mount, and the container's `:ro` volume. Any change that widens the share, the mount or the
+   library root is a blocking finding.
 4. **External processes.** `ffmpeg`/`ffprobe` (phase 2+) are invoked with argument arrays, never a shell string, with
    timeouts and resource limits; file names are never interpolated into a command line. Treat probe output as
    untrusted input.
