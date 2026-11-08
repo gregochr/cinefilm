@@ -143,11 +143,11 @@ class LibraryIngestTest extends ApiTestBase {
     }
 
     @Test
-    void aFileWithAnUnknownYearGetsYearZeroAndNoEditionYear() {
+    void aFileWithAnUnknownYearStoresNoYearAtAll() {
         ingest.addNew(found("Mystery.m4v", 1), Playability.PLAYABLE, null, new TitleGuess("Mystery", null), null);
 
         Film film = only();
-        assertThat(film.getYear()).isZero();
+        assertThat(film.getYear()).isNull();
         assertThat(film.getEditions().get(0).getYear()).isNull();
         assertThat(film.getEditions().get(0).getRuntimeMs()).isZero();
         assertThat(film.getOverview()).isNull();
@@ -338,7 +338,7 @@ class LibraryIngestTest extends ApiTestBase {
     }
 
     @Test
-    void refreshWithAFailedProbeKeepsTheRuntimeAndClearsTheStreams() {
+    void refreshWithAFailedProbeKeepsTheRuntimeAndTheStreams() {
         ingest.addNew(found("A.m4v", 10), Playability.PLAYABLE, probe(5_000L), new TitleGuess("A", null), null);
         Long id = ingest.known().get("A.m4v").id();
 
@@ -349,7 +349,7 @@ class LibraryIngestTest extends ApiTestBase {
         MediaFile file = mediaFiles.findById(id).orElseThrow();
         assertThat(file.getPlayability()).isEqualTo(Playability.UNREADABLE);
         assertThat(file.getEdition().getRuntimeMs()).isEqualTo(5_000L);
-        assertThat(file.getAudioStreams()).isEmpty();
+        assertThat(file.getAudioStreams()).hasSize(2);
     }
 
     @Test

@@ -56,7 +56,9 @@ public final class WeeklyThemeSelector {
         Map<String, Integer> genres = new TreeMap<>();
         Map<String, Integer> directors = new TreeMap<>();
         for (Film film : library) {
-            decades.merge(film.getYear() / 10 * 10, 1, Integer::sum);
+            if (film.getYear() != null) {
+                decades.merge(film.getYear() / 10 * 10, 1, Integer::sum);
+            }
             film.getGenres().forEach(g -> genres.merge(g, 1, Integer::sum));
             film.getCredits().stream()
                 .filter(c -> c.getRole() == CreditRole.DIRECTOR)
@@ -67,7 +69,7 @@ public final class WeeklyThemeSelector {
         decades.forEach((decade, n) -> {
             if (n >= MIN_FILMS) {
                 out.add(new Candidate("decade", String.valueOf(decade), "This week: the " + decade + "s",
-                    f -> f.getYear() / 10 * 10 == decade));
+                    f -> f.getYear() != null && f.getYear() / 10 * 10 == decade));
             }
         });
         genres.forEach((genre, n) -> {

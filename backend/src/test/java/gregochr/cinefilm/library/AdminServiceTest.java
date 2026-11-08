@@ -44,7 +44,7 @@ class AdminServiceTest extends ApiTestBase {
         admin = new AdminService(scans, runs, films, mediaFiles, new LibraryRoot("/media/films"));
     }
 
-    private Film saved(String title, int year, String path, MatchStatus status, Playability playability,
+    private Film saved(String title, Integer year, String path, MatchStatus status, Playability playability,
                        Presence presence) {
         Film film = film(null, title, year, NOW);
         film.setMatchStatus(status);
@@ -110,7 +110,7 @@ class AdminServiceTest extends ApiTestBase {
 
     @Test
     void anUnmatchedFileShowsItsCandidatesReadOnly() {
-        Film dune = saved("Dune", 0, "Dune.m4v", MatchStatus.NEEDS_MATCH, Playability.PLAYABLE, Presence.PRESENT);
+        Film dune = saved("Dune", null, "Dune.m4v", MatchStatus.NEEDS_MATCH, Playability.PLAYABLE, Presence.PRESENT);
         dune.setMatchCandidates("[{\"tmdbId\":841,\"title\":\"Dune\",\"year\":1984,\"runtimeMinutes\":136,"
             + "\"posterPath\":\"/p.jpg\",\"score\":50},{\"tmdbId\":438631,\"title\":\"Dune\",\"year\":2021,"
             + "\"runtimeMinutes\":null,\"posterPath\":null,\"score\":50}]");
@@ -199,7 +199,7 @@ class AdminServiceTest extends ApiTestBase {
 
     @Test
     void anEditionWithNoFileRowIsSimplyNotListedAmongTheFileNames() {
-        Film dune = film(null, "Dune", 0, NOW);
+        Film dune = film(null, "Dune", null, NOW);
         dune.setMatchStatus(MatchStatus.NEEDS_MATCH);
         edition(dune, null, "No file", 100 * MIN, null);
         file(edition(dune, null, "Original", 100 * MIN, null), "Dune.m4v");

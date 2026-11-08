@@ -9,6 +9,8 @@ import gregochr.cinefilm.film.CreditRole;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.FilmPreference;
+import gregochr.cinefilm.film.FilmPreferenceRepository;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.MatchStatus;
 import gregochr.cinefilm.film.MediaFile;
@@ -56,18 +58,20 @@ public class LibraryIngest {
     private final EditionRepository editions;
     private final MediaFileRepository files;
     private final PersonRepository people;
+    private final FilmPreferenceRepository preferences;
     private final FilmCollectionRepository collections;
     private final ScanRunRepository runs;
     private final TmdbApi tmdb;
 
     /** Creates the ingest over the repositories and TMDB (for collection parts). */
     public LibraryIngest(FilmRepository films, EditionRepository editions, MediaFileRepository files,
-                         PersonRepository people, FilmCollectionRepository collections, ScanRunRepository runs,
-                         TmdbApi tmdb) {
+                         PersonRepository people, FilmPreferenceRepository preferences,
+                         FilmCollectionRepository collections, ScanRunRepository runs, TmdbApi tmdb) {
         this.films = films;
         this.editions = editions;
         this.files = files;
         this.people = people;
+        this.preferences = preferences;
         this.collections = collections;
         this.runs = runs;
         this.tmdb = tmdb;
@@ -140,7 +144,7 @@ public class LibraryIngest {
         Edition edition = new Edition();
         edition.setFilm(film);
         edition.setName("Original");
-        edition.setYear(film.getYear() == 0 ? null : film.getYear());
+        edition.setYear(film.getYear());
         edition.setRuntimeMs(probe == null ? 0 : probe.durationMs());
         MediaFile file = new MediaFile();
         file.setEdition(edition);
@@ -151,14 +155,26 @@ public class LibraryIngest {
         films.save(film);
     }
 
-    /** Updates a known file whose size or modified time changed, or that could not be read last time. */
+    /**
+     * Updates a known file whose size or modified time changed, or that could not be read last time. Streams are
+     * matched by their index in the file and updated in place, so their ids (which saved audio and subtitle choices
+     * hold) survive; a stream that is really gone resets any choice that pointed at it.
+     */
     @Transactional
     public void refresh(Long mediaFileId, FoundFile found, Playability playability, ProbeResult probe) {
         MediaFile file = files.findById(mediaFileId).orElseThrow();
-        fill(file, found, playability, probe);
+        RemovedStreams removed = fill(file, found, playability, probe);
         if (probe != null) {
             file.getEdition().setRuntimeMs(probe.durationMs());
         }
+        preferences.findById(file.getEdition().getFilm().getId()).ifPresent(preference -> {
+            if (removed.audio().contains(preference.getAudioStreamId())) {
+                preference.setAudioStreamId(null);
+            }
+            if (removed.subtitles().contains(preference.getSubtitle())) {
+                preference.setSubtitle("off");
+            }
+        });
     }
 
     /** A file that had gone missing is back. */
@@ -186,7 +202,7 @@ public class LibraryIngest {
     public List<Pending> pending() {
         return films.findByMatchStatusOrderBySortTitle(MatchStatus.PENDING).stream()
             .filter(f -> !f.getEditions().isEmpty() && f.browsable())
-            .map(f -> new Pending(f.getId(), f.getTitle(), f.getYear() == 0 ? null : f.getYear(),
+            .map(f -> new Pending(f.getId(), f.getTitle(), f.getYear(),
                 f.getEditions().get(0).getRuntimeMs()))
             .toList();
     }
@@ -208,13 +224,35 @@ public class LibraryIngest {
             return;
         }
         editions.moveAll(film, existing);
+        mergePreferences(filmId, existing.getId());
         films.delete(films.findById(filmId).orElseThrow());
+    }
+
+    /**
+     * The merged-away film's remembered choices move to the film that keeps its editions (the edition ids are
+     * unchanged, so they still point at the right cuts); if that film already has its own, the old ones are dropped.
+     */
+    private void mergePreferences(Long fromFilmId, Long toFilmId) {
+        FilmPreference source = preferences.findById(fromFilmId).orElse(null);
+        if (source == null) {
+            return;
+        }
+        if (!preferences.existsById(toFilmId)) {
+            FilmPreference moved = new FilmPreference(toFilmId);
+            moved.setDefaultEditionId(source.getDefaultEditionId());
+            moved.setLastEditionId(source.getLastEditionId());
+            moved.setQuality(source.getQuality());
+            moved.setAudioStreamId(source.getAudioStreamId());
+            moved.setSubtitle(source.getSubtitle());
+            preferences.save(moved);
+        }
+        preferences.delete(source);
     }
 
     private Film newFilm(FoundFile found, ProbeResult probe, TitleGuess guess) {
         Film film = new Film();
         film.setTitleAndSort(cut(guess.title(), NAME_MAX));
-        film.setYear(guess.year() == null ? 0 : guess.year());
+        film.setYear(guess.year());
         film.setAddedAt(found.createdAt());
         film.setMatchStatus(MatchStatus.PENDING);
         if (probe != null && probe.tags().description() != null) {
@@ -277,18 +315,50 @@ public class LibraryIngest {
     }
 
     private FilmCollection collection(CollectionRef ref) {
-        return collections.findFirstByTmdbIdOrderByIdAsc(ref.id()).orElseGet(() -> {
-            FilmCollection created = new FilmCollection();
-            created.setTmdbId(ref.id());
-            created.setName(cut(ref.name() == null ? "Collection" : ref.name(), NAME_MAX));
-            created.setPosterPath(ref.posterPath());
-            try {
-                tmdb.collection(ref.id()).ifPresent(details -> addParts(created, details));
-            } catch (TmdbUnavailableException e) {
-                LOG.warn("TMDB collection {} unavailable; stored without its parts", ref.id());
+        FilmCollection known = collections.findFirstByTmdbIdOrderByIdAsc(ref.id()).orElse(null);
+        if (known != null) {
+            if (!known.isPartsComplete()) {
+                completeParts(known);
             }
-            return collections.save(created);
-        });
+            return known;
+        }
+        FilmCollection created = new FilmCollection();
+        created.setTmdbId(ref.id());
+        created.setName(cut(ref.name() == null ? "Collection" : ref.name(), NAME_MAX));
+        created.setPosterPath(ref.posterPath());
+        completeParts(created);
+        return collections.save(created);
+    }
+
+    /** Fetches a collection's parts; if TMDB cannot answer it stays marked incomplete for the next scan. */
+    private void completeParts(FilmCollection collection) {
+        try {
+            collection.getParts().clear();
+            tmdb.collection(collection.getTmdbId()).ifPresent(details -> addParts(collection, details));
+            collection.setPartsComplete(true);
+        } catch (TmdbUnavailableException e) {
+            collection.setPartsComplete(false);
+            LOG.warn("TMDB collection {} unavailable; its parts will be fetched on a later scan",
+                collection.getTmdbId());
+        }
+    }
+
+    /**
+     * Retries the parts of every collection that could not be completed earlier. Stops at the first TMDB outage.
+     *
+     * @return how many collections are complete now that were not before
+     */
+    @Transactional
+    public int completeCollections() {
+        int done = 0;
+        for (FilmCollection collection : collections.findByPartsCompleteFalseOrderById()) {
+            completeParts(collection);
+            if (!collection.isPartsComplete()) {
+                break;
+            }
+            done++;
+        }
+        return done;
     }
 
     private static void addParts(FilmCollection collection, CollectionDetails details) {
@@ -305,16 +375,20 @@ public class LibraryIngest {
         }
     }
 
-    private static void fill(MediaFile file, FoundFile found, Playability playability, ProbeResult probe) {
+    /** The ids of streams that a refresh removed, as a saved preference would hold them. */
+    private record RemovedStreams(java.util.Set<Long> audio, java.util.Set<String> subtitles) {
+    }
+
+    private static RemovedStreams fill(MediaFile file, FoundFile found, Playability playability, ProbeResult probe) {
         file.setPath(found.path());
         file.setSizeBytes(found.sizeBytes());
         file.setModifiedAt(found.modifiedAt());
         file.setPresence(Presence.PRESENT);
         file.setPlayability(playability);
-        file.getAudioStreams().clear();
-        file.getSubtitleStreams().clear();
+        java.util.Set<Long> removedAudio = new java.util.HashSet<>();
+        java.util.Set<String> removedSubtitles = new java.util.HashSet<>();
         if (probe == null) {
-            return;
+            return new RemovedStreams(removedAudio, removedSubtitles);
         }
         file.setContainer(cut(probe.container(), 20));
         file.setVideoCodec(cut(probe.videoCodec(), 40));
@@ -322,28 +396,55 @@ public class LibraryIngest {
         file.setHeight(probe.height());
         file.setBitrate(probe.bitrate());
         file.setDurationMs(probe.durationMs());
+        java.util.Set<Integer> audioIndexes = new java.util.HashSet<>();
+        probe.audio().forEach(a -> audioIndexes.add(a.index()));
+        file.getAudioStreams().removeIf(s -> {
+            boolean gone = !audioIndexes.contains(s.getIndex());
+            if (gone) {
+                removedAudio.add(s.getId());
+            }
+            return gone;
+        });
         for (ProbeResult.Audio a : probe.audio()) {
-            AudioStream stream = new AudioStream();
-            stream.setMediaFile(file);
-            stream.setIndex(a.index());
+            AudioStream stream = file.getAudioStreams().stream().filter(s -> s.getIndex() == a.index()).findFirst()
+                .orElseGet(() -> {
+                    AudioStream created = new AudioStream();
+                    created.setMediaFile(file);
+                    created.setIndex(a.index());
+                    file.getAudioStreams().add(created);
+                    return created;
+                });
             stream.setLanguage(cut(a.language(), 40));
             stream.setChannels(a.channels());
             stream.setCodec(cut(a.codec(), 40));
             stream.setTitle(cut(a.title(), NAME_MAX));
             stream.setDefault(a.isDefault());
             stream.setSafariPlayable(a.safariPlayable());
-            file.getAudioStreams().add(stream);
         }
+        java.util.Set<Integer> subtitleIndexes = new java.util.HashSet<>();
+        probe.subtitles().forEach(s -> subtitleIndexes.add(s.index()));
+        file.getSubtitleStreams().removeIf(s -> {
+            boolean gone = !subtitleIndexes.contains(s.getIndex());
+            if (gone) {
+                removedSubtitles.add(String.valueOf(s.getId()));
+            }
+            return gone;
+        });
         for (ProbeResult.Subtitle s : probe.subtitles()) {
-            SubtitleStream stream = new SubtitleStream();
-            stream.setMediaFile(file);
-            stream.setIndex(s.index());
+            SubtitleStream stream = file.getSubtitleStreams().stream().filter(x -> x.getIndex() == s.index())
+                .findFirst().orElseGet(() -> {
+                    SubtitleStream created = new SubtitleStream();
+                    created.setMediaFile(file);
+                    created.setIndex(s.index());
+                    file.getSubtitleStreams().add(created);
+                    return created;
+                });
             stream.setLanguage(cut(s.language(), 40));
             stream.setForced(s.forced());
             stream.setTitle(cut(s.title(), NAME_MAX));
             stream.setFormat(s.format());
-            file.getSubtitleStreams().add(stream);
         }
+        return new RemovedStreams(removedAudio, removedSubtitles);
     }
 
     private static String cut(String text, int max) {

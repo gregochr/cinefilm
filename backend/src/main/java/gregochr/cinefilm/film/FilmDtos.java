@@ -14,7 +14,7 @@ public final class FilmDtos {
     }
 
     /** The compact film representation used in rows and grids. */
-    public record FilmCard(Long id, String title, int year, String posterPath, String backdropPath,
+    public record FilmCard(Long id, String title, Integer year, String posterPath, String backdropPath,
                            boolean watched, Progress progress, String director) {
     }
 
@@ -59,7 +59,7 @@ public final class FilmDtos {
     }
 
     /** The film detail page. */
-    public record FilmDetail(Long id, String title, int year, String posterPath, String backdropPath,
+    public record FilmDetail(Long id, String title, Integer year, String posterPath, String backdropPath,
                              boolean watched, Progress progress, String director, String overview,
                              List<String> genres, CollectionRef collection, List<PersonRef> directors,
                              List<CastEntry> cast, List<EditionDto> editions, Preferences preferences) {

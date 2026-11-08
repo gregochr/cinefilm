@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { joinMeta } from '../state/titles.js';
 import { Link, useParams } from 'react-router-dom';
 import { BACKDROP_SIZE, POSTER_SIZE_LARGE } from '../api/images.js';
 import Art from '../components/Art.jsx';
@@ -51,9 +52,7 @@ function EditionPicker({ editions, value, onChange }) {
               />
               <span className="edition__name">{e.name}</span>
             </span>
-            <span className="edition__meta">
-              {e.year} &middot; {formatRuntime(e.runtimeMs)}
-            </span>
+            <span className="edition__meta">{joinMeta(e.year, formatRuntime(e.runtimeMs))}</span>
             {e.note ? <span className="edition__note">{e.note}</span> : null}
           </label>
         ))}
@@ -110,7 +109,7 @@ export default function FilmDetail() {
     : `Play${multi ? ` ${edition.name}` : ''}`;
 
   const meta = [
-    <span key="y">{film.year}</span>,
+    film.year ? <span key="y">{film.year}</span> : null,
     <span key="r">{formatRuntime(edition.runtimeMs)}</span>,
     film.genres?.length ? <span key="g">{film.genres.join(', ')}</span> : null,
     film.collection ? (

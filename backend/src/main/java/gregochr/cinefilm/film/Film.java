@@ -46,8 +46,9 @@ public class Film {
     @Column(nullable = false)
     private String sortTitle;
 
-    @Column(name = "release_year", nullable = false)
-    private int year;
+    /** The release year; null when the file gave none and TMDB has not been consulted. */
+    @Column(name = "release_year")
+    private Integer year;
 
     private String overview;
 

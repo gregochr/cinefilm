@@ -1,4 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom';
+import { captionTitle, labelTitle } from '../state/titles.js';
 import { imageUrl } from '../api/images.js';
 import { Poster } from '../components/Poster.jsx';
 import { GridSkeleton } from '../components/Skeleton.jsx';
@@ -11,15 +12,13 @@ function MissingTile({ part }) {
     <div
       className="missing"
       role="group"
-      aria-label={`${part.title}, ${part.year}, not in your library`}
+      aria-label={`${labelTitle(part.title, part.year)}, not in your library`}
     >
       <div className="missing__art">
         {url ? <img src={url} alt="" loading="lazy" className="missing__img" /> : null}
         <span className="missing__label">Not in your library</span>
       </div>
-      <span className="poster__caption">
-        {part.title} &middot; {part.year}
-      </span>
+      <span className="poster__caption">{captionTitle(part.title, part.year)}</span>
     </div>
   );
 }

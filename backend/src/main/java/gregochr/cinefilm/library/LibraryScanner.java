@@ -52,8 +52,20 @@ public class LibraryScanner {
      *
      * @param files every candidate film file found
      * @param rejected candidate files refused because they resolve outside the library root
+     * @param unreadable folders (or files) under the root that could not be read, relative to it; what is below
+     *     them is unknown, not gone
      */
-    public record Found(List<FoundFile> files, int rejected) {
+    public record Found(List<FoundFile> files, int rejected, List<String> unreadable) {
+
+        /** A walk that read everything it tried to. */
+        public Found(List<FoundFile> files, int rejected) {
+            this(files, rejected, List.of());
+        }
+
+        /** True when the path is, or is inside, a folder or file the walk could not read. */
+        public boolean isUnder(String path) {
+            return unreadable.stream().anyMatch(u -> path.equals(u) || path.startsWith(u + "/"));
+        }
     }
 
     /**
@@ -66,6 +78,7 @@ public class LibraryScanner {
     public Found scan() {
         List<FoundFile> files = new ArrayList<>();
         int[] rejected = {0};
+        List<String> unreadable = new ArrayList<>();
         try {
             Files.walkFileTree(root.root(), new SimpleFileVisitor<>() {
                 @Override
@@ -102,6 +115,7 @@ public class LibraryScanner {
                     if (file.equals(root.root())) {
                         throw exc;
                     }
+                    unreadable.add(root.relativize(file));
                     return FileVisitResult.CONTINUE;
                 }
             });
@@ -109,7 +123,7 @@ public class LibraryScanner {
             throw new UncheckedIOException("Cannot read the library folder", e);
         }
         files.sort((a, b) -> a.path().compareToIgnoreCase(b.path()));
-        return new Found(List.copyOf(files), rejected[0]);
+        return new Found(List.copyOf(files), rejected[0], List.copyOf(unreadable));
     }
 
     /** When the file was created; file systems with no creation time report the epoch, so use the modified time. */

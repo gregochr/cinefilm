@@ -98,7 +98,7 @@ All JSON. All routes under `/api`. Times are milliseconds. All routes except `/a
 | `GET /actuator/health`, `GET /actuator/health/container`, `GET /actuator/info` | Not under `/api`, open to a signed-out caller, and the only Actuator endpoints exposed (all others 404). `health` is `{status}` only; `health/container` (database + ping, status only) is the Docker healthcheck and deploy smoke probe; `info` carries `git.commit.id.full` of the running build |
 | `GET/POST/DELETE /api/session` | `GET`: 200 `{authenticated:true}` when signed in, 401 `{authenticated:false}` when not; `POST { password }`: 200 and cookie, 401 on a wrong password; `DELETE`: sign out (200) |
 
-**FilmCard:** `{ id, title, year, posterPath, backdropPath, watched, progress: { positionMs, runtimeMs, editionId } | null, director }`
+**FilmCard:** `{ id, title, year (number | null), posterPath, backdropPath, watched, progress: { positionMs, runtimeMs, editionId } | null, director }`
 
 **CollectionCard** (Home): `{ id, name, posterPath, ownedCount, totalCount, posterPaths: (string|null)[] }`, `posterPaths` = up to 3 owned films' poster paths for the fanned posters.
 
@@ -259,8 +259,13 @@ Plan: `library-scan-plan.md`. What the API and the model now carry:
   `NEEDS_MATCH` | `PENDING`) and `matchCandidates` (JSON, top five TMDB candidates); table `scan_run`. A film is
   **browsable** (Home, Library, Person, Collection, detail) unless every edition's original file is missing or not
   playable: such films appear only in Admin, and a missing file keeps its Film, Edition and watch history.
-  `AudioStream.index` and `SubtitleStream.index` are ffprobe's stream indexes in the file; `year` is `0` for an
-  unmatched film whose year is unknown.
+  `AudioStream.index` and `SubtitleStream.index` are ffprobe's stream indexes in the file (a rescan updates streams in
+  place by index, so their ids, which saved audio and subtitle choices hold, survive; a choice for a stream that is
+  really gone resets to the default / `off`). **`year` is nullable** (migration V3): a film whose year is unknown has
+  `year: null` in `FilmCard`, `FilmDetail` and the Admin API, and the UI omits the year and its separator.
+  `FilmCollection.partsComplete` is false while TMDB could not give the collection's parts; later scans (and any film
+  of that collection) retry. Merging a pending film into an existing one moves its `film_preference` to the survivor
+  (or drops it if the survivor has its own) before deleting it.
 - **Scan rules.** Walks the root for `.m4v .mp4 .mov` (playable) and `.avi .mkv` (needs conversion), skipping hidden
   and `._*` files. A file is identified by its relative path; a rescan updates changed files, adds new ones, follows a
   rename (same size and modified time, old path gone) keeping the edition, and marks vanished files `MISSING`. A walk

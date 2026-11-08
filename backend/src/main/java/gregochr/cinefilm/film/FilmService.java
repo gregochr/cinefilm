@@ -54,7 +54,9 @@ public class FilmService {
         Map<Long, String> collections = new TreeMap<>();
         for (FilmView view : all) {
             genres.addAll(view.film().getGenres());
-            decades.add(view.film().getYear() / 10 * 10);
+            if (view.film().getYear() != null) {
+                decades.add(view.film().getYear() / 10 * 10);
+            }
             FilmCollection collection = view.film().getCollection();
             if (collection != null) {
                 collections.put(collection.getId(), collection.getName());

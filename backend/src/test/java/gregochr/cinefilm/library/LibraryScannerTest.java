@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -149,7 +150,10 @@ class LibraryScannerTest {
         assumeFalse(!locked.toFile().setReadable(false) || Files.isReadable(locked),
             "running as a user that ignores file permissions");
         try {
-            assertThat(scanner.scan().files()).extracting(FoundFile::path).containsExactly("Heat.m4v");
+            Found found = scanner.scan();
+            assertThat(found.files()).extracting(FoundFile::path).containsExactly("Heat.m4v");
+            assertThat(found.unreadable()).containsExactly("locked");
+            assertThat(found.isUnder("locked/Hidden.m4v")).isTrue();
         } finally {
             assertThat(locked.toFile().setReadable(true)).isTrue();
         }
@@ -177,5 +181,25 @@ class LibraryScannerTest {
         assertThat(LibraryScanner.created(Instant.EPOCH, T2)).isEqualTo(T2);
         assertThat(LibraryScanner.created(Instant.ofEpochMilli(1), T2)).isEqualTo(Instant.ofEpochMilli(1));
         assertThat(LibraryScanner.created(T1, T2)).isEqualTo(T1);
+    }
+
+    @Test
+    void aPathIsUnderAnUnreadableFolderOnlyIfItIsThatFolderOrInsideIt() {
+        Found found = new Found(List.of(), 0, List.of("Locked", "A/B"));
+
+        assertThat(found.isUnder("Locked")).isTrue();
+        assertThat(found.isUnder("Locked/Heat.m4v")).isTrue();
+        assertThat(found.isUnder("A/B/C/Alien.m4v")).isTrue();
+        assertThat(found.isUnder("Lockedness.m4v")).isFalse();
+        assertThat(found.isUnder("A/Heat.m4v")).isFalse();
+        assertThat(new Found(List.of(), 0).isUnder("Locked/Heat.m4v")).isFalse();
+        assertThat(new Found(List.of(), 0).unreadable()).isEmpty();
+    }
+
+    @Test
+    void aCleanWalkHasNoUnreadableFolders() throws IOException {
+        file("Heat.m4v", "x");
+
+        assertThat(scanner.scan().unreadable()).isEmpty();
     }
 }

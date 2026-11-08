@@ -34,6 +34,10 @@ public class FilmCollection {
 
     private String posterPath;
 
+    /** False while the parts could not be fetched from TMDB; later scans retry. */
+    @Column(nullable = false)
+    private boolean partsComplete = true;
+
     @OneToMany(mappedBy = "collection", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("releaseOrder")
     private List<CollectionPart> parts = new ArrayList<>();

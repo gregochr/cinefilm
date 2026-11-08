@@ -98,7 +98,7 @@ public class AdminService {
 
     private static AttentionItem item(String kind, Film film, String detail, List<String> names,
                                       List<CandidateDto> candidates) {
-        return new AttentionItem(kind, film.getId(), film.getTitle(), film.getYear() == 0 ? null : film.getYear(),
+        return new AttentionItem(kind, film.getId(), film.getTitle(), film.getYear(),
             detail, names, candidates);
     }
 

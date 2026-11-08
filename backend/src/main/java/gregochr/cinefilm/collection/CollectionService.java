@@ -5,6 +5,7 @@ import gregochr.cinefilm.collection.CollectionDtos.CollectionPage;
 import gregochr.cinefilm.collection.CollectionDtos.PartDto;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.FilmMapper;
+import gregochr.cinefilm.film.BrowseRules;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmView;
 import gregochr.cinefilm.film.LibraryLoader;
@@ -92,8 +93,7 @@ public class CollectionService {
         }
         owned.stream()
             .filter(v -> !matched.contains(v.film().getId()))
-            .sorted(Comparator.comparingInt((FilmView v) -> v.film().getYear())
-                .thenComparing(v -> v.film().getSortTitle()))
+            .sorted(BrowseRules.BY_YEAR.thenComparing(v -> v.film().getSortTitle()))
             .forEach(v -> slots.add(new Slot(v, null)));
         return slots;
     }

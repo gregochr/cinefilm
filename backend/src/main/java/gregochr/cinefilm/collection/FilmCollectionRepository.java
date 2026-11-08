@@ -8,4 +8,7 @@ public interface FilmCollectionRepository extends JpaRepository<FilmCollection, 
 
     /** The collection with a TMDB id, if known (the first when several exist). */
     Optional<FilmCollection> findFirstByTmdbIdOrderByIdAsc(Long tmdbId);
+
+    /** Collections whose parts still have to be fetched from TMDB. */
+    java.util.List<FilmCollection> findByPartsCompleteFalseOrderById();
 }

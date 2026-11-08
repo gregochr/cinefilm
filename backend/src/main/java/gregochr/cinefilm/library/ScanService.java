@@ -138,6 +138,7 @@ public class ScanService {
     private static final class Run {
         private final Map<String, Known> known;
         private final Set<Long> claimed = new HashSet<>();
+        private Found found;
         private boolean tmdbDown;
         private int added;
         private int failed;
@@ -157,6 +158,7 @@ public class ScanService {
             return new Counts(0, 0, 0, "The library folder is empty or unavailable; nothing was marked missing");
         }
         Run run = new Run(known);
+        run.found = found;
         AtomicInteger processed = new AtomicInteger();
         for (FoundFile file : found.files()) {
             progress.set(new Progress(found.files().size(), processed.get(), file.fileName()));
@@ -170,18 +172,26 @@ public class ScanService {
         }
         List<Long> vanished = new ArrayList<>();
         for (Known k : known.values()) {
-            if (k.presence() == Presence.PRESENT && !onDisk.contains(k.path()) && !run.claimed.contains(k.id())) {
+            if (k.presence() == Presence.PRESENT && !onDisk.contains(k.path()) && !run.claimed.contains(k.id())
+                && !found.isUnder(k.path())) {
                 vanished.add(k.id());
             }
         }
         ingest.markMissing(vanished);
         retryPending(run);
-        String error = found.rejected() > 0
-            ? found.rejected() + " files outside the library folder were refused" : null;
+        completeCollections(run);
+        List<String> notes = new ArrayList<>();
         if (run.failed > 0) {
-            error = run.failed + " files could not be processed" + (error == null ? "" : "; " + error);
+            notes.add(run.failed + " files could not be processed");
         }
-        return new Counts(found.files().size(), run.added, vanished.size(), error);
+        if (found.rejected() > 0) {
+            notes.add(found.rejected() + " files outside the library folder were refused");
+        }
+        if (!found.unreadable().isEmpty()) {
+            notes.add(found.unreadable().size() + " folders could not be read; their films were left as they were");
+        }
+        return new Counts(found.files().size(), run.added, vanished.size(),
+            notes.isEmpty() ? null : String.join("; ", notes));
     }
 
     private void handle(FoundFile file, Run run, Set<String> onDisk) {
@@ -201,7 +211,7 @@ public class ScanService {
             return;
         }
         Optional<Known> moved = run.known.values().stream()
-            .filter(k -> !onDisk.contains(k.path()) && !run.claimed.contains(k.id())
+            .filter(k -> !onDisk.contains(k.path()) && !run.claimed.contains(k.id()) && !run.found.isUnder(k.path())
                 && k.sizeBytes() != null && k.sizeBytes() == file.sizeBytes() && k.modifiedAt() != null
                 && k.modifiedAt().toEpochMilli() == file.modifiedAt().toEpochMilli())
             .findFirst();
@@ -238,9 +248,27 @@ public class ScanService {
             MatchOutcome outcome = matcher.match(new TitleGuess(pending.title(), pending.year()),
                 pending.runtimeMs());
             if (outcome.status() == Status.UNAVAILABLE) {
+                run.tmdbDown = true;
                 return;
             }
-            ingest.applyOutcome(pending.filmId(), outcome);
+            try {
+                ingest.applyOutcome(pending.filmId(), outcome);
+            } catch (RuntimeException e) {
+                run.failed++;
+                LOG.warn("Could not apply the TMDB match for film {}: {}", pending.filmId(),
+                    e.getClass().getSimpleName());
+            }
+        }
+    }
+
+    private void completeCollections(Run run) {
+        if (run.tmdbDown || !tmdb.enabled()) {
+            return;
+        }
+        try {
+            ingest.completeCollections();
+        } catch (RuntimeException e) {
+            LOG.warn("Could not complete collections: {}", e.getClass().getSimpleName());
         }
     }
 

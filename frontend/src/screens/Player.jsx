@@ -397,7 +397,9 @@ function PlayerView({ film, edition, startAtZero }) {
           </Button>
           <div className="player__title">
             <span className="player__name">{film.title}</span>
-            <span className="player__year">{edition.year ?? film.year}</span>
+            {(edition.year ?? film.year) ? (
+              <span className="player__year">{edition.year ?? film.year}</span>
+            ) : null}
           </div>
           <div className="player__spacer" />
           <IndicatorPill text={indicatorText(quality)} />
