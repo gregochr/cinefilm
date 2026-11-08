@@ -1,5 +1,6 @@
 package gregochr.cinefilm.library;
 
+import static gregochr.cinefilm.TestData.CLOCK;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -25,7 +26,7 @@ class FfprobeServiceTest {
         + "\"streams\":[]}";
 
     private final CommandRunner runner = mock(CommandRunner.class);
-    private final FfprobeService service = new FfprobeService(runner, "ffprobe");
+    private final FfprobeService service = new FfprobeService(runner, "ffprobe", CLOCK);
 
     private static boolean await(CountDownLatch latch) throws IOException {
         try {
@@ -102,7 +103,7 @@ class FfprobeServiceTest {
             }
             return new CommandRunner.Result(0, JSON, false);
         };
-        FfprobeService limited = new FfprobeService(blocking, "ffprobe");
+        FfprobeService limited = new FfprobeService(blocking, "ffprobe", CLOCK);
         ExecutorService pool = Executors.newFixedThreadPool(5);
         try {
             List<java.util.concurrent.Future<ProbeResult>> results = new ArrayList<>();
@@ -130,7 +131,7 @@ class FfprobeServiceTest {
             await(release);
             return new CommandRunner.Result(0, JSON, false);
         };
-        FfprobeService limited = new FfprobeService(blocking, "ffprobe");
+        FfprobeService limited = new FfprobeService(blocking, "ffprobe", CLOCK);
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
             pool.submit(() -> limited.probe(FILE));
@@ -158,5 +159,16 @@ class FfprobeServiceTest {
         org.mockito.Mockito.verify(runner, org.mockito.Mockito.times(FfprobeService.MAX_CONCURRENT + 2))
             .run(command.capture(), org.mockito.ArgumentMatchers.eq(FfprobeService.TIMEOUT));
         assertThat(command.getValue()).last().isEqualTo(FILE.toString());
+    }
+
+    @Test
+    void aReleaseYearIsBelievedUpToTheYearAfterTheClocksYear() throws IOException {
+        String upTo = "{\"format\":{\"format_name\":\"mp4\",\"tags\":{\"date\":\"2025\"}},\"streams\":[]}";
+        String past = "{\"format\":{\"format_name\":\"mp4\",\"tags\":{\"date\":\"2026\"}},\"streams\":[]}";
+        when(runner.run(FfprobeService.command("ffprobe", FILE), FfprobeService.TIMEOUT))
+            .thenReturn(new CommandRunner.Result(0, upTo, false), new CommandRunner.Result(0, past, false));
+
+        assertThat(service.probe(FILE).tags().year()).isEqualTo(2025);
+        assertThat(service.probe(FILE).tags().year()).isNull();
     }
 }

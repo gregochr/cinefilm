@@ -35,6 +35,8 @@ import {
   indicatorText,
   nextSubtitle,
   qualityName,
+  resolveAudioChoice,
+  resolveSubtitleChoice,
   streamKey,
   subtitleLabel,
   subtitleOptions,
@@ -105,14 +107,15 @@ function PlayerView({ film, edition, startAtZero }) {
   const [toast, setToast] = useState(null);
   const [quality, setQuality] = useState(prefs.quality || 'auto');
   const [audio, setAudio] = useState(() => {
-    const preferred = edition.audioStreams.find(
-      (s) => String(streamKey(s)) === String(prefs.audioStreamId),
-    );
+    const preferredKey = resolveAudioChoice(film.editions, edition, prefs.audioStreamId);
+    const preferred = edition.audioStreams.find((s) => streamKey(s) === preferredKey);
     const fallback = edition.audioStreams.find((s) => s.isDefault) || edition.audioStreams[0];
     const chosen = preferred || fallback;
     return chosen ? streamKey(chosen) : null;
   });
-  const [subtitle, setSubtitle] = useState(prefs.subtitle ?? SUBTITLE_OFF);
+  const [subtitle, setSubtitle] = useState(() =>
+    resolveSubtitleChoice(film.editions, edition, prefs.subtitle),
+  );
 
   const hasSubtitles = edition.subtitleStreams.length > 0;
   const atEnd = hasReachedEnd(positionMs, durationMs, edition.creditsMarkerMs);

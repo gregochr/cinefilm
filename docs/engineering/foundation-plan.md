@@ -266,6 +266,13 @@ Plan: `library-scan-plan.md`. What the API and the model now carry:
   `FilmCollection.partsComplete` is false while TMDB could not give the collection's parts; later scans (and any film
   of that collection) retry. Merging a pending film into an existing one moves its `film_preference` to the survivor
   (or drops it if the survivor has its own) before deleting it.
+- **Saved audio and subtitle choices** (`preferences.audioStreamId`, `preferences.subtitle`) hold a stream id from one
+  edition's file, and the API is unchanged: the client translates the saved choice for the selected edition
+  (`resolveAudioChoice` / `resolveSubtitleChoice` in `frontend/src/player/tracks.js`). A stream of the selected edition
+  is used as is; otherwise subtitles map to the stream with the same language and forced flag (else Off), audio to the
+  same language and title, then language and channels (else the edition's default). TMDB collection parts are ordered
+  by full release date, then id. The release year of a scanned file comes only from the `date`/`©day` tag (1888 to next
+  year) or the title/file name, never from `creation_time` (the rip date).
 - **Scan rules.** Walks the root for `.m4v .mp4 .mov` (playable) and `.avi .mkv` (needs conversion), skipping hidden
   and `._*` files. A file is identified by its relative path; a rescan updates changed files, adds new ones, follows a
   rename (same size and modified time, old path gone) keeping the edition, and marks vanished files `MISSING`. A walk

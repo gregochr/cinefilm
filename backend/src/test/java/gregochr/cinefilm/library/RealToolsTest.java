@@ -1,5 +1,6 @@
 package gregochr.cinefilm.library;
 
+import static gregochr.cinefilm.TestData.CLOCK;
 import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.file;
@@ -67,7 +68,7 @@ class RealToolsTest {
 
     @Test
     void ffprobeReadsTheGeneratedClip() throws IOException {
-        ProbeResult probe = new FfprobeService(RUNNER, "ffprobe").probe(clip());
+        ProbeResult probe = new FfprobeService(RUNNER, "ffprobe", CLOCK).probe(clip());
 
         assertThat(probe.durationMs()).isBetween(1_500L, 2_600L);
         assertThat(probe.container()).isEqualTo("mp4");

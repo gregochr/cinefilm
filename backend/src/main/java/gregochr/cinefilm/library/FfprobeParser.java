@@ -34,6 +34,8 @@ public final class FfprobeParser {
     /** The "bibliographic" ISO 639-2 codes that differ from the terminologic ones Java knows. */
     private static final Map<String, String> BIBLIOGRAPHIC = Map.of("fre", "fra", "ger", "deu", "chi", "zho",
         "dut", "nld", "gre", "ell", "cze", "ces", "rum", "ron", "per", "fas", "ice", "isl", "wel", "cym");
+    private static final int FIRST_FILM_YEAR = 1888;
+    private static final int LATEST_YEAR = 2100;
     private static final Pattern YEAR = Pattern.compile("^\\s*(\\d{4})");
 
     private FfprobeParser() {
@@ -47,6 +49,18 @@ public final class FfprobeParser {
      * @throws ProbeException when the text is not ffprobe JSON
      */
     public static ProbeResult parse(String json) {
+        return parse(json, LATEST_YEAR);
+    }
+
+    /**
+     * Parses ffprobe output, accepting a release year from the {@code date} tags only if it is plausible.
+     *
+     * @param json ffprobe's standard output
+     * @param latestYear the latest release year to believe (the year after the current one)
+     * @return what was found
+     * @throws ProbeException when the text is not ffprobe JSON
+     */
+    public static ProbeResult parse(String json, int latestYear) {
         JsonNode root;
         try {
             root = JSON.readTree(json);
@@ -87,7 +101,7 @@ public final class FfprobeParser {
         Long bitrate = number(format, "bit_rate");
         return new ProbeResult(durationMs(format, root), container(text(format, "format_name")), videoCodec, width,
             height, bitrate != null ? bitrate : videoBitrate, List.copyOf(audio), List.copyOf(subtitles),
-            tags(format.path("tags")), protectedContent);
+            tags(format.path("tags"), latestYear), protectedContent);
     }
 
     private static Audio audio(JsonNode stream, int index, String codec) {
@@ -173,10 +187,17 @@ public final class FfprobeParser {
         return seconds == null ? 0 : Math.round(seconds * 1000);
     }
 
-    private static Tags tags(JsonNode tags) {
-        String date = first(tags, "date", "©day", "creation_time");
+    /**
+     * The release year comes only from the {@code date} or {@code ©day} tag. The container's {@code creation_time} is
+     * when the file was ripped or remuxed, not when the film came out, so it is never used.
+     */
+    private static Tags tags(JsonNode tags, int latestYear) {
+        String date = first(tags, "date", "©day");
         Matcher matcher = date == null ? null : YEAR.matcher(date);
         Integer year = matcher != null && matcher.find() ? Integer.valueOf(matcher.group(1)) : null;
+        if (year != null && (year < FIRST_FILM_YEAR || year > latestYear)) {
+            year = null;
+        }
         return new Tags(first(tags, "title", "©nam"), year, text(tags, "media_type"), text(tags, "hd_video"),
             first(tags, "description", "synopsis", "comment"));
     }

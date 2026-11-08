@@ -2,6 +2,9 @@ package gregochr.cinefilm.library;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
 /** The edges of ffprobe parsing: what marks a stream protected, which numbers are trusted, which video counts. */
@@ -77,5 +80,32 @@ class FfprobeParserEdgeTest {
         assertThat(parse("{\"bit_rate\":\"abc\"}").bitrate()).isNull();
         assertThat(parse("{\"bit_rate\":\"2147483646999\"}").bitrate()).isEqualTo(2_147_483_646_999L);
         assertThat(parse("{\"bit_rate\":\"2147483647000\"}").bitrate()).isNull();
+    }
+
+    @Test
+    void aRipDateIsNeverTakenForTheReleaseYear() throws IOException {
+        ProbeResult probe;
+        try (InputStream in = FfprobeParserEdgeTest.class.getResourceAsStream("/ffprobe/rip-date-only.json")) {
+            probe = FfprobeParser.parse(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+        }
+
+        assertThat(probe.tags().year()).as("creation_time 2014 on a 1973 film").isNull();
+        assertThat(TitleGuess.of(null, "The Wicker Man.m4v", probe.tags().year()))
+            .isEqualTo(new TitleGuess("The Wicker Man", null));
+    }
+
+    @Test
+    void aDateTagYearIsBelievedOnlyBetweenTheFirstFilmAndNextYear() {
+        String format = "{\"tags\":{\"date\":\"%s\"}}";
+        assertThat(parseYear(format.formatted("1888"), 2025)).isEqualTo(1888);
+        assertThat(parseYear(format.formatted("1887"), 2025)).isNull();
+        assertThat(parseYear(format.formatted("2025-06-01"), 2025)).isEqualTo(2025);
+        assertThat(parseYear(format.formatted("2026"), 2025)).isNull();
+        assertThat(parseYear("{\"tags\":{\"\u00a9day\":\"1973\"}}", 2025)).isEqualTo(1973);
+        assertThat(parseYear("{\"tags\":{\"date\":\"0000\",\"creation_time\":\"2014-01-01\"}}", 2025)).isNull();
+    }
+
+    private static Integer parseYear(String format, int latestYear) {
+        return FfprobeParser.parse("{\"format\":" + format + ",\"streams\":[]}", latestYear).tags().year();
     }
 }

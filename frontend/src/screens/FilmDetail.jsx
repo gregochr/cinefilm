@@ -13,6 +13,8 @@ import {
   SUBTITLE_OFF,
   audioText,
   qualityName,
+  resolveAudioChoice,
+  resolveSubtitleChoice,
   streamKey,
   subtitleOptions,
 } from '../player/tracks.js';
@@ -88,7 +90,7 @@ export default function FilmDetail() {
 
   const qualityValue = quality ?? prefs.quality ?? 'auto';
   const audioValue = (() => {
-    const wanted = audio ?? prefs.audioStreamId;
+    const wanted = audio ?? resolveAudioChoice(film.editions, edition, prefs.audioStreamId);
     if (edition.audioStreams.some((s) => String(streamKey(s)) === String(wanted)))
       return String(wanted);
     const fallback = edition.audioStreams.find((s) => s.isDefault) || edition.audioStreams[0];
@@ -96,7 +98,9 @@ export default function FilmDetail() {
   })();
   const subtitleChoices = subtitleOptions(edition.subtitleStreams);
   const hasForced = edition.subtitleStreams.some((s) => s.forced);
-  const subtitleValue = String(subtitle ?? prefs.subtitle ?? SUBTITLE_OFF);
+  const subtitleValue = String(
+    subtitle ?? resolveSubtitleChoice(film.editions, edition, prefs.subtitle),
+  );
 
   const pickEdition = (editionId) => {
     setPickedEdition(editionId);

@@ -2,7 +2,9 @@ package gregochr.cinefilm.library;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.concurrent.Semaphore;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,12 +25,15 @@ public class FfprobeService {
 
     private final CommandRunner runner;
     private final String binary;
+    private final Clock clock;
     private final Semaphore slots = new Semaphore(MAX_CONCURRENT);
 
-    /** Creates the service over a command runner and the ffprobe binary ({@code cinefilm.tools.ffprobe}). */
-    public FfprobeService(CommandRunner runner, @Value("${cinefilm.tools.ffprobe:ffprobe}") String binary) {
+    /** Creates the service over a command runner, the ffprobe binary ({@code cinefilm.tools.ffprobe}) and the clock. */
+    public FfprobeService(CommandRunner runner, @Value("${cinefilm.tools.ffprobe:ffprobe}") String binary,
+                          Clock clock) {
         this.runner = runner;
         this.binary = binary;
+        this.clock = clock;
     }
 
     /**
@@ -66,7 +71,7 @@ public class FfprobeService {
             if (!result.succeeded()) {
                 throw new ProbeException("ffprobe exited with status " + result.exitCode(), null);
             }
-            return FfprobeParser.parse(result.stdout());
+            return FfprobeParser.parse(result.stdout(), LocalDate.now(clock).getYear() + 1);
         } catch (IOException e) {
             throw new ProbeException("ffprobe could not be run: " + e.getMessage(), e);
         } finally {

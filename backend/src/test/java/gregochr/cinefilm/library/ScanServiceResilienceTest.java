@@ -2,9 +2,6 @@ package gregochr.cinefilm.library;
 
 import static gregochr.cinefilm.TestData.CLOCK;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -66,8 +63,10 @@ class ScanServiceResilienceTest {
         MatchOutcome heat = new MatchOutcome(Status.NEEDS_MATCH, null, List.of());
         when(ingest.pending()).thenReturn(List.of(new Pending(10L, "Heat", 1995, 1L),
             new Pending(11L, "Alien", null, 2L), new Pending(12L, "Dune", null, 3L)));
-        when(matcher.match(any(), anyLong())).thenReturn(heat);
-        doThrow(new IllegalStateException("constraint")).when(ingest).applyOutcome(eq(11L), any());
+        when(matcher.match(new TitleGuess("Heat", 1995), 1L)).thenReturn(heat);
+        when(matcher.match(new TitleGuess("Alien", null), 2L)).thenReturn(heat);
+        when(matcher.match(new TitleGuess("Dune", null), 3L)).thenReturn(heat);
+        doThrow(new IllegalStateException("constraint")).when(ingest).applyOutcome(11L, heat);
 
         service.start("admin");
 
@@ -101,12 +100,12 @@ class ScanServiceResilienceTest {
         Files.writeString(library.resolve("New.m4v"), "x");
         when(scanner.scan()).thenReturn(new Found(List.of(renamed), 0, List.of("Locked")));
         when(ingest.known()).thenReturn(Map.of("Locked/Heat.m4v", known(2, "Locked/Heat.m4v", 20, T1)));
-        when(ffprobe.probe(any())).thenThrow(new ProbeException("x", null));
+        when(ffprobe.probe(library.resolve("New.m4v").toRealPath())).thenThrow(new ProbeException("x", null));
         when(tmdb.enabled()).thenReturn(false);
 
         service.start("admin");
 
-        verify(ingest, never()).repoint(anyLong(), any());
+        verify(ingest, never()).repoint(2L, renamed);
         verify(ingest, never()).markMissing(List.of(2L));
     }
 
@@ -115,7 +114,7 @@ class ScanServiceResilienceTest {
         FoundFile bad = new FoundFile("Bad.m4v", 10, T1, T1, false);
         when(scanner.scan()).thenReturn(new Found(List.of(bad), 2, List.of("Locked", "Other")));
         when(ingest.known()).thenReturn(Map.of("Bad.m4v", known(1, "Bad.m4v", 99, T1)));
-        doThrow(new IllegalStateException("db")).when(ingest).refresh(anyLong(), any(), any(), any());
+        doThrow(new IllegalStateException("db")).when(ingest).refresh(1L, bad, Playability.UNREADABLE, null);
 
         service.start("admin");
 
@@ -139,7 +138,7 @@ class ScanServiceResilienceTest {
 
         when(tmdb.enabled()).thenReturn(true);
         when(ingest.pending()).thenReturn(List.of(new Pending(10L, "Heat", 1995, 1L)));
-        when(matcher.match(any(), anyLong())).thenReturn(UNAVAILABLE);
+        when(matcher.match(new TitleGuess("Heat", 1995), 1L)).thenReturn(UNAVAILABLE);
         service.start("admin");
         verify(ingest, never()).completeCollections();
     }

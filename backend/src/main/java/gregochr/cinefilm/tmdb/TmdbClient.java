@@ -147,15 +147,20 @@ public class TmdbClient implements TmdbApi {
         return new Credit(c.path("id").asLong(), text(c, "name"), text(c, "profile_path"), character);
     }
 
+    /** A part with the full release date it is ordered by (the model keeps only the year). */
+    private record Dated(String releaseDate, Part part) {
+    }
+
     private static CollectionDetails collectionOf(JsonNode c) {
-        List<Part> parts = new ArrayList<>();
+        List<Dated> dated = new ArrayList<>();
         for (JsonNode p : c.path("parts")) {
-            parts.add(new Part(p.path("id").asLong(), text(p, "title"), year(p), text(p, "poster_path")));
+            dated.add(new Dated(text(p, "release_date"),
+                new Part(p.path("id").asLong(), text(p, "title"), year(p), text(p, "poster_path"))));
         }
-        parts.sort(Comparator.comparing((Part p) -> p.year() == null ? Integer.MAX_VALUE : p.year())
-            .thenComparingLong(Part::id));
+        dated.sort(Comparator.comparing(Dated::releaseDate, Comparator.nullsLast(Comparator.<String>naturalOrder()))
+            .thenComparingLong(d -> d.part().id()));
         return new CollectionDetails(c.path("id").asLong(), text(c, "name"), text(c, "poster_path"),
-            List.copyOf(parts));
+            dated.stream().map(Dated::part).toList());
     }
 
     private static String text(JsonNode node, String name) {

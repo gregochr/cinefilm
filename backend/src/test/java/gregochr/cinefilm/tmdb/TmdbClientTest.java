@@ -150,6 +150,20 @@ class TmdbClientTest {
     }
 
     @Test
+    void partsOfTheSameYearAreOrderedByTheirFullReleaseDateNotByIdAlone() {
+        server.expect(once(), requestTo("https://api.themoviedb.org/3/collection/2"))
+            .andRespond(withSuccess("{\"id\":2,\"name\":\"C\",\"parts\":["
+                + "{\"id\":1,\"title\":\"December\",\"release_date\":\"1990-12-25\"},"
+                + "{\"id\":9,\"title\":\"January\",\"release_date\":\"1990-01-05\"},"
+                + "{\"id\":5,\"title\":\"Same day, lower id\",\"release_date\":\"1990-12-25\"},"
+                + "{\"id\":3,\"title\":\"Next year\",\"release_date\":\"1991-01-01\"}]}",
+                MediaType.APPLICATION_JSON));
+
+        assertThat(client.collection(2).orElseThrow().parts()).extracting(Part::title)
+            .containsExactly("January", "December", "Same day, lower id", "Next year");
+    }
+
+    @Test
     void collectionPartsWithoutAReleaseDateComeLastThenById() {
         server.expect(once(), requestTo("https://api.themoviedb.org/3/collection/1"))
             .andRespond(withSuccess("{\"id\":1,\"name\":\"C\",\"parts\":[{\"id\":9,\"title\":\"Undated B\"},"

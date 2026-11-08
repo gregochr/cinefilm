@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.library.TitleGuess;
@@ -87,7 +88,8 @@ class TmdbMatcherBoundaryTest {
         matcher.match(new TitleGuess("Amelie", null), 122 * MIN);
 
         verify(tmdb, times(1)).search("Amelie", null);
-        verify(tmdb, times(1)).search(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
+        verify(tmdb).movie(1);
+        verifyNoMoreInteractions(tmdb);
     }
 
     @Test

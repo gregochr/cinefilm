@@ -3,14 +3,13 @@ package gregochr.cinefilm.library;
 import static gregochr.cinefilm.TestData.CLOCK;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.film.MediaFileRepository.Known;
@@ -36,6 +35,7 @@ import java.util.concurrent.Executor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.stubbing.Answer;
 
 /** The scan's decisions, with the database, ffprobe and TMDB faked. */
 class ScanServiceTest {
@@ -89,6 +89,26 @@ class ScanServiceTest {
         when(scanner.scan()).thenReturn(new Found(List.of(files), 0));
     }
 
+    private Path real(String relative) throws IOException {
+        return library.resolve(relative).toRealPath();
+    }
+
+    private void stubProbe(ProbeResult probe, FoundFile... files) throws IOException {
+        for (FoundFile file : files) {
+            when(ffprobe.probe(real(file.path()))).thenReturn(probe);
+        }
+    }
+
+    /** The calls every scan makes around the files: the run record, the snapshot, the missing sweep, the retries. */
+    private void verifyBookkeeping(List<Long> missingIds, int seen, int added, int missing, String note) {
+        verify(ingest).startRun("admin", CLOCK.instant());
+        verify(ingest).known();
+        verify(ingest).markMissing(missingIds);
+        verify(ingest).pending();
+        verify(ingest).completeCollections();
+        verify(ingest).finishRun(5L, CLOCK.instant(), seen, added, missing, note);
+    }
+
     private static MatchOutcome matched(long id) {
         return new MatchOutcome(Status.MATCHED, new MovieDetails(id, "Film", "Film", 2000, null, 100, List.of(), null,
             null, 1, List.of(), List.of(), null), List.of());
@@ -116,7 +136,7 @@ class ScanServiceTest {
         FoundFile file = found("a.m4v", 10, T1);
         ProbeResult probe = probe(60_000L, "10 Cloverfield Lane", 2016, false);
         disk(file);
-        when(ffprobe.probe(any())).thenReturn(probe);
+        stubProbe(probe, file);
         when(matcher.match(new TitleGuess("10 Cloverfield Lane", 2016), 60_000L)).thenReturn(matched(1));
 
         service.start("admin");
@@ -130,12 +150,12 @@ class ScanServiceTest {
         FoundFile file = found("Drm.m4v", 10, T1);
         ProbeResult probe = probe(60_000L, null, null, true);
         disk(file);
-        when(ffprobe.probe(any())).thenReturn(probe);
+        stubProbe(probe, file);
 
         service.start("admin");
 
         verify(ingest).addNew(file, Playability.PROTECTED, probe, new TitleGuess("Drm", null), null);
-        verify(matcher, never()).match(any(), anyLong());
+        verifyNoInteractions(matcher);
     }
 
     @Test
@@ -143,19 +163,19 @@ class ScanServiceTest {
         FoundFile file = new FoundFile("Old.avi", 10, T1, T1, true);
         ProbeResult probe = probe(60_000L, null, null, false);
         disk(file);
-        when(ffprobe.probe(any())).thenReturn(probe);
+        stubProbe(probe, file);
 
         service.start("admin");
 
         verify(ingest).addNew(file, Playability.NEEDS_CONVERSION, probe, new TitleGuess("Old", null), null);
-        verify(matcher, never()).match(any(), anyLong());
+        verifyNoInteractions(matcher);
     }
 
     @Test
     void anAviThatCannotBeProbedIsStillRecordedAsNeedingConversion() throws IOException {
         FoundFile file = new FoundFile("Old.avi", 10, T1, T1, true);
         disk(file);
-        when(ffprobe.probe(any())).thenThrow(new ProbeException("boom", null));
+        when(ffprobe.probe(real(file.path()))).thenThrow(new ProbeException("boom", null));
 
         service.start("admin");
 
@@ -166,12 +186,12 @@ class ScanServiceTest {
     void aPlayableFileThatCannotBeProbedIsRecordedAsUnreadableForALaterRetry() throws IOException {
         FoundFile file = found("Corrupt.m4v", 10, T1);
         disk(file);
-        when(ffprobe.probe(any())).thenThrow(new ProbeException("ffprobe exited with status 1", null));
+        when(ffprobe.probe(real(file.path()))).thenThrow(new ProbeException("ffprobe exited with status 1", null));
 
         service.start("admin");
 
         verify(ingest).addNew(file, Playability.UNREADABLE, null, new TitleGuess("Corrupt", null), null);
-        verify(matcher, never()).match(any(), anyLong());
+        verifyNoInteractions(matcher);
         verify(ingest).finishRun(5L, CLOCK.instant(), 1, 1, 0, null);
     }
 
@@ -194,11 +214,9 @@ class ScanServiceTest {
 
         service.start("admin");
 
-        verify(ffprobe, never()).probe(any());
-        verify(ingest, never()).addNew(any(), any(), any(), any(), any());
-        verify(ingest, never()).refresh(anyLong(), any(), any(), any());
-        verify(ingest, never()).markPresent(anyLong());
-        verify(ingest).finishRun(5L, CLOCK.instant(), 1, 0, 0, null);
+        verifyNoInteractions(ffprobe);
+        verifyBookkeeping(List.of(), 1, 0, 0, null);
+        verifyNoMoreInteractions(ingest);
     }
 
     @Test
@@ -210,7 +228,7 @@ class ScanServiceTest {
         service.start("admin");
 
         verify(ingest).markPresent(1L);
-        verify(ffprobe, never()).probe(any());
+        verifyNoInteractions(ffprobe);
     }
 
     @Test
@@ -218,7 +236,7 @@ class ScanServiceTest {
         FoundFile file = found("Heat.m4v", 10, T1.plusMillis(1));
         ProbeResult probe = probe(60_000L, null, null, false);
         disk(file);
-        when(ffprobe.probe(any())).thenReturn(probe);
+        stubProbe(probe, file);
         when(ingest.known()).thenReturn(Map.of("Heat.m4v",
             known(1, "Heat.m4v", 10L, T1, Presence.PRESENT, Playability.PLAYABLE)));
 
@@ -235,7 +253,7 @@ class ScanServiceTest {
 
         service.start("admin");
 
-        verify(ffprobe, never()).probe(any());
+        verifyNoInteractions(ffprobe);
     }
 
     @Test
@@ -243,14 +261,15 @@ class ScanServiceTest {
         FoundFile file = found("Heat.m4v", 11, T1);
         ProbeResult probe = probe(60_000L, null, null, false);
         disk(file);
-        when(ffprobe.probe(any())).thenReturn(probe);
+        stubProbe(probe, file);
         when(ingest.known()).thenReturn(Map.of("Heat.m4v",
             known(1, "Heat.m4v", 10L, T1, Presence.PRESENT, Playability.PLAYABLE)));
 
         service.start("admin");
 
         verify(ingest).refresh(1L, file, Playability.PLAYABLE, probe);
-        verify(ingest, never()).addNew(any(), any(), any(), any(), any());
+        verifyBookkeeping(List.of(), 1, 0, 0, null);
+        verifyNoMoreInteractions(ingest);
     }
 
     @Test
@@ -258,7 +277,7 @@ class ScanServiceTest {
         FoundFile file = found("Heat.m4v", 10, T1);
         ProbeResult probe = probe(60_000L, null, null, false);
         disk(file);
-        when(ffprobe.probe(any())).thenReturn(probe);
+        stubProbe(probe, file);
         when(ingest.known()).thenReturn(Map.of("Heat.m4v",
             known(1, "Heat.m4v", null, T1, Presence.PRESENT, Playability.PLAYABLE)));
         service.start("admin");
@@ -275,7 +294,7 @@ class ScanServiceTest {
         FoundFile file = found("Heat.m4v", 10, T1);
         ProbeResult probe = probe(60_000L, null, null, false);
         disk(file);
-        when(ffprobe.probe(any())).thenReturn(probe);
+        stubProbe(probe, file);
         when(ingest.known()).thenReturn(Map.of("Heat.m4v",
             known(1, "Heat.m4v", 10L, T1, Presence.PRESENT, Playability.UNREADABLE)));
 
@@ -294,10 +313,9 @@ class ScanServiceTest {
         service.start("admin");
 
         verify(ingest).repoint(1L, renamed);
-        verify(ingest).markMissing(List.of());
-        verify(ingest, never()).addNew(any(), any(), any(), any(), any());
-        verify(ffprobe, never()).probe(any());
-        verify(ingest).finishRun(5L, CLOCK.instant(), 1, 0, 0, null);
+        verifyNoInteractions(ffprobe);
+        verifyBookkeeping(List.of(), 1, 0, 0, null);
+        verifyNoMoreInteractions(ingest);
     }
 
     @Test
@@ -306,14 +324,14 @@ class ScanServiceTest {
         FoundFile copy = found("Heat copy.m4v", 10, T1);
         ProbeResult probe = probe(60_000L, null, null, false);
         disk(existing, copy);
-        when(ffprobe.probe(any())).thenReturn(probe);
+        stubProbe(probe, existing, copy);
         when(tmdb.enabled()).thenReturn(false);
         when(ingest.known()).thenReturn(Map.of("Heat.m4v",
             known(1, "Heat.m4v", 10L, T1, Presence.PRESENT, Playability.PLAYABLE)));
 
         service.start("admin");
 
-        verify(ingest, never()).repoint(anyLong(), any());
+        verify(ingest, never()).repoint(1L, copy);
         verify(ingest).addNew(copy, Playability.PLAYABLE, probe, new TitleGuess("Heat copy", null), null);
     }
 
@@ -323,7 +341,7 @@ class ScanServiceTest {
         FoundFile second = found("B.m4v", 10, T1);
         ProbeResult probe = probe(60_000L, null, null, false);
         disk(first, second);
-        when(ffprobe.probe(any())).thenReturn(probe);
+        stubProbe(probe, first, second);
         when(tmdb.enabled()).thenReturn(false);
         when(ingest.known()).thenReturn(Map.of("Old.m4v",
             known(1, "Old.m4v", 10L, T1, Presence.PRESENT, Playability.PLAYABLE)));
@@ -339,7 +357,7 @@ class ScanServiceTest {
         FoundFile file = found("New.m4v", 10, T1);
         ProbeResult probe = probe(60_000L, null, null, false);
         disk(file);
-        when(ffprobe.probe(any())).thenReturn(probe);
+        stubProbe(probe, file);
         when(tmdb.enabled()).thenReturn(false);
         when(ingest.known()).thenReturn(Map.of(
             "SizeDiffers.m4v", known(1, "SizeDiffers.m4v", 11L, T1, Presence.PRESENT, Playability.PLAYABLE),
@@ -349,7 +367,9 @@ class ScanServiceTest {
 
         service.start("admin");
 
-        verify(ingest, never()).repoint(anyLong(), any());
+        for (long id = 1; id <= 4; id++) {
+            verify(ingest, never()).repoint(id, file);
+        }
         verify(ingest).addNew(file, Playability.PLAYABLE, probe, new TitleGuess("New", null), null);
     }
 
@@ -376,7 +396,7 @@ class ScanServiceTest {
 
         service.start("admin");
 
-        verify(ingest, never()).markMissing(any());
+        verify(ingest, never()).markMissing(List.of(1L));
         verify(ingest).finishRun(5L, CLOCK.instant(), 0, 0, 0,
             "The library folder is empty or unavailable; nothing was marked missing");
     }
@@ -427,7 +447,7 @@ class ScanServiceTest {
         FoundFile good = found("Good.m4v", 10, T1);
         ProbeResult probe = probe(60_000L, null, null, false);
         disk(bad, good);
-        when(ffprobe.probe(any())).thenReturn(probe);
+        stubProbe(probe, bad, good);
         when(tmdb.enabled()).thenReturn(false);
         doThrow(new IllegalStateException("db")).when(ingest)
             .addNew(bad, Playability.PLAYABLE, probe, new TitleGuess("Bad", null), null);
@@ -456,7 +476,7 @@ class ScanServiceTest {
         when(scanner.scan()).thenReturn(new Found(List.of(bad), 1));
         when(ingest.known()).thenReturn(Map.of("Bad.m4v",
             known(1, "Bad.m4v", 99L, T1, Presence.PRESENT, Playability.PLAYABLE)));
-        doThrow(new IllegalStateException("db")).when(ingest).refresh(anyLong(), any(), any(), any());
+        doThrow(new IllegalStateException("db")).when(ingest).refresh(1L, bad, Playability.UNREADABLE, null);
 
         service.start("admin");
 
@@ -470,12 +490,13 @@ class ScanServiceTest {
         FoundFile second = found("B.m4v", 11, T1);
         ProbeResult probe = probe(60_000L, null, null, false);
         disk(first, second);
-        when(ffprobe.probe(any())).thenReturn(probe);
-        when(matcher.match(any(), anyLong())).thenReturn(UNAVAILABLE);
+        stubProbe(probe, first, second);
+        when(matcher.match(new TitleGuess("A", null), 60_000L)).thenReturn(UNAVAILABLE);
 
         service.start("admin");
 
-        verify(matcher, times(1)).match(any(), anyLong());
+        verify(matcher, times(1)).match(new TitleGuess("A", null), 60_000L);
+        verifyNoMoreInteractions(matcher);
         verify(ingest).addNew(first, Playability.PLAYABLE, probe, new TitleGuess("A", null), null);
         verify(ingest).addNew(second, Playability.PLAYABLE, probe, new TitleGuess("B", null), null);
         verify(ingest, never()).pending();
@@ -487,12 +508,12 @@ class ScanServiceTest {
         FoundFile file = found("A.m4v", 10, T1);
         ProbeResult probe = probe(60_000L, null, null, false);
         disk(file);
-        when(ffprobe.probe(any())).thenReturn(probe);
+        stubProbe(probe, file);
         when(tmdb.enabled()).thenReturn(false);
 
         service.start("admin");
 
-        verify(matcher, never()).match(any(), anyLong());
+        verifyNoInteractions(matcher);
         verify(ingest, never()).pending();
         verify(ingest).addNew(file, Playability.PLAYABLE, probe, new TitleGuess("A", null), null);
     }
@@ -523,9 +544,9 @@ class ScanServiceTest {
 
         service.start("admin");
 
-        verify(ingest).applyOutcome(eq(10L), any());
-        verify(ingest, never()).applyOutcome(eq(11L), any());
-        verify(matcher, never()).match(eq(new TitleGuess("Dune", null)), anyLong());
+        verify(ingest).applyOutcome(10L, matched(949));
+        verify(ingest, never()).applyOutcome(11L, UNAVAILABLE);
+        verify(matcher, never()).match(new TitleGuess("Dune", null), 3L);
     }
 
     @Test
@@ -557,10 +578,12 @@ class ScanServiceTest {
         FoundFile second = found("B.m4v", 11, T1);
         disk(first, second);
         List<ScanService.Progress> seen = new ArrayList<>();
-        when(ffprobe.probe(any())).thenAnswer(invocation -> {
+        Answer<ProbeResult> recordProgress = invocation -> {
             seen.add(deferred.progress());
             return probe(60_000L, null, null, false);
-        });
+        };
+        when(ffprobe.probe(real(first.path()))).thenAnswer(recordProgress);
+        when(ffprobe.probe(real(second.path()))).thenAnswer(recordProgress);
         when(tmdb.enabled()).thenReturn(false);
 
         deferred.start("admin");

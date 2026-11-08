@@ -6,12 +6,12 @@ import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.config.NotFoundException;
@@ -35,6 +35,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 class SubtitleServiceTest {
 
     private static final long FILE_ID = 7L;
+    private static final java.time.Duration TIMEOUT = SubtitleService.TIMEOUT;
     private static final String VTT = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello\n";
 
     @TempDir
@@ -65,8 +66,19 @@ class SubtitleServiceTest {
         when(files.findById(FILE_ID)).thenReturn(Optional.of(mediaFile));
     }
 
+    /**
+     * The command for stream 3 of the Heat file. Everything is checked except the last element, the temporary output
+     * file, whose name is random.
+     */
+    private List<String> ffmpegCommand() throws IOException {
+        List<String> expected = List.of("ffmpeg", "-v", "error", "-nostdin", "-y", "-i", video.toRealPath().toString(),
+            "-map", "0:3", "-f", "webvtt");
+        return argThat(command -> command.size() == expected.size() + 1
+            && command.subList(0, expected.size()).equals(expected));
+    }
+
     private void ffmpegWrites(String content) throws IOException {
-        when(runner.run(any(), eq(SubtitleService.TIMEOUT))).thenAnswer(invocation -> {
+        when(runner.run(ffmpegCommand(), eq(TIMEOUT))).thenAnswer(invocation -> {
             List<String> command = invocation.getArgument(0);
             Files.writeString(Path.of(command.get(command.size() - 1)), content);
             return new CommandRunner.Result(0, "", false);
@@ -90,7 +102,7 @@ class SubtitleServiceTest {
         assertThat(vtt.getParent()).isEqualTo(cache.toAbsolutePath().resolve("subtitles"));
         assertThat(vtt.getFileName().toString()).isEqualTo("7-3-10-1700000000123.vtt");
         ArgumentCaptor<List<String>> command = ArgumentCaptor.captor();
-        verify(runner).run(command.capture(), eq(SubtitleService.TIMEOUT));
+        verify(runner).run(command.capture(), eq(TIMEOUT));
         assertThat(command.getValue().subList(0, 9)).containsExactly("ffmpeg", "-v", "error", "-nostdin", "-y", "-i",
             video.toRealPath().toString(), "-map", "0:3");
         assertThat(SubtitleService.TIMEOUT.toSeconds()).isEqualTo(60);
@@ -104,7 +116,7 @@ class SubtitleServiceTest {
         Path second = service.vtt(FILE_ID, 3);
 
         assertThat(second).isEqualTo(first);
-        verify(runner, times(1)).run(any(), any());
+        verify(runner, times(1)).run(ffmpegCommand(), eq(TIMEOUT));
     }
 
     @Test
@@ -116,7 +128,7 @@ class SubtitleServiceTest {
         Path again = service.vtt(FILE_ID, 3);
 
         assertThat(again.getFileName().toString()).isEqualTo("7-3-11-1700000000123.vtt");
-        verify(runner, times(2)).run(any(), any());
+        verify(runner, times(2)).run(ffmpegCommand(), eq(TIMEOUT));
     }
 
     @Test
@@ -143,7 +155,7 @@ class SubtitleServiceTest {
     void anUnknownMediaFileIsNotFoundAndNeverRunsFfmpeg() throws IOException {
         assertThatThrownBy(() -> service.vtt(99L, 3)).isInstanceOf(NotFoundException.class)
             .hasMessage("No such media file");
-        verify(runner, never()).run(any(), any());
+        verifyNoInteractions(runner);
     }
 
     @Test
@@ -152,7 +164,7 @@ class SubtitleServiceTest {
             .hasMessage("No such subtitle stream");
         assertThatThrownBy(() -> service.vtt(FILE_ID, -1)).isInstanceOf(NotFoundException.class)
             .hasMessage("No such subtitle stream");
-        verify(runner, never()).run(any(), any());
+        verifyNoInteractions(runner);
     }
 
     @Test
@@ -161,7 +173,7 @@ class SubtitleServiceTest {
 
         assertThatThrownBy(() -> service.vtt(FILE_ID, 3)).isInstanceOf(NotFoundException.class)
             .hasMessage("Media file is not available");
-        verify(runner, never()).run(any(), any());
+        verifyNoInteractions(runner);
     }
 
     @Test
@@ -171,12 +183,12 @@ class SubtitleServiceTest {
 
         assertThatThrownBy(() -> service.vtt(FILE_ID, 3)).isInstanceOf(NotFoundException.class)
             .hasMessage("Media file is not available");
-        verify(runner, never()).run(any(), any());
+        verifyNoInteractions(runner);
     }
 
     @Test
     void aFailedExtractionIsNotFoundAndNothingIsCached() throws IOException {
-        when(runner.run(any(), any())).thenReturn(new CommandRunner.Result(1, "", false));
+        when(runner.run(ffmpegCommand(), eq(TIMEOUT))).thenReturn(new CommandRunner.Result(1, "", false));
 
         assertThatThrownBy(() -> service.vtt(FILE_ID, 3)).isInstanceOf(NotFoundException.class)
             .hasMessage("Subtitles could not be extracted");
@@ -187,7 +199,7 @@ class SubtitleServiceTest {
 
     @Test
     void aFailedFfmpegThatLeftAPartialFileBehindIsStillNotFoundAndNothingIsCached() throws IOException {
-        when(runner.run(any(), eq(SubtitleService.TIMEOUT))).thenAnswer(invocation -> {
+        when(runner.run(ffmpegCommand(), eq(TIMEOUT))).thenAnswer(invocation -> {
             List<String> command = invocation.getArgument(0);
             Files.writeString(Path.of(command.get(command.size() - 1)), "WEBVTT\n\npartial");
             return new CommandRunner.Result(1, "", false);
@@ -202,7 +214,7 @@ class SubtitleServiceTest {
 
     @Test
     void aTimedOutExtractionIsNotFound() throws IOException {
-        when(runner.run(any(), any())).thenReturn(new CommandRunner.Result(-1, "", true));
+        when(runner.run(ffmpegCommand(), eq(TIMEOUT))).thenReturn(new CommandRunner.Result(-1, "", true));
 
         assertThatThrownBy(() -> service.vtt(FILE_ID, 3)).isInstanceOf(NotFoundException.class)
             .hasMessage("Subtitles could not be extracted");
@@ -210,7 +222,7 @@ class SubtitleServiceTest {
 
     @Test
     void aSuccessfulExitThatWroteNothingIsNotFound() throws IOException {
-        when(runner.run(any(), any())).thenReturn(new CommandRunner.Result(0, "", false));
+        when(runner.run(ffmpegCommand(), eq(TIMEOUT))).thenReturn(new CommandRunner.Result(0, "", false));
 
         assertThatThrownBy(() -> service.vtt(FILE_ID, 3)).isInstanceOf(NotFoundException.class)
             .hasMessage("Subtitles could not be extracted");
@@ -218,7 +230,7 @@ class SubtitleServiceTest {
 
     @Test
     void ffmpegNotBeingInstalledIsNotFound() throws IOException {
-        when(runner.run(any(), any())).thenThrow(new IOException("Cannot run program \"ffmpeg\""));
+        when(runner.run(ffmpegCommand(), eq(TIMEOUT))).thenThrow(new IOException("Cannot run program \"ffmpeg\""));
 
         assertThatThrownBy(() -> service.vtt(FILE_ID, 3)).isInstanceOf(NotFoundException.class)
             .hasMessage("Subtitles could not be extracted");
