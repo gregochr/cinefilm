@@ -19,6 +19,7 @@ public class PlaybackController {
     private final PlaybackService playback;
     private final PreferencesService preferences;
 
+    /** Creates the controller over the playback and preferences services. */
     public PlaybackController(PlaybackService playback, PreferencesService preferences) {
         this.playback = playback;
         this.preferences = preferences;

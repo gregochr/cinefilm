@@ -20,6 +20,7 @@ public class PlaybackService {
     private final PreferencesService preferences;
     private final Clock clock;
 
+    /** Creates the service over its repositories, the preferences service and the application clock. */
     public PlaybackService(EditionRepository editions, PlaybackStateRepository states,
                            PreferencesService preferences, Clock clock) {
         this.editions = editions;

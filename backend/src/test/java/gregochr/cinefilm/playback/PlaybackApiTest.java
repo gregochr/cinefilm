@@ -1,6 +1,7 @@
 package gregochr.cinefilm.playback;
 
 import static gregochr.cinefilm.TestData.MIN;
+import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
@@ -15,7 +16,6 @@ import gregochr.cinefilm.ApiTestBase;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmPreference;
-import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
@@ -28,7 +28,7 @@ class PlaybackApiTest extends ApiTestBase {
 
     @BeforeEach
     void data() {
-        film = film(null, "Blade Runner", 1982, Instant.now(), "Sci-fi");
+        film = film(null, "Blade Runner", 1982, NOW, "Sci-fi");
         withMarker = edition(film, null, "The Final Cut", 100 * MIN, 90 * MIN);
         withoutMarker = edition(film, null, "Theatrical Cut", 100 * MIN, null);
         file(withMarker, "/nowhere/final.mp4");
@@ -122,22 +122,27 @@ class PlaybackApiTest extends ApiTestBase {
 
     @Test
     void badProgressBodiesAreRejected() throws Exception {
-        mvc.perform(put(progressUrl(withMarker)).content("{}")).andExpect(status().isBadRequest());
-        mvc.perform(put(progressUrl(withMarker)).content("{\"positionMs\":-5}")).andExpect(status().isBadRequest());
-        mvc.perform(put(progressUrl(withMarker)).content("not json")).andExpect(status().isBadRequest());
+        mvc.perform(put(progressUrl(withMarker)).content("{}")).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("positionMs must be a non-negative number"));
+        mvc.perform(put(progressUrl(withMarker)).content("{\"positionMs\":-5}")).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("positionMs must be a non-negative number"));
+        mvc.perform(put(progressUrl(withMarker)).content("not json")).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
     }
 
     @Test
     void progressForAnUnknownEditionIs404() throws Exception {
         mvc.perform(put("/api/editions/777777/progress").content("{\"positionMs\":1}"))
-            .andExpect(status().isNotFound());
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.error").value("No such edition"));
     }
 
     @Test
     void progressWithoutTheHeaderIsForbidden() throws Exception {
         mvc.perform(MockMvcRequestBuilders.put(progressUrl(withMarker)).contentType("application/json")
                 .with(user("owner")).content("{\"positionMs\":1}"))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
     }
 
     @Test
@@ -161,14 +166,17 @@ class PlaybackApiTest extends ApiTestBase {
     @Test
     void watchedBodyMustBeABoolean() throws Exception {
         String url = "/api/editions/" + withMarker.getId() + "/watched";
-        mvc.perform(post(url).content("{}")).andExpect(status().isBadRequest());
-        mvc.perform(post(url).content("{\"watched\":\"maybe\"}")).andExpect(status().isBadRequest());
+        mvc.perform(post(url).content("{}")).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("watched must be true or false"));
+        mvc.perform(post(url).content("{\"watched\":\"maybe\"}")).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
     }
 
     @Test
     void watchedForAnUnknownEditionIs404() throws Exception {
         mvc.perform(post("/api/editions/777777/watched").content("{\"watched\":true}"))
-            .andExpect(status().isNotFound());
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.error").value("No such edition"));
     }
 
     @Test
@@ -176,7 +184,8 @@ class PlaybackApiTest extends ApiTestBase {
         mvc.perform(MockMvcRequestBuilders
                 .post("/api/editions/" + withMarker.getId() + "/watched").contentType("application/json")
                 .with(user("owner")).content("{\"watched\":true}"))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
     }
 
     // preferences
@@ -234,14 +243,16 @@ class PlaybackApiTest extends ApiTestBase {
     void invalidPreferencesAreRejected() throws Exception {
         mvc.perform(put("/api/films/{id}/preferences", film.getId()).content("{\"quality\":\"4k\"}"))
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.error").exists());
+            .andExpect(jsonPath("$.error").value("quality must be one of [auto, original, 1080p, 720p, 480p]"));
         mvc.perform(put("/api/films/{id}/preferences", film.getId()).content("{\"editionId\":999999}"))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Edition does not belong to this film"));
     }
 
     @Test
     void preferencesForAnUnknownFilmIs404() throws Exception {
-        mvc.perform(put("/api/films/{id}/preferences", 888888).content("{}")).andExpect(status().isNotFound());
+        mvc.perform(put("/api/films/{id}/preferences", 888888).content("{}")).andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.error").value("No such film"));
     }
 
     @Test
@@ -249,7 +260,8 @@ class PlaybackApiTest extends ApiTestBase {
         mvc.perform(MockMvcRequestBuilders.put("/api/films/{id}/preferences", film.getId())
                 .contentType("application/json")
                 .with(user("owner")).content("{}"))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
     }
 
     @Test

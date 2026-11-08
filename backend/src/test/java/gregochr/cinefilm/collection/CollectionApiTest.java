@@ -1,6 +1,7 @@
 package gregochr.cinefilm.collection;
 
 import static gregochr.cinefilm.TestData.MIN;
+import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.collection;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.film;
@@ -12,7 +13,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import gregochr.cinefilm.ApiTestBase;
 import gregochr.cinefilm.film.Film;
-import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class CollectionApiTest extends ApiTestBase {
@@ -30,7 +30,7 @@ class CollectionApiTest extends ApiTestBase {
     }
 
     private Film own(FilmCollection owner, long tmdbId, String title, int year) {
-        Film film = film(null, title, year, Instant.now());
+        Film film = film(null, title, year, NOW);
         film.setTmdbId(tmdbId);
         film.setCollection(owner);
         edition(film, null, "Theatrical Cut", 100 * MIN, null);
@@ -99,6 +99,6 @@ class CollectionApiTest extends ApiTestBase {
     void unknownCollectionIs404() throws Exception {
         mvc.perform(get("/api/collections/{id}", 31337))
             .andExpect(status().isNotFound())
-            .andExpect(jsonPath("$.error").exists());
+            .andExpect(jsonPath("$.error").value("No such collection"));
     }
 }

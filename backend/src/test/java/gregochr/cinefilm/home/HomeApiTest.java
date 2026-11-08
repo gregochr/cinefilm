@@ -1,6 +1,7 @@
 package gregochr.cinefilm.home;
 
 import static gregochr.cinefilm.TestData.MIN;
+import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.collection;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.film;
@@ -22,7 +23,7 @@ import org.junit.jupiter.api.Test;
 
 class HomeApiTest extends ApiTestBase {
 
-    private final Instant now = Instant.now();
+    private final Instant now = NOW;
 
     private Edition add(String title, int year, long addedDaysAgo, String... genres) {
         Film film = film(null, title, year, now.minus(Duration.ofDays(addedDaysAgo)), genres);
@@ -79,10 +80,10 @@ class HomeApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.recentlyAdded[*].title", contains("Zodiac")))
             .andExpect(jsonPath("$.notWatchedInYears[*].title", contains("Kes")))
             .andExpect(jsonPath("$.notWatchedInYears[0].watched").value(true))
-            .andExpect(jsonPath("$.weeklyTheme.title").exists())
+            .andExpect(jsonPath("$.weeklyTheme.title").value("This week: your library"))
             .andExpect(jsonPath("$.weeklyTheme.caption").value("A new theme every Monday"))
-            .andExpect(jsonPath("$.weeklyTheme.kind").exists())
-            .andExpect(jsonPath("$.weeklyTheme.films").isArray())
+            .andExpect(jsonPath("$.weeklyTheme.kind").value("library"))
+            .andExpect(jsonPath("$.weeklyTheme.films", hasSize(6)))
             .andExpect(jsonPath("$.collections", hasSize(1)))
             .andExpect(jsonPath("$.collections[0].name").value("Blade Runner"))
             .andExpect(jsonPath("$.collections[0].ownedCount").value(1))

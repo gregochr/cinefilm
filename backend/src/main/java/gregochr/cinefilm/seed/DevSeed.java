@@ -52,6 +52,7 @@ public class DevSeed implements ApplicationRunner {
     private final Map<String, Person> personCache = new HashMap<>();
     private Instant now;
 
+    /** Creates the seeder over the repositories, the application clock and the optional sample video path. */
     public DevSeed(FilmRepository films, PersonRepository people, FilmCollectionRepository collections,
                    PlaybackStateRepository states, Clock clock,
                    @Value("${cinefilm.sample-video:}") String sampleVideo) {
@@ -262,7 +263,7 @@ public class DevSeed implements ApplicationRunner {
         edition.setCreditsMarkerMs(marker);
         MediaFile file = new MediaFile();
         file.setEdition(edition);
-        file.setPath(sampleVideo == null || sampleVideo.isBlank()
+        file.setPath(sampleVideo.isBlank()
             ? PLACEHOLDER_DIR + film.getSortTitle().replaceAll("[^a-z0-9]+", "-") + "-" + edition.getYear() + ".mp4"
             : sampleVideo);
         file.setKind(MediaKind.ORIGINAL);

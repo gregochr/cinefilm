@@ -13,6 +13,7 @@ public class FilmController {
 
     private final FilmService service;
 
+    /** Creates the controller over the film service. */
     public FilmController(FilmService service) {
         this.service = service;
     }

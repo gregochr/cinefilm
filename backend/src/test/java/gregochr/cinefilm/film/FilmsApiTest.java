@@ -1,6 +1,7 @@
 package gregochr.cinefilm.film;
 
 import static gregochr.cinefilm.TestData.MIN;
+import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.collection;
 import static gregochr.cinefilm.TestData.credit;
 import static gregochr.cinefilm.TestData.edition;
@@ -33,7 +34,7 @@ class FilmsApiTest extends ApiTestBase {
 
     @BeforeEach
     void data() {
-        Instant now = Instant.now();
+        Instant now = NOW;
         Person mann = people.save(new Person("Michael Mann"));
         Person pacino = people.save(new Person("Al Pacino"));
         Person deNiro = people.save(new Person("Robert De Niro"));
@@ -151,9 +152,11 @@ class FilmsApiTest extends ApiTestBase {
     @Test
     void invalidQueryValuesAreBadRequests() throws Exception {
         mvc.perform(get("/api/films").param("sort", "popularity")).andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.error").exists());
-        mvc.perform(get("/api/films").param("show", "seen")).andExpect(status().isBadRequest());
-        mvc.perform(get("/api/films").param("decade", "seventies")).andExpect(status().isBadRequest());
+            .andExpect(jsonPath("$.error").value("sort must be title, year or added"));
+        mvc.perform(get("/api/films").param("show", "seen")).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("show must be all, unwatched or watched"));
+        mvc.perform(get("/api/films").param("decade", "seventies")).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
     }
 
     @Test
@@ -186,7 +189,7 @@ class FilmsApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.editions[0].file.videoCodec").value("HEVC"))
             .andExpect(jsonPath("$.editions[0].file.height").value(1080))
             .andExpect(jsonPath("$.editions[0].file.audioSummary").value("5.1"))
-            .andExpect(jsonPath("$.editions[0].file.addedAt").exists())
+            .andExpect(jsonPath("$.editions[0].file.addedAt").value("2024-03-28T23:30:00Z"))
             .andExpect(jsonPath("$.editions[0].audioStreams", hasSize(2)))
             .andExpect(jsonPath("$.editions[0].audioStreams[0].id").exists())
             .andExpect(jsonPath("$.editions[0].audioStreams[0].index").value(0))
@@ -234,7 +237,8 @@ class FilmsApiTest extends ApiTestBase {
     void unknownFilmIs404() throws Exception {
         mvc.perform(get("/api/films/{id}", 999_999))
             .andExpect(status().isNotFound())
-            .andExpect(jsonPath("$.error").exists());
-        mvc.perform(get("/api/films/abc")).andExpect(status().isBadRequest());
+            .andExpect(jsonPath("$.error").value("No such film"));
+        mvc.perform(get("/api/films/abc")).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
     }
 }

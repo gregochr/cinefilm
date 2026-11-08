@@ -24,6 +24,7 @@ public class FilmService {
     private final FilmRepository films;
     private final PreferencesService preferences;
 
+    /** Creates the service over the loader, the film repository and the preferences service. */
     public FilmService(LibraryLoader loader, FilmRepository films, PreferencesService preferences) {
         this.loader = loader;
         this.films = films;

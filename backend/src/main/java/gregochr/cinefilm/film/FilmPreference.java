@@ -28,6 +28,7 @@ public class FilmPreference {
 
     private String subtitle;
 
+    /** Creates empty preferences for a film. */
     public FilmPreference(Long filmId) {
         this.filmId = filmId;
     }

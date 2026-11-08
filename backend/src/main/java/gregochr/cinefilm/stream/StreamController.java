@@ -19,6 +19,7 @@ public class StreamController {
 
     private final StreamService service;
 
+    /** Creates the controller over the stream service. */
     public StreamController(StreamService service) {
         this.service = service;
     }

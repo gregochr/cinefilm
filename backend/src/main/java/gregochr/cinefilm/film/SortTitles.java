@@ -13,7 +13,8 @@ public final class SortTitles {
     /** Returns the sort key for {@code title}. */
     public static String of(String title) {
         String key = title.strip().toLowerCase(Locale.ROOT);
-        return key.startsWith(ARTICLE) && key.length() > ARTICLE.length()
+        // The key is stripped, so a key that starts with "the " always has more after it.
+        return key.startsWith(ARTICLE)
             ? key.substring(ARTICLE.length()).stripLeading()
             : key;
     }

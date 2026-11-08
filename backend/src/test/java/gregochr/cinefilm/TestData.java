@@ -12,15 +12,29 @@ import gregochr.cinefilm.film.MediaKind;
 import gregochr.cinefilm.film.SubtitleStream;
 import gregochr.cinefilm.person.Person;
 import gregochr.cinefilm.playback.PlaybackState;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
 
 /** Builders for domain objects. Pass null ids when the object will be persisted, real ids for pure unit tests. */
 public final class TestData {
 
-    /** A fixed "now" for rule tests. */
-    public static final Instant NOW = Instant.parse("2026-11-08T12:00:00Z");
+    /** The application time zone, as configured in {@code application.properties}. */
+    public static final ZoneId ZONE = ZoneId.of("Europe/London");
+
+    /**
+     * The fixed "now" for every test: 2024-03-31T23:30Z, chosen to be a date the suite can never be run on and to sit
+     * on two edges at once. In UTC it is Sunday 31 March (ISO week 2024-W13); in {@link #ZONE} British Summer Time
+     * has begun (the clocks changed at 01:00 UTC that day), so it is already Monday 1 April, 00:30 (2024-W14, week key
+     * 202414), and "this week's theme" has rolled over. Code that ignores the injected clock, or reads the date in
+     * UTC, gets the wrong week.
+     */
+    public static final Instant NOW = Instant.parse("2024-03-31T23:30:00Z");
+
+    /** A clock fixed at {@link #NOW} in {@link #ZONE}. */
+    public static final Clock CLOCK = Clock.fixed(NOW, ZONE);
 
     public static final long MIN = 60_000L;
 

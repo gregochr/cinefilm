@@ -11,6 +11,7 @@ public class CollectionController {
 
     private final CollectionService service;
 
+    /** Creates the controller over the collection service. */
     public CollectionController(CollectionService service) {
         this.service = service;
     }
