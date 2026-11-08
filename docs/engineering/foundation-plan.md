@@ -82,7 +82,7 @@ All JSON. All routes under `/api`. Times are milliseconds. All routes except `/a
 
 | Method & path | Returns |
 |---|---|
-| `GET /api/home` | `{ hero: FilmCard?, continueWatching: FilmCard[], recentlyAdded: FilmCard[], notWatchedInYears: FilmCard[], weeklyTheme: { title, caption, kind, value, films: FilmCard[] }, collections: CollectionCard[] }`; `continueWatching` includes the hero (the hero is its first item) |
+| `GET /api/home` | `{ hero: FilmCard?, continueWatching: FilmCard[], recentlyAdded: FilmCard[], notWatchedInYears: FilmCard[], weeklyTheme: { title, caption, kind, value, films: FilmCard[] }, collections: CollectionCard[] }`; `continueWatching` excludes the film shown as `hero` |
 | `GET /api/films?q=&sort=title\|year\|added&genre=&decade=1970&collection=<id>&show=all\|unwatched\|watched` | `{ total, films: FilmCard[], facets: { genres: string[], decades: number[], collections: {id,name}[] } }` |
 | `GET /api/films/{id}` | `FilmDetail` |
 | `GET /api/people/{id}` | `{ id, name, profilePath, films: [{ film: FilmCard, roles: string[] }] }` — owned films only; roles like "as Neil McCauley", "Director" |
@@ -192,5 +192,9 @@ The "Dim the lights" switch is stored in the play request (`?dim=0`) and has no 
   ("as Neil McCauley", "Director").
 - `GET /api/editions/{id}/stream` takes only the id; query parameters such as `start` and `dim` are ignored.
   `addedAt` fields are ISO-8601 instants.
+- Rewatch: when an edition becomes watched (threshold reached, or `POST .../watched` with true) its saved position
+  is reset to 0 and `watched` stays true; progress reports at or past the threshold keep it at 0. Continue watching
+  is every film whose most recently played edition has `positionMs > 0`, watched or not, so a watched film you
+  restart is in progress again. "Not watched in years" is unchanged. `continueWatching` omits the `hero` film.
 - Errors are JSON `{ "error": "..." }`: 400 invalid input, 401 signed out, 403 missing `X-CineFilm: 1` on a
   mutating request, 404 unknown id.

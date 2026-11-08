@@ -48,7 +48,7 @@ class DevSeedTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.hero.title").value("Heat"))
             .andExpect(jsonPath("$.hero.progress.positionMs").value(3_871_000))
-            .andExpect(jsonPath("$.continueWatching", hasSize(5)))
+            .andExpect(jsonPath("$.continueWatching", hasSize(4)))
             .andExpect(jsonPath("$.recentlyAdded.length()", greaterThanOrEqualTo(5)))
             .andExpect(jsonPath("$.notWatchedInYears.length()", greaterThanOrEqualTo(5)))
             .andExpect(jsonPath("$.weeklyTheme.films.length()", greaterThanOrEqualTo(5)))

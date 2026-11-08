@@ -47,7 +47,7 @@ public class HomeService {
             .map(FilmMapper::card).toList();
         return new Home(
             continueWatching.isEmpty() ? null : continueWatching.get(0),
-            continueWatching,
+            continueWatching.isEmpty() ? continueWatching : continueWatching.subList(1, continueWatching.size()),
             cards(BrowseRules.recentlyAdded(library, clock.instant())),
             cards(BrowseRules.notWatchedInYears(library, clock.instant())),
             new ThemeDto(theme.title(), theme.caption(), theme.kind(), theme.value(), themeFilms),

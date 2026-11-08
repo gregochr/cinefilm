@@ -48,13 +48,19 @@ class BrowseRulesTest {
         FilmView old = withState(filmView("Moon", 2009, 100), 10 * MIN, false, ago(8), null);
         FilmView recent = withState(filmView("Heat", 1995, 100), 64 * MIN, false, ago(1), null);
         FilmView middle = withState(filmView("Arrival", 2016, 100), 30 * MIN, false, ago(4), null);
-        FilmView finished = withState(filmView("Alien", 1979, 100), 100 * MIN, true, ago(0), ago(0));
+        FilmView finished = withState(filmView("Alien", 1979, 100), 0, true, ago(0), ago(0));
         FilmView never = filmView("Drive", 2011, 100);
         FilmView atStart = withState(filmView("Kes", 1969, 100), 0, false, ago(2), null);
 
         List<FilmView> result = BrowseRules.continueWatching(List.of(old, finished, never, recent, atStart, middle));
 
         assertThat(result).extracting(v -> v.film().getTitle()).containsExactly("Heat", "Arrival", "Moon");
+    }
+
+    @Test
+    void aWatchedFilmRestartedAppearsInContinueWatching() {
+        FilmView rewatch = withState(filmView("Alien", 1979, 100), 20 * MIN, true, ago(1), ago(30));
+        assertThat(BrowseRules.continueWatching(List.of(rewatch))).hasSize(1);
     }
 
     // recently added

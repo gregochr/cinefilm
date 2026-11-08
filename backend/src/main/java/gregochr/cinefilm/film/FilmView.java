@@ -33,10 +33,10 @@ public record FilmView(Film film, Map<Long, PlaybackState> states) {
         return lastPlayedEdition().map(e -> state(e).orElseThrow().getLastPlayedAt()).orElse(null);
     }
 
-    /** Resume info: the most recently played edition, if it is part-way through and not watched. */
+    /** Resume info: the most recently played edition, if it has a saved position (even if watched before). */
     public Optional<FilmDtos.Progress> progress() {
         return lastPlayedEdition()
-            .filter(e -> state(e).map(s -> s.getPositionMs() > 0 && !s.isWatched()).orElse(false))
+            .filter(e -> state(e).map(s -> s.getPositionMs() > 0).orElse(false))
             .map(e -> new FilmDtos.Progress(state(e).orElseThrow().getPositionMs(), e.getRuntimeMs(), e.getId()));
     }
 

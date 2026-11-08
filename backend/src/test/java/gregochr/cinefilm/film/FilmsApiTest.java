@@ -57,7 +57,7 @@ class FilmsApiTest extends ApiTestBase {
         credit(thirdMan, reed, CreditRole.DIRECTOR, null, 0);
         Edition thirdManEdition = edition(thirdMan, null, "Theatrical Cut", 104 * MIN, null);
         save(thirdMan);
-        saveState(state(thirdManEdition, 104 * MIN, true, now.minus(Duration.ofDays(5)), now));
+        saveState(state(thirdManEdition, 0, true, now.minus(Duration.ofDays(5)), now));
 
         alien = film(null, "Alien", 1979, now.minus(Duration.ofDays(200)), "Sci-fi", "Horror");
         alien.setCollection(alienCollection);

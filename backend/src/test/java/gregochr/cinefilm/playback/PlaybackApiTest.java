@@ -55,9 +55,11 @@ class PlaybackApiTest extends ApiTestBase {
     @Test
     void progressAtTheMarkerMakesItWatchedEvenBelowNinetyTwoPercent() throws Exception {
         mvc.perform(put(progressUrl(withMarker)).content("{\"positionMs\":" + 90 * MIN + "}"))
-            .andExpect(jsonPath("$.watched").value(true));
+            .andExpect(jsonPath("$.watched").value(true))
+            .andExpect(jsonPath("$.positionMs").value(0));
         PlaybackState state = states.findById(withMarker.getId()).orElseThrow();
         assertThat(state.isWatched()).isTrue();
+        assertThat(state.getPositionMs()).isZero();
         assertThat(state.getWatchedAt()).isNotNull();
     }
 
@@ -77,6 +79,36 @@ class PlaybackApiTest extends ApiTestBase {
         mvc.perform(put(progressUrl(withMarker)).content("{\"positionMs\":" + 5 * MIN + "}"))
             .andExpect(jsonPath("$.positionMs").value(5 * MIN))
             .andExpect(jsonPath("$.watched").value(true));
+    }
+
+    @Test
+    void reachingTheThresholdResetsThePositionAndLeavesContinueWatching() throws Exception {
+        mvc.perform(put(progressUrl(withoutMarker)).content("{\"positionMs\":" + 50 * MIN + "}"));
+        mvc.perform(get("/api/home")).andExpect(jsonPath("$.hero.title").value("Blade Runner"));
+        mvc.perform(put(progressUrl(withoutMarker)).content("{\"positionMs\":" + 95 * MIN + "}"));
+        // credits keep playing: still watched, still position 0
+        mvc.perform(put(progressUrl(withoutMarker)).content("{\"positionMs\":" + 99 * MIN + "}"))
+            .andExpect(jsonPath("$.positionMs").value(0));
+        mvc.perform(get("/api/home"))
+            .andExpect(jsonPath("$.hero").value(nullValue()))
+            .andExpect(jsonPath("$.continueWatching", hasSize(0)));
+    }
+
+    @Test
+    void aWatchedEditionWithNewProgressIsInContinueWatchingAgain() throws Exception {
+        mvc.perform(put(progressUrl(withMarker)).content("{\"positionMs\":" + 95 * MIN + "}"));
+        mvc.perform(put(progressUrl(withMarker)).content("{\"positionMs\":" + 7 * MIN + "}"));
+        mvc.perform(get("/api/home"))
+            .andExpect(jsonPath("$.hero.title").value("Blade Runner"))
+            .andExpect(jsonPath("$.hero.watched").value(true))
+            .andExpect(jsonPath("$.hero.progress.positionMs").value(7 * MIN));
+    }
+
+    @Test
+    void markingWatchedResetsThePosition() throws Exception {
+        mvc.perform(put(progressUrl(withMarker)).content("{\"positionMs\":" + 10 * MIN + "}"));
+        mvc.perform(post("/api/editions/" + withMarker.getId() + "/watched").content("{\"watched\":true}"));
+        assertThat(states.findById(withMarker.getId()).orElseThrow().getPositionMs()).isZero();
     }
 
     @Test

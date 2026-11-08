@@ -23,7 +23,7 @@ class FilmViewTest {
 
     @Test
     void watchedIsPerEditionAndAFilmIsWatchedIfAnyEditionIs() {
-        var view = view(blade, state(finalCut, 117 * MIN, true, NOW, NOW));
+        var view = view(blade, state(finalCut, 0, true, NOW, NOW));
         assertThat(view.state(finalCut).orElseThrow().isWatched()).isTrue();
         assertThat(view.state(theatrical)).isEmpty();
         assertThat(view.watched()).isTrue();
@@ -44,11 +44,18 @@ class FilmViewTest {
     }
 
     @Test
-    void noProgressWhenTheLastPlayedEditionIsWatchedEvenIfAnotherIsPartWay() {
+    void noProgressWhenTheLastPlayedEditionIsWatchedAndRewoundEvenIfAnotherIsPartWay() {
         Instant earlier = NOW.minus(Duration.ofDays(3));
         var view = view(blade, state(finalCut, 30 * MIN, false, earlier, null),
-            state(theatrical, 117 * MIN, true, NOW, NOW));
+            state(theatrical, 0, true, NOW, NOW));
         assertThat(view.progress()).isEmpty();
+    }
+
+    @Test
+    void aWatchedEditionRestartedIsInProgressAgain() {
+        var view = view(blade, state(finalCut, 12 * MIN, true, NOW, NOW.minus(Duration.ofDays(9))));
+        assertThat(view.watched()).isTrue();
+        assertThat(view.progress().orElseThrow().positionMs()).isEqualTo(12 * MIN);
     }
 
     @Test

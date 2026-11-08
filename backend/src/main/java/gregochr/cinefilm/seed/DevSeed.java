@@ -214,7 +214,7 @@ public class DevSeed implements ApplicationRunner {
         edition(film, "Theatrical Cut", 1982, 117, "Original release", null, true, false);
         films.save(film);
         // The Final Cut was last watched in May 2019 (more than five years ago); the others are untouched.
-        state(finalCut, 6_900_000L, true, daysAgo(2_730));
+        state(finalCut, 0, true, daysAgo(2_730));
     }
 
     private void film(long tmdbId, String title, int year, int minutes, String genres, String director,
@@ -226,7 +226,7 @@ public class DevSeed implements ApplicationRunner {
         films.save(film);
         switch (watch) {
             case PROGRESS -> state(edition, position, false, daysAgo(lastPlayedDaysAgo));
-            case WATCHED -> state(edition, edition.getRuntimeMs(), true, daysAgo(lastPlayedDaysAgo));
+            case WATCHED -> state(edition, 0, true, daysAgo(lastPlayedDaysAgo));
             default -> { }
         }
     }

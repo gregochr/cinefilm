@@ -37,12 +37,17 @@ public class PlaybackService {
         Edition edition = edition(editionId);
         Instant now = clock.instant();
         PlaybackState state = states.findById(editionId).orElse(new PlaybackState(editionId));
-        state.setPositionMs(positionMs);
         state.setLastPlayedAt(now);
-        if (!state.isWatched()
-            && WatchedRule.isWatched(positionMs, edition.getRuntimeMs(), edition.getCreditsMarkerMs())) {
-            state.setWatched(true);
-            state.setWatchedAt(now);
+        if (WatchedRule.isWatched(positionMs, edition.getRuntimeMs(), edition.getCreditsMarkerMs())) {
+            // Reaching the credits marks it watched and resets the position, so credits playing out never
+            // puts the film back into Continue watching.
+            if (!state.isWatched()) {
+                state.setWatched(true);
+                state.setWatchedAt(now);
+            }
+            state.setPositionMs(0);
+        } else {
+            state.setPositionMs(positionMs);
         }
         states.save(state);
         preferences.rememberLastEdition(edition.getFilm().getId(), editionId);
@@ -62,6 +67,7 @@ public class PlaybackService {
                 state.setWatched(true);
                 state.setWatchedAt(clock.instant());
             }
+            state.setPositionMs(0);
         } else {
             state.setWatched(false);
             state.setWatchedAt(null);

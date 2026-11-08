@@ -53,7 +53,7 @@ class HomeApiTest extends ApiTestBase {
         add("Drive", 2011, 40, "Crime");
         saveState(state(heat, 64 * MIN, false, now.minus(Duration.ofHours(2)), null));
         saveState(state(arrival, 55 * MIN, false, now.minus(Duration.ofDays(2)), null));
-        saveState(state(kes, 100 * MIN, true, now.minus(Duration.ofDays(3000)), null));
+        saveState(state(kes, 0, true, now.minus(Duration.ofDays(3000)), null));
         saveState(state(zodiac, 0, false, null, null));
 
         FilmCollection bladeRunner = collection("Blade Runner");
@@ -75,7 +75,7 @@ class HomeApiTest extends ApiTestBase {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.hero.title").value("Heat"))
             .andExpect(jsonPath("$.hero.progress.positionMs").value(64 * MIN))
-            .andExpect(jsonPath("$.continueWatching[*].title", contains("Heat", "Arrival")))
+            .andExpect(jsonPath("$.continueWatching[*].title", contains("Arrival")))
             .andExpect(jsonPath("$.recentlyAdded[*].title", contains("Zodiac")))
             .andExpect(jsonPath("$.notWatchedInYears[*].title", contains("Kes")))
             .andExpect(jsonPath("$.notWatchedInYears[0].watched").value(true))
@@ -88,6 +88,18 @@ class HomeApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.collections[0].ownedCount").value(1))
             .andExpect(jsonPath("$.collections[0].totalCount").value(2))
             .andExpect(jsonPath("$.collections[0].posterPaths", hasSize(1)));
+    }
+
+    @Test
+    void theHeroIsNotRepeatedInContinueWatching() throws Exception {
+        Edition a = add("Heat", 1995, 90);
+        Edition b = add("Arrival", 2016, 70);
+        saveState(state(a, 5 * MIN, false, now.minus(Duration.ofHours(1)), null));
+        saveState(state(b, 5 * MIN, false, now.minus(Duration.ofDays(1)), null));
+        mvc.perform(get("/api/home"))
+            .andExpect(jsonPath("$.hero.title").value("Heat"))
+            .andExpect(jsonPath("$.continueWatching", hasSize(1)))
+            .andExpect(jsonPath("$.continueWatching[0].title").value("Arrival"));
     }
 
     @Test
