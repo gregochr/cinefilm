@@ -141,3 +141,64 @@ fetch fails), so review after green is where the defects are.
   screen. State which claims were seen and which were only tested; where the browser cannot reach (a state the seed
   does not produce), say so.
 - **Report what was not examined** as plainly as what was.
+
+## CI workflows
+
+One workflow runs the checks (`.github/workflows/ci.yml`, name `CI`); the others support it. The repo is private on a
+plan without branch protection, so nothing is enforced by GitHub: the merge rule in `CLAUDE.md` (read the checks on
+the exact head commit, `gh pr merge --match-head-commit`) is the gate, and the job names below are stable strings
+that `dependabot-auto-merge.yml` reads. Do not rename them.
+
+### `ci.yml` — CI
+
+Triggers: push to `main`, every pull request (any base), `workflow_call` (for a later deploy or mutation workflow to
+reuse), `workflow_dispatch` (the auto-merge workflow builds `main` after a `GITHUB_TOKEN` merge). Concurrency
+cancels superseded runs of the same ref.
+
+| Job | Name | What it runs |
+|---|---|---|
+| `changes` | `Detect docs-only change` | Classifies the PR diff. |
+| `backend` | `Backend — Build, Test & Coverage` | `./mvnw clean verify` in full (Checkstyle, tests incl. Testcontainers integration, JaCoCo per class and bundle, SpotBugs + FindSecBugs), then the integration test count, then on PRs diff-cover at 90% of changed `backend/src/main` lines (JaCoCo XML). Uploads the JaCoCo and SpotBugs reports. 20 min timeout. |
+| `shell` | `Shell — ShellCheck & script tests` | Pinned ShellCheck v0.11.0 (`-o check-unassigned-uppercase`) over `scripts/*.sh` and `scripts/test/*.sh`, then `bash scripts/test/run-all.sh`: the tests stub `npx`/`sleep` on PATH to prove `npm-audit.sh` (clean passes, findings fail without retry, transport errors retry with 15s/30s backoff, exhausted retries fail) and run `ci-docs-only.sh` against throwaway git repos. Run both locally the same way. |
+| `frontend` | `Frontend — Lint, Test & Build` | `npm ci`, `npm run lint`, `npm run test:coverage` (95/90 per file plus the global floor), on PRs diff-cover at 90% of changed `frontend/src` lines (lcov, with the `SF:` prefix rewrite), `scripts/npm-audit.sh frontend high`, `npm run build`. 20 min timeout. |
+
+**Docs-only path.** There are deliberately no `paths:` filters: a workflow filtered out by path never reports, and a
+check that never reports cannot be satisfied. Instead both jobs always run; when every changed file is `docs/**` or
+`*.md` (changelog entries included) `scripts/ci-docs-only.sh` (diffing with `--no-renames`, so moving code into `docs/x.md` still counts as code) outputs `docs_only=true` and every real step is skipped by a
+step-level `if:`, leaving one echo step, so both checks go green in seconds. It is fail-safe: anything but a
+non-empty all-docs pull request diff (push, dispatch, call, empty diff, any other path including
+`.github/workflows/**`) runs everything.
+
+**diff-cover** reads the same coverage files as the local gate, so you can reproduce it before pushing (the
+percentages must be real numbers; "No lines with coverage information" on a diff that changes covered code means
+the path mapping is wrong):
+
+```bash
+pip install diff-cover==10.0.0
+git fetch origin main
+diff-cover backend/target/site/jacoco/jacoco.xml --src-roots backend/src/main/java --compare-branch=origin/main --fail-under=90
+sed 's#^SF:#SF:frontend/#' frontend/coverage/lcov.info > /tmp/lcov-root.info
+diff-cover /tmp/lcov-root.info --compare-branch=origin/main --fail-under=90
+```
+
+**Frontend audit.** `scripts/npm-audit.sh frontend high` is `npm audit --audit-level=high` run under npm 11 with
+retries on registry transport errors only (never on a finding). Run it locally the same way.
+
+### `ci-failure-issue.yml` — CI failure issue
+
+A reusable workflow (`workflow_call`, input `workflow-name`) that opens one `ci-failure` issue per failing
+unattended workflow and comments on it for later failures. Nothing calls it yet: the weekly mutation workflows
+(phase 5) will, from a final job with `if: failure() || cancelled()`.
+
+### `dependabot-auto-merge.yml` — Dependabot auto-merge
+
+Copied from CineLight. Job `label` (on the PR event) adds `automerge-ok` to minor and patch Dependabot PRs and removes
+it from majors. Job `merge` (on `workflow_run` of `CI`) squash-merges only when the label is present, the head has not
+moved, all three required check-runs above succeeded, no other check-run on the head failed, and CI ran against the
+current `main`; the merge is pinned to the head commit and then dispatches `ci.yml` on `main`. Major updates are never
+merged automatically.
+
+### `dependabot.yml`
+
+Weekly (Monday): Maven (`/backend`), npm (`/frontend`, with `vitest` and `@vitest/*` grouped so they bump together)
+and GitHub Actions.

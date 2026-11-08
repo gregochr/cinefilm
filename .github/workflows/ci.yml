@@ -1,0 +1,295 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  # NO `branches:` filter and NO `paths:` filter here, deliberately.
+  #
+  # `branches: [main]` would mean "only PRs whose BASE is main": a stacked PR (opened against
+  # another feature branch) would never run CI. Unfiltered, CI runs for a PR against any base.
+  pull_request:
+  # Reusable by later deploy / mutation workflows (they call this and gate on it).
+  workflow_call:
+  # Lets dependabot-auto-merge.yml build `main` after a GITHUB_TOKEN merge (such a merge starts
+  # no push workflows).
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ── Docs-only detection ──────────────────────────────────────────────────────
+  # A docs/ or *.md change cannot break a test, so running the full suite for one proves nothing.
+  #
+  # The obvious approach — `paths-ignore` (or `paths:`) on the trigger — is a TRAP. The workflow
+  # filtered out by path never runs, so its checks never report; if those checks are ever required
+  # the PR sits BLOCKED forever with no way to satisfy it (and the old backend.yml / frontend.yml,
+  # which had `paths:` filters, were exactly this).
+  #
+  # So the jobs always run and always report; only their expensive STEPS are skipped. A docs-only
+  # PR still shows both checks green, in seconds. Step-level `if:` and not job-level: a job-level
+  # `if:` reports "skipped", which blocks a required check rather than satisfying it.
+  #
+  # Fail-safe by construction: every ambiguous case (not a PR, empty diff, any non-doc path, any
+  # error) yields docs_only=false and the full suite runs. The only route to skipping is an
+  # explicit, non-empty diff of documentation alone.
+  changes:
+    name: Detect docs-only change
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.detect.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: detect
+        name: Classify the diff
+        run: |
+          set -euo pipefail
+          # push to main, workflow_dispatch and workflow_call (the deploy path) ALWAYS run in full —
+          # a release must be verified whatever it happens to contain.
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "Event is ${{ github.event_name }}, not pull_request — running the full suite."
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # The classification lives in scripts/ci-docs-only.sh (tested by scripts/test/ci-docs-only.test.sh):
+          # documentation is *.md anywhere or anything under docs/; renames count as delete + add so moving
+          # code into docs/ is still code. Prints docs_only=true|false; any doubt is false.
+          bash scripts/ci-docs-only.sh \
+            '${{ github.event.pull_request.base.sha }}' \
+            '${{ github.event.pull_request.head.sha }}' >> "$GITHUB_OUTPUT"
+
+  # ── Backend ──────────────────────────────────────────────────────────────────
+  # Required job name — stable string, read by dependabot-auto-merge.yml.
+  backend:
+    needs: changes
+    name: Backend — Build, Test & Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        if: needs.changes.outputs.docs_only != 'true'
+        with:
+          # diff-cover needs the base branch's history to compute the PR diff.
+          fetch-depth: 0
+
+      - name: Set up JDK 25
+        if: needs.changes.outputs.docs_only != 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: maven
+
+      # The full verify includes the integration package (Testcontainers Postgres 17; ubuntu runners
+      # ship Docker), plus Checkstyle, JaCoCo per-class and bundle checks, and SpotBugs + FindSecBugs.
+      - name: Build, test, and verify coverage
+        if: needs.changes.outputs.docs_only != 'true'
+        run: |
+          chmod +x backend/mvnw
+          cd backend && ./mvnw clean verify --batch-mode --no-transfer-progress
+
+      # So "0 integration tests ran" cannot pass as green.
+      - name: Integration test counts
+        if: needs.changes.outputs.docs_only != 'true'
+        run: |
+          total=0
+          for f in backend/target/surefire-reports/TEST-gregochr.cinefilm.integration.*IntegrationTest.xml; do
+            [ -e "$f" ] || { echo "No integration test reports found"; exit 1; }
+            n=$(grep -o '<testsuite [^>]*' "$f" | grep -o ' tests="[0-9]*"' | grep -o '[0-9]*')
+            echo "$(basename "$f"): $n tests"
+            total=$((total + n))
+          done
+          echo "Integration tests run: $total"
+          [ "$total" -gt 0 ]
+
+      # Changed-lines coverage: at least 90% of the lines a PR adds or changes under backend/src/main
+      # must be covered (the per-class and bundle floors cannot see a PR that adds untested code to an
+      # already-high class). diff-cover reads the JaCoCo XML, whose sourcefile paths are package-relative
+      # (gregochr/cinefilm/.../Foo.java), so `--src-roots` maps them onto backend/src/main/java; tests and
+      # resources are absent from the report and never count. Run from the repo root so the diff paths
+      # (backend/src/main/java/...) line up. A wrong mapping reports "No lines with coverage
+      # information" and passes, so the local proof in dev-and-testing.md must show real percentages.
+      # Line coverage only. Pull requests only: a push to main has no PR diff.
+      - name: Set up Python (diff-cover)
+        if: needs.changes.outputs.docs_only != 'true' && github.event_name == 'pull_request'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Changed-lines coverage (diff-cover, 90%)
+        if: needs.changes.outputs.docs_only != 'true' && github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          pip install diff-cover==10.0.0
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          set +e
+          diff-cover backend/target/site/jacoco/jacoco.xml \
+            --src-roots backend/src/main/java \
+            --compare-branch="origin/${{ github.base_ref }}" \
+            --fail-under=90 \
+            --format markdown:"$RUNNER_TEMP/diff-cover.md"
+          STATUS=$?
+          set -e
+          {
+            echo "### Changed-lines coverage (backend, minimum 90%)"
+            cat "$RUNNER_TEMP/diff-cover.md" 2>/dev/null || true
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$STATUS"
+
+      # NOTE: there is deliberately NO separate FindSecBugs step: `clean verify` already runs the
+      # SpotBugs + FindSecBugs `check` bound to the verify phase. Change the pom, not this file, to
+      # make the analysis stricter.
+
+      # Produced by the forked spotbugs:spotbugs run inside the verify-phase check goal.
+      - name: Upload SpotBugs report
+        if: always() && needs.changes.outputs.docs_only != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: spotbugs-report
+          path: backend/target/spotbugsXml.xml
+          if-no-files-found: ignore
+
+      - name: Upload JaCoCo coverage report
+        if: always() && needs.changes.outputs.docs_only != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: backend/target/site/jacoco/
+          if-no-files-found: ignore
+
+      - name: Documentation-only change — suite skipped
+        if: needs.changes.outputs.docs_only == 'true'
+        run: |
+          echo "Every changed path is documentation (*.md or docs/**)."
+          echo "The suite was skipped deliberately — see the 'Detect docs-only change' job."
+          echo "This check reports success so a required check is satisfied."
+
+  # ── Frontend ─────────────────────────────────────────────────────────────────
+  # Required job name — stable string, read by dependabot-auto-merge.yml.
+  frontend:
+    needs: changes
+    name: Frontend — Lint, Test & Build
+    runs-on: ubuntu-latest
+    # Caps what a genuinely hung test costs (GitHub's default ceiling is 360 minutes).
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        if: needs.changes.outputs.docs_only != 'true'
+        with:
+          # diff-cover needs the base branch's history to compute the PR diff.
+          fetch-depth: 0
+
+      - name: Set up Node 24
+        if: needs.changes.outputs.docs_only != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        if: needs.changes.outputs.docs_only != 'true'
+        run: cd frontend && npm ci
+
+      - name: Lint
+        if: needs.changes.outputs.docs_only != 'true'
+        run: cd frontend && npm run lint
+
+      - name: Unit tests + coverage floor (Vitest)
+        if: needs.changes.outputs.docs_only != 'true'
+        run: cd frontend && npm run test:coverage
+
+      # Changed-lines coverage: at least 90% of the lines a PR adds or changes under frontend/src
+      # must be covered. diff-cover reads coverage/lcov.info and ignores diff lines in files absent
+      # from lcov, so tests, src/test/** and src/main.jsx never count. A PR that touches no covered
+      # source reports "No lines with coverage information in this diff" and exits 0.
+      # ⚠️ lcov `SF:` paths are relative to frontend/ but diff-cover resolves them against the repo
+      # root, and run from frontend/ it silently matches NOTHING and passes. So the step prefixes
+      # `SF:` with `frontend/` and runs from the repo root.
+      # Line coverage only. Pull requests only: a push to main has no PR diff.
+      - name: Set up Python (diff-cover)
+        if: needs.changes.outputs.docs_only != 'true' && github.event_name == 'pull_request'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Changed-lines coverage (diff-cover, 90%)
+        if: needs.changes.outputs.docs_only != 'true' && github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          pip install diff-cover==10.0.0
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          sed 's#^SF:#SF:frontend/#' frontend/coverage/lcov.info > "$RUNNER_TEMP/lcov-root.info"
+          set +e
+          diff-cover "$RUNNER_TEMP/lcov-root.info" \
+            --compare-branch="origin/${{ github.base_ref }}" \
+            --fail-under=90 \
+            --format markdown:"$RUNNER_TEMP/diff-cover.md"
+          STATUS=$?
+          set -e
+          {
+            echo "### Changed-lines coverage (frontend, minimum 90%)"
+            cat "$RUNNER_TEMP/diff-cover.md" 2>/dev/null || true
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$STATUS"
+
+      # ⚠️ NOT a bare `npm audit`: scripts/npm-audit.sh runs the audit under npm 11 (so a registry
+      # problem names the endpoint that failed) and retries ONLY on transport errors, never on a
+      # finding. The script carries the full account.
+      - name: Dependency audit (frontend, high)
+        if: needs.changes.outputs.docs_only != 'true'
+        run: ./scripts/npm-audit.sh frontend high
+
+      - name: Build
+        if: needs.changes.outputs.docs_only != 'true'
+        run: cd frontend && npm run build
+
+      - name: Documentation-only change — suite skipped
+        if: needs.changes.outputs.docs_only == 'true'
+        run: |
+          echo "Every changed path is documentation (*.md or docs/**)."
+          echo "The suite was skipped deliberately — see the 'Detect docs-only change' job."
+          echo "This check reports success so a required check is satisfied."
+
+  # ── Shell scripts ────────────────────────────────────────────────────────────
+  # ShellCheck proves the scripts parse and are tidy; the tests (scripts/test/*.test.sh) run the real
+  # scripts against stub npx/sleep on PATH and throwaway git repos, so npm-audit.sh's retry rules and
+  # ci-docs-only.sh's classification are proven, not assumed. No network, a few seconds.
+  # Required job name — stable string. Step-level `if:` and a skipped echo step like every job here.
+  shell:
+    needs: changes
+    name: Shell — ShellCheck & script tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        if: needs.changes.outputs.docs_only != 'true'
+
+      # PINNED, and not to the runner's preinstalled shellcheck: "green locally" must say something about CI.
+      # -o check-unassigned-uppercase: SC2154 is off by default for uppercase names.
+      - name: ShellCheck (pinned, with unassigned-uppercase detection)
+        if: needs.changes.outputs.docs_only != 'true'
+        run: |
+          docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.11.0 \
+            -x -o check-unassigned-uppercase scripts/*.sh scripts/test/*.sh
+
+      - name: Run scripts/test/*.test.sh
+        if: needs.changes.outputs.docs_only != 'true'
+        run: bash scripts/test/run-all.sh
+
+      - name: Documentation-only change — suite skipped
+        if: needs.changes.outputs.docs_only == 'true'
+        run: |
+          echo "Every changed path is documentation (*.md or docs/**)."
+          echo "The suite was skipped deliberately — see the 'Detect docs-only change' job."
+          echo "This check reports success so a required check is satisfied."
