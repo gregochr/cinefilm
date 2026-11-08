@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CineFilm — States</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Inter:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#E8B25A;text-decoration:none}a:hover{color:#F2C878}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1500px; box-sizing: border-box; padding: 40px; background: #0A0908; color: #EDE6DA; font-family: Inter, system-ui, sans-serif; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 32px">
+
+  <figure style="margin: 0; display: flex; flex-direction: column; gap: 12px; min-height: 0">
+    <figcaption style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Loading — static skeleton, no shimmer</figcaption>
+    <div style="flex: 1; background: #0E0C0A; border: 1px solid #2A251F; border-radius: 12px; padding: 28px; display: flex; flex-direction: column; gap: 18px; overflow: hidden">
+      <div style="width: 220px; height: 26px; border-radius: 6px; background: #1A1713"></div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+        <div style="aspect-ratio: 16 / 9; border-radius: 10px; background: #1A1713"></div><div style="aspect-ratio: 16 / 9; border-radius: 10px; background: #1A1713"></div><div style="aspect-ratio: 16 / 9; border-radius: 10px; background: #1A1713"></div>
+      </div>
+      <div style="width: 180px; height: 26px; border-radius: 6px; background: #1A1713"></div>
+      <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px">
+        <div style="aspect-ratio: 2 / 3; border-radius: 8px; background: #161310"></div><div style="aspect-ratio: 2 / 3; border-radius: 8px; background: #161310"></div><div style="aspect-ratio: 2 / 3; border-radius: 8px; background: #161310"></div><div style="aspect-ratio: 2 / 3; border-radius: 8px; background: #161310"></div><div style="aspect-ratio: 2 / 3; border-radius: 8px; background: #161310"></div><div style="aspect-ratio: 2 / 3; border-radius: 8px; background: #161310"></div>
+      </div>
+    </div>
+  </figure>
+
+  <figure style="margin: 0; display: flex; flex-direction: column; gap: 12px; min-height: 0">
+    <figcaption style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Empty library — first run</figcaption>
+    <div style="flex: 1; background: #0E0C0A; border: 1px solid #2A251F; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; text-align: center; padding: 28px">
+      <div style="font-family: 'Instrument Serif', Georgia, serif; font-size: 48px; line-height: 1">The house lights are up</div>
+      <p style="margin: 0; max-width: 420px; color: #D5CCBE; font-size: 15px; line-height: 1.6">Nothing in the library yet. Bring your films, posters and watch history across from Plex, or point CineFilm at a folder.</p>
+      <div style="display: flex; gap: 12px; margin-top: 6px">
+        <button style="height: 48px; padding: 0 22px; border-radius: 999px; background: #E8B25A; color: #1A1206; border: 0; font: 600 15px Inter, system-ui, sans-serif; cursor: pointer">Import from Plex</button>
+        <button style="height: 48px; padding: 0 22px; border-radius: 999px; background: transparent; color: #EDE6DA; border: 1px solid #4A4339; font: 500 15px Inter, system-ui, sans-serif; cursor: pointer">Scan a folder</button>
+      </div>
+    </div>
+  </figure>
+
+  <figure style="margin: 0; display: flex; flex-direction: column; gap: 12px; min-height: 0">
+    <figcaption style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Film detail — no subtitles</figcaption>
+    <div style="flex: 1; background: #0E0C0A; border: 1px solid #2A251F; border-radius: 12px; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+      <div style="font-family: 'Instrument Serif', Georgia, serif; font-size: 44px; line-height: 1">Kes</div>
+      <div style="font-size: 14px; color: #D5CCBE">1969 · 1h 50m · Drama</div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; max-width: 520px">
+        <label style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Quality
+          <select style="height: 44px; background: #1A1713; color: #EDE6DA; border: 1px solid #2A251F; border-radius: 8px; padding: 0 12px; font: 15px Inter, system-ui, sans-serif"><option>Auto</option></select>
+        </label>
+        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Subtitles
+          <div style="height: 44px; display: flex; align-items: center; padding: 0 12px; border: 1px dashed #3A342C; border-radius: 8px; font-size: 14px; letter-spacing: 0; text-transform: none; color: #A39A8B">None for this film</div>
+        </div>
+      </div>
+      <p style="margin: 0; font-size: 14px; color: #A39A8B">The player’s C key does nothing here, and the captions button is dimmed. <a href="Admin.dc.html">Find subtitles in Admin</a></p>
+    </div>
+  </figure>
+
+  <figure style="margin: 0; display: flex; flex-direction: column; gap: 12px; min-height: 0">
+    <figcaption style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Transcode worker offline — quality menu</figcaption>
+    <div style="flex: 1; background: #101418; border-radius: 12px; position: relative; overflow: hidden; display: flex; align-items: flex-end; justify-content: flex-end; padding: 24px">
+      <div role="menu" aria-label="Quality" style="width: 300px; background: rgba(20,17,14,0.94); border: 1px solid #2A251F; border-radius: 12px; padding: 8px; display: flex; flex-direction: column">
+        <div style="padding: 10px 12px; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Quality</div>
+        <button role="menuitemradio" aria-checked="true" style="display: flex; justify-content: space-between; height: 40px; align-items: center; padding: 0 12px; border-radius: 8px; border: 0; background: #2A251F; color: #EDE6DA; font: 500 14px Inter, system-ui, sans-serif">Original <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #D5CCBE">1080p · 24 Mbps</span></button>
+        <button role="menuitemradio" aria-checked="false" disabled style="display: flex; height: 40px; align-items: center; padding: 0 12px; border: 0; background: transparent; color: #6F675B; font: 14px Inter, system-ui, sans-serif">Auto</button>
+        <button role="menuitemradio" aria-checked="false" style="display: flex; justify-content: space-between; height: 40px; align-items: center; padding: 0 12px; border: 0; background: transparent; color: #EDE6DA; font: 14px Inter, system-ui, sans-serif">720p <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #A39A8B">pre-made</span></button>
+        <button role="menuitemradio" aria-checked="false" disabled style="display: flex; height: 40px; align-items: center; padding: 0 12px; border: 0; background: transparent; color: #6F675B; font: 14px Inter, system-ui, sans-serif">480p</button>
+        <div style="margin: 6px 4px 4px; padding: 10px; border-top: 1px solid #2A251F; font-size: 13px; line-height: 1.5; color: #D5CCBE">Lower qualities unavailable right now — the transcode worker is offline. Pre-made versions still play.</div>
+      </div>
+    </div>
+  </figure>
+
+  <figure style="margin: 0; display: flex; flex-direction: column; gap: 12px; min-height: 0">
+    <figcaption style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Remote on a slow connection — first play of the session</figcaption>
+    <div style="flex: 1; background: #101418; border-radius: 12px; position: relative; overflow: hidden">
+      <div style="position: absolute; top: 20px; right: 20px; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: 999px; background: rgba(14,12,10,0.7); font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #D5CCBE">
+        <span style="width: 6px; height: 6px; border-radius: 999px; background: #E8B25A"></span>480p · Remote · slow</div>
+      <div role="status" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 420px; background: rgba(20,17,14,0.94); border: 1px solid #2A251F; border-radius: 12px; padding: 20px 22px; display: flex; flex-direction: column; gap: 10px">
+        <div style="font-size: 15px; font-weight: 600">You’re on a slow connection</div>
+        <div style="font-size: 14px; line-height: 1.55; color: #D5CCBE">Playing at 480p to avoid stalls. Auto will step up if things improve.</div>
+        <div style="display: flex; gap: 10px; margin-top: 4px">
+          <button style="height: 36px; padding: 0 14px; border-radius: 8px; background: #EDE6DA; color: #0E0C0A; border: 0; font: 600 13px Inter, system-ui, sans-serif; cursor: pointer">OK</button>
+          <button style="height: 36px; padding: 0 14px; border-radius: 8px; background: transparent; color: #EDE6DA; border: 1px solid #4A4339; font: 500 13px Inter, system-ui, sans-serif; cursor: pointer">Choose quality</button>
+        </div>
+      </div>
+    </div>
+  </figure>
+
+  <figure style="margin: 0; display: flex; flex-direction: column; gap: 12px; min-height: 0">
+    <figcaption style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Session expired while away</figcaption>
+    <div style="flex: 1; background: #0E0C0A; border: 1px solid #2A251F; border-radius: 12px; display: flex; align-items: center; justify-content: center; padding: 28px">
+      <form style="width: 380px; display: flex; flex-direction: column; gap: 16px">
+        <div style="font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-size: 34px">CineFilm</div>
+        <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #D5CCBE">You’ve been signed out while you were away. Sign in again and you’ll be back where you were.</p>
+        <label style="display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: #A39A8B">Password
+          <input type="password" value="••••••••••" style="height: 44px; padding: 0 12px; background: #1A1713; color: #EDE6DA; border: 1px solid #2A251F; border-radius: 8px; font: 15px Inter, system-ui, sans-serif; box-shadow: 0 0 0 2px #0E0C0A, 0 0 0 4px #EDE6DA">
+        </label>
+        <button type="button" style="height: 48px; border-radius: 999px; background: #E8B25A; color: #1A1206; border: 0; font: 600 15px Inter, system-ui, sans-serif; cursor: pointer">Sign in</button>
+      </form>
+    </div>
+  </figure>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

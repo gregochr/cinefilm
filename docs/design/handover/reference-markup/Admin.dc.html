@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CineFilm — Admin</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Inter:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#0E0C0A}
+a{color:#EDE6DA;text-decoration:none}a:hover{color:#E8B25A}
+</style>
+</helmet>
+<div style="background: #0E0C0A; color: #EDE6DA; font-family: Inter, system-ui, sans-serif; min-height: 100vh; padding-bottom: 80px">
+  <header style="max-width: 1360px; margin: 0 auto; padding: 24px 40px; display: flex; flex-wrap: wrap; align-items: center; gap: 32px">
+    <a href="Main.dc.html" style="font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-size: 30px">CineFilm</a>
+    <nav style="display: flex; gap: 24px; font-size: 14px; font-weight: 500">
+      <a href="Main.dc.html" style="color: #A39A8B">Home</a>
+      <a href="Library.dc.html" style="color: #A39A8B">Library</a>
+      <a href="#" aria-current="page" style="color: #EDE6DA; border-bottom: 1px solid #E8B25A; padding-bottom: 4px">Admin</a>
+    </nav>
+  </header>
+
+  <main style="max-width: 1360px; margin: 0 auto; padding: 8px 40px 0; display: flex; flex-direction: column; gap: 28px">
+    <h1 style="margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 56px; line-height: 1">Admin</h1>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); gap: 20px">
+      <section style="background: #15120F; border: 1px solid #2A251F; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+          <h2 style="margin: 0; font-size: 16px; font-weight: 600">Plex import</h2>
+          <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #E8B25A"><span style="width: 8px; height: 8px; border-radius: 999px; background: #E8B25A"></span>Running</span>
+        </div>
+        <div style="height: 6px; border-radius: 3px; background: #2A251F"><div style="width: 45%; height: 100%; border-radius: 3px; background: #E8B25A"></div></div>
+        <div style="display: flex; justify-content: space-between; gap: 12px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #D5CCBE">
+          <span>142 / 318 films</span><span style="color: #A39A8B">Now: Local Hero (1983)</span>
+        </div>
+        <dl style="margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding-top: 4px">
+          <div style="display: flex; flex-direction: column; gap: 4px"><dt style="font-size: 12px; color: #A39A8B">Matched</dt><dd style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 20px">138</dd></div>
+          <div style="display: flex; flex-direction: column; gap: 4px"><dt style="font-size: 12px; color: #A39A8B">Need a match</dt><dd style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 20px; color: #E8B25A">3</dd></div>
+          <div style="display: flex; flex-direction: column; gap: 4px"><dt style="font-size: 12px; color: #A39A8B">Watch history</dt><dd style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 20px">kept</dd></div>
+        </dl>
+        <div style="display: flex; gap: 10px">
+          <button style="height: 40px; padding: 0 16px; border-radius: 8px; background: transparent; border: 1px solid #4A4339; color: #EDE6DA; font: 500 14px Inter, system-ui, sans-serif; cursor: pointer">Cancel import</button>
+        </div>
+      </section>
+
+      <section style="background: #15120F; border: 1px solid #2A251F; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+          <h2 style="margin: 0; font-size: 16px; font-weight: 600">Library scan</h2>
+          <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #A39A8B"><span style="width: 8px; height: 8px; border-radius: 999px; background: #6F675B"></span>Idle</span>
+        </div>
+        <dl style="margin: 0; display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 10px 16px; font-size: 14px">
+          <dt style="color: #A39A8B">Folder</dt><dd style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px">/media/films</dd>
+          <dt style="color: #A39A8B">Last scan</dt><dd style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px">08 Nov 12:41 · 2 new, 0 removed</dd>
+          <dt style="color: #A39A8B">Watching</dt><dd style="margin: 0">On — new files are picked up automatically</dd>
+        </dl>
+        <div style="display: flex; gap: 10px">
+          <button style="height: 40px; padding: 0 16px; border-radius: 8px; background: #E8B25A; border: 0; color: #1A1206; font: 600 14px Inter, system-ui, sans-serif; cursor: pointer">Scan now</button>
+        </div>
+      </section>
+
+      <section style="background: #15120F; border: 1px solid #2A251F; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+          <h2 style="margin: 0; font-size: 16px; font-weight: 600">Transcode worker</h2>
+          <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #9FD3A8"><span style="width: 8px; height: 8px; border-radius: 999px; background: #9FD3A8"></span>Online</span>
+        </div>
+        <dl style="margin: 0; display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 10px 16px; font-size: 14px">
+          <dt style="color: #A39A8B">Last heartbeat</dt><dd style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px">4 s ago</dd>
+          <dt style="color: #A39A8B">Active sessions</dt><dd style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px">1</dd>
+        </dl>
+        <div style="border-top: 1px solid #2A251F; padding-top: 14px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; font-size: 14px">
+          <span>Heat</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #D5CCBE">Original → 720p</span>
+          <span style="font-size: 13px; color: #A39A8B">MacBook · Remote</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #A39A8B">01:04:31 · 1.6× realtime</span>
+        </div>
+      </section>
+
+      <section style="background: #15120F; border: 1px solid #2A251F; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+          <h2 style="margin: 0; font-size: 16px; font-weight: 600">Pre-made versions (for travel)</h2>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #A39A8B">11.2 GB used</span>
+        </div>
+        <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #D5CCBE">720p and 480p copies made ahead of time. They play without the transcode worker, so they still work if it’s offline.</p>
+        <label style="display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer">
+          <input type="checkbox" role="switch" checked style="accent-color: #E8B25A; width: 18px; height: 18px; margin: 0">Automatically prepare films in Continue watching</label>
+        <div style="display: flex; flex-direction: column; border-top: 1px solid #2A251F">
+          <sc-for list="{{travel}}" as="v" hint-placeholder-count="3">
+            <div style="display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 10px 0; border-bottom: 1px solid #2A251F; font-size: 14px">
+              <span>{{v.t}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: {{v.col}}">{{v.state}}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display: flex; gap: 10px">
+          <button style="height: 40px; padding: 0 16px; border-radius: 8px; background: transparent; border: 1px solid #4A4339; color: #EDE6DA; font: 500 14px Inter, system-ui, sans-serif; cursor: pointer">Prepare a film…</button>
+        </div>
+      </section>
+
+      <section style="background: #15120F; border: 1px solid #2A251F; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+        <h2 style="margin: 0; font-size: 16px; font-weight: 600">Films needing attention</h2>
+        <div style="display: flex; flex-direction: column">
+          <sc-for list="{{issues}}" as="i" hint-placeholder-count="4">
+            <div style="display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 16px; padding: 12px 0; border-bottom: 1px solid #2A251F">
+              <span style="font-size: 14px; font-weight: 500">{{i.t}}</span>
+              <button style="grid-row: span 2; height: 36px; padding: 0 14px; border-radius: 8px; background: transparent; border: 1px solid #4A4339; color: #EDE6DA; font: 500 13px Inter, system-ui, sans-serif; cursor: pointer">{{i.action}}</button>
+              <span style="font-size: 13px; color: #A39A8B">{{i.issue}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </div>
+
+    <section aria-label="Fix match" style="background: #15120F; border: 1px solid #4A4339; border-radius: 12px; padding: 28px; display: flex; flex-direction: column; gap: 20px">
+      <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 16px">
+        <h2 style="margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 32px">Fix match</h2>
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #A39A8B">File: The.Wicker.Man.mkv · 1h 28m</span>
+      </div>
+      <label style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B; max-width: 560px">Search TMDB
+        <input type="search" value="The Wicker Man" style="height: 44px; padding: 0 12px; background: #1A1713; color: #EDE6DA; border: 1px solid #2A251F; border-radius: 8px; font: 15px Inter, system-ui, sans-serif; text-transform: none; letter-spacing: 0">
+      </label>
+      <fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 10px">
+        <legend style="font-size: 13px; color: #A39A8B; margin-bottom: 10px">Pick the right film</legend>
+        <sc-for list="{{matches}}" as="m" hint-placeholder-count="3">
+          <label style="display: grid; grid-template-columns: 20px 48px minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 12px 16px; border-radius: 10px; cursor: pointer; background: {{m.bg}}; border: 1px solid {{m.bd}}">
+            <input type="radio" name="match" checked="{{m.on}}" onChange="{{m.pick}}" style="accent-color: #E8B25A; width: 18px; height: 18px">
+            <span style="width: 48px; aspect-ratio: 2 / 3; border-radius: 4px; background: {{m.c}}"></span>
+            <span style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; font-weight: 500">{{m.t}} ({{m.y}})</span><span style="font-size: 13px; color: #A39A8B">{{m.d}}</span></span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #A39A8B">{{m.len}}</span>
+          </label>
+        </sc-for>
+      </fieldset>
+      <div style="display: flex; gap: 10px">
+        <button style="height: 44px; padding: 0 20px; border-radius: 8px; background: #E8B25A; border: 0; color: #1A1206; font: 600 14px Inter, system-ui, sans-serif; cursor: pointer">Use this match</button>
+        <button style="height: 44px; padding: 0 20px; border-radius: 8px; background: transparent; border: 1px solid #4A4339; color: #EDE6DA; font: 500 14px Inter, system-ui, sans-serif; cursor: pointer">Cancel</button>
+      </div>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { m: 0 }; }
+  renderVals() {
+    const M = [
+      { t: 'The Wicker Man', y: 1973, d: 'Robin Hardy · Edward Woodward, Christopher Lee', len: '1h 28m', c: '#4E4424' },
+      { t: 'The Wicker Man', y: 2006, d: 'Neil LaBute · Nicolas Cage', len: '1h 42m', c: '#3A3A3A' },
+      { t: 'The Wicker Tree', y: 2011, d: 'Robin Hardy', len: '1h 36m', c: '#3D4A33' }
+    ];
+    return {
+      travel: [
+        { t: 'Heat', state: '720p ✓  480p ✓', col: '#9FD3A8' },
+        { t: 'Arrival', state: '720p making · 64%', col: '#E8B25A' },
+        { t: 'Paris, Texas', state: 'queued', col: '#A39A8B' },
+        { t: 'Chinatown', state: 'queued', col: '#A39A8B' }
+      ],
+      issues: [
+        { t: 'The Wicker Man', issue: 'Two possible matches — runtime suggests 1973', action: 'Fix match' },
+        { t: 'Kes', issue: 'No subtitles found', action: 'Find subtitles' },
+        { t: 'Alien', issue: 'Audio is TrueHD 7.1 — Safari can’t play it, will transcode to AAC', action: 'Details' },
+        { t: 'Local Hero', issue: 'Not matched yet (import running)', action: 'Fix match' },
+        { t: 'Blade Runner', issue: '3 files match one film — Final Cut, Director’s Cut, Theatrical?', action: 'Group as editions' }
+      ],
+      matches: M.map((m, i) => ({ ...m, on: this.state.m === i, bg: this.state.m === i ? '#211C16' : 'transparent', bd: this.state.m === i ? '#E8B25A' : '#2A251F', pick: () => this.setState({ m: i }) }))
+    };
+  }
+}
+</script>
+</body>
+</html>

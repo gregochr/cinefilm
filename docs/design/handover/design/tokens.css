@@ -1,0 +1,54 @@
+/* CineFilm — Projection Booth tokens (dark only) */
+:root {
+  /* Ground and surfaces */
+  --cf-bg: #0E0C0A;            /* page ground (warm black) */
+  --cf-bg-deep: #000000;       /* player */
+  --cf-surface: #15120F;       /* admin cards */
+  --cf-surface-2: #1A1713;     /* inputs, segmented controls, skeletons */
+  --cf-surface-3: #211C16;     /* selected row */
+  --cf-line: #2A251F;          /* hairlines, borders */
+  --cf-line-strong: #4A4339;   /* secondary button border */
+  --cf-overlay: rgba(20, 17, 14, 0.96); /* player menus, toast */
+
+  /* Text */
+  --cf-text: #EDE6DA;          /* primary */
+  --cf-text-2: #D5CCBE;        /* secondary (meta, plot) */
+  --cf-text-muted: #A39A8B;    /* labels, captions — 4.5:1+ on --cf-bg */
+  --cf-text-disabled: #6F675B;
+  --cf-on-poster: rgba(255, 248, 236, 0.9);
+
+  /* Accent — use sparingly: primary action, progress, current-nav underline, eyebrow */
+  --cf-amber: #E8B25A;
+  --cf-on-amber: #1A1206;
+  --cf-ok: #9FD3A8;            /* worker online, home network dot */
+
+  /* Type */
+  --cf-font-display: 'Instrument Serif', Georgia, serif;
+  --cf-font-ui: Inter, system-ui, -apple-system, sans-serif;
+  --cf-font-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  --cf-size-hero: 104px;       /* detail title (88px on Home hero, 52-56px on phone) */
+  --cf-size-h1: 64px;          /* Library / Admin page titles */
+  --cf-size-h2: 32px;          /* row headings (26px on phone) */
+  --cf-size-body: 17px;        /* plot */
+  --cf-size-ui: 14px;
+  --cf-size-label: 12px;       /* uppercase, letter-spacing .1–.14em */
+
+  /* Shape and spacing */
+  --cf-radius-poster: 8px;
+  --cf-radius-card: 10px;
+  --cf-radius-panel: 12px;
+  --cf-radius-hero: 14px;
+  --cf-radius-pill: 999px;
+  --cf-content-max: 1360px;
+  --cf-gutter: 40px;           /* 16px on phone */
+  --cf-row-gap: 56px;
+  --cf-grid-gap: 20px;
+
+  /* Focus (keyboard + future TV remote) */
+  --cf-focus-ring: 0 0 0 2px var(--cf-bg), 0 0 0 4px var(--cf-text);
+  --cf-focus-scale: 1.03;
+
+  /* Motion */
+  --cf-controls-autohide-ms: 3000;
+  --cf-toast-ms: 4000;
+}

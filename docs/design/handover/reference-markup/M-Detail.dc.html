@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CineFilm — Mobile film detail</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Inter:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#EDE6DA;text-decoration:none}
+</style>
+</helmet>
+<div style="width: 390px; height: 1500px; background: #0E0C0A; color: #EDE6DA; font-family: Inter, system-ui, sans-serif; overflow: hidden">
+  <div style="position: relative; height: 340px; background: radial-gradient(130% 100% at 70% 15%, #3A5064 0%, #1E2A36 50%, #0E0C0A 100%)">
+    <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 160px; background: linear-gradient(to bottom, rgba(14,12,10,0), #0E0C0A)"></div>
+    <a href="M-Home.dc.html" aria-label="Back" style="position: absolute; top: 56px; left: 12px; width: 44px; height: 44px; border-radius: 999px; background: rgba(14,12,10,0.55); display: flex; align-items: center; justify-content: center">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+  </div>
+
+  <main style="margin-top: -96px; position: relative; padding: 0 16px 40px; display: flex; flex-direction: column; gap: 18px">
+    <div style="display: flex; gap: 16px; align-items: flex-end">
+      <div style="flex: 0 0 104px; aspect-ratio: 2 / 3; border-radius: 8px; background: #24323F; box-shadow: 0 16px 32px rgba(0,0,0,0.55)"></div>
+      <div style="display: flex; flex-direction: column; gap: 8px; min-width: 0">
+        <h1 style="margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 56px; line-height: 0.9">Heat</h1>
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: #D5CCBE">
+          <span>1995</span><span aria-hidden="true">·</span><span>2h 50m</span><span aria-hidden="true">·</span><span style="border: 1px solid #5A5246; border-radius: 4px; padding: 0 6px; font-size: 12px">15</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <a href="M-Player.dc.html" style="display: flex; align-items: center; justify-content: center; gap: 10px; height: 52px; border-radius: 999px; background: #E8B25A; color: #1A1206; font-weight: 600; font-size: 16px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"></path></svg>Resume from 1:04:31</a>
+      <div style="display: flex; align-items: center; gap: 10px; font-size: 12px; color: #A39A8B">
+        <div style="flex: 1; height: 3px; background: #2A251F; border-radius: 2px"><div style="width: 38%; height: 100%; background: #E8B25A; border-radius: 2px"></div></div>1h 45m left
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+        <button style="height: 48px; border-radius: 999px; background: transparent; color: #EDE6DA; border: 1px solid #4A4339; font: 500 14px Inter, system-ui, sans-serif">Start over</button>
+        <button style="height: 48px; border-radius: 999px; background: transparent; color: #EDE6DA; border: 1px solid #4A4339; font: 500 14px Inter, system-ui, sans-serif">Mark watched</button>
+      </div>
+    </div>
+
+    <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #D5CCBE; text-wrap: pretty">A meticulous crew of professional thieves and the obsessive LAPD detective tracking them circle each other across Los Angeles as one last score draws near.</p>
+
+    <div style="display: flex; flex-direction: column; border-top: 1px solid #2A251F">
+      <label style="display: flex; align-items: center; justify-content: space-between; min-height: 52px; border-bottom: 1px solid #2A251F; font-size: 15px">Quality
+        <select style="background: transparent; color: #D5CCBE; border: 0; font: 15px Inter, system-ui, sans-serif; text-align: right">
+          <option>Auto</option><option>Original</option><option>1080p</option><option>720p</option><option>480p</option></select>
+      </label>
+      <label style="display: flex; align-items: center; justify-content: space-between; min-height: 52px; border-bottom: 1px solid #2A251F; font-size: 15px">Subtitles
+        <select style="background: transparent; color: #D5CCBE; border: 0; font: 15px Inter, system-ui, sans-serif; text-align: right">
+          <option>Off · forced when needed</option><option>English</option><option>English (forced)</option></select>
+      </label>
+      <div style="display: flex; align-items: center; justify-content: space-between; min-height: 52px; border-bottom: 1px solid #2A251F; font-size: 15px">Audio<span style="color: #D5CCBE">English · 5.1</span></div>
+      <label style="display: flex; align-items: center; justify-content: space-between; min-height: 52px; border-bottom: 1px solid #2A251F; font-size: 15px">Dim the lights
+        <input type="checkbox" role="switch" checked style="accent-color: #E8B25A; width: 22px; height: 22px"></label>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #A39A8B; font-weight: 600">Directed by</h2>
+      <a href="#" style="font-family: 'Instrument Serif', Georgia, serif; font-size: 24px">Michael Mann</a>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #A39A8B; font-weight: 600">Starring</h2>
+      <div style="display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 15px">
+        <a href="#">Al Pacino</a><a href="#">Robert De Niro</a><a href="#">Val Kilmer</a><a href="#">Jon Voight</a><a href="#">Ashley Judd</a>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

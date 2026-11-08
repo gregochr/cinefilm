@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CineFilm — Library</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Inter:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#0E0C0A}
+a{color:#EDE6DA;text-decoration:none}a:hover{color:#E8B25A}
+</style>
+</helmet>
+<div style="background: #0E0C0A; color: #EDE6DA; font-family: Inter, system-ui, sans-serif; min-height: 100vh; padding-bottom: 80px">
+  <header style="max-width: 1360px; margin: 0 auto; padding: 24px 40px; display: flex; flex-wrap: wrap; align-items: center; gap: 32px">
+    <a href="Main.dc.html" style="font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-size: 30px">CineFilm</a>
+    <nav style="display: flex; gap: 24px; font-size: 14px; font-weight: 500">
+      <a href="Main.dc.html" style="color: #A39A8B; padding-bottom: 4px">Home</a>
+      <a href="#" aria-current="page" style="color: #EDE6DA; border-bottom: 1px solid #E8B25A; padding-bottom: 4px">Library</a>
+    </nav>
+    <div style="flex: 1 1 200px"></div>
+    <a href="Admin.dc.html" aria-label="Admin" style="width: 40px; height: 40px; border-radius: 8px; border: 1px solid #2A251F; color: #A39A8B; display: flex; align-items: center; justify-content: center">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"></path><circle cx="15" cy="7" r="2"></circle><circle cx="9" cy="12" r="2"></circle><circle cx="17" cy="17" r="2"></circle></svg></a>
+  </header>
+
+  <main style="max-width: 1360px; margin: 0 auto; padding: 8px 40px 0; display: flex; flex-direction: column; gap: 28px">
+    <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 16px">
+      <h1 style="margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 64px; line-height: 1">Library</h1>
+      <span style="font-size: 14px; color: #A39A8B">{{countLabel}}</span>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; padding-bottom: 20px; border-bottom: 1px solid #2A251F">
+      <label style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 8px; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Search
+        <span style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; background: #1A1713; border-radius: 8px; box-shadow: 0 0 0 1px #2A251F; color: #A39A8B; text-transform: none; letter-spacing: 0">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+          <input type="search" value="{{q}}" onInput="{{onQ}}" placeholder="Title, actor or director — try “de niro”" style="flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: #EDE6DA; font: 15px Inter, system-ui, sans-serif">
+          <kbd style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; border: 1px solid #3A342C; border-radius: 4px; padding: 1px 6px">/</kbd>
+        </span>
+      </label>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <span id="sort-l" style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Sort</span>
+        <div role="group" aria-labelledby="sort-l" style="display: flex; height: 44px; padding: 3px; box-sizing: border-box; border-radius: 8px; background: #1A1713; box-shadow: 0 0 0 1px #2A251F">
+          <sc-for list="{{sorts}}" as="s" hint-placeholder-count="3">
+            <button onClick="{{s.pick}}" aria-pressed="{{s.on}}" style="padding: 0 14px; border: 0; border-radius: 6px; cursor: pointer; font: 500 14px Inter, system-ui, sans-serif; background: {{s.bg}}; color: {{s.fg}}">{{s.label}}</button>
+          </sc-for>
+        </div>
+      </div>
+      <label style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Genre
+        <select onChange="{{onGenre}}" style="height: 44px; min-width: 150px; background: #1A1713; color: #EDE6DA; border: 1px solid #2A251F; border-radius: 8px; padding: 0 10px; font: 14px Inter, system-ui, sans-serif; text-transform: none; letter-spacing: 0">
+          <sc-for list="{{genres}}" as="g" hint-placeholder-count="8"><option value="{{g}}">{{g}}</option></sc-for>
+        </select>
+      </label>
+      <label style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Decade
+        <select onChange="{{onDec}}" style="height: 44px; min-width: 130px; background: #1A1713; color: #EDE6DA; border: 1px solid #2A251F; border-radius: 8px; padding: 0 10px; font: 14px Inter, system-ui, sans-serif; text-transform: none; letter-spacing: 0">
+          <sc-for list="{{decades}}" as="d" hint-placeholder-count="8"><option value="{{d}}">{{d}}</option></sc-for>
+        </select>
+      </label>
+      <label style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Collection
+        <select style="height: 44px; min-width: 150px; background: #1A1713; color: #EDE6DA; border: 1px solid #2A251F; border-radius: 8px; padding: 0 10px; font: 14px Inter, system-ui, sans-serif; text-transform: none; letter-spacing: 0">
+          <option>All</option><option>Alien</option><option>Blade Runner</option><option>Three Colours</option>
+        </select>
+      </label>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <span id="w-l" style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Show</span>
+        <div role="group" aria-labelledby="w-l" style="display: flex; height: 44px; padding: 3px; box-sizing: border-box; border-radius: 8px; background: #1A1713; box-shadow: 0 0 0 1px #2A251F">
+          <sc-for list="{{watch}}" as="s" hint-placeholder-count="3">
+            <button onClick="{{s.pick}}" aria-pressed="{{s.on}}" style="padding: 0 14px; border: 0; border-radius: 6px; cursor: pointer; font: 500 14px Inter, system-ui, sans-serif; background: {{s.bg}}; color: {{s.fg}}">{{s.label}}</button>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <sc-if value="{{hasResults}}" hint-placeholder-val="{{ true }}">
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr)); gap: 28px 20px">
+        <sc-for list="{{films}}" as="f" hint-placeholder-count="18">
+          <a href="A-Detail.dc.html" aria-label="{{f.aria}}" style="display: flex; flex-direction: column; gap: 8px; border-radius: 10px">
+            <div style="position: relative; aspect-ratio: 2 / 3; border-radius: 8px; background: {{f.c}}; box-shadow: {{f.ring}}; transform: {{f.scale}}; padding: 14px; box-sizing: border-box; display: flex; align-items: flex-end; font-family: 'Instrument Serif', Georgia, serif; font-size: 22px; line-height: 1.05; color: rgba(255,248,236,0.9)">
+              {{f.t}}
+              <sc-if value="{{f.w}}" hint-placeholder-val="{{ false }}">
+                <span title="Watched" style="position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; border-radius: 999px; background: rgba(14,12,10,0.7); color: #EDE6DA; display: flex; align-items: center; justify-content: center">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></span>
+              </sc-if>
+            </div>
+            <div style="font-size: 13px; color: #A39A8B">{{f.t}} · {{f.y}}</div>
+          </a>
+        </sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{noResults}}" hint-placeholder-val="{{ false }}">
+      <div style="padding: 96px 0; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center">
+        <div style="font-family: 'Instrument Serif', Georgia, serif; font-size: 40px">Nothing on the shelf</div>
+        <p style="margin: 0; color: #A39A8B; font-size: 15px; max-width: 420px">No films match “{{q}}” with these filters. Search looks at titles, actors and directors.</p>
+        <button onClick="{{reset}}" style="height: 44px; padding: 0 20px; border-radius: 999px; background: transparent; border: 1px solid #4A4339; color: #EDE6DA; font: 500 14px Inter, system-ui, sans-serif; cursor: pointer">Clear search and filters</button>
+      </div>
+    </sc-if>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 20px; font-size: 12px; color: #A39A8B; font-family: 'IBM Plex Mono', monospace; padding-top: 12px; border-top: 1px solid #2A251F">
+      <span>/ search</span><span>← → ↑ ↓ move</span><span>Enter open</span><span>P play</span><span>W watched</span><span>Esc clear</span>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { q: '', sort: 'Recently added', genre: 'All genres', dec: 'All decades', show: 'All' }; }
+  renderVals() {
+    const F = [
+      ['Heat',1995,'Crime','Michael Mann','Al Pacino, Robert De Niro',0,'#2B3A47'],
+      ['Arrival',2016,'Sci-fi','Denis Villeneuve','Amy Adams, Jeremy Renner',0,'#3B3F3A'],
+      ['Chinatown',1974,'Mystery','Roman Polanski','Jack Nicholson, Faye Dunaway',0,'#5E4329'],
+      ['Paris, Texas',1984,'Drama','Wim Wenders','Harry Dean Stanton, Nastassja Kinski',0,'#6A2E2A'],
+      ['Moon',2009,'Sci-fi','Duncan Jones','Sam Rockwell',0,'#33383E'],
+      ['Zodiac',2007,'Crime','David Fincher','Jake Gyllenhaal, Mark Ruffalo',0,'#3A3A2C'],
+      ['Local Hero',1983,'Comedy','Bill Forsyth','Peter Riegert, Burt Lancaster',0,'#2E4A55'],
+      ['In the Mood for Love',2000,'Romance','Wong Kar-wai','Tony Leung, Maggie Cheung',0,'#6B2424'],
+      ['The Conversation',1974,'Thriller','Francis Ford Coppola','Gene Hackman',0,'#4A3B2E'],
+      ['Spirited Away',2001,'Animation','Hayao Miyazaki','Rumi Hiiragi',0,'#2F4F45'],
+      ['Drive',2011,'Crime','Nicolas Winding Refn','Ryan Gosling, Carey Mulligan',0,'#5A2F4E'],
+      ['Alien',1979,'Sci-fi','Ridley Scott','Sigourney Weaver',0,'#24302C'],
+      ['The Third Man',1949,'Thriller','Carol Reed','Joseph Cotten, Orson Welles',1,'#3C3C3C'],
+      ['Brief Encounter',1945,'Romance','David Lean','Celia Johnson, Trevor Howard',1,'#4A4640'],
+      ['Blade Runner',1982,'Sci-fi','Ridley Scott','Harrison Ford, Rutger Hauer',1,'#25384A'],
+      ['Lost in Translation',2003,'Drama','Sofia Coppola','Bill Murray, Scarlett Johansson',1,'#5A4A5C'],
+      ['Withnail and I',1987,'Comedy','Bruce Robinson','Richard E. Grant, Paul McGann',1,'#4E4A2E'],
+      ['The Long Good Friday',1980,'Crime','John Mackenzie','Bob Hoskins, Helen Mirren',1,'#4A2C2C'],
+      ['Kes',1969,'Drama','Ken Loach','David Bradley',1,'#3D4A33'],
+      ['Taxi Driver',1976,'Crime','Martin Scorsese','Robert De Niro, Jodie Foster',1,'#4A2A2A'],
+      ['Get Carter',1971,'Crime','Mike Hodges','Michael Caine',1,'#3A3D33'],
+      ['Don’t Look Now',1973,'Thriller','Nicolas Roeg','Julie Christie, Donald Sutherland',0,'#3E2E36'],
+      ['The Wicker Man',1973,'Horror','Robin Hardy','Edward Woodward, Christopher Lee',0,'#4E4424'],
+      ['Fargo',1996,'Crime','Joel Coen','Frances McDormand',0,'#44505A']
+    ].map((r, i) => ({ t: r[0], y: r[1], g: r[2], d: r[3], cast: r[4], w: !!r[5], c: r[6], added: i }));
+    const s = this.state;
+    const q = s.q.trim().toLowerCase();
+    const key = (t) => t.replace(/^The /, '');
+    let list = F.filter((f) =>
+      (!q || (f.t + ' ' + f.d + ' ' + f.cast).toLowerCase().includes(q)) &&
+      (s.genre === 'All genres' || f.g === s.genre) &&
+      (s.dec === 'All decades' || String(Math.floor(f.y / 10) * 10) + 's' === s.dec) &&
+      (s.show === 'All' || (s.show === 'Watched') === f.w));
+    if (s.sort === 'Title') list.sort((a, b) => key(a.t).localeCompare(key(b.t)));
+    else if (s.sort === 'Year') list.sort((a, b) => a.y - b.y);
+    else list.sort((a, b) => a.added - b.added);
+    const ring = '0 0 0 2px #0E0C0A, 0 0 0 4px #EDE6DA, 0 18px 40px rgba(0,0,0,0.55)';
+    const seg = (opts, k) => opts.map((label) => { const on = s[k] === label; return { label, on: on ? 'true' : 'false', bg: on ? '#EDE6DA' : 'transparent', fg: on ? '#0E0C0A' : '#D5CCBE', pick: () => this.setState({ [k]: label }) }; });
+    return {
+      q: s.q,
+      onQ: (e) => this.setState({ q: e.target.value }),
+      onGenre: (e) => this.setState({ genre: e.target.value }),
+      onDec: (e) => this.setState({ dec: e.target.value }),
+      reset: () => this.setState({ q: '', genre: 'All genres', dec: 'All decades', show: 'All' }),
+      sorts: seg(['Title', 'Year', 'Recently added'], 'sort'),
+      watch: seg(['All', 'Unwatched', 'Watched'], 'show'),
+      genres: ['All genres', 'Animation', 'Comedy', 'Crime', 'Drama', 'Horror', 'Mystery', 'Romance', 'Sci-fi', 'Thriller'],
+      decades: ['All decades', '1940s', '1960s', '1970s', '1980s', '1990s', '2000s', '2010s'],
+      films: list.map((f, i) => ({ ...f, aria: f.t + ', ' + f.y + (f.w ? ', watched' : ''), ring: i === 0 ? ring : 'none', scale: i === 0 ? 'scale(1.03)' : 'none' })),
+      hasResults: list.length > 0,
+      noResults: list.length === 0,
+      countLabel: list.length + (list.length === 1 ? ' film' : ' films') + ' · sorted by ' + s.sort.toLowerCase()
+    };
+  }
+}
+</script>
+</body>
+</html>

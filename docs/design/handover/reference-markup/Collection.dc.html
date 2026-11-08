@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CineFilm — Alien collection</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Inter:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#0E0C0A}
+a{color:#EDE6DA;text-decoration:none}a:hover{color:#E8B25A}
+</style>
+</helmet>
+<div style="background: #0E0C0A; color: #EDE6DA; font-family: Inter, system-ui, sans-serif; min-height: 100vh; padding-bottom: 80px">
+  <div style="position: relative; height: 420px; background: #1B2421; overflow: hidden">
+    <div aria-hidden="true" style="position: absolute; inset: 0; background: radial-gradient(100% 110% at 70% 10%, #2E3D38 0%, #1B2421 45%, #0E0C0A 100%)"></div>
+    <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 220px; background: linear-gradient(to bottom, rgba(14,12,10,0), #0E0C0A)"></div>
+    <div aria-hidden="true" style="position: absolute; top: 88px; right: 40px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #C9D3DC; opacity: 0.8">Collection backdrop · TMDB</div>
+    <header style="position: relative; max-width: 1360px; margin: 0 auto; padding: 24px 40px; display: flex; align-items: center; gap: 32px">
+      <a href="Main.dc.html" style="font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-size: 30px">CineFilm</a>
+      <nav style="display: flex; gap: 24px; font-size: 14px; font-weight: 500">
+        <a href="Main.dc.html" style="color: #D5CCBE">Home</a>
+        <a href="Library.dc.html" style="color: #D5CCBE">Library</a>
+      </nav>
+    </header>
+    <div style="position: absolute; left: 0; right: 0; bottom: 40px">
+      <div style="max-width: 1360px; margin: 0 auto; padding: 0 40px; display: flex; flex-direction: column; gap: 12px">
+        <div style="font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #E8B25A; font-weight: 600">Collection</div>
+        <h1 style="margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 88px; line-height: 0.95">Alien</h1>
+        <div style="font-size: 15px; color: #D5CCBE">2 of 4 films in your library · in release order</div>
+      </div>
+    </div>
+  </div>
+
+  <main style="max-width: 1360px; margin: 0 auto; padding: 32px 40px 0; display: flex; flex-direction: column; gap: 24px">
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); gap: 28px 20px">
+      <sc-for list="{{films}}" as="f" hint-placeholder-count="4">
+        <sc-if value="{{f.owned}}" hint-placeholder-val="{{ true }}">
+          <a href="A-Detail.dc.html" style="display: flex; flex-direction: column; gap: 8px">
+            <div style="position: relative; aspect-ratio: 2 / 3; border-radius: 8px; background: {{f.c}}; padding: 14px; box-sizing: border-box; display: flex; align-items: flex-end; font-family: 'Instrument Serif', Georgia, serif; font-size: 26px; line-height: 1.05; color: rgba(255,248,236,0.9)">{{f.t}}</div>
+            <div style="display: flex; flex-direction: column; gap: 2px; font-size: 13px"><span style="color: #D5CCBE">{{f.t}} · {{f.y}}</span><span style="color: #A39A8B">{{f.status}}</span></div>
+          </a>
+        </sc-if>
+        <sc-if value="{{f.missing}}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; flex-direction: column; gap: 8px">
+            <div style="aspect-ratio: 2 / 3; border-radius: 8px; border: 1px dashed #3A342C; padding: 14px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; font-family: 'Instrument Serif', Georgia, serif; font-size: 26px; line-height: 1.05; color: #6F675B">
+              <span style="font-family: Inter, system-ui, sans-serif; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Not in your library</span>{{f.t}}</div>
+            <div style="font-size: 13px; color: #A39A8B">{{f.t}} · {{f.y}}</div>
+          </div>
+        </sc-if>
+      </sc-for>
+    </div>
+    <p style="margin: 0; font-size: 13px; color: #A39A8B">Missing films come from TMDB’s collection list. They’re shown so you can see the gaps, and can be hidden in Admin.</p>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1300}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const F = [
+      { t: 'Alien', y: 1979, owned: true, status: 'Watched 3 times · last March 2021', c: '#24302C' },
+      { t: 'Aliens', y: 1986, owned: true, status: 'Not watched yet', c: '#2F3A40' },
+      { t: 'Alien³', y: 1992, owned: false },
+      { t: 'Alien Resurrection', y: 1997, owned: false }
+    ];
+    return { films: F.map((f) => ({ ...f, missing: !f.owned })) };
+  }
+}
+</script>
+</body>
+</html>

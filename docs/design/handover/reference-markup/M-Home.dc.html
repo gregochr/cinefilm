@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CineFilm — Mobile home</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Inter:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#EDE6DA;text-decoration:none}
+</style>
+</helmet>
+<div style="width: 390px; height: 1500px; background: #0E0C0A; color: #EDE6DA; font-family: Inter, system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden">
+  <header style="padding: 56px 16px 12px; display: flex; align-items: center; justify-content: space-between">
+    <span style="font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-size: 28px">CineFilm</span>
+    <a href="#" aria-label="Search" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #D5CCBE">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg></a>
+  </header>
+
+  <main style="flex: 1; display: flex; flex-direction: column; gap: 36px; padding-bottom: 24px">
+    <section style="padding: 0 16px; display: flex; flex-direction: column; gap: 14px">
+      <div style="aspect-ratio: 16 / 9; border-radius: 12px; background: radial-gradient(120% 100% at 75% 20%, #3A5064 0%, #1E2A36 55%, #141B22 100%); position: relative; overflow: hidden">
+        <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(0,0,0,0.45)"><div style="width: 38%; height: 100%; background: #E8B25A"></div></div>
+      </div>
+      <div style="font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #E8B25A; font-weight: 600">Pick up where you left off</div>
+      <h1 style="margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 52px; line-height: 0.95">Heat</h1>
+      <div style="font-size: 14px; color: #D5CCBE">1995 · 1h 45m left</div>
+      <a href="M-Player.dc.html" style="display: flex; align-items: center; justify-content: center; gap: 10px; height: 50px; border-radius: 999px; background: #E8B25A; color: #1A1206; font-weight: 600; font-size: 16px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"></path></svg>Resume from 1:04:31</a>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; padding: 0 16px; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 26px">Continue watching</h2>
+      <div style="display: flex; gap: 12px; overflow-x: auto; padding: 0 16px; scroll-snap-type: x mandatory">
+        <sc-for list="{{cont}}" as="f" hint-placeholder-count="4">
+          <a href="M-Detail.dc.html" style="flex: 0 0 220px; display: flex; flex-direction: column; gap: 8px; scroll-snap-align: start">
+            <div style="position: relative; aspect-ratio: 16 / 9; border-radius: 10px; background: {{f.c}}; overflow: hidden">
+              <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(0,0,0,0.45)"><div style="width: {{f.pct}}%; height: 100%; background: #E8B25A"></div></div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 13px"><span style="font-weight: 500">{{f.t}}</span><span style="color: #A39A8B">{{f.left}}</span></div>
+          </a>
+        </sc-for>
+      </div>
+    </section>
+
+    <sc-for list="{{rows}}" as="r" hint-placeholder-count="2">
+      <section style="display: flex; flex-direction: column; gap: 14px">
+        <div style="padding: 0 16px; display: flex; align-items: baseline; justify-content: space-between">
+          <h2 style="margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 26px">{{r.title}}</h2>
+          <a href="#" style="font-size: 13px; color: #A39A8B; padding: 12px 0">See all</a>
+        </div>
+        <div style="display: flex; gap: 12px; overflow-x: auto; padding: 0 16px">
+          <sc-for list="{{r.items}}" as="f" hint-placeholder-count="5">
+            <a href="M-Detail.dc.html" aria-label="{{f.t}}" style="flex: 0 0 124px; aspect-ratio: 2 / 3; border-radius: 8px; background: {{f.c}}; padding: 10px; box-sizing: border-box; display: flex; align-items: flex-end; font-family: 'Instrument Serif', Georgia, serif; font-size: 18px; line-height: 1.05; color: rgba(255,248,236,0.9)">{{f.t}}</a>
+          </sc-for>
+        </div>
+      </section>
+    </sc-for>
+  </main>
+
+  <nav aria-label="Main" style="flex: 0 0 auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid #2A251F; padding: 6px 0 30px; background: #0E0C0A; font-size: 11px; font-weight: 500">
+    <a href="#" aria-current="page" style="height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #E8B25A">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 11l8-6 8 6v8H4z"></path></svg>Home</a>
+    <a href="#" style="height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #A39A8B">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="4" width="6" height="7" rx="1"></rect><rect x="14" y="4" width="6" height="7" rx="1"></rect><rect x="4" y="14" width="6" height="7" rx="1"></rect><rect x="14" y="14" width="6" height="7" rx="1"></rect></svg>Library</a>
+    <a href="#" style="height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #A39A8B">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>Search</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      cont: [
+        { t: 'Arrival', left: '52m left', pct: 55, c: '#3B3F3A' },
+        { t: 'Chinatown', left: '1h 48m left', pct: 17, c: '#5E4329' },
+        { t: 'Paris, Texas', left: '1h 10m left', pct: 52, c: '#6A2E2A' },
+        { t: 'Moon', left: '12m left', pct: 88, c: '#33383E' }
+      ],
+      rows: [
+        { title: 'Recently added', items: [
+          { t: 'Zodiac', c: '#3A3A2C' }, { t: 'Local Hero', c: '#2E4A55' }, { t: 'In the Mood for Love', c: '#6B2424' },
+          { t: 'The Conversation', c: '#4A3B2E' }, { t: 'Spirited Away', c: '#2F4F45' } ] },
+        { title: 'Not watched in years', items: [
+          { t: 'The Third Man', c: '#3C3C3C' }, { t: 'Brief Encounter', c: '#4A4640' }, { t: 'Blade Runner', c: '#25384A' },
+          { t: 'Lost in Translation', c: '#5A4A5C' }, { t: 'Kes', c: '#3D4A33' } ] },
+        { title: 'This week: the 1970s', items: [
+          { t: 'Chinatown', c: '#5E4329' }, { t: 'Alien', c: '#24302C' }, { t: 'Taxi Driver', c: '#4A2A2A' },
+          { t: 'Don’t Look Now', c: '#3E2E36' }, { t: 'Get Carter', c: '#3A3D33' } ] }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

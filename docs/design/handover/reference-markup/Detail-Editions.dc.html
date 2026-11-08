@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CineFilm — Blade Runner (editions)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Inter:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#0E0C0A}
+a{color:#EDE6DA;text-decoration:none}a:hover{color:#E8B25A}
+</style>
+</helmet>
+<div style="background: #0E0C0A; color: #EDE6DA; font-family: Inter, system-ui, sans-serif; min-height: 100vh; padding-bottom: 96px">
+  <div style="position: relative; height: 560px; background: #1A2633; overflow: hidden">
+    <div aria-hidden="true" style="position: absolute; inset: 0; background: radial-gradient(110% 100% at 70% 10%, #35506B 0%, #1A2633 45%, #0E0C0A 100%)"></div>
+    <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 260px; background: linear-gradient(to bottom, rgba(14,12,10,0), #0E0C0A)"></div>
+    <header style="position: relative; max-width: 1360px; margin: 0 auto; padding: 24px 40px; display: flex; align-items: center; gap: 32px">
+      <a href="Main.dc.html" style="font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-size: 30px">CineFilm</a>
+      <nav style="display: flex; gap: 24px; font-size: 14px; font-weight: 500">
+        <a href="Main.dc.html" style="color: #D5CCBE">Home</a>
+        <a href="Library.dc.html" style="color: #D5CCBE">Library</a>
+      </nav>
+    </header>
+  </div>
+
+  <main style="max-width: 1360px; margin: -300px auto 0; padding: 0 40px; position: relative; display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start">
+    <div style="flex: 0 0 280px; aspect-ratio: 2 / 3; border-radius: 10px; background: #25384A; box-shadow: 0 30px 60px rgba(0,0,0,0.55); padding: 20px; box-sizing: border-box; display: flex; align-items: flex-end; font-family: 'Instrument Serif', Georgia, serif; font-size: 40px; line-height: 1; color: rgba(255,248,236,0.9)">Blade Runner</div>
+
+    <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 22px; padding-top: 40px">
+      <h1 style="margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 104px; line-height: 0.9">Blade Runner</h1>
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px; font-size: 15px; color: #D5CCBE">
+        <span>1982</span><span aria-hidden="true">·</span><span>{{runtime}}</span><span aria-hidden="true">·</span>
+        <span style="border: 1px solid #5A5246; border-radius: 4px; padding: 1px 7px; font-size: 13px">15</span><span aria-hidden="true">·</span>
+        <span>Sci-fi</span><span aria-hidden="true">·</span>
+        <a href="Collection.dc.html" style="color: #D5CCBE; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: #5A5246">Blade Runner collection</a>
+      </div>
+      <p style="margin: 0; max-width: 640px; font-size: 17px; line-height: 1.6; color: #D5CCBE; text-wrap: pretty">In a rain-soaked Los Angeles of 2019, a weary detective is pressed back into service to hunt down four escaped replicants who have come to Earth looking for more life.</p>
+
+      <fieldset style="margin: 6px 0 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 10px; max-width: 760px">
+        <legend style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B; margin-bottom: 10px">Edition · 3 in your library</legend>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 10px">
+          <sc-for list="{{eds}}" as="e" hint-placeholder-count="3">
+            <label style="display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-radius: 10px; cursor: pointer; background: {{e.bg}}; border: 1px solid {{e.bd}}">
+              <span style="display: flex; align-items: center; gap: 10px">
+                <input type="radio" name="edition" checked="{{e.on}}" onChange="{{e.pick}}" style="accent-color: #E8B25A; width: 16px; height: 16px; margin: 0">
+                <span style="font-size: 15px; font-weight: 500">{{e.name}}</span>
+              </span>
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #A39A8B; padding-left: 26px">{{e.meta}}</span>
+              <span style="font-size: 12px; color: #A39A8B; padding-left: 26px">{{e.note}}</span>
+            </label>
+          </sc-for>
+        </div>
+      </fieldset>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px">
+        <button style="display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 26px; border-radius: 999px; background: #E8B25A; color: #1A1206; border: 0; font: 600 16px Inter, system-ui, sans-serif; cursor: pointer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"></path></svg>Play {{edName}}</button>
+        <label style="display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 8px 0 12px; font-size: 14px; color: #D5CCBE; cursor: pointer">
+          <input type="checkbox" role="switch" checked style="accent-color: #E8B25A; width: 18px; height: 18px">Dim the lights</label>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 16px; margin-top: 12px; max-width: 760px">
+        <label style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Quality
+          <select style="height: 44px; background: #1A1713; color: #EDE6DA; border: 1px solid #2A251F; border-radius: 8px; padding: 0 12px; font: 15px Inter, system-ui, sans-serif">
+            <option>Auto</option><option>Original</option><option>1080p</option><option>720p · pre-made</option><option>480p · pre-made</option>
+          </select>
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Audio
+          <select style="height: 44px; background: #1A1713; color: #EDE6DA; border: 1px solid #2A251F; border-radius: 8px; padding: 0 12px; font: 15px Inter, system-ui, sans-serif">
+            <option>English · 5.1</option><option>English · Stereo</option><option>Commentary</option>
+          </select>
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #A39A8B">Subtitles
+          <select style="height: 44px; background: #1A1713; color: #EDE6DA; border: 1px solid #2A251F; border-radius: 8px; padding: 0 12px; font: 15px Inter, system-ui, sans-serif">
+            <option>Off · forced when needed</option><option>English</option>
+          </select>
+        </label>
+      </div>
+
+      <div style="height: 1px; background: #2A251F; margin: 18px 0 4px"></div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 32px">
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <h2 style="margin: 0; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #A39A8B; font-weight: 600">Directed by</h2>
+          <a href="Person.dc.html" style="font-family: 'Instrument Serif', Georgia, serif; font-size: 26px">Ridley Scott</a>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <h2 style="margin: 0; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: #A39A8B; font-weight: 600">Starring</h2>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 16px">
+            <a href="Person.dc.html">Harrison Ford</a><a href="Person.dc.html">Rutger Hauer</a><a href="Person.dc.html">Sean Young</a><a href="Person.dc.html">Edward James Olmos</a><a href="Person.dc.html">Daryl Hannah</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1480}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { ed: 0 }; }
+  renderVals() {
+    const E = [
+      { name: 'The Final Cut', meta: '2007 · 1h 57m · 1080p', note: 'Default · last watched May 2019', run: '1h 57m' },
+      { name: 'Director’s Cut', meta: '1992 · 1h 56m · 1080p', note: 'No voice-over', run: '1h 56m' },
+      { name: 'Theatrical Cut', meta: '1982 · 1h 57m · 1080p', note: 'Original release', run: '1h 57m' }
+    ];
+    const cur = E[this.state.ed];
+    return {
+      runtime: cur.run, edName: cur.name,
+      eds: E.map((e, i) => ({ ...e, on: this.state.ed === i, bg: this.state.ed === i ? '#211C16' : 'transparent', bd: this.state.ed === i ? '#E8B25A' : '#2A251F', pick: () => this.setState({ ed: i }) }))
+    };
+  }
+}
+</script>
+</body>
+</html>

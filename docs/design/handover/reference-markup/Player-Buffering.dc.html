@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CineFilm — Player buffering</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#000}
+@keyframes cf-spin{to{transform:rotate(360deg)}}
+</style>
+</helmet>
+<div style="position: relative; height: 100vh; min-height: 600px; background: #000; color: #EDE6DA; font-family: Inter, system-ui, sans-serif; overflow: hidden">
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: radial-gradient(80% 70% at 60% 40%, #2E4256 0%, #16202A 50%, #050607 100%); filter: brightness(0.6)"></div>
+
+  <div role="status" style="position: absolute; top: 28px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 18px; border-radius: 999px; background: rgba(20,17,14,0.92); border: 1px solid #2A251F; font-size: 14px; box-shadow: 0 12px 30px rgba(0,0,0,0.45)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E8B25A" stroke-width="2" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"></path></svg>
+    Switching to 720p for smoother playback
+  </div>
+
+  <div style="position: absolute; top: 32px; right: 32px; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: 999px; background: rgba(14,12,10,0.55); font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #D5CCBE">
+    <span style="width: 6px; height: 6px; border-radius: 999px; background: #E8B25A"></span>Auto · 720p · Remote</div>
+
+  <div role="status" aria-label="Buffering" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 14px">
+    <div aria-hidden="true" style="width: 48px; height: 48px; border-radius: 999px; border: 3px solid rgba(237,230,218,0.18); border-top-color: #EDE6DA; animation: cf-spin 1s linear infinite"></div>
+    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #D5CCBE; letter-spacing: 0.08em">BUFFERING</span>
+  </div>
+
+  <div style="position: absolute; left: 32px; bottom: 28px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8A8276">Controls hidden — only a hairline progress shows; move the mouse or press a key to bring them back</div>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(237,230,218,0.12)">
+    <div style="position: absolute; left: 0; width: 39%; height: 100%; background: rgba(237,230,218,0.3)"></div>
+    <div style="position: absolute; left: 0; width: 38%; height: 100%; background: #E8B25A"></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
