@@ -82,18 +82,45 @@ It must appear as Idle on the Runners page with the `cinefilm-prod` label. Check
 > volume, and never share `Pictures`.** `MediaBackup` and `TV Shows` are out of scope for CineFilm. A share of the
 > whole disk would put all of that on the network (and inside a container) for the sake of a few films.
 
-1. Create a dedicated standard user for the share: System Settings, Users & Groups, Add User, name `cinefilm`, a long
-   random password (you will paste it into a credentials file below). No admin rights.
-2. System Settings, General, Sharing, turn on File Sharing, then (i) Options: tick SMB, and tick **only** the
-   `cinefilm` user under "Windows File Sharing" accounts.
+1. Create a dedicated **Sharing Only** user: System Settings, Users & Groups, Add User, type Sharing Only, name
+   `cinefilm`. No admin rights.
+2. System Settings, General, Sharing, turn on File Sharing, then (i) Options: tick SMB. Leave your own admin account
+   **unticked** under "Windows File Sharing". macOS often leaves Sharing Only users out of that list, so enable the
+   NTLM hash Linux needs from Terminal instead, **then** set the password (the hash is only made when a password is
+   set): `sudo pwpolicy -u cinefilm -sethashtypes SMB-NT on`, then Users & Groups, (i) on `cinefilm`, Reset, a long
+   random password (it goes in the credentials file below). Check: `sudo pwpolicy -u cinefilm -gethashtypes` lists
+   `SMB-NT`.
 3. Under Shared Folders click `+` and add **`/Volumes/Media Library/Movies`** (just that folder). Its share name is
-   `Movies`.
-4. Click the (i) next to that folder: set `cinefilm` to **Read Only**, set **Everyone** to **No Access**, remove any
-   other user or group, or set them to No Access.
-5. Make sure no other shared folder lists the disk or `Pictures` (File Sharing's folder list should show only
-   `Movies` for this disk).
+   `Movies`. Remove any other shared folder (for example your Public folder).
+4. With Movies selected: `cinefilm` **Read Only**, **Everyone** **No Access** (the Everyone row cannot be removed, only
+   set to No Access).
+5. **Make the share itself read-only and guest-free.** The `Media Library` disk has "Ignore ownership on this volume"
+   on (`diskutil info "/Volumes/Media Library" | grep Owners` says `Disabled`). With ownership ignored, every SMB user
+   is treated as the owner, so the folder permissions in step 4 do **not** stop writes. Only the share-level flag does:
 
-The films are flat files: `/Volumes/Media Library/Movies/<Title>.m4v`.
+   ```bash
+   sudo sharing -e Movies -R 1 -g 000   # read-only for every SMB login, guest access off
+   sudo sharing -l                      # Movies must show: read-only: 1, guest access: 0, and be the only share point
+   ```
+
+   Then turn File Sharing off and on. Leave ownership ignored on the disk: turning it back on can lock you and Plex
+   out of files written by older Macs.
+6. **Fix the folder's owner bits if step 4 stripped them.** Setting Everyone to No Access can leave the folder as
+   `d---------`, which locks your own account and Plex out. `ls -led "/Volumes/Media Library/Movies"` must start
+   `drwx------+`; if not, `sudo chmod u+rwx "/Volumes/Media Library/Movies"`.
+7. **Test from another Mac as `cinefilm`** (eject any earlier connection first; Finder reuses an admin login
+   silently, and an admin login shows the whole disk, which is not what CineFilm sees):
+
+   ```bash
+   # Finder, Cmd-K: smb://cinefilm@<workhorse-ip>/Movies   (do not save the password in the keychain)
+   mount | grep '<workhorse-ip>'        # must show //cinefilm@<workhorse-ip>/Movies
+   touch /Volumes/Movies/.cinefilm-write-test && echo "WRITABLE: stop and fix step 5" || echo "refused: good"
+   ```
+
+   If Finder asks for *your laptop's* password to copy a file, that is the refusal: click Cancel.
+
+The films are flat files: `/Volumes/Media Library/Movies/<Title>.m4v`. Workhorse's hostname is `Study`
+(`Study.local`); its LAN address was `192.168.0.101` when this was set up.
 
 ### 6. Mount it on dockermacmini, read-only
 
@@ -105,12 +132,15 @@ sudo tee /root/.smb-workhorse >/dev/null <<'EOF'
 username=cinefilm
 password=<THE-PASSWORD-YOU-SET-ON-WORKHORSE>
 EOF
-echo '//workhorse.local/Movies /mnt/workhorse-films cifs ro,credentials=/root/.smb-workhorse,vers=3.0,uid=1001,gid=1001,_netdev,nofail,x-systemd.automount 0 0' | sudo tee -a /etc/fstab
+echo '//Study.local/Movies /mnt/workhorse-films cifs ro,credentials=/root/.smb-workhorse,vers=3.0,uid=1001,gid=1001,_netdev,nofail,x-systemd.automount 0 0' | sudo tee -a /etc/fstab
 sudo systemctl daemon-reload
 ls /mnt/workhorse-films
 ```
 
-If `workhorse.local` does not resolve on Ubuntu, use workhorse's LAN IP or its Tailscale name in the fstab line.
+If `Study.local` does not resolve on Ubuntu, use workhorse's LAN IP or its Tailscale name in the fstab line.
+
+The `touch` check below only proves the Linux mount is `ro`. The share's own read-only flag is proved by step 5's
+`sharing -l` and step 7's test from a Mac; both layers must hold.
 
 **Verify (do not skip):**
 
@@ -121,7 +151,7 @@ findmnt /mnt/workhorse-films       # options must include ro
 ```
 
 If `ls` shows anything that is not a film, **stop**: `sudo umount /mnt/workhorse-films` and fix the share on workhorse
-(step 5). Nothing in CineFilm's scripts writes under `/mnt/workhorse-films`; the deploy only does a read-only `ls` and
+(steps 3 to 5). Nothing in CineFilm's scripts writes under `/mnt/workhorse-films`; the deploy only does a read-only `ls` and
 a `mountpoint` check, and warns (never fails) when it is not mounted.
 
 ### 7. Tailscale HTTPS

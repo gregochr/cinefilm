@@ -1,0 +1,1 @@
+- docs(ops): workhorse share setup made read-only at the share level (`sharing -R 1 -g 000`) because the media disk ignores ownership; Sharing Only user's SMB-NT hash, owner-bit repair and a test as `cinefilm` from another Mac.
