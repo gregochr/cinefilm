@@ -173,7 +173,7 @@ The "Dim the lights" switch is stored in the play request (`?dim=0`) and has no 
   transcode for Safari-unplayable tracks, Auto with step-down / step-up (decision 3) and toasts, the network
   indicator and remote/slow detection, worker-offline behaviour, pre-made versions with the automatic queue
   (decision 15), scrubber sprite sheets at scan time (decision 14). Admin: worker and pre-made panels.
-- **Phase 4 — Plex import.** Import films, posters and watch history from Plex; Admin import panel.
+- **Phase 4 — Plex import.** Import films, posters and watch history from Plex; Admin import panel. Plan: `docs/engineering/plex-import-plan.md` (brought forward, next after the library scan).
 - **Phase 5 — ship.** Production polish: the undrawn mobile screens (Library, Person, Admin), Apple TV
   focus-navigation groundwork. (Packaging, deploy, backups and HTTPS behind Tailscale moved to
   `ci-test-deploy-plan.md` phases 7–9, which land before product phase 2.)

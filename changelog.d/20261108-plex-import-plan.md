@@ -1,0 +1,1 @@
+- docs: Plex import plan (phase 4, brought forward): read Plex over its API, pair by file, Plex metadata, artwork and watch history, TMDB by id for cast and collections.
