@@ -12,7 +12,7 @@ avoids goldenhour's). Backups, backup verification and the daily health workflow
 | Image | `ghcr.io/gregochr/cinefilm:vX.Y.Z` (also `:latest`), one image: Spring Boot serves the SPA |
 | Containers | `cinefilm-db` (postgres:17, no published port), `cinefilm` (`127.0.0.1:8086` to 8080) |
 | Compose | `~/cinefilm/docker-compose.yml` (copied from `deploy/` by every deploy), project `cinefilm`, secrets in `~/cinefilm/.env` |
-| Data | `/home/gregochr/cinefilm-data/{postgres,logs,cache}` (owned by uid 1001, except `postgres`, which Postgres owns) |
+| Data | `/home/gregochr/cinefilm-data/{postgres,logs,cache}` (owned by uid 1001, except `postgres`, which Postgres owns); `cache` is the container's `/app/cache`, the application's default `CINEFILM_CACHE_DIR` (generated WebVTT subtitles), kept in step by `scripts/test/config-agreement.test.sh` |
 | Pre-release dumps | `/home/gregochr/cinefilm-backups/pre-release/` (10 newest kept) |
 | Media | workhorse share `Movies`, mounted read-only at `/mnt/workhorse-films`, seen in the container as `/media` |
 | Remote access | `tailscale serve` to `127.0.0.1:8086` (HTTPS with a real certificate, tailnet only) |

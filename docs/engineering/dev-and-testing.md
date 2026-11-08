@@ -25,7 +25,7 @@ Configuration comes from the environment, never from committed files:
 | `CINEFILM_DB_USER` | `cinefilm` | required |
 | `CINEFILM_DB_PASSWORD` | `cinefilm` | required |
 | `CINEFILM_LIBRARY_ROOT` | `/media` | the films folder (read-only mount); media paths are stored relative to it |
-| `CINEFILM_CACHE_DIR` | `$TMPDIR/cinefilm-cache` | `/var/lib/cinefilm/cache` by default; generated WebVTT subtitles live here |
+| `CINEFILM_CACHE_DIR` | `$TMPDIR/cinefilm-cache` | `/app/cache` by default (the deploy mounts the writable cache there; checked by `scripts/test/config-agreement.test.sh`); generated WebVTT subtitles live here |
 | `TMDB_READ_TOKEN` | empty (TMDB off) | the owner's TMDB Read Access Token (sent as a Bearer header, never logged) |
 
 The prod profile has no fallbacks for the database values, so a missing one fails start-up. The library values have

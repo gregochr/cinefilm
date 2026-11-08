@@ -279,5 +279,5 @@ Plan: `library-scan-plan.md`. What the API and the model now carry:
   (`candidates` only for `needs-match`). Fix match, the action on a candidate, is the next slice.
 - **Scheduling.** At start-up when the library has no films, nightly 04:30 `cinefilm.time-zone`, and from Admin. One
   scan at a time.
-- **Config.** `CINEFILM_LIBRARY_ROOT`, `CINEFILM_CACHE_DIR` (default `/var/lib/cinefilm/cache`), `TMDB_READ_TOKEN`
+- **Config.** `CINEFILM_LIBRARY_ROOT`, `CINEFILM_CACHE_DIR` (default `/app/cache`, where the deploy mounts the writable cache; `scripts/test/config-agreement.test.sh` keeps the two in step), `TMDB_READ_TOKEN`
   (empty disables TMDB: films are added with the file's own title and stay `PENDING`).
