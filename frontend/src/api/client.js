@@ -31,7 +31,7 @@ async function fixtureRequest(method, path, body) {
  * Sends a request to the API. Returns parsed JSON (or null for 204 / empty bodies).
  * A 401 from anything except the session endpoint emits the session-expired event.
  */
-export async function request(method, path, { body, signal } = {}) {
+export async function request(method, path, { body, signal, keepalive } = {}) {
   if (import.meta.env.VITE_FIXTURES === '1') {
     return fixtureRequest(method, path, body);
   }
@@ -44,6 +44,7 @@ export async function request(method, path, { body, signal } = {}) {
     credentials: 'same-origin',
     body: body === undefined ? undefined : JSON.stringify(body),
     signal,
+    keepalive: keepalive || undefined,
   });
   if (response.status === 401) {
     if (!path.startsWith('/api/session')) emit(SESSION_EXPIRED_EVENT);

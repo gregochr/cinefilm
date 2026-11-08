@@ -38,6 +38,7 @@ import {
   subtitleOptions,
 } from '../player/tracks.js';
 import { useFilm } from '../state/useFilms.js';
+import { usePageExitReport } from '../player/exitReport.js';
 import { usePlayback } from '../state/usePlayback.js';
 
 function bufferedEnd(video) {
@@ -121,6 +122,8 @@ function PlayerView({ film, edition, startAtZero }) {
     playing,
     getPositionMs: () => positionRef.current,
   });
+
+  usePageExitReport({ editionId: edition.id, getPositionMs: () => positionRef.current });
 
   useEffect(() => {
     containerRef.current?.focus();

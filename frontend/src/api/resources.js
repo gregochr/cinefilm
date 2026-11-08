@@ -29,7 +29,8 @@ export const collectionsApi = {
 
 export const editionsApi = {
   streamUrl: (id) => `/api/editions/${id}/stream`,
-  reportProgress: (id, positionMs) => put(`/api/editions/${id}/progress`, { positionMs }),
+  reportProgress: (id, positionMs, options) =>
+    put(`/api/editions/${id}/progress`, { positionMs }, options),
   setWatched: (id, watched) => post(`/api/editions/${id}/watched`, { watched }),
 };
 

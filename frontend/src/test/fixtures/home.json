@@ -218,6 +218,8 @@
   "weeklyTheme": {
     "title": "This week: the 1970s",
     "caption": "A new theme every Monday",
+    "kind": "decade",
+    "value": "1970",
     "films": [
       {
         "id": 3,
