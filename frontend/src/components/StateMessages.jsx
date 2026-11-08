@@ -1,0 +1,48 @@
+import { Button, ButtonLink } from './Button.jsx';
+
+export function EmptyLibrary() {
+  return (
+    <div className="state">
+      <h2 className="state__title">The house lights are up</h2>
+      <p className="state__text">
+        Nothing in the library yet. Bring your films, posters and watch history across from Plex, or
+        point CineFilm at a folder.
+      </p>
+      <div className="state__actions">
+        <ButtonLink variant="primary" to="/admin">
+          Import from Plex
+        </ButtonLink>
+        <ButtonLink to="/admin">Scan a folder</ButtonLink>
+      </div>
+    </div>
+  );
+}
+
+export function NoResults({ query, onClear }) {
+  return (
+    <div className="state">
+      <h2 className="state__title">Nothing on the shelf</h2>
+      <p className="state__text">
+        No films match {query ? `“${query}” ` : ''}with these filters. Search looks at titles,
+        actors and directors.
+      </p>
+      <div className="state__actions">
+        <Button onClick={onClear}>Clear search and filters</Button>
+      </div>
+    </div>
+  );
+}
+
+export function ErrorState({ onRetry, children = 'Something went wrong loading this.' }) {
+  return (
+    <div className="state" role="alert">
+      <h2 className="state__title">The projector jammed</h2>
+      <p className="state__text">{children}</p>
+      {onRetry ? (
+        <div className="state__actions">
+          <Button onClick={onRetry}>Try again</Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}

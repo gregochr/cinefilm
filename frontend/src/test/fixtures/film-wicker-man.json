@@ -1,0 +1,108 @@
+{
+  "id": 8,
+  "title": "The Wicker Man",
+  "year": 1973,
+  "posterPath": null,
+  "backdropPath": null,
+  "watched": false,
+  "progress": null,
+  "director": "Robin Hardy",
+  "overview": "A devout policeman flies to a remote Scottish island to find a missing girl.",
+  "genres": ["Horror"],
+  "collection": null,
+  "directors": [
+    {
+      "id": 40,
+      "name": "Robin Hardy",
+      "profilePath": null
+    }
+  ],
+  "cast": [
+    {
+      "person": {
+        "id": 41,
+        "name": "Edward Woodward",
+        "profilePath": null
+      },
+      "character": "Sergeant Howie"
+    }
+  ],
+  "editions": [
+    {
+      "id": 71,
+      "name": "Theatrical Cut",
+      "year": 1973,
+      "runtimeMs": 5280000,
+      "note": null,
+      "positionMs": 0,
+      "watched": false,
+      "file": {
+        "videoCodec": "HEVC",
+        "height": 1080,
+        "audioSummary": "2.0",
+        "addedAt": "2024-03-12T10:00:00Z"
+      },
+      "audioStreams": [
+        {
+          "id": 711,
+          "index": 1,
+          "language": "English",
+          "channels": "5.1",
+          "codec": "DTS",
+          "title": null,
+          "isDefault": true,
+          "safariPlayable": true
+        },
+        {
+          "id": 712,
+          "index": 2,
+          "language": "English",
+          "channels": "2.0",
+          "codec": "AAC",
+          "title": "Commentary — Michael Mann",
+          "isDefault": false,
+          "safariPlayable": true
+        }
+      ],
+      "subtitleStreams": [],
+      "qualities": [
+        {
+          "id": "auto",
+          "bitrate": null,
+          "premade": false,
+          "available": true
+        },
+        {
+          "id": "original",
+          "bitrate": 24000000,
+          "premade": false,
+          "available": true
+        },
+        {
+          "id": "1080p",
+          "bitrate": 8000000,
+          "premade": false,
+          "available": false
+        },
+        {
+          "id": "720p",
+          "bitrate": 4000000,
+          "premade": false,
+          "available": false
+        },
+        {
+          "id": "480p",
+          "bitrate": 1500000,
+          "premade": false,
+          "available": false
+        }
+      ]
+    }
+  ],
+  "preferences": {
+    "editionId": 71,
+    "quality": "auto",
+    "audioStreamId": 711,
+    "subtitle": "off"
+  }
+}

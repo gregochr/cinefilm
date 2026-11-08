@@ -1,0 +1,318 @@
+{
+  "id": 6,
+  "title": "Blade Runner",
+  "year": 1982,
+  "posterPath": null,
+  "backdropPath": null,
+  "watched": false,
+  "progress": null,
+  "director": "Ridley Scott",
+  "overview": "In a rain-soaked Los Angeles of 2019, a weary detective is pressed back into service to hunt down four escaped replicants who have come to Earth looking for more life.",
+  "genres": ["Sci-fi"],
+  "collection": {
+    "id": 2,
+    "name": "Blade Runner"
+  },
+  "directors": [
+    {
+      "id": 20,
+      "name": "Ridley Scott",
+      "profilePath": null
+    }
+  ],
+  "cast": [
+    {
+      "person": {
+        "id": 30,
+        "name": "Harrison Ford",
+        "profilePath": null
+      },
+      "character": "Rick Deckard"
+    },
+    {
+      "person": {
+        "id": 31,
+        "name": "Rutger Hauer",
+        "profilePath": null
+      },
+      "character": "Roy Batty"
+    },
+    {
+      "person": {
+        "id": 32,
+        "name": "Sean Young",
+        "profilePath": null
+      },
+      "character": "Rachael"
+    }
+  ],
+  "editions": [
+    {
+      "id": 61,
+      "name": "The Final Cut",
+      "year": 2007,
+      "runtimeMs": 7020000,
+      "note": "Restored; the definitive version",
+      "positionMs": 0,
+      "watched": false,
+      "file": {
+        "videoCodec": "HEVC",
+        "height": 1080,
+        "audioSummary": "5.1",
+        "addedAt": "2024-03-12T10:00:00Z"
+      },
+      "audioStreams": [
+        {
+          "id": 611,
+          "index": 1,
+          "language": "English",
+          "channels": "5.1",
+          "codec": "DTS",
+          "title": null,
+          "isDefault": true,
+          "safariPlayable": true
+        },
+        {
+          "id": 612,
+          "index": 2,
+          "language": "English",
+          "channels": "2.0",
+          "codec": "AAC",
+          "title": "Commentary — Michael Mann",
+          "isDefault": false,
+          "safariPlayable": true
+        }
+      ],
+      "subtitleStreams": [
+        {
+          "id": 613,
+          "index": 3,
+          "language": "English",
+          "forced": false,
+          "title": null,
+          "format": "subrip"
+        },
+        {
+          "id": 614,
+          "index": 4,
+          "language": "English",
+          "forced": true,
+          "title": null,
+          "format": "subrip"
+        }
+      ],
+      "qualities": [
+        {
+          "id": "auto",
+          "bitrate": null,
+          "premade": false,
+          "available": true
+        },
+        {
+          "id": "original",
+          "bitrate": 24000000,
+          "premade": false,
+          "available": true
+        },
+        {
+          "id": "1080p",
+          "bitrate": 8000000,
+          "premade": false,
+          "available": false
+        },
+        {
+          "id": "720p",
+          "bitrate": 4000000,
+          "premade": false,
+          "available": false
+        },
+        {
+          "id": "480p",
+          "bitrate": 1500000,
+          "premade": false,
+          "available": false
+        }
+      ]
+    },
+    {
+      "id": 62,
+      "name": "Director's Cut",
+      "year": 1992,
+      "runtimeMs": 6960000,
+      "note": "No voice-over",
+      "positionMs": 1200000,
+      "watched": false,
+      "file": {
+        "videoCodec": "HEVC",
+        "height": 1080,
+        "audioSummary": "5.1",
+        "addedAt": "2024-03-12T10:00:00Z"
+      },
+      "audioStreams": [
+        {
+          "id": 621,
+          "index": 1,
+          "language": "English",
+          "channels": "5.1",
+          "codec": "DTS",
+          "title": null,
+          "isDefault": true,
+          "safariPlayable": true
+        },
+        {
+          "id": 622,
+          "index": 2,
+          "language": "English",
+          "channels": "2.0",
+          "codec": "AAC",
+          "title": "Commentary — Michael Mann",
+          "isDefault": false,
+          "safariPlayable": true
+        }
+      ],
+      "subtitleStreams": [
+        {
+          "id": 623,
+          "index": 3,
+          "language": "English",
+          "forced": false,
+          "title": null,
+          "format": "subrip"
+        },
+        {
+          "id": 624,
+          "index": 4,
+          "language": "English",
+          "forced": true,
+          "title": null,
+          "format": "subrip"
+        }
+      ],
+      "qualities": [
+        {
+          "id": "auto",
+          "bitrate": null,
+          "premade": false,
+          "available": true
+        },
+        {
+          "id": "original",
+          "bitrate": 24000000,
+          "premade": false,
+          "available": true
+        },
+        {
+          "id": "1080p",
+          "bitrate": 8000000,
+          "premade": false,
+          "available": false
+        },
+        {
+          "id": "720p",
+          "bitrate": 4000000,
+          "premade": false,
+          "available": false
+        },
+        {
+          "id": "480p",
+          "bitrate": 1500000,
+          "premade": false,
+          "available": false
+        }
+      ]
+    },
+    {
+      "id": 63,
+      "name": "Theatrical Cut",
+      "year": 1982,
+      "runtimeMs": 7080000,
+      "note": null,
+      "positionMs": 0,
+      "watched": false,
+      "file": {
+        "videoCodec": "HEVC",
+        "height": 1080,
+        "audioSummary": "5.1",
+        "addedAt": "2024-03-12T10:00:00Z"
+      },
+      "audioStreams": [
+        {
+          "id": 631,
+          "index": 1,
+          "language": "English",
+          "channels": "5.1",
+          "codec": "DTS",
+          "title": null,
+          "isDefault": true,
+          "safariPlayable": true
+        },
+        {
+          "id": 632,
+          "index": 2,
+          "language": "English",
+          "channels": "2.0",
+          "codec": "AAC",
+          "title": "Commentary — Michael Mann",
+          "isDefault": false,
+          "safariPlayable": true
+        }
+      ],
+      "subtitleStreams": [
+        {
+          "id": 633,
+          "index": 3,
+          "language": "English",
+          "forced": false,
+          "title": null,
+          "format": "subrip"
+        },
+        {
+          "id": 634,
+          "index": 4,
+          "language": "English",
+          "forced": true,
+          "title": null,
+          "format": "subrip"
+        }
+      ],
+      "qualities": [
+        {
+          "id": "auto",
+          "bitrate": null,
+          "premade": false,
+          "available": true
+        },
+        {
+          "id": "original",
+          "bitrate": 24000000,
+          "premade": false,
+          "available": true
+        },
+        {
+          "id": "1080p",
+          "bitrate": 8000000,
+          "premade": false,
+          "available": false
+        },
+        {
+          "id": "720p",
+          "bitrate": 4000000,
+          "premade": false,
+          "available": false
+        },
+        {
+          "id": "480p",
+          "bitrate": 1500000,
+          "premade": false,
+          "available": false
+        }
+      ]
+    }
+  ],
+  "preferences": {
+    "editionId": 61,
+    "quality": "auto",
+    "audioStreamId": 611,
+    "subtitle": "off"
+  }
+}
