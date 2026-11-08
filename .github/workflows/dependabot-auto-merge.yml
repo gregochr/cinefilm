@@ -1,0 +1,141 @@
+name: Dependabot auto-merge
+
+# Squash-merges minor and patch Dependabot PRs once CI is green.
+#
+# The repo is on a plan without branch protection, so GitHub's native auto-merge (which needs
+# required checks) is unavailable. This workflow is the gate instead, in two jobs:
+#
+#   1. label:  on the PR event, labels a minor/patch PR `automerge-ok` (and removes the label if a
+#              regenerated PR turns major). dependabot/fetch-metadata needs the pull_request event
+#              and cannot run under workflow_run.
+#   2. merge:  when CI completes for a Dependabot PR, merges only if every condition holds: the
+#              label is present, the head has not moved, CI's `Backend — Build, Test & Coverage` and `Frontend — Lint, Test & Build` check-runs
+#              succeeded, no other check-run on the head failed, and CI tested against the current
+#              main (otherwise two PRs green against an old main would land an untested mix).
+#              A PR skipped for a stale base waits for its next CI run (Dependabot rebases it).
+#
+# A merge made with GITHUB_TOKEN fires no `push` workflows, so the merge job dispatches ci.yml on
+# main to build the merged commit.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  label:
+    name: Label minor and patch updates
+    if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add or remove the automerge-ok label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+        run: |
+          set -euo pipefail
+          LABEL=automerge-ok
+          if [ "$UPDATE_TYPE" = "version-update:semver-minor" ] || [ "$UPDATE_TYPE" = "version-update:semver-patch" ]; then
+            gh label create "$LABEL" --color 0e8a16 --description "Dependabot minor/patch update eligible for auto-merge" 2>/dev/null || true
+            gh pr edit "$PR_NUMBER" --add-label "$LABEL"
+            echo "Update type $UPDATE_TYPE: labelled $LABEL."
+          else
+            # Major, or unknown: never eligible. Remove the label in case a regenerated PR changed type.
+            gh pr edit "$PR_NUMBER" --remove-label "$LABEL" 2>/dev/null || true
+            echo "Update type '$UPDATE_TYPE': not eligible, $LABEL removed if present."
+          fi
+
+  merge:
+    name: Merge green Dependabot PR
+    if: >-
+      github.event_name == 'workflow_run'
+      && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'pull_request'
+      && github.event.workflow_run.actor.login == 'dependabot[bot]'
+      && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Serial merges: the base-SHA check below is only meaningful if merges do not overlap.
+    concurrency:
+      group: dependabot-merge
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: read
+      actions: write
+    steps:
+      - name: Merge if every condition holds
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          CI_BASE_SHA: ${{ github.event.workflow_run.pull_requests[0].base.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          skip() { echo "::notice title=Not merging::$1"; echo "### Not merging" >> "$GITHUB_STEP_SUMMARY"; echo "$1" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+
+          # Find the PR: the run's own list first, then by head branch.
+          PR="$RUN_PR_NUMBER"
+          if [ -z "$PR" ]; then
+            PR=$(gh pr list --head "$HEAD_BRANCH" --state open --json number --jq '.[0].number // empty')
+          fi
+          [ -n "$PR" ] || skip "No open PR found for branch $HEAD_BRANCH."
+
+          STATE=$(gh pr view "$PR" --json state,headRefOid,baseRefName,labels,author)
+          [ "$(jq -r .state <<<"$STATE")" = "OPEN" ] || skip "PR #$PR is not open."
+          [ "$(jq -r .author.login <<<"$STATE")" = "app/dependabot" ] || [ "$(jq -r .author.login <<<"$STATE")" = "dependabot[bot]" ] || skip "PR #$PR was not opened by Dependabot."
+          [ "$(jq -r .baseRefName <<<"$STATE")" = "$DEFAULT_BRANCH" ] || skip "PR #$PR does not target $DEFAULT_BRANCH."
+          [ "$(jq -r .headRefOid <<<"$STATE")" = "$HEAD_SHA" ] || skip "PR #$PR head moved since this CI run; a newer run will decide."
+          jq -e '.labels[] | select(.name == "automerge-ok")' <<<"$STATE" >/dev/null || skip "PR #$PR does not carry automerge-ok (major update, or not labelled yet)."
+
+          # Every check-run on the head must be complete; wait briefly for stragglers (the label job).
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            RUNS=$(gh api --paginate "repos/$GH_REPO/commits/$HEAD_SHA/check-runs?per_page=100" \
+              --jq '.check_runs[] | [.name, .status, (.conclusion // "")] | @tsv')
+            if ! awk -F'\t' '$2 != "completed" { found = 1 } END { exit !found }' <<<"$RUNS"; then break; fi
+            echo "Check-runs still in progress (attempt $attempt); waiting."
+            sleep 10
+          done
+          printf '%s\n' "$RUNS" | sed 's/^/  /'
+          if awk -F'\t' '$2 != "completed" { found = 1 } END { exit !found }' <<<"$RUNS"; then
+            skip "Some check-runs on $HEAD_SHA never completed."
+          fi
+          if awk -F'\t' '$3 == "failure" || $3 == "cancelled" || $3 == "timed_out" || $3 == "action_required" { found = 1 } END { exit !found }' <<<"$RUNS"; then
+            skip "A check-run on $HEAD_SHA failed, was cancelled, timed out or needs action."
+          fi
+          for NAME in "Backend — Build, Test & Coverage" "Frontend — Lint, Test & Build"; do
+            if ! awk -F'\t' -v n="$NAME" '$1 == n && $3 == "success" { found = 1 } END { exit !found }' <<<"$RUNS"; then
+              skip "The CI check-run '$NAME' did not succeed on $HEAD_SHA."
+            fi
+          done
+
+          # CI must have tested against the main it would merge into.
+          [ -n "$CI_BASE_SHA" ] || skip "CI run did not report its base SHA."
+          MASTER_SHA=$(gh api "repos/$GH_REPO/git/ref/heads/$DEFAULT_BRANCH" --jq .object.sha)
+          [ "$CI_BASE_SHA" = "$MASTER_SHA" ] || skip "CI ran against base $CI_BASE_SHA but $DEFAULT_BRANCH is now $MASTER_SHA; waiting for Dependabot to rebase."
+
+          gh pr merge "$PR" --squash --match-head-commit "$HEAD_SHA"
+          echo "Merged PR #$PR at $HEAD_SHA." >> "$GITHUB_STEP_SUMMARY"
+
+          # Build the merged commit: a GITHUB_TOKEN merge starts no push workflows.
+          gh workflow run ci.yml --ref "$DEFAULT_BRANCH"
