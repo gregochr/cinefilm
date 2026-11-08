@@ -120,7 +120,7 @@ jobs:
       # Line coverage only. Pull requests only: a push to main has no PR diff.
       - name: Set up Python (diff-cover)
         if: needs.changes.outputs.docs_only != 'true' && github.event_name == 'pull_request'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -218,7 +218,7 @@ jobs:
       # Line coverage only. Pull requests only: a push to main has no PR diff.
       - name: Set up Python (diff-cover)
         if: needs.changes.outputs.docs_only != 'true' && github.event_name == 'pull_request'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
