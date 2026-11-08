@@ -18,6 +18,8 @@ on:
   schedule:
     - cron: '30 6 * * MON'
   workflow_dispatch:
+  push:
+    branches: [test/mutation]  # TEMPORARY: first validation before the file exists on main
 
 permissions:
   contents: read

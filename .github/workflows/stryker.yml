@@ -17,6 +17,8 @@ name: Stryker Mutation Testing
 on:
   schedule:
     - cron: '30 3 * * WED'
+  push:
+    branches: [test/mutation]  # TEMPORARY: first validation before the file exists on main
   workflow_dispatch:
     inputs:
       force:
