@@ -6,7 +6,7 @@ import jsxA11y from 'eslint-plugin-jsx-a11y';
 import prettier from 'eslint-config-prettier';
 
 export default [
-  { ignores: ['dist/', 'coverage/', 'node_modules/'] },
+  { ignores: ['dist/', 'coverage/', 'node_modules/', 'reports/', '.stryker-tmp/'] },
   js.configs.recommended,
   react.configs.flat.recommended,
   react.configs.flat['jsx-runtime'],
@@ -29,7 +29,7 @@ export default [
     },
   },
   {
-    files: ['*.config.js', 'scripts/**/*.mjs'],
+    files: ['*.config.{js,mjs}','scripts/**/*.mjs'],
     languageOptions: { globals: { ...globals.node } },
   },
   {
