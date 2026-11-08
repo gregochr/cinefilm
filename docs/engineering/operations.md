@@ -120,7 +120,19 @@ It must appear as Idle on the Runners page with the `cinefilm-prod` label. Check
    If Finder asks for *your laptop's* password to copy a file, that is the refusal: click Cancel.
 
 The films are flat files: `/Volumes/Media Library/Movies/<Title>.m4v`. Workhorse's hostname is `Study`
-(`Study.local`); its LAN address was `192.168.0.101` when this was set up.
+(`Study.local`); its LAN address was `192.168.0.101` when this was set up, and its Tailscale name is `study`.
+
+**Surviving a power cut while nobody is home.** Workhorse has no automatic login (keep it that way) and FileVault
+is off, so after a power cut it boots to the login window. To make the films come back without a login:
+
+- System Settings, Energy: **Prevent automatic sleeping** on, **Start up automatically after a power failure** on,
+  **Put hard disks to sleep** off.
+- Mount USB disks at boot without a login:
+  `sudo defaults write /Library/Preferences/SystemConfiguration/autodiskmount AutomountDisksWithoutUserLogin -bool true`
+  (check with `sudo defaults read /Library/Preferences/SystemConfiguration/autodiskmount`).
+
+File sharing then serves `Movies` from the login window. Plex and the Tailscale app run only after a login, so
+until someone logs in workhorse is reachable from dockermacmini over the LAN but not remotely over Tailscale.
 
 ### 6. Mount it on dockermacmini, read-only
 
