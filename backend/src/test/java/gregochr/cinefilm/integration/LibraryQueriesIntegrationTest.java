@@ -23,6 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * The dev seed's library on real PostgreSQL: browse, sort ignoring "The", search across title, actor and
@@ -63,6 +64,7 @@ class LibraryQueriesIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    @Transactional(readOnly = true)
     void loaderReturnsEveryFilmWithItsPlaybackState() {
         List<FilmView> views = loader.loadAll();
         assertThat(views).hasSize((int) films.count());
