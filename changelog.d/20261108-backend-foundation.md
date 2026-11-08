@@ -1,0 +1,3 @@
+### Added — backend foundation
+
+Phase 1A backend: a Spring Boot 4.1.2 / Java 25 service (`backend/`) with the CineFilm domain model (films, editions, media files, streams, people, collections, playback state, preferences) on Flyway and H2, every phase-1 REST endpoint including HTTP Range direct-play streaming, single-password session auth with the `X-CineFilm` header check, the watched, continue-watching, recently-added, not-watched-in-years and weekly-theme rules, a dev-profile sample library, Checkstyle and JaCoCo gates, and a backend CI workflow. The API section of the foundation plan now records the details settled with the frontend.

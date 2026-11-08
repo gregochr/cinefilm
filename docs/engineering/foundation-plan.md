@@ -78,12 +78,11 @@ cache only changes that helper.
 
 ## REST API (phase 1)
 
-All JSON. All routes under `/api`. Times are milliseconds. All routes except `POST /api/session` and
-`GET /api/session` require the session cookie (see Auth).
+All JSON. All routes under `/api`. Times are milliseconds. All routes except `/api/session` require the session cookie (see Auth).
 
 | Method & path | Returns |
 |---|---|
-| `GET /api/home` | `{ hero: FilmCard?, continueWatching: FilmCard[], recentlyAdded: FilmCard[], notWatchedInYears: FilmCard[], weeklyTheme: { title, caption, films: FilmCard[] }, collections: CollectionCard[] }` |
+| `GET /api/home` | `{ hero: FilmCard?, continueWatching: FilmCard[], recentlyAdded: FilmCard[], notWatchedInYears: FilmCard[], weeklyTheme: { title, caption, kind, value, films: FilmCard[] }, collections: CollectionCard[] }`; `continueWatching` includes the hero (the hero is its first item) |
 | `GET /api/films?q=&sort=title\|year\|added&genre=&decade=1970&collection=<id>&show=all\|unwatched\|watched` | `{ total, films: FilmCard[], facets: { genres: string[], decades: number[], collections: {id,name}[] } }` |
 | `GET /api/films/{id}` | `FilmDetail` |
 | `GET /api/people/{id}` | `{ id, name, profilePath, films: [{ film: FilmCard, roles: string[] }] }` — owned films only; roles like "as Neil McCauley", "Director" |
@@ -92,11 +91,13 @@ All JSON. All routes under `/api`. Times are milliseconds. All routes except `PO
 | `POST /api/editions/{id}/watched` body `{ watched: boolean }` | `{ watched }` (watched=false also resets position to 0) |
 | `PUT /api/films/{id}/preferences` body `{ editionId?, quality?, audioStreamId?, subtitle? }` | the stored preferences |
 | `GET /api/editions/{id}/stream` | the ORIGINAL MediaFile bytes, honouring `Range` (206 partial content), correct `Content-Type` |
-| `GET/POST/DELETE /api/session` | auth status / sign in `{ password }` / sign out |
+| `GET/POST/DELETE /api/session` | `GET`: 200 `{authenticated:true}` when signed in, 401 `{authenticated:false}` when not; `POST { password }`: 200 and cookie, 401 on a wrong password; `DELETE`: sign out (200) |
 
 **FilmCard:** `{ id, title, year, posterPath, backdropPath, watched, progress: { positionMs, runtimeMs, editionId } | null, director }`
 
-**FilmDetail:** FilmCard fields plus `{ overview, genres, collection: {id,name}|null, directors: Person[], cast: [{ person, character }], editions: [{ id, name, year, runtimeMs, note, positionMs, watched, file: { videoCodec, height, audioSummary, addedAt }, audioStreams, subtitleStreams, qualities: [{ id: "auto"\|"original"\|"1080p"\|"720p"\|"480p", bitrate, premade, available }] }], preferences: { editionId, quality, audioStreamId, subtitle } }`
+**CollectionCard** (Home): `{ id, name, posterPath, ownedCount, totalCount, posterPaths: (string|null)[] }`, `posterPaths` = up to 3 owned films' poster paths for the fanned posters.
+
+**FilmDetail:** FilmCard fields plus `{ overview, genres, collection: {id,name}|null, directors: Person[], cast: [{ person, character }], editions: [{ id, name, year, runtimeMs, note, creditsMarkerMs (nullable), positionMs, watched, file: { videoCodec, height, audioSummary, addedAt }, audioStreams, subtitleStreams, qualities: [{ id: "auto"\|"original"\|"1080p"\|"720p"\|"480p", bitrate, premade, available }] }], preferences: { editionId, quality, audioStreamId, subtitle } }`
 
 In phase 1 `qualities` lists only `auto` and `original` as available; lower qualities appear with
 `available: false` until phase 3.
@@ -179,3 +180,17 @@ The "Dim the lights" switch is stored in the play request (`?dim=0`) and has no 
    for phase 2 and 5.
 2. Does the transcode worker run on the same machine as the server or a separate, more powerful one?
 3. TMDB API key: the owner supplies it as `TMDB_API_KEY` (phase 2).
+
+### API details settled in phase 1A
+
+- Streams: `audioStreams[]` = `{ id, index, language, channels, codec, title, isDefault, safariPlayable }`,
+  `subtitleStreams[]` = `{ id, index, language, forced, title, format }`; `id` is the database id.
+- `preferences` = `{ editionId, quality, audioStreamId, subtitle }`: `audioStreamId` is an audio stream `id`;
+  `subtitle` is `"off"` or a subtitle stream id as a string; `quality` is one of `auto|original|1080p|720p|480p`.
+  `PUT /api/films/{id}/preferences` changes only the fields sent (400 for an unknown edition or quality).
+- `directors` entries and cast `person` are `{ id, name, profilePath }`; Person `films[].roles` are display strings
+  ("as Neil McCauley", "Director").
+- `GET /api/editions/{id}/stream` takes only the id; query parameters such as `start` and `dim` are ignored.
+  `addedAt` fields are ISO-8601 instants.
+- Errors are JSON `{ "error": "..." }`: 400 invalid input, 401 signed out, 403 missing `X-CineFilm: 1` on a
+  mutating request, 404 unknown id.

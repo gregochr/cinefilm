@@ -1,0 +1,99 @@
+package gregochr.cinefilm.collection;
+
+import gregochr.cinefilm.collection.CollectionDtos.CollectionCard;
+import gregochr.cinefilm.collection.CollectionDtos.CollectionPage;
+import gregochr.cinefilm.collection.CollectionDtos.PartDto;
+import gregochr.cinefilm.config.NotFoundException;
+import gregochr.cinefilm.film.FilmMapper;
+import gregochr.cinefilm.film.FilmRepository;
+import gregochr.cinefilm.film.FilmView;
+import gregochr.cinefilm.film.LibraryLoader;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/** Collection pages and Home collection cards. */
+@Service
+public class CollectionService {
+
+    private static final int FAN_SIZE = 3;
+
+    private final FilmCollectionRepository collections;
+    private final FilmRepository films;
+    private final LibraryLoader loader;
+
+    public CollectionService(FilmCollectionRepository collections, FilmRepository films, LibraryLoader loader) {
+        this.collections = collections;
+        this.films = films;
+        this.loader = loader;
+    }
+
+    /** One slot of a collection in release order: an owned film, or a missing part. */
+    private record Slot(FilmView owned, CollectionPart missing) {
+    }
+
+    /** The collection page: owned films in release order, with missing parts in their place. */
+    @Transactional(readOnly = true)
+    public CollectionPage get(Long id) {
+        FilmCollection collection = collections.findById(id)
+            .orElseThrow(() -> new NotFoundException("No such collection"));
+        List<FilmView> owned = loader.views(films.findByCollectionId(id));
+        List<PartDto> parts = slots(collection, owned).stream()
+            .map(s -> s.owned() != null
+                ? new PartDto(true, FilmMapper.card(s.owned()), null, null, null)
+                : new PartDto(false, null, s.missing().getTitle(), s.missing().getYear(),
+                    s.missing().getPosterPath()))
+            .toList();
+        return new CollectionPage(collection.getId(), collection.getName(), collection.getPosterPath(), parts);
+    }
+
+    /** Home cards for every collection that has at least one owned film. Call inside a transaction. */
+    public List<CollectionCard> cards(List<FilmView> library) {
+        List<CollectionCard> cards = new ArrayList<>();
+        for (FilmCollection collection : collections.findAll()) {
+            List<FilmView> owned = library.stream()
+                .filter(v -> v.film().getCollection() != null
+                    && Objects.equals(v.film().getCollection().getId(), collection.getId()))
+                .toList();
+            if (owned.isEmpty()) {
+                continue;
+            }
+            List<Slot> slots = slots(collection, owned);
+            cards.add(new CollectionCard(collection.getId(), collection.getName(), collection.getPosterPath(),
+                owned.size(), slots.size(),
+                slots.stream().filter(s -> s.owned() != null).limit(FAN_SIZE)
+                    .map(s -> s.owned().film().getPosterPath()).toList()));
+        }
+        cards.sort(Comparator.comparing(CollectionCard::name));
+        return cards;
+    }
+
+    private static List<Slot> slots(FilmCollection collection, List<FilmView> owned) {
+        List<Slot> slots = new ArrayList<>();
+        Set<Long> matched = new HashSet<>();
+        List<CollectionPart> parts = collection.getParts().stream()
+            .sorted(Comparator.comparingInt(CollectionPart::getReleaseOrder)).toList();
+        for (CollectionPart part : parts) {
+            FilmView match = owned.stream()
+                .filter(v -> v.film().getTmdbId() != null && v.film().getTmdbId().equals(part.getTmdbId()))
+                .findFirst().orElse(null);
+            if (match == null) {
+                slots.add(new Slot(null, part));
+            } else {
+                matched.add(match.film().getId());
+                slots.add(new Slot(match, null));
+            }
+        }
+        owned.stream()
+            .filter(v -> !matched.contains(v.film().getId()))
+            .sorted(Comparator.comparingInt((FilmView v) -> v.film().getYear())
+                .thenComparing(v -> v.film().getSortTitle()))
+            .forEach(v -> slots.add(new Slot(v, null)));
+        return slots;
+    }
+}
