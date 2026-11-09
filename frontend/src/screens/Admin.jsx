@@ -289,8 +289,11 @@ function TmdbMark() {
 
 export default function Admin() {
   const { scan, error, loading, starting, notice, startScan, reload } = useScan();
-  const attention = useAttention(scan?.lastScan?.finishedAt ?? 'never');
   const plexImport = usePlexImport();
+  // The list refreshes when a scan or a Plex import finishes: both settle matches.
+  const attention = useAttention(
+    `${scan?.lastScan?.finishedAt ?? 'never'}|${plexImport.plex?.lastImport?.finishedAt ?? 'none'}`,
+  );
   const { hash } = useLocation();
 
   useEffect(() => {

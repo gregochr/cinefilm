@@ -97,10 +97,21 @@ public class PlexFilmWriter {
     @Transactional(readOnly = true)
     public Preflight preflight(List<Long> mediaFileIds, Long tmdbId) {
         Film anchor = files.findById(mediaFileIds.get(0)).orElseThrow().getEdition().getFilm();
-        boolean needsTmdb = tmdbId != null
-            && films.findByTmdbIdOrderByIdAsc(tmdbId).stream().noneMatch(f -> !f.getCredits().isEmpty());
-        return new Preflight(needsTmdb, artwork.exists(anchor.getPosterPath()),
-            artwork.exists(anchor.getBackdropPath()));
+        List<Film> sameId = tmdbId == null ? List.of() : films.findByTmdbIdOrderByIdAsc(tmdbId);
+        boolean needsTmdb = tmdbId != null && sameId.stream().noneMatch(f -> !f.getCredits().isEmpty());
+        // The film the editions will end up in, so a Plex film moved off a shared anchor is judged on its own art.
+        Film destination = tmdbId == null ? anchor
+            : !sameId.isEmpty() ? sameId.get(0) : anchor.getTmdbId() == null ? anchor : null;
+        return new Preflight(needsTmdb, destination != null && artwork.exists(destination.getPosterPath()),
+            destination != null && artwork.exists(destination.getBackdropPath()));
+    }
+
+    /** Every stored-artwork path a film holds, so unreferenced files can be swept. */
+    @Transactional(readOnly = true)
+    public List<String> storedArtworkPaths() {
+        List<String> paths = new ArrayList<>(films.findStoredPosterPaths());
+        paths.addAll(films.findStoredBackdropPaths());
+        return paths;
     }
 
     /** Writes one Plex film into the library in one transaction. */
@@ -151,7 +162,16 @@ public class PlexFilmWriter {
         if (plex.tmdbId() != null) {
             film.setTmdbId(plex.tmdbId());
             if (write.movie() != null) {
+                // applyMovie sets TMDB's poster and backdrop; artwork already stored from Plex must survive it.
+                String poster = film.getPosterPath();
+                String backdrop = film.getBackdropPath();
                 ingest.applyMovie(film, write.movie());
+                if (ArtworkStore.isStored(poster)) {
+                    film.setPosterPath(poster);
+                }
+                if (ArtworkStore.isStored(backdrop)) {
+                    film.setBackdropPath(backdrop);
+                }
             }
         }
         overlay(film, write);

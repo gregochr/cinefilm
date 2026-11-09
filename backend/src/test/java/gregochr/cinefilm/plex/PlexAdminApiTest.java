@@ -35,6 +35,10 @@ class PlexAdminApiTest extends ApiTestBase {
     @Test
     void storedArtworkIsServedThroughTheWholeStack() throws Exception {
         String name = artwork.store(new byte[] {7, 7, 7}, "image/png").substring(9);
+        gregochr.cinefilm.film.Film film = gregochr.cinefilm.TestData.film(null, "Art", 2000,
+            gregochr.cinefilm.TestData.NOW);
+        film.setBackdropPath("/api/art/" + name);
+        films.save(film);
 
         mvc.perform(get("/api/art/" + name))
             .andExpect(status().isOk())
@@ -46,6 +50,15 @@ class PlexAdminApiTest extends ApiTestBase {
     @Test
     void anUnknownArtworkNameIs404() throws Exception {
         mvc.perform(get("/api/art/" + "e".repeat(64) + ".jpg"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.error").value("No such artwork"));
+    }
+
+    @Test
+    void aStoredFileNoFilmReferencesIs404() throws Exception {
+        String name = artwork.store(new byte[] {8, 8, 8, 8}, "image/png").substring(9);
+
+        mvc.perform(get("/api/art/" + name))
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.error").value("No such artwork"));
     }

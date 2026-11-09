@@ -112,4 +112,27 @@ class FilmViewTest {
         assertThat(view.progress()).isEmpty();
         assertThat(view.lastPlayedAt()).isNull();
     }
+
+    @Test
+    void onATieInLastPlayedTheEditionWithAResumePositionWinsWhicheverIdItHas() {
+        Instant same = NOW.minus(Duration.ofDays(2));
+        var lowerHasPosition = view(blade, state(finalCut, 20 * MIN, false, same, null),
+            state(theatrical, 0, true, same, same));
+        var higherHasPosition = view(blade, state(finalCut, 0, true, same, same),
+            state(theatrical, 20 * MIN, false, same, null));
+
+        assertThat(lowerHasPosition.lastPlayedEdition()).contains(finalCut);
+        assertThat(lowerHasPosition.progress()).isPresent();
+        assertThat(higherHasPosition.lastPlayedEdition()).contains(theatrical);
+        assertThat(higherHasPosition.progress().orElseThrow().editionId()).isEqualTo(11L);
+    }
+
+    @Test
+    void aLaterLastPlayedStillBeatsAnEarlierEditionWithAPosition() {
+        var view = view(blade, state(finalCut, 20 * MIN, false, NOW.minus(Duration.ofDays(3)), null),
+            state(theatrical, 0, true, NOW.minus(Duration.ofDays(1)), NOW));
+
+        assertThat(view.lastPlayedEdition()).contains(theatrical);
+        assertThat(view.progress()).isEmpty();
+    }
 }

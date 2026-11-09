@@ -55,6 +55,35 @@ public class ArtworkStore {
         return URL_PREFIX + name;
     }
 
+    /** True when a poster or backdrop path points into the artwork store (whether or not the file is there). */
+    public static boolean isStored(String path) {
+        return path != null && path.startsWith(URL_PREFIX);
+    }
+
+    /**
+     * Deletes every stored file no film refers to: files written for a film whose transaction then rolled back.
+     *
+     * @param referenced the {@code /api/art/<name>} paths films hold
+     * @return how many files were deleted
+     */
+    public int deleteUnreferenced(java.util.Collection<String> referenced) {
+        java.util.Set<String> keep = new java.util.HashSet<>();
+        referenced.stream().filter(ArtworkStore::isStored).forEach(p -> keep.add(p.substring(URL_PREFIX.length())));
+        int deleted = 0;
+        try (java.util.stream.Stream<Path> listing = Files.isDirectory(dir) ? Files.list(dir)
+            : java.util.stream.Stream.empty()) {
+            for (Path file : listing.toList()) {
+                String name = file.getFileName().toString();
+                if (NAME.matcher(name).matches() && !keep.contains(name) && Files.deleteIfExists(file)) {
+                    deleted++;
+                }
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not sweep the artwork store", e);
+        }
+        return deleted;
+    }
+
     /** True when the film's poster or backdrop path is a stored artwork file that is really there. */
     public boolean exists(String artPath) {
         return artPath != null && artPath.startsWith(URL_PREFIX) && file(artPath.substring(URL_PREFIX.length()))

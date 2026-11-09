@@ -161,6 +161,46 @@ describe('Admin: Plex import panel', () => {
   });
 });
 
+describe('Admin: Films needing attention after an import', () => {
+  it('reloads the attention list when an import finishes', async () => {
+    let imported = false;
+    let attentionCalls = 0;
+    installFetch((method, url) => {
+      if (url === '/api/admin/plex/import') {
+        imported = true;
+        return respond(running(0), 202);
+      }
+      if (url === '/api/admin/plex') {
+        return respond(
+          imported
+            ? {
+                ...fixtures.adminPlex,
+                lastImport: {
+                  ...fixtures.adminPlex.lastImport,
+                  finishedAt: '2026-11-09T10:00:00Z',
+                },
+              }
+            : fixtures.adminPlex,
+        );
+      }
+      if (url === '/api/admin/attention') {
+        attentionCalls += 1;
+        return null;
+      }
+      return null;
+    });
+    renderApp('/admin');
+    await screen.findByRole('region', { name: 'Plex import' });
+    await screen.findByRole('button', { name: 'Scan now' });
+    await waitFor(() => expect(attentionCalls).toBeGreaterThan(0));
+    const before = attentionCalls;
+
+    await userEvent.click(screen.getByRole('button', { name: 'Import from Plex' }));
+
+    await waitFor(() => expect(attentionCalls).toBeGreaterThan(before));
+  });
+});
+
 describe('usePlexImport', () => {
   const settle = (ms = 0) => act(() => vi.advanceTimersByTimeAsync(ms));
 

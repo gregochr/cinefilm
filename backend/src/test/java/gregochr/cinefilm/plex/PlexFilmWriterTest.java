@@ -476,4 +476,105 @@ class PlexFilmWriterTest extends ApiTestBase {
         assertThat(states.findById(pairedEdition)).isPresent();
         assertThat(states.findById(otherEdition)).isEmpty();
     }
+
+    @Test
+    void localArtworkSurvivesATmdbRetryThatFillsInTheCredits() {
+        Film film = saved("heat file", null, "Heat.m4v");
+        List<Long> ids = List.of(fileId(film, 0));
+        writer.apply(new FilmWrite(plex(949L, "Heat"), ids, null, POSTER, BACKDROP, NOW));
+        em.flush();
+        em.clear();
+        assertThat(writer.preflight(ids, 949L)).isEqualTo(new Preflight(true, false, false));
+        Film stored = films.findById(film.getId()).orElseThrow();
+        stored.setPosterPath(artwork.store(new byte[] {4, 4}, "image/jpeg"));
+        stored.setBackdropPath(artwork.store(new byte[] {5, 5}, "image/jpeg"));
+        String poster = stored.getPosterPath();
+        String backdrop = stored.getBackdropPath();
+        films.saveAndFlush(stored);
+        em.clear();
+        assertThat(writer.preflight(ids, 949L)).isEqualTo(new Preflight(true, true, true));
+
+        writer.apply(write(plex(949L, "Heat"), ids, tmdb(949, "Heat")));
+
+        Film result = reload(film.getId());
+        assertThat(result.getCredits()).hasSize(2);
+        assertThat(result.getPosterPath()).isEqualTo(poster);
+        assertThat(result.getBackdropPath()).isEqualTo(backdrop);
+    }
+
+    @Test
+    void tmdbArtworkStillFillsInWhenThereIsNoLocalArtwork() {
+        Film film = saved("heat file", null, "Heat.m4v");
+
+        writer.apply(write(plex(949L, "Heat"), List.of(fileId(film, 0)), tmdb(949, "Heat")));
+
+        assertThat(reload(film.getId()).getPosterPath()).isEqualTo("/tp.jpg");
+    }
+
+    @Test
+    void aPlexFilmMovedOffASharedAnchorIsJudgedOnItsOwnDestinationNotTheAnchorsArtwork() {
+        Film anchor = saved("Heat", 949L, "Heat.m4v", "Heat extra.m4v");
+        String poster = artwork.store(new byte[] {6, 6}, "image/jpeg");
+        String backdrop = artwork.store(new byte[] {7, 7}, "image/jpeg");
+        anchor.setPosterPath(poster);
+        anchor.setBackdropPath(backdrop);
+        films.saveAndFlush(anchor);
+        List<Long> first = List.of(fileId(anchor, 0));
+        List<Long> second = List.of(fileId(anchor, 1));
+        em.flush();
+        em.clear();
+
+        assertThat(writer.preflight(first, 949L)).isEqualTo(new Preflight(true, true, true));
+        // The second Plex film (another TMDB id) will move to a new film: it has no artwork of its own yet.
+        assertThat(writer.preflight(second, 111L)).isEqualTo(new Preflight(true, false, false));
+        // With no TMDB guid it stays in the anchor and shares its artwork.
+        assertThat(writer.preflight(second, null)).isEqualTo(new Preflight(false, true, true));
+    }
+
+    @Test
+    void aFilmWithAnIdAnotherFilmHoldsIsJudgedOnThatFilm() {
+        Film holder = saved("Heat", 949L, "Heat.m4v");
+        String poster = artwork.store(new byte[] {8, 8}, "image/jpeg");
+        holder.setPosterPath(poster);
+        films.saveAndFlush(holder);
+        Film other = saved("other", null, "Other.m4v");
+        em.flush();
+        em.clear();
+
+        Preflight pre = writer.preflight(List.of(fileId(other, 0)), 949L);
+
+        assertThat(pre.hasPoster()).isTrue();
+        assertThat(pre.hasBackdrop()).isFalse();
+    }
+
+    @Test
+    void storedArtworkPathsListsOnlyPathsIntoTheStore() {
+        Film one = saved("One", null, "One.m4v");
+        one.setPosterPath("/api/art/" + "a".repeat(64) + ".jpg");
+        one.setBackdropPath("/tb.jpg");
+        Film two = saved("Two", null, "Two.m4v");
+        two.setBackdropPath("/api/art/" + "b".repeat(64) + ".png");
+        films.saveAndFlush(one);
+        films.saveAndFlush(two);
+
+        assertThat(writer.storedArtworkPaths()).containsExactlyInAnyOrder("/api/art/" + "a".repeat(64) + ".jpg",
+            "/api/art/" + "b".repeat(64) + ".png");
+    }
+
+    @Test
+    void theResumePositionLandsOnTheEditionThatSurvivesTheContinueWatchingTieBreak() {
+        Film film = saved("Heat", 949L, "Heat.m4v", "Heat cut.m4v");
+        Edition higher = film.getEditions().get(1);
+        Long higherFile = higher.getMediaFiles().get(0).getId();
+        Long lowerFile = film.getEditions().get(0).getMediaFiles().get(0).getId();
+
+        writer.apply(write(watched(plex(949L, "Heat"), 1, 30 * MIN), List.of(higherFile, lowerFile), null));
+
+        em.flush();
+        em.clear();
+        Film result = films.findById(film.getId()).orElseThrow();
+        var view = TestData.view(result, states.findAll().toArray(new PlaybackState[0]));
+        assertThat(view.lastPlayedEdition().orElseThrow().getId()).isEqualTo(higher.getId());
+        assertThat(view.progress().orElseThrow().positionMs()).isEqualTo(30 * MIN);
+    }
 }

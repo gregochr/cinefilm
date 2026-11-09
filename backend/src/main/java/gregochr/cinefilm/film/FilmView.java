@@ -29,7 +29,9 @@ public record FilmView(Film film, Map<Long, PlaybackState> states) {
         return film.getEditions().stream()
             .filter(e -> !e.hiddenFromBrowse())
             .filter(e -> state(e).map(PlaybackState::getLastPlayedAt).isPresent())
-            .max(Comparator.comparing((Edition e) -> state(e).orElseThrow().getLastPlayedAt()));
+            .max(Comparator.comparing((Edition e) -> state(e).orElseThrow().getLastPlayedAt())
+                // On a tie (editions imported at once) the one with a resume position wins, so progress is not lost.
+                .thenComparing(e -> state(e).orElseThrow().getPositionMs() > 0));
     }
 
     /** When the film was last played (its last played edition), or null. */

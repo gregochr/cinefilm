@@ -252,6 +252,8 @@ public class PlexImportService {
             importFilm(pairing, tally, importTime);
             processed++;
         }
+        // Files written for a film whose transaction then rolled back are not referenced by anything: drop them.
+        artwork.deleteUnreferenced(writer.storedArtworkPaths());
         return tally.report();
     }
 

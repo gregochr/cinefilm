@@ -167,4 +167,33 @@ class ArtworkStoreTest {
         assertThatThrownBy(() -> ArtworkStore.hash(new byte[0], "NOPE-1")).isInstanceOf(IllegalStateException.class)
             .hasMessage("Digest algorithm unavailable: NOPE-1");
     }
+
+    @Test
+    void sweepingDeletesOnlyStoredFilesNoFilmReferencesAndLeavesOtherFilesAlone() throws Exception {
+        ArtworkStore store = new ArtworkStore(dir.toString());
+        String kept = store.store(new byte[] {1}, "image/jpeg");
+        String orphan = store.store(new byte[] {2}, "image/png");
+        Files.writeString(dir.resolve("notes.txt"), "x");
+
+        int deleted = store.deleteUnreferenced(java.util.List.of(kept, "/tmdb.jpg", "/api/art/" + "f".repeat(64)
+            + ".jpg"));
+
+        assertThat(deleted).isEqualTo(1);
+        assertThat(store.exists(kept)).isTrue();
+        assertThat(store.exists(orphan)).isFalse();
+        assertThat(dir.resolve("notes.txt")).exists();
+    }
+
+    @Test
+    void sweepingAMissingFolderDeletesNothing() {
+        assertThat(new ArtworkStore(dir.resolve("none").toString()).deleteUnreferenced(java.util.List.of())).isZero();
+    }
+
+    @Test
+    void isStoredMeansPointsIntoTheStore() {
+        assertThat(ArtworkStore.isStored("/api/art/x.jpg")).isTrue();
+        assertThat(ArtworkStore.isStored("/api/art")).isFalse();
+        assertThat(ArtworkStore.isStored("/abc.jpg")).isFalse();
+        assertThat(ArtworkStore.isStored(null)).isFalse();
+    }
 }

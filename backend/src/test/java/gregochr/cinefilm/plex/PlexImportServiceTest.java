@@ -668,4 +668,28 @@ class PlexImportServiceTest {
         assertThat(deferred.status().progress()).isEqualTo(new PlexProgress(0, 0, null));
         assertThat(queued).hasSize(1);
     }
+
+    @Test
+    void afterAnImportTheArtworkNoFilmReferencesIsSwept() {
+        PlexFilm heat = film("Heat", null, null, null, PREFIX + "Heat.m4v");
+        library(heat);
+        known(known(1, "Heat.m4v"));
+        when(writer.preflight(List.of(1L), null)).thenReturn(HAS_ALL);
+        when(writer.apply(new FilmWrite(heat, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.storedArtworkPaths()).thenReturn(List.of("/api/art/a.jpg", "/api/art/b.png"));
+
+        service.start();
+
+        verify(artwork).deleteUnreferenced(List.of("/api/art/a.jpg", "/api/art/b.png"));
+    }
+
+    @Test
+    void anImportThatStopsBeforeWritingSweepsNothing() {
+        library(film("Heat", 949L, null, null, "/wrong/Heat.m4v"));
+        known(known(1, "Heat.m4v"));
+
+        service.start();
+
+        verify(artwork, never()).deleteUnreferenced(java.util.List.of());
+    }
 }

@@ -1,5 +1,6 @@
 package gregochr.cinefilm.plex;
 
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -8,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gregochr.cinefilm.auth.SecurityConfig;
+import gregochr.cinefilm.film.FilmRepository;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -36,6 +39,9 @@ class ArtworkControllerTest {
     @Autowired
     private MockMvc mvc;
 
+    @MockitoBean
+    private FilmRepository films;
+
     @Autowired
     private ArtworkStore store;
 
@@ -46,6 +52,8 @@ class ArtworkControllerTest {
     void stored() {
         jpg = store.store(new byte[] {(byte) 0xff, (byte) 0xd8, 1}, "image/jpeg").substring(9);
         png = store.store(new byte[] {(byte) 0x89, 'P', 'N', 'G'}, "image/png").substring(9);
+        when(films.existsByPosterPathOrBackdropPath("/api/art/" + jpg, "/api/art/" + jpg)).thenReturn(true);
+        when(films.existsByPosterPathOrBackdropPath("/api/art/" + png, "/api/art/" + png)).thenReturn(true);
     }
 
     @Test
@@ -92,5 +100,14 @@ class ArtworkControllerTest {
         mvc.perform(get("/api/art/" + jpg))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.error").value("Authentication required"));
+    }
+
+    @Test
+    void aFileNoFilmReferencesIsNotServedEvenThoughItIsInTheStore() throws Exception {
+        String stray = store.store(new byte[] {9, 9, 9, 9}, "image/jpeg").substring(9);
+
+        mvc.perform(get("/api/art/" + stray).with(user("owner")))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.error").value("No such artwork"));
     }
 }
