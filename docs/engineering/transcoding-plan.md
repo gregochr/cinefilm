@@ -56,7 +56,7 @@ read of the file. Direct play of the file remains only as a fallback.
 | Rung | Video | When |
 |---|---|---|
 | `original` | **copy** of the source video | when the file has a keyframe index with gaps ≤ 12 s |
-| `1080p` | `h264_vaapi` at source height capped 1080, 5 Mbps | source above 720 lines and no copy rung |
+| top (no copy rung) | `h264_vaapi` at the **source height** (capped 1080), named by height: above 720 ⇒ `1080p` 5 Mbps, above 480 ⇒ `720p` 2.5 Mbps, above 360 ⇒ `480p` 1 Mbps, above 240 ⇒ `360p` 0.6 Mbps, else `240p` 0.4 Mbps | only when the file has no copy rung; the rungs below follow the same rule as with a copy rung |
 | `720p` | 2.5 Mbps | source above 720 lines |
 | `480p` | 1 Mbps | source above 480 lines |
 | `360p` | 0.6 Mbps | source above 360 lines (owner: yes; the floor for the worst links) |
