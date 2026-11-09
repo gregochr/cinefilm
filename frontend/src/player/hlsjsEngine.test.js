@@ -179,6 +179,15 @@ describe('throughput', () => {
     expect(handlers.onThroughput).toHaveBeenCalledWith(10000);
   });
 
+  it('reads the stats from frag.stats of the real FRAG_LOADED payload, not from the payload root', () => {
+    const { hls, handlers } = start();
+    hls.manifest(levels, 3);
+    hls.emit('hlsFragLoaded', { stats, frag: {}, part: null });
+    expect(handlers.onThroughput).not.toHaveBeenCalled();
+    hls.emit('hlsFragLoaded', { frag: { stats }, part: null, payload: new ArrayBuffer(0), networkDetails: null });
+    expect(handlers.onThroughput).toHaveBeenCalledWith(10000);
+  });
+
   it('reports nothing for a fragment with no timing', () => {
     const { hls, handlers } = start();
     hls.manifest(levels, 3);

@@ -264,3 +264,10 @@ from-zero run exactly; every segment of every rung decodes standalone with zero 
 - Speed: 120 s of film with copy + 720p + 360p took 13–15 s (about 8–9x realtime). ffmpeg peak RSS 105–146 MB, so
   three sessions sit well inside `mem_limit: 2g`.
 - (c) Player switching in hls.js and Safari is **not** verified by the spike; the owner checks Safari manually.
+
+## Review fixes (Codex)
+
+- Copy rung and GPU decode only for 8-bit 4:2:0 H.264 (`SourceFormat`; pixel format stored in `media_file.pixel_format`, migration V6, nullable). Unknown (rows scanned before V6, until reprobed) means no copy rung and software decode.
+- Non-eligible sources (HEVC, High 10, 4:2:2, 4:4:4) on VAAPI: software decode, `scale,format=nv12,hwupload`, `-vaapi_device <dev>`; i965 cannot decode them.
+- The render node comes from `cinefilm.transcode.device` via `SessionSettings` and `TranscodePlan.device`.
+- libx264 outputs carry their own `-threads N`; the keyframe ffprobe fallback streams stdout (`LineStreamRunner`) and keeps only K rows.

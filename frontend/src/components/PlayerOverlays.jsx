@@ -5,6 +5,7 @@ export function IndicatorPill({ text, amber = false }) {
   return (
     <div className="pill" role="status">
       <span className={`pill__dot${amber ? ' pill__dot--amber' : ''}`} aria-hidden="true" />
+      <span className="sr-only">{amber ? 'Connection is limited. ' : 'Connection is good. '}</span>
       {text}
     </div>
   );

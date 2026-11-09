@@ -48,6 +48,9 @@ public class MediaFile {
 
     private String videoCodec;
 
+    /** The video stream's ffprobe pixel format (for example {@code yuv420p}); null until the file is (re)probed. */
+    private String pixelFormat;
+
     private Integer width;
 
     private Integer height;

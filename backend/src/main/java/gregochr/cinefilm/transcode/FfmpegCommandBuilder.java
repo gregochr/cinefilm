@@ -32,12 +32,17 @@ public final class FfmpegCommandBuilder {
     /** Keep the source's timestamps on the film's timeline. */
     static final String COPY_TIMESTAMPS = "-copyts";
 
-    /** The VAAPI render node. */
-    static final String VAAPI_DEVICE = "/dev/dri/renderD128";
+    /** Decode on the GPU and keep the frames there for {@code scale_vaapi}; the render node follows the flag. */
+    static final List<String> VAAPI_DECODE_FLAGS = List.of("-hwaccel", "vaapi", "-hwaccel_device");
 
-    /** Decode on the GPU and keep the frames there for {@code scale_vaapi}. */
-    static final List<String> VAAPI_DECODE_FLAGS = List.of("-hwaccel", "vaapi", "-hwaccel_device", VAAPI_DEVICE,
-        "-hwaccel_output_format", "vaapi");
+    /** The tail of {@link #VAAPI_DECODE_FLAGS}. */
+    static final List<String> VAAPI_DECODE_OUTPUT_FLAGS = List.of("-hwaccel_output_format", "vaapi");
+
+    /** Names the render node for {@code hwupload} and the VAAPI encoder when the source is decoded in software. */
+    static final String VAAPI_DEVICE_FLAG = "-vaapi_device";
+
+    /** Software-decoded frames are converted to 8-bit NV12 and uploaded to the GPU after scaling. */
+    static final String UPLOAD_FILTERS = ",format=nv12,hwupload";
 
     /** Seek flag for a restart at a cut: land on the nearest keyframe before the time, no decode-and-discard. */
     static final String NO_ACCURATE_SEEK = "-noaccurate_seek";
@@ -112,7 +117,14 @@ public final class FfmpegCommandBuilder {
         List<String> flags = new ArrayList<>();
         flags.add(COPY_TIMESTAMPS);
         if (plan.mode() == EncoderMode.VAAPI && !plan.transcodedRungs().isEmpty()) {
-            flags.addAll(VAAPI_DECODE_FLAGS);
+            if (plan.hardwareDecode()) {
+                flags.addAll(VAAPI_DECODE_FLAGS);
+                flags.add(plan.device());
+                flags.addAll(VAAPI_DECODE_OUTPUT_FLAGS);
+            } else {
+                flags.add(VAAPI_DEVICE_FLAG);
+                flags.add(plan.device());
+            }
         }
         flags.add("-threads");
         flags.add(Integer.toString(plan.threads()));
@@ -137,23 +149,27 @@ public final class FfmpegCommandBuilder {
         }
         StringBuilder graph = new StringBuilder("[0:v]");
         if (transcoded.size() == 1) {
-            graph.append(scale(plan.mode(), transcoded.get(0))).append("[v0]");
+            graph.append(scale(plan, transcoded.get(0))).append("[v0]");
         } else {
             graph.append("split=").append(transcoded.size());
             for (int i = 0; i < transcoded.size(); i++) {
                 graph.append("[s").append(i).append(']');
             }
             for (int i = 0; i < transcoded.size(); i++) {
-                graph.append(";[s").append(i).append(']').append(scale(plan.mode(), transcoded.get(i)))
+                graph.append(";[s").append(i).append(']').append(scale(plan, transcoded.get(i)))
                     .append("[v").append(i).append(']');
             }
         }
         return List.of("-filter_complex", graph.toString());
     }
 
-    private static String scale(EncoderMode mode, Rung rung) {
-        String filter = mode == EncoderMode.VAAPI ? "scale_vaapi" : "scale";
-        return filter + "=w=-2:h=" + rung.height();
+    /** Scales on the GPU for hardware decode, otherwise on the CPU (then uploaded when VAAPI encodes). */
+    private static String scale(TranscodePlan plan, Rung rung) {
+        String size = "=w=-2:h=" + rung.height();
+        if (plan.mode() != EncoderMode.VAAPI) {
+            return "scale" + size;
+        }
+        return plan.hardwareDecode() ? "scale_vaapi" + size : "scale" + size + UPLOAD_FILTERS;
     }
 
     /** One output: the rung's video and audio, its codecs, and its segment muxer writing into its directory. */
@@ -168,6 +184,7 @@ public final class FfmpegCommandBuilder {
                 flags.add(VAAPI_ENCODER);
             } else {
                 flags.addAll(SOFTWARE_ENCODER_FLAGS);
+                flags.addAll(List.of("-threads", Integer.toString(plan.threads())));
             }
             flags.addAll(List.of("-b:v", Long.toString(rung.videoBitrate()), "-g", GOP_SIZE));
             String forced = cutTimes(plan, 0);

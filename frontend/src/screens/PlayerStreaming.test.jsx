@@ -228,9 +228,10 @@ describe('automatic level changes: toasts, indicator, quality menu', () => {
       hls().fragLoaded({ loaded: 250_000, loading: { start: 0, first: 0, end: 1000 } }); // 2,000 kbit/s
       hls().switchTo(P480);
     });
-    const pill = screen.getByText('Auto · 480p · Remote · slow');
-    expect(pill).toBeInTheDocument();
-    expect(pill.querySelector('.pill__dot')).toHaveClass('pill__dot--amber');
+    expect(screen.getByText('Auto · 480p · Remote · slow')).toBeInTheDocument();
+    // The dot is decorative; its meaning is the hidden text beside it.
+    expect(screen.getByText('Connection is limited.')).toBeInTheDocument();
+    expect(screen.queryByText('Connection is good.')).not.toBeInTheDocument();
   });
 
   it('shows the dot green at home on the top rung', async () => {
@@ -238,9 +239,9 @@ describe('automatic level changes: toasts, indicator, quality menu', () => {
     await hlsEvent(() =>
       hls().fragLoaded({ loaded: 3_750_000, loading: { start: 0, first: 0, end: 1000 } }),
     );
-    expect(screen.getByText('Auto · Original · Home').querySelector('.pill__dot')).not.toHaveClass(
-      'pill__dot--amber',
-    );
+    expect(screen.getByText('Auto · Original · Home')).toBeInTheDocument();
+    expect(screen.getByText('Connection is good.')).toBeInTheDocument();
+    expect(screen.queryByText('Connection is limited.')).not.toBeInTheDocument();
   });
 
   it('the Auto row of the quality menu says what is playing now', async () => {
@@ -393,6 +394,55 @@ describe('changing quality or audio restarts the session at the current position
     await instances(2);
     expect(log.posted[1]).toEqual({ quality: 'auto', startMs: 4000000, audioStreamId: 112 });
     expect(FakeHls.instances[0].destroy).toHaveBeenCalledTimes(1);
+  });
+
+  describe('the paused state survives the restart', () => {
+    const chooseQuality = async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'Quality' }));
+      await userEvent.click(
+        within(screen.getByRole('menu', { name: 'Quality' })).getByRole('menuitemradio', {
+          name: /720p/,
+        }),
+      );
+    };
+    const chooseAudio = async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'Audio and subtitles' }));
+      await userEvent.click(
+        within(screen.getByRole('menu', { name: 'Audio' })).getByRole('menuitemradio', {
+          name: /Commentary/,
+        }),
+      );
+    };
+
+    it.each([
+      ['quality', chooseQuality],
+      ['audio', chooseAudio],
+    ])('a paused film stays paused after a %s change', async (_name, choose) => {
+      const { video } = await open();
+      await landResume(video);
+      await moveTo(video, 4000);
+      await hlsEvent(() => video.pause());
+      await choose();
+      await instances(2);
+      await hlsEvent(() => fireEvent.loadedMetadata(video));
+      expect(video.paused).toBe(true);
+    });
+
+    it.each([
+      ['quality', chooseQuality],
+      ['audio', chooseAudio],
+    ])('a playing film plays on after a %s change', async (_name, choose) => {
+      const { video } = await open();
+      await landResume(video);
+      await moveTo(video, 4000);
+      expect(video.paused).toBe(false);
+      await choose();
+      await instances(2);
+      // The browser pauses the element when its source is replaced.
+      await hlsEvent(() => video.pause());
+      await hlsEvent(() => fireEvent.loadedMetadata(video));
+      expect(video.paused).toBe(false);
+    });
   });
 
   it('a new audio track on a direct-played film only saves the choice', async () => {

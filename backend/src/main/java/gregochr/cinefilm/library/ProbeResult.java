@@ -15,10 +15,20 @@ import java.util.List;
  * @param subtitles every text subtitle stream CineFilm can convert to WebVTT
  * @param tags the format-level tags
  * @param protectedContent true when a video or audio stream is FairPlay-protected
+ * @param pixelFormat the video stream's ffprobe pixel format such as {@code yuv420p} (8-bit 4:2:0) or
+ *     {@code yuv420p10le}, or null when unknown
  */
 public record ProbeResult(long durationMs, String container, String videoCodec, Integer width, Integer height,
                           Long bitrate, List<Audio> audio, List<Subtitle> subtitles, Tags tags,
-                          boolean protectedContent) {
+                          boolean protectedContent, String pixelFormat) {
+
+    /** A result with no pixel format known. */
+    public ProbeResult(long durationMs, String container, String videoCodec, Integer width, Integer height,
+                       Long bitrate, List<Audio> audio, List<Subtitle> subtitles, Tags tags,
+                       boolean protectedContent) {
+        this(durationMs, container, videoCodec, width, height, bitrate, audio, subtitles, tags, protectedContent,
+            null);
+    }
 
     /**
      * An audio stream.

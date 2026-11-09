@@ -16,9 +16,22 @@ import java.util.List;
  * @param mode what to encode with; {@code UNAVAILABLE} allows copy rungs only
  * @param threads ffmpeg's thread bound
  * @param fps the film's average frame rate (sets how far before a cut keyframes are forced), or null when unknown
+ * @param hardwareDecode whether the source can be decoded on the GPU (8-bit 4:2:0 H.264): VAAPI encodes then keep
+ *     the frames on the GPU; otherwise the source is decoded in software and uploaded for the encoder
+ * @param device the VAAPI render node ({@code cinefilm.transcode.device}), used only in {@code VAAPI} mode
  */
 public record TranscodePlan(Path source, Path outputDir, List<Rung> rungs, int audioIndex, CutList cuts,
-                            int startSegment, EncoderMode mode, int threads, Double fps) {
+                            int startSegment, EncoderMode mode, int threads, Double fps, boolean hardwareDecode,
+                            String device) {
+
+    /** The default VAAPI render node. */
+    public static final String DEFAULT_DEVICE = "/dev/dri/renderD128";
+
+    /** A plan whose source is decoded on the GPU, on the default render node. */
+    public TranscodePlan(Path source, Path outputDir, List<Rung> rungs, int audioIndex, CutList cuts,
+                         int startSegment, EncoderMode mode, int threads, Double fps) {
+        this(source, outputDir, rungs, audioIndex, cuts, startSegment, mode, threads, fps, true, DEFAULT_DEVICE);
+    }
 
     /** Checks the plan; a bad one is a programming error, not a request error. */
     public TranscodePlan {
@@ -42,6 +55,9 @@ public record TranscodePlan(Path source, Path outputDir, List<Rung> rungs, int a
         }
         if (fps != null && !(fps > 0)) {
             throw new IllegalArgumentException("fps must be positive when known");
+        }
+        if (device == null || device.isBlank()) {
+            throw new IllegalArgumentException("device must not be blank");
         }
         rungs = List.copyOf(rungs);
     }

@@ -35,6 +35,9 @@ export function useStream({
   const startedRef = useRef(false);
   const recoveriesRef = useRef([]);
   const sessionRef = useRef(null);
+  // Whether the new source should start playing once it has metadata: true for the first load (autoplay), and
+  // after a restart or reload whatever the viewer had at that moment (a paused film stays paused).
+  const resumeRef = useRef({ play: true, held: false });
   const latest = useRef({ edition, audioStreamId, getPositionMs, onToast });
   useEffect(() => {
     latest.current = { edition, audioStreamId, getPositionMs, onToast };
@@ -49,6 +52,11 @@ export function useStream({
     let rung = null;
     setReconnecting(false);
 
+    const holdPlayState = () => {
+      // Only the first change counts: a source swapped out before its metadata arrived reads paused, wrongly.
+      if (resumeRef.current.held) return;
+      resumeRef.current = { play: !video.paused, held: true };
+    };
     const currentPosition = () => Math.round(latest.current.getPositionMs());
     const dropSession = (id) => sessionsApi.remove(id).catch(() => {});
     const forget = () => {
@@ -138,6 +146,7 @@ export function useStream({
           onThroughput: (kbps) => setSamples((s) => addSample(s, kbps)),
           onReconnecting: setReconnecting,
           onReload(ms) {
+            holdPlayState();
             if (ms > 0) pendingSeekRef.current = ms;
           },
           onSessionLost: recover,
@@ -157,6 +166,7 @@ export function useStream({
 
     return () => {
       cancelled = true;
+      holdPlayState();
       engine?.destroy();
       if (session) {
         sessionsApi.remove(session.sessionId, { keepalive: true }).catch(() => {});
@@ -175,6 +185,13 @@ export function useStream({
     return () => window.removeEventListener('pagehide', onPageHide);
   }, []);
 
+  /** Whether to play now that the source has metadata; reads once and goes back to "play". */
+  const takePlayAfterLoad = useCallback(() => {
+    const { play } = resumeRef.current;
+    resumeRef.current = { play: true, held: false };
+    return play;
+  }, []);
+
   const restart = useCallback(() => setGeneration((g) => g + 1), []);
 
   return {
@@ -184,6 +201,7 @@ export function useStream({
     reconnecting,
     kbps: median(samples),
     pendingSeekRef,
+    takePlayAfterLoad,
     restart,
   };
 }

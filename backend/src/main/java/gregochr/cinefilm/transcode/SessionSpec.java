@@ -18,8 +18,10 @@ import java.util.List;
  * @param startRung the rung listed first in the master playlist
  * @param pinned the pinned quality id, or null for adaptive playback
  * @param startSegment the segment the first encoder run starts at
+ * @param hardwareDecode whether the source (8-bit 4:2:0 H.264) may be decoded on the GPU; otherwise the encoder
+ *     decodes in software and uploads the frames
  */
 public record SessionSpec(long editionId, String filmTitle, Path source, int audioIndex, CutList cuts, Double fps,
                           int width, int height, List<Rung> rungs, Rung startRung, String pinned,
-                          int startSegment) {
+                          int startSegment, boolean hardwareDecode) {
 }

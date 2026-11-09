@@ -30,7 +30,9 @@ public class TranscodeConfig {
     public SessionSettings sessionSettings(@Value("${cinefilm.transcode.idle-stop:2m}") Duration idleStop,
                                            @Value("${cinefilm.transcode.expiry:10m}") Duration expiry,
                                            @Value("${cinefilm.transcode.hls-cap-bytes:5368709120}") long hlsCapBytes,
-                                           @Value("${cinefilm.transcode.threads:2}") int threads) {
-        return new SessionSettings(idleStop, expiry, hlsCapBytes, threads);
+                                           @Value("${cinefilm.transcode.threads:2}") int threads,
+                                           @Value("${cinefilm.transcode.device:/dev/dri/renderD128}")
+                                           String device) {
+        return new SessionSettings(idleStop, expiry, hlsCapBytes, threads, device);
     }
 }

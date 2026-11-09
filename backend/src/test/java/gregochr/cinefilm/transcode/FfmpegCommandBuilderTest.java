@@ -103,12 +103,97 @@ class FfmpegCommandBuilderTest {
         assertThat(command).isEqualTo(join(HEAD,
             List.of("-copyts", "-threads", "2", "-i", "/films/Heat (1995).mp4", "-filter_complex",
                 "[0:v]split=2[s0][s1];[s0]scale=w=-2:h=480[v0];[s1]scale=w=-2:h=360[v1]",
-                "-map", "[v0]", "-map", "0:a:1", "-c:v", "libx264", "-preset", "veryfast", "-b:v", "1000000", "-g",
+                "-map", "[v0]", "-map", "0:a:1", "-c:v", "libx264", "-preset", "veryfast",
+                "-threads", "2", "-b:v", "1000000", "-g",
                 "9999", "-force_key_frames", "3.980000,7.988000"),
             audio("128000"), segments("3.980000,7.988000", 0, "480p"),
-            List.of("-map", "[v1]", "-map", "0:a:1", "-c:v", "libx264", "-preset", "veryfast", "-b:v", "600000",
+            List.of("-map", "[v1]", "-map", "0:a:1", "-c:v", "libx264", "-preset", "veryfast",
+                "-threads", "2", "-b:v", "600000",
                 "-g", "9999", "-force_key_frames", "3.980000,7.988000"),
             audio("96000"), segments("3.980000,7.988000", 0, "360p")));
+    }
+
+    private static TranscodePlan full(List<Rung> rungs, EncoderMode mode, int threads, boolean hardwareDecode,
+                                      String device) {
+        return new TranscodePlan(Path.of("/films/Heat (1995).mp4"), Path.of("/cache/hls/abc"), rungs, 1, CUTS, 0,
+            mode, threads, 25.0, hardwareDecode, device);
+    }
+
+    @Test
+    void everyLibx264OutputCarriesItsOwnThreadBoundAfterTheInputAndBeforeItsFile() {
+        List<String> command = FfmpegCommandBuilder.build("ffmpeg", full(List.of(ORIGINAL, R480, R360),
+            EncoderMode.SOFTWARE, 3, true, "/dev/dri/renderD128"));
+
+        assertThat(command).isEqualTo(join(HEAD,
+            List.of("-copyts", "-threads", "3", "-i", "/films/Heat (1995).mp4", "-filter_complex",
+                "[0:v]split=2[s0][s1];[s0]scale=w=-2:h=480[v0];[s1]scale=w=-2:h=360[v1]"),
+            copyOutput("3.980000,7.988000", 0),
+            List.of("-map", "[v0]", "-map", "0:a:1", "-c:v", "libx264", "-preset", "veryfast", "-threads", "3",
+                "-b:v", "1000000", "-g", "9999", "-force_key_frames", "3.980000,7.988000"),
+            audio("128000"), segments("3.980000,7.988000", 0, "480p"),
+            List.of("-map", "[v1]", "-map", "0:a:1", "-c:v", "libx264", "-preset", "veryfast", "-threads", "3",
+                "-b:v", "600000", "-g", "9999", "-force_key_frames", "3.980000,7.988000"),
+            audio("96000"), segments("3.980000,7.988000", 0, "360p")));
+    }
+
+    @Test
+    void theHardwareEncoderOutputsHaveNoOutputThreadBound() {
+        List<String> command = FfmpegCommandBuilder.build("ffmpeg", full(List.of(R720), EncoderMode.VAAPI, 3, true,
+            "/dev/dri/renderD128"));
+
+        assertThat(command).containsOnlyOnce("-threads");
+    }
+
+    @Test
+    void aNonDefaultRenderNodeIsUsedForHardwareDecode() {
+        List<String> command = FfmpegCommandBuilder.build("ffmpeg", full(List.of(ORIGINAL, R720), EncoderMode.VAAPI,
+            2, true, "/dev/dri/renderD129"));
+
+        assertThat(command).containsSequence("-hwaccel", "vaapi", "-hwaccel_device", "/dev/dri/renderD129",
+            "-hwaccel_output_format", "vaapi", "-threads", "2", "-i");
+        assertThat(command).doesNotContain("/dev/dri/renderD128").doesNotContain("-vaapi_device");
+    }
+
+    @Test
+    void aSourceTheGpuCannotDecodeIsDecodedInSoftwareAndUploadedForTheVaapiEncode() {
+        List<String> command = FfmpegCommandBuilder.build("ffmpeg", full(List.of(R720, R480), EncoderMode.VAAPI, 2,
+            false, "/dev/dri/renderD129"));
+
+        assertThat(command).isEqualTo(join(HEAD,
+            List.of("-copyts", "-vaapi_device", "/dev/dri/renderD129", "-threads", "2", "-i",
+                "/films/Heat (1995).mp4", "-filter_complex",
+                "[0:v]split=2[s0][s1];[s0]scale=w=-2:h=720,format=nv12,hwupload[v0];"
+                    + "[s1]scale=w=-2:h=480,format=nv12,hwupload[v1]"),
+            vaapiOutput("[v0]", "2500000", "3.980000,7.988000", "128000", "3.980000,7.988000", 0, "720p"),
+            vaapiOutput("[v1]", "1000000", "3.980000,7.988000", "128000", "3.980000,7.988000", 0, "480p")));
+        assertThat(command).doesNotContain("-hwaccel").doesNotContain("-hwaccel_output_format")
+            .doesNotContain("scale_vaapi");
+    }
+
+    @Test
+    void aSingleSoftwareDecodedVaapiRungHasNoSplit() {
+        List<String> command = FfmpegCommandBuilder.build("ffmpeg", full(List.of(R720), EncoderMode.VAAPI, 2, false,
+            "/dev/dri/renderD128"));
+
+        assertThat(command).containsSequence("-filter_complex", "[0:v]scale=w=-2:h=720,format=nv12,hwupload[v0]");
+    }
+
+    @Test
+    void theDecodeChoiceAndDeviceDoNotTouchSoftwareModeOrCopyOnlyPlans() {
+        assertThat(FfmpegCommandBuilder.build("ffmpeg", full(List.of(R480), EncoderMode.SOFTWARE, 2, false,
+            "/dev/dri/renderD129"))).doesNotContain("-vaapi_device", "-hwaccel", "hwupload")
+            .containsSequence("-filter_complex", "[0:v]scale=w=-2:h=480[v0]");
+        assertThat(FfmpegCommandBuilder.build("ffmpeg", full(List.of(ORIGINAL), EncoderMode.VAAPI, 2, false,
+            "/dev/dri/renderD129"))).doesNotContain("-vaapi_device", "-hwaccel", "-filter_complex");
+    }
+
+    @Test
+    void aBlankDeviceIsRejected() {
+        List<Rung> copy = List.of(ORIGINAL);
+        assertThatThrownBy(() -> full(copy, EncoderMode.VAAPI, 1, true, " "))
+            .isInstanceOf(IllegalArgumentException.class).hasMessage("device must not be blank");
+        assertThatThrownBy(() -> full(copy, EncoderMode.VAAPI, 1, true, null))
+            .hasMessage("device must not be blank");
     }
 
     @Test
@@ -120,7 +205,8 @@ class FfmpegCommandBuilderTest {
             List.of("-copyts", "-threads", "2", "-noaccurate_seek", "-ss", "4.001", "-i", "/films/Heat (1995).mp4",
                 "-filter_complex", "[0:v]scale=w=-2:h=360[v0]"),
             copyOutput("3.987000,7.979000", 1),
-            List.of("-map", "[v0]", "-map", "0:a:1", "-c:v", "libx264", "-preset", "veryfast", "-b:v", "600000",
+            List.of("-map", "[v0]", "-map", "0:a:1", "-c:v", "libx264", "-preset", "veryfast",
+                "-threads", "2", "-b:v", "600000",
                 "-g", "9999", "-force_key_frames", "7.988000,11.980000"),
             audio("96000"), segments("3.987000,7.979000", 1, "360p")));
     }

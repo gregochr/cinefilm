@@ -111,7 +111,7 @@ export function startHlsJs({
 
   hls.on(Events.FRAG_LOADED, (_event, data) => {
     stopReconnecting();
-    const kbps = fragmentKbps(data.stats);
+    const kbps = fragmentKbps(data.frag?.stats);
     if (kbps) handlers.onThroughput(kbps);
     if (auto) cap(gate.tick(top));
   });

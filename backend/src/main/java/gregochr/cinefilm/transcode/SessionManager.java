@@ -355,7 +355,8 @@ public class SessionManager {
         }
         Run run = new Run(segment);
         TranscodePlan plan = new TranscodePlan(spec.source(), session.dir, spec.rungs(), spec.audioIndex(),
-            spec.cuts(), segment, transcoder.mode(), settings.threads(), spec.fps());
+            spec.cuts(), segment, transcoder.mode(), settings.threads(), spec.fps(),
+            spec.hardwareDecode(), settings.device());
         run.process = transcoder.start(plan, new RunListener(session, run));
         session.run = run;
         session.deletedBelow = Math.min(session.deletedBelow, segment);

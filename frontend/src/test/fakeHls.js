@@ -57,8 +57,14 @@ export class FakeHls {
     this.emit(FakeHls.Events.LEVEL_SWITCHED, { level });
   }
 
+  /** hls.js 1.7 FRAG_LOADED payload: { frag, part, payload, networkDetails }; the stats live on `frag.stats`. */
   fragLoaded(stats) {
-    this.emit(FakeHls.Events.FRAG_LOADED, { stats });
+    this.emit(FakeHls.Events.FRAG_LOADED, {
+      frag: { stats },
+      part: null,
+      payload: new ArrayBuffer(0),
+      networkDetails: null,
+    });
   }
 
   error(data) {

@@ -206,7 +206,9 @@ public class ScanService {
             boolean unchanged = existing.sizeBytes() != null && existing.sizeBytes() == file.sizeBytes()
                 && existing.modifiedAt() != null
                 && existing.modifiedAt().toEpochMilli() == file.modifiedAt().toEpochMilli();
-            if (unchanged && existing.playability() != Playability.UNREADABLE) {
+            // A null pixel format means the file was last probed before that column existed: probe it once more
+            // (the update stores a value, or an empty marker, so this happens once per file).
+            if (unchanged && existing.playability() != Playability.UNREADABLE && existing.pixelFormat() != null) {
                 if (existing.presence() == Presence.MISSING) {
                     ingest.markPresent(existing.id());
                 }

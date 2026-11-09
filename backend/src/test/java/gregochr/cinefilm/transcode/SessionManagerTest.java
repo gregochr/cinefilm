@@ -35,6 +35,7 @@ class SessionManagerTest {
     private static final Duration IDLE = Duration.ofMinutes(2);
     private static final Duration EXPIRY = Duration.ofMinutes(10);
     private static final Duration ONE_MS = Duration.ofMillis(1);
+    private static final String DEVICE = "/dev/dri/renderD129";
 
     private final FakeTranscoder transcoder = new FakeTranscoder();
     private final FakeFiles files = new FakeFiles();
@@ -43,7 +44,7 @@ class SessionManagerTest {
     private final MutableClock clock = new MutableClock();
     private int counter;
     private final SessionManager manager = new SessionManager(transcoder, files, waiter, scheduler, clock,
-        new SessionSettings(IDLE, EXPIRY, 1000, 2), HLS, () -> new UUID(0, ++counter));
+        new SessionSettings(IDLE, EXPIRY, 1000, 2, DEVICE), HLS, () -> new UUID(0, ++counter));
 
     private static String id(int n) {
         return new UUID(0, n).toString();
@@ -51,7 +52,7 @@ class SessionManagerTest {
 
     private static SessionSpec spec(long edition, int startSegment) {
         return new SessionSpec(edition, "Heat", SOURCE, 1, CUTS, 25.0, 1920, 1080, RUNGS, RUNGS.get(0), null,
-            startSegment);
+            startSegment, true);
     }
 
     private static Path seg(int session, String rung, int n) {
@@ -93,6 +94,8 @@ class SessionManagerTest {
         assertThat(plan.mode()).isEqualTo(EncoderMode.VAAPI);
         assertThat(plan.threads()).isEqualTo(2);
         assertThat(plan.fps()).isEqualTo(25.0);
+        assertThat(plan.hardwareDecode()).isTrue();
+        assertThat(plan.device()).isEqualTo(DEVICE);
         assertThat(row()).isEqualTo(new SessionDtos.SessionRow(id(1), "Heat", 7, "original", null, 0,
             TestData.NOW, false));
     }
@@ -720,7 +723,7 @@ class SessionManagerTest {
     @Test
     void viewDescribesThePinnedSessionForThePlaylists() {
         SessionSpec pinned = new SessionSpec(7, "Heat", SOURCE, 0, CUTS, null, 1920, 1080,
-            List.of(RUNGS.get(1)), RUNGS.get(1), "720p", 0);
+            List.of(RUNGS.get(1)), RUNGS.get(1), "720p", 0, false);
 
         SessionView view = manager.create(pinned);
 
@@ -728,6 +731,8 @@ class SessionManagerTest {
         assertThat(view.startRung()).isEqualTo(RUNGS.get(1));
         assertThat(view.pinned()).isEqualTo("720p");
         assertThat(transcoder.lastPlan().fps()).isNull();
+        assertThat(transcoder.lastPlan().hardwareDecode()).isFalse();
+        assertThat(transcoder.lastPlan().device()).isEqualTo(DEVICE);
     }
 
     @Test

@@ -55,7 +55,7 @@ class ScanServiceResilienceTest {
     }
 
     private static Known known(long id, String path, long size, Instant modified) {
-        return new Known(id, path, size, modified, Presence.PRESENT, Playability.PLAYABLE);
+        return new Known(id, path, size, modified, Presence.PRESENT, Playability.PLAYABLE, "yuv420p");
     }
 
     @Test

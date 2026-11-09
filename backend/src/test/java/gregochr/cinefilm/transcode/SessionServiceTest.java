@@ -60,6 +60,64 @@ class SessionServiceTest {
         file.setHeight(1080);
         file.setWidth(1920);
         file.setBitrate(15_000_000L);
+        file.setVideoCodec("H.264");
+        file.setPixelFormat("yuv420p");
+    }
+
+    @Test
+    void eightBitFourTwoZeroH264IsCopiedAndDecodedOnTheGpu() {
+        file.setPixelFormat("yuvj420p");
+        readyToCreate(EncoderMode.VAAPI, INDEX);
+
+        service.create(EDITION_ID, request(null, null, "auto", null));
+
+        assertThat(created().rungs()).extracting(Rung::id).containsExactly("original", "720p", "480p", "360p");
+        assertThat(created().hardwareDecode()).isTrue();
+    }
+
+    @Test
+    void tenBitH264HasNoCopyRungTheTopRungIsTranscodedAtSourceHeightAndDecodeIsSoftware() {
+        file.setPixelFormat("yuv420p10le");
+        readyToCreate(EncoderMode.VAAPI, INDEX);
+
+        SessionCreated result = service.create(EDITION_ID, request(null, null, "auto", null));
+
+        assertThat(result.renditions()).extracting(RenditionDto::id).containsExactly("1080p", "720p", "480p", "360p");
+        assertThat(result.renditions()).noneMatch(RenditionDto::copy);
+        assertThat(result.startRung()).isEqualTo("1080p");
+        assertThat(created().rungs().get(0).height()).isEqualTo(1080);
+        assertThat(created().hardwareDecode()).isFalse();
+    }
+
+    @Test
+    void hevcHasNoCopyRungAndIsDecodedInSoftware() {
+        file.setVideoCodec("HEVC");
+        readyToCreate(EncoderMode.VAAPI, INDEX);
+
+        service.create(EDITION_ID, request(null, null, "auto", null));
+
+        assertThat(created().rungs()).extracting(Rung::id).doesNotContain("original");
+        assertThat(created().hardwareDecode()).isFalse();
+    }
+
+    @Test
+    void anUnknownPixelFormatIsTreatedAsNotCopyable() {
+        file.setPixelFormat(null);
+        readyToCreate(EncoderMode.VAAPI, INDEX);
+
+        service.create(EDITION_ID, request(null, null, "auto", null));
+
+        assertThat(created().rungs()).extracting(Rung::id).doesNotContain("original");
+        assertThat(created().hardwareDecode()).isFalse();
+    }
+
+    @Test
+    void pinningTheOriginalOfANonCopyableFileIs409() {
+        file.setPixelFormat("yuv422p");
+        ready(EncoderMode.VAAPI, INDEX);
+
+        assertThatThrownBy(() -> service.create(EDITION_ID, request(null, null, "original", null)))
+            .isInstanceOf(ConflictException.class).hasMessage("The original cannot be copied for this film");
     }
 
     private void source(List<AudioChoice> audio) {

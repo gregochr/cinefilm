@@ -3,6 +3,8 @@ package gregochr.cinefilm.library;
 import static gregochr.cinefilm.TestData.CLOCK;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -75,7 +77,7 @@ class ScanServiceTest {
 
     private static Known known(long id, String path, Long size, Instant modified, Presence presence,
                                Playability playability) {
-        return new Known(id, path, size, modified, presence, playability);
+        return new Known(id, path, size, modified, presence, playability, "yuv420p");
     }
 
     private static ProbeResult probe(long durationMs, String embeddedTitle, Integer year, boolean drm) {
@@ -220,6 +222,33 @@ class ScanServiceTest {
         verifyNoInteractions(ffprobe);
         verifyBookkeeping(List.of(), 1, 0, 0, null);
         verifyNoMoreInteractions(ingest);
+    }
+
+    @Test
+    void anUnchangedFileWithNoStoredPixelFormatIsProbedOnceMoreAndRefreshed() throws IOException {
+        FoundFile file = found("Heat.m4v", 10, T1);
+        ProbeResult probe = probe(60_000L, null, null, false);
+        disk(file);
+        stubProbe(probe, file);
+        when(ingest.known()).thenReturn(Map.of("Heat.m4v",
+            new Known(1L, "Heat.m4v", 10L, T1, Presence.PRESENT, Playability.PLAYABLE, null)));
+
+        service.start("admin");
+
+        verify(ingest).refresh(1L, file, Playability.PLAYABLE, probe);
+    }
+
+    @Test
+    void anUnchangedFileWithAStoredOrEmptyMarkerPixelFormatIsNeverProbedAgain() throws IOException {
+        disk(found("Heat.m4v", 10, T1), found("NoVideo.m4v", 20, T1));
+        when(ingest.known()).thenReturn(Map.of(
+            "Heat.m4v", new Known(1L, "Heat.m4v", 10L, T1, Presence.PRESENT, Playability.PLAYABLE, "yuv420p"),
+            "NoVideo.m4v", new Known(2L, "NoVideo.m4v", 20L, T1, Presence.PRESENT, Playability.PLAYABLE, "")));
+
+        service.start("admin");
+
+        verifyNoInteractions(ffprobe);
+        verify(ingest, never()).refresh(anyLong(), any(), any(), any());
     }
 
     @Test

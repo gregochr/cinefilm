@@ -340,7 +340,8 @@ function PlayerView({ film, edition, startAtZero }) {
       setPositionMs(pending);
     }
     applySubtitleModes();
-    video.play().catch(() => {});
+    // A restart (audio, quality, reconnect, expired session) keeps a paused film paused.
+    if (stream.takePlayAfterLoad()) video.play().catch(() => {});
   };
 
   const onTimeUpdate = () => {

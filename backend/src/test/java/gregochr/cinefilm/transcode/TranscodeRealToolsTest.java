@@ -9,6 +9,7 @@ import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.library.CommandRunner;
 import gregochr.cinefilm.library.LibraryRoot;
 import gregochr.cinefilm.library.ProcessCommandRunner;
+import gregochr.cinefilm.library.ProcessLineStreamRunner;
 import gregochr.cinefilm.transcode.SessionFakes.FakeScheduler;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -74,7 +75,7 @@ class TranscodeRealToolsTest {
         file.setDurationMs(DURATION_MS);
         LibraryRoot root = new LibraryRoot(library.toString());
         KeyframeIndexService service = new KeyframeIndexService(root,
-            new KeyframeIndexer(new Mp4SampleTableReader(), RUNNER, "ffprobe"),
+            new KeyframeIndexer(new Mp4SampleTableReader(), new ProcessLineStreamRunner(), "ffprobe"),
             mock(MediaKeyframesRepository.class), new NioFileStamps(), CLOCK);
         index = service.ensureIndexed(file);
         rungs = Ladder.rungs(480, 0, index.cuts().copyOk(), EncoderMode.SOFTWARE);
@@ -93,13 +94,13 @@ class TranscodeRealToolsTest {
         Transcoder transcoder = new FfmpegTranscoder(null, new ProcessEncoderFactory(0), "ffmpeg", "software");
         manager = new SessionManager(transcoder, new NioSegmentFiles(), new PollingSegmentWaiter(real),
             new FakeScheduler(), real, new SessionSettings(Duration.ofMinutes(2), Duration.ofMinutes(10),
-            Long.MAX_VALUE, 2), hls, UUID::randomUUID);
+            Long.MAX_VALUE, 2, "/dev/dri/renderD128"), hls, UUID::randomUUID);
         return manager;
     }
 
     private SessionView session(long edition, int startSegment) {
         SessionSpec spec = new SessionSpec(edition, "Clip", source, 0, index.cuts(), index.fps(), 640, 480, rungs,
-            rungs.get(0), null, startSegment);
+            rungs.get(0), null, startSegment, true);
         return manager.create(spec);
     }
 

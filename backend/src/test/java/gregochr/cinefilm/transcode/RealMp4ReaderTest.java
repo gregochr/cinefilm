@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import gregochr.cinefilm.library.CommandRunner;
 import gregochr.cinefilm.library.ProcessCommandRunner;
+import gregochr.cinefilm.library.ProcessLineStreamRunner;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -63,7 +64,7 @@ class RealMp4ReaderTest {
                 throw new KeyframeIndexException("force the fallback");
             }
         };
-        KeyframeIndex fromFfprobe = new KeyframeIndexer(failing, RUNNER, "ffprobe").index(clip);
+        KeyframeIndex fromFfprobe = new KeyframeIndexer(failing, new ProcessLineStreamRunner(), "ffprobe").index(clip);
 
         assertThat(fromTables.keyframesMs()).hasSameSizeAs(fromFfprobe.keyframesMs());
         for (int i = 0; i < fromTables.keyframesMs().size(); i++) {

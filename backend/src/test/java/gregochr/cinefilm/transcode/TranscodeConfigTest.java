@@ -26,9 +26,9 @@ class TranscodeConfigTest {
     @Test
     void sessionSettingsCarryTheConfiguredLimits() {
         SessionSettings settings = new TranscodeConfig().sessionSettings(Duration.ofMinutes(2),
-            Duration.ofMinutes(10), 5_368_709_120L, 2);
+            Duration.ofMinutes(10), 5_368_709_120L, 2, "/dev/dri/renderD129");
 
         assertThat(settings).isEqualTo(new SessionSettings(Duration.ofMinutes(2), Duration.ofMinutes(10),
-            5_368_709_120L, 2));
+            5_368_709_120L, 2, "/dev/dri/renderD129"));
     }
 }

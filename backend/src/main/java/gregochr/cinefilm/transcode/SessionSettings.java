@@ -9,6 +9,7 @@ import java.time.Duration;
  * @param expiry no request for this long deletes the session (later requests get 404)
  * @param hlsCapBytes the most the {@code hls/} folder may hold before idle sessions are evicted
  * @param threads ffmpeg's thread bound
+ * @param device the VAAPI render node ({@code cinefilm.transcode.device})
  */
-public record SessionSettings(Duration idleStop, Duration expiry, long hlsCapBytes, int threads) {
+public record SessionSettings(Duration idleStop, Duration expiry, long hlsCapBytes, int threads, String device) {
 }

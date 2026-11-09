@@ -77,7 +77,8 @@ public class SessionService {
         }
         KeyframeIndexService.Index index = index(file);
         long bitrate = file.getBitrate() == null ? 0 : file.getBitrate();
-        List<Rung> ladder = Ladder.rungs(file.getHeight(), bitrate, index.cuts().copyOk(), mode);
+        boolean hardwareDecode = SourceFormat.isH264Yuv420(file.getVideoCodec(), file.getPixelFormat());
+        List<Rung> ladder = Ladder.rungs(file.getHeight(), bitrate, index.cuts().copyOk() && hardwareDecode, mode);
         String pinned = Ladder.AUTO.equals(quality) ? null : quality;
         List<Rung> encoded = ladder;
         Rung start;
@@ -95,7 +96,7 @@ public class SessionService {
         int width = file.getWidth() == null ? file.getHeight() * 16 / 9 / 2 * 2 : file.getWidth();
         SessionSpec spec = new SessionSpec(editionId, source.filmTitle(), source.path(), audio.position(),
             index.cuts(), index.fps(), width, file.getHeight(), encoded, start, pinned,
-            index.cuts().segmentAt(startMs));
+            index.cuts().segmentAt(startMs), hardwareDecode);
         SessionView created;
         try {
             created = manager.create(spec);

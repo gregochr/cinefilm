@@ -74,6 +74,7 @@ public final class FfprobeParser {
         List<Audio> audio = new ArrayList<>();
         List<Subtitle> subtitles = new ArrayList<>();
         String videoCodec = null;
+        String pixelFormat = null;
         Integer width = null;
         Integer height = null;
         Long videoBitrate = null;
@@ -89,6 +90,7 @@ public final class FfprobeParser {
                     width = integer(stream, "width");
                     height = integer(stream, "height");
                     videoBitrate = number(stream, "bit_rate");
+                    pixelFormat = text(stream, "pix_fmt");
                 }
             } else if ("audio".equals(type)) {
                 protectedContent |= isProtected(stream);
@@ -101,7 +103,7 @@ public final class FfprobeParser {
         Long bitrate = number(format, "bit_rate");
         return new ProbeResult(durationMs(format, root), container(text(format, "format_name")), videoCodec, width,
             height, bitrate != null ? bitrate : videoBitrate, List.copyOf(audio), List.copyOf(subtitles),
-            tags(format.path("tags"), latestYear), protectedContent);
+            tags(format.path("tags"), latestYear), protectedContent, pixelFormat);
     }
 
     private static Audio audio(JsonNode stream, int index, String codec) {
