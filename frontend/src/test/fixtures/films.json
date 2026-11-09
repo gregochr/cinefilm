@@ -1,5 +1,5 @@
 {
-  "total": 23,
+  "total": 27,
   "films": [
     {
       "id": 1,
@@ -13,7 +13,8 @@
         "runtimeMs": 10200000,
         "editionId": 11
       },
-      "director": "Michael Mann"
+      "director": "Michael Mann",
+      "collectionId": null
     },
     {
       "id": 2,
@@ -27,7 +28,8 @@
         "runtimeMs": 6960000,
         "editionId": 21
       },
-      "director": "Denis Villeneuve"
+      "director": "Denis Villeneuve",
+      "collectionId": null
     },
     {
       "id": 3,
@@ -41,7 +43,8 @@
         "runtimeMs": 7800000,
         "editionId": 31
       },
-      "director": "Roman Polanski"
+      "director": "Roman Polanski",
+      "collectionId": null
     },
     {
       "id": 4,
@@ -55,7 +58,8 @@
         "runtimeMs": 7200000,
         "editionId": 41
       },
-      "director": null
+      "director": null,
+      "collectionId": null
     },
     {
       "id": 5,
@@ -69,7 +73,8 @@
         "runtimeMs": 5820000,
         "editionId": 51
       },
-      "director": null
+      "director": null,
+      "collectionId": null
     },
     {
       "id": 6,
@@ -79,7 +84,8 @@
       "backdropPath": null,
       "watched": true,
       "progress": null,
-      "director": "Ridley Scott"
+      "director": "Ridley Scott",
+      "collectionId": null
     },
     {
       "id": 7,
@@ -89,7 +95,19 @@
       "backdropPath": null,
       "watched": true,
       "progress": null,
-      "director": "Ridley Scott"
+      "director": "Ridley Scott",
+      "collectionId": 1
+    },
+    {
+      "id": 117,
+      "title": "Alien 3",
+      "year": 1992,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null,
+      "collectionId": 1
     },
     {
       "id": 100,
@@ -99,7 +117,8 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "collectionId": null
     },
     {
       "id": 101,
@@ -109,7 +128,8 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "collectionId": null
     },
     {
       "id": 102,
@@ -119,7 +139,8 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "collectionId": null
     },
     {
       "id": 103,
@@ -129,7 +150,8 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "collectionId": null
     },
     {
       "id": 104,
@@ -139,7 +161,8 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "collectionId": null
     },
     {
       "id": 105,
@@ -149,7 +172,8 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "collectionId": null
     },
     {
       "id": 106,
@@ -159,7 +183,8 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "collectionId": null
     },
     {
       "id": 107,
@@ -169,7 +194,8 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "collectionId": null
     },
     {
       "id": 108,
@@ -179,7 +205,8 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "collectionId": null
     },
     {
       "id": 109,
@@ -189,7 +216,8 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "collectionId": null
     },
     {
       "id": 110,
@@ -199,7 +227,8 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "collectionId": null
     },
     {
       "id": 111,
@@ -209,7 +238,8 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "collectionId": null
     },
     {
       "id": 112,
@@ -219,7 +249,8 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "collectionId": null
     },
     {
       "id": 113,
@@ -229,7 +260,8 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "collectionId": null
     },
     {
       "id": 114,
@@ -239,7 +271,8 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "collectionId": null
     },
     {
       "id": 115,
@@ -249,7 +282,41 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "collectionId": null
+    },
+    {
+      "id": 118,
+      "title": "Three Colours: Blue",
+      "year": 1993,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null,
+      "collectionId": 3
+    },
+    {
+      "id": 119,
+      "title": "Three Colours: White",
+      "year": 1994,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null,
+      "collectionId": 3
+    },
+    {
+      "id": 120,
+      "title": "Three Colours: Red",
+      "year": 1994,
+      "posterPath": null,
+      "backdropPath": null,
+      "watched": false,
+      "progress": null,
+      "director": null,
+      "collectionId": 3
     }
   ],
   "facets": {

@@ -1,10 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
-import { Picker, Segmented } from '../components/Controls.jsx';
+import CollectionTile from '../components/CollectionTile.jsx';
+import { Picker, Segmented, Switch } from '../components/Controls.jsx';
 import { SearchIcon } from '../components/icons.jsx';
 import { Poster } from '../components/Poster.jsx';
 import { GridSkeleton } from '../components/Skeleton.jsx';
 import { EmptyLibrary, ErrorState, NoResults } from '../components/StateMessages.jsx';
+import { groupFilms } from '../state/collections.js';
+import { useCollections } from '../state/usePeopleAndCollections.js';
+import { useGroupCollections } from '../state/useGroupCollections.js';
 import { useUrlSearch } from '../state/useUrlSearch.js';
 import { useFilms } from '../state/useFilms.js';
 
@@ -29,6 +33,8 @@ export default function LibraryFilms() {
   const show = params.get('show') || 'all';
 
   const { q, text, setText } = useUrlSearch(params, setParams);
+  const [groupPreference, setGroupPreference] = useGroupCollections();
+  const { data: collectionsData } = useCollections();
 
   const update = (key, value, empty = '') => {
     const next = new URLSearchParams(params);
@@ -48,9 +54,20 @@ export default function LibraryFilms() {
   const filtersActive = Boolean(q || genre || decade || show !== 'all');
   const facets = data?.facets || { genres: [], decades: [] };
   const total = data?.total ?? 0;
-  const countLabel = data
-    ? `${total} ${total === 1 ? 'film' : 'films'} · sorted by ${SORT_PHRASE[sort] || 'recently added'}`
-    : '';
+  // Search never groups: a search shows individual films even with the switch on.
+  const grouping = groupPreference && !q;
+  const items =
+    data && grouping
+      ? groupFilms(data.films, collectionsData?.collections || [], sort)
+      : (data?.films || []).map((film) => ({ type: 'film', film }));
+  const plural = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
+  const sortedBy = `sorted by ${SORT_PHRASE[sort] || 'recently added'}`;
+  let countLabel = '';
+  if (data) {
+    countLabel = grouping
+      ? `${plural(total, 'film')} in ${plural(items.length, 'tile')} · ${sortedBy}`
+      : `${plural(total, 'film')} · ${sortedBy}`;
+  }
 
   useEffect(() => {
     setCountLabel(countLabel);
@@ -70,15 +87,23 @@ export default function LibraryFilms() {
   } else if (data) {
     body = (
       <div className={`poster-grid${loading ? ' poster-grid--busy' : ''}`}>
-        {data.films.map((f) => (
-          <Poster key={f.id} film={f} />
-        ))}
+        {items.map((item) =>
+          item.type === 'film' ? (
+            <Poster key={item.film.id} film={item.film} />
+          ) : (
+            <CollectionTile
+              key={`collection-${item.collection.id}`}
+              collection={item.collection}
+              films={item.films}
+            />
+          ),
+        )}
       </div>
     );
   }
 
   return (
-    <div className="page__stack library__panel">
+    <>
       <div className="filters">
         <label className="field field--grow">
           <span className="field__label">Search</span>
@@ -134,6 +159,7 @@ export default function LibraryFilms() {
           value={show}
           onChange={(v) => update('show', v, 'all')}
         />
+        <Switch label="Group collections" checked={groupPreference} onChange={setGroupPreference} />
       </div>
 
       {body}
@@ -144,6 +170,6 @@ export default function LibraryFilms() {
         <span>Enter open</span>
         <span>Esc clear</span>
       </div>
-    </div>
+    </>
   );
 }

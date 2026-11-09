@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { browseCollections, displayName, fanPosters, isComplete, sortKey } from './collections.js';
+import {
+  browseCollections,
+  displayName,
+  fanPosters,
+  groupFilms,
+  isComplete,
+  sortKey,
+} from './collections.js';
 
 describe('displayName', () => {
   it('drops a trailing " Collection"', () => {
@@ -112,5 +119,108 @@ describe('browseCollections', () => {
     expect(names(browseCollections(LIST(), { q: 'a', show: 'missing', sort: 'size' }))).toEqual([
       3, 2, 5,
     ]);
+  });
+});
+
+const f = (id, title, year, collectionId = null) => ({ id, title, year, collectionId });
+const COLLECTIONS = [
+  { id: 1, name: 'Alien Collection' },
+  { id: 2, name: 'The Matrix Collection' },
+];
+const label = (item) => (item.type === 'film' ? item.film.title : `[${item.collection.id}]`);
+const labels = (items) => items.map(label);
+
+describe('groupFilms', () => {
+  // The server's order for each sort, with Alien (1) and Matrix (2) films mixed in.
+  const added = [
+    f(10, 'Heat', 1995),
+    f(11, 'Aliens', 1986, 1),
+    f(12, 'Zodiac', 2007),
+    f(13, 'Alien', 1979, 1),
+    f(14, 'The Matrix', 1999, 2),
+    f(15, 'Kes', 1969),
+  ];
+
+  it('folds the films of a collection into one tile at the first one under recently added', () => {
+    const items = groupFilms(added, COLLECTIONS, 'added');
+    expect(labels(items)).toEqual(['Heat', '[1]', 'Zodiac', '[2]', 'Kes']);
+    expect(groupFilms(added, COLLECTIONS)).toEqual(items);
+  });
+
+  it('puts the tile at the earliest film under year, listing its films earliest first', () => {
+    const byYearOrder = [
+      f(15, 'Kes', 1969),
+      f(13, 'Alien', 1979, 1),
+      f(11, 'Aliens', 1986, 1),
+      f(10, 'Heat', 1995),
+      f(14, 'The Matrix', 1999, 2),
+    ];
+    const items = groupFilms(byYearOrder, COLLECTIONS, 'year');
+    expect(labels(items)).toEqual(['Kes', '[1]', 'Heat', '[2]']);
+    expect(items[1].films.map((x) => x.title)).toEqual(['Alien', 'Aliens']);
+    expect(items[1].count).toBe(2);
+  });
+
+  it('puts a film with no known year last among a tile’s films', () => {
+    const items = groupFilms(
+      [f(1, 'Undated', null, 1), f(2, 'Dated', 1990, 1)],
+      COLLECTIONS,
+      'year',
+    );
+    expect(items[0].films.map((x) => x.title)).toEqual(['Dated', 'Undated']);
+  });
+
+  it('places tiles by display name among the other films under title, ignoring The', () => {
+    const byTitle = [
+      f(11, 'Aliens', 1986, 1),
+      f(13, 'Alien', 1979, 1),
+      f(10, 'Heat', 1995),
+      f(15, 'Kes', 1969),
+      f(14, 'The Matrix', 1999, 2),
+      f(12, 'Zodiac', 2007),
+    ];
+    // "Alien" sorts before the film "Heat" and after nothing; "Matrix" sits between "Kes" and "Zodiac".
+    expect(labels(groupFilms(byTitle, COLLECTIONS, 'title'))).toEqual([
+      '[1]',
+      'Heat',
+      'Kes',
+      '[2]',
+      'Zodiac',
+    ]);
+  });
+
+  it('keeps a title tie stable: the film first, then the tile', () => {
+    const items = groupFilms(
+      [f(1, 'Alien', 1979), f(2, 'Aliens', 1986, 1), f(3, 'Alien 3', 1992, 1)],
+      COLLECTIONS,
+      'title',
+    );
+    expect(labels(items)).toEqual(['Alien', '[1]']);
+  });
+
+  it('puts tiles after the last film when their names sort last, and handles only tiles', () => {
+    const items = groupFilms(
+      [f(1, 'Aardvark', 2000), f(2, 'The Matrix', 1999, 2)],
+      COLLECTIONS,
+      'title',
+    );
+    expect(labels(items)).toEqual(['Aardvark', '[2]']);
+    expect(labels(groupFilms([f(2, 'The Matrix', 1999, 2)], COLLECTIONS, 'title'))).toEqual([
+      '[2]',
+    ]);
+  });
+
+  it('counts only the films that came through the filters, and makes no tile for a collection with none', () => {
+    const filtered = [f(13, 'Alien', 1979, 1), f(10, 'Heat', 1995)];
+    const items = groupFilms(filtered, COLLECTIONS, 'added');
+    expect(labels(items)).toEqual(['[1]', 'Heat']);
+    expect(items[0].count).toBe(1);
+    expect(items.some((i) => i.type === 'collection' && i.collection.id === 2)).toBe(false);
+  });
+
+  it('leaves a film whose collection is not in the list as a plain film, and with no collections groups nothing', () => {
+    const films = [f(1, 'Orphan', 2000, 99), f(2, 'Heat', 1995)];
+    expect(labels(groupFilms(films, COLLECTIONS, 'added'))).toEqual(['Orphan', 'Heat']);
+    expect(labels(groupFilms(added, [], 'title'))).toHaveLength(added.length);
   });
 });

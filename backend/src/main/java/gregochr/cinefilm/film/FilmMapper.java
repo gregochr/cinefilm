@@ -20,6 +20,7 @@ import gregochr.cinefilm.transcode.Rung;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 
 /** Maps domain objects to the API shapes. */
@@ -28,13 +29,20 @@ public final class FilmMapper {
     private FilmMapper() {
     }
 
-    /** The compact card. */
+    /** The compact card, without a collection id. */
     public static FilmCard card(FilmView view) {
+        return card(view, Set.of());
+    }
+
+    /** The compact card; {@code collectionId} is set when the film's collection is in {@code qualifying}. */
+    public static FilmCard card(FilmView view, Set<Long> qualifying) {
         Film film = view.film();
         String director = view.directorNames();
+        Long collectionId = film.getCollection() != null && qualifying.contains(film.getCollection().getId())
+            ? film.getCollection().getId() : null;
         return new FilmCard(film.getId(), film.getTitle(), film.getYear(), film.getPosterPath(),
             film.getBackdropPath(), view.watched(), view.progress().orElse(null),
-            director.isEmpty() ? null : director);
+            director.isEmpty() ? null : director, collectionId);
     }
 
     /** A person reference. */

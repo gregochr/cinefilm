@@ -90,6 +90,12 @@ class LibraryQueriesIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void filmCardsCarryTheCollectionIdOnlyForQualifyingCollections() throws Exception {
+        get("/api/films", "q", "alien").andExpect(jsonPath("$.films[0].collectionId").isNumber());
+        get("/api/films", "q", "heat").andExpect(jsonPath("$.films[0].collectionId").doesNotExist());
+    }
+
+    @Test
     void sortByTitleIgnoresALeadingThe() throws Exception {
         String json = get("/api/films", "sort", "title").andReturn().getResponse().getContentAsString();
         List<String> titles = JsonPath.read(json, "$.films[*].title");

@@ -57,3 +57,56 @@ export function fanPosters(posters = []) {
     shadow: depth < last,
   }));
 }
+
+/** Earliest release first; a film with no known year goes last. Stable. */
+const byYear = (a, b) => (a.year ?? Infinity) - (b.year ?? Infinity);
+
+/**
+ * Folds the films of each collection into one tile, for the Films grid's "Group collections" switch.
+ * `films` is the server's filtered, sorted list (each card may carry a `collectionId`); `collections` are
+ * the Collections tab's cards; `sort` is the Films sort. Returns items in grid order, each
+ * `{ type: 'film', film }` or `{ type: 'collection', collection, films, count }`, where `films` are the
+ * folded films that passed the filters, earliest year first, and `count` their number.
+ * A collection with no film in `films` gets no tile.
+ *
+ * Under `added` and `year` a tile sits where its first film was in the server order (the most recently
+ * added, or the earliest, film). Under `title` it is placed among the other films by its display name.
+ */
+export function groupFilms(films, collections, sort = 'added') {
+  const byId = new Map(collections.map((c) => [c.id, c]));
+  const tiles = new Map();
+  const items = [];
+  for (const film of films) {
+    const collection = film.collectionId != null ? byId.get(film.collectionId) : null;
+    if (!collection) {
+      items.push({ type: 'film', film });
+      continue;
+    }
+    let tile = tiles.get(collection.id);
+    if (!tile) {
+      tile = { type: 'collection', collection, films: [], count: 0 };
+      tiles.set(collection.id, tile);
+      items.push(tile);
+    }
+    tile.films.push(film);
+  }
+  for (const tile of tiles.values()) {
+    tile.films.sort(byYear);
+    tile.count = tile.films.length;
+  }
+  if (sort !== 'title') return items;
+
+  const loose = items.filter((item) => item.type === 'film');
+  const grouped = [...tiles.values()]
+    .map((tile) => ({ tile, key: sortKey(displayName(tile.collection.name)) }))
+    .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  const merged = [];
+  let next = 0;
+  for (const film of loose) {
+    const key = sortKey(film.film.title);
+    while (next < grouped.length && grouped[next].key < key) merged.push(grouped[next++].tile);
+    merged.push(film);
+  }
+  while (next < grouped.length) merged.push(grouped[next++].tile);
+  return merged;
+}

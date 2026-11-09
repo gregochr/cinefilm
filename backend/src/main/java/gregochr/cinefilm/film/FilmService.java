@@ -1,6 +1,7 @@
 package gregochr.cinefilm.film;
 
 import gregochr.cinefilm.collection.CollectionService;
+import gregochr.cinefilm.collection.FilmCollection;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.FilmDtos.Facets;
 import gregochr.cinefilm.film.FilmDtos.FilmCard;
@@ -10,7 +11,11 @@ import gregochr.cinefilm.playback.PreferencesService;
 import gregochr.cinefilm.transcode.KeyframeIndexService;
 import gregochr.cinefilm.transcode.Transcoder;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,7 +43,9 @@ public class FilmService {
     @Transactional(readOnly = true)
     public FilmList list(LibraryQuery query) {
         List<FilmView> all = loader.loadAll();
-        List<FilmCard> cards = BrowseRules.filterAndSort(all, query).stream().map(FilmMapper::card).toList();
+        Set<Long> qualifying = qualifyingCollections(all);
+        List<FilmCard> cards = BrowseRules.filterAndSort(all, query).stream()
+            .map(v -> FilmMapper.card(v, qualifying)).toList();
         return new FilmList(cards.size(), cards, facets(all));
     }
 
@@ -53,6 +60,18 @@ public class FilmService {
                 >= CollectionService.MIN_OWNED;
         return FilmMapper.detail(view, preferences.resolve(film), inCollection,
             transcoder.mode(), file -> indexes.cached(file).map(KeyframeIndexService.Index::cuts).orElse(null));
+    }
+
+    /** The ids of the collections with at least {@link CollectionService#MIN_OWNED} films in the library. */
+    private static Set<Long> qualifyingCollections(List<FilmView> all) {
+        return all.stream()
+            .map(v -> v.film().getCollection())
+            .filter(Objects::nonNull)
+            .collect(Collectors.groupingBy(FilmCollection::getId, Collectors.counting()))
+            .entrySet().stream()
+            .filter(e -> e.getValue() >= CollectionService.MIN_OWNED)
+            .map(Map.Entry::getKey)
+            .collect(Collectors.toSet());
     }
 
     private static Facets facets(List<FilmView> all) {

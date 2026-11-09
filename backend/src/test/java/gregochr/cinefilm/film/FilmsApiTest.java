@@ -90,6 +90,12 @@ class FilmsApiTest extends ApiTestBase {
         edition(aliens, null, "Theatrical Cut", 137 * MIN, null);
         save(aliens);
 
+        mvc.perform(get("/api/films").param("sort", "title"))
+            .andExpect(jsonPath("$.films[?(@.title == 'Alien')].collectionId",
+                contains(alienCollection.getId().intValue())))
+            .andExpect(jsonPath("$.films[?(@.title == 'Aliens')].collectionId",
+                contains(alienCollection.getId().intValue())))
+            .andExpect(jsonPath("$.films[?(@.title == 'Heat')].collectionId", contains(nullValue())));
         mvc.perform(get("/api/films/{id}", alien.getId()))
             .andExpect(jsonPath("$.collection.id").value(alienCollection.getId()))
             .andExpect(jsonPath("$.collection.name").value("Alien"));
@@ -104,6 +110,8 @@ class FilmsApiTest extends ApiTestBase {
 
         mvc.perform(get("/api/films/{id}", alien.getId()))
             .andExpect(jsonPath("$.collection").value(nullValue()));
+        mvc.perform(get("/api/films").param("q", "alien"))
+            .andExpect(jsonPath("$.films[0].collectionId").value(nullValue()));
     }
 
     @Test
@@ -118,7 +126,8 @@ class FilmsApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.films[0].director").value("Michael Mann"))
             .andExpect(jsonPath("$.films[0].progress.positionMs").value(64 * MIN))
             .andExpect(jsonPath("$.films[0].progress.runtimeMs").value(170 * MIN))
-            .andExpect(jsonPath("$.films[0].progress.editionId").value(heatEdition.getId()));
+            .andExpect(jsonPath("$.films[0].progress.editionId").value(heatEdition.getId()))
+            .andExpect(jsonPath("$.films[0].collectionId").value(nullValue()));
     }
 
     @Test

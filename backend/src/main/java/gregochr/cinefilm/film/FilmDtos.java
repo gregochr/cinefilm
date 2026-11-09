@@ -13,9 +13,13 @@ public final class FilmDtos {
     public record Progress(long positionMs, long runtimeMs, long editionId) {
     }
 
-    /** The compact film representation used in rows and grids. */
+    /**
+     * The compact film representation used in rows and grids. {@code collectionId} is set only on the library
+     * listing ({@code GET /api/films}) and only when the film's collection has at least
+     * {@code CollectionService.MIN_OWNED} films in the library; everywhere else it is null.
+     */
     public record FilmCard(Long id, String title, Integer year, String posterPath, String backdropPath,
-                           boolean watched, Progress progress, String director) {
+                           boolean watched, Progress progress, String director, Long collectionId) {
     }
 
     /** A director or actor reference. */

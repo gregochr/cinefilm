@@ -103,6 +103,41 @@ class FilmServiceTest {
     }
 
     @Test
+    void cardsCarryTheCollectionIdOnlyWhenTheCollectionHasTwoFilmsInTheLibrary() {
+        FilmCollection pair = withId(6L, "Pair");
+        FilmCollection lone = withId(5L, "Lone Sequel");
+        Film p1 = owned(1L, "P1", 2001);
+        p1.setCollection(pair);
+        Film p2 = owned(2L, "P2", 2002);
+        p2.setCollection(pair);
+        Film l1 = owned(3L, "L1", 2000);
+        l1.setCollection(lone);
+        Film heat = owned(4L, "Heat", 1995);
+        when(loader.loadAll()).thenReturn(List.of(view(p1), view(p2), view(l1), view(heat)));
+
+        FilmList list = service.list(LibraryQuery.all());
+
+        assertThat(list.films()).extracting(FilmDtos.FilmCard::title, FilmDtos.FilmCard::collectionId)
+            .containsExactlyInAnyOrder(org.assertj.core.groups.Tuple.tuple("P1", 6L),
+                org.assertj.core.groups.Tuple.tuple("P2", 6L), org.assertj.core.groups.Tuple.tuple("L1", null),
+                org.assertj.core.groups.Tuple.tuple("Heat", null));
+    }
+
+    @Test
+    void aFilterThatLeavesOneFilmOfACollectionStillCarriesItsCollectionId() {
+        FilmCollection pair = withId(6L, "Pair");
+        Film p1 = owned(1L, "P1", 2001);
+        p1.setCollection(pair);
+        Film p2 = owned(2L, "P2", 2002);
+        p2.setCollection(pair);
+        when(loader.loadAll()).thenReturn(List.of(view(p1), view(p2)));
+
+        FilmList list = service.list(new LibraryQuery("p1", null, null, null, null));
+
+        assertThat(list.films()).extracting(FilmDtos.FilmCard::collectionId).containsExactly(6L);
+    }
+
+    @Test
     void detailHasTheCollectionWhenTwoFilmsOfItAreBrowsable() {
         FilmCollection saga = withId(7L, "Saga");
         Film one = owned(1L, "One", 2000);

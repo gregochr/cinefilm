@@ -268,6 +268,48 @@
   color: var(--cf-text);
 }
 
+/* Collection tile in the Films grid */
+.collection-tile__art {
+  background: var(--cf-surface);
+  border: 1px solid var(--cf-line);
+  border-radius: var(--cf-radius-poster);
+  --fan-inset: 14px 0 56px;
+}
+.collection-tile__badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--cf-radius-pill);
+  background: var(--cf-bg);
+  color: var(--cf-text);
+  font-family: var(--cf-font-mono);
+  font-size: 12px;
+}
+.collection-tile__scrim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  padding: 36px 14px 12px;
+  background: linear-gradient(to top, rgba(14, 12, 10, 0.92), rgba(14, 12, 10, 0));
+}
+.collection-tile__name {
+  font-family: var(--cf-font-display);
+  font-size: 22px;
+  line-height: 1.05;
+  color: var(--cf-on-poster);
+}
+
 /* Poster fan: up to three posters, earliest at the front, the rest stepping back and to the left. */
 .fan {
   position: absolute;
