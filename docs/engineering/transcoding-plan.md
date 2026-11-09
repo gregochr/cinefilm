@@ -40,7 +40,9 @@ read of the file. Direct play of the file remains only as a fallback.
   reading them from the MP4 sample tables (`stss`/`stts`/`ctts` in the `moov` box, a few MB at the start of the file)
   rather than decoding; fall back to `ffprobe -skip_frame nokey`. Built by a **background index job** after the scan
   (one file at a time, low priority) and on demand when a film is played before its index exists.
-- **Cuts**: segment *n* starts at the first keyframe at or after `4n` s (target 4 s), so segments are 4–~12 s.
+- **Cuts**: the first cut is 0; each next cut is the first keyframe at or after **the previous cut + 4 s**, so the
+  list is strictly increasing (no zero-length segments however far apart keyframes are) and segments are 4–~12 s;
+  segment *n* is `[cut[n], cut[n+1])`.
   The cut list is the timeline for **every rung**: the copy rung cuts there naturally, and the transcoded rungs force
   keyframes at exactly those times (`-force_key_frames <t1,t2,…>`, ~1,800 entries for two hours; VAAPI gives closed
   GOPs). A file whose largest gap between cuts exceeds **12 s** gets **no copy rung** (its top rung is transcoded at
@@ -55,9 +57,13 @@ read of the file. Direct play of the file remains only as a fallback.
 |---|---|---|
 | `original` | **copy** of the source video | when the file has a keyframe index with gaps ≤ 12 s |
 | `1080p` | `h264_vaapi` at source height capped 1080, 5 Mbps | source above 720 lines and no copy rung |
-| `720p` | 2.5 Mbps | source above 480 lines |
-| `480p` | 1 Mbps | always (or source height if lower) |
-| `360p` | 0.6 Mbps | always (owner: yes; the floor for the worst links) |
+| `720p` | 2.5 Mbps | source above 720 lines |
+| `480p` | 1 Mbps | source above 480 lines |
+| `360p` | 0.6 Mbps | source above 360 lines (owner: yes; the floor for the worst links) |
+
+- **Every rung is strictly shorter than the one above it** (a transcoded rung exists only below the source height;
+  a source of 360 lines or fewer has its top rung only, plus a 240p 0.4 Mbps rung if it is above 240). So heights
+  are unique per film and the player can always tell the active rung from `videoHeight`.
 
 - Audio on every rung: the chosen audio stream as **AAC stereo 128 kbps** (96 kbps on 360p); Chrome never meets AC-3.
 - `BANDWIDTH` in the master playlist is the rung's **peak** per-segment bitrate (from the index and file sizes for
@@ -133,15 +139,18 @@ read of the file. Direct play of the file remains only as a fallback.
 - **Auto**: start rung from a **time-boxed probe** (≈1.5 s of a range request on the original, counting bytes after
   the first byte) — at home that is normally `original`, on a poor link 480p or 360p — then let ABR run: hls.js steps
   down at once and up one level after ~60 s healthy (decision 3, via `autoLevelCapping`/`nextAutoLevel`); Safari's
-  native HLS adapts on its own (it can't be gated) and the player reads changes from `resize`/`videoHeight`. Toasts
+  native HLS adapts on its own (it can't be gated) and the player reads changes from `resize`/`videoHeight`, which
+  identifies the rung because heights are unique per film (Rungs). Toasts
   on every change: "Switching to 720p for smoother playback", "Back to Original" / "Back to 1080p".
 - **Chosen quality** pins the master to that rung (`original` included); remembered per film (decision 2).
 - **hls.js settings**: `maxBufferLength` 120 s and `maxBufferSize` raised so 120 s of the copy rung fits (~250 MB;
   drops to whatever fits on lower rungs), back buffer 30 s; `fragLoadPolicy`/`playlistLoadPolicy`/
   `manifestLoadPolicy` retries with backoff; on a fatal network error keep retrying every 5 s with "Reconnecting…"
-  (polite status) and resume at the same position; session 404 ⇒ new session at `currentTime`. Safari native: on
-  `stalled`/`error`, reload the source at `currentTime` (an explicit `pendingSeekMs`, never the page-load resume
-  position).
+  (polite status) and resume at the same position; session 404 ⇒ new session at `currentTime`. Safari native:
+  `stalled` alone does nothing (it fires when fetching pauses while buffered video still plays); the source is
+  reloaded at `currentTime` (an explicit `pendingSeekMs`, never the page-load resume position) only on a fatal
+  `error`, or when playback has made no progress for 15 s while not paused and the buffer ahead is empty, with
+  "Reconnecting…" shown meanwhile.
 - **Position and progress**: HLS time equals film time, so subtitles (existing VTT `<track>`s), resume and progress
   line up. On any source (re)load the player re-applies `<track>` modes after `loadedmetadata`, seeks to
   `pendingSeekMs`, and freezes progress reporting until the seek lands; `usePlayback` never reports a position ≤ 0
