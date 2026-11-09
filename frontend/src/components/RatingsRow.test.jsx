@@ -63,9 +63,22 @@ describe('RatingsRow', () => {
     expect(screen.getByText('84%')).toBeInTheDocument();
   });
 
-  it('keeps the rating links at a 44px touch target (jsdom does not load the stylesheet, so read the rule)', () => {
-    const css = readFileSync('src/styles/detail.css', 'utf8');
-    const rule = /\.ratings__link\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
-    expect(rule).toMatch(/min-height:\s*44px/);
+  it.each([
+    ['two links', BOTH],
+    ['a link and a plain Rotten Tomatoes item', { ...BOTH, rottenTomatoes: { score: 84, url: null } }],
+  ])('keeps every rating at a 44px touch target with the real stylesheet (%s)', (_name, ratings) => {
+    const style = document.createElement('style');
+    style.textContent = readFileSync('src/styles/detail.css', 'utf8');
+    document.head.appendChild(style);
+    try {
+      const { container } = render(<RatingsRow ratings={ratings} />);
+      const targets = container.querySelectorAll('.ratings__link');
+      expect(targets).toHaveLength(2);
+      targets.forEach((target) => {
+        expect(getComputedStyle(target).minHeight).toBe('44px');
+      });
+    } finally {
+      style.remove();
+    }
   });
 });
