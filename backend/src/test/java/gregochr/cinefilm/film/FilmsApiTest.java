@@ -80,9 +80,35 @@ class FilmsApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.facets.genres",
                 contains("Crime", "Horror", "Mystery", "Sci-fi", "Thriller")))
             .andExpect(jsonPath("$.facets.decades", contains(1940, 1970, 1990)))
+            .andExpect(jsonPath("$.facets.collections", hasSize(0)));
+    }
+
+    @Test
+    void aSecondFilmInTheLibraryMakesTheCollectionAFacetAndALinkOnDetail() throws Exception {
+        Film aliens = film(null, "Aliens", 1986, NOW.minus(Duration.ofDays(150)), "Sci-fi");
+        aliens.setCollection(alienCollection);
+        edition(aliens, null, "Theatrical Cut", 137 * MIN, null);
+        save(aliens);
+
+        mvc.perform(get("/api/films"))
             .andExpect(jsonPath("$.facets.collections", hasSize(1)))
             .andExpect(jsonPath("$.facets.collections[0].name").value("Alien"))
             .andExpect(jsonPath("$.facets.collections[0].id").value(alienCollection.getId()));
+        mvc.perform(get("/api/films/{id}", alien.getId()))
+            .andExpect(jsonPath("$.collection.id").value(alienCollection.getId()))
+            .andExpect(jsonPath("$.collection.name").value("Alien"));
+    }
+
+    @Test
+    void aSecondFilmThatIsNotBrowsableDoesNotMakeACollection() throws Exception {
+        Film aliens = film(null, "Aliens", 1986, NOW.minus(Duration.ofDays(150)), "Sci-fi");
+        aliens.setCollection(alienCollection);
+        file(edition(aliens, null, "Theatrical Cut", 137 * MIN, null), "aliens.m4v").setPresence(Presence.MISSING);
+        save(aliens);
+
+        mvc.perform(get("/api/films")).andExpect(jsonPath("$.facets.collections", hasSize(0)));
+        mvc.perform(get("/api/films/{id}", alien.getId()))
+            .andExpect(jsonPath("$.collection").value(nullValue()));
     }
 
     @Test
@@ -215,10 +241,9 @@ class FilmsApiTest extends ApiTestBase {
     }
 
     @Test
-    void detailShowsCollectionAndEditionWithoutFile() throws Exception {
+    void detailOfALoneCollectionFilmHasNoCollectionAndShowsEditionWithoutFile() throws Exception {
         mvc.perform(get("/api/films/{id}", alien.getId()))
-            .andExpect(jsonPath("$.collection.id").value(alienCollection.getId()))
-            .andExpect(jsonPath("$.collection.name").value("Alien"))
+            .andExpect(jsonPath("$.collection").value(nullValue()))
             .andExpect(jsonPath("$.editions[0].file").value(nullValue()))
             .andExpect(jsonPath("$.editions[0].audioStreams", hasSize(0)))
             .andExpect(jsonPath("$.editions[0].qualities[1].bitrate").value(nullValue()))

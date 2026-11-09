@@ -36,11 +36,11 @@ public final class FilmMapper {
         return new PersonRef(person.getId(), person.getName(), person.getProfilePath());
     }
 
-    /** The full detail page. */
-    public static FilmDetail detail(FilmView view, Preferences preferences) {
+    /** The full detail page; the collection ref is set only when {@code inCollection} (enough films owned). */
+    public static FilmDetail detail(FilmView view, Preferences preferences, boolean inCollection) {
         Film film = view.film();
         FilmCard card = card(view);
-        CollectionRef collection = film.getCollection() == null ? null
+        CollectionRef collection = film.getCollection() == null || !inCollection ? null
             : new CollectionRef(film.getCollection().getId(), film.getCollection().getName());
         return new FilmDetail(card.id(), card.title(), card.year(), card.posterPath(), card.backdropPath(),
             card.watched(), card.progress(), card.director(), film.getOverview(),

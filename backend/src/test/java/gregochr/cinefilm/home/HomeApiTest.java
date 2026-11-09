@@ -4,6 +4,7 @@ import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.collection;
 import static gregochr.cinefilm.TestData.edition;
+import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static gregochr.cinefilm.TestData.state;
 import static org.hamcrest.Matchers.contains;
@@ -17,6 +18,7 @@ import gregochr.cinefilm.collection.CollectionPart;
 import gregochr.cinefilm.collection.FilmCollection;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.Presence;
 import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
@@ -71,6 +73,21 @@ class HomeApiTest extends ApiTestBase {
         br.setCollection(bladeRunner);
         edition(br, null, "The Final Cut", 117 * MIN, null);
         save(br);
+        Film br2049 = film(null, "Blade Runner 2049", 2017, now.minus(Duration.ofDays(150)), "Sci-fi");
+        br2049.setTmdbId(335984L);
+        br2049.setCollection(bladeRunner);
+        edition(br2049, null, "Theatrical Cut", 164 * MIN, null);
+        save(br2049);
+        // A second film of the collection that is not browsable (its only file is missing) does not count.
+        Film lone = film(null, "Lone Sequel", 2001, now.minus(Duration.ofDays(150)), "Drama");
+        FilmCollection loneSaga = collections.save(collection("Lone Saga"));
+        lone.setCollection(loneSaga);
+        edition(lone, null, "Theatrical Cut", 90 * MIN, null);
+        save(lone);
+        Film gone = film(null, "Gone Sequel", 2003, now.minus(Duration.ofDays(150)), "Drama");
+        gone.setCollection(loneSaga);
+        file(edition(gone, null, "Theatrical Cut", 90 * MIN, null), "gone.m4v").setPresence(Presence.MISSING);
+        save(gone);
 
         mvc.perform(get("/api/home"))
             .andExpect(status().isOk())
@@ -83,12 +100,12 @@ class HomeApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.weeklyTheme.title").value("This week: your library"))
             .andExpect(jsonPath("$.weeklyTheme.caption").value("A new theme every Monday"))
             .andExpect(jsonPath("$.weeklyTheme.kind").value("library"))
-            .andExpect(jsonPath("$.weeklyTheme.films", hasSize(6)))
+            .andExpect(jsonPath("$.weeklyTheme.films", hasSize(8)))
             .andExpect(jsonPath("$.collections", hasSize(1)))
             .andExpect(jsonPath("$.collections[0].name").value("Blade Runner"))
-            .andExpect(jsonPath("$.collections[0].ownedCount").value(1))
+            .andExpect(jsonPath("$.collections[0].ownedCount").value(2))
             .andExpect(jsonPath("$.collections[0].totalCount").value(2))
-            .andExpect(jsonPath("$.collections[0].posterPaths", hasSize(1)));
+            .andExpect(jsonPath("$.collections[0].posterPaths", hasSize(2)));
     }
 
     @Test
@@ -104,7 +121,7 @@ class HomeApiTest extends ApiTestBase {
     }
 
     @Test
-    void collectionsWithoutOwnedFilmsAreNotListed() throws Exception {
+    void collectionsWithoutTwoOwnedFilmsAreNotListed() throws Exception {
         collections.save(collection("Empty"));
         mvc.perform(get("/api/home")).andExpect(jsonPath("$.collections", hasSize(0)));
     }
