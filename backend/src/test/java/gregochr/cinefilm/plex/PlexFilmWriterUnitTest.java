@@ -9,6 +9,8 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.TestData;
@@ -147,7 +149,7 @@ class PlexFilmWriterUnitTest {
         Preflight pre = writer.preflight(List.of(100L), null);
 
         assertThat(pre).isEqualTo(new Preflight(false, true, false));
-        verify(films, never()).findByTmdbIdOrderByIdAsc(any());
+        verify(films, never()).findByTmdbIdOrderByIdAsc(949L);
     }
 
     @Test
@@ -207,8 +209,12 @@ class PlexFilmWriterUnitTest {
 
         assertThat(applied).isEqualTo(new Applied(1, 0, 0, 0, 0));
         verify(ingest).merge(2L, 1L);
-        verify(films, never()).saveAndFlush(any());
-        verify(editions, never()).moveOne(any(), any());
+        verify(films).findByTmdbIdOrderByIdAsc(949L);
+        verify(films).findById(1L);
+        verifyNoMoreInteractions(films);
+        verify(editions).findById(10L);
+        verify(editions).findById(20L);
+        verifyNoMoreInteractions(editions);
     }
 
     @Test
@@ -269,7 +275,8 @@ class PlexFilmWriterUnitTest {
         Applied applied = writer.apply(write(plex(949L), List.of(100L), null, null, null));
 
         assertThat(applied.editionsMoved()).isZero();
-        verify(editions, never()).moveOne(any(), any());
+        verify(editions).findById(10L);
+        verifyNoMoreInteractions(editions);
     }
 
     @Test
@@ -287,7 +294,7 @@ class PlexFilmWriterUnitTest {
 
         assertThat(applied).isEqualTo(new Applied(0, 1, 0, 0, 0));
         verify(ingest).merge(2L, 1L);
-        verify(films, never()).findByTmdbIdOrderByIdAsc(any());
+        verify(films, never()).findByTmdbIdOrderByIdAsc(949L);
         assertThat(first.getTmdbId()).isEqualTo(949L);
     }
 
@@ -301,7 +308,8 @@ class PlexFilmWriterUnitTest {
         verify(ingest).applyMovie(first, details);
 
         writer.apply(write(plex(949L), List.of(100L), null, null, null));
-        verify(ingest, org.mockito.Mockito.times(1)).applyMovie(any(), any());
+        verify(ingest, org.mockito.Mockito.times(1)).applyMovie(first, details);
+        verifyNoMoreInteractions(ingest);
     }
 
     @Test
@@ -429,7 +437,8 @@ class PlexFilmWriterUnitTest {
         Applied applied = writer.apply(write(viewed(949L, 1, 0, null), List.of(100L), null, null, null));
 
         assertThat(applied).isEqualTo(new Applied(0, 0, 0, 0, 1));
-        verify(states, never()).save(any());
+        verify(states).findById(10L);
+        verifyNoMoreInteractions(states);
     }
 
     @Test
@@ -454,7 +463,8 @@ class PlexFilmWriterUnitTest {
         Applied applied = writer.apply(write(plex(949L), List.of(100L), null, null, null));
 
         assertThat(applied).isEqualTo(new Applied(0, 0, 0, 0, 0));
-        verify(states, never()).save(any());
+        verify(states).findById(10L);
+        verifyNoMoreInteractions(states);
     }
 
     // ---- error paths ---------------------------------------------------------------------------------------------
@@ -466,7 +476,7 @@ class PlexFilmWriterUnitTest {
 
         assertThatThrownBy(() -> writer.apply(write(plex(949L), List.of(100L), null, null, null)))
             .isInstanceOf(NoSuchElementException.class);
-        verify(states, never()).save(any());
+        verifyNoInteractions(states);
     }
 
     @Test
@@ -487,8 +497,9 @@ class PlexFilmWriterUnitTest {
 
         assertThatThrownBy(() -> writer.apply(write(plex(949L), List.of(100L, 200L), movie(), null, null)))
             .isInstanceOf(IllegalStateException.class);
-        verify(ingest, never()).applyMovie(any(), any());
-        verify(states, never()).save(any());
+        verify(ingest).merge(2L, 1L);
+        verifyNoMoreInteractions(ingest);
+        verifyNoInteractions(states);
     }
 
     @Test
