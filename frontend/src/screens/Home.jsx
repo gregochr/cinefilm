@@ -1,6 +1,5 @@
 import Art from '../components/Art.jsx';
 import { ButtonLink } from '../components/Button.jsx';
-import CollectionCard from '../components/CollectionCard.jsx';
 import FilmRow from '../components/FilmRow.jsx';
 import { PlayIcon } from '../components/icons.jsx';
 import { ContinueCard, Poster } from '../components/Poster.jsx';
@@ -64,14 +63,12 @@ export default function Home() {
 
   const { hero, continueWatching = [], recentlyAdded = [], notWatchedInYears = [] } = data;
   const theme = data.weeklyTheme;
-  const collections = data.collections || [];
   const empty =
     !hero &&
     !continueWatching.length &&
     !recentlyAdded.length &&
     !notWatchedInYears.length &&
-    !theme?.films?.length &&
-    !collections.length;
+    !theme?.films?.length;
   if (empty) return <EmptyLibrary />;
 
   return (
@@ -110,13 +107,6 @@ export default function Home() {
         <FilmRow title={theme.title} sub={theme.caption} seeAllTo="/library">
           {theme.films.map((f) => (
             <Poster key={f.id} film={f} />
-          ))}
-        </FilmRow>
-      ) : null}
-      {collections.length ? (
-        <FilmRow title="Collections" sub="Series and sets in your library" variant="collections">
-          {collections.map((c) => (
-            <CollectionCard key={c.id} collection={c} />
           ))}
         </FilmRow>
       ) : null}

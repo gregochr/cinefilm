@@ -11,7 +11,6 @@ const EMPTY = {
   recentlyAdded: [],
   notWatchedInYears: [],
   weeklyTheme: null,
-  collections: [],
 };
 const film = (id, title, extra = {}) => ({
   id,
@@ -91,12 +90,7 @@ describe('Home rows', () => {
       'href',
       '/library',
     );
-    const collections = screen.getByRole('region', { name: 'Collections' });
-    expect(within(collections).getByText('Series and sets in your library')).toBeInTheDocument();
-    expect(within(collections).getByRole('link', { name: /Alien/ })).toHaveAttribute(
-      'href',
-      '/collections/1',
-    );
+    expect(screen.queryByRole('region', { name: 'Collections' })).not.toBeInTheDocument();
   });
 
   it('continue-watching cards link to the film and say how much is left', async () => {
@@ -123,7 +117,7 @@ describe('Home rows', () => {
     expect(screen.queryByRole('region', { name: heading })).not.toBeInTheDocument();
   });
 
-  it('omits the theme row when the theme has no films, and the collections row when none', async () => {
+  it('omits the theme row when the theme has no films', async () => {
     homeWith({
       hero: film(5, 'Zodiac'),
       weeklyTheme: { title: 'This week: noir', caption: 'x', films: [] },
@@ -131,7 +125,6 @@ describe('Home rows', () => {
     renderApp('/');
     await screen.findByRole('region', { name: 'Resume Zodiac' });
     expect(screen.queryByRole('region', { name: 'This week: noir' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Collections' })).not.toBeInTheDocument();
   });
 
   it('shows a lone theme row for a library with nothing else', async () => {
@@ -141,12 +134,6 @@ describe('Home rows', () => {
     renderApp('/');
     expect(await screen.findByRole('region', { name: 'This week: noir' })).toBeInTheDocument();
     expect(screen.queryByText('The house lights are up')).not.toBeInTheDocument();
-  });
-
-  it('shows a lone collections row for a library with nothing else', async () => {
-    homeWith({ collections: [fixtures.home.collections[0]] });
-    renderApp('/');
-    expect(await screen.findByRole('region', { name: 'Collections' })).toBeInTheDocument();
   });
 
   it('tolerates a payload missing its optional lists', async () => {

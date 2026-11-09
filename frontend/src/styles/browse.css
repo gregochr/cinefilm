@@ -147,10 +147,6 @@
 .row__grid--stills {
   grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
 }
-.row__grid--collections {
-  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
-  gap: 24px;
-}
 .poster-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr));
@@ -612,8 +608,7 @@
     flex: 1;
   }
   .row__grid--posters,
-  .row__grid--stills,
-  .row__grid--collections {
+  .row__grid--stills {
     display: flex;
     overflow-x: auto;
     scroll-snap-type: x mandatory;
@@ -622,17 +617,13 @@
     scroll-padding: 0 var(--cf-gutter);
     gap: 12px;
   }
-  .row__grid--posters > *,
-  .row__grid--collections > * {
+  .row__grid--posters > * {
     flex: 0 0 132px;
     scroll-snap-align: start;
   }
   .row__grid--stills > * {
     flex: 0 0 240px;
     scroll-snap-align: start;
-  }
-  .row__grid--collections > * {
-    flex-basis: 260px;
   }
   .person__name {
     font-size: 48px;

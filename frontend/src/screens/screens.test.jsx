@@ -25,11 +25,10 @@ describe('Home', () => {
       'Recently added',
       'Not watched in years',
       'This week: the 1970s',
-      'Collections',
     ]) {
       expect(screen.getByRole('heading', { name })).toBeInTheDocument();
     }
-    expect(screen.getByText('2 of 4 films')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Collections' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Zodiac, 2007' })).toBeInTheDocument();
   });
 
@@ -42,7 +41,6 @@ describe('Home', () => {
             recentlyAdded: [],
             notWatchedInYears: [],
             weeklyTheme: null,
-            collections: [],
           })
         : null,
     );

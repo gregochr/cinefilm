@@ -30,15 +30,15 @@ class HomeControllerTest {
     @Test
     void homeReturnsWhatTheServiceAssembled() throws Exception {
         when(service.home()).thenReturn(new Home(null, List.of(), List.of(), List.of(),
-            new ThemeDto("This week: the 1990s", "A new theme every Monday", "decade", "1990", List.of()),
-            List.of()));
+            new ThemeDto("This week: the 1990s", "A new theme every Monday", "decade", "1990", List.of())));
 
         mvc.perform(get("/api/home").with(user("owner")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.hero").doesNotExist())
             .andExpect(jsonPath("$.weeklyTheme.title").value("This week: the 1990s"))
             .andExpect(jsonPath("$.weeklyTheme.kind").value("decade"))
-            .andExpect(jsonPath("$.weeklyTheme.value").value("1990"));
+            .andExpect(jsonPath("$.weeklyTheme.value").value("1990"))
+            .andExpect(jsonPath("$.collections").doesNotExist());
     }
 
     @Test

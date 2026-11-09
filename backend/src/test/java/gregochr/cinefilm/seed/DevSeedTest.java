@@ -53,8 +53,7 @@ class DevSeedTest {
             .andExpect(jsonPath("$.notWatchedInYears.length()", greaterThanOrEqualTo(5)))
             .andExpect(jsonPath("$.weeklyTheme.films.length()", greaterThanOrEqualTo(5)))
             .andExpect(jsonPath("$.weeklyTheme.title").value(org.hamcrest.Matchers.startsWith("This week: ")))
-            .andExpect(jsonPath("$.collections", hasSize(2)))
-            .andExpect(jsonPath("$.collections[*].name", hasItem("Three Colours")));
+            .andExpect(jsonPath("$.collections").doesNotExist());
     }
 
     @Test

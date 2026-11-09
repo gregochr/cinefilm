@@ -286,31 +286,5 @@
         "director": null
       }
     ]
-  },
-  "collections": [
-    {
-      "id": 1,
-      "name": "Alien",
-      "posterPath": null,
-      "ownedCount": 2,
-      "totalCount": 4,
-      "posterPaths": [null, null, null]
-    },
-    {
-      "id": 2,
-      "name": "Blade Runner",
-      "posterPath": null,
-      "ownedCount": 1,
-      "totalCount": 2,
-      "posterPaths": [null, null, null]
-    },
-    {
-      "id": 3,
-      "name": "Three Colours",
-      "posterPath": null,
-      "ownedCount": 3,
-      "totalCount": 3,
-      "posterPaths": [null, null, null]
-    }
-  ]
+  }
 }

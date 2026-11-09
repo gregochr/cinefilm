@@ -1,6 +1,5 @@
 package gregochr.cinefilm.home;
 
-import gregochr.cinefilm.collection.CollectionService;
 import gregochr.cinefilm.film.BrowseRules;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmDtos.FilmCard;
@@ -25,17 +24,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class HomeService {
 
     private final LibraryLoader loader;
-    private final CollectionService collections;
     private final Clock clock;
 
-    /** Creates the service over its collaborators and the application clock. */
-    public HomeService(LibraryLoader loader, CollectionService collections, Clock clock) {
+    /** Creates the service over the library loader and the application clock. */
+    public HomeService(LibraryLoader loader, Clock clock) {
         this.loader = loader;
-        this.collections = collections;
         this.clock = clock;
     }
 
-    /** Builds the hero, the rows, the weekly theme and the collection cards. */
+    /** Builds the hero, the rows, the weekly theme. */
     @Transactional(readOnly = true)
     public Home home() {
         List<FilmView> library = loader.loadAll();
@@ -51,8 +48,7 @@ public class HomeService {
             continueWatching.isEmpty() ? continueWatching : continueWatching.subList(1, continueWatching.size()),
             cards(BrowseRules.recentlyAdded(library, clock.instant())),
             cards(BrowseRules.notWatchedInYears(library, clock.instant(), clock.getZone())),
-            new ThemeDto(theme.title(), theme.caption(), theme.kind(), theme.value(), themeFilms),
-            collections.cards(library));
+            new ThemeDto(theme.title(), theme.caption(), theme.kind(), theme.value(), themeFilms));
     }
 
     private static List<FilmCard> cards(List<FilmView> views) {

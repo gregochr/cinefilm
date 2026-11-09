@@ -118,6 +118,6 @@ class LibraryQueriesIntegrationTest extends IntegrationTestBase {
         get("/api/home")
             .andExpect(jsonPath("$.hero.title").value("Heat"))
             .andExpect(jsonPath("$.continueWatching", hasSize(4)))
-            .andExpect(jsonPath("$.collections", hasSize(2)));
+            .andExpect(jsonPath("$.collections").doesNotExist());
     }
 }

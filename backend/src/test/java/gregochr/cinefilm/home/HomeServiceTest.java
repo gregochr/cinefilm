@@ -3,7 +3,6 @@ package gregochr.cinefilm.home;
 import static gregochr.cinefilm.TestData.CLOCK;
 import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
-import static gregochr.cinefilm.TestData.collection;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.film;
 import static gregochr.cinefilm.TestData.state;
@@ -11,8 +10,6 @@ import static gregochr.cinefilm.TestData.view;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
-import gregochr.cinefilm.collection.CollectionDtos.CollectionCard;
-import gregochr.cinefilm.collection.CollectionService;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmDtos.FilmCard;
@@ -38,11 +35,8 @@ class HomeServiceTest {
     @Mock
     private LibraryLoader loader;
 
-    @Mock
-    private CollectionService collections;
-
     private HomeService service(Clock clock) {
-        return new HomeService(loader, collections, clock);
+        return new HomeService(loader, clock);
     }
 
     private long nextId = 1;
@@ -79,7 +73,6 @@ class HomeServiceTest {
 
     private void libraryIs(List<FilmView> library) {
         when(loader.loadAll()).thenReturn(library);
-        when(collections.cards(library)).thenReturn(List.of());
     }
 
     private static List<Film> filmsOf(List<FilmView> library) {
@@ -133,7 +126,6 @@ class HomeServiceTest {
         assertThat(home.continueWatching()).isEmpty();
         assertThat(home.recentlyAdded()).isEmpty();
         assertThat(home.notWatchedInYears()).isEmpty();
-        assertThat(home.collections()).isEmpty();
     }
 
     // hero and continue watching
@@ -186,19 +178,5 @@ class HomeServiceTest {
         Home home = service(CLOCK).home();
 
         assertThat(home.notWatchedInYears()).extracting(FilmCard::title).containsExactly("Before");
-    }
-
-    // collections
-
-    @Test
-    void theCollectionCardsComeFromTheCollectionServiceOverTheSameLibrary() {
-        List<FilmView> library = List.of(unwatched("Alien", 1979, NOW.minus(Duration.ofDays(400))));
-        CollectionCard card = new CollectionCard(1L, collection("Alien").getName(), null, 1, 4, List.of());
-        when(loader.loadAll()).thenReturn(library);
-        when(collections.cards(library)).thenReturn(List.of(card));
-
-        Home home = service(CLOCK).home();
-
-        assertThat(home.collections()).containsExactly(card);
     }
 }
