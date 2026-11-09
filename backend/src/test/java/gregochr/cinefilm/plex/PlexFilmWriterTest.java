@@ -577,4 +577,39 @@ class PlexFilmWriterTest extends ApiTestBase {
         assertThat(view.lastPlayedEdition().orElseThrow().getId()).isEqualTo(higher.getId());
         assertThat(view.progress().orElseThrow().positionMs()).isEqualTo(30 * MIN);
     }
+
+    @Test
+    void whenOnlyALaterFilmWithThePlexIdHasCreditsTheSurvivorIsStillFetchedFromTmdb() {
+        Film survivor = saved("Heat", 949L, "Heat.m4v");
+        Film later = saved("Heat again", 949L, "Heat DC.m4v");
+        TestData.credit(later, people.save(TestData.person(null, "Someone")),
+            gregochr.cinefilm.film.CreditRole.DIRECTOR, null, 0);
+        films.saveAndFlush(later);
+        List<Long> ids = List.of(fileId(survivor, 0), fileId(later, 0));
+        em.flush();
+        em.clear();
+
+        assertThat(writer.preflight(ids, 949L).needsTmdb()).isTrue();
+        writer.apply(write(plex(949L, "Heat"), ids, tmdb(949, "Heat")));
+
+        em.flush();
+        em.clear();
+        assertThat(films.findAll()).singleElement().satisfies(f -> {
+            assertThat(f.getId()).isEqualTo(survivor.getId());
+            assertThat(f.getCredits()).hasSize(2);
+        });
+    }
+
+    @Test
+    void whenTheSurvivorAlreadyHasCreditsTmdbIsNotNeeded() {
+        Film survivor = saved("Heat", 949L, "Heat.m4v");
+        TestData.credit(survivor, people.save(TestData.person(null, "Someone")),
+            gregochr.cinefilm.film.CreditRole.DIRECTOR, null, 0);
+        films.saveAndFlush(survivor);
+        Film later = saved("Heat again", 949L, "Heat DC.m4v");
+        em.flush();
+        em.clear();
+
+        assertThat(writer.preflight(List.of(fileId(survivor, 0), fileId(later, 0)), 949L).needsTmdb()).isFalse();
+    }
 }

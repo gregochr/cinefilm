@@ -98,7 +98,8 @@ public class PlexFilmWriter {
     public Preflight preflight(List<Long> mediaFileIds, Long tmdbId) {
         Film anchor = files.findById(mediaFileIds.get(0)).orElseThrow().getEdition().getFilm();
         List<Film> sameId = tmdbId == null ? List.of() : films.findByTmdbIdOrderByIdAsc(tmdbId);
-        boolean needsTmdb = tmdbId != null && sameId.stream().noneMatch(f -> !f.getCredits().isEmpty());
+        // Judged on the film that survives the merge (the lowest id): merging deletes the others' credits.
+        boolean needsTmdb = tmdbId != null && (sameId.isEmpty() || sameId.get(0).getCredits().isEmpty());
         // The film the editions will end up in, so a Plex film moved off a shared anchor is judged on its own art.
         Film destination = tmdbId == null ? anchor
             : !sameId.isEmpty() ? sameId.get(0) : anchor.getTmdbId() == null ? anchor : null;
