@@ -1,4 +1,4 @@
-### Changed — operations runbook log commands
+### Docs — operations runbook log commands
 
 `operations.md` "Everyday commands" now reads logs with `docker logs cinefilm` / `cinefilm-proxy`, which work in any
 shell, instead of `docker compose logs`, which fails with "required variable CINEFILM_VERSION is missing a value"
