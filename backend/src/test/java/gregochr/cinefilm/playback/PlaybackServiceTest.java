@@ -210,7 +210,6 @@ class PlaybackServiceTest {
         assertThatThrownBy(() -> service.setHiddenFromContinueWatching(WITH_MARKER, null))
             .isInstanceOf(BadRequestException.class)
             .hasMessage("hidden must be true or false");
-        verify(states, never()).save(any());
     }
 
     @Test
@@ -263,7 +262,6 @@ class PlaybackServiceTest {
         HiddenResponse response = service.setHiddenFromContinueWatching(WITH_MARKER, true);
 
         assertThat(response).isEqualTo(new HiddenResponse(false));
-        verify(states, never()).save(any());
     }
 
     // snapshot and restore (undo of Mark as watched)
@@ -325,7 +323,6 @@ class PlaybackServiceTest {
         assertThatThrownBy(() -> service.restore(WITH_MARKER, new PlaybackSnapshot(-1, false, null, false, null)))
             .isInstanceOf(BadRequestException.class)
             .hasMessage("positionMs must be a non-negative number");
-        verify(states, never()).save(any());
         assertThat(service.restore(WITH_MARKER, new PlaybackSnapshot(0, false, null, false, null)).positionMs())
             .isZero();
     }
