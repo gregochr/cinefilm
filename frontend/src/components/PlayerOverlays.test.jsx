@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { BufferingSpinner, EndOverlay, IndicatorPill, Toast } from './PlayerOverlays.jsx';
+import { EndOverlay, ReconnectingNotice, IndicatorPill, Toast } from './PlayerOverlays.jsx';
 
 describe('status overlays', () => {
   it('the indicator pill is a status carrying its text', () => {
@@ -9,9 +9,10 @@ describe('status overlays', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Original · Home');
   });
 
-  it('buffering is announced as a status reading BUFFERING', () => {
-    render(<BufferingSpinner />);
-    expect(screen.getByRole('status')).toHaveTextContent('BUFFERING');
+  it('a dropped connection is announced at once as a status reading Reconnecting…, not BUFFERING', () => {
+    render(<ReconnectingNotice />);
+    expect(screen.getByRole('status')).toHaveTextContent('Reconnecting…');
+    expect(screen.queryByText('BUFFERING')).not.toBeInTheDocument();
   });
 
   it('a toast is a status carrying its message', () => {

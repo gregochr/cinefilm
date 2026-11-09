@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { SESSION_EXPIRED_EVENT, SIGNED_IN_EVENT } from '../api/client.js';
 import { mediaFilesApi } from '../api/resources.js';
+import BufferingIndicator from '../components/BufferingIndicator.jsx';
 import { Button } from '../components/Button.jsx';
 import {
   BackIcon,
@@ -17,7 +18,6 @@ import {
 } from '../components/icons.jsx';
 import { AudioSubtitlesPanel, QualityMenu } from '../components/PlayerMenus.jsx';
 import {
-  BufferingSpinner,
   EndOverlay,
   IndicatorPill,
   ReconnectingNotice,
@@ -426,7 +426,7 @@ function PlayerView({ film, edition, startAtZero }) {
         onDoubleClick={() => toggleFullscreen(containerRef.current, videoRef.current)}
       />
 
-      {stream.reconnecting ? <ReconnectingNotice /> : buffering ? <BufferingSpinner /> : null}
+      {stream.reconnecting ? <ReconnectingNotice /> : buffering ? <BufferingIndicator /> : null}
       {toast ? <Toast>{toast}</Toast> : null}
 
       <div className="player__chrome">

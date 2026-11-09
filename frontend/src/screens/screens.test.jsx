@@ -329,12 +329,47 @@ describe('Player', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('shows buffering with role=status', async () => {
+  it('shows buffering with role=status only after 400 ms of continuous buffering, and hides it at once on resume', async () => {
     const { video } = await openPlayer();
-    fireEvent.waiting(video);
-    expect(screen.getByText('BUFFERING')).toBeInTheDocument();
     fireEvent.playing(video);
-    expect(screen.queryByText('BUFFERING')).not.toBeInTheDocument();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      act(() => {
+        fireEvent.waiting(video);
+      });
+      expect(screen.queryByText('BUFFERING')).not.toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(399);
+      });
+      expect(screen.queryByText('BUFFERING')).not.toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(screen.getByText('BUFFERING')).toBeInTheDocument();
+      act(() => {
+        fireEvent.playing(video);
+      });
+      expect(screen.queryByText('BUFFERING')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a stall shorter than 400 ms never shows the indicator', async () => {
+    const { video } = await openPlayer();
+    fireEvent.playing(video);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      act(() => {
+        fireEvent.waiting(video);
+        vi.advanceTimersByTime(399);
+        fireEvent.playing(video);
+        vi.advanceTimersByTime(1000);
+      });
+      expect(screen.queryByText('BUFFERING')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('auto-hides after 3 s of playing, not while a menu is open', async () => {
