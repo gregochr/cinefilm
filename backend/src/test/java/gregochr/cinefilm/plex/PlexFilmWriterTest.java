@@ -171,6 +171,22 @@ class PlexFilmWriterTest extends ApiTestBase {
     }
 
     @Test
+    void anImportThatAssignsATmdbIdWithoutMovieDetailsMakesAStampedFilmDueForRatingsAgain() {
+        Film film = saved("heat file", null, "Heat.m4v");
+        film.setRatingsFetchedAt(NOW);
+        films.saveAndFlush(film);
+        Instant cutoff = NOW.minus(Duration.ofDays(30));
+        assertThat(films.findIdsWithRatingsDueBefore(cutoff)).doesNotContain(film.getId());
+
+        writer.apply(write(plex(949L, "Heat"), List.of(fileId(film, 0)), null));
+
+        Film result = reload(film.getId());
+        assertThat(result.getTmdbId()).isEqualTo(949L);
+        assertThat(result.getRatingsFetchedAt()).isNull();
+        assertThat(films.findIdsWithRatingsDueBefore(cutoff)).contains(film.getId());
+    }
+
+    @Test
     void aTmdbOutageStillGivesTheFilmItsTmdbIdAndPlexMetadataAndIsFetchedAgainNextTime() {
         Film film = saved("heat file", null, "Heat.m4v");
         List<Long> ids = List.of(fileId(film, 0));

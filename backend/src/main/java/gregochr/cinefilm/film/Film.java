@@ -113,6 +113,22 @@ public class Film {
     /** When OMDb was last asked about this film (a film with nothing to show is stamped too); null = never. */
     private Instant ratingsFetchedAt;
 
+    /**
+     * Sets the TMDB id. A film stamped as "no ratings" only because it had no identity at all (no TMDB id, no IMDb id)
+     * is un-stamped when it gains a different TMDB id, so the next refresh retries it instead of waiting out the
+     * stamp. A film that already has an IMDb id keeps its ratings: they are keyed by that id.
+     */
+    public void setTmdbId(Long newTmdbId) {
+        if (newTmdbId != null && !newTmdbId.equals(tmdbId) && imdbId == null) {
+            ratingsFetchedAt = null;
+            imdbRating = null;
+            imdbVotes = null;
+            rtScore = null;
+            rtUrl = null;
+        }
+        this.tmdbId = newTmdbId;
+    }
+
     /** A film shows in browse unless every one of its editions is missing from disk or cannot be played. */
     public boolean browsable() {
         return editions.isEmpty() || editions.stream().anyMatch(e -> !e.hiddenFromBrowse());
