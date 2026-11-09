@@ -450,3 +450,35 @@ describe('popover placement', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 });
+
+describe('the sheet keeps keyboard focus inside', () => {
+  it('Tab and Shift+Tab cycle through the items and Cancel, and the dialog stays open', async () => {
+    touchHover(true);
+    setup();
+    await userEvent.click(more());
+    const [remove, , start] = screen.getAllByRole('menuitem');
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    expect(remove).toHaveFocus();
+
+    start.focus();
+    await userEvent.tab();
+    expect(cancel).toHaveFocus();
+    await userEvent.tab();
+    expect(remove).toHaveFocus();
+    await userEvent.tab({ shift: true });
+    expect(cancel).toHaveFocus();
+    await userEvent.tab({ shift: true });
+    expect(start).toHaveFocus();
+    expect(screen.getByRole('dialog', { name: 'Options for Heat' })).toBeInTheDocument();
+  });
+
+  it('Esc still closes it and returns focus to ⋯', async () => {
+    touchHover(true);
+    setup();
+    await userEvent.click(more());
+    await userEvent.tab();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(more()).toHaveFocus();
+  });
+});

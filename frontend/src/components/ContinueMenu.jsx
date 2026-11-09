@@ -12,6 +12,7 @@ const itemsOf = (menu) => [...menu.querySelectorAll('[role="menuitem"]')];
 export default function ContinueMenu({ film, sheet, anchorRef, onClose, onRemove, onMarkWatched }) {
   const panelRef = useRef(null);
   const menuRef = useRef(null);
+  const cancelRef = useRef(null);
   const labelId = useId();
   const subId = useId();
   const progress = film.progress;
@@ -80,7 +81,17 @@ export default function ContinueMenu({ film, sheet, anchorRef, onClose, onRemove
     else if (event.key === 'ArrowUp') go(at - 1);
     else if (event.key === 'Home') go(0);
     else if (event.key === 'End') go(-1);
-    else if (event.key === 'Tab') onClose(false);
+    else if (event.key === 'Tab') {
+      if (!sheet) {
+        onClose(false);
+        return;
+      }
+      // The sheet is modal: Tab cycles through the items and Cancel, never out of the dialog.
+      event.preventDefault();
+      const ring = [...items, cancelRef.current];
+      const from = ring.indexOf(document.activeElement);
+      ring[(from + (event.shiftKey ? -1 : 1) + ring.length) % ring.length].focus();
+    }
   };
 
   const body = (
@@ -148,7 +159,7 @@ export default function ContinueMenu({ film, sheet, anchorRef, onClose, onRemove
         </div>
       </div>
       {sheet ? (
-        <button type="button" className="sheet__cancel" onClick={() => onClose(true)}>
+        <button type="button" className="sheet__cancel" ref={cancelRef} onClick={() => onClose(true)}>
           Cancel
         </button>
       ) : null}
