@@ -90,9 +90,9 @@ public final class PlexWatchMerge {
         if (existing != null && existing.lastPlayedAt() != null && existing.lastPlayedAt().isAfter(played)) {
             return keep(existing, Change.KEPT_NEWER);
         }
-        boolean nearEnd = offset > 0 && WatchedRule.isWatched(offset, cut.runtimeMs(), cut.creditsMarkerMs());
+        boolean nearEnd = WatchedRule.isWatched(offset, cut.runtimeMs(), cut.creditsMarkerMs());
         boolean watched = plex.viewCount() > 0 || nearEnd || (existing != null && existing.watched());
-        long position = offset > 0 && !nearEnd ? offset : 0;
+        long position = nearEnd ? 0 : offset;
         Instant watchedAt = existing != null && existing.watched() && existing.watchedAt() != null
             ? existing.watchedAt() : played;
         if (!watched) {

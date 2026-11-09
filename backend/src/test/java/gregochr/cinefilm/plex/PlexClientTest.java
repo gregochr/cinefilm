@@ -429,4 +429,28 @@ class PlexClientTest {
             .hasMessage("Interrupted while waiting to call Plex for plex sections");
         assertThat(Thread.interrupted()).isTrue();
     }
+
+    @Test
+    void aTotalSizeOfZeroEndsTheListEvenWhenAFullPageCameBack() {
+        server.expect(once(), requestTo(BASE + "/library/sections/1/all?includeGuids=1"))
+            .andRespond(withSuccess(page(0, 0, 200), MediaType.APPLICATION_JSON));
+
+        assertThat(big.films("1")).hasSize(200);
+        server.verify();
+    }
+
+    @Test
+    void fieldsThatAreNotStringsAreTreatedAsMissing() {
+        String body = "{\"MediaContainer\":{\"totalSize\":1,\"Metadata\":[{\"title\":12,\"titleSort\":true,"
+            + "\"Guid\":[{\"id\":5}],\"Media\":[{\"Part\":[{\"file\":7}]}]}]}}";
+        server.expect(once(), requestTo(BASE + "/library/sections/1/all?includeGuids=1"))
+            .andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+
+        PlexFilm film = client.films("1").get(0);
+
+        assertThat(film.title()).isNull();
+        assertThat(film.titleSort()).isNull();
+        assertThat(film.tmdbId()).isNull();
+        assertThat(film.files()).isEmpty();
+    }
 }

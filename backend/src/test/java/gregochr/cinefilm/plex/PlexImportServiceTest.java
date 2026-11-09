@@ -443,6 +443,8 @@ class PlexImportServiceTest {
         verify(plex, never()).image("/library/metadata/1/art/3?x=1", 1920, 1080);
         assertThat(report().invalidArtPaths()).isEqualTo(2);
         assertThat(report().artworkFailures()).isZero();
+        assertThat(report().failures()).isZero();
+        assertThat(report().metadataApplied()).isEqualTo(1);
     }
 
     @Test
@@ -652,5 +654,18 @@ class PlexImportServiceTest {
 
         verify(writer, times(1)).apply(new FilmWrite(heat, List.of(1L), null, null, null, NOW));
         verify(writer).preflight(List.of(1L), null);
+    }
+
+    @Test
+    void theProgressStartsAtZeroAsSoonAsTheImportIsAccepted() {
+        List<Runnable> queued = new ArrayList<>();
+        PlexImportService deferred = new PlexImportService(plex, tmdb, ingest, writer, artwork, scans, runs, lock,
+            queued::add, CLOCK, PREFIX);
+        when(runs.findFirstByFinishedAtNotNullOrderByIdDesc()).thenReturn(Optional.empty());
+
+        deferred.start();
+
+        assertThat(deferred.status().progress()).isEqualTo(new PlexProgress(0, 0, null));
+        assertThat(queued).hasSize(1);
     }
 }

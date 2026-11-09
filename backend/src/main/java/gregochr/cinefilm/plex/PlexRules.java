@@ -45,10 +45,7 @@ public final class PlexRules {
     /** The configured path prefix, NFC and ending in exactly one slash (a blank prefix stays blank). */
     public static String prefix(String configured) {
         String prefix = nfc(configured == null ? "" : configured.strip());
-        if (prefix.isEmpty()) {
-            return prefix;
-        }
-        return prefix.endsWith("/") ? prefix : prefix + "/";
+        return prefix.isEmpty() || prefix.endsWith("/") ? prefix : prefix + "/";
     }
 
     /**

@@ -166,6 +166,7 @@ class PlexFilmWriterTest extends ApiTestBase {
         assertThat(result.getCredits()).hasSize(1);
         assertThat(result.getTitle()).isEqualTo("Dune (Plex)");
         assertThat(result.getMatchStatus()).isEqualTo(MatchStatus.MATCHED);
+        assertThat(result.getMatchCandidates()).isNull();
         assertThat(films.count()).isEqualTo(1);
     }
 
@@ -460,5 +461,19 @@ class PlexFilmWriterTest extends ApiTestBase {
         assertThat(state.isWatched()).isTrue();
         assertThat(state.getPositionMs()).isZero();
         assertThat(state.getLastPlayedAt()).isEqualTo(VIEWED);
+    }
+
+    @Test
+    void anEditionPlexDoesNotPairIsLeftUntouchedByTheWatchedState() {
+        Film film = saved("Heat", 949L, "Heat.m4v", "Heat other.m4v");
+        Long otherEdition = film.getEditions().get(1).getId();
+        Long pairedEdition = film.getEditions().get(0).getId();
+
+        writer.apply(write(watched(plex(949L, "Heat"), 1, 0), List.of(fileId(film, 0)), null));
+
+        em.flush();
+        em.clear();
+        assertThat(states.findById(pairedEdition)).isPresent();
+        assertThat(states.findById(otherEdition)).isEmpty();
     }
 }

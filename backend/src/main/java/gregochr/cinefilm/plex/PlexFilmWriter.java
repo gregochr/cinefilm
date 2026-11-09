@@ -166,7 +166,6 @@ public class PlexFilmWriter {
         Film film = new Film();
         film.setTitleAndSort(cut(plex.title() == null ? "Untitled" : plex.title(), NAME_MAX), plex.titleSort());
         film.setAddedAt(plex.addedAt() == null ? importTime : plex.addedAt());
-        film.setMatchStatus(MatchStatus.MATCHED);
         return films.saveAndFlush(film);
     }
 
