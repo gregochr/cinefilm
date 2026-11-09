@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import { ContinueCard, Poster } from './Poster.jsx';
+import { Poster } from './Poster.jsx';
 
 const wrap = (ui) => render(<MemoryRouter>{ui}</MemoryRouter>);
 
@@ -34,38 +34,5 @@ describe('Poster', () => {
   it('shows the title on a placeholder when there is no poster', () => {
     wrap(<Poster film={{ ...FILM, posterPath: null }} />);
     expect(screen.getAllByText('Alien')).toHaveLength(1); // the placeholder title; caption reads "Alien · 1979"
-  });
-});
-
-describe('ContinueCard', () => {
-  const film = {
-    id: 1,
-    title: 'Heat',
-    backdropPath: '/heat.jpg',
-    progress: { positionMs: 3_871_000, runtimeMs: 10_200_000 },
-  };
-
-  it('links to the film, naming the time left', () => {
-    wrap(<ContinueCard film={film} />);
-    const link = screen.getByRole('link', { name: 'Heat, 1h 45m left' });
-    expect(link).toHaveAttribute('href', '/films/1');
-    expect(link).toHaveTextContent('Heat');
-    expect(link).toHaveTextContent('1h 45m left');
-  });
-
-  it('fills the progress bar to the watched fraction', () => {
-    wrap(<ContinueCard film={film} />);
-    // The fill is decorative (aria-hidden), so it carries a test-id instead of a role.
-    expect(screen.getByTestId('continue-fill')).toHaveStyle({ width: '38%' });
-  });
-
-  it('copes with a film that has no progress yet', () => {
-    wrap(<ContinueCard film={{ ...film, progress: undefined }} />);
-    expect(screen.getByRole('link', { name: 'Heat,' })).toBeInTheDocument();
-  });
-
-  it('shows an empty bar when the runtime is unknown', () => {
-    wrap(<ContinueCard film={{ ...film, progress: { positionMs: 1000, runtimeMs: 0 } }} />);
-    expect(screen.getByTestId('continue-fill')).toHaveStyle({ width: '0%' });
   });
 });

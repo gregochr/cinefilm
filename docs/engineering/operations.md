@@ -387,15 +387,28 @@ This **discards everything written since that dump** (watch history included): a
 
 ## Everyday commands
 
+Logs need nothing set up: `docker logs` reads a container by name and never parses the compose file.
+
+```bash
+docker logs -f cinefilm
+docker logs --tail 40 cinefilm-proxy
+docker logs --since 2026-11-09T21:45:00 --until 2026-11-09T22:05:00 cinefilm 2>&1 | grep -iE "error|exception"
+```
+
+Every `docker compose` command parses the compose file, which refuses to load without `CINEFILM_VERSION` ("required
+variable CINEFILM_VERSION is missing a value"), so export it first in the same shell:
+
 ```bash
 cd ~/cinefilm && export CINEFILM_VERSION=$(cat .deployed-version)
 docker compose ps
-docker compose logs -f cinefilm
 docker compose restart cinefilm
-docker compose logs --tail 40 cinefilm-proxy
 curl -s http://127.0.0.1:8090/actuator/health
 curl -sI https://cinefilm.chrisjgregory.dev/ | head -1
 ```
+
+The browse URL is https://cinefilm.chrisjgregory.dev. A tab still open on the old
+`https://dockermacmini.tail0c74fa.ts.net/` (port 443) now reaches Caddy under a name it does not serve, so every API
+call fails and pages show "The projector jammed": reopen it on the domain (or the fallback on `:8443`).
 
 ## Deferred (not built yet)
 

@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import { captionTitle, labelTitle } from '../state/titles.js';
-import { formatLeft } from '../player/time.js';
 import Art from './Art.jsx';
 import { CheckIcon } from './icons.jsx';
 
@@ -22,28 +21,3 @@ export function Poster({ film, caption }) {
   );
 }
 
-/** A 16:9 "continue watching" card with a progress fill and time left. */
-export function ContinueCard({ film }) {
-  const progress = film.progress;
-  const pct = progress?.runtimeMs
-    ? Math.round((progress.positionMs / progress.runtimeMs) * 100)
-    : 0;
-  const left = progress ? formatLeft(progress.positionMs, progress.runtimeMs) : '';
-  return (
-    <Link to={`/films/${film.id}`} className="continue-card" aria-label={`${film.title}, ${left}`}>
-      <Art kind="still" path={film.backdropPath} id={film.id} title={film.title}>
-        <span className="continue-card__track" aria-hidden="true">
-          <span
-            className="continue-card__fill"
-            data-testid="continue-fill"
-            style={{ width: `${pct}%` }}
-          />
-        </span>
-      </Art>
-      <span className="continue-card__meta">
-        <span className="continue-card__title">{film.title}</span>
-        <span className="continue-card__left">{left}</span>
-      </span>
-    </Link>
-  );
-}

@@ -138,7 +138,7 @@ describe('tracks', () => {
 
   it('describes quality rows', () => {
     expect(qualityDetail({ id: 'auto' })).toBe('now Original');
-    expect(qualityDetail({ id: 'original', bitrate: 24000000 }, { height: 1080 })).toBe(
+    expect(qualityDetail({ id: 'original', bitrate: 24000000 }, { width: 1920 })).toBe(
       '1080p · 24 Mbps',
     );
     expect(qualityDetail({ id: '480p', bitrate: 1500000, premade: true })).toBe(

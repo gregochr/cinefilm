@@ -84,6 +84,24 @@ class PlaybackStateIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void theHiddenColumnsExistDefaultToFalseAndAreClearedByTheNextProgressReport() throws Exception {
+        send(false, "/progress", "{\"positionMs\":" + 10 * MIN + "}");
+        assertThat(states.findById(editionId).orElseThrow().isHiddenFromContinueWatching()).isFalse();
+
+        send(false, "/continue-watching", "{\"hidden\":true}");
+        PlaybackState hidden = states.findById(editionId).orElseThrow();
+        assertThat(hidden.isHiddenFromContinueWatching()).isTrue();
+        assertThat(hidden.getHiddenAt()).isNotNull();
+        assertThat(hidden.getPositionMs()).isEqualTo(10 * MIN);
+
+        send(false, "/progress", "{\"positionMs\":" + 11 * MIN + "}");
+        PlaybackState back = states.findById(editionId).orElseThrow();
+        assertThat(back.isHiddenFromContinueWatching()).isFalse();
+        assertThat(back.getHiddenAt()).isNull();
+        assertThat(back.getPositionMs()).isEqualTo(11 * MIN);
+    }
+
+    @Test
     void unwatchingClearsTheWatchedFlagAndTimestamp() throws Exception {
         send(true, "/watched", "{\"watched\":true}");
         assertThat(states.findById(editionId).orElseThrow().isWatched()).isTrue();

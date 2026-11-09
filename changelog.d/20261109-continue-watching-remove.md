@@ -1,0 +1,3 @@
+### Added — remove a film from Continue watching, with Undo
+
+Each Continue watching card on Home has a ⋯ menu (and a long press on touch devices) with Remove from Continue watching, Mark as watched and Start from beginning; Delete or Backspace and M work on a focused card. Remove only sets a flag on the watch progress, so the resume position is kept and the film comes back as soon as it is played again. A pill at the bottom offers Undo for 8 seconds; undoing Mark as watched restores the exact previous position and watched state through a new `previous` snapshot on the watched response and `PUT /api/editions/{id}/playback-state`. New endpoint `PUT /api/editions/{id}/continue-watching`; migration V7 adds the two columns.

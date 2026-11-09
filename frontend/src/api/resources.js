@@ -33,6 +33,11 @@ export const editionsApi = {
   reportProgress: (id, positionMs, options) =>
     put(`/api/editions/${id}/progress`, { positionMs }, options),
   setWatched: (id, watched) => post(`/api/editions/${id}/watched`, { watched }),
+  /** Remove from (or put back into) Continue watching; keeps the resume position. */
+  setHiddenFromContinueWatching: (id, hidden) =>
+    put(`/api/editions/${id}/continue-watching`, { hidden }),
+  /** Undo: restore a `previous` snapshot returned by setWatched. */
+  restoreState: (id, snapshot) => put(`/api/editions/${id}/playback-state`, snapshot),
 };
 
 /** HLS playback sessions (adaptive streaming). `remove` is sent with keepalive when the page is closing. */

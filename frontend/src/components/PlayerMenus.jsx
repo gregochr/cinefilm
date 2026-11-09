@@ -50,7 +50,7 @@ function Item({ checked, disabled, onSelect, children, detail }) {
   );
 }
 
-export function QualityMenu({ qualities, value, height, activeRung, onSelect }) {
+export function QualityMenu({ qualities, value, width, activeRung, onSelect }) {
   const ref = useRef(null);
   useFocusChecked(ref);
   return (
@@ -69,7 +69,7 @@ export function QualityMenu({ qualities, value, height, activeRung, onSelect }) 
           checked={value === q.id}
           disabled={!q.available}
           onSelect={() => onSelect(q.id)}
-          detail={qualityDetail(q, { height, activeRung })}
+          detail={qualityDetail(q, { width, activeRung })}
         >
           {qualityName(q.id)}
         </Item>

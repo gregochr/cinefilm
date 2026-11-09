@@ -38,7 +38,7 @@
 }
 
 .poster,
-.continue-card {
+.continue-card__link {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -46,16 +46,16 @@
   min-width: 0;
 }
 .poster:hover .art,
-.continue-card:hover .art {
+.continue-card__link:hover .art {
   transform: scale(var(--cf-focus-scale));
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 .poster:focus-visible,
-.continue-card:focus-visible {
+.continue-card__link:focus-visible {
   box-shadow: none; /* the ring and scale are drawn on the art */
 }
 .poster:focus-visible .art,
-.continue-card:focus-visible .art {
+.continue-card__link:focus-visible .art {
   transform: scale(var(--cf-focus-scale));
   box-shadow:
     var(--cf-focus-ring),
@@ -95,6 +95,59 @@
   display: block;
   height: 100%;
   background: var(--cf-amber);
+}
+/* The card wraps the link and the ⋯ button (a sibling: no interactive content inside a link). */
+.continue-card {
+  position: relative;
+  min-width: 0;
+  -webkit-touch-callout: none;
+}
+.continue-card__link {
+  border-radius: var(--cf-radius-card);
+}
+.continue-card__more {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--cf-radius-pill);
+  background: var(--cf-chip);
+  color: var(--cf-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  z-index: 2;
+}
+.continue-card__more::after {
+  content: '';
+  position: absolute;
+  inset: -4px; /* 44px touch target */
+}
+.continue-card:hover .continue-card__more,
+.continue-card:focus-within .continue-card__more,
+.continue-card__more[aria-expanded='true'] {
+  opacity: 1;
+}
+.continue-card__more:hover {
+  background: var(--cf-chip-hover);
+}
+.continue-card__more:focus-visible {
+  box-shadow: var(--cf-focus-ring);
+}
+@media (hover: none) {
+  .continue-card__more {
+    opacity: 1;
+    top: auto;
+    bottom: -8px;
+    right: 0;
+    background: transparent;
+    color: var(--cf-text-muted);
+  }
+  .continue-card__meta {
+    padding-right: 40px;
+  }
 }
 .continue-card__meta {
   display: flex;
@@ -743,4 +796,153 @@
   .hints {
     display: none;
   }
+}
+
+/* The ⋯ menu: popover (hover devices) and bottom sheet (touch) */
+.cmenu {
+  position: fixed; /* portalled to <body> and placed from the ⋯ button's rect */
+  top: 0;
+  left: 0;
+  z-index: 60;
+  min-width: 280px;
+  padding: 8px;
+  border-radius: var(--cf-radius-card);
+  background: var(--cf-overlay);
+  border: 1px solid var(--cf-line-strong);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+}
+.cmenu__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 15px;
+  color: var(--cf-text);
+}
+.cmenu__item:hover,
+.cmenu__item:focus-visible {
+  background: var(--cf-surface-3);
+  color: var(--cf-text);
+}
+.cmenu__item:focus-visible {
+  box-shadow: var(--cf-focus-ring);
+}
+.cmenu__sub {
+  font-size: 13px;
+  color: var(--cf-text-muted);
+}
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 8px calc(8px + env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, 0.6);
+}
+.sheet__panel,
+.sheet__cancel {
+  border-radius: var(--cf-radius-panel);
+  background: var(--cf-surface-3);
+}
+.sheet__head {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--cf-line);
+}
+.sheet__title {
+  font-family: var(--cf-font-display);
+  font-size: 26px;
+  line-height: 1.1;
+}
+.sheet__meta {
+  margin-top: 4px;
+  font-size: var(--cf-size-ui);
+  color: var(--cf-text-muted);
+}
+.sheet .cmenu__item {
+  min-height: 56px;
+  padding: 14px 20px;
+  border-radius: 0;
+  border-top: 1px solid var(--cf-line);
+}
+.sheet .cmenu__item:first-child {
+  border-top: 0;
+}
+.sheet__cancel {
+  min-height: 56px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--cf-text);
+}
+.sheet__cancel:focus-visible {
+  box-shadow: var(--cf-focus-ring);
+}
+
+/* Undo pill */
+.undo-toast-region {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 28px;
+  z-index: 50;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.undo-toast {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 8px 8px 28px;
+  border-radius: var(--cf-radius-pill);
+  background: var(--cf-text);
+  color: var(--cf-bg);
+  font-size: 16px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+}
+.undo-toast__btn {
+  height: 44px;
+  padding: 0 22px;
+  border-radius: var(--cf-radius-pill);
+  background: var(--cf-bg);
+  color: var(--cf-text);
+  font-weight: 600;
+}
+.undo-toast__btn:focus-visible {
+  box-shadow: var(--cf-focus-ring);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .undo-toast {
+    animation: undo-in 160ms ease-out;
+  }
+}
+@keyframes undo-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (max-width: 600px) {
+  .undo-toast-region {
+    bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+}
+
+.continue-card__more,
+.cmenu__item,
+.sheet__cancel,
+.undo-toast__btn {
+  border: 0;
+  cursor: pointer;
+}
+.cmenu__item {
+  background: transparent;
 }

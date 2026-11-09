@@ -16,6 +16,7 @@ import gregochr.cinefilm.ApiTestBase;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmPreference;
+import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
@@ -184,6 +185,112 @@ class PlaybackApiTest extends ApiTestBase {
         mvc.perform(MockMvcRequestBuilders
                 .post("/api/editions/" + withMarker.getId() + "/watched").contentType("application/json")
                 .with(user("owner")).content("{\"watched\":true}"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
+    }
+
+    // Continue watching: remove, undo, come back
+
+    private String hiddenUrl(Edition edition) {
+        return "/api/editions/" + edition.getId() + "/continue-watching";
+    }
+
+    @Test
+    void aRemovedFilmLeavesHomeButKeepsItsPositionAndReturnsWhenPlayedAgain() throws Exception {
+        mvc.perform(put(progressUrl(withoutMarker)).content("{\"positionMs\":" + 50 * MIN + "}"));
+
+        mvc.perform(put(hiddenUrl(withoutMarker)).content("{\"hidden\":true}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.hidden").value(true));
+
+        mvc.perform(get("/api/home"))
+            .andExpect(jsonPath("$.hero").value(nullValue()))
+            .andExpect(jsonPath("$.continueWatching", hasSize(0)));
+        PlaybackState state = states.findById(withoutMarker.getId()).orElseThrow();
+        assertThat(state.getPositionMs()).isEqualTo(50 * MIN);
+        assertThat(state.getHiddenAt()).isNotNull();
+        mvc.perform(get("/api/films/{id}", film.getId()))
+            .andExpect(jsonPath("$.progress.positionMs").value(50 * MIN));
+
+        mvc.perform(put(progressUrl(withoutMarker)).content("{\"positionMs\":" + 51 * MIN + "}"));
+        mvc.perform(get("/api/home")).andExpect(jsonPath("$.hero.progress.positionMs").value(51 * MIN));
+        assertThat(states.findById(withoutMarker.getId()).orElseThrow().isHiddenFromContinueWatching()).isFalse();
+    }
+
+    @Test
+    void unhidingPutsTheFilmBackInTheRow() throws Exception {
+        mvc.perform(put(progressUrl(withoutMarker)).content("{\"positionMs\":" + 50 * MIN + "}"));
+        mvc.perform(put(hiddenUrl(withoutMarker)).content("{\"hidden\":true}"));
+
+        mvc.perform(put(hiddenUrl(withoutMarker)).content("{\"hidden\":false}"))
+            .andExpect(jsonPath("$.hidden").value(false));
+
+        mvc.perform(get("/api/home")).andExpect(jsonPath("$.hero.title").value("Blade Runner"));
+        assertThat(states.findById(withoutMarker.getId()).orElseThrow().getHiddenAt()).isNull();
+    }
+
+    @Test
+    void hidingAnEditionThatWasNeverPlayedCreatesNoRow() throws Exception {
+        mvc.perform(put(hiddenUrl(withoutMarker)).content("{\"hidden\":true}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.hidden").value(false));
+        assertThat(states.findById(withoutMarker.getId())).isEmpty();
+    }
+
+    @Test
+    void hiddenBodyMustBeABooleanAndTheEditionMustExist() throws Exception {
+        mvc.perform(put(hiddenUrl(withoutMarker)).content("{}")).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("hidden must be true or false"));
+        mvc.perform(put(hiddenUrl(withoutMarker)).content("{\"hidden\":\"maybe\"}"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("Invalid request"));
+        mvc.perform(put("/api/editions/777777/continue-watching").content("{\"hidden\":true}"))
+            .andExpect(status().isNotFound()).andExpect(jsonPath("$.error").value("No such edition"));
+    }
+
+    @Test
+    void markingWatchedReturnsTheStateBeforeAndRestoringItUndoesItExactly() throws Exception {
+        mvc.perform(put(progressUrl(withMarker)).content("{\"positionMs\":" + 95 * MIN + "}"));
+        mvc.perform(put(progressUrl(withMarker)).content("{\"positionMs\":" + 7 * MIN + "}"));
+        Instant watchedAt = states.findById(withMarker.getId()).orElseThrow().getWatchedAt();
+        mvc.perform(put(hiddenUrl(withMarker)).content("{\"hidden\":true}"));
+        String url = "/api/editions/" + withMarker.getId() + "/watched";
+
+        String body = mvc.perform(post(url).content("{\"watched\":true}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.previous.positionMs").value(7 * MIN))
+            .andExpect(jsonPath("$.previous.watched").value(true))
+            .andExpect(jsonPath("$.previous.hiddenFromContinueWatching").value(true))
+            .andReturn().getResponse().getContentAsString();
+        assertThat(states.findById(withMarker.getId()).orElseThrow().getPositionMs()).isZero();
+
+        String previous = com.jayway.jsonpath.JsonPath.<java.util.Map<String, Object>>read(body, "$.previous")
+            .entrySet().stream()
+            .map(e -> "\"" + e.getKey() + "\":" + (e.getValue() instanceof String s ? "\"" + s + "\""
+                : String.valueOf(e.getValue())))
+            .collect(java.util.stream.Collectors.joining(",", "{", "}"));
+        mvc.perform(put("/api/editions/" + withMarker.getId() + "/playback-state").content(previous))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.positionMs").value(7 * MIN));
+
+        PlaybackState state = states.findById(withMarker.getId()).orElseThrow();
+        assertThat(state.getPositionMs()).isEqualTo(7 * MIN);
+        assertThat(state.isWatched()).isTrue();
+        assertThat(state.getWatchedAt()).isEqualTo(watchedAt);
+        assertThat(state.isHiddenFromContinueWatching()).isTrue();
+        assertThat(state.getHiddenAt()).isNotNull();
+    }
+
+    @Test
+    void restoreValidatesThePositionAndTheEditionAndNeedsTheHeader() throws Exception {
+        String url = "/api/editions/" + withMarker.getId() + "/playback-state";
+        mvc.perform(put(url).content("{\"positionMs\":-1,\"watched\":false,\"hiddenFromContinueWatching\":false}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("positionMs must be a non-negative number"));
+        mvc.perform(put("/api/editions/777777/playback-state")
+                .content("{\"positionMs\":0,\"watched\":false,\"hiddenFromContinueWatching\":false}"))
+            .andExpect(status().isNotFound()).andExpect(jsonPath("$.error").value("No such edition"));
+        mvc.perform(MockMvcRequestBuilders.put(url).contentType("application/json").with(user("owner"))
+                .content("{\"positionMs\":0}"))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
     }

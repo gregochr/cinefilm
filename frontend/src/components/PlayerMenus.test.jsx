@@ -58,7 +58,7 @@ describe('QualityMenu', () => {
       <QualityMenu
         qualities={QUALITIES}
         value="original"
-        height={1080}
+        width={1920}
         onSelect={onSelect}
         {...props}
       />,

@@ -35,7 +35,8 @@ public final class FilmDtos {
     }
 
     /** The original file of an edition, summarised for the "file line". */
-    public record FileInfo(Long id, String videoCodec, Integer height, String audioSummary, Instant addedAt) {
+    public record FileInfo(Long id, String videoCodec, Integer width, Integer height, String audioSummary,
+                           Instant addedAt) {
     }
 
     /** An audio track. */

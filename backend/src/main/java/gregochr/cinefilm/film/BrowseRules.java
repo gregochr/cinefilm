@@ -1,6 +1,7 @@
 package gregochr.cinefilm.film;
 
 import gregochr.cinefilm.config.BadRequestException;
+import gregochr.cinefilm.playback.PlaybackState;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -21,10 +22,15 @@ public final class BrowseRules {
     private BrowseRules() {
     }
 
-    /** Films whose last played edition is part-way through, most recently played first. */
+    /**
+     * Films whose last played edition is part-way through and has not been removed from Continue watching, most
+     * recently played first. Removing only sets a flag on that edition's state; the position stays.
+     */
     public static List<FilmView> continueWatching(List<FilmView> views) {
         return views.stream()
             .filter(v -> v.progress().isPresent())
+            .filter(v -> !v.lastPlayedEdition().flatMap(v::state)
+                .map(PlaybackState::isHiddenFromContinueWatching).orElse(false))
             .sorted(Comparator.comparing(FilmView::lastPlayedAt).reversed())
             .toList();
     }

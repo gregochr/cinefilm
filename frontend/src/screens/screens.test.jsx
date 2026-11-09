@@ -151,10 +151,11 @@ describe('Film detail', () => {
     expect(await screen.findByRole('link', { name: 'Play The Final Cut' })).toBeInTheDocument();
     expect(screen.getByText('1h 57m')).toBeInTheDocument();
     expect(screen.getByText(/Edition .* 3 in your library/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Blade Runner collection' })).toHaveAttribute(
-      'href',
-      '/collections/2',
-    );
+    const collectionLink = screen.getByRole('link', { name: 'Blade Runner collection' });
+    expect(collectionLink).toHaveAttribute('href', '/collections/2');
+    expect(collectionLink).toHaveTextContent(/^Blade Runner collection$/);
+    // TMDB's name is "Blade Runner Collection"; the suffix is dropped before " collection" is added.
+    expect(collectionLink.textContent).not.toContain('Collection collection');
 
     await userEvent.click(screen.getByRole('radio', { name: /Theatrical Cut/ }));
     expect(screen.getByRole('link', { name: 'Play Theatrical Cut' })).toHaveAttribute(
