@@ -341,6 +341,31 @@ class LibraryIngestTest extends ApiTestBase {
     }
 
     @Test
+    void refreshingOnePartOfAnEditionSetsTheRuntimeToTheSumOfAllItsParts() {
+        ingest.addNew(found("Towers - pt1.m4v", 10), Playability.PLAYABLE, probe(5_000L),
+            new TitleGuess("Towers", null), null);
+        Edition edition = only().getEditions().get(0);
+        MediaFile second = new MediaFile();
+        second.setEdition(edition);
+        second.setPath("Towers - pt2.m4v");
+        second.setPartNumber(2);
+        second.setDurationMs(7_000L);
+        second.setAddedAt(CREATED);
+        edition.getMediaFiles().add(second);
+        em.flush();
+        Long firstId = ingest.known().get("Towers - pt1.m4v").id();
+
+        ingest.refresh(firstId, found("Towers - pt1.m4v", 11), Playability.PLAYABLE, probe(6_000L));
+        em.flush();
+        em.clear();
+
+        Edition reloaded = editions.findById(edition.getId()).orElseThrow();
+        assertThat(reloaded.getRuntimeMs()).isEqualTo(13_000L);
+        assertThat(reloaded.originalParts()).extracting(MediaFile::getPartNumber, MediaFile::getDurationMs)
+            .containsExactly(tuple(1, 6_000L), tuple(2, 7_000L));
+    }
+
+    @Test
     void refreshWithAFailedProbeKeepsTheRuntimeAndTheStreams() {
         ingest.addNew(found("A.m4v", 10), Playability.PLAYABLE, probe(5_000L), new TitleGuess("A", null), null);
         Long id = ingest.known().get("A.m4v").id();

@@ -145,12 +145,12 @@ public class LibraryIngest {
         edition.setFilm(film);
         edition.setName("Original");
         edition.setYear(film.getYear());
-        edition.setRuntimeMs(probe == null ? 0 : probe.durationMs());
         MediaFile file = new MediaFile();
         file.setEdition(edition);
         file.setAddedAt(found.createdAt());
         fill(file, found, playability, probe);
         edition.getMediaFiles().add(file);
+        edition.recomputeRuntime();
         film.getEditions().add(edition);
         films.save(film);
     }
@@ -165,7 +165,7 @@ public class LibraryIngest {
         MediaFile file = files.findById(mediaFileId).orElseThrow();
         RemovedStreams removed = fill(file, found, playability, probe);
         if (probe != null) {
-            file.getEdition().setRuntimeMs(probe.durationMs());
+            file.getEdition().recomputeRuntime();
         }
         preferences.findById(file.getEdition().getFilm().getId()).ifPresent(preference -> {
             if (removed.audio().contains(preference.getAudioStreamId())) {

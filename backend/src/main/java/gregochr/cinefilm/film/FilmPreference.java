@@ -1,5 +1,6 @@
 package gregochr.cinefilm.film;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
@@ -27,6 +28,10 @@ public class FilmPreference {
     private Long audioStreamId;
 
     private String subtitle;
+
+    /** True once the owner picked the default edition (Film detail or Edit editions); the scan then leaves it. */
+    @Column(nullable = false)
+    private boolean defaultEditionChosen;
 
     /** Creates empty preferences for a film. */
     public FilmPreference(Long filmId) {

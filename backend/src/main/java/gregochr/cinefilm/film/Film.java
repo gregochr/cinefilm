@@ -86,6 +86,10 @@ public class Film {
     @Column(length = 8000)
     private String matchCandidates;
 
+    /** True once the owner settled this film's files (Fix match, Edit editions): the scan never regroups it. */
+    @Column(nullable = false)
+    private boolean editionsConfirmed;
+
     /** A film shows in browse unless every one of its editions is missing from disk or cannot be played. */
     public boolean browsable() {
         return editions.isEmpty() || editions.stream().anyMatch(e -> !e.hiddenFromBrowse());

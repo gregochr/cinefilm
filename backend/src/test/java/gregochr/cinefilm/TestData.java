@@ -74,6 +74,7 @@ public final class TestData {
         file.setHeight(1080);
         file.setWidth(1920);
         file.setBitrate(9_000_000L);
+        file.setDurationMs(edition.getRuntimeMs() > 0 ? edition.getRuntimeMs() : 100 * MIN);
         file.setAddedAt(edition.getFilm().getAddedAt());
         file.getAudioStreams().add(audio(file, 0, "5.1", "DTS", null, true));
         file.getAudioStreams().add(audio(file, 1, "Stereo", "AAC", "Commentary — Someone", false));
