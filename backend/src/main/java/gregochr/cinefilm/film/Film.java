@@ -34,6 +34,8 @@ import lombok.Setter;
 @NoArgsConstructor
 public class Film {
 
+    private static final int SORT_TITLE_MAX = 255;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -97,7 +99,12 @@ public class Film {
         this.title = newTitle;
         this.sortTitle = explicitSort == null || explicitSort.isBlank()
             ? SortTitles.of(newTitle)
-            : explicitSort.strip().toLowerCase(java.util.Locale.ROOT);
+            : bound(explicitSort.strip().toLowerCase(java.util.Locale.ROOT));
+    }
+
+    /** The sort key is a VARCHAR(255): a longer one from outside would fail the flush and roll the import back. */
+    private static String bound(String key) {
+        return key.substring(0, Math.min(key.length(), SORT_TITLE_MAX));
     }
 
     /** Sets the title and derives {@link #sortTitle} from it. */

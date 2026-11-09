@@ -28,4 +28,18 @@ class FilmTitleSortTest {
         film.setTitleAndSort("Alien", "");
         assertThat(film.getSortTitle()).isEqualTo("alien");
     }
+
+    @Test
+    void anExplicitSortTitleIsBoundedToTheColumnAfterNormalising() {
+        Film film = new Film();
+
+        film.setTitleAndSort("Heat", "  " + "A".repeat(300));
+        assertThat(film.getSortTitle()).isEqualTo("a".repeat(255));
+
+        film.setTitleAndSort("Heat", "B".repeat(255));
+        assertThat(film.getSortTitle()).hasSize(255);
+
+        film.setTitleAndSort("Heat", "C".repeat(254));
+        assertThat(film.getSortTitle()).hasSize(254);
+    }
 }
