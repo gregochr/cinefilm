@@ -22,7 +22,8 @@ describe('FilmDetail ratings row', () => {
     expect(within(row).getByText('Rotten Tomatoes')).toBeInTheDocument();
     expect(within(row).getByText('84%')).toBeInTheDocument();
     const plot = screen.getByText(fixtures.heat.overview);
-    expect(row.compareDocumentPosition(plot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The plot follows the row in document order (and is not inside it).
+    expect(row.compareDocumentPosition(plot)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('hides Rotten Tomatoes when the film has no score from it', async () => {

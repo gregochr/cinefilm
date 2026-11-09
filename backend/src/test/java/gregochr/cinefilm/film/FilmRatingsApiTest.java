@@ -11,11 +11,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gregochr.cinefilm.ApiTestBase;
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /** Ratings end to end: stored on the film, in the detail JSON, and as library sort keys. */
 class FilmRatingsApiTest extends ApiTestBase {
+
+    @Autowired
+    private EntityManager entityManager;
+
+    /** The test shares a transaction with the request: without this it would read back the instances saved here. */
+    private void readFromTheDatabase() {
+        films.flush();
+        entityManager.clear();
+    }
 
     private Film saved(String title, String imdb, Integer rt) {
         Film film = film(null, title, 2000, NOW);
@@ -33,6 +44,7 @@ class FilmRatingsApiTest extends ApiTestBase {
         Film heat = saved("Heat", "8.3", 84);
         heat.setImdbId("tt0113277");
         save(heat);
+        readFromTheDatabase();
 
         mvc.perform(get("/api/films/{id}", heat.getId()))
             .andExpect(status().isOk())
@@ -46,6 +58,7 @@ class FilmRatingsApiTest extends ApiTestBase {
     @Test
     void aSourceWithoutAScoreIsNullAndTheBlockIsStillThere() throws Exception {
         Film film = saved("Unrated", null, null);
+        readFromTheDatabase();
 
         mvc.perform(get("/api/films/{id}", film.getId()))
             .andExpect(jsonPath("$.ratings.imdb").value(nullValue()))
@@ -58,6 +71,7 @@ class FilmRatingsApiTest extends ApiTestBase {
         saved("Top", "9.1", null);
         saved("None", null, 99);
         saved("Low", "5.5", 50);
+        readFromTheDatabase();
 
         mvc.perform(get("/api/films").param("sort", "imdb"))
             .andExpect(jsonPath("$.films[*].title", contains("Top", "Mid", "Low", "None")));
@@ -69,6 +83,7 @@ class FilmRatingsApiTest extends ApiTestBase {
         saved("Top", "9.1", null);
         saved("None", null, 99);
         saved("Low", "5.5", 5);
+        readFromTheDatabase();
 
         mvc.perform(get("/api/films").param("sort", "rt"))
             .andExpect(jsonPath("$.films[*].title", contains("None", "Mid", "Low", "Top")));

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -20,6 +21,9 @@ class FilmRatingsIntegrationTest extends IntegrationTestBase {
 
     @Autowired
     private FilmRepository films;
+
+    @Autowired
+    private EntityManager entityManager;
 
     private Film saved(String title, Instant fetchedAt) {
         Film film = film(null, title, 2000, NOW);
@@ -37,6 +41,8 @@ class FilmRatingsIntegrationTest extends IntegrationTestBase {
         film.setRtUrl("https://www.rottentomatoes.com/m/heat_1995");
         film.setRatingsFetchedAt(NOW);
         Long id = films.saveAndFlush(film).getId();
+        // The test is transactional: without clearing, findById would hand back this same instance, not the row.
+        entityManager.clear();
 
         Film loaded = films.findById(id).orElseThrow();
 

@@ -4,24 +4,22 @@ import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.ZONE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.library.ScanFinished;
 import gregochr.cinefilm.plex.PlexImportFinished;
-import gregochr.cinefilm.ratings.RatingsStore.Target;
 import gregochr.cinefilm.tmdb.Sleeper;
 import gregochr.cinefilm.tmdb.TmdbApi;
+import gregochr.cinefilm.tmdb.TmdbModels.CollectionDetails;
+import gregochr.cinefilm.tmdb.TmdbModels.MovieDetails;
+import gregochr.cinefilm.tmdb.TmdbModels.SearchHit;
 import gregochr.cinefilm.tmdb.TmdbUnavailableException;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -30,36 +28,55 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
+/**
+ * The refresher against in-memory stand-ins for the store, OMDb and TMDB, so each test asserts what became of the
+ * films (their stored ids, ratings and stamps) and what was asked of the outside services, not which repository
+ * methods ran.
+ */
 class RatingsRefresherTest {
 
     private static final Instant CUTOFF = NOW.minus(Duration.ofDays(30));
     private static final OmdbRatings HEAT_RATINGS =
         new OmdbRatings(new BigDecimal("8.3"), 712345, 84, "https://www.rottentomatoes.com/m/heat_1995");
+    private static final OmdbRatings STALE_RATINGS =
+        new OmdbRatings(new BigDecimal("7.0"), 100, 50, "https://www.rottentomatoes.com/m/old");
 
-    private final OmdbApi omdb = mock(OmdbApi.class);
-    private final TmdbApi tmdb = mock(TmdbApi.class);
+    private final FakeOmdb omdb = new FakeOmdb();
+    private final FakeTmdb tmdb = new FakeTmdb();
     private final FilmRepository films = mock(FilmRepository.class);
-    private final RatingsStore store = mock(RatingsStore.class);
+    private final FakeStore store = new FakeStore();
     private final InMemoryBudget budget = new InMemoryBudget();
     private final List<Duration> sleeps = new ArrayList<>();
     private final List<Runnable> queued = new ArrayList<>();
+    private final Logger refresherLog = (Logger) LoggerFactory.getLogger(RatingsRefresher.class);
+    private final ListAppender<ILoggingEvent> logged = new ListAppender<>();
     private Instant now = NOW;
     private RatingsRefresher refresher;
 
     @BeforeEach
     void setUp() {
         refresher = refresher(2);
-        when(omdb.enabled()).thenReturn(true);
-        when(tmdb.enabled()).thenReturn(true);
         when(films.findIdsWithRatingsDueBefore(CUTOFF)).thenReturn(List.of());
+        logged.start();
+        refresherLog.addAppender(logged);
+    }
+
+    @AfterEach
+    void detachLog() {
+        refresherLog.detachAppender(logged);
     }
 
     /** A refresher on a clock the test can move, running its work inline. */
@@ -108,16 +125,152 @@ class RatingsRefresherTest {
         }
     }
 
+    /** One stored film: what the store keeps, so a test can read back what the refresh did to it. */
+    private static final class Row {
+        private String imdbId;
+        private Long tmdbId;
+        private OmdbRatings ratings;
+        private Instant fetchedAt;
+    }
+
+    /** The ratings columns without a database, following the real store's rules for ids, stamps and refusals. */
+    private static final class FakeStore extends RatingsStore {
+        private final Map<Long, Row> rows = new HashMap<>();
+        private final Set<Long> failing = new HashSet<>();
+
+        FakeStore() {
+            super(null);
+        }
+
+        @Override
+        public Optional<Target> target(Long filmId) {
+            return Optional.ofNullable(rows.get(filmId)).map(r -> new Target(r.imdbId, r.tmdbId));
+        }
+
+        @Override
+        public boolean saveImdbId(Long filmId, String imdbId) {
+            Row row = rows.get(filmId);
+            if (row == null || row.imdbId != null) {
+                return false;
+            }
+            row.imdbId = imdbId;
+            return true;
+        }
+
+        @Override
+        public boolean saveRatings(Long filmId, String expectedImdbId, OmdbRatings ratings, Instant at) {
+            if (failing.contains(filmId)) {
+                throw new IllegalStateException("db");
+            }
+            Row row = rows.get(filmId);
+            if (row == null || !Objects.equals(row.imdbId, expectedImdbId)) {
+                return false;
+            }
+            row.ratings = ratings;
+            row.fetchedAt = at;
+            return true;
+        }
+    }
+
+    /** OMDb with scripted answers; it records every id asked, because each ask spends from the budget. */
+    private static final class FakeOmdb implements OmdbApi {
+        private boolean enabled = true;
+        private final Map<String, OmdbResult> answers = new HashMap<>();
+        private final Set<String> outages = new HashSet<>();
+        private final Map<String, Runnable> whileAsking = new HashMap<>();
+        private final List<String> lookups = new ArrayList<>();
+
+        @Override
+        public boolean enabled() {
+            return enabled;
+        }
+
+        @Override
+        public OmdbResult lookup(String imdbId) {
+            lookups.add(imdbId);
+            Runnable meanwhile = whileAsking.get(imdbId);
+            if (meanwhile != null) {
+                meanwhile.run();
+            }
+            if (outages.contains(imdbId)) {
+                throw new OmdbUnavailableException("OMDb could not be reached");
+            }
+            return answers.getOrDefault(imdbId, OmdbResult.notFound());
+        }
+    }
+
+    /** TMDB with scripted IMDb ids; it records every film asked about. */
+    private static final class FakeTmdb implements TmdbApi {
+        private boolean enabled = true;
+        private final Map<Long, String> imdbIds = new HashMap<>();
+        private final Set<Long> down = new HashSet<>();
+        private final Map<Long, Runnable> whileAsking = new HashMap<>();
+        private final List<Long> asked = new ArrayList<>();
+
+        @Override
+        public boolean enabled() {
+            return enabled;
+        }
+
+        @Override
+        public Optional<String> imdbId(long id) {
+            asked.add(id);
+            Runnable meanwhile = whileAsking.get(id);
+            if (meanwhile != null) {
+                meanwhile.run();
+            }
+            if (down.contains(id)) {
+                throw new TmdbUnavailableException("down", null);
+            }
+            return Optional.ofNullable(imdbIds.get(id));
+        }
+
+        @Override
+        public List<SearchHit> search(String title, Integer year) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Optional<MovieDetails> movie(long id) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Optional<CollectionDetails> collection(long id) {
+            throw new UnsupportedOperationException();
+        }
+    }
+
     private void due(Long... ids) {
         when(films.findIdsWithRatingsDueBefore(CUTOFF)).thenReturn(List.of(ids));
     }
 
-    private void target(long id, String imdbId, Long tmdbId) {
-        when(store.target(id)).thenReturn(Optional.of(new Target(imdbId, tmdbId)));
+    /** A stored film, never fetched. */
+    private Row film(long id, String imdbId, Long tmdbId) {
+        Row row = new Row();
+        row.imdbId = imdbId;
+        row.tmdbId = tmdbId;
+        store.rows.put(id, row);
+        return row;
     }
 
     private void found(String imdbId) {
-        when(omdb.lookup(imdbId)).thenReturn(OmdbResult.found(HEAT_RATINGS));
+        omdb.answers.put(imdbId, OmdbResult.found(HEAT_RATINGS));
+    }
+
+    private void assertGotRatings(Row row) {
+        assertThat(row.ratings).isEqualTo(HEAT_RATINGS);
+        assertThat(row.fetchedAt).isEqualTo(NOW);
+    }
+
+    private void assertStampedNoRatings(Row row) {
+        assertThat(row.ratings).isNull();
+        assertThat(row.fetchedAt).isEqualTo(NOW);
+    }
+
+    private void assertUntouched(Row row) {
+        assertThat(row.ratings).isNull();
+        assertThat(row.fetchedAt).isNull();
     }
 
     // what a film gets
@@ -125,50 +278,51 @@ class RatingsRefresherTest {
     @Test
     void aFilmWithNoImdbIdAndNoTmdbIdIsStampedNoRatingsWithoutAskingOmdb() {
         due(1L);
-        target(1, null, null);
+        Row heat = film(1, null, null);
+        heat.ratings = STALE_RATINGS;
 
         refresher.startDue();
 
-        verify(store).saveRatings(1L, null, null, NOW);
-        verifyNoInteractions(tmdb);
-        verify(omdb, never()).lookup(anyString());
+        assertStampedNoRatings(heat);
+        assertThat(omdb.lookups).isEmpty();
+        assertThat(tmdb.asked).isEmpty();
     }
 
     @Test
     void aFoundFilmGetsItsRatingsAndTheStamp() {
         due(1L);
-        target(1, "tt0113277", 949L);
+        Row heat = film(1, "tt0113277", 949L);
         found("tt0113277");
-        when(store.saveRatings(1L, "tt0113277", HEAT_RATINGS, NOW)).thenReturn(true);
 
         refresher.startDue();
 
-        verify(store).saveRatings(1L, "tt0113277", HEAT_RATINGS, NOW);
-        verify(tmdb, never()).imdbId(anyLong());
+        assertGotRatings(heat);
+        assertThat(heat.imdbId).isEqualTo("tt0113277");
+        assertThat(tmdb.asked).isEmpty();
     }
 
     @Test
     void aFilmOmdbDoesNotKnowIsStampedWithNoRatingsSoItIsNotAskedAgainTomorrow() {
         due(1L);
-        target(1, "tt0113277", 949L);
-        when(omdb.lookup("tt0113277")).thenReturn(OmdbResult.notFound());
+        Row heat = film(1, "tt0113277", 949L);
+        heat.ratings = STALE_RATINGS;
+        omdb.answers.put("tt0113277", OmdbResult.notFound());
 
         refresher.startDue();
 
-        verify(store).saveRatings(1L, "tt0113277", null, NOW);
+        assertStampedNoRatings(heat);
     }
 
     @Test
-    void aFilmThatHasGoneIsSkipped() {
+    void aFilmThatHasGoneIsSkippedAndTheBatchCarriesOn() {
         due(1L, 2L);
-        when(store.target(1L)).thenReturn(Optional.empty());
-        target(2, "tt0113277", 949L);
+        Row alien = film(2, "tt0113277", 949L);
         found("tt0113277");
 
         refresher.startDue();
 
-        verify(store).saveRatings(2L, "tt0113277", HEAT_RATINGS, NOW);
-        verify(store, never()).saveRatings(1L, null, null, NOW);
+        assertGotRatings(alien);
+        assertThat(store.rows).doesNotContainKey(1L);
     }
 
     // backfill
@@ -176,83 +330,85 @@ class RatingsRefresherTest {
     @Test
     void aFilmStoredBeforeImdbIdsWereKeptGetsItsIdFromTmdbBeforeOmdbIsAsked() {
         due(1L);
-        target(1, null, 949L);
-        when(tmdb.imdbId(949)).thenReturn(Optional.of("tt0113277"));
-        when(store.saveImdbId(1L, "tt0113277")).thenReturn(true);
+        Row heat = film(1, null, 949L);
+        tmdb.imdbIds.put(949L, "tt0113277");
         found("tt0113277");
 
         refresher.startDue();
 
-        verify(store).saveImdbId(1L, "tt0113277");
-        verify(omdb).lookup("tt0113277");
-        verify(store).saveRatings(1L, "tt0113277", HEAT_RATINGS, NOW);
+        assertThat(heat.imdbId).isEqualTo("tt0113277");
+        assertGotRatings(heat);
+        assertThat(omdb.lookups).containsExactly("tt0113277");
     }
 
     @Test
     void whenTmdbHasNoImdbIdTheFilmIsStampedNoRatingsWithoutAskingOmdb() {
         due(1L);
-        target(1, null, 949L);
-        when(tmdb.imdbId(949)).thenReturn(Optional.empty());
+        Row heat = film(1, null, 949L);
 
         refresher.startDue();
 
-        verify(store).saveRatings(1L, null, null, NOW);
-        verify(store, never()).saveImdbId(anyLong(), anyString());
-        verify(omdb, never()).lookup(anyString());
+        assertThat(tmdb.asked).containsExactly(949L);
+        assertThat(heat.imdbId).isNull();
+        assertStampedNoRatings(heat);
+        assertThat(omdb.lookups).isEmpty();
     }
 
     @Test
-    void anImdbIdLongerThanTheColumnIsTreatedAsNone() {
+    void anImdbIdOneLongerThanTheColumnIsTreatedAsNone() {
         due(1L);
-        target(1, null, 949L);
-        when(tmdb.imdbId(949)).thenReturn(Optional.of("tt12345678901234567"));
+        Row heat = film(1, null, 949L);
+        tmdb.imdbIds.put(949L, "tt123456789012345");
 
         refresher.startDue();
 
-        verify(store).saveRatings(1L, null, null, NOW);
-        verify(store, never()).saveImdbId(anyLong(), anyString());
+        assertThat(heat.imdbId).isNull();
+        assertStampedNoRatings(heat);
+        assertThat(omdb.lookups).isEmpty();
     }
 
     @Test
     void anImdbIdAtTheColumnLimitIsKept() {
         due(1L);
-        target(1, null, 949L);
-        when(tmdb.imdbId(949)).thenReturn(Optional.of("tt1234567890123"));
-        when(store.saveImdbId(1L, "tt1234567890123")).thenReturn(true);
-        when(omdb.lookup("tt1234567890123")).thenReturn(OmdbResult.notFound());
+        Row heat = film(1, null, 949L);
+        tmdb.imdbIds.put(949L, "tt12345678901234");
+        found("tt12345678901234");
 
         refresher.startDue();
 
-        verify(store).saveImdbId(1L, "tt1234567890123");
+        assertThat(heat.imdbId).isEqualTo("tt12345678901234");
+        assertGotRatings(heat);
     }
 
     @Test
     void withoutATmdbTokenAFilmThatNeedsBackfillingIsLeftUnstampedToTryAgain() {
-        when(tmdb.enabled()).thenReturn(false);
+        tmdb.enabled = false;
         due(1L);
-        target(1, null, 949L);
+        Row heat = film(1, null, 949L);
 
         refresher.startDue();
 
-        verify(store, never()).saveRatings(anyLong(), any(), any(), any());
-        verify(omdb, never()).lookup(anyString());
+        assertUntouched(heat);
+        assertThat(heat.imdbId).isNull();
+        assertThat(tmdb.asked).isEmpty();
+        assertThat(omdb.lookups).isEmpty();
     }
 
     @Test
     void aTmdbOutageLeavesThoseFilmsUnstampedAndIsNotAskedAgainThisBatchButOtherFilmsCarryOn() {
         due(1L, 2L, 3L);
-        target(1, null, 949L);
-        target(2, null, 348L);
-        target(3, "tt0090605", 679L);
-        when(tmdb.imdbId(949)).thenThrow(new TmdbUnavailableException("down", null));
+        Row first = film(1, null, 949L);
+        Row second = film(2, null, 348L);
+        Row third = film(3, "tt0090605", 679L);
+        tmdb.down.add(949L);
         found("tt0090605");
 
         refresher.startDue();
 
-        verify(tmdb, never()).imdbId(348);
-        verify(store, never()).saveRatings(1L, null, null, NOW);
-        verify(store, never()).saveRatings(2L, null, null, NOW);
-        verify(store).saveRatings(3L, "tt0090605", HEAT_RATINGS, NOW);
+        assertThat(tmdb.asked).containsExactly(949L);
+        assertUntouched(first);
+        assertUntouched(second);
+        assertGotRatings(third);
     }
 
     // the daily budget
@@ -260,42 +416,43 @@ class RatingsRefresherTest {
     @Test
     void theBatchStopsWhenTheDailyBudgetIsSpentAndLeavesTheRestUnstamped() {
         due(1L, 2L, 3L);
-        target(1, "tt1", 1L);
-        target(2, "tt2", 2L);
-        target(3, "tt3", 3L);
-        when(omdb.lookup(anyString())).thenReturn(OmdbResult.found(HEAT_RATINGS));
+        Row first = film(1, "tt1", 1L);
+        Row second = film(2, "tt2", 2L);
+        Row third = film(3, "tt3", 3L);
+        found("tt1");
+        found("tt2");
+        found("tt3");
 
         refresher.startDue();
 
-        verify(omdb).lookup("tt1");
-        verify(omdb).lookup("tt2");
-        verify(omdb, never()).lookup("tt3");
-        verify(store, never()).target(4L);
-        verify(store, never()).saveRatings(3L, "tt3", HEAT_RATINGS, NOW);
+        assertGotRatings(first);
+        assertGotRatings(second);
+        assertUntouched(third);
+        assertThat(omdb.lookups).containsExactly("tt1", "tt2");
     }
 
     @Test
     void aSecondRunTheSameUtcDayAsksNothingAndTheNextUtcDayStartsAgain() {
         now = Instant.parse("2024-03-31T00:00:00Z");
-        due();
-        target(1, "tt1", 1L);
-        target(2, "tt2", 2L);
-        target(3, "tt3", 3L);
-        when(omdb.lookup(anyString())).thenReturn(OmdbResult.found(HEAT_RATINGS));
+        film(1, "tt1", 1L);
+        film(2, "tt2", 2L);
+        Row third = film(3, "tt3", 3L);
+        found("tt3");
         when(films.findIdsWithRatingsDueBefore(now.minus(Duration.ofDays(30)))).thenReturn(List.of(1L, 2L));
         refresher.startDue();
-        verify(omdb).lookup("tt1");
-        verify(omdb).lookup("tt2");
+        assertThat(omdb.lookups).containsExactly("tt1", "tt2");
 
         now = Instant.parse("2024-03-31T23:59:59.999Z");
         when(films.findIdsWithRatingsDueBefore(now.minus(Duration.ofDays(30)))).thenReturn(List.of(3L));
         refresher.startDue();
-        verify(omdb, never()).lookup("tt3");
+        assertThat(third.fetchedAt).isNull();
+        assertThat(omdb.lookups).containsExactly("tt1", "tt2");
 
         now = Instant.parse("2024-04-01T00:00:00Z");
         when(films.findIdsWithRatingsDueBefore(now.minus(Duration.ofDays(30)))).thenReturn(List.of(3L));
         refresher.startDue();
-        verify(omdb).lookup("tt3");
+        assertThat(third.ratings).isEqualTo(HEAT_RATINGS);
+        assertThat(third.fetchedAt).isEqualTo(now);
     }
 
     @Test
@@ -303,9 +460,9 @@ class RatingsRefresherTest {
         // 23:30 UTC on 31 March is already 1 April in London (BST); a London day would have rolled over an hour ago.
         now = Instant.parse("2024-03-31T22:59:59Z");
         refresher = refresher(1);
-        target(1, "tt1", 1L);
-        target(2, "tt2", 2L);
-        when(omdb.lookup(anyString())).thenReturn(OmdbResult.found(HEAT_RATINGS));
+        film(1, "tt1", 1L);
+        Row second = film(2, "tt2", 2L);
+        found("tt2");
         when(films.findIdsWithRatingsDueBefore(now.minus(Duration.ofDays(30)))).thenReturn(List.of(1L));
         refresher.startDue();
 
@@ -313,83 +470,88 @@ class RatingsRefresherTest {
         when(films.findIdsWithRatingsDueBefore(now.minus(Duration.ofDays(30)))).thenReturn(List.of(2L));
         refresher.startDue();
 
-        verify(omdb, never()).lookup("tt2");
+        assertThat(second.fetchedAt).isNull();
+        assertThat(omdb.lookups).containsExactly("tt1");
     }
 
     @Test
     void filmsWithNothingToAskOmdbAreStampedEvenWhenTheBudgetIsSpent() {
         refresher = refresher(0);
         due(1L, 2L);
-        target(1, null, null);
-        target(2, "tt2", 2L);
+        Row nothing = film(1, null, null);
+        Row withId = film(2, "tt2", 2L);
 
         refresher.startDue();
 
-        verify(store).saveRatings(1L, null, null, NOW);
-        verify(omdb, never()).lookup(anyString());
+        assertStampedNoRatings(nothing);
+        assertUntouched(withId);
+        assertThat(omdb.lookups).isEmpty();
     }
 
     @Test
     void theLimitErrorStopsTheBatchLeavesThatFilmUnstampedAndSpendsTheRestOfTheDay() {
         refresher = refresher(900);
         due(1L, 2L);
-        target(1, "tt1", 1L);
-        target(2, "tt2", 2L);
-        when(omdb.lookup("tt1")).thenReturn(OmdbResult.limitReached());
+        Row first = film(1, "tt1", 1L);
+        Row second = film(2, "tt2", 2L);
+        omdb.answers.put("tt1", OmdbResult.limitReached());
+        found("tt2");
 
         refresher.startDue();
 
-        verify(omdb, never()).lookup("tt2");
-        verify(store, never()).saveRatings(anyLong(), any(), any(),
-            any());
+        assertUntouched(first);
+        assertUntouched(second);
+        assertThat(omdb.lookups).containsExactly("tt1");
 
         due(2L);
         refresher.startDue();
 
-        verify(omdb, never()).lookup("tt2");
+        assertUntouched(second);
+        assertThat(omdb.lookups).containsExactly("tt1");
     }
 
     @Test
     void anOmdbOutageStopsTheBatchWithoutStampingOrThrowing() {
         refresher = refresher(900);
         due(1L, 2L);
-        target(1, "tt1", 1L);
-        target(2, "tt2", 2L);
-        when(omdb.lookup("tt1")).thenThrow(new OmdbUnavailableException("OMDb could not be reached"));
+        Row first = film(1, "tt1", 1L);
+        Row second = film(2, "tt2", 2L);
+        omdb.outages.add("tt1");
+        found("tt2");
 
         refresher.startDue();
 
-        verify(omdb, never()).lookup("tt2");
-        verify(store, never()).saveRatings(anyLong(), any(), any(),
-            any());
+        assertUntouched(first);
+        assertUntouched(second);
+        assertThat(omdb.lookups).containsExactly("tt1");
+        assertThat(refresher.isRunning()).isFalse();
     }
 
     @Test
     void theBudgetCarriesAcrossARestartTheSameUtcDay() {
         now = Instant.parse("2024-03-31T10:00:00Z");
-        due(1L, 2L);
-        target(1, "tt1", 1L);
-        target(2, "tt2", 2L);
-        when(omdb.lookup(anyString())).thenReturn(OmdbResult.found(HEAT_RATINGS));
+        film(1, "tt1", 1L);
+        film(2, "tt2", 2L);
+        Row third = film(3, "tt3", 3L);
+        found("tt3");
         when(films.findIdsWithRatingsDueBefore(now.minus(Duration.ofDays(30)))).thenReturn(List.of(1L, 2L));
         refresher.startDue();
-        verify(omdb).lookup("tt1");
-        verify(omdb).lookup("tt2");
+        assertThat(omdb.lookups).containsExactly("tt1", "tt2");
 
         RatingsRefresher restarted = refresher(2);
-        target(3, "tt3", 3L);
         when(films.findIdsWithRatingsDueBefore(now.minus(Duration.ofDays(30)))).thenReturn(List.of(3L));
         restarted.startDue();
 
-        verify(omdb, never()).lookup("tt3");
+        assertThat(third.fetchedAt).isNull();
+        assertThat(omdb.lookups).containsExactly("tt1", "tt2");
     }
 
     @Test
     void aRestartOnTheNextUtcDayStartsAFreshBudget() {
         now = Instant.parse("2024-03-31T10:00:00Z");
-        target(1, "tt1", 1L);
-        target(2, "tt2", 2L);
-        when(omdb.lookup(anyString())).thenReturn(OmdbResult.found(HEAT_RATINGS));
+        film(1, "tt1", 1L);
+        Row second = film(2, "tt2", 2L);
+        found("tt2");
         when(films.findIdsWithRatingsDueBefore(now.minus(Duration.ofDays(30)))).thenReturn(List.of(1L));
         refresher(1).startDue();
 
@@ -397,22 +559,25 @@ class RatingsRefresherTest {
         when(films.findIdsWithRatingsDueBefore(now.minus(Duration.ofDays(30)))).thenReturn(List.of(2L));
         refresher(1).startDue();
 
-        verify(omdb).lookup("tt2");
+        assertThat(second.ratings).isEqualTo(HEAT_RATINGS);
+        assertThat(second.fetchedAt).isEqualTo(now);
     }
 
     @Test
     void aLimitReachedAnswerStaysSpentAcrossARestart() {
         refresher = refresher(900);
         due(1L);
-        target(1, "tt1", 1L);
-        target(2, "tt2", 2L);
-        when(omdb.lookup("tt1")).thenReturn(OmdbResult.limitReached());
+        film(1, "tt1", 1L);
+        Row second = film(2, "tt2", 2L);
+        found("tt2");
+        omdb.answers.put("tt1", OmdbResult.limitReached());
         refresher.startDue();
 
         due(2L);
         refresher(900).startDue();
 
-        verify(omdb, never()).lookup("tt2");
+        assertUntouched(second);
+        assertThat(omdb.lookups).containsExactly("tt1");
     }
 
     // a film that changes under the refresh
@@ -420,32 +585,33 @@ class RatingsRefresherTest {
     @Test
     void aFilmWhoseImdbIdChangedMeanwhileIsLeftUnstampedAndTheBatchCarriesOn() {
         due(1L, 2L);
-        target(1, null, 949L);
-        target(2, "tt2", 2L);
-        when(tmdb.imdbId(949)).thenReturn(Optional.of("tt0113277"));
-        when(store.saveImdbId(1L, "tt0113277")).thenReturn(false);
+        Row first = film(1, null, 949L);
+        Row second = film(2, "tt2", 2L);
+        tmdb.imdbIds.put(949L, "tt0113277");
+        // A scan wrote the film's own id while TMDB was being asked.
+        tmdb.whileAsking.put(949L, () -> first.imdbId = "tt-from-scan");
         found("tt2");
 
         refresher.startDue();
 
-        verify(omdb, never()).lookup("tt0113277");
-        verify(store, never()).saveRatings(1L, null, null, NOW);
-        verify(store, never()).saveRatings(1L, "tt0113277", HEAT_RATINGS, NOW);
-        verify(store).saveRatings(2L, "tt2", HEAT_RATINGS, NOW);
+        assertThat(first.imdbId).isEqualTo("tt-from-scan");
+        assertUntouched(first);
+        assertGotRatings(second);
+        assertThat(omdb.lookups).containsExactly("tt2");
     }
 
     @Test
-    void theSaveCarriesTheIdTheRefreshActedOnSoAChangedFilmCanBeRefused() {
+    void aResultForAFilmWhoseImdbIdChangedWhileOmdbWasAskedIsRefusedAndTheBatchCarriesOn() {
         due(1L, 2L);
-        target(1, "tt1", 1L);
-        target(2, null, null);
+        Row first = film(1, "tt1", 1L);
+        Row second = film(2, null, null);
         found("tt1");
-        when(store.saveRatings(1L, "tt1", HEAT_RATINGS, NOW)).thenReturn(false);
+        omdb.whileAsking.put("tt1", () -> first.imdbId = "tt-from-scan");
 
         refresher.startDue();
 
-        verify(store).saveRatings(1L, "tt1", HEAT_RATINGS, NOW);
-        verify(store).saveRatings(2L, null, null, NOW);
+        assertUntouched(first);
+        assertStampedNoRatings(second);
     }
 
     // pacing
@@ -454,13 +620,13 @@ class RatingsRefresherTest {
     void omdbRequestsAreAtLeastAQuarterOfASecondApartAndTheFirstWaitsForNothing() {
         refresher = refresher(900);
         due(1L, 2L, 3L);
-        target(1, "tt1", 1L);
-        target(2, "tt2", 2L);
-        target(3, "tt3", 3L);
-        when(omdb.lookup(anyString())).thenReturn(OmdbResult.found(HEAT_RATINGS));
+        film(1, "tt1", 1L);
+        film(2, "tt2", 2L);
+        film(3, "tt3", 3L);
 
         refresher.startDue();
 
+        assertThat(omdb.lookups).containsExactly("tt1", "tt2", "tt3");
         assertThat(sleeps).containsExactly(Duration.ofMillis(250), Duration.ofMillis(250));
     }
 
@@ -474,9 +640,9 @@ class RatingsRefresherTest {
         refresher = new RatingsRefresher(omdb, tmdb, films, store, budget, interrupted, Clock.fixed(NOW, ZONE),
             Runnable::run, 900);
         due(1L, 2L, 3L);
-        target(1, "tt1", 1L);
-        target(2, "tt2", 2L);
-        when(omdb.lookup("tt1")).thenReturn(OmdbResult.found(HEAT_RATINGS));
+        Row first = film(1, "tt1", 1L);
+        Row second = film(2, "tt2", 2L);
+        found("tt1");
 
         try {
             refresher.startDue();
@@ -486,44 +652,59 @@ class RatingsRefresherTest {
             Thread.interrupted();
         }
         assertThat(asked).hasSize(1);
-        verify(omdb, never()).lookup("tt2");
-        verify(store).saveRatings(1L, "tt1", HEAT_RATINGS, NOW);
+        assertThat(omdb.lookups).containsExactly("tt1");
+        assertGotRatings(first);
+        assertUntouched(second);
     }
 
     // which films
 
     @Test
-    void theDueFilmsAreThoseNeverFetchedOrFetchedMoreThanThirtyDaysAgoAndAreAskedForByTheCutoff() {
+    void theDueFilmsAreThoseTheRepositoryNamesForTheThirtyDayCutoffNotTheOldestFirstList() {
+        due(1L);
+        when(films.findIdsByRatingsOldestFirst()).thenReturn(List.of(2L));
+        Row due = film(1, "tt1", 1L);
+        Row other = film(2, "tt2", 2L);
+        found("tt1");
+        found("tt2");
+
         refresher.startDue();
 
-        verify(films).findIdsWithRatingsDueBefore(NOW.minus(Duration.ofDays(30)));
-        verify(films, never()).findIdsByRatingsOldestFirst();
+        assertGotRatings(due);
+        assertUntouched(other);
     }
 
     @Test
     void aForcedRefreshTakesEveryFilmOldestFirstIgnoringTheThirtyDayWindow() {
+        due(1L);
         when(films.findIdsByRatingsOldestFirst()).thenReturn(List.of(7L));
-        target(7, "tt7", 7L);
+        Row forced = film(7, "tt7", 7L);
+        Row dueOnly = film(1, "tt1", 1L);
         found("tt7");
+        found("tt1");
 
         refresher.startForced();
 
-        verify(films).findIdsByRatingsOldestFirst();
-        verify(films, never()).findIdsWithRatingsDueBefore(CUTOFF);
-        verify(store).saveRatings(7L, "tt7", HEAT_RATINGS, NOW);
+        assertGotRatings(forced);
+        assertUntouched(dueOnly);
     }
 
     @Test
     void aForcedRefreshStillRespectsTheDailyBudget() {
         when(films.findIdsByRatingsOldestFirst()).thenReturn(List.of(1L, 2L, 3L));
-        target(1, "tt1", 1L);
-        target(2, "tt2", 2L);
-        target(3, "tt3", 3L);
-        when(omdb.lookup(anyString())).thenReturn(OmdbResult.found(HEAT_RATINGS));
+        Row first = film(1, "tt1", 1L);
+        Row second = film(2, "tt2", 2L);
+        Row third = film(3, "tt3", 3L);
+        found("tt1");
+        found("tt2");
+        found("tt3");
 
         refresher.startForced();
 
-        verify(omdb, never()).lookup("tt3");
+        assertGotRatings(first);
+        assertGotRatings(second);
+        assertUntouched(third);
+        assertThat(omdb.lookups).containsExactly("tt1", "tt2");
     }
 
     // failures
@@ -531,15 +712,16 @@ class RatingsRefresherTest {
     @Test
     void aFilmThatFailsToSaveDoesNotStopTheOthers() {
         due(1L, 2L);
-        target(1, "tt1", 1L);
-        target(2, "tt2", 2L);
+        Row first = film(1, "tt1", 1L);
+        Row second = film(2, "tt2", 2L);
         found("tt1");
         found("tt2");
-        doThrow(new IllegalStateException("db")).when(store).saveRatings(1L, "tt1", HEAT_RATINGS, NOW);
+        store.failing.add(1L);
 
         refresher.startDue();
 
-        verify(store).saveRatings(2L, "tt2", HEAT_RATINGS, NOW);
+        assertUntouched(first);
+        assertGotRatings(second);
     }
 
     @Test
@@ -549,23 +731,29 @@ class RatingsRefresherTest {
         refresher.startDue();
 
         assertThat(refresher.isRunning()).isFalse();
+        assertThat(logged.list).extracting(ILoggingEvent::getFormattedMessage)
+            .contains("Ratings refresh failed");
     }
 
     // starting
 
     @Test
     void withoutAKeyNothingStartsAndNoRequestIsMade() {
-        when(omdb.enabled()).thenReturn(false);
+        omdb.enabled = false;
+        due(1L);
+        Row heat = film(1, "tt1", 1L);
+        found("tt1");
 
         assertThat(refresher.startDue()).isFalse();
 
-        verifyNoInteractions(films);
+        assertUntouched(heat);
+        assertThat(omdb.lookups).isEmpty();
         assertThat(refresher.enabled()).isFalse();
     }
 
     @Test
     void withoutAKeyAForcedRefreshIs404() {
-        when(omdb.enabled()).thenReturn(false);
+        omdb.enabled = false;
 
         assertThatThrownBy(refresher::startForced).isInstanceOf(NotFoundException.class)
             .hasMessage("Ratings need an OMDb API key");
@@ -605,34 +793,62 @@ class RatingsRefresherTest {
     // triggers
 
     @Test
-    void aFinishedScanStartsARefreshOfTheDueFilms() {
+    void aFinishedScanRefreshesTheDueFilms() {
+        due(1L);
+        Row heat = film(1, "tt1", 1L);
+        found("tt1");
+
         refresher.onScanFinished(new ScanFinished("nightly"));
 
-        verify(films).findIdsWithRatingsDueBefore(CUTOFF);
+        assertGotRatings(heat);
     }
 
     @Test
-    void aFinishedPlexImportStartsARefreshOfTheDueFilms() {
+    void aFinishedPlexImportRefreshesTheDueFilms() {
+        due(1L);
+        Row heat = film(1, "tt1", 1L);
+        found("tt1");
+
         refresher.onPlexImportFinished(new PlexImportFinished());
 
-        verify(films).findIdsWithRatingsDueBefore(CUTOFF);
+        assertGotRatings(heat);
     }
 
     @Test
     void aFinishedScanWithoutAKeyDoesNothing() {
-        when(omdb.enabled()).thenReturn(false);
+        omdb.enabled = false;
+        due(1L);
+        Row heat = film(1, "tt1", 1L);
+        found("tt1");
 
         refresher.onScanFinished(new ScanFinished("nightly"));
 
-        verifyNoInteractions(films);
+        assertUntouched(heat);
+        assertThat(omdb.lookups).isEmpty();
+    }
+
+    @Test
+    void aFinishedPlexImportWithoutAKeyDoesNothing() {
+        omdb.enabled = false;
+        due(1L);
+        Row heat = film(1, "tt1", 1L);
+        found("tt1");
+
+        refresher.onPlexImportFinished(new PlexImportFinished());
+
+        assertUntouched(heat);
+        assertThat(omdb.lookups).isEmpty();
     }
 
     @Test
     void startUpSaysSoOnlyWhenRatingsAreOff() {
         refresher.onStartup();
-        when(omdb.enabled()).thenReturn(false);
+        assertThat(logged.list).isEmpty();
+
+        omdb.enabled = false;
         refresher.onStartup();
 
-        verifyNoInteractions(films);
+        assertThat(logged.list).extracting(ILoggingEvent::getFormattedMessage)
+            .containsExactly("Ratings are off: no OMDb API key is configured (OMDB_API_KEY)");
     }
 }

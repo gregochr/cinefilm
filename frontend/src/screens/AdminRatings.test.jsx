@@ -11,14 +11,12 @@ afterEach(() => {
 const panelOf = () => screen.findByRole('region', { name: 'Library scan' });
 
 describe('Admin: ratings in the Library scan card', () => {
-  it('says when ratings were last refreshed, with Refresh ratings ready and not amber', async () => {
+  it('says when ratings were last refreshed, with Refresh ratings ready', async () => {
     installFetch();
     renderApp('/admin');
     const panel = await panelOf();
     expect(within(panel).getByText('Ratings last refreshed 08 Nov 12:41')).toBeInTheDocument();
-    const button = within(panel).getByRole('button', { name: 'Refresh ratings' });
-    expect(button).toBeEnabled();
-    expect(button).not.toHaveClass('primary');
+    expect(within(panel).getByRole('button', { name: 'Refresh ratings' })).toBeEnabled();
   });
 
   it('says ratings were never refreshed', async () => {

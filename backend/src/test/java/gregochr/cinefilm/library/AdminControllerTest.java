@@ -1,5 +1,6 @@
 package gregochr.cinefilm.library;
 
+import static gregochr.cinefilm.TestData.NOW;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -9,8 +10,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
-import static gregochr.cinefilm.TestData.NOW;
 
 import gregochr.cinefilm.auth.SecurityConfig;
 import gregochr.cinefilm.config.ConflictException;

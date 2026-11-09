@@ -69,8 +69,9 @@ class RatingsStoreTest {
         when(films.findByIdForUpdate(1L)).thenReturn(Optional.of(heat));
         Duration later = Duration.ofMinutes(5);
 
-        boolean saved = store.saveRatings(1L, "tt0113277", new OmdbRatings(new BigDecimal("8.3"), 712345, 84, "https://rt.example/heat"),
-            NOW.plus(later));
+        OmdbRatings ratings = new OmdbRatings(new BigDecimal("8.3"), 712345, 84, "https://rt.example/heat");
+
+        boolean saved = store.saveRatings(1L, "tt0113277", ratings, NOW.plus(later));
 
         assertThat(saved).isTrue();
         assertThat(heat.getImdbRating()).isEqualByComparingTo("8.3");

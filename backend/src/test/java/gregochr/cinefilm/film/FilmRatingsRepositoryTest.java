@@ -5,15 +5,20 @@ import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import gregochr.cinefilm.ApiTestBase;
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /** The ratings columns and the due-films queries, on the in-memory database. */
 class FilmRatingsRepositoryTest extends ApiTestBase {
 
     private static final Instant CUTOFF = NOW.minus(Duration.ofDays(30));
+
+    @Autowired
+    private EntityManager entityManager;
 
     private Film saved(String title, Instant fetchedAt) {
         Film film = film(null, title, 2000, NOW);
@@ -31,6 +36,8 @@ class FilmRatingsRepositoryTest extends ApiTestBase {
         film.setRtUrl("https://www.rottentomatoes.com/m/heat_1995");
         film.setRatingsFetchedAt(NOW);
         Long id = films.saveAndFlush(film).getId();
+        // The test is transactional: without clearing, findById would hand back this same instance, not the row.
+        entityManager.clear();
 
         Film loaded = films.findById(id).orElseThrow();
 
