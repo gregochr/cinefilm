@@ -61,4 +61,43 @@ has_not "the proxy does not get the whole .env (database password, tokens)" "$PR
 has_not "no ports mapping (host networking cannot publish ports)" "$PROXY" '^\s*ports:'
 has_not "the proxy does not mount the films" "$PROXY" '/media|workhorse'
 
+# The image's entrypoint: refuses a malformed token without ever printing it, starts caddy only for a good one.
+assert_file_has "the image runs the entrypoint" "$DOCKERFILE" 'ENTRYPOINT ["/entrypoint.sh"]'
+ENTRY="$REPO/deploy/caddy/entrypoint.sh"
+sed -E 's/^[[:space:]]*#.*$//' "$ENTRY" > "$TMP/entrypoint.code"
+has_not "the entrypoint never traces or echoes the token" "$TMP/entrypoint.code" 'set -[a-z]*x|(echo|printf)[^|;&]*\$[{(]?(token|CLOUDFLARE_API_TOKEN)'
+mkdir -p "$TMP/bin"
+printf '#!/bin/sh\necho "caddy-started $*"\n' > "$TMP/bin/caddy"
+chmod +x "$TMP/bin/caddy"
+
+GOOD40="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn"
+# entry_run TOKEN: runs the entrypoint with the stub caddy; output in $OUT, exit code in $RC.
+entry_run() {
+    OUT="$(env PATH="$TMP/bin:$PATH" CLOUDFLARE_API_TOKEN="$1" sh "$ENTRY" 2>&1)"
+    RC=$?
+}
+entry_refuses() { # DESCRIPTION TOKEN
+    entry_run "$2"
+    if [ "$RC" -ne 0 ]; then ok "entrypoint refuses: $1"; else bad "entrypoint accepted: $1"; fi
+    assert_not_contains "entrypoint prints no token text: $1" "$OUT" "ABCDEFGH"
+    assert_not_contains "entrypoint starts no caddy: $1" "$OUT" "caddy-started"
+    assert_contains "entrypoint says it is malformed: $1" "$OUT" "CLOUDFLARE_API_TOKEN is malformed"
+}
+entry_refuses "trailing space" "${GOOD40} "
+entry_refuses "trailing newline" "${GOOD40}"$'\n'
+entry_refuses "embedded newline" "${GOOD40:0:20}"$'\n'"${GOOD40:20}"
+entry_refuses "double quotes" "\"${GOOD40}\""
+entry_refuses "single quotes" "'${GOOD40}'"
+entry_refuses "braces" "{${GOOD40}}"
+entry_refuses "short (39)" "${GOOD40:0:39}"
+entry_refuses "too long (201)" "${GOOD40}$(printf 'x%.0s' $(seq 1 161))"
+entry_refuses "empty" ""
+entry_run "$GOOD40"
+assert_eq "a 40-character token starts caddy" "0" "$RC"
+assert_contains "caddy runs the baked Caddyfile" "$OUT" "caddy-started run --config /etc/caddy/Caddyfile --adapter caddyfile"
+entry_run "cfut_${GOOD40}_-"
+assert_eq "a longer URL-safe token (with _ and -) starts caddy" "0" "$RC"
+entry_run "${GOOD40}$(printf 'x%.0s' $(seq 1 160))"
+assert_eq "a 200-character token starts caddy" "0" "$RC"
+
 finish_tests

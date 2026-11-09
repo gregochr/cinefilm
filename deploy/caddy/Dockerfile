@@ -15,3 +15,7 @@ RUN xcaddy build "v${CADDY_VERSION}" --with "github.com/caddy-dns/cloudflare@${C
 FROM caddy:${CADDY_VERSION}
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
 COPY Caddyfile /etc/caddy/Caddyfile
+# Refuses a malformed CLOUDFLARE_API_TOKEN before Caddy can echo it into the logs, then execs caddy run.
+COPY --chmod=0755 entrypoint.sh /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+CMD []

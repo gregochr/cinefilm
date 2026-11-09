@@ -31,6 +31,16 @@ version_gt() {
     [ "$a" != "$b" ] && [ "$(printf '%s\n%s\n' "$a" "$b" | sort -V | tail -n 1)" = "$a" ]
 }
 
+# token_is_wellformed VALUE: 0 when it is 40 to 200 characters of A-Z a-z 0-9 _ - only (no whitespace, newline, quotes or
+# braces). Same rule as deploy/caddy/entrypoint.sh. Never prints the value.
+token_is_wellformed() {
+    local t="${1:-}"
+    case "$t" in
+        *[!A-Za-z0-9_-]*) return 1 ;;
+    esac
+    [ "${#t}" -ge 40 ] && [ "${#t}" -le 200 ]
+}
+
 # rollback_decision SMOKE_EXIT ENFORCE: prints "rollback", "report-only" or "none".
 # Exit-code contract of the smoke and deploy checks: 0 passed, 1 the release is broken, 3 inconclusive or
 # infrastructure, 4 the smoke is misconfigured. ONLY 1 can roll back, and only when ENFORCE is exactly "true".

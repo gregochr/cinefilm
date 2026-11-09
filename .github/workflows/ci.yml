@@ -371,8 +371,14 @@ jobs:
         if: needs.changes.outputs.docs_only != 'true'
         run: |
           set -euo pipefail
-          docker run --rm cinefilm-caddy:ci caddy version
-          docker run --rm cinefilm-caddy:ci caddy list-modules | grep -qx 'dns.providers.cloudflare'
+          docker run --rm --entrypoint caddy cinefilm-caddy:ci version
+          docker run --rm --entrypoint caddy cinefilm-caddy:ci list-modules | grep -qx 'dns.providers.cloudflare'
+          # The entrypoint refuses a malformed token (here with a trailing space) without printing it, and starts nothing.
+          if docker run --rm -e "CLOUDFLARE_API_TOKEN=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA " cinefilm-caddy:ci > "$RUNNER_TEMP/entrypoint.out" 2>&1; then
+            echo "the entrypoint accepted a malformed token"; exit 1
+          fi
+          grep -q 'CLOUDFLARE_API_TOKEN is malformed' "$RUNNER_TEMP/entrypoint.out"
+          ! grep -q 'AAAAAAAAAA' "$RUNNER_TEMP/entrypoint.out"
           # The baked-in Caddyfile parses and provisions with placeholder values (no network, nothing is bound or issued; the module only
           # checks that the token looks like a Cloudflare one, 40 characters, hence the placeholder's shape).
           docker run --rm \
@@ -380,7 +386,7 @@ jobs:
             -e CINEFILM_TAILNET_IPV4=100.64.0.1 \
             -e CINEFILM_TAILNET_IPV6=fd7a:115c:a1e0::1 \
             -e CLOUDFLARE_API_TOKEN=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA \
-            cinefilm-caddy:ci caddy validate --config /etc/caddy/Caddyfile
+            --entrypoint caddy cinefilm-caddy:ci validate --config /etc/caddy/Caddyfile
 
       - name: Documentation-only change — suite skipped
         if: needs.changes.outputs.docs_only == 'true'

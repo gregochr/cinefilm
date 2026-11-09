@@ -47,6 +47,15 @@ for key in CLOUDFLARE_API_TOKEN CINEFILM_TAILNET_IPV4 CINEFILM_TAILNET_IPV6; do
         exit 4
     fi
 done
+# A malformed token (stray space, quote, brace, wrong length) would make Caddy echo it into `docker logs`: reject it here,
+# without printing it, its length or any character of it. The proxy image's entrypoint applies the same rule.
+cf_token="$(sed -n 's/^CLOUDFLARE_API_TOKEN=//p' "${DEPLOY_HOME}/.env" | tail -n 1)"
+if ! token_is_wellformed "$cf_token"; then
+    unset cf_token
+    echo "ERROR: CLOUDFLARE_API_TOKEN in ${DEPLOY_HOME}/.env is malformed (expected 40+ URL-safe characters, no spaces, quotes or braces); fix it and rotate the token if it was ever logged." >&2
+    exit 4
+fi
+unset cf_token
 # The smoke also probes the app through the proxy. CINEFILM_DOMAIN is optional in .env (compose defaults it).
 proxy_domain="$(sed -n 's/^CINEFILM_DOMAIN=//p' "${DEPLOY_HOME}/.env" | tail -n 1 | tr -d "\"' \r")"
 export SMOKE_PROXY_URL="https://${proxy_domain:-cinefilm.chrisjgregory.dev}"

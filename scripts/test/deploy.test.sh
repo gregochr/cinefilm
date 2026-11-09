@@ -22,7 +22,7 @@ new_world() {
     STUB="$(mktemp -d "$ROOT/w.XXXXXX")"
     DH="$STUB/home"; DATA="$STUB/data"; BK="$STUB/backups"
     mkdir -p "$STUB/bin" "$DH" "$DATA"
-    printf 'CLOUDFLARE_API_TOKEN=t\nCINEFILM_TAILNET_IPV4=100.1.1.1\nCINEFILM_TAILNET_IPV6=fd7a::1\n' > "$DH/.env"
+    printf 'CLOUDFLARE_API_TOKEN=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\nCINEFILM_TAILNET_IPV4=100.1.1.1\nCINEFILM_TAILNET_IPV6=fd7a::1\n' > "$DH/.env"
     : > "$STUB/calls.log"
     echo "v0.1.0" > "$STUB/healthy_dummy"
     cat > "$STUB/bin/docker" <<'EOS'
@@ -106,6 +106,27 @@ assert_eq "missing CLOUDFLARE_API_TOKEN: exit 4, loud" "4" "$RC"
 assert_contains "names the missing key" "$OUT" "CLOUDFLARE_API_TOKEN is not set"
 assert_file_lacks "missing token: nothing pulled" "$STUB/calls.log" " pull"
 assert_file_lacks "missing token: no dump taken" "$STUB/calls.log" "docker exec"
+
+# --- a malformed token is refused before anything changes, and never printed -------------------------------------------
+GOOD40="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn"
+for label_and_token in "trailing space|${GOOD40} " "trailing CR|${GOOD40}"$'\r' "double quotes|\"${GOOD40}\"" "single quotes|'${GOOD40}'" \
+    "braces|{${GOOD40}}" "inner space|${GOOD40:0:20} ${GOOD40:20}" "short|${GOOD40:0:39}" "too long|${GOOD40}$(printf 'x%.0s' $(seq 1 170))" "empty value|"; do
+    label="${label_and_token%%|*}"; tok="${label_and_token#*|}"
+    new_world; deployed v0.1.0
+    grep -v '^CLOUDFLARE_API_TOKEN=' "$DH/.env" > "$DH/.env.new"; printf 'CLOUDFLARE_API_TOKEN=%s\n' "$tok" >> "$DH/.env.new"; mv "$DH/.env.new" "$DH/.env"
+    run_deploy v0.2.0 SMOKE_ENFORCE=true
+    assert_eq "malformed token (${label}): exit 4" "4" "$RC"
+    assert_contains "malformed token (${label}): says malformed" "$OUT" "CLOUDFLARE_API_TOKEN"
+    if [ -n "$tok" ]; then assert_not_contains "malformed token (${label}): the value is not in the output" "$OUT" "${GOOD40:0:12}"; fi
+    assert_file_lacks "malformed token (${label}): nothing pulled" "$STUB/calls.log" " pull"
+    assert_file_lacks "malformed token (${label}): no dump taken" "$STUB/calls.log" "docker exec"
+done
+
+new_world; deployed v0.1.0
+grep -v '^CLOUDFLARE_API_TOKEN=' "$DH/.env" > "$DH/.env.new"; printf 'CLOUDFLARE_API_TOKEN=%s\n' "cfut_${GOOD40}_-" >> "$DH/.env.new"; mv "$DH/.env.new" "$DH/.env"
+run_deploy v0.2.0
+assert_eq "a well-formed token with _ and - (and a newer prefix): deploys" "0" "$RC"
+assert_not_contains "the token never appears in the deploy output" "$OUT" "${GOOD40:0:12}"
 
 # --- a failed dump stops the deploy before anything is pulled or started ---------------------------------------------
 new_world; deployed v0.1.0; touch "$STUB/fail_dump"
