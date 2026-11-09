@@ -28,6 +28,7 @@ export function useContinueWatching(data, reload) {
   const current = useRef(null);
   const timer = useRef(null);
   const chains = useRef(new Map());
+  const versions = useRef(new Map()); // film id -> bumped by every action and Undo on it
 
   if (source !== data) {
     setSource(data);
@@ -56,7 +57,12 @@ export function useContinueWatching(data, reload) {
     });
   }, []);
 
-  const clearAction = useCallback((entry) => {
+  const bump = useCallback((filmId) => {
+    const next = (versions.current.get(filmId) ?? 0) + 1;
+    versions.current.set(filmId, next);
+    return next;
+  }, []),
+  clearAction = useCallback((entry) => {
     if (current.current !== entry) return;
     current.current = null;
     clearTimeout(timer.current);
@@ -74,6 +80,7 @@ export function useContinueWatching(data, reload) {
         index,
         editionId,
         heroWas: hero?.id === film.id ? hero : null,
+        version: bump(film.id),
       };
       setRow((r) => r.filter((f) => f.id !== film.id));
       if (entry.heroWas) setHero(null);
@@ -81,6 +88,8 @@ export function useContinueWatching(data, reload) {
       entry.call = enqueue(editionId, () => call(editionId));
       entry.call.catch(() => {
         clearAction(entry);
+        // Only roll back if nothing newer has happened to this film since (Undo, another action).
+        if (versions.current.get(film.id) !== entry.version) return;
         if (kind === 'watched') dropOverride(film.id);
         setRow((r) => insertAt(r, film, index));
         if (entry.heroWas) setHero(entry.heroWas);
@@ -90,7 +99,7 @@ export function useContinueWatching(data, reload) {
       clearTimeout(timer.current);
       timer.current = setTimeout(() => clearAction(entry), UNDO_MS);
     },
-    [row, hero, clearAction, enqueue, dropOverride],
+    [row, hero, clearAction, enqueue, dropOverride, bump],
   );
 
   const remove = useCallback(
@@ -106,6 +115,7 @@ export function useContinueWatching(data, reload) {
     const entry = current.current;
     if (!entry) return;
     clearAction(entry);
+    bump(entry.film.id);
     setRow((r) => insertAt(r, entry.film, entry.index));
     if (entry.heroWas) setHero(entry.heroWas);
     if (entry.kind === 'watched') dropOverride(entry.film.id); // back to what was loaded
@@ -126,7 +136,7 @@ export function useContinueWatching(data, reload) {
     } catch {
       reload();
     }
-  }, [clearAction, reload, enqueue, dropOverride]);
+  }, [clearAction, reload, enqueue, dropOverride, bump]);
 
   return { hero, row, action, watched, remove, markWatched, undo };
 }

@@ -459,3 +459,53 @@ describe('useContinueWatching: watched overrides for the other rows', () => {
     expect(result.current.watched).toEqual({});
   });
 });
+
+describe('useContinueWatching: a stale failure does not roll back a newer action', () => {
+  function sequenced(path) {
+    const gates = [];
+    return {
+      gates,
+      route: (method, url) => (url === path ? new Promise((resolve) => gates.push(resolve)) : null),
+    };
+  }
+
+  it('Remove, Undo, Remove, then the first fails: the card stays removed', async () => {
+    const seq = sequenced('/api/editions/30/continue-watching');
+    const { result } = setup(DATA, seq.route);
+    act(() => result.current.remove(B));
+    await flush();
+    act(() => {
+      result.current.undo();
+    });
+    await flush();
+    act(() => result.current.remove(B));
+    await flush();
+
+    await act(async () => seq.gates[0](respond({ error: 'x' }, 500)));
+    await flush();
+    expect(ids(result.current.row)).toEqual([2, 4]);
+    expect(result.current.action).toMatchObject({ kind: 'remove', film: B });
+
+    await act(async () => seq.gates[1](respond({ hidden: true })));
+    expect(ids(result.current.row)).toEqual([2, 4]);
+  });
+
+  it('Mark watched, Undo, Mark watched, then the first fails: the override stays', async () => {
+    const seq = sequenced('/api/editions/30/watched');
+    const { result } = setup(DATA, seq.route);
+    act(() => result.current.markWatched(B));
+    await flush();
+    act(() => {
+      result.current.undo();
+    });
+    await flush();
+    act(() => result.current.markWatched(B));
+    await flush();
+
+    await act(async () => seq.gates[0](respond({ error: 'x' }, 500)));
+    await flush();
+
+    expect(result.current.watched).toEqual({ 3: true });
+    expect(ids(result.current.row)).toEqual([2, 4]);
+  });
+});

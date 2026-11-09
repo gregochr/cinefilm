@@ -414,7 +414,8 @@ describe('popover placement', () => {
     const popover = place({ top: 100, bottom: 136, left: 500, right: 536 });
     expect(popover.style.left).toBe('256px');
     expect(popover.style.top).toBe('144px');
-    expect(popover.parentElement).toBe(document.body);
+    expect(document.body).toContainElement(popover);
+    expect(screen.getByRole('link', { name: 'Heat, 1h 45m left' })).not.toContainElement(popover);
   });
 
   it('is clamped to the left edge of the viewport', () => {
