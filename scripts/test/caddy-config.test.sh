@@ -2,6 +2,9 @@
 # The proxy's safety properties, read from the committed files only (no Docker, no network): it never listens on port
 # 80, never binds a wildcard address, takes the token from the environment, and compose passes it only what it needs.
 
+# The needles are literal Caddy and compose placeholders ({$VAR}, ${VAR:?}), never meant to expand here.
+# shellcheck disable=SC2016
+
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"

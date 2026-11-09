@@ -103,7 +103,7 @@ out="$(SMOKE_PROXY_URL=https://proxy.test run http://x)"; rc=$?
 assert_eq "app broken and proxy down: exit 1 wins" "1" "$rc"
 
 good
-out="$(SMOKE_PROXY_URL= run http://x)"; rc=$?
+out="$(SMOKE_PROXY_URL='' run http://x)"; rc=$?
 assert_eq "empty SMOKE_PROXY_URL: the proxy is not checked" "0" "$rc"
 
 out="$(SMOKE_PROXY_URL=http://proxy.test run http://x)"; rc=$?
