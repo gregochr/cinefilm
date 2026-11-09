@@ -7,7 +7,9 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import org.springframework.stereotype.Component;
@@ -27,14 +29,11 @@ public class ProcessLineStreamRunner implements LineStreamRunner {
         builder.redirectInput(new File("/dev/null"));
         Process process = builder.start();
         AtomicBoolean timedOut = new AtomicBoolean();
-        Thread watchdog = Thread.ofVirtual().start(() -> {
-            try {
-                if (!process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
-                    timedOut.set(true);
-                    process.destroyForcibly();
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+        CompletableFuture<Process> watchdog = process.onExit().orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        watchdog.whenComplete((exited, failure) -> {
+            if (failure instanceof TimeoutException) {
+                timedOut.set(true);
+                process.destroyForcibly();
             }
         });
         try {
@@ -52,7 +51,7 @@ public class ProcessLineStreamRunner implements LineStreamRunner {
             throw new IOException("Interrupted while waiting for " + command.get(0), e);
         } finally {
             process.destroyForcibly();
-            watchdog.interrupt();
+            watchdog.cancel(true);
         }
     }
 }
