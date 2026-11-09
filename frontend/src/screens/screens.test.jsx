@@ -153,10 +153,10 @@ describe('Film detail', () => {
     expect(await screen.findByRole('link', { name: 'Play The Final Cut' })).toBeInTheDocument();
     expect(screen.getByText('1h 57m')).toBeInTheDocument();
     expect(screen.getByText(/Edition .* 3 in your library/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Blade Runner collection' })).toHaveAttribute(
-      'href',
-      '/collections/2',
-    );
+    const collectionLink = screen.getByRole('link', { name: 'Blade Runner Collection' });
+    expect(collectionLink).toHaveAttribute('href', '/collections/2');
+    expect(collectionLink).toHaveTextContent(/^Blade Runner Collection$/);
+    expect(collectionLink.textContent).not.toContain('Collection collection');
 
     await userEvent.click(screen.getByRole('radio', { name: /Theatrical Cut/ }));
     expect(screen.getByRole('link', { name: 'Play Theatrical Cut' })).toHaveAttribute(

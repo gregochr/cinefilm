@@ -118,7 +118,7 @@ export default function FilmDetail() {
     film.genres?.length ? <span key="g">{film.genres.join(', ')}</span> : null,
     film.collection ? (
       <Link key="c" to={`/collections/${film.collection.id}`} className="detail__collection">
-        {film.collection.name} collection
+        {film.collection.name}
       </Link>
     ) : null,
   ].filter(Boolean);
