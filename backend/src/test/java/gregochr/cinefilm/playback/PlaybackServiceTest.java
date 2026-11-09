@@ -18,6 +18,8 @@ import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.playback.PlaybackDtos.HiddenResponse;
+import gregochr.cinefilm.playback.PlaybackDtos.PlaybackSnapshot;
 import gregochr.cinefilm.playback.PlaybackDtos.ProgressResponse;
 import gregochr.cinefilm.playback.PlaybackDtos.WatchedResponse;
 import java.time.Duration;
@@ -184,6 +186,157 @@ class PlaybackServiceTest {
         assertThat(saved().getWatchedAt()).isEqualTo(firstWatched);
     }
 
+    @Test
+    void anyProgressReportClearsTheRemovedFlagAndKeepsThePosition() {
+        use(withMarker);
+        PlaybackState hidden = state(withMarker, 10 * MIN, false, NOW.minus(Duration.ofDays(3)), null);
+        hidden.setHiddenFromContinueWatching(true);
+        hidden.setHiddenAt(NOW.minus(Duration.ofDays(2)));
+        stored(hidden);
+
+        service.reportProgress(WITH_MARKER, 10 * MIN);
+
+        PlaybackState state = saved();
+        assertThat(state.isHiddenFromContinueWatching()).isFalse();
+        assertThat(state.getHiddenAt()).isNull();
+        assertThat(state.getPositionMs()).isEqualTo(10 * MIN);
+        assertThat(state.getLastPlayedAt()).isEqualTo(NOW);
+    }
+
+    // setHiddenFromContinueWatching
+
+    @Test
+    void hidingNeedsAValue() {
+        assertThatThrownBy(() -> service.setHiddenFromContinueWatching(WITH_MARKER, null))
+            .isInstanceOf(BadRequestException.class)
+            .hasMessage("hidden must be true or false");
+        verify(states, never()).save(any());
+    }
+
+    @Test
+    void hidingAnUnknownEditionIsNotFound() {
+        assertThatThrownBy(() -> service.setHiddenFromContinueWatching(999L, true))
+            .isInstanceOf(NotFoundException.class)
+            .hasMessage("No such edition");
+    }
+
+    @Test
+    void hidingStampsTheTimeAndKeepsPositionWatchedAndLastPlayed() {
+        use(withMarker);
+        Instant lastPlayed = NOW.minus(Duration.ofDays(1));
+        Instant watchedAt = NOW.minus(Duration.ofDays(40));
+        stored(state(withMarker, 12 * MIN, true, lastPlayed, watchedAt));
+
+        HiddenResponse response = service.setHiddenFromContinueWatching(WITH_MARKER, true);
+
+        assertThat(response).isEqualTo(new HiddenResponse(true));
+        PlaybackState state = saved();
+        assertThat(state.isHiddenFromContinueWatching()).isTrue();
+        assertThat(state.getHiddenAt()).isEqualTo(NOW);
+        assertThat(state.getPositionMs()).isEqualTo(12 * MIN);
+        assertThat(state.isWatched()).isTrue();
+        assertThat(state.getWatchedAt()).isEqualTo(watchedAt);
+        assertThat(state.getLastPlayedAt()).isEqualTo(lastPlayed);
+    }
+
+    @Test
+    void unhidingClearsTheFlagAndTheTimeAndKeepsThePosition() {
+        use(withMarker);
+        PlaybackState hidden = state(withMarker, 12 * MIN, false, NOW.minus(Duration.ofDays(1)), null);
+        hidden.setHiddenFromContinueWatching(true);
+        hidden.setHiddenAt(NOW.minusSeconds(30));
+        stored(hidden);
+
+        HiddenResponse response = service.setHiddenFromContinueWatching(WITH_MARKER, false);
+
+        assertThat(response).isEqualTo(new HiddenResponse(false));
+        PlaybackState state = saved();
+        assertThat(state.isHiddenFromContinueWatching()).isFalse();
+        assertThat(state.getHiddenAt()).isNull();
+        assertThat(state.getPositionMs()).isEqualTo(12 * MIN);
+    }
+
+    @Test
+    void hidingAnEditionThatWasNeverPlayedCreatesNothing() {
+        use(withMarker);
+
+        HiddenResponse response = service.setHiddenFromContinueWatching(WITH_MARKER, true);
+
+        assertThat(response).isEqualTo(new HiddenResponse(false));
+        verify(states, never()).save(any());
+    }
+
+    // snapshot and restore (undo of Mark as watched)
+
+    @Test
+    void markingWatchedFromNoStateSnapshotsZerosAndFalse() {
+        use(withoutMarker);
+
+        WatchedResponse response = service.setWatched(WITHOUT_MARKER, true);
+
+        assertThat(response.previous()).isEqualTo(new PlaybackSnapshot(0, false, null, false, null));
+    }
+
+    @Test
+    void restoringTheSnapshotOfAMidRewatchBringsBackEveryFieldExactly() {
+        use(withMarker);
+        Instant firstWatched = NOW.minus(Duration.ofDays(400));
+        Instant hiddenAt = NOW.minus(Duration.ofHours(1));
+        Instant lastPlayed = NOW.minus(Duration.ofDays(1));
+        PlaybackState rewatch = state(withMarker, 20 * MIN, true, lastPlayed, firstWatched);
+        rewatch.setHiddenFromContinueWatching(true);
+        rewatch.setHiddenAt(hiddenAt);
+        stored(rewatch);
+        PlaybackSnapshot previous = service.setWatched(WITH_MARKER, true).previous();
+        assertThat(previous).isEqualTo(new PlaybackSnapshot(20 * MIN, true, firstWatched, true, hiddenAt));
+        assertThat(rewatch.getPositionMs()).as("mark as watched reset the position").isZero();
+        rewatch.setHiddenFromContinueWatching(false);
+        rewatch.setHiddenAt(null);
+        rewatch.setWatchedAt(NOW);
+
+        PlaybackSnapshot restored = service.restore(WITH_MARKER, previous);
+
+        assertThat(restored).isEqualTo(previous);
+        assertThat(rewatch.getPositionMs()).isEqualTo(20 * MIN);
+        assertThat(rewatch.isWatched()).isTrue();
+        assertThat(rewatch.getWatchedAt()).isEqualTo(firstWatched);
+        assertThat(rewatch.isHiddenFromContinueWatching()).isTrue();
+        assertThat(rewatch.getHiddenAt()).isEqualTo(hiddenAt);
+        assertThat(rewatch.getLastPlayedAt()).as("lastPlayedAt is never restored").isEqualTo(lastPlayed);
+    }
+
+    @Test
+    void restoringZerosOnAMissingRowCreatesAnInertRow() {
+        use(withMarker);
+
+        service.restore(WITH_MARKER, new PlaybackSnapshot(0, false, null, false, null));
+
+        PlaybackState state = saved();
+        assertThat(state.getEditionId()).isEqualTo(WITH_MARKER);
+        assertThat(state.getPositionMs()).isZero();
+        assertThat(state.isWatched()).isFalse();
+        assertThat(state.getLastPlayedAt()).isNull();
+    }
+
+    @Test
+    void restoreRejectsANegativePositionAndAcceptsZero() {
+        use(withMarker);
+
+        assertThatThrownBy(() -> service.restore(WITH_MARKER, new PlaybackSnapshot(-1, false, null, false, null)))
+            .isInstanceOf(BadRequestException.class)
+            .hasMessage("positionMs must be a non-negative number");
+        verify(states, never()).save(any());
+        assertThat(service.restore(WITH_MARKER, new PlaybackSnapshot(0, false, null, false, null)).positionMs())
+            .isZero();
+    }
+
+    @Test
+    void restoringAnUnknownEditionIsNotFound() {
+        assertThatThrownBy(() -> service.restore(999L, new PlaybackSnapshot(0, false, null, false, null)))
+            .isInstanceOf(NotFoundException.class)
+            .hasMessage("No such edition");
+    }
+
     // setWatched
 
     @Test
@@ -207,7 +360,8 @@ class PlaybackServiceTest {
 
         WatchedResponse response = service.setWatched(WITH_MARKER, true);
 
-        assertThat(response).isEqualTo(new WatchedResponse(true));
+        assertThat(response).isEqualTo(new WatchedResponse(true,
+            new PlaybackSnapshot(10 * MIN, false, null, false, null)));
         PlaybackState state = saved();
         assertThat(state.isWatched()).isTrue();
         assertThat(state.getWatchedAt()).isEqualTo(NOW);
@@ -245,7 +399,8 @@ class PlaybackServiceTest {
 
         WatchedResponse response = service.setWatched(WITH_MARKER, false);
 
-        assertThat(response).isEqualTo(new WatchedResponse(false));
+        assertThat(response).isEqualTo(new WatchedResponse(false,
+            new PlaybackSnapshot(3 * MIN, true, watchedAt, false, null)));
         PlaybackState state = saved();
         assertThat(state.isWatched()).isFalse();
         assertThat(state.getWatchedAt()).isNull();

@@ -4,10 +4,13 @@ import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
+import gregochr.cinefilm.playback.PlaybackDtos.HiddenResponse;
+import gregochr.cinefilm.playback.PlaybackDtos.PlaybackSnapshot;
 import gregochr.cinefilm.playback.PlaybackDtos.ProgressResponse;
 import gregochr.cinefilm.playback.PlaybackDtos.WatchedResponse;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +42,9 @@ public class PlaybackService {
         Instant now = clock.instant();
         PlaybackState state = states.findById(editionId).orElse(new PlaybackState(editionId));
         state.setLastPlayedAt(now);
+        // Any playback brings a removed film back into Continue watching.
+        state.setHiddenFromContinueWatching(false);
+        state.setHiddenAt(null);
         if (WatchedRule.isWatched(positionMs, edition.getRuntimeMs(), edition.getCreditsMarkerMs())) {
             // Reaching the credits marks it watched and resets the position, so credits playing out never
             // puts the film back into Continue watching.
@@ -63,6 +69,7 @@ public class PlaybackService {
         }
         edition(editionId);
         PlaybackState state = states.findById(editionId).orElse(new PlaybackState(editionId));
+        PlaybackSnapshot previous = snapshot(state);
         if (watched) {
             if (!state.isWatched()) {
                 state.setWatched(true);
@@ -75,7 +82,54 @@ public class PlaybackService {
             state.setPositionMs(0);
         }
         states.save(state);
-        return new WatchedResponse(state.isWatched());
+        return new WatchedResponse(state.isWatched(), previous);
+    }
+
+    /**
+     * Hides an edition's film from Continue watching, or shows it again. Only the hidden flag and its time change:
+     * the resume position, watched state and last-played time are kept. An edition that has never been played has
+     * no state row and nothing to hide: none is created and the answer is {@code hidden: false}.
+     */
+    @Transactional
+    public HiddenResponse setHiddenFromContinueWatching(Long editionId, Boolean hidden) {
+        if (hidden == null) {
+            throw new BadRequestException("hidden must be true or false");
+        }
+        edition(editionId);
+        Optional<PlaybackState> found = states.findById(editionId);
+        if (found.isEmpty()) {
+            return new HiddenResponse(false);
+        }
+        PlaybackState state = found.get();
+        state.setHiddenFromContinueWatching(hidden);
+        state.setHiddenAt(hidden ? clock.instant() : null);
+        states.save(state);
+        return new HiddenResponse(hidden);
+    }
+
+    /**
+     * Restores exactly the five snapshot fields (undo). {@code lastPlayedAt} is never touched. A missing state row
+     * is created.
+     */
+    @Transactional
+    public PlaybackSnapshot restore(Long editionId, PlaybackSnapshot snapshot) {
+        if (snapshot.positionMs() < 0) {
+            throw new BadRequestException("positionMs must be a non-negative number");
+        }
+        edition(editionId);
+        PlaybackState state = states.findById(editionId).orElse(new PlaybackState(editionId));
+        state.setPositionMs(snapshot.positionMs());
+        state.setWatched(snapshot.watched());
+        state.setWatchedAt(snapshot.watchedAt());
+        state.setHiddenFromContinueWatching(snapshot.hiddenFromContinueWatching());
+        state.setHiddenAt(snapshot.hiddenAt());
+        states.save(state);
+        return snapshot(state);
+    }
+
+    private static PlaybackSnapshot snapshot(PlaybackState state) {
+        return new PlaybackSnapshot(state.getPositionMs(), state.isWatched(), state.getWatchedAt(),
+            state.isHiddenFromContinueWatching(), state.getHiddenAt());
     }
 
     private Edition edition(Long id) {

@@ -162,6 +162,32 @@ class HomeServiceTest {
         assertThat(home.continueWatching()).isEmpty();
     }
 
+    @Test
+    void aFilmRemovedFromContinueWatchingLeavesTheHeroAndTheRow() {
+        FilmView hidden = withState("Heat", 1995, 64 * MIN, false, NOW.minusSeconds(5), null);
+        hidden.states().values().forEach(s -> s.setHiddenFromContinueWatching(true));
+        FilmView next = withState("Arrival", 2016, 55 * MIN, false, NOW.minus(Duration.ofDays(2)), null);
+        FilmView last = withState("Moon", 2009, 10 * MIN, false, NOW.minus(Duration.ofDays(9)), null);
+        libraryIs(List.of(hidden, next, last));
+
+        Home home = service(CLOCK).home();
+
+        assertThat(home.hero().title()).isEqualTo("Arrival");
+        assertThat(home.continueWatching()).extracting(FilmCard::title).containsExactly("Moon");
+    }
+
+    @Test
+    void whenEveryFilmInProgressIsRemovedThereIsNoHeroAndNoRow() {
+        FilmView hidden = withState("Heat", 1995, 64 * MIN, false, NOW.minusSeconds(5), null);
+        hidden.states().values().forEach(s -> s.setHiddenFromContinueWatching(true));
+        libraryIs(List.of(hidden));
+
+        Home home = service(CLOCK).home();
+
+        assertThat(home.hero()).isNull();
+        assertThat(home.continueWatching()).isEmpty();
+    }
+
     // rows measured against the injected clock
 
     @Test

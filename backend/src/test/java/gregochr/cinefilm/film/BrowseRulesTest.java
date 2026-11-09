@@ -64,6 +64,39 @@ class BrowseRulesTest {
         assertThat(BrowseRules.continueWatching(List.of(rewatch))).hasSize(1);
     }
 
+    @Test
+    void aFilmRemovedFromContinueWatchingLeavesTheRowButKeepsItsPosition() {
+        FilmView removed = withState(filmView("Moon", 2009, 100), 10 * MIN, false, ago(1), null);
+        removed.states().values().forEach(s -> {
+            s.setHiddenFromContinueWatching(true);
+            s.setHiddenAt(ago(0));
+        });
+        FilmView shown = withState(filmView("Heat", 1995, 100), 64 * MIN, false, ago(2), null);
+
+        assertThat(BrowseRules.continueWatching(List.of(removed, shown)))
+            .extracting(v -> v.film().getTitle()).containsExactly("Heat");
+        assertThat(removed.progress()).as("Resume from still works").isPresent();
+        assertThat(removed.progress().orElseThrow().positionMs()).isEqualTo(10 * MIN);
+    }
+
+    @Test
+    void onlyTheLastPlayedEditionsFlagDecidesWhetherTheFilmIsHidden() {
+        Film film = film(98L, "Blade Runner", 1982, ago(900));
+        Edition finalCut = edition(film, 980L, "The Final Cut", 117 * MIN, null);
+        Edition theatrical = edition(film, 981L, "Theatrical Cut", 117 * MIN, null);
+        var hiddenOlder = state(finalCut, 20 * MIN, false, ago(5), null);
+        hiddenOlder.setHiddenFromContinueWatching(true);
+        var visibleNewer = state(theatrical, 5 * MIN, false, ago(1), null);
+
+        assertThat(BrowseRules.continueWatching(List.of(view(film, hiddenOlder, visibleNewer)))).hasSize(1);
+
+        var hiddenNewer = state(theatrical, 5 * MIN, false, ago(1), null);
+        hiddenNewer.setHiddenFromContinueWatching(true);
+        var visibleOlder = state(finalCut, 20 * MIN, false, ago(5), null);
+
+        assertThat(BrowseRules.continueWatching(List.of(view(film, visibleOlder, hiddenNewer)))).isEmpty();
+    }
+
     // recently added
 
     @Test

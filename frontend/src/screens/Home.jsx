@@ -1,12 +1,16 @@
+import { useEffect, useRef } from 'react';
 import Art from '../components/Art.jsx';
 import { ButtonLink } from '../components/Button.jsx';
 import CollectionCard from '../components/CollectionCard.jsx';
 import FilmRow from '../components/FilmRow.jsx';
 import { PlayIcon } from '../components/icons.jsx';
-import { ContinueCard, Poster } from '../components/Poster.jsx';
+import { ContinueCard } from '../components/ContinueCard.jsx';
+import { Poster } from '../components/Poster.jsx';
 import { HomeSkeleton } from '../components/Skeleton.jsx';
 import { EmptyLibrary, ErrorState } from '../components/StateMessages.jsx';
+import UndoToast from '../components/UndoToast.jsx';
 import { formatLeft, formatResume, fraction } from '../player/time.js';
+import { useContinueWatching } from '../state/useContinueWatching.js';
 import { useHome } from '../state/useHome.js';
 
 function Hero({ film }) {
@@ -58,11 +62,41 @@ function Hero({ film }) {
 
 export default function Home() {
   const { data, error, loading, reload } = useHome();
+  const cw = useContinueWatching(data, reload);
+  const cardLinks = useRef(new Map());
+  const undoButton = useRef(null);
+  const pendingFocus = useRef(null);
+
+  // After a removal focus moves to a neighbouring card (or Undo); after Undo, to the restored card.
+  useEffect(() => {
+    const target = pendingFocus.current;
+    if (target === null) return;
+    pendingFocus.current = null;
+    (target === 'undo' ? undoButton.current : cardLinks.current.get(target))?.focus();
+  });
+
   if (loading && !data) return <HomeSkeleton />;
   if (error && !data) return <ErrorState onRetry={reload} />;
   if (!data) return null;
 
-  const { hero, continueWatching = [], recentlyAdded = [], notWatchedInYears = [] } = data;
+  const { hero, row: continueWatching } = cw;
+  const { recentlyAdded = [], notWatchedInYears = [] } = data;
+
+  const act = (run, film) => {
+    const at = continueWatching.findIndex((f) => f.id === film.id);
+    const next = continueWatching[at + 1] ?? continueWatching[at - 1];
+    pendingFocus.current = next ? next.id : 'undo';
+    run(film);
+  };
+  const undo = () => {
+    pendingFocus.current = cw.action.film.id;
+    cw.undo();
+  };
+  const registerCard = (id) => (el) => {
+    if (el) cardLinks.current.set(id, el);
+    else cardLinks.current.delete(id);
+  };
+  const toast = <UndoToast action={cw.action} undoRef={undoButton} onUndo={undo} />;
   const theme = data.weeklyTheme;
   const collections = data.collections || [];
   const empty =
@@ -72,7 +106,14 @@ export default function Home() {
     !notWatchedInYears.length &&
     !theme?.films?.length &&
     !collections.length;
-  if (empty) return <EmptyLibrary />;
+  if (empty) {
+    return (
+      <>
+        <EmptyLibrary />
+        {toast}
+      </>
+    );
+  }
 
   return (
     <div className="page__stack">
@@ -84,7 +125,13 @@ export default function Home() {
           variant="stills"
         >
           {continueWatching.map((f) => (
-            <ContinueCard key={f.id} film={f} />
+            <ContinueCard
+              key={f.id}
+              film={f}
+              onRemove={(film) => act(cw.remove, film)}
+              onMarkWatched={(film) => act(cw.markWatched, film)}
+              linkRef={registerCard(f.id)}
+            />
           ))}
         </FilmRow>
       ) : null}
@@ -120,6 +167,7 @@ export default function Home() {
           ))}
         </FilmRow>
       ) : null}
+      {toast}
     </div>
   );
 }

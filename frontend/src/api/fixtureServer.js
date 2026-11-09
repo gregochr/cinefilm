@@ -11,6 +11,13 @@ import adminTranscoding from '../test/fixtures/admin-transcoding.json';
 import collection from '../test/fixtures/collection.json';
 import session from '../test/fixtures/session.json';
 
+const PREVIOUS = {
+  positionMs: 0,
+  watched: false,
+  watchedAt: null,
+  hiddenFromContinueWatching: false,
+  hiddenAt: null,
+};
 const details = { 1: heat, 6: bladeRunner, 8: wickerMan };
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -48,7 +55,9 @@ export async function handle(method, path, body) {
   if (/^\/api\/people\/\d+$/.test(route)) return person;
   if (/^\/api\/collections\/\d+$/.test(route)) return collection;
   if (/\/progress$/.test(route)) return { positionMs: body?.positionMs ?? 0, watched: false };
-  if (/\/watched$/.test(route)) return { watched: !!body?.watched };
+  if (/\/watched$/.test(route)) return { watched: !!body?.watched, previous: PREVIOUS };
+  if (/\/continue-watching$/.test(route)) return { hidden: !!body?.hidden };
+  if (/\/playback-state$/.test(route)) return body;
   if (/\/preferences$/.test(route)) return body;
   return null;
 }
