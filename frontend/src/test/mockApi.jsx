@@ -55,7 +55,20 @@ export function defaultRoute(method, url) {
   if (/^\/api\/people\//.test(path)) return json(person);
   if (/^\/api\/collections\//.test(path)) return json(collection);
   if (/\/progress$/.test(path)) return json({ positionMs: 0, watched: false });
-  if (/\/watched$/.test(path)) return json({ watched: true });
+  if (/\/watched$/.test(path)) {
+    return json({
+      watched: true,
+      previous: {
+        positionMs: 3600000,
+        watched: false,
+        watchedAt: null,
+        hiddenFromContinueWatching: false,
+        hiddenAt: null,
+      },
+    });
+  }
+  if (/\/continue-watching$/.test(path)) return json({ hidden: true });
+  if (/\/playback-state$/.test(path)) return json({});
   if (/\/preferences$/.test(path)) return json({});
   if (path === '/api/admin/scan') {
     return method === 'POST' ? json({ ...adminScan, running: true }, 202) : json(adminScan);

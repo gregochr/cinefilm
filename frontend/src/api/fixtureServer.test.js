@@ -90,10 +90,23 @@ describe('fixture server', () => {
       positionMs: 0,
       watched: false,
     });
+    const previous = {
+      positionMs: 0,
+      watched: false,
+      watchedAt: null,
+      hiddenFromContinueWatching: false,
+      hiddenAt: null,
+    };
     expect(await call('POST', '/api/editions/11/watched', { watched: true })).toEqual({
       watched: true,
+      previous,
     });
-    expect(await call('POST', '/api/editions/11/watched')).toEqual({ watched: false });
+    expect(await call('POST', '/api/editions/11/watched')).toEqual({ watched: false, previous });
+    expect(await call('PUT', '/api/editions/11/continue-watching', { hidden: true })).toEqual({
+      hidden: true,
+    });
+    expect(await call('PUT', '/api/editions/11/continue-watching')).toEqual({ hidden: false });
+    expect(await call('PUT', '/api/editions/11/playback-state', previous)).toEqual(previous);
     expect(await call('PUT', '/api/films/1/preferences', { quality: 'auto' })).toEqual({
       quality: 'auto',
     });

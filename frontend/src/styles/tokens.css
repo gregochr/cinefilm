@@ -9,6 +9,8 @@
   --cf-line: #2A251F;          /* hairlines, borders */
   --cf-line-strong: #4A4339;   /* secondary button border */
   --cf-overlay: rgba(20, 17, 14, 0.96); /* player menus, toast */
+  --cf-chip: rgba(14, 12, 10, 0.72);    /* round buttons over artwork */
+  --cf-chip-hover: rgba(14, 12, 10, 0.9);
 
   /* Text */
   --cf-text: #EDE6DA;          /* primary */

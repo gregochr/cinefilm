@@ -1,5 +1,6 @@
 package gregochr.cinefilm.playback;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -11,9 +12,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import gregochr.cinefilm.auth.SecurityConfig;
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.film.FilmDtos.Preferences;
+import gregochr.cinefilm.playback.PlaybackDtos.HiddenResponse;
+import gregochr.cinefilm.playback.PlaybackDtos.PlaybackSnapshot;
 import gregochr.cinefilm.playback.PlaybackDtos.PreferencesRequest;
 import gregochr.cinefilm.playback.PlaybackDtos.ProgressResponse;
 import gregochr.cinefilm.playback.PlaybackDtos.WatchedResponse;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -63,11 +67,84 @@ class PlaybackControllerTest {
 
     @Test
     void watchedPassesTheEditionAndTheFlag() throws Exception {
-        when(playback.setWatched(6L, true)).thenReturn(new WatchedResponse(true));
+        when(playback.setWatched(6L, true)).thenReturn(new WatchedResponse(true,
+            new PlaybackSnapshot(90_000L, false, null, true, Instant.parse("2024-03-30T10:00:00Z"))));
 
         mvc.perform(signedIn(post("/api/editions/{id}/watched", 6)).content("{\"watched\":true}"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.watched").value(true));
+            .andExpect(jsonPath("$.watched").value(true))
+            .andExpect(jsonPath("$.previous.positionMs").value(90_000))
+            .andExpect(jsonPath("$.previous.watched").value(false))
+            .andExpect(jsonPath("$.previous.watchedAt").value(nullValue()))
+            .andExpect(jsonPath("$.previous.hiddenFromContinueWatching").value(true))
+            .andExpect(jsonPath("$.previous.hiddenAt").value("2024-03-30T10:00:00Z"));
+    }
+
+    @Test
+    void continueWatchingPassesTheEditionAndTheFlag() throws Exception {
+        when(playback.setHiddenFromContinueWatching(6L, true)).thenReturn(new HiddenResponse(true));
+
+        mvc.perform(signedIn(put("/api/editions/{id}/continue-watching", 6)).content("{\"hidden\":true}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.hidden").value(true));
+    }
+
+    @Test
+    void aMissingHiddenFlagIsA400WithTheServicesMessage() throws Exception {
+        when(playback.setHiddenFromContinueWatching(6L, null))
+            .thenThrow(new BadRequestException("hidden must be true or false"));
+
+        mvc.perform(signedIn(put("/api/editions/{id}/continue-watching", 6)).content("{}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("hidden must be true or false"));
+    }
+
+    @Test
+    void restorePassesTheWholeSnapshotAndReturnsWhatWasStored() throws Exception {
+        PlaybackSnapshot snapshot = new PlaybackSnapshot(90_000L, true, Instant.parse("2024-03-01T10:00:00Z"),
+            false, null);
+        when(playback.restore(6L, snapshot)).thenReturn(snapshot);
+
+        mvc.perform(signedIn(put("/api/editions/{id}/playback-state", 6)).content(
+                "{\"positionMs\":90000,\"watched\":true,\"watchedAt\":\"2024-03-01T10:00:00Z\","
+                    + "\"hiddenFromContinueWatching\":false,\"hiddenAt\":null}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.positionMs").value(90_000))
+            .andExpect(jsonPath("$.watched").value(true))
+            .andExpect(jsonPath("$.watchedAt").value("2024-03-01T10:00:00Z"))
+            .andExpect(jsonPath("$.hiddenFromContinueWatching").value(false));
+        verify(playback).restore(6L, snapshot);
+    }
+
+    @Test
+    void restoreRejectedByTheServiceIsA400() throws Exception {
+        when(playback.restore(6L, new PlaybackSnapshot(-1L, false, null, false, null)))
+            .thenThrow(new BadRequestException("positionMs must be a non-negative number"));
+
+        mvc.perform(signedIn(put("/api/editions/{id}/playback-state", 6)).content(
+                "{\"positionMs\":-1,\"watched\":false,\"hiddenFromContinueWatching\":false}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("positionMs must be a non-negative number"));
+    }
+
+    @Test
+    void theNewEndpointsNeedTheCsrfHeaderAndASession() throws Exception {
+        mvc.perform(put("/api/editions/{id}/continue-watching", 6).with(user("owner")).contentType(JSON)
+                .content("{\"hidden\":true}"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
+        mvc.perform(put("/api/editions/{id}/playback-state", 6).with(user("owner")).contentType(JSON)
+                .content("{\"positionMs\":0}"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
+        mvc.perform(put("/api/editions/{id}/continue-watching", 6).header("X-CineFilm", "1").contentType(JSON)
+                .content("{\"hidden\":true}"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Authentication required"));
+        mvc.perform(put("/api/editions/{id}/playback-state", 6).header("X-CineFilm", "1").contentType(JSON)
+                .content("{\"positionMs\":0}"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Authentication required"));
     }
 
     @Test

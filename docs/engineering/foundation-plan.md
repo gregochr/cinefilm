@@ -41,7 +41,7 @@ changelog.d/    one changelog entry file per change
 Film 1—n Edition 1—n MediaFile 1—n AudioStream / SubtitleStream
 Film n—1 Collection (nullable)          Collection also lists missing parts (CollectionPart)
 Film 1—n Credit n—1 Person              Credit: role DIRECTOR | CAST, character, order
-Edition 1—1 PlaybackState               resume position (ms), watched, watchedAt, lastPlayedAt
+Edition 1—1 PlaybackState               resume position (ms), watched, watchedAt, lastPlayedAt, hiddenFromContinueWatching, hiddenAt
 Film 1—1 FilmPreference                 defaultEditionId, lastEditionId, quality, audioStreamId, subtitle choice
 ```
 
@@ -67,7 +67,10 @@ cache only changes that helper.
   `runtimeMs` when there is no marker. Watched is per edition; a film is "watched" in browse views if any edition is.
 - **Resume (decision 1):** the API returns the saved position; the *client* seeks to `max(0, position − 10 s)`.
 - **Continue watching:** films whose most recently played edition has a position > 0 and is not watched, newest
-  `lastPlayedAt` first. The Home hero is the first of these.
+  `lastPlayedAt` first, **except** films whose most recently played edition has `hiddenFromContinueWatching` set
+  ("Remove from Continue watching": only the flag and `hiddenAt` change, the position stays so "Resume from…" still
+  works; any progress report clears the flag, so playing the film again brings it back). The Home hero is the first
+  of these, so a hidden film leaves the hero and the row together.
 - **Recently added:** `addedAt` within 30 days, newest first. **Not watched in years:** watched, `lastPlayedAt`
   more than 5 years ago (or never played but imported as watched long ago), oldest first.
 - **Weekly theme (decision 4):** chosen deterministically from the ISO week (Monday start) and the library
@@ -88,7 +91,9 @@ All JSON. All routes under `/api`. Times are milliseconds. All routes except `/a
 | `GET /api/people/{id}` | `{ id, name, profilePath, films: [{ film: FilmCard, roles: string[] }] }` — owned films only; roles like "as Neil McCauley", "Director" |
 | `GET /api/collections/{id}` | `{ id, name, posterPath, parts: [{ owned: true, film: FilmCard } \| { owned: false, title, year, posterPath }] }` in release order |
 | `PUT /api/editions/{id}/progress` body `{ positionMs }` | `{ positionMs, watched }` — applies the watched rule |
-| `POST /api/editions/{id}/watched` body `{ watched: boolean }` | `{ watched }` (watched=false also resets position to 0) |
+| `POST /api/editions/{id}/watched` body `{ watched: boolean }` | `{ watched, previous: PlaybackSnapshot }` (watched=false also resets position to 0); `previous` is the state just before the change (an absent row is `{0, false, null, false, null}`) so the client can undo exactly |
+| `PUT /api/editions/{id}/continue-watching` body `{ hidden: boolean }` | `{ hidden }`: true sets the hidden flag and `hiddenAt`, false clears both; never touches position, watched or `lastPlayedAt`. 404 unknown edition, 400 missing flag. An edition with no playback state yet has nothing to hide: no row is created and the answer is `{ hidden: false }` |
+| `PUT /api/editions/{id}/playback-state` body `PlaybackSnapshot` | the stored `PlaybackSnapshot`; restores exactly `positionMs`, `watched`, `watchedAt`, `hiddenFromContinueWatching`, `hiddenAt` (never `lastPlayedAt`). 400 for `positionMs` < 0, 404 unknown edition. Used by Undo |
 | `PUT /api/films/{id}/preferences` body `{ editionId?, quality?, audioStreamId?, subtitle? }` | the stored preferences |
 | `GET /api/editions/{id}/stream` | the ORIGINAL MediaFile bytes, honouring `Range` (206 partial content), correct `Content-Type` |
 | `GET /api/media-files/{id}/subtitles/{streamIndex}.vtt` | WebVTT (`text/vtt;charset=UTF-8`) of an embedded text subtitle stream of the media file (`file.id` on an edition), extracted with `ffmpeg` on first request and cached under `CINEFILM_CACHE_DIR`; 404 for an unknown file or stream, a file that is gone, or a failed extraction |

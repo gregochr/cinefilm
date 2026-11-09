@@ -68,6 +68,25 @@ describe('API resources', () => {
       method: 'POST',
       body: { watched: false },
     });
+    await editionsApi.setHiddenFromContinueWatching(11, true);
+    expect(last()).toEqual({
+      path: '/api/editions/11/continue-watching',
+      method: 'PUT',
+      body: { hidden: true },
+    });
+    const snapshot = {
+      positionMs: 5000,
+      watched: true,
+      watchedAt: '2024-03-01T10:00:00Z',
+      hiddenFromContinueWatching: false,
+      hiddenAt: null,
+    };
+    await editionsApi.restoreState(11, snapshot);
+    expect(last()).toEqual({
+      path: '/api/editions/11/playback-state',
+      method: 'PUT',
+      body: snapshot,
+    });
   });
 
   it('checks, signs in and signs out through /api/session', async () => {
