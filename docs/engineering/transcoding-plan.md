@@ -68,7 +68,8 @@ read of the file. Direct play of the file remains only as a fallback.
 - Audio on every rung: the chosen audio stream as **AAC stereo 128 kbps** (96 kbps on 360p); Chrome never meets AC-3.
 - `BANDWIDTH` in the master playlist is the rung's **peak** per-segment bitrate (from the index and file sizes for
   the copy rung; the target × 1.2 for transcoded rungs), so ABR never picks a rung the link can't carry.
-- Quality ids: `auto | original | 1080p | 720p | 480p | 360p`; `PreferencesService` and `FilmMapper` accept `360p`.
+- Quality ids: `auto | original | 1080p | 720p | 480p | 360p | 240p`; `PreferencesService` and `FilmMapper` accept
+  `360p` and `240p` (240p only exists for sources of 360 lines or fewer, common among the older SD rips).
 
 ## The encoder: one ffmpeg per session, all rungs
 
@@ -123,7 +124,7 @@ read of the file. Direct play of the file remains only as a fallback.
 - `GET /api/sessions/{id}/master.m3u8`: per session, the **intended start rung listed first** (Safari starts on the
   first variant) and **only the pinned rung** when a quality is chosen.
 - `GET /api/sessions/{id}/{rung}/index.m3u8`, `GET /api/sessions/{id}/{rung}/seg-{n}.ts`: validated
-  (`^[0-9a-f-]{36}$`, `^(original|1080p|720p|480p|360p)$`, `^seg-\d{1,6}\.ts$`, **n < the file's segment count**),
+  (`^[0-9a-f-]{36}$`, `^(original|1080p|720p|480p|360p|240p)$`, `^seg-\d{1,6}\.ts$`, **n < the file's segment count**),
   served only from that session's dir, `Cache-Control: no-store`.
 - `DELETE /api/sessions/{id}` on exit via `fetch(..., { keepalive: true })` with `X-CineFilm` (as `usePageExitReport`
   does); the idle timeout is the backstop.
