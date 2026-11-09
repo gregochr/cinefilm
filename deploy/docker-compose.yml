@@ -8,8 +8,8 @@ services:
     container_name: cinefilm-db
     environment:
       POSTGRES_DB: cinefilm
-      POSTGRES_USER: ${CINEFILM_DB_USER:?set CINEFILM_DB_USER in ~/cinefilm/.env}
-      POSTGRES_PASSWORD: ${CINEFILM_DB_PASSWORD:?set CINEFILM_DB_PASSWORD in ~/cinefilm/.env}
+      POSTGRES_USER: "${CINEFILM_DB_USER:?set CINEFILM_DB_USER in ~/cinefilm/.env}"
+      POSTGRES_PASSWORD: "${CINEFILM_DB_PASSWORD:?set CINEFILM_DB_PASSWORD in ~/cinefilm/.env}"
     volumes:
       - ${CINEFILM_DATA_DIR:-/home/gregochr/cinefilm-data}/postgres:/var/lib/postgresql/data
     # No published port: only the cinefilm container reaches it, over the compose network.
@@ -26,7 +26,7 @@ services:
         max-file: "3"
 
   cinefilm:
-    image: ghcr.io/gregochr/cinefilm:${CINEFILM_VERSION:?CINEFILM_VERSION is set by scripts/deploy.sh}
+    image: "ghcr.io/gregochr/cinefilm:${CINEFILM_VERSION:?CINEFILM_VERSION is set by scripts/deploy.sh}"
     container_name: cinefilm
     env_file:
       - ./.env
@@ -85,14 +85,14 @@ services:
   # Host networking so it can bind the tailnet addresses and reach the app on 127.0.0.1:8090; the Caddyfile binds ONLY
   # those two addresses. It gets just the variables below, never the whole .env (database password, tokens).
   cinefilm-proxy:
-    image: ghcr.io/gregochr/cinefilm-caddy:${CINEFILM_VERSION:?CINEFILM_VERSION is set by scripts/deploy.sh}
+    image: "ghcr.io/gregochr/cinefilm-caddy:${CINEFILM_VERSION:?CINEFILM_VERSION is set by scripts/deploy.sh}"
     container_name: cinefilm-proxy
     network_mode: host
     environment:
-      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?set CLOUDFLARE_API_TOKEN in ~/cinefilm/.env (a Zone, DNS, Edit token for chrisjgregory.dev only)}
+      CLOUDFLARE_API_TOKEN: "${CLOUDFLARE_API_TOKEN:?set CLOUDFLARE_API_TOKEN in ~/cinefilm/.env (a Zone, DNS, Edit token for chrisjgregory.dev only)}"
       CINEFILM_DOMAIN: ${CINEFILM_DOMAIN:-cinefilm.chrisjgregory.dev}
-      CINEFILM_TAILNET_IPV4: ${CINEFILM_TAILNET_IPV4:?set CINEFILM_TAILNET_IPV4 in ~/cinefilm/.env (this host's 100.x tailnet address)}
-      CINEFILM_TAILNET_IPV6: ${CINEFILM_TAILNET_IPV6:?set CINEFILM_TAILNET_IPV6 in ~/cinefilm/.env (this host's fd7a: tailnet address)}
+      CINEFILM_TAILNET_IPV4: "${CINEFILM_TAILNET_IPV4:?set CINEFILM_TAILNET_IPV4 in ~/cinefilm/.env (this host's 100.x tailnet address)}"
+      CINEFILM_TAILNET_IPV6: "${CINEFILM_TAILNET_IPV6:?set CINEFILM_TAILNET_IPV6 in ~/cinefilm/.env (this host's fd7a tailnet address)}"
     volumes:
       # Certificates and the ACME account persist here, so a redeploy never re-issues (Let's Encrypt rate limits).
       - ${CINEFILM_DATA_DIR:-/home/gregochr/cinefilm-data}/caddy/data:/data
