@@ -20,21 +20,21 @@ describe('CollectionTile', () => {
   });
 
   it('shows the count badge and the name, and a fan of the films’ posters', () => {
-    const { container } = wrap({ id: 4, name: 'Alien Collection' }, [
+    wrap({ id: 4, name: 'Alien Collection' }, [
       film(1, '/a.jpg'),
       film(2, '/b.jpg'),
       film(3, '/c.jpg'),
       film(4, '/d.jpg'),
     ]);
-    expect(container.querySelector('.collection-tile__badge')).toHaveTextContent('4');
-    expect(container.querySelector('.collection-tile__name')).toHaveTextContent(/^Alien$/);
-    expect(container.querySelectorAll('.fan__poster')).toHaveLength(3);
+    expect(screen.getByTestId('collection-tile-badge')).toHaveTextContent('4');
+    expect(screen.getByTestId('collection-tile-name')).toHaveTextContent(/^Alien$/);
+    expect(screen.getAllByTestId('fan-poster')).toHaveLength(3);
   });
 
   it('says "1 film" in the singular, with a single poster', () => {
-    const { container } = wrap({ id: 5, name: 'Dune' }, [film(1, '/a.jpg')]);
+    wrap({ id: 5, name: 'Dune' }, [film(1, '/a.jpg')]);
     expect(screen.getByRole('link', { name: 'Dune, collection of 1 film' })).toBeInTheDocument();
     expect(screen.getByText('Collection · 1 film')).toBeInTheDocument();
-    expect(container.querySelectorAll('.fan__poster')).toHaveLength(1);
+    expect(screen.getAllByTestId('fan-poster')).toHaveLength(1);
   });
 });

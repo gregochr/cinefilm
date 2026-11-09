@@ -22,11 +22,17 @@ export default function CollectionTile({ collection, films }) {
           seed={collection.id}
           name={collection.name}
         />
-        <span className="collection-tile__badge" aria-hidden="true">
+        <span
+          className="collection-tile__badge"
+          aria-hidden="true"
+          data-testid="collection-tile-badge"
+        >
           {count}
         </span>
         <span className="collection-tile__scrim" aria-hidden="true">
-          <span className="collection-tile__name">{name}</span>
+          <span className="collection-tile__name" data-testid="collection-tile-name">
+            {name}
+          </span>
         </span>
       </div>
       <span className="poster__caption">

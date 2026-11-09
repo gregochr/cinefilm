@@ -38,26 +38,26 @@ describe('CollectionCard', () => {
   });
 
   it('draws one poster per owned film up to three', () => {
-    const { container } = wrap({
+    wrap({
       id: 6,
       name: 'Many',
       ownedCount: 5,
       totalCount: 5,
       posterPaths: ['/1.jpg', '/2.jpg', '/3.jpg'],
     });
-    expect(container.querySelectorAll('.fan__poster')).toHaveLength(3);
+    expect(screen.getAllByTestId('fan-poster')).toHaveLength(3);
   });
 
   it('uses /api/art/ paths as they are', () => {
     const art = `/api/art/${'b'.repeat(64)}.jpg`;
-    const { container } = wrap({
+    wrap({
       id: 9,
       name: 'Mix',
       ownedCount: 2,
       totalCount: 2,
       posterPaths: [art, '/t.jpg'],
     });
-    const srcs = [...container.querySelectorAll('img')].map((i) => i.getAttribute('src'));
+    const srcs = screen.getAllByAltText('').map((i) => i.getAttribute('src'));
     expect(srcs).toContain(art);
     expect(srcs).toContain('https://image.tmdb.org/t/p/w342/t.jpg');
   });

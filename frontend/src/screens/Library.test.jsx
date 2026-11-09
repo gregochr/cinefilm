@@ -227,7 +227,10 @@ describe('Library states', () => {
 });
 
 const tileNames = () =>
-  [...document.querySelectorAll('.poster-grid > a')].map((a) => a.getAttribute('aria-label') || '');
+  screen
+    .getAllByRole('link')
+    .filter((a) => /^\/(films|collections)\//.test(a.getAttribute('href')))
+    .map((a) => a.getAttribute('aria-label') || '');
 
 describe('Group collections', () => {
   it('has a switch, off by default, and no tiles', async () => {

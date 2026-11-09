@@ -16,7 +16,9 @@ export default function CollectionCard({ collection }) {
           name={collection.name}
         />
       </span>
-      <span className="collection-card__name">{name}</span>{' '}
+      <span className="collection-card__name" data-testid="collection-card-name">
+        {name}
+      </span>{' '}
       <span className="collection-card__count">
         {collection.ownedCount} of {collection.totalCount} films
         {complete ? (

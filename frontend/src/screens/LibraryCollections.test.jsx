@@ -6,8 +6,7 @@ import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx'
 afterEach(() => vi.unstubAllGlobals());
 
 // Visible cards, in order, by their display names.
-const cardNames = () =>
-  [...document.querySelectorAll('.collection-card__name')].map((n) => n.textContent);
+const cardNames = () => screen.queryAllByTestId('collection-card-name').map((n) => n.textContent);
 
 const c = (id, name, ownedCount, totalCount, lastAddedAt) => ({
   id,
@@ -171,6 +170,6 @@ describe('Collections tab', () => {
     renderApp('/library/collections');
     await screen.findByText(`${fixtures.collections.collections.length} collections`);
     const potter = screen.getByRole('link', { name: 'Harry Potter 7 of 8 films' });
-    expect(potter.querySelectorAll('img')).toHaveLength(3);
+    expect(within(potter).getAllByAltText('')).toHaveLength(3);
   });
 });

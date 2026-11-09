@@ -14,7 +14,7 @@ export default function CollectionFan({ posters, seed, name }) {
   const count = slots.length;
   // Rendered rear to front so the front poster paints last.
   return (
-    <span className="fan" aria-hidden="true">
+    <span className="fan" aria-hidden="true" data-testid="fan">
       <span className="fan__stack">
         {[...slots].reverse().map((slot) => {
           const url = imageUrl(slot.path);
@@ -29,6 +29,7 @@ export default function CollectionFan({ posters, seed, name }) {
               key={slot.depth}
               className={`fan__poster${slot.shadow ? ' fan__poster--shadow' : ''}`}
               style={style}
+              data-testid="fan-poster"
             >
               {url ? (
                 <img className="fan__img" src={url} alt="" loading="lazy" decoding="async" />
