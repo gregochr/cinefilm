@@ -243,7 +243,8 @@ class PlaybackApiTest extends ApiTestBase {
     void invalidPreferencesAreRejected() throws Exception {
         mvc.perform(put("/api/films/{id}/preferences", film.getId()).content("{\"quality\":\"4k\"}"))
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.error").value("quality must be one of [auto, original, 1080p, 720p, 480p]"));
+            .andExpect(jsonPath("$.error")
+                .value("quality must be one of [auto, original, 1080p, 720p, 480p, 360p, 240p]"));
         mvc.perform(put("/api/films/{id}/preferences", film.getId()).content("{\"editionId\":999999}"))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.error").value("Edition does not belong to this film"));

@@ -15,7 +15,6 @@ import {
   audioText,
   currentQualityLabel,
   formatBitrate,
-  indicatorText,
   nextSubtitle,
   qualityDetail,
   qualityName,
@@ -159,10 +158,9 @@ describe('tracks: quality', () => {
     expect(qualityDetail({ id: '720p', premade: true })).toBe('pre-made');
   });
 
-  it('the corner indicator reads Original · Home only when original is chosen', () => {
-    expect(indicatorText('original')).toBe('Original · Home');
-    expect(indicatorText('auto')).toBe('Auto · Original · Home');
-    expect(indicatorText()).toBe('Auto · Original · Home');
-    expect(indicatorText('720p')).toBe('Auto · Original · Home');
+  it('the Auto row names the rung playing now, the original until told otherwise', () => {
+    expect(qualityDetail({ id: 'auto' })).toBe('now Original');
+    expect(qualityDetail({ id: 'auto' }, { activeRung: '480p' })).toBe('now 480p');
+    expect(qualityDetail({ id: 'auto' }, { activeRung: 'original' })).toBe('now Original');
   });
 });

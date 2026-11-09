@@ -53,6 +53,7 @@ class ScanServiceTest {
     private final TmdbMatcher matcher = mock(TmdbMatcher.class);
     private final LibraryIngest ingest = mock(LibraryIngest.class);
     private final List<Runnable> queued = new ArrayList<>();
+    private final List<Object> events = new ArrayList<>();
     private ScanService service;
     private ScanService deferred;
 
@@ -60,9 +61,9 @@ class ScanServiceTest {
     void setUp() {
         LibraryRoot root = new LibraryRoot(library.toString());
         service = new ScanService(root, scanner, ffprobe, tmdb, matcher, ingest, Runnable::run, CLOCK,
-            new LibraryLock());
+            new LibraryLock(), events::add);
         deferred = new ScanService(root, scanner, ffprobe, tmdb, matcher, ingest, queued::add, CLOCK,
-            new LibraryLock());
+            new LibraryLock(), events::add);
         when(tmdb.enabled()).thenReturn(true);
         when(ingest.startRun("admin", CLOCK.instant())).thenReturn(5L);
         when(ingest.known()).thenReturn(Map.of());
@@ -596,12 +597,19 @@ class ScanServiceTest {
     }
 
     @Test
+    void aFinishedScanPublishesScanFinishedWithItsTrigger() {
+        service.start("admin");
+
+        assertThat(events).containsExactly(new ScanFinished("admin"));
+    }
+
+    @Test
     void anExecutorThatRefusesTheScanDoesNotLeaveTheServiceStuckRunning() {
         Executor refusing = command -> {
             throw new java.util.concurrent.RejectedExecutionException("shutting down");
         };
         ScanService stopped = new ScanService(new LibraryRoot(library.toString()), scanner, ffprobe, tmdb, matcher,
-            ingest, refusing, CLOCK, new LibraryLock());
+            ingest, refusing, CLOCK, new LibraryLock(), events::add);
 
         assertThatThrownBy(() -> stopped.start("admin")).isInstanceOf(
             java.util.concurrent.RejectedExecutionException.class);

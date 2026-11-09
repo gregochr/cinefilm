@@ -34,6 +34,12 @@ export const editionsApi = {
   setWatched: (id, watched) => post(`/api/editions/${id}/watched`, { watched }),
 };
 
+/** HLS playback sessions (adaptive streaming). `remove` is sent with keepalive when the page is closing. */
+export const sessionsApi = {
+  create: (editionId, body, options) => post(`/api/editions/${editionId}/sessions`, body, options),
+  remove: (sessionId, options) => del(`/api/sessions/${sessionId}`, options),
+};
+
 export const sessionApi = {
   status: () => get('/api/session'),
   signIn: (password) => post('/api/session', { password }),
@@ -46,6 +52,8 @@ export const adminApi = {
   attention: (options) => get('/api/admin/attention', options),
   plex: (options) => get('/api/admin/plex', options),
   startPlexImport: () => post('/api/admin/plex/import'),
+  transcoding: (options) => get('/api/admin/transcoding', options),
+  stopTranscodingSession: (id) => del(`/api/admin/transcoding/sessions/${id}`),
 };
 
 export const mediaFilesApi = {

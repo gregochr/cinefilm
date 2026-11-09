@@ -149,6 +149,12 @@
           "bitrate": 1500000,
           "premade": false,
           "available": false
+        },
+        {
+          "id": "360p",
+          "bitrate": 600000,
+          "premade": false,
+          "available": false
         }
       ]
     }

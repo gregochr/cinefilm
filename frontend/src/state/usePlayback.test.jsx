@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installFetch, respond } from '../test/mockApi.jsx';
-import { usePlayback } from './usePlayback.js';
+import { RETRY_BASE_MS, RETRY_MAX_MS, usePlayback } from './usePlayback.js';
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
@@ -108,6 +108,138 @@ describe('usePlayback reporting', () => {
       await vi.advanceTimersByTimeAsync(30000);
     });
     expect(puts(fetchMock)).toHaveLength(0);
+  });
+});
+
+describe('usePlayback: a reloading source must not overwrite the saved position', () => {
+  it.each([0, -1])('never reports a position of %s', async (ms) => {
+    const fetchMock = installFetch();
+    const { result } = setup({}, { ms });
+    await act(async () => {
+      expect(await result.current.report()).toBeNull();
+    });
+    expect(puts(fetchMock)).toHaveLength(0);
+  });
+
+  it('reports 1 ms, the first position above the line', async () => {
+    const fetchMock = installFetch();
+    const { result } = setup({}, { ms: 1 });
+    await act(async () => {
+      await result.current.report();
+    });
+    expect(puts(fetchMock)).toHaveLength(1);
+  });
+});
+
+describe('usePlayback: failed reports are kept and retried with backoff', () => {
+  const failing = () => {
+    const state = { fail: true };
+    const fetchMock = installFetch((m, url) =>
+      state.fail && url.endsWith('/progress') ? respond(null, 500) : null,
+    );
+    return { state, fetchMock };
+  };
+
+  it('retries after 2 s, then 4 s, then 8 s, until a report goes through', async () => {
+    const { state, fetchMock } = failing();
+    const { result } = setup();
+    await act(async () => {
+      await result.current.report();
+    });
+    expect(puts(fetchMock)).toHaveLength(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RETRY_BASE_MS - 1);
+    });
+    expect(puts(fetchMock)).toHaveLength(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(puts(fetchMock)).toHaveLength(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RETRY_BASE_MS * 2 - 1);
+    });
+    expect(puts(fetchMock)).toHaveLength(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(puts(fetchMock)).toHaveLength(3);
+    state.fail = false;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RETRY_BASE_MS * 4);
+    });
+    expect(puts(fetchMock)).toHaveLength(4);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RETRY_MAX_MS * 2);
+    });
+    expect(puts(fetchMock)).toHaveLength(4);
+  });
+
+  it('never waits longer than 30 s between attempts', async () => {
+    const { fetchMock } = failing();
+    const { result } = setup();
+    await act(async () => {
+      await result.current.report();
+    });
+    // 2, 4, 8, 16 s, then 30 s (not 32): the fifth retry is due 30 s after the fourth.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000 + 4000 + 8000 + 16000);
+    });
+    const before = puts(fetchMock).length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RETRY_MAX_MS);
+    });
+    expect(puts(fetchMock)).toHaveLength(before + 1);
+  });
+
+  it('retries with the latest position, not the one that failed', async () => {
+    const { state, fetchMock } = failing();
+    const position = { ms: 61000 };
+    const { result } = setup({}, position);
+    await act(async () => {
+      await result.current.report();
+    });
+    position.ms = 99000;
+    state.fail = false;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RETRY_BASE_MS);
+    });
+    expect(puts(fetchMock).map((c) => JSON.parse(c[1].body).positionMs)).toEqual([61000, 99000]);
+  });
+
+  it('starts the backoff over after a success', async () => {
+    const { state, fetchMock } = failing();
+    const position = { ms: 61000 };
+    const { result } = setup({}, position);
+    await act(async () => {
+      await result.current.report();
+    });
+    state.fail = false;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RETRY_BASE_MS);
+    });
+    state.fail = true;
+    position.ms = 70000;
+    await act(async () => {
+      await result.current.report();
+    });
+    const count = puts(fetchMock).length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RETRY_BASE_MS);
+    });
+    expect(puts(fetchMock)).toHaveLength(count + 1);
+  });
+
+  it('leaves no retry timer behind when the player closes', async () => {
+    failing();
+    const { result, unmount } = setup();
+    await act(async () => {
+      await result.current.report();
+    });
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 

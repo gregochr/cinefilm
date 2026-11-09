@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 /**
@@ -46,12 +47,14 @@ public class ScanService {
     private final Executor executor;
     private final Clock clock;
     private final LibraryLock lock;
+    private final ApplicationEventPublisher events;
     private final AtomicReference<Progress> progress = new AtomicReference<>();
 
     /** Creates the service; the executor runs scans in the background, the lock keeps scans and imports apart. */
     public ScanService(LibraryRoot root, LibraryScanner scanner, FfprobeService ffprobe, TmdbApi tmdb,
                        TmdbMatcher matcher, LibraryIngest ingest,
-                       @Qualifier("scanExecutor") Executor scanExecutor, Clock clock, LibraryLock lock) {
+                       @Qualifier("scanExecutor") Executor scanExecutor, Clock clock, LibraryLock lock,
+                       ApplicationEventPublisher events) {
         this.root = root;
         this.scanner = scanner;
         this.ffprobe = ffprobe;
@@ -61,6 +64,7 @@ public class ScanService {
         this.executor = scanExecutor;
         this.clock = clock;
         this.lock = lock;
+        this.events = events;
     }
 
     /**
@@ -130,6 +134,7 @@ public class ScanService {
         }
         ingest.finishRun(run, clock.instant(), seen, added, missing, error);
         LOG.info("Scan finished: {} files, {} new, {} missing, note: {}", seen, added, missing, error);
+        events.publishEvent(new ScanFinished(trigger));
     }
 
     private record Counts(int seen, int added, int missing, String error) {

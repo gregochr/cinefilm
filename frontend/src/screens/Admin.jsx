@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Button } from '../components/Button.jsx';
 import { SkeletonBlock } from '../components/Skeleton.jsx';
+import TranscodingPanel from '../components/TranscodingPanel.jsx';
 import { ErrorState } from '../components/StateMessages.jsx';
 import { formatRuntime } from '../player/time.js';
 import { useAttention, usePlexImport, useScan } from '../state/useAdmin.js';
@@ -333,6 +334,7 @@ export default function Admin() {
           onImport={plexImport.startImport}
           onRecheck={plexImport.reload}
         />
+        <TranscodingPanel />
       </div>
       <p className="admin__credit">
         <TmdbMark />

@@ -22,6 +22,8 @@ import gregochr.cinefilm.playback.PreferencesService;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
+import gregochr.cinefilm.transcode.EncoderMode;
+import gregochr.cinefilm.transcode.Transcoder;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -39,11 +41,14 @@ class FilmServiceTest {
     @Mock
     private PreferencesService preferences;
 
+    @Mock
+    private Transcoder transcoder;
+
     private FilmService service;
 
     @BeforeEach
     void setUp() {
-        service = new FilmService(loader, films, preferences);
+        service = new FilmService(loader, films, preferences, transcoder);
     }
 
     private static Film owned(long id, String title, int year, String... genres) {
@@ -173,6 +178,7 @@ class FilmServiceTest {
         when(films.findById(1L)).thenReturn(Optional.of(heat));
         when(loader.views(List.of(heat))).thenReturn(List.of(view(heat)));
         when(preferences.resolve(heat)).thenReturn(resolved);
+        when(transcoder.mode()).thenReturn(EncoderMode.UNAVAILABLE);
 
         FilmDetail detail = service.detail(1L);
 
@@ -180,6 +186,8 @@ class FilmServiceTest {
         assertThat(detail.title()).isEqualTo("Heat");
         assertThat(detail.preferences()).isEqualTo(resolved);
         assertThat(detail.editions()).hasSize(1);
+        assertThat(detail.editions().get(0).qualities()).extracting(FilmDtos.QualityDto::available)
+            .containsOnly(false, true);
     }
 
     @Test

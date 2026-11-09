@@ -7,7 +7,9 @@ import wickerMan from '../test/fixtures/film-wicker-man.json';
 import person from '../test/fixtures/person.json';
 import adminScan from '../test/fixtures/admin-scan.json';
 import adminAttention from '../test/fixtures/admin-attention.json';
+import adminTranscoding from '../test/fixtures/admin-transcoding.json';
 import collection from '../test/fixtures/collection.json';
+import session from '../test/fixtures/session.json';
 
 const details = { 1: heat, 6: bladeRunner, 8: wickerMan };
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -36,6 +38,10 @@ export async function handle(method, path, body) {
   if (route === '/api/home') return home;
   if (route === '/api/admin/scan') return adminScan;
   if (route === '/api/admin/attention') return adminAttention;
+  if (route === '/api/admin/transcoding') return adminTranscoding;
+  if (/^\/api\/admin\/transcoding\/sessions\//.test(route)) return null;
+  if (/^\/api\/editions\/\d+\/sessions$/.test(route)) return session;
+  if (/^\/api\/sessions\//.test(route)) return null;
   if (route === '/api/films') return listFilms(url.searchParams);
   let match = route.match(/^\/api\/films\/(\d+)$/);
   if (match) return details[match[1]] || heat;

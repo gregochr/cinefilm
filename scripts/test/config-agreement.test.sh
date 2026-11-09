@@ -63,4 +63,10 @@ smoke_port="$(grep -E '^BASE_URL=' "$SMOKE" | head -1 | sed -E 's/.*127\.0\.0\.1
 assert_eq "compose publishes the host port on loopback" "8090" "$compose_port"
 assert_eq "the smoke script's default base URL uses the compose host port" "$compose_port" "$smoke_port"
 
+# Live transcoding needs the GPU render node, its group, the i965 driver and a reaping init; the heap is pinned.
+for needle in '- /dev/dri:/dev/dri' '- "993"' 'LIBVA_DRIVER_NAME: i965' 'init: true' 'mem_limit: 2g' 'JAVA_TOOL_OPTIONS: -Xmx512m'; do
+    if grep -qF -- "$needle" "$COMPOSE"; then ok "compose has '$needle'"; else bad "compose is missing '$needle'"; fi
+done
+assert_eq "compose passes only the /dev/dri device" "1" "$(grep -cE '^ +- /dev/' "$COMPOSE")"
+
 finish_tests

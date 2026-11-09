@@ -240,13 +240,15 @@ describe('Player', () => {
     const fetchMock = installFetch();
     renderApp(path);
     const video = await screen.findByTestId('player-video');
+    await waitFor(() => expect(video).toHaveAttribute('src'));
     fireEvent.loadedMetadata(video);
+    fireEvent.timeUpdate(video); // the resume seek lands
     return { video, fetchMock, player: screen.getByRole('region', { name: 'Video player' }) };
   };
 
   it('streams the edition and resumes 10 s before the saved position', async () => {
     const { video } = await openPlayer();
-    expect(video).toHaveAttribute('src', '/api/editions/11/stream');
+    expect(video).toHaveAttribute('src', '/api/editions/11/stream'); // direct play: the default API makes no session
     expect(video.currentTime).toBe(3861);
     expect(screen.getByText('Heat')).toBeInTheDocument();
     expect(screen.getByText('Auto · Original · Home')).toBeInTheDocument();
@@ -274,7 +276,8 @@ describe('Player', () => {
     await userEvent.keyboard('q');
     const menu = screen.getByRole('menu', { name: 'Quality' });
     const rows = within(menu).getAllByRole('menuitemradio');
-    expect(rows).toHaveLength(5);
+    expect(rows).toHaveLength(6); // Auto, Original, 1080p, 720p, 480p and the new 360p
+    expect(within(menu).getByRole('menuitemradio', { name: /^360p/ })).toBeDisabled();
     expect(within(menu).getByRole('menuitemradio', { name: /Auto/ })).toHaveAttribute(
       'aria-checked',
       'true',

@@ -9,6 +9,7 @@ import gregochr.cinefilm.film.FilmDtos.FilmCard;
 import gregochr.cinefilm.film.FilmDtos.FilmDetail;
 import gregochr.cinefilm.film.FilmDtos.FilmList;
 import gregochr.cinefilm.playback.PreferencesService;
+import gregochr.cinefilm.transcode.Transcoder;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -25,12 +26,15 @@ public class FilmService {
     private final LibraryLoader loader;
     private final FilmRepository films;
     private final PreferencesService preferences;
+    private final Transcoder transcoder;
 
-    /** Creates the service over the loader, the film repository and the preferences service. */
-    public FilmService(LibraryLoader loader, FilmRepository films, PreferencesService preferences) {
+    /** Creates the service over the loader, the repository, the preferences service and the transcoder. */
+    public FilmService(LibraryLoader loader, FilmRepository films, PreferencesService preferences,
+                       Transcoder transcoder) {
         this.loader = loader;
         this.films = films;
         this.preferences = preferences;
+        this.transcoder = transcoder;
     }
 
     /** Searches, filters and sorts the library and computes the filter facets over the whole library. */
@@ -50,7 +54,8 @@ public class FilmService {
         boolean inCollection = film.getCollection() != null
             && films.findByCollectionId(film.getCollection().getId()).stream().filter(Film::browsable).count()
                 >= CollectionService.MIN_OWNED;
-        return FilmMapper.detail(view, preferences.resolve(film), inCollection);
+        return FilmMapper.detail(view, preferences.resolve(film), inCollection,
+            transcoder.mode());
     }
 
     private static Facets facets(List<FilmView> all) {

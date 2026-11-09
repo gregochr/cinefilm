@@ -28,9 +28,12 @@ the owner's tailnet through `tailscale serve`. Films are read from a read-only S
    shared, mounted, scanned or written by CineFilm, its scripts or its CI. Read-only is enforced three times: the SMB
    share, the `ro` cifs mount, and the container's `:ro` volume. Any change that widens the share, the mount or the
    library root is a blocking finding.
-4. **External processes.** `ffmpeg`/`ffprobe` (phase 2+) are invoked with argument arrays, never a shell string, with
+4. **External processes.** `ffmpeg`/`ffprobe` are invoked with argument arrays, never a shell string, with
    timeouts and resource limits; file names are never interpolated into a command line. Treat probe output as
-   untrusted input.
+   untrusted input. Transcoding: `-protocol_whitelist file`, input only the database-known path under the library root,
+   outputs only under the session directory (`cache/hls/<uuid>/`), every session URL segment regex-validated and
+   bounded, the MP4 box reader bounds every size it reads, and resources are capped (3 sessions, idle stop, look-ahead
+   cap, `hls/` cap, bounded threads, encoders killed on shutdown). `/dev/dri` is the only device passed in.
 5. **Secrets.** `CINEFILM_PASSWORD`, `CINEFILM_DB_*`, `TMDB_READ_TOKEN`, Plex tokens and the CineLight credentials come
    from the environment, never from the repo, and never reach the browser, API responses, logs, error messages or
    `/actuator`. The Plex token is sent only in the `X-Plex-Token` header, never in a URL, and logs and errors name the

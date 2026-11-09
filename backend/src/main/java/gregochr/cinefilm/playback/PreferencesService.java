@@ -10,6 +10,7 @@ import gregochr.cinefilm.film.FilmPreference;
 import gregochr.cinefilm.film.FilmPreferenceRepository;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.MediaFile;
+import gregochr.cinefilm.transcode.Ladder;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -21,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class PreferencesService {
 
     /** Quality identifiers the API accepts. */
-    public static final List<String> QUALITIES = List.of("auto", "original", "1080p", "720p", "480p");
+    public static final List<String> QUALITIES = Ladder.QUALITY_IDS;
 
     private final FilmRepository films;
     private final FilmPreferenceRepository preferences;

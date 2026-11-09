@@ -73,17 +73,15 @@ read of the file. Direct play of the file remains only as a fallback.
 
 ## The encoder: one ffmpeg per session, all rungs
 
-- One ffmpeg reads the file once: the copy rung maps the video stream with `-c:v copy` (`h264_mp4toannexb` applied
-  for MPEG-TS); the transcoded rungs decode with VAAPI, `split`, `scale_vaapi`, `h264_vaapi` with the forced
-  keyframes; every rung gets the AAC audio. Output with ffmpeg's **`hls` muxer** (`-var_stream_map`,
-  `-hls_segment_filename v%v/seg-%d.ts`, `-hls_flags temp_file+independent_segments`, segment times from the cut
-  list via `-hls_time` + forced keyframes / `-segment_times`) — the exact flags are settled by the spike below. With
-  `temp_file`, a segment appears under its final name only when complete.
+- One ffmpeg reads the file once: the copy rung maps the video stream with `-c:v copy`; the transcoded rungs decode
+  with VAAPI, `split`, `scale_vaapi`, `h264_vaapi` with forced keyframes; every rung gets the AAC audio. **Each rung
+  has its own `segment` muxer output** (`-f segment`, `<session>/<rung>/seg-%d.ts`) — not the `hls` muxer, which cut
+  on its own grid (see "Spike results"). The exact arguments are in "Spike results".
 - **Seeking** to a segment the encoder won't reach within ~10 segments **restarts the encoder at that cut**
-  (`-ss <cut>` on input — accurate for the copy rung because the cut is a keyframe — `-start_number n`, timestamps
-  kept on the film's timeline, `-muxdelay 0 -muxpreload 0`). No playlist discontinuity is inserted, so continuity
+  (`-noaccurate_seek -ss <cut+1 ms>` on input, `-segment_start_number n`, timestamps kept on the film's timeline
+  with `-copyts`; see "Spike results"). No playlist discontinuity is inserted, so continuity
   across a join must hold.
-- **Spike first (in the build PR, before the session code)**, recorded in the PR: (a) copy-rung and transcoded-rung
+- **Spike first (done; results below)**, recorded in the PR: (a) copy-rung and transcoded-rung
   segments start at identical PTS at every boundary; (b) segment n-1 from encoder A then segment n from restarted
   encoder B play cleanly in Safari and hls.js (PTS and AAC priming checked with ffprobe); (c) switching between the
   copy rung and 720p mid-film in both players is seamless; (d) CPU and RSS of the full ladder with the copy rung.
@@ -225,3 +223,40 @@ read of the file. Direct play of the file remains only as a fallback.
 
 - None on the hosts: `/dev/dri` and the `render` group exist on dockermacmini; the release adds the device.
 - After release: the manual check above.
+
+## Spike results (2026-11-09, real VAAPI on dockermacmini, the deployed image's ffmpeg)
+
+Films: *American Beauty* (regular 1 s keyframes) and *127 Hours* (HandBrake: irregular keyframes, gaps up to 10 s,
+non-IDR I-frames). Software encoder was not the spike target; the software path is the same shape with `libx264`.
+
+**What failed**
+- The `hls` muxer (`-var_stream_map`) picks its own cut points on an absolute `hls_time` grid, so the copy and
+  transcoded rungs diverged on *127 Hours*. Replaced by per-rung `segment` muxers fed the same cut times.
+- `-force_key_frames` with the raw keyframe pts landed one frame late: the forced times are the cuts minus half a frame.
+- Absolute `-segment_times` on a restart produced one giant segment (the muxer measures from the run's first packet):
+  the times passed are relative to the run's start.
+- A copy-rung segment starting on a non-IDR I-frame had no SPS/PPS and failed standalone decode ("non-existing PPS 0"):
+  `dump_extra=freq=keyframe` is required.
+- Without a fixed `-output_ts_offset`, ffmpeg shifted negative B-frame timestamps differently per output and the copy
+  rung landed 20 ms off the transcoded ones.
+
+**Adopted recipe (verified: every rung's segment n starts at the identical PTS on both films; restart segments match a
+from-zero run exactly; every segment of every rung decodes standalone with zero errors)**
+- Keyframes are the video packet pts the demuxer reports for K packets, edit list applied
+  (`ffprobe -v error -select_streams v:0 -show_entries packet=pts_time,flags -of csv=p=0`, filtered to K); not frame pts.
+  The MP4 reader yields the same values. The cut list is unchanged.
+- Global: `-nostdin -copyts -hwaccel vaapi -hwaccel_device <dev> -hwaccel_output_format vaapi`, then
+  `[-noaccurate_seek -ss <S>] -i <src>`, then `-filter_complex "[0:v]split=K[..];[..]scale_vaapi=w=-2:h=H[vN]..."`.
+- Copy rung: `-map 0:v:0 -map 0:a:<idx> -c:v copy -bsf:v h264_mp4toannexb,dump_extra=freq=keyframe`.
+- Transcoded rung: `-map [vN] -map 0:a:<idx> -c:v h264_vaapi -b:v <rate> -g 9999 -force_key_frames <ABS>`.
+- Every rung: `-c:a aac -b:a <ab> -ac 2 -f segment -segment_format mpegts -segment_times <REL> -segment_start_number <n>
+  -reset_timestamps 0 -output_ts_offset 10 -muxdelay 0 -muxpreload 0 <dir>/<rungId>/seg-%d.ts`.
+- With h = 0.5 / fps (0.02 if unknown): ABS = every cut after the start segment minus h on the film timeline; REL = the
+  same minus the run's start time S; 6 decimals. Segment PTS = film time + 10 s (playlists use EXTINF only).
+- Restart at segment n > 0: `-noaccurate_seek -ss <(floor(cutMs)+1)/1000, 3 decimals>` (1 ms past the keyframe),
+  `-segment_start_number n`, REL relative to that same value.
+- A restarted run's audio starts up to ~70 ms before the cut (a few AAC frames overlap); the video join is
+  frame-exact; players trim the overlap.
+- Speed: 120 s of film with copy + 720p + 360p took 13–15 s (about 8–9x realtime). ffmpeg peak RSS 105–146 MB, so
+  three sessions sit well inside `mem_limit: 2g`.
+- (c) Player switching in hls.js and Safari is **not** verified by the spike; the owner checks Safari manually.

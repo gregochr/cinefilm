@@ -34,10 +34,18 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       CINEFILM_DB_URL: jdbc:postgresql://cinefilm-db:5432/cinefilm
       TZ: Europe/London
-      # TODO(owner): dockermacmini's RAM is not known yet and it is shared with goldenhour. Revisit mem_limit and
-      # MaxRAMPercentage once `free -h` is known (and again when ffmpeg/transcoding lands).
-      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
-    mem_limit: 1g
+      # Heap pinned (not a percentage of mem_limit): the ffmpeg children live outside the heap. Intel Quick Sync.
+      JAVA_TOOL_OPTIONS: -Xmx512m
+      LIBVA_DRIVER_NAME: i965
+    # Live transcoding: the only device passed in is the GPU render node; 993 is `render` on dockermacmini.
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "993"
+    # Reaps the ffmpeg children.
+    init: true
+    # 512 MB heap + one ffmpeg ladder; revisit from Admin > Transcoding if the host swaps.
+    mem_limit: 2g
     # Published on loopback only; `tailscale serve` is the way in.
     ports:
       - "127.0.0.1:8090:8080"

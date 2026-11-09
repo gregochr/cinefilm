@@ -10,6 +10,47 @@ const QUALITIES = [
   { id: '720p', available: true, bitrate: 4_000_000, premade: true },
 ];
 
+describe('QualityMenu: transcoding', () => {
+  const OFFLINE = [
+    { id: 'auto', available: false },
+    { id: 'original', available: true, bitrate: 18_400_000 },
+    { id: '360p', available: false, bitrate: 600_000 },
+  ];
+
+  it('names the rung Auto is using now', () => {
+    render(<QualityMenu qualities={QUALITIES} value="auto" activeRung="720p" onSelect={vi.fn()} />);
+    expect(screen.getByRole('menuitemradio', { name: /Auto/ })).toHaveTextContent('now 720p');
+  });
+
+  it('lists 360p like any other rung', () => {
+    render(
+      <QualityMenu
+        qualities={[...QUALITIES, { id: '360p', available: true, bitrate: 600_000 }]}
+        value="360p"
+        onSelect={vi.fn()}
+      />,
+    );
+    const row = screen.getByRole('menuitemradio', { name: /360p/ });
+    expect(row).toHaveAttribute('aria-checked', 'true');
+    expect(row).toHaveTextContent('0.6 Mbps');
+  });
+
+  it('says why when the worker is offline: Auto and lower are disabled, Original is not', () => {
+    render(<QualityMenu qualities={OFFLINE} value="original" onSelect={vi.fn()} />);
+    expect(screen.getByRole('menuitemradio', { name: /Auto/ })).toBeDisabled();
+    expect(screen.getByRole('menuitemradio', { name: /360p/ })).toBeDisabled();
+    expect(screen.getByRole('menuitemradio', { name: /^Original/ })).toBeEnabled();
+    expect(screen.getByRole('menu', { name: 'Quality' })).toHaveTextContent(
+      'Lower qualities unavailable right now — the transcode worker is offline. Pre-made versions still play.',
+    );
+  });
+
+  it('has no offline footer while Auto is available, even with some rungs missing', () => {
+    render(<QualityMenu qualities={QUALITIES} value="auto" onSelect={vi.fn()} />);
+    expect(screen.getByRole('menu', { name: 'Quality' })).not.toHaveTextContent('offline');
+  });
+});
+
 describe('QualityMenu', () => {
   const setup = (props = {}) => {
     const onSelect = vi.fn();
