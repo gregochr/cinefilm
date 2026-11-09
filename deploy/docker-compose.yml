@@ -52,6 +52,9 @@ services:
           propagation: rslave
       - ${CINEFILM_DATA_DIR:-/home/gregochr/cinefilm-data}/logs:/app/logs
       - ${CINEFILM_DATA_DIR:-/home/gregochr/cinefilm-data}/cache:/app/cache
+      # Posters and backdrops imported from Plex: a persistent data mount, not a cache (Plex's copies cannot be
+      # fetched again once Plex is gone). Backed up with the database.
+      - ${CINEFILM_DATA_DIR:-/home/gregochr/cinefilm-data}/artwork:/app/artwork
     depends_on:
       cinefilm-db:
         condition: service_healthy

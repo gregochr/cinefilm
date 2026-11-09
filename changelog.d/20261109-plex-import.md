@@ -1,0 +1,3 @@
+### Added — Import the library from Plex
+
+Admin has a Plex import panel (shown when `PLEX_URL` and `PLEX_TOKEN` are set): **Import from Plex** pairs Plex's files with the scanned library by path, merges films that share a TMDB id, moves editions Plex keeps apart, takes Plex's titles, years, overviews, added dates and posters, and carries over watched flags and resume points without ever overwriting newer CineFilm state. Posters and backdrops are stored in `/app/artwork` (served at `/api/art/<hash>.jpg`). Scans and imports share one library lock, and the scanner skips `Plex Versions` folders. Read-only against Plex; safe to run again.

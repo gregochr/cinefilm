@@ -38,7 +38,7 @@ if [ ! -f "${DEPLOY_HOME}/.env" ]; then
     exit 4
 fi
 
-mkdir -p "${CINEFILM_DATA_DIR}"/{postgres,logs,cache} "${BACKUP_DIR}/pre-release"
+mkdir -p "${CINEFILM_DATA_DIR}"/{postgres,logs,cache,artwork} "${BACKUP_DIR}/pre-release"
 PREVIOUS="$(cat "${DEPLOY_HOME}/.deployed-version" 2>/dev/null || true)"
 
 # Guard: a previous deploy exists, so the Postgres data directory must hold a database. Pointed at an empty

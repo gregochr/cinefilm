@@ -89,6 +89,9 @@ assert_eq ".deployed-version is the new one" "v0.2.0" "$(cat "$DH/.deployed-vers
 assert_eq ".previous-version is the old one" "v0.1.0" "$(cat "$DH/.previous-version")"
 if ls "$BK"/pre-release/v0.2.0-*.dump >/dev/null 2>&1; then ok "a dump file was written"; else bad "no dump file"; fi
 assert_file_has "the smoke was told the expected commit" "$STUB/calls.log" "smoke [expect=abc123]"
+for d in postgres logs cache artwork; do
+    if [ -d "$DATA/$d" ]; then ok "deploy creates the $d data directory (artwork holds the imported Plex posters)"; else bad "no $DATA/$d"; fi
+done
 
 # --- a failed dump stops the deploy before anything is pulled or started ---------------------------------------------
 new_world; deployed v0.1.0; touch "$STUB/fail_dump"
