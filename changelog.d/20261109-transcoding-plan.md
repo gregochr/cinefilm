@@ -1,0 +1,1 @@
+- docs: transcoding and network-resilience plan (phase 3): one adaptive HLS stream with the original as its top rung, live VAAPI rungs down to 360p, the same policy at home and away.
