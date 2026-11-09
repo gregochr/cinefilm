@@ -6,6 +6,9 @@ import { useResource } from './useResource.js';
 /** How often the Library scan panel asks for progress while a scan runs. */
 export const SCAN_POLL_MS = 1500;
 
+/** How often the Plex import panel looks again while Plex is not reachable. */
+export const PLEX_RECHECK_MS = 30000;
+
 /**
  * The Library scan panel: status and counts, polled while a scan runs, plus "Scan now". Starting a scan
  * while one is already running (409) is not an error: the panel just shows it running.
@@ -61,11 +64,13 @@ export function usePlexImport() {
   const [notice, setNotice] = useState(null);
   const running = Boolean(data?.running);
 
+  // Poll quickly while an import runs, and slowly while Plex cannot be reached, so the panel recovers by itself.
+  const unreachable = Boolean(data?.configured) && !running && !data.reachable;
   useEffect(() => {
-    if (!running) return undefined;
-    const id = setTimeout(reload, SCAN_POLL_MS);
+    if (!running && !unreachable) return undefined;
+    const id = setTimeout(reload, running ? SCAN_POLL_MS : PLEX_RECHECK_MS);
     return () => clearTimeout(id);
-  }, [running, data, error, reload]);
+  }, [running, unreachable, data, error, reload]);
 
   const startImport = useCallback(async () => {
     setStarting(true);

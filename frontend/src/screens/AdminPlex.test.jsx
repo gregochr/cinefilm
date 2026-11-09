@@ -1,7 +1,7 @@
 import { act, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SCAN_POLL_MS, usePlexImport } from '../state/useAdmin.js';
+import { PLEX_RECHECK_MS, SCAN_POLL_MS, usePlexImport } from '../state/useAdmin.js';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
 
 afterEach(() => {
@@ -94,6 +94,32 @@ describe('Admin: Plex import panel', () => {
     const panel = await screen.findByRole('region', { name: 'Plex import' });
     expect(within(panel).getByText('Not reachable')).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: 'Import from Plex' })).toBeDisabled();
+  });
+
+  it('offers Check again while Plex is unreachable, and Import is enabled once it answers', async () => {
+    let reachable = false;
+    installFetch((m, url) =>
+      url === '/api/admin/plex' ? respond({ ...fixtures.adminPlex, reachable }) : null,
+    );
+    renderApp('/admin');
+    const panel = await screen.findByRole('region', { name: 'Plex import' });
+    expect(within(panel).getByRole('button', { name: 'Import from Plex' })).toBeDisabled();
+
+    reachable = true;
+    await userEvent.click(within(panel).getByRole('button', { name: 'Check again' }));
+
+    await waitFor(() =>
+      expect(within(panel).getByRole('button', { name: 'Import from Plex' })).toBeEnabled(),
+    );
+    expect(within(panel).getByText('Reachable')).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: 'Check again' })).not.toBeInTheDocument();
+  });
+
+  it('has no Check again while Plex is reachable or an import is running', async () => {
+    installFetch(plexRoute(running(3)));
+    renderApp('/admin');
+    const panel = await screen.findByRole('region', { name: 'Plex import' });
+    expect(within(panel).queryByRole('button', { name: 'Check again' })).not.toBeInTheDocument();
   });
 
   it('starts an import and shows live progress with the button disabled', async () => {
@@ -248,5 +274,69 @@ describe('usePlexImport', () => {
         (c) => c[0] === '/api/admin/plex/import' && c[1]?.method === 'POST',
       ),
     ).toHaveLength(2);
+  });
+
+  it('rechecks every 30 s while Plex is unreachable, stops once it is reachable, and leaves no timer', async () => {
+    let calls = 0;
+    const fetchMock = installFetch((method, url) => {
+      if (url !== '/api/admin/plex') return null;
+      calls += 1;
+      return respond({ ...fixtures.adminPlex, reachable: calls >= 3 });
+    });
+    vi.useFakeTimers();
+    const { result, unmount } = renderHook(() => usePlexImport());
+    await settle();
+    expect(result.current.plex.reachable).toBe(false);
+    expect(PLEX_RECHECK_MS).toBe(30000);
+
+    await settle(PLEX_RECHECK_MS - 1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await settle(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await settle(PLEX_RECHECK_MS);
+    expect(result.current.plex.reachable).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    await settle(PLEX_RECHECK_MS * 4);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('clears the recheck timer on unmount while still unreachable', async () => {
+    const fetchMock = installFetch((m, url) =>
+      url === '/api/admin/plex' ? respond({ ...fixtures.adminPlex, reachable: false }) : null,
+    );
+    vi.useFakeTimers();
+    const { unmount } = renderHook(() => usePlexImport());
+    await settle();
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+    unmount();
+    await settle(PLEX_RECHECK_MS * 2);
+
+    expect(vi.getTimerCount()).toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not recheck when Plex is not configured', async () => {
+    const fetchMock = installFetch((m, url) =>
+      url === '/api/admin/plex'
+        ? respond({
+            configured: false,
+            reachable: false,
+            running: false,
+            progress: null,
+            lastImport: null,
+          })
+        : null,
+    );
+    vi.useFakeTimers();
+    renderHook(() => usePlexImport());
+    await settle();
+
+    await settle(PLEX_RECHECK_MS * 3);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

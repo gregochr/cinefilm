@@ -138,7 +138,7 @@ function ImportReport({ report }) {
 }
 
 /** Shown only when Plex is configured on the server: nothing renders until the status says so. */
-function PlexPanel({ plex, starting, notice, onImport }) {
+function PlexPanel({ plex, starting, notice, onImport, onRecheck }) {
   if (!plex || !plex.configured) return null;
   const running = plex.running;
   const last = plex.lastImport;
@@ -187,6 +187,11 @@ function PlexPanel({ plex, starting, notice, onImport }) {
         >
           {running ? 'Importing…' : 'Import from Plex'}
         </Button>
+        {!running && !plex.reachable ? (
+          <Button variant="secondary" onClick={onRecheck}>
+            Check again
+          </Button>
+        ) : null}
         {notice ? (
           <span className="admin__notice" role="status">
             {notice}
@@ -326,6 +331,7 @@ export default function Admin() {
           starting={plexImport.starting}
           notice={plexImport.notice}
           onImport={plexImport.startImport}
+          onRecheck={plexImport.reload}
         />
       </div>
       <p className="admin__credit">
