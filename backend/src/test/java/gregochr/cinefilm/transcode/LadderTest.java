@@ -161,4 +161,13 @@ class LadderTest {
         assertThat(copy.averageBandwidth()).isEqualTo(8_000_000 + 128_000);
         assertThat(new Rung("360p", 360, 600_000, false).peakBandwidth()).isEqualTo(720_000 + 96_000);
     }
+
+    @Test
+    void forSourceIsNotCalledForTheCutListWhenTheFormatRulesOutCopying() {
+        List<Rung> rungs = Ladder.forSource(1080, 9_000_000, "HEVC", "yuv420p", () -> {
+            throw new AssertionError("the cut list must not be read");
+        }, EncoderMode.VAAPI);
+
+        assertThat(rungs).extracting(Rung::id).containsExactly("1080p", "720p", "480p", "360p");
+    }
 }

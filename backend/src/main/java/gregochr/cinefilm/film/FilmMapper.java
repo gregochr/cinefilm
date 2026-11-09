@@ -13,12 +13,14 @@ import gregochr.cinefilm.film.FilmDtos.QualityDto;
 import gregochr.cinefilm.film.FilmDtos.SubtitleStreamDto;
 import gregochr.cinefilm.person.Person;
 import gregochr.cinefilm.playback.PlaybackState;
+import gregochr.cinefilm.transcode.CutList;
 import gregochr.cinefilm.transcode.EncoderMode;
 import gregochr.cinefilm.transcode.Ladder;
 import gregochr.cinefilm.transcode.Rung;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 
 /** Maps domain objects to the API shapes. */
 public final class FilmMapper {
@@ -42,6 +44,16 @@ public final class FilmMapper {
 
     /** The full detail page; the collection ref is set only when {@code inCollection}; {@code mode} sets qualities. */
     public static FilmDetail detail(FilmView view, Preferences preferences, boolean inCollection, EncoderMode mode) {
+        return detail(view, preferences, inCollection, mode, file -> null);
+    }
+
+    /**
+     * The full detail page with the stored cut lists in play.
+     *
+     * @param cuts the film file's stored cut list, or null when it is not indexed yet
+     */
+    public static FilmDetail detail(FilmView view, Preferences preferences, boolean inCollection, EncoderMode mode,
+                                    Function<MediaFile, CutList> cuts) {
         Film film = view.film();
         FilmCard card = card(view);
         CollectionRef collection = film.getCollection() == null || !inCollection ? null
@@ -51,11 +63,12 @@ public final class FilmMapper {
             film.getGenres().stream().sorted().toList(), collection,
             view.directors().stream().map(FilmMapper::personRef).toList(),
             view.cast().stream().map(c -> new CastEntry(personRef(c.getPerson()), c.getCharacter())).toList(),
-            film.getEditions().stream().filter(e -> !e.hiddenFromBrowse()).map(e -> edition(e, view.state(e), mode))
-                .toList(), preferences);
+            film.getEditions().stream().filter(e -> !e.hiddenFromBrowse())
+                .map(e -> edition(e, view.state(e), mode, cuts)).toList(), preferences);
     }
 
-    private static EditionDto edition(Edition edition, Optional<PlaybackState> state, EncoderMode mode) {
+    private static EditionDto edition(Edition edition, Optional<PlaybackState> state, EncoderMode mode,
+                                       Function<MediaFile, CutList> cuts) {
         MediaFile original = edition.originalFile();
         List<AudioStreamDto> audio = original == null ? List.of() : original.getAudioStreams().stream()
             .map(a -> new AudioStreamDto(a.getId(), a.getIndex(), a.getLanguage(), a.getChannels(), a.getCodec(),
@@ -66,7 +79,7 @@ public final class FilmMapper {
         return new EditionDto(edition.getId(), edition.getName(), edition.getYear(), edition.getRuntimeMs(),
             edition.getNote(), edition.getCreditsMarkerMs(), state.map(PlaybackState::getPositionMs).orElse(0L),
             state.map(PlaybackState::isWatched).orElse(false), fileInfo(original), audio, subtitles,
-            qualities(original, mode));
+            qualities(original, mode, cuts));
     }
 
     private static FileInfo fileInfo(MediaFile original) {
@@ -84,12 +97,15 @@ public final class FilmMapper {
     }
 
     /**
-     * Auto, Original (always available), then the transcoded rungs the film's height allows. The index may not
-     * exist yet, so the ladder assumes the original can be copied (no extra top rung); a file that cannot be copied
-     * still lists the same names. Without an encoder the rungs are listed as unavailable, as the player's "worker
-     * offline" state expects; the software encoder offers fewer rungs.
+     * Auto, Original (always available: when it cannot be copied the client direct-plays it), then the transcoded
+     * rungs of the same ladder a playback session builds ({@link Ladder#forSource}), so a source that cannot be
+     * copied (HEVC, 10-bit, unknown pixel format, or a stored cut list with long gaps) lists its top transcoded rung
+     * named by its own height. When the keyframe index does not exist yet the codec and pixel format decide alone.
+     * Without an encoder the rungs are listed as unavailable, as the player's "worker offline" state expects; the
+     * software encoder offers fewer rungs.
      */
-    private static List<QualityDto> qualities(MediaFile original, EncoderMode mode) {
+    private static List<QualityDto> qualities(MediaFile original, EncoderMode mode,
+                                              Function<MediaFile, CutList> cuts) {
         Long bitrate = original == null ? null : original.getBitrate();
         boolean encoder = mode != EncoderMode.UNAVAILABLE;
         List<QualityDto> qualities = new ArrayList<>();
@@ -97,7 +113,9 @@ public final class FilmMapper {
         qualities.add(new QualityDto(Ladder.ORIGINAL, bitrate, false, true));
         if (original != null && original.getHeight() != null && original.getHeight() > 1) {
             EncoderMode shown = encoder ? mode : EncoderMode.VAAPI;
-            for (Rung rung : Ladder.rungs(original.getHeight(), 0, true, shown)) {
+            long fileBitrate = bitrate == null ? 0 : bitrate;
+            for (Rung rung : Ladder.forSource(original.getHeight(), fileBitrate, original.getVideoCodec(),
+                original.getPixelFormat(), () -> cuts.apply(original), shown)) {
                 if (!rung.copy()) {
                     qualities.add(new QualityDto(rung.id(), rung.videoBitrate(), false, encoder));
                 }

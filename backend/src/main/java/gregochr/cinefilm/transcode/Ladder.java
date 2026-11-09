@@ -3,6 +3,7 @@ package gregochr.cinefilm.transcode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * Which rungs a film has: a pure function of the source height, whether the original can be copied, and what the
@@ -91,6 +92,33 @@ public final class Ladder {
             rungs.addAll(transcoded);
         }
         return List.copyOf(rungs);
+    }
+
+    /**
+     * The rungs of a film from its stored facts: the one place that decides whether the original can be copied, used
+     * by both the session service and the film detail's quality list so the two always agree. The original is copied
+     * only when it is 8-bit 4:2:0 H.264 (see {@link SourceFormat}) and its keyframe gaps allow it.
+     *
+     * <p>When the keyframe index does not exist yet the supplier returns null and the codec and pixel format decide
+     * alone (an indexed file with long gaps is only discovered, and its list corrected, when it is first played).
+     * The supplier is not called for a source whose format already rules the copy out.
+     *
+     * @param sourceHeight the video height, at least 2
+     * @param sourceBitrate the file's average bits per second (0 or less when unknown)
+     * @param videoCodec the stored display codec, or null
+     * @param pixelFormat the stored pixel format, or null (not eligible)
+     * @param cuts the film's cut list, or null from the supplier when it is not indexed
+     * @param mode what the server can encode with
+     * @return the rungs, best first
+     */
+    public static List<Rung> forSource(int sourceHeight, long sourceBitrate, String videoCodec, String pixelFormat,
+                                       Supplier<CutList> cuts, EncoderMode mode) {
+        boolean copyOk = SourceFormat.isH264Yuv420(videoCodec, pixelFormat);
+        if (copyOk) {
+            CutList indexed = cuts.get();
+            copyOk = indexed == null || indexed.copyOk();
+        }
+        return rungs(sourceHeight, sourceBitrate, copyOk, mode);
     }
 
     private static Level topLevel(int height) {

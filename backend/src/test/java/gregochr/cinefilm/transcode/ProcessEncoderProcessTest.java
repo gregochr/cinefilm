@@ -219,16 +219,19 @@ class ProcessEncoderProcessTest {
     void theExitIsReportedOnlyAfterTheProgressReaderHasFinished() throws Exception {
         Process finished = new ProcessBuilder("true").start();
         finished.waitFor();
+        CountDownLatch releaseReader = new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicBoolean readerDone = new java.util.concurrent.atomic.AtomicBoolean();
         Thread slowReader = Thread.ofVirtual().start(() -> {
             try {
-                Thread.sleep(400);
+                releaseReader.await();
+                readerDone.set(true);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
         });
         Thread errors = Thread.ofVirtual().start(() -> { });
-        java.util.concurrent.atomic.AtomicBoolean readerStillAlive =
-            new java.util.concurrent.atomic.AtomicBoolean(true);
+        CountDownLatch exitReported = new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicBoolean readerDoneAtExit = new java.util.concurrent.atomic.AtomicBoolean();
         EncoderListener listener = new EncoderListener() {
             @Override
             public void onProgress(EncoderProgress report) {
@@ -236,13 +239,18 @@ class ProcessEncoderProcessTest {
 
             @Override
             public void onExit(int exitCode, String logTail) {
-                readerStillAlive.set(slowReader.isAlive());
+                readerDoneAtExit.set(readerDone.get());
+                exitReported.countDown();
             }
         };
 
-        ProcessEncoderProcess.awaitExit(finished, slowReader, errors, new LogTail(), listener);
+        Thread.ofVirtual().start(() ->
+            ProcessEncoderProcess.awaitExit(finished, slowReader, errors, new LogTail(), listener));
+        assertThat(exitReported.getCount()).as("exit not reported while the reader is blocked").isEqualTo(1);
+        releaseReader.countDown();
 
-        assertThat(readerStillAlive).isFalse();
+        assertThat(exitReported.await(30, TimeUnit.SECONDS)).as("exit reported after release").isTrue();
+        assertThat(readerDoneAtExit).as("reader had finished when the exit was reported").isTrue();
     }
 
     @SuppressWarnings("unchecked")

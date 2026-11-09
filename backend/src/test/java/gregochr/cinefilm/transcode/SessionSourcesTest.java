@@ -74,6 +74,18 @@ class SessionSourcesTest {
     }
 
     @Test
+    void theAudioPositionIsTheRankOfTheFileStreamIndexNotTheListOrder() throws IOException {
+        Files.writeString(library.resolve("Heat.m4v"), "x");
+        MediaFile original = original("Heat.m4v");
+        original.getAudioStreams().get(0).setIndex(5);
+        original.getAudioStreams().get(1).setIndex(2);
+
+        Source source = sources.find(EDITION_ID);
+
+        assertThat(source.audio()).containsExactly(new AudioChoice(100, 1, true), new AudioChoice(101, 0, false));
+    }
+
+    @Test
     void anUnknownEditionIs404() {
         when(editions.findById(555L)).thenReturn(Optional.empty());
 

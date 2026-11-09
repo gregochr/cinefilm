@@ -78,7 +78,8 @@ public class SessionService {
         KeyframeIndexService.Index index = index(file);
         long bitrate = file.getBitrate() == null ? 0 : file.getBitrate();
         boolean hardwareDecode = SourceFormat.isH264Yuv420(file.getVideoCodec(), file.getPixelFormat());
-        List<Rung> ladder = Ladder.rungs(file.getHeight(), bitrate, index.cuts().copyOk() && hardwareDecode, mode);
+        List<Rung> ladder = Ladder.forSource(file.getHeight(), bitrate, file.getVideoCodec(), file.getPixelFormat(),
+            index::cuts, mode);
         String pinned = Ladder.AUTO.equals(quality) ? null : quality;
         List<Rung> encoded = ladder;
         Rung start;

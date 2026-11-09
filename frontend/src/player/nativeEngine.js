@@ -6,6 +6,7 @@ import { rungForHeight } from './ladder.js';
 export const STALL_MS = 15000;
 export const RELOAD_SPACING_MS = 5000;
 export const POLL_MS = 1000;
+export const CHECK_TIMEOUT_MS = 10000;
 
 /** Seconds of video buffered ahead of the playhead (0 when the playhead is outside every range). */
 export function bufferAhead(video) {
@@ -32,6 +33,7 @@ export function startNative({
   stallMs = STALL_MS,
   spacingMs = RELOAD_SPACING_MS,
   pollMs = POLL_MS,
+  checkTimeoutMs = CHECK_TIMEOUT_MS,
 }) {
   let rung = null;
   let lastTime = video.currentTime;
@@ -41,6 +43,10 @@ export function startNative({
   let errored = false;
   let reconnecting = false;
   let destroyed = false;
+  // One recovery check at a time. `generation` changes when playback resumes, so a response that arrives late
+  // (for trouble that is already over) is ignored.
+  let generation = 0;
+  let controller = null;
 
   const detectLevel = () => {
     const next = rungForHeight(session.renditions, video.videoHeight);
@@ -55,6 +61,9 @@ export function startNative({
     lastMoveAt = now();
     if (reconnecting) {
       reconnecting = false;
+      generation += 1;
+      controller?.abort();
+      controller = null;
       handlers.onReconnecting(false);
     }
   };
@@ -64,6 +73,7 @@ export function startNative({
   };
 
   async function reload() {
+    if (controller) return; // a check is already in flight
     lastReloadAt = now();
     errored = false;
     if (!reconnecting) {
@@ -71,19 +81,27 @@ export function startNative({
       resumeMs = Math.round(video.currentTime * 1000);
       handlers.onReconnecting(true);
     }
+    const mine = generation;
+    const own = new AbortController();
+    controller = own;
+    const timer = setTimeout(() => own.abort(), checkTimeoutMs);
     let status;
     try {
-      status = (await fetchImpl(session.masterUrl, { credentials: 'same-origin' })).status;
+      status = (await fetchImpl(session.masterUrl, { credentials: 'same-origin', signal: own.signal })).status;
     } catch {
-      return; // Still offline: the next check tries again.
+      return; // Offline or timed out: the next check tries again.
+    } finally {
+      clearTimeout(timer);
+      if (controller === own) controller = null;
     }
-    if (destroyed) return;
+    if (destroyed || mine !== generation || !reconnecting) return; // stale, or playback already resumed
     if (status === 404) {
       handlers.onSessionLost();
       return;
     }
     if (status >= 400) return;
-    handlers.onReload(resumeMs);
+    // Never rewind behind where playback has got to.
+    handlers.onReload(Math.max(resumeMs, Math.round(video.currentTime * 1000)));
     video.src = session.masterUrl;
     video.load();
   }

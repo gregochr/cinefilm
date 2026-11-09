@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import gregochr.cinefilm.transcode.EncoderMode;
+import gregochr.cinefilm.transcode.CutList;
+import gregochr.cinefilm.transcode.KeyframeIndexService;
 import gregochr.cinefilm.transcode.Transcoder;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,11 +46,14 @@ class FilmServiceTest {
     @Mock
     private Transcoder transcoder;
 
+    @Mock
+    private KeyframeIndexService indexes;
+
     private FilmService service;
 
     @BeforeEach
     void setUp() {
-        service = new FilmService(loader, films, preferences, transcoder);
+        service = new FilmService(loader, films, preferences, transcoder, indexes);
     }
 
     private static Film owned(long id, String title, int year, String... genres) {
@@ -188,6 +193,39 @@ class FilmServiceTest {
         assertThat(detail.editions()).hasSize(1);
         assertThat(detail.editions().get(0).qualities()).extracting(FilmDtos.QualityDto::available)
             .containsOnly(false, true);
+    }
+
+    @Test
+    void detailListsTheTopTranscodedRungWhenTheStoredCutListForbidsCopying() {
+        Film heat = owned(1L, "Heat", 1995, "Crime");
+        MediaFile original = file(heat.getEditions().get(0), "heat.mp4");
+        original.setVideoCodec("H.264");
+        original.setPixelFormat("yuv420p");
+        when(films.findById(1L)).thenReturn(Optional.of(heat));
+        when(loader.views(List.of(heat))).thenReturn(List.of(view(heat)));
+        when(preferences.resolve(heat)).thenReturn(new Preferences(10L, "auto", null, "off"));
+        when(transcoder.mode()).thenReturn(EncoderMode.VAAPI);
+        when(indexes.cached(original)).thenReturn(Optional.of(new KeyframeIndexService.Index(
+            CutList.fromKeyframes(List.of(), 100 * MIN), null)));
+
+        assertThat(service.detail(1L).editions().get(0).qualities()).extracting(FilmDtos.QualityDto::id)
+            .containsExactly("auto", "original", "1080p", "720p", "480p", "360p");
+    }
+
+    @Test
+    void detailUsesTheCodecAloneWhenTheFilmIsNotIndexedYet() {
+        Film heat = owned(1L, "Heat", 1995, "Crime");
+        MediaFile original = file(heat.getEditions().get(0), "heat.mp4");
+        original.setVideoCodec("H.264");
+        original.setPixelFormat("yuv420p");
+        when(films.findById(1L)).thenReturn(Optional.of(heat));
+        when(loader.views(List.of(heat))).thenReturn(List.of(view(heat)));
+        when(preferences.resolve(heat)).thenReturn(new Preferences(10L, "auto", null, "off"));
+        when(transcoder.mode()).thenReturn(EncoderMode.VAAPI);
+        when(indexes.cached(original)).thenReturn(Optional.empty());
+
+        assertThat(service.detail(1L).editions().get(0).qualities()).extracting(FilmDtos.QualityDto::id)
+            .containsExactly("auto", "original", "720p", "480p", "360p");
     }
 
     @Test

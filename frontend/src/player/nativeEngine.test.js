@@ -145,6 +145,7 @@ describe('stalls', () => {
     expect(handlers.onReconnecting).toHaveBeenCalledWith(true);
     expect(fetchImpl).toHaveBeenCalledWith('/api/sessions/abc/master.m3u8', {
       credentials: 'same-origin',
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -236,6 +237,85 @@ describe('reloading at the playhead', () => {
     await tick(STALL_MS);
     expect(handlers.onReload).not.toHaveBeenCalled();
     expect(handlers.onSessionLost).not.toHaveBeenCalled();
+  });
+});
+
+const CHECK_TIMEOUT_MS = 10000;
+
+// A fetch the test settles by hand; it rejects with an AbortError when its signal aborts, like the real one.
+function pendingFetch() {
+  const calls = [];
+  const fetchImpl = vi.fn(
+    (url, { signal } = {}) =>
+      new Promise((resolve, reject) => {
+        calls.push({ resolve, signal });
+        signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      }),
+  );
+  return { fetchImpl, calls };
+}
+
+describe('one recovery check at a time', () => {
+  it('two slow checks cause at most one reload', async () => {
+    const { fetchImpl, calls } = pendingFetch();
+    const { video, handlers } = start({ fetchImpl, checkTimeoutMs: CHECK_TIMEOUT_MS });
+    video.currentTime = 10;
+    await tick(STALL_MS + CHECK_TIMEOUT_MS - POLL_MS); // spacing passes while the first check still hangs
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    calls[0].resolve({ status: 200 });
+    await tick(0);
+    expect(handlers.onReload).toHaveBeenCalledTimes(1);
+    expect(video.load).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts a check that times out, then tries again', async () => {
+    const { fetchImpl, calls } = pendingFetch();
+    const { video, handlers } = start({ fetchImpl, checkTimeoutMs: CHECK_TIMEOUT_MS });
+    video.currentTime = 10;
+    await tick(STALL_MS);
+    expect(calls[0].signal.aborted).toBe(false);
+    await tick(CHECK_TIMEOUT_MS);
+    expect(calls[0].signal.aborted).toBe(true);
+    expect(handlers.onReload).not.toHaveBeenCalled();
+    await tick(RELOAD_SPACING_MS);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores a response that arrives after playback resumed (stale generation)', async () => {
+    const fetchImpl = vi.fn(() => new Promise((r) => setTimeout(() => r({ status: 200 }), 3000)));
+    const { video, handlers } = start({ fetchImpl });
+    video.currentTime = 10;
+    await tick(STALL_MS);
+    video.currentTime = 11;
+    video.dispatchEvent(new Event('timeupdate')); // recovered by itself
+    await tick(3000);
+    expect(handlers.onReload).not.toHaveBeenCalled();
+    expect(handlers.onSessionLost).not.toHaveBeenCalled();
+    expect(video.load).not.toHaveBeenCalled();
+  });
+
+  it('does not reload when playback already resumed, and aborts the check', async () => {
+    const { fetchImpl, calls } = pendingFetch();
+    const { video, handlers } = start({ fetchImpl });
+    video.currentTime = 10;
+    await tick(STALL_MS);
+    video.currentTime = 10.5;
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(calls[0].signal.aborted).toBe(true);
+    await tick(0);
+    expect(handlers.onReload).not.toHaveBeenCalled();
+    expect(video.load).not.toHaveBeenCalled();
+  });
+
+  it('never rewinds: resumes from the later of the trouble position and the current time', async () => {
+    const { fetchImpl, calls } = pendingFetch();
+    const { video, handlers } = start({ fetchImpl });
+    video.currentTime = 100;
+    await tick(STALL_MS);
+    video.currentTime = 140; // advanced during the check, without a timeupdate
+    calls[0].resolve({ status: 200 });
+    await tick(0);
+    expect(handlers.onReload).toHaveBeenCalledWith(140000);
   });
 });
 

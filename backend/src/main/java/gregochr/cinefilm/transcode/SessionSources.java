@@ -10,7 +10,6 @@ import gregochr.cinefilm.library.LibraryRoot;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.stream.IntStream;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,7 +24,8 @@ public class SessionSources {
      * An audio stream of the file.
      *
      * @param id the {@code audio_stream} row id the API takes
-     * @param position its position among the file's audio streams, which is what {@code -map 0:a:N} counts
+     * @param position the rank of its file stream index among all the file's audio stream indexes (ascending), which
+     *     is what {@code -map 0:a:N} counts; database id order and list order do not matter
      * @param isDefault true for the stream flagged as the default
      */
     public record AudioChoice(long id, int position, boolean isDefault) {
@@ -72,8 +72,9 @@ public class SessionSources {
         Path path = root.resolveFile(original.getPath()).filter(Files::isReadable)
             .orElseThrow(() -> new NotFoundException("Media file is not available"));
         List<AudioStream> streams = original.getAudioStreams();
-        List<AudioChoice> audio = IntStream.range(0, streams.size())
-            .mapToObj(i -> new AudioChoice(streams.get(i).getId(), i, streams.get(i).isDefault())).toList();
+        List<Integer> fileOrder = streams.stream().map(AudioStream::getIndex).sorted().toList();
+        List<AudioChoice> audio = streams.stream()
+            .map(a -> new AudioChoice(a.getId(), fileOrder.indexOf(a.getIndex()), a.isDefault())).toList();
         return new Source(editionId, edition.getFilm().getTitle(), original, path, audio);
     }
 }

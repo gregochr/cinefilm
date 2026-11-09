@@ -128,7 +128,14 @@ read of the file. Direct play of the file remains only as a fallback.
   does); the idle timeout is the backstop.
 - `GET /api/editions/{id}/stream` (direct play) stays for the fallback cases.
 - All behind the session cookie; `RouteSecurityDriftTest` covers the new routes. `FilmDetail.qualities[]` reports
-  the rungs `available: true` (false in the worker-offline state; `original` is always available).
+  the rungs `available: true` (false in the worker-offline state; `original` is always available, direct play being
+  the fallback). The listed rungs come from the same function as the session ladder (`Ladder.forSource`), so a
+  non-copyable source (HEVC, 10-bit, unknown pixel format, or a stored cut list with gaps over 12 s) lists its top
+  transcoded rung named by height (e.g. `1080p`). When the film has no keyframe index row yet, the codec and pixel
+  format decide alone (the cut list is only consulted when stored and current); a long-gap film is therefore
+  corrected in the list once it has been indexed by its first playback.
+- `-map 0:a:N` counts the file's audio streams in file order: N is the rank of the chosen stream's file stream index
+  among all the edition file's audio stream indexes, never its database id or list position.
 
 ## Player
 
@@ -271,3 +278,7 @@ from-zero run exactly; every segment of every rung decodes standalone with zero 
 - Non-eligible sources (HEVC, High 10, 4:2:2, 4:4:4) on VAAPI: software decode, `scale,format=nv12,hwupload`, `-vaapi_device <dev>`; i965 cannot decode them.
 - The render node comes from `cinefilm.transcode.device` via `SessionSettings` and `TranscodePlan.device`.
 - libx264 outputs carry their own `-threads N`; the keyframe ffprobe fallback streams stdout (`LineStreamRunner`) and keeps only K rows.
+
+**Software decode into VAAPI encode (verified 2026-11-09 on dockermacmini):** a 10-bit HEVC source decoded in software,
+`hwupload`ed and encoded with `h264_vaapi` produced aligned segments on both rungs (7 of 7), no decode errors, 8-bit
+High-profile output, and 40 s of film in 12 s. This is the path for every source that is not 8-bit 4:2:0 H.264.
