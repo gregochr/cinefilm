@@ -101,7 +101,14 @@ p {
   align-items: center;
   gap: 32px;
 }
+.logo-mark {
+  flex: none;
+  color: var(--cf-amber);
+}
 .header__wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
   font-family: var(--cf-font-display);
   font-style: italic;
   font-size: 30px;
@@ -473,6 +480,10 @@ p {
     gap: 12px;
     padding-top: 16px;
     padding-bottom: 12px;
+  }
+  .header__wordmark .logo-mark {
+    width: 26px;
+    height: 26px;
   }
   .header__nav,
   .header__search {

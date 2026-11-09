@@ -11,6 +11,9 @@ describe('App routes', () => {
     renderApp('/no/such/page');
     expect(await screen.findByRole('heading', { level: 1, name: 'Nothing here' })).toBeVisible();
     expect(screen.getByText('That page isn’t in the library.')).toBeInTheDocument();
+    // The header lockup (30px) plus the 48px mark above the message.
+    const widths = screen.getAllByTestId('logo-mark').map((m) => m.getAttribute('width'));
+    expect(widths).toEqual(['30', '48']);
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
 

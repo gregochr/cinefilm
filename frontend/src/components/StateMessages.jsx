@@ -1,8 +1,10 @@
 import { Button, ButtonLink } from './Button.jsx';
+import LogoMark from './LogoMark.jsx';
 
 export function EmptyLibrary() {
   return (
     <div className="state">
+      <LogoMark size={64} />
       <h2 className="state__title">The house lights are up</h2>
       <p className="state__text">
         Nothing in the library yet. Bring your films, posters and watch history across from Plex, or
@@ -36,6 +38,7 @@ export function NoResults({ query, onClear }) {
 export function ErrorState({ onRetry, children = 'Something went wrong loading this.' }) {
   return (
     <div className="state" role="alert">
+      <LogoMark size={48} />
       <h2 className="state__title">The projector jammed</h2>
       <p className="state__text">{children}</p>
       {onRetry ? (

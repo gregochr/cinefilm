@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import SignInCard from './SignInCard.jsx';
@@ -17,6 +17,12 @@ describe('SignInCard', () => {
     expect(dialog).toHaveTextContent(
       'You’ve been signed out while you were away. Sign in again and you’ll be back where you were.',
     );
+  });
+
+  it('shows the 48px mark above the title', () => {
+    setup();
+    const dialog = screen.getByRole('dialog', { name: 'Signed out' });
+    expect(within(dialog).getByTestId('logo-mark')).toHaveAttribute('width', '48');
   });
 
   it('focuses the password field when it appears', () => {

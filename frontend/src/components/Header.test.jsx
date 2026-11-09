@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
@@ -20,12 +20,19 @@ const renderHeader = (path = '/') =>
 describe('Header', () => {
   it('has the wordmark, primary navigation and the settings icon', () => {
     renderHeader('/');
-    expect(screen.getByRole('link', { name: 'CineFilm' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: 'CineFilm — Home' })).toHaveAttribute('href', '/');
     const nav = screen.getByRole('navigation', { name: 'Primary' });
     expect(nav).toHaveTextContent('Home');
     expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: 'Library' })).toHaveAttribute('href', '/library');
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/admin');
+  });
+
+  it('the wordmark link is one lockup: the 30px mark beside the CineFilm text', () => {
+    renderHeader('/library');
+    const home = screen.getByRole('link', { name: 'CineFilm — Home' });
+    expect(home).toHaveTextContent('CineFilm');
+    expect(within(home).getByTestId('logo-mark')).toHaveAttribute('width', '30');
   });
 
   it('marks the current section with aria-current', () => {

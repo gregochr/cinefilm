@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -12,6 +12,7 @@ describe('EmptyLibrary', () => {
       </MemoryRouter>,
     );
     expect(screen.getByRole('heading', { name: 'The house lights are up' })).toBeInTheDocument();
+    expect(screen.getByTestId('logo-mark')).toHaveAttribute('width', '64');
     expect(screen.getByRole('link', { name: 'Import from Plex' })).toHaveAttribute(
       'href',
       '/admin#library-scan',
@@ -28,6 +29,7 @@ describe('NoResults', () => {
     const onClear = vi.fn();
     render(<NoResults query="zzz" onClear={onClear} />);
     expect(screen.getByRole('heading', { name: 'Nothing on the shelf' })).toBeInTheDocument();
+    expect(screen.queryByTestId('logo-mark')).not.toBeInTheDocument();
     expect(screen.getByText(/No films match “zzz” with these filters/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Clear search and filters' }));
     expect(onClear).toHaveBeenCalledTimes(1);
@@ -46,6 +48,7 @@ describe('ErrorState', () => {
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent('The projector jammed');
     expect(alert).toHaveTextContent('Something went wrong loading this.');
+    expect(within(alert).getByTestId('logo-mark')).toHaveAttribute('width', '48');
   });
 
   it('offers Try again only when it can retry', async () => {
