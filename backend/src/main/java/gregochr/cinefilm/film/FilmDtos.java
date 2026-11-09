@@ -65,12 +65,8 @@ public final class FilmDtos {
                              List<CastEntry> cast, List<EditionDto> editions, Preferences preferences) {
     }
 
-    /** A collection entry in the library filter. */
-    public record CollectionFacet(Long id, String name) {
-    }
-
     /** The values the library filters can offer. */
-    public record Facets(List<String> genres, List<Integer> decades, List<CollectionFacet> collections) {
+    public record Facets(List<String> genres, List<Integer> decades) {
     }
 
     /** The library listing. */

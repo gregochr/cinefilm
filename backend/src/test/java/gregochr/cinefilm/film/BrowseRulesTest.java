@@ -3,7 +3,6 @@ package gregochr.cinefilm.film;
 import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.ZONE;
-import static gregochr.cinefilm.TestData.collection;
 import static gregochr.cinefilm.TestData.credit;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.film;
@@ -13,7 +12,6 @@ import static gregochr.cinefilm.TestData.view;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import gregochr.cinefilm.collection.FilmCollection;
 import gregochr.cinefilm.config.BadRequestException;
 import java.time.Duration;
 import java.time.Instant;
@@ -142,7 +140,7 @@ class BrowseRulesTest {
     }
 
     private List<String> titles(List<FilmView> all, String q) {
-        return BrowseRules.filterAndSort(all, new LibraryQuery(q, "title", null, null, null, null)).stream()
+        return BrowseRules.filterAndSort(all, new LibraryQuery(q, "title", null, null, null)).stream()
             .map(v -> v.film().getTitle()).toList();
     }
 
@@ -160,7 +158,7 @@ class BrowseRulesTest {
     @Test
     void sameTitleSortsByYearAscending() {
         List<FilmView> all = List.of(filmView("Dune", 2021, 1), filmView("Dune", 1984, 2));
-        assertThat(BrowseRules.filterAndSort(all, new LibraryQuery(null, "title", null, null, null, null)).stream()
+        assertThat(BrowseRules.filterAndSort(all, new LibraryQuery(null, "title", null, null, null)).stream()
             .map(v -> v.film().getYear())).containsExactly(1984, 2021);
     }
 
@@ -187,7 +185,7 @@ class BrowseRulesTest {
     }
 
     private List<String> sorted(List<FilmView> all, String sort) {
-        return BrowseRules.filterAndSort(all, new LibraryQuery(null, sort, null, null, null, null)).stream()
+        return BrowseRules.filterAndSort(all, new LibraryQuery(null, sort, null, null, null)).stream()
             .map(v -> v.film().getTitle()).toList();
     }
 
@@ -196,39 +194,33 @@ class BrowseRulesTest {
         List<FilmView> all = List.of(filmView("Heat", 1995, 1));
         assertThatThrownBy(() -> sorted(all, "popularity")).isInstanceOf(BadRequestException.class);
         assertThatThrownBy(() -> BrowseRules.filterAndSort(all,
-            new LibraryQuery(null, null, null, null, null, "seen"))).isInstanceOf(BadRequestException.class);
+            new LibraryQuery(null, null, null, null, "seen"))).isInstanceOf(BadRequestException.class);
     }
 
     // filters
 
     @Test
-    void filtersByGenreDecadeCollectionAndShow() {
-        FilmCollection alien = collection("Alien");
-        alien.setId(7L);
+    void filtersByGenreDecadeAndShow() {
         FilmView aliens = filmView("Aliens", 1986, 1, "Sci-fi", "Action");
-        aliens.film().setCollection(alien);
         FilmView alienFilm = withState(filmView("Alien", 1979, 2, "Sci-fi", "Horror"), 100 * MIN, true, NOW, NOW);
-        alienFilm.film().setCollection(alien);
         FilmView heat = filmView("Heat", 1995, 3, "Crime");
         FilmView chinatown = withState(filmView("Chinatown", 1974, 4, "Crime", "Mystery"), 100 * MIN, true, NOW,
             NOW);
         List<FilmView> all = List.of(aliens, alienFilm, heat, chinatown);
 
-        assertThat(query(all, "sci-fi", null, null, null)).containsExactlyInAnyOrder("Aliens", "Alien");
-        assertThat(query(all, " Crime ", null, null, null)).containsExactlyInAnyOrder("Heat", "Chinatown");
-        assertThat(query(all, "", null, null, null)).hasSize(4);
-        assertThat(query(all, null, 1970, null, null)).containsExactlyInAnyOrder("Alien", "Chinatown");
-        assertThat(query(all, null, 1980, null, null)).containsExactly("Aliens");
-        assertThat(query(all, null, null, 7L, null)).containsExactlyInAnyOrder("Aliens", "Alien");
-        assertThat(query(all, null, null, 99L, null)).isEmpty();
-        assertThat(query(all, null, null, null, "watched")).containsExactlyInAnyOrder("Alien", "Chinatown");
-        assertThat(query(all, null, null, null, "unwatched")).containsExactlyInAnyOrder("Aliens", "Heat");
-        assertThat(query(all, null, null, null, "all")).hasSize(4);
-        assertThat(query(all, "Sci-fi", 1970, 7L, "watched")).containsExactly("Alien");
+        assertThat(query(all, "sci-fi", null, null)).containsExactlyInAnyOrder("Aliens", "Alien");
+        assertThat(query(all, " Crime ", null, null)).containsExactlyInAnyOrder("Heat", "Chinatown");
+        assertThat(query(all, "", null, null)).hasSize(4);
+        assertThat(query(all, null, 1970, null)).containsExactlyInAnyOrder("Alien", "Chinatown");
+        assertThat(query(all, null, 1980, null)).containsExactly("Aliens");
+        assertThat(query(all, null, null, "watched")).containsExactlyInAnyOrder("Alien", "Chinatown");
+        assertThat(query(all, null, null, "unwatched")).containsExactlyInAnyOrder("Aliens", "Heat");
+        assertThat(query(all, null, null, "all")).hasSize(4);
+        assertThat(query(all, "Sci-fi", 1970, "watched")).containsExactly("Alien");
     }
 
-    private List<String> query(List<FilmView> all, String genre, Integer decade, Long collection, String show) {
-        return BrowseRules.filterAndSort(all, new LibraryQuery(null, "title", genre, decade, collection, show))
+    private List<String> query(List<FilmView> all, String genre, Integer decade, String show) {
+        return BrowseRules.filterAndSort(all, new LibraryQuery(null, "title", genre, decade, show))
             .stream().map(v -> v.film().getTitle()).toList();
     }
 }

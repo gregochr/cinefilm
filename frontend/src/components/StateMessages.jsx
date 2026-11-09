@@ -18,13 +18,17 @@ export function EmptyLibrary() {
   );
 }
 
-export function NoResults({ query, onClear }) {
+export function NoResults({
+  query,
+  onClear,
+  noun = 'films',
+  hint = 'Search looks at titles, actors and directors.',
+}) {
   return (
     <div className="state">
       <h2 className="state__title">Nothing on the shelf</h2>
       <p className="state__text">
-        No films match {query ? `“${query}” ` : ''}with these filters. Search looks at titles,
-        actors and directors.
+        No {noun} match {query ? `“${query}” ` : ''}with these filters. {hint}
       </p>
       <div className="state__actions">
         <Button onClick={onClear}>Clear search and filters</Button>

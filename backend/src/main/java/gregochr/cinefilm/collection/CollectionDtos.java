@@ -2,6 +2,7 @@ package gregochr.cinefilm.collection;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import gregochr.cinefilm.film.FilmDtos.FilmCard;
+import java.time.Instant;
 import java.util.List;
 
 /** JSON shapes of the collection endpoints. */
@@ -22,8 +23,15 @@ public final class CollectionDtos {
     public record CollectionPage(Long id, String name, String posterPath, List<PartDto> parts) {
     }
 
-    /** A Home collection card: up to three owned films for the fanned posters, and the "2 of 4" counts. */
+    /**
+     * A card of the Library's Collections tab: up to three owned films' posters for the fan (earliest release
+     * first), the "2 of 4" counts, and when the newest owned film was added.
+     */
     public record CollectionCard(Long id, String name, String posterPath, int ownedCount, int totalCount,
-                                 List<String> posterPaths) {
+                                 List<String> posterPaths, Instant lastAddedAt) {
+    }
+
+    /** The Collections tab: every collection, and how many films the library holds (the Films tab's count). */
+    public record CollectionList(int filmCount, List<CollectionCard> collections) {
     }
 }

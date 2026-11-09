@@ -14,7 +14,6 @@ import static org.mockito.Mockito.when;
 import gregochr.cinefilm.collection.FilmCollection;
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.NotFoundException;
-import gregochr.cinefilm.film.FilmDtos.CollectionFacet;
 import gregochr.cinefilm.film.FilmDtos.FilmDetail;
 import gregochr.cinefilm.film.FilmDtos.FilmList;
 import gregochr.cinefilm.film.FilmDtos.Preferences;
@@ -79,49 +78,12 @@ class FilmServiceTest {
         Film kes = owned(3L, "Kes", 1969, "Drama");
         when(loader.loadAll()).thenReturn(List.of(view(heat), view(alien), view(aliens), view(kes)));
 
-        FilmList list = service.list(new LibraryQuery("alien", "title", null, null, null, null));
+        FilmList list = service.list(new LibraryQuery("alien", "title", null, null, null));
 
         assertThat(list.total()).isEqualTo(2);
         assertThat(list.films()).extracting(FilmDtos.FilmCard::title).containsExactly("Alien", "Aliens");
         assertThat(list.facets().genres()).containsExactly("Crime", "Drama", "Horror", "sci-fi", "Thriller");
         assertThat(list.facets().decades()).containsExactly(1960, 1970, 1990);
-        assertThat(list.facets().collections()).containsExactly(new CollectionFacet(9L, "Alien"));
-    }
-
-    @Test
-    void collectionFacetsAreDistinctAndSortedByName() {
-        FilmCollection zodiacs = withId(2L, "Zodiac Saga");
-        FilmCollection alien = withId(1L, "Alien");
-        Film a = owned(1L, "Z1", 2000);
-        a.setCollection(zodiacs);
-        Film b = owned(2L, "Z2", 2001);
-        b.setCollection(zodiacs);
-        Film c = owned(3L, "A1", 1979);
-        c.setCollection(alien);
-        Film d = owned(4L, "A2", 1986);
-        d.setCollection(alien);
-        when(loader.loadAll()).thenReturn(List.of(view(a), view(b), view(c), view(d)));
-
-        FilmList list = service.list(LibraryQuery.all());
-
-        assertThat(list.facets().collections())
-            .containsExactly(new CollectionFacet(1L, "Alien"), new CollectionFacet(2L, "Zodiac Saga"));
-    }
-
-    @Test
-    void aCollectionWithOnlyOneFilmInTheLibraryIsNotAFacet() {
-        FilmCollection lone = withId(5L, "Lone Sequel");
-        FilmCollection pair = withId(6L, "Pair");
-        Film a = owned(1L, "L1", 2000);
-        a.setCollection(lone);
-        Film b = owned(2L, "P1", 2001);
-        b.setCollection(pair);
-        Film c = owned(3L, "P2", 2002);
-        c.setCollection(pair);
-        when(loader.loadAll()).thenReturn(List.of(view(a), view(b), view(c)));
-
-        assertThat(service.list(LibraryQuery.all()).facets().collections())
-            .containsExactly(new CollectionFacet(6L, "Pair"));
     }
 
     @Test
@@ -164,14 +126,13 @@ class FilmServiceTest {
         assertThat(list.films()).isEmpty();
         assertThat(list.facets().genres()).isEmpty();
         assertThat(list.facets().decades()).isEmpty();
-        assertThat(list.facets().collections()).isEmpty();
     }
 
     @Test
     void aBadQueryValueIsRejected() {
         when(loader.loadAll()).thenReturn(List.of());
 
-        assertThatThrownBy(() -> service.list(new LibraryQuery(null, "popularity", null, null, null, null)))
+        assertThatThrownBy(() -> service.list(new LibraryQuery(null, "popularity", null, null, null)))
             .isInstanceOf(BadRequestException.class)
             .hasMessage("sort must be title, year or added");
     }

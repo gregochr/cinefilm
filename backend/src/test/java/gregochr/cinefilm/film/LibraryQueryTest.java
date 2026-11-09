@@ -14,7 +14,6 @@ class LibraryQueryTest {
         assertThat(all.sort()).isNull();
         assertThat(all.genre()).isNull();
         assertThat(all.decade()).isNull();
-        assertThat(all.collection()).isNull();
         assertThat(all.show()).isNull();
     }
 }

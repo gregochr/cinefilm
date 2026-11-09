@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import App from '../App.jsx';
 import collection from './fixtures/collection.json';
+import collections from './fixtures/collections.json';
 import filmsEmpty from './fixtures/films-empty.json';
 import films from './fixtures/films.json';
 import bladeRunner from './fixtures/film-blade-runner.json';
@@ -25,6 +26,7 @@ export const fixtures = {
   wickerMan,
   person,
   collection,
+  collections,
   adminScan,
   adminAttention,
   adminPlex,
@@ -53,6 +55,7 @@ export function defaultRoute(method, url) {
   if (path === '/api/films/6') return json(bladeRunner);
   if (path === '/api/films/8') return json(wickerMan);
   if (/^\/api\/people\//.test(path)) return json(person);
+  if (path === '/api/collections') return json(collections);
   if (/^\/api\/collections\//.test(path)) return json(collection);
   if (/\/progress$/.test(path)) return json({ positionMs: 0, watched: false });
   if (/\/watched$/.test(path)) return json({ watched: true });

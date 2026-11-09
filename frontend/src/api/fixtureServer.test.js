@@ -79,6 +79,7 @@ describe('fixture server', () => {
   it('serves people and collections', async () => {
     expect((await call('GET', '/api/people/11')).name).toBe('Robert De Niro');
     expect((await call('GET', '/api/collections/1')).name).toBe('Alien');
+    expect((await call('GET', '/api/collections')).filmCount).toBe(23);
   });
 
   it('echoes progress, watched and preference writes', async () => {

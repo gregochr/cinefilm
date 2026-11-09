@@ -1,0 +1,43 @@
+{
+  "filmCount": 23,
+  "collections": [
+    {
+      "id": 1,
+      "name": "Alien",
+      "posterPath": null,
+      "ownedCount": 2,
+      "totalCount": 4,
+      "posterPaths": [
+        null,
+        null
+      ],
+      "lastAddedAt": "2026-10-20T09:00:00Z"
+    },
+    {
+      "id": 4,
+      "name": "Harry Potter Collection",
+      "posterPath": null,
+      "ownedCount": 7,
+      "totalCount": 8,
+      "posterPaths": [
+        "/hp1.jpg",
+        "/hp2.jpg",
+        "/hp3.jpg"
+      ],
+      "lastAddedAt": "2026-11-02T18:30:00Z"
+    },
+    {
+      "id": 3,
+      "name": "The Three Colours Collection",
+      "posterPath": null,
+      "ownedCount": 3,
+      "totalCount": 3,
+      "posterPaths": [
+        null,
+        null,
+        null
+      ],
+      "lastAddedAt": "2026-09-01T12:00:00Z"
+    }
+  ]
+}

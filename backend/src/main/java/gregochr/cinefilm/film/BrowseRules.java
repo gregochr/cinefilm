@@ -7,7 +7,6 @@ import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.stream.Stream;
 
 /** The pure browse rules: Home rows, search, filters and sorting. */
@@ -61,8 +60,6 @@ public final class BrowseRules {
             .filter(v -> query.genre() == null || query.genre().isBlank() || hasGenre(v, query.genre()))
             .filter(v -> query.decade() == null || v.film().getYear() != null
                 && v.film().getYear() / 10 * 10 == query.decade())
-            .filter(v -> query.collection() == null || (v.film().getCollection() != null
-                && Objects.equals(v.film().getCollection().getId(), query.collection())))
             .filter(v -> "all".equals(show) || v.watched() == "watched".equals(show))
             .sorted(order)
             .toList();

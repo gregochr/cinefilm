@@ -1,6 +1,7 @@
 package gregochr.cinefilm.collection;
 
 import gregochr.cinefilm.collection.CollectionDtos.CollectionCard;
+import gregochr.cinefilm.collection.CollectionDtos.CollectionList;
 import gregochr.cinefilm.collection.CollectionDtos.CollectionPage;
 import gregochr.cinefilm.collection.CollectionDtos.PartDto;
 import gregochr.cinefilm.config.NotFoundException;
@@ -18,7 +19,7 @@ import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Collection pages and Home collection cards. */
+/** Collection pages and the Library's collection cards. */
 @Service
 public class CollectionService {
 
@@ -57,7 +58,14 @@ public class CollectionService {
         return new CollectionPage(collection.getId(), collection.getName(), collection.getPosterPath(), parts);
     }
 
-    /** Home cards for every collection with at least {@link #MIN_OWNED} owned films. Call inside a transaction. */
+    /** The Collections tab: the cards, and the number of films in the library. */
+    @Transactional(readOnly = true)
+    public CollectionList list() {
+        List<FilmView> library = loader.loadAll();
+        return new CollectionList(library.size(), cards(library));
+    }
+
+    /** Cards for every collection with at least {@link #MIN_OWNED} owned films. Call inside a transaction. */
     public List<CollectionCard> cards(List<FilmView> library) {
         List<CollectionCard> cards = new ArrayList<>();
         for (FilmCollection collection : collections.findAll()) {
@@ -72,7 +80,8 @@ public class CollectionService {
             cards.add(new CollectionCard(collection.getId(), collection.getName(), collection.getPosterPath(),
                 owned.size(), slots.size(),
                 slots.stream().filter(s -> s.owned() != null).limit(FAN_SIZE)
-                    .map(s -> s.owned().film().getPosterPath()).toList()));
+                    .map(s -> s.owned().film().getPosterPath()).toList(),
+                owned.stream().map(v -> v.film().getAddedAt()).max(Comparator.naturalOrder()).orElse(null)));
         }
         cards.sort(Comparator.comparing(CollectionCard::name));
         return cards;

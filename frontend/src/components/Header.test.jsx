@@ -54,6 +54,12 @@ describe('Header', () => {
     expect(screen.getByLabelText('Location')).toHaveTextContent(/^\/library$/);
   });
 
+  it('hides its search on the Library tabs, which have their own', () => {
+    renderHeader('/library/collections');
+    expect(screen.queryByRole('search')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Library' })).toHaveAttribute('aria-current', 'page');
+  });
+
   it('hides its search on the Library page, which has its own', () => {
     renderHeader('/library');
     expect(screen.queryByRole('search')).not.toBeInTheDocument();

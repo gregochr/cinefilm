@@ -20,7 +20,7 @@ describe('Library filters', () => {
     expect(screen.getByRole('link', { name: 'Heat, 1995' })).toBeInTheDocument();
   });
 
-  it('the genre, decade and collection pickers offer the facets from the API', async () => {
+  it('the genre and decade pickers offer the facets from the API', async () => {
     installFetch();
     renderApp('/library');
     await screen.findByText(/sorted by/);
@@ -32,11 +32,10 @@ describe('Library filters', () => {
     ).toEqual(['All', 'Crime', 'Drama', 'Sci-fi', 'Thriller']);
     const decade = screen.getByLabelText('Decade');
     expect(within(decade).getByRole('option', { name: '1970s' })).toHaveValue('1970');
-    const collection = screen.getByLabelText('Collection');
-    expect(within(collection).getByRole('option', { name: 'Three Colours' })).toHaveValue('3');
+    expect(screen.queryByLabelText('Collection')).not.toBeInTheDocument();
   });
 
-  it('choosing a genre, decade and collection refetches with each and keeps them in the URL', async () => {
+  it('choosing a genre and a decade refetches with each and keeps them in the URL', async () => {
     const fetchMock = installFetch();
     renderApp('/library');
     await screen.findByText(/sorted by/);
@@ -44,8 +43,6 @@ describe('Library filters', () => {
     await waitFor(() => expect(lastFilmsUrl(fetchMock)).toContain('genre=Sci-fi'));
     await userEvent.selectOptions(screen.getByLabelText('Decade'), '1970s');
     await waitFor(() => expect(lastFilmsUrl(fetchMock)).toContain('decade=1970'));
-    await userEvent.selectOptions(screen.getByLabelText('Collection'), 'Alien');
-    await waitFor(() => expect(lastFilmsUrl(fetchMock)).toContain('collection=1'));
     expect(lastFilmsUrl(fetchMock)).toContain('genre=Sci-fi');
     expect(lastFilmsUrl(fetchMock)).toContain('decade=1970');
   });

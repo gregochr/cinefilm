@@ -24,6 +24,7 @@ export const peopleApi = {
 };
 
 export const collectionsApi = {
+  list: (options) => get('/api/collections', options),
   get: (id, options) => get(`/api/collections/${id}`, options),
 };
 

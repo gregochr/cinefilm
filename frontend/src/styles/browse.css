@@ -289,6 +289,38 @@
 .library {
   gap: 28px;
 }
+.library__panel {
+  gap: 28px;
+}
+.library__tabs {
+  display: flex;
+  gap: 28px;
+  margin-left: auto;
+}
+.library__tab {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 2px 8px;
+  color: var(--cf-text-muted);
+  font-size: 16px;
+  border-bottom: 2px solid transparent;
+}
+.library__tab[aria-selected='true'] {
+  color: var(--cf-text);
+  border-bottom-color: var(--cf-amber);
+}
+.library__tab-count {
+  font-family: var(--cf-font-mono);
+  font-size: 12px;
+  color: var(--cf-text-muted);
+}
+.collection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+  gap: 36px 24px;
+}
 .filters {
   display: flex;
   flex-wrap: wrap;

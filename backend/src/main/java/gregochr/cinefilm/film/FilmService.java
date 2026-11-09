@@ -1,9 +1,7 @@
 package gregochr.cinefilm.film;
 
 import gregochr.cinefilm.collection.CollectionService;
-import gregochr.cinefilm.collection.FilmCollection;
 import gregochr.cinefilm.config.NotFoundException;
-import gregochr.cinefilm.film.FilmDtos.CollectionFacet;
 import gregochr.cinefilm.film.FilmDtos.Facets;
 import gregochr.cinefilm.film.FilmDtos.FilmCard;
 import gregochr.cinefilm.film.FilmDtos.FilmDetail;
@@ -11,11 +9,7 @@ import gregochr.cinefilm.film.FilmDtos.FilmList;
 import gregochr.cinefilm.playback.PreferencesService;
 import gregochr.cinefilm.transcode.KeyframeIndexService;
 import gregochr.cinefilm.transcode.Transcoder;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
 import java.util.TreeSet;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -64,24 +58,12 @@ public class FilmService {
     private static Facets facets(List<FilmView> all) {
         TreeSet<String> genres = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
         TreeSet<Integer> decades = new TreeSet<>();
-        Map<Long, String> collections = new TreeMap<>();
-        Map<Long, Integer> owned = new HashMap<>();
         for (FilmView view : all) {
             genres.addAll(view.film().getGenres());
             if (view.film().getYear() != null) {
                 decades.add(view.film().getYear() / 10 * 10);
             }
-            FilmCollection collection = view.film().getCollection();
-            if (collection != null) {
-                collections.put(collection.getId(), collection.getName());
-                owned.merge(collection.getId(), 1, Integer::sum);
-            }
         }
-        List<CollectionFacet> collectionFacets = collections.entrySet().stream()
-            .filter(e -> owned.get(e.getKey()) >= CollectionService.MIN_OWNED)
-            .map(e -> new CollectionFacet(e.getKey(), e.getValue()))
-            .sorted(Comparator.comparing(CollectionFacet::name))
-            .toList();
-        return new Facets(List.copyOf(genres), List.copyOf(decades), collectionFacets);
+        return new Facets(List.copyOf(genres), List.copyOf(decades));
     }
 }
