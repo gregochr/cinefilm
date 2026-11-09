@@ -354,3 +354,108 @@ describe('useContinueWatching: hero and inputs', () => {
     expect(result.current.hero).toBeNull();
   });
 });
+
+describe('useContinueWatching: requests for one edition are serialised', () => {
+  /** Every request to `path` waits for `answer(n)`; `sent` lists the bodies in the order they were sent. */
+  function sequenced(path) {
+    const gates = [];
+    const sent = [];
+    return {
+      sent,
+      gates,
+      route: (method, url, init) => {
+        if (url !== path) return null;
+        sent.push(JSON.parse(init.body));
+        return new Promise((resolve) => gates.push(resolve));
+      },
+    };
+  }
+
+  it('Remove, Undo, Remove reach the server as true, false, true and the film ends up removed', async () => {
+    const seq = sequenced('/api/editions/30/continue-watching');
+    const { result } = setup(DATA, seq.route);
+
+    act(() => result.current.remove(B));
+    await flush();
+    act(() => {
+      result.current.undo();
+    });
+    await flush();
+    act(() => result.current.remove(B));
+    await flush();
+
+    expect(seq.sent).toEqual([{ hidden: true }]); // the rest wait their turn
+    expect(ids(result.current.row)).toEqual([2, 4]);
+
+    await act(async () => seq.gates[0](respond({ hidden: true })));
+    expect(seq.sent).toEqual([{ hidden: true }, { hidden: false }]);
+
+    await act(async () => seq.gates[1](respond({ hidden: false })));
+    expect(seq.sent).toEqual([{ hidden: true }, { hidden: false }, { hidden: true }]);
+
+    await act(async () => seq.gates[2](respond({ hidden: true })));
+    expect(ids(result.current.row)).toEqual([2, 4]);
+    expect(result.current.action).toMatchObject({ kind: 'remove', film: B });
+  });
+
+  it('a failed request does not stop the ones queued behind it', async () => {
+    const seq = sequenced('/api/editions/30/continue-watching');
+    const { result } = setup(DATA, seq.route);
+    act(() => result.current.remove(B));
+    await flush();
+    act(() => {
+      result.current.undo();
+    });
+    await flush();
+
+    await act(async () => seq.gates[0](respond({ error: 'x' }, 500)));
+
+    expect(seq.sent).toEqual([{ hidden: true }]); // the original failed: nothing to reverse
+    expect(ids(result.current.row)).toEqual([2, 3, 4]);
+  });
+});
+
+describe('useContinueWatching: watched overrides for the other rows', () => {
+  const watchedRoute = (m, url) =>
+    url === '/api/editions/30/watched' ? respond({ watched: true, previous: PREVIOUS }) : null;
+
+  it('marks the film watched as soon as it is sent, and drops that on Undo', async () => {
+    const { result } = setup(DATA, watchedRoute);
+    expect(result.current.watched).toEqual({});
+
+    act(() => result.current.markWatched(B));
+    expect(result.current.watched).toEqual({ 3: true });
+    await flush();
+
+    await act(async () => {
+      await result.current.undo();
+    });
+    expect(result.current.watched).toEqual({});
+  });
+
+  it('drops the override when the request fails', async () => {
+    const { result } = setup(DATA, (m, url) =>
+      url === '/api/editions/30/watched' ? respond({ error: 'x' }, 500) : null,
+    );
+    act(() => result.current.markWatched(B));
+    await flush();
+    expect(result.current.watched).toEqual({});
+  });
+
+  it('keeps the overrides of earlier marks, and Remove sets none', async () => {
+    const { result } = setup(DATA, watchedRoute);
+    act(() => result.current.markWatched(B));
+    await flush();
+    act(() => result.current.remove(A));
+    await flush();
+    expect(result.current.watched).toEqual({ 3: true });
+  });
+
+  it('forgets them when fresh Home data arrives', async () => {
+    const { result, rerender } = setup(DATA, watchedRoute);
+    act(() => result.current.markWatched(B));
+    await flush();
+    rerender({ d: { ...DATA } });
+    expect(result.current.watched).toEqual({});
+  });
+});

@@ -15,22 +15,46 @@ function insertAt(list, film, index) {
  * The Continue watching row and hero over the Home payload, with optimistic Remove / Mark as watched
  * and a single undoable action (the latest). The API is called straight away; Undo reverses it.
  * `reload` is called if an Undo cannot be sent, to resynchronise with the server.
+ * Requests for one edition are serialised (each starts after the previous one settled), so a quick
+ * Remove, Undo, Remove reaches the server in that order. `watched` holds local watched overrides by film
+ * id (set while a Mark as watched stands) for the other Home rows to apply.
  */
 export function useContinueWatching(data, reload) {
   const [source, setSource] = useState(data);
   const [row, setRow] = useState(data?.continueWatching ?? []);
   const [hero, setHero] = useState(data?.hero ?? null);
   const [action, setAction] = useState(null);
+  const [watched, setWatched] = useState({});
   const current = useRef(null);
   const timer = useRef(null);
+  const chains = useRef(new Map());
 
   if (source !== data) {
     setSource(data);
     setRow(data?.continueWatching ?? []);
     setHero(data?.hero ?? null);
+    setWatched({});
   }
 
   useEffect(() => () => clearTimeout(timer.current), []);
+
+  const enqueue = useCallback((editionId, run) => {
+    const tail = chains.current.get(editionId) ?? Promise.resolve();
+    const result = tail.then(run);
+    chains.current.set(
+      editionId,
+      result.catch(() => {}),
+    );
+    return result;
+  }, []);
+
+  const dropOverride = useCallback((filmId) => {
+    setWatched((w) => {
+      const next = { ...w };
+      delete next[filmId];
+      return next;
+    });
+  }, []);
 
   const clearAction = useCallback((entry) => {
     if (current.current !== entry) return;
@@ -53,9 +77,11 @@ export function useContinueWatching(data, reload) {
       };
       setRow((r) => r.filter((f) => f.id !== film.id));
       if (entry.heroWas) setHero(null);
-      entry.call = call(editionId);
+      if (kind === 'watched') setWatched((w) => ({ ...w, [film.id]: true }));
+      entry.call = enqueue(editionId, () => call(editionId));
       entry.call.catch(() => {
         clearAction(entry);
+        if (kind === 'watched') dropOverride(film.id);
         setRow((r) => insertAt(r, film, index));
         if (entry.heroWas) setHero(entry.heroWas);
       });
@@ -64,7 +90,7 @@ export function useContinueWatching(data, reload) {
       clearTimeout(timer.current);
       timer.current = setTimeout(() => clearAction(entry), UNDO_MS);
     },
-    [row, hero, clearAction],
+    [row, hero, clearAction, enqueue, dropOverride],
   );
 
   const remove = useCallback(
@@ -82,22 +108,25 @@ export function useContinueWatching(data, reload) {
     clearAction(entry);
     setRow((r) => insertAt(r, entry.film, entry.index));
     if (entry.heroWas) setHero(entry.heroWas);
-    let result;
+    if (entry.kind === 'watched') dropOverride(entry.film.id); // back to what was loaded
     try {
-      result = await entry.call;
-    } catch {
-      return; // the original failed and has already been rolled back
-    }
-    try {
-      if (entry.kind === 'remove') {
-        await editionsApi.setHiddenFromContinueWatching(entry.editionId, false);
-      } else {
-        await editionsApi.restoreState(entry.editionId, result.previous);
-      }
+      await enqueue(entry.editionId, async () => {
+        let result;
+        try {
+          result = await entry.call;
+        } catch {
+          return; // the original failed and has already been rolled back
+        }
+        if (entry.kind === 'remove') {
+          await editionsApi.setHiddenFromContinueWatching(entry.editionId, false);
+        } else {
+          await editionsApi.restoreState(entry.editionId, result.previous);
+        }
+      });
     } catch {
       reload();
     }
-  }, [clearAction, reload]);
+  }, [clearAction, reload, enqueue, dropOverride]);
 
-  return { hero, row, action, remove, markWatched, undo };
+  return { hero, row, action, watched, remove, markWatched, undo };
 }

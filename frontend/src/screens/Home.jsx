@@ -96,6 +96,8 @@ export default function Home() {
     if (el) cardLinks.current.set(id, el);
     else cardLinks.current.delete(id);
   };
+  // A film marked watched here shows as watched in every other row too, until the page data is reloaded.
+  const seen = (f) => (f.id in cw.watched ? { ...f, watched: cw.watched[f.id] } : f);
   const toast = <UndoToast action={cw.action} undoRef={undoButton} onUndo={undo} />;
   const theme = data.weeklyTheme;
   const collections = data.collections || [];
@@ -117,7 +119,7 @@ export default function Home() {
 
   return (
     <div className="page__stack">
-      {hero ? <Hero film={hero} /> : null}
+      {hero ? <Hero film={seen(hero)} /> : null}
       {continueWatching.length ? (
         <FilmRow
           title="Continue watching"
@@ -138,7 +140,7 @@ export default function Home() {
       {recentlyAdded.length ? (
         <FilmRow title="Recently added" sub="Last 30 days" seeAllTo="/library?sort=added">
           {recentlyAdded.map((f) => (
-            <Poster key={f.id} film={f} />
+            <Poster key={f.id} film={seen(f)} />
           ))}
         </FilmRow>
       ) : null}
@@ -149,14 +151,14 @@ export default function Home() {
           seeAllTo="/library?show=watched&sort=title"
         >
           {notWatchedInYears.map((f) => (
-            <Poster key={f.id} film={f} />
+            <Poster key={f.id} film={seen(f)} />
           ))}
         </FilmRow>
       ) : null}
       {theme?.films?.length ? (
         <FilmRow title={theme.title} sub={theme.caption} seeAllTo="/library">
           {theme.films.map((f) => (
-            <Poster key={f.id} film={f} />
+            <Poster key={f.id} film={seen(f)} />
           ))}
         </FilmRow>
       ) : null}

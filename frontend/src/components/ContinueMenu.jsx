@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { formatLeft } from '../player/time.js';
@@ -17,8 +17,39 @@ export default function ContinueMenu({ film, sheet, anchorRef, onClose, onRemove
   const progress = film.progress;
 
   useEffect(() => {
-    itemsOf(menuRef.current)[0]?.focus();
+    itemsOf(menuRef.current)[0]?.focus({ preventScroll: true });
   }, []);
+
+  // The popover is portalled out of the (possibly scrolling) row: place it under the ⋯ button, right-aligned
+  // to it, flipped above when it would run off the bottom and clamped inside the viewport.
+  useLayoutEffect(() => {
+    if (sheet) return;
+    const panel = panelRef.current;
+    const rect = anchorRef.current.getBoundingClientRect();
+    const width = panel.offsetWidth;
+    const height = panel.offsetHeight;
+    const margin = 8;
+    const left = Math.max(
+      margin,
+      Math.min(rect.right - width, window.innerWidth - width - margin),
+    );
+    let top = rect.bottom + margin;
+    if (top + height > window.innerHeight - margin) top = rect.top - height - margin;
+    panel.style.left = `${left}px`;
+    panel.style.top = `${Math.max(margin, top)}px`;
+  }, [sheet, anchorRef]);
+
+  // A popover that is not tied to its anchor any more (resize, any scroll) just closes.
+  useEffect(() => {
+    if (sheet) return undefined;
+    const dismiss = () => onClose(false);
+    window.addEventListener('resize', dismiss);
+    window.addEventListener('scroll', dismiss, true);
+    return () => {
+      window.removeEventListener('resize', dismiss);
+      window.removeEventListener('scroll', dismiss, true);
+    };
+  }, [sheet, onClose]);
 
   useEffect(() => {
     const onOutside = (event) => {
@@ -46,7 +77,7 @@ export default function ContinueMenu({ film, sheet, anchorRef, onClose, onRemove
       event.preventDefault();
       onClose(true);
     } else if (event.key === 'ArrowDown') go(at + 1);
-    else if (event.key === 'ArrowUp') go(at < 0 ? -1 : at - 1);
+    else if (event.key === 'ArrowUp') go(at - 1);
     else if (event.key === 'Home') go(0);
     else if (event.key === 'End') go(-1);
     else if (event.key === 'Tab') onClose(false);
@@ -55,6 +86,7 @@ export default function ContinueMenu({ film, sheet, anchorRef, onClose, onRemove
   const body = (
     <div
       className={sheet ? 'sheet' : 'cmenu'}
+      data-testid={sheet ? undefined : 'continue-popover'}
       ref={panelRef}
       onKeyDown={onKeyDown}
       role={sheet ? 'dialog' : undefined}
@@ -123,5 +155,5 @@ export default function ContinueMenu({ film, sheet, anchorRef, onClose, onRemove
     </div>
   );
 
-  return sheet ? createPortal(body, document.body) : body;
+  return createPortal(body, document.body);
 }

@@ -710,10 +710,10 @@
 
 /* The ⋯ menu: popover (hover devices) and bottom sheet (touch) */
 .cmenu {
-  position: absolute;
-  top: 54px;
-  right: 10px;
-  z-index: 5;
+  position: fixed; /* portalled to <body> and placed from the ⋯ button's rect */
+  top: 0;
+  left: 0;
+  z-index: 60;
   min-width: 280px;
   padding: 8px;
   border-radius: var(--cf-radius-card);
@@ -726,6 +726,7 @@
   flex-direction: column;
   gap: 2px;
   width: 100%;
+  min-height: 44px;
   padding: 10px 12px;
   border-radius: 8px;
   text-align: left;

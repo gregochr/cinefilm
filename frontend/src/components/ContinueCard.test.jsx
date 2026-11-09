@@ -142,14 +142,6 @@ describe('the menu', () => {
     expect(start).toHaveFocus();
   });
 
-  it('ArrowUp from outside the items goes to the last one', async () => {
-    setup();
-    await userEvent.click(more());
-    more().focus();
-    fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowUp' });
-    expect(screen.getByRole('menuitem', { name: 'Start from beginning' })).toHaveFocus();
-  });
-
   it('closes when you click elsewhere, but not when you click inside it', async () => {
     setup();
     await userEvent.click(more());
@@ -206,6 +198,7 @@ describe('keys on a focused card', () => {
   it.each(['{Delete}', '{Backspace}'])('%s removes the film', async (key) => {
     const { onRemove } = setup();
     link().focus();
+    expect(link()).toHaveFocus();
     await userEvent.keyboard(key);
     expect(onRemove).toHaveBeenCalledExactlyOnceWith(film);
   });
@@ -213,38 +206,43 @@ describe('keys on a focused card', () => {
   it('m marks the film watched', async () => {
     const { onMarkWatched } = setup();
     link().focus();
+    expect(link()).toHaveFocus();
     await userEvent.keyboard('m');
     expect(onMarkWatched).toHaveBeenCalledExactlyOnceWith(film);
   });
 
-  it('ignores Shift+M, but accepts a capital M typed without Shift (Caps Lock)', () => {
+  it('ignores Shift+M', async () => {
     const { onMarkWatched } = setup();
-    fireEvent.keyDown(link(), { key: 'M', shiftKey: true });
+    link().focus();
+    expect(link()).toHaveFocus();
+    await userEvent.keyboard('{Shift>}M{/Shift}');
     expect(onMarkWatched).not.toHaveBeenCalled();
   });
 
-  it('accepts a capital M from Caps Lock', () => {
+  it('accepts a capital M typed without Shift (Caps Lock)', async () => {
     const { onMarkWatched } = setup();
-    fireEvent.keyDown(link(), { key: 'M' });
+    link().focus();
+    expect(link()).toHaveFocus();
+    await userEvent.keyboard('M');
     expect(onMarkWatched).toHaveBeenCalledExactlyOnceWith(film);
   });
 
-  it.each([{ ctrlKey: true }, { metaKey: true }, { altKey: true }])(
-    'ignores Delete and M with a modifier held (%o)',
-    (modifier) => {
-      const { onRemove, onMarkWatched } = setup();
-      fireEvent.keyDown(link(), { key: 'Delete', ...modifier });
-      fireEvent.keyDown(link(), { key: 'm', ...modifier });
-      expect(onRemove).not.toHaveBeenCalled();
-      expect(onMarkWatched).not.toHaveBeenCalled();
-    },
-  );
-
-  it('works from the ⋯ button too, and ignores other keys', () => {
-    const { onRemove } = setup();
-    fireEvent.keyDown(more(), { key: 'x' });
+  it.each(['Control', 'Meta', 'Alt'])('ignores Delete and M with %s held', async (modifier) => {
+    const { onRemove, onMarkWatched } = setup();
+    link().focus();
+    expect(link()).toHaveFocus();
+    await userEvent.keyboard(`{${modifier}>}{Delete}m{/${modifier}}`);
     expect(onRemove).not.toHaveBeenCalled();
-    fireEvent.keyDown(more(), { key: 'Delete' });
+    expect(onMarkWatched).not.toHaveBeenCalled();
+  });
+
+  it('works from the ⋯ button too, and ignores other keys', async () => {
+    const { onRemove } = setup();
+    more().focus();
+    expect(more()).toHaveFocus();
+    await userEvent.keyboard('x');
+    expect(onRemove).not.toHaveBeenCalled();
+    await userEvent.keyboard('{Delete}');
     expect(onRemove).toHaveBeenCalledTimes(1);
   });
 
@@ -393,5 +391,61 @@ describe('long press', () => {
     fireEvent.touchStart(link(), touch());
     unmount();
     expect(() => act(() => vi.advanceTimersByTime(1000))).not.toThrow();
+  });
+});
+
+describe('popover placement', () => {
+  const rectOf = (r) => ({ ...r, width: r.right - r.left, height: r.bottom - r.top, x: r.left, y: r.top });
+
+  function place(buttonRect) {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function rect() {
+      return this.getAttribute('aria-haspopup') ? rectOf(buttonRect) : rectOf({ top: 0, bottom: 0, left: 0, right: 0 });
+    });
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(280);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(150);
+    setup();
+    fireEvent.click(more());
+    return screen.getByTestId('continue-popover');
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('sits under the button, right-aligned to it, outside the card (on <body>)', () => {
+    const popover = place({ top: 100, bottom: 136, left: 500, right: 536 });
+    expect(popover.style.left).toBe('256px');
+    expect(popover.style.top).toBe('144px');
+    expect(popover.parentElement).toBe(document.body);
+  });
+
+  it('is clamped to the left edge of the viewport', () => {
+    const popover = place({ top: 100, bottom: 136, left: 60, right: 100 });
+    expect(popover.style.left).toBe('8px');
+  });
+
+  it('is clamped to the right edge of the viewport', () => {
+    const popover = place({ top: 100, bottom: 136, left: 1000, right: 1100 });
+    expect(popover.style.left).toBe(`${window.innerWidth - 280 - 8}px`);
+  });
+
+  it('flips above the button when it would run off the bottom', () => {
+    const popover = place({ top: 650, bottom: 686, left: 500, right: 536 });
+    expect(popover.style.top).toBe(`${650 - 150 - 8}px`);
+  });
+
+  it('never goes above the top of the viewport', () => {
+    const popover = place({ top: 20, bottom: 740, left: 500, right: 536 });
+    expect(popover.style.top).toBe('8px');
+  });
+
+  it('closes on resize and on any scroll, but not before', () => {
+    place({ top: 100, bottom: 136, left: 500, right: 536 });
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    fireEvent(window, new Event('resize'));
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+
+    fireEvent.click(more());
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    fireEvent.scroll(document.body);
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 });

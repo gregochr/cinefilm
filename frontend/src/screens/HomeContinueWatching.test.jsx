@@ -138,6 +138,7 @@ describe('Home: removing a film from Continue watching', () => {
   it('Delete on a focused card removes it and moves focus to the next card', async () => {
     const fetchMock = await open();
     cardLink('Arrival, 56m left').focus();
+    expect(cardLink('Arrival, 56m left')).toHaveFocus();
     await userEvent.keyboard('{Delete}');
 
     expect(maybeCard('Arrival, 56m left')).not.toBeInTheDocument();
@@ -150,6 +151,7 @@ describe('Home: removing a film from Continue watching', () => {
   it('Backspace on the last card removes it and moves focus to the previous one', async () => {
     await open();
     cardLink(/^Moon/).focus();
+    expect(cardLink(/^Moon/)).toHaveFocus();
     await userEvent.keyboard('{Backspace}');
     expect(maybeCard(/^Moon/)).not.toBeInTheDocument();
     expect(cardLink(/^Paris, Texas/)).toHaveFocus();
@@ -158,6 +160,7 @@ describe('Home: removing a film from Continue watching', () => {
   it('M marks the focused card watched and moves focus on', async () => {
     const fetchMock = await open();
     cardLink(/^Chinatown/).focus();
+    expect(cardLink(/^Chinatown/)).toHaveFocus();
     await userEvent.keyboard('m');
     expect(body(calls(fetchMock, '/api/editions/31/watched')[0])).toEqual({ watched: true });
     expect(screen.getByRole('status')).toHaveTextContent('Chinatown marked as watched');
@@ -238,5 +241,48 @@ describe('Home: removing a film from Continue watching', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('Home: a film marked watched shows as watched in the other rows', () => {
+  it('the theme-row poster gains the watched label after Mark as watched and loses it after Undo', async () => {
+    await open();
+    const theme = screen.getByRole('region', { name: 'This week: the 1970s' });
+    expect(within(theme).getByRole('link', { name: 'Chinatown, 1974' })).toBeInTheDocument();
+
+    await userEvent.click(more('Chinatown'));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Mark as watched' }));
+    expect(within(theme).getByRole('link', { name: 'Chinatown, 1974, watched' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(within(theme).getByRole('link', { name: 'Chinatown, 1974' })).toBeInTheDocument();
+    expect(within(theme).queryByRole('link', { name: 'Chinatown, 1974, watched' })).not.toBeInTheDocument();
+  });
+
+  it('Remove leaves the other rows alone', async () => {
+    await open();
+    await removeViaMenu('Chinatown');
+    const theme = screen.getByRole('region', { name: 'This week: the 1970s' });
+    expect(within(theme).getByRole('link', { name: 'Chinatown, 1974' })).toBeInTheDocument();
+  });
+
+  it('the hero and the Recently added and Not watched in years posters follow too', async () => {
+    const other = film(7, 'Zodiac');
+    homeWith({
+      hero: moon,
+      continueWatching: [moon],
+      recentlyAdded: [{ ...moon, progress: null }],
+      notWatchedInYears: [{ ...moon, progress: null }, other],
+    });
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Continue watching' });
+    await userEvent.click(more('Moon'));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Mark as watched' }));
+
+    const recent = screen.getByRole('region', { name: 'Recently added' });
+    expect(within(recent).getByRole('link', { name: 'Moon, 2005, watched' })).toBeInTheDocument();
+    const old = screen.getByRole('region', { name: 'Not watched in years' });
+    expect(within(old).getByRole('link', { name: 'Moon, 2005, watched' })).toBeInTheDocument();
+    expect(within(old).getByRole('link', { name: 'Zodiac, 2007' })).toBeInTheDocument();
   });
 });
