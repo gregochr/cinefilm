@@ -37,7 +37,7 @@ if ! dc up -d --no-deps --force-recreate cinefilm; then
 fi
 echo "$PREVIOUS" > "${DEPLOY_HOME}/.deployed-version"
 
-if wait_healthy cinefilm 180 && EXPECT_COMMIT="" bash "${SMOKE_SCRIPT:-${SCRIPT_DIR}/post-deploy-smoke.sh}"; then
+if wait_healthy cinefilm 180 && EXPECT_COMMIT="" SMOKE_PROXY_URL="" bash "${SMOKE_SCRIPT:-${SCRIPT_DIR}/post-deploy-smoke.sh}"; then
     echo "ROLLBACK: ${PREVIOUS} is running and verified. ${FAILED} remains a FAILED release."
     exit 1
 fi

@@ -10,18 +10,20 @@ avoids goldenhour's). Backups, backup verification and the daily health workflow
 |---|---|
 | Host | dockermacmini (Ubuntu), shared with goldenhour production |
 | Image | `ghcr.io/gregochr/cinefilm:vX.Y.Z` (also `:latest`), one image: Spring Boot serves the SPA |
-| Containers | `cinefilm-db` (postgres:17, no published port), `cinefilm` (`127.0.0.1:8090` to 8080; 8086 is used by vbgone on dockermacmini) |
+| Proxy image | `ghcr.io/gregochr/cinefilm-caddy:vX.Y.Z` (same tag as the app): Caddy 2.11.8 + `caddy-dns/cloudflare` v0.2.4, built from `deploy/caddy/` |
+| Containers | `cinefilm-db` (postgres:17, no published port), `cinefilm` (`127.0.0.1:8090` to 8080; 8086 is used by vbgone on dockermacmini), `cinefilm-proxy` (Caddy, host network, binds only the two tailnet addresses on 443) |
 | Compose | `~/cinefilm/docker-compose.yml` (copied from `deploy/` by every deploy), project `cinefilm`, secrets in `~/cinefilm/.env` |
-| Data | `/home/gregochr/cinefilm-data/{postgres,logs,cache,artwork}` (owned by uid 1001, except `postgres`, which Postgres owns); `cache` is the container's `/app/cache`, the application's default `CINEFILM_CACHE_DIR` (generated WebVTT subtitles), kept in step by `scripts/test/config-agreement.test.sh`; `artwork` is the container's `/app/artwork` (`CINEFILM_ARTWORK_DIR`, posters imported from Plex): **persistent data, not a cache, backed up with the database** (phase 9 must include it) |
+| Data | `/home/gregochr/cinefilm-data/{postgres,logs,cache,artwork,caddy}` (`caddy` holds the proxy certificates; owned by uid 1001, except `postgres`, which Postgres owns); `cache` is the container's `/app/cache`, the application's default `CINEFILM_CACHE_DIR` (generated WebVTT subtitles), kept in step by `scripts/test/config-agreement.test.sh`; `artwork` is the container's `/app/artwork` (`CINEFILM_ARTWORK_DIR`, posters imported from Plex): **persistent data, not a cache, backed up with the database** (phase 9 must include it) |
 | Pre-release dumps | `/home/gregochr/cinefilm-backups/pre-release/` (10 newest kept) |
 | Media | workhorse share `Movies`, mounted read-only at `/mnt/workhorse-films`, seen in the container as `/media` |
-| Remote access | `tailscale serve` to `127.0.0.1:8090` (HTTPS with a real certificate, tailnet only) |
+| Remote access | **https://cinefilm.chrisjgregory.dev** (Caddy `cinefilm-proxy`, tailnet only; "Custom domain" below). Fallback: `tailscale serve` on :8443 to `127.0.0.1:8090`, https://dockermacmini.tail0c74fa.ts.net:8443 |
 | Runner | second GitHub runner `~/actions-runner-cinefilm`, label `cinefilm-prod`, service |
 | State files | `~/cinefilm/.deployed-version`, `~/cinefilm/.previous-version` (written by the deploy scripts) |
 
 RAM is 15 GiB and the root disk is 98 G with only about 5.8 G free (94% used). Host ports in use: 22 53 80 5050 5432
-5433 8081-8087 9000 (8086 is vbgone's frontend, hence CineFilm on 8090). Port 443 is free and no `tailscale serve`
-config exists yet. RAM is not a constraint: the container stays capped at `mem_limit: 1g` with
+5433 8081-8087 9000 (8086 is vbgone's frontend, hence CineFilm on 8090). Port 80 belongs to goldenhour: nothing of CineFilm's ever binds it
+(Caddy has no redirect listener and uses the DNS challenge). 443 on the tailnet addresses is Caddy's; `tailscale serve`
+moves to 8443 (Custom domain). RAM is not a constraint: the container stays capped at `mem_limit: 1g` with
 `-XX:MaxRAMPercentage=75` in `deploy/docker-compose.yml`; revisit it before ffmpeg/transcoding lands. Disk is: see the
 warning in the host setup below.
 
@@ -42,7 +44,7 @@ groups                        # must include docker
 ### 2. Directories
 
 ```bash
-sudo mkdir -p /home/gregochr/cinefilm-data/{postgres,logs,cache,artwork} /home/gregochr/cinefilm-backups/pre-release
+sudo mkdir -p /home/gregochr/cinefilm-data/{postgres,logs,cache,artwork,caddy/data,caddy/config} /home/gregochr/cinefilm-backups/pre-release
 sudo chown -R 1001:1001 /home/gregochr/cinefilm-data/logs /home/gregochr/cinefilm-data/cache /home/gregochr/cinefilm-data/artwork
 sudo chown gregochr:gregochr /home/gregochr/cinefilm-backups /home/gregochr/cinefilm-backups/pre-release
 mkdir -p ~/cinefilm
@@ -188,23 +190,135 @@ If `ls` shows anything that is not a film, **stop**: `sudo umount /mnt/workhorse
 (steps 3 to 5). Nothing in CineFilm's scripts writes under `/mnt/workhorse-films`; the deploy only does a read-only `ls` and
 a `mountpoint` check, and warns (never fails) when it is not mounted.
 
-### 7. Tailscale HTTPS
+### 7. Tailscale HTTPS (the fallback URL; the main one is "Custom domain" below)
 
 Enable MagicDNS and HTTPS certificates in the Tailscale admin console (DNS page) if they are not already on. Then,
 according to `tailscale serve status` from step 1:
 
 ```bash
-# 443 is free on dockermacmini (checked; no serve config exists yet):
-sudo tailscale serve --bg --https=443 http://127.0.0.1:8090
-# 443 is already used by goldenhour (do NOT replace it): use 8443 instead
+# The fallback on 8443 (443 belongs to the Caddy proxy, see "Custom domain"):
 sudo tailscale serve --bg --https=8443 http://127.0.0.1:8090
 
 tailscale serve status        # shows the URL
 ```
 
-The URL is `https://<machine>.<tailnet>.ts.net` (443) or `https://<machine>.<tailnet>.ts.net:8443`. Open it on the Mac
-and the iPhone (both on the tailnet). Never use `tailscale funnel` and never open a router port: CineFilm is tailnet-only
-(`SECURITY.md` rule 6).
+The URL is `https://dockermacmini.tail0c74fa.ts.net:8443`. (Before the custom domain existed, `--https=443` was used
+and the URL had no port; "Custom domain" step 5 moves it.) Open it on the Mac and the iPhone (both on the tailnet).
+Never use `tailscale funnel` and never open a router port: CineFilm is tailnet-only (`SECURITY.md` rule 6).
+
+## Custom domain: https://cinefilm.chrisjgregory.dev (owner, one time)
+
+The app is served at `https://cinefilm.chrisjgregory.dev` by `cinefilm-proxy`, a Caddy container (`deploy/caddy/`)
+that is deployed with every release. It binds **only** the host's two tailnet addresses on 443, gets its certificate
+from Let's Encrypt with the **DNS challenge** through the Cloudflare API (so it never needs port 80, which is
+goldenhour's), and proxies to the app on `127.0.0.1:8090`. Do these steps **in order, before the first release that
+includes the proxy**; `scripts/deploy.sh` stops with exit 4 before touching anything if one of the three `.env` keys
+is missing.
+
+**1. Cloudflare DNS records (dashboard, zone `chrisjgregory.dev`, DNS, Records).** Add two records, both with the
+proxy status **DNS only (grey cloud)**:
+
+| Type | Name | Content | Proxy status |
+|---|---|---|---|
+| A | `cinefilm` | `100.76.73.16` | DNS only |
+| AAAA | `cinefilm` | `fd7a:115c:a1e0::6501:49b3` | DNS only |
+
+It must be grey cloud: an orange-cloud (proxied) record would publish Cloudflare's addresses instead of the tailnet
+ones, send the traffic to Cloudflare (a public path that cannot reach a tailnet-only host, and exactly the exposure
+this setup avoids), and break the certificate flow. Do not use a Cloudflare Tunnel either.
+
+**2. A scoped API token (Cloudflare dashboard, My Profile, API Tokens, Create Token, Custom token).** Name it
+`cinefilm-caddy-dns`. Permissions: **Zone, DNS, Edit** and **Zone, Zone, Read** (the module looks the zone up by name,
+so it needs the read permission too; the two together are the module's documented "single token"). Zone Resources:
+Include, Specific zone, `chrisjgregory.dev`, nothing wider. No other permissions. Copy the token once; it is shown
+only once. Never paste it into chat, an issue or the repo.
+
+**3. Put the token and the tailnet addresses in `~/cinefilm/.env` (on dockermacmini).** The snippet reads the token
+without echoing it, appends only keys that are missing (never overwrites the file) and keeps mode 600. The token
+never appears in the shell history or the terminal:
+
+```bash
+cd ~/cinefilm
+touch .env && chmod 600 .env
+[ -z "$(tail -c1 .env)" ] || echo >> .env                    # make sure the last line ends in a newline
+read -rsp 'Cloudflare API token (input hidden): ' CF_TOKEN; echo
+grep -q '^CLOUDFLARE_API_TOKEN=' .env || printf 'CLOUDFLARE_API_TOKEN=%s\n' "$CF_TOKEN" >> .env
+unset CF_TOKEN
+grep -q '^CINEFILM_TAILNET_IPV4=' .env || echo "CINEFILM_TAILNET_IPV4=$(tailscale ip -4)" >> .env
+grep -q '^CINEFILM_TAILNET_IPV6=' .env || echo "CINEFILM_TAILNET_IPV6=$(tailscale ip -6)" >> .env
+ls -l .env                                                   # -rw------- (600)
+cut -d= -f1 .env | grep -E 'CLOUDFLARE|TAILNET'              # the key names only, never the values
+tailscale ip -4; tailscale ip -6                             # should be 100.76.73.16 and fd7a:115c:a1e0::6501:49b3
+```
+
+(`CINEFILM_DOMAIN` is optional; it defaults to `cinefilm.chrisjgregory.dev`.) If a key already exists with a wrong
+value, edit the file by hand; the snippet leaves existing keys alone.
+
+**4. The Caddy data directory.** Certificates and the ACME account live here, so a redeploy never re-issues them
+(Let's Encrypt rate limits). Created by step 2 of the host setup; on an existing host:
+
+```bash
+sudo mkdir -p /home/gregochr/cinefilm-data/caddy/data /home/gregochr/cinefilm-data/caddy/config
+```
+
+**5. Move `tailscale serve` off 443** (Caddy needs 443 on the tailnet addresses). Add the 8443 fallback first, then
+turn the old 443 config off, then check:
+
+```bash
+sudo tailscale serve --bg --https=8443 http://127.0.0.1:8090   # the fallback: https://dockermacmini.tail0c74fa.ts.net:8443
+sudo tailscale serve --https=443 off                          # the old config: https://dockermacmini.tail0c74fa.ts.net
+tailscale serve status                                        # only :8443 is listed
+```
+
+Check the fallback URL answers from the Mac before going on. Never `tailscale funnel`.
+
+**6. Release** (`scripts/release.sh`, below). The deploy pulls both images, starts `cinefilm-proxy`, and the smoke
+also probes `https://cinefilm.chrisjgregory.dev/` and `/api/home` through it (up to about two minutes, because the
+first start has to obtain the certificate). If only the proxy probes fail, the smoke exits 3 (inconclusive): the
+release is **not** rolled back, because an image rollback cannot fix DNS, a token or a certificate.
+
+**7. Verify** (the host, then a tailnet device, then a device that is off the tailnet):
+
+```bash
+cd ~/cinefilm && export CINEFILM_VERSION=$(cat .deployed-version)
+docker compose ps                                                   # cinefilm-proxy Up (healthy)
+docker logs --tail 40 cinefilm-proxy                                # "certificate obtained successfully", no errors
+dig +short cinefilm.chrisjgregory.dev @1.1.1.1                      # 100.76.73.16 (and AAAA: fd7a:...)
+curl -sSI https://cinefilm.chrisjgregory.dev/ | head -3             # HTTP/2 200, valid certificate
+ss -ltn | grep -E ':(80|443) '                                      # 443 only on 100.76.73.16 and [fd7a:...], never *:443 or 0.0.0.0; :80 is goldenhour's, unchanged
+```
+
+Then open https://cinefilm.chrisjgregory.dev on the Mac and the iPhone (on the tailnet), sign in and play a film. With
+Tailscale off on the phone the site must **not** load (the address is not routable).
+
+**Things to know.**
+
+- **Certificate Transparency.** Every Let's Encrypt certificate is published in public Certificate Transparency logs,
+  so the name `cinefilm.chrisjgregory.dev` is public knowledge. That is accepted: it reveals only that a name exists.
+- **The public A record exposes only an unroutable tailnet address.** `100.76.73.16` is in the CGNAT range (and the
+  AAAA is a tailnet ULA): not reachable from the internet, and reachable on the tailnet only by devices the tailnet
+  admits. The access control is Tailscale, not the name.
+- **Renewal** is automatic (Caddy renews about 30 days before expiry, over the same DNS challenge). Rotating the
+  token: create a new one, edit the `CLOUDFLARE_API_TOKEN` line in `.env` by hand, `docker compose up -d cinefilm-proxy`
+  (compose recreates it with the new value), then delete the old token in Cloudflare.
+- **Boot order.** If `tailscale0` comes up after Docker, Caddy cannot bind, exits, and Docker restarts it until the
+  address exists. If the proxy is not up after a reboot, check `tailscale status` first.
+- Port 80 is never bound: there is no HTTP redirect, so `http://cinefilm.chrisjgregory.dev` simply does not answer.
+
+**Roll back to `tailscale serve` on 443 (and remove the proxy).** Stop the proxy first (it frees 443), then give the
+port back to `tailscale serve`:
+
+```bash
+cd ~/cinefilm && export CINEFILM_VERSION=$(cat .deployed-version)
+docker compose stop cinefilm-proxy && docker compose rm -f cinefilm-proxy
+sudo tailscale serve --bg --https=443 http://127.0.0.1:8090
+sudo tailscale serve --https=8443 off                         # optional: drop the fallback
+tailscale serve status                                         # https://dockermacmini.tail0c74fa.ts.net on 443 again
+```
+
+The proxy comes back at the next deploy unless the compose file is changed (revert the PR that added it);
+`scripts/deploy.sh` also requires the three `.env` keys until then. The Cloudflare records and token can be deleted in
+the dashboard once the proxy is gone.
 
 ### 8. GitHub repository variable (optional, after the first release)
 
@@ -227,8 +341,8 @@ CI (reused, includes `Docker — image builds`), build and push to GHCR, then on
 
 1. guards (a database must exist at `$CINEFILM_DATA_DIR/postgres`, default `/home/gregochr/cinefilm-data`, once something was deployed before);
 2. `pg_dump` (starting `cinefilm-db` first if it is stopped on an existing deployment; skipped only on a genuine first deploy) of the live database into `cinefilm-backups/pre-release/<version>-<timestamp>.dump` (a failed dump stops the deploy);
-3. pull the image, `docker compose up -d`, wait for the container to be healthy;
-4. smoke on `http://127.0.0.1:8090`: `/actuator/health` 200 UP, `/` serves the SPA, `/api/home` is 401 JSON, `/actuator/info` reports the tagged commit;
+3. pull the app and proxy images, `docker compose up -d`, wait for the app container to be healthy;
+4. smoke on `http://127.0.0.1:8090`: `/actuator/health` 200 UP, `/` serves the SPA, `/api/home` is 401 JSON, `/actuator/info` reports the tagged commit; then `/` and `/api/home` again through `https://cinefilm.chrisjgregory.dev` (exit 3, never a rollback, if only those fail);
 5. smoke failed and `SMOKE_ENFORCE=true`: automatic image-only rollback (below). Otherwise the job just fails and says so.
 
 Changelog promotion (`changelog.d/` into `CHANGELOG.md`) is not automated yet.
@@ -272,7 +386,9 @@ cd ~/cinefilm && export CINEFILM_VERSION=$(cat .deployed-version)
 docker compose ps
 docker compose logs -f cinefilm
 docker compose restart cinefilm
+docker compose logs --tail 40 cinefilm-proxy
 curl -s http://127.0.0.1:8090/actuator/health
+curl -sI https://cinefilm.chrisjgregory.dev/ | head -1
 ```
 
 ## Deferred (not built yet)

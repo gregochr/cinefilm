@@ -354,6 +354,33 @@ jobs:
           grep -qx "git.commit.id.full=${{ github.sha }}" "$RUNNER_TEMP/git.properties"
           unzip -p "$RUNNER_TEMP/app.jar" BOOT-INF/classes/static/index.html | grep -q '<div id="root">'
 
+      # The tailnet-only reverse proxy image (Caddy + the Cloudflare DNS module, deploy/caddy/). Built here without pushing
+      # so a broken Dockerfile or Caddyfile fails the PR; deploy.yml builds and pushes it next to the app image.
+      - name: Build the Caddy proxy image (no push)
+        if: needs.changes.outputs.docs_only != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: deploy/caddy
+          push: false
+          load: true
+          tags: cinefilm-caddy:ci
+          cache-from: type=gha,scope=caddy
+          cache-to: type=gha,scope=caddy,mode=max
+
+      - name: Check the Caddy proxy image
+        if: needs.changes.outputs.docs_only != 'true'
+        run: |
+          set -euo pipefail
+          docker run --rm cinefilm-caddy:ci caddy version
+          docker run --rm cinefilm-caddy:ci caddy list-modules | grep -qx 'dns.providers.cloudflare'
+          # The baked-in Caddyfile parses and provisions with placeholder values (no network, nothing is bound or issued).
+          docker run --rm \
+            -e CINEFILM_DOMAIN=cinefilm.example.test \
+            -e CINEFILM_TAILNET_IPV4=100.64.0.1 \
+            -e CINEFILM_TAILNET_IPV6=fd7a:115c:a1e0::1 \
+            -e CLOUDFLARE_API_TOKEN=ci-placeholder \
+            cinefilm-caddy:ci caddy validate --config /etc/caddy/Caddyfile
+
       - name: Documentation-only change — suite skipped
         if: needs.changes.outputs.docs_only == 'true'
         run: |

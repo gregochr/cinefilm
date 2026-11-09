@@ -50,6 +50,19 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # The tailnet-only reverse proxy (Caddy + the Cloudflare DNS module, deploy/caddy/), tagged with the same release
+      # version as the app image so deploy/docker-compose.yml pulls both at ${CINEFILM_VERSION}.
+      - name: Build and push the Caddy proxy image
+        uses: docker/build-push-action@v6
+        with:
+          context: deploy/caddy
+          push: true
+          tags: |
+            ghcr.io/gregochr/cinefilm-caddy:${{ github.ref_name }}
+            ghcr.io/gregochr/cinefilm-caddy:latest
+          cache-from: type=gha,scope=caddy
+          cache-to: type=gha,scope=caddy,mode=max
+
   deploy:
     name: Deploy to dockermacmini
     runs-on: [self-hosted, cinefilm-prod]

@@ -22,7 +22,7 @@ new_world() {
     STUB="$(mktemp -d "$ROOT/w.XXXXXX")"
     DH="$STUB/home"; DATA="$STUB/data"; BK="$STUB/backups"
     mkdir -p "$STUB/bin" "$DH" "$DATA"
-    : > "$DH/.env"
+    printf 'CLOUDFLARE_API_TOKEN=t\nCINEFILM_TAILNET_IPV4=100.1.1.1\nCINEFILM_TAILNET_IPV6=fd7a::1\n' > "$DH/.env"
     : > "$STUB/calls.log"
     echo "v0.1.0" > "$STUB/healthy_dummy"
     cat > "$STUB/bin/docker" <<'EOS'
@@ -53,7 +53,7 @@ EOS
     printf '#!/bin/bash\nexit 0\n' > "$STUB/bin/sleep"
     cat > "$STUB/smoke.sh" <<'EOS'
 #!/bin/bash
-echo "smoke [expect=${EXPECT_COMMIT:-}]" >> "$STUB/calls.log"
+echo "smoke [expect=${EXPECT_COMMIT:-}] [proxy=${SMOKE_PROXY_URL:-}]" >> "$STUB/calls.log"
 grep -qx "$(cat "$STUB/running_version" 2>/dev/null)" "$STUB/smoke_bad_versions" 2>/dev/null && exit 1
 exit 0
 EOS
@@ -92,6 +92,20 @@ assert_file_has "the smoke was told the expected commit" "$STUB/calls.log" "smok
 for d in postgres logs cache artwork; do
     if [ -d "$DATA/$d" ]; then ok "deploy creates the $d data directory (artwork holds the imported Plex posters)"; else bad "no $DATA/$d"; fi
 done
+
+assert_file_has "both images are pulled" "$STUB/calls.log" "pull cinefilm cinefilm-proxy"
+assert_file_has "the smoke probes the default domain through the proxy" "$STUB/calls.log" "[proxy=https://cinefilm.chrisjgregory.dev]"
+
+new_world; deployed v0.1.0; echo 'CINEFILM_DOMAIN="films.example.test"' >> "$DH/.env"
+run_deploy v0.2.0
+assert_file_has "CINEFILM_DOMAIN from .env selects the proxy smoke URL" "$STUB/calls.log" "[proxy=https://films.example.test]"
+
+new_world; deployed v0.1.0; grep -v '^CLOUDFLARE_API_TOKEN=' "$DH/.env" > "$DH/.env.new"; mv "$DH/.env.new" "$DH/.env"
+run_deploy v0.2.0 SMOKE_ENFORCE=true
+assert_eq "missing CLOUDFLARE_API_TOKEN: exit 4, loud" "4" "$RC"
+assert_contains "names the missing key" "$OUT" "CLOUDFLARE_API_TOKEN is not set"
+assert_file_lacks "missing token: nothing pulled" "$STUB/calls.log" " pull"
+assert_file_lacks "missing token: no dump taken" "$STUB/calls.log" "docker exec"
 
 # --- a failed dump stops the deploy before anything is pulled or started ---------------------------------------------
 new_world; deployed v0.1.0; touch "$STUB/fail_dump"
