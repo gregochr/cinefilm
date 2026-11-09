@@ -19,6 +19,9 @@ const byName = (a, b) => {
   return x < y ? -1 : x > y ? 1 : 0;
 };
 
+/** An ISO instant as milliseconds, so "…12:00:00Z" and "…12:00:00.500Z" compare by time; missing is oldest. */
+const instant = (iso) => (iso ? Date.parse(iso) : -Infinity);
+
 export const isComplete = (c) => c.ownedCount >= c.totalCount;
 
 /** Search on display name, the Show filter (`all` | `complete` | `missing`) and the sort (`name` | `added` | `size`). */
@@ -31,7 +34,11 @@ export function browseCollections(collections, { q = '', show = 'all', sort = 'n
     return true;
   });
   const order = {
-    added: (a, b) => (b.lastAddedAt || '').localeCompare(a.lastAddedAt || ''),
+    added: (a, b) => {
+      const x = instant(a.lastAddedAt);
+      const y = instant(b.lastAddedAt);
+      return x === y ? 0 : y > x ? 1 : -1;
+    },
     size: (a, b) => b.ownedCount - a.ownedCount,
     name: () => 0,
   }[sort];

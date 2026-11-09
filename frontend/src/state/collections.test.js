@@ -95,6 +95,16 @@ describe('browseCollections', () => {
     expect(names(browseCollections(LIST(), { sort: 'added' }))).toEqual([2, 4, 3, 1, 5]);
   });
 
+  it('compares instants, not strings: 12:00:00.500Z is newer than 12:00:00Z; never-added is last', () => {
+    const list = [
+      c(1, 'Alpha', 2, 2, '2026-11-09T12:00:00Z'),
+      c(2, 'Beta', 2, 2, '2026-11-09T12:00:00.500Z'),
+      c(3, 'Gamma', 2, 2, null),
+      c(4, 'Delta', 2, 2, '2026-11-09T12:00:00Z'),
+    ];
+    expect(names(browseCollections(list, { sort: 'added' }))).toEqual([2, 1, 4, 3]);
+  });
+
   it('sorts by size, largest first, ties by name', () => {
     expect(names(browseCollections(LIST(), { sort: 'size' }))).toEqual([3, 1, 2, 4, 5]);
   });
