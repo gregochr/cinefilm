@@ -141,9 +141,14 @@ read of the file. Direct play of the file remains only as a fallback.
   the first byte) — at home that is normally `original`, on a poor link 480p or 360p — then let ABR run: hls.js steps
   down at once and up one level after ~60 s healthy (decision 3, via `autoLevelCapping`/`nextAutoLevel`); Safari's
   native HLS adapts on its own (it can't be gated) and the player reads changes from `resize`/`videoHeight`, which
-  identifies the rung because heights are unique per film (Rungs). Toasts
+  identifies the rung because heights are unique per film (Rungs: a transcoded rung exists only *strictly below*
+  the source height, so `original` and e.g. `480p` never share a height; a test asserts uniqueness for every
+  ladder). Toasts
   on every change: "Switching to 720p for smoother playback", "Back to Original" / "Back to 1080p".
-- **Chosen quality** pins the master to that rung (`original` included); remembered per film (decision 2).
+- **Chosen quality** pins the master to that rung; remembered per film (decision 2). Choosing **`original`** pins
+  the copy rung when the file has one, and otherwise **direct-plays the file** (`GET /api/editions/{id}/stream`), so
+  `original` is always available and always means the untouched source video. A pinned quality the film doesn't
+  have (e.g. a remembered `720p` on a 480-line film) falls back to Auto.
 - **hls.js settings**: `maxBufferLength` 120 s and `maxBufferSize` raised so 120 s of the copy rung fits (~250 MB;
   drops to whatever fits on lower rungs), back buffer 30 s; `fragLoadPolicy`/`playlistLoadPolicy`/
   `manifestLoadPolicy` retries with backoff; on a fatal network error keep retrying every 5 s with "Reconnecting…"
