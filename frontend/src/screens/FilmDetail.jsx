@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { resolutionLabel } from '../state/resolution.js';
 import { joinMeta } from '../state/titles.js';
 import { Link, useParams } from 'react-router-dom';
 import { BACKDROP_SIZE, POSTER_SIZE_LARGE } from '../api/images.js';
@@ -126,7 +127,7 @@ export default function FilmDetail() {
   const file = edition.file || {};
   const fileLine = [
     'Original file',
-    [file.height ? `${file.height}p` : null, file.videoCodec].filter(Boolean).join(' '),
+    [resolutionLabel(file.width), file.videoCodec].filter(Boolean).join(' '),
     file.audioSummary,
     addedLabel(file.addedAt),
   ]

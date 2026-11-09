@@ -1,4 +1,5 @@
 // Audio, subtitle and quality option helpers shared by the detail page and the player.
+import { resolutionLabel } from '../state/resolution.js';
 
 export const SUBTITLE_OFF = 'off';
 
@@ -104,11 +105,12 @@ export function qualityName(id) {
 }
 
 /** The mono detail shown on the right of a quality row. */
-export function qualityDetail(quality, { height, activeRung = 'original' } = {}) {
+export function qualityDetail(quality, { width, activeRung = 'original' } = {}) {
   if (quality.id === 'auto') return `now ${qualityName(activeRung)}`;
   const bitrate = formatBitrate(quality.bitrate);
   const parts = [];
-  if (quality.id === 'original' && height) parts.push(`${height}p`);
+  const resolution = quality.id === 'original' ? resolutionLabel(width) : null;
+  if (resolution) parts.push(resolution);
   if (bitrate) parts.push(bitrate);
   if (quality.premade) parts.push('pre-made');
   return parts.join(' · ');
