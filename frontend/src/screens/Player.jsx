@@ -454,7 +454,7 @@ function PlayerView({ film, edition, startAtZero }) {
             <QualityMenu
               qualities={edition.qualities}
               value={quality}
-              height={edition.file?.height}
+              width={edition.file?.width}
               activeRung={activeRung}
               onSelect={chooseQuality}
             />

@@ -151,9 +151,15 @@ describe('tracks: quality', () => {
     expect(currentQualityLabel()).toBe('Auto');
   });
 
-  it('shows the file height only on the Original row, and only when known', () => {
+  it('labels the Original row by width, so a letterboxed file reads 1080p', () => {
+    expect(qualityDetail({ id: 'original', bitrate: 8_000_000 }, { width: 1920 })).toBe(
+      '1080p · 8 Mbps',
+    );
+  });
+
+  it('shows the file resolution (by width) only on the Original row, and only when known', () => {
     expect(qualityDetail({ id: 'original', bitrate: 24_000_000 })).toBe('24 Mbps');
-    expect(qualityDetail({ id: '720p', bitrate: 4_000_000 }, { height: 1080 })).toBe('4 Mbps');
+    expect(qualityDetail({ id: '720p', bitrate: 4_000_000 }, { width: 1920 })).toBe('4 Mbps');
     expect(qualityDetail({ id: '720p' })).toBe('');
     expect(qualityDetail({ id: '720p', premade: true })).toBe('pre-made');
   });

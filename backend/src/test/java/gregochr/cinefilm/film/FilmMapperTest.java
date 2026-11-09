@@ -51,6 +51,18 @@ class FilmMapperTest {
     }
 
     @Test
+    void theFileSummaryCarriesTheWidthAndHeightOfALetterboxedFile() {
+        MediaFile original = file(edition, "/films/heat.mp4");
+        original.setWidth(1920);
+        original.setHeight(796);
+
+        var info = FilmMapper.detail(view(film), null, false, EncoderMode.SOFTWARE).editions().get(0).file();
+
+        assertThat(info.width()).isEqualTo(1920);
+        assertThat(info.height()).isEqualTo(796);
+    }
+
+    @Test
     void anEditionWithoutAFileHasNoFileSummary() {
         assertThat(FilmMapper.detail(view(film), null, false, EncoderMode.SOFTWARE).editions().get(0).file()).isNull();
     }

@@ -92,7 +92,8 @@ public final class FilmMapper {
             .or(() -> original.getAudioStreams().stream().findFirst())
             .map(AudioStream::getChannels)
             .orElse(null);
-        return new FileInfo(original.getId(), original.getVideoCodec(), original.getHeight(), summary,
+        return new FileInfo(original.getId(), original.getVideoCodec(), original.getWidth(),
+            original.getHeight(), summary,
             original.getAddedAt());
     }
 

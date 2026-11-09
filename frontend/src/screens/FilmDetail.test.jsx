@@ -216,9 +216,25 @@ describe('FilmDetail content', () => {
     expect(screen.queryByText('Horror')).not.toBeInTheDocument();
   });
 
+  it('labels a letterboxed 1920x796 file 1080p, not 796p', async () => {
+    filmServer(8, fixtures.wickerMan, (f) => {
+      f.editions[0].file = { width: 1920, height: 796, videoCodec: 'H.264', audioSummary: '5.1' };
+    });
+    renderApp('/films/8');
+    expect(await screen.findByText('Original file · 1080p H.264 · 5.1')).toBeInTheDocument();
+  });
+
+  it('shows no resolution when the file width is unknown, never the height', async () => {
+    filmServer(8, fixtures.wickerMan, (f) => {
+      f.editions[0].file = { height: 796, videoCodec: 'H.264' };
+    });
+    renderApp('/films/8');
+    expect(await screen.findByText('Original file · H.264')).toBeInTheDocument();
+  });
+
   it('describes the original file, leaving out what is unknown', async () => {
     filmServer(8, fixtures.wickerMan, (f) => {
-      f.editions[0].file = { height: 720 };
+      f.editions[0].file = { width: 1280, height: 536 };
     });
     renderApp('/films/8');
     expect(await screen.findByText('Original file · 720p')).toBeInTheDocument();

@@ -39,6 +39,7 @@
       "file": {
         "id": 801,
         "videoCodec": "HEVC",
+        "width": 1920,
         "height": 1080,
         "audioSummary": "2.0",
         "addedAt": "2024-03-12T10:00:00Z"
