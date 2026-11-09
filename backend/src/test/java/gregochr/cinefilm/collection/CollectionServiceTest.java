@@ -150,15 +150,30 @@ class CollectionServiceTest {
     }
 
     @Test
+    void aCollectionWithOneOwnedFilmHasNoCardButTwoMakeOne() {
+        part(alienSaga, 1L, "Alien", 1979, 1, null);
+        part(alienSaga, 2L, "Aliens", 1986, 2, null);
+        Film a1 = owned(1L, "Alien", 1979, 1L, alienSaga, null);
+        Film a2 = owned(2L, "Aliens", 1986, 2L, alienSaga, null);
+        when(collections.findAll()).thenReturn(List.of(alienSaga));
+
+        assertThat(service.cards(List.of(view(a1)))).isEmpty();
+        assertThat(service.cards(List.of(view(a1), view(a2)))).extracting(CollectionCard::ownedCount)
+            .containsExactly(2);
+    }
+
+    @Test
     void cardsAreSortedByName() {
         FilmCollection zebra = collection("Zebra");
         zebra.setId(1L);
         FilmCollection apple = collection("Apple");
         apple.setId(2L);
         Film z = owned(1L, "Z", 2000, 1L, zebra, null);
+        Film z2 = owned(3L, "Z2", 2000, 3L, zebra, null);
         Film a = owned(2L, "A", 2001, 2L, apple, null);
+        Film a2 = owned(4L, "A2", 2001, 4L, apple, null);
         when(collections.findAll()).thenReturn(List.of(zebra, apple));
-        List<FilmView> library = List.of(view(z), view(a));
+        List<FilmView> library = List.of(view(z), view(z2), view(a), view(a2));
 
         assertThat(service.cards(library)).extracting(CollectionCard::name).containsExactly("Apple", "Zebra");
     }

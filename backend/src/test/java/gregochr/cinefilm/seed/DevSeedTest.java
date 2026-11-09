@@ -53,7 +53,7 @@ class DevSeedTest {
             .andExpect(jsonPath("$.notWatchedInYears.length()", greaterThanOrEqualTo(5)))
             .andExpect(jsonPath("$.weeklyTheme.films.length()", greaterThanOrEqualTo(5)))
             .andExpect(jsonPath("$.weeklyTheme.title").value(org.hamcrest.Matchers.startsWith("This week: ")))
-            .andExpect(jsonPath("$.collections", hasSize(3)))
+            .andExpect(jsonPath("$.collections", hasSize(2)))
             .andExpect(jsonPath("$.collections[*].name", hasItem("Three Colours")));
     }
 
@@ -75,7 +75,8 @@ class DevSeedTest {
             .andExpect(jsonPath("$.editions[*].name", hasItem("The Final Cut")))
             .andExpect(jsonPath("$.editions[*].name", hasItem("Director\u2019s Cut")))
             .andExpect(jsonPath("$.editions[*].note", hasItem("No voice-over")))
-            .andExpect(jsonPath("$.collection.name").value("Blade Runner"));
+            // Only one Blade Runner film is seeded, so it is not yet a collection.
+            .andExpect(jsonPath("$.collection").value(org.hamcrest.Matchers.nullValue()));
 
         long heatId = films.findAll().stream().filter(f -> f.getTitle().equals("Heat")).findFirst()
             .orElseThrow().getId();
