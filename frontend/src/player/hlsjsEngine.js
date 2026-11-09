@@ -30,6 +30,8 @@ export function hlsConfig(startSeconds) {
     maxMaxBufferLength: 120,
     maxBufferSize: 250 * 1000 * 1000,
     backBufferLength: 30,
+    // Standard MediaSource only: iOS (ManagedMediaSource) plays natively instead.
+    preferManagedMediaSource: false,
     startPosition: startSeconds > 0 ? startSeconds : -1,
     fragLoadPolicy: policy(10000, 8),
     playlistLoadPolicy: policy(10000, 6),

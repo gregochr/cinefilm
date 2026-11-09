@@ -1,4 +1,5 @@
-// Chooses how a session plays: Safari's own HLS, hls.js (lazy-loaded), or direct play as the fallback.
+// Chooses how a session plays: hls.js (lazy-loaded) wherever Media Source exists, the browser's own HLS on iPhone,
+// or direct play as the fallback.
 import { startHlsJs } from './hlsjsEngine.js';
 import { startNative } from './nativeEngine.js';
 
@@ -7,9 +8,18 @@ export const HLS_MIME = 'application/vnd.apple.mpegurl';
 const loadHlsJs = async () => (await import('hls.js')).default;
 
 /**
+ * Which engine plays HLS. hls.js wherever the standard Media Source exists and hls.js supports it (Chrome, Firefox,
+ * Edge, desktop Safari: our ABR, buffer and reconnect policy apply, and Chrome may claim native HLS too); the
+ * browser's own HLS only where there is no Media Source (iPhone Safari: AirPlay, native fullscreen, power).
+ */
+export function chooseEngine({ hasMediaSource, hlsSupported, nativeHls }) {
+  if (hasMediaSource) return hlsSupported ? 'hlsjs' : null;
+  return nativeHls ? 'native' : null;
+}
+
+/**
  * Starts `session` on `video` and returns the running engine ({ destroy }), or null when this browser can
- * play no HLS (the caller direct-plays the file). Native HLS wins where the browser has it (Safari, so the
- * iPhone keeps its native fullscreen); otherwise hls.js when the browser supports Media Source.
+ * play no HLS (the caller direct-plays the file).
  */
 export async function startStream({
   video,
@@ -20,13 +30,18 @@ export async function startStream({
   loadHls = loadHlsJs,
   ...timing
 }) {
-  if (video.canPlayType(HLS_MIME)) return startNative({ video, session, handlers, ...timing });
+  const hasMediaSource = typeof window.MediaSource !== 'undefined';
+  const nativeHls = Boolean(video.canPlayType(HLS_MIME));
+  if (!hasMediaSource) {
+    if (chooseEngine({ hasMediaSource, hlsSupported: false, nativeHls }) !== 'native') return null;
+    return startNative({ video, session, handlers, ...timing });
+  }
   let Hls;
   try {
     Hls = await loadHls();
   } catch {
     return null;
   }
-  if (!Hls.isSupported()) return null;
+  if (chooseEngine({ hasMediaSource, hlsSupported: Hls.isSupported(), nativeHls }) !== 'hlsjs') return null;
   return startHlsJs({ Hls, video, session, auto, startSeconds, handlers, ...timing });
 }

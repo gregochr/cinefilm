@@ -55,6 +55,7 @@ describe('hls.js settings', () => {
     expect(config.maxMaxBufferLength).toBe(120);
     expect(config.maxBufferSize).toBe(250_000_000);
     expect(config.backBufferLength).toBe(30);
+    expect(config.preferManagedMediaSource).toBe(false);
   });
 
   it('retries fragments, playlists and the manifest with backoff on errors and timeouts', () => {

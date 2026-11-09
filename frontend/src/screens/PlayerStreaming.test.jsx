@@ -11,10 +11,12 @@ vi.mock('../player/probe.js', () => ({ measureThroughput: vi.fn() }));
 
 beforeEach(() => {
   FakeHls.reset();
+  window.MediaSource = class {};
   measureThroughput.mockReset().mockResolvedValue(null);
   sessionStorage.clear();
 });
 afterEach(() => {
+  delete window.MediaSource;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -571,9 +573,10 @@ describe('leaving the player', () => {
   });
 });
 
-describe('Safari: native HLS', () => {
+describe('iPhone Safari: native HLS', () => {
   // `master.status` is what a GET of the master playlist answers (the reload checks the session is alive).
   const nativeOpen = async (film) => {
+    delete window.MediaSource; // iPhone Safari: no Media Source, so native HLS
     vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('maybe');
     const srv = serve({ film });
     const master = { status: 200 };

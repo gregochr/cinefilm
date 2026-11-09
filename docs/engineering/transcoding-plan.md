@@ -132,12 +132,16 @@ read of the file. Direct play of the file remains only as a fallback.
 
 ## Player
 
-- **`streamSource`**: HLS everywhere — **native on Safari** (Mac and iPhone; iPhone native fullscreen keeps working,
-  decision 10) and **hls.js** (pinned, lazy-loaded) on Chrome and Firefox. Direct play only in the worker-offline
+- **`streamSource`**: HLS everywhere — **hls.js** (pinned, lazy-loaded, standard MediaSource only) wherever
+  `window.MediaSource` exists and `Hls.isSupported()` (Chrome, Firefox, Edge and desktop Safari), and the browser's
+  **native HLS only when there is no standard MediaSource** (iPhone Safari: native fullscreen, AirPlay and power
+  efficiency, decision 10). Recent desktop Chrome answers `canPlayType('application/vnd.apple.mpegurl')` truthy, so
+  `canPlayType` alone must never pick the engine: Chrome is where the buffering was seen and needs our ABR, buffer
+  and reconnect policy (`chooseEngine` in `streamSource.js`; `preferManagedMediaSource: false`). Direct play only in the worker-offline
   state or for a file whose index isn't ready and can't be built in time.
 - **Auto**: start rung from a **time-boxed probe** (≈1.5 s of a range request on the original, counting bytes after
   the first byte) — at home that is normally `original`, on a poor link 480p or 360p — then let ABR run: hls.js steps
-  down at once and up one level after ~60 s healthy (decision 3, via `autoLevelCapping`/`nextAutoLevel`); Safari's
+  down at once and up one level after ~60 s healthy (decision 3, via `autoLevelCapping`/`nextAutoLevel`); iPhone's
   native HLS adapts on its own (it can't be gated) and the player reads changes from `resize`/`videoHeight`, which
   identifies the rung because heights are unique per film (Rungs: a transcoded rung exists only *strictly below*
   the source height, so `original` and e.g. `480p` never share a height; a test asserts uniqueness for every

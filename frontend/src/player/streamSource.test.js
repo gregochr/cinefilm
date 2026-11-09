@@ -1,10 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeHls } from '../test/fakeHls.js';
-import { HLS_MIME, startStream } from './streamSource.js';
+import { chooseEngine, HLS_MIME, startStream } from './streamSource.js';
 
 vi.mock('hls.js', async () => ({ default: (await import('../test/fakeHls.js')).FakeHls }));
 
-beforeEach(() => FakeHls.reset());
+beforeEach(() => {
+  FakeHls.reset();
+  window.MediaSource = class {};
+});
+afterEach(() => {
+  delete window.MediaSource;
+});
 
 const session = {
   masterUrl: '/api/sessions/abc/master.m3u8',
@@ -30,7 +36,21 @@ const start = (video, over = {}) =>
   startStream({ video, session, auto: true, startSeconds: 0, handlers, ...over });
 
 describe('choosing how to play a session', () => {
-  it('uses the browser’s own HLS where it has it (Safari, iPhone), without loading hls.js', async () => {
+  it('is null without Media Source and without native HLS', async () => {
+    delete window.MediaSource;
+    expect(await start(videoThat(false))).toBeNull();
+  });
+
+  it('still picks hls.js when canPlayType claims native HLS but Media Source exists (Chrome)', async () => {
+    const video = videoThat(true);
+    const engine = await start(video);
+    expect(FakeHls.instances).toHaveLength(1);
+    expect(video.getAttribute('src')).toBeNull();
+    engine.destroy();
+  });
+
+  it('uses the browser’s own HLS only without Media Source (iPhone), without loading hls.js', async () => {
+    delete window.MediaSource;
     const loadHls = vi.fn();
     const video = videoThat(true);
     const engine = await start(video, { loadHls });
@@ -69,5 +89,18 @@ describe('choosing how to play a session', () => {
   it('is null (direct play) when hls.js cannot be loaded', async () => {
     const loadHls = vi.fn().mockRejectedValue(new Error('chunk failed'));
     expect(await start(videoThat(false), { loadHls })).toBeNull();
+  });
+
+  it.each([
+    [true, true, true, 'hlsjs'],
+    [true, true, false, 'hlsjs'],
+    [true, false, true, null],
+    [true, false, false, null],
+    [false, true, true, 'native'],
+    [false, false, true, 'native'],
+    [false, true, false, null],
+    [false, false, false, null],
+  ])('chooseEngine: mediaSource=%s hlsSupported=%s native=%s -> %s', (mediaSource, hls, native, expected) => {
+    expect(chooseEngine({ hasMediaSource: mediaSource, hlsSupported: hls, nativeHls: native })).toBe(expected);
   });
 });
