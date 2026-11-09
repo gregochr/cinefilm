@@ -226,7 +226,8 @@ class PlexImportFlowTest extends ApiTestBase {
         when(matcher.match(new gregochr.cinefilm.library.TitleGuess("Alien", 1979), 100 * MIN)).thenReturn(
             new MatchOutcome(Status.MATCHED, movie(8078, "Alien 3"), List.of()));
         ScanService scan = new ScanService(new LibraryRoot(System.getProperty("java.io.tmpdir")), scanner,
-            mock(FfprobeService.class), tmdb, matcher, ingest, Runnable::run, CLOCK, new LibraryLock());
+            mock(FfprobeService.class), tmdb, matcher, ingest, Runnable::run, CLOCK, new LibraryLock(),
+            event -> { });
 
         scan.start("admin");
 

@@ -31,7 +31,8 @@ class LibraryLockTest {
     private final LibraryIngest ingest = mock(LibraryIngest.class);
     private ScanService scans() {
         return new ScanService(new LibraryRoot(library.toString()), mock(LibraryScanner.class),
-            mock(FfprobeService.class), mock(TmdbApi.class), mock(TmdbMatcher.class), ingest, queued::add, CLOCK, lock);
+            mock(FfprobeService.class), mock(TmdbApi.class), mock(TmdbMatcher.class), ingest, queued::add, CLOCK, lock,
+            event -> { });
     }
 
     @Test

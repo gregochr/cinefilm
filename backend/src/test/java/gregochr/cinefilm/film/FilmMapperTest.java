@@ -63,7 +63,7 @@ class FilmMapperTest {
 
     private java.util.List<FilmDtos.QualityDto> qualities(int height, EncoderMode mode) {
         file(edition, "heat.mp4").setHeight(height);
-        return FilmMapper.detail(view(film), null, mode).editions().get(0).qualities();
+        return FilmMapper.detail(view(film), null, false, mode).editions().get(0).qualities();
     }
 
     @Test
@@ -108,7 +108,7 @@ class FilmMapperTest {
     void aFileWithoutAKnownHeightOffersOnlyAutoAndOriginal() {
         file(edition, "heat.mp4").setHeight(null);
 
-        assertThat(FilmMapper.detail(view(film), null, EncoderMode.VAAPI).editions().get(0).qualities())
+        assertThat(FilmMapper.detail(view(film), null, false, EncoderMode.VAAPI).editions().get(0).qualities())
             .extracting(FilmDtos.QualityDto::id).containsExactly("auto", "original");
     }
 
