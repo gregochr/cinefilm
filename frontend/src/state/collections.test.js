@@ -189,6 +189,16 @@ describe('groupFilms', () => {
     ]);
   });
 
+  it('places by the server sort title, not the title, when the film has one', () => {
+    // An import can give "Zulu" the sort title "aardvark": the server lists it first, so the tile follows it.
+    const byTitle = [
+      { ...f(1, 'Zulu', 1964), sortTitle: 'aardvark' },
+      f(2, 'Heat', 1995),
+      f(3, 'The Matrix', 1999, 2),
+    ];
+    expect(labels(groupFilms(byTitle, COLLECTIONS, 'title'))).toEqual(['Zulu', 'Heat', '[2]']);
+  });
+
   it('keeps a title tie stable: the film first, then the tile', () => {
     const items = groupFilms(
       [f(1, 'Alien', 1979), f(2, 'Aliens', 1986, 1), f(3, 'Alien 3', 1992, 1)],

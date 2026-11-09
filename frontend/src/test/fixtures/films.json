@@ -14,7 +14,8 @@
         "editionId": 11
       },
       "director": "Michael Mann",
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "heat"
     },
     {
       "id": 2,
@@ -29,7 +30,8 @@
         "editionId": 21
       },
       "director": "Denis Villeneuve",
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "arrival"
     },
     {
       "id": 3,
@@ -44,7 +46,8 @@
         "editionId": 31
       },
       "director": "Roman Polanski",
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "chinatown"
     },
     {
       "id": 4,
@@ -59,7 +62,8 @@
         "editionId": 41
       },
       "director": null,
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "paris, texas"
     },
     {
       "id": 5,
@@ -74,7 +78,8 @@
         "editionId": 51
       },
       "director": null,
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "moon"
     },
     {
       "id": 6,
@@ -85,7 +90,8 @@
       "watched": true,
       "progress": null,
       "director": "Ridley Scott",
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "blade runner"
     },
     {
       "id": 7,
@@ -96,7 +102,8 @@
       "watched": true,
       "progress": null,
       "director": "Ridley Scott",
-      "collectionId": 1
+      "collectionId": 1,
+      "sortTitle": "alien"
     },
     {
       "id": 117,
@@ -107,7 +114,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": 1
+      "collectionId": 1,
+      "sortTitle": "alien 3"
     },
     {
       "id": 100,
@@ -118,7 +126,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "zodiac"
     },
     {
       "id": 101,
@@ -129,7 +138,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "local hero"
     },
     {
       "id": 102,
@@ -140,7 +150,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "in the mood for love"
     },
     {
       "id": 103,
@@ -151,7 +162,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "conversation"
     },
     {
       "id": 104,
@@ -162,7 +174,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "spirited away"
     },
     {
       "id": 105,
@@ -173,7 +186,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "drive"
     },
     {
       "id": 106,
@@ -184,7 +198,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "third man"
     },
     {
       "id": 107,
@@ -195,7 +210,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "brief encounter"
     },
     {
       "id": 108,
@@ -206,7 +222,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "lost in translation"
     },
     {
       "id": 109,
@@ -217,7 +234,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "withnail and i"
     },
     {
       "id": 110,
@@ -228,7 +246,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "long good friday"
     },
     {
       "id": 111,
@@ -239,7 +258,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "kes"
     },
     {
       "id": 112,
@@ -250,7 +270,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "conversation"
     },
     {
       "id": 113,
@@ -261,7 +282,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "taxi driver"
     },
     {
       "id": 114,
@@ -272,7 +294,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "don't look now"
     },
     {
       "id": 115,
@@ -283,7 +306,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": null
+      "collectionId": null,
+      "sortTitle": "wicker man"
     },
     {
       "id": 118,
@@ -294,7 +318,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": 3
+      "collectionId": 3,
+      "sortTitle": "three colours: blue"
     },
     {
       "id": 119,
@@ -305,7 +330,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": 3
+      "collectionId": 3,
+      "sortTitle": "three colours: white"
     },
     {
       "id": 120,
@@ -316,7 +342,8 @@
       "watched": false,
       "progress": null,
       "director": null,
-      "collectionId": 3
+      "collectionId": 3,
+      "sortTitle": "three colours: red"
     }
   ],
   "facets": {

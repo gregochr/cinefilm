@@ -39,6 +39,12 @@ describe('TabBar', () => {
     expect(currentTabs()).toEqual(['Library']);
   });
 
+  it('marks Library as current on the Collections tab too', () => {
+    renderAt('/library/collections');
+    expect(currentTabs()).toEqual(['Library']);
+    expect(screen.getByRole('link', { name: 'Library' })).toHaveAttribute('aria-current', 'page');
+  });
+
   it('marks Search, not Library, as current when the library was opened to search', () => {
     renderAt('/library?focus=search');
     expect(currentTabs()).toEqual(['Search']);

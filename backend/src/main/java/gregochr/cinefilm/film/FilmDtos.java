@@ -16,10 +16,12 @@ public final class FilmDtos {
     /**
      * The compact film representation used in rows and grids. {@code collectionId} is set only on the library
      * listing ({@code GET /api/films}) and only when the film's collection has at least
-     * {@code CollectionService.MIN_OWNED} films in the library; everywhere else it is null.
+     * {@code CollectionService.MIN_OWNED} films in the library; everywhere else it is null. {@code sortTitle} is the
+     * key the library sorts titles by (an import may set it to something other than the title).
      */
     public record FilmCard(Long id, String title, Integer year, String posterPath, String backdropPath,
-                           boolean watched, Progress progress, String director, Long collectionId) {
+                           boolean watched, Progress progress, String director, Long collectionId,
+                           String sortTitle) {
     }
 
     /** A director or actor reference. */

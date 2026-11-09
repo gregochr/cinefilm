@@ -103,7 +103,8 @@ export function groupFilms(films, collections, sort = 'added') {
   const merged = [];
   let next = 0;
   for (const film of loose) {
-    const key = sortKey(film.film.title);
+    // The server sorts by the film's sort title, which an import can set to something else.
+    const key = film.film.sortTitle ?? sortKey(film.film.title);
     while (next < grouped.length && grouped[next].key < key) merged.push(grouped[next++].tile);
     merged.push(film);
   }

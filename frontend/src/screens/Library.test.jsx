@@ -312,10 +312,17 @@ describe('Group collections', () => {
                 ...fixtures.films.films[0],
                 id: 117,
                 title: 'Alien 3',
+                sortTitle: 'alien 3',
                 year: 1992,
                 collectionId: 1,
               },
-              { ...fixtures.films.films[0], id: 2, title: 'Zodiac', collectionId: null },
+              {
+                ...fixtures.films.films[0],
+                id: 2,
+                title: 'Zodiac',
+                sortTitle: 'zodiac',
+                collectionId: null,
+              },
             ],
             facets: { genres: [], decades: [] },
           })
@@ -327,7 +334,9 @@ describe('Group collections', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Collection · 1 film')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Three Colours/ })).not.toBeInTheDocument();
-    expect(screen.getByText('2 films in 2 tiles · sorted by recently added')).toBeInTheDocument();
+    expect(
+      await screen.findByText('2 films in 2 tiles · sorted by recently added'),
+    ).toBeInTheDocument();
   });
 
   it('puts a collection under the title sort at its display name among the films', async () => {
@@ -337,8 +346,21 @@ describe('Group collections', () => {
         ? respond({
             total: 4,
             films: [
-              { ...fixtures.films.films[0], id: 1, title: 'Aardvark', collectionId: null },
-              { ...fixtures.films.films[0], id: 7, title: 'Alien', year: 1979, collectionId: 1 },
+              {
+                ...fixtures.films.films[0],
+                id: 1,
+                title: 'Aardvark',
+                sortTitle: 'aardvark',
+                collectionId: null,
+              },
+              {
+                ...fixtures.films.films[0],
+                id: 7,
+                title: 'Alien',
+                sortTitle: 'alien',
+                year: 1979,
+                collectionId: 1,
+              },
               {
                 ...fixtures.films.films[0],
                 id: 117,
@@ -355,7 +377,7 @@ describe('Group collections', () => {
     renderApp('/library?sort=title');
     await screen.findByRole('link', { name: 'Alien, collection of 2 films' });
     expect(tileNames().map((n) => n.split(',')[0])).toEqual(['Aardvark', 'Alien', 'Zodiac']);
-    expect(screen.getByText('4 films in 3 tiles · sorted by title')).toBeInTheDocument();
+    expect(await screen.findByText('4 films in 3 tiles · sorted by title')).toBeInTheDocument();
   });
 
   it('says "1 film in 1 tile" in the singular', async () => {

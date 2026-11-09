@@ -127,7 +127,8 @@ class FilmsApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.films[0].progress.positionMs").value(64 * MIN))
             .andExpect(jsonPath("$.films[0].progress.runtimeMs").value(170 * MIN))
             .andExpect(jsonPath("$.films[0].progress.editionId").value(heatEdition.getId()))
-            .andExpect(jsonPath("$.films[0].collectionId").value(nullValue()));
+            .andExpect(jsonPath("$.films[0].collectionId").value(nullValue()))
+            .andExpect(jsonPath("$.films[0].sortTitle").value("heat"));
     }
 
     @Test

@@ -4,14 +4,9 @@ import { HomeIcon, LibraryIcon, SearchIcon } from './icons.jsx';
 /** Phone bottom tab bar (shown by CSS at ≤ 600px): Home / Library / Search. */
 export default function TabBar() {
   const { search, pathname } = useLocation();
-  const searching = pathname === '/library' && new URLSearchParams(search).has('focus');
-  const current = searching
-    ? 'search'
-    : pathname === '/'
-      ? 'home'
-      : pathname === '/library'
-        ? 'library'
-        : '';
+  const inLibrary = pathname === '/library' || pathname.startsWith('/library/');
+  const searching = inLibrary && new URLSearchParams(search).has('focus');
+  const current = searching ? 'search' : pathname === '/' ? 'home' : inLibrary ? 'library' : '';
   const tab = (key, to, label, Icon) => (
     <Link
       to={to}

@@ -42,7 +42,7 @@ public final class FilmMapper {
             ? film.getCollection().getId() : null;
         return new FilmCard(film.getId(), film.getTitle(), film.getYear(), film.getPosterPath(),
             film.getBackdropPath(), view.watched(), view.progress().orElse(null),
-            director.isEmpty() ? null : director, collectionId);
+            director.isEmpty() ? null : director, collectionId, film.getSortTitle());
     }
 
     /** A person reference. */

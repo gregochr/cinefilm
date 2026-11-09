@@ -37,6 +37,9 @@ class FilmMapperTest {
         saga.setId(7L);
         film.setCollection(saga);
 
+        assertThat(FilmMapper.card(view(film)).sortTitle()).isEqualTo(film.getSortTitle());
+        film.setTitleAndSort("Zulu", "aardvark");
+        assertThat(FilmMapper.card(view(film)).sortTitle()).isEqualTo("aardvark");
         assertThat(FilmMapper.card(view(film)).collectionId()).isNull();
         assertThat(FilmMapper.card(view(film), java.util.Set.of(7L)).collectionId()).isEqualTo(7L);
         assertThat(FilmMapper.card(view(film), java.util.Set.of(8L)).collectionId()).isNull();
