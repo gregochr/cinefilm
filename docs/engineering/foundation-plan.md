@@ -172,11 +172,12 @@ The "Dim the lights" switch is stored in the play request (`?dim=0`) and has no 
 - **Phase 2 — real library.** Folder scanner with `ffprobe` (streams, codecs, durations), TMDB matching and
   metadata (films, people, collections, images with a local cache), multiple files for one TMDB id flagged for
   "Group as editions", Admin: Library scan panel, Films needing attention, Fix match (TMDB search with runtime).
-- **Phase 3 — transcoding.** Separate transcode worker (heartbeat, sessions), HLS output for 1080p/720p/480p, audio-only
-  transcode for Safari-unplayable tracks, Auto with step-down / step-up (decision 3) and toasts, the network
-  indicator and remote/slow detection, worker-offline behaviour, pre-made versions with the automatic queue
-  (decision 15), scrubber sprite sheets at scan time (decision 14). Admin: worker and pre-made panels.
 - **Phase 4 — Plex import.** Import films, posters and watch history from Plex; Admin import panel. Plan: `docs/engineering/plex-import-plan.md` (brought forward; built in the "import the library from Plex" PR).
+- **Phase 3 — transcoding and network resilience (owner's top priority, 2026-11-09).** Plan:
+  `docs/engineering/transcoding-plan.md` — one HLS stream per playback whose top rung is the original (video copied)
+  and whose lower rungs (1080p/720p/480p/360p) are transcoded live with VAAPI on dockermacmini, ABR in hls.js and
+  Safari, the same policy at home and away. Server-side pre-made "travel copies" (decision 15) are replaced by a later
+  "Download for offline"; the separate worker and workhorse failover wait until dockermacmini proves too slow.
 - **Phase 5 — ship.** Production polish: the undrawn mobile screens (Library, Person, Admin), Apple TV
   focus-navigation groundwork. (Packaging, deploy, backups and HTTPS behind Tailscale moved to
   `ci-test-deploy-plan.md` phases 7–9, which land before product phase 2.)
