@@ -10,8 +10,9 @@ export const SCAN_POLL_MS = 1500;
 export const PLEX_RECHECK_MS = 30000;
 
 /**
- * The Library scan panel: status and counts, polled while a scan runs, plus "Scan now". Starting a scan
- * while one is already running (409) is not an error: the panel just shows it running.
+ * The Library scan panel: status and counts, polled while a scan or a ratings refresh runs, plus "Scan now" and
+ * "Refresh ratings". Starting either while one is already running (409) is not an error: the panel just shows it
+ * running.
  */
 export function useScan() {
   const { data, error, loading, reload } = useResource('admin-scan', (options) =>
@@ -19,13 +20,34 @@ export function useScan() {
   );
   const [starting, setStarting] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [ratingsStarting, setRatingsStarting] = useState(false);
+  const [ratingsNotice, setRatingsNotice] = useState(null);
   const running = Boolean(data?.running);
+  const ratingsRunning = Boolean(data?.ratingsRunning);
 
+  // The same status carries the ratings refresh, so one poll follows whichever is running.
   useEffect(() => {
-    if (!running) return undefined;
+    if (!running && !ratingsRunning) return undefined;
     const id = setTimeout(reload, SCAN_POLL_MS);
     return () => clearTimeout(id);
-  }, [running, data, error, reload]);
+  }, [running, ratingsRunning, data, error, reload]);
+
+  const refreshRatings = useCallback(async () => {
+    setRatingsStarting(true);
+    setRatingsNotice(null);
+    try {
+      await adminApi.startRatingsRefresh();
+    } catch (failure) {
+      setRatingsNotice(
+        failure instanceof ApiError && failure.status === 409
+          ? 'A ratings refresh is already running.'
+          : 'Could not start the ratings refresh.',
+      );
+    } finally {
+      setRatingsStarting(false);
+      reload();
+    }
+  }, [reload]);
 
   const startScan = useCallback(async () => {
     setStarting(true);
@@ -44,7 +66,18 @@ export function useScan() {
     }
   }, [reload]);
 
-  return { scan: data, error, loading, starting, notice, startScan, reload };
+  return {
+    scan: data,
+    error,
+    loading,
+    starting,
+    notice,
+    startScan,
+    ratingsStarting,
+    ratingsNotice,
+    refreshRatings,
+    reload,
+  };
 }
 
 /** Films needing attention. `version` changes when a scan finishes, so the list refreshes. */

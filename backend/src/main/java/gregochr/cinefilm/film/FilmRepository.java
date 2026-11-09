@@ -31,4 +31,20 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
 
     /** Films in the given match state. */
     List<Film> findByMatchStatusOrderBySortTitle(MatchStatus status);
+
+    /** Ids of films whose ratings were never fetched or were fetched before the cutoff: never first, then oldest. */
+    @org.springframework.data.jpa.repository.Query(
+        "select f.id from Film f where f.ratingsFetchedAt is null or f.ratingsFetchedAt < :cutoff "
+            + "order by f.ratingsFetchedAt asc nulls first, f.id asc")
+    List<Long> findIdsWithRatingsDueBefore(
+        @org.springframework.data.repository.query.Param("cutoff") java.time.Instant cutoff);
+
+    /** Ids of every film: ratings never fetched first, then the oldest fetch. */
+    @org.springframework.data.jpa.repository.Query(
+        "select f.id from Film f order by f.ratingsFetchedAt asc nulls first, f.id asc")
+    List<Long> findIdsByRatingsOldestFirst();
+
+    /** When ratings were last fetched for any film, or null when never. */
+    @org.springframework.data.jpa.repository.Query("select max(f.ratingsFetchedAt) from Film f")
+    java.time.Instant findLatestRatingsFetchedAt();
 }

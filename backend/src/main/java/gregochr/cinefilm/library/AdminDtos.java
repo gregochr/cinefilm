@@ -57,9 +57,13 @@ public final class AdminDtos {
      * @param progress live progress while running, else null
      * @param lastScan the last finished scan, or null if none
      * @param counts the counts
+     * @param ratingsLastRefreshedAt when ratings were last fetched for any film, or null if never
+     * @param ratingsRunning true while a ratings refresh runs
+     * @param ratingsEnabled true when an OMDb API key is configured
      */
     public record ScanStatusDto(boolean running, String folder, ProgressDto progress, LastScanDto lastScan,
-                                CountsDto counts) {
+                                CountsDto counts, Instant ratingsLastRefreshedAt, boolean ratingsRunning,
+                                boolean ratingsEnabled) {
     }
 
     /**

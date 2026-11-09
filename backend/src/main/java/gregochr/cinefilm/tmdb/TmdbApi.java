@@ -39,4 +39,13 @@ public interface TmdbApi {
      * @throws TmdbUnavailableException when TMDB cannot answer
      */
     Optional<CollectionDetails> collection(long id);
+
+    /**
+     * A film's IMDb id from {@code /3/movie/{id}/external_ids}, for films stored before the id was kept.
+     *
+     * @param id TMDB id
+     * @return the IMDb id, or empty when TMDB does not know the film or has no IMDb id for it
+     * @throws TmdbUnavailableException when TMDB cannot answer
+     */
+    Optional<String> imdbId(long id);
 }

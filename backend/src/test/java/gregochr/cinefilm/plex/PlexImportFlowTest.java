@@ -44,6 +44,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -58,6 +59,8 @@ class PlexImportFlowTest extends ApiTestBase {
     private static final String HEAT_ART = "/library/metadata/1/art/3";
     private static final String ALIEN_THUMB = "/library/metadata/2/thumb/4";
     private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
 
     @MockitoBean
     private PlexApi plex;
@@ -138,7 +141,7 @@ class PlexImportFlowTest extends ApiTestBase {
         when(tmdb.movie(949)).thenReturn(Optional.of(movie(949, "Heat")));
         when(tmdb.movie(348)).thenReturn(Optional.of(movie(348, "Alien")));
         service = new PlexImportService(plex, tmdb, ingest, writer, artwork, scanRuns, importRuns, new LibraryLock(),
-            Runnable::run, CLOCK, PREFIX);
+            Runnable::run, CLOCK, PREFIX, events);
     }
 
     private PlexImportReport lastReport() throws Exception {
@@ -244,7 +247,7 @@ class PlexImportFlowTest extends ApiTestBase {
     @Test
     void whenNoFilePairsNothingIsWrittenAndTheRunRecordsWhy() {
         service = new PlexImportService(plex, tmdb, ingest, writer, artwork, scanRuns, importRuns, new LibraryLock(),
-            Runnable::run, CLOCK, "/somewhere/else/");
+            Runnable::run, CLOCK, "/somewhere/else/", events);
         long filmRows = films.count();
 
         service.start();

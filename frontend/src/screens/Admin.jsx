@@ -14,16 +14,53 @@ import {
   reportLists,
   reportTiles,
 } from '../state/plexFormat.js';
+import { describeRatingsRefresh } from '../state/ratings.js';
 import {
   countTiles,
   describeLastScan,
+  formatScanTime,
   kindLabel,
   progressPercent,
   progressText,
   titleWithYear,
 } from '../state/scanFormat.js';
 
-function ScanPanel({ scan, loading, error, starting, notice, onScan, onRetry }) {
+function RatingsLine({ scan, starting, notice, onRefresh }) {
+  const running = Boolean(scan.ratingsRunning);
+  const enabled = Boolean(scan.ratingsEnabled);
+  return (
+    <div className="admin__ratings">
+      <p className="admin__mono admin__ratings-line">
+        {enabled
+          ? describeRatingsRefresh(scan.ratingsLastRefreshedAt, formatScanTime)
+          : 'Ratings need an OMDb API key'}
+      </p>
+      <div className="admin__actions">
+        <Button disabled={!enabled || running || starting} onClick={onRefresh}>
+          {running ? 'Refreshing ratings…' : 'Refresh ratings'}
+        </Button>
+        {notice ? (
+          <span className="admin__notice" role="status">
+            {notice}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ScanPanel({
+  scan,
+  loading,
+  error,
+  starting,
+  notice,
+  ratingsStarting,
+  ratingsNotice,
+  onScan,
+  onRefreshRatings,
+  onRetry,
+}) {
   let body;
   if (loading && !scan) {
     body = (
@@ -90,6 +127,12 @@ function ScanPanel({ scan, loading, error, starting, notice, onScan, onRetry }) 
             </span>
           ) : null}
         </div>
+        <RatingsLine
+          scan={scan}
+          starting={ratingsStarting}
+          notice={ratingsNotice}
+          onRefresh={onRefreshRatings}
+        />
       </>
     );
   }
@@ -294,7 +337,18 @@ function TmdbMark() {
 }
 
 export default function Admin() {
-  const { scan, error, loading, starting, notice, startScan, reload } = useScan();
+  const {
+    scan,
+    error,
+    loading,
+    starting,
+    notice,
+    startScan,
+    ratingsStarting,
+    ratingsNotice,
+    refreshRatings,
+    reload,
+  } = useScan();
   const plexImport = usePlexImport();
   // The list refreshes when a scan or a Plex import finishes: both settle matches.
   const attention = useAttention(
@@ -318,7 +372,10 @@ export default function Admin() {
           error={error}
           starting={starting}
           notice={notice}
+          ratingsStarting={ratingsStarting}
+          ratingsNotice={ratingsNotice}
           onScan={startScan}
+          onRefreshRatings={refreshRatings}
           onRetry={reload}
         />
         <AttentionPanel

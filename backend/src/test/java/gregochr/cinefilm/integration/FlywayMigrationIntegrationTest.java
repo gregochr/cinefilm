@@ -45,6 +45,20 @@ class FlywayMigrationIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void theRatingsColumnsExistWithTheirTypesAndAreNullable() {
+        List<String> columns = jdbc.queryForList(
+            "SELECT column_name || ':' || data_type || ':' || is_nullable FROM information_schema.columns "
+                + "WHERE table_name = 'film' AND column_name IN ('imdb_id', 'imdb_rating', 'imdb_votes', "
+                + "'rt_score', 'rt_url', 'ratings_fetched_at') ORDER BY column_name", String.class);
+        assertThat(columns).containsExactly("imdb_id:character varying:YES", "imdb_rating:numeric:YES",
+            "imdb_votes:integer:YES", "ratings_fetched_at:timestamp with time zone:YES", "rt_score:integer:YES",
+            "rt_url:character varying:YES");
+        Integer scale = jdbc.queryForObject("SELECT numeric_scale FROM information_schema.columns "
+            + "WHERE table_name = 'film' AND column_name = 'imdb_rating'", Integer.class);
+        assertThat(scale).isEqualTo(1);
+    }
+
+    @Test
     void instantsAreStoredWithTimeZone() {
         String type = jdbc.queryForObject(
             "SELECT data_type FROM information_schema.columns WHERE table_name = 'film' AND column_name = 'added_at'",

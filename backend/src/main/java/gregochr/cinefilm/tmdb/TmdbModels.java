@@ -59,11 +59,21 @@ public final class TmdbModels {
      * @param directors directors in credit order
      * @param cast the top ten cast in billing order
      * @param collection the collection it belongs to, or null
+     * @param imdbId the IMDb id (for example {@code tt0113277}), or null when TMDB has none
      */
     public record MovieDetails(long id, String title, String originalTitle, Integer year, String overview,
                                Integer runtimeMinutes, List<String> genres, String posterPath, String backdropPath,
                                double popularity, List<Credit> directors, List<Credit> cast,
-                               CollectionRef collection) {
+                               CollectionRef collection, String imdbId) {
+
+        /** A film with no IMDb id. */
+        public MovieDetails(long id, String title, String originalTitle, Integer year, String overview,
+                            Integer runtimeMinutes, List<String> genres, String posterPath, String backdropPath,
+                            double popularity, List<Credit> directors, List<Credit> cast,
+                            CollectionRef collection) {
+            this(id, title, originalTitle, year, overview, runtimeMinutes, genres, posterPath, backdropPath,
+                popularity, directors, cast, collection, null);
+        }
     }
 
     /**
