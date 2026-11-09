@@ -86,6 +86,24 @@ describe('choosing how to play a session', () => {
     expect(FakeHls.instances).toHaveLength(0);
   });
 
+  it('attaches nothing when cancelled while hls.js was loading', async () => {
+    let cancelled = false;
+    const loadHls = vi.fn(async () => {
+      cancelled = true;
+      return FakeHls;
+    });
+    const video = videoThat(false);
+    expect(await start(video, { loadHls, isCancelled: () => cancelled })).toBeNull();
+    expect(FakeHls.instances).toHaveLength(0);
+    expect(video.getAttribute('src')).toBeNull();
+  });
+
+  it('still starts when the predicate says it is not cancelled', async () => {
+    const engine = await start(videoThat(false), { isCancelled: () => false });
+    expect(FakeHls.instances).toHaveLength(1);
+    engine.destroy();
+  });
+
   it('is null (direct play) when hls.js cannot be loaded', async () => {
     const loadHls = vi.fn().mockRejectedValue(new Error('chunk failed'));
     expect(await start(videoThat(false), { loadHls })).toBeNull();

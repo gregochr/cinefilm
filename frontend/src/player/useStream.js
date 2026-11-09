@@ -134,6 +134,7 @@ export function useStream({
         session: created,
         auto: quality === AUTO,
         startSeconds: startMs / 1000,
+        isCancelled: () => cancelled,
         handlers: {
           onLevel(next, { initial }) {
             const previous = rung;

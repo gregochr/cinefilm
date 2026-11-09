@@ -19,7 +19,8 @@ export function chooseEngine({ hasMediaSource, hlsSupported, nativeHls }) {
 
 /**
  * Starts `session` on `video` and returns the running engine ({ destroy }), or null when this browser can
- * play no HLS (the caller direct-plays the file).
+ * play no HLS (the caller direct-plays the file). `isCancelled` is checked once hls.js has loaded: when it
+ * says so, nothing is attached and the result is null.
  */
 export async function startStream({
   video,
@@ -28,6 +29,7 @@ export async function startStream({
   startSeconds,
   handlers,
   loadHls = loadHlsJs,
+  isCancelled = () => false,
   ...timing
 }) {
   const hasMediaSource = typeof window.MediaSource !== 'undefined';
@@ -42,6 +44,7 @@ export async function startStream({
   } catch {
     return null;
   }
+  if (isCancelled()) return null; // The viewer moved on while hls.js loaded: attach nothing.
   if (chooseEngine({ hasMediaSource, hlsSupported: Hls.isSupported(), nativeHls }) !== 'hlsjs') return null;
   return startHlsJs({ Hls, video, session, auto, startSeconds, handlers, ...timing });
 }

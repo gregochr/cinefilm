@@ -167,7 +167,8 @@ public final class FfmpegCommandBuilder {
     private static String scale(TranscodePlan plan, Rung rung) {
         String size = "=w=-2:h=" + rung.height();
         if (plan.mode() != EncoderMode.VAAPI) {
-            return "scale" + size;
+            // 8-bit 4:2:0 so a 10-bit source cannot come out as High 10, which browsers will not decode.
+            return "scale" + size + ",format=yuv420p";
         }
         return plan.hardwareDecode() ? "scale_vaapi" + size : "scale" + size + UPLOAD_FILTERS;
     }

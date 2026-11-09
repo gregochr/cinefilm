@@ -102,7 +102,7 @@ class FfmpegCommandBuilderTest {
 
         assertThat(command).isEqualTo(join(HEAD,
             List.of("-copyts", "-threads", "2", "-i", "/films/Heat (1995).mp4", "-filter_complex",
-                "[0:v]split=2[s0][s1];[s0]scale=w=-2:h=480[v0];[s1]scale=w=-2:h=360[v1]",
+                "[0:v]split=2[s0][s1];[s0]scale=w=-2:h=480,format=yuv420p[v0];[s1]scale=w=-2:h=360,format=yuv420p[v1]",
                 "-map", "[v0]", "-map", "0:a:1", "-c:v", "libx264", "-preset", "veryfast",
                 "-threads", "2", "-b:v", "1000000", "-g",
                 "9999", "-force_key_frames", "3.980000,7.988000"),
@@ -126,7 +126,7 @@ class FfmpegCommandBuilderTest {
 
         assertThat(command).isEqualTo(join(HEAD,
             List.of("-copyts", "-threads", "3", "-i", "/films/Heat (1995).mp4", "-filter_complex",
-                "[0:v]split=2[s0][s1];[s0]scale=w=-2:h=480[v0];[s1]scale=w=-2:h=360[v1]"),
+                "[0:v]split=2[s0][s1];[s0]scale=w=-2:h=480,format=yuv420p[v0];[s1]scale=w=-2:h=360,format=yuv420p[v1]"),
             copyOutput("3.980000,7.988000", 0),
             List.of("-map", "[v0]", "-map", "0:a:1", "-c:v", "libx264", "-preset", "veryfast", "-threads", "3",
                 "-b:v", "1000000", "-g", "9999", "-force_key_frames", "3.980000,7.988000"),
@@ -182,7 +182,7 @@ class FfmpegCommandBuilderTest {
     void theDecodeChoiceAndDeviceDoNotTouchSoftwareModeOrCopyOnlyPlans() {
         assertThat(FfmpegCommandBuilder.build("ffmpeg", full(List.of(R480), EncoderMode.SOFTWARE, 2, false,
             "/dev/dri/renderD129"))).doesNotContain("-vaapi_device", "-hwaccel", "hwupload")
-            .containsSequence("-filter_complex", "[0:v]scale=w=-2:h=480[v0]");
+            .containsSequence("-filter_complex", "[0:v]scale=w=-2:h=480,format=yuv420p[v0]");
         assertThat(FfmpegCommandBuilder.build("ffmpeg", full(List.of(ORIGINAL), EncoderMode.VAAPI, 2, false,
             "/dev/dri/renderD129"))).doesNotContain("-vaapi_device", "-hwaccel", "-filter_complex");
     }
@@ -203,7 +203,7 @@ class FfmpegCommandBuilderTest {
 
         assertThat(command).isEqualTo(join(HEAD,
             List.of("-copyts", "-threads", "2", "-noaccurate_seek", "-ss", "4.001", "-i", "/films/Heat (1995).mp4",
-                "-filter_complex", "[0:v]scale=w=-2:h=360[v0]"),
+                "-filter_complex", "[0:v]scale=w=-2:h=360,format=yuv420p[v0]"),
             copyOutput("3.987000,7.979000", 1),
             List.of("-map", "[v0]", "-map", "0:a:1", "-c:v", "libx264", "-preset", "veryfast",
                 "-threads", "2", "-b:v", "600000",
