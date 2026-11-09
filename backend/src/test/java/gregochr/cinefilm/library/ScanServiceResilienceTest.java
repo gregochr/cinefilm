@@ -47,7 +47,7 @@ class ScanServiceResilienceTest {
     @BeforeEach
     void setUp() {
         service = new ScanService(new LibraryRoot(library.toString()), scanner, ffprobe, tmdb, matcher, ingest,
-            Runnable::run, CLOCK);
+            Runnable::run, CLOCK, new LibraryLock());
         when(tmdb.enabled()).thenReturn(true);
         when(ingest.startRun("admin", CLOCK.instant())).thenReturn(5L);
         when(ingest.known()).thenReturn(Map.of());

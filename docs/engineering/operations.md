@@ -12,7 +12,7 @@ avoids goldenhour's). Backups, backup verification and the daily health workflow
 | Image | `ghcr.io/gregochr/cinefilm:vX.Y.Z` (also `:latest`), one image: Spring Boot serves the SPA |
 | Containers | `cinefilm-db` (postgres:17, no published port), `cinefilm` (`127.0.0.1:8090` to 8080; 8086 is used by vbgone on dockermacmini) |
 | Compose | `~/cinefilm/docker-compose.yml` (copied from `deploy/` by every deploy), project `cinefilm`, secrets in `~/cinefilm/.env` |
-| Data | `/home/gregochr/cinefilm-data/{postgres,logs,cache}` (owned by uid 1001, except `postgres`, which Postgres owns); `cache` is the container's `/app/cache`, the application's default `CINEFILM_CACHE_DIR` (generated WebVTT subtitles), kept in step by `scripts/test/config-agreement.test.sh` |
+| Data | `/home/gregochr/cinefilm-data/{postgres,logs,cache,artwork}` (owned by uid 1001, except `postgres`, which Postgres owns); `cache` is the container's `/app/cache`, the application's default `CINEFILM_CACHE_DIR` (generated WebVTT subtitles), kept in step by `scripts/test/config-agreement.test.sh`; `artwork` is the container's `/app/artwork` (`CINEFILM_ARTWORK_DIR`, posters imported from Plex): **persistent data, not a cache, backed up with the database** (phase 9 must include it) |
 | Pre-release dumps | `/home/gregochr/cinefilm-backups/pre-release/` (10 newest kept) |
 | Media | workhorse share `Movies`, mounted read-only at `/mnt/workhorse-films`, seen in the container as `/media` |
 | Remote access | `tailscale serve` to `127.0.0.1:8090` (HTTPS with a real certificate, tailnet only) |
@@ -67,6 +67,15 @@ grep -q '^TMDB_READ_TOKEN=' .env || echo "TMDB_READ_TOKEN=" >> .env
 Compare the result with `deploy/.env.example` for any other keys it lists.
 
 `TMDB_READ_TOKEN` stays empty until the TMDB phase. Never commit `.env`; never paste it anywhere.
+
+**Plex import settings** (all in `~/cinefilm/.env`; the import is off while `PLEX_URL` or `PLEX_TOKEN` is blank):
+
+```bash
+grep -q '^PLEX_URL=' .env || echo 'PLEX_URL=http://100.92.70.50:32400' >> .env   # over Tailscale; WireGuard encrypts the hop
+grep -q '^PLEX_PATH_PREFIX=' .env || echo 'PLEX_PATH_PREFIX=/Volumes/Media Library/Movies/' >> .env   # where Plex sees the library
+```
+
+`PLEX_TOKEN` is already there. **Keep Plex Media Server running on workhorse until the import report is right**; then it can be uninstalled. After the first deploy and a completed scan: Admin, **Import from Plex**, read the report (*In Plex, not on disk*, *On disk, not in Plex*, failures). The importer only GETs from `PLEX_URL`, never writes to Plex, and can be run again safely.
 
 ### 4. The second GitHub runner
 

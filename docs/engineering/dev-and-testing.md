@@ -148,7 +148,7 @@ code and report how many mutants the tests kill. Neither is a PR gate. Each has 
 | Workflow | `pitest.yml`, Mondays 06:30 UTC | `stryker.yml`, Wednesdays 03:30 UTC |
 | Mutated | `gregochr.cinefilm.*` minus `config.*`, `seed.*`, `*Dtos*`, `*Controller`, `CineFilmApplication` | `src/player/*.js`, `src/api/*.js` (not `fixtureServer.js`), `src/state/*.js`, `src/components/placeholder.js`, `src/components/useSlashFocus.js` |
 | Tests that kill | Unit, MockMvc/`@WebMvcTest` and `ApiTestBase` (H2) tests; the Testcontainers `integration` package is excluded (same locally and in CI so scores compare) | The whole Vitest suite (per-test coverage), `pool: 'forks'` |
-| Floor | `mutationThreshold` 98 in `backend/pom.xml` (98.62%, 857 of 869, after the library scan) | `STRYKER_BREAK` 95 in `stryker.yml` (`thresholds.break`) |
+| Floor | `mutationThreshold` 98 in `backend/pom.xml` (98.19%, 1196 of 1218, after the Plex import) | `STRYKER_BREAK` 95 in `stryker.yml` (`thresholds.break`) |
 | First measured (2026-11-08) | 96.25% (282 of 293 mutants killed) | 92.22% (498 of 540) |
 | After the first new tests | 97.95% (287 of 293) | 95.56% (516 of 540) |
 | Runtime (one job, no shards) | about 5 minutes on a laptop and on the runner | about 10 minutes on a laptop, 28 minutes on the runner (3-minute dry run, then mutants) |

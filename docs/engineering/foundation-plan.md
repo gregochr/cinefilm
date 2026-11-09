@@ -95,6 +95,9 @@ All JSON. All routes under `/api`. Times are milliseconds. All routes except `/a
 | `GET /api/admin/scan` | `ScanStatus`: the Library scan panel, polled while a scan runs |
 | `POST /api/admin/scan` | starts a scan: 202 and the `ScanStatus`; 409 `{ "error": "A scan is already running" }` when one runs |
 | `GET /api/admin/attention` | `{ items: AttentionItem[] }`: Films needing attention |
+| `GET /api/admin/plex` | `PlexImportStatus`: `{ configured, reachable, running, progress: { processed, total, current } \| null, lastImport: { startedAt, finishedAt, error, report } \| null }`; `configured` is false (and the Admin panel hidden) when `PLEX_URL` or `PLEX_TOKEN` is blank. The `report` counts paired, merged, editionsMoved, metadataApplied, postersStored, backdropsStored, artworkFailures, invalidArtPaths, tmdbUnavailable, watchedImported, resumePointsImported, keptNewer, failures, onDiskNotInPlex, with capped lists (200) `failedFilms`, `notOnDisk` (+ `notOnDiskTotal`), `collections` (+ `collectionsTotal`) |
+| `POST /api/admin/plex/import` | starts the import: 202 and the status; 409 `"A scan or import is already running"`, 409 `"Run a library scan first"`, 404 `"Plex is not configured"` |
+| `GET /api/art/{name}` | artwork imported from Plex; `name` must match `^[0-9a-f]{64}\.(jpg\|png)$` (else 404); `Cache-Control: private, max-age=31536000, immutable`. A film's or collection's `posterPath`/`backdropPath` is either a TMDB path (`/abc.jpg`) or `/api/art/<sha>.<ext>`, which clients use as it is (`imageUrl` passes it through) |
 | `GET /actuator/health`, `GET /actuator/health/container`, `GET /actuator/info` | Not under `/api`, open to a signed-out caller, and the only Actuator endpoints exposed (all others 404). `health` is `{status}` only; `health/container` (database + ping, status only) is the Docker healthcheck and deploy smoke probe; `info` carries `git.commit.id.full` of the running build |
 | `GET/POST/DELETE /api/session` | `GET`: 200 `{authenticated:true}` when signed in, 401 `{authenticated:false}` when not; `POST { password }`: 200 and cookie, 401 on a wrong password; `DELETE`: sign out (200) |
 
@@ -178,7 +181,7 @@ The "Dim the lights" switch is stored in the play request (`?dim=0`) and has no 
   and whose lower rungs (1080p/720p/480p/360p) are transcoded live with VAAPI on dockermacmini, ABR in hls.js and
   Safari, the same policy at home and away. Server-side pre-made "travel copies" (decision 15) are replaced by a later
   "Download for offline"; the separate worker and workhorse failover wait until dockermacmini proves too slow.
-- **Phase 4 — Plex import.** Import films, posters and watch history from Plex; Admin import panel. Plan: `docs/engineering/plex-import-plan.md` (brought forward, next after the library scan).
+- **Phase 4 — Plex import.** Import films, posters and watch history from Plex; Admin import panel. Plan: `docs/engineering/plex-import-plan.md` (brought forward; built in the "import the library from Plex" PR).
 - **Phase 5 — ship.** Production polish: the undrawn mobile screens (Library, Person, Admin), Apple TV
   focus-navigation groundwork. (Packaging, deploy, backups and HTTPS behind Tailscale moved to
   `ci-test-deploy-plan.md` phases 7–9, which land before product phase 2.)

@@ -10,6 +10,7 @@ import heat from './fixtures/film-heat.json';
 import wickerMan from './fixtures/film-wicker-man.json';
 import adminAttention from './fixtures/admin-attention.json';
 import adminScan from './fixtures/admin-scan.json';
+import adminPlex from './fixtures/admin-plex.json';
 import home from './fixtures/home.json';
 import person from './fixtures/person.json';
 
@@ -24,6 +25,7 @@ export const fixtures = {
   collection,
   adminScan,
   adminAttention,
+  adminPlex,
 };
 
 const json = (data, status = 200) =>
@@ -55,6 +57,17 @@ export function defaultRoute(method, url) {
     return method === 'POST' ? json({ ...adminScan, running: true }, 202) : json(adminScan);
   }
   if (path === '/api/admin/attention') return json(adminAttention);
+  if (path === '/api/admin/plex') {
+    return method === 'POST'
+      ? json({ ...adminPlex, running: true }, 202)
+      : json({
+          configured: false,
+          reachable: false,
+          running: false,
+          progress: null,
+          lastImport: null,
+        });
+  }
   if (path === '/api/session') return json({ authenticated: true });
   return json(null, 404);
 }

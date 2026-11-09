@@ -43,6 +43,13 @@ else
     ok "compose leaves the library folder to the application default"
 fi
 
+# Artwork imported from Plex is persistent data, not cache: it has its own mount, which must be where the application writes.
+artwork_default="$(default_of cinefilm.artwork.dir)"
+artwork_mount="$(grep -E '/artwork:/' "$COMPOSE" | head -1 | sed -E 's/.*\/artwork:([^ ]*).*/\1/')"
+assert_eq "the application's production artwork default is set" "/app/artwork" "$artwork_default"
+assert_eq "compose mounts the artwork folder where the application writes it" "$artwork_default" "$artwork_mount"
+if [ "$artwork_mount" != "$cache_mount" ]; then ok "artwork is not on the cache mount"; else bad "artwork shares the cache mount"; fi
+
 # The image runs as an unprivileged user that owns /app only: the cache folder must be under it.
 case "$cache_default" in
     /app/*) ok "the cache folder is under /app, which the image's user owns" ;;

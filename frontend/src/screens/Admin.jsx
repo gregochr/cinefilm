@@ -4,7 +4,15 @@ import { Button } from '../components/Button.jsx';
 import { SkeletonBlock } from '../components/Skeleton.jsx';
 import { ErrorState } from '../components/StateMessages.jsx';
 import { formatRuntime } from '../player/time.js';
-import { useAttention, useScan } from '../state/useAdmin.js';
+import { useAttention, usePlexImport, useScan } from '../state/useAdmin.js';
+import {
+  describeLastImport,
+  moreText,
+  plexPillLabel,
+  plexProgressText,
+  reportLists,
+  reportTiles,
+} from '../state/plexFormat.js';
 import {
   countTiles,
   describeLastScan,
@@ -103,6 +111,97 @@ function ScanPanel({ scan, loading, error, starting, notice, onScan, onRetry }) 
   );
 }
 
+function ImportReport({ report }) {
+  return (
+    <>
+      <ul className="admin__counts" aria-label="Import report">
+        {reportTiles(report).map((tile) => (
+          <li key={tile.key} className="admin__count">
+            <span className="admin__count-label">{tile.label}</span>
+            <span className="admin__count-value">{tile.value}</span>
+          </li>
+        ))}
+      </ul>
+      {reportLists(report).map((list) => (
+        <div key={list.key} className="admin__report-list">
+          <h3 className="admin__subtitle">{list.title}</h3>
+          <ul className="admin__candidates" aria-label={list.title}>
+            {list.items.map((item, i) => (
+              <li key={`${i}-${item}`}>{item}</li>
+            ))}
+          </ul>
+          {moreText(list) ? <p className="admin__text">{moreText(list)}</p> : null}
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** Shown only when Plex is configured on the server: nothing renders until the status says so. */
+function PlexPanel({ plex, starting, notice, onImport, onRecheck }) {
+  if (!plex || !plex.configured) return null;
+  const running = plex.running;
+  const last = plex.lastImport;
+  return (
+    <section id="plex-import" className="admin__card" aria-labelledby="admin-plex-title">
+      <div className="admin__head">
+        <h2 id="admin-plex-title" className="admin__title">
+          Plex import
+        </h2>
+        <span className={`admin__pill${running ? ' admin__pill--running' : ''}`}>
+          <span className="admin__dot" aria-hidden="true" />
+          {plexPillLabel(plex)}
+        </span>
+      </div>
+      {running && plex.progress ? (
+        <div className="admin__progress">
+          <div
+            className="admin__bar"
+            role="progressbar"
+            aria-label="Import progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progressPercent(plex.progress)}
+            aria-valuetext={plexProgressText(plex.progress)}
+          >
+            <div className="admin__fill" style={{ width: `${progressPercent(plex.progress)}%` }} />
+          </div>
+          <div className="admin__progress-line">
+            <span className="admin__mono">{plexProgressText(plex.progress)}</span>
+            {plex.progress.current ? (
+              <span className="admin__mono admin__now">Now: {plex.progress.current}</span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+      <dl className="admin__rows">
+        <dt>Last import</dt>
+        <dd className="admin__mono">{describeLastImport(last)}</dd>
+      </dl>
+      {last?.report ? <ImportReport report={last.report} /> : null}
+      <div className="admin__actions">
+        <Button
+          variant="secondary"
+          disabled={running || starting || !plex.reachable}
+          onClick={onImport}
+        >
+          {running ? 'Importing…' : 'Import from Plex'}
+        </Button>
+        {!running && !plex.reachable ? (
+          <Button variant="secondary" onClick={onRecheck}>
+            Check again
+          </Button>
+        ) : null}
+        {notice ? (
+          <span className="admin__notice" role="status">
+            {notice}
+          </span>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function Candidates({ candidates }) {
   return (
     <ul className="admin__candidates" aria-label="Possible matches">
@@ -195,7 +294,11 @@ function TmdbMark() {
 
 export default function Admin() {
   const { scan, error, loading, starting, notice, startScan, reload } = useScan();
-  const attention = useAttention(scan?.lastScan?.finishedAt ?? 'never');
+  const plexImport = usePlexImport();
+  // The list refreshes when a scan or a Plex import finishes: both settle matches.
+  const attention = useAttention(
+    `${scan?.lastScan?.finishedAt ?? 'never'}|${plexImport.plex?.lastImport?.finishedAt ?? 'none'}`,
+  );
   const { hash } = useLocation();
 
   useEffect(() => {
@@ -222,6 +325,13 @@ export default function Admin() {
           loading={attention.loading}
           error={attention.error}
           onRetry={attention.reload}
+        />
+        <PlexPanel
+          plex={plexImport.plex}
+          starting={plexImport.starting}
+          notice={plexImport.notice}
+          onImport={plexImport.startImport}
+          onRecheck={plexImport.reload}
         />
       </div>
       <p className="admin__credit">

@@ -562,6 +562,19 @@
   color: var(--cf-text-2);
   font-size: var(--cf-size-ui);
 }
+.admin__subtitle {
+  margin: 0 0 6px;
+  font-family: var(--cf-font-ui);
+  font-weight: 500;
+  font-size: var(--cf-size-ui);
+  color: var(--cf-text-2);
+}
+.admin__report-list {
+  margin-bottom: 16px;
+}
+.admin__report-list .admin__candidates {
+  margin-top: 0;
+}
 .admin__credit {
   display: flex;
   align-items: center;

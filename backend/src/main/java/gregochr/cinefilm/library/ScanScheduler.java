@@ -46,7 +46,7 @@ public class ScanScheduler {
         try {
             scans.start(trigger);
         } catch (ScanAlreadyRunningException e) {
-            LOG.info("Skipping {} scan: one is already running", trigger);
+            LOG.info("Skipping {} scan: a scan or import is already running", trigger);
         }
     }
 }

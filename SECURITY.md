@@ -33,7 +33,8 @@ the owner's tailnet through `tailscale serve`. Films are read from a read-only S
    untrusted input.
 5. **Secrets.** `CINEFILM_PASSWORD`, `CINEFILM_DB_*`, `TMDB_READ_TOKEN`, Plex tokens and the CineLight credentials come
    from the environment, never from the repo, and never reach the browser, API responses, logs, error messages or
-   `/actuator`. Only `health` and `info` are exposed by actuator.
+   `/actuator`. The Plex token is sent only in the `X-Plex-Token` header, never in a URL, and logs and errors name the
+   call ("plex sections"), never an address or the token. Only `health` and `info` are exposed by actuator.
 6. **Network exposure.** The app binds to `127.0.0.1` on the host and is published only via `tailscale serve`. The
    database publishes no host port. No Cloudflare tunnel, port forward or public listener. CORS stays off.
 7. **Untrusted data in the UI.** TMDB, Plex and file metadata (titles, overviews, track names) are rendered as text,
@@ -42,6 +43,12 @@ the owner's tailnet through `tailscale serve`. Films are read from a read-only S
    block. Workflows declare least-privilege `permissions:`, pin third-party actions, and never print secrets.
 9. **Data.** The watch history is the owner's only irreplaceable data: migrations follow expand-then-contract, and
    deploys take a pre-release dump.
+
+10. **Plex import.** The importer only issues GET requests to `PLEX_URL` (no method writes to Plex), follows no
+    redirects, caps response sizes (JSON 50 MB, images 10 MB), and fetches artwork only for `thumb`/`art` values that
+    match `^/library/metadata/\d+/(thumb|art)/\d+$`, URL-encoded into Plex's resizer, so it can never be made to fetch
+    an arbitrary URL. Stored artwork names are SHA-256 content hashes with a `.jpg`/`.png` extension, validated against
+    `^[0-9a-f]{64}\.(jpg|png)$` on every read of `/api/art/{name}` (behind the session), never a path from the request.
 
 ## Reporting
 

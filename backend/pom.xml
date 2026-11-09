@@ -382,7 +382,7 @@
                     <mutators>
                         <mutator>DEFAULTS</mutator>
                     </mutators>
-                    <!-- Measured 2026-11-08 after the library scan: 98.62% (857/869 mutants killed), floor rounded down. -->
+                    <!-- Measured 2026-11-09 after the Plex import: 98.19% (1196/1218 killed, 98.6% with timeouts), floor unchanged at 98. -->
                     <mutationThreshold>98</mutationThreshold>
                     <parseSurefireConfig>false</parseSurefireConfig>
                     <timeoutConstant>10000</timeoutConstant>

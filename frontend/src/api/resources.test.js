@@ -109,3 +109,16 @@ describe('image URLs', () => {
     expect(mediaFilesApi.subtitleUrl(501, 3)).toBe('/api/media-files/501/subtitles/3.vtt');
   });
 });
+
+describe('imageUrl for artwork stored by the server', () => {
+  it('passes a /api/art/ path through unchanged, whatever the size', () => {
+    const path = `/api/art/${'a'.repeat(64)}.jpg`;
+    expect(imageUrl(path)).toBe(path);
+    expect(imageUrl(path, 'w500')).toBe(path);
+  });
+
+  it('still builds TMDB URLs for other paths, including ones that merely contain api/art', () => {
+    expect(imageUrl('/x/api/art/a.jpg')).toBe('https://image.tmdb.org/t/p/w342/x/api/art/a.jpg');
+    expect(imageUrl('/api/artist.jpg')).toBe('https://image.tmdb.org/t/p/w342/api/artist.jpg');
+  });
+});

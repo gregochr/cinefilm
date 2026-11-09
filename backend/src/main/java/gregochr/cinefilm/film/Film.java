@@ -34,6 +34,8 @@ import lombok.Setter;
 @NoArgsConstructor
 public class Film {
 
+    private static final int SORT_TITLE_MAX = 255;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -87,6 +89,22 @@ public class Film {
     /** A film shows in browse unless every one of its editions is missing from disk or cannot be played. */
     public boolean browsable() {
         return editions.isEmpty() || editions.stream().anyMatch(e -> !e.hiddenFromBrowse());
+    }
+
+    /**
+     * Sets the title and a sort title that someone else chose (Plex's {@code titleSort}); a blank one falls back to the
+     * derived key. The key is lower-cased like every other sort title.
+     */
+    public void setTitleAndSort(String newTitle, String explicitSort) {
+        this.title = newTitle;
+        this.sortTitle = explicitSort == null || explicitSort.isBlank()
+            ? SortTitles.of(newTitle)
+            : bound(explicitSort.strip().toLowerCase(java.util.Locale.ROOT));
+    }
+
+    /** The sort key is a VARCHAR(255): a longer one from outside would fail the flush and roll the import back. */
+    private static String bound(String key) {
+        return key.substring(0, Math.min(key.length(), SORT_TITLE_MAX));
     }
 
     /** Sets the title and derives {@link #sortTitle} from it. */

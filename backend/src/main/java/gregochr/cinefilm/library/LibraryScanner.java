@@ -22,6 +22,9 @@ public class LibraryScanner {
     private static final Set<String> PLAYABLE = Set.of("m4v", "mp4", "mov");
     private static final Set<String> NEEDS_CONVERSION = Set.of("avi", "mkv");
 
+    /** Plex's optimised copies live in a folder of this name; they are not films of their own. */
+    public static final String PLEX_VERSIONS = "Plex Versions";
+
     private final LibraryRoot root;
 
     /** Creates the scanner over the library root. */
@@ -70,8 +73,8 @@ public class LibraryScanner {
 
     /**
      * Walks the library recursively for {@code .m4v}, {@code .mp4}, {@code .mov} (playable) and {@code .avi},
-     * {@code .mkv} (needs conversion), skipping hidden files and folders and AppleDouble {@code ._*} files. There is
-     * no size filter.
+     * {@code .mkv} (needs conversion), skipping hidden files and folders, Plex's
+     * {@code Plex Versions} folders and AppleDouble {@code ._*} files. There is no size filter.
      *
      * @return the files found; an unreadable or missing root yields an {@link UncheckedIOException}
      */
@@ -83,8 +86,12 @@ public class LibraryScanner {
             Files.walkFileTree(root.root(), new SimpleFileVisitor<>() {
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                    boolean hidden = !dir.equals(root.root()) && dir.getFileName().toString().startsWith(".");
-                    return hidden ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
+                    if (dir.equals(root.root())) {
+                        return FileVisitResult.CONTINUE;
+                    }
+                    String name = dir.getFileName().toString();
+                    boolean skipped = name.startsWith(".") || name.equals(PLEX_VERSIONS);
+                    return skipped ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
                 }
 
                 @Override

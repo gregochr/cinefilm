@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gregochr.cinefilm.library.ScanService;
+import gregochr.cinefilm.plex.PlexImportService;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -38,6 +39,10 @@ class RouteSecurityDriftTest {
     /** The signed-in sweep calls POST /api/admin/scan: a real scan must not start from a security test. */
     @MockitoBean
     private ScanService scans;
+
+    /** The signed-in sweep calls POST /api/admin/plex/import: a real import must not start from a security test. */
+    @MockitoBean
+    private PlexImportService plexImports;
 
     /** Routes that may be called signed out: sign in, check status, sign out. */
     private static final Set<String> SESSION_ROUTES = Set.of(
@@ -88,7 +93,8 @@ class RouteSecurityDriftTest {
             "PUT /api/editions/{id}/progress", "POST /api/editions/{id}/watched",
             "PUT /api/films/{id}/preferences", "GET /api/session", "POST /api/session",
             "DELETE /api/session", "GET /api/admin/scan", "POST /api/admin/scan", "GET /api/admin/attention",
-            "GET /api/media-files/{id}/subtitles/{streamIndex}.vtt");
+            "GET /api/media-files/{id}/subtitles/{streamIndex}.vtt", "GET /api/art/{name}", "GET /api/admin/plex",
+            "POST /api/admin/plex/import");
     }
 
     @Test
