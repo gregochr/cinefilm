@@ -5,6 +5,7 @@
 # Usage: scripts/deploy.sh vX.Y.Z
 # Env:   SMOKE_ENFORCE=true   roll back (image only) when the release is broken; else report-only
 #        EXPECT_COMMIT=<sha>  the smoke also checks /actuator/info reports this commit (deploy.yml passes github.sha)
+#        SMOKE_PROXY_URL is derived here from CINEFILM_DOMAIN in .env (default cinefilm.chrisjgregory.dev)
 #        DEPLOY_HOME (~/cinefilm), CINEFILM_DATA_DIR (/home/gregochr/cinefilm-data, the same variable and default as
 #        deploy/docker-compose.yml), BACKUP_DIR (/home/gregochr/cinefilm-backups)
 #
@@ -38,7 +39,28 @@ if [ ! -f "${DEPLOY_HOME}/.env" ]; then
     exit 4
 fi
 
-mkdir -p "${CINEFILM_DATA_DIR}"/{postgres,logs,cache,artwork} "${BACKUP_DIR}/pre-release"
+# The Caddy proxy (cinefilm-proxy) needs these three; compose would stop on the missing one anyway, but name it here
+# before anything is dumped or pulled (operations.md, Custom domain). Values are never printed.
+for key in CLOUDFLARE_API_TOKEN CINEFILM_TAILNET_IPV4 CINEFILM_TAILNET_IPV6; do
+    if ! grep -Eq "^${key}=." "${DEPLOY_HOME}/.env"; then
+        echo "ERROR: ${key} is not set in ${DEPLOY_HOME}/.env (the proxy needs it): see operations.md, Custom domain." >&2
+        exit 4
+    fi
+done
+# A malformed token (stray space, quote, brace, wrong length) would make Caddy echo it into `docker logs`: reject it here,
+# without printing it, its length or any character of it. The proxy image's entrypoint applies the same rule.
+cf_token="$(sed -n 's/^CLOUDFLARE_API_TOKEN=//p' "${DEPLOY_HOME}/.env" | tail -n 1)"
+if ! token_is_wellformed "$cf_token"; then
+    unset cf_token
+    echo "ERROR: CLOUDFLARE_API_TOKEN in ${DEPLOY_HOME}/.env is malformed (expected 40+ URL-safe characters, no spaces, quotes or braces); fix it and rotate the token if it was ever logged." >&2
+    exit 4
+fi
+unset cf_token
+# The smoke also probes the app through the proxy. CINEFILM_DOMAIN is optional in .env (compose defaults it).
+proxy_domain="$(sed -n 's/^CINEFILM_DOMAIN=//p' "${DEPLOY_HOME}/.env" | tail -n 1 | tr -d "\"' \r")"
+export SMOKE_PROXY_URL="https://${proxy_domain:-cinefilm.chrisjgregory.dev}"
+
+mkdir -p "${CINEFILM_DATA_DIR}"/{postgres,logs,cache,artwork,caddy/data,caddy/config} "${BACKUP_DIR}/pre-release"
 PREVIOUS="$(cat "${DEPLOY_HOME}/.deployed-version" 2>/dev/null || true)"
 
 # Guard: a previous deploy exists, so the Postgres data directory must hold a database. Pointed at an empty
@@ -62,8 +84,8 @@ bash "${SCRIPT_DIR}/pre-release-backup.sh" "$VERSION"
 cp "${SCRIPT_DIR}/../deploy/docker-compose.yml" "${DEPLOY_HOME}/docker-compose.yml"
 export CINEFILM_VERSION="$VERSION"
 
-if ! dc pull cinefilm; then
-    echo "ERROR: could not pull ghcr.io/gregochr/cinefilm:${VERSION} (is the runner logged in to GHCR?)." >&2
+if ! dc pull cinefilm cinefilm-proxy; then
+    echo "ERROR: could not pull ghcr.io/gregochr/cinefilm:${VERSION} and cinefilm-caddy:${VERSION} (is the runner logged in to GHCR?)." >&2
     exit 3
 fi
 

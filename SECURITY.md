@@ -1,7 +1,7 @@
 # SECURITY.md — security review guidelines for CineFilm
 
 CineFilm is a private, single-user movie server. It runs in Docker on `dockermacmini` (Ubuntu), reachable only on
-the owner's tailnet through `tailscale serve`. Films are read from a read-only SMB share on `workhorse`. Reviewers
+the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the tailnet addresses only; `tailscale serve` on :8443 as a fallback). Films are read from a read-only SMB share on `workhorse`. Reviewers
 (Codex, Claude) flag any change that weakens the rules below, and name the rule.
 
 ## Threat model
@@ -38,8 +38,8 @@ the owner's tailnet through `tailscale serve`. Films are read from a read-only S
    from the environment, never from the repo, and never reach the browser, API responses, logs, error messages or
    `/actuator`. The Plex token is sent only in the `X-Plex-Token` header, never in a URL, and logs and errors name the
    call ("plex sections"), never an address or the token. Only `health` and `info` are exposed by actuator.
-6. **Network exposure.** The app binds to `127.0.0.1` on the host and is published only via `tailscale serve`. The
-   database publishes no host port. No Cloudflare tunnel, port forward or public listener. CORS stays off.
+6. **Network exposure.** The app binds to `127.0.0.1` on the host and is published only through the tailnet-bound Caddy proxy (and `tailscale serve`). Caddy never binds 0.0.0.0, the LAN or port 80, and its Cloudflare token is DNS-edit scoped to one zone. The
+   database publishes no host port. No Cloudflare tunnel or proxying (the DNS records are grey cloud), no `tailscale funnel`, port forward or public listener. CORS stays off.
 7. **Untrusted data in the UI.** TMDB, Plex and file metadata (titles, overviews, track names) are rendered as text,
    never with `dangerouslySetInnerHTML`. Image URLs come from the `imageUrl` helper only.
 8. **Dependencies and CI.** No new dependency without a reason in the PR. OWASP/`npm audit` findings at High or above

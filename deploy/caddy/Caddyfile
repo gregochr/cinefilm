@@ -1,0 +1,46 @@
+# CineFilm's way in: https://cinefilm.chrisjgregory.dev, reachable on the owner's tailnet only.
+# Runs with network_mode: host (deploy/docker-compose.yml). Never listens on :80 (goldenhour owns it) and never on
+# 0.0.0.0 or the LAN: the site is bound to the two tailnet addresses and nothing else. Operations: docs/engineering/operations.md
+
+{
+	# No admin API at all (nothing to reach, nothing that could print the config).
+	admin off
+
+	# Certificates come from the Cloudflare DNS challenge, so Caddy has no use for port 80: no HTTP->HTTPS redirect
+	# listener, and the HTTP port is moved off 80 in case anything ever asks for it.
+	auto_https disable_redirects
+	http_port 18080
+	https_port 443
+}
+
+https://{$CINEFILM_DOMAIN} {
+	# Tailnet addresses only. If tailscale0 is not up yet (boot order) the bind fails, Caddy exits and
+	# `restart: unless-stopped` retries until it is.
+	bind {$CINEFILM_TAILNET_IPV4} {$CINEFILM_TAILNET_IPV6}
+
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+		resolvers 1.1.1.1 8.8.8.8
+	}
+
+	# No encode (video is already compressed) and no buffering: range requests and long responses pass straight through.
+	# The app sees X-Forwarded-Proto/-For/-Host from Caddy (Spring: server.forward-headers-strategy=native).
+	reverse_proxy 127.0.0.1:8090 {
+		flush_interval -1
+	}
+
+	# Access log to stderr (docker logs). Credentials never reach it: the session cookie and any Authorization header are
+	# stripped, and the Cloudflare token is read from the environment and is not part of any request.
+	log {
+		output stderr
+		format filter {
+			wrap json
+			fields {
+				request>headers>Authorization delete
+				request>headers>Proxy-Authorization delete
+				request>headers>Cookie delete
+				resp_headers>Set-Cookie delete
+			}
+		}
+	}
+}

@@ -22,6 +22,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 path="${url#http*://*/}"; slug="_${path//\//_}"
+case "$url" in https://proxy.test/*) slug="_proxy${slug}" ;; esac
 [ -f "$STUB/$slug.code" ] || { exit 7; }
 cat "$STUB/$slug.body" > "$out"
 printf '%s %s' "$(cat "$STUB/$slug.code")" "$(cat "$STUB/$slug.type")"
@@ -36,7 +37,11 @@ good() {
     serve "_" 200 "text/html;charset=UTF-8" '<html><div id="root"></div></html>'
     serve "_api_home" 401 application/json '{"error":"Authentication required"}'
 }
-run() { STUB="$TMP/stub" PATH="$TMP/bin:$PATH" SMOKE_ATTEMPTS=1 SMOKE_RETRY_SLEEP=0 bash "${HERE}/../post-deploy-smoke.sh" "$@" 2>&1; }
+proxy_good() {
+    serve "_proxy_" 200 "text/html;charset=UTF-8" '<html><div id="root"></div></html>'
+    serve "_proxy_api_home" 401 application/json '{"error":"Authentication required"}'
+}
+run() { STUB="$TMP/stub" PATH="$TMP/bin:$PATH" SMOKE_ATTEMPTS=1 SMOKE_RETRY_SLEEP=0 SMOKE_PROXY_ATTEMPTS=1 SMOKE_PROXY_SLEEP=0 bash "${HERE}/../post-deploy-smoke.sh" "$@" 2>&1; }
 
 good
 out="$(run http://x)"; rc=$?
@@ -77,5 +82,31 @@ assert_eq "no EXPECT_COMMIT: the commit is not checked" "0" "$rc"
 
 out="$(run ftp://x)"; rc=$?
 assert_eq "bad URL: exit 4" "4" "$rc"
+
+# --- through the Caddy proxy (SMOKE_PROXY_URL) ---
+good; proxy_good
+out="$(SMOKE_PROXY_URL=https://proxy.test run http://x)"; rc=$?
+assert_eq "proxy answers: exit 0" "0" "$rc"
+assert_contains "the proxy probes ran" "$out" "proxy spa index"
+
+good; rm "$TMP/stub/_proxy_.code"
+out="$(SMOKE_PROXY_URL=https://proxy.test run http://x)"; rc=$?
+assert_eq "proxy down, app fine: exit 3 (inconclusive, never a rollback)" "3" "$rc"
+assert_contains "names the proxy" "$out" "proxy"
+
+good; proxy_good; serve "_proxy_api_home" 200 application/json '{"error":"x"}'
+out="$(SMOKE_PROXY_URL=https://proxy.test run http://x)"; rc=$?
+assert_eq "api open to a signed-out caller through the proxy: exit 3" "3" "$rc"
+
+good; proxy_good; serve "_actuator_health" 200 application/json '{"status":"DOWN"}'; rm "$TMP/stub/_proxy_.code"
+out="$(SMOKE_PROXY_URL=https://proxy.test run http://x)"; rc=$?
+assert_eq "app broken and proxy down: exit 1 wins" "1" "$rc"
+
+good
+out="$(SMOKE_PROXY_URL='' run http://x)"; rc=$?
+assert_eq "empty SMOKE_PROXY_URL: the proxy is not checked" "0" "$rc"
+
+out="$(SMOKE_PROXY_URL=http://proxy.test run http://x)"; rc=$?
+assert_eq "proxy URL that is not https: exit 4" "4" "$rc"
 
 finish_tests

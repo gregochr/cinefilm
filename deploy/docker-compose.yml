@@ -46,7 +46,7 @@ services:
     init: true
     # 512 MB heap + one ffmpeg ladder; revisit from Admin > Transcoding if the host swaps.
     mem_limit: 2g
-    # Published on loopback only; `tailscale serve` is the way in.
+    # Published on loopback only; cinefilm-proxy (below) is the way in, and `tailscale serve --https=8443` the fallback.
     ports:
       - "127.0.0.1:8090:8080"
     volumes:
@@ -74,6 +74,40 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # HTTPS for https://${CINEFILM_DOMAIN}, tailnet only (docs/engineering/operations.md, "Custom domain"). Caddy with the
+  # Cloudflare DNS module (deploy/caddy/), certificates by DNS challenge, so it never needs port 80 (goldenhour's).
+  # Host networking so it can bind the tailnet addresses and reach the app on 127.0.0.1:8090; the Caddyfile binds ONLY
+  # those two addresses. It gets just the variables below, never the whole .env (database password, tokens).
+  cinefilm-proxy:
+    image: ghcr.io/gregochr/cinefilm-caddy:${CINEFILM_VERSION:?CINEFILM_VERSION is set by scripts/deploy.sh}
+    container_name: cinefilm-proxy
+    network_mode: host
+    environment:
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?set CLOUDFLARE_API_TOKEN in ~/cinefilm/.env (a Zone, DNS, Edit token for chrisjgregory.dev only)}
+      CINEFILM_DOMAIN: ${CINEFILM_DOMAIN:-cinefilm.chrisjgregory.dev}
+      CINEFILM_TAILNET_IPV4: ${CINEFILM_TAILNET_IPV4:?set CINEFILM_TAILNET_IPV4 in ~/cinefilm/.env (this host's 100.x tailnet address)}
+      CINEFILM_TAILNET_IPV6: ${CINEFILM_TAILNET_IPV6:?set CINEFILM_TAILNET_IPV6 in ~/cinefilm/.env (this host's fd7a: tailnet address)}
+    volumes:
+      # Certificates and the ACME account persist here, so a redeploy never re-issues (Let's Encrypt rate limits).
+      - ${CINEFILM_DATA_DIR:-/home/gregochr/cinefilm-data}/caddy/data:/data
+      - ${CINEFILM_DATA_DIR:-/home/gregochr/cinefilm-data}/caddy/config:/config
+    mem_limit: 256m
+    security_opt:
+      - no-new-privileges:true
+    # tailscale0 can come up after Docker at boot: the bind then fails, Caddy exits and Docker retries until it works.
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z -w 3 \"$$CINEFILM_TAILNET_IPV4\" 443 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
     logging:
       driver: json-file
       options:
