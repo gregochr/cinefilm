@@ -22,6 +22,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CollectionService {
 
+    /** A TMDB collection counts as a collection only when at least this many of its films are in the library. */
+    public static final int MIN_OWNED = 2;
+
     private static final int FAN_SIZE = 3;
 
     private final FilmCollectionRepository collections;
@@ -54,7 +57,7 @@ public class CollectionService {
         return new CollectionPage(collection.getId(), collection.getName(), collection.getPosterPath(), parts);
     }
 
-    /** Home cards for every collection that has at least one owned film. Call inside a transaction. */
+    /** Home cards for every collection with at least {@link #MIN_OWNED} owned films. Call inside a transaction. */
     public List<CollectionCard> cards(List<FilmView> library) {
         List<CollectionCard> cards = new ArrayList<>();
         for (FilmCollection collection : collections.findAll()) {
@@ -62,7 +65,7 @@ public class CollectionService {
                 .filter(v -> v.film().getCollection() != null
                     && Objects.equals(v.film().getCollection().getId(), collection.getId()))
                 .toList();
-            if (owned.isEmpty()) {
+            if (owned.size() < MIN_OWNED) {
                 continue;
             }
             List<Slot> slots = slots(collection, owned);

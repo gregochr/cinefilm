@@ -64,13 +64,15 @@ class FilmServiceTest {
         Film heat = owned(1L, "Heat", 1995, "Crime", "Thriller");
         Film alien = owned(2L, "Alien", 1979, "sci-fi", "Horror");
         alien.setCollection(alienSaga);
+        Film aliens = owned(4L, "Aliens", 1979, "sci-fi");
+        aliens.setCollection(alienSaga);
         Film kes = owned(3L, "Kes", 1969, "Drama");
-        when(loader.loadAll()).thenReturn(List.of(view(heat), view(alien), view(kes)));
+        when(loader.loadAll()).thenReturn(List.of(view(heat), view(alien), view(aliens), view(kes)));
 
         FilmList list = service.list(new LibraryQuery("alien", "title", null, null, null, null));
 
-        assertThat(list.total()).isEqualTo(1);
-        assertThat(list.films()).extracting(FilmDtos.FilmCard::title).containsExactly("Alien");
+        assertThat(list.total()).isEqualTo(2);
+        assertThat(list.films()).extracting(FilmDtos.FilmCard::title).containsExactly("Alien", "Aliens");
         assertThat(list.facets().genres()).containsExactly("Crime", "Drama", "Horror", "sci-fi", "Thriller");
         assertThat(list.facets().decades()).containsExactly(1960, 1970, 1990);
         assertThat(list.facets().collections()).containsExactly(new CollectionFacet(9L, "Alien"));
@@ -86,12 +88,60 @@ class FilmServiceTest {
         b.setCollection(zodiacs);
         Film c = owned(3L, "A1", 1979);
         c.setCollection(alien);
-        when(loader.loadAll()).thenReturn(List.of(view(a), view(b), view(c)));
+        Film d = owned(4L, "A2", 1986);
+        d.setCollection(alien);
+        when(loader.loadAll()).thenReturn(List.of(view(a), view(b), view(c), view(d)));
 
         FilmList list = service.list(LibraryQuery.all());
 
         assertThat(list.facets().collections())
             .containsExactly(new CollectionFacet(1L, "Alien"), new CollectionFacet(2L, "Zodiac Saga"));
+    }
+
+    @Test
+    void aCollectionWithOnlyOneFilmInTheLibraryIsNotAFacet() {
+        FilmCollection lone = withId(5L, "Lone Sequel");
+        FilmCollection pair = withId(6L, "Pair");
+        Film a = owned(1L, "L1", 2000);
+        a.setCollection(lone);
+        Film b = owned(2L, "P1", 2001);
+        b.setCollection(pair);
+        Film c = owned(3L, "P2", 2002);
+        c.setCollection(pair);
+        when(loader.loadAll()).thenReturn(List.of(view(a), view(b), view(c)));
+
+        assertThat(service.list(LibraryQuery.all()).facets().collections())
+            .containsExactly(new CollectionFacet(6L, "Pair"));
+    }
+
+    @Test
+    void detailHasNoCollectionWhenOnlyOneFilmOfItIsBrowsable() {
+        FilmCollection saga = withId(7L, "Saga");
+        Film one = owned(1L, "One", 2000);
+        one.setCollection(saga);
+        Film hidden = owned(2L, "Two", 2002);
+        hidden.setCollection(saga);
+        hidden.getEditions().get(0).getMediaFiles().clear();
+        file(hidden.getEditions().get(0), "two.m4v").setPresence(Presence.MISSING);
+        when(films.findById(1L)).thenReturn(Optional.of(one));
+        when(films.findByCollectionId(7L)).thenReturn(List.of(one, hidden));
+        when(loader.views(List.of(one))).thenReturn(List.of(view(one)));
+
+        assertThat(service.detail(1L).collection()).isNull();
+    }
+
+    @Test
+    void detailHasTheCollectionWhenTwoFilmsOfItAreBrowsable() {
+        FilmCollection saga = withId(7L, "Saga");
+        Film one = owned(1L, "One", 2000);
+        one.setCollection(saga);
+        Film two = owned(2L, "Two", 2002);
+        two.setCollection(saga);
+        when(films.findById(1L)).thenReturn(Optional.of(one));
+        when(films.findByCollectionId(7L)).thenReturn(List.of(one, two));
+        when(loader.views(List.of(one))).thenReturn(List.of(view(one)));
+
+        assertThat(service.detail(1L).collection()).isEqualTo(new FilmDtos.CollectionRef(7L, "Saga"));
     }
 
     @Test

@@ -219,6 +219,10 @@ Custom controls over HTML5 `<video>`.
     - **In the UI:** marked "· pre-made" in the quality menus, and the Admin card shows status and storage used.
 16. **Collections.**
     - **Source:** TMDB collections (e.g. Alien, Blade Runner).
+    - **Two films make a collection** (owner, 2026-11-09). A TMDB collection counts only once at least two of
+      its films are in the library. With one, that film looks like any other: no Home card, no Library filter
+      entry, no link on Film detail. TMDB puts any film with a sequel in a collection, and a "collection" of
+      one owned film plus a "Not in your library" tile is noise.
     - **Collection page:** owned films in release order, followed by missing parts as dashed "Not in your library" tiles. The missing tiles can be hidden in Admin.
     - **Elsewhere:** a "Collections" row on Home, a Collection filter in Library, and a link to the film's collection on Film detail.
 
