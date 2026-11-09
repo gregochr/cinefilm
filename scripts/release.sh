@@ -28,7 +28,7 @@ REMOTE="$(git rev-parse origin/main)"
 LAST="$(git tag --list 'v*' | sort -V | tail -n 1)"
 echo "Last release: ${LAST:-none}"
 echo "Commits since:"
-if [ -n "$LAST" ]; then git log --oneline "${LAST}..HEAD"; else git log --oneline | head -20; fi
+if [ -n "$LAST" ]; then git log --oneline "${LAST}..HEAD"; else git log --oneline -n 20; fi
 echo ""
 
 if [ -z "$VERSION" ]; then

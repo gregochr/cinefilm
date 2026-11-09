@@ -26,7 +26,8 @@ export DEPLOY_HOME CINEFILM_DATA_DIR
 
 RUNNING="$(cat "${DEPLOY_HOME}/.deployed-version" 2>/dev/null || true)"
 
-if ! docker ps --format '{{.Names}}' | grep -qx cinefilm-db; then
+RUNNING_CONTAINERS="$(docker ps --format '{{.Names}}')"
+if ! printf '%s\n' "$RUNNING_CONTAINERS" | grep -qx cinefilm-db; then
     existing=false
     if [ -n "$RUNNING" ] || [ -f "${DEPLOY_HOME}/.previous-version" ] || pgdata_has_database "${CINEFILM_DATA_DIR}/postgres"; then
         existing=true
