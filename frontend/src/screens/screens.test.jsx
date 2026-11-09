@@ -106,7 +106,7 @@ describe('Library', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Clear search and filters' }));
     await waitFor(() => expect(screen.queryByText('Nothing on the shelf')).not.toBeInTheDocument());
     expect(screen.getByRole('searchbox', { name: /Search/ })).toHaveValue('');
-    expect(filmsCalls(fetchMock).at(-1)).not.toContain('q=');
+    await waitFor(() => expect(filmsCalls(fetchMock).at(-1)).not.toContain('q='));
   });
 
   it('badges watched films', async () => {
