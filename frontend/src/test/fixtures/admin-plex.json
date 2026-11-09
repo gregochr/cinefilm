@@ -1,0 +1,33 @@
+{
+  "configured": true,
+  "reachable": true,
+  "running": false,
+  "progress": null,
+  "lastImport": {
+    "startedAt": "2026-11-08T14:00:00Z",
+    "finishedAt": "2026-11-08T14:09:30Z",
+    "error": null,
+    "report": {
+      "plexFilms": 1087,
+      "paired": 1037,
+      "merged": 3,
+      "editionsMoved": 2,
+      "metadataApplied": 1037,
+      "postersStored": 1030,
+      "backdropsStored": 1020,
+      "artworkFailures": 4,
+      "invalidArtPaths": 1,
+      "tmdbUnavailable": 0,
+      "watchedImported": 378,
+      "resumePointsImported": 143,
+      "keptNewer": 2,
+      "failures": 1,
+      "failedFilms": ["Kes"],
+      "notOnDisk": ["Gone Film (1999)", "Another Gone Film"],
+      "notOnDiskTotal": 50,
+      "onDiskNotInPlex": 50,
+      "collections": ["Alien Collection", "Bond"],
+      "collectionsTotal": 95
+    }
+  }
+}

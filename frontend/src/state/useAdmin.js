@@ -48,3 +48,41 @@ export function useScan() {
 export function useAttention(version) {
   return useResource(`admin-attention:${version}`, (options) => adminApi.attention(options));
 }
+
+/**
+ * The Plex import panel: status, polled while an import runs, plus "Import from Plex". Starting while a scan or
+ * import already runs (409) is not an error: the notice says why, and the panel shows whichever is running.
+ */
+export function usePlexImport() {
+  const { data, error, loading, reload } = useResource('admin-plex', (options) =>
+    adminApi.plex(options),
+  );
+  const [starting, setStarting] = useState(false);
+  const [notice, setNotice] = useState(null);
+  const running = Boolean(data?.running);
+
+  useEffect(() => {
+    if (!running) return undefined;
+    const id = setTimeout(reload, SCAN_POLL_MS);
+    return () => clearTimeout(id);
+  }, [running, data, error, reload]);
+
+  const startImport = useCallback(async () => {
+    setStarting(true);
+    setNotice(null);
+    try {
+      await adminApi.startPlexImport();
+    } catch (failure) {
+      setNotice(
+        failure instanceof ApiError && failure.status === 409
+          ? 'A scan or import is already running, or no scan has finished yet.'
+          : 'Could not start the import.',
+      );
+    } finally {
+      setStarting(false);
+      reload();
+    }
+  }, [reload]);
+
+  return { plex: data, error, loading, starting, notice, startImport, reload };
+}

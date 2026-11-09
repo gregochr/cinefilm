@@ -51,3 +51,13 @@ describe('CollectionCard', () => {
     expect(screen.getByRole('link', { name: 'Many 5 of 5 films' })).toBeInTheDocument();
   });
 });
+
+describe('CollectionCard with artwork stored by the server', () => {
+  it('uses /api/art/ paths as they are and TMDB paths as TMDB images', () => {
+    const art = `/api/art/${'b'.repeat(64)}.jpg`;
+    const { container } = wrap({ id: 9, name: 'Mix', ownedCount: 2, posterPaths: [art, '/t.jpg'] });
+    const posters = container.querySelectorAll('.collection-card__poster');
+    expect(posters[0].style.backgroundImage).toBe(`url("${art}")`);
+    expect(posters[1].style.backgroundImage).toContain('https://image.tmdb.org/t/p/w342/t.jpg');
+  });
+});
