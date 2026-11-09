@@ -334,6 +334,22 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # The v0.2.0 deploy died on a YAML error in this file, which nothing had ever parsed. Dummy values for every
+      # required `${VAR:?}` guard (and an empty .env for env_file); --quiet exits non-zero on any parse or guard failure.
+      - name: Validate deploy/docker-compose.yml
+        if: needs.changes.outputs.docs_only != 'true'
+        env:
+          CINEFILM_VERSION: v0.0.0-ci
+          CINEFILM_DB_USER: ci
+          CINEFILM_DB_PASSWORD: ci-dummy-password
+          CLOUDFLARE_API_TOKEN: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+          CINEFILM_TAILNET_IPV4: 100.64.0.1
+          CINEFILM_TAILNET_IPV6: fd7a:115c:a1e0::1
+        run: |
+          set -euo pipefail
+          touch deploy/.env
+          docker compose -f deploy/docker-compose.yml config --quiet
+
       - name: Check the image
         if: needs.changes.outputs.docs_only != 'true'
         run: |

@@ -49,12 +49,12 @@ assert_file_has "the Cloudflare module is pinned" "$DOCKERFILE" "ARG CLOUDFLARE_
 has_not "no floating Caddy tag" "$DOCKERFILE" '^FROM .*(:latest|:2( |$)|:builder)'
 
 # Compose: the proxy service.
-assert_file_has "the proxy service exists" "$PROXY" "image: ghcr.io/gregochr/cinefilm-caddy:"
+assert_file_has "the proxy service exists" "$PROXY" "image: \"ghcr.io/gregochr/cinefilm-caddy:"
 assert_file_has "host networking (binds the tailnet IPs, reaches loopback:8090)" "$PROXY" "network_mode: host"
 assert_file_has "restarts until the tailnet interface is up" "$PROXY" "restart: unless-stopped"
-assert_file_has "the token is guarded" "$PROXY" 'CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?'
-assert_file_has "the IPv4 is guarded" "$PROXY" 'CINEFILM_TAILNET_IPV4: ${CINEFILM_TAILNET_IPV4:?'
-assert_file_has "the IPv6 is guarded" "$PROXY" 'CINEFILM_TAILNET_IPV6: ${CINEFILM_TAILNET_IPV6:?'
+assert_file_has "the token is guarded" "$PROXY" 'CLOUDFLARE_API_TOKEN: "${CLOUDFLARE_API_TOKEN:?'
+assert_file_has "the IPv4 is guarded" "$PROXY" 'CINEFILM_TAILNET_IPV4: "${CINEFILM_TAILNET_IPV4:?'
+assert_file_has "the IPv6 is guarded" "$PROXY" 'CINEFILM_TAILNET_IPV6: "${CINEFILM_TAILNET_IPV6:?'
 assert_file_has "the domain has a default" "$PROXY" 'CINEFILM_DOMAIN: ${CINEFILM_DOMAIN:-cinefilm.chrisjgregory.dev}'
 assert_file_has "certificates persist" "$PROXY" "/caddy/data:/data"
 has_not "the proxy does not get the whole .env (database password, tokens)" "$PROXY" 'env_file'
