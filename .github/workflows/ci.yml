@@ -373,12 +373,13 @@ jobs:
           set -euo pipefail
           docker run --rm cinefilm-caddy:ci caddy version
           docker run --rm cinefilm-caddy:ci caddy list-modules | grep -qx 'dns.providers.cloudflare'
-          # The baked-in Caddyfile parses and provisions with placeholder values (no network, nothing is bound or issued).
+          # The baked-in Caddyfile parses and provisions with placeholder values (no network, nothing is bound or issued; the module only
+          # checks that the token looks like a Cloudflare one, 40 characters, hence the placeholder's shape).
           docker run --rm \
             -e CINEFILM_DOMAIN=cinefilm.example.test \
             -e CINEFILM_TAILNET_IPV4=100.64.0.1 \
             -e CINEFILM_TAILNET_IPV6=fd7a:115c:a1e0::1 \
-            -e CLOUDFLARE_API_TOKEN=ci-placeholder \
+            -e CLOUDFLARE_API_TOKEN=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA \
             cinefilm-caddy:ci caddy validate --config /etc/caddy/Caddyfile
 
       - name: Documentation-only change — suite skipped

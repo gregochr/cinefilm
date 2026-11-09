@@ -301,6 +301,10 @@ Tailscale off on the phone the site must **not** load (the address is not routab
 - **Renewal** is automatic (Caddy renews about 30 days before expiry, over the same DNS challenge). Rotating the
   token: create a new one, edit the `CLOUDFLARE_API_TOKEN` line in `.env` by hand, `docker compose up -d cinefilm-proxy`
   (compose recreates it with the new value), then delete the old token in Cloudflare.
+- **A malformed token is echoed by Caddy.** The Cloudflare module checks the token's shape (40 characters, no quotes or
+  braces) at start-up and, if it is wrong, names the value in the error that `docker logs cinefilm-proxy` shows. Paste
+  it exactly as Cloudflare gave it, and if the proxy fails with "appears invalid", rotate the token rather than sharing
+  that log.
 - **Boot order.** If `tailscale0` comes up after Docker, Caddy cannot bind, exits, and Docker restarts it until the
   address exists. If the proxy is not up after a reboot, check `tailscale status` first.
 - Port 80 is never bound: there is no HTTP redirect, so `http://cinefilm.chrisjgregory.dev` simply does not answer.
