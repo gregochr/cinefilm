@@ -1,36 +1,33 @@
 import { Link } from 'react-router-dom';
-import { imageUrl } from '../api/images.js';
-import { placeholderColor } from './placeholder.js';
+import { displayName, isComplete } from '../state/collections.js';
+import { CheckIcon } from './icons.jsx';
+import CollectionFan from './CollectionFan.jsx';
 
-/** Collection card with three fanned posters, the name and "2 of 4 films". */
+/** A Collections-tab card: the poster fan on a surface, the name and "2 of 4 films". */
 export default function CollectionCard({ collection }) {
-  const paths = collection.posterPaths?.length
-    ? collection.posterPaths.slice(0, 3)
-    : [collection.posterPath, null, null];
-  while (paths.length < 3) paths.push(null);
-  const count =
-    collection.totalCount != null
-      ? `${collection.ownedCount} of ${collection.totalCount} films`
-      : `${collection.ownedCount ?? 0} films`;
+  const name = displayName(collection.name);
+  const complete = isComplete(collection);
   return (
     <Link to={`/collections/${collection.id}`} className="collection-card">
-      <span className="collection-card__fan" aria-hidden="true">
-        {paths.map((path, i) => {
-          const url = imageUrl(path);
-          const style = url
-            ? { backgroundImage: `url(${url})`, backgroundSize: 'cover' }
-            : { background: placeholderColor(`${collection.id}-${i}`, collection.name) };
-          return (
-            <span
-              key={i}
-              className={`collection-card__poster collection-card__poster--${i}`}
-              style={style}
-            />
-          );
-        })}
+      <span className="collection-card__art">
+        <CollectionFan
+          posters={collection.posterPaths}
+          seed={collection.id}
+          name={collection.name}
+        />
       </span>
-      <span className="collection-card__name">{collection.name}</span>{' '}
-      <span className="collection-card__count">{count}</span>
+      <span className="collection-card__name">{name}</span>{' '}
+      <span className="collection-card__count">
+        {collection.ownedCount} of {collection.totalCount} films
+        {complete ? (
+          <>
+            {' '}
+            <span className="collection-card__complete">
+              <CheckIcon size={13} /> Complete
+            </span>
+          </>
+        ) : null}
+      </span>
     </Link>
   );
 }

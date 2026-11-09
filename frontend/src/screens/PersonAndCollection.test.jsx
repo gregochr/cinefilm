@@ -104,6 +104,7 @@ describe('Collection', () => {
   it('counts owned parts and shows each as a poster or a dashed missing tile', async () => {
     installFetch();
     renderApp('/collections/1');
+    // TMDB names it "Alien Collection"; the heading drops the suffix.
     expect(await screen.findByRole('heading', { level: 1, name: 'Alien' })).toBeVisible();
     expect(screen.getByText('2 of 4 films in your library')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Alien, 1979, watched' })).toHaveAttribute(

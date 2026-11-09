@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { Picker, Segmented } from '../components/Controls.jsx';
 import { SearchIcon } from '../components/icons.jsx';
 import { Poster } from '../components/Poster.jsx';
 import { GridSkeleton } from '../components/Skeleton.jsx';
 import { EmptyLibrary, ErrorState, NoResults } from '../components/StateMessages.jsx';
-import { useDebouncedValue } from '../state/useDebouncedValue.js';
+import { useUrlSearch } from '../state/useUrlSearch.js';
 import { useFilms } from '../state/useFilms.js';
 
 const SORTS = [
@@ -20,31 +20,15 @@ const SHOWS = [
   { value: 'watched', label: 'Watched' },
 ];
 
-export const SEARCH_DEBOUNCE_MS = 250;
-
 export default function LibraryFilms() {
   const { setCountLabel } = useOutletContext();
   const [params, setParams] = useSearchParams();
-  const q = params.get('q') || '';
   const sort = params.get('sort') || 'added';
   const genre = params.get('genre') || '';
   const decade = params.get('decade') || '';
   const show = params.get('show') || 'all';
 
-  const [text, setText] = useState(q);
-  const debounced = useDebouncedValue(text, SEARCH_DEBOUNCE_MS);
-  const paramsRef = useRef(params);
-  useEffect(() => {
-    paramsRef.current = params;
-  });
-  useEffect(() => {
-    const current = paramsRef.current;
-    if (debounced === (current.get('q') || '')) return;
-    const next = new URLSearchParams(current);
-    if (debounced.trim()) next.set('q', debounced.trim());
-    else next.delete('q');
-    setParams(next, { replace: true });
-  }, [debounced, setParams]);
+  const { q, text, setText } = useUrlSearch(params, setParams);
 
   const update = (key, value, empty = '') => {
     const next = new URLSearchParams(params);
