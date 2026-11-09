@@ -246,7 +246,18 @@
   position: relative;
   display: block;
   height: 170px;
-  margin-bottom: 8px;
+  margin: 0 auto 8px;
+  /* Fan width = poster 104px + 44px per extra poster, centred in the card. */
+  width: calc(104px + 44px * (var(--fan-count) - 1));
+}
+.collection-card__fan--1 {
+  --fan-count: 1;
+}
+.collection-card__fan--2 {
+  --fan-count: 2;
+}
+.collection-card__fan--3 {
+  --fan-count: 3;
 }
 .collection-card__poster {
   position: absolute;
@@ -254,21 +265,31 @@
   height: 156px;
   border-radius: 6px;
 }
-.collection-card__poster--2 {
+/* Depth 0 is the front (rightmost) poster; each step back is 44px left and 7px down. */
+.collection-card__poster--depth-0 {
+  left: calc(44px * (var(--fan-count) - 1));
+  top: 0;
+  z-index: 3;
+}
+.collection-card__poster--depth-1 {
+  left: calc(44px * (var(--fan-count) - 2));
+  top: 7px;
+  z-index: 2;
+  filter: brightness(0.8);
+}
+.collection-card__poster--depth-2 {
   left: 0;
   top: 14px;
-  opacity: 0.7;
+  z-index: 1;
+  filter: brightness(0.6);
 }
-.collection-card__poster--1 {
-  left: 44px;
-  top: 7px;
-  opacity: 0.85;
-  box-shadow: -8px 0 20px rgba(0, 0, 0, 0.4);
-}
-.collection-card__poster--0 {
-  left: 88px;
-  top: 0;
+/* Left-edge shadow only on a poster that has another one behind it. */
+.collection-card__fan--2 .collection-card__poster--depth-0,
+.collection-card__fan--3 .collection-card__poster--depth-0 {
   box-shadow: -8px 0 20px rgba(0, 0, 0, 0.5);
+}
+.collection-card__fan--3 .collection-card__poster--depth-1 {
+  box-shadow: -8px 0 20px rgba(0, 0, 0, 0.4);
 }
 .collection-card__name {
   font-family: var(--cf-font-display);
