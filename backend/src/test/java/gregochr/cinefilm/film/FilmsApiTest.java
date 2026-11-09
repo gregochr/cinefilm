@@ -213,6 +213,7 @@ class FilmsApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.editions[0].positionMs").value(64 * MIN))
             .andExpect(jsonPath("$.editions[0].watched").value(false))
             .andExpect(jsonPath("$.editions[0].file.videoCodec").value("HEVC"))
+            .andExpect(jsonPath("$.editions[0].file.width").value(1920))
             .andExpect(jsonPath("$.editions[0].file.height").value(1080))
             .andExpect(jsonPath("$.editions[0].file.audioSummary").value("5.1"))
             .andExpect(jsonPath("$.editions[0].file.addedAt").value("2024-03-28T23:30:00Z"))
