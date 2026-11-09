@@ -89,6 +89,17 @@ public class Film {
         return editions.isEmpty() || editions.stream().anyMatch(e -> !e.hiddenFromBrowse());
     }
 
+    /**
+     * Sets the title and a sort title that someone else chose (Plex's {@code titleSort}); a blank one falls back to the
+     * derived key. The key is lower-cased like every other sort title.
+     */
+    public void setTitleAndSort(String newTitle, String explicitSort) {
+        this.title = newTitle;
+        this.sortTitle = explicitSort == null || explicitSort.isBlank()
+            ? SortTitles.of(newTitle)
+            : explicitSort.strip().toLowerCase(java.util.Locale.ROOT);
+    }
+
     /** Sets the title and derives {@link #sortTitle} from it. */
     public void setTitleAndSort(String newTitle) {
         this.title = newTitle;

@@ -223,9 +223,25 @@ public class LibraryIngest {
             applyMovie(film, outcome.movie());
             return;
         }
-        editions.moveAll(film, existing);
-        mergePreferences(filmId, existing.getId());
-        films.delete(films.findById(filmId).orElseThrow());
+        merge(filmId, existing.getId());
+    }
+
+    /**
+     * Folds one film into another: every edition (with its files, streams and watch state, which follow the edition
+     * id) and the remembered choices move to the survivor, then the emptied film is deleted (its credits and genres
+     * go with it). Because the bulk move clears the persistence context, callers must reload the survivor before
+     * writing to it.
+     *
+     * @param fromId the film that goes away
+     * @param toId the film that keeps everything
+     */
+    @Transactional
+    public void merge(Long fromId, Long toId) {
+        Film from = films.findById(fromId).orElseThrow();
+        Film to = films.findById(toId).orElseThrow();
+        editions.moveAll(from, to);
+        mergePreferences(fromId, toId);
+        films.delete(films.findById(fromId).orElseThrow());
     }
 
     /**
@@ -270,7 +286,11 @@ public class LibraryIngest {
         film.setMatchCandidates(JSON.writeValueAsString(candidates));
     }
 
-    private void applyMovie(Film film, MovieDetails movie) {
+    /**
+     * Applies TMDB's film to a film: ids, title, year, overview, artwork, genres, collection and credits, and settles
+     * the match. Call inside a transaction.
+     */
+    public void applyMovie(Film film, MovieDetails movie) {
         film.setTmdbId(movie.id());
         if (movie.title() != null) {
             film.setTitleAndSort(cut(movie.title(), NAME_MAX));

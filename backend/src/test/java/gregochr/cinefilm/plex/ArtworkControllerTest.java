@@ -1,0 +1,96 @@
+package gregochr.cinefilm.plex;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import gregochr.cinefilm.auth.SecurityConfig;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+
+/** {@code GET /api/art/{name}}: strict names, the right headers, and the session. */
+@WebMvcTest(ArtworkController.class)
+@Import({SecurityConfig.class, ArtworkStore.class})
+class ArtworkControllerTest {
+
+    private static Path dir;
+
+    @DynamicPropertySource
+    static void artworkDir(DynamicPropertyRegistry registry) throws IOException {
+        dir = Files.createTempDirectory("art-controller-test");
+        registry.add("cinefilm.artwork.dir", dir::toString);
+    }
+
+    @Autowired
+    private MockMvc mvc;
+
+    @Autowired
+    private ArtworkStore store;
+
+    private String jpg;
+    private String png;
+
+    @BeforeEach
+    void stored() {
+        jpg = store.store(new byte[] {(byte) 0xff, (byte) 0xd8, 1}, "image/jpeg").substring(9);
+        png = store.store(new byte[] {(byte) 0x89, 'P', 'N', 'G'}, "image/png").substring(9);
+    }
+
+    @Test
+    void aStoredJpegIsServedWithItsTypeAndAnImmutablePrivateCacheHeader() throws Exception {
+        mvc.perform(get("/api/art/" + jpg).with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType("image/jpeg"))
+            .andExpect(header().string("Cache-Control", "private, max-age=31536000, immutable"))
+            .andExpect(content().bytes(new byte[] {(byte) 0xff, (byte) 0xd8, 1}));
+    }
+
+    @Test
+    void aStoredPngIsServedAsPng() throws Exception {
+        mvc.perform(get("/api/art/" + png).with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType("image/png"));
+    }
+
+    @Test
+    void namesThatAreNotExactlyAHashAndAnAllowedExtensionAre404() throws Exception {
+        String hash = jpg.substring(0, 64);
+        String[] bad = {hash.toUpperCase() + ".jpg", hash + ".gif", hash + ".jpeg", hash, hash + ".jpg.png",
+            "not-a-hash.jpg", "a".repeat(64) + ".jpg"};
+        for (String name : bad) {
+            mvc.perform(get("/api/art/" + name).with(user("owner")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("No such artwork"));
+        }
+    }
+
+    @Test
+    void traversalAndEncodedSlashesAreNeverServed() throws Exception {
+        String[] bad = {"..", "..%2f" + jpg, "%2e%2e%2f" + jpg, "x%2f" + jpg, "x/" + jpg, "../" + jpg};
+        for (String name : bad) {
+            mvc.perform(get("/api/art/" + name).with(user("owner")))
+                .andExpect(status().is4xxClientError())
+                .andExpect(result -> org.assertj.core.api.Assertions
+                    .assertThat(String.valueOf(result.getResponse().getContentType())).doesNotStartWith("image/"));
+        }
+    }
+
+    @Test
+    void signedOutIs401() throws Exception {
+        mvc.perform(get("/api/art/" + jpg))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Authentication required"));
+    }
+}

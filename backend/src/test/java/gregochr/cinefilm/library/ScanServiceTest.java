@@ -59,8 +59,10 @@ class ScanServiceTest {
     @BeforeEach
     void setUp() {
         LibraryRoot root = new LibraryRoot(library.toString());
-        service = new ScanService(root, scanner, ffprobe, tmdb, matcher, ingest, Runnable::run, CLOCK);
-        deferred = new ScanService(root, scanner, ffprobe, tmdb, matcher, ingest, queued::add, CLOCK);
+        service = new ScanService(root, scanner, ffprobe, tmdb, matcher, ingest, Runnable::run, CLOCK,
+            new LibraryLock());
+        deferred = new ScanService(root, scanner, ffprobe, tmdb, matcher, ingest, queued::add, CLOCK,
+            new LibraryLock());
         when(tmdb.enabled()).thenReturn(true);
         when(ingest.startRun("admin", CLOCK.instant())).thenReturn(5L);
         when(ingest.known()).thenReturn(Map.of());
@@ -599,7 +601,7 @@ class ScanServiceTest {
             throw new java.util.concurrent.RejectedExecutionException("shutting down");
         };
         ScanService stopped = new ScanService(new LibraryRoot(library.toString()), scanner, ffprobe, tmdb, matcher,
-            ingest, refusing, CLOCK);
+            ingest, refusing, CLOCK, new LibraryLock());
 
         assertThatThrownBy(() -> stopped.start("admin")).isInstanceOf(
             java.util.concurrent.RejectedExecutionException.class);

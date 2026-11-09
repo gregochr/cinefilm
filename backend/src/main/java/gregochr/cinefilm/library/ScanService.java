@@ -19,7 +19,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executor;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
@@ -46,13 +45,13 @@ public class ScanService {
     private final LibraryIngest ingest;
     private final Executor executor;
     private final Clock clock;
-    private final AtomicBoolean running = new AtomicBoolean();
+    private final LibraryLock lock;
     private final AtomicReference<Progress> progress = new AtomicReference<>();
 
-    /** Creates the service; the executor runs scans in the background. */
+    /** Creates the service; the executor runs scans in the background, the lock keeps scans and imports apart. */
     public ScanService(LibraryRoot root, LibraryScanner scanner, FfprobeService ffprobe, TmdbApi tmdb,
                        TmdbMatcher matcher, LibraryIngest ingest,
-                       @Qualifier("scanExecutor") Executor scanExecutor, Clock clock) {
+                       @Qualifier("scanExecutor") Executor scanExecutor, Clock clock, LibraryLock lock) {
         this.root = root;
         this.scanner = scanner;
         this.ffprobe = ffprobe;
@@ -61,6 +60,7 @@ public class ScanService {
         this.ingest = ingest;
         this.executor = scanExecutor;
         this.clock = clock;
+        this.lock = lock;
     }
 
     /**
@@ -75,23 +75,24 @@ public class ScanService {
 
     /** True while a scan is running. */
     public boolean isRunning() {
-        return running.get();
+        return lock.heldBy(LibraryLock.SCAN);
     }
 
     /** Progress of the running scan, or null when idle. */
     public Progress progress() {
-        return running.get() ? progress.get() : null;
+        return isRunning() ? progress.get() : null;
     }
 
     /**
      * Starts a scan in the background.
      *
      * @param trigger what asked for it: {@code startup}, {@code nightly} or {@code admin}
-     * @throws ScanAlreadyRunningException when a scan is already running
+     * @throws ScanAlreadyRunningException when a scan or a Plex import is already running
      */
     public void start(String trigger) {
-        if (!running.compareAndSet(false, true)) {
-            throw new ScanAlreadyRunningException();
+        if (!lock.tryAcquire(LibraryLock.SCAN)) {
+            throw lock.heldBy(LibraryLock.SCAN) ? new ScanAlreadyRunningException()
+                : new ScanAlreadyRunningException("A Plex import is running");
         }
         progress.set(new Progress(0, 0, null));
         try {
@@ -99,11 +100,11 @@ public class ScanService {
                 try {
                     execute(trigger);
                 } finally {
-                    running.set(false);
+                    lock.release();
                 }
             });
         } catch (RuntimeException e) {
-            running.set(false);
+            lock.release();
             throw e;
         }
     }

@@ -13,6 +13,9 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
     /** The film matched to a TMDB id, if any (the first when several exist). */
     Optional<Film> findFirstByTmdbIdOrderByIdAsc(Long tmdbId);
 
+    /** Every film matched to a TMDB id, oldest first. */
+    List<Film> findByTmdbIdOrderByIdAsc(Long tmdbId);
+
     /** Films in the given match state. */
     List<Film> findByMatchStatusOrderBySortTitle(MatchStatus status);
 }

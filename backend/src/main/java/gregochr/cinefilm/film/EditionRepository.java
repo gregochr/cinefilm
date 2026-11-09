@@ -14,4 +14,12 @@ public interface EditionRepository extends JpaRepository<Edition, Long> {
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update Edition e set e.film = :target where e.film = :source")
     int moveAll(Film source, Film target);
+
+    /** Moves one edition to another film, keeping its id. The persistence context is cleared: reload afterwards. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update Edition e set e.film = :target where e.id = :editionId")
+    int moveOne(Long editionId, Film target);
+
+    /** How many editions a film has. */
+    long countByFilmId(Long filmId);
 }
