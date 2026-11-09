@@ -19,7 +19,11 @@ export default function CollectionCard({ collection }) {
       : `${collection.ownedCount ?? 0} films`;
   return (
     <Link to={`/collections/${collection.id}`} className="collection-card">
-      <span className={`collection-card__fan collection-card__fan--${n}`} aria-hidden="true">
+      <span
+        className={`collection-card__fan collection-card__fan--${n}`}
+        aria-hidden="true"
+        data-testid="collection-fan"
+      >
         {posters.map(({ path, depth }) => {
           const url = imageUrl(path);
           const style = url
@@ -28,6 +32,8 @@ export default function CollectionCard({ collection }) {
           return (
             <span
               key={depth}
+              data-testid="collection-poster"
+              data-depth={depth}
               className={`collection-card__poster collection-card__poster--depth-${depth}`}
               style={style}
             />
