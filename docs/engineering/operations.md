@@ -23,8 +23,8 @@ avoids goldenhour's). Backups, backup verification and the daily health workflow
 RAM is 15 GiB and the root disk is 98 G with only about 5.8 G free (94% used). Host ports in use: 22 53 80 5050 5432
 5433 8081-8087 9000 (8086 is vbgone's frontend, hence CineFilm on 8090). Port 80 belongs to goldenhour: nothing of CineFilm's ever binds it
 (Caddy has no redirect listener and uses the DNS challenge). 443 on the tailnet addresses is Caddy's; `tailscale serve`
-moves to 8443 (Custom domain). RAM is not a constraint: the container stays capped at `mem_limit: 1g` with
-`-XX:MaxRAMPercentage=75` in `deploy/docker-compose.yml`; revisit it before ffmpeg/transcoding lands. Disk is: see the
+moves to 8443 (Custom domain). RAM is not a constraint: the container is capped at `mem_limit: 2g` with the heap pinned
+at `-Xmx512m` in `deploy/docker-compose.yml` (ffmpeg children live outside the heap). Disk is: see the
 warning in the host setup below.
 
 ## One-time host setup (owner, on dockermacmini unless stated)
@@ -402,3 +402,13 @@ curl -sI https://cinefilm.chrisjgregory.dev/ | head -1
 Playwright E2E and axe a11y in CI, ZAP, release changelog
 promotion, nightly backups with verification and the daily health workflow
 (phase 9), the `cinefilm-worker` service.
+
+## Transcoding (live HLS)
+
+The container transcodes with Intel Quick Sync (`h264_vaapi`, i965 driver). The compose file passes only
+`/dev/dri`, adds the `render` group (`group_add: ["993"]`; confirm with `getent group render` on the host) and sets
+`LIBVA_DRIVER_NAME=i965` and `init: true`. Check the encoder in **Admin > Transcoding**: `vaapi` is the goal,
+`software` means the render node was not usable (libx264, 480p/360p only; check `ls -l /dev/dri` and the group id),
+`unavailable` means ffmpeg itself is unusable and the player shows "worker offline" (original direct-plays).
+The same panel shows keyframe-index progress, running sessions (Stop per session) and the size of `cache/hls`
+(capped at 5 GB, idle sessions evicted; leftovers are deleted at start-up).

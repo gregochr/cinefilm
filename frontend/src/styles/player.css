@@ -106,6 +106,9 @@
   border-radius: 50%;
   background: var(--cf-ok);
 }
+.pill__dot--amber {
+  background: var(--cf-amber);
+}
 
 .player__bottom {
   position: relative;
@@ -306,6 +309,13 @@
   font-size: 13px;
   color: var(--cf-text-muted);
 }
+.menu__footer {
+  margin-top: 6px;
+  padding: 10px 12px 4px;
+  border-top: 1px solid var(--cf-line);
+  font-size: 13px;
+  color: var(--cf-text-muted);
+}
 .menu__empty {
   padding: 12px;
   color: var(--cf-text-muted);
@@ -347,6 +357,51 @@
   .buffering__spinner {
     animation-duration: 3s;
   }
+}
+.reconnecting {
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  border-radius: var(--cf-radius-pill);
+  background: var(--cf-overlay);
+  border: 1px solid var(--cf-line);
+  pointer-events: none;
+}
+.reconnecting .buffering__spinner {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+.slow-card {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: 140px;
+  transform: translateX(-50%);
+  width: min(440px, calc(100% - 32px));
+  padding: 20px 22px;
+  border-radius: 12px;
+  background: var(--cf-overlay);
+  border: 1px solid var(--cf-line-strong);
+}
+.slow-card__title {
+  font-family: var(--cf-font-display);
+  font-weight: 400;
+  font-size: 26px;
+}
+.slow-card__text {
+  margin: 8px 0 16px;
+  color: var(--cf-text-2);
+}
+.slow-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 .toast {
   position: absolute;

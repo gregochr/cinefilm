@@ -2,27 +2,46 @@ import { useCallback, useEffect, useRef } from 'react';
 import { editionsApi, filmsApi } from '../api/resources.js';
 import { PROGRESS_INTERVAL_MS } from '../player/resume.js';
 
+/** A failed report is retried after 2 s, then 4 s, 8 s … never more than 30 s apart. */
+export const RETRY_BASE_MS = 2000;
+export const RETRY_MAX_MS = 30000;
+
 /**
  * Progress reporting and preference saving for one playing edition. No DOM: the caller
  * supplies `getPositionMs`. Reports every 10 s while `playing`, when playback pauses, and on
- * unmount.
+ * unmount. A position of 0 or less is never reported (a reloading source reads 0 and must not
+ * overwrite the saved position), and a failed report is kept and retried with backoff.
  */
 export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
   const getRef = useRef(getPositionMs);
   const lastReported = useRef(null);
+  const failures = useRef(0);
+  const retryTimer = useRef(null);
+  const closed = useRef(false);
   useEffect(() => {
     getRef.current = getPositionMs;
   });
 
   const report = useCallback(async () => {
     const positionMs = Math.round(getRef.current());
-    if (!editionId || !Number.isFinite(positionMs) || positionMs === lastReported.current)
+    if (
+      !editionId ||
+      !Number.isFinite(positionMs) ||
+      positionMs <= 0 ||
+      positionMs === lastReported.current
+    )
       return null;
     lastReported.current = positionMs;
+    clearTimeout(retryTimer.current);
     try {
-      return await editionsApi.reportProgress(editionId, positionMs);
+      const saved = await editionsApi.reportProgress(editionId, positionMs);
+      failures.current = 0;
+      return saved;
     } catch {
       lastReported.current = null;
+      const delay = Math.min(RETRY_BASE_MS * 2 ** failures.current, RETRY_MAX_MS);
+      failures.current += 1;
+      if (!closed.current) retryTimer.current = setTimeout(() => void report(), delay);
       return null;
     }
   }, [editionId]);
@@ -39,7 +58,14 @@ export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
     wasPlaying.current = playing;
   }, [playing, report]);
 
-  useEffect(() => () => void report(), [report]);
+  useEffect(() => {
+    closed.current = false;
+    return () => {
+      closed.current = true;
+      clearTimeout(retryTimer.current);
+      void report();
+    };
+  }, [report]);
 
   const setWatched = useCallback(
     (watched) => (editionId ? editionsApi.setWatched(editionId, watched) : Promise.resolve(null)),

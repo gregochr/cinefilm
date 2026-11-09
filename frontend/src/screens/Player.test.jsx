@@ -22,7 +22,10 @@ async function openPlayer(path = '/films/1/play?edition=11', route) {
   const fetchMock = installFetch(route);
   renderApp(path);
   const video = await screen.findByTestId('player-video');
+  // No session in these tests (the default API refuses), so the player settles on direct play first.
+  await waitFor(() => expect(video).toHaveAttribute('src'));
   fireEvent.loadedMetadata(video);
+  fireEvent.timeUpdate(video); // the resume seek lands: from here the element's time is the position
   return { video, fetchMock, player: screen.getByRole('region', { name: 'Video player' }) };
 }
 
@@ -62,20 +65,16 @@ describe('Player loading and choosing the edition', () => {
   it('plays the edition named in the URL', async () => {
     installFetch();
     renderApp('/films/6/play?edition=62');
-    expect(await screen.findByTestId('player-video')).toHaveAttribute(
-      'src',
-      '/api/editions/62/stream',
-    );
+    const video = await screen.findByTestId('player-video');
+    await waitFor(() => expect(video).toHaveAttribute('src', '/api/editions/62/stream'));
     expect(screen.getByText('1992')).toBeInTheDocument();
   });
 
   it('otherwise plays the remembered edition', async () => {
     installFetch(heatWith(() => {}));
     renderApp('/films/6/play');
-    expect(await screen.findByTestId('player-video')).toHaveAttribute(
-      'src',
-      '/api/editions/61/stream',
-    );
+    const video = await screen.findByTestId('player-video');
+    await waitFor(() => expect(video).toHaveAttribute('src', '/api/editions/61/stream'));
   });
 
   it('falls back to the first edition when the remembered one is gone', async () => {
@@ -86,10 +85,8 @@ describe('Player loading and choosing the edition', () => {
       return respond(film);
     });
     renderApp('/films/6/play?edition=abc');
-    expect(await screen.findByTestId('player-video')).toHaveAttribute(
-      'src',
-      '/api/editions/61/stream',
-    );
+    const video = await screen.findByTestId('player-video');
+    await waitFor(() => expect(video).toHaveAttribute('src', '/api/editions/61/stream'));
   });
 
   it('works for a film with no saved preferences', async () => {
@@ -99,10 +96,8 @@ describe('Player loading and choosing the edition', () => {
       }),
     );
     renderApp('/films/1/play');
-    expect(await screen.findByTestId('player-video')).toHaveAttribute(
-      'src',
-      '/api/editions/11/stream',
-    );
+    const video = await screen.findByTestId('player-video');
+    await waitFor(() => expect(video).toHaveAttribute('src', '/api/editions/11/stream'));
     expect(screen.getByRole('button', { name: 'Quality' })).toHaveTextContent('Auto');
   });
 

@@ -94,7 +94,11 @@ class RouteSecurityDriftTest {
             "PUT /api/films/{id}/preferences", "GET /api/session", "POST /api/session",
             "DELETE /api/session", "GET /api/admin/scan", "POST /api/admin/scan", "GET /api/admin/attention",
             "GET /api/media-files/{id}/subtitles/{streamIndex}.vtt", "GET /api/art/{name}", "GET /api/admin/plex",
-            "POST /api/admin/plex/import");
+            "POST /api/admin/plex/import",
+            "POST /api/editions/{id}/sessions", "GET /api/sessions/{id}/master.m3u8",
+            "GET /api/sessions/{id}/{rung}/index.m3u8", "GET /api/sessions/{id}/{rung}/{file}",
+            "DELETE /api/sessions/{id}", "GET /api/admin/transcoding",
+            "DELETE /api/admin/transcoding/sessions/{id}");
     }
 
     @Test
@@ -124,6 +128,22 @@ class RouteSecurityDriftTest {
             int status = mvc.perform(request(route).with(user("owner").roles("OWNER"))).andReturn()
                 .getResponse().getStatus();
             assertThat(status).as(route).isNotIn(401, 403);
+        }
+    }
+
+    @Test
+    void theStreamingSessionRoutesThatChangeStateAlsoNeedTheCsrfHeaderWhenSignedIn() throws Exception {
+        List<String> mutating = List.of("POST /api/editions/{id}/sessions", "DELETE /api/sessions/{id}",
+            "DELETE /api/admin/transcoding/sessions/{id}");
+        assertThat(apiRoutes()).containsAll(mutating);
+
+        for (String route : mutating) {
+            String[] parts = route.split(" ", 2);
+            mvc.perform(MockMvcRequestBuilders.request(HttpMethod.valueOf(parts[0]),
+                    parts[1].replaceAll("\\{[^}]+}", "1")).with(user("owner").roles("OWNER"))
+                    .contentType("application/json").content("{}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
         }
     }
 

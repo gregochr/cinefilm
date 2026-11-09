@@ -1,0 +1,1 @@
+- feat: adaptive streaming and network resilience: every film plays as one HLS stream (the original video copied as the top rung, 720p/480p/360p/240p transcoded live with Intel Quick Sync, software fallback), automatic step-down and step-up, reconnect and resume after a drop, quality indicator, Admin transcoding panel; direct play stays as the fallback.

@@ -12,7 +12,7 @@ import {
   remainingMs,
   spokenTime,
 } from './time.js';
-import { indicatorText, nextSubtitle, qualityDetail, subtitleOptions } from './tracks.js';
+import { nextSubtitle, qualityDetail, subtitleOptions } from './tracks.js';
 
 describe('time formatting', () => {
   it('formats the mono clock and resume label', () => {
@@ -144,6 +144,6 @@ describe('tracks', () => {
     expect(qualityDetail({ id: '480p', bitrate: 1500000, premade: true })).toBe(
       '1.5 Mbps · pre-made',
     );
-    expect(indicatorText('auto')).toBe('Auto · Original · Home');
+    expect(qualityDetail({ id: 'auto' }, { activeRung: '720p' })).toBe('now 720p');
   });
 });

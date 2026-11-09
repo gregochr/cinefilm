@@ -412,6 +412,8 @@ public class LibraryIngest {
         }
         file.setContainer(cut(probe.container(), 20));
         file.setVideoCodec(cut(probe.videoCodec(), 40));
+        // Empty (not null) when ffprobe gave none, so the scanner knows the file was probed and never asks again.
+        file.setPixelFormat(probe.pixelFormat() == null ? "" : cut(probe.pixelFormat(), 20));
         file.setWidth(probe.width());
         file.setHeight(probe.height());
         file.setBitrate(probe.bitrate());

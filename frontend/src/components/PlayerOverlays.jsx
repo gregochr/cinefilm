@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { Button } from './Button.jsx';
 
-export function IndicatorPill({ text }) {
+export function IndicatorPill({ text, amber = false }) {
   return (
     <div className="pill" role="status">
-      <span className="pill__dot" aria-hidden="true" />
+      <span className={`pill__dot${amber ? ' pill__dot--amber' : ''}`} aria-hidden="true" />
+      <span className="sr-only">{amber ? 'Connection is limited. ' : 'Connection is good. '}</span>
       {text}
     </div>
   );
@@ -15,6 +16,40 @@ export function BufferingSpinner() {
     <div className="buffering" role="status">
       <span className="buffering__spinner" aria-hidden="true" />
       <span className="buffering__text">BUFFERING</span>
+    </div>
+  );
+}
+
+/** Shown while the connection is down and the player keeps retrying; polite, never an error. */
+export function ReconnectingNotice() {
+  return (
+    <div className="reconnecting" role="status">
+      <span className="buffering__spinner" aria-hidden="true" />
+      <span className="buffering__text">Reconnecting…</span>
+    </div>
+  );
+}
+
+/** The one-off card per session on a slow connection (decision 11). */
+export function SlowConnectionCard({ rung, onOk, onChoose }) {
+  const ok = useRef(null);
+  useEffect(() => {
+    ok.current?.focus();
+  }, []);
+  return (
+    <div className="slow-card" role="dialog" aria-modal="false" aria-labelledby="slow-card-title">
+      <h2 id="slow-card-title" className="slow-card__title">
+        You&rsquo;re on a slow connection
+      </h2>
+      <p className="slow-card__text">
+        Playing at {rung} to avoid stalls. Auto will step up if things improve.
+      </p>
+      <div className="slow-card__actions">
+        <Button variant="primary" ref={ok} onClick={onOk}>
+          OK
+        </Button>
+        <Button onClick={onChoose}>Choose quality</Button>
+      </div>
     </div>
   );
 }

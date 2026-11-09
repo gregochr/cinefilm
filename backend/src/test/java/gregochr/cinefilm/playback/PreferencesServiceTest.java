@@ -217,7 +217,8 @@ class PreferencesServiceTest {
 
     @Test
     void everyListedQualityIsAccepted() {
-        assertThat(PreferencesService.QUALITIES).containsExactly("auto", "original", "1080p", "720p", "480p");
+        assertThat(PreferencesService.QUALITIES)
+            .containsExactly("auto", "original", "1080p", "720p", "480p", "360p", "240p");
     }
 
     @Test
@@ -226,7 +227,7 @@ class PreferencesServiceTest {
 
         assertThatThrownBy(() -> service.update(FILM_ID, new PreferencesRequest(null, "4k", null, null)))
             .isInstanceOf(BadRequestException.class)
-            .hasMessage("quality must be one of [auto, original, 1080p, 720p, 480p]");
+            .hasMessage("quality must be one of [auto, original, 1080p, 720p, 480p, 360p, 240p]");
         verify(stored, never()).save(org.mockito.ArgumentMatchers.any());
     }
 

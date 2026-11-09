@@ -241,7 +241,7 @@ None outstanding for the topology. workhorse is always on, so the film share is 
 - Streams: `audioStreams[]` = `{ id, index, language, channels, codec, title, isDefault, safariPlayable }`,
   `subtitleStreams[]` = `{ id, index, language, forced, title, format }`; `id` is the database id.
 - `preferences` = `{ editionId, quality, audioStreamId, subtitle }`: `audioStreamId` is an audio stream `id`;
-  `subtitle` is `"off"` or a subtitle stream id as a string; `quality` is one of `auto|original|1080p|720p|480p`.
+  `subtitle` is `"off"` or a subtitle stream id as a string; `quality` is one of `auto|original|1080p|720p|480p|360p|240p`.
   `PUT /api/films/{id}/preferences` changes only the fields sent (400 for an unknown edition or quality).
 - `directors` entries and cast `person` are `{ id, name, profilePath }`; Person `films[].roles` are display strings
   ("as Neil McCauley", "Director").
@@ -296,3 +296,19 @@ Plan: `library-scan-plan.md`. What the API and the model now carry:
   scan at a time.
 - **Config.** `CINEFILM_LIBRARY_ROOT`, `CINEFILM_CACHE_DIR` (default `/app/cache`, where the deploy mounts the writable cache; `scripts/test/config-agreement.test.sh` keeps the two in step), `TMDB_READ_TOKEN`
   (empty disables TMDB: films are added with the file's own title and stay `PENDING`).
+
+## Adaptive streaming API (phase 3, see `transcoding-plan.md`)
+
+All behind the session cookie; the mutating routes need `X-CineFilm`.
+
+| Route | Contract |
+|---|---|
+| `POST /api/editions/{id}/sessions` `{audioStreamId?, startMs?, quality, probeKbps?}` | 201 `{sessionId, masterUrl, startRung, renditions:[{id,height,bitrate,copy}]}`; 404 unknown edition or unplayable file; 400 bad quality, audio stream, `startMs`, or a pinned rung the film lacks; 409 `{error}` when the encoder is unavailable, the index cannot be built, or `original` has no copy rung (the client direct-plays) |
+| `GET /api/sessions/{id}/master.m3u8` | per-session master, intended start rung first, only the pinned rung when a quality is chosen |
+| `GET /api/sessions/{id}/{rung}/index.m3u8`, `.../seg-{n}.ts` | VOD playlist from the cut list; segments 503 + `Retry-After: 1` while the encoder catches up (never 404); 404 for an expired session, bad path segment, rung outside the ladder or `n` past the segment count; `Cache-Control: no-store` |
+| `DELETE /api/sessions/{id}` | 204, idempotent |
+| `GET /api/admin/transcoding` | `{encoder: vaapi/software/unavailable, index:{indexed,total}, hlsBytes, sessions:[{id,filmTitle,editionId,rung,speed,segmentsAhead,startedAt,unavailable}]}` |
+| `DELETE /api/admin/transcoding/sessions/{id}` | 204 |
+
+`FilmDetail` editions list `qualities[]` with ids `auto|original|1080p|720p|480p|360p|240p`; transcoded rungs and
+`auto` are `available:false` when the encoder is unavailable.

@@ -11,6 +11,8 @@ import wickerMan from './fixtures/film-wicker-man.json';
 import adminAttention from './fixtures/admin-attention.json';
 import adminScan from './fixtures/admin-scan.json';
 import adminPlex from './fixtures/admin-plex.json';
+import adminTranscoding from './fixtures/admin-transcoding.json';
+import session from './fixtures/session.json';
 import home from './fixtures/home.json';
 import person from './fixtures/person.json';
 
@@ -26,6 +28,8 @@ export const fixtures = {
   adminScan,
   adminAttention,
   adminPlex,
+  adminTranscoding,
+  session,
 };
 
 const json = (data, status = 200) =>
@@ -68,6 +72,8 @@ export function defaultRoute(method, url) {
           lastImport: null,
         });
   }
+  if (path === '/api/admin/transcoding') return json(adminTranscoding);
+  if (/^\/api\/admin\/transcoding\/sessions\//.test(path)) return json(null, 204);
   if (path === '/api/session') return json({ authenticated: true });
   return json(null, 404);
 }

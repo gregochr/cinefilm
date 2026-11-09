@@ -9,6 +9,7 @@ import {
   mediaFilesApi,
   peopleApi,
   sessionApi,
+  sessionsApi,
 } from './resources.js';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -107,6 +108,40 @@ describe('image URLs', () => {
 
   it('builds the WebVTT url of a subtitle stream from the media file id and stream index', () => {
     expect(mediaFilesApi.subtitleUrl(501, 3)).toBe('/api/media-files/501/subtitles/3.vtt');
+  });
+
+  it('reads the transcoding state and stops a session with DELETE', async () => {
+    const last = stubFetch();
+    await adminApi.transcoding();
+    expect(last()).toMatchObject({ path: '/api/admin/transcoding', method: 'GET' });
+    await adminApi.stopTranscodingSession('abc');
+    expect(last()).toEqual({
+      path: '/api/admin/transcoding/sessions/abc',
+      method: 'DELETE',
+      body: undefined,
+    });
+  });
+
+  it('creates a playback session with POST and removes it with DELETE', async () => {
+    const last = stubFetch();
+    await sessionsApi.create(11, { quality: 'auto', startMs: 5000, probeKbps: 8000 });
+    expect(last()).toEqual({
+      path: '/api/editions/11/sessions',
+      method: 'POST',
+      body: { quality: 'auto', startMs: 5000, probeKbps: 8000 },
+    });
+    await sessionsApi.remove('abc', { keepalive: true });
+    expect(last()).toEqual({ path: '/api/sessions/abc', method: 'DELETE', body: undefined });
+  });
+
+  it('sends the session DELETE with keepalive and the CSRF header', async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await sessionsApi.remove('abc', { keepalive: true });
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      keepalive: true,
+      headers: expect.objectContaining({ 'X-CineFilm': '1' }),
+    });
   });
 });
 

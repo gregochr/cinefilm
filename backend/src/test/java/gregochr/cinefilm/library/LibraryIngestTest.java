@@ -78,7 +78,7 @@ class LibraryIngestTest extends ApiTestBase {
                 new ProbeResult.Audio(2, "English", "5.1", "AC-3", "Surround", false, true)),
             List.of(new ProbeResult.Subtitle(3, "English", false, null, "mov_text"),
                 new ProbeResult.Subtitle(4, "English", true, "English (forced)", "mov_text")),
-            new ProbeResult.Tags("Heat", 1995, "9", "1", "A crew of thieves."), false);
+            new ProbeResult.Tags("Heat", 1995, "9", "1", "A crew of thieves."), false, "yuv420p");
     }
 
     private static MovieDetails movie(long id, String title, Integer year, CollectionRef collection) {
@@ -129,6 +129,7 @@ class LibraryIngestTest extends ApiTestBase {
         assertThat(file.getPlayability()).isEqualTo(Playability.PLAYABLE);
         assertThat(file.getContainer()).isEqualTo("mp4");
         assertThat(file.getVideoCodec()).isEqualTo("H.264");
+        assertThat(file.getPixelFormat()).isEqualTo("yuv420p");
         assertThat(file.getWidth()).isEqualTo(1920);
         assertThat(file.getHeight()).isEqualTo(800);
         assertThat(file.getBitrate()).isEqualTo(9_000_000L);
@@ -152,6 +153,7 @@ class LibraryIngestTest extends ApiTestBase {
         assertThat(film.getEditions().get(0).getRuntimeMs()).isZero();
         assertThat(film.getOverview()).isNull();
         assertThat(film.getEditions().get(0).originalFile().getVideoCodec()).isNull();
+        assertThat(film.getEditions().get(0).originalFile().getPixelFormat()).isNull();
         assertThat(film.getEditions().get(0).originalFile().getAudioStreams()).isEmpty();
     }
 
@@ -165,6 +167,7 @@ class LibraryIngestTest extends ApiTestBase {
         Film film = only();
         assertThat(film.getOverview()).isNull();
         assertThat(film.getEditions().get(0).originalFile().getContainer()).isNull();
+        assertThat(film.getEditions().get(0).originalFile().getPixelFormat()).isEmpty();
     }
 
     @Test

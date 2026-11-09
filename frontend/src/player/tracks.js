@@ -104,19 +104,14 @@ export function qualityName(id) {
 }
 
 /** The mono detail shown on the right of a quality row. */
-export function qualityDetail(quality, { height } = {}) {
-  if (quality.id === 'auto') return 'now Original';
+export function qualityDetail(quality, { height, activeRung = 'original' } = {}) {
+  if (quality.id === 'auto') return `now ${qualityName(activeRung)}`;
   const bitrate = formatBitrate(quality.bitrate);
   const parts = [];
   if (quality.id === 'original' && height) parts.push(`${height}p`);
   if (bitrate) parts.push(bitrate);
   if (quality.premade) parts.push('pre-made');
   return parts.join(' · ');
-}
-
-/** The corner indicator. Phase 1 always plays the original at home. */
-export function indicatorText(quality = 'auto') {
-  return quality === 'original' ? 'Original · Home' : 'Auto · Original · Home';
 }
 
 export function currentQualityLabel(quality = 'auto') {

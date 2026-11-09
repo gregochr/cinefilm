@@ -107,4 +107,20 @@ describe('fixture server', () => {
     expect((await call('GET', '/api/admin/scan')).folder).toBe('/media');
     expect((await call('GET', '/api/admin/attention')).items.length).toBeGreaterThan(0);
   });
+
+  it('serves the Admin transcoding state and stops a session', async () => {
+    const state = await call('GET', '/api/admin/transcoding');
+    expect(state.encoder).toBe('vaapi');
+    expect(state.sessions[0].filmTitle).toBe('Heat');
+    expect(
+      await call('DELETE', `/api/admin/transcoding/sessions/${state.sessions[0].id}`),
+    ).toBeNull();
+  });
+
+  it('creates and removes a playback session', async () => {
+    const session = await call('POST', '/api/editions/11/sessions', { quality: 'auto' });
+    expect(session.masterUrl).toBe(`/api/sessions/${session.sessionId}/master.m3u8`);
+    expect(session.renditions.map((r) => r.id)).toEqual(['original', '720p', '480p', '360p']);
+    expect(await call('DELETE', `/api/sessions/${session.sessionId}`)).toBeNull();
+  });
 });

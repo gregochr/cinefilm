@@ -1,0 +1,16 @@
+{
+  "encoder": "vaapi",
+  "index": { "indexed": 412, "total": 538 },
+  "hlsBytes": 1288490188,
+  "sessions": [
+    {
+      "id": "5b0f1c1e-6a52-4d5e-9a4c-0a7d3c1f2b11",
+      "filmTitle": "Heat",
+      "editionId": 11,
+      "rung": "720p",
+      "speed": 3.4,
+      "segmentsAhead": 12,
+      "startedAt": "2026-11-09T19:02:11Z"
+    }
+  ]
+}

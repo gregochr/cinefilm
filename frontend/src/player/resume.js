@@ -19,3 +19,9 @@ export function hasReachedEnd(positionMs, runtimeMs, creditsMarkerMs) {
   if (!runtimeMs) return false;
   return positionMs >= endThresholdMs(runtimeMs, creditsMarkerMs);
 }
+
+/** How close (ms) the playhead must be to a requested position for the seek to count as landed. */
+export const SEEK_LANDED_MS = 2000;
+
+/** True once the playhead is within 2 s of the position a reloaded source was asked to seek to. */
+export const seekLanded = (currentMs, targetMs) => Math.abs(currentMs - targetMs) < SEEK_LANDED_MS;

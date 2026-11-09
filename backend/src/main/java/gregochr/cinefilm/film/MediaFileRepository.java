@@ -17,14 +17,17 @@ public interface MediaFileRepository extends JpaRepository<MediaFile, Long> {
      * @param modifiedAt last-modified time at the last scan, or null
      * @param presence whether the last scan found it
      * @param playability whether it can be played
+     * @param pixelFormat the stored pixel format: null when the file has never been probed since the column was
+     *     added (the scanner re-probes it once), empty when it was probed and ffprobe gave none
      */
     record Known(Long id, String path, Long sizeBytes, Instant modifiedAt, Presence presence,
-                 Playability playability) {
+                 Playability playability, String pixelFormat) {
     }
 
     /** Every original file, as the scanner's snapshot of what is already in the library. */
     @Query("select new gregochr.cinefilm.film.MediaFileRepository$Known(m.id, m.path, m.sizeBytes, m.modifiedAt, "
-        + "m.presence, m.playability) from MediaFile m where m.kind = gregochr.cinefilm.film.MediaKind.ORIGINAL")
+        + "m.presence, m.playability, m.pixelFormat) from MediaFile m "
+        + "where m.kind = gregochr.cinefilm.film.MediaKind.ORIGINAL")
     List<Known> findKnownOriginals();
 
     /** Original files that were last seen with the given presence and playability. */

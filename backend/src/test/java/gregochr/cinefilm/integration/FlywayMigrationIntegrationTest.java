@@ -41,7 +41,7 @@ class FlywayMigrationIntegrationTest extends IntegrationTestBase {
             "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'", String.class);
         assertThat(tables).contains("film", "film_genre", "film_collection", "collection_part", "edition",
             "media_file", "audio_stream", "subtitle_stream", "person", "credit", "playback_state",
-            "film_preference", "scan_run", "plex_import_run");
+            "film_preference", "scan_run", "plex_import_run", "media_keyframes");
     }
 
     @Test

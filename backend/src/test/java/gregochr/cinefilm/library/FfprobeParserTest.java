@@ -296,6 +296,26 @@ class FfprobeParserTest {
     }
 
     @Test
+    void theFirstRealVideoStreamsPixelFormatIsKeptAndCoverArtIsIgnored() {
+        String json = "{\"format\":{},\"streams\":["
+            + "{\"index\":0,\"codec_type\":\"video\",\"codec_name\":\"mjpeg\",\"pix_fmt\":\"yuvj444p\","
+            + "\"disposition\":{\"attached_pic\":1}},"
+            + "{\"index\":1,\"codec_type\":\"video\",\"codec_name\":\"h264\",\"pix_fmt\":\"yuv420p10le\"},"
+            + "{\"index\":2,\"codec_type\":\"video\",\"codec_name\":\"h264\",\"pix_fmt\":\"yuv420p\"}]}";
+
+        assertThat(FfprobeParser.parse(json).pixelFormat()).isEqualTo("yuv420p10le");
+    }
+
+    @Test
+    void aMissingOrBlankPixelFormatIsNull() {
+        assertThat(FfprobeParser.parse("{\"format\":{},\"streams\":[{\"index\":0,\"codec_type\":\"video\","
+            + "\"codec_name\":\"h264\"}]}").pixelFormat()).isNull();
+        assertThat(FfprobeParser.parse("{\"format\":{},\"streams\":[{\"index\":0,\"codec_type\":\"video\","
+            + "\"codec_name\":\"h264\",\"pix_fmt\":\" \"}]}").pixelFormat()).isNull();
+        assertThat(FfprobeParser.parse("{\"format\":{},\"streams\":[]}").pixelFormat()).isNull();
+    }
+
+    @Test
     void numbersAtTheEdgesOfWhatIsTrustedAreHandledExactly() {
         String video = "{\"index\":0,\"codec_type\":\"video\",\"codec_name\":\"h264\",\"width\":%s}";
         assertThat(FfprobeParser.parse("{\"format\":{},\"streams\":[" + video.formatted("2147483647") + "]}")

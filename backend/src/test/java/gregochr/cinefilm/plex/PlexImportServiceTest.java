@@ -81,7 +81,7 @@ class PlexImportServiceTest {
     }
 
     private static Known known(long id, String path) {
-        return new Known(id, path, 1L, NOW, Presence.PRESENT, Playability.PLAYABLE);
+        return new Known(id, path, 1L, NOW, Presence.PRESENT, Playability.PLAYABLE, "yuv420p");
     }
 
     private static PlexFilm film(String title, Long tmdbId, String thumb, String art, String... files) {
@@ -278,7 +278,7 @@ class PlexImportServiceTest {
         PlexFilm there = film("There", null, null, null, PREFIX + "There.m4v");
         library(there);
         known(known(1, "There.m4v"), known(2, "Unknown.m4v"),
-            new Known(3L, "Gone.m4v", 1L, NOW, Presence.MISSING, Playability.PLAYABLE));
+            new Known(3L, "Gone.m4v", 1L, NOW, Presence.MISSING, Playability.PLAYABLE, "yuv420p"));
         when(writer.preflight(List.of(1L), null)).thenReturn(HAS_ALL);
         when(writer.apply(new FilmWrite(there, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
 

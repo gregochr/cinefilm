@@ -6,6 +6,7 @@ import {
   streamKey,
   subtitleOptions,
 } from '../player/tracks.js';
+import { workerOffline } from '../player/ladder.js';
 import { CheckIcon } from './icons.jsx';
 
 /** Moves focus between enabled menu items with the arrow keys. */
@@ -49,7 +50,7 @@ function Item({ checked, disabled, onSelect, children, detail }) {
   );
 }
 
-export function QualityMenu({ qualities, value, height, onSelect }) {
+export function QualityMenu({ qualities, value, height, activeRung, onSelect }) {
   const ref = useRef(null);
   useFocusChecked(ref);
   return (
@@ -68,11 +69,17 @@ export function QualityMenu({ qualities, value, height, onSelect }) {
           checked={value === q.id}
           disabled={!q.available}
           onSelect={() => onSelect(q.id)}
-          detail={qualityDetail(q, { height })}
+          detail={qualityDetail(q, { height, activeRung })}
         >
           {qualityName(q.id)}
         </Item>
       ))}
+      {workerOffline(qualities) ? (
+        <div className="menu__footer">
+          Lower qualities unavailable right now &mdash; the transcode worker is offline. Pre-made
+          versions still play.
+        </div>
+      ) : null}
     </div>
   );
 }

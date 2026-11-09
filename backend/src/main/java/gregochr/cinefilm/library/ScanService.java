@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 /**
@@ -46,12 +47,14 @@ public class ScanService {
     private final Executor executor;
     private final Clock clock;
     private final LibraryLock lock;
+    private final ApplicationEventPublisher events;
     private final AtomicReference<Progress> progress = new AtomicReference<>();
 
     /** Creates the service; the executor runs scans in the background, the lock keeps scans and imports apart. */
     public ScanService(LibraryRoot root, LibraryScanner scanner, FfprobeService ffprobe, TmdbApi tmdb,
                        TmdbMatcher matcher, LibraryIngest ingest,
-                       @Qualifier("scanExecutor") Executor scanExecutor, Clock clock, LibraryLock lock) {
+                       @Qualifier("scanExecutor") Executor scanExecutor, Clock clock, LibraryLock lock,
+                       ApplicationEventPublisher events) {
         this.root = root;
         this.scanner = scanner;
         this.ffprobe = ffprobe;
@@ -61,6 +64,7 @@ public class ScanService {
         this.executor = scanExecutor;
         this.clock = clock;
         this.lock = lock;
+        this.events = events;
     }
 
     /**
@@ -130,6 +134,7 @@ public class ScanService {
         }
         ingest.finishRun(run, clock.instant(), seen, added, missing, error);
         LOG.info("Scan finished: {} files, {} new, {} missing, note: {}", seen, added, missing, error);
+        events.publishEvent(new ScanFinished(trigger));
     }
 
     private record Counts(int seen, int added, int missing, String error) {
@@ -201,7 +206,9 @@ public class ScanService {
             boolean unchanged = existing.sizeBytes() != null && existing.sizeBytes() == file.sizeBytes()
                 && existing.modifiedAt() != null
                 && existing.modifiedAt().toEpochMilli() == file.modifiedAt().toEpochMilli();
-            if (unchanged && existing.playability() != Playability.UNREADABLE) {
+            // A null pixel format means the file was last probed before that column existed: probe it once more
+            // (the update stores a value, or an empty marker, so this happens once per file).
+            if (unchanged && existing.playability() != Playability.UNREADABLE && existing.pixelFormat() != null) {
                 if (existing.presence() == Presence.MISSING) {
                     ingest.markPresent(existing.id());
                 }

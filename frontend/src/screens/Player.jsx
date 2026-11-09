@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { SESSION_EXPIRED_EVENT, SIGNED_IN_EVENT } from '../api/client.js';
-import { editionsApi, mediaFilesApi } from '../api/resources.js';
+import { mediaFilesApi } from '../api/resources.js';
 import { Button } from '../components/Button.jsx';
 import {
   BackIcon,
@@ -20,6 +20,8 @@ import {
   BufferingSpinner,
   EndOverlay,
   IndicatorPill,
+  ReconnectingNotice,
+  SlowConnectionCard,
   Toast,
 } from '../components/PlayerOverlays.jsx';
 import Scrubber from '../components/Scrubber.jsx';
@@ -27,12 +29,15 @@ import { ErrorState } from '../components/StateMessages.jsx';
 import { useAutoHide } from '../player/autohide.js';
 import { toggleFullscreen } from '../player/fullscreen.js';
 import { clampVolume, keyToAction, resolveEscape } from '../player/keymap.js';
-import { hasReachedEnd, resumePosition } from '../player/resume.js';
+import { indicatorModel } from '../player/indicator.js';
+import { AUTO, ORIGINAL, resolveQuality, rungName, topRung } from '../player/ladder.js';
+import { hasReachedEnd, resumePosition, seekLanded } from '../player/resume.js';
+import { useSlowCard } from '../player/slowCard.js';
+import { useStream } from '../player/useStream.js';
 import { formatClock, formatRemaining } from '../player/time.js';
 import {
   SUBTITLE_OFF,
   activeSubtitleKey,
-  indicatorText,
   nextSubtitle,
   qualityName,
   resolveAudioChoice,
@@ -105,7 +110,7 @@ function PlayerView({ film, edition, startAtZero }) {
   const [fullscreen, setFullscreen] = useState(false);
   const [endDismissed, setEndDismissed] = useState(false);
   const [toast, setToast] = useState(null);
-  const [quality, setQuality] = useState(prefs.quality || 'auto');
+  const [quality, setQuality] = useState(() => resolveQuality(prefs.quality, edition.qualities));
   const [audio, setAudio] = useState(() => {
     const preferredKey = resolveAudioChoice(film.editions, edition, prefs.audioStreamId);
     const preferred = edition.audioStreams.find((s) => streamKey(s) === preferredKey);
@@ -116,6 +121,28 @@ function PlayerView({ film, edition, startAtZero }) {
   const [subtitle, setSubtitle] = useState(() =>
     resolveSubtitleChoice(film.editions, edition, prefs.subtitle),
   );
+
+  const audioStreamId = edition.audioStreams.find(
+    (s) => String(streamKey(s)) === String(audio),
+  )?.id;
+  const stream = useStream({
+    videoRef,
+    edition,
+    quality,
+    audioStreamId,
+    getPositionMs: () => positionRef.current,
+    initialSeekMs: startAtZero ? 0 : resumePosition(edition.positionMs),
+    onToast: setToast,
+  });
+  const { pendingSeekRef } = stream;
+  const activeRung = stream.rung ?? (quality === AUTO ? ORIGINAL : quality);
+  const indicator = indicatorModel({
+    quality,
+    rung: activeRung,
+    top: topRung(stream.renditions),
+    kbps: stream.kbps,
+  });
+  const slowCard = useSlowCard(stream.mode === 'hls' && quality === AUTO && indicator.slow);
 
   const hasSubtitles = edition.subtitleStreams.length > 0;
   const atEnd = hasReachedEnd(positionMs, durationMs, edition.creditsMarkerMs);
@@ -137,14 +164,15 @@ function PlayerView({ film, edition, startAtZero }) {
 
   // Show the chosen subtitle track, or the forced one when Subtitles is Off. Tracks that are not showing stay
   // disabled, so the browser only fetches (and the server only extracts) a track when it is wanted.
-  useEffect(() => {
+  const applySubtitleModes = useCallback(() => {
     const showing = activeSubtitleKey(edition.subtitleStreams, subtitle);
-    edition.subtitleStreams.forEach((stream) => {
-      const key = streamKey(stream);
+    edition.subtitleStreams.forEach((subtitleStream) => {
+      const key = streamKey(subtitleStream);
       const track = trackRefs.current.get(key)?.track;
       if (track) track.mode = key === showing ? 'showing' : 'disabled';
     });
   }, [edition.subtitleStreams, subtitle]);
+  useEffect(applySubtitleModes, [applySubtitleModes]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -183,11 +211,12 @@ function PlayerView({ film, edition, startAtZero }) {
       const video = videoRef.current;
       if (!video) return;
       const clamped = Math.min(Math.max(0, ms), durationMs);
+      pendingSeekRef.current = null; // the viewer chose a position: nothing is left to restore
       video.currentTime = clamped / 1000;
       positionRef.current = clamped;
       setPositionMs(clamped);
     },
-    [durationMs],
+    [durationMs, pendingSeekRef],
   );
 
   const togglePlay = useCallback(() => {
@@ -230,6 +259,8 @@ function PlayerView({ film, edition, startAtZero }) {
   const chooseAudio = (key) => {
     setAudio(key);
     playback.savePreferences({ audioStreamId: key });
+    // The server picks the audio when it makes the session, so a new one starts at the current position.
+    if (stream.mode === 'hls') stream.restart();
   };
 
   const chooseQuality = (qualityId) => {
@@ -297,20 +328,30 @@ function PlayerView({ film, edition, startAtZero }) {
     }
   };
 
+  // Runs for every source load, including a new session or a reload: a fresh source may reset the text
+  // tracks, and it starts at 0 until the seek to the pending position lands.
   const onLoadedMetadata = () => {
     const video = videoRef.current;
     if (Number.isFinite(video.duration) && video.duration > 0) setDurationMs(video.duration * 1000);
-    const start = startAtZero ? 0 : resumePosition(edition.positionMs);
-    if (start > 0) {
-      video.currentTime = start / 1000;
-      positionRef.current = start;
-      setPositionMs(start);
+    const pending = pendingSeekRef.current;
+    if (pending !== null) {
+      video.currentTime = pending / 1000;
+      positionRef.current = pending;
+      setPositionMs(pending);
     }
-    video.play().catch(() => {});
+    applySubtitleModes();
+    // A restart (audio, quality, reconnect, expired session) keeps a paused film paused.
+    if (stream.takePlayAfterLoad()) video.play().catch(() => {});
   };
 
   const onTimeUpdate = () => {
     const video = videoRef.current;
+    // Until the seek lands the element reads 0: do not let that overwrite the position or the progress report.
+    const pending = pendingSeekRef.current;
+    if (pending !== null) {
+      if (!seekLanded(video.currentTime * 1000, pending)) return;
+      pendingSeekRef.current = null;
+    }
     positionRef.current = video.currentTime * 1000;
     setPositionMs(positionRef.current);
     setBufferedMs(bufferedEnd(video));
@@ -344,7 +385,6 @@ function PlayerView({ film, edition, startAtZero }) {
         ref={videoRef}
         data-testid="player-video"
         className="player__video"
-        src={editionsApi.streamUrl(edition.id)}
         playsInline
         preload="metadata"
         onLoadedMetadata={onLoadedMetadata}
@@ -386,7 +426,7 @@ function PlayerView({ film, edition, startAtZero }) {
         onDoubleClick={() => toggleFullscreen(containerRef.current, videoRef.current)}
       />
 
-      {buffering ? <BufferingSpinner /> : null}
+      {stream.reconnecting ? <ReconnectingNotice /> : buffering ? <BufferingSpinner /> : null}
       {toast ? <Toast>{toast}</Toast> : null}
 
       <div className="player__chrome">
@@ -406,7 +446,7 @@ function PlayerView({ film, edition, startAtZero }) {
             ) : null}
           </div>
           <div className="player__spacer" />
-          <IndicatorPill text={indicatorText(quality)} />
+          <IndicatorPill text={indicator.text} amber={indicator.amber} />
         </div>
 
         <div className="player__bottom">
@@ -415,6 +455,7 @@ function PlayerView({ film, edition, startAtZero }) {
               qualities={edition.qualities}
               value={quality}
               height={edition.file?.height}
+              activeRung={activeRung}
               onSelect={chooseQuality}
             />
           ) : null}
@@ -536,6 +577,20 @@ function PlayerView({ film, edition, startAtZero }) {
       <div className="player__hairline" aria-hidden="true">
         <div className="player__hairline-fill" style={{ width: `${progressPct}%` }} />
       </div>
+
+      {slowCard.open && !endOverlay ? (
+        <SlowConnectionCard
+          rung={rungName(activeRung)}
+          onOk={() => {
+            slowCard.close();
+            containerRef.current?.focus();
+          }}
+          onChoose={() => {
+            slowCard.close();
+            setMenu('quality');
+          }}
+        />
+      ) : null}
 
       {endOverlay ? (
         <EndOverlay

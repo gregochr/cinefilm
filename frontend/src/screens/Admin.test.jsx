@@ -179,7 +179,7 @@ describe('Admin: Library scan panel', () => {
   it('shows a loading skeleton while the status loads', () => {
     installFetch(() => new Promise(() => {}));
     renderApp('/admin');
-    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(2);
+    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(3);
   });
 
   it('scrolls the panel into view for the empty-library link (#library-scan)', async () => {
@@ -328,11 +328,11 @@ describe('Admin: Films needing attention panel', () => {
 });
 
 describe('Admin: page', () => {
-  it('has the Admin heading, only the two real panels, and the TMDB credit', async () => {
+  it('has the Admin heading, its three panels, and the TMDB credit', async () => {
     installFetch();
     renderApp('/admin');
     expect(await screen.findByRole('heading', { level: 1, name: 'Admin' })).toBeInTheDocument();
-    expect(screen.getAllByRole('region')).toHaveLength(2);
+    expect(screen.getAllByRole('region')).toHaveLength(3);
     expect(
       screen.getByText('This product uses the TMDB API but is not endorsed or certified by TMDB.'),
     ).toBeInTheDocument();
@@ -360,5 +360,125 @@ describe('Admin: page', () => {
     expect(screen.getAllByRole('img').map((img) => img.getAttribute('aria-label'))).toEqual([
       'TMDB',
     ]);
+  });
+});
+
+const session = (n) => ({
+  ...fixtures.adminTranscoding.sessions[0],
+  id: `session-${n}`,
+  filmTitle: `Film ${n}`,
+});
+
+describe('Admin: Transcoding panel', () => {
+  it('shows the encoder, the keyframe index progress and the stream cache size', async () => {
+    installFetch();
+    renderApp('/admin');
+    const panel = await screen.findByRole('region', { name: 'Transcoding' });
+    expect(within(panel).getByText('VAAPI (hardware)')).toBeInTheDocument();
+    expect(within(panel).getByText('412 of 538 films indexed')).toBeInTheDocument();
+    expect(within(panel).getByText('1.2 GB')).toBeInTheDocument();
+  });
+
+  it('lists each session with its film, rung, speed, segments ahead and start time', async () => {
+    installFetch();
+    renderApp('/admin');
+    const panel = await screen.findByRole('region', { name: 'Transcoding' });
+    const sessions = within(panel).getByRole('list', { name: 'Playback sessions' });
+    const [first] = within(sessions).getAllByRole('listitem');
+    expect(within(first).getByText('Heat')).toBeInTheDocument();
+    expect(within(first).getByText('720p')).toBeInTheDocument();
+    expect(first).toHaveTextContent('3.4× · 12 segments ahead · started 09 Nov 19:02');
+  });
+
+  it('names the software encoder, and shows a dash before a speed is known', async () => {
+    installFetch((m, url) =>
+      url === '/api/admin/transcoding'
+        ? respond({
+            ...fixtures.adminTranscoding,
+            encoder: 'software',
+            sessions: [{ ...session(1), speed: null, segmentsAhead: 1 }],
+          })
+        : null,
+    );
+    renderApp('/admin');
+    const panel = await screen.findByRole('region', { name: 'Transcoding' });
+    expect(within(panel).getByText('Software (x264)')).toBeInTheDocument();
+    expect(panel).toHaveTextContent('— · 1 segment ahead');
+  });
+
+  it('says so when nothing is being transcoded', async () => {
+    installFetch((m, url) =>
+      url === '/api/admin/transcoding'
+        ? respond({ ...fixtures.adminTranscoding, encoder: 'unavailable', sessions: [] })
+        : null,
+    );
+    renderApp('/admin');
+    const panel = await screen.findByRole('region', { name: 'Transcoding' });
+    expect(within(panel).getByText('Unavailable')).toBeInTheDocument();
+    expect(within(panel).getByText('Nothing is being transcoded.')).toBeInTheDocument();
+    expect(
+      within(panel).queryByRole('list', { name: 'Playback sessions' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('Stop ends that session with DELETE and refreshes the list', async () => {
+    let stopped = false;
+    const fetchMock = installFetch((method, url) => {
+      if (url === '/api/admin/transcoding')
+        return respond({
+          ...fixtures.adminTranscoding,
+          sessions: stopped ? [] : [session(1), session(2)],
+        });
+      if (method === 'DELETE') {
+        stopped = true;
+        return respond(null, 204);
+      }
+      return null;
+    });
+    renderApp('/admin');
+    await userEvent.click(await screen.findByRole('button', { name: 'Stop Film 2' }));
+    const stop = fetchMock.mock.calls.find((c) => c[1]?.method === 'DELETE');
+    expect(stop[0]).toBe('/api/admin/transcoding/sessions/session-2');
+    expect(stop[1].headers['X-CineFilm']).toBe('1');
+    expect(await screen.findByText('Nothing is being transcoded.')).toBeInTheDocument();
+  });
+
+  it('says so when Stop fails, and keeps the session listed', async () => {
+    installFetch((method, url) => {
+      if (url === '/api/admin/transcoding')
+        return respond({ ...fixtures.adminTranscoding, sessions: [session(1)] });
+      return method === 'DELETE' ? respond(null, 500) : null;
+    });
+    renderApp('/admin');
+    await userEvent.click(await screen.findByRole('button', { name: 'Stop Film 1' }));
+    expect(await screen.findByText('Could not stop the session.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Stop Film 1' })).toBeInTheDocument();
+  });
+
+  it('shows the projector-jammed error with Try again when the state cannot be read', async () => {
+    let fail = true;
+    installFetch((m, url) =>
+      url === '/api/admin/transcoding' && fail ? respond(null, 500) : null,
+    );
+    renderApp('/admin');
+    const panel = await screen.findByRole('region', { name: 'Transcoding' });
+    expect(await within(panel).findByRole('alert')).toHaveTextContent('The projector jammed');
+    fail = false;
+    await userEvent.click(within(panel).getByRole('button', { name: 'Try again' }));
+    expect(await within(panel).findByText('VAAPI (hardware)')).toBeInTheDocument();
+  });
+
+  it('refreshes every 5 s while it is open', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = installFetch();
+    renderApp('/admin');
+    await screen.findByText('VAAPI (hardware)');
+    const reads = () =>
+      fetchMock.mock.calls.filter((c) => c[0] === '/api/admin/transcoding').length;
+    expect(reads()).toBe(1);
+    await act(() => vi.advanceTimersByTimeAsync(4900));
+    expect(reads()).toBe(1);
+    await act(() => vi.advanceTimersByTimeAsync(200));
+    expect(reads()).toBe(2);
   });
 });
