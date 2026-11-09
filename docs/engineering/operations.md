@@ -75,7 +75,7 @@ Compare the result with `deploy/.env.example` for any other keys it lists.
 *Ratings need an OMDb API key*). Get a free key at https://www.omdbapi.com/apikey.aspx (1,000 requests a day) and put
 it in `~/cinefilm/.env` by editing the `OMDB_API_KEY=` line; do not paste it into chat or a commit. OMDb takes the key
 in the request URL, so CineFilm never logs that URL. The app asks for at most 900 films a day (`cinefilm.omdb.daily-limit`,
-counted per UTC day) and stops for the day when OMDb says its limit is reached. A film's ratings are refetched when
+counted per UTC day in the `ratings_budget` table, so a restart does not grant a fresh allowance) and stops for the day when OMDb says its limit is reached. A film's ratings are refetched when
 they are over 30 days old, after each library scan and Plex import, and daily at 05:30 (London). The first run also
 fetches each existing film's IMDb id from TMDB (`/3/movie/{id}/external_ids`), so a large library fills in over a few
 days. **Refresh ratings** in Admin (Library scan card) refetches every film, oldest first, within the same daily

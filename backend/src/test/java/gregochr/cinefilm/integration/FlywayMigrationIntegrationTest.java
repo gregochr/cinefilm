@@ -59,6 +59,19 @@ class FlywayMigrationIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void theRatingsBudgetTableHoldsOneNotNullCountPerDay() {
+        List<String> columns = jdbc.queryForList(
+            "SELECT column_name || ':' || data_type || ':' || is_nullable FROM information_schema.columns "
+                + "WHERE table_name = 'ratings_budget' ORDER BY column_name", String.class);
+        assertThat(columns).containsExactly("budget_day:date:NO", "used:integer:NO");
+        List<String> keys = jdbc.queryForList(
+            "SELECT kcu.column_name FROM information_schema.table_constraints tc "
+                + "JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name "
+                + "WHERE tc.table_name = 'ratings_budget' AND tc.constraint_type = 'PRIMARY KEY'", String.class);
+        assertThat(keys).containsExactly("budget_day");
+    }
+
+    @Test
     void instantsAreStoredWithTimeZone() {
         String type = jdbc.queryForObject(
             "SELECT data_type FROM information_schema.columns WHERE table_name = 'film' AND column_name = 'added_at'",

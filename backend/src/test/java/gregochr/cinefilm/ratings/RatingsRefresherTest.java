@@ -27,8 +27,11 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
@@ -45,6 +48,7 @@ class RatingsRefresherTest {
     private final TmdbApi tmdb = mock(TmdbApi.class);
     private final FilmRepository films = mock(FilmRepository.class);
     private final RatingsStore store = mock(RatingsStore.class);
+    private final InMemoryBudget budget = new InMemoryBudget();
     private final List<Duration> sleeps = new ArrayList<>();
     private final List<Runnable> queued = new ArrayList<>();
     private Instant now = NOW;
@@ -77,7 +81,31 @@ class RatingsRefresherTest {
             }
         };
         Sleeper sleeper = sleeps::add;
-        return new RatingsRefresher(omdb, tmdb, films, store, sleeper, clock, Runnable::run, dailyLimit);
+        return new RatingsRefresher(omdb, tmdb, films, store, budget, sleeper, clock, Runnable::run, dailyLimit);
+    }
+
+    /** The budget table without a database: the same take/exhaust rules, kept in a map the test can share. */
+    private static final class InMemoryBudget extends RatingsBudget {
+        private final Map<LocalDate, Integer> used = new HashMap<>();
+
+        InMemoryBudget() {
+            super(null);
+        }
+
+        @Override
+        public boolean take(LocalDate day, int limit) {
+            int now = used.getOrDefault(day, 0);
+            if (now >= limit) {
+                return false;
+            }
+            used.put(day, now + 1);
+            return true;
+        }
+
+        @Override
+        public void exhaust(LocalDate day, int limit) {
+            used.put(day, Math.max(limit, used.getOrDefault(day, 0)));
+        }
     }
 
     private void due(Long... ids) {
@@ -101,7 +129,7 @@ class RatingsRefresherTest {
 
         refresher.startDue();
 
-        verify(store).saveRatings(1L, null, NOW);
+        verify(store).saveRatings(1L, null, null, NOW);
         verifyNoInteractions(tmdb);
         verify(omdb, never()).lookup(anyString());
     }
@@ -111,10 +139,11 @@ class RatingsRefresherTest {
         due(1L);
         target(1, "tt0113277", 949L);
         found("tt0113277");
+        when(store.saveRatings(1L, "tt0113277", HEAT_RATINGS, NOW)).thenReturn(true);
 
         refresher.startDue();
 
-        verify(store).saveRatings(1L, HEAT_RATINGS, NOW);
+        verify(store).saveRatings(1L, "tt0113277", HEAT_RATINGS, NOW);
         verify(tmdb, never()).imdbId(anyLong());
     }
 
@@ -126,7 +155,7 @@ class RatingsRefresherTest {
 
         refresher.startDue();
 
-        verify(store).saveRatings(1L, null, NOW);
+        verify(store).saveRatings(1L, "tt0113277", null, NOW);
     }
 
     @Test
@@ -138,8 +167,8 @@ class RatingsRefresherTest {
 
         refresher.startDue();
 
-        verify(store).saveRatings(2L, HEAT_RATINGS, NOW);
-        verify(store, never()).saveRatings(1L, null, NOW);
+        verify(store).saveRatings(2L, "tt0113277", HEAT_RATINGS, NOW);
+        verify(store, never()).saveRatings(1L, null, null, NOW);
     }
 
     // backfill
@@ -149,13 +178,14 @@ class RatingsRefresherTest {
         due(1L);
         target(1, null, 949L);
         when(tmdb.imdbId(949)).thenReturn(Optional.of("tt0113277"));
+        when(store.saveImdbId(1L, "tt0113277")).thenReturn(true);
         found("tt0113277");
 
         refresher.startDue();
 
         verify(store).saveImdbId(1L, "tt0113277");
         verify(omdb).lookup("tt0113277");
-        verify(store).saveRatings(1L, HEAT_RATINGS, NOW);
+        verify(store).saveRatings(1L, "tt0113277", HEAT_RATINGS, NOW);
     }
 
     @Test
@@ -166,7 +196,7 @@ class RatingsRefresherTest {
 
         refresher.startDue();
 
-        verify(store).saveRatings(1L, null, NOW);
+        verify(store).saveRatings(1L, null, null, NOW);
         verify(store, never()).saveImdbId(anyLong(), anyString());
         verify(omdb, never()).lookup(anyString());
     }
@@ -179,7 +209,7 @@ class RatingsRefresherTest {
 
         refresher.startDue();
 
-        verify(store).saveRatings(1L, null, NOW);
+        verify(store).saveRatings(1L, null, null, NOW);
         verify(store, never()).saveImdbId(anyLong(), anyString());
     }
 
@@ -188,6 +218,7 @@ class RatingsRefresherTest {
         due(1L);
         target(1, null, 949L);
         when(tmdb.imdbId(949)).thenReturn(Optional.of("tt1234567890123"));
+        when(store.saveImdbId(1L, "tt1234567890123")).thenReturn(true);
         when(omdb.lookup("tt1234567890123")).thenReturn(OmdbResult.notFound());
 
         refresher.startDue();
@@ -203,7 +234,7 @@ class RatingsRefresherTest {
 
         refresher.startDue();
 
-        verify(store, never()).saveRatings(anyLong(), any(), any());
+        verify(store, never()).saveRatings(anyLong(), any(), any(), any());
         verify(omdb, never()).lookup(anyString());
     }
 
@@ -219,9 +250,9 @@ class RatingsRefresherTest {
         refresher.startDue();
 
         verify(tmdb, never()).imdbId(348);
-        verify(store, never()).saveRatings(1L, null, NOW);
-        verify(store, never()).saveRatings(2L, null, NOW);
-        verify(store).saveRatings(3L, HEAT_RATINGS, NOW);
+        verify(store, never()).saveRatings(1L, null, null, NOW);
+        verify(store, never()).saveRatings(2L, null, null, NOW);
+        verify(store).saveRatings(3L, "tt0090605", HEAT_RATINGS, NOW);
     }
 
     // the daily budget
@@ -240,7 +271,7 @@ class RatingsRefresherTest {
         verify(omdb).lookup("tt2");
         verify(omdb, never()).lookup("tt3");
         verify(store, never()).target(4L);
-        verify(store, never()).saveRatings(3L, HEAT_RATINGS, NOW);
+        verify(store, never()).saveRatings(3L, "tt3", HEAT_RATINGS, NOW);
     }
 
     @Test
@@ -294,7 +325,7 @@ class RatingsRefresherTest {
 
         refresher.startDue();
 
-        verify(store).saveRatings(1L, null, NOW);
+        verify(store).saveRatings(1L, null, null, NOW);
         verify(omdb, never()).lookup(anyString());
     }
 
@@ -309,7 +340,7 @@ class RatingsRefresherTest {
         refresher.startDue();
 
         verify(omdb, never()).lookup("tt2");
-        verify(store, never()).saveRatings(anyLong(), any(),
+        verify(store, never()).saveRatings(anyLong(), any(), any(),
             any());
 
         due(2L);
@@ -329,8 +360,92 @@ class RatingsRefresherTest {
         refresher.startDue();
 
         verify(omdb, never()).lookup("tt2");
-        verify(store, never()).saveRatings(anyLong(), any(),
+        verify(store, never()).saveRatings(anyLong(), any(), any(),
             any());
+    }
+
+    @Test
+    void theBudgetCarriesAcrossARestartTheSameUtcDay() {
+        now = Instant.parse("2024-03-31T10:00:00Z");
+        due(1L, 2L);
+        target(1, "tt1", 1L);
+        target(2, "tt2", 2L);
+        when(omdb.lookup(anyString())).thenReturn(OmdbResult.found(HEAT_RATINGS));
+        when(films.findIdsWithRatingsDueBefore(now.minus(Duration.ofDays(30)))).thenReturn(List.of(1L, 2L));
+        refresher.startDue();
+        verify(omdb).lookup("tt1");
+        verify(omdb).lookup("tt2");
+
+        RatingsRefresher restarted = refresher(2);
+        target(3, "tt3", 3L);
+        when(films.findIdsWithRatingsDueBefore(now.minus(Duration.ofDays(30)))).thenReturn(List.of(3L));
+        restarted.startDue();
+
+        verify(omdb, never()).lookup("tt3");
+    }
+
+    @Test
+    void aRestartOnTheNextUtcDayStartsAFreshBudget() {
+        now = Instant.parse("2024-03-31T10:00:00Z");
+        target(1, "tt1", 1L);
+        target(2, "tt2", 2L);
+        when(omdb.lookup(anyString())).thenReturn(OmdbResult.found(HEAT_RATINGS));
+        when(films.findIdsWithRatingsDueBefore(now.minus(Duration.ofDays(30)))).thenReturn(List.of(1L));
+        refresher(1).startDue();
+
+        now = Instant.parse("2024-04-01T00:00:00Z");
+        when(films.findIdsWithRatingsDueBefore(now.minus(Duration.ofDays(30)))).thenReturn(List.of(2L));
+        refresher(1).startDue();
+
+        verify(omdb).lookup("tt2");
+    }
+
+    @Test
+    void aLimitReachedAnswerStaysSpentAcrossARestart() {
+        refresher = refresher(900);
+        due(1L);
+        target(1, "tt1", 1L);
+        target(2, "tt2", 2L);
+        when(omdb.lookup("tt1")).thenReturn(OmdbResult.limitReached());
+        refresher.startDue();
+
+        due(2L);
+        refresher(900).startDue();
+
+        verify(omdb, never()).lookup("tt2");
+    }
+
+    // a film that changes under the refresh
+
+    @Test
+    void aFilmWhoseImdbIdChangedMeanwhileIsLeftUnstampedAndTheBatchCarriesOn() {
+        due(1L, 2L);
+        target(1, null, 949L);
+        target(2, "tt2", 2L);
+        when(tmdb.imdbId(949)).thenReturn(Optional.of("tt0113277"));
+        when(store.saveImdbId(1L, "tt0113277")).thenReturn(false);
+        found("tt2");
+
+        refresher.startDue();
+
+        verify(omdb, never()).lookup("tt0113277");
+        verify(store, never()).saveRatings(1L, null, null, NOW);
+        verify(store, never()).saveRatings(1L, "tt0113277", HEAT_RATINGS, NOW);
+        verify(store).saveRatings(2L, "tt2", HEAT_RATINGS, NOW);
+    }
+
+    @Test
+    void theSaveCarriesTheIdTheRefreshActedOnSoAChangedFilmCanBeRefused() {
+        due(1L, 2L);
+        target(1, "tt1", 1L);
+        target(2, null, null);
+        found("tt1");
+        when(store.saveRatings(1L, "tt1", HEAT_RATINGS, NOW)).thenReturn(false);
+
+        refresher.startDue();
+
+        verify(store).saveRatings(1L, "tt1", HEAT_RATINGS, NOW);
+        verify(store).saveRatings(2L, null, null, NOW);
     }
 
     // pacing
@@ -356,7 +471,7 @@ class RatingsRefresherTest {
             asked.add(duration);
             throw new InterruptedException();
         };
-        refresher = new RatingsRefresher(omdb, tmdb, films, store, interrupted, Clock.fixed(NOW, ZONE),
+        refresher = new RatingsRefresher(omdb, tmdb, films, store, budget, interrupted, Clock.fixed(NOW, ZONE),
             Runnable::run, 900);
         due(1L, 2L, 3L);
         target(1, "tt1", 1L);
@@ -372,7 +487,7 @@ class RatingsRefresherTest {
         }
         assertThat(asked).hasSize(1);
         verify(omdb, never()).lookup("tt2");
-        verify(store).saveRatings(1L, HEAT_RATINGS, NOW);
+        verify(store).saveRatings(1L, "tt1", HEAT_RATINGS, NOW);
     }
 
     // which films
@@ -395,7 +510,7 @@ class RatingsRefresherTest {
 
         verify(films).findIdsByRatingsOldestFirst();
         verify(films, never()).findIdsWithRatingsDueBefore(CUTOFF);
-        verify(store).saveRatings(7L, HEAT_RATINGS, NOW);
+        verify(store).saveRatings(7L, "tt7", HEAT_RATINGS, NOW);
     }
 
     @Test
@@ -420,11 +535,11 @@ class RatingsRefresherTest {
         target(2, "tt2", 2L);
         found("tt1");
         found("tt2");
-        doThrow(new IllegalStateException("db")).when(store).saveRatings(1L, HEAT_RATINGS, NOW);
+        doThrow(new IllegalStateException("db")).when(store).saveRatings(1L, "tt1", HEAT_RATINGS, NOW);
 
         refresher.startDue();
 
-        verify(store).saveRatings(2L, HEAT_RATINGS, NOW);
+        verify(store).saveRatings(2L, "tt2", HEAT_RATINGS, NOW);
     }
 
     @Test
@@ -458,7 +573,7 @@ class RatingsRefresherTest {
 
     @Test
     void onlyOneRefreshRunsAtATimeSoAForcedOneWhileRunningIs409() {
-        RatingsRefresher deferred = new RatingsRefresher(omdb, tmdb, films, store, sleeps::add,
+        RatingsRefresher deferred = new RatingsRefresher(omdb, tmdb, films, store, budget, sleeps::add,
             Clock.fixed(NOW, ZONE), queued::add, 900);
 
         assertThat(deferred.startDue()).isTrue();
@@ -479,7 +594,7 @@ class RatingsRefresherTest {
         Executor refusing = command -> {
             throw new RejectedExecutionException("shutting down");
         };
-        RatingsRefresher stopped = new RatingsRefresher(omdb, tmdb, films, store, sleeps::add,
+        RatingsRefresher stopped = new RatingsRefresher(omdb, tmdb, films, store, budget, sleeps::add,
             Clock.fixed(NOW, ZONE), refusing, 900);
 
         assertThatThrownBy(stopped::startDue).isInstanceOf(RejectedExecutionException.class);

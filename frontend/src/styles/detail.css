@@ -84,7 +84,11 @@
 .ratings__link {
   display: inline-flex;
   align-items: baseline;
-  padding: 2px 0;
+  /* A 44px touch target (AGENTS.md); the negative margin hands the extra height back so the row looks unchanged. */
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 8px 0;
+  margin: -6px 0;
   border-radius: 4px;
   color: var(--cf-text);
   text-decoration: none;

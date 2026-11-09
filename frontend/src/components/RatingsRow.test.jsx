@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import RatingsRow from './RatingsRow.jsx';
@@ -60,5 +61,11 @@ describe('RatingsRow', () => {
     expect(screen.getByRole('link')).toHaveAccessibleName(/^IMDb rating/);
     expect(screen.getByText('Rotten Tomatoes')).toBeInTheDocument();
     expect(screen.getByText('84%')).toBeInTheDocument();
+  });
+
+  it('keeps the rating links at a 44px touch target (jsdom does not load the stylesheet, so read the rule)', () => {
+    const css = readFileSync('src/styles/detail.css', 'utf8');
+    const rule = /\.ratings__link\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/min-height:\s*44px/);
   });
 });

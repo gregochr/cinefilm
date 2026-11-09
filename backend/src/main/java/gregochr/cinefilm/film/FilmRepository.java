@@ -26,6 +26,11 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
         "select f.backdropPath from Film f where f.backdropPath like '/api/art/%'")
     List<String> findStoredBackdropPaths();
 
+    /** The film, row-locked until the transaction ends, so a check-then-write on it cannot interleave with another. */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select f from Film f where f.id = :id")
+    Optional<Film> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") Long id);
+
     /** Every film matched to a TMDB id, oldest first. */
     List<Film> findByTmdbIdOrderByIdAsc(Long tmdbId);
 
