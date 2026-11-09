@@ -289,11 +289,21 @@ describe('on a touch device', () => {
   });
 });
 
+// userEvent has no touch API, so touchstart/touchmove/touchend/touchcancel go through fireEvent (and
+// contextmenu, because only fireEvent returns whether the default was prevented). Clicks use userEvent.
 describe('long press', () => {
   const touch = (n = 1) => ({ touches: Array.from({ length: n }, () => ({ clientX: 0, clientY: 0 })) });
 
+  /** Fake clock installed before anything arms a timer; userEvent is told to advance it. */
+  function fakeClock() {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    // Testing Library drains its async wrapper through `jest.advanceTimersByTime` when it sees a fake clock.
+    vi.stubGlobal('jest', { advanceTimersByTime: vi.advanceTimersByTime });
+    return userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime });
+  }
+
   it('opens the sheet after 500 ms and not a millisecond sooner', () => {
-    vi.useFakeTimers();
+    fakeClock();
     setup();
     fireEvent.touchStart(link(), touch());
     act(() => vi.advanceTimersByTime(LONG_PRESS_MS - 1));
@@ -308,7 +318,7 @@ describe('long press', () => {
     ['touchEnd', fireEvent.touchEnd],
     ['touchCancel', fireEvent.touchCancel],
   ])('%s before 500 ms cancels it', (name, fire) => {
-    vi.useFakeTimers();
+    fakeClock();
     setup();
     fireEvent.touchStart(link(), touch());
     act(() => vi.advanceTimersByTime(300));
@@ -318,28 +328,28 @@ describe('long press', () => {
   });
 
   it('a two-finger touch is not a long press', () => {
-    vi.useFakeTimers();
+    fakeClock();
     setup();
     fireEvent.touchStart(link(), touch(2));
     act(() => vi.advanceTimersByTime(1000));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('swallows the click that follows a long press, once', () => {
-    vi.useFakeTimers();
+  it('swallows the click that follows a long press, once', async () => {
+    const user = fakeClock();
     setup();
     fireEvent.touchStart(link(), touch());
     act(() => vi.advanceTimersByTime(LONG_PRESS_MS));
     fireEvent.touchEnd(link());
 
-    fireEvent.click(link());
+    await user.click(link());
     expect(screen.getByRole('status', { name: 'where' })).toHaveTextContent('/');
-    fireEvent.click(link());
+    await user.click(link());
     expect(screen.getByRole('status', { name: 'where' })).toHaveTextContent('/films/1');
   });
 
   it('suppresses the context menu a long press raises, but not a normal one', () => {
-    vi.useFakeTimers();
+    fakeClock();
     setup();
     expect(fireEvent.contextMenu(link())).toBe(true);
     fireEvent.touchStart(link(), touch());
@@ -347,42 +357,42 @@ describe('long press', () => {
     expect(fireEvent.contextMenu(link())).toBe(false);
   });
 
-  it('a tap after a long press that never produced a click is a normal tap', () => {
-    vi.useFakeTimers();
+  it('a tap after a long press that never produced a click is a normal tap', async () => {
+    const user = fakeClock();
     setup();
     fireEvent.touchStart(link(), touch());
     act(() => vi.advanceTimersByTime(LONG_PRESS_MS));
     fireEvent.touchEnd(link());
     fireEvent.touchStart(link(), touch());
     fireEvent.touchEnd(link());
-    fireEvent.click(link());
+    await user.click(link());
     expect(screen.getByRole('status', { name: 'where' })).toHaveTextContent('/films/1');
   });
 
   it('touches inside the open sheet never start a press, and its buttons are not swallowed', async () => {
-    vi.useFakeTimers();
+    const user = fakeClock();
     touchHover(true);
     setup();
-    fireEvent.click(more());
+    await user.click(more());
     const cancel = screen.getByRole('button', { name: 'Cancel' });
     fireEvent.touchStart(cancel, touch());
     act(() => vi.advanceTimersByTime(LONG_PRESS_MS));
     fireEvent.touchEnd(cancel);
-    fireEvent.click(cancel);
+    await user.click(cancel);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('a long press that opens the sheet does not swallow a tap on Cancel', () => {
-    vi.useFakeTimers();
+  it('a long press that opens the sheet does not swallow a tap on Cancel', async () => {
+    const user = fakeClock();
     setup();
     fireEvent.touchStart(link(), touch());
     act(() => vi.advanceTimersByTime(LONG_PRESS_MS));
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('clears a pending press when the card goes away', () => {
-    vi.useFakeTimers();
+    fakeClock();
     const { unmount } = render(
       <MemoryRouter>
         <ContinueCard film={film} onRemove={() => {}} onMarkWatched={() => {}} />
@@ -397,54 +407,57 @@ describe('long press', () => {
 describe('popover placement', () => {
   const rectOf = (r) => ({ ...r, width: r.right - r.left, height: r.bottom - r.top, x: r.left, y: r.top });
 
-  function place(buttonRect) {
+  // jsdom has no layout: stub the button's rect and the popover's size, then read where it was put.
+  async function place(buttonRect) {
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function rect() {
-      return this.getAttribute('aria-haspopup') ? rectOf(buttonRect) : rectOf({ top: 0, bottom: 0, left: 0, right: 0 });
+      return this.getAttribute('aria-haspopup')
+        ? rectOf(buttonRect)
+        : rectOf({ top: 0, bottom: 0, left: 0, right: 0 });
     });
     vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(280);
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(150);
     setup();
-    fireEvent.click(more());
-    return screen.getByTestId('continue-popover');
+    await userEvent.click(more());
+    return screen.getByRole('menu');
   }
 
   afterEach(() => vi.restoreAllMocks());
 
-  it('sits under the button, right-aligned to it, outside the card (on <body>)', () => {
-    const popover = place({ top: 100, bottom: 136, left: 500, right: 536 });
-    expect(popover.style.left).toBe('256px');
-    expect(popover.style.top).toBe('144px');
+  it('sits under the button, right-aligned to it, outside the card (on <body>)', async () => {
+    const popover = await place({ top: 100, bottom: 136, left: 500, right: 536 });
+    expect(popover).toHaveStyle({ left: '256px', top: '144px' });
     expect(document.body).toContainElement(popover);
-    expect(screen.getByRole('link', { name: 'Heat, 1h 45m left' })).not.toContainElement(popover);
+    expect(link()).not.toContainElement(popover);
   });
 
-  it('is clamped to the left edge of the viewport', () => {
-    const popover = place({ top: 100, bottom: 136, left: 60, right: 100 });
-    expect(popover.style.left).toBe('8px');
+  it('is clamped to the left edge of the viewport', async () => {
+    const popover = await place({ top: 100, bottom: 136, left: 60, right: 100 });
+    expect(popover).toHaveStyle({ left: '8px' });
   });
 
-  it('is clamped to the right edge of the viewport', () => {
-    const popover = place({ top: 100, bottom: 136, left: 1000, right: 1100 });
-    expect(popover.style.left).toBe(`${window.innerWidth - 280 - 8}px`);
+  it('is clamped to the right edge of the viewport', async () => {
+    const popover = await place({ top: 100, bottom: 136, left: 1000, right: 1100 });
+    expect(popover).toHaveStyle({ left: `${window.innerWidth - 280 - 8}px` });
   });
 
-  it('flips above the button when it would run off the bottom', () => {
-    const popover = place({ top: 650, bottom: 686, left: 500, right: 536 });
-    expect(popover.style.top).toBe(`${650 - 150 - 8}px`);
+  it('flips above the button when it would run off the bottom', async () => {
+    const popover = await place({ top: 650, bottom: 686, left: 500, right: 536 });
+    expect(popover).toHaveStyle({ top: `${650 - 150 - 8}px` });
   });
 
-  it('never goes above the top of the viewport', () => {
-    const popover = place({ top: 20, bottom: 740, left: 500, right: 536 });
-    expect(popover.style.top).toBe('8px');
+  it('never goes above the top of the viewport', async () => {
+    const popover = await place({ top: 20, bottom: 740, left: 500, right: 536 });
+    expect(popover).toHaveStyle({ top: '8px' });
   });
 
-  it('closes on resize and on any scroll, but not before', () => {
-    place({ top: 100, bottom: 136, left: 500, right: 536 });
+  // Resize and scroll are window events userEvent cannot produce.
+  it('closes on resize and on any scroll, but not before', async () => {
+    await place({ top: 100, bottom: 136, left: 500, right: 536 });
     expect(screen.getByRole('menu')).toBeInTheDocument();
     fireEvent(window, new Event('resize'));
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
 
-    fireEvent.click(more());
+    await userEvent.click(more());
     expect(screen.getByRole('menu')).toBeInTheDocument();
     fireEvent.scroll(document.body);
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();

@@ -3,7 +3,10 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installFetch, renderApp, respond } from '../test/mockApi.jsx';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 const EMPTY = {
   hero: null,
@@ -226,21 +229,21 @@ describe('Home: removing a film from Continue watching', () => {
     expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
   });
 
+  // userEvent has no touch API, so the touch itself goes through fireEvent; the Cancel tap is userEvent.
   it('a long press opens the sheet and Cancel closes it', async () => {
     await open();
-    vi.useFakeTimers();
-    try {
-      fireEvent.touchStart(cardLink('Arrival, 56m left'), {
-        touches: [{ clientX: 0, clientY: 0 }],
-      });
-      act(() => vi.advanceTimersByTime(500));
-      const sheet = screen.getByRole('dialog', { name: 'Options for Arrival' });
-      expect(sheet).toHaveTextContent('2016 · 56m left');
-      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    } finally {
-      vi.useRealTimers();
-    }
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    // Testing Library drains its async wrapper through `jest.advanceTimersByTime` when it sees a fake clock.
+    vi.stubGlobal('jest', { advanceTimersByTime: vi.advanceTimersByTime });
+    const user = userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime });
+    fireEvent.touchStart(cardLink('Arrival, 56m left'), {
+      touches: [{ clientX: 0, clientY: 0 }],
+    });
+    act(() => vi.advanceTimersByTime(500));
+    const sheet = screen.getByRole('dialog', { name: 'Options for Arrival' });
+    expect(sheet).toHaveTextContent('2016 · 56m left');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
 

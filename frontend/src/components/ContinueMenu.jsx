@@ -25,7 +25,7 @@ export default function ContinueMenu({ film, sheet, anchorRef, onClose, onRemove
   // to it, flipped above when it would run off the bottom and clamped inside the viewport.
   useLayoutEffect(() => {
     if (sheet) return;
-    const panel = panelRef.current;
+    const panel = menuRef.current;
     const rect = anchorRef.current.getBoundingClientRect();
     const width = panel.offsetWidth;
     const height = panel.offsetHeight;
@@ -96,8 +96,7 @@ export default function ContinueMenu({ film, sheet, anchorRef, onClose, onRemove
 
   const body = (
     <div
-      className={sheet ? 'sheet' : 'cmenu'}
-      data-testid={sheet ? undefined : 'continue-popover'}
+      className={sheet ? 'sheet' : undefined}
       ref={panelRef}
       onKeyDown={onKeyDown}
       role={sheet ? 'dialog' : undefined}
@@ -119,7 +118,7 @@ export default function ContinueMenu({ film, sheet, anchorRef, onClose, onRemove
           role="menu"
           aria-label={`Options for ${film.title}`}
           ref={menuRef}
-          className="cmenu__list"
+          className={sheet ? 'cmenu__list' : 'cmenu cmenu__list'}
         >
           <button
             type="button"
