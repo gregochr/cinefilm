@@ -84,7 +84,7 @@ describe('useFixMatch', () => {
     const post = fetchMock.mock.calls.find((c) => c[1]?.method === 'POST');
     expect(post[1].headers['X-CineFilm']).toBe('1');
     expect(JSON.parse(post[1].body)).toEqual({ tmdbId: 5 });
-    expect(onApplied).toHaveBeenCalledWith({ filmId: 7, joined: true });
+    expect(onApplied).toHaveBeenCalledWith({ filmId: 7, joined: true }, false);
   });
 
   it('shows the apply problem and does not report success when the apply fails', async () => {
@@ -101,5 +101,55 @@ describe('useFixMatch', () => {
 
     expect(result.current.applyProblem).toBe('A scan is running. Try again when it finishes.');
     expect(onApplied).not.toHaveBeenCalled();
+  });
+
+  it('reports an apply that ends after the panel closed as stale, and one that ends after the film changed', async () => {
+    const slow = deferred();
+    installFetch((m, url) => {
+      if (isSearch(m, url)) return respond([{ tmdbId: 5 }]);
+      if (isApply(m, url)) return slow.promise;
+      return null;
+    });
+    const onApplied = vi.fn();
+    const { result, unmount } = renderHook(() => useFixMatch(7, 'Dune', onApplied));
+    await waitFor(() => expect(result.current.search.status).toBe('ready'));
+    act(() => result.current.setPicked(5));
+    let finished;
+    act(() => {
+      finished = result.current.apply();
+    });
+    unmount();
+    await act(async () => {
+      slow.resolve(respond({ filmId: 7, joined: false }));
+      await finished;
+    });
+
+    expect(onApplied).toHaveBeenCalledWith({ filmId: 7, joined: false }, true);
+  });
+
+  it('reports an apply for a film the hook has since moved off as stale', async () => {
+    const slow = deferred();
+    installFetch((m, url) => {
+      if (isSearch(m, url)) return respond([{ tmdbId: 5 }]);
+      if (isApply(m, url)) return slow.promise;
+      return respond([]);
+    });
+    const onApplied = vi.fn();
+    const { result, rerender } = renderHook(({ id }) => useFixMatch(id, 'Dune', onApplied), {
+      initialProps: { id: 7 },
+    });
+    await waitFor(() => expect(result.current.search.status).toBe('ready'));
+    act(() => result.current.setPicked(5));
+    let finished;
+    act(() => {
+      finished = result.current.apply();
+    });
+    rerender({ id: 8 });
+    await act(async () => {
+      slow.resolve(respond({ filmId: 7, joined: false }));
+      await finished;
+    });
+
+    expect(onApplied).toHaveBeenCalledWith({ filmId: 7, joined: false }, true);
   });
 });

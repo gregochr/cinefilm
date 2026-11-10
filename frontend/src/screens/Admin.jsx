@@ -431,8 +431,8 @@ export default function Admin() {
   const [fixing, setFixing] = useState(null);
   const { hash } = useLocation();
 
-  const applied = () => {
-    setFixing(null);
+  const applied = (result, stale) => {
+    if (!stale) setFixing(null);
     attention.reload();
     grouping.reload();
     reload();

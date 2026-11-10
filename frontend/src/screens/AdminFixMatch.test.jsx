@@ -164,6 +164,62 @@ describe('Admin: Fix match', () => {
   });
 });
 
+describe('Admin: a slow apply for a film that is no longer on screen', () => {
+  it('refreshes the lists but leaves the newer panel open with its search and selection', async () => {
+    const second = {
+      ...fixtures.adminAttention.items[0],
+      filmId: 32,
+      title: 'Local Hero',
+      files: ['Local Hero.m4v'],
+    };
+    const attention = { items: [fixtures.adminAttention.items[0], second] };
+    let release;
+    const slow = new Promise((resolve) => {
+      release = resolve;
+    });
+    let attentionCalls = 0;
+    let reportCalls = 0;
+    installFetch((m, url) => {
+      if (url === '/api/admin/attention') {
+        attentionCalls += 1;
+        return respond(attention);
+      }
+      if (url === '/api/admin/grouping-report') {
+        reportCalls += 1;
+        return null;
+      }
+      if (isApply(m, url)) return slow;
+      return null;
+    });
+    renderApp('/admin');
+    const list = await screen.findByRole('region', { name: 'Films needing attention' });
+    const buttons = await within(list).findAllByRole('button', { name: 'Fix match' });
+    await userEvent.click(buttons[0]);
+    const first = await screen.findByRole('region', { name: 'Fix match' });
+    await userEvent.click((await within(first).findAllByRole('radio'))[0]);
+    await userEvent.click(within(first).getByRole('button', { name: 'Use this match' }));
+
+    await userEvent.click(buttons[1]);
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('region', { name: 'Fix match' })).getByRole('searchbox'),
+      ).toHaveValue('Local Hero'),
+    );
+    const open = screen.getByRole('region', { name: 'Fix match' });
+    await userEvent.click((await within(open).findAllByRole('radio'))[1]);
+    const attentionBefore = attentionCalls;
+    const reportBefore = reportCalls;
+
+    release(respond({ filmId: 31, joined: false }));
+
+    await waitFor(() => expect(attentionCalls).toBeGreaterThan(attentionBefore));
+    await waitFor(() => expect(reportCalls).toBeGreaterThan(reportBefore));
+    const still = screen.getByRole('region', { name: 'Fix match' });
+    expect(within(still).getByRole('searchbox')).toHaveValue('Local Hero');
+    expect(within(still).getAllByRole('radio')[1]).toBeChecked();
+  });
+});
+
 describe('Admin: grouping report', () => {
   it('lists the newest changes with a label, a time and what happened', async () => {
     installFetch();

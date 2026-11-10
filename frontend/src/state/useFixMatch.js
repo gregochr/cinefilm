@@ -15,6 +15,7 @@ export function useFixMatch(filmId, initialQuery, onApplied) {
   const [applyProblem, setApplyProblem] = useState(null);
   const latest = useRef(0);
   const controller = useRef(null);
+  const shown = useRef(filmId);
 
   const run = useCallback(
     async (text, yearText) => {
@@ -41,6 +42,14 @@ export function useFixMatch(filmId, initialQuery, onApplied) {
     [filmId],
   );
 
+  // The film whose panel is on screen (null once it closed): an apply for any other film is stale when it ends.
+  useEffect(() => {
+    shown.current = filmId;
+    return () => {
+      shown.current = null;
+    };
+  }, [filmId]);
+
   // A replayed effect (StrictMode, a remount) cancels the search it started before, so only the last one counts.
   useEffect(() => {
     run(initialQuery, '');
@@ -58,7 +67,7 @@ export function useFixMatch(filmId, initialQuery, onApplied) {
     setApplyProblem(null);
     try {
       const applied = await adminApi.applyMatch(filmId, picked);
-      onApplied(applied);
+      onApplied(applied, shown.current !== filmId);
     } catch (failure) {
       setApplyProblem(matchProblem(failure));
     } finally {
