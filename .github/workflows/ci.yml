@@ -413,7 +413,10 @@ jobs:
           docker rm "$cid" > /dev/null
           unzip -p "$RUNNER_TEMP/app.jar" BOOT-INF/classes/git.properties | tee "$RUNNER_TEMP/git.properties"
           grep -qx "git.commit.id.full=${{ github.sha }}" "$RUNNER_TEMP/git.properties"
-          unzip -p "$RUNNER_TEMP/app.jar" BOOT-INF/classes/static/index.html | grep -q '<div id="root">'
+          # Write to a file, then grep it: `producer | grep -q` lets grep exit on its first match and SIGPIPE the producer,
+          # which pipefail turns into a failed step depending on timing.
+          unzip -p "$RUNNER_TEMP/app.jar" BOOT-INF/classes/static/index.html > "$RUNNER_TEMP/index.html"
+          grep -q '<div id="root">' "$RUNNER_TEMP/index.html"
 
       # The tailnet-only reverse proxy image (Caddy + the Cloudflare DNS module, deploy/caddy/). Built here without pushing
       # so a broken Dockerfile or Caddyfile fails the PR; deploy.yml builds and pushes it next to the app image.
@@ -433,13 +436,16 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm --entrypoint caddy cinefilm-caddy:ci version
-          docker run --rm --entrypoint caddy cinefilm-caddy:ci list-modules | grep -qx 'dns.providers.cloudflare'
+          # Capture first, then grep: piping list-modules into `grep -q` SIGPIPEs caddy ("broken pipe") under pipefail.
+          modules="$(docker run --rm --entrypoint caddy cinefilm-caddy:ci list-modules)"
+          grep -qx 'dns.providers.cloudflare' <<<"$modules"
           # The entrypoint refuses a malformed token (here with a trailing space) without printing it, and starts nothing.
           if docker run --rm -e "CLOUDFLARE_API_TOKEN=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA " cinefilm-caddy:ci > "$RUNNER_TEMP/entrypoint.out" 2>&1; then
             echo "the entrypoint accepted a malformed token"; exit 1
           fi
           grep -q 'CLOUDFLARE_API_TOKEN is malformed' "$RUNNER_TEMP/entrypoint.out"
-          ! grep -q 'AAAAAAAAAA' "$RUNNER_TEMP/entrypoint.out"
+          # An explicit if, not `! grep`: under set -e a bare `!` never aborts the step, so that check could not fail.
+          if grep -q 'AAAAAAAAAA' "$RUNNER_TEMP/entrypoint.out"; then echo "the entrypoint printed the token"; exit 1; fi
           # The baked-in Caddyfile parses and provisions with placeholder values (no network, nothing is bound or issued; the module only
           # checks that the token looks like a Cloudflare one, 40 characters, hence the placeholder's shape).
           docker run --rm \
