@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSearchIndex } from '../state/searchIndex.js';
 import {
@@ -9,6 +9,22 @@ import {
 } from '../state/useSearchCombobox.js';
 import { SearchIcon } from './icons.jsx';
 import SearchResults from './SearchResults.jsx';
+
+const PANEL_WIDTH = 540;
+const VIEWPORT_GUTTER = 16;
+
+/**
+ * Where the panel sits relative to the box: right-aligned to it (the default) unless that would push the panel past
+ * the left edge of the viewport, as when the header wraps and the box starts a line at the left. Then it is
+ * left-aligned to the box and narrowed to fit the viewport.
+ */
+export function panelPlacement(boxRect, viewportWidth) {
+  if (boxRect.right - PANEL_WIDTH >= VIEWPORT_GUTTER) return { align: 'right', width: null };
+  const room = viewportWidth - boxRect.left - VIEWPORT_GUTTER;
+  return { align: 'left', width: Math.min(PANEL_WIDTH, Math.max(0, room)) };
+}
+
+const RIGHT = { align: 'right', width: null };
 
 /**
  * The header search: a combobox over the shared client-side index, with the results in a dropdown under it. Every
@@ -22,9 +38,24 @@ export default function SearchBox() {
   const { state, result, rows, dispatch, setQuery } = useSearchCombobox(index);
   const inputRef = useRef(null);
   const panelRef = useRef(null);
+  const boxRef = useRef(null);
+  const [placement, setPlacement] = useState(RIGHT);
   const listboxId = useId();
   const open = state.open;
   const activeRow = open && status === 'ready' ? (rows[state.active] ?? null) : null;
+
+  // Place the panel against the box before the first paint, and again when the window is resized while it is open.
+  const showing = open && hasQuery(state.query);
+  useLayoutEffect(() => {
+    if (!showing) return undefined;
+    const place = () => {
+      const next = panelPlacement(boxRef.current.getBoundingClientRect(), window.innerWidth);
+      setPlacement((now) => (now.align === next.align && now.width === next.width ? now : next));
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [showing]);
 
   // Keep the active row visible as the arrows move it.
   useEffect(() => {
@@ -80,7 +111,7 @@ export default function SearchBox() {
 
   return (
     <div className="header__search" role="search">
-      <div className="searchbox">
+      <div className="searchbox" ref={boxRef}>
         <SearchIcon size={16} />
         <input
           ref={inputRef}
@@ -118,7 +149,8 @@ export default function SearchBox() {
           />
           {/* Keep the focus in the input when the panel is pressed. */}
           <div
-            className="search-panel"
+            className={`search-panel${placement.align === 'left' ? ' search-panel--left' : ''}`}
+            style={placement.width === null ? undefined : { width: placement.width }}
             role="presentation"
             ref={panelRef}
             onMouseDown={(e) => e.preventDefault()}

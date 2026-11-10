@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs';
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildFixtureSearchIndex } from '../api/fixtureSearchIndex.js';
 import { prepareIndex, useSearchIndex } from '../state/searchIndex.js';
 import Header from './Header.jsx';
+import { panelPlacement } from './SearchBox.jsx';
 import SearchResults, { Highlighted } from './SearchResults.jsx';
 
 vi.mock('../state/searchIndex.js', async (importOriginal) => ({
@@ -709,17 +710,81 @@ describe('SearchResults size', () => {
 });
 
 describe('search.css', () => {
-  const css = readFileSync(`${process.cwd()}/src/styles/search.css`, 'utf8');
-
   it('makes the See all link a 44px touch target', () => {
+    const css = readFileSync(`${process.cwd()}/src/styles/search.css`, 'utf8');
     expect(css).toMatch(/\.search-footer__all \{[^}]*display: inline-flex;[^}]*min-height: 44px;/);
   });
+});
 
-  it('keeps the panel inside the viewport where the header wraps (max-width: 1000px)', () => {
-    const block = /@media \(max-width: 1000px\) \{([\s\S]*)\n\}/.exec(css)?.[1] ?? '';
-    expect(block).toMatch(/\.header__search \{\s*position: static;/);
-    expect(block).toMatch(/left: var\(--cf-gutter\);/);
-    expect(block).toMatch(/right: auto;/);
-    expect(block).toMatch(/width: min\(540px, calc\(100vw - 2 \* var\(--cf-gutter\)\)\);/);
+describe('panel placement', () => {
+  const rect = (left, right) => ({
+    left,
+    right,
+    top: 0,
+    bottom: 40,
+    width: right - left,
+    height: 40,
+  });
+  let boxRect;
+  let spy;
+
+  beforeEach(() => {
+    spy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(() => boxRect);
+  });
+  afterEach(() => {
+    spy.mockRestore();
+    window.innerWidth = 1024;
+  });
+
+  const panel = () => screen.getByRole('listbox').closest('.search-panel');
+
+  it('pure: right-aligned when it fits, else left-aligned with the width clamped to the viewport', () => {
+    expect(panelPlacement(rect(640, 940), 980)).toEqual({ align: 'right', width: null });
+    expect(panelPlacement(rect(556, 856), 1000)).toEqual({ align: 'right', width: null });
+    expect(panelPlacement(rect(40, 340), 768)).toEqual({ align: 'left', width: 540 });
+    expect(panelPlacement(rect(40, 340), 400)).toEqual({ align: 'left', width: 344 });
+    expect(panelPlacement(rect(500, 540), 510)).toEqual({ align: 'left', width: 0 });
+  });
+
+  it('is right-aligned to a box with room on its left', async () => {
+    boxRect = rect(640, 940);
+    window.innerWidth = 980;
+    const { user, box } = setup();
+    await user.type(box, 'w');
+    expect(panel()).not.toHaveClass('search-panel--left');
+    expect(panel().style.width).toBe('');
+  });
+
+  it('is left-aligned to a box at the left, with the width clamped to the viewport', async () => {
+    boxRect = rect(40, 340);
+    window.innerWidth = 400;
+    const { user, box } = setup();
+    await user.type(box, 'w');
+    expect(panel()).toHaveClass('search-panel--left');
+    expect(panel().style.width).toBe('344px');
+  });
+
+  it('switches when the window is resized while open', async () => {
+    boxRect = rect(640, 940);
+    window.innerWidth = 980;
+    const { user, box } = setup();
+    await user.type(box, 'w');
+    expect(panel()).not.toHaveClass('search-panel--left');
+    boxRect = rect(40, 340);
+    window.innerWidth = 768;
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+    expect(panel()).toHaveClass('search-panel--left');
+    expect(panel().style.width).toBe('540px');
+    boxRect = rect(640, 940);
+    window.innerWidth = 980;
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+    expect(panel()).not.toHaveClass('search-panel--left');
+    expect(panel().style.width).toBe('');
   });
 });

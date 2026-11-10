@@ -179,17 +179,9 @@
   min-height: 52px;
 }
 
-/* Below this the header wraps (the box can drop to its own line at the left), so the panel is anchored to the header,
-   not the box: left-aligned at the gutter and never wider than the viewport. */
-@media (max-width: 1000px) {
-  .header__search {
-    position: static;
-  }
-  .search-panel {
-    top: calc(100% - 14px);
-    left: var(--cf-gutter);
-    right: auto;
-    width: min(540px, calc(100vw - 2 * var(--cf-gutter)));
-    max-width: none;
-  }
+/* Used when right-aligned would run off the left of the viewport (see panelPlacement in SearchBox); the width is set inline. */
+.search-panel--left {
+  left: 0;
+  right: auto;
+  max-width: none;
 }
