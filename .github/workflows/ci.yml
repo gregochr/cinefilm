@@ -167,7 +167,7 @@ jobs:
       # Produced by the forked spotbugs:spotbugs run inside the verify-phase check goal.
       - name: Upload SpotBugs report
         if: always() && needs.changes.outputs.docs_only != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: spotbugs-report
           path: backend/target/spotbugsXml.xml
@@ -175,7 +175,7 @@ jobs:
 
       - name: Upload JaCoCo coverage report
         if: always() && needs.changes.outputs.docs_only != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: jacoco-report
           path: backend/target/site/jacoco/
@@ -195,7 +195,7 @@ jobs:
       # to backend/target.
       - name: Upload Sonar inputs (classes, test classes, dependency jars)
         if: needs.changes.outputs.docs_only != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-sonar-inputs
           path: |
@@ -301,7 +301,7 @@ jobs:
       # lcov for the `sonar` job; short-lived. The sonar job rewrites the SF: paths in its own copy.
       - name: Upload lcov (for SonarQube Cloud)
         if: needs.changes.outputs.docs_only != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-lcov
           path: frontend/coverage/lcov.info
