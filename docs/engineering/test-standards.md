@@ -223,6 +223,12 @@ header, 401 handling, 204 handling) is part of what every screen test exercises.
 `film-heat.json`, `films-empty.json`). To vary one, `structuredClone` it and change the field the test is about;
 do not hand-write a second whole payload.
 
+**A table both suites run stays one file, outside `frontend/`** (the edition validation cases, the search vectors:
+the backend reads the same file, so a rule cannot drift). Load it with `readRepoJson('<path from the repo root>')`
+from `src/test/repoFile.js`, never with a relative import or `process.cwd()`: Stryker runs the suite from a copy of
+`frontend/`, where those lead nowhere and the weekly run fails before it tests a mutant (`dev-and-testing.md`
+"Mutation testing"). ESLint fails a `../…/backend/` or `../…/docs/` path in a test or a `src/test/` helper.
+
 **`userEvent` is the default** for everything a person does: click, type, tab, keyboard, select, hover. Use
 `userEvent.setup()` when one test needs state across calls (a held mouse button, a drag). `fireEvent` is for what
 `userEvent` cannot produce: media element events (`loadedMetadata`, `timeUpdate`, `waiting`, `ended`), `change` on

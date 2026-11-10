@@ -1,7 +1,6 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildFixtureSearchIndex } from '../api/fixtureSearchIndex.js';
+import { readRepoJson } from '../test/repoFile.js';
 import {
   DEFAULT_CAPS,
   matchEntry,
@@ -14,10 +13,8 @@ import {
 } from './search.js';
 import { prepareIndex } from './searchIndex.js';
 
-// Vitest runs in frontend/, so the repository root is one level up.
-const vectors = JSON.parse(
-  readFileSync(resolve(process.cwd(), '../docs/design/search/vectors.json'), 'utf8'),
-);
+// The one table of vectors both sides read: backend SearchTextTest runs the same file against SearchText.java.
+const vectors = readRepoJson('docs/design/search/vectors.json');
 
 const film = (id, title, extra = {}) => ({ id, t: title, ...extra });
 const person = (id, n, a, d = 0) => ({ id, n, a, d });

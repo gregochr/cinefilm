@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-// The one table of cases both sides read: backend EditionRulesTest runs the same file against EditionRules.java.
-import table from '../../../backend/src/test/resources/shared/edition-validation-cases.json';
+import { readRepoJson } from '../test/repoFile.js';
 import { MESSAGES, validateArrangement } from './editionRules.js';
+
+// The one table of cases both sides read: backend EditionRulesTest runs the same file against EditionRules.java.
+const table = readRepoJson('backend/src/test/resources/shared/edition-validation-cases.json');
 
 describe('validateArrangement', () => {
   it.each(table.cases.map((c) => [c.name, c]))('%s', (_name, c) => {
