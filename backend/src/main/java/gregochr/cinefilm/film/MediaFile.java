@@ -61,6 +61,10 @@ public class MediaFile {
 
     private Long durationMs;
 
+    /** Which part of its edition this file is (1-based); 1 for a single-file edition. Only originals have parts. */
+    @Column(nullable = false)
+    private int partNumber = 1;
+
     @Column(nullable = false)
     private boolean spriteReady;
 

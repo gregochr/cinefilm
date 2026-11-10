@@ -92,6 +92,10 @@ public class Film {
     @Column(length = 8000)
     private String matchCandidates;
 
+    /** True once the owner settled this film's files (Fix match, Edit editions): the scan never regroups it. */
+    @Column(nullable = false)
+    private boolean editionsConfirmed;
+
     /** The IMDb id (for example {@code tt0113277}), from TMDB; null when TMDB has none or has not been asked. */
     @Column(length = 16)
     private String imdbId;
