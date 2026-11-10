@@ -179,7 +179,7 @@ describe('Admin: Library scan panel', () => {
   it('shows a loading skeleton while the status loads', () => {
     installFetch(() => new Promise(() => {}));
     renderApp('/admin');
-    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(4);
+    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(5);
   });
 
   it('scrolls the panel into view for the empty-library link (#library-scan)', async () => {
@@ -335,11 +335,11 @@ describe('Admin: Films needing attention panel', () => {
 });
 
 describe('Admin: page', () => {
-  it('has the Admin heading, its five panels, and the TMDB credit', async () => {
+  it('has the Admin heading, its six panels, and the TMDB credit', async () => {
     installFetch();
     renderApp('/admin');
     expect(await screen.findByRole('heading', { level: 1, name: 'Admin' })).toBeInTheDocument();
-    expect(screen.getAllByRole('region')).toHaveLength(5);
+    expect(screen.getAllByRole('region')).toHaveLength(6);
     expect(
       screen.getByText('This product uses the TMDB API but is not endorsed or certified by TMDB.'),
     ).toBeInTheDocument();
@@ -487,6 +487,19 @@ describe('Admin: Transcoding panel', () => {
     expect(reads()).toBe(1);
     await act(() => vi.advanceTimersByTimeAsync(200));
     expect(reads()).toBe(2);
+  });
+});
+
+describe('Admin: Playback health panel', () => {
+  it('comes directly after the Transcoding card, with the recent playbacks', async () => {
+    installFetch();
+    renderApp('/admin');
+    const panel = await screen.findByRole('region', { name: 'Playback health' });
+    const titles = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(titles.indexOf('Playback health')).toBe(titles.indexOf('Transcoding') + 1);
+    const list = await within(panel).findByRole('list', { name: 'Recent playbacks' });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(3);
+    expect(within(list).getByText('Heat')).toBeInTheDocument();
   });
 });
 
