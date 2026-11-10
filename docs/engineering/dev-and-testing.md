@@ -216,10 +216,35 @@ fetch fails), so review after green is where the defects are.
 
 ## CI workflows
 
-One workflow runs the checks (`.github/workflows/ci.yml`, name `CI`); the others support it. The repo is private on a
-plan without branch protection, so nothing is enforced by GitHub: the merge rule in `CLAUDE.md` (read the checks on
-the exact head commit, `gh pr merge --match-head-commit`) is the gate, and the job names below are stable strings
-that `dependabot-auto-merge.yml` reads. Do not rename them.
+One workflow runs the checks (`.github/workflows/ci.yml`, name `CI`); the others support it. The job names below are
+stable strings: branch protection and `dependabot-auto-merge.yml` both read them. Do not rename them.
+
+**What GitHub enforces (since 2026-11-10).** The repo is public, which is why Actions minutes, CodeQL and SonarQube
+Cloud are free; a private repo on the free plan has a monthly Actions quota and stops starting jobs when it runs out.
+
+- **Branch protection on `main`:** the `Backend`, `Frontend` and `Shell` checks are required; force-pushes and
+  deletion are blocked; no review is required; admins are not bound. Auto-merge is allowed on the repo, and with
+  these required checks it merges on green CI. It does not wait for Codex: read Codex on the head commit before
+  enabling it, and still merge by hand with `gh pr merge --match-head-commit` otherwise (`CLAUDE.md`).
+- **Ruleset "CodeQL: no new high-severity alerts"** on the default branch: a PR that adds a CodeQL security alert
+  of `high` or above (or an `error`) cannot merge. It is a ruleset rather than a required check so a docs-only PR is
+  never left waiting. Proven on 2026-11-10 with a throwaway path-injection PR (#56, closed unmerged).
+
+### CodeQL (GitHub default setup, no workflow file)
+
+GitHub-managed: `java-kotlin`, `javascript-typescript` and `actions`, extended query suite, on every PR, every push
+to `main`, and weekly. Results are in the repo's Security tab and as the `CodeQL` check on a PR. There is no
+`codeql.yml`; change the setup in the repo's code-scanning settings (or the `code-scanning/default-setup` API).
+
+- **A real finding is fixed in the PR that raised it.** A false positive is dismissed in GitHub with a written
+  reason (never suppressed in code), by the planner, and named in the PR description.
+- **Baseline, 2026-11-10:** 20 alerts on the first scan, 0 open after PR #54. Dismissed with reasons: the disabled
+  Spring CSRF (replaced by `auth/CsrfHeaderFilter`), path injection in `ArtworkController` and
+  `HlsSessionController` (inputs are pattern-checked and file names rebuilt server-side), the array index in
+  `CutList.startMs` (range-checked in `SessionManager.segment` and again in `CutList.checkSegment`, which CodeQL
+  does not follow), and a relative command in a test.
+- **Third-party actions are pinned to commit SHAs** with the version in a trailing comment; Dependabot's
+  `github-actions` updates move both. First-party `actions/*` stay on tags.
 
 ### `ci.yml` — CI
 
