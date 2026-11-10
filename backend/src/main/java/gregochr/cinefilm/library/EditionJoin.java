@@ -320,7 +320,7 @@ public class EditionJoin {
     }
 
     /** Points the remembered edition choices at the survivor and the stream choices at part 1's streams. */
-    private void repoint(Long filmId, Long survivorId, Set<Long> absorbed) {
+    void repoint(Long filmId, Long survivorId, Set<Long> absorbed) {
         FilmPreference preference = preferences.findById(filmId).orElse(null);
         if (preference == null) {
             return;
