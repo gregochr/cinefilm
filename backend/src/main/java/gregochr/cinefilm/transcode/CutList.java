@@ -109,15 +109,31 @@ public final class CutList {
         return cuts.length;
     }
 
-    /** Start of segment {@code n} in milliseconds. */
+    /**
+     * Start of segment {@code n} in milliseconds.
+     *
+     * @throws IndexOutOfBoundsException when {@code n} is not a segment of this list
+     */
     public long startMs(int n) {
+        checkSegment(n);
         return cuts[n];
     }
 
-    /** Length of segment {@code n} in milliseconds (the last one runs to the film's duration). */
+    /**
+     * Length of segment {@code n} in milliseconds (the last one runs to the film's duration).
+     *
+     * @throws IndexOutOfBoundsException when {@code n} is not a segment of this list
+     */
     public long durationMs(int n) {
+        checkSegment(n);
         long end = n + 1 < cuts.length ? cuts[n + 1] : durationMs;
         return end - cuts[n];
+    }
+
+    private void checkSegment(int n) {
+        if (n < 0 || n >= cuts.length) {
+            throw new IndexOutOfBoundsException("No segment " + n + " in " + cuts.length);
+        }
     }
 
     /** The film's duration in milliseconds. */

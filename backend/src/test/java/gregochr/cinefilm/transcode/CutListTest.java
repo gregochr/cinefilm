@@ -63,6 +63,22 @@ class CutListTest {
     }
 
     @Test
+    void aSegmentOutsideTheListIsRefusedNotReadFromTheArray() {
+        CutList cuts = CutList.fromKeyframes(List.of(4004L, 8100L), 10_000);
+
+        assertThatThrownBy(() -> cuts.startMs(-1)).isInstanceOf(IndexOutOfBoundsException.class)
+            .hasMessage("No segment -1 in 3");
+        assertThatThrownBy(() -> cuts.startMs(3)).isInstanceOf(IndexOutOfBoundsException.class)
+            .hasMessage("No segment 3 in 3");
+        assertThatThrownBy(() -> cuts.startMs(Integer.MAX_VALUE)).isInstanceOf(IndexOutOfBoundsException.class);
+        assertThatThrownBy(() -> cuts.durationMs(-1)).isInstanceOf(IndexOutOfBoundsException.class)
+            .hasMessage("No segment -1 in 3");
+        assertThatThrownBy(() -> cuts.durationMs(3)).isInstanceOf(IndexOutOfBoundsException.class)
+            .hasMessage("No segment 3 in 3");
+        assertThatThrownBy(() -> cuts.durationMs(Integer.MAX_VALUE)).isInstanceOf(IndexOutOfBoundsException.class);
+    }
+
+    @Test
     void theLargestGapIncludesTheFinalSegment() {
         assertThat(CutList.fromKeyframes(List.of(4000L, 8000L), 30_000).maxGapMs()).isEqualTo(22_000);
         assertThat(CutList.fromKeyframes(List.of(4000L, 20_000L), 24_000).maxGapMs()).isEqualTo(16_000);

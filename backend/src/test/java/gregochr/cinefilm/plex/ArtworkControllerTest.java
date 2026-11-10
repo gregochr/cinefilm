@@ -85,6 +85,37 @@ class ArtworkControllerTest {
     }
 
     @Test
+    void oddAndEncodedNamesAreRefusedAndNeverServedAsAnImage() throws Exception {
+        String hash = jpg.substring(0, 64);
+        String[] bad = {hash + "0.jpg", ".jpg", "..%2Fx", "%2Fetc%2Fpasswd", hash + ".jpg%00.png", hash + ".jpg%20",
+            "x.jpg"};
+        for (String name : bad) {
+            mvc.perform(get("/api/art/" + name).with(user("owner")))
+                .andExpect(result -> org.assertj.core.api.Assertions
+                    .assertThat(result.getResponse().getStatus()).isIn(400, 404))
+                .andExpect(result -> org.assertj.core.api.Assertions
+                    .assertThat(String.valueOf(result.getResponse().getContentType())).doesNotStartWith("image/"));
+        }
+    }
+
+    @Test
+    void aSixtyThreeCharacterNameIsExactly404() throws Exception {
+        String hash = jpg.substring(0, 64);
+        mvc.perform(get("/api/art/" + hash.substring(1) + ".jpg").with(user("owner")))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.error").value("No such artwork"));
+    }
+
+    @Test
+    void anAbsolutePathOrEncodedTraversalIsRefusedByTheFirewallOrTheRoute() throws Exception {
+        for (String url : new String[] {"/api/art//etc/passwd", "/api/art/..%2Fx.jpg"}) {
+            mvc.perform(get(url).with(user("owner")))
+                .andExpect(result -> org.assertj.core.api.Assertions
+                    .assertThat(result.getResponse().getStatus()).isIn(400, 404));
+        }
+    }
+
+    @Test
     void traversalAndEncodedSlashesAreNeverServed() throws Exception {
         String[] bad = {"..", "..%2f" + jpg, "%2e%2e%2f" + jpg, "x%2f" + jpg, "x/" + jpg, "../" + jpg};
         for (String name : bad) {

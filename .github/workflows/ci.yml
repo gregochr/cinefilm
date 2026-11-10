@@ -14,6 +14,12 @@ on:
   # no push workflows).
   workflow_dispatch:
 
+# Least privilege for every job: they only check out and read the repository. Artifact upload, the Actions
+# cache and the job summary use the runner's own tokens, not the GITHUB_TOKEN scopes. Called from deploy.yml, whose
+# top-level `contents: read` is the same, so the reusable-workflow call is not narrowed.
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -323,12 +329,12 @@ jobs:
       - uses: actions/checkout@v4
         if: needs.changes.outputs.docs_only != 'true'
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
         if: needs.changes.outputs.docs_only != 'true'
 
       - name: Build the image (no push)
         if: needs.changes.outputs.docs_only != 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           push: false
@@ -379,7 +385,7 @@ jobs:
       # so a broken Dockerfile or Caddyfile fails the PR; deploy.yml builds and pushes it next to the app image.
       - name: Build the Caddy proxy image (no push)
         if: needs.changes.outputs.docs_only != 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: deploy/caddy
           push: false
