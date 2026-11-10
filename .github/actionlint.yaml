@@ -1,0 +1,4 @@
+# deploy.yml runs on the production host's self-hosted runner, labelled cinefilm-prod.
+self-hosted-runner:
+  labels:
+    - cinefilm-prod
