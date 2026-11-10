@@ -2,6 +2,7 @@ package gregochr.cinefilm.plex;
 
 import gregochr.cinefilm.plex.PlexModels.PlexFilm;
 import gregochr.cinefilm.plex.PlexModels.PlexImage;
+import gregochr.cinefilm.plex.PlexModels.PlexMedia;
 import gregochr.cinefilm.tmdb.Sleeper;
 import java.net.URI;
 import java.time.Duration;
@@ -168,13 +169,17 @@ public class PlexClient implements PlexApi {
                 guids.add(id);
             }
         }
-        List<String> files = new ArrayList<>();
-        for (JsonNode media : item.path("Media")) {
-            for (JsonNode part : media.path("Part")) {
+        List<PlexMedia> media = new ArrayList<>();
+        for (JsonNode version : item.path("Media")) {
+            List<String> parts = new ArrayList<>();
+            for (JsonNode part : version.path("Part")) {
                 String file = text(part, "file");
                 if (file != null) {
-                    files.add(file);
+                    parts.add(file);
                 }
+            }
+            if (!parts.isEmpty()) {
+                media.add(new PlexMedia(List.copyOf(parts)));
             }
         }
         int year = item.path("year").asInt(0);
@@ -182,7 +187,7 @@ public class PlexClient implements PlexApi {
             year > 0 ? year : null, text(item, "summary"), text(item, "editionTitle"), seconds(item, "addedAt"),
             seconds(item, "updatedAt"), text(item, "thumb"), text(item, "art"), PlexRules.tmdbId(guids),
             item.path("viewCount").asInt(0), item.path("viewOffset").asLong(0), seconds(item, "lastViewedAt"),
-            List.copyOf(files));
+            List.copyOf(media));
     }
 
     private static String text(JsonNode node, String name) {

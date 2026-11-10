@@ -68,13 +68,13 @@ class PlexFilmWriterTest extends ApiTestBase {
 
     private static PlexFilm plex(Long tmdbId, String title) {
         return new PlexFilm("9", title, "Sort " + title, 1995, "Plex overview", null, PLEX_ADDED, PLEX_ADDED, null,
-            null, tmdbId, 0, 0, null, List.of("/m/x.m4v"));
+            null, tmdbId, 0, 0, null, List.of(new PlexModels.PlexMedia(List.of("/m/x.m4v"))));
     }
 
     private static PlexFilm watched(PlexFilm base, int views, long offset) {
         return new PlexFilm(base.ratingKey(), base.title(), base.titleSort(), base.year(), base.summary(),
             base.editionTitle(), base.addedAt(), base.updatedAt(), base.thumb(), base.art(), base.tmdbId(), views,
-            offset, VIEWED, base.files());
+            offset, VIEWED, base.media());
     }
 
     private static MovieDetails tmdb(long id, String title) {
@@ -84,7 +84,7 @@ class PlexFilmWriterTest extends ApiTestBase {
     }
 
     private FilmWrite write(PlexFilm plex, List<Long> fileIds, MovieDetails movie) {
-        return new FilmWrite(plex, fileIds, movie, null, null, NOW);
+        return FilmWrite.ofFiles(plex, fileIds, movie, null, null, NOW);
     }
 
     private Film reload(Long id) {
@@ -98,9 +98,9 @@ class PlexFilmWriterTest extends ApiTestBase {
         Film film = saved("heat file", null, "Heat.m4v");
         Long id = film.getId();
         PlexFilm plex = new PlexFilm("9", "Heat", "Heat, sorted", 1995, "Plex overview", "Director's Cut", PLEX_ADDED,
-            PLEX_ADDED, null, null, 949L, 0, 0, null, List.of("/m/Heat.m4v"));
+            PLEX_ADDED, null, null, 949L, 0, 0, null, List.of(new PlexModels.PlexMedia(List.of("/m/Heat.m4v"))));
 
-        Applied applied = writer.apply(new FilmWrite(plex, List.of(fileId(film, 0)), tmdb(949, "Heat (TMDB)"),
+        Applied applied = writer.apply(FilmWrite.ofFiles(plex, List.of(fileId(film, 0)), tmdb(949, "Heat (TMDB)"),
             POSTER, BACKDROP, NOW));
 
         Film result = reload(id);
@@ -137,7 +137,7 @@ class PlexFilmWriterTest extends ApiTestBase {
         Film film = saved("Kept title", 5L, "A.m4v");
         film.setOverview("Kept overview");
         PlexFilm bare = new PlexFilm(null, null, null, null, null, null, null, null, null, null, null, 0, 0, null,
-            List.of("/m/A.m4v"));
+            List.of(new PlexModels.PlexMedia(List.of("/m/A.m4v"))));
 
         writer.apply(write(bare, List.of(fileId(film, 0)), null));
 
@@ -274,7 +274,7 @@ class PlexFilmWriterTest extends ApiTestBase {
     @Test
     void anEditionInAFilmWithADifferentIdentityMovesToAnExistingFilmWithThePlexId() {
         Film heat = saved("Heat", 949L, "Heat.m4v");
-        Film wrong = saved("Wrong", 111L, "Other.m4v", "Heat extra.m4v");
+        Film wrong = saved("Wrong", 111L, "Other.m4v", "Heat (Extended).m4v");
         Edition extra = wrong.getEditions().get(1);
         Long extraFileId = extra.getMediaFiles().get(0).getId();
         Long extraEditionId = extra.getId();
@@ -292,7 +292,7 @@ class PlexFilmWriterTest extends ApiTestBase {
 
     @Test
     void anEditionInAFilmWithADifferentIdentityMovesToANewFilmWhenNoFilmHasThePlexId() {
-        Film wrong = saved("Wrong", 111L, "Other.m4v", "Heat extra.m4v");
+        Film wrong = saved("Wrong", 111L, "Other.m4v", "Heat (Extended).m4v");
         Edition extra = wrong.getEditions().get(1);
         Long extraFileId = extra.getMediaFiles().get(0).getId();
         Long extraEditionId = extra.getId();
@@ -316,7 +316,7 @@ class PlexFilmWriterTest extends ApiTestBase {
     void aNewFilmForAPlexFilmWithoutATitleOrAddedDateIsStillValid() {
         Film wrong = saved("Wrong", 111L, "Other.m4v");
         PlexFilm bare = new PlexFilm(null, null, null, null, null, null, null, null, null, null, 949L, 0, 0, null,
-            List.of("/m/Other.m4v"));
+            List.of(new PlexModels.PlexMedia(List.of("/m/Other.m4v"))));
 
         writer.apply(write(bare, List.of(fileId(wrong, 0)), null));
 
@@ -414,7 +414,7 @@ class PlexFilmWriterTest extends ApiTestBase {
     void runningTheSameFilmAgainMakesNoNewRowsAndChangesNothing() {
         Film film = saved("Heat", 949L, "Heat.m4v");
         List<Long> ids = List.of(fileId(film, 0));
-        FilmWrite write = new FilmWrite(watched(plex(949L, "Heat"), 1, 40 * MIN), ids, tmdb(949, "Heat"), POSTER,
+        FilmWrite write = FilmWrite.ofFiles(watched(plex(949L, "Heat"), 1, 40 * MIN), ids, tmdb(949, "Heat"), POSTER,
             BACKDROP, NOW);
         writer.apply(write);
         em.flush();
@@ -428,7 +428,7 @@ class PlexFilmWriterTest extends ApiTestBase {
         Instant lastPlayed = stateBefore.getLastPlayedAt();
         em.clear();
 
-        Applied second = writer.apply(new FilmWrite(write.plex(), ids, null, null, null, NOW.plusSeconds(60)));
+        Applied second = writer.apply(FilmWrite.ofFiles(write.plex(), ids, null, null, null, NOW.plusSeconds(60)));
 
         em.flush();
         em.clear();
@@ -497,7 +497,7 @@ class PlexFilmWriterTest extends ApiTestBase {
     void localArtworkSurvivesATmdbRetryThatFillsInTheCredits() {
         Film film = saved("heat file", null, "Heat.m4v");
         List<Long> ids = List.of(fileId(film, 0));
-        writer.apply(new FilmWrite(plex(949L, "Heat"), ids, null, POSTER, BACKDROP, NOW));
+        writer.apply(FilmWrite.ofFiles(plex(949L, "Heat"), ids, null, POSTER, BACKDROP, NOW));
         em.flush();
         em.clear();
         assertThat(writer.preflight(ids, 949L)).isEqualTo(new Preflight(true, false, false));

@@ -26,12 +26,26 @@ public final class PlexModels {
      * @param viewCount how many times it was watched
      * @param viewOffsetMs the resume position in milliseconds (0 when none)
      * @param lastViewedAt when it was last watched, or null
-     * @param files the file paths of its parts, in the order Plex lists them
+     * @param media its versions ("Media"), in the order Plex lists them, each with its file paths in play order
      */
     public record PlexFilm(String ratingKey, String title, String titleSort, Integer year, String summary,
                            String editionTitle, Instant addedAt, Instant updatedAt, String thumb, String art,
                            Long tmdbId, int viewCount, long viewOffsetMs, Instant lastViewedAt,
-                           List<String> files) {
+                           List<PlexMedia> media) {
+
+        /** Every file path of every version, in Plex's order. */
+        public List<String> files() {
+            return media.stream().flatMap(m -> m.parts().stream()).toList();
+        }
+    }
+
+    /**
+     * One version ("Media") of a Plex film: the files that play one after the other, in the order Plex lists its
+     * Parts. A film split across files is one Media with several Parts.
+     *
+     * @param parts the file paths of its Parts, in play order
+     */
+    public record PlexMedia(List<String> parts) {
     }
 
     /**
