@@ -2,17 +2,23 @@ name: Dependabot auto-merge
 
 # Squash-merges minor and patch Dependabot PRs once CI is green.
 #
-# The repo is on a plan without branch protection, so GitHub's native auto-merge (which needs
-# required checks) is unavailable. This workflow is the gate instead, in two jobs:
+# `main` is protected (required checks, CodeQL ruleset), but this workflow stays because it also enforces what a
+# ruleset cannot: minor/patch only, the `automerge-ok` label, and CI having run against the current main. Two jobs:
 #
 #   1. label:  on the PR event, labels a minor/patch PR `automerge-ok` (and removes the label if a
-#              regenerated PR turns major). dependabot/fetch-metadata needs the pull_request event
-#              and cannot run under workflow_run.
-#   2. merge:  when CI completes for a Dependabot PR, merges only if every condition holds: the
-#              label is present, the head has not moved, CI's `Backend — Build, Test & Coverage` and `Frontend — Lint, Test & Build` check-runs
-#              succeeded, no other check-run on the head failed, and CI tested against the current
-#              main (otherwise two PRs green against an old main would land an untested mix).
-#              A PR skipped for a stale base waits for its next CI run (Dependabot rebases it).
+#              regenerated PR turns major). Runs only for a PR authored by Dependabot from a branch in this
+#              repository. dependabot/fetch-metadata needs the pull_request event and cannot run under workflow_run.
+#   2. merge:  when CI completes for a same-repository `dependabot/` branch, merges only if every condition holds:
+#              the PR's author is Dependabot, every commit on it is authored by Dependabot with a verified
+#              signature, the label is present, the head has not moved, CI's `Backend — Build, Test & Coverage`,
+#              `Frontend — Lint, Test & Build` and `Shell — ShellCheck & script tests` check-runs succeeded, no
+#              other check-run on the head failed, and CI tested against the current main (otherwise two PRs
+#              green against an old main would land an untested mix). A PR skipped for a stale base waits for its
+#              next CI run (Dependabot rebases it).
+#
+# Trust never rests on `github.actor` or `workflow_run.actor`: those name whoever triggered the event, which a
+# fork can arrange to be Dependabot. The job-level `if:` is only a prefilter; the decision is made in the script
+# from the PR's author and its commits, read from the API.
 #
 # A merge made with GITHUB_TOKEN fires no `push` workflows, so the merge job dispatches ci.yml on
 # main to build the merged commit.
@@ -29,7 +35,10 @@ permissions: {}
 jobs:
   label:
     name: Label minor and patch updates
-    if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
+    if: >-
+      github.event_name == 'pull_request'
+      && github.event.pull_request.user.login == 'dependabot[bot]'
+      && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -63,12 +72,14 @@ jobs:
 
   merge:
     name: Merge green Dependabot PR
+    # The branch-prefix test is only a prefilter, so the job is skipped for ordinary PRs. The trust decision is
+    # made in the script below.
     if: >-
       github.event_name == 'workflow_run'
       && github.event.workflow_run.conclusion == 'success'
       && github.event.workflow_run.event == 'pull_request'
-      && github.event.workflow_run.actor.login == 'dependabot[bot]'
       && github.event.workflow_run.head_repository.full_name == github.repository
+      && startsWith(github.event.workflow_run.head_branch, 'dependabot/')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Serial merges: the base-SHA check below is only meaningful if merges do not overlap.
@@ -81,6 +92,15 @@ jobs:
       checks: read
       actions: write
     steps:
+      # The default branch only, never the PR head, and without a persisted token: this job holds
+      # contents: write, and the script that makes the trust decision must come from main, not from
+      # the PR being judged.
+      - name: Check out the trust-gate script from the default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
       - name: Merge if every condition holds
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -107,6 +127,14 @@ jobs:
           [ "$(jq -r .baseRefName <<<"$STATE")" = "$DEFAULT_BRANCH" ] || skip "PR #$PR does not target $DEFAULT_BRANCH."
           [ "$(jq -r .headRefOid <<<"$STATE")" = "$HEAD_SHA" ] || skip "PR #$PR head moved since this CI run; a newer run will decide."
           jq -e '.labels[] | select(.name == "automerge-ok")' <<<"$STATE" >/dev/null || skip "PR #$PR does not carry automerge-ok (major update, or not labelled yet)."
+
+          # Every commit on the PR must be authored by Dependabot and carry a verified signature. Unlike the
+          # actor of an event, neither can be arranged by someone else pushing to the branch. A non-zero exit
+          # (a bad commit, no commits, unreadable input, or the API call failing) goes to skip, which ends
+          # the step, so nothing rejected here reaches `gh pr merge` below.
+          if ! COMMIT_PROBLEM=$(gh api "repos/$GH_REPO/pulls/$PR/commits" --paginate | bash scripts/dependabot-commits-trusted.sh); then
+            skip "PR #$PR has a commit that is not Dependabot-authored and verified: ${COMMIT_PROBLEM:-could not read the commits}."
+          fi
 
           # Every check-run on the head must be complete; wait briefly for stragglers (the label job).
           for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do

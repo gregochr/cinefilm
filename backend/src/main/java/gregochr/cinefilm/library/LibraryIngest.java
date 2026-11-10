@@ -37,6 +37,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -367,7 +368,8 @@ public class LibraryIngest {
 
     private Film newFilm(FoundFile found, ProbeResult probe, TitleGuess guess) {
         Film film = new Film();
-        film.setTitleAndSort(cut(guess.title(), NAME_MAX));
+        // TitleGuess always carries a title (the parsed file name is never null); fail loudly here, not in SortTitles.
+        film.setTitleAndSort(cut(Objects.requireNonNull(guess.title(), "A title guess must carry a title"), NAME_MAX));
         film.setYear(guess.year());
         film.setAddedAt(found.createdAt());
         film.setMatchStatus(MatchStatus.PENDING);

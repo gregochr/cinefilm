@@ -2,6 +2,7 @@ package gregochr.cinefilm.library;
 
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.Mockito.when;
 
@@ -155,6 +156,17 @@ class LibraryIngestTest extends ApiTestBase {
         assertThat(film.getEditions().get(0).originalFile().getVideoCodec()).isNull();
         assertThat(film.getEditions().get(0).originalFile().getPixelFormat()).isNull();
         assertThat(film.getEditions().get(0).originalFile().getAudioStreams()).isEmpty();
+    }
+
+    @Test
+    void aTitleGuessWithoutATitleIsRefusedAtTheBoundaryAndStoresNothing() {
+        FoundFile file = found("Nameless.m4v", 1);
+        TitleGuess nameless = new TitleGuess(null, null);
+
+        assertThatNullPointerException()
+            .isThrownBy(() -> ingest.addNew(file, Playability.PLAYABLE, null, nameless, null))
+            .withMessage("A title guess must carry a title");
+        assertThat(mediaFiles.count()).isZero();
     }
 
     @Test
