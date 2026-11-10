@@ -78,6 +78,7 @@ public class EditionJoin {
     @Transactional
     public Long join(List<Long> orderedFileIds) {
         List<MediaFile> parts = load(orderedFileIds);
+        refuseIfAnAbsorbedEditionKeepsFiles(parts, orderedFileIds);
         List<Long> durations = parts.stream().map(MediaFile::getDurationMs).toList();
         EditionTimeline timeline = EditionTimeline.of(durations);
         Long survivorId = parts.get(0).getEdition().getId();
@@ -212,6 +213,22 @@ public class EditionJoin {
             }
         }
         return ids;
+    }
+
+    /** An absorbed edition is deleted, so it must hold no file that is not moving into the survivor. */
+    private void refuseIfAnAbsorbedEditionKeepsFiles(List<MediaFile> parts, List<Long> orderedFileIds) {
+        Long survivor = parts.get(0).getEdition().getId();
+        Set<Long> absorbed = new LinkedHashSet<>();
+        parts.forEach(p -> absorbed.add(p.getEdition().getId()));
+        absorbed.remove(survivor);
+        for (Long editionId : absorbed) {
+            for (MediaFile file : editions.findById(editionId).orElseThrow().getMediaFiles()) {
+                if (file.getKind() != MediaKind.ORIGINAL || !orderedFileIds.contains(file.getId())) {
+                    throw new IllegalArgumentException("Edition " + editionId + " still holds file " + file.getId()
+                        + " that is not part of the join");
+                }
+            }
+        }
     }
 
     private List<MediaFile> load(List<Long> orderedFileIds) {

@@ -94,7 +94,13 @@ public final class EditionGrouper {
     private static List<FileFact> joinable(List<FileFact> group, Map<Long, Long> filesPerEdition) {
         Set<Long> editions = new LinkedHashSet<>();
         Map<Long, Long> inGroup = new LinkedHashMap<>();
+        long survivor = group.stream().min(Comparator.comparingInt((FileFact f) -> f.parsed().partTag() == null
+            ? 0 : f.parsed().partTag()).thenComparingLong(FileFact::fileId)).orElseThrow().editionId();
         for (FileFact fact : group) {
+            // An absorbed edition is deleted, so it must hold nothing but files of this group.
+            if (fact.extraFiles() && fact.editionId() != survivor) {
+                return null;
+            }
             if (fact.editionSource() != GroupingSource.AUTO || fact.parsed().partTag() == null || !fact.joinable()) {
                 return null;
             }

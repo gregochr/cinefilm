@@ -524,6 +524,46 @@ class EditionJoinTest extends ApiTestBase {
     }
 
     @Test
+    void anAbsorbedEditionStillHoldingAnotherFileIsNeverDeleted() {
+        Film one = film("Towers", MatchStatus.MATCHED, "Towers - pt1.m4v", 90);
+        Film two = film("Towers 2", MatchStatus.PENDING, "Towers - pt2.m4v", 110);
+        Film three = film("Towers 3", MatchStatus.PENDING, "Towers - pt3.m4v", 100);
+        Edition absorbed = two.getEditions().get(0);
+        MediaFile premade = TestData.file(absorbed, "Towers - pt2.720.m4v");
+        premade.setKind(MediaKind.PREMADE_720);
+        em.persist(premade);
+        em.flush();
+        Long first = fileId(one);
+        Long second = fileId(two);
+        Long other = fileId(three);
+        Long premadeId = premade.getId();
+        reset();
+
+        assertThatThrownBy(() -> join.join(List.of(first, second))).isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Edition " + absorbed.getId() + " still holds file " + premadeId
+                + " that is not part of the join");
+        assertThat(editions.findById(absorbed.getId())).isPresent();
+        assertThat(other).isNotNull();
+    }
+
+    @Test
+    void anAbsorbedEditionHoldingAnOriginalOutsideTheJoinIsNotDeletedEither() {
+        Film one = film("Towers", MatchStatus.MATCHED, "Towers - pt1.m4v", 90);
+        Film two = film("Towers 2", MatchStatus.PENDING, "Towers - pt2.m4v", 110);
+        Edition absorbed = two.getEditions().get(0);
+        MediaFile stray = TestData.file(absorbed, "Towers - extra.m4v");
+        em.persist(stray);
+        em.flush();
+        Long first = fileId(one);
+        Long second = fileId(two);
+        Long strayId = stray.getId();
+        reset();
+
+        assertThatThrownBy(() -> join.join(List.of(first, second))).isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("still holds file " + strayId);
+    }
+
+    @Test
     void aRenditionIsNotAnOriginalFile() {
         Film one = film("Towers", MatchStatus.MATCHED, "Towers - pt1.m4v", 90);
         Film two = film("Towers 2", MatchStatus.PENDING, "Towers - pt2.m4v", 110);

@@ -8,9 +8,11 @@ import gregochr.cinefilm.film.FilmPreferenceRepository;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.GroupingChange;
 import gregochr.cinefilm.film.GroupingChangeRepository;
+import gregochr.cinefilm.film.GroupingSource;
 import gregochr.cinefilm.film.MatchStatus;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
+import gregochr.cinefilm.film.MediaKind;
 import gregochr.cinefilm.library.RepairRules.Decision;
 import gregochr.cinefilm.library.RepairRules.Kind;
 import gregochr.cinefilm.library.RepairRules.TitleGroup;
@@ -83,7 +85,8 @@ public class LibraryGrouping {
                     facts.add(new FileFact(film.getId(), film.getTitle(), film.getTmdbId(), film.getMatchStatus(),
                         edition.getId(), edition.getName(), edition.getGroupingSource(), file.getId(),
                         file.getPath(), file.getPartNumber(), file.getDurationMs(), file.getPresence(),
-                        file.getPlayability(), FileNameParser.parse(file.getPath())));
+                        file.getPlayability(), FileNameParser.parse(file.getPath()),
+                        edition.getMediaFiles().stream().anyMatch(f -> f.getKind() != MediaKind.ORIGINAL)));
                 }
             }
             return facts;
@@ -125,6 +128,7 @@ public class LibraryGrouping {
      */
     public int group() {
         int done = 0;
+        renameOriginals();
         List<FileFact> facts = facts();
         List<List<Long>> merges = EditionGrouper.filmMerges(facts);
         for (List<Long> merge : merges) {
@@ -153,6 +157,32 @@ public class LibraryGrouping {
             }
         }
         return done;
+    }
+
+    /**
+     * Files scanned before editions were named from their tags all got the name "Original". An auto-grouped edition of
+     * a film the owner has not settled that still has that name takes the edition tag (else the plain edition word) of
+     * its first file's name. Idempotent, and nothing is logged.
+     *
+     * @return how many editions were renamed
+     */
+    int renameOriginals() {
+        Map<Long, FileFact> firsts = new LinkedHashMap<>();
+        for (FileFact fact : facts()) {
+            firsts.merge(fact.editionId(), fact, (a, b) -> a.partNumber() <= b.partNumber() ? a : b);
+        }
+        int renamed = 0;
+        for (FileFact first : firsts.values()) {
+            String name = first.parsed().editionTag() != null ? first.parsed().editionTag()
+                : first.parsed().plainEdition();
+            if (name != null && "Original".equals(first.editionName())
+                && first.editionSource() == GroupingSource.AUTO) {
+                tx.executeWithoutResult(status -> editions.findById(first.editionId()).orElseThrow()
+                    .setName(cut(name, NAME_MAX)));
+                renamed++;
+            }
+        }
+        return renamed;
     }
 
     /**
@@ -273,7 +303,9 @@ public class LibraryGrouping {
     }
 
     private static String title(Collection<FileFact> facts, Long filmId) {
-        return facts.stream().filter(f -> f.filmId() == filmId).map(FileFact::filmTitle).findFirst().orElseThrow();
+        Map<Long, String> titles = new LinkedHashMap<>();
+        facts.forEach(f -> titles.put(f.filmId(), f.filmTitle()));
+        return titles.get(filmId);
     }
 
     private static String cut(String text, int max) {

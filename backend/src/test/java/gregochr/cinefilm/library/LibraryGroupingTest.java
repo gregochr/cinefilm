@@ -181,6 +181,96 @@ class LibraryGroupingTest extends ApiTestBase {
         assertThat(preferences.findById(two.getId()).orElseThrow().getDefaultEditionId()).isEqualTo(plain.getId());
     }
 
+    // ---- existing editions named "Original"
+
+    @Test
+    void existingRowsNamedOriginalTakeTheirNamesFromTheirTagsAndGladiatorIsOneFilmDefaultTheatrical() {
+        film("Gladiator", MatchStatus.PENDING, null, "Original", 175, "Gladiator (2000) {edition-Extended Cut}.m4v");
+        film("Gladiator", MatchStatus.PENDING, null, "Original", 155,
+            "Gladiator (2000) {edition-Theatrical Cut}.m4v");
+        reset();
+
+        grouping.group();
+        grouping.refreshDefaults();
+        reset();
+
+        Film one = films.findAll().get(0);
+        assertThat(films.count()).isEqualTo(1);
+        assertThat(one.getEditions()).extracting(Edition::getName).containsExactlyInAnyOrder("Extended Cut",
+            "Theatrical Cut");
+        Edition theatrical = one.getEditions().stream().filter(e -> e.getName().equals("Theatrical Cut"))
+            .findFirst().orElseThrow();
+        assertThat(preferences.findById(one.getId()).orElseThrow().getDefaultEditionId())
+            .isEqualTo(theatrical.getId());
+        long rows = changes.count();
+
+        assertThat(grouping.renameOriginals()).isZero();
+        assertThat(grouping.group()).isZero();
+        assertThat(grouping.refreshDefaults()).isZero();
+        assertThat(changes.count()).isEqualTo(rows);
+    }
+
+    @Test
+    void aPlainEditionWordNamesTheEditionAndAnUntaggedOneStaysOriginal() {
+        film("Alien", MatchStatus.MATCHED, 348L, "Original", 116, "Alien Director's Cut.m4v");
+        film("Heat", MatchStatus.MATCHED, 949L, "Original", 170, "Heat.m4v");
+        reset();
+
+        assertThat(grouping.renameOriginals()).isEqualTo(1);
+        reset();
+
+        assertThat(editions.findAll()).extracting(Edition::getName).containsExactlyInAnyOrder("Director's Cut",
+            "Original");
+    }
+
+    @Test
+    void aConfirmedFilmAndAPlexOrOwnerEditionAreNotRenamed() {
+        Film confirmed = film("Gladiator", MatchStatus.MATCHED, 98L, "Original", 175, "G {edition-Extended}.m4v");
+        confirmed.setEditionsConfirmed(true);
+        Film plex = film("Alien", MatchStatus.MATCHED, 348L, "Original", 116, "A {edition-Final}.m4v");
+        plex.getEditions().get(0).setGroupingSource(GroupingSource.PLEX);
+        Film owner = film("Dune", MatchStatus.MATCHED, 1L, "Original", 150, "D {edition-Long}.m4v");
+        owner.getEditions().get(0).setGroupingSource(GroupingSource.OWNER);
+        films.saveAndFlush(confirmed);
+        films.saveAndFlush(plex);
+        films.saveAndFlush(owner);
+        reset();
+
+        assertThat(grouping.renameOriginals()).isZero();
+        reset();
+
+        assertThat(editions.findAll()).extracting(Edition::getName).containsOnly("Original");
+    }
+
+    @Test
+    void anEditionIsNamedFromItsFirstPartWhateverOrderTheFilesAreRead() {
+        Film film = film("Towers", MatchStatus.MATCHED, 121L, "Original", 90, "Towers {edition-Extended} - pt1.m4v");
+        Edition edition = film.getEditions().get(0);
+        MediaFile second = TestData.file(edition, "Towers {edition-Extended} - pt2.m4v");
+        edition.getMediaFiles().get(0).setPartNumber(2);
+        second.setPartNumber(1);
+        em.persist(second);
+        em.flush();
+        reset();
+
+        assertThat(grouping.renameOriginals()).isEqualTo(1);
+        reset();
+
+        assertThat(editions.findAll()).extracting(Edition::getName).containsExactly("Extended");
+    }
+
+    @Test
+    void aMultiPartEditionInOrderIsNamedToo() {
+        Film film = film("Dune", MatchStatus.MATCHED, 1L, "Original", 90, "Dune {edition-Long} - pt1.m4v");
+        MediaFile second = TestData.file(film.getEditions().get(0), "Dune {edition-Long} - pt2.m4v");
+        second.setPartNumber(2);
+        em.persist(second);
+        em.flush();
+        reset();
+
+        assertThat(grouping.renameOriginals()).isEqualTo(1);
+    }
+
     // ---- The Two Towers: Extended pt1 + pt2 + Theatrical Cut
 
     @Test
@@ -536,6 +626,10 @@ class LibraryGroupingTest extends ApiTestBase {
         films.saveAndFlush(settled);
         open.getEditions().get(0).setGroupingSource(GroupingSource.PLEX);
         films.saveAndFlush(open);
+        MediaFile premade = TestData.file(open.getEditions().get(0), "Heat.720.m4v");
+        premade.setKind(gregochr.cinefilm.film.MediaKind.PREMADE_720);
+        em.persist(premade);
+        em.flush();
         reset();
 
         List<FileFact> facts = grouping.facts();
@@ -546,6 +640,7 @@ class LibraryGroupingTest extends ApiTestBase {
             assertThat(fact.filmTmdbId()).isEqualTo(949L);
             assertThat(fact.editionSource()).isEqualTo(GroupingSource.PLEX);
             assertThat(fact.joinable()).isTrue();
+            assertThat(fact.extraFiles()).isTrue();
             assertThat(fact.parsed().comparisonTitle()).isEqualTo("heat");
         });
     }

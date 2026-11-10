@@ -2,6 +2,7 @@ package gregochr.cinefilm.library;
 
 import static gregochr.cinefilm.library.FileFacts.fact;
 import static gregochr.cinefilm.library.FileFacts.withDuration;
+import static gregochr.cinefilm.library.FileFacts.withExtraFiles;
 import static gregochr.cinefilm.library.FileFacts.withPlayability;
 import static gregochr.cinefilm.library.FileFacts.withPresence;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -104,6 +105,17 @@ class EditionGrouperTest {
             withPresence(fact(2, 20, 200, "Epic - pt2.m4v"), Presence.MISSING));
 
         assertThat(EditionGrouper.partJoins(facts)).isEmpty();
+    }
+
+    @Test
+    void anAbsorbedEditionHoldingOtherFilesIsNotJoinedButTheSurvivorMay() {
+        List<FileFact> absorbedHolds = List.of(fact(1, 10, 100, "Epic - pt1.m4v"),
+            withExtraFiles(fact(2, 20, 200, "Epic - pt2.m4v")));
+        List<FileFact> survivorHolds = List.of(withExtraFiles(fact(1, 10, 100, "Epic - pt1.m4v")),
+            fact(2, 20, 200, "Epic - pt2.m4v"));
+
+        assertThat(EditionGrouper.partJoins(absorbedHolds)).isEmpty();
+        assertThat(EditionGrouper.partJoins(survivorHolds)).containsExactly(List.of(100L, 200L));
     }
 
     @Test

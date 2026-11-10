@@ -24,10 +24,12 @@ import gregochr.cinefilm.library.FileNameParser.ParsedName;
  * @param presence whether the last scan found it
  * @param playability whether it can be played
  * @param parsed what the path says
+ * @param extraFiles whether the edition also holds a file that is not an original (a pre-made rendition)
  */
 public record FileFact(long filmId, String filmTitle, Long filmTmdbId, MatchStatus filmStatus, long editionId,
                        String editionName, GroupingSource editionSource, long fileId, String path, int partNumber,
-                       Long durationMs, Presence presence, Playability playability, ParsedName parsed) {
+                       Long durationMs, Presence presence, Playability playability, ParsedName parsed,
+                       boolean extraFiles) {
 
     /** True when the file can be a part of a joined edition: on disk, playable and with a duration. */
     public boolean joinable() {
