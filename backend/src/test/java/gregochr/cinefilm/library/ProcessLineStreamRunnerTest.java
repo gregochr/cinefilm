@@ -92,14 +92,18 @@ class ProcessLineStreamRunnerTest {
     }
 
     @Test
-    void anInterruptedWaitIsAnIoExceptionAndKeepsTheInterruptFlag() {
-        Thread.currentThread().interrupt();
+    void anInterruptIsAnIoExceptionKeepsTheInterruptFlagAndKillsTheProcess() {
+        long started = System.nanoTime();
         try {
-            assertThatThrownBy(() -> runner.run(List.of("/bin/echo", "hi"), Duration.ofSeconds(30),
-                lines::add)).isInstanceOf(IOException.class).hasMessageContaining("Interrupted");
+            // The handler interrupts this thread while the child is alive and blocked, so the outcome does not
+            // depend on how fast the child exits.
+            assertThatThrownBy(() -> runner.run(List.of("/bin/sh", "-c", "echo go; exec sleep 30"),
+                Duration.ofSeconds(30), line -> Thread.currentThread().interrupt()))
+                .isInstanceOf(IOException.class).hasMessageContaining("Interrupted");
             assertThat(Thread.currentThread().isInterrupted()).isTrue();
         } finally {
             Thread.interrupted();
         }
+        assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofSeconds(15));
     }
 }

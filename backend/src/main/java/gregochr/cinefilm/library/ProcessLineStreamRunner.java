@@ -42,6 +42,9 @@ public class ProcessLineStreamRunner implements LineStreamRunner {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     lines.accept(line);
+                    if (Thread.interrupted()) {
+                        throw new InterruptedException();
+                    }
                 }
             }
             process.waitFor();
