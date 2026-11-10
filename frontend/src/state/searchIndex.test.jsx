@@ -1,22 +1,23 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  LIBRARY_CHANGED_EVENT,
-  SESSION_EXPIRED_EVENT,
-  SIGNED_IN_EVENT,
-  announceLibraryChanged,
-} from '../api/client.js';
 import { installStorage } from '../test/storage.js';
 import {
   SEARCH_INDEX_STORAGE_KEY,
+  forgetSearchIndex,
   getSnapshot,
+  isValidEtag,
   prepareIndex,
   resetSearchIndexForTests,
   revalidate,
+  sanitizeRaw,
   startSearchIndex,
   subscribe,
   useSearchIndex,
 } from './searchIndex.js';
+
+const E1 = 'W/"0000000000000001"';
+const E2 = 'W/"0000000000000002"';
+const E3 = 'W/"0000000000000003"';
 
 const RAW = {
   films: [
@@ -34,6 +35,23 @@ const RAW = {
   ],
   collections: [{ id: 4, n: 'Star Wars Collection', o: 2, of: 9, p: ['/a.jpg', '/b.jpg'] }],
   people: [{ id: 9, n: 'Tom Hanks', a: 9, d: 0 }],
+};
+const RAW_CLEAN = {
+  films: [
+    {
+      id: 1,
+      t: 'Warrior',
+      y: 2011,
+      d: ["Gavin O'Connor"],
+      p: '/w.jpg',
+      left: 7380000,
+      at: '2026-11-01T20:00:00Z',
+      s: 'warrior',
+    },
+    { id: 2, t: 'The Hangover', y: 2009, d: ['Todd Phillips'], s: 'hangover' },
+  ],
+  collections: RAW.collections,
+  people: RAW.people,
 };
 const RAW_2 = { ...RAW, films: [RAW.films[0]] };
 
@@ -122,20 +140,20 @@ describe('the search index store', () => {
   });
 
   it('loads once, publishes the prepared index and keeps a copy with its ETag in localStorage', async () => {
-    const fetchMock = queueFetch(() => json(RAW, '"e1"'));
+    const fetchMock = queueFetch(() => json(RAW, E1));
 
-    startSearchIndex();
-    startSearchIndex();
+    expect(startSearchIndex()).toBe(true);
+    expect(startSearchIndex()).toBe(false);
 
     await waitFor(() => expect(getSnapshot().status).toBe('ready'));
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(sent(fetchMock, 0)).toBeUndefined();
     expect(getSnapshot().index.films.map((f) => f.title)).toEqual(['Warrior', 'The Hangover']);
-    expect(stored(storage)).toEqual({ etag: '"e1"', raw: RAW });
+    expect(stored(storage)).toEqual({ etag: E1, raw: RAW });
   });
 
   it('shows the stored copy at once on a reload, then revalidates with its ETag; a 304 keeps the data', async () => {
-    storage.setItem(SEARCH_INDEX_STORAGE_KEY, JSON.stringify({ etag: '"e1"', raw: RAW }));
+    storage.setItem(SEARCH_INDEX_STORAGE_KEY, JSON.stringify({ etag: E1, raw: RAW }));
     const fetchMock = queueFetch(notModified);
 
     startSearchIndex();
@@ -143,26 +161,26 @@ describe('the search index store', () => {
     expect(getSnapshot().status).toBe('ready');
     expect(getSnapshot().index.films).toHaveLength(2);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(sent(fetchMock, 0)).toBe('"e1"');
+    expect(sent(fetchMock, 0)).toBe(E1);
     await act(async () => {});
     expect(getSnapshot().index.films).toHaveLength(2);
-    expect(stored(storage).etag).toBe('"e1"');
+    expect(stored(storage).etag).toBe(E1);
   });
 
   it('replaces the held index and the stored copy when the server has a newer one', async () => {
-    storage.setItem(SEARCH_INDEX_STORAGE_KEY, JSON.stringify({ etag: '"e1"', raw: RAW }));
-    queueFetch(() => json(RAW_2, '"e2"'));
+    storage.setItem(SEARCH_INDEX_STORAGE_KEY, JSON.stringify({ etag: E1, raw: RAW }));
+    queueFetch(() => json(RAW_2, E2));
 
     startSearchIndex();
 
     await waitFor(() => expect(getSnapshot().index.films).toHaveLength(1));
-    expect(stored(storage)).toEqual({ etag: '"e2"', raw: RAW_2 });
+    expect(stored(storage)).toEqual({ etag: E2, raw: RAW_2 });
   });
 
   it('does not store a response that carries no ETag, and so never sends If-None-Match for it', async () => {
     const fetchMock = queueFetch(
       () => json(RAW),
-      () => json(RAW_2, '"e2"'),
+      () => json(RAW_2, E2),
     );
 
     startSearchIndex();
@@ -179,7 +197,7 @@ describe('the search index store', () => {
   it('ignores a stored copy that is not valid', async () => {
     for (const bad of ['not json', '{"etag":"x"}', '{"raw":{}}', 'null']) {
       storage.setItem(SEARCH_INDEX_STORAGE_KEY, bad);
-      const fetchMock = queueFetch(() => json(RAW, '"e1"'));
+      const fetchMock = queueFetch(() => json(RAW, E1));
 
       startSearchIndex();
 
@@ -197,19 +215,19 @@ describe('the search index store', () => {
     const blocked = { getItem: throwing, setItem: throwing, removeItem: throwing };
     vi.stubGlobal('localStorage', blocked);
     Object.defineProperty(window, 'localStorage', { value: blocked, configurable: true });
-    queueFetch(() => json(RAW, '"e1"'));
+    queueFetch(() => json(RAW, E1));
 
     startSearchIndex();
     await waitFor(() => expect(getSnapshot().status).toBe('ready'));
 
     expect(getSnapshot().index.films).toHaveLength(2);
-    expect(() => window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT))).not.toThrow();
+    expect(() => forgetSearchIndex()).not.toThrow();
   });
 
   it('is an error when the first load fails with nothing held, and recovers on the next revalidation', async () => {
     queueFetch(
       () => new Response(null, { status: 500 }),
-      () => json(RAW, '"e1"'),
+      () => json(RAW, E1),
     );
 
     startSearchIndex();
@@ -223,7 +241,7 @@ describe('the search index store', () => {
   });
 
   it('keeps what it holds when a revalidation fails', async () => {
-    storage.setItem(SEARCH_INDEX_STORAGE_KEY, JSON.stringify({ etag: '"e1"', raw: RAW }));
+    storage.setItem(SEARCH_INDEX_STORAGE_KEY, JSON.stringify({ etag: E1, raw: RAW }));
     const fetchMock = queueFetch(() => new Response(null, { status: 500 }));
 
     startSearchIndex();
@@ -234,71 +252,26 @@ describe('the search index store', () => {
     expect(getSnapshot().index.films).toHaveLength(2);
   });
 
-  it('revalidates when the tab becomes visible, and not when it is hidden', async () => {
-    const fetchMock = queueFetch(() => json(RAW, '"e1"'), notModified, notModified);
-    startSearchIndex();
-    await waitFor(() => expect(getSnapshot().status).toBe('ready'));
-    const setVisibility = (value) =>
-      Object.defineProperty(document, 'visibilityState', { value, configurable: true });
-
-    setVisibility('hidden');
-    document.dispatchEvent(new Event('visibilitychange'));
-    await act(async () => {});
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-
-    setVisibility('visible');
-    document.dispatchEvent(new Event('visibilitychange'));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(sent(fetchMock, 1)).toBe('"e1"');
-    delete document.visibilityState;
-  });
-
-  it('revalidates on cinefilm:library-changed and picks up the new index', async () => {
-    const fetchMock = queueFetch(
-      () => json(RAW, '"e1"'),
-      () => json(RAW_2, '"e2"'),
-    );
-    startSearchIndex();
-    await waitFor(() => expect(getSnapshot().status).toBe('ready'));
-
-    act(() => announceLibraryChanged());
-
-    await waitFor(() => expect(getSnapshot().index.films).toHaveLength(1));
-    expect(sent(fetchMock, 1)).toBe('"e1"');
-    expect(LIBRARY_CHANGED_EVENT).toBe('cinefilm:library-changed');
-  });
-
-  it('revalidates after signing in again', async () => {
-    const fetchMock = queueFetch(() => json(RAW, '"e1"'), notModified);
-    startSearchIndex();
-    await waitFor(() => expect(getSnapshot().status).toBe('ready'));
-
-    window.dispatchEvent(new CustomEvent(SIGNED_IN_EVENT));
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(sent(fetchMock, 1)).toBe('"e1"');
-  });
-
   it('shares the request in flight, then asks exactly once more, so a change made meanwhile is not missed', async () => {
     const fetchMock = queueFetch(
-      () => json(RAW, '"e1"'),
-      () => json(RAW_2, '"e2"'),
-      () => json(RAW, '"e3"'),
+      () => json(RAW, E1),
+      () => json(RAW_2, E2),
+      () => json(RAW, E3),
     );
 
     startSearchIndex();
     const again = revalidate();
-    window.dispatchEvent(new CustomEvent(LIBRARY_CHANGED_EVENT));
+    void revalidate();
     await again;
 
     await waitFor(() => expect(getSnapshot().index.films).toHaveLength(1));
     await act(async () => {});
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(sent(fetchMock, 1)).toBe('"e1"');
+    expect(sent(fetchMock, 1)).toBe(E1);
   });
 
   it('does not ask again when nothing overlapped', async () => {
-    const fetchMock = queueFetch(() => json(RAW, '"e1"'), notModified);
+    const fetchMock = queueFetch(() => json(RAW, E1), notModified);
     startSearchIndex();
     await waitFor(() => expect(getSnapshot().status).toBe('ready'));
     await act(async () => {});
@@ -312,7 +285,7 @@ describe('the search index store', () => {
   });
 
   it('clears the stored copy when the session expires, and drops the request in flight', async () => {
-    storage.setItem(SEARCH_INDEX_STORAGE_KEY, JSON.stringify({ etag: '"e1"', raw: RAW }));
+    storage.setItem(SEARCH_INDEX_STORAGE_KEY, JSON.stringify({ etag: E1, raw: RAW }));
     let signal;
     vi.stubGlobal(
       'fetch',
@@ -329,9 +302,7 @@ describe('the search index store', () => {
     startSearchIndex();
     await waitFor(() => expect(signal).toBeDefined());
 
-    act(() => {
-      window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
-    });
+    act(() => forgetSearchIndex());
 
     expect(storage.getItem(SEARCH_INDEX_STORAGE_KEY)).toBeNull();
     expect(signal.aborted).toBe(true);
@@ -353,7 +324,7 @@ describe('the search index store', () => {
     );
     startSearchIndex();
 
-    window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+    forgetSearchIndex();
     await act(async () => {});
 
     expect(getSnapshot().status).toBe('loading');
@@ -361,8 +332,8 @@ describe('the search index store', () => {
 
   it('notifies subscribers on a change and stops after they unsubscribe', async () => {
     queueFetch(
-      () => json(RAW, '"e1"'),
-      () => json(RAW_2, '"e2"'),
+      () => json(RAW, E1),
+      () => json(RAW_2, E2),
     );
     const listener = vi.fn();
     const unsubscribe = subscribe(listener);
@@ -377,13 +348,12 @@ describe('the search index store', () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
-  it('reset forgets the held index and detaches the listeners', async () => {
-    const fetchMock = queueFetch(() => json(RAW, '"e1"'));
+  it('reset forgets the held index', async () => {
+    const fetchMock = queueFetch(() => json(RAW, E1));
     startSearchIndex();
     await waitFor(() => expect(getSnapshot().status).toBe('ready'));
 
     resetSearchIndexForTests();
-    announceLibraryChanged();
     await act(async () => {});
 
     expect(getSnapshot()).toEqual({ index: null, status: 'loading' });
@@ -392,8 +362,9 @@ describe('the search index store', () => {
 });
 
 describe('useSearchIndex', () => {
-  it('starts the load on first use and returns the shared { index, status }', async () => {
-    const fetchMock = queueFetch(() => json(RAW, '"e1"'));
+  it('returns the shared { index, status } to every reader', async () => {
+    const fetchMock = queueFetch(() => json(RAW, E1));
+    startSearchIndex();
 
     const { result, rerender } = renderHook(() => useSearchIndex());
     const second = renderHook(() => useSearchIndex());
@@ -404,5 +375,201 @@ describe('useSearchIndex', () => {
     expect(second.result.current).toBe(result.current);
     rerender();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('what the store trusts', () => {
+  it('accepts only weak ETags of 16 hex characters, or the fixture ETag', () => {
+    expect(isValidEtag('W/"0123456789abcdef"')).toBe(true);
+    expect(isValidEtag('"fixtures"')).toBe(true);
+    for (const bad of [
+      '"0123456789abcdef"',
+      'W/"0123456789ABCDEF"',
+      'W/"0123456789abcde"',
+      'W/"0123456789abcdef0"',
+      'W/"0123456789abcdef"\n',
+      '<script>',
+      '',
+      null,
+      undefined,
+      42,
+      { toString: () => 'W/"0123456789abcdef"' },
+    ]) {
+      expect(isValidEtag(bad), String(bad)).toBe(false);
+    }
+  });
+
+  it('rebuilds a conforming index with exactly the known fields', () => {
+    const clean = sanitizeRaw({
+      films: [{ ...RAW.films[0], extra: 'x', __proto__: { evil: true } }],
+      collections: [{ ...RAW.collections[0], extra: 1 }],
+      people: [{ ...RAW.people[0], extra: [] }],
+      extra: 'ignored',
+    });
+
+    expect(clean).toEqual({ ...RAW_CLEAN, films: [RAW_CLEAN.films[0]] });
+    expect(Object.keys(clean)).toEqual(['films', 'collections', 'people']);
+  });
+
+  it('drops entries missing their id or name, or whose id is not a finite number', () => {
+    const clean = sanitizeRaw({
+      films: [
+        { t: 'No id' },
+        { id: '7', t: 'String id' },
+        { id: Infinity, t: 'Infinite id' },
+        { id: NaN, t: 'NaN id' },
+        { id: 8 },
+        { id: 9, t: 42 },
+        null,
+        'film',
+        { id: 10, t: 'Kept' },
+      ],
+      collections: [
+        { id: 1, n: 'No counts' },
+        { id: 2, n: 'Bad counts', o: '2', of: 3 },
+        { id: 3, n: 'Kept', o: 2, of: 3 },
+      ],
+      people: [{ id: 'x', n: 'Bad id' }, { id: 1 }, { id: 2, n: 'Kept' }],
+    });
+
+    expect(clean.films).toEqual([{ id: 10, t: 'Kept', d: [] }]);
+    expect(clean.collections).toEqual([{ id: 3, n: 'Kept', o: 2, of: 3, p: [] }]);
+    expect(clean.people).toEqual([{ id: 2, n: 'Kept', a: 0, d: 0 }]);
+  });
+
+  it('leaves out optional fields of the wrong type and filters lists to strings with capped lengths', () => {
+    const [film] = sanitizeRaw({
+      films: [
+        {
+          id: 1,
+          t: 'Warrior',
+          y: '2011',
+          d: [
+            'Ok',
+            5,
+            null,
+            { a: 1 },
+            'x'.repeat(301),
+            ...Array.from({ length: 30 }, (_, i) => `D${i}`),
+          ],
+          p: { path: 1 },
+          left: Infinity,
+          at: 12,
+          s: ['warrior'],
+        },
+      ],
+    }).films;
+
+    expect(Object.keys(film)).toEqual(['id', 't', 'd']);
+    expect(film.d).toHaveLength(20);
+    expect(film.d.slice(0, 3)).toEqual(['Ok', 'D0', 'D1']);
+    const [collection] = sanitizeRaw({
+      collections: [{ id: 1, n: 'X', o: 1, of: 1, p: ['/a', '/b', '/c', '/d', 7] }],
+    }).collections;
+    expect(collection.p).toEqual(['/a', '/b', '/c']);
+  });
+
+  it('gives empty lists for anything that is not an index', () => {
+    for (const bad of [
+      null,
+      undefined,
+      'x',
+      5,
+      [],
+      { films: 'x', collections: {}, people: null },
+    ]) {
+      expect(sanitizeRaw(bad)).toEqual({ films: [], collections: [], people: [] });
+    }
+  });
+
+  it('stores and shows only the rebuilt index when the server sends extra or malformed fields', async () => {
+    const dirty = {
+      ...RAW,
+      films: [
+        { ...RAW.films[0], onload: 'alert(1)' },
+        { id: 'bad', t: 'x' },
+      ],
+      injected: { a: 1 },
+    };
+    queueFetch(() => json(dirty, E1));
+
+    startSearchIndex();
+    await waitFor(() => expect(getSnapshot().status).toBe('ready'));
+
+    expect(getSnapshot().index.films).toHaveLength(1);
+    expect(JSON.parse(storage.getItem(SEARCH_INDEX_STORAGE_KEY))).toEqual({
+      etag: E1,
+      raw: { ...RAW_CLEAN, films: [RAW_CLEAN.films[0]] },
+    });
+  });
+
+  it('does not store or send back an ETag that is not one of ours', async () => {
+    const fetchMock = queueFetch(
+      () => json(RAW, '"not-ours"'),
+      () => json(RAW_2, '<img src=x>'),
+    );
+
+    startSearchIndex();
+    await waitFor(() => expect(getSnapshot().status).toBe('ready'));
+    expect(storage.getItem(SEARCH_INDEX_STORAGE_KEY)).toBeNull();
+    await act(async () => {
+      await revalidate();
+    });
+
+    expect(sent(fetchMock, 1)).toBeUndefined();
+    expect(storage.getItem(SEARCH_INDEX_STORAGE_KEY)).toBeNull();
+    expect(getSnapshot().index.films).toHaveLength(1);
+  });
+
+  it('rebuilds a stored copy before using it: extra keys and wrong types do not get through', async () => {
+    storage.setItem(
+      SEARCH_INDEX_STORAGE_KEY,
+      JSON.stringify({
+        etag: E1,
+        raw: {
+          ...RAW,
+          films: [
+            { ...RAW.films[0], y: 'not a year', onload: 'alert(1)' },
+            { id: [], t: 'bad' },
+          ],
+          extra: 1,
+        },
+      }),
+    );
+    const fetchMock = queueFetch(notModified);
+
+    startSearchIndex();
+
+    expect(getSnapshot().index.films).toEqual([
+      expect.objectContaining({ id: 1, title: 'Warrior', year: null }),
+    ]);
+    expect(Object.keys(getSnapshot().index.films[0])).not.toContain('onload');
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  });
+
+  it('ignores a stored copy whose ETag is not one of ours, and does not send it', async () => {
+    for (const etag of ['"x"', 'W/"zzzzzzzzzzzzzzzz"', 5, null, '<script>alert(1)</script>']) {
+      storage.setItem(SEARCH_INDEX_STORAGE_KEY, JSON.stringify({ etag, raw: RAW }));
+      const fetchMock = queueFetch(() => json(RAW, E1));
+
+      startSearchIndex();
+
+      expect(getSnapshot().status).toBe('loading');
+      await waitFor(() => expect(getSnapshot().status).toBe('ready'));
+      expect(sent(fetchMock, 0)).toBeUndefined();
+      resetSearchIndexForTests();
+    }
+  });
+
+  it('copes with a stored raw that is not an object', async () => {
+    storage.setItem(SEARCH_INDEX_STORAGE_KEY, JSON.stringify({ etag: E1, raw: 'nonsense' }));
+    queueFetch(notModified);
+
+    startSearchIndex();
+
+    expect(getSnapshot()).toEqual({
+      index: { films: [], collections: [], people: [] },
+      status: 'ready',
+    });
   });
 });

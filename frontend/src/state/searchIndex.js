@@ -1,17 +1,67 @@
-// The compact search index, shared app-wide. No JSX; the store is usable with React's useSyncExternalStore.
+// The compact search index, shared app-wide. Plain functions: no JSX, no DOM events (the browser-facing wiring is
+// `components/useSearchIndexLifecycle.js`). Usable with React's useSyncExternalStore.
 //
 // It loads once after sign-in, is kept in localStorage so a reload has it at once, and is revalidated with its ETag
-// when the tab becomes visible again and when this tab sees the library change (a scan or import finished, the
-// player closed). A 304 keeps what is held.
-import { useEffect, useSyncExternalStore } from 'react';
-import { LIBRARY_CHANGED_EVENT, SESSION_EXPIRED_EVENT, SIGNED_IN_EVENT } from '../api/client.js';
+// when asked to (the tab became visible, a scan or import finished, the player closed). A 304 keeps what is held.
+// Whatever comes from the server or from storage is rebuilt field by field (`sanitizeRaw`) before it is used.
+import { useSyncExternalStore } from 'react';
+import { FIXTURE_ETAG } from '../api/client.js';
 import { searchApi } from '../api/resources.js';
 import { displayName } from './collections.js';
 
-export { LIBRARY_CHANGED_EVENT };
-
 /** The localStorage key of the cached `{ etag, raw }`. */
 export const SEARCH_INDEX_STORAGE_KEY = 'cinefilm.searchIndex.v1';
+
+const WEAK_ETAG = /^W\/"[0-9a-f]{16}"$/;
+
+/** Only the server's own weak ETags (or the fixture server's) are kept or sent back. */
+export function isValidEtag(value) {
+  return typeof value === 'string' && (WEAK_ETAG.test(value) || value === FIXTURE_ETAG);
+}
+
+const MAX_TEXT = 300;
+const MAX_DIRECTORS = 20;
+const MAX_POSTERS = 3;
+
+const isNumber = (v) => typeof v === 'number' && Number.isFinite(v);
+const isText = (v) => typeof v === 'string' && v.length <= MAX_TEXT;
+const texts = (v, max) => (Array.isArray(v) ? v.filter(isText).slice(0, max) : []);
+const ifNumber = (v) => (isNumber(v) ? v : undefined);
+const ifText = (v) => (isText(v) ? v : undefined);
+const without = (entry) =>
+  Object.fromEntries(Object.entries(entry).filter(([, value]) => value !== undefined));
+
+/**
+ * Rebuilds the compact index from scratch with only the known fields, each type-checked: ids and counts finite
+ * numbers, names strings, `d` and `p` arrays of strings with capped lengths. An entry missing its id or name is
+ * dropped; an optional field of the wrong type is left out. Nothing else (extra keys, other types) survives.
+ */
+export function sanitizeRaw(raw) {
+  const list = (value) => (Array.isArray(value) ? value : []);
+  const section = raw && typeof raw === 'object' ? raw : {};
+  return {
+    films: list(section.films)
+      .filter((f) => f && isNumber(f.id) && isText(f.t))
+      .map((f) =>
+        without({
+          id: f.id,
+          t: f.t,
+          y: ifNumber(f.y),
+          d: texts(f.d, MAX_DIRECTORS),
+          p: ifText(f.p),
+          left: ifNumber(f.left),
+          at: ifText(f.at),
+          s: ifText(f.s),
+        }),
+      ),
+    collections: list(section.collections)
+      .filter((c) => c && isNumber(c.id) && isText(c.n) && isNumber(c.o) && isNumber(c.of))
+      .map((c) => ({ id: c.id, n: c.n, o: c.o, of: c.of, p: texts(c.p, MAX_POSTERS) })),
+    people: list(section.people)
+      .filter((p) => p && isNumber(p.id) && isText(p.n))
+      .map((p) => ({ id: p.id, n: p.n, a: ifNumber(p.a) ?? 0, d: ifNumber(p.d) ?? 0 })),
+  };
+}
 
 /**
  * Turns the server's compact index into entries with display strings ready. Normalisation for matching is added
@@ -49,18 +99,25 @@ export function prepareIndex(raw) {
   };
 }
 
+/** The stored copy as `{ etag, raw }`, rebuilt through the same checks as a response; null if absent or invalid. */
 function readStored() {
   try {
     const stored = JSON.parse(localStorage.getItem(SEARCH_INDEX_STORAGE_KEY));
-    return stored && stored.etag && stored.raw ? stored : null;
+    return stored && isValidEtag(stored.etag)
+      ? { etag: stored.etag, raw: sanitizeRaw(stored.raw) }
+      : null;
   } catch {
     return null;
   }
 }
 
-function writeStored(etag, raw) {
+/** Stores a copy of an already sanitised index with its valid ETag. */
+function writeStored(tag, raw) {
   try {
-    localStorage.setItem(SEARCH_INDEX_STORAGE_KEY, JSON.stringify({ etag, raw }));
+    localStorage.setItem(
+      SEARCH_INDEX_STORAGE_KEY,
+      JSON.stringify({ etag: tag, raw: sanitizeRaw(raw) }),
+    );
   } catch {
     // Storage full, blocked or missing: the index still works from memory.
   }
@@ -116,9 +173,10 @@ export function revalidate() {
     .index({ etag, signal: mine.signal })
     .then((result) => {
       if (mine.signal.aborted || result.notModified) return;
-      etag = result.etag;
-      if (etag) writeStored(etag, result.data);
-      publish({ index: prepareIndex(result.data), status: 'ready' });
+      const raw = sanitizeRaw(result.data);
+      etag = isValidEtag(result.etag) ? result.etag : null;
+      if (etag) writeStored(etag, raw);
+      publish({ index: prepareIndex(raw), status: 'ready' });
     })
     .catch(() => {
       if (mine.signal.aborted || snapshot.index) return;
@@ -136,47 +194,32 @@ export function revalidate() {
   return request;
 }
 
-function onVisibility() {
-  if (document.visibilityState === 'visible') void revalidate();
-}
-
-function onSessionExpired() {
+/** The session ended: forget the stored copy and any request in flight. What is on screen stays until reload. */
+export function forgetSearchIndex() {
   clearStored();
   controller?.abort();
   inFlight = null;
   pending = false;
 }
 
-function onSignedIn() {
-  void revalidate();
-}
-
-function onLibraryChanged() {
-  void revalidate();
-}
-
-/** Loads the index once (from the stored copy at once, then the server) and keeps it fresh. Safe to call again. */
+/**
+ * Loads the index (the stored copy at once, then the server). Only the first call does anything; it returns true
+ * when it started the load, false when the store was already started.
+ */
 export function startSearchIndex() {
-  if (started) return;
+  if (started) return false;
   started = true;
   const stored = readStored();
   if (stored) {
     etag = stored.etag;
     publish({ index: prepareIndex(stored.raw), status: 'ready' });
   }
-  document.addEventListener('visibilitychange', onVisibility);
-  window.addEventListener(LIBRARY_CHANGED_EVENT, onLibraryChanged);
-  window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
-  window.addEventListener(SIGNED_IN_EVENT, onSignedIn);
   void revalidate();
+  return true;
 }
 
-/** Forgets everything and detaches the listeners. For tests; the app never stops the store. */
+/** Forgets everything. For tests; the app never stops the store. */
 export function resetSearchIndexForTests() {
-  document.removeEventListener('visibilitychange', onVisibility);
-  window.removeEventListener(LIBRARY_CHANGED_EVENT, onLibraryChanged);
-  window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
-  window.removeEventListener(SIGNED_IN_EVENT, onSignedIn);
   controller?.abort();
   controller = null;
   inFlight = null;
@@ -187,10 +230,7 @@ export function resetSearchIndexForTests() {
   listeners.clear();
 }
 
-/** The shared index: `{ index, status }`. The first caller starts the load. */
+/** The shared index: `{ index, status }`. Starting and refreshing it is `useSearchIndexLifecycle`'s job. */
 export function useSearchIndex() {
-  useEffect(() => {
-    startSearchIndex();
-  }, []);
   return useSyncExternalStore(subscribe, getSnapshot);
 }

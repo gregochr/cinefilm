@@ -19,26 +19,50 @@ function listen() {
 
 const settle = (ms = 0) => act(() => vi.advanceTimersByTimeAsync(ms));
 
-/** Answers `url` with each body in turn, repeating the last. */
+/** Answers GET `url` with each body in turn, repeating the last. */
 const sequence = (url, bodies) => {
   let calls = 0;
   return (method, requested) => {
-    if (requested !== url) return null;
+    if (method !== 'GET' || requested !== url) return null;
     calls += 1;
     return respond(bodies[Math.min(calls, bodies.length) - 1]);
   };
 };
 
+const scanAt = (finishedAt, extra = {}) => ({
+  ...fixtures.adminScan,
+  lastScan: finishedAt === null ? null : { ...fixtures.adminScan.lastScan, finishedAt },
+  ...extra,
+});
+const plexAt = (finishedAt, extra = {}) => ({
+  ...fixtures.adminPlex,
+  lastImport: finishedAt === null ? null : { ...fixtures.adminPlex.lastImport, finishedAt },
+  ...extra,
+});
+const T1 = '2026-11-08T12:41:10Z';
+const T2 = '2026-11-10T09:00:00Z';
+
 describe('Admin announces cinefilm:library-changed when a scan or import finishes', () => {
-  it('announces once when a scan goes from running to finished, and not before', async () => {
-    const running = { ...fixtures.adminScan, running: true, progress: { processed: 1, total: 2 } };
-    installFetch(sequence('/api/admin/scan', [running, running, fixtures.adminScan]));
+  it('announces nothing for the first status, whatever it holds', async () => {
+    installFetch(sequence('/api/admin/scan', [scanAt(T1)]));
+    vi.useFakeTimers();
+    const { events, stop } = listen();
+    renderHook(() => useScan());
+
+    await settle(SCAN_POLL_MS * 3);
+
+    stop();
+    expect(events).toEqual([]);
+  });
+
+  it('announces once when the last scan time changes while polling a running scan', async () => {
+    const running = scanAt(T1, { running: true, progress: { processed: 1, total: 2 } });
+    installFetch(sequence('/api/admin/scan', [running, running, scanAt(T2)]));
     vi.useFakeTimers();
     const { events, stop } = listen();
     renderHook(() => useScan());
 
     await settle();
-    expect(events).toEqual([]);
     await settle(SCAN_POLL_MS);
     expect(events).toEqual([]);
     await settle(SCAN_POLL_MS);
@@ -49,7 +73,41 @@ describe('Admin announces cinefilm:library-changed when a scan or import finishe
     expect(events).toEqual(['changed']);
   });
 
-  it('announces nothing for a scan that was never running', async () => {
+  it('announces a scan that starts and finishes between two polls (it is never seen running)', async () => {
+    installFetch(sequence('/api/admin/scan', [scanAt(T1), scanAt(T2)]));
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useScan());
+    await settle();
+    const { events, stop } = listen();
+
+    await act(async () => {
+      void result.current.startScan();
+    });
+    await settle();
+
+    stop();
+    expect(result.current.scan.running).toBe(false);
+    expect(events).toEqual(['changed']);
+  });
+
+  it('announces the first scan ever finishing on a library that never had one', async () => {
+    installFetch(sequence('/api/admin/scan', [scanAt(null), scanAt(T2)]));
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useScan());
+    await settle();
+    const { events, stop } = listen();
+    expect(events).toEqual([]);
+
+    await act(async () => {
+      void result.current.startScan();
+    });
+    await settle();
+
+    stop();
+    expect(events).toEqual(['changed']);
+  });
+
+  it('announces nothing while the last scan time stays the same', async () => {
     installFetch();
     vi.useFakeTimers();
     const { events, stop } = listen();
@@ -61,21 +119,50 @@ describe('Admin announces cinefilm:library-changed when a scan or import finishe
     expect(events).toEqual([]);
   });
 
-  it('announces once when a Plex import goes from running to finished', async () => {
-    const importing = { ...fixtures.adminPlex, running: true, progress: { done: 1, total: 2 } };
-    installFetch(
-      sequence('/api/admin/plex', [importing, { ...fixtures.adminPlex, running: false }]),
-    );
+  it('announces once when a Plex import finishes, including one that finishes before the first poll', async () => {
+    installFetch(sequence('/api/admin/plex', [plexAt(T1), plexAt(T2)]));
+    vi.useFakeTimers();
+    const { result } = renderHook(() => usePlexImport());
+    await settle();
+    const { events, stop } = listen();
+    expect(events).toEqual([]);
+
+    await act(async () => {
+      void result.current.startImport();
+    });
+    await settle();
+
+    stop();
+    expect(result.current.plex.running).toBe(false);
+    expect(events).toEqual(['changed']);
+  });
+
+  it('announces nothing for the first Plex status', async () => {
+    installFetch(sequence('/api/admin/plex', [plexAt(T1)]));
     vi.useFakeTimers();
     const { events, stop } = listen();
     renderHook(() => usePlexImport());
 
-    await settle();
-    expect(events).toEqual([]);
-    await settle(SCAN_POLL_MS);
-    expect(events).toEqual(['changed']);
+    await settle(SCAN_POLL_MS * 2);
 
     stop();
+    expect(events).toEqual([]);
+  });
+
+  it('treats a Plex status with no import yet as a first load, then announces the first import', async () => {
+    installFetch(sequence('/api/admin/plex', [plexAt(null), plexAt(T2)]));
+    vi.useFakeTimers();
+    const { result } = renderHook(() => usePlexImport());
+    await settle();
+    const { events, stop } = listen();
+
+    await act(async () => {
+      void result.current.startImport();
+    });
+    await settle();
+
+    stop();
+    expect(events).toEqual(['changed']);
   });
 });
 
@@ -128,6 +215,41 @@ describe('the player announces cinefilm:library-changed when it closes', () => {
 
     await waitFor(() => expect(events).toEqual(['changed']));
     stop();
+  });
+
+  it('waits for a progress write still in flight before announcing', async () => {
+    const order = [];
+    let release;
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    installFetch((method, url) => {
+      if (method === 'PUT' && url.endsWith('/progress')) {
+        order.push('put');
+        return held.then(() => {
+          order.push('put-done');
+          return respond({ positionMs: 61000, watched: false });
+        });
+      }
+      return null;
+    });
+    const onChanged = () => order.push('changed');
+    window.addEventListener(LIBRARY_CHANGED_EVENT, onChanged);
+    const { result, unmount } = renderHook(() =>
+      usePlayback({ ...props, getPositionMs: () => 61000 }),
+    );
+    act(() => {
+      void result.current.report();
+    });
+    await waitFor(() => expect(order).toEqual(['put']));
+
+    unmount();
+    await act(async () => {});
+    expect(order).toEqual(['put']);
+    release();
+
+    await waitFor(() => expect(order).toEqual(['put', 'put-done', 'changed']));
+    window.removeEventListener(LIBRARY_CHANGED_EVENT, onChanged);
   });
 
   it('announces nothing while it is open', async () => {

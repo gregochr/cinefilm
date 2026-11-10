@@ -12,7 +12,7 @@ export const RETRY_MAX_MS = 30000;
  * supplies `getPositionMs`. Reports every 10 s while `playing`, when playback pauses, and on
  * unmount. A position of 0 or less is never reported (a reloading source reads 0 and must not
  * overwrite the saved position), and a failed report is kept and retried with backoff. When the player closes
- * it announces `cinefilm:library-changed` once the final report has settled.
+ * it waits for any write in flight, sends the final position and then announces `cinefilm:library-changed`.
  */
 export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
   const getRef = useRef(getPositionMs);
@@ -20,6 +20,7 @@ export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
   const failures = useRef(0);
   const retryTimer = useRef(null);
   const closed = useRef(false);
+  const outstanding = useRef(new Set());
   useEffect(() => {
     getRef.current = getPositionMs;
   });
@@ -36,7 +37,14 @@ export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
     lastReported.current = positionMs;
     clearTimeout(retryTimer.current);
     try {
-      const saved = await editionsApi.reportProgress(editionId, positionMs);
+      const sending = editionsApi.reportProgress(editionId, positionMs);
+      outstanding.current.add(sending);
+      let saved;
+      try {
+        saved = await sending;
+      } finally {
+        outstanding.current.delete(sending);
+      }
       failures.current = 0;
       return saved;
     } catch {
@@ -62,11 +70,15 @@ export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
 
   useEffect(() => {
     closed.current = false;
+    const written = outstanding.current;
     return () => {
       closed.current = true;
       clearTimeout(retryTimer.current);
-      // Leaving the player: once the last position is saved, tell the search index its time-left is out of date.
-      void report().then(announceLibraryChanged, announceLibraryChanged);
+      // Leaving the player: wait for a write still in flight (settled either way), then send the final position,
+      // then tell the search index its time-left is out of date. The announcement comes even if a step fails.
+      const writing = [...written];
+      const final = writing.length ? Promise.allSettled(writing).then(report) : report();
+      void final.then(announceLibraryChanged, announceLibraryChanged);
     };
   }, [report]);
 

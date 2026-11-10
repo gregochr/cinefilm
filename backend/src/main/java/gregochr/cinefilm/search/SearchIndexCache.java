@@ -4,7 +4,9 @@ import gregochr.cinefilm.library.ScanFinished;
 import gregochr.cinefilm.plex.PlexImportFinished;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.HexFormat;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.context.event.EventListener;
@@ -25,6 +27,21 @@ public class SearchIndexCache {
 
     /** The serialised index and the weak ETag that goes with it. */
     public record Snapshot(byte[] body, String etag) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Snapshot that && Arrays.equals(body, that.body) && Objects.equals(etag, that.etag);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * Arrays.hashCode(body) + Objects.hashCode(etag);
+        }
+
+        @Override
+        public String toString() {
+            return "Snapshot[body=" + body.length + " bytes, etag=" + etag + "]";
+        }
     }
 
     /** A snapshot and the generation that was current when its build began. */

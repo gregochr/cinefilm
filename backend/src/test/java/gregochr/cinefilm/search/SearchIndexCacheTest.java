@@ -159,4 +159,25 @@ class SearchIndexCacheTest {
         assertThat(cache.get()).as("the second build was kept").isSameAs(fresh);
         verify(service, times(2)).build();
     }
+
+    @Test
+    void snapshotsAreEqualWhenTheirBytesAndEtagAre() {
+        byte[] bytes = {1, 2, 3};
+        SearchIndexCache.Snapshot snapshot = new SearchIndexCache.Snapshot(bytes, "W/\"a\"");
+
+        assertThat(snapshot).isEqualTo(snapshot);
+        assertThat(snapshot).isEqualTo(new SearchIndexCache.Snapshot(new byte[] {1, 2, 3}, "W/\"a\""));
+        assertThat(snapshot.hashCode())
+            .isEqualTo(new SearchIndexCache.Snapshot(new byte[] {1, 2, 3}, "W/\"a\"").hashCode());
+        assertThat(snapshot).isNotEqualTo(new SearchIndexCache.Snapshot(new byte[] {1, 2, 4}, "W/\"a\""));
+        assertThat(snapshot).isNotEqualTo(new SearchIndexCache.Snapshot(new byte[] {1, 2, 3}, "W/\"b\""));
+        assertThat(snapshot).isNotEqualTo("not a snapshot");
+        assertThat(snapshot).isNotEqualTo(null);
+    }
+
+    @Test
+    void aSnapshotPrintsItsSizeAndEtagNotItsContents() {
+        assertThat(new SearchIndexCache.Snapshot(new byte[] {1, 2, 3}, "W/\"a\""))
+            .hasToString("Snapshot[body=3 bytes, etag=W/\"a\"]");
+    }
 }
