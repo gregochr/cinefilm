@@ -30,10 +30,7 @@ export default function ContinueMenu({ film, sheet, anchorRef, onClose, onRemove
     const width = panel.offsetWidth;
     const height = panel.offsetHeight;
     const margin = 8;
-    const left = Math.max(
-      margin,
-      Math.min(rect.right - width, window.innerWidth - width - margin),
-    );
+    const left = Math.max(margin, Math.min(rect.right - width, window.innerWidth - width - margin));
     let top = rect.bottom + margin;
     if (top + height > window.innerHeight - margin) top = rect.top - height - margin;
     panel.style.left = `${left}px`;
@@ -158,7 +155,12 @@ export default function ContinueMenu({ film, sheet, anchorRef, onClose, onRemove
         </div>
       </div>
       {sheet ? (
-        <button type="button" className="sheet__cancel" ref={cancelRef} onClick={() => onClose(true)}>
+        <button
+          type="button"
+          className="sheet__cancel"
+          ref={cancelRef}
+          onClick={() => onClose(true)}
+        >
           Cancel
         </button>
       ) : null}

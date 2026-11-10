@@ -214,6 +214,11 @@ jobs:
         if: needs.changes.outputs.docs_only != 'true'
         run: cd frontend && npm run lint
 
+      # Fails on any file that `npm run format` would change.
+      - name: Format check (Prettier)
+        if: needs.changes.outputs.docs_only != 'true'
+        run: cd frontend && npm run format:check
+
       - name: Unit tests + coverage floor (Vitest)
         if: needs.changes.outputs.docs_only != 'true'
         run: cd frontend && npm run test:coverage

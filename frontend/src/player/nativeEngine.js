@@ -87,7 +87,9 @@ export function startNative({
     const timer = setTimeout(() => own.abort(), checkTimeoutMs);
     let status;
     try {
-      status = (await fetchImpl(session.masterUrl, { credentials: 'same-origin', signal: own.signal })).status;
+      status = (
+        await fetchImpl(session.masterUrl, { credentials: 'same-origin', signal: own.signal })
+      ).status;
     } catch {
       return; // Offline or timed out: the next check tries again.
     } finally {

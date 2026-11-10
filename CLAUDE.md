@@ -50,7 +50,7 @@ Never done by a session: creating or deleting tags, pushing to `main`, force-pus
 
 ```bash
 cd backend && ./mvnw clean verify --batch-mode --no-transfer-progress -Dtest='!**/integration/**' -DfailIfNoSpecifiedTests=false   # local backend gate (no Docker here)
-cd frontend && npm run lint && npm run test:coverage && ../scripts/npm-audit.sh . high && npm run build   # CI frontend job (95/90 per file)
+cd frontend && npm run lint && npm run format:check && npm run test:coverage && ../scripts/npm-audit.sh . high && npm run build   # CI frontend job (95/90 per file)
 ```
 
 CI (`.github/workflows/ci.yml`) also requires, on PRs, 90% of changed lines covered on both sides (diff-cover; see

@@ -94,9 +94,9 @@ describe('the ⋯ button', () => {
     ]);
     expect(menu).toContainElement(items[0]);
     expect(items[0]).toHaveFocus();
-    expect(screen.getByRole('menuitem', { name: 'Remove from Continue watching' })).toHaveAccessibleDescription(
-      'Keeps your place if you come back to it',
-    );
+    expect(
+      screen.getByRole('menuitem', { name: 'Remove from Continue watching' }),
+    ).toHaveAccessibleDescription('Keeps your place if you come back to it');
   });
 
   it('closes on a second press of ⋯', async () => {
@@ -292,7 +292,9 @@ describe('on a touch device', () => {
 // userEvent has no touch API, so touchstart/touchmove/touchend/touchcancel go through fireEvent (and
 // contextmenu, because only fireEvent returns whether the default was prevented). Clicks use userEvent.
 describe('long press', () => {
-  const touch = (n = 1) => ({ touches: Array.from({ length: n }, () => ({ clientX: 0, clientY: 0 })) });
+  const touch = (n = 1) => ({
+    touches: Array.from({ length: n }, () => ({ clientX: 0, clientY: 0 })),
+  });
 
   /** Fake clock installed before anything arms a timer; userEvent is told to advance it. */
   function fakeClock() {
@@ -405,7 +407,13 @@ describe('long press', () => {
 });
 
 describe('popover placement', () => {
-  const rectOf = (r) => ({ ...r, width: r.right - r.left, height: r.bottom - r.top, x: r.left, y: r.top });
+  const rectOf = (r) => ({
+    ...r,
+    width: r.right - r.left,
+    height: r.bottom - r.top,
+    x: r.left,
+    y: r.top,
+  });
 
   // jsdom has no layout: stub the button's rect and the popover's size, then read where it was put.
   async function place(buttonRect) {

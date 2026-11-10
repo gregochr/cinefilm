@@ -184,7 +184,12 @@ describe('throughput', () => {
     hls.manifest(levels, 3);
     hls.emit('hlsFragLoaded', { stats, frag: {}, part: null });
     expect(handlers.onThroughput).not.toHaveBeenCalled();
-    hls.emit('hlsFragLoaded', { frag: { stats }, part: null, payload: new ArrayBuffer(0), networkDetails: null });
+    hls.emit('hlsFragLoaded', {
+      frag: { stats },
+      part: null,
+      payload: new ArrayBuffer(0),
+      networkDetails: null,
+    });
     expect(handlers.onThroughput).toHaveBeenCalledWith(10000);
   });
 

@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  describeRatingsRefresh,
-  formatImdbScore,
-  formatRtScore,
-  ratingItems,
-} from './ratings.js';
+import { describeRatingsRefresh, formatImdbScore, formatRtScore, ratingItems } from './ratings.js';
 
 describe('score formatting', () => {
   it('shows the IMDb score with one decimal', () => {

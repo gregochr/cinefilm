@@ -61,7 +61,7 @@ export const MoreIcon = make(
     <circle cx="18.5" cy="12" r="1.3" fill="currentColor" stroke="none" />
   </>,
 );
-export const BackIcon =make(<path d="m15 5-7 7 7 7" />, { strokeWidth: 2 });
+export const BackIcon = make(<path d="m15 5-7 7 7 7" />, { strokeWidth: 2 });
 export const HomeIcon = make(<path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z" />);
 export const LibraryIcon = make(
   <>
