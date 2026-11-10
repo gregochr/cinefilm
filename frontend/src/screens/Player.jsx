@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { SESSION_EXPIRED_EVENT, SIGNED_IN_EVENT } from '../api/client.js';
 import { editionsApi } from '../api/resources.js';
@@ -33,6 +33,7 @@ import { clampVolume, keyToAction, resolveEscape } from '../player/keymap.js';
 import { indicatorModel } from '../player/indicator.js';
 import { AUTO, ORIGINAL, resolveQuality, rungName, topRung } from '../player/ladder.js';
 import { hasReachedEnd, resumePosition, seekLanded } from '../player/resume.js';
+import { STILL_FADE_MS, initialStill, stillReducer, stillRendered } from '../player/resumeStill.js';
 import { useSlowCard } from '../player/slowCard.js';
 import { useStream } from '../player/useStream.js';
 import { formatClock, formatRemaining } from '../player/time.js';
@@ -133,6 +134,8 @@ function PlayerView({ film, edition, startAtZero }) {
   const audioStreamId = edition.audioStreams.find(
     (s) => String(streamKey(s)) === String(audio),
   )?.id;
+  // Resuming (a start position above 0) also gets a still of the resume frame behind PREPARING.
+  const [still, dispatchStill] = useReducer(stillReducer, initialSeekMs, initialStill);
   const stream = useStream({
     videoRef,
     edition,
@@ -166,6 +169,19 @@ function PlayerView({ film, edition, startAtZero }) {
     playing,
     getPositionMs: getReportPositionMs,
   });
+
+  // The still goes when the player has nothing to show behind it, and is removed once its fade has run.
+  useEffect(() => {
+    if (stream.mode === 'unavailable') dispatchStill('unavailable');
+  }, [stream.mode]);
+  useEffect(() => {
+    if (endOverlay) dispatchStill('ended');
+  }, [endOverlay]);
+  useEffect(() => {
+    if (still !== 'hiding') return undefined;
+    const id = setTimeout(() => dispatchStill('faded'), STILL_FADE_MS);
+    return () => clearTimeout(id);
+  }, [still]);
 
   usePageExitReport({ editionId: edition.id, getPositionMs: getReportPositionMs });
 
@@ -224,6 +240,7 @@ function PlayerView({ film, edition, startAtZero }) {
       const clamped = Math.min(Math.max(0, ms), durationMs);
       positionKnownRef.current = true;
       pendingSeekRef.current = null; // the viewer chose a position: nothing is left to restore
+      dispatchStill('seek'); // the resume frame would be the wrong picture now
       video.currentTime = clamped / 1000;
       positionRef.current = clamped;
       setPositionMs(clamped);
@@ -424,6 +441,7 @@ function PlayerView({ film, edition, startAtZero }) {
         onPlaying={() => {
           setBuffering(false);
           setStarted(true);
+          dispatchStill('playing');
         }}
         onCanPlay={settle}
         onWaiting={() => setBuffering(true)}
@@ -447,6 +465,19 @@ function PlayerView({ film, edition, startAtZero }) {
           />
         ))}
       </video>
+      {stillRendered(still) ? (
+        <img
+          className={`player__still${still === 'shown' ? ' player__still--shown' : ''}`}
+          data-testid="player-still"
+          src={editionsApi.stillUrl(edition.id, initialSeekMs)}
+          alt=""
+          aria-hidden="true"
+          decoding="async"
+          fetchPriority="high"
+          onLoad={() => dispatchStill('loaded')}
+          onError={() => dispatchStill('errored')}
+        />
+      ) : null}
       <button
         type="button"
         className="player__surface"

@@ -88,6 +88,59 @@ class RealToolsTest {
     }
 
     @Test
+    void ffmpegGrabsAJpegStillAtTwelveSeconds() throws IOException {
+        Path clip = library.resolve("Long Film.mp4");
+        CommandRunner.Result made = RUNNER.run(List.of("ffmpeg", "-v", "error", "-nostdin", "-y",
+            "-f", "lavfi", "-i", "testsrc=duration=20:size=1920x1080:rate=10",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "10", "-f", "mp4", clip.toString()),
+            Duration.ofSeconds(60));
+        assertThat(made.succeeded()).as("ffmpeg generated the test clip").isTrue();
+        gregochr.cinefilm.film.Edition edition = edition(film(1L, "Long Film", 2024, NOW), 3L, "Original", 20_000,
+            null);
+        MediaFile media = file(edition, "Long Film.mp4");
+        media.setId(9L);
+        gregochr.cinefilm.film.EditionRepository editions = mock(gregochr.cinefilm.film.EditionRepository.class);
+        when(editions.findById(3L)).thenReturn(Optional.of(edition));
+        gregochr.cinefilm.still.StillService service = new gregochr.cinefilm.still.StillService(editions,
+            new LibraryRoot(library.toString()), RUNNER,
+            new TransactionTemplate(mock(PlatformTransactionManager.class)), "ffmpeg",
+            library.resolve("cache").toString());
+
+        byte[] bytes = service.still(3L, 12_400L);
+
+        assertThat(bytes[0]).isEqualTo((byte) 0xFF);
+        assertThat(bytes[1]).isEqualTo((byte) 0xD8);
+        java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes));
+        assertThat(image.getWidth()).isLessThanOrEqualTo(1280);
+    }
+
+    @Test
+    void anAnamorphicSourceKeepsItsTrueAspectInTheStill() throws IOException {
+        Path clip = library.resolve("Anamorphic.mp4");
+        CommandRunner.Result made = RUNNER.run(List.of("ffmpeg", "-v", "error", "-nostdin", "-y",
+            "-f", "lavfi", "-i", "testsrc=duration=20:size=720x576:rate=25", "-vf", "setsar=64/45",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "25", "-f", "mp4", clip.toString()),
+            Duration.ofSeconds(60));
+        assertThat(made.succeeded()).as("ffmpeg generated the anamorphic clip").isTrue();
+        gregochr.cinefilm.film.Edition edition = edition(film(1L, "Anamorphic", 2024, NOW), 4L, "Original", 20_000,
+            null);
+        MediaFile media = file(edition, "Anamorphic.mp4");
+        media.setId(10L);
+        gregochr.cinefilm.film.EditionRepository editions = mock(gregochr.cinefilm.film.EditionRepository.class);
+        when(editions.findById(4L)).thenReturn(Optional.of(edition));
+        gregochr.cinefilm.still.StillService service = new gregochr.cinefilm.still.StillService(editions,
+            new LibraryRoot(library.toString()), RUNNER,
+            new TransactionTemplate(mock(PlatformTransactionManager.class)), "ffmpeg",
+            library.resolve("cache").toString());
+
+        byte[] jpeg = service.still(4L, 12_000L);
+
+        java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(jpeg));
+        assertThat(image.getWidth()).isLessThanOrEqualTo(1280);
+        assertThat((double) image.getWidth() / image.getHeight()).isBetween(16.0 / 9 * 0.98, 16.0 / 9 * 1.02);
+    }
+
+    @Test
     void ffmpegExtractsTheSubtitleToWebVtt() throws IOException {
         clip();
         MediaFileRepository files = mock(MediaFileRepository.class);

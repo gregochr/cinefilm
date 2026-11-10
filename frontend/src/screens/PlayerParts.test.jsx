@@ -171,6 +171,15 @@ describe('playing a film split across several files', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('drops the resume still when the film cannot be played right now', async () => {
+    const srv = serve({ create: (n) => (n === 1 ? respond({ error: 'No encoder' }, 409) : null) });
+    installFetch(srv.route);
+    renderApp('/films/1/play?edition=11');
+    await screen.findByRole('alert');
+
+    await vi.waitFor(() => expect(screen.queryByTestId('player-still')).not.toBeInTheDocument());
+  });
+
   it('never direct-plays: a refused session says so and Try again asks once more', async () => {
     const srv = serve({ create: (n) => (n === 1 ? respond({ error: 'No encoder' }, 409) : null) });
     installFetch(srv.route);

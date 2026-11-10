@@ -172,6 +172,8 @@ While a film is starting or resuming (before its first frame plays) the same ind
 "BUFFERING" only for a stall after playback has begun (owner, 2026-11-10). The time readout shows the resume point
 from the moment the player opens, never 0:00.
 
+When resuming, the frame at the resume point is shown behind the startup indicator until the film plays.
+
 **Auto step-down:** a toast at the top centre reads "Switching to 720p for smoother playback". It shows for about 4 s, is non-blocking, and plays no sound.
 
 **End of film**

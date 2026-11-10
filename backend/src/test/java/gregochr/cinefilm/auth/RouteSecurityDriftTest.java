@@ -90,6 +90,7 @@ class RouteSecurityDriftTest {
         assertThat(apiRoutes()).contains(
             "GET /api/home", "GET /api/films", "GET /api/films/{id}", "GET /api/people/{id}",
             "GET /api/collections", "GET /api/collections/{id}", "GET /api/editions/{id}/stream",
+            "GET /api/editions/{id}/still",
             "PUT /api/editions/{id}/progress", "POST /api/editions/{id}/watched",
             "PUT /api/films/{id}/preferences", "GET /api/session", "POST /api/session",
             "DELETE /api/session", "GET /api/admin/scan", "POST /api/admin/scan", "GET /api/admin/attention",

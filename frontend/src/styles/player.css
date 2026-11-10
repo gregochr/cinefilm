@@ -24,6 +24,26 @@
   object-fit: contain;
   background: var(--cf-bg-deep);
 }
+.player__still {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--cf-bg-deep);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+.player__still--shown {
+  opacity: 1;
+  transition: none; /* it appears at once; only hiding fades */
+}
+@media (prefers-reduced-motion: reduce) {
+  .player__still {
+    transition: none;
+  }
+}
 .player__surface {
   position: absolute;
   inset: 0;
