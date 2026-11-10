@@ -172,3 +172,29 @@ describe('announceSignedOut', () => {
     expect(handler.mock.calls[0][0].detail).toEqual({ reason: 'signed-out' });
   });
 });
+
+describe('api client: failed responses', () => {
+  it('carries the JSON body of a failure (the field errors of a 400) on the error', async () => {
+    const body = {
+      error: 'Choose a default edition.',
+      errors: [{ field: 'default', message: 'Choose a default edition.' }],
+    };
+    vi.stubGlobal('fetch', reply(400, body));
+
+    await expect(put('/api/admin/films/1/editions', {})).rejects.toMatchObject({
+      status: 400,
+      body,
+    });
+  });
+
+  it('has no body on the error when the failure sent none or sent something that is not JSON', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('<html>nope</html>', { status: 502 })),
+    );
+    await expect(get('/api/x')).rejects.toMatchObject({ status: 502, body: null });
+    vi.stubGlobal('fetch', reply(500));
+    await expect(get('/api/x')).rejects.toMatchObject({ status: 500, body: null });
+    expect(new ApiError(503).body).toBeNull();
+  });
+});

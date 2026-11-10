@@ -356,6 +356,42 @@ below the grid (per the handover) and its apply button reads "Use this match", a
   `frontend/src/api`, state and validation in `frontend/src/state` (no JSX).
 - Tests: validation both sides; save keeps state; Not this film; suggestion reasons; opened from both places.
 
+**As built (phase 6).** The API contract is in `foundation-plan.md` ("Edit editions"). Where it differs from the plan above:
+
+- **Rules and error shape.** The rules are `EditionRules` (server, the authority) and `editionRules.js` (panel); one JSON
+  table of cases, `backend/src/test/resources/shared/edition-validation-cases.json`, is read by both suites. The server
+  returns every broken rule as `{ field, message }` (not only the first), in a fixed order; `error` is the first message.
+  Extra rules beyond the design's list: file placement ("Every file has to be in an edition or marked Not this film.",
+  "Each file can only be in one edition, or marked Not this film."), parts outside 1 to 8, and an edition with no files.
+  A lone file may be sent as `part: null` or 1.
+- **State on save** (`StateCarry`, pure, over the `StateFolding` and `EditionTimeline` rules `EditionJoin` uses). A kept
+  edition keeps its id, so its history stays, and a renamed edition keeps it because the panel sends the edition's id with
+  the new name (a "New edition…" that takes over the files of an emptied edition adopts its id). When files move between
+  editions the state follows the files, placed per file: the position and the credits marker are located in the old
+  edition's own timeline (the file and the offset inside it), moved onto that file's start on the new edition's timeline
+  (`EditionTimeline`, `timelineDurationMs`), and the pieces landing in one edition are folded (`StateFolding.fold`:
+  watched only when the edition holding the last part was watched, furthest progress otherwise). Reordering parts or
+  interleaving files from two editions therefore keeps every position in its file; a watched edition is watched for the
+  files it had. The marker is kept only when it is in the new edition's last file. So pt1 and pt2 joined from two editions give pt2's 5 min the position
+  partStart + 5 min. A new edition made from an emptied edition's files inherits that share. State is lost only where it is
+  truly gone: an edition whose files all go to Not this film or that is removed, or a resume position that sat in a file
+  that left. An edition with a file of no known duration cannot be folded: its position is only clamped to the new runtime
+  and its marker cleared if the files changed. `EditionJoin.repoint` (package-visible) remaps stream choices, and a
+  remembered last edition that was deleted points at the default.
+- **Lock.** A save takes `LibraryLock.EDIT`; a scan refused because of it says "Editions are being edited".
+- **Suggestion** (`EditionSuggester`): beyond the plan's rules, a settled film is suggested as arranged; files whose title
+  is another film's are suggested as Not this film with the design's "these may be different films" line; plain edition
+  words in a file name count as tags; runtimes 1 to 5 minutes apart are copies with "Runtimes are close (…) — likely
+  copies of one cut. Kept apart so you can compare; rename one, or mark it Not this film."; three or more cuts, or
+  unknown runtimes, are kept apart as "Original", "Original 2", … with their own reason; a single file has no reason
+  (the panel hides the Suggested line). A suggested edition continues the existing edition holding most of its files
+  (so its history stays). The suggestion also carries the default's name (the current default while it is still there,
+  else Original/Theatrical, else the longest).
+- **Panel.** `components/EditEditions.jsx` (dialog on desktop, full-screen sheet at 600px and below). Opened from the
+  Several files row in Admin (not from Parts don't match: splitting editions does not change what the parts are) and
+  from Film detail → "Edit editions…". Esc is Cancel with no prompt. After a save the Admin lists refresh and a toast
+  says "Editions saved".
+
 ## Join parts — deferred (owner, 2026-11-09)
 
 Brief kept for when it is revisited: lossless concat (`-c copy`, MP4/M4V `+faststart`), temp file, duration = sum ±

@@ -12,6 +12,7 @@ import wickerMan from './fixtures/film-wicker-man.json';
 import adminAttention from './fixtures/admin-attention.json';
 import adminScan from './fixtures/admin-scan.json';
 import adminGrouping from './fixtures/admin-grouping.json';
+import adminEditions from './fixtures/admin-editions.json';
 import adminMatch from './fixtures/admin-match.json';
 import adminPlex from './fixtures/admin-plex.json';
 import adminTranscoding from './fixtures/admin-transcoding.json';
@@ -32,6 +33,7 @@ export const fixtures = {
   adminScan,
   adminAttention,
   adminGrouping,
+  adminEditions,
   adminMatch,
   adminPlex,
   adminTranscoding,
@@ -87,6 +89,9 @@ export function defaultRoute(method, url) {
   if (path === '/api/admin/grouping-report') return json(adminGrouping);
   if (/^\/api\/admin\/films\/\d+\/match$/.test(path)) {
     return method === 'POST' ? json({ filmId: 31, joined: false }) : json(adminMatch);
+  }
+  if (/^\/api\/admin\/films\/\d+\/editions$/.test(path)) {
+    return method === 'PUT' ? json({ filmId: 40, newFilmIds: [] }) : json(adminEditions);
   }
   if (path === '/api/admin/plex') {
     return method === 'POST'

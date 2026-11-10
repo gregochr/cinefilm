@@ -82,6 +82,10 @@ export const adminApi = {
     return get(`/api/admin/films/${filmId}/match?${params}`, options);
   },
   applyMatch: (filmId, tmdbId) => post(`/api/admin/films/${filmId}/match`, { tmdbId }),
+  /** A film's files, editions and the suggested arrangement, for the Edit editions panel. */
+  editions: (filmId, options) => get(`/api/admin/films/${filmId}/editions`, options),
+  /** Saves the arranged editions. A 400 carries `{ error, errors: [{ field, message }] }`; a 409 means a scan. */
+  saveEditions: (filmId, request) => put(`/api/admin/films/${filmId}/editions`, request),
   plex: (options) => get('/api/admin/plex', options),
   startPlexImport: () => post('/api/admin/plex/import'),
   transcoding: (options) => get('/api/admin/transcoding', options),

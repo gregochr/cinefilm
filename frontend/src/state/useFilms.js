@@ -40,5 +40,8 @@ export function useFilmActions(filmId) {
     [filmId],
   );
 
-  return { overrides, setWatched, savePreferences };
+  /** Forget the local overrides: the server's state is the truth again (after Edit editions changed it). */
+  const clearOverrides = useCallback(() => setOverrides({}), []);
+
+  return { overrides, setWatched, savePreferences, clearOverrides };
 }

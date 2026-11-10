@@ -320,7 +320,7 @@ public class EditionJoin {
     }
 
     /** Points the remembered edition choices at the survivor and the stream choices at part 1's streams. */
-    private void repoint(Long filmId, Long survivorId, Set<Long> absorbed) {
+    void repoint(Long filmId, Long survivorId, Set<Long> absorbed) {
         FilmPreference preference = preferences.findById(filmId).orElse(null);
         if (preference == null) {
             return;
@@ -405,12 +405,12 @@ public class EditionJoin {
         return file.getSubtitleStreams().stream().sorted(Comparator.comparingInt(SubtitleStream::getIndex)).toList();
     }
 
-    private static State stateOf(PlaybackState state) {
+    static State stateOf(PlaybackState state) {
         return new State(state.getPositionMs(), state.isWatched(), state.getWatchedAt(), state.getLastPlayedAt(),
             state.isHiddenFromContinueWatching(), state.getHiddenAt());
     }
 
-    private static PlaybackState apply(PlaybackState target, State state) {
+    static PlaybackState apply(PlaybackState target, State state) {
         target.setPositionMs(state.positionMs());
         target.setWatched(state.watched());
         target.setWatchedAt(state.watchedAt());

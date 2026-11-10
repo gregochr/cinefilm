@@ -1,0 +1,61 @@
+{
+  "files": [
+    {
+      "id": 11,
+      "fileName": "The Lord of the Rings - The Two Towers {edition-Extended Edition} - pt1.m4v",
+      "durationMs": 6840000,
+      "width": 1920,
+      "height": 800,
+      "videoCodec": "HEVC",
+      "sizeBytes": 14200000000,
+      "presence": "PRESENT",
+      "editionId": 101,
+      "partNumber": 1
+    },
+    {
+      "id": 12,
+      "fileName": "The Lord of the Rings - The Two Towers {edition-Extended Edition} - pt2.m4v",
+      "durationMs": 7260000,
+      "width": 1920,
+      "height": 800,
+      "videoCodec": "HEVC",
+      "sizeBytes": 15000000000,
+      "presence": "PRESENT",
+      "editionId": 102,
+      "partNumber": 1
+    },
+    {
+      "id": 13,
+      "fileName": "The Lord of the Rings - The Two Towers {edition-Theatrical Cut}.m4v",
+      "durationMs": 10740000,
+      "width": 1920,
+      "height": 800,
+      "videoCodec": "HEVC",
+      "sizeBytes": 11800000000,
+      "presence": "PRESENT",
+      "editionId": 103,
+      "partNumber": 1
+    }
+  ],
+  "editions": [
+    { "id": 101, "name": "Original", "default": false },
+    { "id": 102, "name": "Original", "default": false },
+    { "id": 103, "name": "Theatrical Cut", "default": true }
+  ],
+  "suggestion": {
+    "reason": "From the edition tags and part numbers",
+    "editions": [
+      {
+        "id": 101,
+        "name": "Extended Edition",
+        "files": [
+          { "fileId": 11, "part": 1 },
+          { "fileId": 12, "part": 2 }
+        ]
+      },
+      { "id": 103, "name": "Theatrical Cut", "files": [{ "fileId": 13, "part": null }] }
+    ],
+    "notThisFilm": [],
+    "defaultName": "Theatrical Cut"
+  }
+}

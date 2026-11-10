@@ -190,3 +190,18 @@ describe('imageUrl for artwork stored by the server', () => {
     expect(imageUrl('/api/artist.jpg')).toBe('https://image.tmdb.org/t/p/w342/api/artist.jpg');
   });
 });
+
+describe('Edit editions resources', () => {
+  it('reads a film’s files and the suggestion', async () => {
+    const last = stubFetch();
+    await adminApi.editions(40);
+    expect(last()).toMatchObject({ path: '/api/admin/films/40/editions', method: 'GET' });
+  });
+
+  it('saves the arrangement with PUT and its body', async () => {
+    const last = stubFetch();
+    const request = { editions: [], notThisFilm: [12] };
+    await adminApi.saveEditions(40, request);
+    expect(last()).toEqual({ path: '/api/admin/films/40/editions', method: 'PUT', body: request });
+  });
+});

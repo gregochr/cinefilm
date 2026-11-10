@@ -8,7 +8,9 @@ import { Button, ButtonLink } from '../components/Button.jsx';
 import { Picker, Switch } from '../components/Controls.jsx';
 import { CheckIcon, PlayIcon, RestartIcon } from '../components/icons.jsx';
 import RatingsRow from '../components/RatingsRow.jsx';
+import EditEditions from '../components/EditEditions.jsx';
 import { DetailSkeleton } from '../components/Skeleton.jsx';
+import Toast from '../components/Toast.jsx';
 import { ErrorState } from '../components/StateMessages.jsx';
 import { formatLeft, formatResume, formatRuntime, fraction } from '../player/time.js';
 import {
@@ -22,6 +24,7 @@ import {
 } from '../player/tracks.js';
 import { displayName } from '../state/collections.js';
 import { useFilm, useFilmActions } from '../state/useFilms.js';
+import { useToast } from '../state/useToast.js';
 
 function qualityOptions(edition) {
   return edition.qualities.map((q) => ({
@@ -68,6 +71,8 @@ export default function FilmDetail() {
   const [quality, setQuality] = useState(null);
   const [audio, setAudio] = useState(null);
   const [subtitle, setSubtitle] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const toast = useToast();
 
   if (loading && !film) return <DetailSkeleton />;
   if (error && !film) return <ErrorState onRetry={reload} />;
@@ -272,8 +277,29 @@ export default function FilmDetail() {
             </div>
           </div>
           <p className="detail__file">{fileLine(edition)}</p>
+          <div className="detail__edit">
+            <Button onClick={(event) => setEditing({ opener: event.currentTarget })}>
+              Edit editions…
+            </Button>
+          </div>
         </div>
       </div>
+      {editing ? (
+        <EditEditions
+          film={{ id: film.id, title: film.title, year: film.year }}
+          opener={editing.opener}
+          onClose={() => setEditing(null)}
+          onSaved={(result, stale) => {
+            if (!stale) {
+              setEditing(null);
+              toast.show('Editions saved');
+            }
+            actions.clearOverrides();
+            reload();
+          }}
+        />
+      ) : null}
+      <Toast message={toast.message} />
     </div>
   );
 }

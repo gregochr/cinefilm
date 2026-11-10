@@ -2,6 +2,7 @@ package gregochr.cinefilm.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -55,5 +56,17 @@ class ApiExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(response.getBody()).containsExactly(Map.entry("error", "A scan is already running"));
+    }
+
+    @Test
+    void fieldErrorsAre400WithTheFirstMessageAsTheErrorAndEveryFieldErrorListed() {
+        List<FieldError> errors = List.of(new FieldError("editions[0].parts", "Two files are both part 1."),
+            new FieldError("default", "Choose a default edition."));
+
+        ResponseEntity<Map<String, Object>> response = handler.fieldErrors(new FieldErrorsException(errors));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).containsEntry("error", "Two files are both part 1.")
+            .containsEntry("errors", errors).hasSize(2);
     }
 }
