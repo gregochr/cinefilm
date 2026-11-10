@@ -315,7 +315,8 @@ public class PlexFilmWriter {
         MediaWrite reference = null;
         for (MediaWrite version : write.media()) {
             List<MediaFile> parts = version.fileIds().stream().map(byId::get).toList();
-            boolean comparable = version.complete() && write.plex().editionTitle() == null
+            boolean comparable = version.complete() && RuntimeSignal.durationsKnown(parts)
+                && write.plex().editionTitle() == null
                 && RuntimeSignal.untagged(parts.stream().map(MediaFile::getPath).toList());
             if (!comparable) {
                 continue;

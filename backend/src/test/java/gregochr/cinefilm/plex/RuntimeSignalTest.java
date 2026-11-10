@@ -65,4 +65,21 @@ class RuntimeSignalTest {
         assertThat(RuntimeSignal.conflict(List.of(joined), List.of(far))).startsWith("Runtimes differ");
         assertThat(RuntimeSignal.conflict(List.of(a), List.of(edition(7, 130)))).isNull();
     }
+
+    @Test
+    void aPartWithNoPositiveDurationMakesAnEditionNeverComparable() {
+        Edition a = edition(1, 100, "Heat.m4v");
+        Edition far = edition(2, 130, "Heat HD.m4v");
+        Edition unprobed = edition(3, 130, "Heat HD - pt1.m4v", "Heat HD - pt2.m4v");
+        unprobed.originalParts().get(1).setDurationMs(null);
+        Edition zero = edition(4, 130, "Heat HD - pt1.m4v", "Heat HD - pt2.m4v");
+        zero.originalParts().get(1).setDurationMs(0L);
+
+        assertThat(RuntimeSignal.conflict(List.of(a), List.of(far))).isNotNull();
+        assertThat(RuntimeSignal.conflict(List.of(a), List.of(unprobed))).isNull();
+        assertThat(RuntimeSignal.conflict(List.of(unprobed), List.of(a))).isNull();
+        assertThat(RuntimeSignal.conflict(List.of(a), List.of(zero))).isNull();
+        assertThat(RuntimeSignal.durationsKnown(List.of())).isFalse();
+        assertThat(RuntimeSignal.durationsKnown(far.originalParts())).isTrue();
+    }
 }

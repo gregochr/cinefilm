@@ -522,6 +522,45 @@ class PlexGroupingFlowTest extends ApiTestBase {
     }
 
     @Test
+    void aVersionWithAnUnprobedPartIsNeverComparedByRuntimeNorFlagged() {
+        assertNoFlagWhenOnePartDuration(null);
+    }
+
+    @Test
+    void aVersionWithAZeroDurationPartIsTreatedAsUnknownToo() {
+        assertNoFlagWhenOnePartDuration(0L);
+    }
+
+    private void assertNoFlagWhenOnePartDuration(Long unknown) {
+        Film heat = film("Heat", 949L);
+        edition(heat, "Original", 100, "Heat.m4v");
+        Edition split = edition(heat, "Original", 50, "Heat HD - pt1.m4v", "Heat HD - pt2.m4v");
+        split.originalParts().get(0).setDurationMs(50 * MIN);
+        split.originalParts().get(1).setDurationMs(unknown);
+        Long heatId = saved(heat).getId();
+
+        importItems(item("Heat", 949L, null, 0, 0, media("Heat.m4v"),
+            media("Heat HD - pt1.m4v", "Heat HD - pt2.m4v")));
+
+        assertThat(film(heatId).getEditions()).hasSize(2);
+        assertThat(flags()).isEmpty();
+    }
+
+    @Test
+    void aMultiPartVersionWithEveryDurationKnownAndFarApartIsFlaggedOnce() {
+        Film heat = film("Heat", 949L);
+        edition(heat, "Original", 100, "Heat.m4v");
+        edition(heat, "Original", 130, "Heat HD - pt1.m4v", "Heat HD - pt2.m4v");
+        Long heatId = saved(heat).getId();
+
+        importItems(item("Heat", 949L, null, 0, 0, media("Heat.m4v"),
+            media("Heat HD - pt1.m4v", "Heat HD - pt2.m4v")));
+
+        assertThat(film(heatId).getEditions()).hasSize(2);
+        assertThat(flags()).hasSize(1).allMatch(f -> f.startsWith("Runtimes differ by 23%"));
+    }
+
+    @Test
     void filmsWithUntaggedVersionsFarApartInRuntimeAreGatheredAndMergedAndFlaggedOnce() {
         Film short1 = film("Heat", 949L);
         edition(short1, "Original", 100, "Heat.m4v");

@@ -1,6 +1,7 @@
 package gregochr.cinefilm.plex;
 
 import gregochr.cinefilm.film.Edition;
+import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.library.FileNameParser;
 import gregochr.cinefilm.library.FileNameParser.ParsedName;
 import java.util.Collection;
@@ -65,9 +66,15 @@ final class RuntimeSignal {
         return null;
     }
 
+    /** True when there is at least one part and every part has a positive duration (a sum is only then a runtime). */
+    static boolean durationsKnown(Collection<MediaFile> parts) {
+        return !parts.isEmpty() && parts.stream().allMatch(p -> p.getDurationMs() != null && p.getDurationMs() > 0);
+    }
+
     private static boolean comparable(Edition edition) {
-        List<String> paths = edition.originalParts().stream().map(f -> f.getPath()).toList();
-        if (paths.isEmpty() || !untagged(paths)) {
+        List<MediaFile> parts = edition.originalParts();
+        List<String> paths = parts.stream().map(f -> f.getPath()).toList();
+        if (paths.isEmpty() || !durationsKnown(parts) || !untagged(paths)) {
             return false;
         }
         return paths.size() > 1 || FileNameParser.parse(paths.get(0)).partTag() == null;
