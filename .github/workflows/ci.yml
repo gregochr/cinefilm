@@ -181,13 +181,27 @@ jobs:
           path: backend/target/site/jacoco/
           if-no-files-found: ignore
 
-      # Compiled classes for the `sonar` job (Java analysis needs them); short-lived, only that job reads them.
-      - name: Upload compiled classes (for SonarQube Cloud)
+      # Inputs for the `sonar` job, whose Java analysis needs the compiled classes AND the classpath to resolve Spring,
+      # Hibernate and Jakarta types. The plugin goal is invoked directly (no lifecycle phase), so it cannot re-run tests
+      # or touch target/classes; it only copies the already-resolved jars. Version pinned on the command line.
+      - name: Copy dependency jars (for SonarQube Cloud)
+        if: needs.changes.outputs.docs_only != 'true'
+        run: |
+          cd backend && ./mvnw --batch-mode --no-transfer-progress \
+            org.apache.maven.plugins:maven-dependency-plugin:3.9.0:copy-dependencies \
+            -DincludeScope=test -DoutputDirectory=target/sonar-libs
+
+      # One short-lived artifact, laid out relative to backend/target (its common root): the sonar job downloads it
+      # to backend/target.
+      - name: Upload Sonar inputs (classes, test classes, dependency jars)
         if: needs.changes.outputs.docs_only != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: backend-classes
-          path: backend/target/classes/
+          name: backend-sonar-inputs
+          path: |
+            backend/target/classes/
+            backend/target/test-classes/
+            backend/target/sonar-libs/
           retention-days: 1
           if-no-files-found: error
 
@@ -474,12 +488,12 @@ jobs:
           # New-code detection and blame need the full history.
           fetch-depth: 0
 
-      - name: Download compiled classes
+      - name: Download compiled classes, test classes and dependency jars
         if: needs.changes.outputs.docs_only != 'true' && env.SONAR_TOKEN != ''
         uses: actions/download-artifact@v4
         with:
-          name: backend-classes
-          path: backend/target/classes
+          name: backend-sonar-inputs
+          path: backend/target
 
       - name: Download JaCoCo report
         if: needs.changes.outputs.docs_only != 'true' && env.SONAR_TOKEN != ''
