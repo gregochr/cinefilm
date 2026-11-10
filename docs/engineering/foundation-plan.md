@@ -312,6 +312,35 @@ Plan: `library-scan-plan.md`. What the API and the model now carry:
     and `joined` is true; a `join` line is written to the grouping report. Takes the library lock.
   - Errors (`{ error }`): 400 blank query or missing `tmdbId`; 404 unknown film, or TMDB does not know the id; 409
     `A scan is running` (apply only, when the library lock is held); 503 TMDB unavailable.
+- **Edit editions** (`EditionArranger`, owner-only; the panel is `docs/design/handover/edit-editions/README.md`):
+  - `GET /api/admin/films/{id}/editions` returns `{ files: [{ id, fileName, durationMs | null, width | null, height |
+    null, videoCodec | null, sizeBytes | null, presence: "PRESENT"|"MISSING", editionId, partNumber }], editions: [{
+    id, name, default }], suggestion: { reason, editions: [{ id | null, name, files: [{ fileId, part | null }] }],
+    notThisFilm: [fileId], defaultName } }`. `files` are the film's original files in edition and part order;
+    `default` marks the edition the film opens on now. The suggestion (`EditionSuggester`) is already in the shape the
+    panel edits: `id` is the existing edition a suggested one continues (its history stays), `part` is `null` for a
+    single file, `reason` is one line (empty for a single file). A film the owner has settled (`editions_confirmed`)
+    is suggested as it is arranged ("As you last arranged it").
+  - `PUT /api/admin/films/{id}/editions` takes `{ editions: [{ id | null, name, default, files: [{ fileId, part |
+    null }] }], notThisFilm: [fileId] }` and answers `{ filmId, newFilmIds }` (the unmatched films made for
+    `notThisFilm`, in its order). One transaction under the library lock. A kept edition (its `id`) keeps its resume
+    position and watched state (position clamped to the new runtime) whatever it is renamed to; a new edition starts
+    fresh; an edition left with no files is deleted with its state; part numbers, runtimes, `default_edition_chosen`,
+    `grouping_source = OWNER`, `editions_confirmed` are set; every file marked Not this film moves, keeping its id, to
+    a new film with `NEEDS_MATCH` (title from the file name; Unmatched with Fix match in Admin); one `split` (when files
+    moved out) or `join` line goes to the grouping report. Needs `X-CineFilm`.
+  - **Validation** (`EditionRules`, mirrored in `frontend/src/state/editionRules.js`, one shared table of cases in
+    `backend/src/test/resources/shared/edition-validation-cases.json` that both suites read): every file in exactly one
+    edition or in `notThisFilm`; each edition's parts 1..n without gaps or duplicates (`null` only as an edition's only
+    file; a lone file may be `null` or 1; parts 1 to 8); names 1 to 32 characters after trimming, unique
+    case-insensitively (an existing edition keeps its name over a new one); exactly one `default`; at least one
+    edition.
+  - **Error shape:** a rule broken is `400 { error: "<first message>", errors: [{ field, message }] }`, in the owner's
+    words. `field` is a path into the request, in a fixed order: `files`, then for each edition in turn
+    `editions[i].name`, `editions[i].parts` (or `editions[i].files` for an empty edition), then `editions`, then
+    `default`. Other errors are `{ error }`: 400 an edition that is not the film's or is listed twice, or an unreadable
+    body; 404 unknown film; 409 `A scan is running` when the library lock is held (by a scan, an import, a match or
+    another save).
 - **Grouping report:** `GET /api/admin/grouping-report` returns `{ items: [{ happenedAt, kind: "split"|"join"|"flag",
   summary }] }`, the newest 20 `grouping_change` rows, newest first.
 - **Scheduling.** At start-up when the library has no films, nightly 04:30 `cinefilm.time-zone`, and from Admin. One
