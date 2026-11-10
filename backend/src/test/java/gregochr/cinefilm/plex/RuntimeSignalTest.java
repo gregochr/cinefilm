@@ -25,6 +25,7 @@ class RuntimeSignalTest {
     @Test
     void exactlyFifteenPercentIsTheSameFilmAndOneMinuteMoreIsNot() {
         assertThat(RuntimeSignal.differs(100 * MIN, 85 * MIN)).isFalse();
+        assertThat(RuntimeSignal.differs(100 * MIN, 85 * MIN + 1)).isFalse();
         assertThat(RuntimeSignal.differs(100 * MIN, 85 * MIN - 1)).isTrue();
         assertThat(RuntimeSignal.differs(85 * MIN - 1, 100 * MIN)).isTrue();
         assertThat(RuntimeSignal.differs(0, 100 * MIN)).isFalse();
