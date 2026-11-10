@@ -411,21 +411,40 @@ class EditionArrangerTest extends ApiTestBase {
     }
 
     @Test
-    void aFileNameThatParsesToNoTitleStillGetsAFilm() {
+    void severalFilesCanLeaveAtOnceAndAKeptEditionKeepsItsRenditions() {
         Film built = film(null, "Heat", 1995, NOW);
         Edition only = edition(built, null, "Original", 170 * MIN, null);
         file(only, "Heat.m4v");
-        MediaFile odd = file(only, "[1995].m4v");
-        odd.setPartNumber(2);
+        file(only, "Heat (1995).m4v").setPartNumber(2);
+        file(only, "Heat - HD.m4v").setPartNumber(3);
+        MediaFile rendition = file(only, "Heat-720.m4v");
+        rendition.setKind(MediaKind.PREMADE_720);
         Film film = save(built);
         List<MediaFile> parts = film.getEditions().get(0).originalParts();
 
         SaveResult result = arranger.save(film.getId(), new SaveRequest(
             List.of(ed(editionId(film, 0), "Original", true, f(parts.get(0).getId(), null))),
-            List.of(parts.get(1).getId())));
+            List.of(parts.get(1).getId(), parts.get(2).getId())));
 
-        Film split = films.findById(result.newFilmIds().get(0)).orElseThrow();
-        assertThat(split.getTitle()).isNotBlank();
-        assertThat(split.getMatchStatus()).isEqualTo(MatchStatus.NEEDS_MATCH);
+        assertThat(result.newFilmIds()).hasSize(2);
+        assertThat(groupingChanges.findTop20ByOrderByHappenedAtDescIdDesc()).singleElement().extracting(
+            GroupingChange::getSummary).isEqualTo(
+            "You moved 2 files out of \"Heat\" and arranged it into 1 edition with Edit editions");
+        assertThat(editions.findById(editionId(film, 0)).orElseThrow().getMediaFiles()).hasSize(2);
+    }
+
+    @Test
+    void aResumePositionIsLeftAloneWhenTheRuntimeIsUnknown() {
+        Film built = film(null, "Heat", 1995, NOW);
+        MediaFile unknown = file(edition(built, null, "Original", 0, null), "Heat.m4v");
+        unknown.setDurationMs(null);
+        Film film = save(built);
+        saveState(state(film.getEditions().get(0), 5 * MIN, false, NOW, null));
+
+        arranger.save(film.getId(), new SaveRequest(List.of(ed(editionId(film, 0), "Original", true,
+            f(fileId(film, 0), null))), List.of()));
+
+        assertThat(states.findById(editionId(film, 0))).get().extracting(PlaybackState::getPositionMs)
+            .isEqualTo(5 * MIN);
     }
 }

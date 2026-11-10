@@ -259,7 +259,8 @@ public class EditionArranger {
     /** A film of its own for a file that is not this film: titled from the file name, unmatched, for Fix match. */
     private Film createFilm(MediaFile file) {
         ParsedName parsed = FileNameParser.parse(file.getPath());
-        String title = parsed.title() == null || parsed.title().isBlank() ? stem(file.getPath()) : parsed.title();
+        // The parser always carries a title (as in LibraryIngest).
+        String title = parsed.title();
         Film film = new Film();
         film.setTitleAndSort(title.substring(0, Math.min(title.length(), TITLE_MAX)));
         film.setYear(parsed.year());
@@ -308,12 +309,9 @@ public class EditionArranger {
     }
 
     private static Long defaultEditionId(SaveRequest request, List<Long> targets) {
-        for (int i = 0; i < request.editions().size(); i++) {
-            if (request.editions().get(i).isDefault()) {
-                return targets.get(i);
-            }
-        }
-        throw new IllegalStateException("Validation guarantees one default edition");
+        EditionRequest chosen = request.editions().stream().filter(EditionRequest::isDefault).findFirst()
+            .orElseThrow(() -> new IllegalStateException("Validation guarantees one default edition"));
+        return targets.get(request.editions().indexOf(chosen));
     }
 
     private void report(String title, int editionCount, int movedOut) {
@@ -337,12 +335,6 @@ public class EditionArranger {
 
     private static String fileName(String path) {
         return path.substring(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
-    }
-
-    private static String stem(String path) {
-        String name = fileName(path);
-        int dot = name.lastIndexOf('.');
-        return dot > 0 ? name.substring(0, dot) : name;
     }
 
     private <T> T locked(Supplier<T> work) {

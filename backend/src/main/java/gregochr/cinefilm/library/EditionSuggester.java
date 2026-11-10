@@ -294,9 +294,6 @@ public final class EditionSuggester {
      * longest.
      */
     private static String defaultName(List<Group> groups, List<SuggestFile> files, Long currentDefaultId) {
-        if (groups.isEmpty()) {
-            return null;
-        }
         for (Group group : groups) {
             if (group.editionId() != null && group.editionId().equals(currentDefaultId)) {
                 return group.name();
