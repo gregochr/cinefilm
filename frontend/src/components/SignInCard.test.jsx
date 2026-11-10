@@ -19,10 +19,11 @@ describe('SignInCard', () => {
     );
   });
 
-  it('shows the 48px mark above the title', () => {
+  it('shows the 30px mark beside the visible CineFilm wordmark', () => {
     setup();
     const dialog = screen.getByRole('dialog', { name: 'Signed out' });
-    expect(within(dialog).getByTestId('logo-mark')).toHaveAttribute('width', '48');
+    expect(within(dialog).getByTestId('logo-mark')).toHaveAttribute('width', '30');
+    expect(within(dialog).getByText('CineFilm')).toBeVisible();
   });
 
   it('focuses the password field when it appears', () => {
@@ -70,5 +71,14 @@ describe('SignInCard', () => {
     unmount();
     render(<SignInCard onSignIn={vi.fn()} error={null} />);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('shows the signed-out copy for the signed-out reason', () => {
+    setup({ reason: 'signed-out' });
+    const dialog = screen.getByRole('dialog', { name: 'Signed out' });
+    expect(dialog).toHaveTextContent(
+      'You’ve signed out of CineFilm. Enter the password to sign back in.',
+    );
+    expect(dialog).not.toHaveTextContent('while you were away');
   });
 });

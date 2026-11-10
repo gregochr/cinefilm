@@ -13,12 +13,17 @@ export class ApiError extends Error {
   }
 }
 
-function emit(name) {
-  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(name));
+function emit(name, detail) {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(name, { detail }));
 }
 
 export function announceSignedIn() {
   emit(SIGNED_IN_EVENT);
+}
+
+/** The user signed out on purpose: the same event as an expiry, with the reason attached. */
+export function announceSignedOut() {
+  emit(SESSION_EXPIRED_EVENT, { reason: 'signed-out' });
 }
 
 async function fixtureRequest(method, path, body) {

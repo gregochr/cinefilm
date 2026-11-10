@@ -18,7 +18,7 @@ export default function Header() {
 
   return (
     <header className="header">
-      <Link to="/" className="header__wordmark" aria-label="CineFilm — Home">
+      <Link to="/" className="wordmark header__wordmark" aria-label="CineFilm — Home">
         <LogoMark size={30} />
         <span aria-hidden="true">CineFilm</span>
       </Link>
