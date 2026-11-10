@@ -83,6 +83,7 @@ class StillControllerTest {
     @Test
     void signedOutIs401() throws Exception {
         mvc.perform(get("/api/editions/{id}/still", 5).param("atMs", "1"))
-            .andExpect(status().isUnauthorized());
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Authentication required"));
     }
 }

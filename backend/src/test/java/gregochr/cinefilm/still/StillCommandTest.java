@@ -13,7 +13,9 @@ class StillCommandTest {
             Path.of("/cache/out.tmp"))).containsExactly("/usr/bin/ffmpeg", "-nostdin", "-hide_banner", "-v", "error",
                 "-protocol_whitelist", "file", "-threads", "1", "-ss", "12", "-i",
                 "/media/a; rm -rf ~.m4v", "-map", "0:v:0", "-frames:v", "1", "-an", "-sn", "-dn",
-                "-vf", "scale='min(1280,iw*sar)':-2,setsar=1", "-q:v", "5", "-f", "image2", "-y", "/cache/out.tmp");
+                "-vf",
+                "scale='trunc(iw*sar/2)*2':ih,setsar=1,scale='min(1280,iw)':-2", "-q:v", "5", "-f", "image2", "-y",
+                "/cache/out.tmp");
     }
 
     @Test

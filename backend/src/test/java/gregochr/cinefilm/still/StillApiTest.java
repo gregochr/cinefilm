@@ -86,13 +86,14 @@ class StillApiTest extends ApiTestBase {
     void anAtMsPastTheEndIs400EvenWhenOnlyImageJpegIsAccepted() throws Exception {
         mvc.perform(get(url(101 * MIN)).header(HttpHeaders.ACCEPT, "image/jpeg"))
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.error").exists());
+            .andExpect(jsonPath("$.error").value("atMs must be between 0 and the film's length"));
     }
 
     @Test
     void anUnknownEditionIs404EvenWhenOnlyImageJpegIsAccepted() throws Exception {
         mvc.perform(get("/api/editions/999999/still?atMs=1").header(HttpHeaders.ACCEPT, "image/jpeg"))
-            .andExpect(status().isNotFound());
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.error").value("No such edition"));
     }
 
     @Test
@@ -101,12 +102,14 @@ class StillApiTest extends ApiTestBase {
             org.mockito.ArgumentMatchers.any())).thenThrow(new IOException("ffmpeg missing"));
 
         mvc.perform(get(url(5_000)).header(HttpHeaders.ACCEPT, "image/jpeg"))
-            .andExpect(status().isServiceUnavailable());
+            .andExpect(status().isServiceUnavailable())
+            .andExpect(jsonPath("$.error").value("Frame is not available right now"));
     }
 
     @Test
     void signedOutIs401() throws Exception {
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(url(1_000)))
-            .andExpect(status().isUnauthorized());
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Authentication required"));
     }
 }
