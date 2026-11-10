@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ApiError } from '../api/client.js';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ApiError, announceLibraryChanged } from '../api/client.js';
 import { adminApi } from '../api/resources.js';
 import { useResource } from './useResource.js';
 
@@ -8,6 +8,15 @@ export const SCAN_POLL_MS = 1500;
 
 /** How often the Plex import panel looks again while Plex is not reachable. */
 export const PLEX_RECHECK_MS = 30000;
+
+/** Announces `cinefilm:library-changed` when `running` goes from true to false: a scan or import just finished. */
+function useAnnounceWhenFinished(running) {
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    if (wasRunning.current && !running) announceLibraryChanged();
+    wasRunning.current = running;
+  }, [running]);
+}
 
 /**
  * The Library scan panel: status and counts, polled while a scan or a ratings refresh runs, plus "Scan now" and
@@ -24,6 +33,7 @@ export function useScan() {
   const [ratingsNotice, setRatingsNotice] = useState(null);
   const running = Boolean(data?.running);
   const ratingsRunning = Boolean(data?.ratingsRunning);
+  useAnnounceWhenFinished(running);
 
   // The same status carries the ratings refresh, so one poll follows whichever is running.
   useEffect(() => {
@@ -101,6 +111,7 @@ export function usePlexImport() {
   const [starting, setStarting] = useState(false);
   const [notice, setNotice] = useState(null);
   const running = Boolean(data?.running);
+  useAnnounceWhenFinished(running);
 
   // Poll quickly while an import runs, and slowly while Plex cannot be reached, so the panel recovers by itself.
   const unreachable = Boolean(data?.configured) && !running && !data.reachable;

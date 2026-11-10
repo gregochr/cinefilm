@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { announceLibraryChanged } from '../api/client.js';
 import { editionsApi, filmsApi } from '../api/resources.js';
 import { PROGRESS_INTERVAL_MS } from '../player/resume.js';
 
@@ -10,7 +11,8 @@ export const RETRY_MAX_MS = 30000;
  * Progress reporting and preference saving for one playing edition. No DOM: the caller
  * supplies `getPositionMs`. Reports every 10 s while `playing`, when playback pauses, and on
  * unmount. A position of 0 or less is never reported (a reloading source reads 0 and must not
- * overwrite the saved position), and a failed report is kept and retried with backoff.
+ * overwrite the saved position), and a failed report is kept and retried with backoff. When the player closes
+ * it announces `cinefilm:library-changed` once the final report has settled.
  */
 export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
   const getRef = useRef(getPositionMs);
@@ -63,7 +65,8 @@ export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
     return () => {
       closed.current = true;
       clearTimeout(retryTimer.current);
-      void report();
+      // Leaving the player: once the last position is saved, tell the search index its time-left is out of date.
+      void report().then(announceLibraryChanged, announceLibraryChanged);
     };
   }, [report]);
 

@@ -23,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 /**
  * Resume and watched on an edition split across two files: every position is an edition time (from the start of part
@@ -46,12 +47,15 @@ class PlaybackServicePartsTest {
     @Mock
     private PreferencesService preferences;
 
+    @Mock
+    private ApplicationEventPublisher events;
+
     private PlaybackService service;
     private Edition split;
 
     @BeforeEach
     void setUp() {
-        service = new PlaybackService(editions, states, preferences, CLOCK);
+        service = new PlaybackService(editions, states, preferences, CLOCK, events);
         Film film = film(7L, "The Two Towers", 2002, NOW);
         split = edition(film, EDITION_ID, "Extended Edition", 0, null);
         part("pt1.m4v", 1, 1L, PART_1 + 1_040, PART_1);

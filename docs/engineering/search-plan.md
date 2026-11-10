@@ -23,7 +23,7 @@ commits): **index**, **matching/ranking**, **desktop dropdown**, **iPhone**. Eac
 - **New endpoint `GET /api/search-index`** rather than stitching `/api/films` + `/api/collections` + people: one
   request, one ETag, and people/film counts don't exist anywhere else.
 - **Freshness by content hash, not event bookkeeping.** The server builds the index, hashes the serialised body
-  (SHA-256, first 16 hex) and returns it as a strong `ETag`; `If-None-Match` matching → `304`. Built on demand
+  (SHA-256, first 16 hex) and returns it as a weak `ETag`, so Tomcat still compresses it; `If-None-Match` matching → `304`. Built on demand
   inside a read transaction and memoised in a small `SearchIndexCache` that `ScanFinished`, `PlexImportFinished` and
   any playback/progress write invalidate (cheap: it only drops the memo). Correct even if an invalidation is
   missed, as long as the memo is dropped on those writes; the hash makes the client side trivially right.
