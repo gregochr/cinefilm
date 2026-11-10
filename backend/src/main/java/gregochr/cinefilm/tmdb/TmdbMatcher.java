@@ -69,6 +69,28 @@ public class TmdbMatcher {
         }
     }
 
+    /**
+     * Looks a film up by the id its file name carries: the {@code {tmdb-N}} tag fetches that movie directly, else the
+     * {@code {imdb-tt...}} tag is resolved through TMDB's find endpoint. Nothing is searched or scored: the tag is the
+     * owner's word.
+     *
+     * @param tmdbId the TMDB id tag, or null
+     * @param imdbId the IMDb id tag, or null
+     * @return the matched outcome, an {@link Status#UNAVAILABLE} one on an outage, or empty when no tag names a film
+     *     TMDB knows (the caller then searches by title)
+     */
+    public Optional<MatchOutcome> matchTagged(Long tmdbId, String imdbId) {
+        try {
+            Optional<MovieDetails> movie = tmdbId == null ? Optional.empty() : tmdb.movie(tmdbId);
+            if (movie.isEmpty() && imdbId != null) {
+                movie = tmdb.findMovieByImdbId(imdbId).flatMap(tmdb::movie);
+            }
+            return movie.map(m -> new MatchOutcome(Status.MATCHED, m, List.of()));
+        } catch (TmdbUnavailableException e) {
+            return Optional.of(new MatchOutcome(Status.UNAVAILABLE, null, List.of()));
+        }
+    }
+
     private MatchOutcome decide(TitleGuess guess, long durationMs) {
         Map<Long, SearchHit> hits = new LinkedHashMap<>();
         List<String> used = new ArrayList<>();

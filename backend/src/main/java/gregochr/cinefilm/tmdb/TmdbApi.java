@@ -48,4 +48,13 @@ public interface TmdbApi {
      * @throws TmdbUnavailableException when TMDB cannot answer
      */
     Optional<String> imdbId(long id);
+
+    /**
+     * Finds the film TMDB holds for an IMDb id, from {@code /3/find/{id}?external_source=imdb_id}.
+     *
+     * @param imdbId the IMDb id (for example {@code tt0113277})
+     * @return TMDB's movie id, or empty when TMDB has no film for it
+     * @throws TmdbUnavailableException when TMDB cannot answer
+     */
+    Optional<Long> findMovieByImdbId(String imdbId);
 }

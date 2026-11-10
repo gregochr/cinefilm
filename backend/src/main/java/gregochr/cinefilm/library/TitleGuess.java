@@ -37,6 +37,25 @@ public record TitleGuess(String title, Integer year) {
         return new TitleGuess(primary.title(), year != null ? year : tagYear);
     }
 
+    /**
+     * Guesses as {@link #of(String, String, Integer)} does, but reads a file name through {@link FileNameParser}, so
+     * an edition tag, a part suffix, an id tag or a scene-style name ("Rocky.IV.1985.1080p.BluRay.x264-SPARKS") never
+     * reaches TMDB as part of the title. An embedded {@code title} tag still wins when there is one.
+     *
+     * @param embeddedTitle the format {@code title} tag, or null
+     * @param fileName the file name (no folders)
+     * @param tagYear the year from the {@code date} tag, or null
+     * @param parsed what the path says
+     * @return the guess
+     */
+    public static TitleGuess of(String embeddedTitle, String fileName, Integer tagYear,
+                                FileNameParser.ParsedName parsed) {
+        if (embeddedTitle != null && !embeddedTitle.isBlank()) {
+            return of(embeddedTitle, fileName, tagYear);
+        }
+        return new TitleGuess(parsed.title(), parsed.year() != null ? parsed.year() : tagYear);
+    }
+
     private static TitleGuess split(String text) {
         Matcher matcher = TRAILING_YEAR.matcher(text);
         if (matcher.matches()) {

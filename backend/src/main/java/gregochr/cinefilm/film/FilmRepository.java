@@ -34,6 +34,10 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
     /** Every film matched to a TMDB id, oldest first. */
     List<Film> findByTmdbIdOrderByIdAsc(Long tmdbId);
 
+    /** Films with more than one edition (the ones that have a default to choose). */
+    @org.springframework.data.jpa.repository.Query("select f from Film f where size(f.editions) > 1 order by f.id")
+    List<Film> findWithSeveralEditions();
+
     /** Films in the given match state. */
     List<Film> findByMatchStatusOrderBySortTitle(MatchStatus status);
 

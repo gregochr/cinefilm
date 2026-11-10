@@ -94,7 +94,7 @@ class LibraryIngestRepairsTest extends ApiTestBase {
         ingest.addNew(found("Heat.m4v", 10), Playability.PLAYABLE, standard(), new TitleGuess("Heat", 1995),
             matched(heat(null)));
         Long keeper = films.findFirstByTmdbIdOrderByIdAsc(949L).orElseThrow().getId();
-        Long copyFile = add("Heat copy.m4v", standard());
+        Long copyFile = add("Heat - HD.m4v", standard());
         Film pending = mediaFiles.findById(copyFile).orElseThrow().getEdition().getFilm();
         Long copyEdition = mediaFiles.findById(copyFile).orElseThrow().getEdition().getId();
         FilmPreference played = new FilmPreference(pending.getId());
@@ -129,7 +129,7 @@ class LibraryIngestRepairsTest extends ApiTestBase {
         FilmPreference own = new FilmPreference(keeper);
         own.setQuality("720p");
         preferences.save(own);
-        Long copyFile = add("Heat copy.m4v", standard());
+        Long copyFile = add("Heat - HD.m4v", standard());
         Long pendingId = mediaFiles.findById(copyFile).orElseThrow().getEdition().getFilm().getId();
         FilmPreference other = new FilmPreference(pendingId);
         other.setQuality("original");

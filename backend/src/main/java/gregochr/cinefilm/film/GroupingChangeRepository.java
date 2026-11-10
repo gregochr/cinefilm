@@ -8,4 +8,7 @@ public interface GroupingChangeRepository extends JpaRepository<GroupingChange, 
 
     /** The newest 20 changes, newest first. */
     List<GroupingChange> findTop20ByOrderByHappenedAtDescIdDesc();
+
+    /** True when a line of this kind and text is already logged (a flag is written once, not on every scan). */
+    boolean existsByKindAndSummary(String kind, String summary);
 }

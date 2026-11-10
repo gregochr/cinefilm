@@ -1,5 +1,6 @@
 package gregochr.cinefilm.film;
 
+import java.util.Collection;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -19,6 +20,14 @@ public interface EditionRepository extends JpaRepository<Edition, Long> {
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("update Edition e set e.film = :target where e.id = :editionId")
     int moveOne(Long editionId, Film target);
+
+    /**
+     * Deletes editions by id in one statement (no cascade: the caller has already moved their files out and removed
+     * their playback state). The persistence context is flushed first and cleared afterwards.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("delete from Edition e where e.id in :ids")
+    int deleteByIds(Collection<Long> ids);
 
     /** How many editions a film has. */
     long countByFilmId(Long filmId);

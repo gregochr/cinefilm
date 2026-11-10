@@ -656,6 +656,13 @@ class FileNameParserTest {
     }
 
     @Test
+    void aFilmsOwnTitleIsComparedTheSameWayAsAFileName() {
+        assertThat(FileNameParser.comparisonTitle("Rocky IV")).isEqualTo(parse("Rocky.4.1985.m4v").comparisonTitle());
+        assertThat(FileNameParser.comparisonTitle("Léon: The Professional")).isEqualTo("leon the professional");
+        assertThat(FileNameParser.comparisonTitle(null)).isEmpty();
+    }
+
+    @Test
     void theCuttingOfAnEditionTagDoesNotAffectTheComparisonTitle() {
         assertThat(parse("Alien {edition-Director's Cut}.m4v").comparisonTitle()).isEqualTo("alien");
     }

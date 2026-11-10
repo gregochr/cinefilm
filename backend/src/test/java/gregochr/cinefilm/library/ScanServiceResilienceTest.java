@@ -42,12 +42,13 @@ class ScanServiceResilienceTest {
     private final TmdbApi tmdb = mock(TmdbApi.class);
     private final TmdbMatcher matcher = mock(TmdbMatcher.class);
     private final LibraryIngest ingest = mock(LibraryIngest.class);
+    private final LibraryGrouping grouping = mock(LibraryGrouping.class);
     private ScanService service;
 
     @BeforeEach
     void setUp() {
         service = new ScanService(new LibraryRoot(library.toString()), scanner, ffprobe, tmdb, matcher, ingest,
-            Runnable::run, CLOCK, new LibraryLock(), event -> { });
+            Runnable::run, CLOCK, new LibraryLock(), event -> { }, grouping);
         when(tmdb.enabled()).thenReturn(true);
         when(ingest.startRun("admin", CLOCK.instant())).thenReturn(5L);
         when(ingest.known()).thenReturn(Map.of());

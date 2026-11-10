@@ -171,6 +171,17 @@ public final class FileNameParser {
             compared[1], groupKey);
     }
 
+    /**
+     * Normalises a film's own title the way {@link ParsedName#comparisonTitle()} is, so "Rocky IV" and a file called
+     * "Rocky 4" compare equal.
+     *
+     * @param title a display title (a film's, or a parsed one)
+     * @return the comparison form
+     */
+    public static String comparisonTitle(String title) {
+        return compare(title == null ? "" : title)[0];
+    }
+
     private static String stripExtensions(String fileName) {
         String stem = fileName;
         Matcher matcher = VIDEO_EXTENSION.matcher(stem);

@@ -12,6 +12,7 @@ import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmPreference;
 import gregochr.cinefilm.film.FilmPreferenceRepository;
 import gregochr.cinefilm.film.FilmRepository;
+import gregochr.cinefilm.film.GroupingSource;
 import gregochr.cinefilm.film.MatchStatus;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
@@ -19,6 +20,7 @@ import gregochr.cinefilm.film.MediaFileRepository.Known;
 import gregochr.cinefilm.film.Playability;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.film.SubtitleStream;
+import gregochr.cinefilm.library.FileNameParser.ParsedName;
 import gregochr.cinefilm.library.LibraryScanner.FoundFile;
 import gregochr.cinefilm.person.Person;
 import gregochr.cinefilm.person.PersonRepository;
@@ -43,8 +45,9 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * The database side of a scan, one short transaction per operation so a slow probe or TMDB call never holds one
- * open. A file is identified by its path relative to the library root; nothing here ever deletes a film, an edition
- * or its watch history.
+ * open. A file is identified by its path relative to the library root. Nothing here deletes an edition or its watch
+ * history; a film is deleted only when its editions have all moved to another ({@link #merge}). Editions are deleted
+ * only by {@link EditionJoin}, after it has folded their watch state onto the edition that absorbs them.
  */
 @Service
 public class LibraryIngest {
@@ -53,6 +56,7 @@ public class LibraryIngest {
     private static final int NAME_MAX = 255;
     private static final int OVERVIEW_MAX = 4000;
     private static final int IMDB_ID_MAX = 16;
+    private static final int REFUSED_SCORE = 60;
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final FilmRepository films;
@@ -119,7 +123,11 @@ public class LibraryIngest {
     }
 
     /**
-     * Records a file seen for the first time. Two files matching one TMDB id become two editions of one film.
+     * Records a file seen for the first time. A file whose path says it is another part of an edition already known
+     * joins that film (no TMDB lookup was made for it; the scan's auto-resolve then joins the edition). Otherwise two
+     * files matching one TMDB id become two editions of one film, but only through the different-film guard: a match
+     * whose film already has files with a different comparison title is refused and the file stays in a film of its
+     * own, unmatched, with the TMDB film as its candidate.
      *
      * @param found the file on disk
      * @param playability whether it can be played
@@ -130,13 +138,20 @@ public class LibraryIngest {
     @Transactional
     public void addNew(FoundFile found, Playability playability, ProbeResult probe, TitleGuess guess,
                        MatchOutcome outcome) {
-        Film film = null;
-        if (outcome != null && outcome.status() == Status.MATCHED) {
-            film = films.findFirstByTmdbIdOrderByIdAsc(outcome.movie().id()).orElse(null);
+        ParsedName parsed = FileNameParser.parse(found.path());
+        Film film = partGroupFilm(found.path(), parsed);
+        boolean matched = outcome != null && outcome.status() == Status.MATCHED;
+        boolean refused = false;
+        if (film == null && matched) {
+            List<Film> sameTmdb = films.findByTmdbIdOrderByIdAsc(outcome.movie().id());
+            film = sameTmdb.stream().filter(f -> GroupingGuard.accepts(f, found.path())).findFirst().orElse(null);
+            refused = film == null && !sameTmdb.isEmpty();
         }
         if (film == null) {
             film = newFilm(found, probe, guess);
-            if (outcome != null && outcome.status() == Status.MATCHED) {
+            if (refused) {
+                markNeedsMatch(film, asCandidate(outcome));
+            } else if (matched) {
                 applyMovie(film, outcome.movie());
             } else if (outcome != null && outcome.status() == Status.NEEDS_MATCH) {
                 markNeedsMatch(film, outcome);
@@ -144,16 +159,69 @@ public class LibraryIngest {
         }
         Edition edition = new Edition();
         edition.setFilm(film);
-        edition.setName("Original");
+        edition.setName(editionName(parsed));
         edition.setYear(film.getYear());
         MediaFile file = new MediaFile();
         file.setEdition(edition);
         file.setAddedAt(found.createdAt());
+        file.setPartNumber(parsed.partTag() == null ? 1 : parsed.partTag());
         fill(file, found, playability, probe);
         edition.getMediaFiles().add(file);
         edition.recomputeRuntime();
         film.getEditions().add(edition);
         films.save(film);
+    }
+
+    /**
+     * True when a new file with this path would be another part of an edition we already have (so the scan makes no
+     * TMDB lookup for it): it carries a part number, and an auto-grouped edition of a film the owner has not settled
+     * holds files with the same folder, title, year and edition tag, every one of them part-numbered, none with the
+     * same number.
+     */
+    @Transactional(readOnly = true)
+    public boolean isPartOfKnownEdition(String path) {
+        return partGroupFilm(path, FileNameParser.parse(path)) != null;
+    }
+
+    private Film partGroupFilm(String path, ParsedName parsed) {
+        if (parsed.partTag() == null) {
+            return null;
+        }
+        String normal = path.replace('\\', '/');
+        int slash = normal.lastIndexOf('/');
+        List<MediaFile> neighbours = slash < 0 ? files.findRootOriginals()
+            : files.findOriginalsUnder(normal.substring(0, slash + 1) + "%");
+        for (MediaFile neighbour : neighbours) {
+            Edition edition = neighbour.getEdition();
+            if (edition.getFilm().isEditionsConfirmed() || edition.getGroupingSource() != GroupingSource.AUTO
+                || !FileNameParser.parse(neighbour.getPath()).groupKey().equals(parsed.groupKey())) {
+                continue;
+            }
+            List<Integer> tags = edition.originalParts().stream()
+                .map(p -> FileNameParser.parse(p.getPath()).partTag()).toList();
+            if (!tags.contains(null) && !tags.contains(parsed.partTag())) {
+                return edition.getFilm();
+            }
+        }
+        return null;
+    }
+
+    /** The edition's name: the file's edition tag, else a plain edition word in its title, else "Original". */
+    private static String editionName(ParsedName parsed) {
+        if (parsed.editionTag() != null) {
+            return parsed.editionTag();
+        }
+        return parsed.plainEdition() != null ? parsed.plainEdition() : "Original";
+    }
+
+    /** The match TMDB made, as the one candidate of a file the guard refused to fold. */
+    private static MatchOutcome asCandidate(MatchOutcome outcome) {
+        if (!outcome.candidates().isEmpty()) {
+            return new MatchOutcome(Status.NEEDS_MATCH, null, outcome.candidates());
+        }
+        MovieDetails movie = outcome.movie();
+        return new MatchOutcome(Status.NEEDS_MATCH, null, List.of(new Candidate(movie.id(), movie.title(),
+            movie.year(), movie.runtimeMinutes(), movie.posterPath(), REFUSED_SCORE)));
     }
 
     /**
@@ -203,12 +271,22 @@ public class LibraryIngest {
     public List<Pending> pending() {
         return films.findByMatchStatusOrderBySortTitle(MatchStatus.PENDING).stream()
             .filter(f -> !f.getEditions().isEmpty() && f.browsable())
-            .map(f -> new Pending(f.getId(), f.getTitle(), f.getYear(),
-                f.getEditions().get(0).getRuntimeMs()))
+            .map(f -> new Pending(f.getId(), f.getTitle(), f.getYear(), searchRuntimeMs(f.getEditions().get(0))))
             .toList();
     }
 
-    /** Applies the result of a retried lookup. A TMDB outage changes nothing. */
+    /** A part-numbered file is only a piece of the film, so its duration says nothing about the film's runtime. */
+    private static long searchRuntimeMs(Edition edition) {
+        boolean partNumbered = edition.originalParts().stream()
+            .anyMatch(p -> FileNameParser.parse(p.getPath()).partTag() != null);
+        return partNumbered ? 0 : edition.getRuntimeMs();
+    }
+
+    /**
+     * Applies the result of a retried lookup. A TMDB outage changes nothing. A film that matches one we already have is
+     * merged into it only through the different-film guard; otherwise it is left unmatched with the match as its
+     * candidate (which also stops it being split off and matched again on every scan).
+     */
     @Transactional
     public void applyOutcome(Long filmId, MatchOutcome outcome) {
         if (outcome.status() == Status.UNAVAILABLE) {
@@ -219,12 +297,18 @@ public class LibraryIngest {
             markNeedsMatch(film, outcome);
             return;
         }
-        Film existing = films.findFirstByTmdbIdOrderByIdAsc(outcome.movie().id()).orElse(null);
-        if (existing == null || existing.getId().equals(filmId)) {
+        List<Film> others = films.findByTmdbIdOrderByIdAsc(outcome.movie().id()).stream()
+            .filter(f -> !f.getId().equals(filmId)).toList();
+        if (others.isEmpty()) {
             applyMovie(film, outcome.movie());
             return;
         }
-        merge(filmId, existing.getId());
+        Film target = others.stream().filter(f -> GroupingGuard.accepts(f, film)).findFirst().orElse(null);
+        if (target == null) {
+            markNeedsMatch(film, asCandidate(outcome));
+            return;
+        }
+        merge(filmId, target.getId());
     }
 
     /**

@@ -239,6 +239,11 @@ class RatingsRefresherTest {
         public Optional<CollectionDetails> collection(long id) {
             throw new UnsupportedOperationException();
         }
+
+        @Override
+        public Optional<Long> findMovieByImdbId(String imdbId) {
+            throw new UnsupportedOperationException();
+        }
     }
 
     private void due(Long... ids) {
