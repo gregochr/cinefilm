@@ -4,6 +4,7 @@ import {
   SESSION_EXPIRED_EVENT,
   SIGNED_IN_EVENT,
   announceSignedIn,
+  announceSignedOut,
   del,
   get,
   post,
@@ -158,5 +159,16 @@ describe('helpers', () => {
       '?q=heat&sort=title',
     );
     expect(buildFilmsQuery({})).toBe('');
+  });
+});
+
+describe('announceSignedOut', () => {
+  it('dispatches the session-expired event with the signed-out reason', () => {
+    const handler = vi.fn();
+    window.addEventListener(SESSION_EXPIRED_EVENT, handler);
+    announceSignedOut();
+    window.removeEventListener(SESSION_EXPIRED_EVENT, handler);
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler.mock.calls[0][0].detail).toEqual({ reason: 'signed-out' });
   });
 });

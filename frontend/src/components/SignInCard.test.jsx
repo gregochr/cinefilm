@@ -71,4 +71,13 @@ describe('SignInCard', () => {
     render(<SignInCard onSignIn={vi.fn()} error={null} />);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+
+  it('shows the signed-out copy for the signed-out reason', () => {
+    setup({ reason: 'signed-out' });
+    const dialog = screen.getByRole('dialog', { name: 'Signed out' });
+    expect(dialog).toHaveTextContent(
+      'You’ve signed out of CineFilm. Enter the password to sign back in.',
+    );
+    expect(dialog).not.toHaveTextContent('while you were away');
+  });
 });

@@ -3,17 +3,25 @@ import { SESSION_EXPIRED_EVENT, announceSignedIn } from '../api/client.js';
 import { sessionApi } from '../api/resources.js';
 
 /**
- * Tracks whether the session has expired (any 401 from the API) and signs in again.
- * Nothing navigates: the route and playback position stay exactly where they were, and
- * resources reload once sign-in succeeds.
+ * Tracks whether the session has expired (any 401 from the API, or an explicit sign-out) and
+ * signs in again. Nothing navigates: the route and playback position stay exactly where they
+ * were, and resources reload once sign-in succeeds. `reason` is 'expired' or 'signed-out'; the
+ * first one recorded wins until the next successful sign-in.
  */
 export function useSession() {
   const [expired, setExpired] = useState(false);
+  const [reason, setReason] = useState('expired');
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const onExpired = () => setExpired(true);
+    const onExpired = (event) => {
+      // Polling 401s after a sign-out must not flip the copy back to "expired".
+      setExpired((wasExpired) => {
+        if (!wasExpired) setReason(event.detail?.reason ?? 'expired');
+        return true;
+      });
+    };
     window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
   }, []);
@@ -24,6 +32,7 @@ export function useSession() {
     try {
       await sessionApi.signIn(password);
       setExpired(false);
+      setReason('expired');
       announceSignedIn();
       return true;
     } catch {
@@ -34,5 +43,5 @@ export function useSession() {
     }
   }, []);
 
-  return { expired, error, submitting, signIn };
+  return { expired, reason, error, submitting, signIn };
 }

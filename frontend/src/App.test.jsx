@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installFetch, renderApp, respond } from './test/mockApi.jsx';
@@ -91,5 +91,36 @@ describe('App session expiry', () => {
     );
     expect(screen.getByRole('dialog', { name: 'Signed out' })).toBeInTheDocument();
     expect(within(card).getByLabelText('Password')).toHaveValue('nope');
+  });
+
+  it('shows the signed-out copy after signing out from Admin, and keeps it through later 401s', async () => {
+    let signedOut = false;
+    installFetch((method, url) => {
+      if (method === 'DELETE' && url === '/api/session') {
+        signedOut = true;
+        return respond(null, 204);
+      }
+      if (signedOut && url !== '/api/session') return respond(null, 401);
+      return null;
+    });
+    renderApp('/admin');
+    await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+    const card = await screen.findByRole('dialog', { name: 'Signed out' });
+    expect(card).toHaveTextContent(
+      'You’ve signed out of CineFilm. Enter the password to sign back in.',
+    );
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('cinefilm:session-expired'));
+    });
+    expect(screen.getByRole('dialog', { name: 'Signed out' })).toHaveTextContent(
+      'You’ve signed out of CineFilm.',
+    );
+  });
+
+  it('shows the expired copy for a plain 401', async () => {
+    installFetch((method, url) => (url === '/api/home' ? respond(null, 401) : null));
+    renderApp('/');
+    const card = await screen.findByRole('dialog', { name: 'Signed out' });
+    expect(card).toHaveTextContent('while you were away');
   });
 });

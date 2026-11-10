@@ -48,6 +48,7 @@ export default function App() {
       </Routes>
       {session.expired ? (
         <SignInCard
+          reason={session.reason}
           error={session.error}
           submitting={session.submitting}
           onSignIn={session.signIn}

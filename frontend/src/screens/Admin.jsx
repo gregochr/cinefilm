@@ -5,6 +5,7 @@ import { SkeletonBlock } from '../components/Skeleton.jsx';
 import TranscodingPanel from '../components/TranscodingPanel.jsx';
 import { ErrorState } from '../components/StateMessages.jsx';
 import { formatRuntime } from '../player/time.js';
+import { useSignOut } from '../state/useSignOut.js';
 import { useAttention, usePlexImport, useScan } from '../state/useAdmin.js';
 import {
   describeLastImport,
@@ -336,6 +337,30 @@ function TmdbMark() {
   );
 }
 
+function SessionPanel() {
+  const { signingOut, error, signOut } = useSignOut();
+  return (
+    <section className="admin__card" aria-labelledby="admin-session-title">
+      <div className="admin__head">
+        <h2 id="admin-session-title" className="admin__title">
+          Session
+        </h2>
+      </div>
+      <p className="admin__text">Signed in to this browser.</p>
+      <div className="admin__actions">
+        <Button variant="secondary" disabled={signingOut} onClick={signOut}>
+          {signingOut ? 'Signing out…' : 'Sign out'}
+        </Button>
+        {error ? (
+          <span className="admin__notice" role="status">
+            {error}
+          </span>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 export default function Admin() {
   const {
     scan,
@@ -392,6 +417,7 @@ export default function Admin() {
           onRecheck={plexImport.reload}
         />
         <TranscodingPanel />
+        <SessionPanel />
       </div>
       <p className="admin__credit">
         <TmdbMark />

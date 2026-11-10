@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SESSION_EXPIRED_EVENT } from '../api/client.js';
+import { SESSION_EXPIRED_EVENT, announceSignedOut } from '../api/client.js';
 import { useSession } from './useSession.js';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -45,5 +45,35 @@ describe('useSession', () => {
     });
     expect(result.current.submitting).toBe(false);
     expect(result.current.expired).toBe(false);
+  });
+
+  it('records the signed-out reason and keeps it when a plain expiry follows', () => {
+    const { result } = renderHook(() => useSession());
+    expect(result.current.reason).toBe('expired');
+    act(() => announceSignedOut());
+    expect(result.current.expired).toBe(true);
+    expect(result.current.reason).toBe('signed-out');
+    act(() => window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT)));
+    expect(result.current.expired).toBe(true);
+    expect(result.current.reason).toBe('signed-out');
+  });
+
+  it('a plain expiry records the expired reason', () => {
+    const { result } = renderHook(() => useSession());
+    act(() => window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT)));
+    expect(result.current.reason).toBe('expired');
+  });
+
+  it('a successful sign-in clears expired and resets the reason', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
+    const { result } = renderHook(() => useSession());
+    act(() => announceSignedOut());
+    await act(async () => {
+      expect(await result.current.signIn('right')).toBe(true);
+    });
+    expect(result.current.expired).toBe(false);
+    expect(result.current.reason).toBe('expired');
+    act(() => window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT)));
+    expect(result.current.reason).toBe('expired');
   });
 });

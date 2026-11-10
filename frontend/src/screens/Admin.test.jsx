@@ -328,11 +328,11 @@ describe('Admin: Films needing attention panel', () => {
 });
 
 describe('Admin: page', () => {
-  it('has the Admin heading, its three panels, and the TMDB credit', async () => {
+  it('has the Admin heading, its four panels, and the TMDB credit', async () => {
     installFetch();
     renderApp('/admin');
     expect(await screen.findByRole('heading', { level: 1, name: 'Admin' })).toBeInTheDocument();
-    expect(screen.getAllByRole('region')).toHaveLength(3);
+    expect(screen.getAllByRole('region')).toHaveLength(4);
     expect(
       screen.getByText('This product uses the TMDB API but is not endorsed or certified by TMDB.'),
     ).toBeInTheDocument();
@@ -480,5 +480,53 @@ describe('Admin: Transcoding panel', () => {
     expect(reads()).toBe(1);
     await act(() => vi.advanceTimersByTimeAsync(200));
     expect(reads()).toBe(2);
+  });
+});
+
+describe('Admin: Session panel', () => {
+  it('renders Sign out and signs out through the API', async () => {
+    const fetchMock = installFetch((m, url) =>
+      m === 'DELETE' && url === '/api/session' ? respond(null, 204) : null,
+    );
+    renderApp('/admin');
+    const panel = await screen.findByRole('region', { name: 'Session' });
+    expect(within(panel).getByText('Signed in to this browser.')).toBeInTheDocument();
+    await userEvent.click(within(panel).getByRole('button', { name: 'Sign out' }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) => url === '/api/session' && init?.method === 'DELETE',
+        ),
+      ).toBe(true),
+    );
+    const call = fetchMock.mock.calls.find(([, init]) => init?.method === 'DELETE');
+    expect(call[1].headers['X-CineFilm']).toBe('1');
+  });
+
+  it('is disabled and reads Signing out… while the request is in flight', async () => {
+    let finish;
+    installFetch((m, url) =>
+      m === 'DELETE' && url === '/api/session'
+        ? new Promise((resolve) => (finish = resolve))
+        : null,
+    );
+    // installFetch awaits the route result, so a pending promise holds the response.
+    renderApp('/admin');
+    await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+    const busy = await screen.findByRole('button', { name: 'Signing out…' });
+    expect(busy).toBeDisabled();
+    await act(async () => finish(respond(null, 204)));
+  });
+
+  it('shows a notice and re-enables the button when sign-out fails', async () => {
+    installFetch((m, url) =>
+      m === 'DELETE' && url === '/api/session' ? respond(null, 500) : null,
+    );
+    renderApp('/admin');
+    await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+    const notice = await screen.findByText("Couldn't sign out. Try again.");
+    expect(notice).toHaveAttribute('role', 'status');
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeEnabled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
