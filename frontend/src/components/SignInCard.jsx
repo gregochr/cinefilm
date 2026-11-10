@@ -20,7 +20,10 @@ export default function SignInCard({ reason = 'expired', error, submitting, onSi
   return (
     <div className="signin" role="dialog" aria-modal="true" aria-labelledby="signin-title">
       <form className="signin__card" onSubmit={submit}>
-        <LogoMark size={48} />
+        <div className="wordmark">
+          <LogoMark size={30} />
+          <span>CineFilm</span>
+        </div>
         <h2 id="signin-title" className="signin__title">
           Signed out
         </h2>

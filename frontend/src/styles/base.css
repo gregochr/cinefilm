@@ -105,7 +105,8 @@ p {
   flex: none;
   color: var(--cf-amber);
 }
-.header__wordmark {
+/* Shared by the header link and the sign-in card. */
+.wordmark {
   display: inline-flex;
   align-items: center;
   gap: 12px;

@@ -19,10 +19,11 @@ describe('SignInCard', () => {
     );
   });
 
-  it('shows the 48px mark above the title', () => {
+  it('shows the 30px mark beside the visible CineFilm wordmark', () => {
     setup();
     const dialog = screen.getByRole('dialog', { name: 'Signed out' });
-    expect(within(dialog).getByTestId('logo-mark')).toHaveAttribute('width', '48');
+    expect(within(dialog).getByTestId('logo-mark')).toHaveAttribute('width', '30');
+    expect(within(dialog).getByText('CineFilm')).toBeVisible();
   });
 
   it('focuses the password field when it appears', () => {
