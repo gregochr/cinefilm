@@ -126,6 +126,23 @@ class StateCarryTest {
     }
 
     @Test
+    void theEditionsThatReceiveFilesFromAnUncarriableEditionAreReported() {
+        Old unknown = new Old(List.of(1L, 3L), Arrays.asList(100 * MIN, null), resume(40 * MIN), null);
+        Old markerOnly = new Old(List.of(4L), Arrays.asList((Long) null), null, MIN);
+        Old nothing = new Old(List.of(5L), Arrays.asList((Long) null), null, null);
+        Old fine = ab(resume(MIN), null);
+        HashMap<Long, Long> targets = new HashMap<>();
+        targets.put(1L, 8L);
+        targets.put(3L, null);
+        targets.put(4L, 7L);
+        targets.put(5L, 6L);
+        targets.put(2L, 9L);
+
+        assertThat(StateCarry.uncarried(List.of(unknown, markerOnly, nothing, fine), targets))
+            .containsExactlyInAnyOrder(8L, 7L);
+    }
+
+    @Test
     void anEditionWithNothingToCarryAddsNoPiece() {
         assertThat(StateCarry.split(List.of(ab(null, null)), Map.of(1L, 8L, 2L, 9L))).isEmpty();
     }

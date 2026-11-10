@@ -208,6 +208,7 @@ public class EditionArranger {
             moves.computeIfAbsent(newEditionIds.get(i), k -> new ArrayList<>()).add(notThis.get(i));
         }
         Map<Long, List<StateCarry.Piece>> pieces = StateCarry.split(olds, targetOfFile);
+        Set<Long> uncarried = StateCarry.uncarried(olds, targetOfFile);
         moves.forEach((target, ids) -> files.moveToEdition(ids, editions.getReferenceById(target)));
 
         List<Long> touched = new ArrayList<>(targets);
@@ -215,7 +216,8 @@ public class EditionArranger {
         for (int i = 0; i < touched.size(); i++) {
             String name = i < editionCount ? request.editions().get(i).name().strip() : ORIGINAL;
             Long id = touched.get(i);
-            StateCarry.Result carried = i < editionCount ? StateCarry.land(pieces.getOrDefault(id, List.of()),
+            boolean carry = i < editionCount && !uncarried.contains(id);
+            StateCarry.Result carried = carry ? StateCarry.land(pieces.getOrDefault(id, List.of()),
                 StateCarry.inPlayOrder(partOf, newFiles.get(id)), timelineMs) : null;
             settle(id, name, partOf, filesBefore.get(id), carried);
         }

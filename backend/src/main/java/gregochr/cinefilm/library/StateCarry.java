@@ -5,9 +5,11 @@ import gregochr.cinefilm.library.StateFolding.Source;
 import gregochr.cinefilm.library.StateFolding.State;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Carries playback state and credits markers from the editions as they were to the editions as the owner arranged
@@ -98,6 +100,30 @@ final class StateCarry {
             }
         }
         return pieces;
+    }
+
+    /**
+     * The new editions that receive a file from an old edition whose state or marker could not be carried because a
+     * file has no known duration. For those the caller keeps what the edition has (its own state clamped to the new
+     * runtime) instead of treating "nothing was carried" as "there is no state".
+     *
+     * @param olds the old editions
+     * @param targetOfFile the new edition of each file, null for a file that leaves the film
+     * @return the ids of those new editions
+     */
+    static Set<Long> uncarried(List<Old> olds, Map<Long, Long> targetOfFile) {
+        Set<Long> targets = new HashSet<>();
+        for (Old old : olds) {
+            if ((old.state() != null || old.markerMs() != null) && !usable(old.durations())) {
+                old.fileIds().forEach(file -> {
+                    Long target = targetOfFile.get(file);
+                    if (target != null) {
+                        targets.add(target);
+                    }
+                });
+            }
+        }
+        return targets;
     }
 
     private static void add(Map<Long, List<Piece>> pieces, Long target, Piece piece) {

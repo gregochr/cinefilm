@@ -660,4 +660,35 @@ class EditionArrangerTest extends ApiTestBase {
         assertThat(states.findById(editionId(film, 0))).get().extracting(PlaybackState::getPositionMs)
             .isEqualTo(40 * MIN);
     }
+
+    @Test
+    void theKeptFileOfAnEditionWithAnUnknownDurationFileKeepsItsResumePosition() {
+        Film film = partlyUnknown(40);
+        List<MediaFile> parts = film.getEditions().get(0).originalParts();
+
+        arranger.save(film.getId(), new SaveRequest(List.of(ed(editionId(film, 0), "Original", true,
+            f(parts.get(0).getId(), null))), List.of(parts.get(1).getId())));
+
+        assertThat(states.findById(editionId(film, 0))).get().extracting(PlaybackState::getPositionMs)
+            .isEqualTo(40 * MIN);
+    }
+
+    @Test
+    void anEmptiedEditionWithAnUnknownDurationStillDropsItsStateWhileTheSurvivorKeepsItsOwn() {
+        Film built = film(null, "Heat", 1995, NOW);
+        timed(edition(built, null, "Original", 100 * MIN, null), "Heat - pt1.m4v", 100, 1);
+        MediaFile unknown = timed(edition(built, null, "Original", 50 * MIN, null), "Heat - pt2.m4v", 50, 1);
+        unknown.setDurationMs(null);
+        Film film = save(built);
+        saveState(state(film.getEditions().get(0), 30 * MIN, false, NOW, null));
+        saveState(state(film.getEditions().get(1), 20 * MIN, false, NOW, null));
+
+        arranger.save(film.getId(), new SaveRequest(List.of(ed(editionId(film, 0), "Original", true,
+            f(fileId(film, 0), 1), f(fileId(film, 1), 2))), List.of()));
+
+        assertThat(editions.findById(editionId(film, 1))).isEmpty();
+        assertThat(states.findById(editionId(film, 1))).isEmpty();
+        assertThat(states.findById(editionId(film, 0))).get().extracting(PlaybackState::getPositionMs)
+            .isEqualTo(30 * MIN);
+    }
 }
