@@ -182,6 +182,7 @@ describe('groups and rows', () => {
   });
 
   it('title rows use the small poster size', async () => {
+    ready(prepareIndex(raw({ films: [{ id: 202, t: 'War Horse', p: '/horse.jpg' }] })));
     const { user, box } = setup();
     await user.type(box, 'war horse');
     const img = within(screen.getByRole('option', { name: /War Horse/ })).getByRole(
@@ -221,6 +222,7 @@ describe('groups and rows', () => {
     expect(row).not.toHaveTextContent('Star Wars Collection');
     expect(row).toHaveTextContent('Collection · 2 of 9 films');
     expect(within(row).getByTestId('fan')).toBeInTheDocument();
+    expect(within(row).getAllByTestId('fan-poster')).toHaveLength(2);
   });
 
   it('people rows: initials, role and film count (1 film singular)', async () => {

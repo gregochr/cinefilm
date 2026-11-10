@@ -26,6 +26,9 @@ export function Highlighted({ text, ranges = [] }) {
   return <>{parts}</>;
 }
 
+/** Two slots for the small fan; a collection has at least two films, so one with no artwork gets placeholders. */
+const fanSlots = (paths) => [paths[0] ?? null, paths[1] ?? null];
+
 function Lead({ row }) {
   const { item, groupKey } = row;
   if (groupKey === 'titles') {
@@ -44,7 +47,7 @@ function Lead({ row }) {
   if (groupKey === 'collections') {
     return (
       <span className="search-row__fan">
-        <CollectionFan posters={item.posterPaths.slice(0, 2)} seed={item.id} name={item.name} />
+        <CollectionFan posters={fanSlots(item.posterPaths)} seed={item.id} name={item.name} />
       </span>
     );
   }
