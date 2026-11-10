@@ -551,7 +551,7 @@ class EditionJoinTest extends ApiTestBase {
         Film one = film("Towers", MatchStatus.MATCHED, "Towers - pt1.m4v", 90);
         Film two = film("Towers 2", MatchStatus.PENDING, "Towers - pt2.m4v", 110);
         Edition absorbed = two.getEditions().get(0);
-        MediaFile stray = TestData.file(absorbed, "Towers - extra.m4v");
+        MediaFile stray = TestData.file(absorbed, "Towers - pt3.m4v");
         em.persist(stray);
         em.flush();
         Long first = fileId(one);

@@ -219,13 +219,36 @@ public class EditionJoin {
     private void refuseIfAnAbsorbedEditionKeepsFiles(List<MediaFile> parts, List<Long> orderedFileIds) {
         Long survivor = parts.get(0).getEdition().getId();
         Set<Long> absorbed = new LinkedHashSet<>();
-        parts.forEach(p -> absorbed.add(p.getEdition().getId()));
+        Set<Long> filmIds = new LinkedHashSet<>();
+        parts.forEach(p -> {
+            absorbed.add(p.getEdition().getId());
+            filmIds.add(p.getEdition().getFilm().getId());
+        });
         absorbed.remove(survivor);
+        refuseIfAFilmHoldsAnotherTitle(parts.get(0), filmIds);
         for (Long editionId : absorbed) {
             for (MediaFile file : editions.findById(editionId).orElseThrow().getMediaFiles()) {
                 if (file.getKind() != MediaKind.ORIGINAL || !orderedFileIds.contains(file.getId())) {
                     throw new IllegalArgumentException("Edition " + editionId + " still holds file " + file.getId()
                         + " that is not part of the join");
+                }
+            }
+        }
+    }
+
+    /** Joining across films merges them whole, so no film involved may hold a file with another title than part 1. */
+    private void refuseIfAFilmHoldsAnotherTitle(MediaFile first, Set<Long> filmIds) {
+        if (filmIds.size() < 2) {
+            return;
+        }
+        String title = FileNameParser.parse(first.getPath()).comparisonTitle();
+        for (Film film : films.findAllById(filmIds)) {
+            for (Edition edition : film.getEditions()) {
+                for (MediaFile file : edition.originalParts()) {
+                    if (!FileNameParser.parse(file.getPath()).comparisonTitle().equals(title)) {
+                        throw new IllegalArgumentException("Film " + film.getId() + " also holds file " + file.getId()
+                            + " with another title, so its films cannot be merged");
+                    }
                 }
             }
         }

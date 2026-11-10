@@ -42,10 +42,7 @@ public final class EditionGrouper {
         for (FileFact fact : facts) {
             byKey.computeIfAbsent(fact.filmKey(), k -> new ArrayList<>()).add(fact);
         }
-        Map<Long, Set<String>> keysOfFilm = new LinkedHashMap<>();
-        for (FileFact fact : facts) {
-            keysOfFilm.computeIfAbsent(fact.filmId(), k -> new HashSet<>()).add(fact.filmKey());
-        }
+        Map<Long, Set<String>> keysOfFilm = keysOfFilms(facts);
         List<List<Long>> plans = new ArrayList<>();
         for (Map.Entry<String, List<FileFact>> entry : byKey.entrySet()) {
             List<FileFact> group = entry.getValue();
@@ -72,6 +69,15 @@ public final class EditionGrouper {
         return plans;
     }
 
+    /** For each film, the film keys (folder, title, year) of all its original files. */
+    private static Map<Long, Set<String>> keysOfFilms(List<FileFact> facts) {
+        Map<Long, Set<String>> keysOfFilm = new LinkedHashMap<>();
+        for (FileFact fact : facts) {
+            keysOfFilm.computeIfAbsent(fact.filmId(), k -> new HashSet<>()).add(fact.filmKey());
+        }
+        return keysOfFilm;
+    }
+
     /**
      * The files to join into one edition, each list in play order (the first file's edition survives).
      *
@@ -85,9 +91,10 @@ public final class EditionGrouper {
             byKey.computeIfAbsent(fact.parsed().groupKey(), k -> new ArrayList<>()).add(fact);
             filesPerEdition.merge(fact.editionId(), 1L, Long::sum);
         }
+        Map<Long, Set<String>> keysOfFilm = keysOfFilms(facts);
         List<List<Long>> plans = new ArrayList<>();
         for (List<FileFact> group : byKey.values()) {
-            List<FileFact> ordered = joinable(group, filesPerEdition);
+            List<FileFact> ordered = joinable(group, filesPerEdition, keysOfFilm);
             if (ordered != null) {
                 plans.add(ordered.stream().map(FileFact::fileId).toList());
             }
@@ -96,8 +103,10 @@ public final class EditionGrouper {
     }
 
     /** The group sorted by part, or null when it must not be joined. */
-    private static List<FileFact> joinable(List<FileFact> group, Map<Long, Long> filesPerEdition) {
+    private static List<FileFact> joinable(List<FileFact> group, Map<Long, Long> filesPerEdition,
+                                           Map<Long, Set<String>> keysOfFilm) {
         Set<Long> editions = new LinkedHashSet<>();
+        Set<Long> filmIds = new LinkedHashSet<>();
         Map<Long, Long> inGroup = new LinkedHashMap<>();
         long survivor = group.stream().min(Comparator.comparingInt((FileFact f) -> f.parsed().partTag() == null
             ? 0 : f.parsed().partTag()).thenComparingLong(FileFact::fileId)).orElseThrow().editionId();
@@ -110,9 +119,15 @@ public final class EditionGrouper {
                 return null;
             }
             editions.add(fact.editionId());
+            filmIds.add(fact.filmId());
             inGroup.merge(fact.editionId(), 1L, Long::sum);
         }
         if (group.size() < 2 || editions.size() < 2) {
+            return null;
+        }
+        // Joining across films merges the films whole, so no film involved may hold another title.
+        String key = group.get(0).filmKey();
+        if (filmIds.size() > 1 && !filmIds.stream().allMatch(id -> keysOfFilm.get(id).equals(Set.of(key)))) {
             return null;
         }
         // Every file of every edition involved must be in the group: nothing else gets swept into the join or lost.
