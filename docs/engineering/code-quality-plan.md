@@ -63,6 +63,10 @@ duplication, smells) on new code only. Their numbers predict the shape of SonarC
 
 ### Phase 1 — CodeQL: clear the baseline, then gate
 
+**Done 2026-11-10** (PR #54, ruleset added and proven with probe PR #56). None of the five high alerts was
+exploitable: two got cheap hardening (`CutList` bounds, the MP4 edit-list loop) and five alerts in all were dismissed
+with reasons, recorded in `dev-and-testing.md` "CodeQL". The brief below is kept as the record of what was asked.
+
 - **Triage each of the 5 high alerts before changing code.** For each: is the tainted value attacker-controlled
   after authentication, and is it already constrained? Fix real ones (canonicalise and check the resolved path stays
   under its root; bounds-check the index; widen the loop variable). `spring-disabled-csrf-protection` is expected to
@@ -144,8 +148,11 @@ real alert rate is known; a routine that fires on an empty queue every week is n
 
 ## 5. Order and dependencies
 
-1 → 2 → 3 are independent and can run in any order; 1 goes first because it carries the only high-severity
-findings. 4 waits for the owner's SonarCloud steps and can slot in whenever they are done. 5 is last.
+1 → 2 → 3 are independent and can run in any order; 1 went first because it carried the only high-severity
+findings. **Revised 2026-11-10: 4 runs next, before 2 and 3.** The owner has done the SonarQube Cloud steps
+(`SONAR_TOKEN` is set for Actions and Dependabot) and Automatic Analysis is already off, so nothing is analysed until
+phase 4 lands. Automatic Analysis measured 105 open issues on `b1f52ae` (71 smells, 25 vulnerabilities, 9 bugs; 73
+in shell scripts, none in Java, which it did not appear to analyse). 5 is last.
 
 ## 6. Open points
 
