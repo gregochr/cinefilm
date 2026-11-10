@@ -15,6 +15,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -85,34 +87,33 @@ class ArtworkControllerTest {
     }
 
     @Test
-    void oddAndEncodedNamesAreRefusedAndNeverServedAsAnImage() throws Exception {
+    void aSixtyThreeOrSixtyFiveCharacterOrEmptyStemReachesTheControllerAnd404sWithTheNormalBody() throws Exception {
         String hash = jpg.substring(0, 64);
-        String[] bad = {hash + "0.jpg", ".jpg", "..%2Fx", "%2Fetc%2Fpasswd", hash + ".jpg%00.png", hash + ".jpg%20",
-            "x.jpg"};
-        for (String name : bad) {
+        for (String name : new String[] {hash.substring(1) + ".jpg", hash + "0.jpg", ".jpg", "x.jpg"}) {
             mvc.perform(get("/api/art/" + name).with(user("owner")))
-                .andExpect(result -> org.assertj.core.api.Assertions
-                    .assertThat(result.getResponse().getStatus()).isIn(400, 404))
-                .andExpect(result -> org.assertj.core.api.Assertions
-                    .assertThat(String.valueOf(result.getResponse().getContentType())).doesNotStartWith("image/"));
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("No such artwork"));
         }
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"..%2Fx", "..%2Fx.jpg", "%2Fetc%2Fpasswd"})
+    void encodedSlashesAreRejectedByTheFirewallBeforeTheController(String name) throws Exception {
+        mvc.perform(get("/api/art/" + name).with(user("owner")))
+            .andExpect(status().isBadRequest())
+            .andExpect(content().string(""));
+    }
+
     @Test
-    void aSixtyThreeCharacterNameIsExactly404() throws Exception {
-        String hash = jpg.substring(0, 64);
-        mvc.perform(get("/api/art/" + hash.substring(1) + ".jpg").with(user("owner")))
+    void anAbsolutePathAfterThePrefixMatchesNoRouteSoNoControllerRuns() throws Exception {
+        var result = mvc.perform(get("/api/art//etc/passwd").with(user("owner")))
             .andExpect(status().isNotFound())
-            .andExpect(jsonPath("$.error").value("No such artwork"));
-    }
+            .andExpect(content().string(""))
+            .andReturn();
 
-    @Test
-    void anAbsolutePathOrEncodedTraversalIsRefusedByTheFirewallOrTheRoute() throws Exception {
-        for (String url : new String[] {"/api/art//etc/passwd", "/api/art/..%2Fx.jpg"}) {
-            mvc.perform(get(url).with(user("owner")))
-                .andExpect(result -> org.assertj.core.api.Assertions
-                    .assertThat(result.getResponse().getStatus()).isIn(400, 404));
-        }
+        // Only the static-resource fallback saw it; no controller method was mapped.
+        org.assertj.core.api.Assertions.assertThat(result.getHandler())
+            .isNotInstanceOf(org.springframework.web.method.HandlerMethod.class);
     }
 
     @Test

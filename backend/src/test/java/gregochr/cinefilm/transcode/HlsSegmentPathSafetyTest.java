@@ -14,6 +14,7 @@ import gregochr.cinefilm.transcode.SessionFakes.FakeTranscoder;
 import gregochr.cinefilm.transcode.SessionFakes.MutableClock;
 import gregochr.cinefilm.transcode.SessionFakes.ScriptedWaiter;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,12 +28,17 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /**
  * The segment route from the URL to the file path with nothing mocked between the controller and the manager: a
  * request can only ever name a known session, a known rung and a segment inside the cut list, so a traversal attempt
  * in any of the three variables is a 404 and never reads a file outside the session folder.
+ *
+ * <p>Two kinds of rejection are told apart. An application-level rejection matches the route, reaches the handler
+ * and carries the application's own error body. A route-level rejection (a value with a {@code /} in it, or an empty
+ * one) matches no route, so no handler runs and the body is empty. The handler check fails if routing changes.
  */
 class HlsSegmentPathSafetyTest {
 
@@ -70,6 +76,25 @@ class HlsSegmentPathSafetyTest {
             .setControllerAdvice(new ApiExceptionHandler()).build();
     }
 
+    private MvcResult segment(String session, String rung, String file) throws Exception {
+        return mvc.perform(get("/api/sessions/{id}/{rung}/{file}", session, rung, file)).andReturn();
+    }
+
+    private void assertRejectedByTheApplication(MvcResult result, String message) throws Exception {
+        assertThat(result.getHandler()).as("the request reached the controller").isNotNull();
+        assertThat(result.getResponse().getStatus()).isEqualTo(404);
+        assertThat(result.getResponse().getContentAsString()).isEqualTo("{\"error\":\"" + message + "\"}")
+            .doesNotContain(SECRET);
+        assertThat(transcoder.plans).as("no encoder was started").hasSize(1);
+    }
+
+    private void assertRejectedByTheRoute(MvcResult result) throws Exception {
+        assertThat(result.getHandler()).as("no handler is mapped to the request").isNull();
+        assertThat(result.getResponse().getStatus()).isEqualTo(404);
+        assertThat(result.getResponse().getContentAsString()).isEmpty();
+        assertThat(transcoder.plans).as("no encoder was started").hasSize(1);
+    }
+
     @Test
     void aCompleteSegmentOfAKnownSessionIsServed() throws Exception {
         mvc.perform(get("/api/sessions/{id}/{rung}/{file}", id, "original", "seg-0.ts"))
@@ -78,42 +103,58 @@ class HlsSegmentPathSafetyTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"..", "../secret.ts", "..%2Fsecret.ts", "seg-0.ts/../../secret.ts", "seg-0.ts/..",
-        "/etc/passwd", "seg-0.TS", "seg-0.ts ", "seg--1.ts", "seg-1000000.ts", "secret.ts", "seg-0.ts%00.jpg"})
-    void aTraversalOrMalformedFileNameIs404AndNeverAFileOutsideTheSession(String file) throws Exception {
-        mvc.perform(get("/api/sessions/{id}/{rung}/{file}", id, "original", file))
-            .andExpect(status().isNotFound())
-            .andExpect(result -> assertThat(result.getResponse().getContentAsString()).doesNotContain(SECRET));
+    @ValueSource(strings = {"..", "..%2Fsecret.ts", "..%2F..", "seg-0.TS", "seg-0.ts ", "seg--1.ts",
+        "seg-1000000.ts", "secret.ts", "seg-0.ts%00.jpg", "."})
+    void aFileNameThatIsNotASegmentIsRejectedByTheServiceAs404NoSuchSegment(String file) throws Exception {
+        assertRejectedByTheApplication(segment(id, "original", file), "No such segment");
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"..", "../..", "..%2F..", "../" + "original", "/etc", "ORIGINAL", "original/..", "999p",
-        "480p", ""})
-    void aTraversalOrUnknownRungIs404AndNeverAFileOutsideTheSession(String rung) throws Exception {
-        mvc.perform(get("/api/sessions/{id}/{rung}/{file}", id, rung, "seg-0.ts"))
-            .andExpect(status().isNotFound())
-            .andExpect(result -> assertThat(result.getResponse().getContentAsString()).doesNotContain(SECRET));
+    @ValueSource(strings = {"..", "..%2Fsecret.ts", "..%2F..", "ORIGINAL", "999p", "480p", ".", "seg-0.ts"})
+    void aRungThatIsNotOneOfTheSessionsIsRejectedAs404NoSuchSegment(String rung) throws Exception {
+        assertRejectedByTheApplication(segment(id, rung, "seg-0.ts"), "No such segment");
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"..", "../hls/" + "x", "..%2F", ".", "not-a-uuid", "00000000-0000-0000-0000-000000000002",
-        "00000000-0000-0000-0000-000000000001/..", "00000000-0000-0000-0000-00000000000G"})
-    void aTraversalOrUnknownSessionIdIs404AndNeverAFileOutsideTheSession(String session) throws Exception {
-        mvc.perform(get("/api/sessions/{id}/{rung}/{file}", session, "original", "seg-0.ts"))
-            .andExpect(status().isNotFound())
-            .andExpect(result -> assertThat(result.getResponse().getContentAsString()).doesNotContain(SECRET));
+    @ValueSource(strings = {"..", "..%2Fsecret.ts", "..%2F..", "not-a-uuid", "00000000-0000-0000-0000-000000000002",
+        "00000000-0000-0000-0000-00000000000G", ".", "ORIGINAL"})
+    void aSessionIdThatIsNotALiveSessionIsRejectedAs404NoSuchSession(String session) throws Exception {
+        assertRejectedByTheApplication(segment(session, "original", "seg-0.ts"), "No such session");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"seg-100.ts", "seg-999999.ts"})
+    void aSegmentNumberBeyondTheCutListIsRejectedByTheManagerAs404NoSuchSegment(String file) throws Exception {
+        assertRejectedByTheApplication(segment(id, "original", file), "No such segment");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"../secret.ts", "seg-0.ts/../../secret.ts", "seg-0.ts/..", "/etc/passwd", "../..",
+        "../original", "/etc", "original/..", "", "../hls/x"})
+    void aFileValueThatSpansPathSegmentsOrIsEmptyMatchesNoRoute(String file) throws Exception {
+        assertRejectedByTheRoute(segment(id, "original", file));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"../secret.ts", "seg-0.ts/../../secret.ts", "seg-0.ts/..", "/etc/passwd", "../..",
+        "../original", "/etc", "original/..", "", "../hls/x"})
+    void aRungValueThatSpansPathSegmentsOrIsEmptyMatchesNoRoute(String rung) throws Exception {
+        assertRejectedByTheRoute(segment(id, rung, "seg-0.ts"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"../secret.ts", "seg-0.ts/../../secret.ts", "seg-0.ts/..", "/etc/passwd", "../..",
+        "../original", "/etc", "original/..", "", "../hls/x", "00000000-0000-0000-0000-000000000001/.."})
+    void aSessionIdValueThatSpansPathSegmentsOrIsEmptyMatchesNoRoute(String session) throws Exception {
+        assertRejectedByTheRoute(segment(session, "original", "seg-0.ts"));
     }
 
     @Test
-    void aSegmentNumberBeyondTheCutListIsA404WithTheNormalBodyAndStartsNoEncoder() throws Exception {
-        mvc.perform(get("/api/sessions/{id}/{rung}/{file}", id, "original", "seg-100.ts"))
-            .andExpect(status().isNotFound())
-            .andExpect(jsonPath("$.error").value("No such segment"));
-        mvc.perform(get("/api/sessions/{id}/{rung}/{file}", id, "original", "seg-999999.ts"))
-            .andExpect(status().isNotFound())
-            .andExpect(jsonPath("$.error").value("No such segment"));
+    void anEncodedSlashInTheFileNameReachesTheServiceWhichRejectsIt() throws Exception {
+        MvcResult result = mvc.perform(get(URI.create("/api/sessions/" + id + "/original/..%2Fsecret.ts")))
+            .andReturn();
 
-        assertThat(transcoder.plans).hasSize(1);
+        assertRejectedByTheApplication(result, "No such segment");
     }
 
     @Test
