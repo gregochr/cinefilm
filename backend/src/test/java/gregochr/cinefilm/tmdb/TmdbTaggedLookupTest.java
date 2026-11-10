@@ -3,8 +3,8 @@ package gregochr.cinefilm.tmdb;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
@@ -88,7 +88,8 @@ class TmdbTaggedLookupTest {
         assertThat(outcome.status()).isEqualTo(Status.MATCHED);
         assertThat(outcome.movie().id()).isEqualTo(949);
         assertThat(outcome.candidates()).isEmpty();
-        verify(tmdb, never()).search(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(tmdb).movie(949);
+        verifyNoMoreInteractions(tmdb);
     }
 
     @Test

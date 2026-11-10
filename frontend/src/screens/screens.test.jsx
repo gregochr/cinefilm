@@ -384,7 +384,8 @@ describe('Player', () => {
       expect(player).toHaveClass('player--hidden');
       fireEvent.mouseMove(player);
       expect(player).not.toHaveClass('player--hidden');
-      fireEvent.keyDown(player, { key: 'q' });
+      expect(player).toHaveFocus();
+      fireEvent.keyDown(document.activeElement, { key: 'q' });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(5000);
       });

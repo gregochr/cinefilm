@@ -7,8 +7,8 @@ import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.config.BadRequestException;
@@ -174,7 +174,8 @@ class PreferencesServiceTest {
         assertThatThrownBy(() -> service.update(FILM_ID, new PreferencesRequest(999L, null, null, null)))
             .isInstanceOf(BadRequestException.class)
             .hasMessage("Edition does not belong to this film");
-        verify(stored, never()).save(org.mockito.ArgumentMatchers.any());
+        verify(stored).findById(FILM_ID);
+        verifyNoMoreInteractions(stored);
     }
 
     @Test
@@ -228,7 +229,8 @@ class PreferencesServiceTest {
         assertThatThrownBy(() -> service.update(FILM_ID, new PreferencesRequest(null, "4k", null, null)))
             .isInstanceOf(BadRequestException.class)
             .hasMessage("quality must be one of [auto, original, 1080p, 720p, 480p, 360p, 240p]");
-        verify(stored, never()).save(org.mockito.ArgumentMatchers.any());
+        verify(stored).findById(FILM_ID);
+        verifyNoMoreInteractions(stored);
     }
 
     @Test
