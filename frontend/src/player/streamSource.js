@@ -45,6 +45,7 @@ export async function startStream({
     return null;
   }
   if (isCancelled()) return null; // The viewer moved on while hls.js loaded: attach nothing.
-  if (chooseEngine({ hasMediaSource, hlsSupported: Hls.isSupported(), nativeHls }) !== 'hlsjs') return null;
+  if (chooseEngine({ hasMediaSource, hlsSupported: Hls.isSupported(), nativeHls }) !== 'hlsjs')
+    return null;
   return startHlsJs({ Hls, video, session, auto, startSeconds, handlers, ...timing });
 }

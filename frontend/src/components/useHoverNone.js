@@ -16,5 +16,7 @@ function subscribe(onChange) {
 
 /** True on touch devices (no hover): the ⋯ menu becomes a bottom sheet. False where matchMedia is missing. */
 export function useHoverNone() {
+  // One line on purpose: Prettier would split out the SSR snapshot as an uncovered line.
+  // prettier-ignore
   return useSyncExternalStore(subscribe, () => query()?.matches ?? false, () => false);
 }

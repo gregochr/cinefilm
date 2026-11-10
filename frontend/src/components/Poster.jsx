@@ -20,4 +20,3 @@ export function Poster({ film, caption }) {
     </Link>
   );
 }
-

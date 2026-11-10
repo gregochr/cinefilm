@@ -11,7 +11,10 @@ function stubMatchMedia(matches) {
     addEventListener: vi.fn((type, fn) => listeners.add(fn)),
     removeEventListener: vi.fn((type, fn) => listeners.delete(fn)),
   };
-  vi.stubGlobal('matchMedia', vi.fn(() => list));
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => list),
+  );
   return {
     list,
     change(next) {

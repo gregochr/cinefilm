@@ -186,7 +186,9 @@ describe('Home: removing a film from Continue watching', () => {
     await screen.findByRole('region', { name: 'Continue watching' });
     await removeViaMenu('Arrival');
 
-    expect(await within(row()).findByRole('link', { name: 'Arrival, 56m left' })).toBeInTheDocument();
+    expect(
+      await within(row()).findByRole('link', { name: 'Arrival, 56m left' }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('status')).toBeEmptyDOMElement();
     expect(within(row()).getByText('4 in progress')).toBeInTheDocument();
   });
@@ -255,11 +257,15 @@ describe('Home: a film marked watched shows as watched in the other rows', () =>
 
     await userEvent.click(more('Chinatown'));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Mark as watched' }));
-    expect(within(theme).getByRole('link', { name: 'Chinatown, 1974, watched' })).toBeInTheDocument();
+    expect(
+      within(theme).getByRole('link', { name: 'Chinatown, 1974, watched' }),
+    ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(within(theme).getByRole('link', { name: 'Chinatown, 1974' })).toBeInTheDocument();
-    expect(within(theme).queryByRole('link', { name: 'Chinatown, 1974, watched' })).not.toBeInTheDocument();
+    expect(
+      within(theme).queryByRole('link', { name: 'Chinatown, 1974, watched' }),
+    ).not.toBeInTheDocument();
   });
 
   it('Remove leaves the other rows alone', async () => {

@@ -118,7 +118,12 @@ describe('choosing how to play a session', () => {
     [false, false, true, 'native'],
     [false, true, false, null],
     [false, false, false, null],
-  ])('chooseEngine: mediaSource=%s hlsSupported=%s native=%s -> %s', (mediaSource, hls, native, expected) => {
-    expect(chooseEngine({ hasMediaSource: mediaSource, hlsSupported: hls, nativeHls: native })).toBe(expected);
-  });
+  ])(
+    'chooseEngine: mediaSource=%s hlsSupported=%s native=%s -> %s',
+    (mediaSource, hls, native, expected) => {
+      expect(
+        chooseEngine({ hasMediaSource: mediaSource, hlsSupported: hls, nativeHls: native }),
+      ).toBe(expected);
+    },
+  );
 });

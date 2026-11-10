@@ -58,16 +58,16 @@ export function useContinueWatching(data, reload) {
   }, []);
 
   const bump = useCallback((filmId) => {
-    const next = (versions.current.get(filmId) ?? 0) + 1;
-    versions.current.set(filmId, next);
-    return next;
-  }, []),
-  clearAction = useCallback((entry) => {
-    if (current.current !== entry) return;
-    current.current = null;
-    clearTimeout(timer.current);
-    setAction(null);
-  }, []);
+      const next = (versions.current.get(filmId) ?? 0) + 1;
+      versions.current.set(filmId, next);
+      return next;
+    }, []),
+    clearAction = useCallback((entry) => {
+      if (current.current !== entry) return;
+      current.current = null;
+      clearTimeout(timer.current);
+      setAction(null);
+    }, []);
 
   const begin = useCallback(
     (kind, film, call) => {

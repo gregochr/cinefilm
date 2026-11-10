@@ -66,20 +66,23 @@ describe('RatingsRow', () => {
   it.each([
     ['both sources link out', BOTH, 2],
     ['Rotten Tomatoes has no page', { ...BOTH, rottenTomatoes: { score: 84, url: null } }, 1],
-  ])('keeps every rating link at a 44px touch target with the real stylesheet (%s)', (_name, ratings, linkCount) => {
-    const style = document.createElement('style');
-    style.textContent = readFileSync('src/styles/detail.css', 'utf8');
-    document.head.appendChild(style);
-    try {
-      render(<RatingsRow ratings={ratings} />);
-      const links = screen.getAllByRole('link');
-      expect(links).toHaveLength(linkCount);
-      expect(screen.getByRole('link', { name: /IMDb rating/ })).toBeInTheDocument();
-      links.forEach((link) => {
-        expect(getComputedStyle(link).minHeight).toBe('44px');
-      });
-    } finally {
-      style.remove();
-    }
-  });
+  ])(
+    'keeps every rating link at a 44px touch target with the real stylesheet (%s)',
+    (_name, ratings, linkCount) => {
+      const style = document.createElement('style');
+      style.textContent = readFileSync('src/styles/detail.css', 'utf8');
+      document.head.appendChild(style);
+      try {
+        render(<RatingsRow ratings={ratings} />);
+        const links = screen.getAllByRole('link');
+        expect(links).toHaveLength(linkCount);
+        expect(screen.getByRole('link', { name: /IMDb rating/ })).toBeInTheDocument();
+        links.forEach((link) => {
+          expect(getComputedStyle(link).minHeight).toBe('44px');
+        });
+      } finally {
+        style.remove();
+      }
+    },
+  );
 });

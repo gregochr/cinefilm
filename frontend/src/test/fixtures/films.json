@@ -347,20 +347,7 @@
     }
   ],
   "facets": {
-    "genres": [
-      "Crime",
-      "Drama",
-      "Sci-fi",
-      "Thriller"
-    ],
-    "decades": [
-      1940,
-      1950,
-      1970,
-      1980,
-      1990,
-      2000,
-      2010
-    ]
+    "genres": ["Crime", "Drama", "Sci-fi", "Thriller"],
+    "decades": [1940, 1950, 1970, 1980, 1990, 2000, 2010]
   }
 }
