@@ -231,9 +231,13 @@ public class EditionArranger {
         for (int i = 0; i < touched.size(); i++) {
             String name = i < editionCount ? request.editions().get(i).name().strip() : ORIGINAL;
             Long id = touched.get(i);
-            boolean carry = i < editionCount && !uncarried.contains(id);
-            StateCarry.Result carried = carry ? StateCarry.land(pieces.getOrDefault(id, List.of()),
-                StateCarry.inPlayOrder(partOf, newFiles.get(id)), timelineMs) : null;
+            List<Long> order = i < editionCount ? StateCarry.inPlayOrder(partOf, newFiles.get(id)) : null;
+            // An edition with exactly the files it had, in the order it had them, keeps its state row and marker as
+            // they are (a rename, a new default, or nothing changed): folding would reset a watched edition's
+            // position.
+            boolean carry = i < editionCount && !uncarried.contains(id) && !order.equals(filesBefore.get(id));
+            StateCarry.Result carried = carry ? StateCarry.land(pieces.getOrDefault(id, List.of()), order,
+                timelineMs) : null;
             settle(id, name, partOf, filesBefore.get(id), carried);
         }
         for (Long editionId : emptied) {

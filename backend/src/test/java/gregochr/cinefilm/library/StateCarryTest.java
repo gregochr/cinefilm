@@ -142,6 +142,49 @@ class StateCarryTest {
             .containsExactlyInAnyOrder(8L, 7L);
     }
 
+    private static State rewatch(long positionMs, java.time.Instant lastPlayed) {
+        return new State(positionMs, true, NOW.minusSeconds(3600), lastPlayed, false, null);
+    }
+
+    @Test
+    void aWatchedEditionBeingWatchedAgainCarriesItsPositionBesideTheWatchedFlag() {
+        Map<Long, List<Piece>> pieces = StateCarry.split(List.of(ab(rewatch(120 * MIN, NOW), null)),
+            Map.of(1L, 9L, 2L, 9L));
+
+        assertThat(pieces.get(9L)).hasSize(2);
+        assertThat(pieces.get(9L).get(1)).isEqualTo(new Piece(rewatch(20 * MIN, NOW), List.of(2L), null, null, true));
+        Result swapped = StateCarry.land(pieces.get(9L), List.of(2L, 1L), TIMES);
+        assertThat(swapped.state().watched()).isTrue();
+        assertThat(swapped.state().positionMs()).isEqualTo(20 * MIN);
+        assertThat(swapped.state().watchedAt()).isEqualTo(NOW.minusSeconds(3600));
+    }
+
+    @Test
+    void theLatestRewatchPositionWinsAndANotWatchedResultKeepsNoRewatch() {
+        Piece older = new Piece(rewatch(10 * MIN, NOW.minusSeconds(60)), List.of(1L), null, null, true);
+        Piece newer = new Piece(rewatch(5 * MIN, NOW), List.of(2L), null, null, true);
+        Piece unplayed = new Piece(rewatch(1 * MIN, null), List.of(1L), null, null, true);
+        Piece watchedAll = new Piece(rewatch(0, NOW), List.of(1L, 2L), null, null);
+
+        State both = StateCarry.land(List.of(watchedAll, older, newer, unplayed), List.of(1L, 2L), TIMES).state();
+        State partOnly = StateCarry.land(List.of(new Piece(rewatch(0, NOW), List.of(1L), null, null), older),
+            List.of(1L, 2L), TIMES).state();
+
+        assertThat(both.watched()).isTrue();
+        assertThat(both.positionMs()).as("the later play: 5 min into file 2").isEqualTo(105 * MIN);
+        assertThat(partOnly.watched()).as("only part 1 was watched").isFalse();
+        assertThat(partOnly.positionMs()).isEqualTo(100 * MIN);
+    }
+
+    @Test
+    void anUnwatchedEditionBehavesAsBefore() {
+        Map<Long, List<Piece>> pieces = StateCarry.split(List.of(ab(resume(120 * MIN), null)),
+            Map.of(1L, 9L, 2L, 9L));
+
+        assertThat(pieces.get(9L)).containsExactly(new Piece(resume(20 * MIN), List.of(2L), null, null));
+        assertThat(pieces.get(9L).get(0).rewatch()).isFalse();
+    }
+
     @Test
     void anEditionWithNothingToCarryAddsNoPiece() {
         assertThat(StateCarry.split(List.of(ab(null, null)), Map.of(1L, 8L, 2L, 9L))).isEmpty();

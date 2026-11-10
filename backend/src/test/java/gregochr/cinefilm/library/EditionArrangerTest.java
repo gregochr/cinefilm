@@ -789,4 +789,81 @@ class EditionArrangerTest extends ApiTestBase {
         assertThat(after.getAudioStreamId()).isEqualTo(keep);
         assertThat(after.getSubtitle()).isEqualTo("off");
     }
+
+    private PlaybackState rewatching(Edition edition, long positionMin) {
+        PlaybackState state = state(edition, positionMin * MIN, true, NOW, NOW.minusSeconds(3600));
+        return saveState(state);
+    }
+
+    @Test
+    void anUnchangedSaveKeepsWatchedTogetherWithARewatchPosition() {
+        Film built = film(null, "Heat", 1995, NOW);
+        file(edition(built, null, "Original", 100 * MIN, 90 * MIN), "Heat.m4v");
+        Film film = save(built);
+        rewatching(film.getEditions().get(0), 40);
+
+        arranger.save(film.getId(), new SaveRequest(List.of(ed(editionId(film, 0), "Original", true,
+            f(fileId(film, 0), null))), List.of()));
+
+        assertThat(states.findById(editionId(film, 0))).get().satisfies(state -> {
+            assertThat(state.isWatched()).isTrue();
+            assertThat(state.getPositionMs()).isEqualTo(40 * MIN);
+            assertThat(state.getWatchedAt()).isEqualTo(NOW.minusSeconds(3600));
+        });
+        assertThat(editions.findById(editionId(film, 0)).orElseThrow().getCreditsMarkerMs()).isEqualTo(90 * MIN);
+    }
+
+    @Test
+    void renamingAWatchedEditionKeepsItsRewatchPosition() {
+        Film built = film(null, "Heat", 1995, NOW);
+        file(edition(built, null, "Original", 100 * MIN, null), "Heat.m4v");
+        Film film = save(built);
+        rewatching(film.getEditions().get(0), 40);
+
+        arranger.save(film.getId(), new SaveRequest(List.of(ed(editionId(film, 0), "Director's Cut", true,
+            f(fileId(film, 0), null))), List.of()));
+
+        assertThat(states.findById(editionId(film, 0))).get().satisfies(state -> {
+            assertThat(state.isWatched()).isTrue();
+            assertThat(state.getPositionMs()).isEqualTo(40 * MIN);
+        });
+    }
+
+    @Test
+    void swappingThePartsOfAWatchedEditionMapsTheRewatchPositionPerFileAndKeepsWatched() {
+        Film built = film(null, "Heat", 1995, NOW);
+        Edition whole = edition(built, null, "Original", 150 * MIN, null);
+        timed(whole, "Heat - pt1.m4v", 100, 1);
+        timed(whole, "Heat - pt2.m4v", 50, 2);
+        Film film = save(built);
+        rewatching(film.getEditions().get(0), 120);
+        List<MediaFile> parts = film.getEditions().get(0).originalParts();
+
+        arranger.save(film.getId(), new SaveRequest(List.of(ed(editionId(film, 0), "Original", true,
+            f(parts.get(1).getId(), 1), f(parts.get(0).getId(), 2))), List.of()));
+
+        assertThat(states.findById(editionId(film, 0))).get().satisfies(state -> {
+            assertThat(state.isWatched()).isTrue();
+            assertThat(state.getPositionMs()).as("20 min into the file that now comes first").isEqualTo(20 * MIN);
+        });
+    }
+
+    @Test
+    void aWatchedEditionWithNoRewatchPositionStaysAtZero() {
+        Film built = film(null, "Heat", 1995, NOW);
+        Edition whole = edition(built, null, "Original", 150 * MIN, null);
+        timed(whole, "Heat - pt1.m4v", 100, 1);
+        timed(whole, "Heat - pt2.m4v", 50, 2);
+        Film film = save(built);
+        rewatching(film.getEditions().get(0), 0);
+        List<MediaFile> parts = film.getEditions().get(0).originalParts();
+
+        arranger.save(film.getId(), new SaveRequest(List.of(ed(editionId(film, 0), "Original", true,
+            f(parts.get(1).getId(), 1), f(parts.get(0).getId(), 2))), List.of()));
+
+        assertThat(states.findById(editionId(film, 0))).get().satisfies(state -> {
+            assertThat(state.isWatched()).isTrue();
+            assertThat(state.getPositionMs()).isZero();
+        });
+    }
 }

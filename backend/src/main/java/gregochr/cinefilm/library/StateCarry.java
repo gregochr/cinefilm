@@ -44,8 +44,15 @@ final class StateCarry {
      * @param fileIds the files the state covers
      * @param markerFileId the file the credits marker is in, or null
      * @param markerOffsetMs the marker's offset inside that file
+     * @param rewatch true for the resume position of an edition that is watched and being watched again: it is
+     *     carried beside the watched flag, never folded into it
      */
-    record Piece(State state, List<Long> fileIds, Long markerFileId, Long markerOffsetMs) {
+    record Piece(State state, List<Long> fileIds, Long markerFileId, Long markerOffsetMs, boolean rewatch) {
+
+        /** A piece that is not a rewatch position. */
+        Piece(State state, List<Long> fileIds, Long markerFileId, Long markerOffsetMs) {
+            this(state, fileIds, markerFileId, markerOffsetMs, false);
+        }
     }
 
     /**
@@ -78,20 +85,11 @@ final class StateCarry {
                 List<Long> there = old.fileIds().stream()
                     .filter(f -> target != null && target.equals(targetOfFile.get(f))).toList();
                 add(pieces, target, new Piece(state, there, null, null));
-            } else if (state != null) {
-                EditionTimeline.Position at = timeline.locate(state.positionMs());
-                int index = at.partIndex();
-                long offset = at.offsetMs();
-                if (offset == 0 && state.positionMs() > 0) {
-                    // Offset 0 above the start of the timeline can only be on a join, which is real progress
-                    // (the earlier file was played to its end): place it there so folding does not take it for 0.
-                    index -= 1;
-                    offset = old.durations().get(index);
+                if (state.positionMs() > 0) {
+                    addPosition(pieces, old, timeline, state, targetOfFile);
                 }
-                Long file = old.fileIds().get(index);
-                State inFile = new State(offset, false, null, state.lastPlayedAt(), state.hidden(),
-                    state.hiddenAt());
-                add(pieces, targetOfFile.get(file), new Piece(inFile, List.of(file), null, null));
+            } else if (state != null) {
+                addPosition(pieces, old, timeline, state, targetOfFile);
             }
             if (old.markerMs() != null) {
                 EditionTimeline.Position at = timeline.locate(old.markerMs());
@@ -126,6 +124,24 @@ final class StateCarry {
         return targets;
     }
 
+    /** Places a resume position by the file it was in: at the end of the earlier file when it is exactly on a join. */
+    private static void addPosition(Map<Long, List<Piece>> pieces, Old old, EditionTimeline timeline, State state,
+                                    Map<Long, Long> targetOfFile) {
+        EditionTimeline.Position at = timeline.locate(state.positionMs());
+        int index = at.partIndex();
+        long offset = at.offsetMs();
+        if (offset == 0 && state.positionMs() > 0) {
+            // Offset 0 above the start of the timeline can only be on a join, which is real progress (the earlier
+            // file was played to its end): place it there so folding does not take it for 0.
+            index -= 1;
+            offset = old.durations().get(index);
+        }
+        Long file = old.fileIds().get(index);
+        State inFile = new State(offset, state.watched(), state.watchedAt(), state.lastPlayedAt(), state.hidden(),
+            state.hiddenAt());
+        add(pieces, targetOfFile.get(file), new Piece(inFile, List.of(file), null, null, state.watched()));
+    }
+
     private static void add(Map<Long, List<Piece>> pieces, Long target, Piece piece) {
         if (target != null) {
             pieces.computeIfAbsent(target, k -> new ArrayList<>()).add(piece);
@@ -150,7 +166,18 @@ final class StateCarry {
         int lastIndex = orderedFileIds.size() - 1;
         List<Source> sources = new ArrayList<>();
         Long marker = null;
+        State rewatch = null;
+        long rewatchAt = 0;
         for (Piece piece : pieces) {
+            if (piece.rewatch()) {
+                int at = orderedFileIds.indexOf(piece.fileIds().get(0));
+                State candidate = piece.state();
+                if (rewatch == null || later(candidate, rewatch)) {
+                    rewatch = candidate;
+                    rewatchAt = timeline.partStartMs(at) + candidate.positionMs();
+                }
+                continue;
+            }
             if (piece.markerFileId() != null) {
                 int at = orderedFileIds.indexOf(piece.markerFileId());
                 if (at == lastIndex) {
@@ -165,7 +192,19 @@ final class StateCarry {
             sources.add(new Source(timeline.partStartMs(first), timeline.partStartMs(last) + durations.get(last),
                 last == lastIndex, state));
         }
-        return new Result(StateFolding.fold(sources, timeline.totalMs()), marker);
+        State folded = StateFolding.fold(sources, timeline.totalMs());
+        if (folded != null && folded.watched() && rewatch != null) {
+            // Watched and being watched again: the flag and the position are both kept (folding alone would reset
+            // the position to 0).
+            folded = new State(Math.min(rewatchAt, timeline.totalMs()), true, folded.watchedAt(),
+                folded.lastPlayedAt(), folded.hidden(), folded.hiddenAt());
+        }
+        return new Result(folded, marker);
+    }
+
+    private static boolean later(State a, State b) {
+        return Comparator.nullsFirst(Comparator.<java.time.Instant>naturalOrder())
+            .compare(a.lastPlayedAt(), b.lastPlayedAt()) > 0;
     }
 
     private static boolean usable(List<Long> durations) {
