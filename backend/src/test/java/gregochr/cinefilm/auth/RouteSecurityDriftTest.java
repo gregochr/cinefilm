@@ -102,7 +102,9 @@ class RouteSecurityDriftTest {
             "DELETE /api/sessions/{id}", "GET /api/admin/transcoding",
             "DELETE /api/admin/transcoding/sessions/{id}", "GET /api/admin/films/{id}/match",
             "POST /api/admin/films/{id}/match", "GET /api/admin/grouping-report",
-            "GET /api/admin/films/{id}/editions", "PUT /api/admin/films/{id}/editions");
+            "GET /api/admin/films/{id}/editions", "PUT /api/admin/films/{id}/editions",
+            "PUT /api/playback-health/{playbackId}", "GET /api/admin/playback-health",
+            "GET /api/admin/playback-health/{playbackId}");
     }
 
     @Test
@@ -138,7 +140,7 @@ class RouteSecurityDriftTest {
     @Test
     void theStreamingSessionRoutesThatChangeStateAlsoNeedTheCsrfHeaderWhenSignedIn() throws Exception {
         List<String> mutating = List.of("POST /api/editions/{id}/sessions", "DELETE /api/sessions/{id}",
-            "DELETE /api/admin/transcoding/sessions/{id}");
+            "DELETE /api/admin/transcoding/sessions/{id}", "PUT /api/playback-health/{playbackId}");
         assertThat(apiRoutes()).containsAll(mutating);
 
         for (String route : mutating) {

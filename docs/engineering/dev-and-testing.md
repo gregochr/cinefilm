@@ -227,6 +227,31 @@ fetch fails), so review after green is where the defects are.
   does not produce), say so.
 - **Report what was not examined** as plainly as what was.
 
+## Poor-network check (by hand)
+
+A train is not reproducible, so a change to playback is checked on a deliberately bad link before it is released
+(`network-resilience-review.md`, item 13). In Chrome, add three custom profiles under DevTools, Network, throttling:
+
+| Profile | Download | Upload | Latency |
+|---|---|---|---|
+| Train, bad | 300 kbit/s | 150 kbit/s | 150 ms |
+| Train, typical | 500 kbit/s | 250 kbit/s | 150 ms |
+| Train, good | 800 kbit/s | 400 kbit/s | 150 ms |
+
+On each profile, with a film on Auto:
+
+1. Play from the start, and again from a resume point. Note the time to the first frame.
+2. Watch two minutes, then seek forward ten minutes. Note every stall.
+3. Switch the throttle to Offline for 30 seconds and back, then for 3 minutes and back. "Reconnecting…" must clear
+   by itself and playback must carry on from the same place, without a reload and without falling back to the
+   original file.
+4. Open Admin, Playback health: the viewing is there, and its start-up time, stalls and reconnects match what you
+   saw (`playback-health-plan.md`).
+
+- DevTools throttles the page's own requests (the hls.js segments included) and only while DevTools is open. It
+  does not reach Safari: use Network Link Conditioner there (macOS: Additional Tools for Xcode; iPhone: Settings,
+  Developer).
+
 ## Local Codex review before the PR
 
 Every PR costs a 10–15 minute CI run on dockermacmini, and every Codex finding on the PR costs another. Most of

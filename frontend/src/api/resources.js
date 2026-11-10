@@ -90,6 +90,9 @@ export const adminApi = {
   startPlexImport: () => post('/api/admin/plex/import'),
   transcoding: (options) => get('/api/admin/transcoding', options),
   stopTranscodingSession: (id) => del(`/api/admin/transcoding/sessions/${id}`),
+  playbackHealth: (options) => get('/api/admin/playback-health', options),
+  /** The whole report of one playback as JSON: a link, not a fetch. */
+  playbackHealthUrl: (playbackId) => `/api/admin/playback-health/${playbackId}`,
 };
 
 export const mediaFilesApi = {

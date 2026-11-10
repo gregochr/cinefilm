@@ -12,6 +12,7 @@ import adminGrouping from '../test/fixtures/admin-grouping.json';
 import adminEditions from '../test/fixtures/admin-editions.json';
 import adminMatch from '../test/fixtures/admin-match.json';
 import adminTranscoding from '../test/fixtures/admin-transcoding.json';
+import adminPlaybackHealth from '../test/fixtures/admin-playback-health.json';
 import collection from '../test/fixtures/collection.json';
 import collections from '../test/fixtures/collections.json';
 import session from '../test/fixtures/session.json';
@@ -58,6 +59,7 @@ export async function handle(method, path, body) {
   if (/^\/api\/admin\/films\/\d+\/editions$/.test(route)) {
     return method === 'PUT' ? { filmId: 40, newFilmIds: [] } : adminEditions;
   }
+  if (route === '/api/admin/playback-health') return adminPlaybackHealth;
   if (route === '/api/admin/transcoding') return adminTranscoding;
   if (/^\/api\/admin\/transcoding\/sessions\//.test(route)) return null;
   if (/^\/api\/editions\/\d+\/sessions$/.test(route)) return session;
