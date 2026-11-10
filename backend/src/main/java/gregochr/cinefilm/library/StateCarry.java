@@ -80,9 +80,9 @@ final class StateCarry {
                 EditionTimeline.Position at = timeline.locate(state.positionMs());
                 int index = at.partIndex();
                 long offset = at.offsetMs();
-                if (offset == 0 && index > 0 && state.positionMs() > 0) {
-                    // Exactly on a join is real progress (the earlier file was played to its end), not an unstarted
-                    // file: place it at the end of the earlier file so folding does not take it for 0.
+                if (offset == 0 && state.positionMs() > 0) {
+                    // Offset 0 above the start of the timeline can only be on a join, which is real progress
+                    // (the earlier file was played to its end): place it there so folding does not take it for 0.
                     index -= 1;
                     offset = old.durations().get(index);
                 }

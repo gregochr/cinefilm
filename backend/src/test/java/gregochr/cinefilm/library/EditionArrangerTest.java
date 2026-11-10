@@ -623,4 +623,41 @@ class EditionArrangerTest extends ApiTestBase {
         assertThat(states.findById(editionId(film, 0))).get().extracting(PlaybackState::getPositionMs)
             .isEqualTo(100 * MIN);
     }
+
+    private Film partlyUnknown(long positionMin) {
+        Film built = film(null, "Heat", 1995, NOW);
+        Edition whole = edition(built, null, "Original", 100 * MIN, null);
+        timed(whole, "Heat - pt1.m4v", 100, 1);
+        MediaFile unknown = timed(whole, "Heat - pt2.m4v", 50, 2);
+        unknown.setDurationMs(null);
+        Film film = save(built);
+        saveState(state(film.getEditions().get(0), positionMin * MIN, false, NOW, null));
+        return film;
+    }
+
+    private void arrangeAsTwoParts(Film film) {
+        List<MediaFile> parts = film.getEditions().get(0).originalParts();
+        arranger.save(film.getId(), new SaveRequest(List.of(ed(editionId(film, 0), "Original", true,
+            f(parts.get(0).getId(), 1), f(parts.get(1).getId(), 2))), List.of()));
+    }
+
+    @Test
+    void withAFileOfUnknownDurationAPositionBeyondTheKnownRuntimeIsClamped() {
+        Film film = partlyUnknown(300);
+
+        arrangeAsTwoParts(film);
+
+        assertThat(states.findById(editionId(film, 0))).get().extracting(PlaybackState::getPositionMs)
+            .isEqualTo(100 * MIN);
+    }
+
+    @Test
+    void withAFileOfUnknownDurationAPositionWithinTheKnownRuntimeIsKept() {
+        Film film = partlyUnknown(40);
+
+        arrangeAsTwoParts(film);
+
+        assertThat(states.findById(editionId(film, 0))).get().extracting(PlaybackState::getPositionMs)
+            .isEqualTo(40 * MIN);
+    }
 }
