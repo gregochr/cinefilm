@@ -194,6 +194,40 @@ class LibraryGroupingTest extends ApiTestBase {
         assertThat(changes.count()).isZero();
     }
 
+    @Test
+    void aMixedFilmIsNotMergedThroughAPartJoin() {
+        Film a = film("Alien", MatchStatus.MATCHED, 348L, "Original", 60, "Alien - pt1.m4v");
+        Film b = film("Alien 2", MatchStatus.PENDING, null, "Original", 57, "Alien - pt2.m4v");
+        Long prometheus = addEdition(b, "Original", 124, "Prometheus.m4v", 1).getId();
+        Long partOne = a.getEditions().get(0).getId();
+        Long partTwo = b.getEditions().get(0).getId();
+        reset();
+
+        assertThat(grouping.group()).isZero();
+        reset();
+
+        assertThat(films.count()).isEqualTo(2);
+        assertThat(editions.findById(prometheus).orElseThrow().getFilm().getId()).isEqualTo(b.getId());
+        assertThat(editions.findById(partTwo).orElseThrow().getFilm().getId()).isEqualTo(b.getId());
+        assertThat(editions.findById(partOne).orElseThrow().originalParts()).hasSize(1);
+        assertThat(report(GroupingChange.JOIN)).isEmpty();
+    }
+
+    @Test
+    void twoFilmsThatEachHoldOnlyOneAlienPartAreStillJoined() {
+        Film a = film("Alien", MatchStatus.MATCHED, 348L, "Original", 60, "Alien - pt1.m4v");
+        film("Alien 2", MatchStatus.PENDING, null, "Original", 57, "Alien - pt2.m4v");
+        Long partOne = a.getEditions().get(0).getId();
+        reset();
+
+        assertThat(grouping.group()).isEqualTo(1);
+        reset();
+
+        assertThat(films.count()).isEqualTo(1);
+        assertThat(editions.findById(partOne).orElseThrow().originalParts()).hasSize(2);
+        assertThat(report(GroupingChange.JOIN)).hasSize(1);
+    }
+
     // ---- existing editions named "Original"
 
     @Test

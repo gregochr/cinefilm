@@ -119,6 +119,21 @@ class EditionGrouperTest {
     }
 
     @Test
+    void aFilmHoldingAnotherTitleIsNeverMergedThroughAPartJoin() {
+        List<FileFact> facts = List.of(fact(1, 10, 100, "Alien - pt1.m4v"), fact(2, 20, 200, "Alien - pt2.m4v"),
+            fact(2, 21, 201, "Prometheus.m4v"));
+
+        assertThat(EditionGrouper.partJoins(facts)).isEmpty();
+    }
+
+    @Test
+    void twoFilmsThatEachHoldOnlyOneAlienPartStillJoin() {
+        List<FileFact> facts = List.of(fact(1, 10, 100, "Alien - pt1.m4v"), fact(2, 20, 200, "Alien - pt2.m4v"));
+
+        assertThat(EditionGrouper.partJoins(facts)).containsExactly(List.of(100L, 200L));
+    }
+
+    @Test
     void aPartThatCannotBePlayedHoldsTheJoinBack() {
         List<FileFact> facts = List.of(fact(1, 10, 100, "Epic - pt1.m4v"),
             withPlayability(fact(2, 20, 200, "Epic - pt2.m4v"), Playability.UNREADABLE));

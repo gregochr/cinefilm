@@ -564,6 +564,34 @@ class EditionJoinTest extends ApiTestBase {
     }
 
     @Test
+    void aJoinThatWouldMergeAFilmHoldingAnotherTitleIsRefusedAndChangesNothing() {
+        Film one = film("Alien", MatchStatus.MATCHED, "Alien - pt1.m4v", 60);
+        Film two = film("Alien 2", MatchStatus.PENDING, "Alien - pt2.m4v", 57);
+        Edition other = TestData.edition(two, null, "Original", 124 * MIN, null);
+        TestData.file(other, "Prometheus.m4v");
+        em.persist(other);
+        em.flush();
+        Long first = fileId(one);
+        Long second = fileId(two);
+        Long oneEdition = editionId(one);
+        Long twoEdition = editionId(two);
+        Long prometheusEdition = other.getId();
+        reset();
+
+        assertThatThrownBy(() -> join.join(List.of(first, second))).isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("also holds file").hasMessageContaining("another title");
+        reset();
+
+        assertThat(films.count()).isEqualTo(2);
+        assertThat(films.findById(one.getId()).orElseThrow().getEditions()).extracting(Edition::getId)
+            .containsExactly(oneEdition);
+        assertThat(films.findById(two.getId()).orElseThrow().getEditions()).extracting(Edition::getId)
+            .containsExactlyInAnyOrder(twoEdition, prometheusEdition);
+        assertThat(mediaFiles.findById(first).orElseThrow().getEdition().getId()).isEqualTo(oneEdition);
+        assertThat(mediaFiles.findById(second).orElseThrow().getEdition().getId()).isEqualTo(twoEdition);
+    }
+
+    @Test
     void aRenditionIsNotAnOriginalFile() {
         Film one = film("Towers", MatchStatus.MATCHED, "Towers - pt1.m4v", 90);
         Film two = film("Towers 2", MatchStatus.PENDING, "Towers - pt2.m4v", 110);
