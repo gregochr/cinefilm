@@ -179,3 +179,28 @@ in shell scripts, none in Java, which it did not appear to analyse). 5 is last.
   only; phase 3 moves the repository access. Do not merge the two.
 - **Codex and auto-merge:** auto-merge does not wait for Codex. Unchanged rule: read Codex on the head commit first.
 - **Admin bypass on `main`** is still on (owner's call).
+
+## 7. State after 2026-11-10 (phases 1 and 4, Sonar blockers, dependency majors)
+
+- **Sonar, legacy blocker/critical: 0** after PR #60 (two fixed, two accepted in `sonar-project.properties`). 75
+  issues open. **By impact there are still 3 blockers, untriaged:** `githubactions:S8232` at
+  `dependabot-auto-merge.yml:32` and `:70` (trusting forgeable GitHub context values; that workflow merges with
+  write permission, so triage it first) and `javabugs:S2259` at `film/SortTitles.java:15` (possible
+  `NullPointerException`). 45 are high impact: 44 `shell:S7688` and one `jssecurity:S8476`. The dashboard also lists
+  14 dependency risks, not yet read.
+- **Dependency majors landed:** GitHub Actions (#61; `download-artifact` 8 pairs with `upload-artifact` 7),
+  Checkstyle 14.4.0 (#62, zero findings), Vitest 5.1 and jsdom 31 (#63).
+- **ESLint 10 is blocked upstream** (Dependabot #21, #22 left open): `eslint-plugin-jsx-a11y` 6.10.2 and
+  `eslint-plugin-react` 7.37.5 have no release whose peer range includes ESLint 10.
+- **Stryker is below its floor.** A full run on 2026-11-10 scored 89.08% against 95 (issue #65); the only earlier
+  run (2026-11-08) was 95.56%, before the features merged since. The weekly run will fail until the surviving
+  mutants are dealt with. Separately, under Vitest 5 a local dry run hit Stryker's 5-minute initial-run timeout on a
+  loaded machine and passed in about 4 minutes with a longer timeout.
+- **Not exercised by any run:** `deploy.yml` with `actions/checkout` 7 and the pinned `docker/*` actions (first
+  proof is the next release tag; the self-hosted `cinefilm-prod` runner must be 2.327.1 or newer for Node 24
+  actions), and `dependabot-auto-merge.yml` with `fetch-metadata` 3.1.0 (first proof is the next minor/patch
+  Dependabot PR).
+- **Could be simplified:** Vitest 5 can express per-file and global coverage thresholds together, so
+  `frontend/scripts/check-coverage-floor.mjs` could be retired.
+- **Still to do from this plan:** phase 2 (knip), phase 3 (ArchUnit), the Sonar backlog sizing, making the Sonar
+  job required, phase 5.

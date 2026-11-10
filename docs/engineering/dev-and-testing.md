@@ -265,8 +265,16 @@ cancels superseded runs of the same ref.
 Actions secret and a Dependabot secret (the owner's personal token; when it expires the job fails at the scan step).
 Results are public at `https://sonarcloud.io/project/overview?id=gregochr_cinefilm` and the same API serves
 measures without a token. The separate `SonarCloud Code Analysis` check on a PR is the Sonar GitHub App's
-decoration of the same analysis. A finding in new code is fixed in the PR; a false positive is marked in SonarQube
-Cloud with a reason, not suppressed in code.
+decoration of the same analysis. A finding in new code is fixed in the PR. An accepted finding is recorded in
+`sonar-project.properties` (`sonar.issue.ignore.multicriteria`: one entry per finding, exactly one rule and one
+file, a dated reason in the comment, no wildcards), so the decision is reviewed in a PR; sessions cannot sign in to
+the Sonar UI. Never `NOSONAR` or `@SuppressWarnings`.
+
+**Read issues by impact, not by the legacy severity.** The dashboard groups issues by software quality (Security,
+Reliability, Maintainability) with an impact severity; the API's older `severities` field rates the same issues
+differently (an issue can be `MAJOR` there and `BLOCKER` by impact). Query `impactSeverities` and
+`impactSoftwareQualities` on `api/issues/search`. The dashboard's ratings are for the whole code base; only the
+quality gate judges new code.
 
 **Docs-only path.** There are deliberately no `paths:` filters: a workflow filtered out by path never reports, and a
 check that never reports cannot be satisfied. Instead both jobs always run; when every changed file is `docs/**` or
