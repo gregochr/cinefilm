@@ -7,9 +7,12 @@ import gregochr.cinefilm.film.FilmDtos.EditionDto;
 import gregochr.cinefilm.film.FilmDtos.FileInfo;
 import gregochr.cinefilm.film.FilmDtos.FilmCard;
 import gregochr.cinefilm.film.FilmDtos.FilmDetail;
+import gregochr.cinefilm.film.FilmDtos.ImdbRating;
 import gregochr.cinefilm.film.FilmDtos.PersonRef;
 import gregochr.cinefilm.film.FilmDtos.Preferences;
 import gregochr.cinefilm.film.FilmDtos.QualityDto;
+import gregochr.cinefilm.film.FilmDtos.Ratings;
+import gregochr.cinefilm.film.FilmDtos.RottenTomatoesRating;
 import gregochr.cinefilm.film.FilmDtos.SubtitleStreamDto;
 import gregochr.cinefilm.person.Person;
 import gregochr.cinefilm.playback.PlaybackState;
@@ -25,6 +28,8 @@ import java.util.function.Function;
 
 /** Maps domain objects to the API shapes. */
 public final class FilmMapper {
+
+    private static final String IMDB_TITLE_URL = "https://www.imdb.com/title/";
 
     private FilmMapper() {
     }
@@ -72,7 +77,17 @@ public final class FilmMapper {
             view.directors().stream().map(FilmMapper::personRef).toList(),
             view.cast().stream().map(c -> new CastEntry(personRef(c.getPerson()), c.getCharacter())).toList(),
             film.getEditions().stream().filter(e -> !e.hiddenFromBrowse())
-                .map(e -> edition(e, view.state(e), mode, cuts)).toList(), preferences);
+                .map(e -> edition(e, view.state(e), mode, cuts)).toList(), preferences, ratings(film));
+    }
+
+    /** The ratings block: a source with no score is null; the IMDb url comes from the IMDb id. */
+    static Ratings ratings(Film film) {
+        ImdbRating imdb = film.getImdbRating() == null ? null
+            : new ImdbRating(film.getImdbRating(), film.getImdbVotes(),
+                film.getImdbId() == null ? null : IMDB_TITLE_URL + film.getImdbId() + "/");
+        RottenTomatoesRating rottenTomatoes = film.getRtScore() == null ? null
+            : new RottenTomatoesRating(film.getRtScore(), film.getRtUrl());
+        return new Ratings(imdb, rottenTomatoes);
     }
 
     private static EditionDto edition(Edition edition, Optional<PlaybackState> state, EncoderMode mode,

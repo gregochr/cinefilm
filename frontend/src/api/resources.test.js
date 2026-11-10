@@ -123,6 +123,8 @@ describe('image URLs', () => {
     expect(last()).toMatchObject({ path: '/api/admin/scan', method: 'GET' });
     await adminApi.startScan();
     expect(last()).toEqual({ path: '/api/admin/scan', method: 'POST', body: undefined });
+    await adminApi.startRatingsRefresh();
+    expect(last()).toEqual({ path: '/api/admin/ratings/refresh', method: 'POST', body: undefined });
     await adminApi.attention();
     expect(last()).toMatchObject({ path: '/api/admin/attention', method: 'GET' });
   });

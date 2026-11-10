@@ -659,6 +659,18 @@
   align-items: center;
   gap: 16px;
 }
+.admin__ratings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--cf-line);
+}
+.admin__ratings-line {
+  margin: 0;
+  color: var(--cf-text-muted);
+}
 .admin__notice {
   color: var(--cf-text-muted);
   font-size: var(--cf-size-ui);
@@ -792,6 +804,11 @@
   .filters .field,
   .filters .segmented {
     width: 100%;
+    overflow-x: auto;
+  }
+  .filters .segmented__btn {
+    flex: 1 0 auto;
+    white-space: nowrap;
   }
   .hints {
     display: none;

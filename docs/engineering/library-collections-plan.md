@@ -53,8 +53,9 @@ grouping.
   pure `groupFilms(films, collections, sort)` from `state/collections.js`:
   - films with `collectionId` in `collections` fold into one tile per collection; others stay.
   - tile `count` = folded films passing the filters; posters = those films, earliest year first.
-  - **Placement:** `added` and `year` — at the position of the collection's first film in the server order (the
-    server order already puts the most-recent / earliest film first). `title` — inserted among the remaining items
+  - **Placement:** `added`, `year`, `imdb` and `rt` — at the position of the collection's first film in the server order (the
+    server order already puts the most-recent / earliest / highest-rated film first, so under the rating sorts a
+    tile sits where its best-rated passing film would). `title` — inserted among the remaining items
     by `sortKey(displayName)` vs each film's `sortKey(title)` (lower-case, leading "the " dropped, as
     `SortTitles`), stable.
   - count line while grouped: "{films} films in {tiles} tiles · sorted by …" (singular forms).

@@ -76,6 +76,7 @@ export function defaultRoute(method, url) {
   if (path === '/api/admin/scan') {
     return method === 'POST' ? json({ ...adminScan, running: true }, 202) : json(adminScan);
   }
+  if (path === '/api/admin/ratings/refresh') return json({ ...adminScan, ratingsRunning: true }, 202);
   if (path === '/api/admin/attention') return json(adminAttention);
   if (path === '/api/admin/plex') {
     return method === 'POST'

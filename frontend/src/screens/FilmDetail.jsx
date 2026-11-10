@@ -7,6 +7,7 @@ import Art from '../components/Art.jsx';
 import { Button, ButtonLink } from '../components/Button.jsx';
 import { Picker, Switch } from '../components/Controls.jsx';
 import { CheckIcon, PlayIcon, RestartIcon } from '../components/icons.jsx';
+import RatingsRow from '../components/RatingsRow.jsx';
 import { DetailSkeleton } from '../components/Skeleton.jsx';
 import { ErrorState } from '../components/StateMessages.jsx';
 import { formatLeft, formatResume, formatRuntime, fraction } from '../player/time.js';
@@ -166,6 +167,7 @@ export default function FilmDetail() {
               </span>
             ))}
           </div>
+          <RatingsRow ratings={film.ratings} />
           {film.overview ? <p className="detail__plot">{film.overview}</p> : null}
 
           {multi ? (

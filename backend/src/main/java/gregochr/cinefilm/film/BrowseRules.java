@@ -2,6 +2,7 @@ package gregochr.cinefilm.film;
 
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.playback.PlaybackState;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -104,7 +105,11 @@ public final class BrowseRules {
             case "year" -> BY_YEAR.thenComparing(byTitle);
             case "added" -> Comparator.comparing((FilmView v) -> v.film().getAddedAt()).reversed()
                 .thenComparing(byTitle);
-            default -> throw new BadRequestException("sort must be title, year or added");
+            case "imdb" -> Comparator.comparing((FilmView v) -> v.film().getImdbRating(),
+                Comparator.nullsLast(Comparator.<BigDecimal>reverseOrder())).thenComparing(byTitle);
+            case "rt" -> Comparator.comparing((FilmView v) -> v.film().getRtScore(),
+                Comparator.nullsLast(Comparator.<Integer>reverseOrder())).thenComparing(byTitle);
+            default -> throw new BadRequestException("sort must be title, year, added, imdb or rt");
         };
     }
 }

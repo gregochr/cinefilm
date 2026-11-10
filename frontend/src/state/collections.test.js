@@ -171,6 +171,18 @@ describe('groupFilms', () => {
     expect(items[1].count).toBe(2);
   });
 
+  it('places the tile at its highest-rated film under the rating sorts, as under recently added', () => {
+    // The server lists best-rated first for imdb and rt; the tile takes the first Alien film's place.
+    const byRating = [
+      f(10, 'Heat', 1995),
+      f(13, 'Alien', 1979, 1),
+      f(14, 'The Matrix', 1999, 2),
+      f(11, 'Aliens', 1986, 1),
+    ];
+    expect(labels(groupFilms(byRating, COLLECTIONS, 'imdb'))).toEqual(['Heat', '[1]', '[2]']);
+    expect(labels(groupFilms(byRating, COLLECTIONS, 'rt'))).toEqual(['Heat', '[1]', '[2]']);
+  });
+
   it('puts a film with no known year last among a tile’s films', () => {
     const items = groupFilms(
       [f(1, 'Undated', null, 1), f(2, 'Dated', 1990, 1)],

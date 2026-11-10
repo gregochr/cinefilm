@@ -1,5 +1,6 @@
 package gregochr.cinefilm.film;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
@@ -65,11 +66,40 @@ public final class FilmDtos {
     public record Preferences(Long editionId, String quality, Long audioStreamId, String subtitle) {
     }
 
+    /**
+     * The IMDb score.
+     *
+     * @param score out of 10, one decimal
+     * @param votes how many votes it rests on, or null
+     * @param url the film's IMDb page, or null when the IMDb id is unknown
+     */
+    public record ImdbRating(BigDecimal score, Integer votes, String url) {
+    }
+
+    /**
+     * The Rotten Tomatoes score.
+     *
+     * @param score the percentage, 0 to 100
+     * @param url the film's Rotten Tomatoes page, or null
+     */
+    public record RottenTomatoesRating(int score, String url) {
+    }
+
+    /**
+     * The film's ratings; a source with no score is null.
+     *
+     * @param imdb the IMDb score, or null
+     * @param rottenTomatoes the Rotten Tomatoes score, or null
+     */
+    public record Ratings(ImdbRating imdb, RottenTomatoesRating rottenTomatoes) {
+    }
+
     /** The film detail page. */
     public record FilmDetail(Long id, String title, Integer year, String posterPath, String backdropPath,
                              boolean watched, Progress progress, String director, String overview,
                              List<String> genres, CollectionRef collection, List<PersonRef> directors,
-                             List<CastEntry> cast, List<EditionDto> editions, Preferences preferences) {
+                             List<CastEntry> cast, List<EditionDto> editions, Preferences preferences,
+                             Ratings ratings) {
     }
 
     /** The values the library filters can offer. */

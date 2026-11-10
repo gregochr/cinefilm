@@ -115,6 +115,11 @@ public class TmdbClient implements TmdbApi {
         return fetched;
     }
 
+    @Override
+    public Optional<String> imdbId(long id) {
+        return get(b -> b.path("/3/movie/{id}/external_ids").build(id)).map(body -> text(body, "imdb_id"));
+    }
+
     private static MovieDetails movieOf(JsonNode m) {
         List<String> genres = new ArrayList<>();
         for (JsonNode g : m.path("genres")) {
@@ -140,7 +145,7 @@ public class TmdbClient implements TmdbApi {
         return new MovieDetails(m.path("id").asLong(), text(m, "title"), text(m, "original_title"), year(m),
             text(m, "overview"), runtime > 0 ? runtime : null, List.copyOf(genres), text(m, "poster_path"),
             text(m, "backdrop_path"), m.path("popularity").asDouble(0), List.copyOf(directors),
-            List.copyOf(cast), collection);
+            List.copyOf(cast), collection, text(m, "imdb_id"));
     }
 
     private static Credit credit(JsonNode c, String character) {
