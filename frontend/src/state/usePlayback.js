@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { announceLibraryChanged } from '../api/client.js';
 import { editionsApi, filmsApi } from '../api/resources.js';
 import { PROGRESS_INTERVAL_MS } from '../player/resume.js';
 
@@ -10,7 +11,8 @@ export const RETRY_MAX_MS = 30000;
  * Progress reporting and preference saving for one playing edition. No DOM: the caller
  * supplies `getPositionMs`. Reports every 10 s while `playing`, when playback pauses, and on
  * unmount. A position of 0 or less is never reported (a reloading source reads 0 and must not
- * overwrite the saved position), and a failed report is kept and retried with backoff.
+ * overwrite the saved position), and a failed report is kept and retried with backoff. When the player closes
+ * it waits for any write in flight, sends the final position and then announces `cinefilm:library-changed`.
  */
 export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
   const getRef = useRef(getPositionMs);
@@ -19,6 +21,7 @@ export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
   const retryTimer = useRef(null);
   const closed = useRef(false);
   const inFlight = useRef(null);
+  const outstanding = useRef(new Set());
   useEffect(() => {
     getRef.current = getPositionMs;
   });
@@ -30,13 +33,20 @@ export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
     if (positionMs === lastReported.current) return inFlight.current;
     lastReported.current = positionMs;
     clearTimeout(retryTimer.current);
-    const request = editionsApi.reportProgress(editionId, positionMs);
-    inFlight.current = request.then(
+    const sending = editionsApi.reportProgress(editionId, positionMs);
+    // A repeat call for this position waits on this same request (settled either way), never sends a second PUT.
+    inFlight.current = sending.then(
       () => null,
       () => null,
     );
+    outstanding.current.add(sending);
     try {
-      const saved = await request;
+      let saved;
+      try {
+        saved = await sending;
+      } finally {
+        outstanding.current.delete(sending);
+      }
       failures.current = 0;
       return saved;
     } catch {
@@ -62,10 +72,15 @@ export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
 
   useEffect(() => {
     closed.current = false;
+    const written = outstanding.current;
     return () => {
       closed.current = true;
       clearTimeout(retryTimer.current);
-      void report();
+      // Leaving the player: wait for a write still in flight (settled either way), then send the final position,
+      // then tell the search index its time-left is out of date. The announcement comes even if a step fails.
+      const writing = [...written];
+      const final = writing.length ? Promise.allSettled(writing).then(report) : report();
+      void final.then(announceLibraryChanged, announceLibraryChanged);
     };
   }, [report]);
 

@@ -59,6 +59,7 @@ export function defaultRoute(method, url) {
   if (path === '/api/films/6') return json(bladeRunner);
   if (path === '/api/films/8') return json(wickerMan);
   if (/^\/api\/people\//.test(path)) return json(person);
+  if (path === '/api/search-index') return json({ films: [], collections: [], people: [] });
   if (path === '/api/collections') return json(collections);
   if (/^\/api\/collections\//.test(path)) return json(collection);
   if (/\/progress$/.test(path)) return json({ positionMs: 0, watched: false });

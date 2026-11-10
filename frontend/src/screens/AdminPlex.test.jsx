@@ -247,7 +247,8 @@ describe('usePlexImport', () => {
     await settle(SCAN_POLL_MS);
     expect(result.current.plex.running).toBe(false);
     await settle(SCAN_POLL_MS * 4);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    // Only the import status calls: finishing also announces a library change, which refreshes the search index.
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/admin/plex')).toHaveLength(3);
   });
 
   it('starts with POST to the import route, then refetches, and clears an old notice', async () => {

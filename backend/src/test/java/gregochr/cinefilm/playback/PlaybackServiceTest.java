@@ -8,7 +8,9 @@ import static gregochr.cinefilm.TestData.film;
 import static gregochr.cinefilm.TestData.state;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
@@ -21,6 +23,7 @@ import gregochr.cinefilm.playback.PlaybackDtos.HiddenResponse;
 import gregochr.cinefilm.playback.PlaybackDtos.PlaybackSnapshot;
 import gregochr.cinefilm.playback.PlaybackDtos.ProgressResponse;
 import gregochr.cinefilm.playback.PlaybackDtos.WatchedResponse;
+import gregochr.cinefilm.search.LibraryChanged;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
@@ -30,6 +33,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 class PlaybackServiceTest {
@@ -47,13 +51,16 @@ class PlaybackServiceTest {
     @Mock
     private PreferencesService preferences;
 
+    @Mock
+    private ApplicationEventPublisher events;
+
     private PlaybackService service;
     private Edition withMarker;
     private Edition withoutMarker;
 
     @BeforeEach
     void setUp() {
-        service = new PlaybackService(editions, states, preferences, CLOCK);
+        service = new PlaybackService(editions, states, preferences, CLOCK, events);
         Film film = film(FILM_ID, "Blade Runner", 1982, NOW);
         withMarker = edition(film, WITH_MARKER, "The Final Cut", 100 * MIN, 90 * MIN);
         withoutMarker = edition(film, WITHOUT_MARKER, "Theatrical Cut", 100 * MIN, null);
@@ -401,5 +408,36 @@ class PlaybackServiceTest {
         assertThat(state.isWatched()).isFalse();
         assertThat(state.getWatchedAt()).isNull();
         assertThat(state.getPositionMs()).isZero();
+    }
+
+    // the search index is told
+
+    @Test
+    void everyPlaybackWriteTellsTheSearchIndex() {
+        use(withMarker);
+        stored(state(withMarker, 3 * MIN, false, NOW, null));
+
+        service.reportProgress(WITH_MARKER, 5 * MIN);
+        verify(events, times(1)).publishEvent(new LibraryChanged());
+
+        service.setWatched(WITH_MARKER, true);
+        verify(events, times(2)).publishEvent(new LibraryChanged());
+
+        service.setHiddenFromContinueWatching(WITH_MARKER, true);
+        verify(events, times(3)).publishEvent(new LibraryChanged());
+
+        service.restore(WITH_MARKER, new PlaybackSnapshot(0, false, null, false, null));
+        verify(events, times(4)).publishEvent(new LibraryChanged());
+    }
+
+    @Test
+    void rejectedOrEmptyWritesDoNotTellTheSearchIndex() {
+        use(withMarker);
+
+        assertThatThrownBy(() -> service.reportProgress(WITH_MARKER, -1L)).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> service.setWatched(WITH_MARKER, null)).isInstanceOf(BadRequestException.class);
+        service.setHiddenFromContinueWatching(WITH_MARKER, true);
+
+        verifyNoInteractions(events);
     }
 }
