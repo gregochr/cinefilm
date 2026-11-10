@@ -2,6 +2,7 @@ package gregochr.cinefilm.config;
 
 import java.util.Map;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -38,6 +39,6 @@ public class ApiExceptionHandler {
     }
 
     private static ResponseEntity<Map<String, String>> error(HttpStatus status, String message) {
-        return ResponseEntity.status(status).body(Map.of("error", message));
+        return ResponseEntity.status(status).contentType(MediaType.APPLICATION_JSON).body(Map.of("error", message));
     }
 }

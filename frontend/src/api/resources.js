@@ -41,6 +41,12 @@ export const editionsApi = {
    * cues in place.
    */
   subtitleUrl: (editionId, index) => `/api/editions/${editionId}/subtitles/${index}.vtt`,
+  /**
+   * The JPEG of the frame at `atMs` (edition time). Floored to whole seconds, as the server does, so the browser
+   * cache key matches the server's cache.
+   */
+  stillUrl: (id, atMs) =>
+    `/api/editions/${id}/still?atMs=${Math.floor(Math.max(0, atMs) / 1000) * 1000}`,
   reportProgress: (id, positionMs, options) =>
     put(`/api/editions/${id}/progress`, { positionMs }, options),
   setWatched: (id, watched) => post(`/api/editions/${id}/watched`, { watched }),

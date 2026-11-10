@@ -33,7 +33,10 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    untrusted input. Transcoding: `-protocol_whitelist file`, input only the database-known path under the library root,
    outputs only under the session directory (`cache/hls/<uuid>/`), every session URL segment regex-validated and
    bounded, the MP4 box reader bounds every size it reads, and resources are capped (3 sessions, idle stop, look-ahead
-   cap, `hls/` cap, bounded threads, encoders killed on shutdown). `/dev/dri` is the only device passed in.
+   cap, `hls/` cap, bounded threads, encoders killed on shutdown). `/dev/dri` is the only device passed in. The
+   resume still (`GET /api/editions/{id}/still`) takes one number from the request (`atMs`, bounds-checked against the
+   edition); the input is the database-known path, `-protocol_whitelist file`, output only under `cache/stills/`, at
+   most 2 grabs at once, a 10 s timeout, and the cache is capped at 300 files.
 5. **Secrets.** `CINEFILM_PASSWORD`, `CINEFILM_DB_*`, `TMDB_READ_TOKEN`, Plex tokens and the CineLight credentials come
    from the environment, never from the repo, and never reach the browser, API responses, logs, error messages or
    `/actuator`. The Plex token is sent only in the `X-Plex-Token` header, never in a URL, and logs and errors name the

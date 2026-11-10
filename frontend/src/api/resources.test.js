@@ -137,6 +137,12 @@ describe('image URLs', () => {
     expect(editionsApi.subtitleUrl(11, 3)).toBe('/api/editions/11/subtitles/3.vtt');
   });
 
+  it('builds the still url with the time floored to whole seconds', () => {
+    expect(editionsApi.stillUrl(11, 3_590_999)).toBe('/api/editions/11/still?atMs=3590000');
+    expect(editionsApi.stillUrl(11, 0)).toBe('/api/editions/11/still?atMs=0');
+    expect(editionsApi.stillUrl(11, -5)).toBe('/api/editions/11/still?atMs=0');
+  });
+
   it('reads the transcoding state and stops a session with DELETE', async () => {
     const last = stubFetch();
     await adminApi.transcoding();

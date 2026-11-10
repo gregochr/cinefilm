@@ -33,9 +33,9 @@ Player PREPARING/BUFFERING PR.
   misses the cache), written to a `UUID.tmp` and moved atomically, like subtitles. After a write, when `stills/` has
   more than **300** files the oldest by mtime are deleted down to 300 (~30 MB at most).
 - **Command** (argument list, never a shell; exact list asserted in a test):
-  `ffmpeg -nostdin -hide_banner -v error -protocol_whitelist file -ss <sec> -i <file> -map 0:v:0 -frames:v 1
+  `ffmpeg -nostdin -hide_banner -v error -protocol_whitelist file -threads 1 -ss <sec> -i <file> -map 0:v:0 -frames:v 1
   -an -sn -dn -vf scale='min(1280,iw*sar)':-2,setsar=1 -q:v 5 -f image2 -y <tmp>`. `-ss` before `-i` (keyframe seek,
-  then accurate decode up to the time: at most one GOP, ≤ 10 s on this library). `iw*sar` un-squeezes anamorphic DVD
+  then accurate decode up to the time: at most one GOP, ≤ 10 s on this library). `-threads 1` keeps two concurrent grabs to two cores (SECURITY.md rule 4 resource limits; added after Codex review). `iw*sar` un-squeezes anamorphic DVD
   rips; `min` never upscales SD. `-f image2` with a `.tmp` name (the muxer would otherwise guess from the extension).
 - **Bounds**: a `Semaphore(2)`; `tryAcquire(3 s)` fails → **503** (no retry: the player just stays black). ffmpeg timeout **10 s** → 503 (and
   a WARN with edition, part, second). Non-zero exit or no output file → 503 too (a transient SMB failure must not look
