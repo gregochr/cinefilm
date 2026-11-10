@@ -83,6 +83,18 @@ class HlsSessionControllerTest {
     }
 
     @Test
+    void createForASplitFilmWhoseLaterPartsAreStillBeingIndexedIs503WithRetryAfterOne() throws Exception {
+        when(service.create(41L, new CreateRequest(null, null, "auto", null)))
+            .thenThrow(new SegmentNotReadyException("The film is still being prepared"));
+
+        mvc.perform(post("/api/editions/41/sessions").with(user("owner")).header("X-CineFilm", "1")
+                .contentType("application/json").content("{\"quality\":\"auto\"}"))
+            .andExpect(status().isServiceUnavailable())
+            .andExpect(header().string("Retry-After", "1"))
+            .andExpect(jsonPath("$.error").value("The film is still being prepared"));
+    }
+
+    @Test
     void createMapsTheServiceErrorsToTheirStatusesWithTheExactMessage() throws Exception {
         when(service.create(1L, new CreateRequest(null, null, "bogus", null)))
             .thenThrow(new BadRequestException("Invalid quality"));

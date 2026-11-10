@@ -21,14 +21,22 @@ public interface MediaFileRepository extends JpaRepository<MediaFile, Long> {
      * @param playability whether it can be played
      * @param pixelFormat the stored pixel format: null when the file has never been probed since the column was
      *     added (the scanner re-probes it once), empty when it was probed and ffprobe gave none
+     * @param videoDurationMs the stored video stream duration: null when the file has never been probed since the
+     *     column was added (the scanner re-probes it once), 0 when it was probed and ffprobe gave none
      */
     record Known(Long id, String path, Long sizeBytes, Instant modifiedAt, Presence presence,
-                 Playability playability, String pixelFormat) {
+                 Playability playability, String pixelFormat, Long videoDurationMs) {
+
+        /** A file whose video duration has been probed (the usual case in tests). */
+        public Known(Long id, String path, Long sizeBytes, Instant modifiedAt, Presence presence,
+                     Playability playability, String pixelFormat) {
+            this(id, path, sizeBytes, modifiedAt, presence, playability, pixelFormat, 0L);
+        }
     }
 
     /** Every original file, as the scanner's snapshot of what is already in the library. */
     @Query("select new gregochr.cinefilm.film.MediaFileRepository$Known(m.id, m.path, m.sizeBytes, m.modifiedAt, "
-        + "m.presence, m.playability, m.pixelFormat) from MediaFile m "
+        + "m.presence, m.playability, m.pixelFormat, m.videoDurationMs) from MediaFile m "
         + "where m.kind = gregochr.cinefilm.film.MediaKind.ORIGINAL")
     List<Known> findKnownOriginals();
 

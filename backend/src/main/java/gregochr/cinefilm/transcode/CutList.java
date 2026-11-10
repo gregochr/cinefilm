@@ -8,7 +8,8 @@ import java.util.List;
  * The segment timeline of one film, shared by every rung: segment {@code n} is {@code [startMs(n), startMs(n+1))}
  * and the last one ends at the film's duration. The first cut is 0 and each next cut is the first keyframe at or
  * after the previous cut plus {@link #TARGET_MS}, so the list is strictly increasing however far apart keyframes
- * are. Immutable.
+ * are. A film split across several files has one list per file and {@link #join} puts them on one timeline: each
+ * part's cuts shifted by the part's start, with a cut at every part start. Immutable.
  */
 public final class CutList {
 
@@ -21,10 +22,24 @@ public final class CutList {
     private final long[] cuts;
     private final long durationMs;
     private final long maxGapMs;
+    /** The segment each part starts at ({@code {0}} for a list that was not joined). */
+    private final int[] partStartSegments;
+    /** The time each part starts at ({@code {0}} for a list that was not joined). */
+    private final long[] partStartsMs;
+    /** The per-part lists of a joined list; null when this list is a single file's. */
+    private final List<CutList> parts;
 
     private CutList(long[] cuts, long durationMs) {
+        this(cuts, durationMs, new int[] {0}, new long[] {0}, null);
+    }
+
+    private CutList(long[] cuts, long durationMs, int[] partStartSegments, long[] partStartsMs,
+                    List<CutList> parts) {
         this.cuts = cuts;
         this.durationMs = durationMs;
+        this.partStartSegments = partStartSegments;
+        this.partStartsMs = partStartsMs;
+        this.parts = parts;
         long widest = durationMs - cuts[cuts.length - 1];
         for (int i = 1; i < cuts.length; i++) {
             widest = Math.max(widest, cuts[i] - cuts[i - 1]);
@@ -90,6 +105,103 @@ public final class CutList {
             throw new KeyframeIndexException("Stored cuts run past the duration");
         }
         return new CutList(cuts, durationMs);
+    }
+
+    /**
+     * Puts the cut lists of a film's parts, in play order, on one timeline. Part {@code i} starts where the parts
+     * before it end (the sum of their {@link #totalDurationMs()}), its cuts are shifted by that start, and the start
+     * itself is a cut, so a segment never spans two files. Segment numbers run on across parts: part 0's segments
+     * come first, then part 1's.
+     *
+     * @param partCuts one list per part, at least one; none of them may itself be joined
+     * @return the joined list; one part gives an equal list that still knows its single part
+     * @throws IllegalArgumentException when there are no parts
+     */
+    public static CutList join(List<CutList> partCuts) {
+        if (partCuts.isEmpty()) {
+            throw new IllegalArgumentException("at least one part");
+        }
+        List<Long> all = new ArrayList<>();
+        int[] segments = new int[partCuts.size()];
+        long[] starts = new long[partCuts.size()];
+        long start = 0;
+        for (int p = 0; p < partCuts.size(); p++) {
+            CutList part = partCuts.get(p);
+            if (part.parts != null) {
+                throw new IllegalArgumentException("a joined list cannot be joined again");
+            }
+            segments[p] = all.size();
+            starts[p] = start;
+            for (long cut : part.cuts) {
+                all.add(start + cut);
+            }
+            start += part.durationMs;
+        }
+        return new CutList(all.stream().mapToLong(Long::longValue).toArray(), start, segments, starts,
+            List.copyOf(partCuts));
+    }
+
+    /** How many parts the film has (1 unless the list was made by {@link #join}). */
+    public int partCount() {
+        return partStartSegments.length;
+    }
+
+    /**
+     * The cut list of one part, on that file's own timeline (0 is the start of the file).
+     *
+     * @throws IndexOutOfBoundsException when there is no such part
+     */
+    public CutList part(int part) {
+        checkPart(part);
+        return parts == null ? this : parts.get(part);
+    }
+
+    /**
+     * The first segment of a part; segment {@code partStartSegment(p)} starts at {@link #partStartMs(int)}.
+     *
+     * @throws IndexOutOfBoundsException when there is no such part
+     */
+    public int partStartSegment(int part) {
+        checkPart(part);
+        return partStartSegments[part];
+    }
+
+    /** The first segment of every part, in order; the first is always 0. */
+    public List<Integer> partStartSegments() {
+        return Arrays.stream(partStartSegments).boxed().toList();
+    }
+
+    /**
+     * Where a part starts on the film's timeline in milliseconds.
+     *
+     * @throws IndexOutOfBoundsException when there is no such part
+     */
+    public long partStartMs(int part) {
+        checkPart(part);
+        return partStartsMs[part];
+    }
+
+    /** The last segment of a part. */
+    public int lastSegmentOfPart(int part) {
+        checkPart(part);
+        return part + 1 < partStartSegments.length ? partStartSegments[part + 1] - 1 : cuts.length - 1;
+    }
+
+    /**
+     * The part that segment {@code n} belongs to.
+     *
+     * @throws IndexOutOfBoundsException when {@code n} is not a segment of this list
+     */
+    public int partOfSegment(int n) {
+        checkSegment(n);
+        int index = Arrays.binarySearch(partStartSegments, n);
+        return index >= 0 ? index : -index - 2;
+    }
+
+    private void checkPart(int part) {
+        if (part < 0 || part >= partStartSegments.length) {
+            throw new IndexOutOfBoundsException("No part " + part + " in " + partStartSegments.length);
+        }
     }
 
     /** The text to store: segment start times in milliseconds, comma-separated. */

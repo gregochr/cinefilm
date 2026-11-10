@@ -136,4 +136,51 @@ class EditionPartsTest {
         only.setPresence(Presence.MISSING);
         assertThat(edition.hiddenFromBrowse()).as("missing").isTrue();
     }
+
+    @Test
+    void aPartsTimelineLengthIsItsVideoDurationWhenKnownElseTheContainerDuration() {
+        MediaFile file = part("pt1.m4v", 1, 1L, 6_354_460L);
+
+        assertThat(file.timelineDurationMs()).as("never probed").isEqualTo(6_354_460L);
+        file.setVideoDurationMs(0L);
+        assertThat(file.timelineDurationMs()).as("probed, none").isEqualTo(6_354_460L);
+        file.setVideoDurationMs(1L);
+        assertThat(file.timelineDurationMs()).as("one millisecond").isEqualTo(1L);
+        file.setVideoDurationMs(6_353_420L);
+        assertThat(file.timelineDurationMs()).as("probed").isEqualTo(6_353_420L);
+        file.setDurationMs(null);
+        file.setVideoDurationMs(null);
+        assertThat(file.timelineDurationMs()).as("nothing known").isNull();
+    }
+
+    @Test
+    void theRuntimeOfASplitEditionIsTheSumOfThePartsVideoDurationsSoItMatchesTheStream() {
+        part("pt1.m4v", 1, 1L, 6_354_460L).setVideoDurationMs(6_353_420L);
+        part("pt2.m4v", 2, 2L, 7_354_432L).setVideoDurationMs(7_354_347L);
+
+        edition.recomputeRuntime();
+
+        assertThat(edition.getRuntimeMs()).isEqualTo(13_707_767L);
+    }
+
+    @Test
+    void aSingleFilesRuntimeIsAlwaysItsContainerDuration() {
+        part("a.m4v", 1, 1L, 6_354_460L).setVideoDurationMs(6_353_420L);
+
+        edition.recomputeRuntime();
+
+        assertThat(edition.getRuntimeMs()).isEqualTo(6_354_460L);
+    }
+
+    @Test
+    void theTimelineOfAnEditionStartsEachPartWhereThePreviousPartsVideoEnds() {
+        part("pt1.m4v", 1, 1L, 6_354_460L).setVideoDurationMs(6_353_420L);
+        part("pt2.m4v", 2, 2L, 7_354_432L).setVideoDurationMs(7_354_347L);
+
+        EditionTimeline timeline = EditionTimeline.of(edition);
+
+        assertThat(timeline.partStartMs(1)).isEqualTo(6_353_420L);
+        assertThat(timeline.totalMs()).isEqualTo(13_707_767L);
+        assertThat(timeline.locate(6_353_420L)).isEqualTo(new EditionTimeline.Position(1, 0));
+    }
 }

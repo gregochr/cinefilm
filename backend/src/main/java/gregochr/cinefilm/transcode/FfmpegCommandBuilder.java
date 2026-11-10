@@ -17,6 +17,13 @@ import java.util.Locale;
  * keyframe time (absolute film time) and to every rung's segment muxer as a split time (relative to the run's
  * start time {@code S}), so a split lands just before the keyframe that opens the next segment. Segment
  * timestamps are the film time plus {@link #TS_OFFSET_SECONDS}.
+ *
+ * <p>A film split across several files is encoded one file at a time. Under {@code -copyts} the forced keyframe times
+ * and the segment times stay on the file's own timeline (the plan's cut list is the file's), and only the output is
+ * moved onto the film's timeline: the timestamp offset adds the part's start, and the segment numbers continue from
+ * the film-wide number. Every part but the last pads its audio with silence ({@link #PAD_AUDIO_FLAGS}) so the audio
+ * ends where the picture ends. A run is never bounded with {@code -t} or {@code -to}: under {@code -copyts} they
+ * compare against the input's timestamps and make an empty output; each part runs to its natural end.
  */
 public final class FfmpegCommandBuilder {
 
@@ -70,9 +77,21 @@ public final class FfmpegCommandBuilder {
     /** The segment timestamps are the film time plus this many seconds. */
     public static final int TS_OFFSET_SECONDS = 10;
 
-    /** Segment muxer options after the start number: timestamps stay as they are, shifted by the offset. */
-    static final List<String> SEGMENT_TIMING_FLAGS = List.of("-reset_timestamps", "0", "-output_ts_offset",
-        Integer.toString(TS_OFFSET_SECONDS), "-muxdelay", "0", "-muxpreload", "0");
+    /** Segment muxer options after the start number, before the timestamp offset. */
+    static final List<String> SEGMENT_TIMING_FLAGS = List.of("-reset_timestamps", "0", "-output_ts_offset");
+
+    /** Segment muxer options after the timestamp offset. */
+    static final List<String> MUX_DELAY_FLAGS = List.of("-muxdelay", "0", "-muxpreload", "0");
+
+    /**
+     * Pads the audio with silence for ever and ends the output with the picture: the audio then runs to the end of
+     * the video even when the file's audio stops earlier (a part's AAC track can end a second before its picture).
+     * Used on every part but the last.
+     */
+    static final List<String> PAD_AUDIO_FLAGS = List.of("-af", "apad");
+
+    /** Ends an output when its shortest stream ends: with {@link #PAD_AUDIO_FLAGS} that is the video. */
+    static final String SHORTEST = "-shortest";
 
     /** The segment file name pattern inside a rung directory. */
     static final String SEGMENT_PATTERN = "seg-%d.ts";
@@ -194,13 +213,28 @@ public final class FfmpegCommandBuilder {
             }
         }
         flags.addAll(List.of("-c:a", "aac", "-b:a", Long.toString(rung.audioBitrate()), "-ac", "2"));
+        if (plan.padAudio()) {
+            flags.addAll(PAD_AUDIO_FLAGS);
+            flags.add(SHORTEST);
+        }
         flags.addAll(SEGMENT_FLAGS);
         String split = cutTimes(plan, seekMs(plan));
         flags.addAll(List.of("-segment_times", split.isEmpty() ? NO_MORE_CUTS : split,
-            "-segment_start_number", Integer.toString(plan.startSegment())));
+            "-segment_start_number", Integer.toString(plan.startNumber())));
         flags.addAll(SEGMENT_TIMING_FLAGS);
+        flags.add(timestampOffset(plan));
+        flags.addAll(MUX_DELAY_FLAGS);
         flags.add(plan.rungDir(rung).resolve(SEGMENT_PATTERN).toString());
         return flags;
+    }
+
+    /**
+     * The timestamp offset: {@link #TS_OFFSET_SECONDS} plus the part's start on the film's timeline, so a later part's
+     * timestamps continue where the previous part's end ({@code "10"} for a film in one piece).
+     */
+    static String timestampOffset(TranscodePlan plan) {
+        return plan.partStartMs() == 0 ? Integer.toString(TS_OFFSET_SECONDS)
+            : Seconds.format(TS_OFFSET_SECONDS * 1000L + plan.partStartMs());
     }
 
     /**

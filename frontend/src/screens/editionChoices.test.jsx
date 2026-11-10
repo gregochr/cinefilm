@@ -80,8 +80,8 @@ describe('Player: saved choices follow the selected edition', () => {
     renderApp('/films/1/play?edition=12');
     fireEvent.loadedMetadata(await screen.findByTestId('player-video'));
 
-    expect(mode('/api/media-files/502/subtitles/4.vtt')).toBe('showing');
-    expect(mode('/api/media-files/502/subtitles/3.vtt')).toBe('disabled');
+    expect(mode('/api/editions/12/subtitles/4.vtt')).toBe('showing');
+    expect(mode('/api/editions/12/subtitles/3.vtt')).toBe('disabled');
   });
 
   it('the saved full English track follows too', async () => {
@@ -90,7 +90,7 @@ describe('Player: saved choices follow the selected edition', () => {
     renderApp('/films/1/play?edition=12');
     fireEvent.loadedMetadata(await screen.findByTestId('player-video'));
 
-    expect(mode('/api/media-files/502/subtitles/3.vtt')).toBe('showing');
-    expect(mode('/api/media-files/502/subtitles/4.vtt')).toBe('disabled');
+    expect(mode('/api/editions/12/subtitles/3.vtt')).toBe('showing');
+    expect(mode('/api/editions/12/subtitles/4.vtt')).toBe('disabled');
   });
 });

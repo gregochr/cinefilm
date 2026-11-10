@@ -521,6 +521,8 @@ public class LibraryIngest {
         file.setHeight(probe.height());
         file.setBitrate(probe.bitrate());
         file.setDurationMs(probe.durationMs());
+        // 0 (not null) when ffprobe gave no video duration, so the scanner knows the file was probed.
+        file.setVideoDurationMs(probe.videoDurationMs() == null ? 0 : probe.videoDurationMs());
         java.util.Set<Integer> audioIndexes = new java.util.HashSet<>();
         probe.audio().forEach(a -> audioIndexes.add(a.index()));
         file.getAudioStreams().removeIf(s -> {

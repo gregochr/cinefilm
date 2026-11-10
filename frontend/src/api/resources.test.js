@@ -133,6 +133,10 @@ describe('image URLs', () => {
     expect(mediaFilesApi.subtitleUrl(501, 3)).toBe('/api/media-files/501/subtitles/3.vtt');
   });
 
+  it('builds the edition WebVTT url from the edition id and the stream index of part 1', () => {
+    expect(editionsApi.subtitleUrl(11, 3)).toBe('/api/editions/11/subtitles/3.vtt');
+  });
+
   it('reads the transcoding state and stops a session with DELETE', async () => {
     const last = stubFetch();
     await adminApi.transcoding();

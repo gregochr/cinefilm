@@ -123,6 +123,20 @@ class LibraryScanIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void theVideoStreamsDurationIsStoredAndTheScansSnapshotReadsItBackNullUntilProbed() {
+        ProbeResult withVideoDuration = new ProbeResult(10_200_000L, "mp4", "H.264", 1920, 800, 9_000_000L,
+            List.of(), List.of(), new ProbeResult.Tags(null, null, null, null, null), false, "yuv420p", 10_199_000L);
+        ingest.addNew(found("Towers pt1.m4v", 10), Playability.PLAYABLE, withVideoDuration,
+            new TitleGuess("Towers", null), null);
+        ingest.addNew(found("Unprobed.m4v", 11), Playability.UNREADABLE, null, new TitleGuess("Unprobed", null),
+            null);
+
+        assertThat(mediaFiles.findKnownOriginals()).extracting(k -> k.path(), k -> k.videoDurationMs())
+            .containsExactlyInAnyOrder(org.assertj.core.api.Assertions.tuple("Towers pt1.m4v", 10_199_000L),
+                org.assertj.core.api.Assertions.tuple("Unprobed.m4v", null));
+    }
+
+    @Test
     void missingFilesKeepTheirRowsAndAMissingCountIsReported() {
         ingest.addNew(found("Gone.m4v", 10), Playability.PLAYABLE, probe(1), new TitleGuess("Gone", null), null);
         Long id = ingest.known().get("Gone.m4v").id();

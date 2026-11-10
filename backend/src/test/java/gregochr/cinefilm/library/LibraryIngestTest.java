@@ -180,6 +180,22 @@ class LibraryIngestTest extends ApiTestBase {
         assertThat(film.getOverview()).isNull();
         assertThat(film.getEditions().get(0).originalFile().getContainer()).isNull();
         assertThat(film.getEditions().get(0).originalFile().getPixelFormat()).isEmpty();
+        assertThat(film.getEditions().get(0).originalFile().getVideoDurationMs()).isZero();
+    }
+
+    @Test
+    void theVideoStreamsDurationIsStoredAndIsNullUntilTheFileHasBeenProbed() {
+        ProbeResult withVideoDuration = new ProbeResult(10_200_000L, "mp4", "H.264", 1920, 800, 9_000_000L,
+            List.of(), List.of(), new ProbeResult.Tags(null, null, null, null, null), false, "yuv420p", 10_199_000L);
+        ingest.addNew(found("Heat.m4v", 1), Playability.PLAYABLE, withVideoDuration, new TitleGuess("Heat", null),
+            null);
+        ingest.addNew(found("Unprobed.m4v", 1), Playability.UNREADABLE, null, new TitleGuess("Unprobed", null),
+            null);
+        em.flush();
+        em.clear();
+
+        assertThat(mediaFiles.findAll()).extracting(MediaFile::getPath, MediaFile::getVideoDurationMs)
+            .containsExactlyInAnyOrder(tuple("Heat.m4v", 10_199_000L), tuple("Unprobed.m4v", null));
     }
 
     @Test

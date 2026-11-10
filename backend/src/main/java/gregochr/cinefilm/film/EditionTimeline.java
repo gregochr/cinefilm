@@ -49,14 +49,15 @@ public final class EditionTimeline {
     }
 
     /**
-     * Builds the timeline from an edition's {@link Edition#originalParts()}.
+     * Builds the timeline from an edition's {@link Edition#originalParts()}, each part as long as its video stream
+     * ({@link MediaFile#timelineDurationMs()}) so a part starts where the previous part's picture ends.
      *
      * @param edition the edition
      * @return the timeline
      * @throws IllegalArgumentException when the edition has no original part or a part has no duration
      */
     public static EditionTimeline of(Edition edition) {
-        return new EditionTimeline(edition.originalParts().stream().map(MediaFile::getDurationMs).toList());
+        return new EditionTimeline(edition.originalParts().stream().map(MediaFile::timelineDurationMs).toList());
     }
 
     /** The whole edition's length in milliseconds. */

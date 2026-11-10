@@ -12,8 +12,11 @@ interface SegmentFiles {
     /** Deletes one file; a missing file is fine. */
     void delete(Path file);
 
-    /** Deletes every {@code seg-<n>.ts} in the directory with {@code n} at or above {@code firstIndex}. */
-    void deleteFrom(Path rungDir, int firstIndex);
+    /**
+     * Deletes every {@code seg-<n>.ts} in the directory with {@code n} from {@code firstIndex} to {@code lastIndex}
+     * inclusive (the run's own part: the segments of another part of the film stay).
+     */
+    void deleteRange(Path rungDir, int firstIndex, int lastIndex);
 
     /** Deletes a directory and everything under it; a missing directory is fine. */
     void deleteTree(Path dir);

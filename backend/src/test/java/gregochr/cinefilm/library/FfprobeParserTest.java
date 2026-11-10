@@ -307,6 +307,42 @@ class FfprobeParserTest {
     }
 
     @Test
+    void theVideoStreamsOwnDurationIsKeptInMillisecondsAndIsNotTheAudiosOrTheContainers() {
+        ProbeResult probe = FfprobeParser.parse("""
+            {"format":{"format_name":"mp4","duration":"7354.432000"},"streams":[
+              {"index":0,"codec_type":"video","codec_name":"h264","duration":"7354.347000"},
+              {"index":1,"codec_type":"audio","codec_name":"aac","duration":"7354.432000"}]}""");
+
+        assertThat(probe.durationMs()).isEqualTo(7_354_432L);
+        assertThat(probe.videoDurationMs()).isEqualTo(7_354_347L);
+    }
+
+    @Test
+    void theFirstRealVideoStreamsDurationIsTheOneKeptAndCoverArtIsIgnored() {
+        ProbeResult probe = FfprobeParser.parse("""
+            {"format":{},"streams":[
+              {"index":0,"codec_type":"video","codec_name":"mjpeg","duration":"99.0",
+               "disposition":{"attached_pic":1}},
+              {"index":1,"codec_type":"video","codec_name":"h264","duration":"12.3456"},
+              {"index":2,"codec_type":"video","codec_name":"h264","duration":"50.0"}]}""");
+
+        assertThat(probe.videoDurationMs()).isEqualTo(12_346L);
+    }
+
+    @Test
+    void aVideoStreamWithNoDurationOrNoVideoStreamGivesNoVideoDuration() {
+        assertThat(FfprobeParser.parse("""
+            {"format":{},"streams":[{"index":0,"codec_type":"video","codec_name":"h264","duration":"N/A"}]}""")
+            .videoDurationMs()).isNull();
+        assertThat(FfprobeParser.parse("""
+            {"format":{},"streams":[{"index":0,"codec_type":"video","codec_name":"h264"}]}""")
+            .videoDurationMs()).isNull();
+        assertThat(FfprobeParser.parse("""
+            {"format":{"duration":"5.0"},"streams":[
+              {"index":0,"codec_type":"audio","codec_name":"aac","duration":"5.0"}]}""").videoDurationMs()).isNull();
+    }
+
+    @Test
     void aMissingOrBlankPixelFormatIsNull() {
         assertThat(FfprobeParser.parse("{\"format\":{},\"streams\":[{\"index\":0,\"codec_type\":\"video\","
             + "\"codec_name\":\"h264\"}]}").pixelFormat()).isNull();

@@ -56,10 +56,14 @@ public final class FilmDtos {
     public record QualityDto(String id, Long bitrate, boolean premade, boolean available) {
     }
 
-    /** One edition with its streams and qualities. */
+    /**
+     * One edition with its streams and qualities. {@code parts} is how many files the edition is made of (1 for a film
+     * in one piece): a split film plays as one continuous film (times are edition times, from the start of part 1), is
+     * never direct-played and shows no part numbers; the audio and subtitle streams are part 1's, the logical ones.
+     */
     public record EditionDto(Long id, String name, Integer year, long runtimeMs, String note, Long creditsMarkerMs,
                              long positionMs, boolean watched, FileInfo file, List<AudioStreamDto> audioStreams,
-                             List<SubtitleStreamDto> subtitleStreams, List<QualityDto> qualities) {
+                             List<SubtitleStreamDto> subtitleStreams, List<QualityDto> qualities, int parts) {
     }
 
     /** Remembered per-film choices. */

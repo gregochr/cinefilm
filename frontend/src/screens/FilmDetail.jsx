@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { resolutionLabel } from '../state/resolution.js';
+import { fileLine } from '../state/fileLine.js';
 import { joinMeta } from '../state/titles.js';
 import { Link, useParams } from 'react-router-dom';
 import { BACKDROP_SIZE, POSTER_SIZE_LARGE } from '../api/images.js';
@@ -22,13 +22,6 @@ import {
 } from '../player/tracks.js';
 import { displayName } from '../state/collections.js';
 import { useFilm, useFilmActions } from '../state/useFilms.js';
-
-function addedLabel(iso) {
-  if (!iso) return '';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '';
-  return `added ${date.toLocaleString('en-GB', { month: 'long', year: 'numeric' })}`;
-}
 
 function qualityOptions(edition) {
   return edition.qualities.map((q) => ({
@@ -125,16 +118,6 @@ export default function FilmDetail() {
       </Link>
     ) : null,
   ].filter(Boolean);
-
-  const file = edition.file || {};
-  const fileLine = [
-    'Original file',
-    [resolutionLabel(file.width), file.videoCodec].filter(Boolean).join(' '),
-    file.audioSummary,
-    addedLabel(file.addedAt),
-  ]
-    .filter(Boolean)
-    .join(' · ');
 
   return (
     <div className="detail">
@@ -288,7 +271,7 @@ export default function FilmDetail() {
               </div>
             </div>
           </div>
-          <p className="detail__file">{fileLine}</p>
+          <p className="detail__file">{fileLine(edition)}</p>
         </div>
       </div>
     </div>

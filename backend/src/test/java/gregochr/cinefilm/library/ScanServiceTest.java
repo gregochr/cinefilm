@@ -240,6 +240,32 @@ class ScanServiceTest {
     }
 
     @Test
+    void anUnchangedFileWithNoStoredVideoDurationIsProbedOnceMoreAndRefreshed() throws IOException {
+        FoundFile file = found("Heat.m4v", 10, T1);
+        ProbeResult probe = probe(60_000L, null, null, false);
+        disk(file);
+        stubProbe(probe, file);
+        when(ingest.known()).thenReturn(Map.of("Heat.m4v",
+            new Known(1L, "Heat.m4v", 10L, T1, Presence.PRESENT, Playability.PLAYABLE, "yuv420p", null)));
+
+        service.start("admin");
+
+        verify(ingest).refresh(1L, file, Playability.PLAYABLE, probe);
+    }
+
+    @Test
+    void anUnchangedFileWhoseVideoDurationWasProbedAsNoneIsNotProbedAgain() throws IOException {
+        disk(found("Heat.m4v", 10, T1));
+        when(ingest.known()).thenReturn(Map.of("Heat.m4v",
+            new Known(1L, "Heat.m4v", 10L, T1, Presence.PRESENT, Playability.PLAYABLE, "yuv420p", 0L)));
+
+        service.start("admin");
+
+        verifyNoInteractions(ffprobe);
+        verify(ingest, never()).refresh(anyLong(), any(), any(), any());
+    }
+
+    @Test
     void anUnchangedFileWithAStoredOrEmptyMarkerPixelFormatIsNeverProbedAgain() throws IOException {
         disk(found("Heat.m4v", 10, T1), found("NoVideo.m4v", 20, T1));
         when(ingest.known()).thenReturn(Map.of(

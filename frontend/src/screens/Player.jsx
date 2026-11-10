@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { SESSION_EXPIRED_EVENT, SIGNED_IN_EVENT } from '../api/client.js';
-import { mediaFilesApi } from '../api/resources.js';
+import { editionsApi } from '../api/resources.js';
 import BufferingIndicator from '../components/BufferingIndicator.jsx';
 import { Button } from '../components/Button.jsx';
 import {
@@ -23,6 +23,7 @@ import {
   ReconnectingNotice,
   SlowConnectionCard,
   Toast,
+  UnavailableCard,
 } from '../components/PlayerOverlays.jsx';
 import Scrubber from '../components/Scrubber.jsx';
 import { ErrorState } from '../components/StateMessages.jsx';
@@ -401,21 +402,19 @@ function PlayerView({ film, edition, startAtZero }) {
           setPositionMs(durationMs);
         }}
       >
-        {edition.file
-          ? edition.subtitleStreams.map((stream) => (
-              <track
-                key={streamKey(stream)}
-                ref={(element) => {
-                  if (element) trackRefs.current.set(streamKey(stream), element);
-                  else trackRefs.current.delete(streamKey(stream));
-                }}
-                kind="subtitles"
-                data-testid="subtitle-track"
-                label={subtitleLabel(stream)}
-                src={mediaFilesApi.subtitleUrl(edition.file.id, stream.index)}
-              />
-            ))
-          : null}
+        {edition.subtitleStreams.map((stream) => (
+          <track
+            key={streamKey(stream)}
+            ref={(element) => {
+              if (element) trackRefs.current.set(streamKey(stream), element);
+              else trackRefs.current.delete(streamKey(stream));
+            }}
+            kind="subtitles"
+            data-testid="subtitle-track"
+            label={subtitleLabel(stream)}
+            src={editionsApi.subtitleUrl(edition.id, stream.index)}
+          />
+        ))}
       </video>
       <button
         type="button"
@@ -426,7 +425,13 @@ function PlayerView({ film, edition, startAtZero }) {
         onDoubleClick={() => toggleFullscreen(containerRef.current, videoRef.current)}
       />
 
-      {stream.reconnecting ? <ReconnectingNotice /> : buffering ? <BufferingIndicator /> : null}
+      {stream.mode === 'unavailable' ? (
+        <UnavailableCard onRetry={stream.restart} />
+      ) : stream.reconnecting ? (
+        <ReconnectingNotice />
+      ) : buffering ? (
+        <BufferingIndicator />
+      ) : null}
       {toast ? <Toast>{toast}</Toast> : null}
 
       <div className="player__chrome">

@@ -110,6 +110,20 @@ class StreamApiTest extends ApiTestBase {
     }
 
     @Test
+    void anEditionSplitAcrossSeveralFilesIs409BecauseItPlaysOnlyAsOneAdaptiveSession() throws Exception {
+        Film film = film(null, "Towers", 2002, NOW);
+        Edition split = edition(film, null, "Extended", 200 * MIN, null);
+        file(split, rel(video));
+        MediaFile second = file(split, rel(video));
+        second.setPartNumber(2);
+        save(film);
+
+        mvc.perform(get("/api/editions/{id}/stream", split.getId())).andExpect(status().isConflict())
+            .andExpect(jsonPath("$.error")
+                .value("This edition is split across several files and cannot be direct-played"));
+    }
+
+    @Test
     void unknownEditionIs404() throws Exception {
         mvc.perform(get("/api/editions/{id}/stream", 555555)).andExpect(status().isNotFound())
             .andExpect(jsonPath("$.error").value("No such edition"));

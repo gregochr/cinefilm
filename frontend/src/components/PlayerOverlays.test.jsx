@@ -1,7 +1,13 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { EndOverlay, ReconnectingNotice, IndicatorPill, Toast } from './PlayerOverlays.jsx';
+import {
+  EndOverlay,
+  ReconnectingNotice,
+  IndicatorPill,
+  Toast,
+  UnavailableCard,
+} from './PlayerOverlays.jsx';
 
 describe('status overlays', () => {
   it('the indicator pill is a status carrying its text', () => {
@@ -18,6 +24,21 @@ describe('status overlays', () => {
   it('a toast is a status carrying its message', () => {
     render(<Toast>Subtitles: English</Toast>);
     expect(screen.getByRole('status')).toHaveTextContent('Subtitles: English');
+  });
+});
+
+describe('UnavailableCard', () => {
+  it('says the film cannot be played right now as an alert and focuses Try again', () => {
+    render(<UnavailableCard onRetry={() => {}} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('This film can’t be played right now');
+    expect(screen.getByRole('button', { name: 'Try again' })).toHaveFocus();
+  });
+
+  it('Try again calls onRetry', async () => {
+    const onRetry = vi.fn();
+    render(<UnavailableCard onRetry={onRetry} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });
 

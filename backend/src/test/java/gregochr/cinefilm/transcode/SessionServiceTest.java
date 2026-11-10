@@ -160,10 +160,10 @@ class SessionServiceTest {
         SessionSpec spec = created();
         assertThat(spec.editionId()).isEqualTo(EDITION_ID);
         assertThat(spec.filmTitle()).isEqualTo("Heat");
-        assertThat(spec.source()).isEqualTo(PATH);
-        assertThat(spec.audioIndex()).isEqualTo(1);
+        assertThat(spec.parts().get(0).source()).isEqualTo(PATH);
+        assertThat(spec.parts().get(0).audioIndex()).isEqualTo(1);
         assertThat(spec.cuts()).isSameAs(CUTS);
-        assertThat(spec.fps()).isEqualTo(25.0);
+        assertThat(spec.parts().get(0).fps()).isEqualTo(25.0);
         assertThat(spec.width()).isEqualTo(1920);
         assertThat(spec.height()).isEqualTo(1080);
         assertThat(spec.rungs()).extracting(Rung::id).containsExactly("original", "720p", "480p", "360p");
@@ -203,7 +203,7 @@ class SessionServiceTest {
 
         service.create(EDITION_ID, request(100L, null, "auto", null));
 
-        assertThat(created().audioIndex()).isZero();
+        assertThat(created().parts().get(0).audioIndex()).isZero();
     }
 
     @Test
@@ -213,7 +213,7 @@ class SessionServiceTest {
 
         service.create(EDITION_ID, request(null, null, "auto", null));
 
-        assertThat(created().audioIndex()).isZero();
+        assertThat(created().parts().get(0).audioIndex()).isZero();
     }
 
     @Test
@@ -288,23 +288,24 @@ class SessionServiceTest {
 
     @Test
     void aFileWithoutADurationOrHeightIs409() {
-        source(AUDIO);
         file.setDurationMs(null);
-        assertThatThrownBy(() -> service.create(EDITION_ID, request(null, null, "auto", null)))
-            .isInstanceOf(ConflictException.class).hasMessage("The film's duration or size is unknown");
+        assertUnknownFact();
 
         file.setDurationMs(0L);
-        assertThatThrownBy(() -> service.create(EDITION_ID, request(null, null, "auto", null)))
-            .isInstanceOf(ConflictException.class);
+        assertUnknownFact();
 
         file.setDurationMs(DURATION);
         file.setHeight(null);
-        assertThatThrownBy(() -> service.create(EDITION_ID, request(null, null, "auto", null)))
-            .isInstanceOf(ConflictException.class);
+        assertUnknownFact();
 
         file.setHeight(1);
+        assertUnknownFact();
+    }
+
+    private void assertUnknownFact() {
+        source(AUDIO);
         assertThatThrownBy(() -> service.create(EDITION_ID, request(null, null, "auto", null)))
-            .isInstanceOf(ConflictException.class);
+            .isInstanceOf(ConflictException.class).hasMessage("The film's duration or size is unknown");
     }
 
     @Test
