@@ -25,13 +25,17 @@ import org.springframework.stereotype.Component;
 /**
  * Owns every live HLS session: one encoder run per session, started at the segment the player needs, killed when it
  * runs too far ahead or the player goes quiet, restarted when the player seeks somewhere it will not reach soon.
+ * A film split across several files is encoded one file at a time: a run covers one part, and when it ends cleanly
+ * the next run starts at the first segment of the next part (unless the player is far behind), so the player sees one
+ * continuous film. A restart or a clean-up touches only the run's own part.
  * State changes happen under one lock; waiting for a segment happens outside it, on the caller's virtual thread.
  * Time comes from the injected clock, periodic upkeep from the injected scheduler, and file questions from
  * {@link SegmentFiles}, so the whole thing runs in tests without a process, a disk or a sleep.
  *
- * <p>A segment file is complete when the next segment's file exists (the encoder moved on) or when the run that
- * wrote it exited cleanly. A killed run's half-written segment is deleted at once, so that rule never mistakes it
- * for a finished one, and a restart first deletes every file at or after its first segment.
+ * <p>A segment file is complete when the next segment's file exists (the encoder moved on) or, for the last segment
+ * of a part, when a run of that part exited cleanly. A killed run's half-written segment is deleted at once, so that
+ * rule never mistakes it for a finished one, and a restart first deletes every file of its part at or after its first
+ * segment.
  */
 @Component
 public class SessionManager {
@@ -253,6 +257,8 @@ public class SessionManager {
             if (idle.compareTo(settings.idleStop()) >= 0 || tooFarAhead(session, run)) {
                 stop(session, run);
             }
+        } else if (idle.compareTo(settings.idleStop()) < 0 && chainDue(session)) {
+            chain(session);
         }
         deleteBehind(session);
     }
@@ -314,11 +320,13 @@ public class SessionManager {
         if (!files.exists(session.segmentFile(rungId, n))) {
             return false;
         }
-        if (n + 1 < session.spec.cuts().segmentCount() && files.exists(session.segmentFile(rungId, n + 1))) {
+        CutList cuts = session.spec.cuts();
+        int part = cuts.partOfSegment(n);
+        Integer finishedFrom = session.finishedFrom.get(part);
+        if (finishedFrom != null && n >= finishedFrom) {
             return true;
         }
-        Run run = session.run;
-        return run.status == Status.FINISHED && n >= run.startSegment;
+        return n < cuts.lastSegmentOfPart(part) && files.exists(session.segmentFile(rungId, n + 1));
     }
 
     private boolean settled(TranscodeSession session, String rungId, int n) {
@@ -328,12 +336,16 @@ public class SessionManager {
         }
     }
 
-    /** Leaves a live encoder that will reach the segment soon alone; otherwise restarts it at the segment. */
+    /**
+     * Leaves a live encoder that will reach the segment soon alone; otherwise restarts it at the segment. A segment
+     * in the part after the run's is reached by the chain when the run ends, so it is waited for too.
+     */
     private void ensureReaching(TranscodeSession session, int n) {
         Run run = session.run;
         if (run.running()) {
             advance(session, run);
-            if (n >= run.startSegment && n <= run.frontier + WAIT_AHEAD_SEGMENTS) {
+            boolean inReach = n <= run.lastSegment || session.spec.cuts().partOfSegment(n) == run.part + 1;
+            if (inReach && n >= run.startSegment && n <= run.frontier + WAIT_AHEAD_SEGMENTS) {
                 return;
             }
         }
@@ -348,24 +360,32 @@ public class SessionManager {
         }
     }
 
+    /** Starts an encoder run at a film-wide segment, on the file (part) that segment belongs to. */
     private void startRun(TranscodeSession session, int segment) throws IOException {
         SessionSpec spec = session.spec;
+        CutList film = spec.cuts();
+        int part = film.partOfSegment(segment);
+        int last = film.lastSegmentOfPart(part);
         for (Rung rung : spec.rungs()) {
-            files.deleteFrom(session.dir.resolve(rung.id()), segment);
+            files.deleteRange(session.dir.resolve(rung.id()), segment, last);
         }
-        Run run = new Run(segment);
-        TranscodePlan plan = new TranscodePlan(spec.source(), session.dir, spec.rungs(), spec.audioIndex(),
-            spec.cuts(), segment, transcoder.mode(), settings.threads(), spec.fps(),
-            spec.hardwareDecode(), settings.device());
+        session.finishedFrom.remove(part);
+        Run run = new Run(segment, part, last);
+        SessionSpec.PartSource source = spec.parts().get(part);
+        int firstSegment = film.partStartSegment(part);
+        TranscodePlan plan = new TranscodePlan(source.source(), session.dir, spec.rungs(), source.audioIndex(),
+            film.part(part), segment - firstSegment, transcoder.mode(), settings.threads(), source.fps(),
+            spec.hardwareDecode(), settings.device(), film.partStartMs(part), firstSegment,
+            part < film.partCount() - 1);
         run.process = transcoder.start(plan, new RunListener(session, run));
         session.run = run;
         session.deletedBelow = Math.min(session.deletedBelow, segment);
     }
 
-    /** Moves the run's newest-segment mark forward over the files the first rung has written. */
+    /** Moves the run's newest-segment mark forward over the files the first rung has written, up to its part's end. */
     private void advance(TranscodeSession session, Run run) {
         String first = session.spec.rungs().get(0).id();
-        int last = session.spec.cuts().segmentCount() - 1;
+        int last = run.lastSegment;
         while (run.frontier < last && files.exists(session.segmentFile(first, run.frontier + 1))) {
             run.frontier++;
         }
@@ -389,10 +409,13 @@ public class SessionManager {
         }
     }
 
-    /** Deletes, in every rung, the last segment file of a dead run: it is half written. */
+    /**
+     * Deletes, in every rung, the last segment file of a dead run: it is half written. Only the run's own part is
+     * looked at: the next part's files (from an earlier run) are not this run's and are left alone.
+     */
     private void cleanPartial(TranscodeSession session, Run run) {
         advance(session, run);
-        int last = session.spec.cuts().segmentCount() - 1;
+        int last = run.lastSegment;
         for (Rung rung : session.spec.rungs()) {
             int n = Math.max(run.startSegment, run.frontier - RUNG_LAG);
             while (n < last && files.exists(session.segmentFile(rung.id(), n + 1))) {
@@ -428,6 +451,10 @@ public class SessionManager {
         }
         if (exitCode == 0) {
             run.status = Status.FINISHED;
+            session.finishedFrom.put(run.part, run.startSegment);
+            if (chainDue(session)) {
+                chain(session);
+            }
             return;
         }
         LOG.warn("ffmpeg for session {} exited with {}: {}", session.id, exitCode, logTail);
@@ -442,6 +469,32 @@ public class SessionManager {
             startRun(session, run.frontier);
         } catch (IOException e) {
             LOG.warn("Cannot restart the encoder for session {}: {}", session.id, e.getMessage());
+            session.unavailable = true;
+        }
+    }
+
+    /**
+     * True when the session's run ended cleanly before the last part and the player is near enough to the next part
+     * to want it: further than {@link #LOOK_AHEAD} ahead of the player it waits (the player's request, or a later
+     * sweep once the player has caught up, starts it).
+     */
+    private boolean chainDue(TranscodeSession session) {
+        Run run = session.run;
+        CutList cuts = session.spec.cuts();
+        if (run.status != Status.FINISHED || session.unavailable || run.part + 1 >= cuts.partCount()) {
+            return false;
+        }
+        long ahead = cuts.startMs(cuts.partStartSegment(run.part + 1)) - cuts.startMs(session.playhead);
+        return ahead <= LOOK_AHEAD.toMillis();
+    }
+
+    /** Starts the run of the part after the finished run's, at that part's first segment. */
+    private void chain(TranscodeSession session) {
+        CutList cuts = session.spec.cuts();
+        try {
+            startRun(session, cuts.partStartSegment(session.run.part + 1));
+        } catch (IOException e) {
+            LOG.warn("Cannot start the next part's encoder for session {}: {}", session.id, e.getMessage());
             session.unavailable = true;
         }
     }

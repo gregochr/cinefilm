@@ -18,7 +18,9 @@ public final class PlaylistWriter {
     }
 
     /**
-     * A VOD media playlist covering the whole film.
+     * A VOD media playlist covering the whole film. A film split across several files has one
+     * {@code #EXT-X-DISCONTINUITY} before the first segment of every part after the first, at the same segment in
+     * every rung (every rung lists the same cut list).
      *
      * @param cuts the film's segment timeline
      * @return the playlist text
@@ -31,7 +33,11 @@ public final class PlaylistWriter {
         StringBuilder out = new StringBuilder("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-PLAYLIST-TYPE:VOD\n");
         out.append("#EXT-X-TARGETDURATION:").append((longest + 999) / 1000).append('\n');
         out.append("#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-INDEPENDENT-SEGMENTS\n");
+        List<Integer> partStarts = cuts.partStartSegments();
         for (int n = 0; n < cuts.segmentCount(); n++) {
+            if (n > 0 && partStarts.contains(n)) {
+                out.append("#EXT-X-DISCONTINUITY\n");
+            }
             out.append("#EXTINF:").append(Seconds.format(cuts.durationMs(n))).append(",\n");
             out.append(segmentName(n)).append('\n');
         }

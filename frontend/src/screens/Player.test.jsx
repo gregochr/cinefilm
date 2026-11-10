@@ -705,8 +705,8 @@ describe('Player subtitle tracks', () => {
     expect(tracks.map((t) => t.getAttribute('kind'))).toEqual(['subtitles', 'subtitles']);
     expect(tracks.map((t) => t.getAttribute('label'))).toEqual(['English', 'English (forced)']);
     expect(tracks.map((t) => t.getAttribute('src'))).toEqual([
-      '/api/media-files/501/subtitles/3.vtt',
-      '/api/media-files/501/subtitles/4.vtt',
+      '/api/editions/11/subtitles/3.vtt',
+      '/api/editions/11/subtitles/4.vtt',
     ]);
   });
 
@@ -715,14 +715,19 @@ describe('Player subtitle tracks', () => {
     expect(screen.queryAllByTestId('subtitle-track')).toHaveLength(0);
   });
 
-  it('adds no tracks when the edition has no file to read them from', async () => {
-    await openPlayer(
-      '/films/1/play?edition=11',
+  it('points a film split across several files at the edition too: one track each, no part numbers', async () => {
+    installFetch(
       heatWith((f) => {
-        f.editions[0].file = null;
+        f.editions[0].parts = 2;
       }),
     );
-    expect(screen.queryAllByTestId('subtitle-track')).toHaveLength(0);
+    renderApp('/films/1/play?edition=11');
+    const tracks = await screen.findAllByTestId('subtitle-track');
+    expect(tracks.map((t) => t.getAttribute('src'))).toEqual([
+      '/api/editions/11/subtitles/3.vtt',
+      '/api/editions/11/subtitles/4.vtt',
+    ]);
+    expect(tracks.map((t) => t.getAttribute('label'))).toEqual(['English', 'English (forced)']);
   });
 
   it('turns the forced track on by itself when Subtitles is Off (decision 6)', async () => {

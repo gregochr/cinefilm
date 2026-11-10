@@ -65,19 +65,21 @@ class NioSegmentFilesTest {
     }
 
     @Test
-    void deleteFromRemovesSegmentsAtOrAboveTheIndexAndNothingElse() throws IOException {
-        for (int n = 0; n < 6; n++) {
+    void deleteRangeRemovesSegmentsFromFirstToLastInclusiveAndNothingElse() throws IOException {
+        for (int n = 0; n < 8; n++) {
             touch("r/seg-" + n + ".ts", 1);
         }
         touch("r/seg-x.ts", 1);
         touch("r/index.m3u8", 1);
         touch("other/seg-4.ts", 1);
 
-        files.deleteFrom(dir.resolve("r"), 3);
+        files.deleteRange(dir.resolve("r"), 3, 5);
 
         assertThat(dir.resolve("r/seg-2.ts")).exists();
         assertThat(dir.resolve("r/seg-3.ts")).doesNotExist();
         assertThat(dir.resolve("r/seg-5.ts")).doesNotExist();
+        assertThat(dir.resolve("r/seg-6.ts")).exists();
+        assertThat(dir.resolve("r/seg-7.ts")).exists();
         assertThat(dir.resolve("r/seg-x.ts")).exists();
         assertThat(dir.resolve("r/index.m3u8")).exists();
         assertThat(dir.resolve("other/seg-4.ts")).exists();
@@ -85,17 +87,17 @@ class NioSegmentFilesTest {
     }
 
     @Test
-    void deleteFromAMissingFolderDoesNothing() {
-        files.deleteFrom(dir.resolve("missing"), 0);
+    void deleteRangeOfAMissingFolderDoesNothing() {
+        files.deleteRange(dir.resolve("missing"), 0, 9);
 
         assertThat(dir.resolve("missing")).doesNotExist();
     }
 
     @Test
-    void deleteFromAnUnreadableFolderIsLoggedNotThrown() throws IOException {
+    void deleteRangeOfAnUnreadableFolderIsLoggedNotThrown() throws IOException {
         Path folder = unreadableDir();
 
-        files.deleteFrom(folder, 0);
+        files.deleteRange(folder, 0, 9);
 
         assertThat(folder).exists();
     }

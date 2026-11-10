@@ -233,6 +233,26 @@ class EditionJoinTest extends ApiTestBase {
     }
 
     @Test
+    void aSecondPartsResumeIsShiftedByThePreviousPartsVideoNotItsContainer() {
+        Film one = film("Towers", MatchStatus.MATCHED, "Towers - pt1.m4v", 90);
+        Film two = film("Towers 2", MatchStatus.PENDING, "Towers - pt2.m4v", 110);
+        MediaFile firstFile = one.getEditions().get(0).getMediaFiles().get(0);
+        firstFile.setVideoDurationMs(89 * MIN); // the container is a minute longer than the picture
+        films.saveAndFlush(one);
+        Long survivor = editionId(one);
+        saveState(TestData.state(two.getEditions().get(0), 5_000, false, TUESDAY, null));
+        Long first = fileId(one);
+        Long second = fileId(two);
+        reset();
+
+        join.join(List.of(first, second));
+        reset();
+
+        // Playback puts part 2 at 89 minutes, so 5 s into it is 89 minutes and 5 s, not 90 minutes and 5 s.
+        assertThat(states.findById(survivor).orElseThrow().getPositionMs()).isEqualTo(89 * MIN + 5_000);
+    }
+
+    @Test
     void aWatchedLastPartMakesTheJoinedEditionWatched() {
         Film one = film("Towers", MatchStatus.MATCHED, "Towers - pt1.m4v", 90);
         Film two = film("Towers 2", MatchStatus.PENDING, "Towers - pt2.m4v", 110);
@@ -648,6 +668,28 @@ class EditionJoinTest extends ApiTestBase {
         assertThat(created.getName()).isEqualTo("Extended");
         assertThat(kept.getCreditsMarkerMs()).isNull();
         assertThat(created.getCreditsMarkerMs()).isEqualTo(100 * MIN);
+    }
+
+    @Test
+    void unfoldingLocatesThePositionAndTheMarkerOnThePlaybackTimelineWhereVideoIsShorterThanTheContainer() {
+        Edition edition = twoParts(190 * MIN);
+        MediaFile firstFile = edition.getMediaFiles().get(0);
+        firstFile.setVideoDurationMs(89 * MIN);
+        edition.getMediaFiles().get(1).setVideoDurationMs(110 * MIN);
+        films.saveAndFlush(edition.getFilm());
+        Long editionId = edition.getId();
+        Long first = firstFile.getId();
+        Long second = edition.getMediaFiles().get(1).getId();
+        // 5 s past the join as playback sees it (89 minutes); by container durations it would still be in part 1.
+        saveState(TestData.state(edition, 89 * MIN + 5_000, false, TUESDAY, null));
+        reset();
+
+        List<Long> ids = join.unfold(editionId, List.of(List.of(first), List.of(second)));
+        reset();
+
+        assertThat(states.findById(ids.get(0))).isEmpty();
+        assertThat(states.findById(ids.get(1)).orElseThrow().getPositionMs()).isEqualTo(5_000);
+        assertThat(editions.findById(ids.get(1)).orElseThrow().getCreditsMarkerMs()).isEqualTo(101 * MIN);
     }
 
     @Test

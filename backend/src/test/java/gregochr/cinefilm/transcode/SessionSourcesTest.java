@@ -70,7 +70,8 @@ class SessionSourcesTest {
         assertThat(source.filmTitle()).isEqualTo("Heat");
         assertThat(source.file()).isSameAs(original);
         assertThat(source.path()).isEqualTo(film.toRealPath());
-        assertThat(source.audio()).containsExactly(new AudioChoice(100, 0, true), new AudioChoice(101, 1, false));
+        assertThat(source.audio()).containsExactly(new AudioChoice(100, 0, true, "English"),
+            new AudioChoice(101, 1, false, "English"));
     }
 
     @Test
@@ -82,7 +83,8 @@ class SessionSourcesTest {
 
         Source source = sources.find(EDITION_ID);
 
-        assertThat(source.audio()).containsExactly(new AudioChoice(100, 1, true), new AudioChoice(101, 0, false));
+        assertThat(source.audio()).containsExactly(new AudioChoice(100, 1, true, "English"),
+            new AudioChoice(101, 0, false, "English"));
     }
 
     @Test

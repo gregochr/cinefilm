@@ -6,8 +6,10 @@ import gregochr.cinefilm.film.Playability;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.library.ScanFinished;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -105,9 +107,11 @@ public class IndexJob {
     void run() {
         List<MediaFile> originals = files.findOriginals(Presence.PRESENT, Playability.PLAYABLE);
         int failed = 0;
+        Map<Long, Long> perEdition = originals.stream()
+            .collect(Collectors.groupingBy(f -> f.getEdition().getId(), Collectors.counting()));
         for (MediaFile file : originals) {
             try {
-                service.ensureIndexed(file);
+                service.ensureIndexedFor(file, perEdition.get(file.getEdition().getId()) > 1);
             } catch (RuntimeException e) {
                 failed++;
                 LOG.warn("Keyframe index failed for {}: {}", file.getPath(), e.getMessage());

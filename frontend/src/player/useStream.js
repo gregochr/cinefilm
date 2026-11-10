@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { editionsApi, sessionsApi } from '../api/resources.js';
 import { AUTO, ORIGINAL, levelToast, workerOffline } from './ladder.js';
+import { createSession } from './createSession.js';
 import { measureThroughput } from './probe.js';
 import { startStream } from './streamSource.js';
 import { addSample, median } from './throughput.js';
@@ -12,7 +13,10 @@ export const RECOVERY_WINDOW_MS = 60000;
 /**
  * Owns how the edition reaches the `<video>`: creates the HLS session for the chosen quality (Auto probes the
  * link first), attaches hls.js or Safari's native player, recovers an expired session at the current
- * position, and falls back to direct play when there is no encoder, no index or no HLS in the browser.
+ * position, and falls back to direct play when there is no encoder, no index or no HLS in the browser. A film
+ * split across several files (`edition.parts` above 1) has no single file to direct-play: where a film in one
+ * piece would fall back, it reports `mode: 'unavailable'` instead, and a session the server is still preparing
+ * (503) is asked for again.
  *
  * `pendingSeekRef` holds the film position (ms) to seek to once the new source has loaded metadata; the
  * caller applies it and clears it. Returns the active rung, its renditions, the reconnecting flag, the median
@@ -65,7 +69,13 @@ export function useStream({
       sessionRef.current = null;
     };
 
+    const split = (latest.current.edition.parts ?? 1) > 1;
     const toDirect = () => {
+      if (split) {
+        setStream({ mode: 'unavailable', rung: null, renditions: [] });
+        setReconnecting(false);
+        return;
+      }
       const position = currentPosition();
       if (position > 0) pendingSeekRef.current = position;
       setStream({ mode: 'direct', rung: ORIGINAL, renditions: [] });
@@ -100,19 +110,23 @@ export function useStream({
         return;
       }
       let probeKbps = null;
-      if (quality === AUTO) {
+      if (quality === AUTO && !split) {
         probeKbps = await measureThroughput(editionsApi.streamUrl(editionId));
         if (cancelled) return;
         if (probeKbps) setSamples((s) => addSample(s, probeKbps));
       }
-      let created;
-      try {
-        const body = { quality, startMs };
-        if (latest.current.audioStreamId !== null && latest.current.audioStreamId !== undefined)
-          body.audioStreamId = latest.current.audioStreamId;
-        if (probeKbps) body.probeKbps = probeKbps;
-        created = await sessionsApi.create(editionId, body);
-      } catch {
+      const body = { quality, startMs };
+      if (latest.current.audioStreamId !== null && latest.current.audioStreamId !== undefined)
+        body.audioStreamId = latest.current.audioStreamId;
+      if (probeKbps) body.probeKbps = probeKbps;
+      setStream((s) =>
+        s.mode === 'unavailable' ? { mode: 'loading', rung: null, renditions: [] } : s,
+      );
+      const created = await createSession(() => sessionsApi.create(editionId, body), {
+        retryWhenPreparing: split,
+        isCancelled: () => cancelled,
+      });
+      if (!created) {
         if (!cancelled) toDirect(); // No encoder, no keyframe index yet, or the request failed.
         return;
       }

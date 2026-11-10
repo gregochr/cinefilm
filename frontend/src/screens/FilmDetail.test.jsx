@@ -240,6 +240,25 @@ describe('FilmDetail content', () => {
     expect(await screen.findByText('Original file · 720p')).toBeInTheDocument();
   });
 
+  it('describes an edition split across several files as one: name, part count, runtime, picture', async () => {
+    filmServer(8, fixtures.wickerMan, (f) => {
+      Object.assign(f.editions[0], { name: 'Extended Edition', parts: 2, runtimeMs: 14_100_000 });
+      f.editions[0].file = {
+        id: 9,
+        width: 1920,
+        height: 800,
+        videoCodec: 'HEVC',
+        audioSummary: '5.1',
+      };
+    });
+    renderApp('/films/8');
+    expect(
+      await screen.findByText('Extended Edition · 2 parts · 3h 55m · 1080p HEVC'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Original file/)).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/part\s*\d|pt\s*\d|cd\s*\d/i);
+  });
+
   it('copes with an edition that has no file details', async () => {
     filmServer(8, fixtures.wickerMan, (f) => {
       delete f.editions[0].file;

@@ -30,6 +30,12 @@ export const collectionsApi = {
 
 export const editionsApi = {
   streamUrl: (id) => `/api/editions/${id}/stream`,
+  /**
+   * The WebVTT of an embedded subtitle stream of the edition on the edition's own timeline (`index` is the stream
+   * index in part 1, the logical stream). A film split across several files has one such track, with every part's
+   * cues in place.
+   */
+  subtitleUrl: (editionId, index) => `/api/editions/${editionId}/subtitles/${index}.vtt`,
   reportProgress: (id, positionMs, options) =>
     put(`/api/editions/${id}/progress`, { positionMs }, options),
   setWatched: (id, watched) => post(`/api/editions/${id}/watched`, { watched }),
@@ -64,6 +70,6 @@ export const adminApi = {
 };
 
 export const mediaFilesApi = {
-  /** The WebVTT of an embedded subtitle stream (`index` is the stream index in the file). */
+  /** The WebVTT of one file's embedded subtitle stream (`index` is the stream index in the file). */
   subtitleUrl: (fileId, index) => `/api/media-files/${fileId}/subtitles/${index}.vtt`,
 };

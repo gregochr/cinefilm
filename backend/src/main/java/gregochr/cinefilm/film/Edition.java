@@ -97,12 +97,20 @@ public class Edition {
         return parts.isEmpty() ? null : parts.get(0);
     }
 
-    /** Sets the runtime to the sum of the original parts' durations (an unknown duration counts as 0). */
+    /**
+     * Sets the runtime to the sum of the original parts' durations (an unknown duration counts as 0). A single file's
+     * runtime is its container duration; the parts of a split film add up on the timeline playback uses (each part's
+     * video duration when known), so the runtime matches the length of the stream.
+     */
     public void recomputeRuntime() {
         List<MediaFile> parts = originalParts();
         if (parts.isEmpty()) {
             return;
         }
-        runtimeMs = parts.stream().mapToLong(p -> p.getDurationMs() == null ? 0 : p.getDurationMs()).sum();
+        boolean multiPart = parts.size() > 1;
+        runtimeMs = parts.stream().mapToLong(p -> {
+            Long duration = multiPart ? p.timelineDurationMs() : p.getDurationMs();
+            return duration == null ? 0 : duration;
+        }).sum();
     }
 }

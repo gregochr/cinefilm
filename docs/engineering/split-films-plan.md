@@ -252,6 +252,57 @@ Code:
 - **Film detail** file line: `Extended Edition · 2 parts · 3h 55m · 1080p HEVC` (single-part unchanged). No part
   numbers in browse, Film detail or the player. `RouteSecurityDriftTest` updated.
 
+### Spike results (2026-11-10)
+
+Run on the real server with Fellowship Extended pt1 and pt2 (both H.264 1920×800 23.976, AAC 2ch and AC-3 5.1, both
+`start_time` 0), using the existing per-part command shape (`-copyts`, `-noaccurate_seek -ss`, copy and libx264 rungs,
+`-output_ts_offset`, `-segment_start_number`). Phase 4 is built to these:
+
+1. **The video is seamless at the join on both rungs when `partStart` is part 1's _video stream_ duration** (part 1's
+   last PTS is 6353.4204 and part 2's first is 6353.4204 with offset 10). `-output_ts_offset 10 + partStart` works as
+   planned.
+2. **`-force_key_frames` and `-segment_times` stay in input (local) time under `-copyts`**, so each part is given its
+   own local times; only the output (timestamp offset, segment numbers) moves onto the film's timeline.
+3. **`partStart` must come from the video stream's duration, not `format.duration`.** Part 2's `format.duration` is
+   7354.432 (the audio); its video is 7354.347. Stored as `media_file.video_duration_ms` (below).
+4. **There is an audio gap**: part 1's AAC ends 1.04 s before its video. Audio is always re-encoded (even on the copy
+   rung), so every non-last part pads it with `-af apad -shortest`: the audio runs on as silence and the output ends
+   with the picture, so audio and video end together and no drift builds up across joins. The last part is unchanged.
+5. **Pitfall: never bound a per-part run with `-t`/`-to`.** Under `-copyts` an output `-t` compares with input-time
+   PTS and produced an empty output; every part runs to its natural end (a command-builder test pins it).
+6. Both parts pass `PartsMatch`, so the copy rung is allowed for such editions.
+
+The padding command (`-af apad -shortest`) was not itself run in the spike; it is the idiom for "audio to the end of the
+video", and the owner's play-through of a join in Safari (Mac, iPhone) and Chrome is its proof.
+
+### As built
+
+- **Video duration.** `media_file.video_duration_ms` (migration `V10`, expand-only, nullable). `FfprobeParser` records the
+  first real video stream's `duration`; `LibraryIngest.fill` stores it (0 when ffprobe gave none, so "probed, none" is
+  told from "never probed"), and the scan re-probes a file whose value is still NULL once (like the pixel format), so
+  existing rows fill on the next scan. `MediaFile.timelineDurationMs()` is the video duration when above 0, else the
+  container's; `EditionTimeline.of(Edition)`, a part's keyframe index and `Edition.recomputeRuntime` (for several parts
+  only) use it, so the runtime, the playlist and the player agree. A film in one piece keeps using the container
+  duration everywhere, exactly as before.
+- **Timeline.** `CutList.join` shifts each part's cuts by the sum of the earlier parts' timeline durations and cuts at
+  every part start; segment numbers run on across parts. The joined list knows its parts (`part(i)`, `partStartSegment`,
+  `partOfSegment`, `lastSegmentOfPart`). Every rung's playlist carries `#EXT-X-DISCONTINUITY` before each later part.
+- **Sessions.** `SessionSources` reads every part (all must be playable and readable); `SessionService` indexes part 1
+  now and later parts in the background for up to 8 s, then answers 503 (`Retry-After: 1`); the ladder uses the
+  smallest part's picture; the copy rung needs matching parts and a copy-ok joined list; audio for a later part is the
+  stream with part 1's chosen language (the same rank among those), else the same rank, else its default.
+- **Encoder runs** are per part (`TranscodePlan.partStartMs/firstSegment/padAudio`). `SessionManager`: a run covers one
+  part; a clean exit before the last part chains into the next unless the player is more than 3 minutes behind it (the
+  sweep or the player's request starts it later); `finishedFrom` per part replaces "the run finished" for a part's last
+  segment (the next file's first segment may exist from an earlier run); restarts and clean-ups touch only the run's
+  part (`SegmentFiles.deleteRange`).
+- **Subtitles.** `GET /api/editions/{id}/subtitles/{streamIndex}.vtt` (`EditionSubtitleService`, `VttShifter`,
+  `PartSubtitles`); the player uses it for every film.
+- **Direct play** answers 409 for several files; `EditionDto.parts`; `original` is available for such an edition only with
+  a copy rung and an encoder. The frontend never direct-plays one: where a film in one piece falls back it shows "This
+  film can't be played right now" with Try again, skips the direct-stream probe, and asks again on a 503 from the
+  session request (up to 15 times, a second apart).
+
 ## Phase 5 — Admin: attention, Unmatched + Fix match, report
 
 - **Attention**: `multiple-files` ("Several files") only for genuine ambiguity in a non-confirmed film: two or more

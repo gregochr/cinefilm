@@ -61,6 +61,13 @@ public class MediaFile {
 
     private Long durationMs;
 
+    /**
+     * The video stream's own duration in milliseconds: the container's {@link #durationMs} can be the audio's (a part's
+     * AAC track may outlast its video), and a part must start where the previous part's video ends. Null until the
+     * file is (re)probed; 0 when ffprobe gave no video stream duration.
+     */
+    private Long videoDurationMs;
+
     /** Which part of its edition this file is (1-based); 1 for a single-file edition. Only originals have parts. */
     @Column(nullable = false)
     private int partNumber = 1;
@@ -89,4 +96,12 @@ public class MediaFile {
     @OneToMany(mappedBy = "mediaFile", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("id")
     private List<SubtitleStream> subtitleStreams = new ArrayList<>();
+
+    /**
+     * How long this file is on its edition's timeline: the video stream's duration when known, else the container's
+     * duration (null when neither is known).
+     */
+    public Long timelineDurationMs() {
+        return videoDurationMs != null && videoDurationMs > 0 ? videoDurationMs : durationMs;
+    }
 }

@@ -102,7 +102,7 @@ public final class FilmMapper {
         return new EditionDto(edition.getId(), edition.getName(), edition.getYear(), edition.getRuntimeMs(),
             edition.getNote(), edition.getCreditsMarkerMs(), state.map(PlaybackState::getPositionMs).orElse(0L),
             state.map(PlaybackState::isWatched).orElse(false), fileInfo(original), audio, subtitles,
-            qualities(original, mode, cuts));
+            qualities(edition, mode, cuts), Math.max(1, edition.partCount()));
     }
 
     private static FileInfo fileInfo(MediaFile original) {
@@ -121,30 +121,54 @@ public final class FilmMapper {
     }
 
     /**
-     * Auto, Original (always available: when it cannot be copied the client direct-plays it), then the transcoded
+     * Auto, Original (always available: when it cannot be copied the client direct-plays it; a split film cannot be
+     * direct-played, so its Original is available only when the parts match, can be copied and an encoder is there),
+     * then the transcoded
      * rungs of the same ladder a playback session builds ({@link Ladder#forSource}), so a source that cannot be
      * copied (HEVC, 10-bit, unknown pixel format, or a stored cut list with long gaps) lists its top transcoded rung
      * named by its own height. When the keyframe index does not exist yet the codec and pixel format decide alone.
      * Without an encoder the rungs are listed as unavailable, as the player's "worker offline" state expects; the
      * software encoder offers fewer rungs.
      */
-    private static List<QualityDto> qualities(MediaFile original, EncoderMode mode,
-                                              Function<MediaFile, CutList> cuts) {
+    private static List<QualityDto> qualities(Edition edition, EncoderMode mode, Function<MediaFile, CutList> cuts) {
+        List<MediaFile> parts = edition.originalParts();
+        MediaFile original = parts.isEmpty() ? null : parts.get(0);
+        boolean split = parts.size() > 1;
         Long bitrate = original == null ? null : original.getBitrate();
         boolean encoder = mode != EncoderMode.UNAVAILABLE;
         List<QualityDto> qualities = new ArrayList<>();
         qualities.add(new QualityDto(Ladder.AUTO, bitrate, false, encoder));
+        int originalAt = qualities.size();
         qualities.add(new QualityDto(Ladder.ORIGINAL, bitrate, false, true));
-        if (original != null && original.getHeight() != null && original.getHeight() > 1) {
+        boolean copy = false;
+        Integer height = parts.stream().map(MediaFile::getHeight).filter(h -> h != null).min(Integer::compare)
+            .orElse(null);
+        if (original != null && height != null && height > 1) {
             EncoderMode shown = encoder ? mode : EncoderMode.VAAPI;
             long fileBitrate = bitrate == null ? 0 : bitrate;
-            for (Rung rung : Ladder.forSource(original.getHeight(), fileBitrate, original.getVideoCodec(),
-                original.getPixelFormat(), () -> cuts.apply(original), shown)) {
-                if (!rung.copy()) {
+            String codec = split && !PartsMatch.check(parts).matches() ? null : original.getVideoCodec();
+            for (Rung rung : Ladder.forSource(height, fileBitrate, codec, original.getPixelFormat(),
+                () -> storedCuts(parts, cuts), shown)) {
+                if (rung.copy()) {
+                    copy = true;
+                } else {
                     qualities.add(new QualityDto(rung.id(), rung.videoBitrate(), false, encoder));
                 }
             }
         }
+        if (split && !(copy && encoder)) {
+            qualities.set(originalAt, new QualityDto(Ladder.ORIGINAL, bitrate, false, false));
+        }
         return List.copyOf(qualities);
+    }
+
+    /**
+     * The stored cut list that decides whether the original can be copied: null while any part is not indexed (the
+     * format decides alone), else the first part's list that cannot be copied, else the first part's.
+     */
+    private static CutList storedCuts(List<MediaFile> parts, Function<MediaFile, CutList> cuts) {
+        List<CutList> stored = parts.stream().map(cuts).toList();
+        return stored.stream().filter(c -> c != null && !c.copyOk()).findFirst()
+            .orElse(stored.contains(null) ? null : stored.get(0));
     }
 }

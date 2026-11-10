@@ -72,6 +72,15 @@ class FlywayMigrationIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void theVideoDurationColumnIsAnExpandOnlyNullableBigintSoExistingRowsStayValid() {
+        List<String> columns = jdbc.queryForList(
+            "SELECT column_name || ':' || data_type || ':' || is_nullable || ':' || coalesce(column_default, '') "
+                + "FROM information_schema.columns WHERE table_name = 'media_file' "
+                + "AND column_name = 'video_duration_ms'", String.class);
+        assertThat(columns).containsExactly("video_duration_ms:bigint:YES:");
+    }
+
+    @Test
     void instantsAreStoredWithTimeZone() {
         String type = jdbc.queryForObject(
             "SELECT data_type FROM information_schema.columns WHERE table_name = 'film' AND column_name = 'added_at'",

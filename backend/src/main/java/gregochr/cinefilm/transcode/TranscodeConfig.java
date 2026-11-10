@@ -2,6 +2,7 @@ package gregochr.cinefilm.transcode;
 
 import java.time.Duration;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -18,6 +19,24 @@ public class TranscodeConfig {
             Thread thread = new Thread(runnable, "keyframe-index");
             thread.setDaemon(true);
             thread.setPriority(Thread.MIN_PRIORITY);
+            return thread;
+        });
+    }
+
+    /** How many files playback may index at once. */
+    static final int SESSION_INDEX_THREADS = 2;
+
+    /**
+     * Indexing a playing film's later parts on demand, apart from the library-wide {@link #indexExecutor()} (which
+     * {@code IndexJob} holds for a whole pass). Two daemon threads; the container shuts it down with the context. A
+     * file the library pass is indexing at the same moment is indexed once ({@code KeyframeIndexService} locks per
+     * file).
+     */
+    @Bean
+    public ExecutorService sessionIndexExecutor() {
+        return Executors.newFixedThreadPool(SESSION_INDEX_THREADS, runnable -> {
+            Thread thread = new Thread(runnable, "session-index");
+            thread.setDaemon(true);
             return thread;
         });
     }

@@ -17,10 +17,20 @@ import java.util.List;
  * @param protectedContent true when a video or audio stream is FairPlay-protected
  * @param pixelFormat the video stream's ffprobe pixel format such as {@code yuv420p} (8-bit 4:2:0) or
  *     {@code yuv420p10le}, or null when unknown
+ * @param videoDurationMs the video stream's own duration in milliseconds, or null when ffprobe gave none (the
+ *     container duration can be the audio's, a second or more longer)
  */
 public record ProbeResult(long durationMs, String container, String videoCodec, Integer width, Integer height,
                           Long bitrate, List<Audio> audio, List<Subtitle> subtitles, Tags tags,
-                          boolean protectedContent, String pixelFormat) {
+                          boolean protectedContent, String pixelFormat, Long videoDurationMs) {
+
+    /** A result with no video stream duration known. */
+    public ProbeResult(long durationMs, String container, String videoCodec, Integer width, Integer height,
+                       Long bitrate, List<Audio> audio, List<Subtitle> subtitles, Tags tags,
+                       boolean protectedContent, String pixelFormat) {
+        this(durationMs, container, videoCodec, width, height, bitrate, audio, subtitles, tags, protectedContent,
+            pixelFormat, null);
+    }
 
     /** A result with no pixel format known. */
     public ProbeResult(long durationMs, String container, String videoCodec, Integer width, Integer height,

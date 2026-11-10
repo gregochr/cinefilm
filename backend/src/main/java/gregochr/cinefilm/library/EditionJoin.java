@@ -79,7 +79,7 @@ public class EditionJoin {
     public Long join(List<Long> orderedFileIds) {
         List<MediaFile> parts = load(orderedFileIds);
         refuseIfAnAbsorbedEditionKeepsFiles(parts, orderedFileIds);
-        List<Long> durations = parts.stream().map(MediaFile::getDurationMs).toList();
+        List<Long> durations = parts.stream().map(MediaFile::timelineDurationMs).toList();
         EditionTimeline timeline = EditionTimeline.of(durations);
         Long survivorId = parts.get(0).getEdition().getId();
         List<Piece> pieces = pieces(parts);
@@ -170,7 +170,7 @@ public class EditionJoin {
         if (fileGroups.size() < 2 || seen.size() != parts.size() || groups.stream().anyMatch(List::isEmpty)) {
             throw new IllegalArgumentException("The groups must split all of the edition's files, at least two ways");
         }
-        List<Long> durations = parts.stream().map(MediaFile::getDurationMs).toList();
+        List<Long> durations = parts.stream().map(MediaFile::timelineDurationMs).toList();
         EditionTimeline.of(durations); // every part needs a duration
         List<List<Long>> orderedIds = new ArrayList<>();
         for (List<Integer> group : groups) {

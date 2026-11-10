@@ -126,8 +126,9 @@ final class SessionFakes {
         }
 
         @Override
-        public void deleteFrom(Path rungDir, int firstIndex) {
-            existing.removeIf(file -> rungDir.equals(file.getParent()) && index(file) >= firstIndex);
+        public void deleteRange(Path rungDir, int firstIndex, int lastIndex) {
+            existing.removeIf(file -> rungDir.equals(file.getParent()) && index(file) >= firstIndex
+                && index(file) <= lastIndex);
         }
 
         @Override

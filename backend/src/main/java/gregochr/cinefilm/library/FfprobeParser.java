@@ -78,6 +78,7 @@ public final class FfprobeParser {
         Integer width = null;
         Integer height = null;
         Long videoBitrate = null;
+        Long videoDurationMs = null;
         boolean protectedContent = false;
         for (JsonNode stream : root.path("streams")) {
             String type = text(stream, "codec_type");
@@ -91,6 +92,7 @@ public final class FfprobeParser {
                     height = integer(stream, "height");
                     videoBitrate = number(stream, "bit_rate");
                     pixelFormat = text(stream, "pix_fmt");
+                    videoDurationMs = number(stream, "duration", 1000);
                 }
             } else if ("audio".equals(type)) {
                 protectedContent |= isProtected(stream);
@@ -103,7 +105,7 @@ public final class FfprobeParser {
         Long bitrate = number(format, "bit_rate");
         return new ProbeResult(durationMs(format, root), container(text(format, "format_name")), videoCodec, width,
             height, bitrate != null ? bitrate : videoBitrate, List.copyOf(audio), List.copyOf(subtitles),
-            tags(format.path("tags"), latestYear), protectedContent, pixelFormat);
+            tags(format.path("tags"), latestYear), protectedContent, pixelFormat, videoDurationMs);
     }
 
     private static Audio audio(JsonNode stream, int index, String codec) {
@@ -229,8 +231,13 @@ public final class FfprobeParser {
     }
 
     private static Long number(JsonNode node, String name) {
+        return number(node, name, 1);
+    }
+
+    /** A decimal field times {@code scale}, rounded (seconds to milliseconds). */
+    private static Long number(JsonNode node, String name, int scale) {
         Double value = decimal(node, name);
-        return value == null ? null : Long.valueOf(Math.round(value));
+        return value == null ? null : Long.valueOf(Math.round(value * scale));
     }
 
     private static Double decimal(JsonNode node, String name) {

@@ -41,6 +41,28 @@ export function SlowConnectionCard({ rung, onOk, onChoose }) {
   );
 }
 
+/**
+ * A film split across several files plays only as one adaptive stream, so when that stream cannot be made there is
+ * nothing to fall back to. Says so plainly and offers to try again; never an error page.
+ */
+export function UnavailableCard({ onRetry }) {
+  const retry = useRef(null);
+  useEffect(() => {
+    retry.current?.focus();
+  }, []);
+  return (
+    <div className="slow-card" role="alert">
+      <h2 className="slow-card__title">This film can&rsquo;t be played right now</h2>
+      <p className="slow-card__text">The server could not prepare it. Try again in a moment.</p>
+      <div className="slow-card__actions">
+        <Button variant="primary" ref={retry} onClick={onRetry}>
+          Try again
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function Toast({ children }) {
   return (
     <div className="toast" role="status">

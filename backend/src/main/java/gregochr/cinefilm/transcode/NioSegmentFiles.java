@@ -35,12 +35,13 @@ class NioSegmentFiles implements SegmentFiles {
     }
 
     @Override
-    public void deleteFrom(Path rungDir, int firstIndex) {
+    public void deleteRange(Path rungDir, int firstIndex, int lastIndex) {
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(rungDir, "seg-*.ts")) {
             for (Path file : stream) {
                 String name = file.getFileName().toString();
                 String number = name.substring("seg-".length(), name.length() - ".ts".length());
-                if (number.matches("\\d{1,9}") && Integer.parseInt(number) >= firstIndex) {
+                if (number.matches("\\d{1,9}") && Integer.parseInt(number) >= firstIndex
+                    && Integer.parseInt(number) <= lastIndex) {
                     delete(file);
                 }
             }

@@ -96,7 +96,8 @@ All JSON. All routes under `/api`. Times are milliseconds. All routes except `/a
 | `PUT /api/editions/{id}/continue-watching` body `{ hidden: boolean }` | `{ hidden }`: true sets the hidden flag and `hiddenAt`, false clears both; never touches position, watched or `lastPlayedAt`. 404 unknown edition, 400 missing flag. An edition with no playback state yet has nothing to hide: no row is created and the answer is `{ hidden: false }` |
 | `PUT /api/editions/{id}/playback-state` body `PlaybackSnapshot` | the stored `PlaybackSnapshot`; restores exactly `positionMs`, `watched`, `watchedAt`, `hiddenFromContinueWatching`, `hiddenAt` (never `lastPlayedAt`). 400 for `positionMs` < 0, 404 unknown edition. Used by Undo |
 | `PUT /api/films/{id}/preferences` body `{ editionId?, quality?, audioStreamId?, subtitle? }` | the stored preferences |
-| `GET /api/editions/{id}/stream` | the ORIGINAL MediaFile bytes, honouring `Range` (206 partial content), correct `Content-Type` |
+| `GET /api/editions/{id}/stream` | the ORIGINAL MediaFile bytes, honouring `Range` (206 partial content), correct `Content-Type`; 409 `{ "error": "This edition is split across several files and cannot be direct-played" }` for an edition made of several files (it plays only as one adaptive session) |
+| `GET /api/editions/{id}/subtitles/{streamIndex}.vtt` | WebVTT (`text/vtt;charset=UTF-8`) of one of the edition's subtitle streams on the edition's own timeline; `streamIndex` is part 1's stream index (the logical stream). Each part's matching stream (same language and forced flag, else the same rank) is extracted like the media-file route, later parts' cues are shifted by the part's start, and the parts are joined; a film in one piece is the file's extraction as it is. 404 for an unknown edition or stream, a missing part file or a failed extraction |
 | `GET /api/media-files/{id}/subtitles/{streamIndex}.vtt` | WebVTT (`text/vtt;charset=UTF-8`) of an embedded text subtitle stream of the media file (`file.id` on an edition), extracted with `ffmpeg` on first request and cached under `CINEFILM_CACHE_DIR`; 404 for an unknown file or stream, a file that is gone, or a failed extraction |
 | `GET /api/admin/scan` | `ScanStatus`: the Library scan panel, polled while a scan runs |
 | `POST /api/admin/scan` | starts a scan: 202 and the `ScanStatus`; 409 `{ "error": "A scan is already running" }` when one runs |
@@ -316,6 +317,12 @@ All behind the session cookie; the mutating routes need `X-CineFilm`.
 | `DELETE /api/sessions/{id}` | 204, idempotent |
 | `GET /api/admin/transcoding` | `{encoder: vaapi/software/unavailable, index:{indexed,total}, hlsBytes, sessions:[{id,filmTitle,editionId,rung,speed,segmentsAhead,startedAt,unavailable}]}` |
 | `DELETE /api/admin/transcoding/sessions/{id}` | 204 |
+
+`FilmDetail` editions carry `parts` (an int: how many files the edition is made of, 1 for a film in one piece; a split
+film is one edition on one timeline, so `runtimeMs`, `positionMs` and `creditsMarkerMs` are edition times and the audio
+and subtitle streams are part 1's). For such an edition `original` is available only when the parts match and can be
+copied (it is never direct-played), and `POST /api/editions/{id}/sessions` answers 503 `{ "error": "The film is still
+being prepared" }` with `Retry-After: 1` while a later part's keyframe index is being made (the client asks again).
 
 `FilmDetail` editions list `qualities[]` with ids `auto|original|1080p|720p|480p|360p|240p`; transcoded rungs and
 `auto` are `available:false` when the encoder is unavailable.

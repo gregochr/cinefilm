@@ -10,6 +10,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.mockito.Mockito.when;
 
+import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
@@ -75,6 +76,19 @@ class StreamServiceTest {
         assertThatThrownBy(() -> service.originalPath(EDITION_ID))
             .isInstanceOf(NotFoundException.class)
             .hasMessage("Edition has no original file");
+    }
+
+    @Test
+    void anEditionSplitAcrossSeveralFilesCannotBeDirectPlayed() throws IOException {
+        Files.writeString(dir.resolve("pt1.mp4"), "frames");
+        Files.writeString(dir.resolve("pt2.mp4"), "frames");
+        original("pt1.mp4");
+        MediaFile second = file(edition, "pt2.mp4");
+        second.setPartNumber(2);
+
+        assertThatThrownBy(() -> service.originalPath(EDITION_ID))
+            .isInstanceOf(ConflictException.class)
+            .hasMessage("This edition is split across several files and cannot be direct-played");
     }
 
     @Test
