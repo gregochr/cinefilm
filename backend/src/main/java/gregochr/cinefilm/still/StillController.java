@@ -1,9 +1,6 @@
 package gregochr.cinefilm.still;
 
-import java.nio.file.Path;
 import java.time.Duration;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -24,10 +21,10 @@ public class StillController {
     }
 
     @GetMapping("/api/editions/{id}/still")
-    ResponseEntity<Resource> still(@PathVariable Long id, @RequestParam(required = false) Long atMs) {
-        Path file = service.still(id, atMs);
+    ResponseEntity<byte[]> still(@PathVariable Long id, @RequestParam(required = false) Long atMs) {
+        byte[] jpeg = service.still(id, atMs);
         return ResponseEntity.ok().contentType(MediaType.IMAGE_JPEG)
             .cacheControl(CacheControl.maxAge(Duration.ofDays(1)).cachePrivate())
-            .body(new FileSystemResource(file));
+            .body(jpeg);
     }
 }

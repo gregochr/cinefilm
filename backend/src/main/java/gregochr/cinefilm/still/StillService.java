@@ -12,6 +12,7 @@ import gregochr.cinefilm.library.CommandRunner;
 import gregochr.cinefilm.library.LibraryRoot;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
@@ -90,20 +91,21 @@ public class StillService {
      *
      * @param editionId the edition
      * @param atMs the edition time in milliseconds, 0 up to the edition's length
-     * @return the cached JPEG
+     * @return the JPEG bytes (read inside the service, so pruning the cache cannot race the response)
      * @throws BadRequestException when the time is missing or outside the edition
      * @throws NotFoundException when the edition, its file or the file on disk is unknown or not playable
      * @throws ServiceUnavailableException when ffmpeg is busy, cannot start, times out or fails
      */
-    public Path still(Long editionId, Long atMs) {
+    public byte[] still(Long editionId, Long atMs) {
         Source source = transactions.execute(status -> lookup(editionId, atMs));
         Path cached = cacheDir.resolve(source.mediaFileId() + "-" + source.seconds() + "-" + source.size() + "-"
             + source.modified() + ".jpg");
         // The source must still be there even for a cached frame: a moved or removed film is a 404, not a stale image.
         Path input = root.resolveFile(source.path())
             .orElseThrow(() -> new NotFoundException("Media file is not available"));
-        if (Files.isRegularFile(cached)) {
-            return cached;
+        byte[] hit = readCached(cached);
+        if (hit != null) {
+            return hit;
         }
         acquire();
         try {
@@ -111,6 +113,26 @@ public class StillService {
         } finally {
             slots.release();
         }
+    }
+
+    /** The cached bytes, or null when there is no cached file (a file pruned meanwhile counts as a miss). */
+    private byte[] readCached(Path cached) {
+        if (!Files.isRegularFile(cached)) {
+            return null;
+        }
+        try {
+            return read(cached);
+        } catch (NoSuchFileException e) {
+            return null;
+        } catch (IOException e) {
+            LOG.warn("Could not read cached still {}: {}", cached, e.getMessage());
+            throw new ServiceUnavailableException("Frame is not available right now", e);
+        }
+    }
+
+    /** Reads a cached file; a seam so a test can remove the file between the existence check and the read. */
+    byte[] read(Path file) throws IOException {
+        return Files.readAllBytes(file);
     }
 
     private void acquire() {
@@ -126,7 +148,7 @@ public class StillService {
         }
     }
 
-    private Path grab(Long editionId, Source source, Path input, Path cached) {
+    private byte[] grab(Long editionId, Source source, Path input, Path cached) {
         Path temporary = cacheDir.resolve(UUID.randomUUID() + ".tmp");
         try {
             Files.createDirectories(cacheDir);
@@ -137,9 +159,10 @@ public class StillService {
                     editionId, source.part(), source.seconds(), result.exitCode(), result.timedOut());
                 throw new ServiceUnavailableException("Frame is not available right now");
             }
+            byte[] jpeg = Files.readAllBytes(temporary);
             Files.move(temporary, cached, StandardCopyOption.REPLACE_EXISTING);
             prune(cached);
-            return cached;
+            return jpeg;
         } catch (IOException e) {
             LOG.warn("Frame grab failed for edition {} part {} at {} s: {}", editionId, source.part(),
                 source.seconds(), e.getMessage());

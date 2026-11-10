@@ -12,10 +12,7 @@ import gregochr.cinefilm.auth.SecurityConfig;
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.config.ServiceUnavailableException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -27,9 +24,6 @@ import org.springframework.test.web.servlet.MockMvc;
 @Import(SecurityConfig.class)
 class StillControllerTest {
 
-    @TempDir
-    Path dir;
-
     @Autowired
     private MockMvc mvc;
 
@@ -38,8 +32,7 @@ class StillControllerTest {
 
     @Test
     void servesTheJpegWithAPrivateDayLongCache() throws Exception {
-        Path jpeg = Files.write(dir.resolve("5-12-10-1.jpg"), new byte[] {(byte) 0xFF, (byte) 0xD8, 9});
-        when(service.still(5L, 12_345L)).thenReturn(jpeg);
+        when(service.still(5L, 12_345L)).thenReturn(new byte[] {(byte) 0xFF, (byte) 0xD8, 9});
 
         var result = mvc.perform(get("/api/editions/{id}/still", 5).param("atMs", "12345").with(user("owner")))
             .andExpect(status().isOk())

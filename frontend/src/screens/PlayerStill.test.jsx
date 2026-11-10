@@ -40,13 +40,17 @@ describe('the resume still', () => {
     const { video } = await openPlayer();
 
     const still = stillImage();
-    expect(video.compareDocumentPosition(still) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(video.compareDocumentPosition(still) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
     const surface = screen.getAllByRole('button', { name: 'Play' })[0]; // the surface comes first
-    expect(still.compareDocumentPosition(surface) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(still.compareDocumentPosition(surface) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
     const indicator = screen.getByRole('status');
-    expect(
-      still.compareDocumentPosition(indicator) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    expect(still.compareDocumentPosition(indicator) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
   });
 
   it('is shown once it has loaded', async () => {

@@ -40,7 +40,7 @@ Player PREPARING/BUFFERING PR.
   a WARN with edition, part, second). Non-zero exit or no output file → 503 too (a transient SMB failure must not look
   like "not found"; the client treats every non-200 the same: no still).
 - **Response**: `Cache-Control: private, max-age=86400` (the URL plus the file's stamp is immutable enough; a replaced
-  file within a day showing yesterday's frame is harmless). Body streamed from the cached file.
+  file within a day showing yesterday's frame is harmless). The service reads the JPEG into a `byte[]` (about 100 KB) and the controller returns that, so pruning the cache can never race a response; a cached file pruned between the check and the read is treated as a miss and grabbed again.
 - **Errors on an image route**: the existing `ApiExceptionHandler` answers JSON. A request with `Accept: image/jpeg`
   only (no `*/*`) must still get the right status (400/404/503), not a 406 or 500 from content negotiation; an API test
   covers it. Browsers send `image/...,*/*` for `<img>`.

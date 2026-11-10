@@ -121,10 +121,10 @@ class StillServiceTest {
 
     @Test
     void grabsTheFrameWithTheExactCommandAndCachesItUnderTheStamp() throws IOException {
-        Path jpeg = service.still(EDITION_ID, 750_900L);
+        byte[] jpeg = service.still(EDITION_ID, 750_900L);
 
-        assertThat(jpeg).hasBinaryContent(JPEG);
-        assertThat(jpeg).isEqualTo(stills().resolve("7-750-10-1700000000123.jpg"));
+        assertThat(jpeg).isEqualTo(JPEG);
+        assertThat(stills().resolve("7-750-10-1700000000123.jpg")).hasBinaryContent(JPEG);
         assertThat(runner.commands).singleElement().satisfies(command -> {
             assertThat(command.subList(0, command.size() - 1)).containsExactly("ffmpeg", "-nostdin", "-hide_banner",
                 "-v", "error", "-protocol_whitelist", "file", "-threads", "1", "-ss", "750", "-i",
@@ -138,8 +138,8 @@ class StillServiceTest {
 
     @Test
     void flooringToWholeSecondsMeansTimesInTheSameSecondShareOneGrab() throws IOException {
-        Path first = service.still(EDITION_ID, 12_000L);
-        Path second = service.still(EDITION_ID, 12_999L);
+        byte[] first = service.still(EDITION_ID, 12_000L);
+        byte[] second = service.still(EDITION_ID, 12_999L);
 
         assertThat(second).isEqualTo(first);
         assertThat(runner.commands).hasSize(1);
@@ -149,9 +149,9 @@ class StillServiceTest {
     @Test
     void aCacheHitRunsNothing() throws IOException {
         Files.createDirectories(stills());
-        Path cached = Files.write(stills().resolve("7-30-10-1700000000123.jpg"), JPEG);
+        Files.write(stills().resolve("7-30-10-1700000000123.jpg"), new byte[] {9, 8, 7});
 
-        assertThat(service.still(EDITION_ID, 30_500L)).isEqualTo(cached);
+        assertThat(service.still(EDITION_ID, 30_500L)).isEqualTo(new byte[] {9, 8, 7});
         assertThat(runner.commands).isEmpty();
     }
 
@@ -168,9 +168,9 @@ class StillServiceTest {
         service.still(EDITION_ID, 30_000L);
         part1.setModifiedAt(Instant.ofEpochMilli(1_800_000_000_000L));
 
-        Path again = service.still(EDITION_ID, 30_000L);
+        service.still(EDITION_ID, 30_000L);
 
-        assertThat(again.getFileName().toString()).isEqualTo("7-30-10-1800000000000.jpg");
+        assertThat(files(stills())).contains("7-30-10-1800000000000.jpg");
         assertThat(runner.commands).hasSize(2);
     }
 
@@ -179,7 +179,46 @@ class StillServiceTest {
         part1.setSizeBytes(null);
         part1.setModifiedAt(null);
 
-        assertThat(service.still(EDITION_ID, 0L).getFileName().toString()).isEqualTo("7-0-0-0.jpg");
+        service.still(EDITION_ID, 0L);
+
+        assertThat(stills().resolve("7-0-0-0.jpg")).exists();
+    }
+
+    @Test
+    void aCachedFileRemovedBetweenTheCheckAndTheReadFallsThroughToAFreshGrab() throws IOException {
+        Files.createDirectories(stills());
+        Path cached = Files.write(stills().resolve("7-30-10-1700000000123.jpg"), new byte[] {9});
+        StillService racing = new StillService(editions, new LibraryRoot(library.toString()), runner,
+            new TransactionTemplate(mock(PlatformTransactionManager.class)), "ffmpeg", cache.toString(), 2,
+            Duration.ZERO, 300) {
+                @Override
+                byte[] read(Path file) throws IOException {
+                    Files.delete(cached); // pruned by another request just after the existence check
+                    return super.read(file);
+                }
+            };
+
+        byte[] jpeg = racing.still(EDITION_ID, 30_000L);
+
+        assertThat(jpeg).isEqualTo(JPEG);
+        assertThat(runner.commands).hasSize(1);
+    }
+
+    @Test
+    void aCachedFileThatCannotBeReadIs503() throws IOException {
+        Files.createDirectories(stills());
+        Files.write(stills().resolve("7-30-10-1700000000123.jpg"), new byte[] {9});
+        StillService broken = new StillService(editions, new LibraryRoot(library.toString()), runner,
+            new TransactionTemplate(mock(PlatformTransactionManager.class)), "ffmpeg", cache.toString(), 2,
+            Duration.ZERO, 300) {
+                @Override
+                byte[] read(Path file) throws IOException {
+                    throw new IOException("disk error");
+                }
+            };
+
+        assertThatThrownBy(() -> broken.still(EDITION_ID, 30_000L)).isInstanceOf(ServiceUnavailableException.class)
+            .hasCauseInstanceOf(IOException.class);
     }
 
     @Test
@@ -336,14 +375,14 @@ class StillServiceTest {
             Duration.ZERO, 300);
         ExecutorService pool = Executors.newSingleThreadExecutor();
         try {
-            Future<Path> first = pool.submit(() -> busy.still(EDITION_ID, 10_000L));
+            Future<byte[]> first = pool.submit(() -> busy.still(EDITION_ID, 10_000L));
             assertThat(inside.await(30, TimeUnit.SECONDS)).isTrue();
 
             assertThatThrownBy(() -> busy.still(EDITION_ID, 20_000L)).isInstanceOf(ServiceUnavailableException.class);
 
             release.countDown();
-            assertThat(first.get(30, TimeUnit.SECONDS)).exists();
-            assertThat(busy.still(EDITION_ID, 20_000L)).exists();
+            assertThat(first.get(30, TimeUnit.SECONDS)).isEqualTo(JPEG);
+            assertThat(busy.still(EDITION_ID, 20_000L)).isEqualTo(JPEG);
         } finally {
             release.countDown();
             pool.shutdownNow();
@@ -372,9 +411,9 @@ class StillServiceTest {
             Files.setLastModifiedTime(old, FileTime.fromMillis(1_000_000L + i * 1000L));
         }
 
-        Path fresh = small.still(EDITION_ID, 0L);
+        small.still(EDITION_ID, 0L);
 
-        assertThat(files(stills())).containsExactlyInAnyOrder("old-3.jpg", "old-4.jpg", fresh.getFileName().toString());
+        assertThat(files(stills())).containsExactlyInAnyOrder("old-3.jpg", "old-4.jpg", "7-0-10-1700000000123.jpg");
     }
 
     @Test

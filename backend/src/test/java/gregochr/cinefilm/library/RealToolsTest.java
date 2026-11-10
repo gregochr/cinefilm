@@ -106,12 +106,11 @@ class RealToolsTest {
             new TransactionTemplate(mock(PlatformTransactionManager.class)), "ffmpeg",
             library.resolve("cache").toString());
 
-        Path jpeg = service.still(3L, 12_400L);
+        byte[] bytes = service.still(3L, 12_400L);
 
-        byte[] bytes = Files.readAllBytes(jpeg);
         assertThat(bytes[0]).isEqualTo((byte) 0xFF);
         assertThat(bytes[1]).isEqualTo((byte) 0xD8);
-        java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(jpeg.toFile());
+        java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes));
         assertThat(image.getWidth()).isLessThanOrEqualTo(1280);
     }
 
@@ -134,9 +133,9 @@ class RealToolsTest {
             new TransactionTemplate(mock(PlatformTransactionManager.class)), "ffmpeg",
             library.resolve("cache").toString());
 
-        Path jpeg = service.still(4L, 12_000L);
+        byte[] jpeg = service.still(4L, 12_000L);
 
-        java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(jpeg.toFile());
+        java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(jpeg));
         assertThat(image.getWidth()).isLessThanOrEqualTo(1280);
         assertThat((double) image.getWidth() / image.getHeight()).isBetween(16.0 / 9 * 0.98, 16.0 / 9 * 1.02);
     }
