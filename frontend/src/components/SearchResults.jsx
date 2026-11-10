@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { Link } from 'react-router-dom';
 import { POSTER_SIZE_THUMB } from '../api/images.js';
 import { formatLeft } from '../player/time.js';
-import { filmCount, initials } from '../state/useSearchCombobox.js';
+import { ERROR_TEXT, LOADING_TEXT, filmCount, initials } from '../state/useSearchCombobox.js';
 import Art from './Art.jsx';
 import CollectionFan from './CollectionFan.jsx';
 
@@ -124,10 +124,8 @@ export default function SearchResults({
   let at = 0;
   return (
     <div className={`search-results search-results--${size}`} data-testid="search-results">
-      {status === 'loading' ? <p className="search-note">Loading…</p> : null}
-      {status === 'error' ? (
-        <p className="search-note">Search isn’t available right now. Enter searches the Library.</p>
-      ) : null}
+      {status === 'loading' ? <p className="search-note">{LOADING_TEXT}</p> : null}
+      {status === 'error' ? <p className="search-note">{ERROR_TEXT}</p> : null}
       {ready && result.fuzzy ? (
         <p className="search-note">No exact match for “{query}” · showing close matches</p>
       ) : null}

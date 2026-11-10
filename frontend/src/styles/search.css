@@ -150,7 +150,8 @@
   align-items: center;
   gap: 16px;
   margin: 0 -8px;
-  padding: 12px 16px;
+  min-height: 44px;
+  padding: 0 16px;
   border-top: 1px solid var(--cf-line);
 }
 .search-footer__hints {
@@ -159,6 +160,9 @@
   color: var(--cf-text-muted);
 }
 .search-footer__all {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px; /* touch target */
   margin-left: auto;
   font-size: var(--cf-size-ui);
   color: var(--cf-text-2);
@@ -173,4 +177,19 @@
 /* Phone sheet rows (phase 4) */
 .search-results--lg .search-row {
   min-height: 52px;
+}
+
+/* Below this the header wraps (the box can drop to its own line at the left), so the panel is anchored to the header,
+   not the box: left-aligned at the gutter and never wider than the viewport. */
+@media (max-width: 1000px) {
+  .header__search {
+    position: static;
+  }
+  .search-panel {
+    top: calc(100% - 14px);
+    left: var(--cf-gutter);
+    right: auto;
+    width: min(540px, calc(100vw - 2 * var(--cf-gutter)));
+    max-width: none;
+  }
 }

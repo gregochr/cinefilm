@@ -101,9 +101,17 @@ export function initials(name) {
 /** "1 film", "3 films". */
 export const filmCount = (n) => `${n} ${n === 1 ? 'film' : 'films'}`;
 
-/** The text for the polite live region: the number of matches, or the no-match sentence. Empty when closed. */
+export const LOADING_TEXT = 'Loading…';
+export const ERROR_TEXT = 'Search isn’t available right now. Enter searches the Library.';
+
+/**
+ * The text for the polite live region, one per state: Loading…, the error line, the number of matches, or the
+ * no-match sentence. Empty when closed. The visible notes are not live regions themselves, so nothing is read twice.
+ */
 export function announcement({ open, status, result }) {
-  if (!open || status !== 'ready') return '';
+  if (!open) return '';
+  if (status === 'loading') return LOADING_TEXT;
+  if (status === 'error') return ERROR_TEXT;
   if (result.total === 0) return `No matches for “${result.query.trim()}”`;
   return result.total === 1 ? '1 result' : `${result.total} results`;
 }

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
@@ -551,7 +552,13 @@ describe('states', () => {
     useSearchIndex.mockReturnValue({ index: null, status: 'loading' });
     const { user, box } = setup();
     await user.type(box, 'blade runner');
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    // Announced once, by the one polite live region; the visible note is plain text.
+    expect(screen.getByTestId('search-live')).toHaveTextContent('Loading…');
+    expect(screen.getByTestId('search-live')).toHaveAttribute('aria-live', 'polite');
+    expect(screen.getByTestId('search-live')).toHaveAttribute('aria-atomic', 'true');
+    expect(screen.getAllByText('Loading…')).toHaveLength(2);
+    expect(screen.queryAllByRole('status').map((n) => n.textContent)).not.toContain('Loading…');
+    expect(screen.queryAllByRole('alert')).toHaveLength(0);
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     expect(options()).toHaveLength(0);
     await user.keyboard('{Enter}');
@@ -563,7 +570,11 @@ describe('states', () => {
     useSearchIndex.mockReturnValue({ index: null, status: 'error' });
     const { user, box } = setup();
     await user.type(box, 'heat');
-    expect(screen.getByText(/Search isn’t available right now/)).toBeInTheDocument();
+    expect(screen.getByTestId('search-live')).toHaveTextContent(
+      'Search isn’t available right now. Enter searches the Library.',
+    );
+    expect(screen.getAllByText(/Search isn’t available right now/)).toHaveLength(2);
+    expect(screen.queryAllByRole('alert')).toHaveLength(0);
     await user.keyboard('{Enter}');
     expect(where()).toBe('/library?q=heat');
   });
@@ -694,5 +705,21 @@ describe('SearchResults size', () => {
     expect(screen.getByTestId('search-results')).toHaveClass('search-results--lg');
     expect(screen.queryByText(/Enter open/)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'See all 9 results' })).toBeInTheDocument();
+  });
+});
+
+describe('search.css', () => {
+  const css = readFileSync(`${process.cwd()}/src/styles/search.css`, 'utf8');
+
+  it('makes the See all link a 44px touch target', () => {
+    expect(css).toMatch(/\.search-footer__all \{[^}]*display: inline-flex;[^}]*min-height: 44px;/);
+  });
+
+  it('keeps the panel inside the viewport where the header wraps (max-width: 1000px)', () => {
+    const block = /@media \(max-width: 1000px\) \{([\s\S]*)\n\}/.exec(css)?.[1] ?? '';
+    expect(block).toMatch(/\.header__search \{\s*position: static;/);
+    expect(block).toMatch(/left: var\(--cf-gutter\);/);
+    expect(block).toMatch(/right: auto;/);
+    expect(block).toMatch(/width: min\(540px, calc\(100vw - 2 \* var\(--cf-gutter\)\)\);/);
   });
 });

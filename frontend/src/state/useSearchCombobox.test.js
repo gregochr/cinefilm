@@ -150,7 +150,7 @@ describe('text helpers', () => {
     expect(hasQuery('  ')).toBe(false);
   });
 
-  it('announces counts and the no-match text, and nothing while closed or not ready', () => {
+  it('announces counts and the no-match text, for loading and error, and nothing while closed', () => {
     const ready = (total, query = 'wa') => ({
       open: true,
       status: 'ready',
@@ -160,6 +160,12 @@ describe('text helpers', () => {
     expect(announcement(ready(1))).toBe('1 result');
     expect(announcement(ready(0, ' zzz '))).toBe('No matches for “zzz”');
     expect(announcement({ ...ready(3), open: false })).toBe('');
-    expect(announcement({ ...ready(3), status: 'loading' })).toBe('');
+    expect(announcement({ ...ready(3), status: 'loading' })).toBe('Loading…');
+    expect(announcement({ ...ready(3), status: 'error' })).toBe(
+      'Search isn’t available right now. Enter searches the Library.',
+    );
+    expect(announcement({ open: false, status: 'loading', result: { total: 0, query: '' } })).toBe(
+      '',
+    );
   });
 });

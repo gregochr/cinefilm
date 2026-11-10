@@ -105,7 +105,7 @@ export default function SearchBox() {
           {open ? 'Esc' : '/'}
         </kbd>
       </div>
-      <p className="sr-only" aria-live="polite" data-testid="search-live">
+      <p className="sr-only" aria-live="polite" aria-atomic="true" data-testid="search-live">
         {message}
       </p>
       {open && hasQuery(state.query) ? (
