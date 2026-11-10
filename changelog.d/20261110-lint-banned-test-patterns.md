@@ -2,6 +2,5 @@
 
 ESLint rejects `querySelector(All)`, DOM walking (`parentElement`, `firstChild`, `lastChild`, `children`),
 `fireEvent.click` and `fireEvent.keyDown` on anything but `document.activeElement` in frontend tests. Checkstyle
-rejects `Thread.sleep(` and wildcard matchers (`any*`, `isA`, `notNull`, `nullable`) inside a `verify(` statement (multi-line too) in backend tests. Existing offenders were fixed
-(keys now go through `userEvent.keyboard` or the focused element; `verify(x, never()).m(any())` became
-`verifyNoInteractions` / `verifyNoMoreInteractions`).
+rejects `Thread.sleep(` and wildcard matchers (`any*`, `isA`, `notNull`, `nullable`) inside a positive `verify(` statement (multi-line too) in backend tests; `verify(x, never())` with wildcards stays allowed as the strict never-called form. Existing offenders were fixed
+(keys now go through `userEvent.keyboard` or the focused element; positive `verify` wildcards became exact arguments or captors).

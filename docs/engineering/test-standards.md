@@ -56,8 +56,9 @@ client depend on. A new `@SpringBootTest` needs a reason a slice or a unit test 
    `verify(preferences).rememberLastEdition(FILM_ID, WITHOUT_MARKER)`, never `verify(preferences).rememberLastEdition(any(), any())`.
    Checkstyle enforces this (`RegexpMultiline` in `backend/config/checkstyle/checkstyle.xml`): a wildcard matcher
    (`any`, `anyString`, `isA`, `notNull`, `nullable`, ...) anywhere in a `verify(` statement, across line breaks, fails the
-   build. `eq`, `same` and an asserting `argThat` are allowed. For "never called", use
-   `verifyNoInteractions` / `verifyNoMoreInteractions` rather than `never()` with matchers.
+   build. `eq`, `same` and an asserting `argThat` are allowed. `verify(x, never()).m(any())` is allowed: it is the strict
+   "never called with anything" form, and the rule exempts any `verify(` statement containing `never()`. When the whole
+   mock should be untouched, `verifyNoInteractions` / `verifyNoMoreInteractions` say it more directly.
 2. **`any()` in `when()` where the input is knowable.** Stub with the real argument so a wrong argument fails the
    test. The one exception is a stub whose argument is the thing under construction (see `loaderWrapsFilms` in
    `PersonServiceTest`).

@@ -17,6 +17,13 @@ updates:
     open-pull-requests-limit: 10
     labels:
       - dependencies
+    ignore:
+      # Hold ESLint at 9: remove when eslint-plugin-jsx-a11y and eslint-plugin-react declare eslint 10 in
+      # peerDependencies (checked 2026-11-10: 6.10.2 / 7.37.5 cap at 9). Minor and patch updates still flow.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@eslint/js"
+        update-types: ["version-update:semver-major"]
     groups:
       # vitest and its @vitest/* companions (coverage-v8 is pinned to the exact vitest version) must bump together.
       vitest:

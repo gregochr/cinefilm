@@ -96,6 +96,12 @@ cd backend
 The last line is the local gate and the only one that proves a change; the earlier rungs are for speed. Do not skip
 Checkstyle or SpotBugs (`-Dcheckstyle.skip`, `-Dspotbugs.skip`) in anything you report as done.
 
+**Vitest workers (frontend).** Locally Vitest uses half the cores (`maxWorkers: '50%'` in `frontend/vite.config.js`),
+because several sessions often run gates at once and an oversubscribed machine makes screen tests hit their 5 s
+timeout. CI keeps Vitest's default. `VITEST_MAX_WORKERS=<number>` (for example `2`, or `8` for every logical core) overrides it; Vitest parses it as an
+integer, so a percentage string is not understood there. Do not raise
+`testTimeout` to cope with load.
+
 **Gate on exit codes, never on a grep of output.** `$?` after a pipeline is the status of the last command in it
 (usually `grep`, which is almost always 0), and with `-q` Checkstyle's violation lines are not printed at all, so a
 grep for `ERROR` finds nothing and looks clean. Run Maven by itself, read its exit status as its own statement, and
@@ -361,3 +367,8 @@ the first minor or patch Dependabot PR after 2026-11-10 is the proof.
 
 Weekly (Monday): Maven (`/backend`), npm (`/frontend`, with `vitest` and `@vitest/*` grouped, and `@stryker-mutator/*` grouped, so each family bumps together)
 and GitHub Actions.
+
+**ESLint is held at 9** (`ignore` for major updates of `eslint` and `@eslint/js`): `eslint-plugin-jsx-a11y` (our
+accessibility gate) and `eslint-plugin-react` do not declare ESLint 10 in `peerDependencies`, so `npm ci` fails with
+ERESOLVE, and we do not use `--legacy-peer-deps` or `overrides`. Remove the `ignore` when both plugins support 10
+(checked 2026-11-10: 6.10.2 and 7.37.5 cap at 9).

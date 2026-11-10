@@ -33,8 +33,8 @@
     </module>
     <module name="RegexpMultiline">
         <property name="id" value="bannedTestVerifyAny"/>
-        <property name="format" value="\bverify\([^;]*?\b(any|anyString|anyInt|anyLong|anyShort|anyByte|anyChar|anyFloat|anyDouble|anyBoolean|anyList|anySet|anyMap|anyCollection|anyIterable|isA|notNull|nullable)\("/>
-        <property name="message" value="No wildcard matchers (any*, isA, notNull, nullable) in verify(): assert the exact argument, or use an ArgumentCaptor or argThat with a real assertion (test-standards.md, smell 1)."/>
+        <property name="format" value="\bverify\((?![^;]*?\bnever\(\))[^;]*?\b(any|anyString|anyInt|anyLong|anyShort|anyByte|anyChar|anyFloat|anyDouble|anyBoolean|anyList|anySet|anyMap|anyCollection|anyIterable|isA|notNull|nullable)\("/>
+        <property name="message" value="No wildcard matchers (any*, isA, notNull, nullable) in a positive verify() (verify(x, never()) is allowed): assert the exact argument, or use an ArgumentCaptor or argThat with a real assertion (test-standards.md, smell 1)."/>
     </module>
 
     <module name="TreeWalker">

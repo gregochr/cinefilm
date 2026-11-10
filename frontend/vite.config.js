@@ -1,6 +1,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+// Local runs use half the cores: several sessions' gates often run at once, and a default-sized pool per run
+// pushed the load high enough for screen tests to hit their 5 s timeout. CI keeps Vitest's default.
+// Vitest itself reads VITEST_MAX_WORKERS and lets it override this value, so no code is needed for the override.
+// It parses the variable with parseInt: use a number (VITEST_MAX_WORKERS=2); '100%' would become 100 workers.
+const maxWorkers = process.env.CI ? undefined : '50%';
+
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -12,6 +18,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.js'],
     css: false,
+    maxWorkers,
     exclude: ['**/node_modules/**', '**/e2e/**', '**/.stryker-tmp/**'],
     // Coverage gate (CI runs `npm run test:coverage`). Two layers, mirroring goldenhour:
     //  1. Per file: every file in src/** must reach 95% lines and 90% branches on its own, so a new file

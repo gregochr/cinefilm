@@ -3,6 +3,8 @@ package gregochr.cinefilm.library;
 import static gregochr.cinefilm.TestData.CLOCK;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -35,7 +37,6 @@ import java.util.concurrent.Executor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mockito.ArgumentCaptor;
 import org.mockito.stubbing.Answer;
 
 /** The scan's decisions, with the database, ffprobe and TMDB faked. */
@@ -261,13 +262,7 @@ class ScanServiceTest {
         service.start("admin");
 
         verifyNoInteractions(ffprobe);
-        ArgumentCaptor<Long> refreshed = ArgumentCaptor.forClass(Long.class);
-        ArgumentCaptor<FoundFile> files = ArgumentCaptor.forClass(FoundFile.class);
-        ArgumentCaptor<Playability> playabilities = ArgumentCaptor.forClass(Playability.class);
-        ArgumentCaptor<ProbeResult> probes = ArgumentCaptor.forClass(ProbeResult.class);
-        verify(ingest, never()).refresh(refreshed.capture(), files.capture(), playabilities.capture(),
-            probes.capture());
-        assertThat(refreshed.getAllValues()).isEmpty();
+        verify(ingest, never()).refresh(anyLong(), any(), any(), any());
     }
 
     @Test

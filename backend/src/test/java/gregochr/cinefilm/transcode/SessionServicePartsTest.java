@@ -3,8 +3,9 @@ package gregochr.cinefilm.transcode;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.config.BadRequestException;
@@ -143,9 +144,7 @@ class SessionServicePartsTest {
             .isInstanceOf(BadRequestException.class).hasMessage("startMs is outside the film");
         assertThatThrownBy(() -> service.create(EDITION_ID, request(null, -1L, "auto")))
             .isInstanceOf(BadRequestException.class);
-        ArgumentCaptor<SessionSpec> created = ArgumentCaptor.forClass(SessionSpec.class);
-        verify(manager, never()).create(created.capture());
-        assertThat(created.getAllValues()).isEmpty();
+        verifyNoInteractions(manager);
     }
 
     @Test
@@ -317,9 +316,7 @@ class SessionServicePartsTest {
 
         assertThatThrownBy(() -> slow.create(EDITION_ID, request(null, null, "auto")))
             .isInstanceOf(SegmentNotReadyException.class).hasMessage("The film is still being prepared");
-        ArgumentCaptor<SessionSpec> created = ArgumentCaptor.forClass(SessionSpec.class);
-        verify(manager, never()).create(created.capture());
-        assertThat(created.getAllValues()).isEmpty();
+        verifyNoInteractions(manager);
     }
 
     @Test
@@ -342,7 +339,8 @@ class SessionServicePartsTest {
 
         assertThatThrownBy(() -> service.create(EDITION_ID, request(null, null, "auto")))
             .isInstanceOf(ConflictException.class).hasMessage("This film cannot be streamed adaptively");
-        verify(indexes, never()).cached(file2, PART_MS);
+        verify(indexes).ensureIndexed(file1, PART_MS);
+        verifyNoMoreInteractions(indexes);
     }
 
     @Test
