@@ -260,7 +260,7 @@ class LibraryIngestTest extends ApiTestBase {
 
         Film film = only();
         assertThat(film.getEditions()).hasSize(2);
-        assertThat(film.getEditions()).extracting(Edition::getName).containsExactly("Original", "Original");
+        assertThat(film.getEditions()).extracting(Edition::getName).containsExactly("Original", "Director's Cut");
         assertThat(film.getEditions()).extracting(e -> e.originalFile().getPath())
             .containsExactly("Heat.m4v", "Heat Directors Cut.m4v");
     }
@@ -537,10 +537,10 @@ class LibraryIngestTest extends ApiTestBase {
         MovieDetails heat = movie(949, "Heat", 1995, null);
         ingest.addNew(found("Heat.m4v", 10), Playability.PLAYABLE, probe(1), new TitleGuess("Heat", 1995),
             matched(heat));
-        ingest.addNew(found("Heat copy.m4v", 11), Playability.PLAYABLE, probe(1), new TitleGuess("Heat copy", null),
+        ingest.addNew(found("Heat - HD.m4v", 11), Playability.PLAYABLE, probe(1), new TitleGuess("Heat - HD", null),
             null);
         Long orphanFilmId = ingest.pending().get(0).filmId();
-        Long copyFileId = ingest.known().get("Heat copy.m4v").id();
+        Long copyFileId = ingest.known().get("Heat - HD.m4v").id();
         Long copyEditionId = mediaFiles.findById(copyFileId).orElseThrow().getEdition().getId();
         PlaybackState state = new PlaybackState(copyEditionId);
         state.setPositionMs(4242);

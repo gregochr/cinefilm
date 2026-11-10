@@ -3,6 +3,7 @@ package gregochr.cinefilm.library;
 import gregochr.cinefilm.film.MediaFileRepository.Known;
 import gregochr.cinefilm.film.Playability;
 import gregochr.cinefilm.film.Presence;
+import gregochr.cinefilm.library.FileNameParser.ParsedName;
 import gregochr.cinefilm.library.LibraryIngest.Pending;
 import gregochr.cinefilm.library.LibraryScanner.Found;
 import gregochr.cinefilm.library.LibraryScanner.FoundFile;
@@ -48,13 +49,14 @@ public class ScanService {
     private final Clock clock;
     private final LibraryLock lock;
     private final ApplicationEventPublisher events;
+    private final LibraryGrouping grouping;
     private final AtomicReference<Progress> progress = new AtomicReference<>();
 
     /** Creates the service; the executor runs scans in the background, the lock keeps scans and imports apart. */
     public ScanService(LibraryRoot root, LibraryScanner scanner, FfprobeService ffprobe, TmdbApi tmdb,
                        TmdbMatcher matcher, LibraryIngest ingest,
                        @Qualifier("scanExecutor") Executor scanExecutor, Clock clock, LibraryLock lock,
-                       ApplicationEventPublisher events) {
+                       ApplicationEventPublisher events, LibraryGrouping grouping) {
         this.root = root;
         this.scanner = scanner;
         this.ffprobe = ffprobe;
@@ -65,6 +67,7 @@ public class ScanService {
         this.clock = clock;
         this.lock = lock;
         this.events = events;
+        this.grouping = grouping;
     }
 
     /**
@@ -184,8 +187,10 @@ public class ScanService {
             }
         }
         ingest.markMissing(vanished);
+        groupLibrary(run);
         retryPending(run);
         completeCollections(run);
+        refreshDefaults(run);
         List<String> notes = new ArrayList<>();
         if (run.failed > 0) {
             notes.add(run.failed + " files could not be processed");
@@ -230,17 +235,31 @@ public class ScanService {
         }
         ProbeResult probe = probe(file);
         Playability playability = classify(file, probe);
-        TitleGuess guess = guess(file, probe);
-        MatchOutcome outcome = playability == Playability.PLAYABLE ? lookup(run, guess, probe) : null;
+        ParsedName parsed = FileNameParser.parse(file.path());
+        TitleGuess guess = guess(file, probe, parsed);
+        // Another part of an edition we already have is added to its film without asking TMDB; the grouping pass at
+        // the end of the scan joins it to that edition.
+        boolean lookup = playability == Playability.PLAYABLE && !ingest.isPartOfKnownEdition(file.path());
+        MatchOutcome outcome = lookup ? lookup(run, guess, parsed, probe) : null;
         ingest.addNew(file, playability, probe, guess, outcome);
         run.added++;
     }
 
-    private MatchOutcome lookup(Run run, TitleGuess guess, ProbeResult probe) {
+    /**
+     * Looks a file up on TMDB: by the id its name carries when it has one, else by title and year. A part-numbered
+     * file is searched with duration 0, since its length says nothing about the film's runtime.
+     */
+    private MatchOutcome lookup(Run run, TitleGuess guess, ParsedName parsed, ProbeResult probe) {
         if (run.tmdbDown || !tmdb.enabled()) {
             return null;
         }
-        MatchOutcome outcome = matcher.match(guess, probe.durationMs());
+        MatchOutcome outcome = null;
+        if (parsed.tmdbId() != null || parsed.imdbId() != null) {
+            outcome = matcher.matchTagged(parsed.tmdbId(), parsed.imdbId()).orElse(null);
+        }
+        if (outcome == null) {
+            outcome = matcher.match(guess, parsed.partTag() == null ? probe.durationMs() : 0);
+        }
         if (outcome.status() == Status.UNAVAILABLE) {
             run.tmdbDown = true;
             return null;
@@ -248,13 +267,38 @@ public class ScanService {
         return outcome;
     }
 
+    /** Repair, then auto-resolve: neither needs TMDB, and a failure leaves the work for the next scan. */
+    private void groupLibrary(Run run) {
+        try {
+            grouping.repair();
+            grouping.group();
+        } catch (RuntimeException e) {
+            run.failed++;
+            LOG.warn("Could not group the library: {}", e.getClass().getSimpleName());
+        }
+    }
+
+    private void refreshDefaults(Run run) {
+        try {
+            grouping.refreshDefaults();
+        } catch (RuntimeException e) {
+            run.failed++;
+            LOG.warn("Could not refresh the default editions: {}", e.getClass().getSimpleName());
+        }
+    }
+
     private void retryPending(Run run) {
         if (run.tmdbDown || !tmdb.enabled()) {
             return;
         }
         for (Pending pending : ingest.pending()) {
-            MatchOutcome outcome = matcher.match(new TitleGuess(pending.title(), pending.year()),
-                pending.runtimeMs());
+            MatchOutcome outcome = null;
+            if (pending.tmdbId() != null || pending.imdbId() != null) {
+                outcome = matcher.matchTagged(pending.tmdbId(), pending.imdbId()).orElse(null);
+            }
+            if (outcome == null) {
+                outcome = matcher.match(new TitleGuess(pending.title(), pending.year()), pending.runtimeMs());
+            }
             if (outcome.status() == Status.UNAVAILABLE) {
                 run.tmdbDown = true;
                 return;
@@ -300,8 +344,8 @@ public class ScanService {
         return probe == null ? Playability.UNREADABLE : Playability.PLAYABLE;
     }
 
-    private static TitleGuess guess(FoundFile file, ProbeResult probe) {
+    private static TitleGuess guess(FoundFile file, ProbeResult probe, ParsedName parsed) {
         return TitleGuess.of(probe == null ? null : probe.tags().title(), file.fileName(),
-            probe == null ? null : probe.tags().year());
+            probe == null ? null : probe.tags().year(), parsed);
     }
 }

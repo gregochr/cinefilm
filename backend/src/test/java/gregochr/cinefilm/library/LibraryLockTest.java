@@ -32,7 +32,7 @@ class LibraryLockTest {
     private ScanService scans() {
         return new ScanService(new LibraryRoot(library.toString()), mock(LibraryScanner.class),
             mock(FfprobeService.class), mock(TmdbApi.class), mock(TmdbMatcher.class), ingest, queued::add, CLOCK, lock,
-            event -> { });
+            event -> { }, mock(LibraryGrouping.class));
     }
 
     @Test

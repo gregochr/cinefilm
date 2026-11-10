@@ -142,10 +142,10 @@ class LibraryScanIntegrationTest extends IntegrationTestBase {
         MovieDetails heat = heat();
         ingest.addNew(found("Heat.m4v", 10), Playability.PLAYABLE, probe(1), new TitleGuess("Heat", 1995),
             new MatchOutcome(Status.MATCHED, heat, List.of()));
-        ingest.addNew(found("Heat copy.m4v", 11), Playability.PLAYABLE, probe(2), new TitleGuess("Heat copy", null),
+        ingest.addNew(found("Heat - HD.m4v", 11), Playability.PLAYABLE, probe(2), new TitleGuess("Heat - HD", null),
             null);
         Long pendingFilm = ingest.pending().get(0).filmId();
-        Long copyEdition = mediaFiles.findById(ingest.known().get("Heat copy.m4v").id()).orElseThrow()
+        Long copyEdition = mediaFiles.findById(ingest.known().get("Heat - HD.m4v").id()).orElseThrow()
             .getEdition().getId();
         PlaybackState state = new PlaybackState(copyEdition);
         state.setPositionMs(4242);

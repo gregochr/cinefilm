@@ -120,6 +120,19 @@ public class TmdbClient implements TmdbApi {
         return get(b -> b.path("/3/movie/{id}/external_ids").build(id)).map(body -> text(body, "imdb_id"));
     }
 
+    @Override
+    public Optional<Long> findMovieByImdbId(String imdbId) {
+        return get(b -> b.path("/3/find/{id}").queryParam("external_source", "imdb_id").build(imdbId))
+            .flatMap(body -> {
+                for (JsonNode result : body.path("movie_results")) {
+                    if (result.path("id").isNumber()) {
+                        return Optional.of(result.path("id").asLong());
+                    }
+                }
+                return Optional.empty();
+            });
+    }
+
     private static MovieDetails movieOf(JsonNode m) {
         List<String> genres = new ArrayList<>();
         for (JsonNode g : m.path("genres")) {
