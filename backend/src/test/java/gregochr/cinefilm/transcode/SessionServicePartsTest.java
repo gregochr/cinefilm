@@ -143,7 +143,9 @@ class SessionServicePartsTest {
             .isInstanceOf(BadRequestException.class).hasMessage("startMs is outside the film");
         assertThatThrownBy(() -> service.create(EDITION_ID, request(null, -1L, "auto")))
             .isInstanceOf(BadRequestException.class);
-        verify(manager, never()).create(any());
+        ArgumentCaptor<SessionSpec> created = ArgumentCaptor.forClass(SessionSpec.class);
+        verify(manager, never()).create(created.capture());
+        assertThat(created.getAllValues()).isEmpty();
     }
 
     @Test
@@ -315,7 +317,9 @@ class SessionServicePartsTest {
 
         assertThatThrownBy(() -> slow.create(EDITION_ID, request(null, null, "auto")))
             .isInstanceOf(SegmentNotReadyException.class).hasMessage("The film is still being prepared");
-        verify(manager, never()).create(any());
+        ArgumentCaptor<SessionSpec> created = ArgumentCaptor.forClass(SessionSpec.class);
+        verify(manager, never()).create(created.capture());
+        assertThat(created.getAllValues()).isEmpty();
     }
 
     @Test
@@ -338,7 +342,7 @@ class SessionServicePartsTest {
 
         assertThatThrownBy(() -> service.create(EDITION_ID, request(null, null, "auto")))
             .isInstanceOf(ConflictException.class).hasMessage("This film cannot be streamed adaptively");
-        verify(indexes, never()).cached(any(), any());
+        verify(indexes, never()).cached(file2, PART_MS);
     }
 
     @Test

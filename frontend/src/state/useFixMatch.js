@@ -14,18 +14,23 @@ export function useFixMatch(filmId, initialQuery, onApplied) {
   const [applying, setApplying] = useState(false);
   const [applyProblem, setApplyProblem] = useState(null);
   const latest = useRef(0);
+  const controller = useRef(null);
 
   const run = useCallback(
     async (text, yearText) => {
       const ticket = ++latest.current;
+      controller.current?.abort();
+      const mine = new AbortController();
+      controller.current = mine;
       setSearch({ status: 'loading', results: [], problem: null });
       setPicked(null);
       setApplyProblem(null);
       try {
-        const results = await adminApi.matchSearch(filmId, {
-          query: text.trim(),
-          year: parseYear(yearText),
-        });
+        const results = await adminApi.matchSearch(
+          filmId,
+          { query: text.trim(), year: parseYear(yearText) },
+          { signal: mine.signal },
+        );
         if (ticket === latest.current) setSearch({ status: 'ready', results, problem: null });
       } catch (failure) {
         if (ticket === latest.current) {
@@ -36,8 +41,13 @@ export function useFixMatch(filmId, initialQuery, onApplied) {
     [filmId],
   );
 
+  // A replayed effect (StrictMode, a remount) cancels the search it started before, so only the last one counts.
   useEffect(() => {
     run(initialQuery, '');
+    return () => {
+      latest.current += 1;
+      controller.current?.abort();
+    };
   }, [run, initialQuery]);
 
   const submit = useCallback(() => run(query, year), [run, query, year]);

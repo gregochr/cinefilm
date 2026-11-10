@@ -1,75 +1,105 @@
+import { StrictMode } from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError } from '../api/client.js';
-import { adminApi } from '../api/resources.js';
+import { installFetch, respond } from '../test/mockApi.jsx';
 import { useFixMatch } from './useFixMatch.js';
 
 afterEach(() => {
-  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 const deferred = () => {
   let resolve;
-  let reject;
-  const promise = new Promise((res, rej) => {
+  const promise = new Promise((res) => {
     resolve = res;
-    reject = rej;
   });
-  return { promise, resolve, reject };
+  return { promise, resolve };
 };
+
+const isSearch = (m, url) => m === 'GET' && url.startsWith('/api/admin/films/7/match?');
+const isApply = (m, url) => m === 'POST' && url === '/api/admin/films/7/match';
 
 describe('useFixMatch', () => {
   it('searches on open with the title and keeps only the newest search when answers arrive out of order', async () => {
     const first = deferred();
     const second = deferred();
-    const search = vi
-      .spyOn(adminApi, 'matchSearch')
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
+    const pending = [first, second];
+    const fetchMock = installFetch((m, url) => (isSearch(m, url) ? pending.shift().promise : null));
     const { result } = renderHook(() => useFixMatch(7, 'Dune', vi.fn()));
-    expect(search).toHaveBeenCalledWith(7, { query: 'Dune', year: null });
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/films/7/match?query=Dune');
 
     act(() => result.current.setQuery('Dune 2021'));
     act(() => result.current.setYear('2021'));
     act(() => {
       result.current.submit();
     });
-    expect(search).toHaveBeenLastCalledWith(7, { query: 'Dune 2021', year: 2021 });
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/admin/films/7/match?query=Dune+2021&year=2021');
 
-    await act(async () => second.resolve([{ tmdbId: 2 }]));
-    await act(async () => first.resolve([{ tmdbId: 1 }]));
+    await act(async () => second.resolve(respond([{ tmdbId: 2 }])));
+    await act(async () => first.resolve(respond([{ tmdbId: 1 }])));
     expect(result.current.search.results).toEqual([{ tmdbId: 2 }]);
   });
 
   it('ignores a failure of a search that is no longer the newest', async () => {
     const first = deferred();
     const second = deferred();
-    vi.spyOn(adminApi, 'matchSearch')
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
+    const pending = [first, second];
+    installFetch((m, url) => (isSearch(m, url) ? pending.shift().promise : null));
     const { result } = renderHook(() => useFixMatch(7, 'Dune', vi.fn()));
     act(() => {
       result.current.submit();
     });
 
-    await act(async () => second.resolve([]));
-    await act(async () => first.reject(new ApiError(503)));
+    await act(async () => second.resolve(respond([])));
+    await act(async () => first.resolve(respond({ error: 'x' }, 503)));
     expect(result.current.search.status).toBe('ready');
   });
 
-  it('applies nothing until a result is picked, then applies it and reports the outcome', async () => {
-    vi.spyOn(adminApi, 'matchSearch').mockResolvedValue([{ tmdbId: 5 }]);
-    const apply = vi.spyOn(adminApi, 'applyMatch').mockResolvedValue({ filmId: 7, joined: true });
+  it('under StrictMode the replayed mount effect keeps the answer to the search that counts', async () => {
+    // The first search of the replayed pair gets a 409 (as it once did from the library lock): it must not win.
+    const answers = [respond({ error: 'A scan is running' }, 409), respond([{ tmdbId: 5 }])];
+    const fetchMock = installFetch((m, url) => (isSearch(m, url) ? answers.shift() : null));
+    const { result } = renderHook(() => useFixMatch(7, 'Dune', vi.fn()), { wrapper: StrictMode });
+
+    await waitFor(() => expect(result.current.search.status).toBe('ready'));
+    expect(result.current.search.results).toEqual([{ tmdbId: 5 }]);
+    expect(fetchMock.mock.calls.filter((c) => c[0].includes('/match?'))).toHaveLength(2);
+  });
+
+  it('applies nothing until a result is picked, then posts it and reports the outcome', async () => {
+    const fetchMock = installFetch((m, url) => {
+      if (isSearch(m, url)) return respond([{ tmdbId: 5 }]);
+      if (isApply(m, url)) return respond({ filmId: 7, joined: true });
+      return null;
+    });
     const onApplied = vi.fn();
     const { result } = renderHook(() => useFixMatch(7, 'Dune', onApplied));
     await waitFor(() => expect(result.current.search.status).toBe('ready'));
 
     await act(async () => result.current.apply());
-    expect(apply).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls.some((c) => c[1]?.method === 'POST')).toBe(false);
 
     act(() => result.current.setPicked(5));
     await act(async () => result.current.apply());
-    expect(apply).toHaveBeenCalledWith(7, 5);
+    const post = fetchMock.mock.calls.find((c) => c[1]?.method === 'POST');
+    expect(post[1].headers['X-CineFilm']).toBe('1');
+    expect(JSON.parse(post[1].body)).toEqual({ tmdbId: 5 });
     expect(onApplied).toHaveBeenCalledWith({ filmId: 7, joined: true });
+  });
+
+  it('shows the apply problem and does not report success when the apply fails', async () => {
+    installFetch((m, url) => {
+      if (isSearch(m, url)) return respond([{ tmdbId: 5 }]);
+      if (isApply(m, url)) return respond({ error: 'A scan is running' }, 409);
+      return null;
+    });
+    const onApplied = vi.fn();
+    const { result } = renderHook(() => useFixMatch(7, 'Dune', onApplied));
+    await waitFor(() => expect(result.current.search.status).toBe('ready'));
+    act(() => result.current.setPicked(5));
+    await act(async () => result.current.apply());
+
+    expect(result.current.applyProblem).toBe('A scan is running. Try again when it finishes.');
+    expect(onApplied).not.toHaveBeenCalled();
   });
 });

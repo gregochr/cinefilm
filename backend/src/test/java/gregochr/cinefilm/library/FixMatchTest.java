@@ -8,7 +8,6 @@ import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -138,14 +137,14 @@ class FixMatchTest extends ApiTestBase {
     }
 
     @Test
-    void searchWhileAScanHoldsTheLibraryLockIsA409AndAsksNothingOfTmdb() {
+    void searchDuringAScanStillWorksBecauseItOnlyReadsTmdb() {
+        when(tmdb.search("Dune", null)).thenReturn(List.of(new SearchHit(2, "B", "B", 2021, 1, null)));
+        when(tmdb.movie(2)).thenReturn(Optional.of(movie(2, "B", 2021)));
         Film film = unmatched("Dune", "Dune.m4v");
         lock.tryAcquire(LibraryLock.SCAN);
 
-        assertThatThrownBy(() -> fix.search(film.getId(), "Dune", null)).isInstanceOf(ConflictException.class)
-            .hasMessage("A scan is running");
-        verifyNoInteractions(tmdb);
-        assertThat(lock.holder()).as("someone else's lock is not released").isEqualTo(LibraryLock.SCAN);
+        assertThat(fix.search(film.getId(), "Dune", null)).hasSize(1);
+        assertThat(lock.holder()).as("the scan keeps its lock").isEqualTo(LibraryLock.SCAN);
     }
 
     @Test
@@ -231,7 +230,7 @@ class FixMatchTest extends ApiTestBase {
 
         assertThatThrownBy(() -> fix.apply(film.getId(), 5L)).isInstanceOf(ConflictException.class)
             .hasMessage("A scan is running");
-        verify(tmdb, never()).movie(anyLong());
+        verify(tmdb, never()).movie(5);
     }
 
     @Test

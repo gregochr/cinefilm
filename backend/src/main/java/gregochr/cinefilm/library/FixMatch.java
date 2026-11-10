@@ -24,10 +24,10 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Fix match: the owner searches TMDB for a film that needs a match and picks the right one. Both steps take the
- * {@link LibraryLock} (a scan rewrites films too) and answer a 409 when they cannot. Applying settles the film
- * ({@code editionsConfirmed}); if another film already holds the chosen TMDB id the owner has said they are one film,
- * so this film is joined into it by {@link EditionJoin} with no different-film guard.
+ * Fix match: the owner searches TMDB for a film that needs a match and picks the right one. Applying takes the
+ * {@link LibraryLock} (a scan rewrites films too) and answers a 409 when it cannot; searching does not. Applying
+ * settles the film ({@code editionsConfirmed}); if another film already holds the chosen TMDB id the owner has said
+ * they are one film, so this film is joined into it by {@link EditionJoin} with no different-film guard.
  */
 @Service
 public class FixMatch {
@@ -64,7 +64,8 @@ public class FixMatch {
 
     /**
      * Searches TMDB and returns up to {@value #MAX_RESULTS} results with their details (fetched one by one through
-     * TMDB's request pacer).
+     * TMDB's request pacer). A search only reads TMDB and writes nothing, so it does not take the library lock and
+     * works during a scan.
      *
      * @param filmId the film being matched
      * @param query the title to search for
@@ -72,28 +73,25 @@ public class FixMatch {
      * @return the results in TMDB's order
      * @throws BadRequestException when the query is blank
      * @throws NotFoundException when there is no such film
-     * @throws ConflictException when a scan, import or another match holds the library lock
      * @throws ServiceUnavailableException when TMDB cannot answer
      */
     public List<MatchResultDto> search(Long filmId, String query, Integer year) {
         if (query == null || query.isBlank()) {
             throw new BadRequestException("A title to search for is needed");
         }
-        return locked(() -> {
-            requireFilm(filmId);
-            try {
-                List<MatchResultDto> results = new ArrayList<>();
-                for (SearchHit hit : tmdb.search(query.strip(), year)) {
-                    if (results.size() == MAX_RESULTS) {
-                        break;
-                    }
-                    tmdb.movie(hit.id()).ifPresent(movie -> results.add(result(movie)));
+        requireFilm(filmId);
+        try {
+            List<MatchResultDto> results = new ArrayList<>();
+            for (SearchHit hit : tmdb.search(query.strip(), year)) {
+                if (results.size() == MAX_RESULTS) {
+                    break;
                 }
-                return results;
-            } catch (TmdbUnavailableException e) {
-                throw new ServiceUnavailableException(TMDB_DOWN, e);
+                tmdb.movie(hit.id()).ifPresent(movie -> results.add(result(movie)));
             }
-        });
+            return results;
+        } catch (TmdbUnavailableException e) {
+            throw new ServiceUnavailableException(TMDB_DOWN, e);
+        }
     }
 
     /**

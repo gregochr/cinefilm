@@ -319,8 +319,9 @@ video", and the owner's play-through of a join in Safari (Mac, iPhone) and Chrom
 - Tests: the attention rules; Fix match search/apply/join/503/409; report listing.
 
 **As built (phase 5).** `FixMatch` (service) + `FixMatchController`; `GET /api/admin/grouping-report` returns
-`{ items }` (newest 20). The lock holder for Fix match is `LibraryLock.MATCH`; both endpoints answer 409 "A scan is
-running" for any holder, and a scan refused because of a match says "A match is being fixed". TMDB trouble is a new
+`{ items }` (newest 20). The lock holder for Fix match is `LibraryLock.MATCH`; only apply takes the lock (409 "A scan is
+running" for any holder; search only reads TMDB, so it works during a scan and a React StrictMode double search cannot
+collide with itself), and a scan refused because of a match says "A match is being fixed". TMDB trouble is a new
 `ServiceUnavailableException` (503). Joining into an existing film goes through the new `EditionJoin.joinFilms`
 (which delegates to `LibraryIngest.merge`; the title guard is not applied) and writes a `join` report line. The
 survivor's editions are not part-joined: the owner arranges them in phase 6. `multiple-files` detail lines: "Files

@@ -35,6 +35,7 @@ import java.util.concurrent.Executor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
 import org.mockito.stubbing.Answer;
 
 /** The scan's decisions, with the database, ffprobe and TMDB faked. */
@@ -260,7 +261,13 @@ class ScanServiceTest {
         service.start("admin");
 
         verifyNoInteractions(ffprobe);
-        verify(ingest, never()).refresh(anyLong(), any(), any(), any());
+        ArgumentCaptor<Long> refreshed = ArgumentCaptor.forClass(Long.class);
+        ArgumentCaptor<FoundFile> files = ArgumentCaptor.forClass(FoundFile.class);
+        ArgumentCaptor<Playability> playabilities = ArgumentCaptor.forClass(Playability.class);
+        ArgumentCaptor<ProbeResult> probes = ArgumentCaptor.forClass(ProbeResult.class);
+        verify(ingest, never()).refresh(refreshed.capture(), files.capture(), playabilities.capture(),
+            probes.capture());
+        assertThat(refreshed.getAllValues()).isEmpty();
     }
 
     @Test

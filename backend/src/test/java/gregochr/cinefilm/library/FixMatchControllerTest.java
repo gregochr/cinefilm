@@ -57,15 +57,6 @@ class FixMatchControllerTest {
     }
 
     @Test
-    void aBusyLibraryIs409WithTheMessage() throws Exception {
-        when(fixMatch.search(7L, "Dune", null)).thenThrow(new ConflictException("A scan is running"));
-
-        mvc.perform(get("/api/admin/films/7/match").param("query", "Dune").with(user("owner")))
-            .andExpect(status().isConflict())
-            .andExpect(jsonPath("$.error").value("A scan is running"));
-    }
-
-    @Test
     void tmdbBeingDownIs503() throws Exception {
         when(fixMatch.search(7L, "Dune", null))
             .thenThrow(new ServiceUnavailableException("TMDB is not available right now", null));
