@@ -14,7 +14,8 @@ import {
 /**
  * The Edit editions panel for one film: loads the files and the suggestion, keeps what the owner arranges, and saves
  * it. A failed save keeps every edit and says why; the server's field errors stay until the next edit. `onSaved`
- * runs with the save's answer once the server has accepted it.
+ * runs with the save's answer once the server has accepted it, and `true` as its second argument when the panel it
+ * belonged to has closed meanwhile (so only the lists need refreshing).
  */
 export function useEditEditions(filmId, onSaved) {
   const [load, setLoad] = useState({ status: 'loading', error: null });
@@ -25,6 +26,14 @@ export function useEditEditions(filmId, onSaved) {
   const [attempt, setAttempt] = useState(0);
   // Set the moment a save starts, so an edit made before the next render is ignored as well.
   const inFlight = useRef(false);
+  // The film whose panel is on screen (null once it closed): a save for any other is stale when it ends.
+  const shown = useRef(filmId);
+  useEffect(() => {
+    shown.current = filmId;
+    return () => {
+      shown.current = null;
+    };
+  }, [filmId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -61,7 +70,7 @@ export function useEditEditions(filmId, onSaved) {
     setProblem(null);
     try {
       const result = await adminApi.saveEditions(filmId, view.request);
-      onSaved(result);
+      onSaved(result, shown.current !== filmId);
     } catch (failure) {
       const failed = saveProblem(failure);
       setProblem(failed.text);

@@ -289,11 +289,13 @@ export default function FilmDetail() {
           film={{ id: film.id, title: film.title, year: film.year }}
           opener={editing.opener}
           onClose={() => setEditing(null)}
-          onSaved={() => {
-            setEditing(null);
+          onSaved={(result, stale) => {
+            if (!stale) {
+              setEditing(null);
+              toast.show('Editions saved');
+            }
             actions.clearOverrides();
             reload();
-            toast.show('Editions saved');
           }}
         />
       ) : null}

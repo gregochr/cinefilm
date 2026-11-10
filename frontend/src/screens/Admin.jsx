@@ -451,12 +451,14 @@ export default function Admin() {
   };
 
   // A saved arrangement settles the row it was opened from, so the lists are read again.
-  const edited = () => {
-    setEditing(null);
+  const edited = (result, stale) => {
+    if (!stale) {
+      setEditing(null);
+      toast.show('Editions saved');
+    }
     attention.reload();
     grouping.reload();
     reload();
-    toast.show('Editions saved');
   };
 
   useEffect(() => {

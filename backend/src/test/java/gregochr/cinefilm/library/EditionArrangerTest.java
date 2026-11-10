@@ -606,4 +606,21 @@ class EditionArrangerTest extends ApiTestBase {
         assertThat(editions.findById(editionId(film, 0)).orElseThrow().getCreditsMarkerMs())
             .isEqualTo(170 * MIN);
     }
+
+    @Test
+    void aResumePositionOnTheJoinBetweenTwoPartsSurvivesAnUnchangedSave() {
+        Film built = film(null, "Heat", 1995, NOW);
+        Edition whole = edition(built, null, "Original", 150 * MIN, null);
+        timed(whole, "Heat - pt1.m4v", 100, 1);
+        timed(whole, "Heat - pt2.m4v", 50, 2);
+        Film film = save(built);
+        saveState(state(film.getEditions().get(0), 100 * MIN, false, NOW, null));
+        List<MediaFile> parts = film.getEditions().get(0).originalParts();
+
+        arranger.save(film.getId(), new SaveRequest(List.of(ed(editionId(film, 0), "Original", true,
+            f(parts.get(0).getId(), 1), f(parts.get(1).getId(), 2))), List.of()));
+
+        assertThat(states.findById(editionId(film, 0))).get().extracting(PlaybackState::getPositionMs)
+            .isEqualTo(100 * MIN);
+    }
 }

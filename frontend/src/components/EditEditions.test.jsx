@@ -224,6 +224,26 @@ describe('Edit editions: editing', () => {
     ).toBeInTheDocument();
   });
 
+  it('keeps focus, the caret and the keystrokes in a name field whose row moves to another group as it is typed in', async () => {
+    installFetch();
+    const { user } = await open();
+    await user.selectOptions(editionSelect(PT2), 'New edition…');
+    await user.selectOptions(editionSelect(THEATRICAL), 'New edition…');
+
+    const field = () => within(row(THEATRICAL)).getByRole('textbox', { name: 'New edition name' });
+    await user.click(field());
+    await user.keyboard('Cut');
+
+    expect(field()).toHaveFocus();
+    expect(field()).toHaveValue('Cut');
+    expect(field().selectionStart).toBe(3);
+    expect(
+      within(screen.getByRole('region', { name: 'Edition Cut' })).getByRole('group', {
+        name: THEATRICAL,
+      }),
+    ).toBeInTheDocument();
+  });
+
   it('a part gap is said under the group header, tied to the Part selects, and counted in the footer', async () => {
     installFetch();
     const { user } = await open();
@@ -368,7 +388,9 @@ describe('Edit editions: saving', () => {
 
     await user.click(saveButton());
 
-    await waitFor(() => expect(onSaved).toHaveBeenCalledWith({ filmId: 40, newFilmIds: [] }));
+    await waitFor(() =>
+      expect(onSaved).toHaveBeenCalledWith({ filmId: 40, newFilmIds: [] }, false),
+    );
     const [url, init] = putOf(fetchMock);
     expect(url).toBe('/api/admin/films/40/editions');
     expect(init.headers['X-CineFilm']).toBe('1');

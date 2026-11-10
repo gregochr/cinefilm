@@ -51,6 +51,26 @@ class StateCarryTest {
     }
 
     @Test
+    void aPositionExactlyOnAJoinIsProgressAtTheEndOfTheEarlierFile() {
+        Map<Long, List<Piece>> pieces = StateCarry.split(List.of(ab(resume(100 * MIN), null)),
+            Map.of(1L, 9L, 2L, 9L));
+
+        assertThat(pieces.get(9L)).containsExactly(new Piece(resume(100 * MIN), List.of(1L), null, null));
+        assertThat(StateCarry.land(pieces.get(9L), List.of(1L, 2L), TIMES).state().positionMs())
+            .as("unchanged").isEqualTo(100 * MIN);
+        assertThat(StateCarry.land(pieces.get(9L), List.of(2L, 1L), TIMES).state().positionMs())
+            .as("swapped: the end of file 1, which now comes last").isEqualTo(150 * MIN);
+    }
+
+    @Test
+    void anUnstartedEditionStaysUnstarted() {
+        Map<Long, List<Piece>> pieces = StateCarry.split(List.of(ab(resume(0), null)), Map.of(1L, 9L, 2L, 9L));
+
+        assertThat(pieces.get(9L)).containsExactly(new Piece(resume(0), List.of(1L), null, null));
+        assertThat(StateCarry.land(pieces.get(9L), List.of(1L, 2L), TIMES).state().positionMs()).isZero();
+    }
+
+    @Test
     void filesInterleavedFromTwoEditionsEachBringTheirOwnPosition() {
         Old other = new Old(List.of(3L), List.of(80 * MIN), new State(10 * MIN, false, null, NOW.minusSeconds(60),
             false, null), null);

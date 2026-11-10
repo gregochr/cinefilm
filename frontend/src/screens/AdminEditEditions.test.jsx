@@ -119,4 +119,43 @@ describe('Admin: Edit editions', () => {
     expect(screen.getByRole('button', { name: 'Sign in' })).toHaveFocus();
     window.removeEventListener('keydown', onEscape);
   });
+
+  it('a save that finishes after its dialog closed refreshes the lists but leaves the next dialog alone', async () => {
+    let release;
+    let attentionCalls = 0;
+    const second = { ...fixtures.adminAttention.items[3], filmId: 7, title: 'Alien', year: 1979 };
+    const fetchMock = installFetch((m, url) => {
+      if (url === '/api/admin/attention') {
+        attentionCalls += 1;
+        return respond({ items: [fixtures.adminAttention.items[3], second] });
+      }
+      if (isSave(m, url)) {
+        return new Promise((resolve) => {
+          release = () => resolve(respond({ filmId: 6, newFilmIds: [] }));
+        });
+      }
+      return null;
+    });
+    renderApp('/admin');
+    const attention = await screen.findByRole('region', { name: 'Films needing attention' });
+    const buttons = await within(attention).findAllByRole('button', { name: 'Edit editions' });
+    await userEvent.click(buttons[0]);
+    await screen.findByRole('region', { name: 'Edition Extended Edition' });
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByRole('button', { name: 'Saving…' });
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(within(attention).getAllByRole('button', { name: 'Edit editions' })[1]);
+    await screen.findByRole('dialog', { name: 'Alien · 1979' });
+    await screen.findByRole('region', { name: 'Edition Extended Edition' });
+    await userEvent.selectOptions(screen.getAllByRole('combobox', { name: 'Part' })[1], 'Part 3');
+    const before = attentionCalls;
+
+    await act(async () => release());
+
+    await waitFor(() => expect(attentionCalls).toBeGreaterThan(before));
+    expect(screen.getByRole('dialog', { name: 'Alien · 1979' })).toBeInTheDocument();
+    expect(screen.getAllByRole('combobox', { name: 'Part' })[1]).toHaveValue('3');
+    expect(screen.queryByText('Editions saved')).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1);
+  });
 });

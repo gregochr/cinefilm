@@ -78,8 +78,16 @@ final class StateCarry {
                 add(pieces, target, new Piece(state, there, null, null));
             } else if (state != null) {
                 EditionTimeline.Position at = timeline.locate(state.positionMs());
-                Long file = old.fileIds().get(at.partIndex());
-                State inFile = new State(at.offsetMs(), false, null, state.lastPlayedAt(), state.hidden(),
+                int index = at.partIndex();
+                long offset = at.offsetMs();
+                if (offset == 0 && index > 0 && state.positionMs() > 0) {
+                    // Exactly on a join is real progress (the earlier file was played to its end), not an unstarted
+                    // file: place it at the end of the earlier file so folding does not take it for 0.
+                    index -= 1;
+                    offset = old.durations().get(index);
+                }
+                Long file = old.fileIds().get(index);
+                State inFile = new State(offset, false, null, state.lastPlayedAt(), state.hidden(),
                     state.hiddenAt());
                 add(pieces, targetOfFile.get(file), new Piece(inFile, List.of(file), null, null));
             }

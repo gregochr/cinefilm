@@ -79,6 +79,7 @@ function Row({ item, fixed, ids, locked, onEdition, onName, onPart, onNot }) {
             <span className="ee__namebox">
               <input
                 type="text"
+                id={`${ids.base}-newname-${file.id}`}
                 aria-label="New edition name"
                 aria-invalid={nameError ? 'true' : undefined}
                 aria-describedby={nameError ? nameId : undefined}
@@ -296,7 +297,9 @@ export default function EditEditions({ film, opener, onClose, onSaved }) {
   const ids = { base, defaultError: `${base}-default-error` };
   const dialog = useDialog({ onEscape: () => dialog.close(onClose), opener });
   const { dialogRef, closing, close } = dialog;
-  const edit = useEditEditions(film.id, (result) => close(() => onSaved(result)));
+  const edit = useEditEditions(film.id, (result, stale) =>
+    stale ? onSaved(result, true) : close(() => onSaved(result, false)),
+  );
   const loading = edit.status === 'loading';
 
   useEffect(() => {
@@ -315,7 +318,12 @@ export default function EditEditions({ film, opener, onClose, onSaved }) {
   const focused = useRef(null);
   useLayoutEffect(() => {
     const id = focused.current;
-    if (id && document.activeElement === document.body) document.getElementById(id)?.focus();
+    if (!id || document.activeElement !== document.body) return;
+    const control = document.getElementById(id);
+    control?.focus();
+    // A text field that was being typed in keeps the caret at the end of what is there.
+    if (control?.type === 'text')
+      control.setSelectionRange(control.value.length, control.value.length);
   });
 
   const errors = edit.view?.errorCount ?? 0;
