@@ -1,4 +1,4 @@
-import { get, put, post, del } from './client.js';
+import { get, getWithEtag, put, post, del } from './client.js';
 
 export const homeApi = {
   get: (options) => get('/api/home', options),
@@ -17,6 +17,11 @@ export const filmsApi = {
   list: (params, options) => get(`/api/films${buildFilmsQuery(params)}`, options),
   get: (id, options) => get(`/api/films/${id}`, options),
   savePreferences: (id, preferences) => put(`/api/films/${id}/preferences`, preferences),
+};
+
+/** The compact search index. Resolves `{ notModified: true }` or `{ data, etag }` (see `getWithEtag`). */
+export const searchApi = {
+  index: ({ etag, signal } = {}) => getWithEtag('/api/search-index', etag, { signal }),
 };
 
 export const peopleApi = {

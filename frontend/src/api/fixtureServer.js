@@ -14,6 +14,7 @@ import adminTranscoding from '../test/fixtures/admin-transcoding.json';
 import collection from '../test/fixtures/collection.json';
 import collections from '../test/fixtures/collections.json';
 import session from '../test/fixtures/session.json';
+import { buildFixtureSearchIndex } from './fixtureSearchIndex.js';
 
 const PREVIOUS = {
   positionMs: 0,
@@ -64,6 +65,7 @@ export async function handle(method, path, body) {
   let match = route.match(/^\/api\/films\/(\d+)$/);
   if (match) return details[match[1]] || heat;
   if (/^\/api\/people\/\d+$/.test(route)) return person;
+  if (route === '/api/search-index') return buildFixtureSearchIndex();
   if (route === '/api/collections') return collections;
   if (/^\/api\/collections\/\d+$/.test(route)) return collection;
   if (/\/progress$/.test(route)) return { positionMs: body?.positionMs ?? 0, watched: false };

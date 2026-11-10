@@ -137,6 +137,13 @@ describe('fixture server', () => {
     expect(session.renditions.map((r) => r.id)).toEqual(['original', '720p', '480p', '360p']);
     expect(await call('DELETE', `/api/sessions/${session.sessionId}`)).toBeNull();
   });
+
+  it('serves the compact search index, with the sample entries', async () => {
+    const index = await call('GET', '/api/search-index');
+    expect(Object.keys(index)).toEqual(['films', 'collections', 'people']);
+    expect(index.films.map((f) => f.t)).toEqual(expect.arrayContaining(['Heat', 'Warrior']));
+    expect(index.people.map((p) => p.n)).toContain('Tom Hanks');
+  });
 });
 
 describe('fixture server: Edit editions', () => {

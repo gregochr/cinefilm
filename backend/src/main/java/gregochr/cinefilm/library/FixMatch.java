@@ -10,6 +10,7 @@ import gregochr.cinefilm.film.GroupingChange;
 import gregochr.cinefilm.film.GroupingChangeRepository;
 import gregochr.cinefilm.library.AdminDtos.MatchApplied;
 import gregochr.cinefilm.library.AdminDtos.MatchResultDto;
+import gregochr.cinefilm.search.LibraryChanged;
 import gregochr.cinefilm.tmdb.TmdbApi;
 import gregochr.cinefilm.tmdb.TmdbModels.Credit;
 import gregochr.cinefilm.tmdb.TmdbModels.MovieDetails;
@@ -19,6 +20,7 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -47,11 +49,12 @@ public class FixMatch {
     private final LibraryLock lock;
     private final TransactionTemplate tx;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
     /** Creates the service over TMDB, the films, the ingest (for {@code applyMovie}), the join and the lock. */
     public FixMatch(TmdbApi tmdb, FilmRepository films, LibraryIngest ingest, EditionJoin join,
                     GroupingChangeRepository changes, LibraryLock lock, PlatformTransactionManager transactions,
-                    Clock clock) {
+                    Clock clock, ApplicationEventPublisher events) {
         this.tmdb = tmdb;
         this.films = films;
         this.ingest = ingest;
@@ -60,6 +63,7 @@ public class FixMatch {
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
         this.clock = clock;
+        this.events = events;
     }
 
     /**
@@ -118,7 +122,9 @@ public class FixMatch {
             } catch (TmdbUnavailableException e) {
                 throw new ServiceUnavailableException(TMDB_DOWN, e);
             }
-            return tx.execute(status -> settle(filmId, movie));
+            MatchApplied applied = tx.execute(status -> settle(filmId, movie));
+            events.publishEvent(new LibraryChanged());
+            return applied;
         });
     }
 

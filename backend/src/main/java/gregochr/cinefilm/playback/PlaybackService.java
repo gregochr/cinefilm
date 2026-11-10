@@ -8,9 +8,11 @@ import gregochr.cinefilm.playback.PlaybackDtos.HiddenResponse;
 import gregochr.cinefilm.playback.PlaybackDtos.PlaybackSnapshot;
 import gregochr.cinefilm.playback.PlaybackDtos.ProgressResponse;
 import gregochr.cinefilm.playback.PlaybackDtos.WatchedResponse;
+import gregochr.cinefilm.search.LibraryChanged;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,14 +24,19 @@ public class PlaybackService {
     private final PlaybackStateRepository states;
     private final PreferencesService preferences;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
-    /** Creates the service over its repositories, the preferences service and the application clock. */
+    /**
+     * Creates the service over its repositories, the preferences service, the application clock and the event
+     * publisher (every write tells the search index its copy of the playback state is out of date).
+     */
     public PlaybackService(EditionRepository editions, PlaybackStateRepository states,
-                           PreferencesService preferences, Clock clock) {
+                           PreferencesService preferences, Clock clock, ApplicationEventPublisher events) {
         this.editions = editions;
         this.states = states;
         this.preferences = preferences;
         this.clock = clock;
+        this.events = events;
     }
 
     /** Saves a progress report; the edition becomes watched once the rule says so (and stays watched). */
@@ -58,6 +65,7 @@ public class PlaybackService {
         }
         states.save(state);
         preferences.rememberLastEdition(edition.getFilm().getId(), editionId);
+        events.publishEvent(new LibraryChanged());
         return new ProgressResponse(state.getPositionMs(), state.isWatched());
     }
 
@@ -82,6 +90,7 @@ public class PlaybackService {
             state.setPositionMs(0);
         }
         states.save(state);
+        events.publishEvent(new LibraryChanged());
         return new WatchedResponse(state.isWatched(), previous);
     }
 
@@ -104,6 +113,7 @@ public class PlaybackService {
         state.setHiddenFromContinueWatching(hidden);
         state.setHiddenAt(hidden ? clock.instant() : null);
         states.save(state);
+        events.publishEvent(new LibraryChanged());
         return new HiddenResponse(hidden);
     }
 
@@ -124,6 +134,7 @@ public class PlaybackService {
         state.setHiddenFromContinueWatching(snapshot.hiddenFromContinueWatching());
         state.setHiddenAt(snapshot.hiddenAt());
         states.save(state);
+        events.publishEvent(new LibraryChanged());
         return snapshot(state);
     }
 

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ApiError } from '../api/client.js';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ApiError, announceLibraryChanged } from '../api/client.js';
 import { adminApi } from '../api/resources.js';
 import { useResource } from './useResource.js';
 
@@ -8,6 +8,20 @@ export const SCAN_POLL_MS = 1500;
 
 /** How often the Plex import panel looks again while Plex is not reachable. */
 export const PLEX_RECHECK_MS = 30000;
+
+/**
+ * Announces `cinefilm:library-changed` when a run's last-finished time changes after one was already seen. Going by
+ * that rather than by watching `running` flip means a scan or import that starts and ends between two polls is
+ * still announced; the first status loaded announces nothing. `finishedAt` is undefined until a status has loaded.
+ */
+function useAnnounceWhenFinished(finishedAt) {
+  const seen = useRef(undefined);
+  useEffect(() => {
+    if (finishedAt === undefined) return;
+    if (seen.current !== undefined && seen.current !== finishedAt) announceLibraryChanged();
+    seen.current = finishedAt;
+  }, [finishedAt]);
+}
 
 /**
  * The Library scan panel: status and counts, polled while a scan or a ratings refresh runs, plus "Scan now" and
@@ -24,6 +38,7 @@ export function useScan() {
   const [ratingsNotice, setRatingsNotice] = useState(null);
   const running = Boolean(data?.running);
   const ratingsRunning = Boolean(data?.ratingsRunning);
+  useAnnounceWhenFinished(data ? (data.lastScan?.finishedAt ?? null) : undefined);
 
   // The same status carries the ratings refresh, so one poll follows whichever is running.
   useEffect(() => {
@@ -101,6 +116,7 @@ export function usePlexImport() {
   const [starting, setStarting] = useState(false);
   const [notice, setNotice] = useState(null);
   const running = Boolean(data?.running);
+  useAnnounceWhenFinished(data ? (data.lastImport?.finishedAt ?? null) : undefined);
 
   // Poll quickly while an import runs, and slowly while Plex cannot be reached, so the panel recovers by itself.
   const unreachable = Boolean(data?.configured) && !running && !data.reachable;
