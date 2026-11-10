@@ -3,8 +3,6 @@ package gregochr.cinefilm.library;
 import static gregochr.cinefilm.TestData.CLOCK;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -249,7 +247,8 @@ class ScanServiceTest {
         service.start("admin");
 
         verifyNoInteractions(ffprobe);
-        verify(ingest, never()).refresh(anyLong(), any(), any(), any());
+        verifyBookkeeping(List.of(), 2, 0, 0, null);
+        verifyNoMoreInteractions(ingest);
     }
 
     @Test

@@ -402,7 +402,8 @@ describe('Player menus', () => {
   it('the subtitle toast goes away after four seconds', async () => {
     const { player } = await openPlayer();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    fireEvent.keyDown(player, { key: 'c' });
+    expect(player).toHaveFocus();
+    fireEvent.keyDown(document.activeElement, { key: 'c' });
     expect(screen.getByText('Subtitles: English')).toBeInTheDocument();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3999);
@@ -774,12 +775,13 @@ describe('Player subtitle tracks', () => {
 
   it('the C key moves the showing track along with the choice', async () => {
     const { player } = await openPlayer();
-    fireEvent.keyDown(player, { key: 'c' });
+    expect(player).toHaveFocus();
+    await userEvent.keyboard('c');
     expect(mode('English')).toBe('showing');
-    fireEvent.keyDown(player, { key: 'c' });
+    await userEvent.keyboard('c');
     expect(mode('English (forced)')).toBe('showing');
     expect(mode('English')).toBe('disabled');
-    fireEvent.keyDown(player, { key: 'c' });
+    await userEvent.keyboard('c');
     expect(mode('English')).toBe('disabled');
     expect(mode('English (forced)')).toBe('showing');
   });

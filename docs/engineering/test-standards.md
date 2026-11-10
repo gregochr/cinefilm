@@ -54,6 +54,10 @@ client depend on. A new `@SpringBootTest` needs a reason a slice or a unit test 
 
 1. **`any()` in `verify()`.** Assert the exact argument, or capture it with `ArgumentCaptor` and assert its fields.
    `verify(preferences).rememberLastEdition(FILM_ID, WITHOUT_MARKER)`, never `verify(preferences).rememberLastEdition(any(), any())`.
+   Checkstyle enforces this (`RegexpMultiline` in `backend/config/checkstyle/checkstyle.xml`): a wildcard matcher
+   (`any`, `anyString`, `isA`, `notNull`, `nullable`, ...) anywhere in a `verify(` statement, across line breaks, fails the
+   build. `eq`, `same` and an asserting `argThat` are allowed. For "never called", use
+   `verifyNoInteractions` / `verifyNoMoreInteractions` rather than `never()` with matchers.
 2. **`any()` in `when()` where the input is knowable.** Stub with the real argument so a wrong argument fails the
    test. The one exception is a stub whose argument is the thing under construction (see `loaderWrapsFilms` in
    `PersonServiceTest`).
@@ -90,7 +94,7 @@ client depend on. A new `@SpringBootTest` needs a reason a slice or a unit test 
 - **No `Instant.now()` and no `Clock.systemDefaultZone()` in a test.** A test that needs a different instant builds
   its own `Clock.fixed(...)` in the zone it is testing, and picks dates that exercise an edge: an ISO-week rollover
   (2024-12-30 is already week 2025-W01), a 53-week year (2020-12-31 and 2021-01-03 are 2020-W53), the BST changeover.
-- No `Thread.sleep()`. Inject a clock or a scheduler you control.
+- No `Thread.sleep()`. Inject a clock or a scheduler you control. Checkstyle fails the build on it in test sources.
 
 ## Security: the route-drift test
 
@@ -221,7 +225,7 @@ do not hand-write a second whole payload.
 **`userEvent` is the default** for everything a person does: click, type, tab, keyboard, select, hover. Use
 `userEvent.setup()` when one test needs state across calls (a held mouse button, a drag). `fireEvent` is for what
 `userEvent` cannot produce: media element events (`loadedMetadata`, `timeUpdate`, `waiting`, `ended`), `change` on
-a range input, and synthetic `keyDown` on a frozen fake clock.
+a range input, and synthetic `keyDown` on a frozen fake clock. ESLint fails `fireEvent.click`.
 
 **Prefer `findBy*` to `waitFor` + `getBy*`.** Same wait, better failure message. Wait on something the fetch
 actually gates: an element that is on screen from the first paint proves nothing.
@@ -243,7 +247,9 @@ fireEvent.click(container.querySelector('.segmented__btn'));
 - **Role queries are required** for anything interactive (`button`, `link`, `switch`, `radio`, `slider`,
   `searchbox`, `combobox`, `menuitemradio`), dialogs, regions and headings.
 - **Never `container.querySelector`** (and no `parentElement`/`firstChild` walking, no class-name queries). If
-  nothing can be queried, the component is missing a role or a test-id: add one.
+  nothing can be queried, the component is missing a role or a test-id: add one. ESLint enforces this in test
+  files and `src/test/` helpers (`no-restricted-syntax` in `frontend/eslint.config.js`): `querySelector(All)`, `parentElement`,
+  `firstChild`, `lastChild` and `children` are errors.
 - **`data-testid` is for the decorative.** `aria-hidden` elements have no role by design, so they carry a test-id
   when a test must reach them: `art`, `skeleton`, `skeleton-row`, `continue-fill`, `scrubber-buffered`,
   `player-video`. Everything with a role is found by role.
@@ -317,6 +323,7 @@ in jsdom.
 - After a transition that removes the focused control, assert `expect(thing).toHaveFocus()` *before* the next key.
   (`Player.test.jsx`: after choosing a quality, the player has focus again.)
 - The single exception is a frozen fake clock, where `userEvent` would hang: `fireEvent.keyDown(document.activeElement, …)`.
+  ESLint fails any other `fireEvent.keyDown(...)` target.
 
 ## Async, timers and the traps this codebase has already met
 
