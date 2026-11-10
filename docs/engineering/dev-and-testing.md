@@ -214,6 +214,36 @@ fetch fails), so review after green is where the defects are.
   does not produce), say so.
 - **Report what was not examined** as plainly as what was.
 
+## Local Codex review before the PR
+
+Every PR costs a 10–15 minute CI run on dockermacmini, and every Codex finding on the PR costs another. Most of
+those findings can be had locally first: the same reviewer, reading the same `AGENTS.md`, on the laptop.
+
+- **When:** after Sonnet's gates are green and the planner's own read of the diff is done, before the commit. Any
+  code change, UI or not.
+- **How:** the planner runs it in Sonnet's worktree, from the repo root (Codex reads `AGENTS.md` there by itself):
+  `codex review --uncommitted` for work not yet committed, or `codex review --base origin/main` once it is. Run it
+  in the background with its output sent to a scratch file; it takes about two minutes. The log is long (every
+  command Codex ran); its verdict and findings are the last block, after the final `codex` line. The CLI is
+  signed in on the owner's laptop (`codex login status`).
+- **Then:** send each finding to Sonnet, or reject it with a reason, as for a PR finding. Sonnet fixes, re-runs the
+  gates, and the planner runs Codex again. Stop when a run finds nothing new, then commit and open the PR.
+- **Still request the PR review.** The PR's Codex run is the merge gate (`CLAUDE.md` step 6); the local run only
+  makes it likely to be clean the first time.
+
+### Self-check in every Sonnet brief
+
+Codex's past PR findings (#9–#46) fall into three groups. Put this list in the brief so Sonnet checks its own diff
+before reporting done:
+
+- **Rules already in `test-standards.md`:** no `container.querySelector`, `parentElement`/`firstChild` walking or
+  class-name queries; `userEvent`, not `fireEvent.click`; keys go to the focused element; no `Thread.sleep`; no
+  `any()` in `verify()`; no `verify(..., never())` on repositories. Lint enforces the ones it can.
+- **`AGENTS.md` items:** a changed request or response shape updates `foundation-plan.md` and the HTTP contract
+  tests; every new script has tests; every new interactive element has a 44px target.
+- **Async state:** for each request the diff starts, what happens on a second click, an undo, or a newer request
+  while the first is in flight, and on cancel? Most of the logic findings (#39, #42) were races of this kind.
+
 ## CI workflows
 
 One workflow runs the checks (`.github/workflows/ci.yml`, name `CI`); the others support it. The job names below are
