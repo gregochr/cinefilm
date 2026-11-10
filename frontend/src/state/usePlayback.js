@@ -18,23 +18,25 @@ export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
   const failures = useRef(0);
   const retryTimer = useRef(null);
   const closed = useRef(false);
+  const inFlight = useRef(null);
   useEffect(() => {
     getRef.current = getPositionMs;
   });
 
   const report = useCallback(async () => {
     const positionMs = Math.round(getRef.current());
-    if (
-      !editionId ||
-      !Number.isFinite(positionMs) ||
-      positionMs <= 0 ||
-      positionMs === lastReported.current
-    )
-      return null;
+    if (!editionId || !Number.isFinite(positionMs) || positionMs <= 0) return null;
+    // The same position is already on its way: hand back that request so a caller can wait for it to land.
+    if (positionMs === lastReported.current) return inFlight.current;
     lastReported.current = positionMs;
     clearTimeout(retryTimer.current);
+    const request = editionsApi.reportProgress(editionId, positionMs);
+    inFlight.current = request.then(
+      () => null,
+      () => null,
+    );
     try {
-      const saved = await editionsApi.reportProgress(editionId, positionMs);
+      const saved = await request;
       failures.current = 0;
       return saved;
     } catch {

@@ -167,6 +167,9 @@ Custom controls over HTML5 `<video>`.
 - If Safari can't decode a track, e.g. TrueHD, the server transcodes the audio only; the video can still direct-play.
 
 **Buffering:** a centred spinner plus "BUFFERING" in mono. Controls stay hidden unless the user interacts.
+While a film is starting or resuming (before its first frame plays) the same indicator reads "PREPARING"; it reads
+"BUFFERING" only for a stall after playback has begun (owner, 2026-11-10). The time readout shows the resume point
+from the moment the player opens, never 0:00.
 
 **Auto step-down:** a toast at the top centre reads "Switching to 720p for smoother playback". It shows for about 4 s, is non-blocking, and plays no sound.
 

@@ -133,9 +133,10 @@ describe('FilmDetail preferences', () => {
 });
 
 describe('FilmDetail watched state', () => {
-  it('a watched edition offers Play, not Resume, and can be marked unwatched', async () => {
+  it('a watched edition with no position offers Play, not Resume, and can be marked unwatched', async () => {
     const fetchMock = filmServer(1, fixtures.heat, (f) => {
       f.editions[0].watched = true;
+      f.editions[0].positionMs = 0;
     });
     renderApp('/films/1');
     expect(await screen.findByRole('link', { name: 'Play' })).toHaveAttribute(
@@ -152,6 +153,35 @@ describe('FilmDetail watched state', () => {
     );
     const post = fetchMock.mock.calls.find((c) => c[0] === '/api/editions/11/watched');
     expect(JSON.parse(post[1].body)).toEqual({ watched: false });
+  });
+
+  it('a watched edition being re-watched offers Resume and Start from beginning', async () => {
+    filmServer(1, fixtures.heat, (f) => {
+      f.editions[0].watched = true;
+    });
+    renderApp('/films/1');
+    expect(await screen.findByRole('link', { name: /Resume from 1:04:31/ })).toHaveAttribute(
+      'href',
+      '/films/1/play?edition=11',
+    );
+    expect(screen.getByRole('link', { name: /Start from beginning/ })).toHaveAttribute(
+      'href',
+      '/films/1/play?edition=11&start=0',
+    );
+    expect(screen.getByRole('button', { name: 'Mark as unwatched' })).toBeInTheDocument();
+  });
+
+  it('marking a re-watched film as watched flips Resume to Play at once', async () => {
+    filmServer(1, fixtures.heat, (f) => {
+      f.editions[0].watched = true;
+    });
+    renderApp('/films/1');
+    await screen.findByRole('link', { name: /Resume from 1:04:31/ });
+    await userEvent.click(screen.getByRole('button', { name: 'Mark as unwatched' }));
+    expect(await screen.findByRole('link', { name: 'Play' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Mark as watched' }));
+    expect(await screen.findByRole('link', { name: 'Play' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Resume/ })).not.toBeInTheDocument();
   });
 
   it('marking a half-watched film as watched hides Resume and the time left', async () => {

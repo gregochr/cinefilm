@@ -82,7 +82,7 @@ export default function FilmDetail() {
   const override = actions.overrides[edition.id] || {};
   const watched = override.watched ?? edition.watched;
   const positionMs = override.positionMs ?? edition.positionMs;
-  const resuming = positionMs > 0 && !watched;
+  const resuming = positionMs > 0;
 
   const qualityValue = quality ?? prefs.quality ?? 'auto';
   const audioValue = (() => {

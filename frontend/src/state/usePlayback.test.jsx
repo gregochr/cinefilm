@@ -36,6 +36,32 @@ describe('usePlayback reporting', () => {
     expect(puts(fetchMock)).toHaveLength(1);
   });
 
+  it('a repeat call for a position still in flight waits for that request instead of resolving at once', async () => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const fetchMock = installFetch((method, url) =>
+      url === '/api/editions/11/progress' ? gate.then(() => respond({})) : null,
+    );
+    const { result } = setup();
+    let second = 'pending';
+    await act(async () => {
+      void result.current.report();
+      void result.current.report().then(() => {
+        second = 'settled';
+      });
+    });
+    expect(second).toBe('pending');
+    expect(puts(fetchMock)).toHaveLength(1);
+    await act(async () => {
+      release();
+      await gate;
+    });
+    await vi.waitFor(() => expect(second).toBe('settled'));
+    expect(puts(fetchMock)).toHaveLength(1);
+  });
+
   it('reports again once the position has moved', async () => {
     const fetchMock = installFetch();
     const position = { ms: 61000 };

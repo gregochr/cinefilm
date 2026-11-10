@@ -90,11 +90,17 @@ export default function Player() {
   );
 }
 
+/** Gives up waiting for the final progress report after this long, so a dead network never traps the viewer. */
+export const LEAVE_REPORT_CAP_MS = 1500;
+
 function PlayerView({ film, edition, startAtZero }) {
   const navigate = useNavigate();
+  // Computed once: the clock, remaining time and scrubber show the resume point from the first render.
+  const [initialSeekMs] = useState(() => (startAtZero ? 0 : resumePosition(edition.positionMs)));
   const containerRef = useRef(null);
   const videoRef = useRef(null);
-  const positionRef = useRef(0);
+  const positionRef = useRef(initialSeekMs);
+  const positionKnownRef = useRef(false);
   const wasPlayingBeforeExpiry = useRef(false);
   const lastPoke = useRef(0);
   const trackRefs = useRef(new Map());
@@ -102,7 +108,8 @@ function PlayerView({ film, edition, startAtZero }) {
 
   const [playing, setPlaying] = useState(false);
   const [buffering, setBuffering] = useState(true);
-  const [positionMs, setPositionMs] = useState(0);
+  const [positionMs, setPositionMs] = useState(initialSeekMs);
+  const [started, setStarted] = useState(false);
   const [durationMs, setDurationMs] = useState(edition.runtimeMs);
   const [bufferedMs, setBufferedMs] = useState(0);
   const [volume, setVolume] = useState(1);
@@ -132,7 +139,7 @@ function PlayerView({ film, edition, startAtZero }) {
     quality,
     audioStreamId,
     getPositionMs: () => positionRef.current,
-    initialSeekMs: startAtZero ? 0 : resumePosition(edition.positionMs),
+    initialSeekMs,
     onToast: setToast,
   });
   const { pendingSeekRef } = stream;
@@ -150,14 +157,17 @@ function PlayerView({ film, edition, startAtZero }) {
   const endOverlay = atEnd && !endDismissed;
   const { visible, poke } = useAutoHide({ playing, menuOpen: menu !== null, ended: endOverlay });
 
+  // Before the source has loaded, positionRef is only the display value (the resume point, 10 s before the
+  // saved position): reporting it would move the saved position back.
+  const getReportPositionMs = () => (positionKnownRef.current ? positionRef.current : 0);
   const playback = usePlayback({
     filmId: film.id,
     editionId: edition.id,
     playing,
-    getPositionMs: () => positionRef.current,
+    getPositionMs: getReportPositionMs,
   });
 
-  usePageExitReport({ editionId: edition.id, getPositionMs: () => positionRef.current });
+  usePageExitReport({ editionId: edition.id, getPositionMs: getReportPositionMs });
 
   useEffect(() => {
     containerRef.current?.focus();
@@ -212,6 +222,7 @@ function PlayerView({ film, edition, startAtZero }) {
       const video = videoRef.current;
       if (!video) return;
       const clamped = Math.min(Math.max(0, ms), durationMs);
+      positionKnownRef.current = true;
       pendingSeekRef.current = null; // the viewer chose a position: nothing is left to restore
       video.currentTime = clamped / 1000;
       positionRef.current = clamped;
@@ -345,6 +356,12 @@ function PlayerView({ film, edition, startAtZero }) {
     if (stream.takePlayAfterLoad()) video.play().catch(() => {});
   };
 
+  // canplay and seeked clear the indicator, except while the film is still starting: it then stays PREPARING
+  // until the first frame plays (or the viewer paused, when no frame is coming).
+  const settle = () => {
+    if (started || videoRef.current?.paused) setBuffering(false);
+  };
+
   const onTimeUpdate = () => {
     const video = videoRef.current;
     // Until the seek lands the element reads 0: do not let that overwrite the position or the progress report.
@@ -353,9 +370,20 @@ function PlayerView({ film, edition, startAtZero }) {
       if (!seekLanded(video.currentTime * 1000, pending)) return;
       pendingSeekRef.current = null;
     }
+    positionKnownRef.current = true;
     positionRef.current = video.currentTime * 1000;
     setPositionMs(positionRef.current);
     setBufferedMs(bufferedEnd(video));
+  };
+
+  // Leave for the detail page only after the final progress report has landed (or the cap passes), so the
+  // page does not fetch a stale position.
+  const leaveToDetail = async () => {
+    await Promise.race([
+      playback.report(),
+      new Promise((resolve) => setTimeout(resolve, LEAVE_REPORT_CAP_MS)),
+    ]);
+    navigate(`/films/${film.id}`);
   };
 
   const markWatchedAndLeave = async () => {
@@ -393,10 +421,13 @@ function PlayerView({ film, edition, startAtZero }) {
         onProgress={() => videoRef.current && setBufferedMs(bufferedEnd(videoRef.current))}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        onPlaying={() => setBuffering(false)}
-        onCanPlay={() => setBuffering(false)}
+        onPlaying={() => {
+          setBuffering(false);
+          setStarted(true);
+        }}
+        onCanPlay={settle}
         onWaiting={() => setBuffering(true)}
-        onSeeked={() => setBuffering(false)}
+        onSeeked={settle}
         onEnded={() => {
           setPlaying(false);
           setPositionMs(durationMs);
@@ -430,18 +461,13 @@ function PlayerView({ film, edition, startAtZero }) {
       ) : stream.reconnecting ? (
         <ReconnectingNotice />
       ) : buffering ? (
-        <BufferingIndicator />
+        <BufferingIndicator label={started ? 'BUFFERING' : 'PREPARING'} />
       ) : null}
       {toast ? <Toast>{toast}</Toast> : null}
 
       <div className="player__chrome">
         <div className="player__top">
-          <Button
-            variant="icon"
-            className="player__back"
-            aria-label="Back"
-            onClick={() => navigate(`/films/${film.id}`)}
-          >
+          <Button variant="icon" className="player__back" aria-label="Back" onClick={leaveToDetail}>
             <BackIcon size={20} />
           </Button>
           <div className="player__title">
