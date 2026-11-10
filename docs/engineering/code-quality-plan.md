@@ -182,12 +182,12 @@ in shell scripts, none in Java, which it did not appear to analyse). 5 is last.
 
 ## 7. State after 2026-11-10 (phases 1 and 4, Sonar blockers, dependency majors)
 
-- **Sonar, legacy blocker/critical: 0** after PR #60 (two fixed, two accepted in `sonar-project.properties`). 75
-  issues open. **By impact there are still 3 blockers, untriaged:** `githubactions:S8232` at
-  `dependabot-auto-merge.yml:32` and `:70` (trusting forgeable GitHub context values; that workflow merges with
-  write permission, so triage it first) and `javabugs:S2259` at `film/SortTitles.java:15` (possible
-  `NullPointerException`). 45 are high impact: 44 `shell:S7688` and one `jssecurity:S8476`. The dashboard also lists
-  14 dependency risks, not yet read.
+- **Sonar, legacy blocker/critical: 0** after PR #60 (two fixed, two accepted in `sonar-project.properties`). **Impact
+  blockers: 0** after PR #67, which fixed the three there were: `githubactions:S8232` twice in
+  `dependabot-auto-merge.yml` (trust moved off the event's actor, see `dev-and-testing.md`) and `javabugs:S2259`
+  (a null title, unreachable with real input, now refused where a film is created). 72 issues open on `1dd5760`:
+  45 high impact (44 `shell:S7688` and one `jssecurity:S8476`), 25 medium, 2 low. The dashboard also lists 14
+  dependency risks, not yet read.
 - **Dependency majors landed:** GitHub Actions (#61; `download-artifact` 8 pairs with `upload-artifact` 7),
   Checkstyle 14.4.0 (#62, zero findings), Vitest 5.1 and jsdom 31 (#63).
 - **ESLint 10 is blocked upstream** (Dependabot #21, #22 left open): `eslint-plugin-jsx-a11y` 6.10.2 and

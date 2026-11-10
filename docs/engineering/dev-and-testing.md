@@ -318,6 +318,15 @@ moved, all three required check-runs above succeeded, no other check-run on the 
 current `main`; the merge is pinned to the head commit and then dispatches `ci.yml` on `main`. Major updates are never
 merged automatically.
 
+**Trust never rests on the event's actor** (`github.actor`, `workflow_run.actor`): that names whoever triggered the
+event, which a fork can arrange to be Dependabot. `label` runs only for a PR authored by Dependabot from a branch in
+this repo. `merge`'s job-level `if:` (same repo, `dependabot/` branch) is only a prefilter; the script re-reads the PR
+from the API and requires a Dependabot author and, through `scripts/dependabot-commits-trusted.sh`, that every commit
+is authored by `dependabot[bot]` with a verified signature. That script fails closed (no commits, bad JSON, an API
+error) and is tested by `scripts/test/dependabot-commits-trusted.test.sh`. The `merge` job checks out the default
+branch only, never the PR head, so the script judging a PR always comes from `main`. Not yet exercised end to end:
+the first minor or patch Dependabot PR after 2026-11-10 is the proof.
+
 ### `dependabot.yml`
 
 Weekly (Monday): Maven (`/backend`), npm (`/frontend`, with `vitest` and `@vitest/*` grouped, and `@stryker-mutator/*` grouped, so each family bumps together)
