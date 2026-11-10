@@ -174,9 +174,140 @@
   text-underline-offset: 3px;
 }
 
-/* Phone sheet rows (phase 4) */
+/* Phone sheet (phase 4): full screen, nothing behind it. Measured against screens/05 (780px wide = 2x 390). */
+body.search-sheet-open {
+  overflow: hidden;
+}
+.search-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 40; /* above the tab bar (20) */
+  display: flex;
+  flex-direction: column;
+  background: var(--cf-bg);
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.search-sheet__bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid var(--cf-line);
+}
+.search-sheet__field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 4px 0 16px;
+  background: var(--cf-surface-2);
+  border: 2px solid var(--cf-line);
+  border-radius: 14px;
+  color: var(--cf-text-muted);
+}
+.search-sheet__field:focus-within {
+  border-color: var(--cf-text);
+}
+.search-sheet__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--cf-text);
+  font: inherit;
+  font-size: 17px; /* 16px or more, so iOS does not zoom the page on focus */
+}
+.search-sheet__input:focus-visible {
+  outline: 0;
+  box-shadow: none; /* the ring is the field's border */
+}
+.search-sheet__input::placeholder {
+  color: var(--cf-text-muted);
+}
+.search-sheet__clear {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px; /* touch target; the visible dot is 28px */
+  height: 44px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: var(--cf-text-2);
+  cursor: pointer;
+}
+.search-sheet__clear-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--cf-line);
+  font-size: 18px;
+  line-height: 1;
+}
+.search-sheet__cancel {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px;
+  background: transparent;
+  border: 0;
+  color: var(--cf-text);
+  font: inherit;
+  font-size: 17px;
+  cursor: pointer;
+}
+.search-sheet__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Rows: 52px minimum, as 05. Posters and circles are the sizes measured there. */
+.search-results--lg {
+  padding: 4px 8px 16px;
+}
+.search-results--lg .search-group__head {
+  padding: 16px 8px 8px;
+}
 .search-results--lg .search-row {
   min-height: 52px;
+  gap: 12px;
+  padding: 5px 8px;
+}
+.search-results--lg .search-row[data-active='true'] {
+  background: transparent; /* no pointer on a phone; Enter still opens the first row */
+  box-shadow: none;
+}
+.search-results--lg .search-row__poster {
+  width: 28px;
+}
+.search-results--lg .search-row__fan {
+  width: 36px;
+  height: 42px;
+}
+.search-results--lg .search-row__avatar {
+  width: 36px;
+  height: 36px;
+}
+.search-results--lg .search-row__name {
+  font-size: 17px;
+}
+.search-results--lg .search-footer {
+  border-top: 0;
+  padding: 0 8px;
 }
 
 /* Used when right-aligned would run off the left of the viewport (see panelPlacement in SearchBox); the width is set inline. */

@@ -23,10 +23,7 @@ describe('TabBar', () => {
     expect(nav).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: 'Library' })).toHaveAttribute('href', '/library');
-    expect(screen.getByRole('link', { name: 'Search' })).toHaveAttribute(
-      'href',
-      '/library?focus=search',
-    );
+    expect(screen.getByRole('link', { name: 'Search' })).toHaveAttribute('href', '/?search=1');
   });
 
   it('marks Home as current on the home page', () => {
@@ -45,9 +42,17 @@ describe('TabBar', () => {
     expect(screen.getByRole('link', { name: 'Library' })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('marks Search, not Library, as current when the library was opened to search', () => {
-    renderAt('/library?focus=search');
+  it('marks Search, not Library, as current while the search sheet is open', () => {
+    renderAt('/library?search=1');
     expect(currentTabs()).toEqual(['Search']);
+  });
+
+  it('the Search tab adds search=1 to the current route and keeps its other params', () => {
+    renderAt('/library?sort=year');
+    expect(screen.getByRole('link', { name: 'Search' })).toHaveAttribute(
+      'href',
+      '/library?sort=year&search=1',
+    );
   });
 
   it('marks nothing as current on other pages', () => {

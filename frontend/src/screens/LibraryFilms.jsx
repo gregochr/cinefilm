@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import CollectionTile from '../components/CollectionTile.jsx';
 import { Picker, Segmented, Switch } from '../components/Controls.jsx';
@@ -81,12 +81,6 @@ export default function LibraryFilms() {
     setCountLabel(countLabel);
   }, [countLabel, setCountLabel]);
 
-  const autoFocus = params.has('focus');
-  const searchRef = useRef(null);
-  useEffect(() => {
-    if (autoFocus) searchRef.current?.focus();
-  }, [autoFocus]);
-
   let body;
   if (loading && !data) body = <GridSkeleton />;
   else if (error && !data) body = <ErrorState onRetry={reload} />;
@@ -118,7 +112,6 @@ export default function LibraryFilms() {
           <span className="searchbox searchbox--lg">
             <SearchIcon size={16} />
             <input
-              ref={searchRef}
               type="search"
               className="searchbox__input"
               placeholder={'Title, actor or director — try “de niro”'}
