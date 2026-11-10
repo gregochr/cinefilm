@@ -78,6 +78,9 @@ class PlexImportFlowTest extends ApiTestBase {
     private ArtworkStore artwork;
 
     @Autowired
+    private gregochr.cinefilm.library.LibraryGrouping grouping;
+
+    @Autowired
     private ScanRunRepository scanRuns;
 
     @Autowired
@@ -108,6 +111,10 @@ class PlexImportFlowTest extends ApiTestBase {
         return films.saveAndFlush(film);
     }
 
+    private static PlexModels.PlexMedia media(String... names) {
+        return new PlexModels.PlexMedia(java.util.Arrays.stream(names).map(n -> PREFIX + n).toList());
+    }
+
     private static MovieDetails movie(long id, String title) {
         return new MovieDetails(id, title, title, 1990, "TMDB overview", 100, List.of("Sci-Fi"), "/tp.jpg", "/tb.jpg",
             1, List.of(new TmdbModels.Credit(100 + id, "Director " + id, null, null)),
@@ -122,14 +129,16 @@ class PlexImportFlowTest extends ApiTestBase {
         scan.setTrigger("admin");
         scanRuns.save(scan);
         heatA = film("heat", 949L, MatchStatus.MATCHED, "Heat.m4v");
-        heatB = film("heat dc", 949L, MatchStatus.MATCHED, "Heat (DC).m4v");
+        heatB = film("heat dc", 949L, MatchStatus.MATCHED, "Heat (Director's Cut).m4v");
         alien = film("alien", null, MatchStatus.PENDING, "Alien.m4v");
         saveState(TestData.state(heatB.getEditions().get(0), 10 * MIN, false, NOW.minus(Duration.ofDays(1)), null));
 
         PlexFilm plexHeat = new PlexFilm("1", "Heat", "Heat", 1995, "Plex heat", null, PLEX_ADDED, PLEX_ADDED,
-            HEAT_THUMB, HEAT_ART, 949L, 1, 30 * MIN, VIEWED, List.of(PREFIX + "Heat.m4v", PREFIX + "Heat (DC).m4v"));
+            HEAT_THUMB, HEAT_ART, 949L, 1, 30 * MIN, VIEWED,
+            List.of(media("Heat.m4v"), media("Heat (Director's Cut).m4v")));
         PlexFilm plexAlien = new PlexFilm("2", "Alien", "Alien", 1979, "Plex alien", "Final Cut", PLEX_ADDED,
-            PLEX_ADDED, ALIEN_THUMB, null, 348L, 0, 0, null, List.of(PREFIX + "Alien.m4v"));
+            PLEX_ADDED, ALIEN_THUMB, null, 348L, 0, 0, null,
+            List.of(media("Alien.m4v")));
         when(plex.configured()).thenReturn(true);
         when(plex.movieSections()).thenReturn(List.of("1"));
         when(plex.films("1")).thenReturn(List.of(plexHeat, plexAlien));
@@ -141,7 +150,7 @@ class PlexImportFlowTest extends ApiTestBase {
         when(tmdb.movie(949)).thenReturn(Optional.of(movie(949, "Heat")));
         when(tmdb.movie(348)).thenReturn(Optional.of(movie(348, "Alien")));
         service = new PlexImportService(plex, tmdb, ingest, writer, artwork, scanRuns, importRuns, new LibraryLock(),
-            Runnable::run, CLOCK, PREFIX, events);
+            Runnable::run, CLOCK, PREFIX, events, grouping);
     }
 
     private PlexImportReport lastReport() throws Exception {
@@ -224,7 +233,7 @@ class PlexImportFlowTest extends ApiTestBase {
         LibraryScanner scanner = mock(LibraryScanner.class);
         TmdbMatcher matcher = mock(TmdbMatcher.class);
         when(scanner.scan()).thenReturn(new Found(List.of(new FoundFile("Heat.m4v", 10, MODIFIED, MODIFIED, false),
-            new FoundFile("Heat (DC).m4v", 10, MODIFIED, MODIFIED, false),
+            new FoundFile("Heat (Director's Cut).m4v", 10, MODIFIED, MODIFIED, false),
             new FoundFile("Alien.m4v", 10, MODIFIED, MODIFIED, false)), 0));
         when(matcher.match(new gregochr.cinefilm.library.TitleGuess("Alien", 1979), 100 * MIN)).thenReturn(
             new MatchOutcome(Status.MATCHED, movie(8078, "Alien 3"), List.of()));
@@ -247,7 +256,7 @@ class PlexImportFlowTest extends ApiTestBase {
     @Test
     void whenNoFilePairsNothingIsWrittenAndTheRunRecordsWhy() {
         service = new PlexImportService(plex, tmdb, ingest, writer, artwork, scanRuns, importRuns, new LibraryLock(),
-            Runnable::run, CLOCK, "/somewhere/else/", events);
+            Runnable::run, CLOCK, "/somewhere/else/", events, grouping);
         long filmRows = films.count();
 
         service.start();

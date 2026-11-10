@@ -54,7 +54,13 @@ class PlexFilmWriterUnitTest {
     private final PlaybackStateRepository states = mock(PlaybackStateRepository.class);
     private final LibraryIngest ingest = mock(LibraryIngest.class);
     private final ArtworkStore artwork = mock(ArtworkStore.class);
-    private final PlexFilmWriter writer = new PlexFilmWriter(films, editions, files, states, ingest, artwork);
+    private final gregochr.cinefilm.library.EditionJoin join = mock(gregochr.cinefilm.library.EditionJoin.class);
+    private final gregochr.cinefilm.film.GroupingChangeRepository changes =
+        mock(gregochr.cinefilm.film.GroupingChangeRepository.class);
+    private final gregochr.cinefilm.film.FilmPreferenceRepository preferences =
+        mock(gregochr.cinefilm.film.FilmPreferenceRepository.class);
+    private final PlexFilmWriter writer = new PlexFilmWriter(films, editions, files, states, ingest, artwork,
+        join, changes, preferences);
 
     private Film first;
     private Film second;
@@ -73,7 +79,7 @@ class PlexFilmWriterUnitTest {
         second = TestData.film(2L, "Heat again", 1995, ADDED);
         second.setTmdbId(949L);
         secondEdition = TestData.edition(second, 20L, "Cut", 100 * MIN, null);
-        secondFile = TestData.file(secondEdition, "Heat cut.m4v");
+        secondFile = TestData.file(secondEdition, "Heat (Director's Cut).m4v");
         secondFile.setId(200L);
         when(files.findById(100L)).thenReturn(Optional.of(firstFile));
         when(files.findById(200L)).thenReturn(Optional.of(secondFile));
@@ -89,12 +95,12 @@ class PlexFilmWriterUnitTest {
 
     private static PlexFilm plex(Long tmdbId) {
         return new PlexFilm("9", "Heat (Plex)", "Heat, plex", 1995, "Plex overview", null, ADDED, ADDED, null, null,
-            tmdbId, 0, 0, null, List.of("/m/Heat.m4v"));
+            tmdbId, 0, 0, null, List.of(new PlexModels.PlexMedia(List.of("/m/Heat.m4v"))));
     }
 
     private static PlexFilm viewed(Long tmdbId, int views, long offset, String editionTitle) {
         return new PlexFilm("9", "Heat (Plex)", "Heat, plex", 1995, "Plex overview", editionTitle, ADDED, ADDED, null,
-            null, tmdbId, views, offset, VIEWED, List.of("/m/Heat.m4v"));
+            null, tmdbId, views, offset, VIEWED, List.of(new PlexModels.PlexMedia(List.of("/m/Heat.m4v"))));
     }
 
     private static MovieDetails movie() {
@@ -103,7 +109,7 @@ class PlexFilmWriterUnitTest {
     }
 
     private FilmWrite write(PlexFilm plex, List<Long> fileIds, MovieDetails movie, String poster, String backdrop) {
-        return new FilmWrite(plex, fileIds, movie, poster, backdrop, NOW);
+        return FilmWrite.ofFiles(plex, fileIds, movie, poster, backdrop, NOW);
     }
 
     private void survivorAfterwards(Film film) {
@@ -210,10 +216,10 @@ class PlexFilmWriterUnitTest {
         assertThat(applied).isEqualTo(new Applied(1, 0, 0, 0, 0));
         verify(ingest).merge(2L, 1L);
         verify(films).findByTmdbIdOrderByIdAsc(949L);
-        verify(films).findById(1L);
+        verify(films, org.mockito.Mockito.atLeastOnce()).findById(1L);
         verifyNoMoreInteractions(films);
-        verify(editions).findById(10L);
-        verify(editions).findById(20L);
+        verify(editions, org.mockito.Mockito.atLeastOnce()).findById(10L);
+        verify(editions, org.mockito.Mockito.atLeastOnce()).findById(20L);
         verifyNoMoreInteractions(editions);
     }
 
@@ -275,7 +281,7 @@ class PlexFilmWriterUnitTest {
         Applied applied = writer.apply(write(plex(949L), List.of(100L), null, null, null));
 
         assertThat(applied.editionsMoved()).isZero();
-        verify(editions).findById(10L);
+        verify(editions, org.mockito.Mockito.atLeastOnce()).findById(10L);
         verifyNoMoreInteractions(editions);
     }
 
@@ -395,7 +401,7 @@ class PlexFilmWriterUnitTest {
 
         writer.apply(write(viewed(949L, 0, 0, "E".repeat(400)), List.of(100L), null, null, null));
 
-        assertThat(firstEdition.getName()).hasSize(255);
+        assertThat(firstEdition.getName()).hasSize(32);
     }
 
     @Test

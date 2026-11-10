@@ -4,6 +4,7 @@ import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.MediaFileRepository.Known;
 import gregochr.cinefilm.film.Presence;
+import gregochr.cinefilm.library.LibraryGrouping;
 import gregochr.cinefilm.library.LibraryIngest;
 import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.library.ScanRunRepository;
@@ -13,6 +14,7 @@ import gregochr.cinefilm.plex.PlexDtos.PlexImportStatus;
 import gregochr.cinefilm.plex.PlexDtos.PlexProgress;
 import gregochr.cinefilm.plex.PlexFilmWriter.Applied;
 import gregochr.cinefilm.plex.PlexFilmWriter.FilmWrite;
+import gregochr.cinefilm.plex.PlexFilmWriter.MediaWrite;
 import gregochr.cinefilm.plex.PlexFilmWriter.Preflight;
 import gregochr.cinefilm.plex.PlexModels.PlexFilm;
 import gregochr.cinefilm.plex.PlexModels.PlexImage;
@@ -66,6 +68,7 @@ public class PlexImportService {
     private final Clock clock;
     private final String prefix;
     private final ApplicationEventPublisher events;
+    private final LibraryGrouping grouping;
     private final AtomicReference<PlexProgress> progress = new AtomicReference<>();
 
     /** Creates the service; the executor runs imports in the background and the lock keeps them apart from scans. */
@@ -73,7 +76,7 @@ public class PlexImportService {
                              ArtworkStore artwork, ScanRunRepository scans, PlexImportRunRepository runs,
                              LibraryLock lock, @Qualifier("plexImportExecutor") Executor executor, Clock clock,
                              @Value("${cinefilm.plex.path-prefix}") String pathPrefix,
-                             ApplicationEventPublisher events) {
+                             ApplicationEventPublisher events, LibraryGrouping grouping) {
         this.plex = plex;
         this.tmdb = tmdb;
         this.ingest = ingest;
@@ -86,10 +89,15 @@ public class PlexImportService {
         this.clock = clock;
         this.prefix = PlexRules.prefix(pathPrefix);
         this.events = events;
+        this.grouping = grouping;
     }
 
-    /** A Plex film and the CineFilm files it pairs with, in the order Plex lists them. */
-    record Pairing(PlexFilm film, List<Long> mediaFileIds) {
+    /** A Plex film and its versions with the CineFilm files they pair with, in the order Plex lists them. */
+    record Pairing(PlexFilm film, List<MediaWrite> media) {
+
+        List<Long> mediaFileIds() {
+            return media.stream().flatMap(m -> m.fileIds().stream()).toList();
+        }
     }
 
     /** True while an import is running. */
@@ -229,21 +237,20 @@ public class PlexImportService {
         }
         Set<Long> claimed = new HashSet<>();
         List<Pairing> pairings = new ArrayList<>();
+        List<String> leftOut = new ArrayList<>();
         for (PlexFilm film : plexFilms) {
-            List<Long> ids = new ArrayList<>();
-            for (String file : film.files()) {
-                Known match = PlexRules.relativePath(prefix, file).map(known::get).orElse(null);
-                if (match != null && claimed.add(match.id())) {
-                    ids.add(match.id());
-                }
-            }
-            if (ids.isEmpty()) {
+            PlexPairing.Result result = PlexPairing.pair(film, prefix, known, claimed);
+            result.leftOut().forEach(path -> leftOut.add("Plex lists \"" + path.substring(path.lastIndexOf('/') + 1)
+                + "\" with \"" + java.util.Objects.toString(film.title(), "Untitled")
+                + "\", but its name is another film's, so it was left out of that film"));
+            if (result.media().isEmpty()) {
                 tally.notOnDiskTotal++;
                 Tally.cappedAdd(tally.notOnDisk, film.title() == null ? "Untitled" : film.title());
             } else {
-                pairings.add(new Pairing(film, ids));
+                pairings.add(new Pairing(film, result.media()));
             }
         }
+        flagLeftOut(leftOut, importTime);
         if (pairings.isEmpty()) {
             throw new PlexException("No Plex file matches a file in the library; check PLEX_PATH_PREFIX", null);
         }
@@ -259,7 +266,31 @@ public class PlexImportService {
         }
         // Files written for a film whose transaction then rolled back are not referenced by anything: drop them.
         artwork.deleteUnreferenced(writer.storedArtworkPaths());
+        groupLibrary();
         return tally.report();
+    }
+
+    /** Writes the guard's left-out files to the grouping report; a failure there never stops the import. */
+    private void flagLeftOut(List<String> summaries, Instant importTime) {
+        if (summaries.isEmpty()) {
+            return;
+        }
+        try {
+            writer.flag(summaries, importTime);
+        } catch (RuntimeException e) {
+            LOG.warn("Could not log the files left out of Plex films: {}", e.getClass().getSimpleName());
+        }
+    }
+
+    /** After the import, under the same lock: repair, auto-resolve, then the default editions. */
+    private void groupLibrary() {
+        try {
+            grouping.repair();
+            grouping.group();
+            grouping.refreshDefaults();
+        } catch (RuntimeException e) {
+            LOG.warn("Could not group the library after the Plex import: {}", e.getClass().getSimpleName());
+        }
     }
 
     private void importFilm(Pairing pairing, Tally tally, Instant importTime) {
@@ -270,7 +301,7 @@ public class PlexImportService {
             String poster = pre.hasPoster() ? null : download(film.thumb(), POSTER_WIDTH, POSTER_HEIGHT, tally);
             String backdrop = pre.hasBackdrop() ? null
                 : download(film.art(), BACKDROP_WIDTH, BACKDROP_HEIGHT, tally);
-            Applied applied = writer.apply(new FilmWrite(film, pairing.mediaFileIds(), movie, poster, backdrop,
+            Applied applied = writer.apply(new FilmWrite(film, pairing.media(), movie, poster, backdrop,
                 importTime));
             tally.postersStored += poster == null ? 0 : 1;
             tally.backdropsStored += backdrop == null ? 0 : 1;

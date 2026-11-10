@@ -196,7 +196,7 @@ public class LibraryGrouping {
         tx.executeWithoutResult(status -> {
             for (Film film : films.findWithSeveralEditions()) {
                 FilmPreference preference = preferences.findById(film.getId()).orElse(null);
-                if (preference != null && preference.isDefaultEditionChosen()) {
+                if (preference != null && (preference.isDefaultEditionChosen() || plexSettled(film, preference))) {
                     continue;
                 }
                 Edition choice = DefaultEdition.choose(film.getEditions()).orElseThrow();
@@ -211,6 +211,12 @@ public class LibraryGrouping {
             }
         });
         return count[0];
+    }
+
+    /** True when the film's default is an edition the Plex import settled: Plex's order stands until you pick. */
+    private static boolean plexSettled(Film film, FilmPreference preference) {
+        return film.getEditions().stream().anyMatch(e -> e.getId().equals(preference.getDefaultEditionId())
+            && e.getGroupingSource() == GroupingSource.PLEX);
     }
 
     /** Moves every title group other than the film's own to a new pending film, unfolding editions that straddle. */

@@ -62,6 +62,8 @@ class PlexImportServiceTest {
     private final LibraryIngest ingest = mock(LibraryIngest.class);
     private final PlexFilmWriter writer = mock(PlexFilmWriter.class);
     private final ArtworkStore artwork = mock(ArtworkStore.class);
+    private final gregochr.cinefilm.library.LibraryGrouping grouping =
+        mock(gregochr.cinefilm.library.LibraryGrouping.class);
     private final ScanRunRepository scans = mock(ScanRunRepository.class);
     private final PlexImportRunRepository runs = mock(PlexImportRunRepository.class);
     private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
@@ -72,7 +74,7 @@ class PlexImportServiceTest {
     @BeforeEach
     void setUp() {
         service = new PlexImportService(plex, tmdb, ingest, writer, artwork, scans, runs, lock, Runnable::run,
-            CLOCK, PREFIX.substring(0, PREFIX.length() - 1), events);
+            CLOCK, PREFIX.substring(0, PREFIX.length() - 1), events, grouping);
         when(plex.configured()).thenReturn(true);
         when(scans.existsByFinishedAtNotNullAndErrorIsNull()).thenReturn(true);
         when(runs.save(any(PlexImportRun.class))).thenAnswer(call -> {
@@ -88,7 +90,7 @@ class PlexImportServiceTest {
 
     private static PlexFilm film(String title, Long tmdbId, String thumb, String art, String... files) {
         return new PlexFilm("1", title, null, 1995, null, null, null, null, thumb, art, tmdbId, 0, 0, null,
-            List.of(files));
+            java.util.Arrays.stream(files).map(f -> new PlexModels.PlexMedia(List.of(f))).toList());
     }
 
     private static MovieDetails movie(long id) {
@@ -153,7 +155,7 @@ class PlexImportServiceTest {
             throw new RejectedExecutionException("shutting down");
         };
         PlexImportService stopped = new PlexImportService(plex, tmdb, ingest, writer, artwork, scans, runs, lock,
-            refusing, CLOCK, PREFIX, events);
+            refusing, CLOCK, PREFIX, events, grouping);
 
         assertThatThrownBy(stopped::start).isInstanceOf(RejectedExecutionException.class);
         assertThat(lock.holder()).isNull();
@@ -177,10 +179,10 @@ class PlexImportServiceTest {
 
     @Test
     void anImportPairsByPathWritesEachFilmAndStoresAReport() throws Exception {
-        PlexFilm heat = film("Heat", 949L, THUMB, ART, PREFIX + "Heat.m4v", PREFIX + "Heat cut.m4v");
+        PlexFilm heat = film("Heat", 949L, THUMB, ART, PREFIX + "Heat.m4v", PREFIX + "Heat (Extended).m4v");
         PlexFilm alien = film("Alien", 348L, null, null, PREFIX + "Alien.m4v");
         library(heat, alien);
-        known(known(11, "Heat.m4v"), known(12, "Heat cut.m4v"), known(13, "Alien.m4v"), known(14, "Extra.m4v"));
+        known(known(11, "Heat.m4v"), known(12, "Heat (Extended).m4v"), known(13, "Alien.m4v"), known(14, "Extra.m4v"));
         MovieDetails heatMovie = movie(949);
         when(tmdb.enabled()).thenReturn(true);
         when(tmdb.movie(949)).thenReturn(Optional.of(heatMovie));
@@ -190,9 +192,9 @@ class PlexImportServiceTest {
         when(plex.image(ART, 1920, 1080)).thenReturn(new PlexImage(new byte[] {2}, "image/png"));
         when(artwork.store(new byte[] {1}, "image/jpeg")).thenReturn("/api/art/p.jpg");
         when(artwork.store(new byte[] {2}, "image/png")).thenReturn("/api/art/b.png");
-        when(writer.apply(new FilmWrite(heat, List.of(11L, 12L), heatMovie, "/api/art/p.jpg", "/api/art/b.png",
+        when(writer.apply(FilmWrite.ofFiles(heat, List.of(11L, 12L), heatMovie, "/api/art/p.jpg", "/api/art/b.png",
             NOW))).thenReturn(new Applied(1, 2, 2, 1, 0));
-        when(writer.apply(new FilmWrite(alien, List.of(13L), null, null, null, NOW)))
+        when(writer.apply(FilmWrite.ofFiles(alien, List.of(13L), null, null, null, NOW)))
             .thenReturn(new Applied(0, 0, 0, 0, 1));
 
         service.start();
@@ -216,7 +218,7 @@ class PlexImportServiceTest {
         library(amelie);
         known(known(5, composed));
         when(writer.preflight(List.of(5L), null)).thenReturn(HAS_ALL);
-        when(writer.apply(new FilmWrite(amelie, List.of(5L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(amelie, List.of(5L), null, null, null, NOW))).thenReturn(NOTHING);
 
         service.start();
 
@@ -231,7 +233,7 @@ class PlexImportServiceTest {
         library(heat);
         known(known(1, "Plex Versions/Heat.m4v"), known(2, "Heat.m4v"));
         when(writer.preflight(List.of(2L), null)).thenReturn(HAS_ALL);
-        when(writer.apply(new FilmWrite(heat, List.of(2L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(heat, List.of(2L), null, null, null, NOW))).thenReturn(NOTHING);
 
         service.start();
 
@@ -246,7 +248,7 @@ class PlexImportServiceTest {
         library(one, two);
         known(known(1, "A.m4v"));
         when(writer.preflight(List.of(1L), null)).thenReturn(HAS_ALL);
-        when(writer.apply(new FilmWrite(one, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(one, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
 
         service.start();
 
@@ -264,7 +266,7 @@ class PlexImportServiceTest {
         library(there, gone, untitled);
         known(known(1, "There.m4v"));
         when(writer.preflight(List.of(1L), null)).thenReturn(HAS_ALL);
-        when(writer.apply(new FilmWrite(there, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(there, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
 
         service.start();
 
@@ -282,7 +284,7 @@ class PlexImportServiceTest {
         known(known(1, "There.m4v"), known(2, "Unknown.m4v"),
             new Known(3L, "Gone.m4v", 1L, NOW, Presence.MISSING, Playability.PLAYABLE, "yuv420p"));
         when(writer.preflight(List.of(1L), null)).thenReturn(HAS_ALL);
-        when(writer.apply(new FilmWrite(there, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(there, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
 
         service.start();
 
@@ -304,7 +306,7 @@ class PlexImportServiceTest {
         when(plex.collections("1")).thenReturn(collections);
         known(known(1, "There.m4v"));
         when(writer.preflight(List.of(1L), null)).thenReturn(HAS_ALL);
-        when(writer.apply(new FilmWrite(films.get(0), List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(films.get(0), List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
 
         service.start();
 
@@ -325,7 +327,7 @@ class PlexImportServiceTest {
         library(films.toArray(new PlexFilm[0]));
         known(known(1, "There.m4v"));
         when(writer.preflight(List.of(1L), null)).thenReturn(HAS_ALL);
-        when(writer.apply(new FilmWrite(films.get(0), List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(films.get(0), List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
 
         service.start();
 
@@ -390,10 +392,10 @@ class PlexImportServiceTest {
         when(writer.preflight(List.of(1L), null)).thenReturn(HAS_ALL);
         when(writer.preflight(List.of(2L), null)).thenReturn(HAS_ALL);
         when(writer.preflight(List.of(3L), null)).thenReturn(HAS_ALL);
-        when(writer.apply(new FilmWrite(bad, List.of(1L), null, null, null, NOW)))
+        when(writer.apply(FilmWrite.ofFiles(bad, List.of(1L), null, null, null, NOW)))
             .thenThrow(new IllegalStateException("boom"));
-        when(writer.apply(new FilmWrite(good, List.of(2L), null, null, null, NOW))).thenReturn(NOTHING);
-        when(writer.apply(new FilmWrite(nameless, List.of(3L), null, null, null, NOW)))
+        when(writer.apply(FilmWrite.ofFiles(good, List.of(2L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(nameless, List.of(3L), null, null, null, NOW)))
             .thenThrow(new IllegalStateException("boom"));
 
         service.start();
@@ -403,7 +405,7 @@ class PlexImportServiceTest {
         assertThat(report.failures()).isEqualTo(2);
         assertThat(report.failedFilms()).containsExactly("Bad", "Untitled");
         assertThat(report.metadataApplied()).isEqualTo(1);
-        verify(writer).apply(new FilmWrite(good, List.of(2L), null, null, null, NOW));
+        verify(writer).apply(FilmWrite.ofFiles(good, List.of(2L), null, null, null, NOW));
     }
 
     @Test
@@ -412,7 +414,7 @@ class PlexImportServiceTest {
         library(heat);
         known(known(1, "Heat.m4v"));
         when(writer.preflight(List.of(1L), 949L)).thenReturn(HAS_ALL);
-        when(writer.apply(new FilmWrite(heat, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(heat, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
 
         service.start();
 
@@ -430,7 +432,7 @@ class PlexImportServiceTest {
         when(writer.preflight(List.of(1L), null)).thenReturn(new Preflight(false, true, false));
         when(plex.image(ART, 1920, 1080)).thenReturn(new PlexImage(new byte[] {2}, "image/jpeg"));
         when(artwork.store(new byte[] {2}, "image/jpeg")).thenReturn("/api/art/b.jpg");
-        when(writer.apply(new FilmWrite(heat, List.of(1L), null, null, "/api/art/b.jpg", NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(heat, List.of(1L), null, null, "/api/art/b.jpg", NOW))).thenReturn(NOTHING);
 
         service.start();
 
@@ -446,7 +448,7 @@ class PlexImportServiceTest {
         library(heat);
         known(known(1, "Heat.m4v"));
         when(writer.preflight(List.of(1L), null)).thenReturn(new Preflight(false, false, false));
-        when(writer.apply(new FilmWrite(heat, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(heat, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
 
         service.start();
 
@@ -467,7 +469,7 @@ class PlexImportServiceTest {
         when(plex.image(THUMB, 600, 900)).thenThrow(new PlexException("Plex is not reachable", null));
         when(plex.image(ART, 1920, 1080)).thenReturn(new PlexImage(new byte[] {2}, "image/gif"));
         when(artwork.store(new byte[] {2}, "image/gif")).thenThrow(new IllegalArgumentException("type"));
-        when(writer.apply(new FilmWrite(heat, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(heat, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
 
         service.start();
 
@@ -486,7 +488,7 @@ class PlexImportServiceTest {
         when(plex.image(THUMB, 600, 900)).thenReturn(new PlexImage(new byte[] {1}, "image/jpeg"));
         when(artwork.store(new byte[] {1}, "image/jpeg")).thenThrow(new UncheckedIOException(
             new java.io.IOException("disk full")));
-        when(writer.apply(new FilmWrite(heat, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(heat, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
 
         service.start();
 
@@ -504,8 +506,8 @@ class PlexImportServiceTest {
         when(tmdb.movie(1)).thenReturn(Optional.of(details));
         when(writer.preflight(List.of(1L), 1L)).thenReturn(new Preflight(true, true, true));
         when(writer.preflight(List.of(2L), 2L)).thenReturn(HAS_ALL);
-        when(writer.apply(new FilmWrite(needs, List.of(1L), details, null, null, NOW))).thenReturn(NOTHING);
-        when(writer.apply(new FilmWrite(has, List.of(2L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(needs, List.of(1L), details, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(has, List.of(2L), null, null, null, NOW))).thenReturn(NOTHING);
 
         service.start();
 
@@ -522,7 +524,7 @@ class PlexImportServiceTest {
         when(tmdb.enabled()).thenReturn(true);
         when(tmdb.movie(949)).thenThrow(new TmdbUnavailableException("down", null));
         when(writer.preflight(List.of(1L), 949L)).thenReturn(new Preflight(true, true, true));
-        when(writer.apply(new FilmWrite(heat, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(heat, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
 
         service.start();
 
@@ -542,8 +544,8 @@ class PlexImportServiceTest {
         when(tmdb.movie(2)).thenReturn(Optional.empty());
         when(writer.preflight(List.of(1L), 1L)).thenReturn(new Preflight(true, true, true));
         when(writer.preflight(List.of(2L), 2L)).thenReturn(new Preflight(true, true, true));
-        when(writer.apply(new FilmWrite(off, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
-        when(writer.apply(new FilmWrite(unknown, List.of(2L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(off, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(unknown, List.of(2L), null, null, null, NOW))).thenReturn(NOTHING);
 
         service.start();
 
@@ -563,11 +565,11 @@ class PlexImportServiceTest {
         List<PlexProgress> seen = new ArrayList<>();
         when(runs.findFirstByFinishedAtNotNullOrderByIdDesc()).thenReturn(Optional.empty());
         when(plex.reachable()).thenReturn(true);
-        when(writer.apply(new FilmWrite(one, List.of(1L), null, null, null, NOW))).thenAnswer(call -> {
+        when(writer.apply(FilmWrite.ofFiles(one, List.of(1L), null, null, null, NOW))).thenAnswer(call -> {
             seen.add(service.status().progress());
             return NOTHING;
         });
-        when(writer.apply(new FilmWrite(two, List.of(2L), null, null, null, NOW))).thenAnswer(call -> {
+        when(writer.apply(FilmWrite.ofFiles(two, List.of(2L), null, null, null, NOW))).thenAnswer(call -> {
             seen.add(service.status().progress());
             return NOTHING;
         });
@@ -659,11 +661,11 @@ class PlexImportServiceTest {
         library(heat);
         known(known(1, "Heat.m4v"));
         when(writer.preflight(List.of(1L), null)).thenReturn(HAS_ALL);
-        when(writer.apply(new FilmWrite(heat, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(heat, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
 
         service.start();
 
-        verify(writer, times(1)).apply(new FilmWrite(heat, List.of(1L), null, null, null, NOW));
+        verify(writer, times(1)).apply(FilmWrite.ofFiles(heat, List.of(1L), null, null, null, NOW));
         verify(writer).preflight(List.of(1L), null);
     }
 
@@ -671,7 +673,7 @@ class PlexImportServiceTest {
     void theProgressStartsAtZeroAsSoonAsTheImportIsAccepted() {
         List<Runnable> queued = new ArrayList<>();
         PlexImportService deferred = new PlexImportService(plex, tmdb, ingest, writer, artwork, scans, runs, lock,
-            queued::add, CLOCK, PREFIX, events);
+            queued::add, CLOCK, PREFIX, events, grouping);
         when(runs.findFirstByFinishedAtNotNullOrderByIdDesc()).thenReturn(Optional.empty());
 
         deferred.start();
@@ -686,7 +688,7 @@ class PlexImportServiceTest {
         library(heat);
         known(known(1, "Heat.m4v"));
         when(writer.preflight(List.of(1L), null)).thenReturn(HAS_ALL);
-        when(writer.apply(new FilmWrite(heat, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(writer.apply(FilmWrite.ofFiles(heat, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
         when(writer.storedArtworkPaths()).thenReturn(List.of("/api/art/a.jpg", "/api/art/b.png"));
 
         service.start();
@@ -702,5 +704,53 @@ class PlexImportServiceTest {
         service.start();
 
         verify(artwork, never()).deleteUnreferenced(java.util.List.of());
+    }
+
+    @Test
+    void afterTheImportRepairThenGroupThenDefaultsRunUnderTheLockAndTheGuardsLeftOversAreFlagged() {
+        PlexFilm rocky = film("Rocky IV", null, null, null, PREFIX + "Rocky IV.m4v", PREFIX + "Rocky V.m4v");
+        library(rocky);
+        known(known(1, "Rocky IV.m4v"), known(2, "Rocky V.m4v"));
+        when(writer.preflight(List.of(1L), null)).thenReturn(HAS_ALL);
+        when(writer.apply(FilmWrite.ofFiles(rocky, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
+        AtomicReference<Boolean> locked = new AtomicReference<>();
+        org.mockito.Mockito.doAnswer(call -> {
+            locked.set(service.isRunning());
+            return 0;
+        }).when(grouping).repair();
+
+        service.start();
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(writer, grouping);
+        order.verify(writer).apply(FilmWrite.ofFiles(rocky, List.of(1L), null, null, null, NOW));
+        order.verify(grouping).repair();
+        order.verify(grouping).group();
+        order.verify(grouping).refreshDefaults();
+        assertThat(locked.get()).isTrue();
+        verify(writer).flag(org.mockito.ArgumentMatchers.argThat(lines -> lines.size() == 1
+            && lines.get(0).contains("Rocky V.m4v") && lines.get(0).contains("Rocky IV")),
+            org.mockito.ArgumentMatchers.eq(NOW));
+        assertThat(finished().getError()).isNull();
+    }
+
+    @Test
+    void aFailureInTheGroupingPassOrTheFlagLogNeverFailsTheImport() throws Exception {
+        PlexFilm rocky = film("Rocky IV", null, null, null, PREFIX + "Rocky IV.m4v", PREFIX + "Rocky V.m4v");
+        library(rocky);
+        known(known(1, "Rocky IV.m4v"), known(2, "Rocky V.m4v"));
+        when(writer.preflight(List.of(1L), null)).thenReturn(HAS_ALL);
+        when(writer.apply(FilmWrite.ofFiles(rocky, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
+        org.mockito.Mockito.doThrow(new IllegalStateException("boom")).when(writer).flag(
+            List.of("Plex lists \"Rocky V.m4v\" with \"Rocky IV\", but its name is another film's, so it was left "
+                + "out of that film"), NOW);
+        org.mockito.Mockito.doThrow(new IllegalStateException("boom")).when(grouping).repair();
+
+        service.start();
+
+        assertThat(finished().getError()).isNull();
+        assertThat(report().paired()).isEqualTo(1);
+        verify(writer).flag(List.of("Plex lists \"Rocky V.m4v\" with \"Rocky IV\", but its name is another film's, "
+            + "so it was left out of that film"), NOW);
+        verify(grouping, never()).group();
     }
 }

@@ -65,6 +65,14 @@ public final class GroupingGuard {
         return titles;
     }
 
+    /**
+     * The comparison title of a path, or of a plain title (the Plex import compares a Plex film's title with its
+     * files'; a slash in a plain title must be replaced first, it would read as a folder).
+     */
+    public static String titleOf(String pathOrTitle) {
+        return title(pathOrTitle);
+    }
+
     private static String title(String path) {
         return FileNameParser.parse(path).comparisonTitle();
     }

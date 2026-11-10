@@ -152,7 +152,25 @@ class PlexClientTest {
         assertThat(film).isEqualTo(new PlexFilm("88", "Heat", "Heat", 1995, "A crew.", "Director's Cut",
             Instant.ofEpochSecond(1_700_000_000L), Instant.ofEpochSecond(1_700_000_100L),
             "/library/metadata/88/thumb/1", "/library/metadata/88/art/2", 949L, 2, 90_000L,
-            Instant.ofEpochSecond(1_700_000_200L), List.of("/m/Heat.m4v", "/m/Heat 2.m4v")));
+            Instant.ofEpochSecond(1_700_000_200L),
+            List.of(new PlexModels.PlexMedia(List.of("/m/Heat.m4v")),
+                new PlexModels.PlexMedia(List.of("/m/Heat 2.m4v")))));
+    }
+
+    @Test
+    void everyPartOfEveryMediaIsKeptInPlexsOrderAndMediaWithoutAFileAreDropped() {
+        String body = "{\"MediaContainer\":{\"totalSize\":1,\"Metadata\":[{\"title\":\"Two Towers\",\"Media\":["
+            + "{\"Part\":[{\"file\":\"/m/B-pt2.m4v\"},{\"file\":\"/m/A-pt1.m4v\"}]},"
+            + "{\"Part\":[{\"size\":1}]},{\"Part\":[{\"file\":\"/m/Theatrical.m4v\"}]}]}]}}";
+        server.expect(once(), requestTo(BASE + "/library/sections/1/all?includeGuids=1"))
+            .andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+
+        PlexFilm film = client.films("1").get(0);
+
+        assertThat(film.media()).containsExactly(
+            new PlexModels.PlexMedia(List.of("/m/B-pt2.m4v", "/m/A-pt1.m4v")),
+            new PlexModels.PlexMedia(List.of("/m/Theatrical.m4v")));
+        assertThat(film.files()).containsExactly("/m/B-pt2.m4v", "/m/A-pt1.m4v", "/m/Theatrical.m4v");
     }
 
     @Test
@@ -451,6 +469,6 @@ class PlexClientTest {
         assertThat(film.title()).isNull();
         assertThat(film.titleSort()).isNull();
         assertThat(film.tmdbId()).isNull();
-        assertThat(film.files()).isEmpty();
+        assertThat(film.media()).isEmpty();
     }
 }
