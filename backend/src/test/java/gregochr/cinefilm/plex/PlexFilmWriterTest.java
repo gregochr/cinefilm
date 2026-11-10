@@ -214,6 +214,23 @@ class PlexFilmWriterTest extends ApiTestBase {
     }
 
     @Test
+    void preflightJudgesTheFilmTheFilesWillEndUpInNotAFilmTheGuardRefuses() {
+        Film refused = saved("Heat DC", 949L, "Heat (DC).m4v");
+        writer.apply(write(plex(949L, "Heat DC"), List.of(fileId(refused, 0)), tmdb(949, "Heat DC")));
+        Film withArt = reload(refused.getId());
+        withArt.setPosterPath(artwork.store(new byte[] {1, 2, 3}, "image/jpeg"));
+        withArt.setBackdropPath(artwork.store(new byte[] {4, 5, 6}, "image/jpeg"));
+        films.saveAndFlush(withArt);
+        Film destination = saved("heat file", null, "Heat.m4v");
+        em.flush();
+        em.clear();
+
+        Preflight pre = writer.preflight(List.of(fileId(destination, 0)), 949L);
+
+        assertThat(pre).isEqualTo(new Preflight(true, false, false));
+    }
+
+    @Test
     void preflightSeesStoredPlexArtworkThatIsReallyOnDiskAndOnlyThat() {
         Film film = saved("heat file", null, "Heat.m4v");
         List<Long> ids = List.of(fileId(film, 0));
@@ -553,7 +570,7 @@ class PlexFilmWriterTest extends ApiTestBase {
         String poster = artwork.store(new byte[] {8, 8}, "image/jpeg");
         holder.setPosterPath(poster);
         films.saveAndFlush(holder);
-        Film other = saved("other", null, "Other.m4v");
+        Film other = saved("other", null, "Heat (Extended).m4v");
         em.flush();
         em.clear();
 

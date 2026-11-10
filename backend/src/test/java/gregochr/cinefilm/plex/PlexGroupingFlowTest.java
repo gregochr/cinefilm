@@ -653,4 +653,43 @@ class PlexGroupingFlowTest extends ApiTestBase {
 
         assertThat(preferences.findById(id).orElseThrow().getDefaultEditionId()).isEqualTo(extended.getId());
     }
+
+    @Test
+    void theFirstPlexItemsDefaultSurvivesASecondItemAddingAnEditionToItsSingleEditionFilm() {
+        Film first = film("Heat", null);
+        Edition theatrical = edition(first, "Original", 100, "Heat.m4v");
+        Film second = film("Heat extended", null);
+        edition(second, "Original", 130, "Heat (Extended).m4v");
+        Long id = saved(first).getId();
+        saved(second);
+        PlexFilm one = item("Heat", 949L, "Theatrical", 0, 0, media("Heat.m4v"));
+        PlexFilm two = item("Heat", 949L, "Extended", 0, 0, media("Heat (Extended).m4v"));
+
+        importItems(one, two);
+
+        assertThat(film(id).getEditions()).hasSize(2);
+        FilmPreference preference = preferences.findById(id).orElseThrow();
+        assertThat(preference.getDefaultEditionId()).isEqualTo(theatrical.getId());
+        assertThat(preference.isDefaultEditionChosen()).isFalse();
+
+        importItems(one, two);
+
+        assertThat(preferences.findById(id).orElseThrow().getDefaultEditionId()).isEqualTo(theatrical.getId());
+    }
+
+    @Test
+    void aSingleEditionFilmsPlexDefaultNeverOverridesTheOwnersChoice() {
+        Film film = film("Heat", 949L);
+        Edition mine = edition(film, "Original", 100, "Heat.m4v");
+        Long id = saved(film).getId();
+        FilmPreference chosen = new FilmPreference(id);
+        chosen.setDefaultEditionId(mine.getId());
+        chosen.setDefaultEditionChosen(true);
+        preferences.save(chosen);
+
+        importItems(item("Heat", 949L, null, 0, 0, media("Heat.m4v")));
+
+        assertThat(preferences.findById(id).orElseThrow().getDefaultEditionId()).isEqualTo(mine.getId());
+        assertThat(preferences.findById(id).orElseThrow().isDefaultEditionChosen()).isTrue();
+    }
 }

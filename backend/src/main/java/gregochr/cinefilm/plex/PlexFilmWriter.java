@@ -25,7 +25,6 @@ import gregochr.cinefilm.plex.PlexWatchMerge.Result;
 import gregochr.cinefilm.tmdb.TmdbModels.MovieDetails;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -140,16 +139,15 @@ public class PlexFilmWriter {
     public record Applied(int merged, int editionsMoved, int watched, int resumePoints, int keptNewer) {
     }
 
-    /** Looks at what the paired film already holds. */
+    /** Looks at what the film the files will end up in already holds (chosen as {@code apply} chooses it). */
     @Transactional(readOnly = true)
     public Preflight preflight(List<Long> mediaFileIds, Long tmdbId) {
         Film anchor = files.findById(mediaFileIds.get(0)).orElseThrow().getEdition().getFilm();
+        Map<Long, MediaFile> byId = load(mediaFileIds);
         List<Film> sameId = tmdbId == null ? List.of() : films.findByTmdbIdOrderByIdAsc(tmdbId);
-        // Judged on the film that survives the merge (the lowest id): merging deletes the others' credits.
-        boolean needsTmdb = tmdbId != null && (sameId.isEmpty() || sameId.get(0).getCredits().isEmpty());
-        // The film the editions will end up in, so a Plex film moved off a shared anchor is judged on its own art.
-        Film destination = tmdbId == null ? anchor
-            : !sameId.isEmpty() ? sameId.get(0) : anchor.getTmdbId() == null ? anchor : null;
+        // The film the editions will end up in (merging deletes the other films' credits), or none: a new film.
+        Film destination = destination(tmdbId, anchor, sameId, mediaFileIds, byId);
+        boolean needsTmdb = tmdbId != null && (destination == null || destination.getCredits().isEmpty());
         return new Preflight(needsTmdb, destination != null && artwork.exists(destination.getPosterPath()),
             destination != null && artwork.exists(destination.getBackdropPath()));
     }
@@ -189,7 +187,11 @@ public class PlexFilmWriter {
         Film anchor = loaded.get(ids.get(0)).getEdition().getFilm();
 
         List<Film> sameId = plex.tmdbId() == null ? List.of() : films.findByTmdbIdOrderByIdAsc(plex.tmdbId());
-        Long targetId = targetFilm(plex, at, anchor, sameId, ids, loaded);
+        Film destination = destination(plex.tmdbId(), anchor, sameId, ids, loaded);
+        Long targetId = destination != null ? destination.getId() : newFilm(plex, at).getId();
+        if (destination != null && !destination.getId().equals(anchor.getId())) {
+            flagRuntimeConflict(destination, ids, loaded, at);
+        }
         int merged = mergeSameTmdb(sameId, targetId, at);
 
         Map<Long, MediaFile> byId = load(ids);
@@ -248,38 +250,35 @@ public class PlexFilmWriter {
     // ---- the film the files go to, and the other films with the same TMDB id --------------------------------------
 
     /**
-     * The film the paired editions end up in: the first film with the TMDB id that the guard admits (the film they
-     * already sit in always counts), else their own film when it has no id, else a new one.
+     * The film the paired editions end up in, chosen the same way for the preflight and the write: the first film with
+     * the TMDB id that the guard admits (the film they already sit in always counts), else their own film when it has
+     * no id; null when a new film is needed.
      */
-    private Long targetFilm(PlexFilm plex, Instant at, Film anchor, List<Film> sameId, List<Long> ids,
-                            Map<Long, MediaFile> byId) {
-        if (plex.tmdbId() == null) {
-            return anchor.getId();
+    private static Film destination(Long tmdbId, Film anchor, List<Film> sameId, List<Long> ids,
+                                    Map<Long, MediaFile> byId) {
+        if (tmdbId == null) {
+            return anchor;
         }
-        Map<Long, Edition> incoming = new LinkedHashMap<>();
-        ids.forEach(id -> incoming.putIfAbsent(byId.get(id).getEdition().getId(), byId.get(id).getEdition()));
         for (Film candidate : sameId) {
-            if (candidate.getId().equals(anchor.getId()) || admits(candidate, ids, byId, incoming.values(), at)) {
-                return candidate.getId();
+            if (candidate.getId().equals(anchor.getId())
+                || ids.stream().allMatch(id -> GroupingGuard.accepts(candidate, byId.get(id).getPath()))) {
+                return candidate;
             }
         }
-        return anchor.getTmdbId() == null ? anchor.getId() : newFilm(plex, at).getId();
+        return anchor.getTmdbId() == null ? anchor : null;
     }
 
     /**
-     * True when the guard accepts every file in the film. Untagged editions there that differ much in runtime are
-     * flagged, never a reason to refuse: the titles agree, so the runtime is only a warning sign.
+     * Untagged editions in the film that differ much in runtime from the incoming ones are flagged, never a reason to
+     * refuse: the titles agree, so the runtime is only a warning sign.
      */
-    private boolean admits(Film candidate, List<Long> ids, Map<Long, MediaFile> byId, Collection<Edition> incoming,
-                           Instant at) {
-        if (!ids.stream().allMatch(id -> GroupingGuard.accepts(candidate, byId.get(id).getPath()))) {
-            return false;
-        }
-        String conflict = RuntimeSignal.conflict(incoming, candidate.getEditions());
+    private void flagRuntimeConflict(Film destination, List<Long> ids, Map<Long, MediaFile> byId, Instant at) {
+        Map<Long, Edition> incoming = new LinkedHashMap<>();
+        ids.forEach(id -> incoming.putIfAbsent(byId.get(id).getEdition().getId(), byId.get(id).getEdition()));
+        String conflict = RuntimeSignal.conflict(incoming.values(), destination.getEditions());
         if (conflict != null) {
             flag(conflict, at);
         }
-        return true;
     }
 
     /**
@@ -481,13 +480,11 @@ public class PlexFilmWriter {
 
     /**
      * The film opens on the first version Plex lists, unless the owner chose one or an earlier Plex film of the same
-     * film already did (its default is an edition the import settled). Plex's choice is not the owner's: it does not
+     * film already did (its default is an edition the import settled). It is recorded even while the film has one
+     * edition, so a later Plex film that adds another does not take it. Plex's choice is not the owner's: it does not
      * set {@code defaultEditionChosen}.
      */
     private void chooseDefault(Film film, Long firstEditionId) {
-        if (film.getEditions().size() < 2) {
-            return;
-        }
         FilmPreference preference = preferences.findById(film.getId()).orElse(null);
         if (preference != null) {
             if (preference.isDefaultEditionChosen()) {
