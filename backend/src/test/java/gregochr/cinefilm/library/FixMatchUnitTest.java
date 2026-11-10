@@ -21,6 +21,7 @@ import gregochr.cinefilm.film.GroupingChange;
 import gregochr.cinefilm.film.GroupingChangeRepository;
 import gregochr.cinefilm.library.AdminDtos.MatchApplied;
 import gregochr.cinefilm.library.AdminDtos.MatchResultDto;
+import gregochr.cinefilm.search.LibraryChanged;
 import gregochr.cinefilm.tmdb.TmdbApi;
 import gregochr.cinefilm.tmdb.TmdbModels.Credit;
 import gregochr.cinefilm.tmdb.TmdbModels.MovieDetails;
@@ -32,6 +33,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.PlatformTransactionManager;
 
 /** {@link FixMatch} on its own: mocked collaborators, no Spring context and no database. */
@@ -45,6 +47,7 @@ class FixMatchUnitTest {
     private EditionJoin join;
     private GroupingChangeRepository changes;
     private LibraryLock lock;
+    private ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
     private FixMatch fix;
 
     @BeforeEach
@@ -55,7 +58,8 @@ class FixMatchUnitTest {
         join = mock(EditionJoin.class);
         changes = mock(GroupingChangeRepository.class);
         lock = new LibraryLock();
-        fix = new FixMatch(tmdb, films, ingest, join, changes, lock, mock(PlatformTransactionManager.class), CLOCK);
+        fix = new FixMatch(tmdb, films, ingest, join, changes, lock, mock(PlatformTransactionManager.class),
+            CLOCK, events);
         when(films.existsById(FILM_ID)).thenReturn(true);
     }
 
@@ -168,6 +172,7 @@ class FixMatchUnitTest {
         when(tmdb.movie(5)).thenThrow(new TmdbUnavailableException("down", null));
 
         assertThatThrownBy(() -> fix.apply(FILM_ID, 5L)).isInstanceOf(ServiceUnavailableException.class);
+        verify(events, never()).publishEvent(new LibraryChanged());
         assertThat(lock.holder()).isNull();
     }
 
@@ -196,6 +201,7 @@ class FixMatchUnitTest {
         assertThat(target.isEditionsConfirmed()).isTrue();
         verify(films).save(target);
         verify(join, never()).joinFilms(FILM_ID, FILM_ID);
+        verify(events).publishEvent(new LibraryChanged());
         assertThat(lock.holder()).isNull();
     }
 
@@ -222,6 +228,7 @@ class FixMatchUnitTest {
         assertThat(saved.getValue().getHappenedAt()).isEqualTo(NOW);
         assertThat(saved.getValue().getSummary())
             .isEqualTo("You joined \"Summerisle\" into \"The Wicker Man\" with Fix match");
+        verify(events).publishEvent(new LibraryChanged());
         assertThat(lock.holder()).isNull();
     }
 

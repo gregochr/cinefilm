@@ -36,6 +36,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.PlatformTransactionManager;
 
 /** Fix match over real repositories and a fake TMDB. */
@@ -55,13 +56,14 @@ class FixMatchTest extends ApiTestBase {
 
     private TmdbApi tmdb;
     private LibraryLock lock;
+    private ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
     private FixMatch fix;
 
     @BeforeEach
     void setUp() {
         tmdb = mock(TmdbApi.class);
         lock = new LibraryLock();
-        fix = new FixMatch(tmdb, films, ingest, join, groupingChanges, lock, transactions, CLOCK);
+        fix = new FixMatch(tmdb, films, ingest, join, groupingChanges, lock, transactions, CLOCK, events);
     }
 
     private static MovieDetails movie(long id, String title, int year) {
