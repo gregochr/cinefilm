@@ -62,6 +62,40 @@ describe('usePlayback reporting', () => {
     expect(puts(fetchMock)).toHaveLength(1);
   });
 
+  it('sends progress writes in call order: a newer position never lands before a held older one', async () => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const received = [];
+    installFetch((method, url, init) => {
+      if (url !== '/api/editions/11/progress') return null;
+      const { positionMs } = JSON.parse(init.body);
+      received.push(positionMs);
+      return positionMs === 61000 ? gate.then(() => respond({})) : null;
+    });
+    const position = { ms: 61000 };
+    const { result } = setup({}, position);
+    await act(async () => {
+      void result.current.report();
+    });
+    position.ms = 62000;
+    let second = 'pending';
+    await act(async () => {
+      void result.current.report().then(() => {
+        second = 'settled';
+      });
+    });
+    // B is queued behind A: the server has only seen A.
+    expect(received).toEqual([61000]);
+    await act(async () => {
+      release();
+      await gate;
+    });
+    await vi.waitFor(() => expect(second).toBe('settled'));
+    expect(received).toEqual([61000, 62000]);
+  });
+
   it('reports again once the position has moved', async () => {
     const fetchMock = installFetch();
     const position = { ms: 61000 };

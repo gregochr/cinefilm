@@ -21,6 +21,7 @@ export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
   const retryTimer = useRef(null);
   const closed = useRef(false);
   const inFlight = useRef(null);
+  const queue = useRef(Promise.resolve());
   const outstanding = useRef(new Set());
   useEffect(() => {
     getRef.current = getPositionMs;
@@ -33,12 +34,15 @@ export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
     if (positionMs === lastReported.current) return inFlight.current;
     lastReported.current = positionMs;
     clearTimeout(retryTimer.current);
-    const sending = editionsApi.reportProgress(editionId, positionMs);
-    // A repeat call for this position waits on this same request (settled either way), never sends a second PUT.
-    inFlight.current = sending.then(
+    // Progress writes are serialised: each is sent only after the one before has settled, so the server
+    // receives them in the order they were asked for and an older position can never land after a newer one.
+    const sending = queue.current.then(() => editionsApi.reportProgress(editionId, positionMs));
+    queue.current = sending.then(
       () => null,
       () => null,
     );
+    // A repeat call for this position waits on this same request (settled either way), never queues a second PUT.
+    inFlight.current = queue.current;
     outstanding.current.add(sending);
     try {
       let saved;
@@ -50,6 +54,8 @@ export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
       failures.current = 0;
       return saved;
     } catch {
+      // A newer position queued meanwhile has superseded this one: nothing to retry.
+      if (lastReported.current !== positionMs) return null;
       lastReported.current = null;
       const delay = Math.min(RETRY_BASE_MS * 2 ** failures.current, RETRY_MAX_MS);
       failures.current += 1;

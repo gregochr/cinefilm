@@ -67,6 +67,10 @@ describe('usePlayback', () => {
 
     position = 75000;
     unmount();
+    // The write is queued behind the previous one, so it is sent a moment later.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
     expect(puts()).toHaveLength(3);
   });
 });
