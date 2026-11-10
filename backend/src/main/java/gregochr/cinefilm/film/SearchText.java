@@ -26,7 +26,7 @@ public final class SearchText {
             return List.of();
         }
         String text = MARKS.matcher(Normalizer.normalize(s, Normalizer.Form.NFD)).replaceAll("")
-            .toLowerCase(Locale.ROOT);
+            .toLowerCase(Locale.ROOT).replace('\u03c2', '\u03c3');
         text = APOSTROPHES.matcher(text).replaceAll("");
         text = SEPARATORS.matcher(text).replaceAll(" ").strip();
         return text.isEmpty() ? List.of() : List.of(text.split(" "));
@@ -57,5 +57,20 @@ public final class SearchText {
             }
         }
         return false;
+    }
+
+    /**
+     * The collection name as the screens show it: stripped, without a trailing " Collection" (any case, one or more
+     * whitespace characters before it). The same as {@code displayName()} in {@code frontend/src/state/collections.js}.
+     */
+    public static String withoutCollectionSuffix(String name) {
+        String stripped = name.strip();
+        String suffix = "collection";
+        int cut = stripped.length() - suffix.length();
+        if (cut > 0 && stripped.regionMatches(true, cut, suffix, 0, suffix.length())
+            && Character.isWhitespace(stripped.charAt(cut - 1))) {
+            return stripped.substring(0, cut).strip();
+        }
+        return stripped;
     }
 }

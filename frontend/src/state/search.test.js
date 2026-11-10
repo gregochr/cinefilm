@@ -73,6 +73,24 @@ describe('normalise', () => {
   });
 });
 
+describe('characters outside the BMP and final sigma', () => {
+  it('keeps highlight ranges on the right characters after a surrogate pair', () => {
+    const name = '𠮷田 太郎';
+    const { text, map } = normalise(name);
+    expect(map).toHaveLength(text.length);
+    expect(marked(name, '太')).toEqual(['太']);
+    expect(marked(name, '𠮷')).toEqual(['𠮷']);
+    expect(marked(name, '𠮷田 太')).toEqual(['𠮷田', '太']);
+  });
+
+  it('matches a typed final sigma exactly against an upper-case name', () => {
+    const index = prep({ people: [person(1, 'ΣΩΚΡΑΤΗΣ', 3)] });
+    const result = search(index, 'σωκρατης');
+    expect(result.fuzzy).toBe(false);
+    expect(titles(result, 'actors')).toEqual(['ΣΩΚΡΑΤΗΣ']);
+  });
+});
+
 describe('matchEntry', () => {
   it('needs every term to prefix some word, in any order, each word once', () => {
     expect(hit('Star Wars', 'star wa')).not.toBeNull();

@@ -50,8 +50,11 @@ export function normalise(s) {
     }
     gap = false;
     text += ch;
-    map.push(from);
-    ends.push(to);
+    // One entry per UTF-16 unit, so `map` lines up with `text` even for a character outside the BMP.
+    for (let unit = 0; unit < ch.length; unit++) {
+      map.push(from);
+      ends.push(to);
+    }
   };
   for (const cp of source) {
     const from = index;
@@ -62,7 +65,8 @@ export function normalise(s) {
         if (!gap && ends.length > 0) ends[ends.length - 1] = index;
         continue;
       }
-      for (const ch of decomposed.toLowerCase()) {
+      // Final sigma is folded to sigma: lower-casing a name or a query gives either, depending on context.
+      for (const ch of decomposed.toLowerCase().replaceAll('\u03c2', '\u03c3')) {
         if (APOSTROPHES.has(ch)) continue;
         if (KEEP.test(ch)) {
           push(ch, from, index);

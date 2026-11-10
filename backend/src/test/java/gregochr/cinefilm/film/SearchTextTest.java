@@ -66,4 +66,14 @@ class SearchTextTest {
     void sharedVectors(String query, String name, boolean matches) {
         assertThat(SearchText.matches(query, name)).isEqualTo(matches);
     }
+
+    @Test
+    void collectionSuffixIsStrippedOnlyAfterWhitespace() {
+        assertThat(SearchText.withoutCollectionSuffix("Star Wars Collection")).isEqualTo("Star Wars");
+        assertThat(SearchText.withoutCollectionSuffix("Star Wars  collection ")).isEqualTo("Star Wars");
+        assertThat(SearchText.withoutCollectionSuffix("Collection")).isEqualTo("Collection");
+        assertThat(SearchText.withoutCollectionSuffix(" Collection")).isEqualTo("Collection");
+        assertThat(SearchText.withoutCollectionSuffix("Recollection")).isEqualTo("Recollection");
+        assertThat(SearchText.withoutCollectionSuffix("Alien")).isEqualTo("Alien");
+    }
 }

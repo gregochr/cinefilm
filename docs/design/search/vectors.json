@@ -35,5 +35,11 @@
   { "query": "200", "name": "2001: A Space Odyssey", "matches": true },
   { "query": "space od", "name": "2001: A Space Odyssey", "matches": true },
   { "query": "", "name": "Heat", "matches": false },
-  { "query": "...", "name": "Heat", "matches": false }
+  { "query": "...", "name": "Heat", "matches": false },
+  { "query": "σωκρατης", "name": "ΣΩΚΡΑΤΗΣ", "matches": true },
+  { "query": "ΣΩΚΡΑΤΗΣ", "name": "Σωκράτης", "matches": true },
+  { "query": "σωκ", "name": "Σωκράτης", "matches": true },
+  { "query": "𠮷", "name": "𠮷田 太郎", "matches": true },
+  { "query": "太", "name": "𠮷田 太郎", "matches": true },
+  { "query": "田", "name": "𠮷田 太郎", "matches": false }
 ]

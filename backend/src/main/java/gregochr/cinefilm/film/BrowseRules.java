@@ -83,7 +83,7 @@ public final class BrowseRules {
             return true;
         }
         Stream<String> collection = view.film().getCollection() == null ? Stream.empty()
-            : Stream.of(view.film().getCollection().getName().strip().replaceFirst("(?i)\\s+collection$", ""));
+            : Stream.of(SearchText.withoutCollectionSuffix(view.film().getCollection().getName()));
         return Stream.of(Stream.of(view.film().getTitle()),
                 view.film().getCredits().stream().map(c -> c.getPerson().getName()), collection)
             .flatMap(s -> s)
