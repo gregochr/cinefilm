@@ -92,7 +92,7 @@ p {
 /* Header */
 .header {
   position: relative;
-  z-index: 2;
+  z-index: 10; /* above the page's own stacking (2-5), so the search dropdown covers it */
   max-width: var(--cf-content-max);
   margin: 0 auto;
   padding: 24px var(--cf-gutter);

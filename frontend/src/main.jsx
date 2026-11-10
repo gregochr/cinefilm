@@ -13,6 +13,7 @@ import './styles/base.css';
 import './styles/browse.css';
 import './styles/detail.css';
 import './styles/player.css';
+import './styles/search.css';
 import './styles/editeditions.css';
 import App from './App.jsx';
 

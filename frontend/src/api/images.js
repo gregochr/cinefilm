@@ -3,6 +3,7 @@
 const BASE = 'https://image.tmdb.org/t/p';
 const LOCAL_ART = '/api/art/';
 
+export const POSTER_SIZE_THUMB = 'w92';
 export const POSTER_SIZE = 'w342';
 export const POSTER_SIZE_LARGE = 'w500';
 export const BACKDROP_SIZE = 'w1280';

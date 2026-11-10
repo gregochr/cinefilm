@@ -1,20 +1,11 @@
-import { useState } from 'react';
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { SearchIcon, SettingsIcon } from './icons.jsx';
+import { Link, NavLink, useLocation } from 'react-router-dom';
+import { SettingsIcon } from './icons.jsx';
 import LogoMark from './LogoMark.jsx';
+import SearchBox from './SearchBox.jsx';
 
 export default function Header() {
-  const navigate = useNavigate();
   const { pathname } = useLocation();
-  const [query, setQuery] = useState('');
   const showSearch = !pathname.startsWith('/library');
-
-  const submit = (event) => {
-    event.preventDefault();
-    const q = query.trim();
-    navigate(q ? `/library?q=${encodeURIComponent(q)}` : '/library');
-    setQuery('');
-  };
 
   return (
     <header className="header">
@@ -31,25 +22,7 @@ export default function Header() {
         </NavLink>
       </nav>
       <div className="header__spacer" />
-      {showSearch ? (
-        <form className="header__search" role="search" onSubmit={submit}>
-          <label className="searchbox">
-            <SearchIcon size={16} />
-            <input
-              type="search"
-              className="searchbox__input"
-              placeholder="Title, actor or director"
-              aria-label="Search the library"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              data-global-search
-            />
-            <kbd className="searchbox__hint" aria-hidden="true">
-              /
-            </kbd>
-          </label>
-        </form>
-      ) : null}
+      {showSearch ? <SearchBox /> : null}
       <Link to="/admin" className="header__settings" aria-label="Settings">
         <SettingsIcon />
       </Link>

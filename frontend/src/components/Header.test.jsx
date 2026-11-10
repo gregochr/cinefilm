@@ -41,9 +41,9 @@ describe('Header', () => {
     expect(screen.getByRole('link', { name: 'Home' })).not.toHaveAttribute('aria-current');
   });
 
-  it('searches the library for the typed text and clears the box', async () => {
+  it('with no index yet, Enter searches the library for the typed text and clears the box', async () => {
     renderHeader('/');
-    const box = screen.getByRole('searchbox', { name: 'Search the library' });
+    const box = screen.getByRole('combobox', { name: 'Search the library' });
     await userEvent.type(box, 'blade runner{Enter}');
     expect(screen.getByLabelText('Location')).toHaveTextContent('/library?q=blade%20runner');
     expect(box).toHaveValue('');
@@ -51,13 +51,13 @@ describe('Header', () => {
 
   it('trims the query before searching', async () => {
     renderHeader('/');
-    await userEvent.type(screen.getByRole('searchbox'), '  heat  {Enter}');
+    await userEvent.type(screen.getByRole('combobox'), '  heat  {Enter}');
     expect(screen.getByLabelText('Location')).toHaveTextContent('/library?q=heat');
   });
 
   it('an empty search just opens the library', async () => {
     renderHeader('/');
-    await userEvent.type(screen.getByRole('searchbox'), '   {Enter}');
+    await userEvent.type(screen.getByRole('combobox'), '   {Enter}');
     expect(screen.getByLabelText('Location')).toHaveTextContent(/^\/library$/);
   });
 
@@ -70,6 +70,6 @@ describe('Header', () => {
   it('hides its search on the Library page, which has its own', () => {
     renderHeader('/library');
     expect(screen.queryByRole('search')).not.toBeInTheDocument();
-    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 });
