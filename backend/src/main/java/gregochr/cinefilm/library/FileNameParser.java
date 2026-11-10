@@ -151,7 +151,7 @@ public final class FileNameParser {
             partTag = Integer.parseInt(part.group(1));
             stem = stem.substring(0, part.start());
         } else {
-            Matcher afterYear = PART_SUFFIX.matcher(tail.stripTrailing());
+            Matcher afterYear = PART_SUFFIX.matcher(tail.replaceAll("[\\s._-]+$", ""));
             if (afterYear.find()) {
                 partTag = Integer.parseInt(afterYear.group(1));
             }

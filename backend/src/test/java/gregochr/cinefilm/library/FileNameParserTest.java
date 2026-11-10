@@ -111,6 +111,17 @@ class FileNameParserTest {
     }
 
     @Test
+    void partSuffixesFollowedByQualityTokensAreRead() {
+        assertThat(parse("Movie.2002.cd1.1080p.mkv").partTag()).isEqualTo(1);
+        assertThat(parse("Movie.2002.cd2.1080p.mkv").partTag()).isEqualTo(2);
+        assertThat(parse("Movie (2002) pt2 1080p.mkv").partTag()).isEqualTo(2);
+        assertThat(parse("Movie (2002) - 1080p.mkv").partTag()).isNull();
+        assertThat(parse("Movie.cd2.1080p.mkv").partTag()).isEqualTo(2);
+        assertThat(parse("Movie - pt2 - 1080p.mkv").partTag()).isEqualTo(2);
+        assertThat(parse("Movie - pt2 - 1080p.mkv").title()).isEqualTo("Movie");
+    }
+
+    @Test
     void partNeedsASeparatorBeforeItAndTheNumberAtTheEnd() {
         assertThat(parse("Spt1.m4v").partTag()).isNull();
         assertThat(parse("pt1.m4v").partTag()).isNull();
