@@ -45,7 +45,7 @@ if ! VERDICT=$(jq -s -r "$FIRST_OFFENDER"); then
     exit 2
 fi
 
-if [ -n "$VERDICT" ]; then
+if [[ -n "$VERDICT" ]]; then
     echo "$VERDICT"
     exit 1
 fi
