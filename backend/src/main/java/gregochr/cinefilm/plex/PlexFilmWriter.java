@@ -183,7 +183,8 @@ public class PlexFilmWriter {
         Instant at = write.importTime();
         String title = plex.title() == null ? "this film" : plex.title();
         Map<Long, MediaFile> loaded = load(write.mediaFileIds());
-        List<MediaWrite> media = withoutRuntimeMismatches(write, loaded);
+        List<MediaWrite> media = write.media();
+        flagRuntimeDifferences(write, loaded);
         List<Long> ids = media.stream().flatMap(m -> m.fileIds().stream()).toList();
         Film anchor = loaded.get(ids.get(0)).getEdition().getFilm();
 
@@ -265,7 +266,10 @@ public class PlexFilmWriter {
         return anchor.getTmdbId() == null ? anchor.getId() : newFilm(plex, at).getId();
     }
 
-    /** True when the guard accepts every file in the film and no untagged edition there differs much in runtime. */
+    /**
+     * True when the guard accepts every file in the film. Untagged editions there that differ much in runtime are
+     * flagged, never a reason to refuse: the titles agree, so the runtime is only a warning sign.
+     */
     private boolean admits(Film candidate, List<Long> ids, Map<Long, MediaFile> byId, Collection<Edition> incoming,
                            Instant at) {
         if (!ids.stream().allMatch(id -> GroupingGuard.accepts(candidate, byId.get(id).getPath()))) {
@@ -275,13 +279,13 @@ public class PlexFilmWriter {
         if (conflict != null) {
             flag(conflict, at);
         }
-        return conflict == null;
+        return true;
     }
 
     /**
-     * Merges the other films with the TMDB id into the target, each only when the guard accepts the merge and no
-     * untagged edition on either side differs by more than 15% in runtime (that is flagged instead). Films that are
-     * refused stay as they are.
+     * Merges the other films with the TMDB id into the target, each only when the guard accepts the merge. Untagged
+     * editions on either side that differ by more than 15% in runtime are flagged, and the films are merged anyway.
+     * Films the guard refuses stay as they are.
      */
     private int mergeSameTmdb(List<Film> sameId, Long targetId, Instant at) {
         Film target = sameId.stream().filter(f -> f.getId().equals(targetId)).findFirst().orElse(null);
@@ -294,44 +298,37 @@ public class PlexFilmWriter {
                 continue;
             }
             String conflict = RuntimeSignal.conflict(target.getEditions(), other.getEditions());
-            if (conflict == null) {
-                merging.add(other.getId());
-            } else {
+            if (conflict != null) {
                 flag(conflict, at);
             }
+            merging.add(other.getId());
         }
         merging.forEach(id -> ingest.merge(id, targetId));
         return merging.size();
     }
 
     /**
-     * Versions that are untagged and whose runtimes differ from the first untagged version's by more than 15% are not
-     * the same film: they are flagged and left out of this import (they stay where they are).
+     * Versions that are untagged and whose runtimes differ from the first untagged version's by more than 15% are
+     * flagged for the owner ("Runtimes differ by N%"). Every version stays its own paired edition: untagged theatrical
+     * and extended cuts routinely differ that much, and the titles already agree. Versions are never part-joined.
      */
-    private List<MediaWrite> withoutRuntimeMismatches(FilmWrite write, Map<Long, MediaFile> byId) {
-        List<MediaWrite> kept = new ArrayList<>();
+    private void flagRuntimeDifferences(FilmWrite write, Map<Long, MediaFile> byId) {
         MediaWrite reference = null;
         for (MediaWrite version : write.media()) {
             List<MediaFile> parts = version.fileIds().stream().map(byId::get).toList();
             boolean comparable = version.complete() && write.plex().editionTitle() == null
                 && RuntimeSignal.untagged(parts.stream().map(MediaFile::getPath).toList());
             if (!comparable) {
-                kept.add(version);
-            } else if (reference == null) {
+                continue;
+            }
+            if (reference == null) {
                 reference = version;
-                kept.add(version);
-            } else {
-                long a = runtime(byId, reference);
-                long b = runtime(byId, version);
-                if (RuntimeSignal.differs(a, b)) {
-                    flag(RuntimeSignal.describe(a, b, byId.get(reference.fileIds().get(0)).getPath(),
-                        byId.get(version.fileIds().get(0)).getPath()), write.importTime());
-                } else {
-                    kept.add(version);
-                }
+            } else if (RuntimeSignal.differs(runtime(byId, reference), runtime(byId, version))) {
+                flag(RuntimeSignal.describe(runtime(byId, reference), runtime(byId, version),
+                    byId.get(reference.fileIds().get(0)).getPath(), byId.get(version.fileIds().get(0)).getPath()),
+                    write.importTime());
             }
         }
-        return kept;
     }
 
     private static long runtime(Map<Long, MediaFile> byId, MediaWrite version) {

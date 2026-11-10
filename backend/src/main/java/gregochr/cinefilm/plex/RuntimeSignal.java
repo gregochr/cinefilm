@@ -8,7 +8,8 @@ import java.util.List;
 
 /**
  * The runtime signal of the different-film guard: untagged versions of one title whose runtimes differ by more than
- * 15% are probably not the same film, so the Plex import never joins them and flags them instead.
+ * 15% are only a warning sign (untagged theatrical and extended cuts routinely differ that much, and the titles
+ * already agree): the Plex import flags them and never blocks on them. It never part-joins untagged versions.
  */
 final class RuntimeSignal {
 
@@ -22,11 +23,18 @@ final class RuntimeSignal {
         return a > 0 && b > 0 && Math.abs(a - b) * 100 > LIMIT_PERCENT * Math.max(a, b);
     }
 
-    /** The report line for two files whose runtimes differ. */
+    /** The report line for two files whose runtimes differ; the names are alphabetical, so a pair reads alike. */
     static String describe(long a, long b, String pathA, String pathB) {
         long percent = Math.round(Math.abs(a - b) * 100.0 / Math.max(a, b));
-        return "Runtimes differ by " + percent + "% — check these are the same film: \"" + name(pathA)
-            + "\" and \"" + name(pathB) + "\"";
+        String first = name(pathA);
+        String second = name(pathB);
+        if (first.compareTo(second) > 0) {
+            String swap = first;
+            first = second;
+            second = swap;
+        }
+        return "Runtimes differ by " + percent + "% — check these are the same film: \"" + first
+            + "\" and \"" + second + "\"";
     }
 
     /** True when no path carries an edition tag or a plain edition word (they say which cut it is). */

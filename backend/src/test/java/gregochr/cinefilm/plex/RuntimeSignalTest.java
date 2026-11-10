@@ -34,7 +34,9 @@ class RuntimeSignalTest {
     @Test
     void theReportLineSaysHowFarApartAndWhichFiles() {
         assertThat(RuntimeSignal.describe(100 * MIN, 130 * MIN, "a/Heat.m4v", "Heat HD.m4v")).isEqualTo(
-            "Runtimes differ by 23% — check these are the same film: \"Heat.m4v\" and \"Heat HD.m4v\"");
+            "Runtimes differ by 23% — check these are the same film: \"Heat HD.m4v\" and \"Heat.m4v\"");
+        assertThat(RuntimeSignal.describe(130 * MIN, 100 * MIN, "Heat HD.m4v", "a/Heat.m4v")).isEqualTo(
+            RuntimeSignal.describe(100 * MIN, 130 * MIN, "a/Heat.m4v", "Heat HD.m4v"));
     }
 
     @Test

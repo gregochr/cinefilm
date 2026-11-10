@@ -277,19 +277,27 @@ class PlexGroupingFlowTest extends ApiTestBase {
     }
 
     @Test
-    void untaggedVersionsMoreThanFifteenPercentApartInRuntimeAreFlaggedNotJoined() {
+    void untaggedVersionsMoreThanFifteenPercentApartKeepBothEditionsAndAreFlaggedOnce() {
         Film heat = film("Heat", 949L);
         edition(heat, "Original", 100, "Heat.m4v");
         edition(heat, "Original", 130, "Heat HD.m4v");
         Long heatId = saved(heat).getId();
 
-        importItems(item("Heat", 949L, null, 0, 0, media("Heat.m4v"), media("Heat HD.m4v")));
+        PlexFilm plexHeat = item("Heat", 949L, null, 1, 0, media("Heat.m4v"), media("Heat HD.m4v"));
+
+        importItems(plexHeat);
 
         Film after = film(heatId);
-        assertThat(flags()).anyMatch(f -> f.startsWith("Runtimes differ by 23%") && f.contains("Heat HD.m4v"));
-        Edition left = after.getEditions().stream().filter(e -> paths(e).contains("Heat HD.m4v")).findFirst()
-            .orElseThrow();
-        assertThat(left.getGroupingSource()).isEqualTo(GroupingSource.AUTO);
+        assertThat(after.getEditions()).hasSize(2);
+        assertThat(after.getEditions()).extracting(Edition::getGroupingSource).containsOnly(GroupingSource.PLEX);
+        assertThat(after.getEditions()).allMatch(e -> states.findById(e.getId()).orElseThrow().isWatched());
+        assertThat(flags()).hasSize(1).allMatch(f -> f.startsWith("Runtimes differ by 23%")
+            && f.contains("Heat HD.m4v"));
+
+        importItems(plexHeat);
+
+        assertThat(film(heatId).getEditions()).hasSize(2);
+        assertThat(flags()).hasSize(1);
     }
 
     // ---- reporting and names ----------------------------------------------------------------------------------
@@ -514,19 +522,20 @@ class PlexGroupingFlowTest extends ApiTestBase {
     }
 
     @Test
-    void filmsWithUntaggedVersionsFarApartInRuntimeAreNeitherGatheredNorMerged() {
+    void filmsWithUntaggedVersionsFarApartInRuntimeAreGatheredAndMergedAndFlaggedOnce() {
         Film short1 = film("Heat", 949L);
         edition(short1, "Original", 100, "Heat.m4v");
         Film long1 = film("Heat again", 949L);
         edition(long1, "Original", 130, "Heat HD.m4v");
-        saved(short1);
+        Long shortId = saved(short1).getId();
         saved(long1);
 
         importItems(item("Heat", 949L, null, 0, 0, media("Heat HD.m4v")));
         importItems(item("Heat", 949L, null, 0, 0, media("Heat.m4v")));
 
-        assertThat(films.count()).isEqualTo(2);
-        assertThat(flags()).hasSize(2).allMatch(f -> f.startsWith("Runtimes differ by 23%"));
+        assertThat(films.count()).isEqualTo(1);
+        assertThat(film(shortId).getEditions()).hasSize(2);
+        assertThat(flags()).hasSize(1).allMatch(f -> f.startsWith("Runtimes differ by 23%"));
     }
 
     // ---- what is never regrouped, and what cannot be ------------------------------------------------------------
