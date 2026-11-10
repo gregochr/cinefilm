@@ -72,16 +72,22 @@ public final class BrowseRules {
             .toList();
     }
 
-    /** Case-insensitive substring search over title, cast names and director names. */
+    /**
+     * Word-prefix search: every word of the query must be a prefix of a different word of the title, of one cast or
+     * director name, or of the film's collection name (without a trailing " Collection"), ignoring case, accents and
+     * punctuation. The same rule as the header search ({@link SearchText}).
+     */
     public static boolean matchesSearch(FilmView view, String q) {
-        if (q == null || q.isBlank()) {
+        List<String> terms = SearchText.words(q);
+        if (terms.isEmpty()) {
             return true;
         }
-        String needle = q.strip().toLowerCase(Locale.ROOT);
-        return Stream.concat(
-                Stream.of(view.film().getTitle()),
-                view.film().getCredits().stream().map(c -> c.getPerson().getName()))
-            .anyMatch(s -> s.toLowerCase(Locale.ROOT).contains(needle));
+        Stream<String> collection = view.film().getCollection() == null ? Stream.empty()
+            : Stream.of(SearchText.withoutCollectionSuffix(view.film().getCollection().getName()));
+        return Stream.of(Stream.of(view.film().getTitle()),
+                view.film().getCredits().stream().map(c -> c.getPerson().getName()), collection)
+            .flatMap(s -> s)
+            .anyMatch(name -> SearchText.allPrefix(terms, SearchText.words(name)));
     }
 
     private static boolean hasGenre(FilmView view, String genre) {

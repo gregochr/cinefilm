@@ -8,6 +8,7 @@ import { useSyncExternalStore } from 'react';
 import { FIXTURE_ETAG } from '../api/client.js';
 import { searchApi } from '../api/resources.js';
 import { displayName } from './collections.js';
+import { normaliseIndex } from './search.js';
 
 /** The localStorage key of the cached `{ etag, raw }`. */
 export const SEARCH_INDEX_STORAGE_KEY = 'cinefilm.searchIndex.v1';
@@ -64,11 +65,11 @@ export function sanitizeRaw(raw) {
 }
 
 /**
- * Turns the server's compact index into entries with display strings ready. Normalisation for matching is added
- * on top of this later; here the keys are only spelled out and the display strings built once.
+ * Turns the server's compact index into entries with display strings ready and each name normalised for matching
+ * (`norm`, see `search.js`). Done once when the index loads, never per keystroke.
  */
 export function prepareIndex(raw) {
-  return {
+  return normaliseIndex({
     films: (raw?.films ?? []).map((f) => {
       const directors = f.d ?? [];
       return {
@@ -96,7 +97,7 @@ export function prepareIndex(raw) {
       actorCount: p.a ?? 0,
       directorCount: p.d ?? 0,
     })),
-  };
+  });
 }
 
 /** The stored copy as `{ etag, raw }`, rebuilt through the same checks as a response; null if absent or invalid. */

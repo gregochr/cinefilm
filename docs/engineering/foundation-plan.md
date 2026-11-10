@@ -75,7 +75,7 @@ cache only changes that helper.
   more than 5 years ago (or never played but imported as watched long ago), oldest first.
 - **Weekly theme (decision 4):** chosen deterministically from the ISO week (Monday start) and the library
   contents: a decade, a genre or a director with at least 5 films. Same input ⇒ same theme all week.
-- **Search (decision 5):** case-insensitive substring on title, cast names and director names.
+- **Search (decision 5):** word-prefix on title, cast names, director names and the collection name: every query word must start a different word of one name, ignoring case, accents, apostrophes and punctuation (`SearchText`, shared test vectors in `docs/design/search/vectors.json`); no typo matching on the server.
 - **Sort:** `title` (by sortTitle), `year`, `added` (default, newest first).
 - **Preferences (decision 2, 12):** quality, audio and subtitle choices and the last edition are remembered per film.
 

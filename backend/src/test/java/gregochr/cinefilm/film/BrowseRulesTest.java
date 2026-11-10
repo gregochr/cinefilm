@@ -172,6 +172,29 @@ class BrowseRulesTest {
         assertThat(titles(all, "  ")).hasSize(3);
     }
 
+    @Test
+    void searchIsWordPrefixOverTitleNamesAndCollectionName() {
+        FilmView twisters = filmView("Twisters", 2024, 100);
+        FilmView wars = filmView("Star Wars", 1977, 100);
+        FilmView warrior = filmView("Warrior", 2011, 100);
+        credit(warrior.film(), person(1L, "Gavin O'Connor"), CreditRole.DIRECTOR, null, 0);
+        FilmView amelie = filmView("Amélie", 2001, 100);
+        FilmView potter = filmView("Prisoner of Azkaban", 2004, 100);
+        gregochr.cinefilm.collection.FilmCollection saga = new gregochr.cinefilm.collection.FilmCollection();
+        saga.setName("Harry Potter Collection");
+        potter.film().setCollection(saga);
+        List<FilmView> all = List.of(twisters, wars, warrior, amelie, potter);
+
+        assertThat(titles(all, "w")).containsExactlyInAnyOrder("Star Wars", "Warrior");
+        assertThat(titles(all, "star wa")).containsExactly("Star Wars");
+        assertThat(titles(all, "amelie")).containsExactly("Amélie");
+        assertThat(titles(all, "ocon")).containsExactly("Warrior");
+        assertThat(titles(all, "harry pot")).containsExactly("Prisoner of Azkaban");
+        assertThat(titles(all, "collection")).isEmpty();
+        assertThat(titles(all, "isters")).isEmpty();
+        assertThat(titles(all, "!!")).hasSize(5);
+    }
+
     private List<String> titles(List<FilmView> all, String q) {
         return BrowseRules.filterAndSort(all, new LibraryQuery(q, "title", null, null, null)).stream()
             .map(v -> v.film().getTitle()).toList();
