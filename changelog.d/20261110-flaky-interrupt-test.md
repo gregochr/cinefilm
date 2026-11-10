@@ -1,0 +1,3 @@
+### Fixed — flaky `ProcessLineStreamRunner` interrupt test
+
+`anInterruptedWaitIsAnIoExceptionAndKeepsTheInterruptFlag` failed about one run in four because it interrupted the thread before running `/bin/echo`, and a child that had already exited never made `waitFor()` throw. The test now interrupts the thread from the line handler while a child is alive and blocked. That exposed a real gap: the runner only noticed an interrupt in `waitFor()` after reading all of stdout, so it now checks for one after each line, still reporting an `IOException` with the interrupt flag kept and the child killed.
