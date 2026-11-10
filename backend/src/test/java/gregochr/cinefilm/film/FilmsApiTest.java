@@ -80,20 +80,22 @@ class FilmsApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.facets.genres",
                 contains("Crime", "Horror", "Mystery", "Sci-fi", "Thriller")))
             .andExpect(jsonPath("$.facets.decades", contains(1940, 1970, 1990)))
-            .andExpect(jsonPath("$.facets.collections", hasSize(0)));
+            .andExpect(jsonPath("$.facets.collections").doesNotExist());
     }
 
     @Test
-    void aSecondFilmInTheLibraryMakesTheCollectionAFacetAndALinkOnDetail() throws Exception {
+    void aSecondFilmInTheLibraryMakesTheCollectionALinkOnDetail() throws Exception {
         Film aliens = film(null, "Aliens", 1986, NOW.minus(Duration.ofDays(150)), "Sci-fi");
         aliens.setCollection(alienCollection);
         edition(aliens, null, "Theatrical Cut", 137 * MIN, null);
         save(aliens);
 
-        mvc.perform(get("/api/films"))
-            .andExpect(jsonPath("$.facets.collections", hasSize(1)))
-            .andExpect(jsonPath("$.facets.collections[0].name").value("Alien"))
-            .andExpect(jsonPath("$.facets.collections[0].id").value(alienCollection.getId()));
+        mvc.perform(get("/api/films").param("sort", "title"))
+            .andExpect(jsonPath("$.films[?(@.title == 'Alien')].collectionId",
+                contains(alienCollection.getId().intValue())))
+            .andExpect(jsonPath("$.films[?(@.title == 'Aliens')].collectionId",
+                contains(alienCollection.getId().intValue())))
+            .andExpect(jsonPath("$.films[?(@.title == 'Heat')].collectionId", contains(nullValue())));
         mvc.perform(get("/api/films/{id}", alien.getId()))
             .andExpect(jsonPath("$.collection.id").value(alienCollection.getId()))
             .andExpect(jsonPath("$.collection.name").value("Alien"));
@@ -106,9 +108,10 @@ class FilmsApiTest extends ApiTestBase {
         file(edition(aliens, null, "Theatrical Cut", 137 * MIN, null), "aliens.m4v").setPresence(Presence.MISSING);
         save(aliens);
 
-        mvc.perform(get("/api/films")).andExpect(jsonPath("$.facets.collections", hasSize(0)));
         mvc.perform(get("/api/films/{id}", alien.getId()))
             .andExpect(jsonPath("$.collection").value(nullValue()));
+        mvc.perform(get("/api/films").param("q", "alien"))
+            .andExpect(jsonPath("$.films[0].collectionId").value(nullValue()));
     }
 
     @Test
@@ -123,7 +126,9 @@ class FilmsApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.films[0].director").value("Michael Mann"))
             .andExpect(jsonPath("$.films[0].progress.positionMs").value(64 * MIN))
             .andExpect(jsonPath("$.films[0].progress.runtimeMs").value(170 * MIN))
-            .andExpect(jsonPath("$.films[0].progress.editionId").value(heatEdition.getId()));
+            .andExpect(jsonPath("$.films[0].progress.editionId").value(heatEdition.getId()))
+            .andExpect(jsonPath("$.films[0].collectionId").value(nullValue()))
+            .andExpect(jsonPath("$.films[0].sortTitle").value("heat"));
     }
 
     @Test
@@ -160,13 +165,14 @@ class FilmsApiTest extends ApiTestBase {
     }
 
     @Test
-    void filtersByGenreDecadeCollectionAndShow() throws Exception {
+    void filtersByGenreDecadeAndShow() throws Exception {
         mvc.perform(get("/api/films").param("genre", "Crime"))
             .andExpect(jsonPath("$.films[*].title", containsInAnyOrder("Heat", "Chinatown")));
         mvc.perform(get("/api/films").param("decade", "1970"))
             .andExpect(jsonPath("$.films[*].title", containsInAnyOrder("Chinatown", "Alien")));
+        // The collection filter is gone: the Collections tab replaces it, and a stray param is ignored.
         mvc.perform(get("/api/films").param("collection", String.valueOf(alienCollection.getId())))
-            .andExpect(jsonPath("$.films[*].title", contains("Alien")));
+            .andExpect(jsonPath("$.total").value(4));
         mvc.perform(get("/api/films").param("show", "watched"))
             .andExpect(jsonPath("$.films[*].title", contains("The Third Man")));
         mvc.perform(get("/api/films").param("show", "unwatched"))

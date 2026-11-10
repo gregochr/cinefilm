@@ -28,7 +28,7 @@ class BrowseRulesRatingsTest {
     }
 
     private List<String> sorted(List<FilmView> all, String sort) {
-        return BrowseRules.filterAndSort(all, new LibraryQuery(null, sort, null, null, null, null)).stream()
+        return BrowseRules.filterAndSort(all, new LibraryQuery(null, sort, null, null, null)).stream()
             .map(v -> v.film().getTitle()).toList();
     }
 

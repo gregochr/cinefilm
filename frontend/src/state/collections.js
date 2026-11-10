@@ -1,0 +1,120 @@
+// Collection display rules shared by the Collections tab, the grouped Films grid and the detail screens.
+
+/** TMDB names its collections "Harry Potter Collection"; we show "Harry Potter". */
+export function displayName(name = '') {
+  return name.trim().replace(/\s+collection$/i, '');
+}
+
+/** Lower-case, leading "the " dropped: how titles and collection names sort (as the server's SortTitles). */
+export function sortKey(text = '') {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/^the\s+/, '');
+}
+
+const byName = (a, b) => {
+  const x = sortKey(displayName(a.name));
+  const y = sortKey(displayName(b.name));
+  return x < y ? -1 : x > y ? 1 : 0;
+};
+
+/** An ISO instant as milliseconds, so "…12:00:00Z" and "…12:00:00.500Z" compare by time; missing is oldest. */
+const instant = (iso) => (iso ? Date.parse(iso) : -Infinity);
+
+export const isComplete = (c) => c.ownedCount >= c.totalCount;
+
+/** Search on display name, the Show filter (`all` | `complete` | `missing`) and the sort (`name` | `added` | `size`). */
+export function browseCollections(collections, { q = '', show = 'all', sort = 'name' } = {}) {
+  const needle = q.trim().toLowerCase();
+  const list = collections.filter((c) => {
+    if (needle && !displayName(c.name).toLowerCase().includes(needle)) return false;
+    if (show === 'complete') return isComplete(c);
+    if (show === 'missing') return !isComplete(c);
+    return true;
+  });
+  const order = {
+    added: (a, b) => {
+      const x = instant(a.lastAddedAt);
+      const y = instant(b.lastAddedAt);
+      return x === y ? 0 : y > x ? 1 : -1;
+    },
+    size: (a, b) => b.ownedCount - a.ownedCount,
+    name: () => 0,
+  }[sort];
+  return list.sort((a, b) => (order ? order(a, b) : 0) || byName(a, b));
+}
+
+const FAN_SIZE = 3;
+const BRIGHTNESS = [1, 0.8, 0.6];
+
+/**
+ * Which posters a fan shows and how. `posters` are paths (or null: a film with no artwork) ordered
+ * earliest release first. Returns up to three slots, front first: `depth` 0 is the front poster,
+ * `brightness` dims the ones behind (1 means no filter) and `shadow` is true for every poster that
+ * has another behind it, so it casts a shadow onto it.
+ */
+export function fanPosters(posters = []) {
+  const shown = posters.slice(0, FAN_SIZE);
+  const last = shown.length - 1;
+  return shown.map((path, depth) => ({
+    path,
+    depth,
+    brightness: depth === last && last > 0 ? BRIGHTNESS[2] : BRIGHTNESS[Math.min(depth, 1)],
+    shadow: depth < last,
+  }));
+}
+
+/** Earliest release first; a film with no known year goes last. Stable. */
+const byYear = (a, b) => (a.year ?? Infinity) - (b.year ?? Infinity);
+
+/**
+ * Folds the films of each collection into one tile, for the Films grid's "Group collections" switch.
+ * `films` is the server's filtered, sorted list (each card may carry a `collectionId`); `collections` are
+ * the Collections tab's cards; `sort` is the Films sort. Returns items in grid order, each
+ * `{ type: 'film', film }` or `{ type: 'collection', collection, films, count }`, where `films` are the
+ * folded films that passed the filters, earliest year first, and `count` their number.
+ * A collection with no film in `films` gets no tile.
+ *
+ * Under `added` and `year` a tile sits where its first film was in the server order (the most recently
+ * added, or the earliest, film). Under `title` it is placed among the other films by its display name.
+ */
+export function groupFilms(films, collections, sort = 'added') {
+  const byId = new Map(collections.map((c) => [c.id, c]));
+  const tiles = new Map();
+  const items = [];
+  for (const film of films) {
+    const collection = film.collectionId != null ? byId.get(film.collectionId) : null;
+    if (!collection) {
+      items.push({ type: 'film', film });
+      continue;
+    }
+    let tile = tiles.get(collection.id);
+    if (!tile) {
+      tile = { type: 'collection', collection, films: [], count: 0 };
+      tiles.set(collection.id, tile);
+      items.push(tile);
+    }
+    tile.films.push(film);
+  }
+  for (const tile of tiles.values()) {
+    tile.films.sort(byYear);
+    tile.count = tile.films.length;
+  }
+  if (sort !== 'title') return items;
+
+  const loose = items.filter((item) => item.type === 'film');
+  const grouped = [...tiles.values()]
+    .map((tile) => ({ tile, key: sortKey(displayName(tile.collection.name)) }))
+    .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  const merged = [];
+  let next = 0;
+  for (const film of loose) {
+    // The server sorts by the film's sort title, which an import can set to something else.
+    const key = film.film.sortTitle ?? sortKey(film.film.title);
+    while (next < grouped.length && grouped[next].key < key) merged.push(grouped[next++].tile);
+    merged.push(film);
+  }
+  while (next < grouped.length) merged.push(grouped[next++].tile);
+  return merged;
+}

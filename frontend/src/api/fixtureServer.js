@@ -9,6 +9,7 @@ import adminScan from '../test/fixtures/admin-scan.json';
 import adminAttention from '../test/fixtures/admin-attention.json';
 import adminTranscoding from '../test/fixtures/admin-transcoding.json';
 import collection from '../test/fixtures/collection.json';
+import collections from '../test/fixtures/collections.json';
 import session from '../test/fixtures/session.json';
 
 const PREVIOUS = {
@@ -53,6 +54,7 @@ export async function handle(method, path, body) {
   let match = route.match(/^\/api\/films\/(\d+)$/);
   if (match) return details[match[1]] || heat;
   if (/^\/api\/people\/\d+$/.test(route)) return person;
+  if (route === '/api/collections') return collections;
   if (/^\/api\/collections\/\d+$/.test(route)) return collection;
   if (/\/progress$/.test(route)) return { positionMs: body?.positionMs ?? 0, watched: false };
   if (/\/watched$/.test(route)) return { watched: !!body?.watched, previous: PREVIOUS };

@@ -66,7 +66,7 @@ See `design/tokens.css` for every value.
 
 **Home**
 - Hero: "Pick up where you left off" shows the most recent in-progress film.
-- Rows: "Continue watching", "Recently added", "Not watched in years", a weekly theme ("This week: the 1970s", captioned "A new theme every Monday"), and "Collections" (cards with three fanned posters, the name, and "2 of 4 films").
+- Rows: "Continue watching", "Recently added", "Not watched in years", and a weekly theme ("This week: the 1970s", captioned "A new theme every Monday"). Collections live in Library, not on Home (decision 16).
 - The rows are static grids with a "See all" link, not carousels.
 
 **Film detail**
@@ -83,7 +83,10 @@ See `design/tokens.css` for every value.
 - Poster grid. The heading count reads "24 films · sorted by recently added".
 - Search matches title, actor and director, live as you type.
 - Sort: Title / Year / Recently added. Title sort ignores a leading "The".
-- Filters: Genre, Decade, Collection, and Show (All / Unwatched / Watched).
+- Filters: Genre, Decade, and Show (All / Unwatched / Watched).
+- Two tabs beside the heading, each its own URL: **Films** (`/library`) and **Collections** (`/library/collections`),
+  with counts. A "Group collections" switch (off by default) folds each collection into one tile in the Films grid.
+  See `docs/design/library-collections/` for the target screens and rules.
 - Watched films get a check badge.
 - No-results state: "Nothing on the shelf", with a "Clear search and filters" button.
 - Shortcut hints sit along the bottom.
@@ -220,11 +223,15 @@ Custom controls over HTML5 `<video>`.
 16. **Collections.**
     - **Source:** TMDB collections (e.g. Alien, Blade Runner).
     - **Two films make a collection** (owner, 2026-11-09). A TMDB collection counts only once at least two of
-      its films are in the library. With one, that film looks like any other: no Home card, no Library filter
-      entry, no link on Film detail. TMDB puts any film with a sequel in a collection, and a "collection" of
+      its films are in the library. With one, that film looks like any other: no Collections tab card, no
+      grouped tile, no link on Film detail. TMDB puts any film with a sequel in a collection, and a "collection" of
       one owned film plus a "Not in your library" tile is noise.
+    - **Display name:** a trailing " Collection" is dropped from TMDB's name everywhere ("Harry Potter Collection"
+      shows as "Harry Potter").
     - **Collection page:** owned films in release order, followed by missing parts as dashed "Not in your library" tiles. The missing tiles can be hidden in Admin.
-    - **Elsewhere:** a "Collections" row on Home, a Collection filter in Library, and a link to the film's collection on Film detail.
+    - **Elsewhere:** the Collections tab in Library, the optional "Group collections" tiles in the Films grid, and a
+      link to the film's collection on Film detail. Home has no Collections row and Library no Collection filter
+      (owner, 2026-11-09; `docs/design/library-collections/`).
 
 ## 7. Accessibility
 

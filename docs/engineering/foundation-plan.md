@@ -85,10 +85,11 @@ All JSON. All routes under `/api`. Times are milliseconds. All routes except `/a
 
 | Method & path | Returns |
 |---|---|
-| `GET /api/home` | `{ hero: FilmCard?, continueWatching: FilmCard[], recentlyAdded: FilmCard[], notWatchedInYears: FilmCard[], weeklyTheme: { title, caption, kind, value, films: FilmCard[] }, collections: CollectionCard[] }`; `continueWatching` excludes the film shown as `hero` |
-| `GET /api/films?q=&sort=title\|year\|added&genre=&decade=1970&collection=<id>&show=all\|unwatched\|watched` | `{ total, films: FilmCard[], facets: { genres: string[], decades: number[], collections: {id,name}[] } }` |
+| `GET /api/home` | `{ hero: FilmCard?, continueWatching: FilmCard[], recentlyAdded: FilmCard[], notWatchedInYears: FilmCard[], weeklyTheme: { title, caption, kind, value, films: FilmCard[] } }`; `continueWatching` excludes the film shown as `hero` |
+| `GET /api/films?q=&sort=title\|year\|added&genre=&decade=1970&show=all\|unwatched\|watched` | `{ total, films: FilmCard[], facets: { genres: string[], decades: number[] } }`; `FilmCard.collectionId` is set only here |
 | `GET /api/films/{id}` | `FilmDetail` |
 | `GET /api/people/{id}` | `{ id, name, profilePath, films: [{ film: FilmCard, roles: string[] }] }` — owned films only; roles like "as Neil McCauley", "Director" |
+| `GET /api/collections` | `{ filmCount, collections: CollectionCard[] }`: `filmCount` is the number of browsable films (the Films tab count); `collections` holds every collection with at least two owned films, sorted by name |
 | `GET /api/collections/{id}` | `{ id, name, posterPath, parts: [{ owned: true, film: FilmCard } \| { owned: false, title, year, posterPath }] }` in release order |
 | `PUT /api/editions/{id}/progress` body `{ positionMs }` | `{ positionMs, watched }` — applies the watched rule |
 | `POST /api/editions/{id}/watched` body `{ watched: boolean }` | `{ watched, previous: PlaybackSnapshot }` (watched=false also resets position to 0); `previous` is the state just before the change (an absent row is `{0, false, null, false, null}`) so the client can undo exactly |
@@ -107,12 +108,12 @@ All JSON. All routes under `/api`. Times are milliseconds. All routes except `/a
 | `GET /actuator/health`, `GET /actuator/health/container`, `GET /actuator/info` | Not under `/api`, open to a signed-out caller, and the only Actuator endpoints exposed (all others 404). `health` is `{status}` only; `health/container` (database + ping, status only) is the Docker healthcheck and deploy smoke probe; `info` carries `git.commit.id.full` of the running build |
 | `GET/POST/DELETE /api/session` | `GET`: 200 `{authenticated:true}` when signed in, 401 `{authenticated:false}` when not; `POST { password }`: 200 and cookie, 401 on a wrong password; `DELETE`: sign out (200) |
 
-**FilmCard:** `{ id, title, year (number | null), posterPath, backdropPath, watched, progress: { positionMs, runtimeMs, editionId } | null, director }`
+**FilmCard:** `{ id, title, year (number | null), posterPath, backdropPath, watched, progress: { positionMs, runtimeMs, editionId } | null, director, collectionId (number | null), sortTitle }`. `collectionId` is set only by `GET /api/films`, and only when the film's collection has two or more films in the library (the "two films make a collection" rule); everywhere else it is `null`. `sortTitle` is the key titles are sorted by (lower-case, leading "the" dropped, or an import's custom value). The Films grid uses both to fold collections into tiles and place them under the title sort.
 
-**CollectionCard** (Home): `{ id, name, posterPath, ownedCount, totalCount, posterPaths: (string|null)[] }`, `posterPaths` = up to 3 owned films' poster paths for the fanned posters.
+**CollectionCard** (Library, Collections tab): `{ id, name, posterPath, ownedCount, totalCount, posterPaths: (string|null)[], lastAddedAt }`. `posterPaths` = up to 3 owned films' poster paths, earliest release first (the front of the fan); `lastAddedAt` = the newest `addedAt` among the owned films (ISO instant), for "Recently added to". `name` is TMDB's; the client drops a trailing " Collection" for display (`state/collections.js`).
 
 **Two films make a collection** (handover decision 16): a collection with fewer than two films in the library
-has no Home card, no entry in `facets.collections`, and is `null` as `FilmDetail.collection`. `GET
+is not in `GET /api/collections`, has no `FilmCard.collectionId` and is `null` as `FilmDetail.collection`. `GET
 /api/collections/{id}` still answers for it, so an old link keeps working.
 
 **FilmDetail:** FilmCard fields plus `{ overview, genres, collection: {id,name}|null, directors: Person[], cast: [{ person, character }], editions: [{ id, name, year, runtimeMs, note, creditsMarkerMs (nullable), positionMs, watched, file: { id, videoCodec, width, height, audioSummary, addedAt }, audioStreams, subtitleStreams, qualities: [{ id: "auto"\|"original"\|"1080p"\|"720p"\|"480p", bitrate, premade, available }] }], preferences: { editionId, quality, audioStreamId, subtitle } }`
@@ -144,12 +145,12 @@ src/state/      hooks over the API (useHome, useFilms, useFilm, usePerson, useCo
                 no JSX here — this is what Apple TV / native will reuse
 src/player/     player engine logic (keyboard map, auto-hide timer, watched/resume maths, time formatting) as plain
                 functions and hooks, separate from player components
-src/components/ Poster, FilmRow, CollectionCard, Button, Switch, Segmented, Picker, Skeleton, Header, TabBar…
+src/components/ Poster, FilmRow, CollectionCard, CollectionTile, CollectionFan, LibraryTabs, Button, Switch, Segmented, Picker, Skeleton, Header, TabBar…
 src/screens/    Home, Library, FilmDetail, Person, Collection, Player, Admin (placeholder in phase 1), SignIn, states
 src/styles/     tokens.css (copied verbatim from the handover), base.css, one CSS module per component
 ```
 
-Routes: `/`, `/library`, `/films/:id`, `/films/:id/play?edition=`, `/people/:id`, `/collections/:id`, `/admin`.
+Routes: `/`, `/library` (Films tab), `/library/collections` (Collections tab), `/films/:id`, `/films/:id/play?edition=`, `/people/:id`, `/collections/:id`, `/admin`.
 
 Rules that apply to every component (from the handover): real elements and labels (§7); the focus ring and 1.03
 scale (§2) on every focusable card, never a bare `outline: none`; lazy images with reserved aspect ratios; static

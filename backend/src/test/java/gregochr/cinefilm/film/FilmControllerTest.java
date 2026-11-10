@@ -31,12 +31,12 @@ class FilmControllerTest {
 
     @Test
     void everyQueryParameterReachesTheServiceInItsOwnSlot() throws Exception {
-        FilmList empty = new FilmList(0, List.of(), new Facets(List.of(), List.of(), List.of()));
-        when(service.list(new LibraryQuery("heat", "year", "Crime", 1990, 3L, "unwatched"))).thenReturn(empty);
+        FilmList empty = new FilmList(0, List.of(), new Facets(List.of(), List.of()));
+        when(service.list(new LibraryQuery("heat", "year", "Crime", 1990, "unwatched"))).thenReturn(empty);
 
         mvc.perform(get("/api/films").with(user("owner"))
                 .param("q", "heat").param("sort", "year").param("genre", "Crime")
-                .param("decade", "1990").param("collection", "3").param("show", "unwatched"))
+                .param("decade", "1990").param("show", "unwatched"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.total").value(0));
     }
@@ -44,7 +44,7 @@ class FilmControllerTest {
     @Test
     void noParametersMeansTheUnfilteredQuery() throws Exception {
         when(service.list(LibraryQuery.all())).thenReturn(
-            new FilmList(0, List.of(), new Facets(List.of(), List.of(), List.of())));
+            new FilmList(0, List.of(), new Facets(List.of(), List.of())));
 
         mvc.perform(get("/api/films").with(user("owner"))).andExpect(status().isOk());
 

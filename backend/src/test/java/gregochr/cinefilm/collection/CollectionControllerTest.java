@@ -7,9 +7,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gregochr.cinefilm.auth.SecurityConfig;
+import gregochr.cinefilm.collection.CollectionDtos.CollectionCard;
+import gregochr.cinefilm.collection.CollectionDtos.CollectionList;
 import gregochr.cinefilm.collection.CollectionDtos.CollectionPage;
 import gregochr.cinefilm.collection.CollectionDtos.PartDto;
 import gregochr.cinefilm.config.NotFoundException;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +43,26 @@ class CollectionControllerTest {
             .andExpect(jsonPath("$.parts[0].title").value("Aliens"))
             .andExpect(jsonPath("$.parts[0].year").value(1986))
             .andExpect(jsonPath("$.parts[0].film").doesNotExist());
+    }
+
+    @Test
+    void theListCarriesTheFilmCountAndTheCards() throws Exception {
+        when(service.list()).thenReturn(new CollectionList(24, List.of(new CollectionCard(4L, "Alien", "/saga.jpg",
+            2, 4, List.of("/a.jpg", "/b.jpg"), Instant.parse("2026-11-01T10:00:00Z")))));
+
+        mvc.perform(get("/api/collections").with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.filmCount").value(24))
+            .andExpect(jsonPath("$.collections[0].name").value("Alien"))
+            .andExpect(jsonPath("$.collections[0].ownedCount").value(2))
+            .andExpect(jsonPath("$.collections[0].totalCount").value(4))
+            .andExpect(jsonPath("$.collections[0].posterPaths[1]").value("/b.jpg"))
+            .andExpect(jsonPath("$.collections[0].lastAddedAt").value("2026-11-01T10:00:00Z"));
+    }
+
+    @Test
+    void theListIsA401WhenSignedOut() throws Exception {
+        mvc.perform(get("/api/collections")).andExpect(status().isUnauthorized());
     }
 
     @Test

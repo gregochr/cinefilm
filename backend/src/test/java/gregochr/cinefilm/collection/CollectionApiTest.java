@@ -4,6 +4,7 @@ import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.collection;
 import static gregochr.cinefilm.TestData.edition;
+import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
@@ -13,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import gregochr.cinefilm.ApiTestBase;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.Presence;
 import org.junit.jupiter.api.Test;
 
 class CollectionApiTest extends ApiTestBase {
@@ -93,6 +95,45 @@ class CollectionApiTest extends ApiTestBase {
         mvc.perform(get("/api/collections/{id}", loose.getId()))
             .andExpect(jsonPath("$.posterPath").value(nullValue()))
             .andExpect(jsonPath("$.parts[*].film.title", contains("Earlier", "Later")));
+    }
+
+    @Test
+    void theListHasTheFilmCountAndOnlyCollectionsWithTwoOwnedFilmsSortedByName() throws Exception {
+        FilmCollection zodiac = collection("Zodiac Saga");
+        part(zodiac, 1, "Z1", 2000, 1);
+        part(zodiac, 2, "Z2", 2002, 2);
+        part(zodiac, 3, "Z3", 2004, 3);
+        collections.save(zodiac);
+        own(zodiac, 2, "Z2", 2002);
+        own(zodiac, 1, "Z1", 2000);
+        FilmCollection alien = collections.save(collection("Alien"));
+        own(alien, 10, "Alien", 1979);
+        own(alien, 11, "Aliens", 1986);
+        FilmCollection lone = collections.save(collection("Lone Saga"));
+        own(lone, 20, "Lone", 2001);
+        // A second film whose only file is missing is not browsable, so it does not count.
+        Film gone = film(null, "Gone Sequel", 2003, NOW, "Drama");
+        gone.setCollection(lone);
+        file(edition(gone, null, "Theatrical Cut", 90 * MIN, null), "gone.m4v").setPresence(Presence.MISSING);
+        save(gone);
+        collections.save(collection("Empty"));
+
+        mvc.perform(get("/api/collections"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.filmCount").value(5))
+            .andExpect(jsonPath("$.collections", hasSize(2)))
+            .andExpect(jsonPath("$.collections[*].name", contains("Alien", "Zodiac Saga")))
+            .andExpect(jsonPath("$.collections[1].ownedCount").value(2))
+            .andExpect(jsonPath("$.collections[1].totalCount").value(3))
+            .andExpect(jsonPath("$.collections[1].posterPaths", hasSize(2)))
+            .andExpect(jsonPath("$.collections[1].lastAddedAt").value(NOW.toString()));
+    }
+
+    @Test
+    void theListIsEmptyWithoutCollections() throws Exception {
+        mvc.perform(get("/api/collections"))
+            .andExpect(jsonPath("$.filmCount").value(0))
+            .andExpect(jsonPath("$.collections", hasSize(0)));
     }
 
     @Test

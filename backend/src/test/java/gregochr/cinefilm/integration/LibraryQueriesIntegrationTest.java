@@ -72,13 +72,27 @@ class LibraryQueriesIntegrationTest extends IntegrationTestBase {
         assertThat(heat.progress()).isPresent();
     }
 
-    // The seed has Alien (2 films) and Three Colours (3); Blade Runner has one, so it is not a collection yet.
     @Test
     void browseListsTheWholeLibraryWithFacets() throws Exception {
         get("/api/films")
             .andExpect(jsonPath("$.total", greaterThanOrEqualTo(24)))
             .andExpect(jsonPath("$.facets.genres", hasItem("Crime")))
-            .andExpect(jsonPath("$.facets.collections", hasSize(2)));
+            .andExpect(jsonPath("$.facets.collections").doesNotExist());
+    }
+
+    // The seed has Alien (2 films) and Three Colours (3); Blade Runner has one, so it is not a collection yet.
+    @Test
+    void collectionsListsTheQualifyingCollectionsAndTheFilmCount() throws Exception {
+        get("/api/collections")
+            .andExpect(jsonPath("$.filmCount", greaterThanOrEqualTo(24)))
+            .andExpect(jsonPath("$.collections", hasSize(2)))
+            .andExpect(jsonPath("$.collections[*].name", hasItem("Three Colours")));
+    }
+
+    @Test
+    void filmCardsCarryTheCollectionIdOnlyForQualifyingCollections() throws Exception {
+        get("/api/films", "q", "alien").andExpect(jsonPath("$.films[0].collectionId").isNumber());
+        get("/api/films", "q", "heat").andExpect(jsonPath("$.films[0].collectionId").doesNotExist());
     }
 
     @Test
@@ -118,6 +132,6 @@ class LibraryQueriesIntegrationTest extends IntegrationTestBase {
         get("/api/home")
             .andExpect(jsonPath("$.hero.title").value("Heat"))
             .andExpect(jsonPath("$.continueWatching", hasSize(4)))
-            .andExpect(jsonPath("$.collections", hasSize(2)));
+            .andExpect(jsonPath("$.collections").doesNotExist());
     }
 }

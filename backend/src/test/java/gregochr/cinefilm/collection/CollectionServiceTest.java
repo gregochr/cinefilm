@@ -11,6 +11,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.collection.CollectionDtos.CollectionCard;
+import gregochr.cinefilm.collection.CollectionDtos.CollectionList;
 import gregochr.cinefilm.collection.CollectionDtos.CollectionPage;
 import gregochr.cinefilm.collection.CollectionDtos.PartDto;
 import gregochr.cinefilm.config.NotFoundException;
@@ -18,6 +19,7 @@ import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmView;
 import gregochr.cinefilm.film.LibraryLoader;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -160,6 +162,38 @@ class CollectionServiceTest {
         assertThat(service.cards(List.of(view(a1)))).isEmpty();
         assertThat(service.cards(List.of(view(a1), view(a2)))).extracting(CollectionCard::ownedCount)
             .containsExactly(2);
+    }
+
+    @Test
+    void cardsFanPostersEarliestReleaseFirstAndCarryTheNewestAddedAt() {
+        part(alienSaga, 1L, "Alien", 1979, 1, null);
+        part(alienSaga, 2L, "Aliens", 1986, 2, null);
+        Film sequel = owned(2L, "Aliens", 1986, 2L, alienSaga, "/p2.jpg");
+        Film first = owned(1L, "Alien", 1979, 1L, alienSaga, "/p1.jpg");
+        sequel.setAddedAt(NOW.minus(Duration.ofDays(1)));
+        first.setAddedAt(NOW.minus(Duration.ofDays(9)));
+        when(collections.findAll()).thenReturn(List.of(alienSaga));
+
+        CollectionCard card = service.cards(List.of(view(sequel), view(first))).get(0);
+
+        assertThat(card.posterPaths()).containsExactly("/p1.jpg", "/p2.jpg");
+        assertThat(card.lastAddedAt()).isEqualTo(NOW.minus(Duration.ofDays(1)));
+    }
+
+    @Test
+    void listCountsEveryFilmInTheLibraryAndTheQualifyingCollections() {
+        part(alienSaga, 1L, "Alien", 1979, 1, null);
+        Film a1 = owned(1L, "Alien", 1979, 1L, alienSaga, null);
+        Film a2 = owned(2L, "Aliens", 1986, 2L, alienSaga, null);
+        Film other = owned(3L, "Heat", 1995, 3L, null, null);
+        List<FilmView> library = List.of(view(a1), view(a2), view(other));
+        when(loader.loadAll()).thenReturn(library);
+        when(collections.findAll()).thenReturn(List.of(alienSaga));
+
+        CollectionList list = service.list();
+
+        assertThat(list.filmCount()).isEqualTo(3);
+        assertThat(list.collections()).extracting(CollectionCard::name).containsExactly("Alien");
     }
 
     @Test

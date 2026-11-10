@@ -7,7 +7,7 @@ export default function Header() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [query, setQuery] = useState('');
-  const showSearch = pathname !== '/library';
+  const showSearch = !pathname.startsWith('/library');
 
   const submit = (event) => {
     event.preventDefault();

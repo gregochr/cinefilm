@@ -7,6 +7,8 @@ import Collection from './screens/Collection.jsx';
 import FilmDetail from './screens/FilmDetail.jsx';
 import Home from './screens/Home.jsx';
 import Library from './screens/Library.jsx';
+import LibraryCollections from './screens/LibraryCollections.jsx';
+import LibraryFilms from './screens/LibraryFilms.jsx';
 import Person from './screens/Person.jsx';
 import Player from './screens/Player.jsx';
 import { useSession } from './state/useSession.js';
@@ -33,7 +35,10 @@ export default function App() {
         <Route path="/films/:id/play" element={<Player />} />
         <Route element={<Layout />}>
           <Route index element={<Home />} />
-          <Route path="library" element={<Library />} />
+          <Route path="library" element={<Library />}>
+            <Route index element={<LibraryFilms />} />
+            <Route path="collections" element={<LibraryCollections />} />
+          </Route>
           <Route path="films/:id" element={<FilmDetail />} />
           <Route path="people/:id" element={<Person />} />
           <Route path="collections/:id" element={<Collection />} />

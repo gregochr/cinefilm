@@ -4,6 +4,7 @@ import { imageUrl } from '../api/images.js';
 import { Poster } from '../components/Poster.jsx';
 import { GridSkeleton } from '../components/Skeleton.jsx';
 import { ErrorState } from '../components/StateMessages.jsx';
+import { displayName } from '../state/collections.js';
 import { useCollection } from '../state/usePeopleAndCollections.js';
 
 function MissingTile({ part }) {
@@ -41,7 +42,7 @@ export default function Collection() {
         &larr; Back
       </button>
       <div className="library__heading">
-        <h1 className="page-title">{collection.name}</h1>
+        <h1 className="page-title">{displayName(collection.name)}</h1>
         <span className="library__count">
           {owned} of {total} films in your library
         </span>

@@ -20,6 +20,7 @@ import {
   streamKey,
   subtitleOptions,
 } from '../player/tracks.js';
+import { displayName } from '../state/collections.js';
 import { useFilm, useFilmActions } from '../state/useFilms.js';
 
 function addedLabel(iso) {
@@ -120,7 +121,7 @@ export default function FilmDetail() {
     film.genres?.length ? <span key="g">{film.genres.join(', ')}</span> : null,
     film.collection ? (
       <Link key="c" to={`/collections/${film.collection.id}`} className="detail__collection">
-        {film.collection.name}
+        {displayName(film.collection.name)} collection
       </Link>
     ) : null,
   ].filter(Boolean);

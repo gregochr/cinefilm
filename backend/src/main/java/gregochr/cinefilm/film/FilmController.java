@@ -23,9 +23,8 @@ public class FilmController {
                   @RequestParam(required = false) String sort,
                   @RequestParam(required = false) String genre,
                   @RequestParam(required = false) Integer decade,
-                  @RequestParam(required = false) Long collection,
                   @RequestParam(required = false) String show) {
-        return service.list(new LibraryQuery(q, sort, genre, decade, collection, show));
+        return service.list(new LibraryQuery(q, sort, genre, decade, show));
     }
 
     @GetMapping("/api/films/{id}")

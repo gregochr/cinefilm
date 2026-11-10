@@ -25,11 +25,10 @@ describe('Home', () => {
       'Recently added',
       'Not watched in years',
       'This week: the 1970s',
-      'Collections',
     ]) {
       expect(screen.getByRole('heading', { name })).toBeInTheDocument();
     }
-    expect(screen.getByText('2 of 4 films')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Collections' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Zodiac, 2007' })).toBeInTheDocument();
   });
 
@@ -42,7 +41,6 @@ describe('Home', () => {
             recentlyAdded: [],
             notWatchedInYears: [],
             weeklyTheme: null,
-            collections: [],
           })
         : null,
     );
@@ -153,9 +151,10 @@ describe('Film detail', () => {
     expect(await screen.findByRole('link', { name: 'Play The Final Cut' })).toBeInTheDocument();
     expect(screen.getByText('1h 57m')).toBeInTheDocument();
     expect(screen.getByText(/Edition .* 3 in your library/)).toBeInTheDocument();
-    const collectionLink = screen.getByRole('link', { name: 'Blade Runner Collection' });
+    const collectionLink = screen.getByRole('link', { name: 'Blade Runner collection' });
     expect(collectionLink).toHaveAttribute('href', '/collections/2');
-    expect(collectionLink).toHaveTextContent(/^Blade Runner Collection$/);
+    expect(collectionLink).toHaveTextContent(/^Blade Runner collection$/);
+    // TMDB's name is "Blade Runner Collection"; the suffix is dropped before " collection" is added.
     expect(collectionLink.textContent).not.toContain('Collection collection');
 
     await userEvent.click(screen.getByRole('radio', { name: /Theatrical Cut/ }));

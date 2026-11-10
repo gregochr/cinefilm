@@ -1,8 +1,13 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
+import { installStorage } from '../test/storage.js';
 
+let storage;
+beforeEach(() => {
+  storage = installStorage();
+});
 afterEach(() => vi.unstubAllGlobals());
 
 const filmsUrls = (fetchMock) =>
@@ -20,7 +25,7 @@ describe('Library filters', () => {
     expect(screen.getByRole('link', { name: 'Heat, 1995' })).toBeInTheDocument();
   });
 
-  it('the genre, decade and collection pickers offer the facets from the API', async () => {
+  it('the genre and decade pickers offer the facets from the API', async () => {
     installFetch();
     renderApp('/library');
     await screen.findByText(/sorted by/);
@@ -32,11 +37,10 @@ describe('Library filters', () => {
     ).toEqual(['All', 'Crime', 'Drama', 'Sci-fi', 'Thriller']);
     const decade = screen.getByLabelText('Decade');
     expect(within(decade).getByRole('option', { name: '1970s' })).toHaveValue('1970');
-    const collection = screen.getByLabelText('Collection');
-    expect(within(collection).getByRole('option', { name: 'Three Colours' })).toHaveValue('3');
+    expect(screen.queryByLabelText('Collection')).not.toBeInTheDocument();
   });
 
-  it('choosing a genre, decade and collection refetches with each and keeps them in the URL', async () => {
+  it('choosing a genre and a decade refetches with each and keeps them in the URL', async () => {
     const fetchMock = installFetch();
     renderApp('/library');
     await screen.findByText(/sorted by/);
@@ -44,8 +48,6 @@ describe('Library filters', () => {
     await waitFor(() => expect(lastFilmsUrl(fetchMock)).toContain('genre=Sci-fi'));
     await userEvent.selectOptions(screen.getByLabelText('Decade'), '1970s');
     await waitFor(() => expect(lastFilmsUrl(fetchMock)).toContain('decade=1970'));
-    await userEvent.selectOptions(screen.getByLabelText('Collection'), 'Alien');
-    await waitFor(() => expect(lastFilmsUrl(fetchMock)).toContain('collection=1'));
     expect(lastFilmsUrl(fetchMock)).toContain('genre=Sci-fi');
     expect(lastFilmsUrl(fetchMock)).toContain('decade=1970');
   });
@@ -221,5 +223,184 @@ describe('Library states', () => {
     release(respond({ ...fixtures.films, total: 1, films: [fixtures.films.films[0]] }));
     await screen.findByText('1 film · sorted by recently added');
     expect(screen.queryByRole('link', { name: 'Alien, 1979, watched' })).not.toBeInTheDocument();
+  });
+});
+
+const tileNames = () =>
+  screen
+    .getAllByRole('link')
+    .filter((a) => /^\/(films|collections)\//.test(a.getAttribute('href')))
+    .map((a) => a.getAttribute('aria-label') || '');
+
+describe('Group collections', () => {
+  it('has a switch, off by default, and no tiles', async () => {
+    installFetch();
+    renderApp('/library');
+    await screen.findByText(/sorted by/);
+    expect(screen.getByRole('switch', { name: 'Group collections' })).not.toBeChecked();
+    expect(screen.queryByRole('link', { name: /collection of/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Alien, 1979, watched' })).toBeInTheDocument();
+  });
+
+  it('turning it on folds each collection into one tile and says so in the count', async () => {
+    installFetch();
+    renderApp('/library');
+    await screen.findByText(`${fixtures.films.total} films · sorted by recently added`);
+    await userEvent.click(screen.getByRole('switch', { name: 'Group collections' }));
+    // Alien + Alien 3 become one tile, the three Three Colours films another: 27 films, 24 - 2 ... tiles.
+    const tiles = fixtures.films.total - 1 - 2;
+    expect(
+      await screen.findByText(
+        `${fixtures.films.total} films in ${tiles} tiles · sorted by recently added`,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Alien, collection of 2 films' })).toHaveAttribute(
+      'href',
+      '/collections/1',
+    );
+    expect(
+      screen.getByRole('link', { name: 'The Three Colours, collection of 3 films' }),
+    ).toHaveAttribute('href', '/collections/3');
+    expect(screen.getByText('Collection · 3 films')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Alien, 1979, watched' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Heat, 1995' })).toBeInTheDocument();
+    expect(storage.getItem('cinefilm.library.groupCollections')).toBe('1');
+  });
+
+  it('turning it off again unfolds them', async () => {
+    installFetch();
+    renderApp('/library');
+    await screen.findByText(/sorted by/);
+    const toggle = screen.getByRole('switch', { name: 'Group collections' });
+    await userEvent.click(toggle);
+    await screen.findByRole('link', { name: 'Alien, collection of 2 films' });
+    await userEvent.click(toggle);
+    expect(await screen.findByRole('link', { name: 'Alien, 1979, watched' })).toBeInTheDocument();
+    expect(storage.getItem('cinefilm.library.groupCollections')).toBeNull();
+  });
+
+  it('starts on when it was left on', async () => {
+    storage.setItem('cinefilm.library.groupCollections', '1');
+    installFetch();
+    renderApp('/library');
+    expect(await screen.findByRole('switch', { name: 'Group collections' })).toBeChecked();
+    expect(
+      await screen.findByRole('link', { name: 'Alien, collection of 2 films' }),
+    ).toBeInTheDocument();
+  });
+
+  it('a search shows individual films even with the switch on', async () => {
+    storage.setItem('cinefilm.library.groupCollections', '1');
+    installFetch();
+    renderApp('/library?q=alien');
+    expect(await screen.findByText(/^2 films · sorted by/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Alien, 1979, watched' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Alien 3, 1992' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /collection of/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Group collections' })).toBeChecked();
+  });
+
+  it('a collection tile counts only the films that pass the filters', async () => {
+    storage.setItem('cinefilm.library.groupCollections', '1');
+    // As the server answers show=unwatched: only one Alien film passes, none of the Three Colours do.
+    installFetch((m, url) =>
+      url.includes('show=unwatched')
+        ? respond({
+            total: 2,
+            films: [
+              {
+                ...fixtures.films.films[0],
+                id: 117,
+                title: 'Alien 3',
+                sortTitle: 'alien 3',
+                year: 1992,
+                collectionId: 1,
+              },
+              {
+                ...fixtures.films.films[0],
+                id: 2,
+                title: 'Zodiac',
+                sortTitle: 'zodiac',
+                collectionId: null,
+              },
+            ],
+            facets: { genres: [], decades: [] },
+          })
+        : null,
+    );
+    renderApp('/library?show=unwatched');
+    expect(
+      await screen.findByRole('link', { name: 'Alien, collection of 1 film' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Collection · 1 film')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Three Colours/ })).not.toBeInTheDocument();
+    expect(
+      await screen.findByText('2 films in 2 tiles · sorted by recently added'),
+    ).toBeInTheDocument();
+  });
+
+  it('puts a collection under the title sort at its display name among the films', async () => {
+    storage.setItem('cinefilm.library.groupCollections', '1');
+    installFetch((m, url) =>
+      url.startsWith('/api/films?')
+        ? respond({
+            total: 4,
+            films: [
+              {
+                ...fixtures.films.films[0],
+                id: 1,
+                title: 'Aardvark',
+                sortTitle: 'aardvark',
+                collectionId: null,
+              },
+              {
+                ...fixtures.films.films[0],
+                id: 7,
+                title: 'Alien',
+                sortTitle: 'alien',
+                year: 1979,
+                collectionId: 1,
+              },
+              {
+                ...fixtures.films.films[0],
+                id: 117,
+                title: 'Alien 3',
+                year: 1992,
+                collectionId: 1,
+              },
+              { ...fixtures.films.films[0], id: 2, title: 'Zodiac', collectionId: null },
+            ],
+            facets: { genres: [], decades: [] },
+          })
+        : null,
+    );
+    renderApp('/library?sort=title');
+    await screen.findByRole('link', { name: 'Alien, collection of 2 films' });
+    expect(tileNames().map((n) => n.split(',')[0])).toEqual(['Aardvark', 'Alien', 'Zodiac']);
+    expect(await screen.findByText('4 films in 3 tiles · sorted by title')).toBeInTheDocument();
+  });
+
+  it('says "1 film in 1 tile" in the singular', async () => {
+    storage.setItem('cinefilm.library.groupCollections', '1');
+    installFetch((m, url) =>
+      url.startsWith('/api/films?')
+        ? respond({
+            total: 1,
+            films: [{ ...fixtures.films.films[0], collectionId: null }],
+            facets: { genres: [], decades: [] },
+          })
+        : null,
+    );
+    renderApp('/library');
+    expect(
+      await screen.findByText('1 film in 1 tile · sorted by recently added'),
+    ).toBeInTheDocument();
+  });
+
+  it('shows plain films while the collections are unavailable', async () => {
+    storage.setItem('cinefilm.library.groupCollections', '1');
+    installFetch((m, url) => (url === '/api/collections' ? respond(null, 500) : null));
+    renderApp('/library');
+    expect(await screen.findByRole('link', { name: 'Alien, 1979, watched' })).toBeInTheDocument();
   });
 });

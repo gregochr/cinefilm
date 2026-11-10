@@ -25,6 +25,15 @@ describe('EmptyLibrary', () => {
 });
 
 describe('NoResults', () => {
+  it('names another kind of thing and its own search hint', () => {
+    render(
+      <NoResults query="zz" noun="collections" hint="Search looks at names." onClear={() => {}} />,
+    );
+    expect(screen.getByText(/^No collections match “zz” with these filters/)).toHaveTextContent(
+      'Search looks at names.',
+    );
+  });
+
   it('quotes the query and offers to clear it', async () => {
     const onClear = vi.fn();
     render(<NoResults query="zzz" onClear={onClear} />);

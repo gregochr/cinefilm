@@ -49,6 +49,8 @@ describe('API resources', () => {
     const last = stubFetch();
     await peopleApi.get(11);
     expect(last()).toMatchObject({ path: '/api/people/11', method: 'GET' });
+    await collectionsApi.list();
+    expect(last()).toMatchObject({ path: '/api/collections', method: 'GET' });
     await collectionsApi.get(2);
     expect(last()).toMatchObject({ path: '/api/collections/2', method: 'GET' });
   });

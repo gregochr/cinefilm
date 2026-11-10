@@ -1,6 +1,5 @@
 package gregochr.cinefilm.home;
 
-import gregochr.cinefilm.collection.CollectionDtos.CollectionCard;
 import gregochr.cinefilm.film.FilmDtos.FilmCard;
 import java.util.List;
 
@@ -16,6 +15,6 @@ public final class HomeDtos {
 
     /** Everything the Home screen shows. */
     public record Home(FilmCard hero, List<FilmCard> continueWatching, List<FilmCard> recentlyAdded,
-                       List<FilmCard> notWatchedInYears, ThemeDto weeklyTheme, List<CollectionCard> collections) {
+                       List<FilmCard> notWatchedInYears, ThemeDto weeklyTheme) {
     }
 }

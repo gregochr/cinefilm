@@ -14,9 +14,15 @@ public final class FilmDtos {
     public record Progress(long positionMs, long runtimeMs, long editionId) {
     }
 
-    /** The compact film representation used in rows and grids. */
+    /**
+     * The compact film representation used in rows and grids. {@code collectionId} is set only on the library
+     * listing ({@code GET /api/films}) and only when the film's collection has at least
+     * {@code CollectionService.MIN_OWNED} films in the library; everywhere else it is null. {@code sortTitle} is the
+     * key the library sorts titles by (an import may set it to something other than the title).
+     */
     public record FilmCard(Long id, String title, Integer year, String posterPath, String backdropPath,
-                           boolean watched, Progress progress, String director) {
+                           boolean watched, Progress progress, String director, Long collectionId,
+                           String sortTitle) {
     }
 
     /** A director or actor reference. */
@@ -96,12 +102,8 @@ public final class FilmDtos {
                              Ratings ratings) {
     }
 
-    /** A collection entry in the library filter. */
-    public record CollectionFacet(Long id, String name) {
-    }
-
     /** The values the library filters can offer. */
-    public record Facets(List<String> genres, List<Integer> decades, List<CollectionFacet> collections) {
+    public record Facets(List<String> genres, List<Integer> decades) {
     }
 
     /** The library listing. */
