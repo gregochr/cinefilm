@@ -101,6 +101,16 @@ class FileNameParserTest {
     }
 
     @Test
+    void partSuffixesAfterABracketedOrBareYearAreRead() {
+        assertThat(parse("Movie (2002) pt1.mkv").partTag()).isEqualTo(1);
+        assertThat(parse("Movie (2002) pt2.mkv").partTag()).isEqualTo(2);
+        assertThat(parse("Movie (2002) part2.mkv").partTag()).isEqualTo(2);
+        assertThat(parse("Movie.2002.cd2.mkv").partTag()).isEqualTo(2);
+        assertThat(parse("Movie (2002) pt1.mkv").title()).isEqualTo("Movie");
+        assertThat(parse("Movie (2002).mkv").partTag()).isNull();
+    }
+
+    @Test
     void partNeedsASeparatorBeforeItAndTheNumberAtTheEnd() {
         assertThat(parse("Spt1.m4v").partTag()).isNull();
         assertThat(parse("pt1.m4v").partTag()).isNull();
