@@ -52,6 +52,7 @@ public class LibraryIngest {
     private static final Logger LOG = LoggerFactory.getLogger(LibraryIngest.class);
     private static final int NAME_MAX = 255;
     private static final int OVERVIEW_MAX = 4000;
+    private static final int IMDB_ID_MAX = 16;
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final FilmRepository films;
@@ -305,6 +306,7 @@ public class LibraryIngest {
         movie.genres().forEach(g -> film.getGenres().add(cut(g, 100)));
         film.setMatchStatus(MatchStatus.MATCHED);
         film.setMatchCandidates(null);
+        applyImdbId(film, movie.imdbId());
         film.setCollection(movie.collection() == null ? null : collection(movie.collection()));
         film.getCredits().clear();
         int order = 0;
@@ -467,6 +469,23 @@ public class LibraryIngest {
             stream.setFormat(s.format());
         }
         return new RemovedStreams(removedAudio, removedSubtitles);
+    }
+
+    /**
+     * Stores TMDB's IMDb id. A blank or missing id changes nothing (an id found earlier is kept); a different id means
+     * a different film, so the ratings fetched for the old one are dropped and will be fetched again.
+     */
+    private static void applyImdbId(Film film, String imdbId) {
+        if (imdbId == null || imdbId.isBlank() || imdbId.strip().length() > IMDB_ID_MAX
+            || imdbId.strip().equals(film.getImdbId())) {
+            return;
+        }
+        film.setImdbId(imdbId.strip());
+        film.setImdbRating(null);
+        film.setImdbVotes(null);
+        film.setRtScore(null);
+        film.setRtUrl(null);
+        film.setRatingsFetchedAt(null);
     }
 
     private static String cut(String text, int max) {

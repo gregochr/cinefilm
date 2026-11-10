@@ -178,7 +178,7 @@ class FilmsApiTest extends ApiTestBase {
     @Test
     void invalidQueryValuesAreBadRequests() throws Exception {
         mvc.perform(get("/api/films").param("sort", "popularity")).andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.error").value("sort must be title, year or added"));
+            .andExpect(jsonPath("$.error").value("sort must be title, year, added, imdb or rt"));
         mvc.perform(get("/api/films").param("show", "seen")).andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.error").value("show must be all, unwatched or watched"));
         mvc.perform(get("/api/films").param("decade", "seventies")).andExpect(status().isBadRequest())

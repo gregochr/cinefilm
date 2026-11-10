@@ -43,6 +43,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 import tools.jackson.databind.json.JsonMapper;
 
 /** The import's orchestration, with Plex, TMDB, the artwork store and the database faked. */
@@ -63,6 +64,7 @@ class PlexImportServiceTest {
     private final ArtworkStore artwork = mock(ArtworkStore.class);
     private final ScanRunRepository scans = mock(ScanRunRepository.class);
     private final PlexImportRunRepository runs = mock(PlexImportRunRepository.class);
+    private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
     private final LibraryLock lock = new LibraryLock();
     private final List<PlexImportRun> saved = new ArrayList<>();
     private PlexImportService service;
@@ -70,7 +72,7 @@ class PlexImportServiceTest {
     @BeforeEach
     void setUp() {
         service = new PlexImportService(plex, tmdb, ingest, writer, artwork, scans, runs, lock, Runnable::run,
-            CLOCK, PREFIX.substring(0, PREFIX.length() - 1));
+            CLOCK, PREFIX.substring(0, PREFIX.length() - 1), events);
         when(plex.configured()).thenReturn(true);
         when(scans.existsByFinishedAtNotNullAndErrorIsNull()).thenReturn(true);
         when(runs.save(any(PlexImportRun.class))).thenAnswer(call -> {
@@ -151,7 +153,7 @@ class PlexImportServiceTest {
             throw new RejectedExecutionException("shutting down");
         };
         PlexImportService stopped = new PlexImportService(plex, tmdb, ingest, writer, artwork, scans, runs, lock,
-            refusing, CLOCK, PREFIX);
+            refusing, CLOCK, PREFIX, events);
 
         assertThatThrownBy(stopped::start).isInstanceOf(RejectedExecutionException.class);
         assertThat(lock.holder()).isNull();
@@ -344,6 +346,15 @@ class PlexImportServiceTest {
         verifyNoInteractions(writer);
         verify(plex, never()).image(THUMB, 600, 900);
         assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void aFinishedImportPublishesPlexImportFinishedWhetherOrNotItFailed() {
+        when(plex.movieSections()).thenThrow(new PlexException("Plex is not reachable", null));
+
+        service.start();
+
+        verify(events).publishEvent(new PlexImportFinished());
     }
 
     @Test
@@ -660,7 +671,7 @@ class PlexImportServiceTest {
     void theProgressStartsAtZeroAsSoonAsTheImportIsAccepted() {
         List<Runnable> queued = new ArrayList<>();
         PlexImportService deferred = new PlexImportService(plex, tmdb, ingest, writer, artwork, scans, runs, lock,
-            queued::add, CLOCK, PREFIX);
+            queued::add, CLOCK, PREFIX, events);
         when(runs.findFirstByFinishedAtNotNullOrderByIdDesc()).thenReturn(Optional.empty());
 
         deferred.start();

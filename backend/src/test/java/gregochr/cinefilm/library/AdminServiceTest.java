@@ -19,6 +19,7 @@ import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.library.AdminDtos.Attention;
 import gregochr.cinefilm.library.AdminDtos.AttentionItem;
 import gregochr.cinefilm.library.AdminDtos.ScanStatusDto;
+import gregochr.cinefilm.ratings.RatingsRefresher;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -36,12 +37,44 @@ class AdminServiceTest extends ApiTestBase {
     private MediaFileRepository mediaFiles;
 
     private ScanService scans;
+    private RatingsRefresher ratings;
     private AdminService admin;
 
     @BeforeEach
     void setUp() {
         scans = mock(ScanService.class);
-        admin = new AdminService(scans, runs, films, mediaFiles, new LibraryRoot("/media/films"));
+        ratings = mock(RatingsRefresher.class);
+        admin = new AdminService(scans, runs, films, mediaFiles, new LibraryRoot("/media/films"), ratings);
+    }
+
+    @Test
+    void theStatusReportsWhenRatingsWereLastFetchedForAnyFilmAndWhetherARefreshRuns() {
+        Film older = saved("Older", 2000, "a.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.PRESENT);
+        older.setRatingsFetchedAt(NOW.minus(Duration.ofDays(3)));
+        films.save(older);
+        Film newer = saved("Newer", 2001, "b.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.PRESENT);
+        newer.setRatingsFetchedAt(NOW.minus(Duration.ofDays(1)));
+        films.save(newer);
+        saved("Never", 2002, "c.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.PRESENT);
+        when(ratings.isRunning()).thenReturn(true);
+        when(ratings.enabled()).thenReturn(true);
+
+        ScanStatusDto status = admin.status();
+
+        assertThat(status.ratingsLastRefreshedAt()).isEqualTo(NOW.minus(Duration.ofDays(1)));
+        assertThat(status.ratingsRunning()).isTrue();
+        assertThat(status.ratingsEnabled()).isTrue();
+    }
+
+    @Test
+    void theStatusSaysRatingsWereNeverRefreshedWhenNoFilmHasBeenStamped() {
+        saved("Never", 2002, "c.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.PRESENT);
+
+        ScanStatusDto status = admin.status();
+
+        assertThat(status.ratingsLastRefreshedAt()).isNull();
+        assertThat(status.ratingsRunning()).isFalse();
+        assertThat(status.ratingsEnabled()).isFalse();
     }
 
     private Film saved(String title, Integer year, String path, MatchStatus status, Playability playability,

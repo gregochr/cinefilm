@@ -33,6 +33,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
@@ -64,13 +65,15 @@ public class PlexImportService {
     private final Executor executor;
     private final Clock clock;
     private final String prefix;
+    private final ApplicationEventPublisher events;
     private final AtomicReference<PlexProgress> progress = new AtomicReference<>();
 
     /** Creates the service; the executor runs imports in the background and the lock keeps them apart from scans. */
     public PlexImportService(PlexApi plex, TmdbApi tmdb, LibraryIngest ingest, PlexFilmWriter writer,
                              ArtworkStore artwork, ScanRunRepository scans, PlexImportRunRepository runs,
                              LibraryLock lock, @Qualifier("plexImportExecutor") Executor executor, Clock clock,
-                             @Value("${cinefilm.plex.path-prefix}") String pathPrefix) {
+                             @Value("${cinefilm.plex.path-prefix}") String pathPrefix,
+                             ApplicationEventPublisher events) {
         this.plex = plex;
         this.tmdb = tmdb;
         this.ingest = ingest;
@@ -82,6 +85,7 @@ public class PlexImportService {
         this.executor = executor;
         this.clock = clock;
         this.prefix = PlexRules.prefix(pathPrefix);
+        this.events = events;
     }
 
     /** A Plex film and the CineFilm files it pairs with, in the order Plex lists them. */
@@ -167,6 +171,7 @@ public class PlexImportService {
         run.setFinishedAt(clock.instant());
         runs.save(run);
         LOG.info("Plex import finished, note: {}", run.getError());
+        events.publishEvent(new PlexImportFinished());
     }
 
     /** The counters and capped lists of one import. */

@@ -54,6 +54,7 @@ export const sessionApi = {
 export const adminApi = {
   scan: (options) => get('/api/admin/scan', options),
   startScan: () => post('/api/admin/scan'),
+  startRatingsRefresh: () => post('/api/admin/ratings/refresh'),
   attention: (options) => get('/api/admin/attention', options),
   plex: (options) => get('/api/admin/plex', options),
   startPlexImport: () => post('/api/admin/plex/import'),

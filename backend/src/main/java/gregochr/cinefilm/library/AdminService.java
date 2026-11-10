@@ -15,6 +15,7 @@ import gregochr.cinefilm.library.AdminDtos.CountsDto;
 import gregochr.cinefilm.library.AdminDtos.LastScanDto;
 import gregochr.cinefilm.library.AdminDtos.ProgressDto;
 import gregochr.cinefilm.library.AdminDtos.ScanStatusDto;
+import gregochr.cinefilm.ratings.RatingsRefresher;
 import gregochr.cinefilm.tmdb.MatchOutcome.Candidate;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,10 +36,12 @@ public class AdminService {
     private final FilmRepository films;
     private final MediaFileRepository files;
     private final LibraryRoot root;
+    private final RatingsRefresher ratings;
 
-    /** Creates the service over the scan service, the repositories and the library root. */
+    /** Creates the service over the scan service, the repositories, the library root and the ratings refresher. */
     public AdminService(ScanService scans, ScanRunRepository runs, FilmRepository films,
-                        MediaFileRepository files, LibraryRoot root) {
+                        MediaFileRepository files, LibraryRoot root, RatingsRefresher ratings) {
+        this.ratings = ratings;
         this.scans = scans;
         this.runs = runs;
         this.films = films;
@@ -62,7 +65,7 @@ public class AdminService {
             files.countPresent(Playability.UNREADABLE));
         return new ScanStatusDto(scans.isRunning(), root.root().toString(),
             progress == null ? null : new ProgressDto(progress.processed(), progress.total(), progress.current()),
-            last, counts);
+            last, counts, films.findLatestRatingsFetchedAt(), ratings.isRunning(), ratings.enabled());
     }
 
     /** Films needing attention: no match, protected, needs conversion, unreadable, several files for one film. */
