@@ -15,6 +15,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -82,6 +84,36 @@ class ArtworkControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("No such artwork"));
         }
+    }
+
+    @Test
+    void aSixtyThreeOrSixtyFiveCharacterOrEmptyStemReachesTheControllerAnd404sWithTheNormalBody() throws Exception {
+        String hash = jpg.substring(0, 64);
+        for (String name : new String[] {hash.substring(1) + ".jpg", hash + "0.jpg", ".jpg", "x.jpg"}) {
+            mvc.perform(get("/api/art/" + name).with(user("owner")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("No such artwork"));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"..%2Fx", "..%2Fx.jpg", "%2Fetc%2Fpasswd"})
+    void encodedSlashesAreRejectedByTheFirewallBeforeTheController(String name) throws Exception {
+        mvc.perform(get("/api/art/" + name).with(user("owner")))
+            .andExpect(status().isBadRequest())
+            .andExpect(content().string(""));
+    }
+
+    @Test
+    void anAbsolutePathAfterThePrefixMatchesNoRouteSoNoControllerRuns() throws Exception {
+        var result = mvc.perform(get("/api/art//etc/passwd").with(user("owner")))
+            .andExpect(status().isNotFound())
+            .andExpect(content().string(""))
+            .andReturn();
+
+        // Only the static-resource fallback saw it; no controller method was mapped.
+        org.assertj.core.api.Assertions.assertThat(result.getHandler())
+            .isNotInstanceOf(org.springframework.web.method.HandlerMethod.class);
     }
 
     @Test

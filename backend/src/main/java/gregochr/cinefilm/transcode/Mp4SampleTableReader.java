@@ -251,8 +251,9 @@ public class Mp4SampleTableReader {
         int entrySize = wide ? 20 : 12;
         long count = moov.getInt(elst.start() + 4) & 0xFFFFFFFFL;
         require(count <= MAX_ENTRIES && 8 + count * entrySize <= elst.length(), "elst entries do not fit");
+        int entries = Math.toIntExact(count);
         long delayTicks = 0;
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < entries; i++) {
             int at = elst.start() + 8 + i * entrySize;
             long duration = wide ? moov.getLong(at) : moov.getInt(at) & 0xFFFFFFFFL;
             long mediaTime = wide ? moov.getLong(at + 8) : moov.getInt(at + 4);
