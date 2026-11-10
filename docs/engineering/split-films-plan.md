@@ -318,6 +318,19 @@ video", and the owner's play-through of a join in Safari (Mac, iPhone) and Chrom
 - **Grouping report**: the newest 20 `grouping_change` rows under the scan panel.
 - Tests: the attention rules; Fix match search/apply/join/503/409; report listing.
 
+**As built (phase 5).** `FixMatch` (service) + `FixMatchController`; `GET /api/admin/grouping-report` returns
+`{ items }` (newest 20). The lock holder for Fix match is `LibraryLock.MATCH`; only apply takes the lock (409 "A scan is
+running" for any holder; search only reads TMDB, so it works during a scan and a React StrictMode double search cannot
+collide with itself), and a scan refused because of a match says "A match is being fixed". TMDB trouble is a new
+`ServiceUnavailableException` (503). Joining into an existing film goes through the new `EditionJoin.joinFilms`
+(which delegates to `LibraryIngest.merge`; the title guard is not applied) and writes a `join` report line. The
+survivor's editions are not part-joined: the owner arranges them in phase 6. `multiple-files` detail lines: "Files
+look like different films", "The edition tags in a file name and its folder disagree", "Duplicate part numbers: N",
+"Parts found: 1, 3, missing: 2", "N untagged versions of one film[, runtimes differ by P%]" (several are joined with
+"; "). Part checks run per edition tag across the film's files. `parts-mismatch` is not exempted by
+`editions_confirmed` (a technical fact) and shows PartsMatch's first difference. The Fix match panel opens as a card
+below the grid (per the handover) and its apply button reads "Use this match", as in the handover.
+
 ## Phase 6 — Edit editions panel
 
 - `GET /api/admin/films/{id}/editions` → files (id, fileName, durationMs, width, height, videoCodec, sizeBytes,

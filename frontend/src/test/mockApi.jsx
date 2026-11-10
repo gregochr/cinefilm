@@ -11,6 +11,8 @@ import heat from './fixtures/film-heat.json';
 import wickerMan from './fixtures/film-wicker-man.json';
 import adminAttention from './fixtures/admin-attention.json';
 import adminScan from './fixtures/admin-scan.json';
+import adminGrouping from './fixtures/admin-grouping.json';
+import adminMatch from './fixtures/admin-match.json';
 import adminPlex from './fixtures/admin-plex.json';
 import adminTranscoding from './fixtures/admin-transcoding.json';
 import session from './fixtures/session.json';
@@ -29,6 +31,8 @@ export const fixtures = {
   collections,
   adminScan,
   adminAttention,
+  adminGrouping,
+  adminMatch,
   adminPlex,
   adminTranscoding,
   session,
@@ -79,6 +83,10 @@ export function defaultRoute(method, url) {
   if (path === '/api/admin/ratings/refresh')
     return json({ ...adminScan, ratingsRunning: true }, 202);
   if (path === '/api/admin/attention') return json(adminAttention);
+  if (path === '/api/admin/grouping-report') return json(adminGrouping);
+  if (/^\/api\/admin\/films\/\d+\/match$/.test(path)) {
+    return method === 'POST' ? json({ filmId: 31, joined: false }) : json(adminMatch);
+  }
   if (path === '/api/admin/plex') {
     return method === 'POST'
       ? json({ ...adminPlex, running: true }, 202)

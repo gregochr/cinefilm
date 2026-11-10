@@ -746,6 +746,116 @@
   flex: none;
 }
 
+/* Admin: Fix match */
+.admin__item-actions {
+  margin-top: 10px;
+}
+.fixmatch {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.fixmatch__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 16px;
+}
+.fixmatch__title {
+  font-family: var(--cf-font-display);
+  font-weight: 400;
+  font-size: 32px;
+}
+.fixmatch__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+.fixmatch__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--cf-text-muted);
+  font-size: var(--cf-size-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.fixmatch__field--query {
+  flex: 1 1 280px;
+  max-width: 560px;
+}
+.fixmatch__field--year {
+  width: 120px;
+}
+.fixmatch__input {
+  height: 44px;
+  padding: 0 12px;
+  background: var(--cf-surface-2);
+  color: var(--cf-text);
+  border: 1px solid var(--cf-line);
+  border-radius: 8px;
+  font-size: 15px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.fixmatch__results {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.fixmatch__results legend {
+  margin-bottom: 10px;
+}
+.fixmatch__result {
+  display: grid;
+  grid-template-columns: 20px 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  border-radius: var(--cf-radius-card);
+  border: 1px solid var(--cf-line);
+  cursor: pointer;
+}
+.fixmatch__result--on {
+  background: var(--cf-surface-3);
+  border-color: var(--cf-line-strong);
+}
+.fixmatch__result:has(input:focus-visible) {
+  box-shadow: var(--cf-focus-ring);
+}
+.fixmatch__result input {
+  accent-color: var(--cf-amber);
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+.fixmatch__result input:focus-visible {
+  box-shadow: none;
+}
+.fixmatch__poster {
+  width: 48px;
+  aspect-ratio: 2 / 3;
+  border-radius: 4px;
+  object-fit: cover;
+  background: var(--cf-surface-2);
+}
+.fixmatch__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.fixmatch__name {
+  font-weight: 500;
+}
+.fixmatch__runtime {
+  color: var(--cf-text-muted);
+}
+
 /* Phone */
 @media (max-width: 600px) {
   .hero {

@@ -1,12 +1,13 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Button } from '../components/Button.jsx';
 import { SkeletonBlock } from '../components/Skeleton.jsx';
+import FixMatchPanel from '../components/FixMatchPanel.jsx';
 import TranscodingPanel from '../components/TranscodingPanel.jsx';
 import { ErrorState } from '../components/StateMessages.jsx';
 import { formatRuntime } from '../player/time.js';
 import { useSignOut } from '../state/useSignOut.js';
-import { useAttention, usePlexImport, useScan } from '../state/useAdmin.js';
+import { useAttention, useGroupingReport, usePlexImport, useScan } from '../state/useAdmin.js';
 import {
   describeLastImport,
   moreText,
@@ -17,6 +18,7 @@ import {
 } from '../state/plexFormat.js';
 import { describeRatingsRefresh } from '../state/ratings.js';
 import {
+  changeLabel,
   countTiles,
   describeLastScan,
   formatScanTime,
@@ -262,7 +264,7 @@ function Candidates({ candidates }) {
   );
 }
 
-function AttentionPanel({ attention, loading, error, onRetry }) {
+function AttentionPanel({ attention, loading, error, onRetry, onFixMatch }) {
   let body;
   if (loading && !attention) {
     body = (
@@ -288,6 +290,11 @@ function AttentionPanel({ attention, loading, error, onRetry }) {
             <div className="admin__item-detail">{item.detail}</div>
             <div className="admin__item-files admin__mono">{item.files.join(' · ')}</div>
             {item.candidates.length > 0 ? <Candidates candidates={item.candidates} /> : null}
+            {item.kind === 'needs-match' ? (
+              <div className="admin__actions admin__item-actions">
+                <Button onClick={() => onFixMatch(item)}>Fix match</Button>
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>
@@ -298,6 +305,45 @@ function AttentionPanel({ attention, loading, error, onRetry }) {
       <div className="admin__head">
         <h2 id="admin-attention-title" className="admin__title">
           Films needing attention
+        </h2>
+      </div>
+      {body}
+    </section>
+  );
+}
+
+function GroupingReport({ report, loading, error, onRetry }) {
+  let body = null;
+  if (loading && !report) {
+    body = (
+      <div role="status" aria-label="Loading">
+        <SkeletonBlock style={{ height: 60 }} />
+      </div>
+    );
+  } else if (error && !report) {
+    body = <ErrorState onRetry={onRetry}>Couldn&rsquo;t load the grouping report.</ErrorState>;
+  } else if (report && report.items.length === 0) {
+    body = <p className="admin__text">Nothing has been grouped or split yet.</p>;
+  } else if (report) {
+    body = (
+      <ul className="admin__list" aria-label="Grouping changes">
+        {report.items.map((change, i) => (
+          <li key={`${i}-${change.happenedAt}`} className="admin__item">
+            <div className="admin__item-head">
+              <span className="admin__tag">{changeLabel(change.kind)}</span>
+              <span className="admin__mono admin__text">{formatScanTime(change.happenedAt)}</span>
+            </div>
+            <div className="admin__item-detail">{change.summary}</div>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return (
+    <section className="admin__card" aria-labelledby="admin-grouping-title">
+      <div className="admin__head">
+        <h2 id="admin-grouping-title" className="admin__title">
+          Grouping report
         </h2>
       </div>
       {body}
@@ -379,7 +425,18 @@ export default function Admin() {
   const attention = useAttention(
     `${scan?.lastScan?.finishedAt ?? 'never'}|${plexImport.plex?.lastImport?.finishedAt ?? 'none'}`,
   );
+  const grouping = useGroupingReport(
+    `${scan?.lastScan?.finishedAt ?? 'never'}|${plexImport.plex?.lastImport?.finishedAt ?? 'none'}`,
+  );
+  const [fixing, setFixing] = useState(null);
   const { hash } = useLocation();
+
+  const applied = (result, stale) => {
+    if (!stale) setFixing(null);
+    attention.reload();
+    grouping.reload();
+    reload();
+  };
 
   useEffect(() => {
     if (hash === '#library-scan') {
@@ -408,6 +465,13 @@ export default function Admin() {
           loading={attention.loading}
           error={attention.error}
           onRetry={attention.reload}
+          onFixMatch={setFixing}
+        />
+        <GroupingReport
+          report={grouping.data}
+          loading={grouping.loading}
+          error={grouping.error}
+          onRetry={grouping.reload}
         />
         <PlexPanel
           plex={plexImport.plex}
@@ -419,6 +483,14 @@ export default function Admin() {
         <TranscodingPanel />
         <SessionPanel />
       </div>
+      {fixing ? (
+        <FixMatchPanel
+          key={fixing.filmId}
+          item={fixing}
+          onApplied={applied}
+          onCancel={() => setFixing(null)}
+        />
+      ) : null}
       <p className="admin__credit">
         <TmdbMark />
         <span>This product uses the TMDB API but is not endorsed or certified by TMDB.</span>

@@ -137,6 +137,20 @@ public class EditionJoin {
     }
 
     /**
+     * Folds one whole film into another because the owner said they are the same film (Fix match): every edition,
+     * with its files and state, and the remembered choices move to the survivor, and the emptied film goes. No
+     * different-film guard applies, this is the owner's explicit decision. The persistence context is cleared:
+     * reload afterwards.
+     *
+     * @param fromId the film that goes away
+     * @param toId the film that keeps everything
+     */
+    @Transactional
+    public void joinFilms(Long fromId, Long toId) {
+        ingest.merge(fromId, toId);
+    }
+
+    /**
      * Splits one multi-part edition into several: the first group keeps the edition (and its id and name), every other
      * group becomes a new edition of the same film with the same name. State, runtimes, part numbers and the credits
      * marker follow the {@link StateFolding} unfolding rules.

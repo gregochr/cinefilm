@@ -1,6 +1,7 @@
 package gregochr.cinefilm.library;
 
 import gregochr.cinefilm.library.AdminDtos.Attention;
+import gregochr.cinefilm.library.AdminDtos.GroupingReport;
 import gregochr.cinefilm.library.AdminDtos.ScanStatusDto;
 import gregochr.cinefilm.ratings.RatingsRefresher;
 import org.springframework.http.HttpStatus;
@@ -46,5 +47,10 @@ public class AdminController {
     @GetMapping("/api/admin/attention")
     Attention attention() {
         return admin.attention();
+    }
+
+    @GetMapping("/api/admin/grouping-report")
+    GroupingReport groupingReport() {
+        return admin.groupingReport();
     }
 }

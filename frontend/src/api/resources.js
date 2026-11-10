@@ -63,6 +63,14 @@ export const adminApi = {
   startScan: () => post('/api/admin/scan'),
   startRatingsRefresh: () => post('/api/admin/ratings/refresh'),
   attention: (options) => get('/api/admin/attention', options),
+  groupingReport: (options) => get('/api/admin/grouping-report', options),
+  /** TMDB results (at most 8, with details) for the Fix match panel. `year` is optional. */
+  matchSearch: (filmId, { query, year }, options) => {
+    const params = new URLSearchParams({ query });
+    if (year) params.set('year', String(year));
+    return get(`/api/admin/films/${filmId}/match?${params}`, options);
+  },
+  applyMatch: (filmId, tmdbId) => post(`/api/admin/films/${filmId}/match`, { tmdbId }),
   plex: (options) => get('/api/admin/plex', options),
   startPlexImport: () => post('/api/admin/plex/import'),
   transcoding: (options) => get('/api/admin/transcoding', options),
