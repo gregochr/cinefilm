@@ -43,7 +43,7 @@ function Skeleton() {
   );
 }
 
-function Row({ item, fixed, ids, onEdition, onName, onPart, onNot }) {
+function Row({ item, fixed, ids, locked, onEdition, onName, onPart, onNot }) {
   const { file, row, isNew, nameError } = item;
   const nameId = `${ids.base}-name-${file.id}`;
   const partDescribed = item.partsInError ? ids.partsError : undefined;
@@ -63,6 +63,7 @@ function Row({ item, fixed, ids, onEdition, onName, onPart, onNot }) {
         <select
           id={`${ids.base}-ed-${file.id}`}
           className="ee__select"
+          disabled={locked}
           value={row.edition}
           onChange={(event) => onEdition(file.id, event.target.value)}
         >
@@ -83,6 +84,7 @@ function Row({ item, fixed, ids, onEdition, onName, onPart, onNot }) {
                 aria-describedby={nameError ? nameId : undefined}
                 className={`ee__input${nameError ? ' ee__input--bad' : ''}`}
                 maxLength={32}
+                disabled={locked}
                 placeholder="Edition name"
                 value={row.newName}
                 onChange={(event) => onName(file.id, event.target.value)}
@@ -108,6 +110,7 @@ function Row({ item, fixed, ids, onEdition, onName, onPart, onNot }) {
           className={`ee__select${item.partsInError ? ' ee__select--bad' : ''}`}
           aria-invalid={item.partsInError ? 'true' : undefined}
           aria-describedby={partDescribed}
+          disabled={locked}
           value={row.part}
           onChange={(event) => onPart(file.id, event.target.value)}
         >
@@ -119,7 +122,12 @@ function Row({ item, fixed, ids, onEdition, onName, onPart, onNot }) {
         </select>
       </div>
       <div className="ee__not-cell">
-        <button type="button" className="ee__pill" onClick={() => onNot(file.id, true)}>
+        <button
+          type="button"
+          className="ee__pill"
+          disabled={locked}
+          onClick={() => onNot(file.id, true)}
+        >
           Not this film
         </button>
       </div>
@@ -148,6 +156,7 @@ function Groups({ edit, ids }) {
             item={{ ...item, partsInError: group.partsInError }}
             fixed={fixed}
             ids={{ base: ids.base, partsError }}
+            locked={edit.saving}
             onEdition={edit.setEdition}
             onName={edit.setNewName}
             onPart={edit.setPart}
@@ -159,7 +168,7 @@ function Groups({ edit, ids }) {
   });
 }
 
-function NotThisFilm({ files, onBack }) {
+function NotThisFilm({ files, locked, onBack }) {
   if (files.length === 0) return null;
   return (
     <section aria-label="Not this film" className="ee__group ee__group--not">
@@ -179,6 +188,7 @@ function NotThisFilm({ files, onBack }) {
           <button
             type="button"
             className="ee__pill ee__pill--small"
+            disabled={locked}
             onClick={() => onBack(file.id, false)}
           >
             Move back
@@ -206,6 +216,7 @@ function Defaults({ edit, ids }) {
               name={`${ids.base}-default`}
               className="ee__radio"
               checked={d.on}
+              disabled={edit.saving}
               aria-describedby={described}
               onChange={() => edit.setDefault(d.name)}
             />
@@ -266,7 +277,7 @@ function Body({ edit, ids }) {
         </div>
       ) : null}
       <Groups edit={edit} ids={ids} />
-      <NotThisFilm files={view.notRows} onBack={edit.setNot} />
+      <NotThisFilm files={view.notRows} locked={edit.saving} onBack={edit.setNot} />
       <Defaults edit={edit} ids={ids} />
     </div>
   );

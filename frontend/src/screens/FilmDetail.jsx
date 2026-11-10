@@ -291,6 +291,7 @@ export default function FilmDetail() {
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
+            actions.clearOverrides();
             reload();
             toast.show('Editions saved');
           }}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { adminApi } from '../api/resources.js';
 import {
   describeModel,
@@ -23,6 +23,8 @@ export function useEditEditions(filmId, onSaved) {
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState(null);
   const [attempt, setAttempt] = useState(0);
+  // Set the moment a save starts, so an edit made before the next render is ignored as well.
+  const inFlight = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -47,12 +49,14 @@ export function useEditEditions(filmId, onSaved) {
   );
 
   const edit = useCallback((change) => {
+    if (inFlight.current) return;
     setModel((m) => change(m));
     setServerErrors([]);
   }, []);
 
   const save = useCallback(async () => {
-    if (!view || view.errorCount > 0 || saving) return;
+    if (!view || view.errorCount > 0 || inFlight.current) return;
+    inFlight.current = true;
     setSaving(true);
     setProblem(null);
     try {
@@ -63,9 +67,10 @@ export function useEditEditions(filmId, onSaved) {
       setProblem(failed.text);
       setServerErrors(failed.fieldErrors);
     } finally {
+      inFlight.current = false;
       setSaving(false);
     }
-  }, [view, saving, filmId, onSaved]);
+  }, [view, filmId, onSaved]);
 
   return {
     status: load.status,

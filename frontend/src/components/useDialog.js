@@ -36,6 +36,9 @@ export function useDialog({ onEscape, opener }) {
     const onKeyDown = (event) => {
       const dialog = dialogRef.current;
       if (!dialog) return;
+      // Another modal on top (the sign-in card) owns the keyboard while focus is inside it.
+      const over = document.activeElement?.closest?.('[aria-modal="true"]');
+      if (over && over !== dialog) return;
       if (event.key === 'Escape') {
         event.preventDefault();
         escape.current();

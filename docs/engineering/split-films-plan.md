@@ -367,10 +367,12 @@ below the grid (per the handover) and its apply button reads "Use this match", a
 - **State on save** (`StateCarry`, pure, over the `StateFolding` and `EditionTimeline` rules `EditionJoin` uses). A kept
   edition keeps its id, so its history stays, and a renamed edition keeps it because the panel sends the edition's id with
   the new name (a "New edition…" that takes over the files of an emptied edition adopts its id). When files move between
-  editions the state follows the files: each old edition's state and credits marker are relocated across the editions its
-  files went to (`StateFolding.unfold`/`relocate`), then the pieces landing in one edition are folded onto its new timeline
-  (`StateFolding.fold`), positions and the last part's marker shifted by the part start (`timelineDurationMs`), watched only
-  when the edition holding the last part was watched. So pt1 and pt2 joined from two editions give pt2's 5 min the position
+  editions the state follows the files, placed per file: the position and the credits marker are located in the old
+  edition's own timeline (the file and the offset inside it), moved onto that file's start on the new edition's timeline
+  (`EditionTimeline`, `timelineDurationMs`), and the pieces landing in one edition are folded (`StateFolding.fold`:
+  watched only when the edition holding the last part was watched, furthest progress otherwise). Reordering parts or
+  interleaving files from two editions therefore keeps every position in its file; a watched edition is watched for the
+  files it had. The marker is kept only when it is in the new edition's last file. So pt1 and pt2 joined from two editions give pt2's 5 min the position
   partStart + 5 min. A new edition made from an emptied edition's files inherits that share. State is lost only where it is
   truly gone: an edition whose files all go to Not this film or that is removed, or a resume position that sat in a file
   that left. An edition with a file of no known duration cannot be folded: its position is only clamped to the new runtime

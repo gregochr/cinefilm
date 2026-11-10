@@ -1,7 +1,6 @@
 package gregochr.cinefilm.library;
 
 import gregochr.cinefilm.film.EditionTimeline;
-import gregochr.cinefilm.library.StateFolding.Located;
 import gregochr.cinefilm.library.StateFolding.Source;
 import gregochr.cinefilm.library.StateFolding.State;
 import java.util.ArrayList;
@@ -12,10 +11,12 @@ import java.util.Map;
 
 /**
  * Carries playback state and credits markers from the editions as they were to the editions as the owner arranged
- * them (Edit editions), with the same rules {@link EditionJoin} uses: the files of an old edition that go to several
- * new editions are relocated with {@link StateFolding#unfold}, and the pieces that land in one new edition are folded
- * onto its timeline with {@link StateFolding#fold}, positions and markers shifted by the part start from
- * {@link EditionTimeline}. Pure: nothing is read or written.
+ * them (Edit editions). Every position is placed by <em>file</em>, so reordering or interleaving files cannot shift it:
+ * the position (and the marker) is located in the old edition's own timeline, which gives the file it was in and the
+ * offset inside that file; that offset is moved onto the file's start on the new edition's timeline
+ * ({@link EditionTimeline}); and the pieces landing in one edition are folded with {@link StateFolding#fold}, so
+ * watched and furthest-progress merge by the same rules as a join. A watched edition is watched for the files it had
+ * (it goes where its last file went). Pure: nothing is read or written.
  */
 final class StateCarry {
 
@@ -34,13 +35,15 @@ final class StateCarry {
     }
 
     /**
-     * What one old edition hands to one new edition.
+     * What one old edition hands to one new edition: either a state (whose position is the offset inside its one file,
+     * or 0 for a watched state spanning all of {@code fileIds}) or a credits marker placed in one file.
      *
-     * @param state the state relocated to the files that went there, or null
-     * @param markerMs the credits marker on those files' own timeline, or null
-     * @param fileIds those files in their old order
+     * @param state the state, or null for a marker piece
+     * @param fileIds the files the state covers
+     * @param markerFileId the file the credits marker is in, or null
+     * @param markerOffsetMs the marker's offset inside that file
      */
-    record Piece(State state, Long markerMs, List<Long> fileIds) {
+    record Piece(State state, List<Long> fileIds, Long markerFileId, Long markerOffsetMs) {
     }
 
     /**
@@ -53,8 +56,8 @@ final class StateCarry {
     }
 
     /**
-     * Splits each old edition's state and marker across the new editions its files went to. Files that go nowhere (Not
-     * this film) take their share with them. An edition with a file of no known duration is not carried.
+     * Places each old edition's state and marker in the new edition its file went to. What was in a file that leaves
+     * the film leaves with it. An edition with a file of no known duration is not carried.
      *
      * @param olds the old editions
      * @param targetOfFile the new edition of each file, null for a file that leaves the film
@@ -66,28 +69,38 @@ final class StateCarry {
             if ((old.state() == null && old.markerMs() == null) || !usable(old.durations())) {
                 continue;
             }
-            Map<Long, List<Integer>> byTarget = new LinkedHashMap<>();
-            for (int i = 0; i < old.fileIds().size(); i++) {
-                byTarget.computeIfAbsent(targetOfFile.get(old.fileIds().get(i)), k -> new ArrayList<>()).add(i);
+            EditionTimeline timeline = EditionTimeline.of(old.durations());
+            State state = old.state();
+            if (state != null && state.watched()) {
+                Long target = targetOfFile.get(old.fileIds().get(old.fileIds().size() - 1));
+                List<Long> there = old.fileIds().stream()
+                    .filter(f -> target != null && target.equals(targetOfFile.get(f))).toList();
+                add(pieces, target, new Piece(state, there, null, null));
+            } else if (state != null) {
+                EditionTimeline.Position at = timeline.locate(state.positionMs());
+                Long file = old.fileIds().get(at.partIndex());
+                State inFile = new State(at.offsetMs(), false, null, state.lastPlayedAt(), state.hidden(),
+                    state.hiddenAt());
+                add(pieces, targetOfFile.get(file), new Piece(inFile, List.of(file), null, null));
             }
-            List<Long> targets = new ArrayList<>(byTarget.keySet());
-            List<List<Integer>> groups = new ArrayList<>(byTarget.values());
-            List<State> states = StateFolding.unfold(old.state(), old.durations(), groups);
-            Located marker = old.markerMs() == null ? null
-                : StateFolding.relocate(old.markerMs(), old.durations(), groups);
-            for (int g = 0; g < groups.size(); g++) {
-                Long marked = marker != null && marker.group() == g ? marker.positionMs() : null;
-                if (targets.get(g) != null && (states.get(g) != null || marked != null)) {
-                    pieces.computeIfAbsent(targets.get(g), k -> new ArrayList<>()).add(new Piece(states.get(g),
-                        marked, groups.get(g).stream().map(old.fileIds()::get).toList()));
-                }
+            if (old.markerMs() != null) {
+                EditionTimeline.Position at = timeline.locate(old.markerMs());
+                Long file = old.fileIds().get(at.partIndex());
+                add(pieces, targetOfFile.get(file), new Piece(null, List.of(file), file, at.offsetMs()));
             }
         }
         return pieces;
     }
 
+    private static void add(Map<Long, List<Piece>> pieces, Long target, Piece piece) {
+        if (target != null) {
+            pieces.computeIfAbsent(target, k -> new ArrayList<>()).add(piece);
+        }
+    }
+
     /**
-     * Folds the pieces a new edition receives onto its own timeline.
+     * Folds the pieces a new edition receives onto its own timeline. The credits marker is kept only when it is in the
+     * edition's last file.
      *
      * @param pieces what the old editions handed to it
      * @param orderedFileIds its files in play order
@@ -100,18 +113,23 @@ final class StateCarry {
             return null;
         }
         EditionTimeline timeline = EditionTimeline.of(durations);
+        int lastIndex = orderedFileIds.size() - 1;
         List<Source> sources = new ArrayList<>();
         Long marker = null;
         for (Piece piece : pieces) {
+            if (piece.markerFileId() != null) {
+                int at = orderedFileIds.indexOf(piece.markerFileId());
+                if (at == lastIndex) {
+                    marker = timeline.partStartMs(at) + piece.markerOffsetMs();
+                }
+                continue;
+            }
             List<Integer> at = piece.fileIds().stream().map(orderedFileIds::indexOf).sorted().toList();
             int first = at.get(0);
             int last = at.get(at.size() - 1);
-            boolean holdsLast = last == orderedFileIds.size() - 1;
+            State state = piece.state();
             sources.add(new Source(timeline.partStartMs(first), timeline.partStartMs(last) + durations.get(last),
-                holdsLast, piece.state()));
-            if (holdsLast && piece.markerMs() != null) {
-                marker = piece.markerMs() + timeline.partStartMs(first);
-            }
+                last == lastIndex, state));
         }
         return new Result(StateFolding.fold(sources, timeline.totalMs()), marker);
     }

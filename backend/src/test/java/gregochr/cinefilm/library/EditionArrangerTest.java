@@ -546,4 +546,64 @@ class EditionArrangerTest extends ApiTestBase {
         assertThat(films.findById(result.newFilmIds().get(0)).orElseThrow().getEditions()).singleElement()
             .satisfies(e -> assertThat(states.findById(e.getId())).isEmpty());
     }
+
+    private static MediaFile timed(Edition edition, String path, long minutes, int part) {
+        MediaFile file = file(edition, path);
+        file.setDurationMs(minutes * MIN);
+        file.setPartNumber(part);
+        return file;
+    }
+
+    @Test
+    void swappingThePartNumbersKeepsAResumePositionInItsFile() {
+        Film built = film(null, "Heat", 1995, NOW);
+        Edition whole = edition(built, null, "Original", 150 * MIN, null);
+        timed(whole, "Heat - pt1.m4v", 100, 1);
+        timed(whole, "Heat - pt2.m4v", 50, 2);
+        Film film = save(built);
+        saveState(state(film.getEditions().get(0), 120 * MIN, false, NOW, null));
+        List<MediaFile> parts = film.getEditions().get(0).originalParts();
+
+        arranger.save(film.getId(), new SaveRequest(List.of(ed(editionId(film, 0), "Original", true,
+            f(parts.get(1).getId(), 1), f(parts.get(0).getId(), 2))), List.of()));
+
+        assertThat(states.findById(editionId(film, 0))).get().extracting(PlaybackState::getPositionMs)
+            .as("20 min into the file that now comes first").isEqualTo(20 * MIN);
+    }
+
+    @Test
+    void filesInterleavedFromTwoEditionsKeepTheirPositionsAndTheLaterPlayWins() {
+        Film built = film(null, "Heat", 1995, NOW);
+        Edition first = edition(built, null, "Original", 150 * MIN, null);
+        timed(first, "Heat - pt1.m4v", 100, 1);
+        timed(first, "Heat - pt3.m4v", 50, 2);
+        Edition second = edition(built, null, "Original", 80 * MIN, null);
+        timed(second, "Heat - pt2.m4v", 80, 1);
+        Film film = save(built);
+        saveState(state(film.getEditions().get(0), 120 * MIN, false, NOW, null));
+        saveState(state(film.getEditions().get(1), 10 * MIN, false, NOW.minusSeconds(60), null));
+        List<MediaFile> a = film.getEditions().get(0).originalParts();
+        Long b = fileId(film, 1);
+
+        arranger.save(film.getId(), new SaveRequest(List.of(ed(editionId(film, 0), "Original", true,
+            f(a.get(0).getId(), 1), f(b, 2), f(a.get(1).getId(), 3))), List.of()));
+
+        assertThat(states.findById(editionId(film, 0))).get().extracting(PlaybackState::getPositionMs)
+            .as("the third file now starts at 180 min").isEqualTo(200 * MIN);
+        assertThat(states.findById(editionId(film, 1))).isEmpty();
+    }
+
+    @Test
+    void aCreditsMarkerInAMovedFileFollowsItToThePartStartOfTheLastPart() {
+        Film built = film(null, "Heat", 1995, NOW);
+        timed(edition(built, null, "Original", 100 * MIN, null), "Heat - pt1.m4v", 100, 1);
+        timed(edition(built, null, "Original", 80 * MIN, 70 * MIN), "Heat - pt2.m4v", 80, 1);
+        Film film = save(built);
+
+        arranger.save(film.getId(), new SaveRequest(List.of(ed(editionId(film, 0), "Original", true,
+            f(fileId(film, 0), 1), f(fileId(film, 1), 2))), List.of()));
+
+        assertThat(editions.findById(editionId(film, 0)).orElseThrow().getCreditsMarkerMs())
+            .isEqualTo(170 * MIN);
+    }
 }

@@ -108,4 +108,30 @@ describe('useEditEditions', () => {
 
     expect(result.current.status).toBe('loading');
   });
+
+  it('ignores edits while a save is on its way, so what is saved is what is shown', async () => {
+    let release;
+    const fetchMock = installFetch((m, url) =>
+      isPut(m, url)
+        ? new Promise((resolve) => {
+            release = () => resolve(respond({ filmId: 40, newFilmIds: [] }));
+          })
+        : null,
+    );
+    const { result } = renderHook(() => useEditEditions(40, vi.fn()));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    act(() => {
+      result.current.save();
+      result.current.setDefault('Extended Edition');
+    });
+    await waitFor(() => expect(result.current.saving).toBe(true));
+    act(() => result.current.setPart(12, '3'));
+    await act(async () => release());
+
+    await waitFor(() => expect(result.current.saving).toBe(false));
+    expect(result.current.view.defaults.map((d) => d.on)).toEqual([false, true]);
+    expect(result.current.view.errorCount).toBe(0);
+    expect(JSON.parse(puts(fetchMock)[0][1].body).editions[1].default).toBe(true);
+  });
 });

@@ -1,6 +1,7 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SESSION_EXPIRED_EVENT } from '../api/client.js';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
 
 afterEach(() => {
@@ -96,5 +97,26 @@ describe('Admin: Edit editions', () => {
     await userEvent.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Admin' })).toBeInTheDocument();
+  });
+
+  it('leaves the keyboard to the sign-in card when the session expires over it', async () => {
+    installFetch();
+    const onEscape = vi.fn();
+    window.addEventListener('keydown', onEscape);
+    await openFromTheRow();
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+    });
+    const password = await screen.findByLabelText('Password');
+    await waitFor(() => expect(password).toHaveFocus());
+    await userEvent.type(password, 'secret');
+    await userEvent.tab();
+    expect(screen.getByRole('button', { name: 'Sign in' })).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+
+    expect(screen.getByRole('dialog', { name: 'Blade Runner · 1982' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in' })).toHaveFocus();
+    window.removeEventListener('keydown', onEscape);
   });
 });

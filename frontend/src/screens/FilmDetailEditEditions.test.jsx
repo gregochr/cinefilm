@@ -52,4 +52,21 @@ describe('Film detail: Edit editions…', () => {
     expect(await screen.findByText('Editions saved')).toBeInTheDocument();
     await waitFor(() => expect(filmCalls).toBe(before + 1));
   });
+
+  it('forgets a local watched mark once the arrangement is saved, so the server’s resume position shows', async () => {
+    installFetch((m, url) =>
+      m === 'PUT' && url === '/api/admin/films/1/editions'
+        ? respond({ filmId: 1, newFilmIds: [] })
+        : null,
+    );
+    renderApp('/films/1');
+    await userEvent.click(await screen.findByRole('button', { name: 'Mark as watched' }));
+    expect(screen.queryByRole('link', { name: /^Resume/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit editions…' }));
+    await screen.findByRole('region', { name: 'Edition Extended Edition' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByRole('link', { name: /^Resume/ })).toBeInTheDocument();
+  });
 });

@@ -510,6 +510,31 @@ describe('Edit editions: saving', () => {
     expect(saveButton()).toBeEnabled();
   });
 
+  it('locks every editing control while the save is on its way and sends what is on screen', async () => {
+    let release;
+    const fetchMock = installFetch((m, url) =>
+      isPut(m, url)
+        ? new Promise((resolve) => {
+            release = () => resolve(respond({ filmId: 40, newFilmIds: [] }));
+          })
+        : null,
+    );
+    const { user, onSaved } = await open();
+    await user.selectOptions(partSelect(PT2), 'Part 2');
+
+    await user.click(saveButton());
+
+    await screen.findByRole('button', { name: 'Saving…' });
+    expect(editionSelect(PT1)).toBeDisabled();
+    expect(partSelect(PT1)).toBeDisabled();
+    expect(within(row(PT1)).getByRole('button', { name: 'Not this film' })).toBeDisabled();
+    screen.getAllByRole('radio').forEach((radio) => expect(radio).toBeDisabled());
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
+    await act(async () => release());
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(putOf(fetchMock)[1].body).editions[1].default).toBe(true);
+  });
+
   it('cannot be saved twice at once', async () => {
     let release;
     const fetchMock = installFetch((m, url) =>
