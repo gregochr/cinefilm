@@ -1035,6 +1035,9 @@
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
   pointer-events: auto;
 }
+.undo-toast--plain {
+  padding: 14px 28px;
+}
 .undo-toast__btn {
   height: 44px;
   padding: 0 22px;

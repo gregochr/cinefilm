@@ -100,6 +100,7 @@ public class ScanService {
         if (!lock.tryAcquire(LibraryLock.SCAN)) {
             throw lock.heldBy(LibraryLock.SCAN) ? new ScanAlreadyRunningException()
                 : lock.heldBy(LibraryLock.IMPORT) ? new ScanAlreadyRunningException("A Plex import is running")
+                : lock.heldBy(LibraryLock.EDIT) ? new ScanAlreadyRunningException("Editions are being edited")
                 : new ScanAlreadyRunningException("A match is being fixed");
         }
         progress.set(new Progress(0, 0, null));

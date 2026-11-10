@@ -8,10 +8,12 @@ export const LIBRARY_CHANGED_EVENT = 'cinefilm:library-changed';
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 export class ApiError extends Error {
-  constructor(status, message) {
+  constructor(status, message, body = null) {
     super(message || `Request failed (${status})`);
     this.name = 'ApiError';
     this.status = status;
+    /** The JSON body of a failed response (`{ error, errors? }`), or null when it had none. */
+    this.body = body;
   }
 }
 
@@ -38,6 +40,14 @@ async function fixtureRequest(method, path, body) {
   return mod.handle(method, path, body);
 }
 
+async function failureBody(response) {
+  try {
+    return JSON.parse(await response.text());
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Sends a request to the API. Returns parsed JSON (or null for 204 / empty bodies).
  * A 401 from anything except the session endpoint emits the session-expired event.
@@ -55,7 +65,7 @@ export async function request(method, path, { body, signal, keepalive } = {}) {
     signal,
     keepalive,
   });
-  if (!response.ok) throw new ApiError(response.status);
+  if (!response.ok) throw new ApiError(response.status, undefined, await failureBody(response));
   if (response.status === 204) return null;
   return parse(response);
 }

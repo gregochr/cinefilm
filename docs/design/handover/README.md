@@ -10,6 +10,7 @@ This bundle is the design handover for the **web front end** (React). It contain
 | `screens/*.png` | The visual target for every screen (2× retina) |
 | `design/tokens.css`, `design/tokens.json` | Colours, type, radii, spacing and focus ring as CSS variables / JSON |
 | `reference-markup/*.dc.html` | The design comps' source, for exact values (paddings, sizes, copy) |
+| `edit-editions/` | The Edit editions panel (Admin and Film detail): `README.md` is its full spec, with `screens/` and `reference/edit-editions.dc.html` (validation logic in `renderVals()`) |
 
 > **About `reference-markup/`.** These are design-tool comps written in a small templating format (`{{hole}}`, `<sc-for>`, `<sc-if>`, a `renderVals()` class). Use them to look up exact values and copy. Don't port the format: build idiomatic React components. Inline styles in the comps should become tokens and components. Poster and backdrop colour blocks are placeholders for TMDB images. Film data in the comps is sample data.
 

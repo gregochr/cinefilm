@@ -81,6 +81,18 @@ class LibraryLockTest {
     }
 
     @Test
+    void aScanCannotStartWhileEditionsAreBeingEditedAndSaysSo() {
+        lock.tryAcquire(LibraryLock.EDIT);
+        ScanService scans = scans();
+
+        assertThatThrownBy(() -> scans.start("admin")).isInstanceOf(ScanAlreadyRunningException.class)
+            .hasMessage("Editions are being edited");
+
+        assertThat(queued).isEmpty();
+        assertThat(lock.heldBy(LibraryLock.EDIT)).isTrue();
+    }
+
+    @Test
     void aRunningScanBlocksAnImportAndFreesTheLockWhenItEnds() {
         ScanService scans = scans();
 

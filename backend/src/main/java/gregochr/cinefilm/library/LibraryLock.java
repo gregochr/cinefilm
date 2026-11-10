@@ -19,6 +19,9 @@ public class LibraryLock {
     /** Holder name of a Fix match (search or apply). */
     public static final String MATCH = "match";
 
+    /** Holder name of an Edit editions save. */
+    public static final String EDIT = "edit";
+
     private final AtomicReference<String> holder = new AtomicReference<>();
 
     /**

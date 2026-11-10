@@ -22,6 +22,12 @@ public class ApiExceptionHandler {
         return error(HttpStatus.BAD_REQUEST, e.getMessage());
     }
 
+    @ExceptionHandler(FieldErrorsException.class)
+    ResponseEntity<Map<String, Object>> fieldErrors(FieldErrorsException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            .body(Map.of("error", e.getMessage(), "errors", e.errors()));
+    }
+
     @ExceptionHandler(ConflictException.class)
     ResponseEntity<Map<String, String>> conflict(ConflictException e) {
         return error(HttpStatus.CONFLICT, e.getMessage());

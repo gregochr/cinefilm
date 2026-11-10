@@ -2,11 +2,14 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Button } from '../components/Button.jsx';
 import { SkeletonBlock } from '../components/Skeleton.jsx';
+import EditEditions from '../components/EditEditions.jsx';
 import FixMatchPanel from '../components/FixMatchPanel.jsx';
+import Toast from '../components/Toast.jsx';
 import TranscodingPanel from '../components/TranscodingPanel.jsx';
 import { ErrorState } from '../components/StateMessages.jsx';
 import { formatRuntime } from '../player/time.js';
 import { useSignOut } from '../state/useSignOut.js';
+import { useToast } from '../state/useToast.js';
 import { useAttention, useGroupingReport, usePlexImport, useScan } from '../state/useAdmin.js';
 import {
   describeLastImport,
@@ -264,7 +267,7 @@ function Candidates({ candidates }) {
   );
 }
 
-function AttentionPanel({ attention, loading, error, onRetry, onFixMatch }) {
+function AttentionPanel({ attention, loading, error, onRetry, onFixMatch, onEditEditions }) {
   let body;
   if (loading && !attention) {
     body = (
@@ -293,6 +296,13 @@ function AttentionPanel({ attention, loading, error, onRetry, onFixMatch }) {
             {item.kind === 'needs-match' ? (
               <div className="admin__actions admin__item-actions">
                 <Button onClick={() => onFixMatch(item)}>Fix match</Button>
+              </div>
+            ) : null}
+            {item.kind === 'multiple-files' ? (
+              <div className="admin__actions admin__item-actions">
+                <Button onClick={(event) => onEditEditions(item, event.currentTarget)}>
+                  Edit editions
+                </Button>
               </div>
             ) : null}
           </li>
@@ -429,10 +439,23 @@ export default function Admin() {
     `${scan?.lastScan?.finishedAt ?? 'never'}|${plexImport.plex?.lastImport?.finishedAt ?? 'none'}`,
   );
   const [fixing, setFixing] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const toast = useToast();
   const { hash } = useLocation();
 
   const applied = (result, stale) => {
     if (!stale) setFixing(null);
+    attention.reload();
+    grouping.reload();
+    reload();
+  };
+
+  // A saved arrangement settles the row it was opened from, so the lists are read again.
+  const edited = (result, stale) => {
+    if (!stale) {
+      setEditing(null);
+      toast.show('Editions saved');
+    }
     attention.reload();
     grouping.reload();
     reload();
@@ -466,6 +489,12 @@ export default function Admin() {
           error={attention.error}
           onRetry={attention.reload}
           onFixMatch={setFixing}
+          onEditEditions={(item, opener) =>
+            setEditing({
+              film: { id: item.filmId, title: item.title, year: item.year },
+              opener,
+            })
+          }
         />
         <GroupingReport
           report={grouping.data}
@@ -491,6 +520,16 @@ export default function Admin() {
           onCancel={() => setFixing(null)}
         />
       ) : null}
+      {editing ? (
+        <EditEditions
+          key={editing.film.id}
+          film={editing.film}
+          opener={editing.opener}
+          onClose={() => setEditing(null)}
+          onSaved={edited}
+        />
+      ) : null}
+      <Toast message={toast.message} />
       <p className="admin__credit">
         <TmdbMark />
         <span>This product uses the TMDB API but is not endorsed or certified by TMDB.</span>
