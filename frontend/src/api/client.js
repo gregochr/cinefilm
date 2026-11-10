@@ -6,10 +6,12 @@ export const SIGNED_IN_EVENT = 'cinefilm:signed-in';
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 export class ApiError extends Error {
-  constructor(status, message) {
+  constructor(status, message, body = null) {
     super(message || `Request failed (${status})`);
     this.name = 'ApiError';
     this.status = status;
+    /** The JSON body of a failed response (`{ error, errors? }`), or null when it had none. */
+    this.body = body;
   }
 }
 
@@ -30,6 +32,14 @@ async function fixtureRequest(method, path, body) {
   // VITE_FIXTURES is a build-time constant, so this branch is dropped from production builds.
   const mod = await import('./fixtureServer.js');
   return mod.handle(method, path, body);
+}
+
+async function failureBody(response) {
+  try {
+    return JSON.parse(await response.text());
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -55,7 +65,7 @@ export async function request(method, path, { body, signal, keepalive } = {}) {
     if (!path.startsWith('/api/session')) emit(SESSION_EXPIRED_EVENT);
     throw new ApiError(401, 'Unauthorised');
   }
-  if (!response.ok) throw new ApiError(response.status);
+  if (!response.ok) throw new ApiError(response.status, undefined, await failureBody(response));
   if (response.status === 204) return null;
   const text = await response.text();
   return text ? JSON.parse(text) : null;

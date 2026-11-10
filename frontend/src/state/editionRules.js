@@ -16,8 +16,7 @@ export const MESSAGES = {
   nameBlank: 'Give this edition a name.',
   nameLong: 'Keep the name to 32 characters.',
   partRange: 'Parts go from 1 to 8.',
-  singleMany:
-    'Single file only works when an edition has one file — give each file a part number.',
+  singleMany: 'Single file only works when an edition has one file — give each file a part number.',
   partOne: 'Only one file — set it to Single file or Part 1.',
   noEditions: 'Keep at least one file with this film.',
   noDefault: 'Choose a default edition.',

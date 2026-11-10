@@ -138,3 +138,15 @@ describe('fixture server', () => {
     expect(await call('DELETE', `/api/sessions/${session.sessionId}`)).toBeNull();
   });
 });
+
+describe('fixture server: Edit editions', () => {
+  it('serves a film’s files with the suggestion, and accepts a save', async () => {
+    const view = await call('GET', '/api/admin/films/40/editions');
+    expect(view.files).toHaveLength(3);
+    expect(view.suggestion.reason).toBe('From the edition tags and part numbers');
+    expect(await call('PUT', '/api/admin/films/40/editions', {})).toEqual({
+      filmId: 40,
+      newFilmIds: [],
+    });
+  });
+});

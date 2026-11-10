@@ -8,6 +8,7 @@ import person from '../test/fixtures/person.json';
 import adminScan from '../test/fixtures/admin-scan.json';
 import adminAttention from '../test/fixtures/admin-attention.json';
 import adminGrouping from '../test/fixtures/admin-grouping.json';
+import adminEditions from '../test/fixtures/admin-editions.json';
 import adminMatch from '../test/fixtures/admin-match.json';
 import adminTranscoding from '../test/fixtures/admin-transcoding.json';
 import collection from '../test/fixtures/collection.json';
@@ -51,6 +52,9 @@ export async function handle(method, path, body) {
   if (route === '/api/admin/grouping-report') return adminGrouping;
   if (/^\/api\/admin\/films\/\d+\/match$/.test(route)) {
     return method === 'POST' ? { filmId: 31, joined: false } : adminMatch;
+  }
+  if (/^\/api\/admin\/films\/\d+\/editions$/.test(route)) {
+    return method === 'PUT' ? { filmId: 40, newFilmIds: [] } : adminEditions;
   }
   if (route === '/api/admin/transcoding') return adminTranscoding;
   if (/^\/api\/admin\/transcoding\/sessions\//.test(route)) return null;

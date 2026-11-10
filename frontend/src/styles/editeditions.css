@@ -1,0 +1,508 @@
+/* Edit editions: a modal dialog on desktop, a full-screen sheet on phones. Amber only on Save. */
+.ee {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--cf-size-ui);
+  color: var(--cf-text);
+}
+.ee__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 4, 3, 0.72);
+}
+.ee__dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 920px;
+  max-width: calc(100vw - 32px);
+  max-height: min(900px, calc(100vh - 32px));
+  background: var(--cf-surface);
+  border: 1px solid var(--cf-line);
+  border-radius: var(--cf-radius-panel);
+  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.7);
+}
+.ee__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 28px 18px;
+  border-bottom: 1px solid var(--cf-line);
+}
+.ee__heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ee__eyebrow {
+  font-size: var(--cf-size-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cf-text-muted);
+}
+.ee__title {
+  margin: 0;
+  font-family: var(--cf-font-display);
+  font-weight: 400;
+  font-size: 32px;
+  line-height: 1.1;
+  color: var(--cf-text);
+}
+.ee__year {
+  color: var(--cf-text-muted);
+}
+.ee__close {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--cf-radius-pill);
+  border: 1px solid var(--cf-line);
+  background: transparent;
+  color: var(--cf-text-2);
+  cursor: pointer;
+}
+.ee__body {
+  flex: 1;
+  overflow: auto;
+  padding: 20px 28px 24px;
+}
+.ee__stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.ee__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 28px;
+  border-top: 1px solid var(--cf-line);
+}
+.ee__foot-note {
+  font-size: 13px;
+  color: var(--cf-text-muted);
+}
+.ee__foot-buttons {
+  display: flex;
+  gap: 10px;
+}
+/* Save is the only amber; disabled it is a quiet block, not a dimmed amber one. */
+.ee .btn--primary:disabled {
+  opacity: 1;
+  background: var(--cf-line);
+  border-color: var(--cf-line);
+  color: var(--cf-text-disabled);
+  filter: none;
+}
+
+/* Save-failed banner and the suggestion line */
+.ee__banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--cf-radius-card);
+  background: #2a1712;
+  border: 1px solid #5a2a1e;
+  color: #f3b4a2;
+  line-height: 1.5;
+}
+.ee__banner svg {
+  flex: none;
+  margin-top: 2px;
+}
+.ee__banner strong {
+  font-weight: 600;
+  color: #f7cabb;
+}
+.ee__suggest {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--cf-text-muted);
+}
+.ee__suggested {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: var(--cf-radius-pill);
+  border: 1px solid var(--cf-line-strong);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cf-text-2);
+}
+
+/* One card per edition */
+.ee__group {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--cf-line);
+  border-radius: var(--cf-radius-card);
+}
+.ee__group--not {
+  border: 1px dashed var(--cf-line-strong);
+}
+.ee__group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--cf-surface-2);
+  border-bottom: 1px solid var(--cf-line);
+}
+.ee__group-name {
+  font-size: var(--cf-size-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cf-text-2);
+}
+.ee__group-summary {
+  font-family: var(--cf-font-mono);
+  font-size: 12px;
+  color: var(--cf-text-muted);
+}
+.ee__group-error {
+  padding: 8px 16px;
+  font-size: 13px;
+  color: #f0876a;
+  border-bottom: 1px solid var(--cf-line);
+}
+.ee__error {
+  margin: 0;
+  font-size: 13px;
+  color: #f0876a;
+}
+.ee__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px 130px auto;
+  gap: 14px;
+  align-items: start;
+  padding: 14px 16px;
+}
+.ee__row + .ee__row {
+  border-top: 1px solid var(--cf-line);
+}
+.ee__file {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+/* The head is cut with an ellipsis when it must be; the last 22 characters never are. */
+.ee__name {
+  display: flex;
+  min-width: 0;
+  font-family: var(--cf-font-mono);
+  font-size: 13px;
+  color: var(--cf-text);
+  white-space: nowrap;
+  border-radius: 4px;
+}
+.ee__name--muted {
+  color: var(--cf-text-2);
+}
+.ee__name-head {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ee__name-tail {
+  flex: none;
+}
+.ee__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-family: var(--cf-font-mono);
+  font-size: 12px;
+  color: var(--cf-text-muted);
+}
+.ee__missing {
+  padding: 1px 8px;
+  border-radius: var(--cf-radius-pill);
+  border: 1px solid var(--cf-line-strong);
+  font-family: var(--cf-font-ui);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cf-text-muted);
+}
+.ee__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ee__label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cf-text-muted);
+}
+.ee__select,
+.ee__input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 40px;
+  padding: 0 10px;
+  font: 14px var(--cf-font-ui);
+  color: var(--cf-text);
+  background: var(--cf-surface-2);
+  border: 1px solid var(--cf-line);
+  border-radius: 8px;
+}
+.ee__select--bad,
+.ee__input--bad {
+  border-color: #c2604a;
+}
+.ee__namebox {
+  position: relative;
+  display: block;
+}
+.ee__namebox .ee__input {
+  padding-right: 52px;
+}
+.ee__count {
+  position: absolute;
+  right: 10px;
+  top: 11px;
+  font-family: var(--cf-font-mono);
+  font-size: 12px;
+  color: var(--cf-text-muted);
+}
+.ee__not-cell {
+  display: flex;
+  padding-top: 20px;
+}
+.ee__pill {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: var(--cf-radius-pill);
+  border: 1px solid var(--cf-line-strong);
+  background: transparent;
+  color: var(--cf-text-2);
+  font: 500 14px var(--cf-font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ee__pill--small {
+  height: 36px;
+}
+
+/* Not this film */
+.ee__not-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 16px;
+  border-bottom: 1px dashed var(--cf-line-strong);
+}
+.ee__not-text {
+  font-size: 13px;
+  color: var(--cf-text-muted);
+}
+.ee__not-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+}
+.ee__not-row .ee__file {
+  flex: 1;
+  gap: 4px;
+}
+
+/* Editions after saving: the default radios are not amber */
+.ee__after {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ee__after-title {
+  margin: 0;
+  font-size: var(--cf-size-label);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cf-text-muted);
+}
+.ee__defaults {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.ee__edition {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: var(--cf-radius-card);
+  border: 1px solid var(--cf-line);
+  cursor: pointer;
+}
+.ee__edition--on {
+  background: var(--cf-surface-3);
+  border-color: var(--cf-line-strong);
+}
+.ee__radio {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--cf-text);
+}
+.ee__edition-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.ee__edition-meta {
+  font-family: var(--cf-font-mono);
+  font-size: 12px;
+  color: var(--cf-text-muted);
+}
+.ee__default-label {
+  font-size: 12px;
+  color: var(--cf-text-2);
+}
+
+/* Focus ring on everything */
+.ee__select:focus-visible,
+.ee__input:focus-visible,
+.ee__close:focus-visible,
+.ee__pill:focus-visible,
+.ee__name:focus-visible,
+.ee__radio:focus-visible,
+.ee .btn:focus-visible {
+  outline: none;
+  box-shadow: var(--cf-focus-ring);
+}
+.ee__edition:has(.ee__radio:focus-visible) {
+  box-shadow: var(--cf-focus-ring);
+}
+
+/* Loading: a static skeleton, no shimmer */
+.ee__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ee__bone {
+  background: var(--cf-surface-2);
+}
+.ee__bone--line {
+  height: 16px;
+  border-radius: 6px;
+}
+.ee__bone--text {
+  height: 14px;
+  border-radius: 4px;
+}
+.ee__bone--box {
+  height: 40px;
+  border-radius: 8px;
+}
+.ee__skel-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--cf-line);
+}
+.ee__skel-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Motion: a simple fade, about 150 ms, and none when the person asked for less */
+@media (prefers-reduced-motion: no-preference) {
+  .ee {
+    animation: ee-fade-in 150ms ease-out;
+  }
+  .ee--closing {
+    animation: ee-fade-out 150ms ease-in forwards;
+  }
+}
+@keyframes ee-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes ee-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* Phone: a full-screen sheet, rows stacked, a sticky footer with equal-width buttons */
+@media (max-width: 600px) {
+  .ee {
+    align-items: stretch;
+  }
+  .ee__dialog {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .ee__header {
+    padding: 56px 16px 14px;
+  }
+  .ee__title {
+    font-size: 26px;
+  }
+  .ee__body {
+    padding: 16px 16px 24px;
+  }
+  .ee__row {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 14px 16px;
+  }
+  .ee__not-cell {
+    padding-top: 0;
+  }
+  .ee__not-cell .ee__pill {
+    width: 100%;
+  }
+  .ee__footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px 16px 30px;
+  }
+  .ee__foot-note {
+    font-size: 12px;
+  }
+  .ee__foot-buttons .btn {
+    flex: 1;
+  }
+}
