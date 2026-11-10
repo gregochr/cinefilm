@@ -131,6 +131,23 @@ class AdminControllerTest {
     }
 
     @Test
+    void getGroupingReportReturnsTheLinesAsItems() throws Exception {
+        when(admin.groupingReport()).thenReturn(new AdminDtos.GroupingReport(List.of(
+            new AdminDtos.GroupingChangeDto(NOW, "join", "Joined 2 files"))));
+
+        mvc.perform(get("/api/admin/grouping-report").with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].happenedAt").value("2024-03-31T23:30:00Z"))
+            .andExpect(jsonPath("$.items[0].kind").value("join"))
+            .andExpect(jsonPath("$.items[0].summary").value("Joined 2 files"));
+    }
+
+    @Test
+    void getGroupingReportSignedOutIs401() throws Exception {
+        mvc.perform(get("/api/admin/grouping-report")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void postScanStartsAnAdminScanAndAnswers202WithTheStatus() throws Exception {
         when(admin.status()).thenReturn(IDLE);
 

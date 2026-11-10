@@ -11,6 +11,8 @@ import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.ApiTestBase;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.GroupingChange;
+import gregochr.cinefilm.film.GroupingChangeRepository;
 import gregochr.cinefilm.film.MatchStatus;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
@@ -36,6 +38,9 @@ class AdminServiceTest extends ApiTestBase {
     @Autowired
     private MediaFileRepository mediaFiles;
 
+    @Autowired
+    private GroupingChangeRepository groupingChanges;
+
     private ScanService scans;
     private RatingsRefresher ratings;
     private AdminService admin;
@@ -44,7 +49,8 @@ class AdminServiceTest extends ApiTestBase {
     void setUp() {
         scans = mock(ScanService.class);
         ratings = mock(RatingsRefresher.class);
-        admin = new AdminService(scans, runs, films, mediaFiles, new LibraryRoot("/media/films"), ratings);
+        admin = new AdminService(scans, runs, films, mediaFiles, new LibraryRoot("/media/films"), ratings,
+            groupingChanges);
     }
 
     @Test
@@ -202,25 +208,22 @@ class AdminServiceTest extends ApiTestBase {
     }
 
     @Test
-    void severalPresentFilesForOneFilmAreListedButAMissingOneDoesNotCount() {
-        Film heat = film(null, "Heat", 1995, NOW);
-        file(edition(heat, null, "Original", 100 * MIN, null), "Heat.m4v");
-        file(edition(heat, null, "Original", 100 * MIN, null), "Heat 2.m4v");
-        MediaFile gone = file(edition(heat, null, "Original", 100 * MIN, null), "Heat 3.m4v");
-        gone.setPresence(Presence.MISSING);
-        save(heat);
-        Film alien = film(null, "Alien", 1979, NOW);
-        file(edition(alien, null, "Original", 100 * MIN, null), "Alien.m4v");
-        MediaFile alienGone = file(edition(alien, null, "Original", 100 * MIN, null), "Alien old.m4v");
-        alienGone.setPresence(Presence.MISSING);
-        save(alien);
+    void theGroupingReportIsTheNewest20LinesNewestFirst() {
+        for (int i = 0; i < 25; i++) {
+            groupingChanges.save(new GroupingChange(NOW.minusSeconds(1000 - i), GroupingChange.JOIN, "line " + i));
+        }
 
-        assertThat(admin.attention().items()).singleElement().satisfies(item -> {
-            assertThat(item.kind()).isEqualTo("multiple-files");
-            assertThat(item.title()).isEqualTo("Heat");
-            assertThat(item.detail()).isEqualTo("2 files match one film");
-            assertThat(item.files()).containsExactly("Heat.m4v", "Heat 2.m4v");
-        });
+        AdminDtos.GroupingReport report = admin.groupingReport();
+
+        assertThat(report.items()).hasSize(20);
+        assertThat(report.items().get(0)).isEqualTo(new AdminDtos.GroupingChangeDto(NOW.minusSeconds(976), "join",
+            "line 24"));
+        assertThat(report.items().get(19).summary()).isEqualTo("line 5");
+    }
+
+    @Test
+    void theGroupingReportIsEmptyWhenNothingWasGrouped() {
+        assertThat(admin.groupingReport().items()).isEmpty();
     }
 
     @Test

@@ -12,7 +12,7 @@ import java.util.List;
  * 15% are only a warning sign (untagged theatrical and extended cuts routinely differ that much, and the titles
  * already agree): the Plex import flags them and never blocks on them. It never part-joins untagged versions.
  */
-final class RuntimeSignal {
+public final class RuntimeSignal {
 
     private static final int LIMIT_PERCENT = 15;
 
@@ -20,13 +20,18 @@ final class RuntimeSignal {
     }
 
     /** True when both runtimes are known and differ by more than 15% of the longer one. */
-    static boolean differs(long a, long b) {
+    public static boolean differs(long a, long b) {
         return a > 0 && b > 0 && Math.abs(a - b) * 100 > LIMIT_PERCENT * Math.max(a, b);
+    }
+
+    /** How far apart two known runtimes are, as a whole percentage of the longer one. */
+    public static long percent(long a, long b) {
+        return Math.round(Math.abs(a - b) * 100.0 / Math.max(a, b));
     }
 
     /** The report line for two files whose runtimes differ; the names are alphabetical, so a pair reads alike. */
     static String describe(long a, long b, String pathA, String pathB) {
-        long percent = Math.round(Math.abs(a - b) * 100.0 / Math.max(a, b));
+        long percent = percent(a, b);
         String first = name(pathA);
         String second = name(pathB);
         if (first.compareTo(second) > 0) {
@@ -39,7 +44,7 @@ final class RuntimeSignal {
     }
 
     /** True when no path carries an edition tag or a plain edition word (they say which cut it is). */
-    static boolean untagged(List<String> paths) {
+    public static boolean untagged(List<String> paths) {
         for (String path : paths) {
             ParsedName parsed = FileNameParser.parse(path);
             if (parsed.editionTag() != null || parsed.plainEdition() != null) {

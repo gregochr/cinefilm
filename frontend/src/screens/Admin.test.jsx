@@ -179,7 +179,7 @@ describe('Admin: Library scan panel', () => {
   it('shows a loading skeleton while the status loads', () => {
     installFetch(() => new Promise(() => {}));
     renderApp('/admin');
-    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(3);
+    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(4);
   });
 
   it('scrolls the panel into view for the empty-library link (#library-scan)', async () => {
@@ -222,9 +222,9 @@ describe('Admin: Films needing attention panel', () => {
     const panel = await screen.findByRole('region', { name: 'Films needing attention' });
     const items = await within(panel).findAllByRole('listitem');
 
-    expect(items).toHaveLength(4 + 2);
+    expect(items).toHaveLength(5 + 2);
     expect(within(panel).getByText('The Wicker Man')).toBeInTheDocument();
-    expect(within(panel).getByText('Needs a match')).toBeInTheDocument();
+    expect(within(panel).getByText('Unmatched')).toBeInTheDocument();
     expect(within(panel).getByText('2 possible matches')).toBeInTheDocument();
     expect(within(panel).getByText('The Wicker Man.m4v')).toBeInTheDocument();
     expect(within(panel).getByText('Kes (1969)')).toBeInTheDocument();
@@ -235,11 +235,18 @@ describe('Admin: Films needing attention panel', () => {
     expect(within(panel).getByText('Alien (1979)')).toBeInTheDocument();
     expect(within(panel).getByText('Needs conversion')).toBeInTheDocument();
     expect(within(panel).getByText('Blade Runner (1982)')).toBeInTheDocument();
-    expect(within(panel).getByText('3 files match one film')).toBeInTheDocument();
+    expect(within(panel).getByText('Several files')).toBeInTheDocument();
     expect(
-      within(panel).getByText(
-        'Blade Runner.m4v · Blade Runner Final Cut.m4v · Blade Runner Directors Cut.m4v',
-      ),
+      within(panel).getByText('2 untagged versions of one film, runtimes differ by 22%'),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByText('Parts don\u2019t match \u2014 will transcode'),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByText('Part 2: video codec is h264, part 1 has hevc'),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByText('Blade Runner.m4v · Blade Runner Final Cut.m4v'),
     ).toBeInTheDocument();
   });
 
@@ -328,11 +335,11 @@ describe('Admin: Films needing attention panel', () => {
 });
 
 describe('Admin: page', () => {
-  it('has the Admin heading, its four panels, and the TMDB credit', async () => {
+  it('has the Admin heading, its five panels, and the TMDB credit', async () => {
     installFetch();
     renderApp('/admin');
     expect(await screen.findByRole('heading', { level: 1, name: 'Admin' })).toBeInTheDocument();
-    expect(screen.getAllByRole('region')).toHaveLength(4);
+    expect(screen.getAllByRole('region')).toHaveLength(5);
     expect(
       screen.getByText('This product uses the TMDB API but is not endorsed or certified by TMDB.'),
     ).toBeInTheDocument();

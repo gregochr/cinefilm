@@ -50,11 +50,12 @@ export function progressPercent(progress) {
 }
 
 const KIND_LABELS = {
-  'needs-match': 'Needs a match',
+  'needs-match': 'Unmatched',
   protected: 'Protected',
   'needs-conversion': 'Needs conversion',
   unreadable: 'Unreadable',
   'multiple-files': 'Several files',
+  'parts-mismatch': 'Parts don\u2019t match \u2014 will transcode',
 };
 
 /** The small tag on an attention entry; an unknown kind shows as is. */
@@ -65,4 +66,11 @@ export function kindLabel(kind) {
 /** "Dune (1984)", or just the title when the year is unknown. */
 export function titleWithYear(title, year) {
   return year ? `${title} (${year})` : title;
+}
+
+const CHANGE_LABELS = { split: 'Split', join: 'Joined', flag: 'Check' };
+
+/** The small label on a grouping report line; an unknown kind shows as is. */
+export function changeLabel(kind) {
+  return CHANGE_LABELS[kind] ?? kind;
 }

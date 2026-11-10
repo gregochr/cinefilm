@@ -27,6 +27,11 @@ public class ApiExceptionHandler {
         return error(HttpStatus.CONFLICT, e.getMessage());
     }
 
+    @ExceptionHandler(ServiceUnavailableException.class)
+    ResponseEntity<Map<String, String>> unavailable(ServiceUnavailableException e) {
+        return error(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage());
+    }
+
     @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
     ResponseEntity<Map<String, String>> unreadable(Exception e) {
         return error(HttpStatus.BAD_REQUEST, "Invalid request");

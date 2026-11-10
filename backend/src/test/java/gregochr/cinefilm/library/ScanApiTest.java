@@ -271,7 +271,7 @@ class ScanApiTest extends ApiTestBase {
     }
 
     @Test
-    void twoFilesForOneFilmAreTwoEditionsAndAreListedAsSeveralFilesMatchingOne() throws Exception {
+    void aTaggedSecondCutIsAnEditionOfTheFilmAndNeedsNoAttention() throws Exception {
         film("Heat.m4v", "0123456789", T1);
         film("Heat Directors Cut.m4v", "0123456789AB", T1);
 
@@ -281,12 +281,7 @@ class ScanApiTest extends ApiTestBase {
         assertThat(films.findAll().get(0).getEditions()).hasSize(2);
         mvc.perform(get("/api/admin/attention"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.items.length()").value(1))
-            .andExpect(jsonPath("$.items[0].kind").value("multiple-files"))
-            .andExpect(jsonPath("$.items[0].title").value("Heat"))
-            .andExpect(jsonPath("$.items[0].detail").value("2 files match one film"))
-            .andExpect(jsonPath("$.items[0].files[0]").value("Heat Directors Cut.m4v"))
-            .andExpect(jsonPath("$.items[0].files[1]").value("Heat.m4v"));
+            .andExpect(jsonPath("$.items.length()").value(0));
     }
 
     @Test
