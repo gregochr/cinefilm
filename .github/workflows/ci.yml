@@ -48,7 +48,7 @@ jobs:
     outputs:
       docs_only: ${{ steps.detect.outputs.docs_only }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -80,7 +80,7 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: needs.changes.outputs.docs_only != 'true'
         with:
           # diff-cover needs the base branch's history to compute the PR diff.
@@ -88,7 +88,7 @@ jobs:
 
       - name: Set up JDK 25
         if: needs.changes.outputs.docs_only != 'true'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: '25'
           distribution: 'temurin'
@@ -136,7 +136,7 @@ jobs:
       # Line coverage only. Pull requests only: a push to main has no PR diff.
       - name: Set up Python (diff-cover)
         if: needs.changes.outputs.docs_only != 'true' && github.event_name == 'pull_request'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -167,7 +167,7 @@ jobs:
       # Produced by the forked spotbugs:spotbugs run inside the verify-phase check goal.
       - name: Upload SpotBugs report
         if: always() && needs.changes.outputs.docs_only != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: spotbugs-report
           path: backend/target/spotbugsXml.xml
@@ -175,7 +175,7 @@ jobs:
 
       - name: Upload JaCoCo coverage report
         if: always() && needs.changes.outputs.docs_only != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: jacoco-report
           path: backend/target/site/jacoco/
@@ -195,7 +195,7 @@ jobs:
       # to backend/target.
       - name: Upload Sonar inputs (classes, test classes, dependency jars)
         if: needs.changes.outputs.docs_only != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-sonar-inputs
           path: |
@@ -222,7 +222,7 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: needs.changes.outputs.docs_only != 'true'
         with:
           # diff-cover needs the base branch's history to compute the PR diff.
@@ -230,7 +230,7 @@ jobs:
 
       - name: Set up Node 24
         if: needs.changes.outputs.docs_only != 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -263,7 +263,7 @@ jobs:
       # Line coverage only. Pull requests only: a push to main has no PR diff.
       - name: Set up Python (diff-cover)
         if: needs.changes.outputs.docs_only != 'true' && github.event_name == 'pull_request'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -301,7 +301,7 @@ jobs:
       # lcov for the `sonar` job; short-lived. The sonar job rewrites the SF: paths in its own copy.
       - name: Upload lcov (for SonarQube Cloud)
         if: needs.changes.outputs.docs_only != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-lcov
           path: frontend/coverage/lcov.info
@@ -327,7 +327,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: needs.changes.outputs.docs_only != 'true'
 
       # PINNED, and not to the runner's preinstalled shellcheck: "green locally" must say something about CI.
@@ -360,7 +360,7 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: needs.changes.outputs.docs_only != 'true'
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
@@ -482,7 +482,7 @@ jobs:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: needs.changes.outputs.docs_only != 'true' && env.SONAR_TOKEN != ''
         with:
           # New-code detection and blame need the full history.
@@ -490,21 +490,21 @@ jobs:
 
       - name: Download compiled classes, test classes and dependency jars
         if: needs.changes.outputs.docs_only != 'true' && env.SONAR_TOKEN != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: backend-sonar-inputs
           path: backend/target
 
       - name: Download JaCoCo report
         if: needs.changes.outputs.docs_only != 'true' && env.SONAR_TOKEN != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: jacoco-report
           path: backend/target/site/jacoco
 
       - name: Download frontend lcov
         if: needs.changes.outputs.docs_only != 'true' && env.SONAR_TOKEN != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: frontend-lcov
           path: frontend/coverage
