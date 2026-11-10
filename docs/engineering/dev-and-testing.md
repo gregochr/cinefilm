@@ -259,6 +259,14 @@ cancels superseded runs of the same ref.
 | `shell` | `Shell — ShellCheck & script tests` | Pinned ShellCheck v0.11.0 (`-o check-unassigned-uppercase`) over `scripts/*.sh`, `scripts/lib/*.sh` and `scripts/test/*.sh`, then `bash scripts/test/run-all.sh`: the tests stub `npx`/`sleep` on PATH to prove `npm-audit.sh` (clean passes, findings fail without retry, transport errors retry with 15s/30s backoff, exhausted retries fail) and run `ci-docs-only.sh` against throwaway git repos. Run both locally the same way. |
 | `frontend` | `Frontend — Lint, Test & Build` | `npm ci`, `npm run lint`, `npm run format:check` (Prettier), `npm run test:coverage` (95/90 per file plus the global floor), on PRs diff-cover at 90% of changed `frontend/src` lines (lcov, with the `SF:` prefix rewrite), `scripts/npm-audit.sh frontend high`, `npm run build`. 20 min timeout. |
 | `docker` | `Docker — image builds` | Builds the production `Dockerfile` (SPA, jar, ffmpeg runtime) without pushing, then checks it runs as uid 1001 with `ffmpeg`, `ffprobe` and `vainfo` present. The Mac has no Docker, so this is the only proof the image builds. 20 min timeout. |
+| `sonar` | `SonarQube Cloud — Analysis` | Needs `backend` and `frontend`. Downloads their artifacts (`backend-sonar-inputs`: classes, test classes and dependency jars; `jacoco-report`; `frontend-lcov`), rewrites the lcov `SF:` paths, and runs the pinned `sonarqube-scan-action` with `sonar.qualitygate.wait=true`, so the job fails when the quality gate on **new code** fails. Config: `sonar-project.properties` (backend, frontend, `scripts/`, Dockerfiles, `deploy/`, `.github/`). **Advisory, not a required check** (see `code-quality-plan.md` phase 4). Skips and reports success when `SONAR_TOKEN` is empty: fork PRs, and `deploy.yml`'s reuse of this workflow. 15 min timeout. |
+
+**SonarQube Cloud** project `gregochr_cinefilm`, organization `gregochr`, Automatic Analysis off. `SONAR_TOKEN` is an
+Actions secret and a Dependabot secret (the owner's personal token; when it expires the job fails at the scan step).
+Results are public at `https://sonarcloud.io/project/overview?id=gregochr_cinefilm` and the same API serves
+measures without a token. The separate `SonarCloud Code Analysis` check on a PR is the Sonar GitHub App's
+decoration of the same analysis. A finding in new code is fixed in the PR; a false positive is marked in SonarQube
+Cloud with a reason, not suppressed in code.
 
 **Docs-only path.** There are deliberately no `paths:` filters: a workflow filtered out by path never reports, and a
 check that never reports cannot be satisfied. Instead both jobs always run; when every changed file is `docs/**` or
