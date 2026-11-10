@@ -1,4 +1,5 @@
 // Dev-only: serves the test fixtures in place of the backend when VITE_FIXTURES=1.
+import { matchesAnyName } from '../state/search.js';
 import home from '../test/fixtures/home.json';
 import films from '../test/fixtures/films.json';
 import heat from '../test/fixtures/film-heat.json';
@@ -27,9 +28,9 @@ const details = { 1: heat, 6: bladeRunner, 8: wickerMan };
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function listFilms(search) {
-  const q = (search.get('q') || '').toLowerCase();
+  const q = search.get('q') || '';
   const sort = search.get('sort') || 'added';
-  let list = films.films.filter((f) => f.title.toLowerCase().includes(q));
+  let list = films.films.filter((f) => matchesAnyName(q, [f.title, f.director]));
   const show = search.get('show');
   if (show === 'watched') list = list.filter((f) => f.watched);
   if (show === 'unwatched') list = list.filter((f) => !f.watched);

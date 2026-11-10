@@ -84,7 +84,7 @@ describe('prepareIndex', () => {
   it('spells out the keys and builds the display strings once', () => {
     const index = prepareIndex(RAW);
 
-    expect(index.films[0]).toEqual({
+    expect(index.films[0]).toMatchObject({
       id: 1,
       title: 'Warrior',
       year: 2011,
@@ -95,11 +95,20 @@ describe('prepareIndex', () => {
       playedAt: '2026-11-01T20:00:00Z',
       sortTitle: 'warrior',
     });
-    expect(index.people).toEqual([{ id: 9, name: 'Tom Hanks', actorCount: 9, directorCount: 0 }]);
+    expect(index.people).toMatchObject([
+      { id: 9, name: 'Tom Hanks', actorCount: 9, directorCount: 0 },
+    ]);
+  });
+
+  it('normalises each name once: the title, the display name and the person name', () => {
+    const index = prepareIndex(RAW);
+    expect(index.films[0].norm.text).toBe('warrior');
+    expect(index.collections[0].norm.text).toBe('star wars');
+    expect(index.people[0].norm.words.map((w) => w.text)).toEqual(['tom', 'hanks']);
   });
 
   it('shows a collection by its display name, without " Collection"', () => {
-    expect(prepareIndex(RAW).collections).toEqual([
+    expect(prepareIndex(RAW).collections).toMatchObject([
       { id: 4, name: 'Star Wars', ownedCount: 2, totalCount: 9, posterPaths: ['/a.jpg', '/b.jpg'] },
     ]);
   });
