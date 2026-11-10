@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { LIBRARY_CHANGED_EVENT } from '../api/client.js';
 import { installFetch, respond } from '../test/mockApi.jsx';
 import { useFixMatch } from './useFixMatch.js';
 
@@ -151,5 +152,23 @@ describe('useFixMatch', () => {
     });
 
     expect(onApplied).toHaveBeenCalledWith({ filmId: 7, joined: false }, true);
+  });
+
+  it('announces a library change once a match was applied', async () => {
+    installFetch((m, url) => {
+      if (isSearch(m, url)) return respond([{ tmdbId: 5 }]);
+      if (isApply(m, url)) return respond({ filmId: 7, joined: false });
+      return null;
+    });
+    const changed = vi.fn();
+    window.addEventListener(LIBRARY_CHANGED_EVENT, changed);
+    const { result } = renderHook(() => useFixMatch(7, 'Dune', vi.fn()));
+    await waitFor(() => expect(result.current.search.status).toBe('ready'));
+    act(() => result.current.setPicked(5));
+
+    await act(async () => result.current.apply());
+
+    expect(changed).toHaveBeenCalledTimes(1);
+    window.removeEventListener(LIBRARY_CHANGED_EVENT, changed);
   });
 });

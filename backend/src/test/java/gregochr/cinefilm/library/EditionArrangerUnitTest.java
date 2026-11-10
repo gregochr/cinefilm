@@ -33,12 +33,14 @@ import gregochr.cinefilm.library.EditionDtos.FileRequest;
 import gregochr.cinefilm.library.EditionDtos.SaveRequest;
 import gregochr.cinefilm.library.EditionDtos.SaveResult;
 import gregochr.cinefilm.playback.PlaybackStateRepository;
+import gregochr.cinefilm.search.LibraryChanged;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.PlatformTransactionManager;
 
 /** {@link EditionArranger} on its own: mocked collaborators, no Spring context and no database. */
@@ -54,6 +56,7 @@ class EditionArrangerUnitTest {
     private GroupingChangeRepository changes;
     private EditionJoin join;
     private LibraryLock lock;
+    private ApplicationEventPublisher events;
     private EditionArranger arranger;
     private Film film;
     private Edition edition;
@@ -68,8 +71,9 @@ class EditionArrangerUnitTest {
         changes = mock(GroupingChangeRepository.class);
         join = mock(EditionJoin.class);
         lock = new LibraryLock();
+        events = mock(ApplicationEventPublisher.class);
         arranger = new EditionArranger(films, editions, files, states, preferences, changes, join, lock,
-            mock(PlatformTransactionManager.class), CLOCK);
+            mock(PlatformTransactionManager.class), CLOCK, events);
         film = TestData.film(FILM_ID, "Heat", 1995, NOW);
         edition = TestData.edition(film, 5L, "Original", 170 * MIN, null);
         MediaFile file = TestData.file(edition, "Heat.m4v");
@@ -89,7 +93,7 @@ class EditionArrangerUnitTest {
             .hasMessage("A scan is running");
 
         assertThat(lock.holder()).as("the other holder keeps it").isEqualTo(LibraryLock.MATCH);
-        verifyNoInteractions(films, editions, files, states, preferences, changes, join);
+        verifyNoInteractions(films, editions, files, states, preferences, changes, join, events);
     }
 
     @Test
@@ -101,6 +105,7 @@ class EditionArrangerUnitTest {
         assertThatThrownBy(() -> arranger.view(99L)).isInstanceOf(NotFoundException.class);
 
         assertThat(lock.holder()).isNull();
+        verifyNoInteractions(events);
     }
 
     @Test
@@ -112,7 +117,7 @@ class EditionArrangerUnitTest {
                 .containsExactly("Give this edition a name."));
 
         assertThat(lock.holder()).isNull();
-        verifyNoInteractions(editions, files, preferences, changes, join);
+        verifyNoInteractions(editions, files, preferences, changes, join, events);
     }
 
     @Test
@@ -133,6 +138,7 @@ class EditionArrangerUnitTest {
         assertThat(preference.getValue().getDefaultEditionId()).isEqualTo(5L);
         assertThat(preference.getValue().isDefaultEditionChosen()).isTrue();
         verify(join).repoint(FILM_ID, 5L, Set.of());
+        verify(events).publishEvent(new LibraryChanged());
         verify(films).save(film);
         ArgumentCaptor<GroupingChange> change = ArgumentCaptor.forClass(GroupingChange.class);
         verify(changes).save(change.capture());

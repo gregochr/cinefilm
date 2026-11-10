@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { announceLibraryChanged } from '../api/client.js';
 import { adminApi } from '../api/resources.js';
 import {
   describeModel,
@@ -70,6 +71,8 @@ export function useEditEditions(filmId, onSaved) {
     setProblem(null);
     try {
       const result = await adminApi.saveEditions(filmId, view.request);
+      // New films and editions change what the search index shows, in this tab as well as on the server.
+      announceLibraryChanged();
       onSaved(result, shown.current !== filmId);
     } catch (failure) {
       const failed = saveProblem(failure);

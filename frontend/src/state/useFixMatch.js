@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { announceLibraryChanged } from '../api/client.js';
 import { adminApi } from '../api/resources.js';
 import { matchProblem, parseYear } from './fixMatch.js';
 
@@ -67,6 +68,7 @@ export function useFixMatch(filmId, initialQuery, onApplied) {
     setApplyProblem(null);
     try {
       const applied = await adminApi.applyMatch(filmId, picked);
+      announceLibraryChanged();
       onApplied(applied, shown.current !== filmId);
     } catch (failure) {
       setApplyProblem(matchProblem(failure));

@@ -32,6 +32,7 @@ import gregochr.cinefilm.library.EditionSuggester.Suggestion;
 import gregochr.cinefilm.library.FileNameParser.ParsedName;
 import gregochr.cinefilm.playback.PlaybackState;
 import gregochr.cinefilm.playback.PlaybackStateRepository;
+import gregochr.cinefilm.search.LibraryChanged;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -42,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -76,12 +78,14 @@ public class EditionArranger {
     private final LibraryLock lock;
     private final TransactionTemplate tx;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
     /** Creates the service over the repositories, the join (whose choice-repointing it reuses) and the lock. */
     public EditionArranger(FilmRepository films, EditionRepository editions, MediaFileRepository files,
                            PlaybackStateRepository states, FilmPreferenceRepository preferences,
                            GroupingChangeRepository changes, EditionJoin join, LibraryLock lock,
-                           PlatformTransactionManager transactions, Clock clock) {
+                           PlatformTransactionManager transactions, Clock clock,
+                           ApplicationEventPublisher events) {
         this.films = films;
         this.editions = editions;
         this.files = files;
@@ -92,6 +96,7 @@ public class EditionArranger {
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
         this.clock = clock;
+        this.events = events;
     }
 
     /**
@@ -140,7 +145,13 @@ public class EditionArranger {
      * @throws BadRequestException when the request names an edition that is not the film's, or names one twice
      */
     public SaveResult save(Long filmId, SaveRequest request) {
-        return locked(() -> tx.execute(status -> arrange(filmId, request)));
+        return locked(() -> {
+            SaveResult result = tx.execute(status -> arrange(filmId, request));
+            // After the commit (a refused or failed save never gets here): the search index and anything cached on
+            // library state must see the new films and editions.
+            events.publishEvent(new LibraryChanged());
+            return result;
+        });
     }
 
     private SaveResult arrange(Long filmId, SaveRequest request) {
@@ -149,6 +160,8 @@ public class EditionArranger {
         Map<Long, List<Long>> filesBefore = new HashMap<>();
         Map<Long, Long> editionOfFile = new HashMap<>();
         Map<Long, Long> timelineMs = new HashMap<>();
+        Set<Long> leavingAudio = new HashSet<>();
+        Set<String> leavingSubtitles = new HashSet<>();
         List<StateCarry.Old> olds = new ArrayList<>();
         for (Edition edition : film.getEditions()) {
             List<Long> ids = new ArrayList<>();
@@ -184,6 +197,8 @@ public class EditionArranger {
         List<Long> newFilmIds = new ArrayList<>();
         List<Long> newEditionIds = new ArrayList<>();
         for (Long fileId : notThis) {
+            originals.get(fileId).getAudioStreams().forEach(a -> leavingAudio.add(a.getId()));
+            originals.get(fileId).getSubtitleStreams().forEach(t -> leavingSubtitles.add(String.valueOf(t.getId())));
             Film split = createFilm(originals.get(fileId));
             newFilmIds.add(split.getId());
             newEditionIds.add(createEdition(split, ORIGINAL));
@@ -236,8 +251,18 @@ public class EditionArranger {
         if (emptied.contains(preference.getLastEditionId())) {
             preference.setLastEditionId(defaultId);
         }
+        if (leavingAudio.contains(preference.getAudioStreamId())) {
+            preference.setAudioStreamId(null);
+        }
+        if (leavingSubtitles.contains(preference.getSubtitle())) {
+            preference.setSubtitle(null);
+        }
         preferences.save(preference);
-        join.repoint(filmId, defaultId, emptied);
+        // A remembered stream is the film's, not an edition's: wherever it now sits in a later part of an edition it
+        // moves to that edition's new first part.
+        for (Long editionId : targets) {
+            join.repoint(filmId, editionId, emptied);
+        }
 
         Film settled = films.findById(filmId).orElseThrow();
         settled.setEditionsConfirmed(true);

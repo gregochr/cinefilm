@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { LIBRARY_CHANGED_EVENT } from '../api/client.js';
 import { installFetch, respond } from '../test/mockApi.jsx';
 import { useEditEditions } from './useEditEditions.js';
 
@@ -133,5 +134,22 @@ describe('useEditEditions', () => {
     expect(result.current.view.defaults.map((d) => d.on)).toEqual([false, true]);
     expect(result.current.view.errorCount).toBe(0);
     expect(JSON.parse(puts(fetchMock)[0][1].body).editions[1].default).toBe(true);
+  });
+
+  it('announces a library change after a save went through, and not after one that failed', async () => {
+    let answer = respond({ error: 'A scan is running' }, 409);
+    installFetch((m, url) => (isPut(m, url) ? answer : null));
+    const changed = vi.fn();
+    window.addEventListener(LIBRARY_CHANGED_EVENT, changed);
+    const { result } = renderHook(() => useEditEditions(40, vi.fn()));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    await act(async () => result.current.save());
+    expect(changed).not.toHaveBeenCalled();
+    answer = respond({ filmId: 40, newFilmIds: [] });
+    await act(async () => result.current.save());
+
+    expect(changed).toHaveBeenCalledTimes(1);
+    window.removeEventListener(LIBRARY_CHANGED_EVENT, changed);
   });
 });

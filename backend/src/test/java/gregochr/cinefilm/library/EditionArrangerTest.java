@@ -691,4 +691,102 @@ class EditionArrangerTest extends ApiTestBase {
         assertThat(states.findById(editionId(film, 0))).get().extracting(PlaybackState::getPositionMs)
             .isEqualTo(30 * MIN);
     }
+
+    /** Theatrical (the default, one file) and Extended (two French-first parts). */
+    private Film withFrenchExtended() {
+        Film built = film(null, "Heat", 1995, NOW);
+        file(edition(built, null, "Theatrical", 100 * MIN, null), "Heat {edition-Theatrical}.m4v");
+        Edition extended = edition(built, null, "Extended", 150 * MIN, null);
+        timed(extended, "Heat {edition-Extended} - pt1.m4v", 100, 1);
+        timed(extended, "Heat {edition-Extended} - pt2.m4v", 50, 2);
+        extended.getMediaFiles().forEach(m -> {
+            m.getAudioStreams().get(0).setLanguage("French");
+            m.getSubtitleStreams().get(0).setLanguage("French");
+        });
+        return save(built);
+    }
+
+    private SaveRequest swappedExtended(Film film) {
+        List<MediaFile> parts = film.getEditions().get(1).originalParts();
+        return new SaveRequest(List.of(
+            ed(editionId(film, 0), "Theatrical", true, f(fileId(film, 0), null)),
+            ed(editionId(film, 1), "Extended", false, f(parts.get(1).getId(), 1), f(parts.get(0).getId(), 2))),
+            List.of());
+    }
+
+    @Test
+    void swappingThePartsOfANonDefaultEditionKeepsItsFrenchAudioAndSubtitles() {
+        Film film = withFrenchExtended();
+        List<MediaFile> parts = film.getEditions().get(1).originalParts();
+        FilmPreference preference = new FilmPreference(film.getId());
+        preference.setDefaultEditionId(editionId(film, 0));
+        preference.setAudioStreamId(parts.get(0).getAudioStreams().get(0).getId());
+        preference.setSubtitle(String.valueOf(parts.get(0).getSubtitleStreams().get(0).getId()));
+        preferences.save(preference);
+
+        arranger.save(film.getId(), swappedExtended(film));
+
+        FilmPreference after = preferences.findById(film.getId()).orElseThrow();
+        assertThat(after.getAudioStreamId()).as("the French track of the new first part")
+            .isEqualTo(parts.get(1).getAudioStreams().get(0).getId());
+        assertThat(after.getSubtitle()).isEqualTo(String.valueOf(parts.get(1).getSubtitleStreams().get(0).getId()));
+        assertThat(after.getDefaultEditionId()).isEqualTo(editionId(film, 0));
+    }
+
+    @Test
+    void aChoiceInTheDefaultEditionStillMovesToItsNewFirstPart() {
+        Film film = withFrenchExtended();
+        List<MediaFile> parts = film.getEditions().get(1).originalParts();
+        FilmPreference preference = new FilmPreference(film.getId());
+        preference.setAudioStreamId(parts.get(0).getAudioStreams().get(0).getId());
+        preferences.save(preference);
+        SaveRequest request = new SaveRequest(List.of(
+            ed(editionId(film, 0), "Theatrical", false, f(fileId(film, 0), null)),
+            ed(editionId(film, 1), "Extended", true, f(parts.get(1).getId(), 1), f(parts.get(0).getId(), 2))),
+            List.of());
+
+        arranger.save(film.getId(), request);
+
+        assertThat(preferences.findById(film.getId()).orElseThrow().getAudioStreamId())
+            .isEqualTo(parts.get(1).getAudioStreams().get(0).getId());
+    }
+
+    @Test
+    void aChoiceInAFileThatIsNotThisFilmIsReset() {
+        Film film = withFrenchExtended();
+        List<MediaFile> parts = film.getEditions().get(1).originalParts();
+        FilmPreference preference = new FilmPreference(film.getId());
+        preference.setAudioStreamId(parts.get(1).getAudioStreams().get(0).getId());
+        preference.setSubtitle(String.valueOf(parts.get(1).getSubtitleStreams().get(0).getId()));
+        preferences.save(preference);
+
+        arranger.save(film.getId(), new SaveRequest(List.of(
+            ed(editionId(film, 0), "Theatrical", true, f(fileId(film, 0), null)),
+            ed(editionId(film, 1), "Extended", false, f(parts.get(0).getId(), null))),
+            List.of(parts.get(1).getId())));
+
+        FilmPreference after = preferences.findById(film.getId()).orElseThrow();
+        assertThat(after.getAudioStreamId()).isNull();
+        assertThat(after.getSubtitle()).isNull();
+    }
+
+    @Test
+    void aChoiceInAKeptFileIsLeftAloneWhenAnotherFileLeaves() {
+        Film film = withFrenchExtended();
+        List<MediaFile> parts = film.getEditions().get(1).originalParts();
+        Long keep = parts.get(0).getAudioStreams().get(0).getId();
+        FilmPreference preference = new FilmPreference(film.getId());
+        preference.setAudioStreamId(keep);
+        preference.setSubtitle("off");
+        preferences.save(preference);
+
+        arranger.save(film.getId(), new SaveRequest(List.of(
+            ed(editionId(film, 0), "Theatrical", true, f(fileId(film, 0), null)),
+            ed(editionId(film, 1), "Extended", false, f(parts.get(0).getId(), null))),
+            List.of(parts.get(1).getId())));
+
+        FilmPreference after = preferences.findById(film.getId()).orElseThrow();
+        assertThat(after.getAudioStreamId()).isEqualTo(keep);
+        assertThat(after.getSubtitle()).isEqualTo("off");
+    }
 }
