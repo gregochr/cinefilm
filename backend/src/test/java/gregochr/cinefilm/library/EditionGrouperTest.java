@@ -193,6 +193,14 @@ class EditionGrouperTest {
     }
 
     @Test
+    void aFilmThatAlsoHoldsAnotherTitleIsNeverMergedWholesale() {
+        List<FileFact> facts = List.of(fact(1, 10, 100, "Alien {edition-A}.m4v"),
+            fact(2, 20, 200, "Alien {edition-B}.m4v"), fact(2, 21, 201, "Prometheus.m4v"));
+
+        assertThat(EditionGrouper.filmMerges(facts)).isEmpty();
+    }
+
+    @Test
     void sameTagInTwoFilmsIsNotMergedBecauseThereAreNoDifferentEditions() {
         List<FileFact> facts = List.of(fact(1, 10, 100, "Gladiator {edition-Extended Cut}.m4v"),
             fact(2, 20, 200, "Gladiator {edition-Extended Cut}.m4v"));
@@ -216,15 +224,6 @@ class EditionGrouperTest {
                 GroupingSource.OWNER));
 
         assertThat(EditionGrouper.filmMerges(facts)).isEmpty();
-    }
-
-    @Test
-    void aFilmIsInOnePlanPerCall() {
-        List<FileFact> facts = List.of(fact(1, 10, 100, "Gladiator {edition-A}.m4v"),
-            fact(2, 20, 200, "Gladiator {edition-B}.m4v"), fact(1, 10, 101, "Alien {edition-A}.m4v"),
-            fact(3, 30, 300, "Alien {edition-B}.m4v"));
-
-        assertThat(EditionGrouper.filmMerges(facts)).containsExactly(List.of(1L, 2L));
     }
 
     @Test

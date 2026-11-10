@@ -292,8 +292,13 @@ public class ScanService {
             return;
         }
         for (Pending pending : ingest.pending()) {
-            MatchOutcome outcome = matcher.match(new TitleGuess(pending.title(), pending.year()),
-                pending.runtimeMs());
+            MatchOutcome outcome = null;
+            if (pending.tmdbId() != null || pending.imdbId() != null) {
+                outcome = matcher.matchTagged(pending.tmdbId(), pending.imdbId()).orElse(null);
+            }
+            if (outcome == null) {
+                outcome = matcher.match(new TitleGuess(pending.title(), pending.year()), pending.runtimeMs());
+            }
             if (outcome.status() == Status.UNAVAILABLE) {
                 run.tmdbDown = true;
                 return;

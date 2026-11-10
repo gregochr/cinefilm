@@ -196,6 +196,37 @@ class ScanServiceGroupingTest {
     }
 
     @Test
+    void aPendingFilmWhoseFileCarriesAnIdIsRetriedByThatId() {
+        when(scanner.scan()).thenReturn(new Found(List.of(), 0));
+        when(ingest.pending()).thenReturn(List.of(new LibraryIngest.Pending(10L, "Heat", null, 170 * MIN, 949L, null)));
+        MatchOutcome outcome = matched(949);
+        when(matcher.matchTagged(949L, null)).thenReturn(Optional.of(outcome));
+
+        service.start("admin");
+
+        verify(ingest).applyOutcome(10L, outcome);
+        verify(matcher, never()).match(org.mockito.ArgumentMatchers.any(), anyLong());
+    }
+
+    @Test
+    void aPendingTagTmdbDoesNotKnowFallsBackToTheTitleSearchAndAnUntaggedOneSearchesDirectly() {
+        when(scanner.scan()).thenReturn(new Found(List.of(), 0));
+        when(ingest.pending()).thenReturn(List.of(new LibraryIngest.Pending(10L, "Heat", 1995, 1L, null, "tt1"),
+            new LibraryIngest.Pending(11L, "Alien", null, 2L)));
+        MatchOutcome heat = matched(949);
+        MatchOutcome alien = matched(348);
+        when(matcher.matchTagged(null, "tt1")).thenReturn(Optional.empty());
+        when(matcher.match(new TitleGuess("Heat", 1995), 1L)).thenReturn(heat);
+        when(matcher.match(new TitleGuess("Alien", null), 2L)).thenReturn(alien);
+
+        service.start("admin");
+
+        verify(ingest).applyOutcome(10L, heat);
+        verify(ingest).applyOutcome(11L, alien);
+        verify(matcher, never()).matchTagged(null, null);
+    }
+
+    @Test
     void aTmdbOutageOnATaggedLookupLeavesTheFileForALaterScan() throws IOException {
         FoundFile file = newFile("Heat {tmdb-949}.m4v", 170);
         when(matcher.matchTagged(949L, null)).thenReturn(Optional.of(UNAVAILABLE));

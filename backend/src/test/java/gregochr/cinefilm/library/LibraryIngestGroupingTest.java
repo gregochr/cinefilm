@@ -314,6 +314,18 @@ class LibraryIngestGroupingTest extends ApiTestBase {
         assertThat(ingest.isPartOfKnownEdition("Fellowship - pt2.m4v")).isFalse();
     }
 
+    @Test
+    void aPendingFilmCarriesTheIdTagsOfItsFirstFile() {
+        add("Heat {tmdb-949}.m4v", 170, null);
+        add("Alien {imdb-tt0078748}.m4v", 117, null);
+        add("Dune.m4v", 155, null);
+
+        assertThat(ingest.pending()).extracting(Pending::title, Pending::tmdbId, Pending::imdbId)
+            .containsExactlyInAnyOrder(org.assertj.core.groups.Tuple.tuple("Heat {tmdb-949}", 949L, null),
+                org.assertj.core.groups.Tuple.tuple("Alien {imdb-tt0078748}", null, "tt0078748"),
+                org.assertj.core.groups.Tuple.tuple("Dune", null, null));
+    }
+
     // ---- searching
 
     @Test

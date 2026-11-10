@@ -32,7 +32,7 @@ public final class EditionGrouper {
 
     /**
      * The films to merge, each list holding the film that survives first (a matched film, else the oldest) and then the
-     * films that go into it. A film appears in at most one plan per call.
+     * films that go into it.
      *
      * @param facts every original file of a film the owner has not settled
      * @return the merges, in the order the files were given
@@ -42,9 +42,13 @@ public final class EditionGrouper {
         for (FileFact fact : facts) {
             byKey.computeIfAbsent(fact.filmKey(), k -> new ArrayList<>()).add(fact);
         }
+        Map<Long, Set<String>> keysOfFilm = new LinkedHashMap<>();
+        for (FileFact fact : facts) {
+            keysOfFilm.computeIfAbsent(fact.filmId(), k -> new HashSet<>()).add(fact.filmKey());
+        }
         List<List<Long>> plans = new ArrayList<>();
-        Set<Long> used = new HashSet<>();
-        for (List<FileFact> group : byKey.values()) {
+        for (Map.Entry<String, List<FileFact>> entry : byKey.entrySet()) {
+            List<FileFact> group = entry.getValue();
             Set<Long> filmIds = new TreeSet<>();
             Set<String> tags = new LinkedHashSet<>();
             boolean allAuto = true;
@@ -53,7 +57,9 @@ public final class EditionGrouper {
                 tags.add(fact.tagKey());
                 allAuto &= fact.editionSource() == GroupingSource.AUTO;
             }
-            if (filmIds.size() < 2 || tags.size() < 2 || !allAuto || filmIds.stream().anyMatch(used::contains)) {
+            // A whole film moves, so every file of every film must be this film (an ambiguous film is left alone).
+            boolean clean = filmIds.stream().allMatch(id -> keysOfFilm.get(id).equals(Set.of(entry.getKey())));
+            if (filmIds.size() < 2 || tags.size() < 2 || !allAuto || !clean) {
                 continue;
             }
             long survivor = group.stream().filter(f -> f.filmStatus() == MatchStatus.MATCHED)
@@ -61,7 +67,6 @@ public final class EditionGrouper {
             List<Long> plan = new ArrayList<>();
             plan.add(survivor);
             filmIds.stream().filter(id -> id != survivor).forEach(plan::add);
-            used.addAll(filmIds);
             plans.add(plan);
         }
         return plans;

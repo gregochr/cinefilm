@@ -89,8 +89,15 @@ public class LibraryIngest {
      * @param title its current (guessed) title
      * @param year its current year, null when unknown
      * @param runtimeMs the runtime of its first playable edition
+     * @param tmdbId the {@code {tmdb-N}} tag in its first file's name, or null
+     * @param imdbId the {@code {imdb-ttN}} tag in its first file's name, or null
      */
-    public record Pending(Long filmId, String title, Integer year, long runtimeMs) {
+    public record Pending(Long filmId, String title, Integer year, long runtimeMs, Long tmdbId, String imdbId) {
+
+        /** A pending film whose file names carry no id tag. */
+        public Pending(Long filmId, String title, Integer year, long runtimeMs) {
+            this(filmId, title, year, runtimeMs, null, null);
+        }
     }
 
     /** Every stored original file keyed by relative path. */
@@ -271,8 +278,16 @@ public class LibraryIngest {
     public List<Pending> pending() {
         return films.findByMatchStatusOrderBySortTitle(MatchStatus.PENDING).stream()
             .filter(f -> !f.getEditions().isEmpty() && f.browsable())
-            .map(f -> new Pending(f.getId(), f.getTitle(), f.getYear(), searchRuntimeMs(f.getEditions().get(0))))
+            .map(f -> pendingOf(f))
             .toList();
+    }
+
+    private static Pending pendingOf(Film film) {
+        Edition edition = film.getEditions().get(0);
+        java.util.Optional<ParsedName> parsed = java.util.Optional.ofNullable(edition.originalFile())
+            .map(first -> FileNameParser.parse(first.getPath()));
+        return new Pending(film.getId(), film.getTitle(), film.getYear(), searchRuntimeMs(edition),
+            parsed.map(ParsedName::tmdbId).orElse(null), parsed.map(ParsedName::imdbId).orElse(null));
     }
 
     /** A part-numbered file is only a piece of the film, so its duration says nothing about the film's runtime. */

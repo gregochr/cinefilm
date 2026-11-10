@@ -181,6 +181,19 @@ class LibraryGroupingTest extends ApiTestBase {
         assertThat(preferences.findById(two.getId()).orElseThrow().getDefaultEditionId()).isEqualTo(plain.getId());
     }
 
+    @Test
+    void aFlaggedFilmHoldingAnotherTitleIsNotMergedIntoACleanOne() {
+        film("Alien", MatchStatus.MATCHED, 348L, "A", 117, "Alien {edition-A}.m4v");
+        Film mixed = film("Alien", MatchStatus.PENDING, null, "B", 116, "Alien {edition-B}.m4v");
+        addEdition(mixed, "Original", 124, "Prometheus.m4v", 1);
+        reset();
+
+        assertThat(grouping.group()).isZero();
+
+        assertThat(films.count()).isEqualTo(2);
+        assertThat(changes.count()).isZero();
+    }
+
     // ---- existing editions named "Original"
 
     @Test
