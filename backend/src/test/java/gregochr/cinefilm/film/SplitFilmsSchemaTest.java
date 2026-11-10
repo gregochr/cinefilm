@@ -14,7 +14,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
-/** The V8 columns and table round-trip through the real mappings (H2 in PostgreSQL mode, ddl-auto=validate). */
+/** The V9 columns and table round-trip through the real mappings (H2 in PostgreSQL mode, ddl-auto=validate). */
 class SplitFilmsSchemaTest extends ApiTestBase {
 
     @Autowired

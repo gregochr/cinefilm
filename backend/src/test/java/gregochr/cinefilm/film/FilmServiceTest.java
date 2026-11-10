@@ -173,7 +173,7 @@ class FilmServiceTest {
 
         assertThatThrownBy(() -> service.list(new LibraryQuery(null, "popularity", null, null, null, null)))
             .isInstanceOf(BadRequestException.class)
-            .hasMessage("sort must be title, year or added");
+            .hasMessage("sort must be title, year, added, imdb or rt");
     }
 
     @Test

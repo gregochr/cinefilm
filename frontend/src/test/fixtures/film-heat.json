@@ -165,5 +165,16 @@
     "quality": "auto",
     "audioStreamId": 111,
     "subtitle": "off"
+  },
+  "ratings": {
+    "imdb": {
+      "score": 8.3,
+      "votes": 712345,
+      "url": "https://www.imdb.com/title/tt0113277/"
+    },
+    "rottenTomatoes": {
+      "score": 84,
+      "url": "https://www.rottentomatoes.com/m/heat_1995"
+    }
   }
 }

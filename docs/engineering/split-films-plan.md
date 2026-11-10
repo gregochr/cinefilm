@@ -146,7 +146,7 @@ ignores them.
 
 ## Phase 1 — model
 
-Migration `V8__split_films.sql` (expand-only):
+Migration `V9__split_films.sql` (expand-only):
 
 - `media_file.part_number int not null default 1`; index `media_file(edition_id, kind, part_number)` (not unique;
   uniqueness enforced in code and tested). Map as `int`/`Integer` (`ddl-auto=validate`; no `smallint`).

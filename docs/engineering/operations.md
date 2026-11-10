@@ -64,11 +64,22 @@ DBPW="$(openssl rand -hex 24)"; PW="$(openssl rand -base64 24 | tr -d '\n')"
 grep -q '^CINEFILM_DB_PASSWORD=' .env || echo "CINEFILM_DB_PASSWORD=${DBPW}" >> .env
 grep -q '^CINEFILM_PASSWORD=' .env || { echo "CINEFILM_PASSWORD=${PW}" >> .env; echo "Sign-in password: ${PW}"; }   # note it in your password manager, then clear the terminal
 grep -q '^TMDB_READ_TOKEN=' .env || echo "TMDB_READ_TOKEN=" >> .env
+grep -q '^OMDB_API_KEY=' .env || echo "OMDB_API_KEY=" >> .env
 ```
 
 Compare the result with `deploy/.env.example` for any other keys it lists.
 
 `TMDB_READ_TOKEN` stays empty until the TMDB phase. Never commit `.env`; never paste it anywhere.
+
+**IMDb and Rotten Tomatoes ratings** come from OMDb and are off while `OMDB_API_KEY` is blank (Admin then says
+*Ratings need an OMDb API key*). Get a free key at https://www.omdbapi.com/apikey.aspx (1,000 requests a day) and put
+it in `~/cinefilm/.env` by editing the `OMDB_API_KEY=` line; do not paste it into chat or a commit. OMDb takes the key
+in the request URL, so CineFilm never logs that URL. The app asks for at most 900 films a day (`cinefilm.omdb.daily-limit`,
+counted per UTC day in the `ratings_budget` table, so a restart does not grant a fresh allowance) and stops for the day when OMDb says its limit is reached. A film's ratings are refetched when
+they are over 30 days old, after each library scan and Plex import, and daily at 05:30 (London). The first run also
+fetches each existing film's IMDb id from TMDB (`/3/movie/{id}/external_ids`), so a large library fills in over a few
+days. **Refresh ratings** in Admin (Library scan card) refetches every film, oldest first, within the same daily
+budget.
 
 **Plex import settings** (all in `~/cinefilm/.env`; the import is off while `PLEX_URL` or `PLEX_TOKEN` is blank):
 

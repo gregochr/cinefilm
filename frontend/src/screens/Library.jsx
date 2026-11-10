@@ -12,8 +12,16 @@ const SORTS = [
   { value: 'title', label: 'Title' },
   { value: 'year', label: 'Year' },
   { value: 'added', label: 'Recently added' },
+  { value: 'imdb', label: 'IMDb rating' },
+  { value: 'rt', label: 'Rotten Tomatoes' },
 ];
-const SORT_PHRASE = { title: 'title', year: 'year', added: 'recently added' };
+const SORT_PHRASE = {
+  title: 'title',
+  year: 'year',
+  added: 'recently added',
+  imdb: 'IMDb rating',
+  rt: 'Rotten Tomatoes',
+};
 const SHOWS = [
   { value: 'all', label: 'All' },
   { value: 'unwatched', label: 'Unwatched' },
