@@ -118,7 +118,7 @@ public class SessionSources {
             }
             Path path = root.resolveFile(original.getPath()).filter(Files::isReadable)
                 .orElseThrow(() -> new NotFoundException("Media file is not available"));
-            Long duration = multiPart ? original.timelineDurationMs() : original.getDurationMs();
+            Long duration = KeyframeIndexService.indexDurationMs(original, multiPart);
             parts.add(new Part(original, path, audio(original), duration == null ? 0 : duration));
         }
         return new Source(editionId, edition.getFilm().getTitle(), List.copyOf(parts),

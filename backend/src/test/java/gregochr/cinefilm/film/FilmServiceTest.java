@@ -201,11 +201,37 @@ class FilmServiceTest {
         when(loader.views(List.of(heat))).thenReturn(List.of(view(heat)));
         when(preferences.resolve(heat)).thenReturn(new Preferences(10L, "auto", null, "off"));
         when(transcoder.mode()).thenReturn(EncoderMode.VAAPI);
-        when(indexes.cached(original)).thenReturn(Optional.of(new KeyframeIndexService.Index(
+        when(indexes.cachedFor(original, false)).thenReturn(Optional.of(new KeyframeIndexService.Index(
             CutList.fromKeyframes(List.of(), 100 * MIN), null)));
 
         assertThat(service.detail(1L).editions().get(0).qualities()).extracting(FilmDtos.QualityDto::id)
             .containsExactly("auto", "original", "1080p", "720p", "480p", "360p");
+    }
+
+    @Test
+    void detailReadsThePartsOfASplitEditionsIndexesAtTheirVideoDuration() {
+        Film heat = owned(1L, "Heat", 1995, "Crime");
+        Edition edition = heat.getEditions().get(0);
+        MediaFile first = file(edition, "pt1.mp4");
+        MediaFile second = file(edition, "pt2.mp4");
+        second.setPartNumber(2);
+        first.setId(1L);
+        second.setId(2L);
+        for (MediaFile part : List.of(first, second)) {
+            part.setVideoCodec("H.264");
+            part.setPixelFormat("yuv420p");
+        }
+        when(films.findById(1L)).thenReturn(Optional.of(heat));
+        when(loader.views(List.of(heat))).thenReturn(List.of(view(heat)));
+        when(preferences.resolve(heat)).thenReturn(new Preferences(10L, "auto", null, "off"));
+        when(transcoder.mode()).thenReturn(EncoderMode.VAAPI);
+        CutList copyable = CutList.fromKeyframes(java.util.stream.IntStream.range(0, 15).mapToObj(i -> i * 4000L)
+            .toList(), 60_000);
+        when(indexes.cachedFor(first, true)).thenReturn(Optional.of(new KeyframeIndexService.Index(copyable, null)));
+        when(indexes.cachedFor(second, true)).thenReturn(Optional.of(new KeyframeIndexService.Index(copyable, null)));
+
+        assertThat(service.detail(1L).editions().get(0).qualities()).filteredOn(q -> q.id().equals("original"))
+            .extracting(FilmDtos.QualityDto::available).containsExactly(true);
     }
 
     @Test
@@ -218,7 +244,7 @@ class FilmServiceTest {
         when(loader.views(List.of(heat))).thenReturn(List.of(view(heat)));
         when(preferences.resolve(heat)).thenReturn(new Preferences(10L, "auto", null, "off"));
         when(transcoder.mode()).thenReturn(EncoderMode.VAAPI);
-        when(indexes.cached(original)).thenReturn(Optional.empty());
+        when(indexes.cachedFor(original, false)).thenReturn(Optional.empty());
 
         assertThat(service.detail(1L).editions().get(0).qualities()).extracting(FilmDtos.QualityDto::id)
             .containsExactly("auto", "original", "720p", "480p", "360p");

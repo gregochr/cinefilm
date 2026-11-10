@@ -45,6 +45,30 @@ public class KeyframeIndexService {
     }
 
     /**
+     * How long a file's cut list is: the one rule every reader of an index uses (playback sessions, Film detail's
+     * quality list, the background index job), so they all see the same cuts. A part of a split film ends where its
+     * video ends (the container can be the audio's, a second or more longer); a film in one piece keeps the container
+     * duration.
+     *
+     * @param file the original file
+     * @param split true when the file is one of several parts of its edition
+     * @return the duration the cut list covers, or null when unknown
+     */
+    public static Long indexDurationMs(MediaFile file, boolean split) {
+        return split ? file.timelineDurationMs() : file.getDurationMs();
+    }
+
+    /** {@link #cached(MediaFile, Long)} for the duration {@link #indexDurationMs} gives. */
+    public Optional<Index> cachedFor(MediaFile file, boolean split) {
+        return cached(file, indexDurationMs(file, split));
+    }
+
+    /** {@link #ensureIndexed(MediaFile, Long)} for the duration {@link #indexDurationMs} gives. */
+    public Index ensureIndexedFor(MediaFile file, boolean split) {
+        return ensureIndexed(file, indexDurationMs(file, split));
+    }
+
+    /**
      * The stored cut list when it is still current (the file has the size and modification time it had when it was
      * indexed), without indexing anything.
      *

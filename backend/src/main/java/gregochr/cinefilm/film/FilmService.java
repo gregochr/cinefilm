@@ -59,7 +59,8 @@ public class FilmService {
             && films.findByCollectionId(film.getCollection().getId()).stream().filter(Film::browsable).count()
                 >= CollectionService.MIN_OWNED;
         return FilmMapper.detail(view, preferences.resolve(film), inCollection,
-            transcoder.mode(), file -> indexes.cached(file).map(KeyframeIndexService.Index::cuts).orElse(null));
+            transcoder.mode(), file -> indexes.cachedFor(file, file.getEdition().partCount() > 1)
+                .map(KeyframeIndexService.Index::cuts).orElse(null));
     }
 
     /** The ids of the collections with at least {@link CollectionService#MIN_OWNED} films in the library. */

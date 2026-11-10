@@ -33,6 +33,9 @@ class IndexJobTest {
         MediaFile file = new MediaFile();
         file.setId(id);
         file.setPath(path);
+        gregochr.cinefilm.film.Edition edition = new gregochr.cinefilm.film.Edition();
+        edition.setId(id);
+        file.setEdition(edition);
         return file;
     }
 
@@ -45,8 +48,23 @@ class IndexJobTest {
         job.run();
 
         InOrder order = inOrder(service);
-        order.verify(service).ensureIndexed(a);
-        order.verify(service).ensureIndexed(b);
+        order.verify(service).ensureIndexedFor(a, false);
+        order.verify(service).ensureIndexedFor(b, false);
+    }
+
+    @Test
+    void thePartsOfASplitFilmAreIndexedToTheirVideoDurationAndAFilmInOnePieceIsNot() {
+        MediaFile pt1 = media(1, "pt1.m4v");
+        MediaFile pt2 = media(2, "pt2.m4v");
+        pt2.setEdition(pt1.getEdition());
+        MediaFile single = media(3, "single.m4v");
+        when(files.findOriginals(Presence.PRESENT, Playability.PLAYABLE)).thenReturn(List.of(pt1, pt2, single));
+
+        job.run();
+
+        verify(service).ensureIndexedFor(pt1, true);
+        verify(service).ensureIndexedFor(pt2, true);
+        verify(service).ensureIndexedFor(single, false);
     }
 
     @Test
@@ -54,11 +72,11 @@ class IndexJobTest {
         MediaFile bad = media(1, "bad.mp4");
         MediaFile good = media(2, "good.mp4");
         when(files.findOriginals(Presence.PRESENT, Playability.PLAYABLE)).thenReturn(List.of(bad, good));
-        when(service.ensureIndexed(bad)).thenThrow(new KeyframeIndexException("Not an MP4 file"));
+        when(service.ensureIndexedFor(bad, false)).thenThrow(new KeyframeIndexException("Not an MP4 file"));
 
         job.run();
 
-        verify(service).ensureIndexed(good);
+        verify(service).ensureIndexedFor(good, false);
     }
 
     @Test
@@ -67,8 +85,8 @@ class IndexJobTest {
         MediaFile good = media(2, "good.mp4");
         MediaFile worse = media(3, "worse.mp4");
         when(files.findOriginals(Presence.PRESENT, Playability.PLAYABLE)).thenReturn(List.of(bad, good, worse));
-        when(service.ensureIndexed(bad)).thenThrow(new KeyframeIndexException("Not an MP4 file"));
-        when(service.ensureIndexed(worse)).thenThrow(new KeyframeIndexException("Not an MP4 file"));
+        when(service.ensureIndexedFor(bad, false)).thenThrow(new KeyframeIndexException("Not an MP4 file"));
+        when(service.ensureIndexedFor(worse, false)).thenThrow(new KeyframeIndexException("Not an MP4 file"));
         Logger logger = (Logger) org.slf4j.LoggerFactory.getLogger(IndexJob.class);
         ListAppender<ILoggingEvent> appender = new ListAppender<>();
         appender.start();
