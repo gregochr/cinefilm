@@ -54,7 +54,7 @@ describe('App routes', () => {
     const fetchMock = installFetch();
     renderApp('/');
     await userEvent.type(
-      await screen.findByRole('searchbox', { name: 'Search the library' }),
+      await screen.findByRole('combobox', { name: 'Search the library' }),
       'heat{Enter}',
     );
     expect(await screen.findByRole('heading', { level: 1, name: 'Library' })).toBeInTheDocument();

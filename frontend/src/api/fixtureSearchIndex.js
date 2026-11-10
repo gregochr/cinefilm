@@ -5,25 +5,25 @@ import collections from '../test/fixtures/collections.json';
 
 const MINUTE = 60000;
 
-// Sample films beyond the fixture list: id, title, year, directors, poster, minutes left (in progress), last played.
+// Sample films beyond the fixture list (no artwork, so Art draws its placeholder): id, title, year, directors, minutes left (in progress), last played.
 const EXTRA_FILMS = [
-  [200, 'Walk the Line', 2005, ['James Mangold'], '/walk.jpg'],
-  [201, 'WALL·E', 2008, ['Andrew Stanton'], '/walle.jpg'],
-  [202, 'War Horse', 2011, ['Steven Spielberg'], '/warhorse.jpg'],
-  [203, 'War of the Worlds', 2005, ['Steven Spielberg'], '/wotw.jpg'],
-  [204, 'Warrior', 2011, ["Gavin O'Connor"], '/warrior.jpg', 123, '2026-11-08T20:00:00Z'],
-  [205, 'Hancock', 2008, ['Peter Berg'], '/hancock.jpg'],
-  [206, 'The Hangover', 2009, ['Todd Phillips'], '/hangover.jpg', null, '2026-10-02T21:00:00Z'],
-  [207, 'Harry Potter and the Philosopher’s Stone', 2001, ['Chris Columbus'], '/hp1.jpg'],
-  [208, 'Harry Potter and the Chamber of Secrets', 2002, ['Chris Columbus'], '/hp2.jpg'],
-  [209, 'Star Wars', 1977, ['George Lucas'], '/sw4.jpg'],
-  [210, 'The Empire Strikes Back', 1980, ['Irvin Kershner'], '/sw5.jpg'],
-  [211, 'The Hangover Part II', 2011, ['Todd Phillips'], '/hangover2.jpg'],
+  [200, 'Walk the Line', 2005, ['James Mangold']],
+  [201, 'WALL·E', 2008, ['Andrew Stanton']],
+  [202, 'War Horse', 2011, ['Steven Spielberg']],
+  [203, 'War of the Worlds', 2005, ['Steven Spielberg']],
+  [204, 'Warrior', 2011, ["Gavin O'Connor"], 123, '2026-11-08T20:00:00Z'],
+  [205, 'Hancock', 2008, ['Peter Berg']],
+  [206, 'The Hangover', 2009, ['Todd Phillips'], null, '2026-10-02T21:00:00Z'],
+  [207, 'Harry Potter and the Philosopher’s Stone', 2001, ['Chris Columbus']],
+  [208, 'Harry Potter and the Chamber of Secrets', 2002, ['Chris Columbus']],
+  [209, 'Star Wars', 1977, ['George Lucas']],
+  [210, 'The Empire Strikes Back', 1980, ['Irvin Kershner']],
+  [211, 'The Hangover Part II', 2011, ['Todd Phillips']],
 ];
 
 const EXTRA_COLLECTIONS = [
-  [40, 'Star Wars Collection', 2, 9, ['/sw4.jpg', '/sw5.jpg']],
-  [42, 'The Hangover Collection', 2, 3, ['/hangover.jpg', '/hangover2.jpg']],
+  [40, 'Star Wars Collection', 2, 9, []],
+  [42, 'The Hangover Collection', 2, 3, []],
 ];
 
 // Sample people: id, name, films as an actor, films as a director.
@@ -52,8 +52,8 @@ function fixtureFilm(card) {
   return entry;
 }
 
-function extraFilm([id, title, year, directors, poster, minutesLeft, playedAt]) {
-  const entry = { id, t: title, y: year, d: directors, p: poster };
+function extraFilm([id, title, year, directors, minutesLeft, playedAt]) {
+  const entry = { id, t: title, y: year, d: directors };
   if (minutesLeft) entry.left = minutesLeft * MINUTE;
   if (playedAt) entry.at = playedAt;
   entry.s = slug(title);

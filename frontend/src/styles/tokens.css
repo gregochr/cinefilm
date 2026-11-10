@@ -18,6 +18,10 @@
   --cf-text-muted: #A39A8B;    /* labels, captions — 4.5:1+ on --cf-bg */
   --cf-text-disabled: #6F675B;
   --cf-on-poster: rgba(255, 248, 236, 0.9);
+  --cf-search-hit-underline: #6F675B; /* underline under the matched part of a search result */
+  --cf-search-row-active: #2A251F;    /* the active search row */
+  --cf-scrim: rgba(14, 12, 10, 0.6);  /* dims the page behind the search dropdown */
+  --cf-shadow-panel: 0 24px 60px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.4);
 
   /* Accent — use sparingly: primary action, progress, current-nav underline, eyebrow */
   --cf-amber: #E8B25A;

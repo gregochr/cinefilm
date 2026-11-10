@@ -202,7 +202,7 @@ When resuming, the frame at the resume point is shown behind the startup indicat
 2. **Quality and subtitles:** both the detail page and the player have them. The last choice is **remembered per film**, and the detail page pre-selects it.
 3. **Auto step-up:** after a step-down, Auto may step back **up one level at a time** after about **60 s** of healthy throughput. Each change shows a quiet toast; the step-down copy is above, and step-up uses the same pattern, e.g. "Back to 1080p".
 4. **Weekly Home row:** one theme (a decade, genre or director drawn from the library) is chosen **each Monday**. It never changes while the page is open.
-5. **Search:** **live as you type** (debounced) across title, actor and director. Names everywhere link to a **Person page** listing only owned films.
+5. **Search:** **live as you type** across title, actor and director. The header dropdown is undebounced and client-side (no request per keystroke); the Library page keeps its debounced server search. The header dropdown's design and rules are in `docs/design/search/`. Names everywhere link to a **Person page** listing only owned films.
 6. **Forced subtitles:** when Subtitles is **Off** and the film has an English (forced) track, the forced track plays automatically. Choosing full English replaces it. The UI shows "Off · forced when needed".
 7. **Remote cue:** only the corner indicator in the player. Nothing on browse pages.
 8. **CineLight:** a **"Dim the lights"** switch next to Play on Film detail, **on by default**. Turning it off skips the Hue dimming for that playback only. CineFilm needs to tell CineLight about the skip, e.g. a flag on the play event. There's no CineLight indicator in the player.
