@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from './Button.jsx';
+import LogoMark from './LogoMark.jsx';
 
 /** The §5 "signed out while you were away" card, shown over whatever the user was doing. */
 export default function SignInCard({ error, submitting, onSignIn }) {
@@ -19,6 +20,7 @@ export default function SignInCard({ error, submitting, onSignIn }) {
   return (
     <div className="signin" role="dialog" aria-modal="true" aria-labelledby="signin-title">
       <form className="signin__card" onSubmit={submit}>
+        <LogoMark size={48} />
         <h2 id="signin-title" className="signin__title">
           Signed out
         </h2>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { SearchIcon, SettingsIcon } from './icons.jsx';
+import LogoMark from './LogoMark.jsx';
 
 export default function Header() {
   const navigate = useNavigate();
@@ -17,8 +18,9 @@ export default function Header() {
 
   return (
     <header className="header">
-      <Link to="/" className="header__wordmark">
-        CineFilm
+      <Link to="/" className="header__wordmark" aria-label="CineFilm — Home">
+        <LogoMark size={30} />
+        <span aria-hidden="true">CineFilm</span>
       </Link>
       <nav className="header__nav" aria-label="Primary">
         <NavLink to="/" end className="header__link">

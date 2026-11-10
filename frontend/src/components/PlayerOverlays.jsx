@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import BufferingIndicator from './BufferingIndicator.jsx';
 import { Button } from './Button.jsx';
 
 export function IndicatorPill({ text, amber = false }) {
@@ -11,23 +12,9 @@ export function IndicatorPill({ text, amber = false }) {
   );
 }
 
-export function BufferingSpinner() {
-  return (
-    <div className="buffering" role="status">
-      <span className="buffering__spinner" aria-hidden="true" />
-      <span className="buffering__text">BUFFERING</span>
-    </div>
-  );
-}
-
 /** Shown while the connection is down and the player keeps retrying; polite, never an error. */
 export function ReconnectingNotice() {
-  return (
-    <div className="reconnecting" role="status">
-      <span className="buffering__spinner" aria-hidden="true" />
-      <span className="buffering__text">Reconnecting…</span>
-    </div>
-  );
+  return <BufferingIndicator label="Reconnecting…" delay={0} />;
 }
 
 /** The one-off card per session on a slow connection (decision 11). */

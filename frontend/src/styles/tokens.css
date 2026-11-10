@@ -21,6 +21,7 @@
 
   /* Accent — use sparingly: primary action, progress, current-nav underline, eyebrow */
   --cf-amber: #E8B25A;
+  --cf-dust: #FFF3DC;          /* dust specks in the buffering beam */
   --cf-on-amber: #1A1206;
   --cf-ok: #9FD3A8;            /* worker online, home network dot */
 

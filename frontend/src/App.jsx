@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router-dom';
 import Layout from './components/Layout.jsx';
+import LogoMark from './components/LogoMark.jsx';
 import SignInCard from './components/SignInCard.jsx';
 import Admin from './screens/Admin.jsx';
 import Collection from './screens/Collection.jsx';
@@ -13,6 +14,7 @@ import { useSession } from './state/useSession.js';
 function NotFound() {
   return (
     <div className="state">
+      <LogoMark size={48} />
       <h1 className="state__title">Nothing here</h1>
       <p className="state__text">That page isn&rsquo;t in the library.</p>
     </div>

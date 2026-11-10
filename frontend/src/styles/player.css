@@ -323,7 +323,7 @@
   border-radius: 8px;
 }
 
-/* Buffering, toast, hairline */
+/* Buffering (the Gate animation), toast, hairline */
 .buffering {
   position: absolute;
   inset: 0;
@@ -331,16 +331,31 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 18px;
   pointer-events: none;
 }
-.buffering__spinner {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: 3px solid rgba(237, 230, 218, 0.25);
-  border-top-color: var(--cf-text);
-  animation: spin 900ms linear infinite;
+.buffering__gate {
+  width: 160px;
+  height: 96px;
+  overflow: hidden;
+  border-radius: 6px;
+  color: var(--cf-amber);
+}
+.buffering__strip {
+  display: flex;
+  flex-direction: column;
+  animation: buffering-pull 2.2s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+.buffering__frame {
+  height: 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.buffering__frame-line {
+  width: 160px;
+  height: 16px;
+  background: var(--cf-surface-2);
 }
 .buffering__text {
   font-family: var(--cf-font-mono);
@@ -348,34 +363,104 @@
   letter-spacing: 0.14em;
   color: var(--cf-text-2);
 }
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
+.buffering__lamp {
+  animation: buffering-lamp 1.1s linear infinite;
+}
+.buffering__beam {
+  animation: buffering-flick 1.6s linear infinite;
+}
+.buffering__dust {
+  fill: var(--cf-dust);
+}
+.buffering__dust--1 {
+  animation: buffering-dust 1.8s linear infinite;
+}
+.buffering__dust--2 {
+  animation: buffering-dust 2.3s linear 0.6s infinite;
+}
+.buffering__dust--3 {
+  animation: buffering-dust 2s linear 1.1s infinite;
+}
+/* Frame advance: hold, then pull up one frame (96px = frame + frame line). The strip has two
+   identical frames, so the jump back to the start is invisible. */
+@keyframes buffering-pull {
+  0%,
+  45% {
+    transform: translateY(0);
+  }
+  75%,
+  100% {
+    transform: translateY(-96px);
   }
 }
+@keyframes buffering-lamp {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  20% {
+    opacity: 0.35;
+  }
+  24% {
+    opacity: 1;
+  }
+  60% {
+    opacity: 0.5;
+  }
+  63% {
+    opacity: 1;
+  }
+}
+@keyframes buffering-flick {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  6% {
+    opacity: 0.4;
+  }
+  8% {
+    opacity: 0.95;
+  }
+  40% {
+    opacity: 0.75;
+  }
+  42% {
+    opacity: 0.3;
+  }
+  44% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 0.85;
+  }
+}
+@keyframes buffering-dust {
+  0% {
+    transform: translate(0, 0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(20px, -4px);
+    opacity: 0;
+  }
+}
+/* Reduced motion: a still mark, beam at full strength (no animation leaves opacity at 1), no dust. */
 @media (prefers-reduced-motion: reduce) {
-  .buffering__spinner {
-    animation-duration: 3s;
+  .buffering__strip,
+  .buffering__lamp,
+  .buffering__beam,
+  .buffering__dust--1,
+  .buffering__dust--2,
+  .buffering__dust--3 {
+    animation: none;
   }
-}
-.reconnecting {
-  position: absolute;
-  top: 28px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 18px;
-  border-radius: var(--cf-radius-pill);
-  background: var(--cf-overlay);
-  border: 1px solid var(--cf-line);
-  pointer-events: none;
-}
-.reconnecting .buffering__spinner {
-  width: 16px;
-  height: 16px;
-  border-width: 2px;
+  .buffering__dust {
+    opacity: 0;
+  }
 }
 .slow-card {
   position: absolute;

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CineFilm — buffering animation (reference)</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #000; font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; }
+
+  /* ---- The component ---- */
+  .cf-buffering { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+  .cf-buffering__gate { width: 160px; height: 96px; overflow: hidden; border-radius: 6px; }
+  .cf-buffering__strip { display: flex; flex-direction: column; animation: cf-pull 2.2s cubic-bezier(.65,0,.35,1) infinite; }
+  .cf-buffering__frame { height: 96px; display: flex; flex-direction: column; align-items: center; }
+  .cf-buffering__frame-line { width: 160px; height: 16px; background: #1A1713; }
+  .cf-buffering__label { font-size: 12px; letter-spacing: .14em; color: #D5CCBE; }
+
+  .cf-lamp { animation: cf-lamp 1.1s linear infinite; }
+  .cf-beam { animation: cf-flick 1.6s linear infinite; }
+  .cf-dust1 { animation: cf-dust 1.8s linear infinite; }
+  .cf-dust2 { animation: cf-dust 2.3s linear .6s infinite; }
+  .cf-dust3 { animation: cf-dust 2s linear 1.1s infinite; }
+
+  /* frame advance: hold, then pull up one frame (96px = frame + frame line); strip has 2 identical frames so the loop is seamless */
+  @keyframes cf-pull  { 0%,45% { transform: translateY(0) } 75%,100% { transform: translateY(-96px) } }
+  @keyframes cf-lamp  { 0%,100% { opacity: 1 } 20% { opacity: .35 } 24% { opacity: 1 } 60% { opacity: .5 } 63% { opacity: 1 } }
+  @keyframes cf-flick { 0%,100% { opacity: 1 } 6% { opacity: .4 } 8% { opacity: .95 } 40% { opacity: .75 } 42% { opacity: .3 } 44% { opacity: 1 } 75% { opacity: .85 } }
+  @keyframes cf-dust  { 0% { transform: translate(0,0); opacity: 0 } 15% { opacity: 1 } 100% { transform: translate(20px,-4px); opacity: 0 } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cf-buffering__strip, .cf-lamp, .cf-beam, .cf-dust1, .cf-dust2, .cf-dust3 { animation: none; }
+    .cf-dust1, .cf-dust2, .cf-dust3 { opacity: 0; }
+  }
+</style>
+</head>
+<body>
+  <div class="cf-buffering" role="status" aria-live="polite">
+    <div class="cf-buffering__gate" aria-hidden="true">
+      <div class="cf-buffering__strip">
+        <!-- frame (repeated twice; identical) -->
+        <div class="cf-buffering__frame">
+          <svg width="160" height="80" viewBox="-8 0 128 64">
+            <defs>
+              <linearGradient id="cf-beam-g" x1="0" x2="1" y1="0" y2="0">
+                <stop offset="0" stop-color="#E8B25A" stop-opacity=".8"/>
+                <stop offset="1" stop-color="#E8B25A" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <g class="cf-beam"><polygon points="42,29 112,14 112,50 42,35" fill="url(#cf-beam-g)"/></g>
+            <path d="M50 14 H20 A10 10 0 0 0 10 24 V40 A10 10 0 0 0 20 50 H50" fill="none" stroke="#E8B25A" stroke-width="6.5" stroke-linecap="round"/>
+            <circle class="cf-lamp" cx="38" cy="32" r="6.5" fill="#E8B25A"/>
+            <circle class="cf-dust1" cx="52" cy="31" r="1" fill="#FFF3DC"/>
+            <circle class="cf-dust2" cx="55" cy="34" r=".8" fill="#FFF3DC"/>
+            <circle class="cf-dust3" cx="58" cy="29" r=".9" fill="#FFF3DC"/>
+          </svg>
+          <div class="cf-buffering__frame-line"></div>
+        </div>
+        <div class="cf-buffering__frame">
+          <svg width="160" height="80" viewBox="-8 0 128 64">
+            <g class="cf-beam"><polygon points="42,29 112,14 112,50 42,35" fill="url(#cf-beam-g)"/></g>
+            <path d="M50 14 H20 A10 10 0 0 0 10 24 V40 A10 10 0 0 0 20 50 H50" fill="none" stroke="#E8B25A" stroke-width="6.5" stroke-linecap="round"/>
+            <circle class="cf-lamp" cx="38" cy="32" r="6.5" fill="#E8B25A"/>
+            <circle class="cf-dust1" cx="52" cy="31" r="1" fill="#FFF3DC"/>
+            <circle class="cf-dust2" cx="55" cy="34" r=".8" fill="#FFF3DC"/>
+            <circle class="cf-dust3" cx="58" cy="29" r=".9" fill="#FFF3DC"/>
+          </svg>
+          <div class="cf-buffering__frame-line"></div>
+        </div>
+      </div>
+    </div>
+    <span class="cf-buffering__label">BUFFERING</span>
+  </div>
+</body>
+</html>
