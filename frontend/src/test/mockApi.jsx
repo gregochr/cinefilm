@@ -16,6 +16,7 @@ import adminEditions from './fixtures/admin-editions.json';
 import adminMatch from './fixtures/admin-match.json';
 import adminPlex from './fixtures/admin-plex.json';
 import adminTranscoding from './fixtures/admin-transcoding.json';
+import adminPlaybackHealth from './fixtures/admin-playback-health.json';
 import session from './fixtures/session.json';
 import home from './fixtures/home.json';
 import person from './fixtures/person.json';
@@ -37,6 +38,7 @@ export const fixtures = {
   adminMatch,
   adminPlex,
   adminTranscoding,
+  adminPlaybackHealth,
   session,
 };
 
@@ -104,6 +106,7 @@ export function defaultRoute(method, url) {
           lastImport: null,
         });
   }
+  if (path === '/api/admin/playback-health') return json(adminPlaybackHealth);
   if (path === '/api/admin/transcoding') return json(adminTranscoding);
   if (/^\/api\/admin\/transcoding\/sessions\//.test(path)) return json(null, 204);
   if (path === '/api/session') return json({ authenticated: true });

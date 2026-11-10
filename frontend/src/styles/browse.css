@@ -750,6 +750,15 @@
 .admin__item-actions {
   margin-top: 10px;
 }
+.admin__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: var(--cf-size-ui);
+  color: var(--cf-text-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .fixmatch {
   display: flex;
   flex-direction: column;

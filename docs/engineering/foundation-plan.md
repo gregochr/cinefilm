@@ -371,3 +371,14 @@ being prepared" }` with `Retry-After: 1` while a later part's keyframe index is 
 
 `FilmDetail` editions list `qualities[]` with ids `auto|original|1080p|720p|480p|360p|240p`; transcoded rungs and
 `auto` are `available:false` when the encoder is unavailable.
+
+## Playback health API (see `playback-health-plan.md`)
+
+All behind the session cookie; the `PUT` needs `X-CineFilm`. The report's fields, their meaning and the rules they
+must meet are in the plan ("The record" and "API").
+
+| Route | Contract |
+|---|---|
+| `PUT /api/playback-health/{playbackId}` body: the health report | 204. `playbackId` is a lower-case UUID made by the browser, one per viewing. A new id creates the record (404 `No such edition`); a known id replaces the report when `seq` is higher, otherwise it is left alone (still 204). 400 `Invalid health report` for an id that is not a UUID, a body over 20,000 characters or not JSON (this route reads the body as text, so it does not answer `Invalid request`), a report outside the rules, or a known id with another `editionId` |
+| `GET /api/admin/playback-health` | `{ playbacks: [{ playbackId, filmId, filmTitle, editionId, startedAt, updatedAt, report }] }`: the 20 with the newest `updatedAt`, newest first; `report` is the stored report without its `minutes` |
+| `GET /api/admin/playback-health/{playbackId}` | one such row with the whole report; 404 `No such playback` |

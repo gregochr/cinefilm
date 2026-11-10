@@ -98,6 +98,10 @@ See `design/tokens.css` for every value.
 - **Transcode worker:** online/offline, heartbeat, active sessions (film, Original → 720p, device, Remote, speed).
 - **Pre-made versions (for travel):** a switch for "Automatically prepare films in Continue watching", a per-film status list (ready, making with %, queued), storage used, and "Prepare a film…".
 - **Films needing attention**, including "3 files match one film", with a "Group as editions" action.
+- **Playback health** (owner, 2026-11-10; `docs/engineering/playback-health-plan.md`): the recent viewings, each with
+  where it was watched (Home, Train, Away or Unknown), when and for how long, the start-up time, stalls and
+  reconnects, the quality mix and download speeds, the network, and a "Full record" link to everything that was
+  measured. "No playbacks recorded yet." until there are some.
 - **Fix match:** search TMDB, then radio-pick from results showing poster, year, director, cast and **runtime**. The runtime is often what tells same-titled films apart, e.g. The Wicker Man 1973 vs 2006.
 
 ### Responsive

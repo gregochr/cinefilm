@@ -131,6 +131,12 @@ describe('fixture server', () => {
     ).toBeNull();
   });
 
+  it('serves the Admin playback health list', async () => {
+    const { playbacks } = await call('GET', '/api/admin/playback-health');
+    expect(playbacks.map((p) => p.filmTitle)).toEqual(['Heat', 'Blade Runner', 'The Wicker Man']);
+    expect(playbacks[0].report.environment).toBe('train');
+  });
+
   it('creates and removes a playback session', async () => {
     const session = await call('POST', '/api/editions/11/sessions', { quality: 'auto' });
     expect(session.masterUrl).toBe(`/api/sessions/${session.sessionId}/master.m3u8`);

@@ -155,6 +155,15 @@ describe('image URLs', () => {
     });
   });
 
+  it('reads the playback health list and builds the link to one full record', async () => {
+    const last = stubFetch();
+    await adminApi.playbackHealth();
+    expect(last()).toMatchObject({ path: '/api/admin/playback-health', method: 'GET' });
+    expect(adminApi.playbackHealthUrl('3f6c1d2e-8a4b-4c7e-9b15-2d0e6f7a1c34')).toBe(
+      '/api/admin/playback-health/3f6c1d2e-8a4b-4c7e-9b15-2d0e6f7a1c34',
+    );
+  });
+
   it('creates a playback session with POST and removes it with DELETE', async () => {
     const last = stubFetch();
     await sessionsApi.create(11, { quality: 'auto', startMs: 5000, probeKbps: 8000 });
