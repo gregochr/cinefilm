@@ -99,7 +99,8 @@ public class ScanService {
     public void start(String trigger) {
         if (!lock.tryAcquire(LibraryLock.SCAN)) {
             throw lock.heldBy(LibraryLock.SCAN) ? new ScanAlreadyRunningException()
-                : new ScanAlreadyRunningException("A Plex import is running");
+                : lock.heldBy(LibraryLock.IMPORT) ? new ScanAlreadyRunningException("A Plex import is running")
+                : new ScanAlreadyRunningException("A match is being fixed");
         }
         progress.set(new Progress(0, 0, null));
         try {

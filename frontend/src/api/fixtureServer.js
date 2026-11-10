@@ -7,6 +7,8 @@ import wickerMan from '../test/fixtures/film-wicker-man.json';
 import person from '../test/fixtures/person.json';
 import adminScan from '../test/fixtures/admin-scan.json';
 import adminAttention from '../test/fixtures/admin-attention.json';
+import adminGrouping from '../test/fixtures/admin-grouping.json';
+import adminMatch from '../test/fixtures/admin-match.json';
 import adminTranscoding from '../test/fixtures/admin-transcoding.json';
 import collection from '../test/fixtures/collection.json';
 import collections from '../test/fixtures/collections.json';
@@ -46,6 +48,10 @@ export async function handle(method, path, body) {
   if (route === '/api/home') return home;
   if (route === '/api/admin/scan') return adminScan;
   if (route === '/api/admin/attention') return adminAttention;
+  if (route === '/api/admin/grouping-report') return adminGrouping;
+  if (/^\/api\/admin\/films\/\d+\/match$/.test(route)) {
+    return method === 'POST' ? { filmId: 31, joined: false } : adminMatch;
+  }
   if (route === '/api/admin/transcoding') return adminTranscoding;
   if (/^\/api\/admin\/transcoding\/sessions\//.test(route)) return null;
   if (/^\/api\/editions\/\d+\/sessions$/.test(route)) return session;

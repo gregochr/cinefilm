@@ -81,7 +81,7 @@ public final class AdminDtos {
     /**
      * One entry of Films needing attention.
      *
-     * @param kind needs-match, protected, needs-conversion, unreadable or multiple-files
+     * @param kind needs-match, protected, needs-conversion, unreadable, multiple-files or parts-mismatch
      * @param filmId the film
      * @param title its title
      * @param year its year, or null
@@ -99,5 +99,55 @@ public final class AdminDtos {
      * @param items the entries, grouped by kind
      */
     public record Attention(List<AttentionItem> items) {
+    }
+
+    /**
+     * The grouping report.
+     *
+     * @param items the newest lines, newest first
+     */
+    public record GroupingReport(List<GroupingChangeDto> items) {
+    }
+
+    /**
+     * One TMDB result in the Fix match panel.
+     *
+     * @param tmdbId TMDB id
+     * @param title title
+     * @param year release year, or null
+     * @param runtimeMinutes runtime in minutes, or null
+     * @param posterPath poster path, or null
+     * @param director the directors, comma separated, or null
+     * @param cast the first few cast members
+     */
+    public record MatchResultDto(long tmdbId, String title, Integer year, Integer runtimeMinutes, String posterPath,
+                                 String director, List<String> cast) {
+    }
+
+    /**
+     * The body of a Fix match apply.
+     *
+     * @param tmdbId the TMDB film the owner picked
+     */
+    public record MatchRequest(Long tmdbId) {
+    }
+
+    /**
+     * What applying a match did.
+     *
+     * @param filmId the film that now holds the files (the existing film when this one was joined into it)
+     * @param joined true when another film already had that TMDB id and this one was joined into it
+     */
+    public record MatchApplied(Long filmId, boolean joined) {
+    }
+
+    /**
+     * One line of the grouping report.
+     *
+     * @param happenedAt when it happened
+     * @param kind split, join or flag
+     * @param summary what happened, in plain words
+     */
+    public record GroupingChangeDto(Instant happenedAt, String kind, String summary) {
     }
 }

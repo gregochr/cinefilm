@@ -84,7 +84,7 @@ describe('progress', () => {
 
 describe('attention labels', () => {
   it('names every kind of entry', () => {
-    expect(kindLabel('needs-match')).toBe('Needs a match');
+    expect(kindLabel('needs-match')).toBe('Unmatched');
     expect(kindLabel('protected')).toBe('Protected');
     expect(kindLabel('needs-conversion')).toBe('Needs conversion');
     expect(kindLabel('unreadable')).toBe('Unreadable');

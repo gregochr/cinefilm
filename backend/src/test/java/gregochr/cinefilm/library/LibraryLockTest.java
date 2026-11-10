@@ -69,6 +69,18 @@ class LibraryLockTest {
     }
 
     @Test
+    void aScanCannotStartWhileAMatchIsBeingFixedAndSaysSo() {
+        lock.tryAcquire(LibraryLock.MATCH);
+        ScanService scans = scans();
+
+        assertThatThrownBy(() -> scans.start("admin")).isInstanceOf(ScanAlreadyRunningException.class)
+            .hasMessage("A match is being fixed");
+
+        assertThat(queued).isEmpty();
+        assertThat(lock.heldBy(LibraryLock.MATCH)).isTrue();
+    }
+
+    @Test
     void aRunningScanBlocksAnImportAndFreesTheLockWhenItEnds() {
         ScanService scans = scans();
 

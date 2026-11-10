@@ -47,8 +47,17 @@
       "filmId": 6,
       "title": "Blade Runner",
       "year": 1982,
-      "detail": "3 files match one film",
-      "files": ["Blade Runner.m4v", "Blade Runner Final Cut.m4v", "Blade Runner Directors Cut.m4v"],
+      "detail": "2 untagged versions of one film, runtimes differ by 22%",
+      "files": ["Blade Runner.m4v", "Blade Runner Final Cut.m4v"],
+      "candidates": []
+    },
+    {
+      "kind": "parts-mismatch",
+      "filmId": 40,
+      "title": "The Two Towers",
+      "year": 2002,
+      "detail": "Part 2: video codec is h264, part 1 has hevc",
+      "files": ["The Two Towers pt1.m4v", "The Two Towers pt2.m4v"],
       "candidates": []
     }
   ]

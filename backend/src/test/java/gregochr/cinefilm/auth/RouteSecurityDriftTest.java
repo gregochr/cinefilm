@@ -99,7 +99,8 @@ class RouteSecurityDriftTest {
             "POST /api/editions/{id}/sessions", "GET /api/sessions/{id}/master.m3u8",
             "GET /api/sessions/{id}/{rung}/index.m3u8", "GET /api/sessions/{id}/{rung}/{file}",
             "DELETE /api/sessions/{id}", "GET /api/admin/transcoding",
-            "DELETE /api/admin/transcoding/sessions/{id}");
+            "DELETE /api/admin/transcoding/sessions/{id}", "GET /api/admin/films/{id}/match",
+            "POST /api/admin/films/{id}/match", "GET /api/admin/grouping-report");
     }
 
     @Test

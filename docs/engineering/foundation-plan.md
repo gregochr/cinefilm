@@ -299,7 +299,21 @@ Plan: `library-scan-plan.md`. What the API and the model now carry:
   films, newFiles, missing, protectedFiles, needsConversion, needsMatch, unreadable } }`.
 - **`AttentionItem`:** `{ kind: "needs-match"|"protected"|"needs-conversion"|"unreadable"|"multiple-files", filmId,
   title, year | null, detail, files: string[], candidates: [{ tmdbId, title, year, runtimeMinutes, posterPath }] }`
-  (`candidates` only for `needs-match`). Fix match, the action on a candidate, is the next slice.
+  (`candidates` only for `needs-match`; `kind` also `"parts-mismatch"`). `needs-match` is shown as Unmatched with a Fix
+  match button; `multiple-files` only for genuine ambiguity in a film that is not `editions_confirmed` (the detail
+  says which case); `parts-mismatch` is a multi-part edition that fails `PartsMatch` (it will transcode).
+- **Fix match** (`FixMatch`, owner-only like every `/api/admin` route; mutating calls need `X-CineFilm`):
+  - `GET /api/admin/films/{id}/match?query=&year=` searches TMDB: at most 8 results, each `{ tmdbId, title, year |
+    null, runtimeMinutes | null, posterPath | null, director | null, cast: string[] }`, details fetched through the
+    TMDB pacer. It only reads TMDB, takes no library lock and works during a scan. `year` is optional.
+  - `POST /api/admin/films/{id}/match { tmdbId }` applies `applyMovie` and sets `editions_confirmed`, answering `{
+    filmId, joined }`. If another film already has that TMDB id, this film is joined into it (the lowest id; the owner's
+    explicit choice, so the different-film guard is not applied), the survivor is confirmed, `filmId` is the survivor's
+    and `joined` is true; a `join` line is written to the grouping report. Takes the library lock.
+  - Errors (`{ error }`): 400 blank query or missing `tmdbId`; 404 unknown film, or TMDB does not know the id; 409
+    `A scan is running` (apply only, when the library lock is held); 503 TMDB unavailable.
+- **Grouping report:** `GET /api/admin/grouping-report` returns `{ items: [{ happenedAt, kind: "split"|"join"|"flag",
+  summary }] }`, the newest 20 `grouping_change` rows, newest first.
 - **Scheduling.** At start-up when the library has no films, nightly 04:30 `cinefilm.time-zone`, and from Admin. One
   scan at a time.
 - **Config.** `CINEFILM_LIBRARY_ROOT`, `CINEFILM_CACHE_DIR` (default `/app/cache`, where the deploy mounts the writable cache; `scripts/test/config-agreement.test.sh` keeps the two in step), `TMDB_READ_TOKEN`

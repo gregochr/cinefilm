@@ -1,0 +1,20 @@
+[
+  {
+    "tmdbId": 16307,
+    "title": "The Wicker Man",
+    "year": 1973,
+    "runtimeMinutes": 88,
+    "posterPath": "/a.jpg",
+    "director": "Robin Hardy",
+    "cast": ["Edward Woodward", "Christopher Lee"]
+  },
+  {
+    "tmdbId": 9708,
+    "title": "The Wicker Man",
+    "year": 2006,
+    "runtimeMinutes": 102,
+    "posterPath": null,
+    "director": "Neil LaBute",
+    "cast": ["Nicolas Cage"]
+  }
+]
