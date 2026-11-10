@@ -22,7 +22,7 @@ export function useFilmActions(filmId) {
   const setWatched = useCallback(async (editionId, watched) => {
     setOverrides((o) => ({
       ...o,
-      [editionId]: { watched, ...(watched ? {} : { positionMs: 0 }) },
+      [editionId]: { watched, positionMs: 0 },
     }));
     try {
       await editionsApi.setWatched(editionId, watched);

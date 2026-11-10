@@ -603,6 +603,39 @@ describe('Player chrome', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Heat' })).toBeInTheDocument();
   });
 
+  it('Back waits for the final progress report before leaving', async () => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const { video, fetchMock } = await openPlayer('/films/1/play?edition=11', (method, url) =>
+      url === '/api/editions/11/progress' ? gate.then(() => respond({})) : null,
+    );
+    video.currentTime = 4000;
+    fireEvent.timeUpdate(video);
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((c) => c[0] === '/api/editions/11/progress')).toBe(true),
+    );
+    expect(screen.getByRole('region', { name: 'Video player' })).toBeInTheDocument();
+    release();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Heat' })).toBeInTheDocument();
+  });
+
+  it('Back leaves anyway after 1.5 s when the report hangs', async () => {
+    const { video } = await openPlayer('/films/1/play?edition=11', (method, url) =>
+      url === '/api/editions/11/progress' ? new Promise(() => {}) : null,
+    );
+    video.currentTime = 4000;
+    fireEvent.timeUpdate(video);
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    // Not yet: the report is still pending.
+    expect(screen.getByRole('region', { name: 'Video player' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Heat' }, { timeout: 3000 }),
+    ).toBeInTheDocument();
+  });
+
   it('the hint row lists the keyboard map', async () => {
     await openPlayer();
     expect(screen.getByText('Space play/pause')).toBeInTheDocument();
@@ -789,5 +822,87 @@ describe('Player subtitle tracks', () => {
     await userEvent.keyboard('c');
     expect(mode('English')).toBe('disabled');
     expect(mode('English (forced)')).toBe('showing');
+  });
+});
+
+describe('Player starting state', () => {
+  const openUnloaded = async (path, route) => {
+    installFetch(route);
+    renderApp(path);
+    const video = await screen.findByTestId('player-video');
+    await waitFor(() => expect(video).toHaveAttribute('src'));
+    return video;
+  };
+
+  it('shows the resume point, not 0:00, before the metadata loads', async () => {
+    await openUnloaded('/films/1/play?edition=11');
+    // Heat is saved at 1:04:31; resuming rewinds 10 s.
+    expect(screen.getByText('01:04:21')).toBeInTheDocument();
+    expect(screen.queryByText('00:00:00')).not.toBeInTheDocument();
+  });
+
+  it('shows 0 before the metadata loads when starting from the beginning', async () => {
+    await openUnloaded('/films/1/play?edition=11&start=0');
+    expect(screen.getByText('00:00:00')).toBeInTheDocument();
+  });
+
+  it('does not report the pre-seek resume point as progress when leaving early', async () => {
+    installFetch();
+    renderApp('/films/1/play?edition=11');
+    const video = await screen.findByTestId('player-video');
+    await waitFor(() => expect(video).toHaveAttribute('src'));
+    const fetchMock = globalThis.fetch;
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Heat' })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some((c) => c[0] === '/api/editions/11/progress')).toBe(false);
+  });
+
+  it('does not report the resume point as progress while the resume seek is still pending', async () => {
+    const fetchMock = installFetch();
+    renderApp('/films/1/play?edition=11');
+    const video = await screen.findByTestId('player-video');
+    await waitFor(() => expect(video).toHaveAttribute('src'));
+    fireEvent.loadedMetadata(video); // the element still reads 0: the seek has not landed
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Heat' })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some((c) => c[0] === '/api/editions/11/progress')).toBe(false);
+  });
+
+  it('stays PREPARING through canplay and seeked until the first frame plays', async () => {
+    const video = await openUnloaded('/films/1/play?edition=11');
+    fireEvent.loadedMetadata(video);
+    act(() => {
+      fireEvent.canPlay(video);
+      fireEvent.seeked(video);
+    });
+    expect(await screen.findByText('PREPARING')).toBeInTheDocument();
+    act(() => {
+      fireEvent.playing(video);
+    });
+    expect(screen.queryByText('PREPARING')).not.toBeInTheDocument();
+  });
+
+  it('reads PREPARING until the first frame plays, then BUFFERING for a stall', async () => {
+    const video = await openUnloaded('/films/1/play?edition=11');
+    expect(await screen.findByText('PREPARING')).toBeInTheDocument();
+    expect(screen.queryByText('BUFFERING')).not.toBeInTheDocument();
+    act(() => {
+      fireEvent.playing(video);
+    });
+    expect(screen.queryByText('PREPARING')).not.toBeInTheDocument();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      act(() => {
+        fireEvent.waiting(video);
+      });
+      expect(screen.queryByText('BUFFERING')).not.toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(screen.getByText('BUFFERING')).toBeInTheDocument();
+      expect(screen.queryByText('PREPARING')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -20,6 +20,8 @@ export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
   const failures = useRef(0);
   const retryTimer = useRef(null);
   const closed = useRef(false);
+  const inFlight = useRef(null);
+  const queue = useRef(Promise.resolve());
   const outstanding = useRef(new Set());
   useEffect(() => {
     getRef.current = getPositionMs;
@@ -27,18 +29,22 @@ export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
 
   const report = useCallback(async () => {
     const positionMs = Math.round(getRef.current());
-    if (
-      !editionId ||
-      !Number.isFinite(positionMs) ||
-      positionMs <= 0 ||
-      positionMs === lastReported.current
-    )
-      return null;
+    if (!editionId || !Number.isFinite(positionMs) || positionMs <= 0) return null;
+    // The same position is already on its way: hand back that request so a caller can wait for it to land.
+    if (positionMs === lastReported.current) return inFlight.current;
     lastReported.current = positionMs;
     clearTimeout(retryTimer.current);
+    // Progress writes are serialised: each is sent only after the one before has settled, so the server
+    // receives them in the order they were asked for and an older position can never land after a newer one.
+    const sending = queue.current.then(() => editionsApi.reportProgress(editionId, positionMs));
+    queue.current = sending.then(
+      () => null,
+      () => null,
+    );
+    // A repeat call for this position waits on this same request (settled either way), never queues a second PUT.
+    inFlight.current = queue.current;
+    outstanding.current.add(sending);
     try {
-      const sending = editionsApi.reportProgress(editionId, positionMs);
-      outstanding.current.add(sending);
       let saved;
       try {
         saved = await sending;
@@ -48,6 +54,8 @@ export function usePlayback({ filmId, editionId, playing, getPositionMs }) {
       failures.current = 0;
       return saved;
     } catch {
+      // A newer position queued meanwhile has superseded this one: nothing to retry.
+      if (lastReported.current !== positionMs) return null;
       lastReported.current = null;
       const delay = Math.min(RETRY_BASE_MS * 2 ** failures.current, RETRY_MAX_MS);
       failures.current += 1;

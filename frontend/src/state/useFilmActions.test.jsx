@@ -13,7 +13,7 @@ describe('useFilmActions', () => {
     await act(async () => {
       await result.current.setWatched(11, true);
     });
-    expect(result.current.overrides[11]).toEqual({ watched: true });
+    expect(result.current.overrides[11]).toEqual({ watched: true, positionMs: 0 });
     const post = fetchMock.mock.calls.find((c) => c[0] === '/api/editions/11/watched');
     expect(JSON.parse(post[1].body)).toEqual({ watched: true });
   });
@@ -37,7 +37,7 @@ describe('useFilmActions', () => {
       await result.current.setWatched(12, true);
     });
     expect(result.current.overrides[12]).toBeUndefined();
-    expect(result.current.overrides[11]).toEqual({ watched: true });
+    expect(result.current.overrides[11]).toEqual({ watched: true, positionMs: 0 });
   });
 
   it('saves preferences for its film with PUT', async () => {
