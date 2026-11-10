@@ -105,6 +105,7 @@ jobs:
       - name: Summarise
         if: always()
         run: |
+          # shellcheck disable=SC2016 # the single-quoted node -e body is JavaScript; $ must not expand
           node -e '
             const fs = require("node:fs");
             const out = process.env.GITHUB_STEP_SUMMARY;

@@ -338,6 +338,12 @@ jobs:
           docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.11.0 \
             -x -o check-unassigned-uppercase scripts/*.sh scripts/lib/*.sh scripts/test/*.sh
 
+      # PINNED like ShellCheck above. The image bundles shellcheck, so `run:` blocks are shellchecked too.
+      # Run `actionlint` locally from the repo root; it reads .github/actionlint.yaml.
+      - name: actionlint (pinned)
+        if: needs.changes.outputs.docs_only != 'true'
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color
+
       - name: Run scripts/test/*.test.sh
         if: needs.changes.outputs.docs_only != 'true'
         run: bash scripts/test/run-all.sh
