@@ -364,14 +364,18 @@ below the grid (per the handover) and its apply button reads "Use this match", a
   Extra rules beyond the design's list: file placement ("Every file has to be in an edition or marked Not this film.",
   "Each file can only be in one edition, or marked Not this film."), parts outside 1 to 8, and an edition with no files.
   A lone file may be sent as `part: null` or 1.
-- **State on save.** A kept edition keeps its id, so its position and watched state stay (position clamped to the new
-  runtime), and a renamed edition keeps its history because the panel sends the edition's id with the new name (a "New
-  edition…" that takes over the files of an emptied edition adopts its id). State is **not** folded across editions: the
-  files moved by a save are moved with `MediaFileRepository.moveToEdition` (the same bulk update `EditionJoin` uses) and
-  an emptied edition is deleted with its state by `EditionArranger`, so a position held by an absorbed edition is lost,
-  not mapped onto the survivor's timeline. The credits marker is kept only when an edition's ordered files did not
-  change, else cleared. `EditionJoin.repoint` (now package-visible) remaps the remembered stream choices, and a remembered last edition that was
-  deleted points at the default.
+- **State on save** (`StateCarry`, pure, over the `StateFolding` and `EditionTimeline` rules `EditionJoin` uses). A kept
+  edition keeps its id, so its history stays, and a renamed edition keeps it because the panel sends the edition's id with
+  the new name (a "New edition…" that takes over the files of an emptied edition adopts its id). When files move between
+  editions the state follows the files: each old edition's state and credits marker are relocated across the editions its
+  files went to (`StateFolding.unfold`/`relocate`), then the pieces landing in one edition are folded onto its new timeline
+  (`StateFolding.fold`), positions and the last part's marker shifted by the part start (`timelineDurationMs`), watched only
+  when the edition holding the last part was watched. So pt1 and pt2 joined from two editions give pt2's 5 min the position
+  partStart + 5 min. A new edition made from an emptied edition's files inherits that share. State is lost only where it is
+  truly gone: an edition whose files all go to Not this film or that is removed, or a resume position that sat in a file
+  that left. An edition with a file of no known duration cannot be folded: its position is only clamped to the new runtime
+  and its marker cleared if the files changed. `EditionJoin.repoint` (package-visible) remaps stream choices, and a
+  remembered last edition that was deleted points at the default.
 - **Lock.** A save takes `LibraryLock.EDIT`; a scan refused because of it says "Editions are being edited".
 - **Suggestion** (`EditionSuggester`): beyond the plan's rules, a settled film is suggested as arranged; files whose title
   is another film's are suggested as Not this film with the design's "these may be different films" line; plain edition

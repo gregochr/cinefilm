@@ -148,14 +148,22 @@ public class EditionArranger {
         Map<Long, MediaFile> originals = new LinkedHashMap<>();
         Map<Long, List<Long>> filesBefore = new HashMap<>();
         Map<Long, Long> editionOfFile = new HashMap<>();
+        Map<Long, Long> timelineMs = new HashMap<>();
+        List<StateCarry.Old> olds = new ArrayList<>();
         for (Edition edition : film.getEditions()) {
             List<Long> ids = new ArrayList<>();
+            List<Long> durations = new ArrayList<>();
             for (MediaFile file : edition.originalParts()) {
                 originals.put(file.getId(), file);
                 editionOfFile.put(file.getId(), edition.getId());
+                timelineMs.put(file.getId(), file.timelineDurationMs());
                 ids.add(file.getId());
+                durations.add(file.timelineDurationMs());
             }
             filesBefore.put(edition.getId(), ids);
+            olds.add(new StateCarry.Old(ids, durations,
+                states.findById(edition.getId()).map(EditionJoin::stateOf).orElse(null),
+                edition.getCreditsMarkerMs()));
         }
         List<FieldError> errors = EditionRules.validate(request, originals.keySet());
         if (!errors.isEmpty()) {
@@ -183,9 +191,13 @@ public class EditionArranger {
 
         Map<Long, List<Long>> moves = new LinkedHashMap<>();
         Map<Long, Integer> partOf = new HashMap<>();
+        Map<Long, Long> targetOfFile = new HashMap<>();
+        Map<Long, List<Long>> newFiles = new HashMap<>();
         for (int i = 0; i < editionCount; i++) {
             for (FileRequest file : request.editions().get(i).files()) {
                 partOf.put(file.fileId(), file.part() == null ? 1 : file.part());
+                targetOfFile.put(file.fileId(), targets.get(i));
+                newFiles.computeIfAbsent(targets.get(i), k -> new ArrayList<>()).add(file.fileId());
                 if (!targets.get(i).equals(editionOfFile.get(file.fileId()))) {
                     moves.computeIfAbsent(targets.get(i), k -> new ArrayList<>()).add(file.fileId());
                 }
@@ -195,13 +207,17 @@ public class EditionArranger {
             partOf.put(notThis.get(i), 1);
             moves.computeIfAbsent(newEditionIds.get(i), k -> new ArrayList<>()).add(notThis.get(i));
         }
+        Map<Long, List<StateCarry.Piece>> pieces = StateCarry.split(olds, targetOfFile);
         moves.forEach((target, ids) -> files.moveToEdition(ids, editions.getReferenceById(target)));
 
         List<Long> touched = new ArrayList<>(targets);
         touched.addAll(newEditionIds);
         for (int i = 0; i < touched.size(); i++) {
             String name = i < editionCount ? request.editions().get(i).name().strip() : ORIGINAL;
-            settle(touched.get(i), name, partOf, filesBefore.get(touched.get(i)));
+            Long id = touched.get(i);
+            StateCarry.Result carried = i < editionCount ? StateCarry.land(pieces.getOrDefault(id, List.of()),
+                StateCarry.inPlayOrder(partOf, newFiles.get(id)), timelineMs) : null;
+            settle(id, name, partOf, filesBefore.get(id), carried);
         }
         for (Long editionId : emptied) {
             dropRenditions(editionId);
@@ -270,8 +286,13 @@ public class EditionArranger {
         return films.saveAndFlush(film);
     }
 
-    /** Names the edition, numbers its parts, recomputes its runtime and clamps its resume position to it. */
-    private void settle(Long editionId, String name, Map<Long, Integer> partOf, List<Long> before) {
+    /**
+     * Names the edition, numbers its parts and recomputes its runtime. Its state and credits marker are the ones
+     * carried from the old editions ({@link StateCarry}); when a file has no known duration nothing can be carried, so
+     * the resume position is only clamped to the new runtime and the marker is cleared if the files changed.
+     */
+    private void settle(Long editionId, String name, Map<Long, Integer> partOf, List<Long> before,
+                        StateCarry.Result carried) {
         Edition edition = editions.findById(editionId).orElseThrow();
         edition.setName(name);
         edition.setGroupingSource(GroupingSource.OWNER);
@@ -282,13 +303,22 @@ public class EditionArranger {
             }
         }
         edition.recomputeRuntime();
-        List<Long> after = edition.originalParts().stream().map(MediaFile::getId).toList();
-        if (!after.equals(before == null ? List.of() : before)) {
-            // The credits marker is a time on the old timeline.
-            edition.setCreditsMarkerMs(null);
+        if (carried != null) {
+            edition.setCreditsMarkerMs(carried.markerMs());
+            if (carried.state() == null) {
+                states.deleteById(editionId);
+            } else {
+                states.save(EditionJoin.apply(states.findById(editionId)
+                    .orElseGet(() -> new PlaybackState(editionId)), carried.state()));
+            }
+        } else {
+            List<Long> after = edition.originalParts().stream().map(MediaFile::getId).toList();
+            if (!after.equals(before == null ? List.of() : before)) {
+                edition.setCreditsMarkerMs(null);
+            }
+            long runtime = edition.getRuntimeMs();
+            states.findById(editionId).ifPresent(state -> clamp(state, runtime));
         }
-        long runtime = edition.getRuntimeMs();
-        states.findById(editionId).ifPresent(state -> clamp(state, runtime));
         editions.save(edition);
     }
 

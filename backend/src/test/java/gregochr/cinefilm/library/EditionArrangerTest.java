@@ -239,7 +239,7 @@ class EditionArrangerTest extends ApiTestBase {
     }
 
     @Test
-    void aResumePositionIsClampedToTheNewRuntimeAndAFileNotThisFilmBecomesAnUnmatchedFilm() {
+    void aFileNotThisFilmBecomesAnUnmatchedFilmAndTheKeptFileKeepsItsResumePosition() {
         Film built = film(null, "Rocky IV", 1985, NOW);
         Edition both = edition(built, null, "Original", 91 * MIN, null);
         file(both, "Rocky IV.m4v");
@@ -250,13 +250,13 @@ class EditionArrangerTest extends ApiTestBase {
         Long id = editionId(film, 0);
         Long rocky = film.getEditions().get(0).originalParts().get(0).getId();
         Long rockyV = film.getEditions().get(0).originalParts().get(1).getId();
-        saveState(state(film.getEditions().get(0), 150 * MIN, false, NOW, null));
+        saveState(state(film.getEditions().get(0), 60 * MIN, false, NOW, null));
 
         SaveResult result = arranger.save(film.getId(), new SaveRequest(
             List.of(ed(id, "Original", true, f(rocky, null))), List.of(rockyV)));
 
         assertThat(editions.findById(id).orElseThrow().getRuntimeMs()).isEqualTo(91 * MIN);
-        assertThat(states.findById(id)).get().extracting(PlaybackState::getPositionMs).isEqualTo(91 * MIN);
+        assertThat(states.findById(id)).get().extracting(PlaybackState::getPositionMs).isEqualTo(60 * MIN);
         assertThat(result.newFilmIds()).hasSize(1);
         Film split = films.findById(result.newFilmIds().get(0)).orElseThrow();
         assertThat(split.getMatchStatus()).isEqualTo(MatchStatus.NEEDS_MATCH);
@@ -289,7 +289,6 @@ class EditionArrangerTest extends ApiTestBase {
         Long first = editionId(film, 0);
         Long second = editionId(film, 1);
         saveState(state(film.getEditions().get(0), 20 * MIN, false, NOW, null));
-        saveState(state(film.getEditions().get(1), 30 * MIN, false, NOW, null));
 
         arranger.save(film.getId(), new SaveRequest(List.of(
             ed(first, "Original", true, f(fileId(film, 0), null)),
@@ -446,5 +445,105 @@ class EditionArrangerTest extends ApiTestBase {
 
         assertThat(states.findById(editionId(film, 0))).get().extracting(PlaybackState::getPositionMs)
             .isEqualTo(5 * MIN);
+    }
+
+    /** pt1 and pt2 each alone in an edition, as the scan leaves them; pt1 114 min, pt2 121 min. */
+    private Film twoParts() {
+        Film built = film(null, "The Two Towers", 2002, NOW);
+        file(edition(built, null, "Original", 114 * MIN, null), PT1);
+        file(edition(built, null, "Original", 121 * MIN, 100 * MIN), PT2);
+        return save(built);
+    }
+
+    private SaveRequest joined(Film film) {
+        return new SaveRequest(List.of(ed(editionId(film, 0), "Extended Edition", true,
+            f(fileId(film, 0), 1), f(fileId(film, 1), 2))), List.of());
+    }
+
+    @Test
+    void joiningTwoEditionsPlacesTheResumePositionOfPart2AfterPart1() {
+        Film film = twoParts();
+        saveState(state(film.getEditions().get(0), 0, false, NOW.minusSeconds(3600), null));
+        saveState(state(film.getEditions().get(1), 5 * MIN, false, NOW, null));
+
+        arranger.save(film.getId(), joined(film));
+
+        assertThat(states.findById(editionId(film, 0))).get().satisfies(state -> {
+            assertThat(state.getPositionMs()).as("partStart + 5 min").isEqualTo(114 * MIN + 5 * MIN);
+            assertThat(state.isWatched()).isFalse();
+            assertThat(state.getLastPlayedAt()).isEqualTo(NOW);
+        });
+        assertThat(states.findById(editionId(film, 1))).isEmpty();
+    }
+
+    @Test
+    void joiningMergesWatchedByTheEditionHoldingTheLastPart() {
+        Film both = twoParts();
+        saveState(state(both.getEditions().get(0), 0, true, NOW.minusSeconds(60), NOW.minusSeconds(60)));
+        saveState(state(both.getEditions().get(1), 0, true, NOW, NOW));
+        Film first = twoParts();
+        saveState(state(first.getEditions().get(0), 0, true, NOW, NOW));
+
+        arranger.save(both.getId(), joined(both));
+        arranger.save(first.getId(), joined(first));
+
+        assertThat(states.findById(editionId(both, 0))).get().extracting(PlaybackState::isWatched)
+            .isEqualTo(true);
+        assertThat(states.findById(editionId(first, 0))).get().satisfies(state -> {
+            assertThat(state.isWatched()).as("only part 1 was watched").isFalse();
+            assertThat(state.getPositionMs()).as("resume at the start of part 2").isEqualTo(114 * MIN);
+        });
+    }
+
+    @Test
+    void aCreditsMarkerInPart2IsShiftedByPart1() {
+        Film film = twoParts();
+
+        arranger.save(film.getId(), joined(film));
+
+        assertThat(editions.findById(editionId(film, 0)).orElseThrow().getCreditsMarkerMs())
+            .isEqualTo(114 * MIN + 100 * MIN);
+    }
+
+    @Test
+    void splittingOneEditionRelocatesItsStateAndMarkerToTheEditionHoldingThatPart() {
+        Film built = film(null, "The Two Towers", 2002, NOW);
+        Edition whole = edition(built, null, "Extended", 235 * MIN, 200 * MIN);
+        file(whole, PT1).setDurationMs(114 * MIN);
+        MediaFile second = file(whole, PT2);
+        second.setDurationMs(121 * MIN);
+        second.setPartNumber(2);
+        Film film = save(built);
+        saveState(state(film.getEditions().get(0), 150 * MIN, false, NOW, null));
+        List<MediaFile> parts = film.getEditions().get(0).originalParts();
+
+        arranger.save(film.getId(), new SaveRequest(List.of(
+            ed(editionId(film, 0), "Part One", true, f(parts.get(0).getId(), null)),
+            ed(null, "Part Two", false, f(parts.get(1).getId(), null))), List.of()));
+
+        Film saved = films.findById(film.getId()).orElseThrow();
+        Edition one = saved.getEditions().stream().filter(e -> e.getName().equals("Part One")).findFirst()
+            .orElseThrow();
+        Edition two = saved.getEditions().stream().filter(e -> e.getName().equals("Part Two")).findFirst()
+            .orElseThrow();
+        assertThat(states.findById(one.getId())).as("the position was in part 2").isEmpty();
+        assertThat(states.findById(two.getId())).get().extracting(PlaybackState::getPositionMs)
+            .isEqualTo(36 * MIN);
+        assertThat(one.getCreditsMarkerMs()).isNull();
+        assertThat(two.getCreditsMarkerMs()).isEqualTo(86 * MIN);
+    }
+
+    @Test
+    void anEditionWhoseFilesAllGoToNotThisFilmLosesItsState() {
+        Film film = twoParts();
+        saveState(state(film.getEditions().get(1), 5 * MIN, false, NOW, null));
+
+        SaveResult result = arranger.save(film.getId(), new SaveRequest(List.of(ed(editionId(film, 0), "Original",
+            true, f(fileId(film, 0), null))), List.of(fileId(film, 1))));
+
+        assertThat(states.findById(editionId(film, 1))).isEmpty();
+        assertThat(result.newFilmIds()).hasSize(1);
+        assertThat(films.findById(result.newFilmIds().get(0)).orElseThrow().getEditions()).singleElement()
+            .satisfies(e -> assertThat(states.findById(e.getId())).isEmpty());
     }
 }

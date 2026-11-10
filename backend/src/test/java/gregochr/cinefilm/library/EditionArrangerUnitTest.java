@@ -112,7 +112,7 @@ class EditionArrangerUnitTest {
                 .containsExactly("Give this edition a name."));
 
         assertThat(lock.holder()).isNull();
-        verifyNoInteractions(editions, files, states, preferences, changes, join);
+        verifyNoInteractions(editions, files, preferences, changes, join);
     }
 
     @Test
