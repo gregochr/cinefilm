@@ -58,7 +58,9 @@ describe('PlaybackHealthPanel', () => {
     expect(unplayed).toHaveTextContent(
       'The Wicker ManUnknown08 Nov 21:15 · under 1m watched · WindowsNot played yet · No stallsFull record',
     );
-    expect(within(unplayed).queryByText(/Mbit\/s|no speed samples|ms$/)).not.toBeInTheDocument();
+    expect(within(unplayed).queryByText(/Mbit\/s/)).not.toBeInTheDocument();
+    expect(within(unplayed).queryByText(/no speed samples/)).not.toBeInTheDocument();
+    expect(within(unplayed).queryByText(/ ms$/)).not.toBeInTheDocument();
   });
 
   it('links each row to its full record in a new tab, named after the film', async () => {
