@@ -92,6 +92,15 @@ jobs:
       checks: read
       actions: write
     steps:
+      # The default branch only, never the PR head, and without a persisted token: this job holds
+      # contents: write, and the script that makes the trust decision must come from main, not from
+      # the PR being judged.
+      - name: Check out the trust-gate script from the default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
       - name: Merge if every condition holds
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -120,12 +129,12 @@ jobs:
           jq -e '.labels[] | select(.name == "automerge-ok")' <<<"$STATE" >/dev/null || skip "PR #$PR does not carry automerge-ok (major update, or not labelled yet)."
 
           # Every commit on the PR must be authored by Dependabot and carry a verified signature. Unlike the
-          # actor of an event, neither can be arranged by someone else pushing to the branch.
-          COMMITS=$(gh api "repos/$GH_REPO/pulls/$PR/commits" --paginate \
-            --jq '.[] | [.sha[0:10], (.author.login // "none"), (.commit.verification.verified | tostring), .commit.verification.reason] | @tsv')
-          [ -n "$COMMITS" ] || skip "PR #$PR reports no commits."
-          BAD=$(awk -F'\t' '$2 != "dependabot[bot]" || $3 != "true" { print "commit " $1 " (author " $2 ", signature verified: " $3 ", reason: " $4 ")"; exit }' <<<"$COMMITS")
-          [ -z "$BAD" ] || skip "PR #$PR has a commit that is not Dependabot-authored and verified: $BAD."
+          # actor of an event, neither can be arranged by someone else pushing to the branch. A non-zero exit
+          # (a bad commit, no commits, unreadable input, or the API call failing) goes to skip, which ends
+          # the step, so nothing rejected here reaches `gh pr merge` below.
+          if ! COMMIT_PROBLEM=$(gh api "repos/$GH_REPO/pulls/$PR/commits" --paginate | bash scripts/dependabot-commits-trusted.sh); then
+            skip "PR #$PR has a commit that is not Dependabot-authored and verified: ${COMMIT_PROBLEM:-could not read the commits}."
+          fi
 
           # Every check-run on the head must be complete; wait briefly for stragglers (the label job).
           for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
