@@ -275,6 +275,36 @@ class SessionServicePartsTest {
     }
 
     @Test
+    void aLaterPartIsIndexedEvenWhileTheLibraryWideIndexThreadIsBusyBecauseSessionsHaveTheirOwnPool()
+        throws Exception {
+        TranscodeConfig config = new TranscodeConfig();
+        java.util.concurrent.ExecutorService library = (java.util.concurrent.ExecutorService) config.indexExecutor();
+        java.util.concurrent.ExecutorService sessions = config.sessionIndexExecutor();
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        library.submit(() -> {
+            release.await(30, java.util.concurrent.TimeUnit.SECONDS);
+            return null;
+        }); // IndexJob holds the library executor for a whole pass
+        SessionService service = new SessionService(sources, indexes, transcoder, manager, sessions,
+            Duration.ofSeconds(10));
+        source(true);
+        when(transcoder.mode()).thenReturn(EncoderMode.VAAPI);
+        when(indexes.ensureIndexed(file1, PART_MS)).thenReturn(INDEX_1);
+        when(indexes.cached(file2, PART_MS)).thenReturn(Optional.empty());
+        when(indexes.ensureIndexed(file2, PART_MS)).thenReturn(INDEX_2);
+        when(manager.create(any())).thenAnswer(call -> new SessionView(ID, List.of(), null, null, CUTS, 1, 1));
+        try {
+            service.create(EDITION_ID, request(null, null, "auto"));
+
+            assertThat(created().parts()).extracting(SessionSpec.PartSource::fps).containsExactly(25.0, 24.0);
+        } finally {
+            release.countDown();
+            library.shutdown();
+            sessions.shutdown();
+        }
+    }
+
+    @Test
     void aLaterPartStillBeingIndexedWhenTheWaitEndsAnswers503ForTheClientToRetry() {
         SessionService slow = new SessionService(sources, indexes, transcoder, manager, runnable -> { },
             Duration.ofMillis(20));

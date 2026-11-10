@@ -54,10 +54,10 @@ public class SessionService {
     private final Executor indexExecutor;
     private final Duration indexWait;
 
-    /** Creates the service; the later parts of a split film are indexed on the {@code indexExecutor}. */
+    /** Creates the service; the later parts of a split film are indexed on the {@code sessionIndexExecutor}. */
     @Autowired
     public SessionService(SessionSources sources, KeyframeIndexService indexes, Transcoder transcoder,
-                          SessionManager manager, @Qualifier("indexExecutor") Executor indexExecutor) {
+                          SessionManager manager, @Qualifier("sessionIndexExecutor") Executor indexExecutor) {
         this(sources, indexes, transcoder, manager, indexExecutor, INDEX_WAIT);
     }
 
