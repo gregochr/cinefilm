@@ -119,7 +119,26 @@ Rules as ordinary JUnit 5 tests in `backend/src/test/java/gregochr/cinefilm/arch
   with `freeze.store.default.allowStoreUpdate=false` in CI's `archunit.properties`, so only a deliberate local run
   can rewrite it, and a changed store file is visible in the diff.
 
-### Phase 4 — SonarCloud (both sides) — blocked on the owner
+### Phase 4 — SonarCloud (both sides)
+
+**Done 2026-11-10** (PR #58), advisory. Still to do: make it a required check after a week of PRs, and the backlog
+below. First CI-based analysis of `main` (`775592b`): quality gate passed; 17,996 lines analysed (Java 9,048, JS
+5,246, CSS 2,406, YAML 816, shell 438, Docker 42); coverage 99.6%; duplication 0.2%; **79 open issues** (52 smells,
+14 bugs, 13 vulnerabilities; 2 blocker, 2 critical, 72 major, 3 minor).
+
+- **Blocker/critical (4), triage first:** an unclosed `InputStream` at `transcode/Mp4SampleTableReader.java:106`
+  (`java:S2095`); use of a publicly writable directory at `library/ProcessCommandRunner.java:27` (`java:S5443`);
+  the disabled Spring CSRF at `auth/SecurityConfig.java:22` (`java:S4502`; the same deliberate design CodeQL
+  flagged, to be marked safe with the same reason); fields `CAPTION` and `caption` in `film/WeeklyTheme.java:9`
+  (`java:S1845`).
+- **Bulk:** 44 are one shell rule (`shell:S7688`, `[[` instead of `[`); 7 unhandled promises
+  (`javascript:S9383`); 3 records with array fields lacking `equals`/`hashCode` (`java:S6218`); 2 null-checks on
+  `Optional` (`java:S2789`); 1 possible `NullPointerException` (`javabugs:S2259`); 2 frontend taint findings
+  (`jssecurity:S7044`, `S8476`); workflow and Docker install-script hygiene (`S6505`, `S8541`, `S8232`, `S6471`).
+- **Known gap:** the scanner still reports unresolved types in the **test** sources (main sources resolve). It does
+  not affect the gate; revisit if test-code rules prove noisy.
+
+The original brief follows.
 
 **Owner steps:** sign in at sonarcloud.io with GitHub, import `gregochr/cinefilm`, turn **off** "Automatic
 Analysis", and add the token as the Actions secret `SONAR_TOKEN` **and** as a Dependabot secret of the same name.
