@@ -1,0 +1,1176 @@
+{
+ "about": "One table of cases for the Edit editions rules. Read by EditionRulesTest (backend) and editionRules.test.js (frontend): the rules, their wording and their order must match on both sides.",
+ "cases": [
+  {
+   "name": "a typical arrangement is valid",
+   "fileIds": [
+    1,
+    2,
+    3
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "Extended Edition",
+      "default": false,
+      "files": [
+       {
+        "fileId": 1,
+        "part": 1
+       },
+       {
+        "fileId": 2,
+        "part": 2
+       }
+      ]
+     },
+     {
+      "id": 11,
+      "name": "Theatrical Cut",
+      "default": true,
+      "files": [
+       {
+        "fileId": 3,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": []
+  },
+  {
+   "name": "one file as Part 1 is valid",
+   "fileIds": [
+    1
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "Original",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": 1
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": []
+  },
+  {
+   "name": "a file left out is not placed",
+   "fileIds": [
+    1,
+    2
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "Original",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "files",
+     "message": "Every file has to be in an edition or marked Not this film."
+    }
+   ]
+  },
+  {
+   "name": "a file that is not the film's is not placed",
+   "fileIds": [
+    1
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "Original",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       },
+       {
+        "fileId": 9,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "files",
+     "message": "Every file has to be in an edition or marked Not this film."
+    },
+    {
+     "field": "editions[0].parts",
+     "message": "Single file only works when an edition has one file — give each file a part number."
+    }
+   ]
+  },
+  {
+   "name": "a file in two editions is placed twice",
+   "fileIds": [
+    1,
+    2
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "A",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       },
+       {
+        "fileId": 2,
+        "part": null
+       }
+      ]
+     },
+     {
+      "id": 11,
+      "name": "B",
+      "default": false,
+      "files": [
+       {
+        "fileId": 2,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "files",
+     "message": "Each file can only be in one edition, or marked Not this film."
+    },
+    {
+     "field": "editions[0].parts",
+     "message": "Single file only works when an edition has one file — give each file a part number."
+    }
+   ]
+  },
+  {
+   "name": "a file both in an edition and Not this film is placed twice",
+   "fileIds": [
+    1,
+    2
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "A",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       },
+       {
+        "fileId": 2,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": [
+     1
+    ]
+   },
+   "errors": [
+    {
+     "field": "files",
+     "message": "Each file can only be in one edition, or marked Not this film."
+    },
+    {
+     "field": "editions[0].parts",
+     "message": "Single file only works when an edition has one file — give each file a part number."
+    }
+   ]
+  },
+  {
+   "name": "nothing at all",
+   "fileIds": [
+    1
+   ],
+   "request": {
+    "editions": [],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "files",
+     "message": "Every file has to be in an edition or marked Not this film."
+    },
+    {
+     "field": "editions",
+     "message": "Keep at least one file with this film."
+    }
+   ]
+  },
+  {
+   "name": "everything marked Not this film",
+   "fileIds": [
+    1,
+    2
+   ],
+   "request": {
+    "editions": [],
+    "notThisFilm": [
+     1,
+     2
+    ]
+   },
+   "errors": [
+    {
+     "field": "editions",
+     "message": "Keep at least one file with this film."
+    }
+   ]
+  },
+  {
+   "name": "no default edition",
+   "fileIds": [
+    1,
+    2
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "A",
+      "default": false,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       }
+      ]
+     },
+     {
+      "id": 11,
+      "name": "B",
+      "default": false,
+      "files": [
+       {
+        "fileId": 2,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "default",
+     "message": "Choose a default edition."
+    }
+   ]
+  },
+  {
+   "name": "two default editions",
+   "fileIds": [
+    1,
+    2
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "A",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       }
+      ]
+     },
+     {
+      "id": 11,
+      "name": "B",
+      "default": true,
+      "files": [
+       {
+        "fileId": 2,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "default",
+     "message": "Choose a default edition."
+    }
+   ]
+  },
+  {
+   "name": "a blank name",
+   "fileIds": [
+    1
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": null,
+      "name": "",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[0].name",
+     "message": "Give this edition a name."
+    }
+   ]
+  },
+  {
+   "name": "a name of only spaces",
+   "fileIds": [
+    1
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": null,
+      "name": "   ",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[0].name",
+     "message": "Give this edition a name."
+    }
+   ]
+  },
+  {
+   "name": "a missing name",
+   "fileIds": [
+    1
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": null,
+      "name": null,
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[0].name",
+     "message": "Give this edition a name."
+    }
+   ]
+  },
+  {
+   "name": "a 33 character name",
+   "fileIds": [
+    1
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": null,
+      "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[0].name",
+     "message": "Keep the name to 32 characters."
+    }
+   ]
+  },
+  {
+   "name": "a 32 character name is fine",
+   "fileIds": [
+    1
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": null,
+      "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": []
+  },
+  {
+   "name": "a name is trimmed before its length counts",
+   "fileIds": [
+    1
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": null,
+      "name": "  aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  ",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": []
+  },
+  {
+   "name": "a new name clashing with an existing edition ignoring case",
+   "fileIds": [
+    1,
+    2,
+    3
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "Extended Edition",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": 1
+       },
+       {
+        "fileId": 2,
+        "part": 2
+       }
+      ]
+     },
+     {
+      "id": null,
+      "name": "extended edition",
+      "default": false,
+      "files": [
+       {
+        "fileId": 3,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[1].name",
+     "message": "Another edition is already called Extended Edition."
+    }
+   ]
+  },
+  {
+   "name": "the new one is flagged even when it comes first",
+   "fileIds": [
+    1,
+    2
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": null,
+      "name": "extended edition",
+      "default": false,
+      "files": [
+       {
+        "fileId": 2,
+        "part": null
+       }
+      ]
+     },
+     {
+      "id": 10,
+      "name": "Extended Edition",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[0].name",
+     "message": "Another edition is already called Extended Edition."
+    }
+   ]
+  },
+  {
+   "name": "two new editions with one name: the later is flagged",
+   "fileIds": [
+    1,
+    2
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": null,
+      "name": "Cut",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       }
+      ]
+     },
+     {
+      "id": null,
+      "name": "CUT",
+      "default": false,
+      "files": [
+       {
+        "fileId": 2,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[1].name",
+     "message": "Another edition is already called Cut."
+    }
+   ]
+  },
+  {
+   "name": "two existing editions with one name: the later is flagged",
+   "fileIds": [
+    1,
+    2
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "Original",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       }
+      ]
+     },
+     {
+      "id": 11,
+      "name": "original",
+      "default": false,
+      "files": [
+       {
+        "fileId": 2,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[1].name",
+     "message": "Another edition is already called Original."
+    }
+   ]
+  },
+  {
+   "name": "several files need part numbers",
+   "fileIds": [
+    1,
+    2
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "A",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       },
+       {
+        "fileId": 2,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[0].parts",
+     "message": "Single file only works when an edition has one file — give each file a part number."
+    }
+   ]
+  },
+  {
+   "name": "one single file among numbered ones",
+   "fileIds": [
+    1,
+    2
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "A",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": 1
+       },
+       {
+        "fileId": 2,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[0].parts",
+     "message": "Single file only works when an edition has one file — give each file a part number."
+    }
+   ]
+  },
+  {
+   "name": "two files with the same part",
+   "fileIds": [
+    1,
+    2
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "A",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": 1
+       },
+       {
+        "fileId": 2,
+        "part": 1
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[0].parts",
+     "message": "Two files are both part 1."
+    }
+   ]
+  },
+  {
+   "name": "the lower duplicate is named",
+   "fileIds": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "A",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": 2
+       },
+       {
+        "fileId": 2,
+        "part": 2
+       },
+       {
+        "fileId": 3,
+        "part": 3
+       },
+       {
+        "fileId": 4,
+        "part": 3
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[0].parts",
+     "message": "Two files are both part 2."
+    }
+   ]
+  },
+  {
+   "name": "a gap of one part",
+   "fileIds": [
+    1,
+    2
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "A",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": 1
+       },
+       {
+        "fileId": 2,
+        "part": 3
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[0].parts",
+     "message": "Parts 1 and 3 — part 2 is missing."
+    }
+   ]
+  },
+  {
+   "name": "a gap of two parts",
+   "fileIds": [
+    1,
+    2
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "A",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": 1
+       },
+       {
+        "fileId": 2,
+        "part": 4
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[0].parts",
+     "message": "Parts 1 and 4 — part 2 and 3 are missing."
+    }
+   ]
+  },
+  {
+   "name": "parts that do not start at 1",
+   "fileIds": [
+    1,
+    2
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "A",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": 2
+       },
+       {
+        "fileId": 2,
+        "part": 3
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[0].parts",
+     "message": "Parts 2 and 3 — part 1 is missing."
+    }
+   ]
+  },
+  {
+   "name": "three parts listed out of order",
+   "fileIds": [
+    1,
+    2,
+    3
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "A",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": 3
+       },
+       {
+        "fileId": 2,
+        "part": 1
+       },
+       {
+        "fileId": 3,
+        "part": 2
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": []
+  },
+  {
+   "name": "one file with a part other than 1",
+   "fileIds": [
+    1
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "A",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": 2
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[0].parts",
+     "message": "Only one file — set it to Single file or Part 1."
+    }
+   ]
+  },
+  {
+   "name": "part 9 is out of range",
+   "fileIds": [
+    1,
+    2
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "A",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": 1
+       },
+       {
+        "fileId": 2,
+        "part": 9
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[0].parts",
+     "message": "Parts go from 1 to 8."
+    }
+   ]
+  },
+  {
+   "name": "part 0 is out of range",
+   "fileIds": [
+    1
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "A",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": 0
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[0].parts",
+     "message": "Parts go from 1 to 8."
+    }
+   ]
+  },
+  {
+   "name": "part 8 is the highest",
+   "fileIds": [
+    1,
+    2
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "A",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": 1
+       },
+       {
+        "fileId": 2,
+        "part": 8
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[0].parts",
+     "message": "Parts 1 and 8 — part 2 and 3 and 4 and 5 and 6 and 7 are missing."
+    }
+   ]
+  },
+  {
+   "name": "an edition with no files",
+   "fileIds": [
+    1
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "A",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       }
+      ]
+     },
+     {
+      "id": 11,
+      "name": "B",
+      "default": false,
+      "files": []
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[1].files",
+     "message": "Every edition needs at least one file."
+    }
+   ]
+  },
+  {
+   "name": "errors come in a fixed order",
+   "fileIds": [
+    1,
+    2,
+    3
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "",
+      "default": false,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       },
+       {
+        "fileId": 2,
+        "part": null
+       }
+      ]
+     },
+     {
+      "id": null,
+      "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "default": false,
+      "files": [
+       {
+        "fileId": 3,
+        "part": 1
+       }
+      ]
+     }
+    ],
+    "notThisFilm": []
+   },
+   "errors": [
+    {
+     "field": "editions[0].name",
+     "message": "Give this edition a name."
+    },
+    {
+     "field": "editions[0].parts",
+     "message": "Single file only works when an edition has one file — give each file a part number."
+    },
+    {
+     "field": "editions[1].name",
+     "message": "Keep the name to 32 characters."
+    },
+    {
+     "field": "default",
+     "message": "Choose a default edition."
+    }
+   ]
+  },
+  {
+   "name": "Not this film files are fine beside a valid arrangement",
+   "fileIds": [
+    1,
+    2
+   ],
+   "request": {
+    "editions": [
+     {
+      "id": 10,
+      "name": "A",
+      "default": true,
+      "files": [
+       {
+        "fileId": 1,
+        "part": null
+       }
+      ]
+     }
+    ],
+    "notThisFilm": [
+     2
+    ]
+   },
+   "errors": []
+  }
+ ]
+}
