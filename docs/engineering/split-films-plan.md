@@ -94,8 +94,9 @@ its own film with `NEEDS_MATCH` and the TMDB hit as its candidate ("Unmatched").
 split → pending → re-merge flip-flop.
 
 - **Exempt**: films the owner settled (`film.editions_confirmed`, set by Fix match and Edit editions).
-- **Runtime signal**: untagged same-title files (not parts) whose runtimes differ by more than 15% are never joined
-  by the Plex import and are flagged "Runtimes differ by 22% — check these are the same film".
+- **Runtime signal**: untagged same-title files (not parts) whose runtimes differ by more than 15% are flagged
+  "Runtimes differ by 22% — check these are the same film". The signal only flags: once titles are identical, the
+  versions stay editions of one film (untagged theatrical and extended cuts routinely differ by more than 15%).
 
 ### Library repair (runs inside the scan, after the walk and **before** `retryPending`; also after a Plex import)
 
@@ -210,7 +211,7 @@ Code:
   order, `grouping_source = PLEX`; an `AUTO` join that disagrees with Plex is unfolded first. A partly paired Media is
   not joined and is reported. Each Media is its own edition named by `editionTitle` (cut to 32); two Media with the
   same name get "Original" / "Original 2" (the Edit editions unique-name rule must hold). Edition ids are recomputed
-  after joins before watch state is written. Untagged Media more than 15% apart in runtime are flagged, not joined.
+  after joins before watch state is written. Untagged Media more than 15% apart in runtime stay separate editions and are flagged.
 - `viewOffset` is global: merged into the joined edition against the summed runtime.
 - Default edition from Plex: when several items share a TMDB id, the first item in Plex's section listing.
 - After the import, repair and auto-resolve run over the library.
