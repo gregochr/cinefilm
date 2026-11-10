@@ -6,5 +6,5 @@ import java.util.List;
 public record WeeklyTheme(String kind, String value, String title, String caption, List<Film> films) {
 
     /** Caption shown under every theme. */
-    public static final String CAPTION = "A new theme every Monday";
+    public static final String STANDING_CAPTION = "A new theme every Monday";
 }

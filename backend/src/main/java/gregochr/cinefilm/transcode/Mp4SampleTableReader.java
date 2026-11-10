@@ -2,7 +2,6 @@ package gregochr.cinefilm.transcode;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -101,9 +100,19 @@ public class Mp4SampleTableReader {
         }
     }
 
-    private static ByteBuffer read(FileChannel channel, long position, long length) throws IOException {
-        channel.position(position);
-        return ByteBuffer.wrap(Channels.newInputStream(channel).readNBytes(Math.toIntExact(length)));
+    /**
+     * Reads {@code length} bytes at {@code position} with positional reads (the channel's own position is not
+     * touched), looping over partial reads. At end of file the buffer is shorter: its limit is the bytes read.
+     */
+    static ByteBuffer read(FileChannel channel, long position, long length) throws IOException {
+        ByteBuffer buffer = ByteBuffer.allocate(Math.toIntExact(length));
+        while (buffer.hasRemaining()) {
+            int n = channel.read(buffer, position + buffer.position());
+            if (n < 0) {
+                break;
+            }
+        }
+        return buffer.flip();
     }
 
     /** Walks the top-level boxes and returns the payload of {@code moov}, wherever in the file it is. */

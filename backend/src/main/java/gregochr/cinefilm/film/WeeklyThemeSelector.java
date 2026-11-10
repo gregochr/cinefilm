@@ -33,11 +33,11 @@ public final class WeeklyThemeSelector {
     public static WeeklyTheme choose(LocalDate date, List<Film> library) {
         List<Candidate> candidates = candidates(library);
         if (candidates.isEmpty()) {
-            return new WeeklyTheme("library", "all", "This week: your library", WeeklyTheme.CAPTION,
+            return new WeeklyTheme("library", "all", "This week: your library", WeeklyTheme.STANDING_CAPTION,
                 pick(library, f -> true));
         }
         Candidate chosen = candidates.get((int) Math.floorMod(mix(weekKey(date)), candidates.size()));
-        return new WeeklyTheme(chosen.kind, chosen.value, chosen.title, WeeklyTheme.CAPTION,
+        return new WeeklyTheme(chosen.kind, chosen.value, chosen.title, WeeklyTheme.STANDING_CAPTION,
             pick(library, chosen.matches));
     }
 

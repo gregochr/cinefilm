@@ -4,8 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 /** The real {@link ProcessCommandRunner} against POSIX tools every CI and dev machine has. */
@@ -88,5 +93,34 @@ class ProcessCommandRunnerTest {
         } finally {
             Thread.interrupted();
         }
+    }
+
+    private static Set<Path> captureFiles() throws IOException {
+        try (Stream<Path> files = Files.list(Path.of(System.getProperty("java.io.tmpdir")))) {
+            return files.filter(p -> p.getFileName().toString().startsWith("cinefilm-tool"))
+                .collect(Collectors.toSet());
+        }
+    }
+
+    @Test
+    void theCaptureFileIsRemovedAfterANormalRun() throws IOException {
+        Set<Path> before = captureFiles();
+
+        CommandRunner.Result result = runner.run(List.of("/bin/echo", "hello"), Duration.ofSeconds(10));
+
+        assertThat(result.succeeded()).isTrue();
+        assertThat(captureFiles()).isEqualTo(before);
+    }
+
+    @Test
+    void theCaptureFileIsRemovedAfterATimeoutAndAfterAFailedStart() throws IOException {
+        Set<Path> before = captureFiles();
+
+        assertThat(runner.run(List.of("/bin/sleep", "30"), Duration.ofMillis(200)).timedOut()).isTrue();
+        assertThat(captureFiles()).isEqualTo(before);
+
+        assertThatThrownBy(() -> runner.run(List.of("/nonexistent/ffprobe-xyz"), Duration.ofSeconds(1)))
+            .isInstanceOf(IOException.class);
+        assertThat(captureFiles()).isEqualTo(before);
     }
 }
