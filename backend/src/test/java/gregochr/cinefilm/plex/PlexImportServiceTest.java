@@ -740,13 +740,17 @@ class PlexImportServiceTest {
         known(known(1, "Rocky IV.m4v"), known(2, "Rocky V.m4v"));
         when(writer.preflight(List.of(1L), null)).thenReturn(HAS_ALL);
         when(writer.apply(FilmWrite.ofFiles(rocky, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
-        org.mockito.Mockito.doThrow(new IllegalStateException("boom")).when(writer).flag(any(), any());
+        org.mockito.Mockito.doThrow(new IllegalStateException("boom")).when(writer).flag(
+            List.of("Plex lists \"Rocky V.m4v\" with \"Rocky IV\", but its name is another film's, so it was left "
+                + "out of that film"), NOW);
         org.mockito.Mockito.doThrow(new IllegalStateException("boom")).when(grouping).repair();
 
         service.start();
 
         assertThat(finished().getError()).isNull();
         assertThat(report().paired()).isEqualTo(1);
+        verify(writer).flag(List.of("Plex lists \"Rocky V.m4v\" with \"Rocky IV\", but its name is another film's, "
+            + "so it was left out of that film"), NOW);
         verify(grouping, never()).group();
     }
 }
