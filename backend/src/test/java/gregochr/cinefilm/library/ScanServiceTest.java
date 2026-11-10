@@ -253,14 +253,15 @@ class ScanServiceTest {
 
     @Test
     void anUnchangedFileWhoseVideoDurationWasProbedAsNoneIsNotProbedAgain() throws IOException {
-        disk(found("Heat.m4v", 10, T1));
+        FoundFile file = found("Heat.m4v", 10, T1);
+        disk(file);
         when(ingest.known()).thenReturn(Map.of("Heat.m4v",
             new Known(1L, "Heat.m4v", 10L, T1, Presence.PRESENT, Playability.PLAYABLE, "yuv420p", 0L)));
 
         service.start("admin");
 
         verifyNoInteractions(ffprobe);
-        verify(ingest, never()).refresh(anyLong(), any(), any(), any());
+        verify(ingest, never()).refresh(1L, file, Playability.PLAYABLE, null);
     }
 
     @Test

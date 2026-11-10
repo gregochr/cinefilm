@@ -40,8 +40,10 @@ files or workflows itself. Docs (this file, `docs/`, `AGENTS.md`) may be written
    (never merge on it), 👍 is a clean review, comments are findings. Until Codex is enabled on this repo, CI alone
    gates.
 6. **Merge (squash) when CI is green and Codex has given 👍 on the exact head commit**, re-reading both just
-   before: `gh pr merge --squash --match-head-commit <sha>`. **The owner does not review PRs** (owner, 2026-11-08):
-   the planner merges each phase itself once these gates pass, without asking.
+   before: `gh pr merge --squash --match-head-commit <sha>`. If `main` has moved since the PR's CI ran (another PR
+   merged meanwhile), update the branch and let CI run again first: a new gate can pass on a PR and still break code
+   that landed beside it. **The owner does not review PRs** (owner, 2026-11-08): the planner merges each phase
+   itself once these gates pass, without asking.
 7. Multi-phase plans repeat 2–6 per phase, each branched from the updated `main`.
 
 Never done by a session: creating or deleting tags, pushing to `main`, force-pushing a shared branch.

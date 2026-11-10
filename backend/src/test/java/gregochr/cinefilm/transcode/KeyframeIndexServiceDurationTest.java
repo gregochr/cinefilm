@@ -17,6 +17,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
 
 /**
  * A part of a split film is indexed to the end of its video, not to the container's duration (which can be the
@@ -83,7 +84,10 @@ class KeyframeIndexServiceDurationTest {
         CutList cuts = service.ensureIndexed(media(), VIDEO).cuts();
 
         assertThat(cuts.toText()).isEqualTo("0,4000");
-        verify(rows).save(org.mockito.ArgumentMatchers.any(MediaKeyframes.class));
+        ArgumentCaptor<MediaKeyframes> saved = ArgumentCaptor.forClass(MediaKeyframes.class);
+        verify(rows).save(saved.capture());
+        assertThat(saved.getValue().getMediaFileId()).isEqualTo(7L);
+        assertThat(saved.getValue().getCuts()).isEqualTo("0,4000");
     }
 
     @Test
