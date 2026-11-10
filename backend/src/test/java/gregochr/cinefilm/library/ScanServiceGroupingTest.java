@@ -1,12 +1,13 @@
 package gregochr.cinefilm.library;
 
 import static gregochr.cinefilm.TestData.CLOCK;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.film.Playability;
@@ -134,8 +135,7 @@ class ScanServiceGroupingTest {
         service.start("admin");
 
         verify(ingest).addNew(file, Playability.PLAYABLE, probe, new TitleGuess("Towers", null), null);
-        verify(matcher, never()).match(org.mockito.ArgumentMatchers.any(), anyLong());
-        verify(matcher, never()).matchTagged(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verifyNoInteractions(matcher);
     }
 
     @Test
@@ -169,7 +169,8 @@ class ScanServiceGroupingTest {
         service.start("admin");
 
         verify(ingest).addNew(file, Playability.PLAYABLE, probe, new TitleGuess("Heat", null), outcome);
-        verify(matcher, never()).match(org.mockito.ArgumentMatchers.any(), anyLong());
+        verify(matcher).matchTagged(949L, null);
+        verifyNoMoreInteractions(matcher);
     }
 
     @Test
@@ -205,7 +206,8 @@ class ScanServiceGroupingTest {
         service.start("admin");
 
         verify(ingest).applyOutcome(10L, outcome);
-        verify(matcher, never()).match(org.mockito.ArgumentMatchers.any(), anyLong());
+        verify(matcher).matchTagged(949L, null);
+        verifyNoMoreInteractions(matcher);
     }
 
     @Test
@@ -234,7 +236,8 @@ class ScanServiceGroupingTest {
         service.start("admin");
 
         verify(ingest).addNew(file, Playability.PLAYABLE, probe, new TitleGuess("Heat", null), null);
-        verify(matcher, never()).match(org.mockito.ArgumentMatchers.any(), anyLong());
+        verify(matcher).matchTagged(949L, null);
+        verifyNoMoreInteractions(matcher);
         verify(ingest, never()).pending();
     }
 }

@@ -36,5 +36,36 @@ export default [
     files: ['**/*.test.{js,jsx}', 'src/test/**'],
     languageOptions: { globals: { ...globals.vitest, ...globals.node } },
   },
+  {
+    // Banned test patterns (docs/engineering/test-standards.md: "Queries", "userEvent", "Keyboard tests").
+    files: ['**/*.test.{js,jsx}', 'src/test/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'CallExpression[callee.property.name=/^querySelector(All)?$/]',
+          message:
+            'No querySelector in tests: query by role, or add a role or data-testid (test-standards.md, "Queries").',
+        },
+        {
+          selector:
+            'MemberExpression[property.name=/^(parentElement|firstChild|lastChild|children)$/]',
+          message:
+            'No DOM walking in tests (parentElement, firstChild, lastChild, children): query by role or data-testid (test-standards.md, "Queries").',
+        },
+        {
+          selector: "CallExpression[callee.object.name='fireEvent'][callee.property.name='click']",
+          message:
+            'Use userEvent.click, not fireEvent.click (test-standards.md, "userEvent is the default").',
+        },
+        {
+          selector:
+            "CallExpression[callee.object.name='fireEvent'][callee.property.name='keyDown']:not([arguments.0.object.name='document'][arguments.0.property.name='activeElement'])",
+          message:
+            'Send keys where the browser would: userEvent.keyboard, or on a frozen fake clock fireEvent.keyDown(document.activeElement, ...) (test-standards.md, "Keyboard tests").',
+        },
+      ],
+    },
+  },
   prettier,
 ];

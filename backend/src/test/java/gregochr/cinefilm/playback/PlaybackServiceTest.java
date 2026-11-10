@@ -8,9 +8,8 @@ import static gregochr.cinefilm.TestData.film;
 import static gregochr.cinefilm.TestData.state;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.config.BadRequestException;
@@ -83,7 +82,7 @@ class PlaybackServiceTest {
         assertThatThrownBy(() -> service.reportProgress(WITH_MARKER, null))
             .isInstanceOf(BadRequestException.class)
             .hasMessage("positionMs must be a non-negative number");
-        verify(states, never()).save(any());
+        verifyNoMoreInteractions(states);
     }
 
     @Test
@@ -91,7 +90,7 @@ class PlaybackServiceTest {
         assertThatThrownBy(() -> service.reportProgress(WITH_MARKER, -1L))
             .isInstanceOf(BadRequestException.class)
             .hasMessage("positionMs must be a non-negative number");
-        verify(states, never()).save(any());
+        verifyNoMoreInteractions(states);
     }
 
     @Test

@@ -24,6 +24,19 @@
         <property name="file" value="${checkstyle.suppressions.file}"/>
     </module>
 
+    <!-- Banned test patterns (docs/engineering/test-standards.md). Checker-level so they run on text; the
+         suppressions file switches them off for src/main, so they only ever fire on test sources. -->
+    <module name="RegexpSingleline">
+        <property name="id" value="bannedTestSleep"/>
+        <property name="format" value="\bThread\s*\.\s*sleep\s*\("/>
+        <property name="message" value="No Thread.sleep() in tests: inject a clock or a scheduler you control (test-standards.md)."/>
+    </module>
+    <module name="RegexpMultiline">
+        <property name="id" value="bannedTestVerifyAny"/>
+        <property name="format" value="\bverify\([^;]*?\b(any|anyString|anyInt|anyLong|anyShort|anyByte|anyChar|anyFloat|anyDouble|anyBoolean|anyList|anySet|anyMap|anyCollection|anyIterable|isA|notNull|nullable)\("/>
+        <property name="message" value="No wildcard matchers (any*, isA, notNull, nullable) in verify(): assert the exact argument, or use an ArgumentCaptor or argThat with a real assertion (test-standards.md, smell 1)."/>
+    </module>
+
     <module name="TreeWalker">
         <!-- Javadoc on every public type, method and constructor in src/main. MissingJavadoc* report a Javadoc
              that is ABSENT; JavadocType/JavadocMethod only validate one that is present. Exempt: bean
