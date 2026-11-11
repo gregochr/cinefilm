@@ -105,6 +105,14 @@ describe('API resources', () => {
     await sessionApi.signOut();
     expect(last()).toMatchObject({ path: '/api/session', method: 'DELETE' });
   });
+
+  it('passes an abort signal through to the status request, so a check can be cut short', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { signal } = new AbortController();
+    await sessionApi.status({ signal });
+    expect(fetchMock.mock.calls[0][1].signal).toBe(signal);
+  });
 });
 
 describe('image URLs', () => {

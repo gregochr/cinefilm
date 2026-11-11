@@ -226,11 +226,10 @@ first requests after a laptop wakes, while Wi-Fi and Tailscale reconnect.
 
 ### Left for afterwards (after phase 2 merges)
 
-- **The native engine's stuck check after a long pause.** `nativeEngine.js` moves `lastMoveAt` only on `timeupdate`
-  (`:58-61`), so a pause counts as time without progress. Played again after a long pause with nothing buffered
-  (if iOS dropped its buffer), the first 1 s poll finds it "stuck" (`:111-116`) and reloads at once, before AVPlayer
-  has asked for anything: a counted reload on the iPhone whatever the server does. The fix is to reset `lastMoveAt` on
-  `play`. It is a client change in a file phase 2 also edits (its `online` wake-up), so it waits for phase 2.
+- **The native engine's stuck check after a long pause — done.** `nativeEngine.js` moved `lastMoveAt` only on
+  `timeupdate`, so a pause counted as time without progress and a film played again with nothing buffered reloaded on
+  the first poll. It now resets `lastMoveAt` on `play`, so a stall is measured from the moment the viewer pressed
+  play (with tests in `nativeEngine.test.js`).
 
 ## Code
 
@@ -369,7 +368,7 @@ In Chrome on the Mac, a film on Auto:
    no new `POST …/sessions` and no new `master.m3u8`. Admin's Transcoding panel shows the same session again.
 4. Admin, Playback health: that viewing shows no recovery and no reload.
 5. On the iPhone: pause for more than ten minutes, then play. It should carry on with no recovery; a reload there
-   is the native engine's own check (see "Left for afterwards").
+   would be a real stall: the native engine now measures its 15 s from `play` (see "Left for afterwards").
 
 ## Not verifiable here
 

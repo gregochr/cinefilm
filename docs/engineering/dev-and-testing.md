@@ -252,16 +252,43 @@ On each profile, with a film on Auto:
 
 1. Play from the start, and again from a resume point. Note the time to the first frame.
 2. Watch two minutes, then seek forward ten minutes. Note every stall.
-3. Switch the throttle to Offline for 30 seconds and back, then for 3 minutes and back. "Reconnecting…" must clear
-   by itself and playback must carry on from the same place, without a reload and without falling back to the
-   original file.
-4. Open Admin, Playback health: the viewing is there, and its start-up time, stalls and reconnects match what you
+3. Switch the throttle to Offline for 30 seconds and back, then for 3 minutes and back. The browser knows it is
+   offline, so hls.js waits quietly: the film plays on from its buffer with no notice (BUFFERING only if the buffer
+   runs dry) and, back online, carries on by itself from the same place, without a reload and without falling back
+   to the original file.
+4. The same with the stream unreachable while the browser believes it is online, as on a train's Wi-Fi with no
+   uplink: DevTools, Network request blocking, a pattern for `/api/sessions/` (it blocks the playlists and segments,
+   not the session), for 30 seconds and for 3 minutes. After 30 seconds there is no notice: hls.js's own retries
+   take about 47 seconds to run out, and the film plays on from its buffer. After 3 minutes "Reconnecting…" shows
+   once the retries are spent and clears by itself once unblocked; playback carries on from the same place, without
+   falling back.
+5. Open Admin, Playback health: the viewing is there, and its start-up time, stalls and reconnects match what you
    saw (`playback-health-plan.md`).
 
 Once per release, with no throttling: let a film bank its buffer, pause it for more than ten minutes (or close the
 lid for longer) and play. It must carry on at once from its buffer under the same session id (DevTools: no new
 `POST …/sessions`, no new `master.m3u8`), with no "Reconnecting…", and Playback health must show no recovery and no
 reload for that viewing (`long-pause-plan.md`).
+
+Once per change to how a session starts (`poor-link-plan.md`):
+
+6. Set Offline, then open a film: "Reconnecting…", never the original file; back online, the film starts within a
+   second or two.
+7. On "Train, bad" from a cold start: Auto starts on the lowest rung, and DevTools Network shows each segment as one
+   request that completes however long it takes (no restart every 20 s, and none every 5 s while "Reconnecting…"
+   shows).
+8. Play a second film within 10 minutes of the first: it starts without the 1.5 s probe (no `Range` request to
+   `/stream`).
+9. With Disable cache ticked (cached files keep their old headers): a rung's `index.m3u8`, the JavaScript and the
+   stylesheet come back with `content-encoding: gzip` (the master playlist is too small to compress).
+10. Block `hls-*.js` alone (request blocking, Disable cache ticked) and open a film: the server still answers, so
+    after one more try the film plays the original file, as before, and Admin shows a fall back. A second blocked
+    request for the chunk shows that the browser fetches a failed chunk again; none means it remembers the failure,
+    as Safari does.
+11. Sign out in another tab, then open a film: the sign-in card, with no "Reconnecting…" and no fall back; sign in
+    and it streams.
+12. On the host, restart the app (`docker restart cinefilm`) just as a film is opened: "Reconnecting…" while the
+    proxy answers 502, then the sign-in card (a restart forgets sign-ins), then it streams.
 
 - DevTools throttles the page's own requests (the hls.js segments included) and only while DevTools is open. It
   does not reach Safari: use Network Link Conditioner there (macOS: Additional Tools for Xcode; iPhone: Settings,
