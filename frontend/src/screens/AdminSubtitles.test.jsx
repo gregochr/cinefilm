@@ -437,6 +437,41 @@ describe('Admin: Subtitles panel, quick nudges', () => {
   });
 });
 
+describe('Admin: Subtitles panel, cues that fail to refresh', () => {
+  it('shows the error and Try again after a nudge, hides the old cues and their links, and recovers on retry', async () => {
+    let offset = 0;
+    let failCues = false;
+    installFetch((method, url, init) => {
+      if (url === '/api/admin/subtitles') return respond([file({ offsetMs: offset })]);
+      if (url === '/api/admin/subtitles/1/offset') {
+        offset = JSON.parse(init.body).offsetMs;
+        failCues = true;
+        return respond(file({ offsetMs: offset }));
+      }
+      if (url === '/api/admin/subtitles/1/cues') {
+        return failCues
+          ? respond(null, 500)
+          : respond({ offsetMs: 0, cues: [{ startMs: 10000, endMs: 12000, text: 'Hello' }] });
+      }
+      return null;
+    });
+    renderApp('/admin');
+    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    const li = (await within(panel).findByText('Heat (1995)/Heat.en.forced.srt')).closest('li');
+    await userEvent.click(within(li).getByRole('button', { name: /Show the cues/ }));
+    expect(await within(li).findByRole('link', { name: /Play from here/ })).toBeInTheDocument();
+
+    await userEvent.click(within(li).getByRole('button', { name: 'Show lines 1 second later' }));
+
+    expect(await within(li).findByText(/Couldn.t load the cues/)).toBeInTheDocument();
+    expect(within(li).queryByRole('link', { name: /Play from here/ })).not.toBeInTheDocument();
+    failCues = false;
+    await userEvent.click(within(li).getByRole('button', { name: 'Try again' }));
+    expect(await within(li).findByRole('link', { name: /Play from here/ })).toBeInTheDocument();
+    expect(within(li).queryByText(/Couldn.t load the cues/)).not.toBeInTheDocument();
+  });
+});
+
 describe('Admin: Subtitles panel, cues after a scan changes the file', () => {
   it('reads the open cues again when the row’s version changes though its attachment and offset do not', async () => {
     let scans = 0;

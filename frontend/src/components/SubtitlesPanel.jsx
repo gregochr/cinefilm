@@ -12,7 +12,7 @@ import {
   sidecarGroups,
   warningsFor,
 } from '../state/subtitleAdmin.js';
-import { useSubtitleCues, useSubtitles } from '../state/useSubtitles.js';
+import { cueResourceKey, useSubtitleCues, useSubtitles } from '../state/useSubtitles.js';
 import AttachPicker from './AttachPicker.jsx';
 import { Button } from './Button.jsx';
 import { SkeletonBlock } from './Skeleton.jsx';
@@ -28,27 +28,39 @@ function CueList({ item, id }) {
       </div>
     );
   }
-  if (error && !data)
-    return <ErrorState onRetry={reload}>Couldn&rsquo;t load the cues.</ErrorState>;
-  if (data.cues.length === 0) return <p className="admin__text">This file has no cues.</p>;
+  const failure = error ? (
+    <ErrorState onRetry={reload}>Couldn&rsquo;t load the cues.</ErrorState>
+  ) : null;
+  if (!data) return failure;
+  if (data.cues.length === 0) {
+    return (
+      <>
+        {failure}
+        <p className="admin__text">This file has no cues.</p>
+      </>
+    );
+  }
   return (
-    <ol className="subs__cues" id={id} aria-label={`Cues in ${fileName(item.path)}`}>
-      {data.cues.map((cue, i) => (
-        <li key={`${i}-${cue.startMs}`} className="subs__cue">
-          <span className="admin__mono subs__time">{cueTime(cue)}</span>
-          <span className="subs__text">{cue.text}</span>
-          {item.filmId == null ? null : (
-            <Link
-              className="admin__link"
-              to={playerPath(item, playFromHereMs(cue))}
-              aria-label={`Play from here: ${cue.text.replace(/\s+/g, ' ')}`}
-            >
-              Play from here
-            </Link>
-          )}
-        </li>
-      ))}
-    </ol>
+    <>
+      {failure}
+      <ol className="subs__cues" id={id} aria-label={`Cues in ${fileName(item.path)}`}>
+        {data.cues.map((cue, i) => (
+          <li key={`${i}-${cue.startMs}`} className="subs__cue">
+            <span className="admin__mono subs__time">{cueTime(cue)}</span>
+            <span className="subs__text">{cue.text}</span>
+            {item.filmId == null ? null : (
+              <Link
+                className="admin__link"
+                to={playerPath(item, playFromHereMs(cue))}
+                aria-label={`Play from here: ${cue.text.replace(/\s+/g, ' ')}`}
+              >
+                Play from here
+              </Link>
+            )}
+          </li>
+        ))}
+      </ol>
+    </>
   );
 }
 
@@ -163,7 +175,8 @@ function Item({ item, busy, problem, actions }) {
               <Check item={item} busy={busy} actions={actions} />
             </>
           ) : null}
-          <CueList item={item} id={cuesId} />
+          {/* A new key remounts the list, so cues for another attachment, offset or version are never shown. */}
+          <CueList key={cueResourceKey(item)} item={item} id={cuesId} />
         </div>
       ) : null}
     </li>

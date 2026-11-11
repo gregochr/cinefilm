@@ -67,14 +67,15 @@ export function useSubtitles(version) {
 }
 
 /**
- * One file's cues on the edition's timeline. Asked again when the offset changes and when the file is attached
- * somewhere else (another edition, part, or whole film versus one part): the times depend on where it sits.
+ * What the cues of a file depend on: where it sits (edition, whole film or part), its offset and its version (when
+ * the row last changed, so a scan that replaced the cues counts). Used as the resource key, and by the panel to
+ * remount the list so cues for another key are never shown.
  */
+export function cueResourceKey(item) {
+  return `admin-subtitle-cues:${item.id}:${item.editionId}:${item.whole}:${item.part}:${item.offsetMs}:${item.version}`;
+}
+
+/** One file's cues on the edition's timeline; see {@link cueResourceKey} for when they are asked again. */
 export function useSubtitleCues(item) {
-  const place = `${item.editionId}:${item.whole}:${item.part}`;
-  // `version` is when the row last changed, so a scan that replaced the file's cues is read again too.
-  return useResource(
-    `admin-subtitle-cues:${item.id}:${place}:${item.offsetMs}:${item.version}`,
-    (options) => adminApi.subtitleCues(item.id, options),
-  );
+  return useResource(cueResourceKey(item), (options) => adminApi.subtitleCues(item.id, options));
 }
