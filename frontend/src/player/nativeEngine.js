@@ -112,12 +112,12 @@ export function startNative({
     if (destroyed || now() - lastReloadAt < spacingMs) return;
     const stuck =
       !video.paused && !video.ended && now() - lastMoveAt >= stallMs && bufferAhead(video) <= 0.5;
-    if (errored || reconnecting || stuck) reload();
+    if (errored || reconnecting || stuck) void reload();
   }
 
   // The connection is back while reconnecting: check now, ignoring the spacing (a check in flight finishes).
   const onOnline = () => {
-    if (!destroyed && reconnecting) reload();
+    if (!destroyed && reconnecting) void reload();
   };
 
   window.addEventListener('online', onOnline);

@@ -286,7 +286,7 @@ describe('a probe with no first byte asks whether the server answers', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('changes nothing when the check answers after the probe has ended', async () => {
+  it('with no first byte, waits for a check still out at 10,000 ms and calls onUnreachable if it says no', async () => {
     const t = {};
     let answer;
     const onUnreachable = vi.fn();
@@ -296,10 +296,27 @@ describe('a probe with no first byte asks whether the server answers', () => {
       checkReachable: vi.fn(() => new Promise((resolve) => (answer = resolve))),
       onUnreachable,
     });
-    await vi.advanceTimersByTimeAsync(10000); // no first byte: the probe ends by itself
-    expect(await pending).toBeNull();
+    await vi.advanceTimersByTimeAsync(10000); // the first-byte limit ends the probe; the check is still out
+    expect(onUnreachable).not.toHaveBeenCalled();
     answer(false);
-    await vi.advanceTimersByTimeAsync(0);
+    expect(await pending).toBeNull();
+    expect(onUnreachable).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('with no first byte, a check still out at 10,000 ms that says yes calls nothing', async () => {
+    const t = {};
+    let answer;
+    const onUnreachable = vi.fn();
+    const pending = measureThroughput('/s', {
+      fetchImpl: stuck(t),
+      now: clock,
+      checkReachable: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+      onUnreachable,
+    });
+    await vi.advanceTimersByTimeAsync(10000);
+    answer(true);
+    expect(await pending).toBeNull();
     expect(onUnreachable).not.toHaveBeenCalled();
   });
 

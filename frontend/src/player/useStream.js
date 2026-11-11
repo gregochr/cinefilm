@@ -10,6 +10,7 @@ import {
   lowerMiddle,
   median,
   networkGeneration,
+  REMEMBER_MS,
   recallSpeed,
   rememberSpeed,
 } from './throughput.js';
@@ -60,7 +61,7 @@ export function useStream({
   // for the render; `network` is the network counter they were taken under.
   const [samples, setSamples] = useState([]);
   const [reusedKbps, setReusedKbps] = useState(null);
-  const samplesRef = useRef({ list: [], network: networkGeneration() });
+  const samplesRef = useRef({ list: [], network: networkGeneration(), at: 0 });
   const [generation, setGeneration] = useState(0);
   const pendingSeekRef = useRef(initialSeekMs > 0 ? initialSeekMs : null);
   const startedRef = useRef(false);
@@ -166,14 +167,20 @@ export function useStream({
       const network = networkGeneration();
       const base = kept.network === network ? kept.list : [];
       const list = addSample(base, kbps);
-      samplesRef.current = { list, network };
+      samplesRef.current = { list, network, at: Date.now() };
       setSamples(list);
       if (list !== base) rememberSpeed(lowerMiddle(list));
     };
     // The start rung's speed: this player's own measurements under this network, else the one remembered.
+    // They have an age: ten minutes after the last measurement (or a network change) they are discarded.
     const knownSpeed = () => {
       const kept = samplesRef.current;
-      const own = kept.network === networkGeneration() ? lowerMiddle(kept.list) : null;
+      const usable = kept.network === networkGeneration() && Date.now() - kept.at < REMEMBER_MS;
+      if (!usable && kept.list.length > 0) {
+        samplesRef.current = { list: [], network: networkGeneration(), at: 0 };
+        setSamples([]);
+      }
+      const own = usable ? lowerMiddle(kept.list) : null;
       return own === null ? { kbps: recallSpeed(), own: false } : { kbps: own, own: true };
     };
 
@@ -322,7 +329,7 @@ export function useStream({
   // samples and a reused speed go, and the indicator and the slow card stop reading them.
   useEffect(() => {
     const forgetMeasurements = () => {
-      samplesRef.current = { list: [], network: networkGeneration() };
+      samplesRef.current = { list: [], network: networkGeneration(), at: 0 };
       setSamples([]);
       setReusedKbps(null);
     };

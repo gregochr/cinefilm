@@ -1076,6 +1076,32 @@ describe('the start rung: reuse a measured speed, probe, or start low', () => {
     expect(log.posted[1].probeKbps).toBe(3000);
   });
 
+  describe('the player’s own samples have an age too', () => {
+    // A clock the test moves; every Date.now() in the player reads it.
+    let now;
+    beforeEach(() => {
+      now = 1_000_000;
+      vi.spyOn(Date, 'now').mockImplementation(() => now);
+    });
+
+    it.each([
+      [599_999, 3000, 1],
+      [600_000, 8000, 2],
+    ])(
+      '%i ms after the last measurement a recovery uses probeKbps %i (probes: %i)',
+      async (age, kbps, probes) => {
+        measureThroughput.mockResolvedValueOnce(3000).mockResolvedValue(8000);
+        const { log, video, hls } = await open();
+        sessionStorage.clear(); // only the player’s own samples are left to reuse
+        now += age;
+        await recover(video, hls);
+        await instances(2);
+        expect(measureThroughput).toHaveBeenCalledTimes(probes);
+        expect(log.posted[1].probeKbps).toBe(kbps);
+      },
+    );
+  });
+
   it('keeps no sample from before a network change: a later segment stands alone', async () => {
     measureThroughput.mockResolvedValue(3000);
     const { log, video, hls } = await open();

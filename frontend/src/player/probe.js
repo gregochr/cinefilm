@@ -13,7 +13,7 @@ export const PROBE_CHECK_MS = 5000;
  * slowness). Returns null when nothing could be measured: no first byte in time, a failed request, an empty
  * body or no byte after the first. With `checkReachable` (resolves whether the server answers), a probe with no
  * first byte after `checkMs` asks; no answer ends it at once and calls `onUnreachable()`. A check that answers
- * after the first byte, or after the probe ended, changes nothing.
+ * after the first byte changes nothing; with no first byte, a check still out when the probe ends is waited for.
  */
 export async function measureThroughput(
   url,
@@ -30,19 +30,21 @@ export async function measureThroughput(
   const controller = new AbortController();
   let waitTimer = setTimeout(() => controller.abort(), firstByteMs);
   let checkTimer = null;
-  let ended = false;
+  let inFlight = null; // the reachability check, once it has started
   let counting = false; // the first byte has arrived
   if (checkReachable) {
-    checkTimer = setTimeout(async () => {
-      let answers = true;
-      try {
-        answers = await checkReachable();
-      } catch {
-        // A check that cannot tell is no reason to end the probe.
-      }
-      if (ended || counting || answers) return;
-      onUnreachable();
-      controller.abort();
+    checkTimer = setTimeout(() => {
+      inFlight = (async () => {
+        let answers = true;
+        try {
+          answers = await checkReachable();
+        } catch {
+          // A check that cannot tell is no reason to end the probe.
+        }
+        if (counting || answers) return;
+        onUnreachable();
+        controller.abort();
+      })();
     }, checkMs);
   }
   let reader = null;
@@ -76,11 +78,13 @@ export async function measureThroughput(
   } catch {
     // Aborted by a time box, or the link failed: use what arrived.
   } finally {
-    ended = true;
     clearTimeout(waitTimer);
     clearTimeout(checkTimer);
     reader?.cancel().catch(() => {});
     controller.abort();
+    // No first byte and a check still out (it started at 5 s, the first-byte limit is 10 s): let it say whether the
+    // server is there, so "unreachable" is not lost. It is bounded by its own limit.
+    if (!counting) await inFlight;
   }
   if (bytes === 0 || lastAt === null || lastAt <= firstAt) return null;
   return Math.round((bytes * 8) / (lastAt - firstAt));
