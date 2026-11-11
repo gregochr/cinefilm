@@ -63,6 +63,12 @@ export const sessionsApi = {
   remove: (sessionId, options) => del(`/api/sessions/${sessionId}`, options),
 };
 
+/** One viewing's health report: each send replaces the one before (the server keeps the highest `seq`). */
+export const healthApi = {
+  report: (playbackId, report, options) =>
+    put(`/api/playback-health/${playbackId}`, report, options),
+};
+
 export const sessionApi = {
   status: () => get('/api/session'),
   signIn: (password) => post('/api/session', { password }),

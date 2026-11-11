@@ -297,3 +297,89 @@ describe('destroy', () => {
     expect(handlers.onReconnecting).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('network errors for the health record', () => {
+  function withHandler() {
+    const onNetworkError = vi.fn();
+    const handlers = {
+      onLevel: vi.fn(),
+      onThroughput: vi.fn(),
+      onReconnecting: vi.fn(),
+      onSessionLost: vi.fn(),
+      onFatal: vi.fn(),
+      onNetworkError,
+    };
+    const { hls } = start({ handlers });
+    return { hls, onNetworkError, handlers };
+  }
+
+  it.each([
+    ['with no response at all', {}],
+    ['with a response code of 0', { response: { code: 0 } }],
+    ['with an empty response', { response: {} }],
+  ])('reports a network error %s as not a timeout', (_name, extra) => {
+    const { hls, onNetworkError } = withHandler();
+    hls.error({ fatal: false, type: 'networkError', details: 'fragLoadError', ...extra });
+    expect(onNetworkError).toHaveBeenCalledTimes(1);
+    expect(onNetworkError).toHaveBeenCalledWith({ timeout: false });
+  });
+
+  it.each(['fragLoadTimeOut', 'manifestLoadTimeOut', 'levelLoadTimeOut'])(
+    'reports details %s as a timeout',
+    (details) => {
+      const { hls, onNetworkError } = withHandler();
+      hls.error({ fatal: false, type: 'networkError', details, response: { code: 0 } });
+      expect(onNetworkError).toHaveBeenCalledWith({ timeout: true });
+    },
+  );
+
+  it('does not take a detail that merely contains TimeOut for a timeout', () => {
+    const { hls, onNetworkError } = withHandler();
+    hls.error({ fatal: false, type: 'networkError', details: 'TimeOutLater' });
+    expect(onNetworkError).toHaveBeenCalledWith({ timeout: false });
+  });
+
+  it('reports a network error with no details as not a timeout', () => {
+    const { hls, onNetworkError } = withHandler();
+    hls.error({ fatal: false, type: 'networkError' });
+    expect(onNetworkError).toHaveBeenCalledWith({ timeout: false });
+  });
+
+  it.each([404, 503, 500, 403])('does not report an error that has an HTTP status (%i)', (code) => {
+    const { hls, onNetworkError } = withHandler();
+    hls.error({ fatal: false, type: 'networkError', details: 'fragLoadError', response: { code } });
+    expect(onNetworkError).not.toHaveBeenCalled();
+  });
+
+  it('does not report an error that is not a network error', () => {
+    const { hls, onNetworkError } = withHandler();
+    hls.error({ fatal: true, type: 'mediaError', details: 'bufferStalledError' });
+    hls.error({ fatal: true, type: 'otherError', details: 'fragLoadTimeOut' });
+    expect(onNetworkError).not.toHaveBeenCalled();
+  });
+
+  it('reports first, so a fatal network error is still counted and still reconnects', () => {
+    const { hls, onNetworkError, handlers } = withHandler();
+    hls.error({
+      fatal: true,
+      type: 'networkError',
+      details: 'manifestLoadError',
+      response: { code: 0 },
+    });
+    expect(onNetworkError).toHaveBeenCalledTimes(1);
+    expect(handlers.onReconnecting).toHaveBeenCalledWith(true);
+  });
+
+  it('works without the handler (the shared fixture has only the five)', () => {
+    const { hls, handlers } = start();
+    expect(() =>
+      hls.error({
+        fatal: true,
+        type: 'networkError',
+        details: 'fragLoadTimeOut',
+        response: { code: 0 },
+      }),
+    ).not.toThrow();
+    expect(handlers.onReconnecting).toHaveBeenCalledWith(true);
+  });
+});

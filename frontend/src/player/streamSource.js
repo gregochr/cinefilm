@@ -18,7 +18,7 @@ export function chooseEngine({ hasMediaSource, hlsSupported, nativeHls }) {
 }
 
 /**
- * Starts `session` on `video` and returns the running engine ({ destroy }), or null when this browser can
+ * Starts `session` on `video` and returns the running engine ({ destroy, kind: 'hlsjs' | 'native' }), or null when this browser can
  * play no HLS (the caller direct-plays the file). `isCancelled` is checked once hls.js has loaded: when it
  * says so, nothing is attached and the result is null.
  */
@@ -36,7 +36,7 @@ export async function startStream({
   const nativeHls = Boolean(video.canPlayType(HLS_MIME));
   if (!hasMediaSource) {
     if (chooseEngine({ hasMediaSource, hlsSupported: false, nativeHls }) !== 'native') return null;
-    return startNative({ video, session, handlers, ...timing });
+    return { ...startNative({ video, session, handlers, ...timing }), kind: 'native' };
   }
   let Hls;
   try {
@@ -47,5 +47,8 @@ export async function startStream({
   if (isCancelled()) return null; // The viewer moved on while hls.js loaded: attach nothing.
   if (chooseEngine({ hasMediaSource, hlsSupported: Hls.isSupported(), nativeHls }) !== 'hlsjs')
     return null;
-  return startHlsJs({ Hls, video, session, auto, startSeconds, handlers, ...timing });
+  return {
+    ...startHlsJs({ Hls, video, session, auto, startSeconds, handlers, ...timing }),
+    kind: 'hlsjs',
+  };
 }
