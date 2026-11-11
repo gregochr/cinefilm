@@ -10,7 +10,7 @@ import { resetThroughputState } from '../player/throughput.js';
 
 // The playback-health recorder as the player wires it: the media events and the fake hls.js go in, the body of
 // the PUT comes out. The clock is `performance.now`, which the counter reads, so every figure is exact.
-vi.mock('hls.js', async () => ({ default: (await import('../test/fakeHls.js')).FakeHls }));
+vi.mock('hls.js/light', async () => ({ default: (await import('../test/fakeHls.js')).FakeHls }));
 vi.mock('../player/probe.js', () => ({ measureThroughput: vi.fn() }));
 
 let clock;
