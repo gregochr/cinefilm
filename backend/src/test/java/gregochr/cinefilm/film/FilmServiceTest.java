@@ -6,6 +6,7 @@ import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.collection;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.film;
+import static gregochr.cinefilm.TestData.state;
 import static gregochr.cinefilm.TestData.view;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -18,6 +19,7 @@ import gregochr.cinefilm.film.FilmDtos.FilmDetail;
 import gregochr.cinefilm.film.FilmDtos.FilmList;
 import gregochr.cinefilm.film.FilmDtos.Preferences;
 import gregochr.cinefilm.playback.PreferencesService;
+import gregochr.cinefilm.settings.ServerSettingsService;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,6 +39,9 @@ class FilmServiceTest {
     private LibraryLoader loader;
 
     @Mock
+    private ServerSettingsService settings;
+
+    @Mock
     private FilmRepository films;
 
     @Mock
@@ -52,7 +57,7 @@ class FilmServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new FilmService(loader, films, preferences, transcoder, indexes);
+        service = new FilmService(loader, films, preferences, transcoder, indexes, settings);
     }
 
     private static Film owned(long id, String title, int year, String... genres) {
@@ -164,12 +169,31 @@ class FilmServiceTest {
     }
 
     @Test
+    void listAppliesTheServersMinimumWatchTimeToTheFilterAndTheCards() {
+        when(settings.minWatchMs()).thenReturn(5 * MIN);
+        Film barely = owned(1L, "Barely", 2000);
+        Film half = owned(2L, "Half", 2001);
+        when(loader.loadAll()).thenReturn(List.of(
+            view(barely, state(barely.getEditions().get(0), 4 * MIN, false, NOW, null)),
+            view(half, state(half.getEditions().get(0), 50 * MIN, false, NOW, null))));
+
+        FilmList inProgress = service.list(new LibraryQuery(null, "title", null, null, "in-progress"));
+        FilmList unwatched = service.list(new LibraryQuery(null, "title", null, null, "unwatched"));
+
+        assertThat(inProgress.films()).extracting(FilmDtos.FilmCard::title).containsExactly("Half");
+        assertThat(inProgress.films().get(0).inProgress()).isTrue();
+        assertThat(unwatched.films()).extracting(FilmDtos.FilmCard::title).containsExactly("Barely");
+        assertThat(unwatched.films().get(0).inProgress()).isFalse();
+        assertThat(unwatched.films().get(0).progress()).isNotNull();
+    }
+
+    @Test
     void aBadQueryValueIsRejected() {
         when(loader.loadAll()).thenReturn(List.of());
 
         assertThatThrownBy(() -> service.list(new LibraryQuery(null, "popularity", null, null, null)))
             .isInstanceOf(BadRequestException.class)
-            .hasMessage("sort must be title, year, added, imdb or rt");
+            .hasMessage("sort must be title, year, added, imdb, rt or last-watched");
     }
 
     @Test

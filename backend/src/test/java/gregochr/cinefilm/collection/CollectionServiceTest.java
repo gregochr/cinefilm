@@ -5,6 +5,7 @@ import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.collection;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.film;
+import static gregochr.cinefilm.TestData.state;
 import static gregochr.cinefilm.TestData.view;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -19,6 +20,7 @@ import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmView;
 import gregochr.cinefilm.film.LibraryLoader;
+import gregochr.cinefilm.settings.ServerSettingsService;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -42,12 +44,15 @@ class CollectionServiceTest {
     @Mock
     private LibraryLoader loader;
 
+    @Mock
+    private ServerSettingsService settings;
+
     private CollectionService service;
     private FilmCollection alienSaga;
 
     @BeforeEach
     void setUp() {
-        service = new CollectionService(collections, films, loader);
+        service = new CollectionService(collections, films, loader, settings);
         alienSaga = collection("Alien");
         alienSaga.setId(ALIEN_ID);
         alienSaga.setPosterPath("/alien-saga.jpg");
@@ -110,6 +115,18 @@ class CollectionServiceTest {
         assertThat(page.parts().subList(3, 6)).allMatch(PartDto::owned);
         assertThat(page.parts().subList(3, 6)).extracting(p -> p.film().title())
             .containsExactly("Prequel Cut", "Alpha Cut", "Zeta Cut");
+    }
+
+    @Test
+    void thePageCardsUseTheServersMinimumWatchTime() {
+        when(settings.minWatchMs()).thenReturn(5 * MIN);
+        Film alien = owned(1L, "Alien", 1979, 348L, alienSaga, null);
+        when(collections.findById(ALIEN_ID)).thenReturn(Optional.of(alienSaga));
+        when(films.findByCollectionId(ALIEN_ID)).thenReturn(List.of(alien));
+        when(loader.views(List.of(alien))).thenReturn(List.of(
+            view(alien, state(alien.getEditions().get(0), 6 * MIN, false, NOW, null))));
+
+        assertThat(service.get(ALIEN_ID).parts().get(0).film().inProgress()).isTrue();
     }
 
     // cards

@@ -69,6 +69,29 @@ class HomeApiTest extends ApiTestBase {
     }
 
     @Test
+    void continueWatchingHasAtMostTwelveFilmsAfterTheHeroAndTheTotalCountsEveryFilmInProgress() throws Exception {
+        for (int i = 1; i <= 20; i++) {
+            Edition edition = add("Film " + i, 2000, 90);
+            saveState(state(edition, 30 * MIN, false, now.minus(Duration.ofHours(i)), null));
+        }
+        // Below the default minimum of five minutes: not in progress, so not in the total.
+        saveState(state(add("Barely", 2000, 90), MIN, false, now.minusSeconds(1), null));
+
+        mvc.perform(get("/api/home"))
+            .andExpect(jsonPath("$.hero.title").value("Film 1"))
+            .andExpect(jsonPath("$.hero.inProgress").value(true))
+            .andExpect(jsonPath("$.continueWatching", hasSize(12)))
+            .andExpect(jsonPath("$.continueWatching[0].title").value("Film 2"))
+            .andExpect(jsonPath("$.continueWatching[11].title").value("Film 13"))
+            .andExpect(jsonPath("$.continueWatchingTotal").value(20));
+    }
+
+    @Test
+    void anEmptyLibraryHasATotalOfZero() throws Exception {
+        mvc.perform(get("/api/home")).andExpect(jsonPath("$.continueWatchingTotal").value(0));
+    }
+
+    @Test
     void theHeroIsNotRepeatedInContinueWatching() throws Exception {
         Edition a = add("Heat", 1995, 90);
         Edition b = add("Arrival", 2016, 70);

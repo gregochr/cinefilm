@@ -19,10 +19,16 @@ public final class FilmDtos {
      * listing ({@code GET /api/films}) and only when the film's collection has at least
      * {@code CollectionService.MIN_OWNED} films in the library; everywhere else it is null. {@code sortTitle} is the
      * key the library sorts titles by (an import may set it to something other than the title).
+     *
+     * <p>{@code progress} is any saved position above 0 (Film detail and the player resume below the minimum watch
+     * time too). {@code inProgress} is the rule clients use: the last played edition is at or above the minimum
+     * watch time. {@code lastWatchedAt} is when that edition was last played; {@code hiddenFromContinueWatching} is
+     * that edition's Remove flag.
      */
     public record FilmCard(Long id, String title, Integer year, String posterPath, String backdropPath,
                            boolean watched, Progress progress, String director, Long collectionId,
-                           String sortTitle) {
+                           String sortTitle, boolean inProgress, Instant lastWatchedAt,
+                           boolean hiddenFromContinueWatching) {
     }
 
     /** A director or actor reference. */

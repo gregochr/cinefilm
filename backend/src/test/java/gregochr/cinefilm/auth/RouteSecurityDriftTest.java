@@ -104,6 +104,7 @@ class RouteSecurityDriftTest {
             "POST /api/admin/films/{id}/match", "GET /api/admin/grouping-report",
             "GET /api/admin/films/{id}/editions", "PUT /api/admin/films/{id}/editions",
             "PUT /api/playback-health/{playbackId}", "GET /api/admin/playback-health",
+            "GET /api/admin/settings", "PUT /api/admin/settings",
             "GET /api/admin/playback-health/{playbackId}");
     }
 

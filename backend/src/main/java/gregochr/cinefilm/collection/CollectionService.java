@@ -10,6 +10,7 @@ import gregochr.cinefilm.film.BrowseRules;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmView;
 import gregochr.cinefilm.film.LibraryLoader;
+import gregochr.cinefilm.settings.ServerSettingsService;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -31,9 +32,12 @@ public class CollectionService {
     private final FilmCollectionRepository collections;
     private final FilmRepository films;
     private final LibraryLoader loader;
+    private final ServerSettingsService settings;
 
-    /** Creates the service over its repositories and the library loader. */
-    public CollectionService(FilmCollectionRepository collections, FilmRepository films, LibraryLoader loader) {
+    /** Creates the service over its repositories, the library loader and the server settings. */
+    public CollectionService(FilmCollectionRepository collections, FilmRepository films, LibraryLoader loader,
+                             ServerSettingsService settings) {
+        this.settings = settings;
         this.collections = collections;
         this.films = films;
         this.loader = loader;
@@ -49,9 +53,10 @@ public class CollectionService {
         FilmCollection collection = collections.findById(id)
             .orElseThrow(() -> new NotFoundException("No such collection"));
         List<FilmView> owned = loader.views(films.findByCollectionId(id));
+        long minMs = settings.minWatchMs();
         List<PartDto> parts = slots(collection, owned).stream()
             .map(s -> s.owned() != null
-                ? new PartDto(true, FilmMapper.card(s.owned()), null, null, null)
+                ? new PartDto(true, FilmMapper.card(s.owned(), minMs), null, null, null)
                 : new PartDto(false, null, s.missing().getTitle(), s.missing().getYear(),
                     s.missing().getPosterPath()))
             .toList();

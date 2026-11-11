@@ -66,8 +66,9 @@ cache only changes that helper.
 - **Watched (decision 1):** an edition becomes watched when a progress report reaches `creditsMarkerMs`, or 92% of
   `runtimeMs` when there is no marker. Watched is per edition; a film is "watched" in browse views if any edition is.
 - **Resume (decision 1):** the API returns the saved position; the *client* seeks to `max(0, position − 10 s)`.
-- **Continue watching:** films whose most recently played edition has a position > 0 and is not watched, newest
-  `lastPlayedAt` first, **except** films whose most recently played edition has `hiddenFromContinueWatching` set
+- **Continue watching** (see `continue-watching-row-plan.md`): films **in progress**, meaning the most recently played
+  edition has a position at or above the minimum watch time (`continueWatchingMinMinutes`, default 5, set in Admin;
+  always above 0), newest `lastPlayedAt` first, **except** films whose most recently played edition has `hiddenFromContinueWatching` set
   ("Remove from Continue watching": only the flag and `hiddenAt` change, the position stays so "Resume from…" still
   works; any progress report clears the flag, so playing the film again brings it back). The Home hero is the first
   of these, so a hidden film leaves the hero and the row together.
@@ -85,8 +86,8 @@ All JSON. All routes under `/api`. Times are milliseconds. All routes except `/a
 
 | Method & path | Returns |
 |---|---|
-| `GET /api/home` | `{ hero: FilmCard?, continueWatching: FilmCard[], recentlyAdded: FilmCard[], notWatchedInYears: FilmCard[], weeklyTheme: { title, caption, kind, value, films: FilmCard[] } }`; `continueWatching` excludes the film shown as `hero` |
-| `GET /api/films?q=&sort=title\|year\|added&genre=&decade=1970&show=all\|unwatched\|watched` | `{ total, films: FilmCard[], facets: { genres: string[], decades: number[] } }`; `FilmCard.collectionId` is set only here |
+| `GET /api/home` | `{ hero: FilmCard?, continueWatching: FilmCard[], continueWatchingTotal: number, recentlyAdded: FilmCard[], notWatchedInYears: FilmCard[], weeklyTheme: { title, caption, kind, value, films: FilmCard[] } }`; `hero` is the newest film in progress, `continueWatching` is **at most the next 12** after it (the client shows 4 and keeps the rest to backfill), and `continueWatchingTotal` counts every film in Continue watching, the hero included and films removed from Continue watching left out |
+| `GET /api/films?q=&sort=title\|year\|added\|imdb\|rt\|last-watched&genre=&decade=1970&show=all\|in-progress\|unwatched\|watched` | `{ total, films: FilmCard[], facets: { genres: string[], decades: number[] } }`; `FilmCard.collectionId` is set only here. `show` is exclusive: `in-progress` is `FilmCard.inProgress` (films removed from Continue watching included), `watched` is any edition watched and not in progress, `unwatched` is the rest. `sort=last-watched` is newest `lastWatchedAt` first, never-played films last, ties by title |
 | `GET /api/films/{id}` | `FilmDetail` |
 | `GET /api/people/{id}` | `{ id, name, profilePath, films: [{ film: FilmCard, roles: string[] }] }` — owned films only; roles like "as Neil McCauley", "Director" |
 | `GET /api/collections` | `{ filmCount, collections: CollectionCard[] }`: `filmCount` is the number of browsable films (the Films tab count); `collections` holds every collection with at least two owned films, sorted by name |
@@ -105,13 +106,15 @@ All JSON. All routes under `/api`. Times are milliseconds. All routes except `/a
 | `POST /api/admin/scan` | starts a scan: 202 and the `ScanStatus`; 409 `{ "error": "A scan is already running" }` when one runs |
 | `POST /api/admin/ratings/refresh` | starts a forced ratings refresh (every film, oldest first, within the daily OMDb budget): 202 and the `ScanStatus`; 409 `"A ratings refresh is already running"`; 404 `"Ratings need an OMDb API key"` when `OMDB_API_KEY` is blank. `ScanStatus` also carries `ratingsLastRefreshedAt` (ISO time or null), `ratingsRunning`, `ratingsEnabled`. `FilmDetail.ratings` is `{ imdb: { score, votes, url } \| null, rottenTomatoes: { score, url \| null } \| null }`; `GET /api/films?sort=imdb\|rt` sorts highest first, films without the score last |
 | `GET /api/admin/attention` | `{ items: AttentionItem[] }`: Films needing attention |
+| `GET /api/admin/settings` | `{ continueWatchingMinMinutes: 0–30 (default 5), inProgressCount }`: the minimum watch time before a film counts as in progress, and how many films are in progress under it (the Library rule: films removed from Continue watching included) |
+| `PUT /api/admin/settings` body `{ continueWatchingMinMinutes }` | the same shape with the recomputed `inProgressCount`; 400 `"continueWatchingMinMinutes must be a whole number from 0 to 30"` for a value outside 0–30 or missing. Stored in the single-row `server_setting` table (V12), applied at query time (no progress is changed or deleted) and never cached, so Home, Library and the count change at once. Two overlapping PUTs: the later one wins |
 | `GET /api/admin/plex` | `PlexImportStatus`: `{ configured, reachable, running, progress: { processed, total, current } \| null, lastImport: { startedAt, finishedAt, error, report } \| null }`; `configured` is false (and the Admin panel hidden) when `PLEX_URL` or `PLEX_TOKEN` is blank. The `report` counts paired, merged, editionsMoved, metadataApplied, postersStored, backdropsStored, artworkFailures, invalidArtPaths, tmdbUnavailable, watchedImported, resumePointsImported, keptNewer, failures, onDiskNotInPlex, with capped lists (200) `failedFilms`, `notOnDisk` (+ `notOnDiskTotal`), `collections` (+ `collectionsTotal`) |
 | `POST /api/admin/plex/import` | starts the import: 202 and the status; 409 `"A scan or import is already running"`, 409 `"Run a library scan first"`, 404 `"Plex is not configured"` |
 | `GET /api/art/{name}` | artwork imported from Plex; `name` must match `^[0-9a-f]{64}\.(jpg\|png)$` (else 404); `Cache-Control: private, max-age=31536000, immutable`. A film's or collection's `posterPath`/`backdropPath` is either a TMDB path (`/abc.jpg`) or `/api/art/<sha>.<ext>`, which clients use as it is (`imageUrl` passes it through) |
 | `GET /actuator/health`, `GET /actuator/health/container`, `GET /actuator/info` | Not under `/api`, open to a signed-out caller, and the only Actuator endpoints exposed (all others 404). `health` is `{status}` only; `health/container` (database + ping, status only) is the Docker healthcheck and deploy smoke probe; `info` carries `git.commit.id.full` of the running build |
 | `GET/POST/DELETE /api/session` | `GET`: 200 `{authenticated:true}` when signed in, 401 `{authenticated:false}` when not; `POST { password }`: 200 and cookie, 401 on a wrong password; `DELETE`: sign out (200) |
 
-**FilmCard:** `{ id, title, year (number | null), posterPath, backdropPath, watched, progress: { positionMs, runtimeMs, editionId } | null, director, collectionId (number | null), sortTitle }`. `collectionId` is set only by `GET /api/films`, and only when the film's collection has two or more films in the library (the "two films make a collection" rule); everywhere else it is `null`. `sortTitle` is the key titles are sorted by (lower-case, leading "the" dropped, or an import's custom value). The Films grid uses both to fold collections into tiles and place them under the title sort.
+**FilmCard:** `{ id, title, year (number | null), posterPath, backdropPath, watched, progress: { positionMs, runtimeMs, editionId } | null, director, collectionId (number | null), sortTitle, inProgress, lastWatchedAt (ISO time | null), hiddenFromContinueWatching }`. `progress` is any saved position above 0 (Film detail and the player resume below the minimum watch time too). `inProgress` is the rule clients use and never recompute: the last played edition's position is at or above the minimum watch time (`continueWatchingMinMinutes`, below) and above 0; the watched flag is not looked at (a rewatch is in progress). `lastWatchedAt` is that edition's `lastPlayedAt`; `hiddenFromContinueWatching` is that edition's Remove flag. `collectionId` is set only by `GET /api/films`, and only when the film's collection has two or more films in the library (the "two films make a collection" rule); everywhere else it is `null`. `sortTitle` is the key titles are sorted by (lower-case, leading "the" dropped, or an import's custom value). The Films grid uses both to fold collections into tiles and place them under the title sort.
 
 **CollectionCard** (Library, Collections tab): `{ id, name, posterPath, ownedCount, totalCount, posterPaths: (string|null)[], lastAddedAt }`. `posterPaths` = up to 3 owned films' poster paths, earliest release first (the front of the fan); `lastAddedAt` = the newest `addedAt` among the owned films (ISO instant), for "Recently added to". `name` is TMDB's; the client drops a trailing " Collection" for display (`state/collections.js`).
 
@@ -259,8 +262,8 @@ None outstanding for the topology. workhorse is always on, so the film share is 
   `addedAt` fields are ISO-8601 instants.
 - Rewatch: when an edition becomes watched (threshold reached, or `POST .../watched` with true) its saved position
   is reset to 0 and `watched` stays true; progress reports at or past the threshold keep it at 0. Continue watching
-  is every film whose most recently played edition has `positionMs > 0`, watched or not, so a watched film you
-  restart is in progress again. "Not watched in years" is unchanged. `continueWatching` omits the `hero` film.
+  is every film whose most recently played edition has `positionMs` at or above the minimum watch time (above 0),
+  watched or not, so a watched film you restart is in progress again. "Not watched in years" is unchanged. `continueWatching` omits the `hero` film.
 - Errors are JSON `{ "error": "..." }`: 400 invalid input, 401 signed out, 403 missing `X-CineFilm: 1` on a
   mutating request, 404 unknown id.
 

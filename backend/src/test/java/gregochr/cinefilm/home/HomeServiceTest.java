@@ -15,6 +15,7 @@ import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmDtos.FilmCard;
 import gregochr.cinefilm.film.FilmView;
 import gregochr.cinefilm.film.LibraryLoader;
+import gregochr.cinefilm.settings.ServerSettingsService;
 import gregochr.cinefilm.film.WeeklyTheme;
 import gregochr.cinefilm.film.WeeklyThemeSelector;
 import gregochr.cinefilm.home.HomeDtos.Home;
@@ -26,6 +27,8 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -35,8 +38,11 @@ class HomeServiceTest {
     @Mock
     private LibraryLoader loader;
 
+    @Mock
+    private ServerSettingsService settings;
+
     private HomeService service(Clock clock) {
-        return new HomeService(loader, clock);
+        return new HomeService(loader, clock, settings);
     }
 
     private long nextId = 1;
@@ -178,6 +184,67 @@ class HomeServiceTest {
 
         assertThat(home.hero()).isNull();
         assertThat(home.continueWatching()).isEmpty();
+    }
+
+    /** {@code count} films in progress, film 1 played most recently, film {@code count} least recently. */
+    private List<FilmView> inProgress(int count) {
+        List<FilmView> films = new ArrayList<>();
+        for (int i = 1; i <= count; i++) {
+            films.add(withState("Film " + i, 2000, 30 * MIN, false, NOW.minus(Duration.ofHours(i)), null));
+        }
+        return films;
+    }
+
+    @ParameterizedTest(name = "{0} in progress: hero {1}, row {2}, total {3}")
+    @CsvSource({"0, false, 0, 0", "1, true, 0, 1", "5, true, 4, 5", "6, true, 5, 6", "13, true, 12, 13",
+        "14, true, 12, 14", "20, true, 12, 20"})
+    void theHeroIsTheNewestTheRowIsAtMostTwelveAfterItAndTheTotalCountsTheHero(int count, boolean hero, int row,
+                                                                              int total) {
+        libraryIs(inProgress(count));
+
+        Home home = service(CLOCK).home();
+
+        assertThat(home.hero() != null).isEqualTo(hero);
+        assertThat(home.continueWatching()).hasSize(row);
+        assertThat(home.continueWatchingTotal()).isEqualTo(total);
+        if (hero) {
+            assertThat(home.hero().title()).isEqualTo("Film 1");
+            assertThat(home.continueWatching()).extracting(FilmCard::title)
+                .containsExactlyElementsOf(java.util.stream.IntStream.rangeClosed(2, row + 1)
+                    .mapToObj(i -> "Film " + i).toList());
+        }
+    }
+
+    @Test
+    void theTotalLeavesOutRemovedFilmsAndFilmsBelowTheMinimumWatchTime() {
+        when(settings.minWatchMs()).thenReturn(5 * MIN);
+        List<FilmView> library = new ArrayList<>(inProgress(3));
+        FilmView removed = withState("Removed", 2000, 30 * MIN, false, NOW.minusSeconds(1), null);
+        removed.states().values().forEach(s -> s.setHiddenFromContinueWatching(true));
+        library.add(removed);
+        library.add(withState("Barely", 2000, 5 * MIN - 1, false, NOW.minusSeconds(2), null));
+        libraryIs(library);
+
+        Home home = service(CLOCK).home();
+
+        assertThat(home.continueWatchingTotal()).isEqualTo(3);
+        assertThat(home.hero().title()).isEqualTo("Film 1");
+        assertThat(home.continueWatching()).extracting(FilmCard::title).containsExactly("Film 2", "Film 3");
+    }
+
+    @Test
+    void everyCardCarriesTheInProgressFieldsUnderTheServerMinimum() {
+        when(settings.minWatchMs()).thenReturn(5 * MIN);
+        FilmView below = withState("Below", 2000, 2 * MIN, false, NOW.minus(Duration.ofDays(3)), null);
+        libraryIs(List.of(withState("Above", 2000, 6 * MIN, false, NOW.minusSeconds(5), null), below));
+
+        Home home = service(CLOCK).home();
+
+        assertThat(home.hero().inProgress()).isTrue();
+        assertThat(home.hero().lastWatchedAt()).isEqualTo(NOW.minusSeconds(5));
+        assertThat(home.hero().hiddenFromContinueWatching()).isFalse();
+        assertThat(home.continueWatching()).isEmpty();
+        assertThat(home.recentlyAdded()).isEmpty();
     }
 
     // rows measured against the injected clock

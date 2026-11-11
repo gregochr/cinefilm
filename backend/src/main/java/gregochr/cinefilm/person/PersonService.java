@@ -10,6 +10,7 @@ import gregochr.cinefilm.film.FilmMapper;
 import gregochr.cinefilm.film.LibraryLoader;
 import gregochr.cinefilm.person.PersonDtos.PersonFilm;
 import gregochr.cinefilm.person.PersonDtos.PersonPage;
+import gregochr.cinefilm.settings.ServerSettingsService;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,9 +25,12 @@ public class PersonService {
     private final PersonRepository people;
     private final CreditRepository credits;
     private final LibraryLoader loader;
+    private final ServerSettingsService settings;
 
-    /** Creates the service over its repositories and the library loader. */
-    public PersonService(PersonRepository people, CreditRepository credits, LibraryLoader loader) {
+    /** Creates the service over its repositories, the library loader and the server settings. */
+    public PersonService(PersonRepository people, CreditRepository credits, LibraryLoader loader,
+                         ServerSettingsService settings) {
+        this.settings = settings;
         this.people = people;
         this.credits = credits;
         this.loader = loader;
@@ -40,10 +44,11 @@ public class PersonService {
         for (Credit credit : credits.findByPersonId(id)) {
             rolesByFilm.computeIfAbsent(credit.getFilm(), f -> new ArrayList<>()).add(describe(credit));
         }
+        long minMs = settings.minWatchMs();
         List<PersonFilm> films = loader.views(rolesByFilm.keySet()).stream()
             .sorted(BrowseRules.NEWEST_FIRST
                 .thenComparing(v -> v.film().getSortTitle()))
-            .map(v -> new PersonFilm(FilmMapper.card(v), rolesByFilm.get(v.film())))
+            .map(v -> new PersonFilm(FilmMapper.card(v, minMs), rolesByFilm.get(v.film())))
             .toList();
         return new PersonPage(person.getId(), person.getName(), person.getProfilePath(), films);
     }

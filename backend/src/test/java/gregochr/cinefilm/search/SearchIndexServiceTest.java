@@ -54,7 +54,8 @@ class SearchIndexServiceTest {
     void setUp() {
         // The real collection service over mocked repositories: the index must reuse its cards, not re-derive them.
         service = new SearchIndexService(loader,
-            new CollectionService(collectionRepository, filmRepository, loader));
+            new CollectionService(collectionRepository, filmRepository, loader,
+                org.mockito.Mockito.mock(gregochr.cinefilm.settings.ServerSettingsService.class)));
     }
 
     private Film saved(long id, String title, int year, String poster) {
