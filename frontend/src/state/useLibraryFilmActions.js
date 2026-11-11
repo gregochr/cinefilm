@@ -75,7 +75,8 @@ export function useLibraryFilmActions(data, show, reload, onRollback, loading = 
   const undo = useCallback(async () => {
     const taken = action?.source;
     const reversed = await undoAction();
-    const reloading = reversed && taken !== current.current;
+    // Replaced, or a read in flight whose answer may predate the reversal: read again (which supersedes it).
+    const reloading = reversed && (taken !== current.current || reading.current);
     if (reloading) reload();
     return reloading;
   }, [action, undoAction, reload]);

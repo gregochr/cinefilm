@@ -43,6 +43,8 @@ function library(route, films = FILMS) {
   });
 }
 
+/** Lets everything already queued (a response being read, state updates) run. */
+const settle = () => new Promise((resolve) => setImmediate(resolve));
 const calls = (fetchMock, path) => fetchMock.mock.calls.filter((c) => c[0] === path);
 const body = (call) => JSON.parse(call[1].body);
 const more = (title) => screen.getByRole('button', { name: `More options for ${title}` });
@@ -473,7 +475,7 @@ describe('Library: the ⋯ menu on in-progress posters', () => {
 
   describe('a list read that is still in flight when the change commits', () => {
     /** A server whose list answers wait on `releaseList` once `hold` is set, and whose change waits on `commit`. */
-    function slowServer(films, applyChange) {
+    function slowServer(films, applyChange, applyRestore = () => {}) {
       const state = { held: false, releaseList: null, commit: null, lists: 0 };
       const changeGate = new Promise((resolve) => {
         state.commit = resolve;
@@ -496,6 +498,10 @@ describe('Library: the ⋯ menu on in-progress posters', () => {
             applyChange();
             return respond({ watched: true, previous: { positionMs: 1800000, watched: false } });
           });
+        }
+        if (/\/playback-state$/.test(url)) {
+          applyRestore();
+          return respond({});
         }
         return null;
       });
@@ -523,12 +529,49 @@ describe('Library: the ⋯ menu on in-progress posters', () => {
       state.held = false; // later reads (the re-read) answer at once
       state.commit();
       await vi.waitFor(() => expect(state.lists).toBeGreaterThan(stale + 1)); // the re-read
-      first(); // the stale answer arrives last, and is ignored
+      await act(async () => {
+        first(); // the stale answer arrives last, and is ignored
+        await settle();
+      });
 
       expect(await screen.findByRole('link', { name: 'Alpha, 2001, watched' })).toBeInTheDocument();
-      await new Promise((resolve) => setTimeout(resolve, 50));
       expect(poster('Alpha, 2001, watched')).toBeInTheDocument();
       expect(screen.getAllByTestId('poster-fill')).toHaveLength(1);
+    });
+
+    it('Undo under All while the list read is in flight: the re-read wins and the film is in progress', async () => {
+      let watched = false;
+      const { state } = slowServer(
+        () => [watched ? { ...ALPHA, watched: true, inProgress: false } : ALPHA, GAMMA],
+        () => {
+          watched = true;
+        },
+        () => {
+          watched = false;
+        },
+      );
+      renderApp('/library');
+      await screen.findByRole('link', { name: 'Alpha, 2001' });
+      await openMenu('Alpha');
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Mark as watched' }));
+      state.commit();
+      await vi.waitFor(() => expect(watched).toBe(true));
+
+      state.held = true; // the list read for the new sort answers with the watched state
+      const stale = state.lists;
+      await userEvent.click(within(screen.getByRole('group', { name: 'Sort' })).getByText('Title'));
+      await vi.waitFor(() => expect(state.lists).toBeGreaterThan(stale));
+      const first = state.releaseList;
+      state.held = false;
+      await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+      await vi.waitFor(() => expect(state.lists).toBeGreaterThan(stale + 1)); // the re-read
+      await act(async () => {
+        first();
+        await settle();
+      });
+
+      expect(await screen.findByRole('link', { name: 'Alpha, 2001' })).toBeInTheDocument();
+      expect(screen.getAllByTestId('poster-fill')).toHaveLength(2);
     });
 
     it('Remove under In progress: the re-read shows the film as removed', async () => {
@@ -552,9 +595,11 @@ describe('Library: the ⋯ menu on in-progress posters', () => {
       state.held = false;
       state.commit();
       await vi.waitFor(() => expect(state.lists).toBeGreaterThan(stale + 1));
-      first();
+      await act(async () => {
+        first();
+        await settle();
+      });
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
       await openMenu('Alpha');
       expect(removeItem()).not.toBeInTheDocument();
     });
