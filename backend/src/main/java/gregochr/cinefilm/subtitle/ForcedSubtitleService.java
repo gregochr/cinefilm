@@ -10,6 +10,7 @@ import gregochr.cinefilm.subtitle.SidecarPrecedence.Pick;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Slot;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -77,11 +78,6 @@ public class ForcedSubtitleService {
             throw new NotFoundException("No forced subtitles");
         }
         List<String> texts = new ArrayList<>();
-        List<Long> starts = new ArrayList<>();
-        if (slots.get(0).partIndex() > 0) {
-            texts.add("WEBVTT\n");
-            starts.add(0L);
-        }
         EditionTimeline timeline = null;
         for (Slot slot : slots) {
             long start = 0;
@@ -89,10 +85,12 @@ public class ForcedSubtitleService {
                 timeline = timeline == null ? timeline(edition) : timeline;
                 start = timeline.partStartMs(slot.partIndex());
             }
-            texts.add(VttWriter.write(SrtParser.cues(slot.sidecar().getCuesText()), slot.sidecar().getOffsetMs()));
-            starts.add(start);
+            // The part's start and the owner's offset move the cues together, so a cue shifted earlier than its
+            // part's start is not clipped at the part's own 0 but lands on the edition timeline.
+            texts.add(VttWriter.write(SrtParser.cues(slot.sidecar().getCuesText()),
+                start + slot.sidecar().getOffsetMs()));
         }
-        return texts.size() == 1 ? texts.get(0) : VttShifter.join(texts, starts);
+        return texts.size() == 1 ? texts.get(0) : VttShifter.join(texts, Collections.nCopies(texts.size(), 0L));
     }
 
     private static EditionTimeline timeline(Edition edition) {

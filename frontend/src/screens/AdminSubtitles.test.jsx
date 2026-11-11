@@ -359,6 +359,48 @@ describe('Admin: Subtitles panel, timing and checking', () => {
   });
 });
 
+describe('Admin: Subtitles panel, cues after a re-attach', () => {
+  it('reads the open cue list again when the file is attached to another part, so Play from here is not stale', async () => {
+    let part = 1;
+    const base = file({ parts: 2, part: 1, ownerAttached: true });
+    installFetch((method, url) => {
+      if (url === '/api/admin/subtitles') return respond([{ ...base, part }]);
+      if (url === '/api/admin/subtitles/1/cues') {
+        return respond({
+          offsetMs: 0,
+          cues: [{ startMs: part === 1 ? 10000 : 3610000, endMs: 12000, text: 'Hello' }],
+        });
+      }
+      if (url === '/api/admin/subtitles/1/attach') {
+        part = 2;
+        return respond({});
+      }
+      return null;
+    });
+    renderApp('/admin');
+    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    const li = (await within(panel).findByText('Heat (1995)/Heat.en.forced.srt')).closest('li');
+    await userEvent.click(within(li).getByRole('button', { name: /Show the cues/ }));
+    expect(await within(li).findByRole('link', { name: /Play from here/ })).toHaveAttribute(
+      'href',
+      '/films/1/play?edition=11&at=7000',
+    );
+
+    await userEvent.click(within(li).getByRole('button', { name: /^Move/ }));
+    await userEvent.type(within(li).getByLabelText('Find a film'), 'heat');
+    await userEvent.click(await within(li).findByRole('radio', { name: 'Heat (1995)' }));
+    await waitFor(() => expect(within(li).getByRole('button', { name: 'Attach' })).toBeEnabled());
+    await userEvent.click(within(li).getByRole('button', { name: 'Attach' }));
+
+    await waitFor(() =>
+      expect(within(panel).getByRole('link', { name: /Play from here/ })).toHaveAttribute(
+        'href',
+        '/films/1/play?edition=11&at=3607000',
+      ),
+    );
+  });
+});
+
 describe('Admin: Subtitles panel, attaching', () => {
   const openUnmatched = async (options = {}) => {
     const served = await openPanel({

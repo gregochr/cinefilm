@@ -20,7 +20,7 @@ import { ErrorState } from './StateMessages.jsx';
 
 /** The cues of one file with "Play from here" (the player opens 3 s before the cue). Cue text is rendered as text. */
 function CueList({ item, id }) {
-  const { data, error, loading, reload } = useSubtitleCues(item.id, item.offsetMs);
+  const { data, error, loading, reload } = useSubtitleCues(item);
   if (loading && !data) {
     return (
       <div role="status" aria-label="Loading cues">

@@ -14,11 +14,17 @@ import gregochr.cinefilm.subtitle.SubtitleDtos.CueDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.CuesDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.OffsetRequest;
 import gregochr.cinefilm.subtitle.SubtitleDtos.SidecarDto;
+import gregochr.cinefilm.config.ConflictException;
+import gregochr.cinefilm.library.LibraryLock;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.junit.jupiter.api.Test;
 
 /** The Admin subtitle service against the real repositories on H2. */
 class SubtitleAdminServiceTest extends SubtitleTestBase {
+
+    @Autowired
+    private LibraryLock lock;
 
     private SidecarDto listed(Long id) {
         return admin.list().stream().filter(d -> d.id().equals(id)).findFirst().orElseThrow();
@@ -418,5 +424,38 @@ class SubtitleAdminServiceTest extends SubtitleTestBase {
             .hasMessage("No such subtitle");
         assertThatThrownBy(() -> admin.unverify(9999L)).isInstanceOf(NotFoundException.class)
             .hasMessage("No such subtitle");
+    }
+
+    @Test
+    void everyChangeIsRefusedWhileAScanHoldsTheLibraryLockAndNothingIsChanged() {
+        Film taken = filmWithParts("Taken", 1, 90);
+        SubtitleSidecar row = sidecar("Taken.en.forced.srt", fileId(taken, 1), false);
+        Long edition = taken.getEditions().get(0).getId();
+        assertThat(lock.tryAcquire(LibraryLock.SCAN)).isTrue();
+        try {
+            for (Runnable change : List.<Runnable>of(() -> admin.attach(row.getId(), new AttachRequest(edition, null)),
+                () -> admin.detach(row.getId()), () -> admin.offset(row.getId(), new OffsetRequest(500)),
+                () -> admin.verify(row.getId()), () -> admin.unverify(row.getId()))) {
+                assertThatThrownBy(change::run).isInstanceOf(ConflictException.class)
+                    .hasMessage("A scan is running");
+            }
+            assertThat(row.getOffsetMs()).isZero();
+            assertThat(row.isOwnerAttached()).isFalse();
+            assertThat(lock.holder()).isEqualTo(LibraryLock.SCAN);
+        } finally {
+            lock.release();
+        }
+    }
+
+    @Test
+    void aChangeTakesTheLockWhileItRunsAndGivesItBack() {
+        SubtitleSidecar row = sidecar("Taken.en.forced.srt", null, false);
+
+        admin.offset(row.getId(), new OffsetRequest(500));
+
+        assertThat(lock.holder()).isNull();
+        assertThatThrownBy(() -> admin.offset(row.getId(), new OffsetRequest(600_001)))
+            .isInstanceOf(BadRequestException.class);
+        assertThat(lock.holder()).isNull();
     }
 }

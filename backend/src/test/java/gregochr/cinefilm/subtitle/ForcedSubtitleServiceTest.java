@@ -197,4 +197,28 @@ class ForcedSubtitleServiceTest extends SubtitleTestBase {
             + "01:40:20.000 --> 01:40:22.500\nWorld\n");
         assertThat(forced.forEditions(films.findById(taken.getId()).orElseThrow().getEditions())).isEmpty();
     }
+
+    @Test
+    void aNegativeOffsetOnALaterPartMovesCuesAcrossTheJoinInsteadOfClippingThemAtThePartsZero() {
+        Film film = filmWithParts("Towers", 2, 60);
+        SubtitleSidecar second = sidecar("Towers - pt2.en.forced.srt", fileId(film, 2), false);
+        second.setCuesText("1\n00:00:01,000 --> 00:00:02,000\nEarly\n\n");
+        second.setOffsetMs(-3000);
+
+        assertThat(forced.vtt(film.getEditions().get(0).getId()))
+            .isEqualTo("WEBVTT\n\n00:59:58.000 --> 00:59:59.000\nEarly\n");
+    }
+
+    @Test
+    void aNegativeOffsetOnPartOneStillClampsAtZeroAndPartTwoKeepsItsOwnOffset() {
+        Film film = filmWithParts("Towers", 2, 60);
+        SubtitleSidecar first = sidecar("Towers - pt1.en.forced.srt", fileId(film, 1), false);
+        first.setCuesText("1\n00:00:01,000 --> 00:00:04,000\nA\n\n");
+        first.setOffsetMs(-3000);
+        SubtitleSidecar second = sidecar("Towers - pt2.en.forced.srt", fileId(film, 2), false);
+        second.setCuesText("1\n00:00:01,000 --> 00:00:02,000\nB\n\n");
+
+        assertThat(forced.vtt(film.getEditions().get(0).getId())).isEqualTo("WEBVTT\n\n00:00:00.000 --> 00:00:01.000\n"
+            + "A\n\n01:00:01.000 --> 01:00:02.000\nB\n");
+    }
 }

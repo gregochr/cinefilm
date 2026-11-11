@@ -70,6 +70,18 @@ class LibraryLockTest {
     }
 
     @Test
+    void aScanCannotStartWhileASubtitleIsBeingChangedAndSaysSo() {
+        lock.tryAcquire(LibraryLock.SUBTITLE);
+        ScanService scans = scans();
+
+        assertThatThrownBy(() -> scans.start("admin")).isInstanceOf(ScanAlreadyRunningException.class)
+            .hasMessage("A subtitle is being changed");
+
+        assertThat(queued).isEmpty();
+        assertThat(lock.heldBy(LibraryLock.SUBTITLE)).isTrue();
+    }
+
+    @Test
     void aScanCannotStartWhileAMatchIsBeingFixedAndSaysSo() {
         lock.tryAcquire(LibraryLock.MATCH);
         ScanService scans = scans();

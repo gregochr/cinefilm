@@ -53,9 +53,13 @@ export function useSubtitles() {
   };
 }
 
-/** One file's cues on the edition's timeline; asked again when the offset changes. */
-export function useSubtitleCues(id, offsetMs) {
-  return useResource(`admin-subtitle-cues:${id}:${offsetMs}`, (options) =>
-    adminApi.subtitleCues(id, options),
+/**
+ * One file's cues on the edition's timeline. Asked again when the offset changes and when the file is attached
+ * somewhere else (another edition, part, or whole film versus one part): the times depend on where it sits.
+ */
+export function useSubtitleCues(item) {
+  const place = `${item.editionId}:${item.whole}:${item.part}`;
+  return useResource(`admin-subtitle-cues:${item.id}:${place}:${item.offsetMs}`, (options) =>
+    adminApi.subtitleCues(item.id, options),
   );
 }

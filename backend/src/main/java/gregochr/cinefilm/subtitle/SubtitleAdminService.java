@@ -1,12 +1,14 @@
 package gregochr.cinefilm.subtitle;
 
 import gregochr.cinefilm.config.BadRequestException;
+import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.EditionTimeline;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
+import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Pick;
 import gregochr.cinefilm.subtitle.SubtitleDtos.AttachRequest;
 import gregochr.cinefilm.subtitle.SubtitleDtos.CueDto;
@@ -21,6 +23,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,15 +45,17 @@ public class SubtitleAdminService {
     private final EditionRepository editions;
     private final SidecarSync sync;
     private final Clock clock;
+    private final LibraryLock lock;
 
     /** Creates the service. */
     public SubtitleAdminService(SubtitleSidecarRepository sidecars, MediaFileRepository files,
-                                EditionRepository editions, SidecarSync sync, Clock clock) {
+                                EditionRepository editions, SidecarSync sync, Clock clock, LibraryLock lock) {
         this.sidecars = sidecars;
         this.files = files;
         this.editions = editions;
         this.sync = sync;
         this.clock = clock;
+        this.lock = lock;
     }
 
     /** Every forced subtitle file with where it belongs and how it reads. */
@@ -93,6 +98,10 @@ public class SubtitleAdminService {
      */
     @Transactional
     public SidecarDto attach(Long id, AttachRequest request) {
+        return locked(() -> attachLocked(id, request));
+    }
+
+    private SidecarDto attachLocked(Long id, AttachRequest request) {
         SubtitleSidecar sidecar = find(id);
         if (request == null || request.editionId() == null) {
             throw new BadRequestException("Pick an edition");
@@ -123,6 +132,10 @@ public class SubtitleAdminService {
      */
     @Transactional
     public SidecarDto detach(Long id) {
+        return locked(() -> detachLocked(id));
+    }
+
+    private SidecarDto detachLocked(Long id) {
         SubtitleSidecar sidecar = find(id);
         sidecar.setOwnerAttached(false);
         sidecar.setMediaFileId(null);
@@ -143,6 +156,10 @@ public class SubtitleAdminService {
      */
     @Transactional
     public SidecarDto offset(Long id, OffsetRequest request) {
+        return locked(() -> offsetLocked(id, request));
+    }
+
+    private SidecarDto offsetLocked(Long id, OffsetRequest request) {
         SubtitleSidecar sidecar = find(id);
         if (request == null || request.offsetMs() == null) {
             throw new BadRequestException("An offset is required");
@@ -165,6 +182,10 @@ public class SubtitleAdminService {
      */
     @Transactional
     public SidecarDto verify(Long id) {
+        return locked(() -> verifyLocked(id));
+    }
+
+    private SidecarDto verifyLocked(Long id) {
         SubtitleSidecar sidecar = find(id);
         MediaFile file = file(sidecar);
         if (file == null) {
@@ -186,10 +207,26 @@ public class SubtitleAdminService {
      */
     @Transactional
     public SidecarDto unverify(Long id) {
+        return locked(() -> unverifyLocked(id));
+    }
+
+    private SidecarDto unverifyLocked(Long id) {
         SubtitleSidecar sidecar = find(id);
         sidecar.clearVerification();
         sidecar.setUpdatedAt(clock.instant());
         return one(id);
+    }
+
+    /** A scan rewrites the sidecar rows, so a change is refused (409) while one runs, as Fix match is. */
+    private SidecarDto locked(Supplier<SidecarDto> work) {
+        if (!lock.tryAcquire(LibraryLock.SUBTITLE)) {
+            throw new ConflictException("A scan is running");
+        }
+        try {
+            return work.get();
+        } finally {
+            lock.release();
+        }
     }
 
     private void changed(SubtitleSidecar sidecar) {
