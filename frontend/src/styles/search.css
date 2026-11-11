@@ -175,9 +175,6 @@
 }
 
 /* Phone sheet (phase 4): full screen, nothing behind it. Measured against screens/05 (780px wide = 2x 390). */
-body.search-sheet-open {
-  overflow: hidden;
-}
 .search-sheet {
   position: fixed;
   inset: 0;

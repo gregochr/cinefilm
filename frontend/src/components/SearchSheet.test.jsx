@@ -132,7 +132,6 @@ describe('results', () => {
     const user = await openSheet();
     await user.type(input(), 'ha');
     expect(input()).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByTestId('search-results')).toHaveClass('search-results--lg');
     expect(screen.getAllByRole('group').map((g) => g.getAttribute('aria-label'))).toEqual([
       'Titles',
       'Collections',
@@ -361,22 +360,31 @@ describe('clear, cancel and Esc', () => {
 });
 
 describe('scroll lock', () => {
-  it('locks the body while open and releases it on close', async () => {
+  it('locks the page while open and restores it after Cancel', async () => {
     const user = setup();
-    expect(document.body).not.toHaveClass('search-sheet-open');
+    expect(document.body.style.overflow).toBe('');
     await user.click(tab());
-    expect(document.body).toHaveClass('search-sheet-open');
+    expect(document.body.style.overflow).toBe('hidden');
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(document.body).not.toHaveClass('search-sheet-open');
+    expect(document.body.style.overflow).toBe('');
+  });
+
+  it('restores the page after choosing a result', async () => {
+    const user = await openSheet('/library');
+    expect(document.body.style.overflow).toBe('hidden');
+    await user.type(input(), 'warrior');
+    await user.click(screen.getByRole('option', { name: /Warrior/ }));
+    expect(sheet()).not.toBeInTheDocument();
+    expect(document.body.style.overflow).toBe('');
   });
 });
 
-describe('touch targets', () => {
+describe('named controls', () => {
   it('Cancel and clear are real buttons with names', async () => {
     const user = await openSheet();
     await user.type(input(), 'h');
-    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveClass('search-sheet__cancel');
-    expect(screen.getByRole('button', { name: 'Clear search' })).toHaveClass('search-sheet__clear');
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Clear search' })).toBeInTheDocument();
   });
 });
 

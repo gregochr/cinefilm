@@ -14,8 +14,6 @@ import { isTypingTarget } from './useSlashFocus.js';
 import { releaseKeyboardProxy } from './searchKeyboard.js';
 import SearchResults from './SearchResults.jsx';
 
-const LOCK_CLASS = 'search-sheet-open';
-
 /**
  * The phone search: a full-screen sheet over a `?search=1` route (opened by the TabBar's Search tab). The same combobox
  * and results as the header dropdown, in 52px rows. Cancel goes back when the tab pushed this entry, otherwise it drops
@@ -41,9 +39,10 @@ export default function SearchSheet() {
 
   // Nothing behind scrolls while the sheet is up; focus goes back to the Search tab when it goes.
   useEffect(() => {
-    document.body.classList.add(LOCK_CLASS);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     return () => {
-      document.body.classList.remove(LOCK_CLASS);
+      document.body.style.overflow = previous;
       document.querySelector('[data-search-tab]')?.focus({ preventScroll: true });
     };
   }, []);
