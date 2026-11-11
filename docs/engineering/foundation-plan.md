@@ -158,6 +158,12 @@ src/screens/    Home, Library, FilmDetail, Person, Collection, Player, Admin (pl
 src/styles/     tokens.css (copied verbatim from the handover), base.css, one CSS module per component
 ```
 
+Browse data is cached in memory (`src/state/resourceCache.js`, used by `useResource`): at most 12 answers for up to 30
+minutes, shown at once and checked again in the background; Film detail's answer is also reused, without a request,
+by the Player for a minute. Every change this tab makes (any `POST`, `PUT`, `PATCH` or `DELETE` except starting or
+ending a playback session and the health report; a preference save drops only its own film) empties it, as do a
+library change and a session expiry, and an answer whose request overlapped such a change is never stored.
+
 Routes: `/`, `/library` (Films tab), `/library/collections` (Collections tab), `/films/:id`, `/films/:id/play?edition=`, `/people/:id`, `/collections/:id`, `/admin`.
 
 Rules that apply to every component (from the handover): real elements and labels (§7); the focus ring and 1.03

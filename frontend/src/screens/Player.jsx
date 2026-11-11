@@ -51,7 +51,7 @@ import {
   subtitleOptions,
 } from '../player/tracks.js';
 import { operatorName } from '../state/healthFormat.js';
-import { useFilm } from '../state/useFilms.js';
+import { useFilmToPlay } from '../state/useFilms.js';
 import { usePageExitReport } from '../player/exitReport.js';
 import { usePlayback } from '../state/usePlayback.js';
 import { useHealthReport } from '../player/useHealthReport.js';
@@ -70,7 +70,7 @@ function bufferedEnd(video) {
 export default function Player() {
   const { id } = useParams();
   const [params] = useSearchParams();
-  const { data: film, error, loading, reload } = useFilm(id);
+  const { data: film, error, loading, reload } = useFilmToPlay(id);
   // When this viewing's route opened: the start-up time of the playback-health record counts from here. The
   // same Player stays mounted when the address changes to another film or edition, so it is taken again then.
   // Setting state while rendering makes React run this function again before it renders PlayerView, so the
