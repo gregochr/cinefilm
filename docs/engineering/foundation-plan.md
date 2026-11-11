@@ -370,8 +370,9 @@ Plan: `library-scan-plan.md`. What the API and the model now carry:
   and `<stem>.forced.en.srt` (any case, same skips). After grouping, every scan syncs the `subtitle_sidecar` table
   (V13): a new or changed file is read and parsed (`SrtParser`: encoding detection, at most 1 MB and 5,000 cues), an
   unchanged one is not read again, a file not found is marked `MISSING` (never deleted, and not under a folder the walk
-  could not read), and every file the owner has not attached by hand is matched to a film file by name (group key and
-  part tag) whether or not the film changed.
+  could not read), and every file the owner has not attached by hand is matched to a film file by exact name (path
+  minus suffix equals path minus video extension, ignoring case; anything else stays unmatched for Admin) whether or
+  not the film changed.
 - **Scheduling.** At start-up when the library has no films, nightly 04:30 `cinefilm.time-zone`, and from Admin. One
   scan at a time.
 - **Config.** `CINEFILM_LIBRARY_ROOT`, `CINEFILM_CACHE_DIR` (default `/app/cache`, where the deploy mounts the writable cache; `scripts/test/config-agreement.test.sh` keeps the two in step), `TMDB_READ_TOKEN`

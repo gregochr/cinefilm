@@ -3,8 +3,8 @@
 A film with a `<name>.en.forced.srt` (or `.forced.en.srt`) file beside it now shows those lines by itself when Subtitles
 is Off, as the foreign-language translations a cinema audience saw. Every scan finds the files (new, changed, missing or
 back again), reads them whatever their encoding (UTF-8, UTF-16, Windows-1252), line endings or numbering, and matches
-each to its film by name, whether or not the film changed; a file named for a split film's whole edition is timed for the
-whole film, one named for a part for that part. The player turns the subtitle on for the edition, hides it when you choose
+each to its film by exact name (ignoring case, beside the film), whether or not the film changed; anything else, such as a
+whole-edition file for a split film, stays unmatched until you attach it in Admin. The player turns the subtitle on for the edition, hides it when you choose
 a full track, and the captions button and the C key work for a film that has only a sidecar.
 
 Admin gains a Subtitles panel: the files grouped as Unmatched, Conflicts, Missing and Matched, each with how it was read

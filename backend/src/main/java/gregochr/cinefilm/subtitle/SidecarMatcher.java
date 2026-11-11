@@ -1,47 +1,42 @@
 package gregochr.cinefilm.subtitle;
 
-import gregochr.cinefilm.library.FileNameParser;
-import gregochr.cinefilm.library.FileNameParser.ParsedName;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
- * Decides which film file a forced subtitle file belongs to from the two names alone. The subtitle's suffix is
- * removed, the rest is read as a film name by {@link FileNameParser}, and the file must have the same group key (the
- * folder, the title ignoring case, the year and the edition tag):
- * <ul>
- *   <li>a part tag ({@code - pt1}) picks that part's file;</li>
- *   <li>no part tag and a single untagged file: that file;</li>
- *   <li>no part tag and only part-tagged files (a split edition): the first part, as a whole-edition subtitle;</li>
- *   <li>anything else (no film by that name, or an ambiguous one): no match.</li>
- * </ul>
- * Pure.
+ * Decides which film file a forced subtitle file belongs to, by exact name only (owner decision, 2026-11-11). The
+ * subtitle's path without its {@code .en.forced.srt} or {@code .forced.en.srt} suffix must equal a film file's path
+ * without its video extension, ignoring case, in the same folder: {@code Taken.en.forced.srt} belongs to
+ * {@code Taken.m4v}, {@code X - pt1.en.forced.srt} to {@code X - pt1.m4v}. Several files that match (the same stem
+ * as {@code .m4v} and {@code .mkv}) are ambiguous, so none is chosen. Everything else (a whole-edition file for a
+ * split edition, a name without its edition tag, a near-miss) is left unmatched for the owner to attach in Admin.
+ * Matching never marks a subtitle as timed for a whole edition: only an owner's attach does. Pure.
  */
 final class SidecarMatcher {
+
+    private static final Pattern VIDEO_EXTENSION = Pattern.compile("\\.(?:m4v|mp4|mov|avi|mkv)$",
+        Pattern.CASE_INSENSITIVE);
 
     /** A film file the subtitle may belong to. */
     record FileRef(Long id, String path) {
     }
 
-    /** The match: the film file and whether the subtitle is timed for the whole split edition. */
-    record Match(Long mediaFileId, boolean whole) {
+    /** The match: the film file. */
+    record Match(Long mediaFileId) {
     }
 
-    private record Candidate(Long id, Integer partTag) {
-    }
-
-    private final Map<String, List<Candidate>> byGroup = new HashMap<>();
+    private final Map<String, List<Long>> byName = new HashMap<>();
 
     /** Reads every film file's name once. */
     SidecarMatcher(List<FileRef> files) {
         for (FileRef file : files) {
-            ParsedName parsed = FileNameParser.parse(file.path());
-            byGroup.computeIfAbsent(parsed.groupKey(), k -> new ArrayList<>())
-                .add(new Candidate(file.id(), parsed.partTag()));
+            String name = VIDEO_EXTENSION.matcher(file.path()).replaceFirst("").toLowerCase(Locale.ROOT);
+            byName.computeIfAbsent(name, k -> new ArrayList<>()).add(file.id());
         }
     }
 
@@ -49,23 +44,10 @@ final class SidecarMatcher {
      * The film file a subtitle belongs to.
      *
      * @param sidecarPath the subtitle's path relative to the library root
-     * @return the match, or empty when it is unmatched
+     * @return the match, or empty when no film file, or more than one, has exactly that name
      */
     Optional<Match> match(String sidecarPath) {
-        ParsedName parsed = FileNameParser.parse(SidecarNames.stem(sidecarPath) + ".m4v");
-        List<Candidate> group = byGroup.getOrDefault(parsed.groupKey(), List.of());
-        if (parsed.partTag() != null) {
-            List<Candidate> same = group.stream().filter(c -> parsed.partTag().equals(c.partTag())).toList();
-            return same.size() == 1 ? Optional.of(new Match(same.get(0).id(), false)) : Optional.empty();
-        }
-        if (group.size() == 1 && group.get(0).partTag() == null) {
-            return Optional.of(new Match(group.get(0).id(), false));
-        }
-        if (!group.isEmpty() && group.stream().allMatch(c -> c.partTag() != null)) {
-            Candidate first = group.stream().min(Comparator.comparingInt(Candidate::partTag)
-                .thenComparing(Candidate::id)).orElseThrow();
-            return Optional.of(new Match(first.id(), true));
-        }
-        return Optional.empty();
+        List<Long> ids = byName.getOrDefault(SidecarNames.stem(sidecarPath).toLowerCase(Locale.ROOT), List.of());
+        return ids.size() == 1 ? Optional.of(new Match(ids.get(0))) : Optional.empty();
     }
 }

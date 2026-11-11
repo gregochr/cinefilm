@@ -100,10 +100,10 @@ public class SidecarSync {
 
     private void apply(SubtitleSidecar row, Match match, Instant now) {
         Long fileId = match == null ? null : match.mediaFileId();
-        boolean whole = match != null && match.whole();
-        if (!Objects.equals(row.getMediaFileId(), fileId) || row.isWholeEdition() != whole) {
+        // Matching by name is never "whole edition": only the owner's attach sets that.
+        if (!Objects.equals(row.getMediaFileId(), fileId) || row.isWholeEdition()) {
             row.setMediaFileId(fileId);
-            row.setWholeEdition(whole);
+            row.setWholeEdition(false);
             row.setUpdatedAt(now);
         }
     }

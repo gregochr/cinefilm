@@ -349,16 +349,19 @@ class SidecarSyncTest extends SubtitleTestBase {
     }
 
     @Test
-    void aWholeEditionSidecarForASplitFilmIsStoredAgainstPartOne() throws IOException {
+    void aWholeEditionNameForASplitFilmIsLeftUnmatchedAndAPartNameMatchesItsPart() throws IOException {
         Film towers = filmWithParts("Towers", 2, 60);
         byte[] content = bytes(CUES);
         write("Towers.en.forced.srt", content, T1);
+        write("Towers - pt2.en.forced.srt", content, T1);
 
-        sync.sync(found(listed("Towers.en.forced.srt", content, T1)));
+        sync.sync(found(listed("Towers.en.forced.srt", content, T1),
+            listed("Towers - pt2.en.forced.srt", content, T1)));
 
-        SubtitleSidecar row = sidecars.findAll().get(0);
-        assertThat(row.getMediaFileId()).isEqualTo(fileId(towers, 1));
-        assertThat(row.isWholeEdition()).isTrue();
+        assertThat(sidecars.findAllByOrderByPathAscIdAsc())
+            .extracting(SubtitleSidecar::getPath, SubtitleSidecar::getMediaFileId, SubtitleSidecar::isWholeEdition)
+            .containsExactly(tuple("Towers - pt2.en.forced.srt", fileId(towers, 2), false),
+                tuple("Towers.en.forced.srt", null, false));
     }
 
     @Test

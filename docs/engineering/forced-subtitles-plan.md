@@ -26,7 +26,7 @@ planning session's scratchpad, not the repo.
 |---|---|---|
 | Film files (`.m4v`) | 1,108 | 23.976 fps in every file sampled |
 | Forced `.srt` files beside a film | 28 | `<stem>.en.forced.srt` (one `.forced.en.srt`); the sample was UTF-8 with a BOM |
-| …that match a film by name (group key, which ignores case) | 21 | includes `No Time to Die` → `No Time To Die.m4v` |
+| …that match a film by exact name (ignoring case) | 21 | includes `No Time to Die` → `No Time To Die.m4v` |
 | …that do not | 7 | 3 LOTR theatrical (`.srt` has no `{edition-Theatrical Cut}` tag, and the film has two editions); 3 LOTR extended (one `.srt` for a film split into `pt1`/`pt2`; Fellowship's also says "The Fellowship"); see phase 1 |
 | Files with embedded subtitle tracks | 61 | **All** `dvd_subtitle` (pictures), all `eng`, **none** flagged forced |
 | …with a real forced track | 3 | LOTR theatrical cuts (3–41 lines). Each also has a `.srt`, so no OCR is needed |
@@ -173,13 +173,13 @@ Gives forced subtitles to the 28 films that have them, with no external service.
   `PRESENT` again.
 - **Matching** runs on every scan, after `groupLibrary`, for every sidecar. It does not wait for the film to change:
   unchanged films are skipped by the scan, and a `.srt` added later must still be found. Owner attachments are never
-  re-matched. Otherwise strip the suffix, parse the stem with `FileNameParser`, and match the media file with the same
-  group key and part tag:
-  - stem with a part tag (`- pt1`) → that part's file;
-  - stem without one, for an edition of one file → that file;
-  - stem without one, for a split edition (the group key matches, the files carry part tags) → a whole-edition
-    sidecar, stored against part 1 and flagged `whole_edition`, so it is served on the edition timeline as it is;
-  - stem without an edition tag when the film has several editions, or no match → **unmatched**.
+  re-matched. **Owner decision 2026-11-11: exact names only; anything else is attached in Admin.** A sidecar attaches
+  by itself only when its path minus the `.en.forced.srt` / `.forced.en.srt` suffix equals a known original file's
+  path minus its video extension, ignoring case, in the same folder (`Taken.en.forced.srt` → `Taken.m4v`,
+  `X - pt1.en.forced.srt` → `X - pt1.m4v`, `No Time to Die.en.forced.srt` → `No Time To Die.m4v`). Several matches
+  (`.m4v` and `.mkv` with one stem) → unmatched. Whole-edition files for split editions, names without the edition
+  tag and near-misses stay **unmatched** for the owner to attach in Admin; automatic matching never sets
+  `whole_edition` (only an owner's attach with no part on a split edition does).
 - **Admin → Subtitles:**
   - Unmatched files, each with "Attach to…" (an edition and, for a split edition, whole or a part). That covers the
     7 LOTR files without renaming anything on the owner's disk.
