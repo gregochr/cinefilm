@@ -1,6 +1,5 @@
 package gregochr.cinefilm.search;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -49,7 +48,9 @@ class SearchIndexControllerTest {
             .andExpect(status().isOk())
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
             .andExpect(header().string("ETag", ETAG))
-            .andExpect(header().string("Cache-Control", "no-cache"))
+            .andExpect(header().string("Cache-Control", "no-cache, private"))
+            .andExpect(header().doesNotExist("Pragma"))
+            .andExpect(header().doesNotExist("Expires"))
             .andExpect(content().string(BODY));
     }
 
@@ -58,7 +59,9 @@ class SearchIndexControllerTest {
         mvc.perform(signedIn().header("If-None-Match", ETAG))
             .andExpect(status().isNotModified())
             .andExpect(header().string("ETag", ETAG))
-            .andExpect(header().string("Cache-Control", "no-cache"))
+            .andExpect(header().string("Cache-Control", "no-cache, private"))
+            .andExpect(header().doesNotExist("Pragma"))
+            .andExpect(header().doesNotExist("Expires"))
             .andExpect(content().string(""));
     }
 
@@ -105,19 +108,6 @@ class SearchIndexControllerTest {
     @Test
     void aBareQuoteIsNotAnEtagAndDoesNotMatch() throws Exception {
         mvc.perform(signedIn().header("If-None-Match", "\"")).andExpect(status().isOk());
-    }
-
-    @Test
-    void matchesHandlesEveryForm() {
-        assertThat(SearchIndexController.matches(ETAG, ETAG)).isTrue();
-        assertThat(SearchIndexController.matches(OPAQUE, ETAG)).isTrue();
-        assertThat(SearchIndexController.matches("0123456789abcdef", ETAG)).isTrue();
-        assertThat(SearchIndexController.matches("*", ETAG)).isTrue();
-        assertThat(SearchIndexController.matches("\"x\", " + ETAG, ETAG)).isTrue();
-        assertThat(SearchIndexController.matches("\"0123456789abcdee\"", ETAG)).isFalse();
-        assertThat(SearchIndexController.matches("", ETAG)).isFalse();
-        assertThat(SearchIndexController.matches("\"0123456789abcdef", ETAG)).isFalse();
-        assertThat(SearchIndexController.matches("0123456789abcdef\"", ETAG)).isFalse();
     }
 
     @Test

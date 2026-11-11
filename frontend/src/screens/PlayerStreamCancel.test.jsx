@@ -14,7 +14,7 @@ const gate = vi.hoisted(() => {
   });
   return g;
 });
-vi.mock('hls.js', async () => {
+vi.mock('hls.js/light', async () => {
   await gate.promise;
   return { default: (await import('../test/fakeHls.js')).FakeHls };
 });

@@ -31,6 +31,22 @@ public final class FilmDtos {
                            boolean hiddenFromContinueWatching) {
     }
 
+    /**
+     * A film as the Library list carries it: a {@link FilmCard} without {@code backdropPath}, which the Library never
+     * shows. Same fields, same order.
+     */
+    public record LibraryCard(Long id, String title, Integer year, String posterPath, boolean watched,
+                              Progress progress, String director, Long collectionId, String sortTitle,
+                              boolean inProgress, Instant lastWatchedAt, boolean hiddenFromContinueWatching) {
+
+        /** The card without its backdrop. */
+        static LibraryCard of(FilmCard card) {
+            return new LibraryCard(card.id(), card.title(), card.year(), card.posterPath(), card.watched(),
+                card.progress(), card.director(), card.collectionId(), card.sortTitle(), card.inProgress(),
+                card.lastWatchedAt(), card.hiddenFromContinueWatching());
+        }
+    }
+
     /** A director or actor reference. */
     public record PersonRef(Long id, String name, String profilePath) {
     }
@@ -117,6 +133,6 @@ public final class FilmDtos {
     }
 
     /** The library listing. */
-    public record FilmList(int total, List<FilmCard> films, Facets facets) {
+    public record FilmList(int total, List<LibraryCard> films, Facets facets) {
     }
 }

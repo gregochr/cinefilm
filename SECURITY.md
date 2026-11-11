@@ -74,6 +74,22 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
     match `^/library/metadata/\d+/(thumb|art)/\d+$`, URL-encoded into Plex's resizer, so it can never be made to fetch
     an arbitrary URL. Stored artwork names are SHA-256 content hashes with a `.jpg`/`.png` extension, validated against
     `^[0-9a-f]{64}\.(jpg|png)$` on every read of `/api/art/{name}` (behind the session), never a path from the request.
+    `GET /api/art/{name}?w=` serves a copy of a stored image resized to one of the widths 342, 500, 780 or 1280: `w`
+    must equal one of those four strings (anything else is a 400) and the copy is built from the constant, never the
+    request. Copies are made on first request with the JDK's own image reader and writer, kept under
+    `cache/art/<width>/<name>` and served only while the stored file is there and referenced; nothing is read from a
+    path in the request. Size and bit depth are read from the header before anything is decoded: an image over 4096 px
+    on either side, over 4 megapixels or deeper than 8 bits, or one the reader warns about, is served as stored, never
+    decoded further. At most two resizes run at once (a request that waits 10 s for a slot gets the stored file,
+    `no-store`), and the resized cache is capped at 128 MiB, oldest files removed first.
+11. **Browser caching.** API responses are `no-store` (Spring Security's default) except: the browse GETs
+    (`/api/home`, `/api/films`, `/api/films/{id}`, `/api/people/{id}`, `/api/collections`, `/api/collections/{id}`)
+    and `/api/search-index`, which are `no-cache, private` with a weak ETag (the browser keeps a copy and asks the
+    server before every use; a 304 carries no body); WebVTT subtitles (`no-cache, private`); artwork, stored or
+    resized (`private, max-age=31536000, immutable`, since names are content hashes, or `private, max-age=86400`
+    for a copy that could not be resized, `no-store` when the resizer was busy); and the resume still
+    (`private, max-age=86400`). HLS playlists and segments are `no-store`. Nothing under `/api/admin`, no session
+    route and no mutating response is cached. Any other exception needs a note in the PR.
 
 ## Reporting
 

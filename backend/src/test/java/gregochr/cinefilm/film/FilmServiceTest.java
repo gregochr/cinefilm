@@ -86,7 +86,7 @@ class FilmServiceTest {
         FilmList list = service.list(new LibraryQuery("alien", "title", null, null, null));
 
         assertThat(list.total()).isEqualTo(2);
-        assertThat(list.films()).extracting(FilmDtos.FilmCard::title).containsExactly("Alien", "Aliens");
+        assertThat(list.films()).extracting(FilmDtos.LibraryCard::title).containsExactly("Alien", "Aliens");
         assertThat(list.facets().genres()).containsExactly("Crime", "Drama", "Horror", "sci-fi", "Thriller");
         assertThat(list.facets().decades()).containsExactly(1960, 1970, 1990);
     }
@@ -122,7 +122,7 @@ class FilmServiceTest {
 
         FilmList list = service.list(LibraryQuery.all());
 
-        assertThat(list.films()).extracting(FilmDtos.FilmCard::title, FilmDtos.FilmCard::collectionId)
+        assertThat(list.films()).extracting(FilmDtos.LibraryCard::title, FilmDtos.LibraryCard::collectionId)
             .containsExactlyInAnyOrder(org.assertj.core.groups.Tuple.tuple("P1", 6L),
                 org.assertj.core.groups.Tuple.tuple("P2", 6L), org.assertj.core.groups.Tuple.tuple("L1", null),
                 org.assertj.core.groups.Tuple.tuple("Heat", null));
@@ -139,7 +139,7 @@ class FilmServiceTest {
 
         FilmList list = service.list(new LibraryQuery("p1", null, null, null, null));
 
-        assertThat(list.films()).extracting(FilmDtos.FilmCard::collectionId).containsExactly(6L);
+        assertThat(list.films()).extracting(FilmDtos.LibraryCard::collectionId).containsExactly(6L);
     }
 
     @Test
@@ -180,9 +180,9 @@ class FilmServiceTest {
         FilmList inProgress = service.list(new LibraryQuery(null, "title", null, null, "in-progress"));
         FilmList unwatched = service.list(new LibraryQuery(null, "title", null, null, "unwatched"));
 
-        assertThat(inProgress.films()).extracting(FilmDtos.FilmCard::title).containsExactly("Half");
+        assertThat(inProgress.films()).extracting(FilmDtos.LibraryCard::title).containsExactly("Half");
         assertThat(inProgress.films().get(0).inProgress()).isTrue();
-        assertThat(unwatched.films()).extracting(FilmDtos.FilmCard::title).containsExactly("Barely");
+        assertThat(unwatched.films()).extracting(FilmDtos.LibraryCard::title).containsExactly("Barely");
         assertThat(unwatched.films().get(0).inProgress()).isFalse();
         assertThat(unwatched.films().get(0).progress()).isNotNull();
     }

@@ -187,6 +187,7 @@
                     <argLine>
                         @{argLine}
                         -Dnet.bytebuddy.experimental=true
+                        -Djava.awt.headless=true
                         --add-opens java.base/java.lang=ALL-UNNAMED
                         --add-opens java.base/java.lang.reflect=ALL-UNNAMED
                         --add-opens java.base/java.util=ALL-UNNAMED
@@ -393,6 +394,7 @@
                     </outputFormats>
                     <jvmArgs>
                         <jvmArg>-Dnet.bytebuddy.experimental=true</jvmArg>
+                        <jvmArg>-Djava.awt.headless=true</jvmArg>
                         <jvmArg>--add-opens</jvmArg>
                         <jvmArg>java.base/java.lang=ALL-UNNAMED</jvmArg>
                         <jvmArg>--add-opens</jvmArg>

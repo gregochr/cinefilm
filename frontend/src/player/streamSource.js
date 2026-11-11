@@ -6,7 +6,12 @@ import { backoffMs } from './retry.js';
 
 export const HLS_MIME = 'application/vnd.apple.mpegurl';
 
-const loadHlsJs = async () => (await import('hls.js')).default;
+// The light build of hls.js (about 65 KB smaller gzipped). It lacks alternate audio and subtitle renditions, EME,
+// CMCD, interstitials, I-frame playlists, variable substitution, Media Capabilities, and HEVC and AC-3 in MPEG-TS;
+// CineFilm sends H.264 + AAC in TS under a master of plain `#EXT-X-STREAM-INF` variants, and its subtitles are
+// `<track>` VTT. An HEVC copy rung, AC-3 passthrough in TS segments or `#EXT-X-MEDIA` renditions would need the
+// full `hls.js` build again.
+const loadHlsJs = async () => (await import('hls.js/light')).default;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Loads hls.js. A failed load asks whether the server answers at all (a retried `import()` fails at once in

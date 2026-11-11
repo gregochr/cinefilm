@@ -8,6 +8,7 @@ import gregochr.cinefilm.film.FilmDtos.FileInfo;
 import gregochr.cinefilm.film.FilmDtos.FilmCard;
 import gregochr.cinefilm.film.FilmDtos.FilmDetail;
 import gregochr.cinefilm.film.FilmDtos.ImdbRating;
+import gregochr.cinefilm.film.FilmDtos.LibraryCard;
 import gregochr.cinefilm.film.FilmDtos.PersonRef;
 import gregochr.cinefilm.film.FilmDtos.Preferences;
 import gregochr.cinefilm.film.FilmDtos.QualityDto;
@@ -52,6 +53,11 @@ public final class FilmMapper {
             film.getBackdropPath(), view.watched(), view.progress().orElse(null),
             director.isEmpty() ? null : director, collectionId, film.getSortTitle(),
             BrowseRules.inProgress(view, minMs), view.lastPlayedAt(), BrowseRules.hiddenFromContinueWatching(view));
+    }
+
+    /** The Library list's card: {@link #card(FilmView, Set, long)} without the backdrop. */
+    public static LibraryCard libraryCard(FilmView view, Set<Long> qualifying, long minMs) {
+        return LibraryCard.of(card(view, qualifying, minMs));
     }
 
     /** A person reference. */

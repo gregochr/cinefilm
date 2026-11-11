@@ -12,14 +12,42 @@ describe('Art', () => {
     expect(img).toHaveAttribute('loading', 'lazy');
   });
 
-  it('uses the backdrop size for backdrops and stills, and an explicit size when given', () => {
+  it('uses the still size for stills and the backdrop size for backdrops', () => {
     const { rerender } = render(<Art kind="backdrop" path="/b.jpg" id={1} title="Alien" />);
     expect(screen.getByAltText('')).toHaveAttribute(
       'src',
       'https://image.tmdb.org/t/p/w1280/b.jpg',
     );
-    rerender(<Art kind="still" path="/b.jpg" id={1} title="Alien" size="w780" />);
+    rerender(<Art kind="still" path="/b.jpg" id={1} title="Alien" />);
     expect(screen.getByAltText('')).toHaveAttribute('src', 'https://image.tmdb.org/t/p/w780/b.jpg');
+  });
+
+  it('asks for the width that matches the kind when the art is stored by the server', () => {
+    const stored = `/api/art/${'c'.repeat(64)}.jpg`;
+    const { rerender } = render(<Art path={stored} id={1} title="Alien" />);
+    expect(screen.getByAltText('')).toHaveAttribute('src', `${stored}?w=342`);
+    rerender(<Art kind="still" path={stored} id={1} title="Alien" />);
+    expect(screen.getByAltText('')).toHaveAttribute('src', `${stored}?w=780`);
+    rerender(<Art kind="backdrop" path={stored} id={1} title="Alien" />);
+    expect(screen.getByAltText('')).toHaveAttribute('src', `${stored}?w=1280`);
+  });
+
+  it('uses an explicit size over the default for the kind', () => {
+    const stored = `/api/art/${'c'.repeat(64)}.jpg`;
+    const { rerender } = render(
+      <Art kind="still" path="/b.jpg" id={1} title="Alien" size="w500" />,
+    );
+    expect(screen.getByAltText('')).toHaveAttribute('src', 'https://image.tmdb.org/t/p/w500/b.jpg');
+    rerender(<Art kind="poster" path={stored} id={1} title="Alien" size="w500" />);
+    expect(screen.getByAltText('')).toHaveAttribute('src', `${stored}?w=500`);
+  });
+
+  it('treats a kind it does not know like a backdrop', () => {
+    render(<Art kind="hero" path="/b.jpg" id={1} title="Alien" />);
+    expect(screen.getByAltText('')).toHaveAttribute(
+      'src',
+      'https://image.tmdb.org/t/p/w1280/b.jpg',
+    );
   });
 
   it('renders children over the image', () => {

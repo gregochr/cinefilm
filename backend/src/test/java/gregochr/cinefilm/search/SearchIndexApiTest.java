@@ -65,7 +65,7 @@ class SearchIndexApiTest extends ApiTestBase {
 
         mvc.perform(get("/api/search-index"))
             .andExpect(status().isOk())
-            .andExpect(header().string("Cache-Control", "no-cache"))
+            .andExpect(header().string("Cache-Control", "no-cache, private"))
             .andExpect(jsonPath("$.films", hasSize(1)))
             .andExpect(jsonPath("$.films[0].id").value(warrior.getId()))
             .andExpect(jsonPath("$.films[0].t").value("Warrior"))

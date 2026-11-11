@@ -1,5 +1,7 @@
 package gregochr.cinefilm.plex;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -46,6 +48,9 @@ class ArtworkControllerTest {
 
     @Autowired
     private ArtworkStore store;
+
+    @MockitoBean
+    private ResizedArtwork resized;
 
     private String jpg;
     private String png;
@@ -141,5 +146,121 @@ class ArtworkControllerTest {
         mvc.perform(get("/api/art/" + stray).with(user("owner")))
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.error").value("No such artwork"));
+    }
+
+    private static final byte[] STORED_JPG = {(byte) 0xff, (byte) 0xd8, 1};
+
+    private void outcome(String name, int width, ResizedArtwork.Outcome outcome, byte[] bytes) {
+        when(resized.resized(eq(name), any(Path.class), eq(width)))
+            .thenReturn(new ResizedArtwork.Result(outcome, bytes));
+    }
+
+    @Test
+    void aResizedCopyIsServedWithTheStoredTypeAndTheImmutableHeader() throws Exception {
+        outcome(jpg, 342, ResizedArtwork.Outcome.RESIZED, new byte[] {7, 8, 9});
+
+        mvc.perform(get("/api/art/" + jpg).param("w", "342").with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType("image/jpeg"))
+            .andExpect(header().string("Cache-Control", "private, max-age=31536000, immutable"))
+            .andExpect(content().bytes(new byte[] {7, 8, 9}));
+    }
+
+    @Test
+    void aResizedPngIsServedAsPng() throws Exception {
+        outcome(png, 500, ResizedArtwork.Outcome.RESIZED, new byte[] {1, 2});
+
+        mvc.perform(get("/api/art/" + png).param("w", "500").with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType("image/png"))
+            .andExpect(content().bytes(new byte[] {1, 2}));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"342", "500", "780", "1280"})
+    void everyAllowedWidthIsPassedAsItsConstant(String w) throws Exception {
+        outcome(jpg, Integer.parseInt(w), ResizedArtwork.Outcome.RESIZED, new byte[] {5});
+
+        mvc.perform(get("/api/art/" + jpg).param("w", w).with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(content().bytes(new byte[] {5}));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"NOT_WIDER", "NOT_SMALLER"})
+    void anImageNotWiderOrNotSmallerIsTheStoredFileWithTheImmutableHeader(String kind) throws Exception {
+        outcome(jpg, 780, ResizedArtwork.Outcome.valueOf(kind), null);
+
+        mvc.perform(get("/api/art/" + jpg).param("w", "780").with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType("image/jpeg"))
+            .andExpect(header().string("Cache-Control", "private, max-age=31536000, immutable"))
+            .andExpect(content().bytes(STORED_JPG));
+    }
+
+    @Test
+    void anImageThatCannotBeResizedIsTheStoredFileCachedForADay() throws Exception {
+        outcome(jpg, 342, ResizedArtwork.Outcome.UNREADABLE, null);
+
+        mvc.perform(get("/api/art/" + jpg).param("w", "342").with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType("image/jpeg"))
+            .andExpect(header().string("Cache-Control", "max-age=86400, private"))
+            .andExpect(content().bytes(STORED_JPG));
+    }
+
+    @Test
+    void aBusyResizerGivesTheStoredFileAndNoStore() throws Exception {
+        outcome(png, 1280, ResizedArtwork.Outcome.BUSY, null);
+
+        mvc.perform(get("/api/art/" + png).param("w", "1280").with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType("image/png"))
+            .andExpect(header().string("Cache-Control", "no-store"))
+            .andExpect(content().bytes(new byte[] {(byte) 0x89, 'P', 'N', 'G'}));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "0", "341", "343", "0342", "342.0", " 342", "abc", "342,342", "-1", "999999999999"})
+    void aBadWidthIs400WithTheExactMessage(String w) throws Exception {
+        mvc.perform(get("/api/art/" + jpg).param("w", w).with(user("owner")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Width must be 342, 500, 780 or 1280"));
+    }
+
+    @Test
+    void anEmptyWidthInTheQueryStringIs400() throws Exception {
+        mvc.perform(get("/api/art/" + jpg + "?w=").with(user("owner")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Width must be 342, 500, 780 or 1280"));
+    }
+
+    @Test
+    void twoWidthParametersAre400() throws Exception {
+        mvc.perform(get("/api/art/" + jpg + "?w=342&w=342").with(user("owner")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Width must be 342, 500, 780 or 1280"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"342", "bad", ""})
+    void anUnknownOrUnreferencedNameIs404WhateverTheWidth(String w) throws Exception {
+        String stray = store.store(new byte[] {9, 9, 9, 9, 9}, "image/jpeg").substring(9);
+        String unknown = "b".repeat(64) + ".jpg";
+
+        for (String name : new String[] {stray, unknown}) {
+            mvc.perform(get("/api/art/" + name).param("w", w).with(user("owner")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("No such artwork"));
+        }
+    }
+
+    @Test
+    void withoutAWidthTheResizerIsNeverAsked() throws Exception {
+        mvc.perform(get("/api/art/" + jpg).with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(header().string("Cache-Control", "private, max-age=31536000, immutable"))
+            .andExpect(content().bytes(STORED_JPG));
+        org.mockito.Mockito.verifyNoInteractions(resized);
     }
 }

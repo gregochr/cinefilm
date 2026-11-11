@@ -14,7 +14,7 @@ import { resetThroughputState } from '../player/throughput.js';
 // browser's edges are faked: a PerformanceObserver that is handed an entry for /api/session, and the lookup
 // frame, which is answered with the message its own script would post. hls.js and the probe are the same
 // stand-ins the streaming tests use.
-vi.mock('hls.js', async () => ({ default: (await import('../test/fakeHls.js')).FakeHls }));
+vi.mock('hls.js/light', async () => ({ default: (await import('../test/fakeHls.js')).FakeHls }));
 vi.mock('../player/probe.js', () => ({ measureThroughput: vi.fn() }));
 
 class FakeObserver {
