@@ -36,6 +36,7 @@ function LibraryProbe() {
   return (
     <>
       <output aria-label="Library search text">{text}</output>
+      <input type="search" data-global-search aria-label="Library behind" />
       <Where />
     </>
   );
@@ -335,5 +336,19 @@ describe('touch targets', () => {
     await user.type(input(), 'h');
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveClass('search-sheet__cancel');
     expect(screen.getByRole('button', { name: 'Clear search' })).toHaveClass('search-sheet__clear');
+  });
+});
+
+describe('the / shortcut', () => {
+  it('keeps focus in the sheet, not the page behind, and still types / in the input', async () => {
+    const user = await openSheet('/library');
+    const cancel = within(sheet()).getByRole('button', { name: 'Cancel' });
+    cancel.focus();
+    await user.keyboard('/');
+    expect(input()).toHaveFocus();
+    expect(screen.getByLabelText('Library behind')).not.toHaveFocus();
+    await user.keyboard('a/b');
+    expect(input()).toHaveValue('a/b');
+    expect(screen.getByLabelText('Library behind')).toHaveValue('');
   });
 });

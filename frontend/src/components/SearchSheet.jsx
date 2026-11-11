@@ -10,6 +10,7 @@ import {
 } from '../state/useSearchCombobox.js';
 import { SearchIcon } from './icons.jsx';
 import { containTab } from './useDialog.js';
+import { isTypingTarget } from './useSlashFocus.js';
 import { releaseKeyboardProxy } from './searchKeyboard.js';
 import SearchResults from './SearchResults.jsx';
 
@@ -82,6 +83,19 @@ export default function SearchSheet() {
     if (event.key === 'Escape' && !event.nativeEvent?.isComposing) {
       event.preventDefault();
       cancel();
+      return;
+    }
+    // "/" outside a text field would reach the page's shortcut behind the sheet: keep it on the sheet's input.
+    if (
+      event.key === '/' &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !isTypingTarget(event.target)
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      inputRef.current?.focus();
       return;
     }
     containTab(event, event.currentTarget);
