@@ -11,3 +11,6 @@ enforced. No production behaviour changed.
 
 The rules also catch the forms that went round them: `test.concurrent.skip`, `test.each(rows).skip`, `.skipIf` and
 `.runIf` in tests, the fully qualified `@org.junit.jupiter.api.Disabled`, and static imports of the real-clock methods.
+
+ESLint now fails any `setTimeout(...)` call in a frontend test, not only the resolver form. The four tests that used one
+(latency, native engine, health report, throughput probe) now release their late answers and chunks from the test.

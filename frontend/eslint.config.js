@@ -102,11 +102,11 @@ export default [
             'No snapshots: assert the values the handover promises (test-standards.md, "Assertions").',
         },
         {
-          // The sleep form: a setTimeout handed the promise executor's own resolver.
+          // Any call at all, bare or on window/globalThis. (vi.spyOn(window, 'setTimeout') is a string, not a call.)
           selector:
-            "NewExpression[callee.name='Promise'] CallExpression[callee.name='setTimeout'][arguments.0.type='Identifier']",
+            "CallExpression:matches([callee.name='setTimeout'], [callee.property.name='setTimeout'])",
           message:
-            'No sleeps in tests (await new Promise(r => setTimeout(r, n))): wait for the UI with findBy* or vi.waitFor, or drive a fake clock (test-standards.md, "No sleeps").',
+            'No setTimeout in tests: wait for the UI with findBy* or vi.waitFor, drive a fake clock (vi.advanceTimersByTimeAsync), or hand the test the promise resolver (test-standards.md, "No sleeps").',
         },
         {
           selector: 'MemberExpression[property.name=/^(className|classList)$/]',

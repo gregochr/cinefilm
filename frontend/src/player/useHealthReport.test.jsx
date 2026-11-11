@@ -421,16 +421,19 @@ describe('leaving', () => {
 
   it('a send that ends after unmount changes nothing', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let finish;
     stubFetch(
       () =>
-        new Promise((resolve) =>
-          setTimeout(() => resolve(new Response(null, { status: 400 })), 1000),
-        ),
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
     );
     const { result, unmount } = mount();
     result.current.engine('hlsjs');
     unmount(); // the exit send is on its way
     await advance(2000);
+    finish(new Response(null, { status: 400 })); // the send ends after the unmount
+    await advance(0);
     expect(warn).not.toHaveBeenCalled();
   });
 });

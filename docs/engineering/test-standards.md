@@ -361,8 +361,9 @@ in jsdom.
   `vi.useFakeTimers()` are not controlled by it: install the fake clock *before* the action that arms the timer.
   Fake only what you need (`toFake: ['setTimeout', 'clearTimeout']`).
 - **No sleeps.** There is no `setTimeout` or `await new Promise(r => setTimeout(...))` in any test. Wait for the UI
-  (`findBy*`, `vi.waitFor`, `vi.dynamicImportSettled()`) or drive a fake clock. ESLint fails a `setTimeout` handed
-  straight to a `new Promise` resolver.
+  (`findBy*`, `vi.waitFor`, `vi.dynamicImportSettled()`) or drive a fake clock. ESLint fails every `setTimeout(...)` call in a test file
+  or `src/test/` helper (bare, or on `window`/`globalThis`); to delay a fake response, hand the test the promise's
+  resolver, or have the test release it as it advances the fake clock.
 - **No never-settling promise in an async *action*.** React 19 entangles async actions process-wide, so one
   `new Promise(() => {})` handed to a form action/`useActionState` poisons every later submit in the file. (A
   never-settling `fetch` to hold a screen in its Loading state is fine: that is an effect, not an action.) Hand
