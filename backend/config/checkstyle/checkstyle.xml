@@ -37,6 +37,27 @@
         <property name="message" value="No wildcard matchers (any*, isA, notNull, nullable) in a positive verify() (verify(x, never()) is allowed): assert the exact argument, or use an ArgumentCaptor or argThat with a real assertion (test-standards.md, smell 1)."/>
     </module>
 
+    <module name="RegexpSingleline">
+        <property name="id" value="bannedTestLenient"/>
+        <property name="format" value="\blenient\s*\(|\blenient\s*=\s*true\b|\bStrictness\s*\.\s*LENIENT\b"/>
+        <property name="message" value="No lenient() stubs, @Mock(lenient = true) or Strictness.LENIENT in tests: delete the unused stub or stub inside the test that needs it (test-standards.md, smell 3)."/>
+    </module>
+    <module name="RegexpSingleline">
+        <property name="id" value="bannedTestDisabled"/>
+        <property name="format" value="@Disabled\b"/>
+        <property name="message" value="No @Disabled tests: fix the test or delete it (test-standards.md, backend &quot;Do not&quot; list)."/>
+    </module>
+    <module name="RegexpSingleline">
+        <property name="id" value="bannedTestRealClock"/>
+        <property name="format" value="\b(Instant|LocalDate|LocalDateTime|LocalTime|ZonedDateTime|OffsetDateTime|OffsetTime|Year|YearMonth|MonthDay)\s*\.\s*now\s*\(\s*\)|\bClock\s*\.\s*(systemDefaultZone|systemUTC)\s*\(|\bZoneId\s*\.\s*systemDefault\s*\(|\bSystem\s*\.\s*currentTimeMillis\s*\(|\bnew\s+Date\s*\(\s*\)"/>
+        <property name="message" value="No real clock or machine zone in tests: use TestData.CLOCK, or build your own Clock.fixed(...) (test-standards.md, &quot;Time&quot;)."/>
+    </module>
+    <module name="RegexpSingleline">
+        <property name="id" value="bannedMainRealClock"/>
+        <property name="format" value="\b(Instant|LocalDate|LocalDateTime|LocalTime|ZonedDateTime|OffsetDateTime|OffsetTime|Year|YearMonth|MonthDay)\s*\.\s*now\s*\(\s*\)|\bClock\s*\.\s*(systemDefaultZone|systemUTC)\s*\(|\bZoneId\s*\.\s*systemDefault\s*\(|\bSystem\s*\.\s*currentTimeMillis\s*\(|\bnew\s+Date\s*\(\s*\)"/>
+        <property name="message" value="Production code reads the time only through the injected java.time.Clock: use LocalDate.now(clock), clock.instant() (test-standards.md, &quot;Time&quot;)."/>
+    </module>
+
     <module name="TreeWalker">
         <!-- Javadoc on every public type, method and constructor in src/main. MissingJavadoc* report a Javadoc
              that is ABSENT; JavadocType/JavadocMethod only validate one that is present. Exempt: bean

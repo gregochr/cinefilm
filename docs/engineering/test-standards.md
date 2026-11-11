@@ -63,7 +63,8 @@ client depend on. A new `@SpringBootTest` needs a reason a slice or a unit test 
    test. The one exception is a stub whose argument is the thing under construction (see `loaderWrapsFilms` in
    `PersonServiceTest`).
 3. **`lenient()` stubs.** If Mockito reports a stub as unnecessary, delete it or fix the test; do not silence it.
-   Stub inside the test that needs it, not in `@BeforeEach`.
+   Stub inside the test that needs it, not in `@BeforeEach`. Checkstyle enforces this (`bannedTestLenient`):
+   `lenient()`, `@Mock(lenient = true)` and `Strictness.LENIENT` fail the build.
 4. **Missing boundaries.** Every threshold gets a test one below, exactly at and one above: the watched rule
    (`90 * MIN - 1` and `90 * MIN`), the 30-day recently-added window, the five-calendar-year cutoff, `positionMs`
    0 and -1, the five films a theme needs. "Boundary" for time means milliseconds, not days.
@@ -92,10 +93,15 @@ client depend on. A new `@SpringBootTest` needs a reason a slice or a unit test 
 - Full-context tests get that clock from `TestClockConfig` (profile `test`, `@Primary`); unit tests pass
   `TestData.CLOCK` to the constructor; `TestData.NOW` and `TestData.ZONE` are the instant and zone of it. Express
   fixture times as offsets from `NOW` (`NOW.minus(Duration.ofDays(30))`).
+- Checkstyle enforces both halves of this (`bannedMainRealClock` in `src/main`, `bannedTestRealClock` in tests): a
+  no-argument `Instant|LocalDate|LocalDateTime|LocalTime|ZonedDateTime|OffsetDateTime|Year|YearMonth|MonthDay.now()`,
+  `Clock.systemDefaultZone()`, `Clock.systemUTC()`, `ZoneId.systemDefault()`, `System.currentTimeMillis()` and
+  `new Date()` fail the build. `Clock.system(zone)` and `now(clock)` are allowed. The one test that reads the real
+  clock on purpose (`TranscodeRealToolsTest`, real ffmpeg) has a `checkstyle-suppressions.xml` entry saying why.
 - **No `Instant.now()` and no `Clock.systemDefaultZone()` in a test.** A test that needs a different instant builds
   its own `Clock.fixed(...)` in the zone it is testing, and picks dates that exercise an edge: an ISO-week rollover
   (2024-12-30 is already week 2025-W01), a 53-week year (2020-12-31 and 2021-01-03 are 2020-W53), the BST changeover.
-- No `Thread.sleep()`. Inject a clock or a scheduler you control. Checkstyle fails the build on it in test sources.
+- No `Thread.sleep()`. Inject a clock or a scheduler you control. Checkstyle fails the build on it in test sources (`bannedTestSleep`).
 
 ## Security: the route-drift test
 
@@ -184,9 +190,11 @@ Mutating production code to prove a test can fail is encouraged. Restoring it is
 ## What not to do (backend)
 
 - Do not add tests that assert nothing meaningful (a constructor sets a field) to move a coverage number.
-- Do not add `@Disabled` tests or `lenient()` stubs: fix them or delete them.
+- Do not add `@Disabled` tests or `lenient()` stubs: fix them or delete them. Checkstyle enforces both
+  (`bannedTestDisabled`, `bannedTestLenient`).
 - Do not test private methods directly; test through the public API.
-- Do not read the real clock in a test, or depend on the machine's time zone or locale.
+- Do not read the real clock in a test, or depend on the machine's time zone or locale (`bannedTestRealClock`
+  catches the clock and zone calls; locale is not machine-checked).
 - Do not weaken a test, an assertion, an exclusion or a threshold to make a gate pass. Fix the code, or ask the owner.
 
 ---
@@ -216,7 +224,7 @@ renderApp('/');
 ```
 
 Returning `null` from the route function falls through to the default response. Always `vi.unstubAllGlobals()` in
-`afterEach`. Do **not** `vi.mock` anything under `src/api`, and do not add MSW: the API client (`X-CineFilm`
+`afterEach`. ESLint fails a `vi.mock`/`vi.doMock` of any path under `api/`. Do **not** `vi.mock` anything under `src/api`, and do not add MSW: the API client (`X-CineFilm`
 header, 401 handling, 204 handling) is part of what every screen test exercises.
 
 **Fixtures are shaped like the API contract** (`src/test/fixtures/*.json`, named for the shape: `home.json`,
@@ -261,7 +269,9 @@ fireEvent.click(container.querySelector('.segmented__btn'));
 - **Never `container.querySelector`** (and no `parentElement`/`firstChild` walking, no class-name queries). If
   nothing can be queried, the component is missing a role or a test-id: add one. ESLint enforces this in test
   files and `src/test/` helpers (`no-restricted-syntax` in `frontend/eslint.config.js`): `querySelector(All)`, `parentElement`,
-  `firstChild`, `lastChild` and `children` are errors.
+  `firstChild`, `lastChild` and `children` are errors, as are `.className`/`.classList` reads and
+  `getElementsByClassName`/`getElementsByTagName`. (`toHaveClass` is not machine-checked: a few tests use it for the
+  player's hidden state, which jsdom has no other handle for.)
 - **`data-testid` is for the decorative.** `aria-hidden` elements have no role by design, so they carry a test-id
   when a test must reach them: `art`, `skeleton`, `skeleton-row`, `continue-fill`, `scrubber-buffered`,
   `player-video`. Everything with a role is found by role.
@@ -275,7 +285,9 @@ fireEvent.click(container.querySelector('.segmented__btn'));
   watched film, no See all on Continue watching, no subtitles picker when there are none. Use `queryBy*` +
   `not.toBeInTheDocument()`.
 - No `toBeTruthy()` on a query result (`getBy*` already throws; on `queryBy*` it passes for the wrong element).
-- No snapshots: nobody reads the diff and they fail on every unrelated change.
+  ESLint bans `toBeTruthy()` outright in tests.
+- No snapshots: nobody reads the diff and they fail on every unrelated change. ESLint fails `toMatchSnapshot`,
+  `toMatchInlineSnapshot` and `toMatchFileSnapshot`.
 - Exact copy is part of the spec: assert the handover's strings ("The house lights are up", "Signed out", "The
   projector jammed", "Nothing on the shelf"). Copy that changes needs a note in the PR (AGENTS.md rule 1).
 
@@ -349,7 +361,8 @@ in jsdom.
   `vi.useFakeTimers()` are not controlled by it: install the fake clock *before* the action that arms the timer.
   Fake only what you need (`toFake: ['setTimeout', 'clearTimeout']`).
 - **No sleeps.** There is no `setTimeout` or `await new Promise(r => setTimeout(...))` in any test. Wait for the UI
-  (`findBy*`, `vi.waitFor`) or drive a fake clock.
+  (`findBy*`, `vi.waitFor`, `vi.dynamicImportSettled()`) or drive a fake clock. ESLint fails a `setTimeout` handed
+  straight to a `new Promise` resolver.
 - **No never-settling promise in an async *action*.** React 19 entangles async actions process-wide, so one
   `new Promise(() => {})` handed to a form action/`useActionState` poisons every later submit in the file. (A
   never-settling `fetch` to hold a screen in its Loading state is fine: that is an effect, not an action.) Hand
@@ -454,7 +467,8 @@ Mutating production code by hand to prove a test can fail is also encouraged. Re
 - Do not mock the component under test's own children to make a test pass; if it needs that, the test is at the
   wrong level.
 - Do not `vi.mock` the API modules; stub `fetch`.
-- Do not skip or disable a test. Fix it or delete it.
+- Do not skip or disable a test. Fix it or delete it. ESLint fails `.skip`, `.only`, `.todo`, `xit`, `xdescribe`, `fit`
+  and `fdescribe`.
 - Do not snapshot a tree.
 - Do not assert inside a raw `requestAnimationFrame` or `setTimeout` callback and settle a promise after it: a
   throw there never reaches the `resolve()`, and the test hangs to the timeout with the real error detached.
