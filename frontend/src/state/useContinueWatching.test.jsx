@@ -509,3 +509,78 @@ describe('useContinueWatching: a stale failure does not roll back a newer action
     expect(ids(result.current.row)).toEqual([2, 4]);
   });
 });
+
+describe('useContinueWatching: the total', () => {
+  const MANY = {
+    hero: HERO,
+    continueWatching: [A, B, C, card(5), card(6)],
+    continueWatchingTotal: 91,
+  };
+
+  it('takes the server total, and falls back to the list length without one', () => {
+    expect(setup(MANY).result.current.total).toBe(91);
+    expect(setup(DATA).result.current.total).toBe(3);
+    expect(setup(null).result.current.total).toBe(0);
+  });
+
+  it('Remove and Mark as watched take one off, and Undo puts it back', async () => {
+    const { result } = setup(MANY);
+    act(() => result.current.remove(B));
+    await flush();
+    expect(result.current.total).toBe(90);
+
+    await act(async () => {
+      await result.current.undo();
+    });
+    expect(result.current.total).toBe(91);
+
+    act(() => result.current.markWatched(A));
+    await flush();
+    expect(result.current.total).toBe(90);
+  });
+
+  it('keeps the spares in the list, so the next film moves up and Undo pushes it back out', async () => {
+    const { result } = setup(MANY);
+    act(() => result.current.remove(B));
+    await flush();
+    expect(ids(result.current.row)).toEqual([2, 4, 5, 6]);
+
+    await act(async () => {
+      await result.current.undo();
+    });
+    expect(ids(result.current.row)).toEqual([2, 3, 4, 5, 6]);
+  });
+
+  it('a failed Remove restores the total as well as the card', async () => {
+    const { result } = setup(MANY, (m, url) =>
+      url === '/api/editions/30/continue-watching' ? respond({ error: 'x' }, 500) : null,
+    );
+    act(() => result.current.remove(B));
+    await flush();
+    expect(result.current.total).toBe(91);
+    expect(ids(result.current.row)).toEqual([2, 3, 4, 5, 6]);
+  });
+
+  it('counts the film once when a failure meets an Undo that already restored it', async () => {
+    const gate = held('/api/editions/30/continue-watching');
+    const { result } = setup(MANY, gate.route);
+    act(() => result.current.remove(B));
+    act(() => {
+      result.current.undo();
+    });
+    await flush();
+    expect(result.current.total).toBe(91);
+
+    await act(async () => {
+      gate.release(respond({ error: 'x' }, 500));
+    });
+    expect(result.current.total).toBe(91);
+    expect(ids(result.current.row)).toEqual([2, 3, 4, 5, 6]);
+  });
+
+  it('follows fresh Home data', () => {
+    const { result, rerender } = setup(MANY);
+    rerender({ d: { ...MANY, continueWatchingTotal: 7 } });
+    expect(result.current.total).toBe(7);
+  });
+});

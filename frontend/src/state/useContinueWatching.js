@@ -4,24 +4,40 @@ import { editionsApi } from '../api/resources.js';
 /** How long the Undo pill stays up; the action is already committed by then. */
 export const UNDO_MS = 8000;
 
-function insertAt(list, film, index) {
-  if (list.some((f) => f.id === film.id)) return list;
-  const next = [...list];
-  next.splice(Math.min(Math.max(index, 0), next.length), 0, film);
-  return next;
+/** The list of film cards and the server's total, seeded from the Home payload. */
+const seed = (data) => {
+  const row = data?.continueWatching ?? [];
+  return { row, total: data?.continueWatchingTotal ?? row.length };
+};
+
+/** Takes a film out of the list and the total (a film that is not in the list changes nothing). */
+function withoutFilm(list, film) {
+  if (!list.row.some((f) => f.id === film.id)) return list;
+  return { row: list.row.filter((f) => f.id !== film.id), total: list.total - 1 };
+}
+
+/** Puts a film back at its index and in the total (a film that is already in the list changes nothing). */
+function withFilmAt(list, film, index) {
+  if (list.row.some((f) => f.id === film.id)) return list;
+  const row = [...list.row];
+  row.splice(Math.min(Math.max(index, 0), row.length), 0, film);
+  return { row, total: list.total + 1 };
 }
 
 /**
- * The Continue watching row and hero over the Home payload, with optimistic Remove / Mark as watched
+ * The Continue watching list (up to 12 films after the hero), its total and the hero over the Home payload, with optimistic Remove / Mark as watched
  * and a single undoable action (the latest). The API is called straight away; Undo reverses it.
  * `reload` is called if an Undo cannot be sent, to resynchronise with the server.
  * Requests for one edition are serialised (each starts after the previous one settled), so a quick
  * Remove, Undo, Remove reaches the server in that order. `watched` holds local watched overrides by film
- * id (set while a Mark as watched stands) for the other Home rows to apply.
+ * id (set while a Mark as watched stands) for the other Home rows to apply. The screen shows the first few
+ * of `row`, so the next film backfills a removal and an Undo pushes it out again with no extra state;
+ * `total` counts every film in progress (the hero included), not just those in `row`.
  */
 export function useContinueWatching(data, reload) {
   const [source, setSource] = useState(data);
-  const [row, setRow] = useState(data?.continueWatching ?? []);
+  const [list, setList] = useState(() => seed(data));
+  const { row, total } = list;
   const [hero, setHero] = useState(data?.hero ?? null);
   const [action, setAction] = useState(null);
   const [watched, setWatched] = useState({});
@@ -32,7 +48,7 @@ export function useContinueWatching(data, reload) {
 
   if (source !== data) {
     setSource(data);
-    setRow(data?.continueWatching ?? []);
+    setList(seed(data));
     setHero(data?.hero ?? null);
     setWatched({});
   }
@@ -82,7 +98,7 @@ export function useContinueWatching(data, reload) {
         heroWas: hero?.id === film.id ? hero : null,
         version: bump(film.id),
       };
-      setRow((r) => r.filter((f) => f.id !== film.id));
+      setList((l) => withoutFilm(l, film));
       if (entry.heroWas) setHero(null);
       if (kind === 'watched') setWatched((w) => ({ ...w, [film.id]: true }));
       entry.call = enqueue(editionId, () => call(editionId));
@@ -91,7 +107,7 @@ export function useContinueWatching(data, reload) {
         // Only roll back if nothing newer has happened to this film since (Undo, another action).
         if (versions.current.get(film.id) !== entry.version) return;
         if (kind === 'watched') dropOverride(film.id);
-        setRow((r) => insertAt(r, film, index));
+        setList((l) => withFilmAt(l, film, index));
         if (entry.heroWas) setHero(entry.heroWas);
       });
       current.current = entry;
@@ -116,7 +132,7 @@ export function useContinueWatching(data, reload) {
     if (!entry) return;
     clearAction(entry);
     bump(entry.film.id);
-    setRow((r) => insertAt(r, entry.film, entry.index));
+    setList((l) => withFilmAt(l, entry.film, entry.index));
     if (entry.heroWas) setHero(entry.heroWas);
     if (entry.kind === 'watched') dropOverride(entry.film.id); // back to what was loaded
     try {
@@ -138,5 +154,5 @@ export function useContinueWatching(data, reload) {
     }
   }, [clearAction, reload, enqueue, dropOverride, bump]);
 
-  return { hero, row, action, watched, remove, markWatched, undo };
+  return { hero, row, total, action, watched, remove, markWatched, undo };
 }
