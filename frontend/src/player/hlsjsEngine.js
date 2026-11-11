@@ -41,7 +41,7 @@ export function hlsConfig(startSeconds) {
 
 /**
  * Starts `session` on `video`. `handlers`: onLevel(rung, { initial }), onThroughput(kbps),
- * onReconnecting(boolean), onSessionLost(), onFatal(). Returns { destroy }.
+ * onReconnecting(boolean), onSessionLost(), onFatal(), and the optional onNetworkError({ timeout }). Returns { destroy }.
  */
 export function startHlsJs({
   Hls,
@@ -117,6 +117,10 @@ export function startHlsJs({
   });
 
   hls.on(Events.ERROR, (_event, data) => {
+    // A network error that got no HTTP answer at all (an error with a status is not counted), for the health record.
+    if (data.type === ErrorTypes.NETWORK_ERROR && !data.response?.code) {
+      handlers.onNetworkError?.({ timeout: String(data.details ?? '').endsWith('TimeOut') });
+    }
     if (data.response?.code === 404) {
       // The session expired (or was replaced): the caller makes a new one at the current position.
       if (!lost) {

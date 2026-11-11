@@ -51,6 +51,7 @@ import {
 import { useFilm } from '../state/useFilms.js';
 import { usePageExitReport } from '../player/exitReport.js';
 import { usePlayback } from '../state/usePlayback.js';
+import { useHealthReport } from '../player/useHealthReport.js';
 
 function bufferedEnd(video) {
   const { buffered, currentTime } = video;
@@ -66,6 +67,13 @@ export default function Player() {
   const { id } = useParams();
   const [params] = useSearchParams();
   const { data: film, error, loading, reload } = useFilm(id);
+  // When this viewing's route opened: the start-up time of the playback-health record counts from here. The
+  // same Player stays mounted when the address changes to another film or edition, so it is taken again then.
+  // Setting state while rendering makes React run this function again before it renders PlayerView, so the
+  // new viewing never mounts with the old time (PlayerHealth.test.jsx, "the clock of a viewing").
+  const routeKey = `${id}|${params.get('edition') ?? ''}`;
+  const [opened, setOpened] = useState(() => ({ key: routeKey, at: performance.now() }));
+  if (opened.key !== routeKey) setOpened({ key: routeKey, at: performance.now() });
   if (loading && !film)
     return <div className="player player--loading" role="status" aria-label="Loading" />;
   if (error && !film) {
@@ -87,6 +95,7 @@ export default function Player() {
       film={film}
       edition={edition}
       startAtZero={params.get('start') === '0'}
+      openedAt={opened.at}
     />
   );
 }
@@ -94,7 +103,7 @@ export default function Player() {
 /** Gives up waiting for the final progress report after this long, so a dead network never traps the viewer. */
 export const LEAVE_REPORT_CAP_MS = 1500;
 
-function PlayerView({ film, edition, startAtZero }) {
+function PlayerView({ film, edition, startAtZero, openedAt }) {
   const navigate = useNavigate();
   // Computed once: the clock, remaining time and scrubber show the resume point from the first render.
   const [initialSeekMs] = useState(() => (startAtZero ? 0 : resumePosition(edition.positionMs)));
@@ -136,6 +145,7 @@ function PlayerView({ film, edition, startAtZero }) {
   )?.id;
   // Resuming (a start position above 0) also gets a still of the resume frame behind PREPARING.
   const [still, dispatchStill] = useReducer(stillReducer, initialSeekMs, initialStill);
+  const health = useHealthReport({ editionId: edition.id, quality, openedAt });
   const stream = useStream({
     videoRef,
     edition,
@@ -144,6 +154,7 @@ function PlayerView({ film, edition, startAtZero }) {
     getPositionMs: () => positionRef.current,
     initialSeekMs,
     onToast: setToast,
+    health,
   });
   const { pendingSeekRef } = stream;
   const activeRung = stream.rung ?? (quality === AUTO ? ORIGINAL : quality);
@@ -244,8 +255,9 @@ function PlayerView({ film, edition, startAtZero }) {
       video.currentTime = clamped / 1000;
       positionRef.current = clamped;
       setPositionMs(clamped);
+      health.seek();
     },
-    [durationMs, pendingSeekRef],
+    [durationMs, pendingSeekRef, health],
   );
 
   const togglePlay = useCallback(() => {
@@ -370,7 +382,11 @@ function PlayerView({ film, edition, startAtZero }) {
     }
     applySubtitleModes();
     // A restart (audio, quality, reconnect, expired session) keeps a paused film paused.
-    if (stream.takePlayAfterLoad()) video.play().catch(() => {});
+    if (stream.takePlayAfterLoad()) {
+      video.play().catch((error) => {
+        if (error?.name === 'NotAllowedError') health.playRefused();
+      });
+    }
   };
 
   // canplay and seeked clear the indicator, except while the film is still starting: it then stays PREPARING
@@ -391,6 +407,7 @@ function PlayerView({ film, edition, startAtZero }) {
     positionRef.current = video.currentTime * 1000;
     setPositionMs(positionRef.current);
     setBufferedMs(bufferedEnd(video));
+    health.beat(video.currentTime * 1000);
   };
 
   // Leave for the detail page only after the final progress report has landed (or the cap passes), so the
@@ -436,19 +453,37 @@ function PlayerView({ film, edition, startAtZero }) {
         onLoadedMetadata={onLoadedMetadata}
         onTimeUpdate={onTimeUpdate}
         onProgress={() => videoRef.current && setBufferedMs(bufferedEnd(videoRef.current))}
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
+        onPlay={() => {
+          setPlaying(true);
+          health.play();
+        }}
+        onPause={() => {
+          setPlaying(false);
+          health.paused();
+        }}
         onPlaying={() => {
           setBuffering(false);
           setStarted(true);
           dispatchStill('playing');
+          health.playing();
         }}
-        onCanPlay={settle}
-        onWaiting={() => setBuffering(true)}
-        onSeeked={settle}
+        onCanPlay={(event) => {
+          settle();
+          health.canPlay(event.currentTarget.paused);
+        }}
+        onWaiting={() => {
+          setBuffering(true);
+          health.waiting();
+        }}
+        onSeeked={() => {
+          settle();
+          health.seeked();
+        }}
+        onEmptied={() => health.sourceChanged()}
         onEnded={() => {
           setPlaying(false);
           setPositionMs(durationMs);
+          health.ended();
         }}
       >
         {edition.subtitleStreams.map((stream) => (

@@ -81,25 +81,25 @@ One record per viewing: one mount of the player on one edition. The browser make
 | Field | Meaning |
 |---|---|
 | `seq` | rises by one with every send attempt; the server keeps a report only when its `seq` is higher than the one it holds |
-| `elapsedMs` | time since the player route opened; the server takes the start time from it |
+| `elapsedMs` | time since this viewing's route opened (the player opened, or its address last changed to another film or edition, which starts a new viewing in the same player); the server takes the start time from it |
 | `environment` | `home`, `train`, `away` (fixed Wi-Fi that is not home) or `unknown`; always `unknown` until PR 3 |
 | `operator`, `latencyMs` | the lookup's `org` and the round trip measured at open; null when not known (always null until PR 3) |
 | `engine` | `hlsjs`, `native` (iPhone) or `direct`; null until a source is attached |
 | `quality` | the viewer's choice at the time of the send (`auto`, `original`, a rung) |
 | `autoplayRefused` | true when the browser refused to start the film by itself and the viewer had to press play |
-| `startupMs` | player route opened to the first `playing` event, less any time spent waiting for the viewer after a refused autoplay; null until there is a first frame |
+| `startupMs` | this viewing's route opened to the first `playing` event, less any time spent waiting for the viewer after a refused autoplay and less any sleep (a single step over 150 s, see "Moving"); null until there is a first frame |
 | `watchedMs` | time the picture was moving (see "Moving") |
 | `stallCount`, `stallMs`, `longestStallMs` | `waiting` after the first frame, not during a seek or a reload, until `playing`, `pause` or `ended`. A pause ends a stall, so a stall the viewer pauses through counts twice |
 | `seekCount`, `seekWaitMs` | seeks the viewer asked for (not the player's own restoring seeks), and the time from each to `seeked` or `playing` |
 | `reloadCount`, `reloadMs` | times the source was replaced after the first frame (a rebuilt session, a quality or audio change, a fallback), and the time from each until the film was playing again or ready while paused |
 | `reconnectCount`, `reconnectMs` | times the "Reconnecting…" notice began and how long it showed; this time usually lies inside a stall as well |
-| `recoveries` | new sessions made because the old one had expired |
+| `recoveries` | times the session had expired and the player set about making a new one. Counted when the rebuild begins: the expired session is the event, whether or not a new one can then be made (a rebuild that fails also shows as `fellBack`, and either way it is one reload) |
 | `fellBack` | true once the player has direct-played because streaming failed: no session could be made, no HLS engine could start, or the stream was abandoned. Not when Original was chosen for a film without a copy rung, and not when the worker is offline |
 | `stepsDown`, `stepsUp` | rung changes to a shorter or a taller picture while the quality is Auto |
 | `netErrors`, `timeouts` | hls.js network errors that got no HTTP answer at all: `timeouts` when the error's detail ends `TimeOut`, `netErrors` otherwise. An error with an HTTP status (an expired session's 404, the encoder's 503) is neither |
 | `kbpsLow`, `kbpsMedian`, `kbpsHigh`, `kbpsSamples` | 10th, 50th and 90th percentile (nearest rank) of the segment download speeds and how many there were; null, null, null and 0 with no samples (always so on iPhone) |
 | `rungMs` | time the picture was moving on each rung, by rung id |
-| `minutes` | one entry per minute in which something happened, at most 360, in order: `[minute number since the player opened, median kbit/s of that minute's samples (0 for none), rung at the end of the minute, ms the picture moved, ms stalled]`. The rung is a code: 0 none, 1 `original`, 2 `1080p`, 3 `720p`, 4 `480p`, 5 `360p`, 6 `240p`. The current, unfinished minute is included |
+| `minutes` | one entry per minute in which something happened, at most 360, in order: `[minute number since the player opened, median kbit/s of that minute's samples (0 for none), the rung, ms the picture moved, ms stalled]`. The rung is the one being played when time was last counted in that minute (moving or stalled), as a code: 0 none (nothing moved or stalled in it, or no rung known yet), 1 `original`, 2 `1080p`, 3 `720p`, 4 `480p`, 5 `360p`, 6 `240p`. The current, unfinished minute is included |
 | `client` | the browser's own description: user agent, screen size, logical cores (null where the browser has none) |
 
 The per-minute track is what later steps need: a minute with the picture moving and no speed sample is a gap the
@@ -108,8 +108,10 @@ buffer covered, a minute with stalled time is one it did not, and the run length
 **Moving.** The picture counts as moving from `playing` until `pause`, `waiting`, `ended` or a source change, and
 only while the playhead advances: `timeupdate` is a heartbeat, and moving time is credited no further than 1.5 s
 past the last heartbeat that moved the playhead. That covers a frozen picture that fires no event (iPhone's native
-player) and a closed lid. The clock is `performance.now()`. Any single step longer than 150 s is taken to be a
-sleep and is not counted towards anything.
+player) and a closed lid. The wait of a seek the viewer asked for is never moving time, whether or not the element
+fires `waiting` for it (a seek inside the buffer often does not): it is seek wait only, and the heartbeat starts
+again at `seeked`. The clock is `performance.now()`. Any single step longer than 150 s is taken to be a sleep and
+is not counted towards anything.
 
 **A source change** is the `<video>` element's `emptied` event. It fires for every rebuilt session, quality or
 audio change, native reload and fallback, and the element then resets itself without firing `pause` or `seeked`.
@@ -123,7 +125,8 @@ next `playing`, or `canplay` while paused. During a reload `waiting` is ignored.
 - every 60 s when something has changed since the last send that **succeeded**: a counter, a flag, or any moving,
   stalled, seeking, reloading or reconnecting time. A paused, idle player sends nothing;
 - when the page is hidden or closed, and when the player is left, with `keepalive`, under the same condition;
-- never two timed sends at once; a timed send is aborted after 15 s; a failed send is dropped, because the next
+- the minute's send waits while another timed send is still in flight; the first-frame send does not wait (the
+  server keeps the higher `seq`). A timed send is aborted after 15 s; a failed send is dropped, because the next
   one carries everything. A 400 is logged to the console once per viewing.
 
 The client normalises before it sends (rounds, clamps numbers to 0–2,000,000,000, cuts strings to their limits), so

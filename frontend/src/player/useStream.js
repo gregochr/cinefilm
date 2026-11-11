@@ -6,6 +6,20 @@ import { measureThroughput } from './probe.js';
 import { startStream } from './streamSource.js';
 import { addSample, median } from './throughput.js';
 
+// What `useStream` calls when no health recorder is given: every other caller and test is unaffected.
+const noop = () => {};
+const NO_HEALTH = {
+  rung: noop,
+  throughput: noop,
+  reconnecting: noop,
+  recovered: noop,
+  engine: noop,
+  fellBack: noop,
+  networkError: noop,
+};
+
+const heightOf = (renditions, id) => renditions.find((r) => r.id === id)?.height ?? null;
+
 /** More than this many expired-session recoveries inside the window means the server is not keeping sessions. */
 export const MAX_RECOVERIES = 3;
 export const RECOVERY_WINDOW_MS = 60000;
@@ -30,6 +44,7 @@ export function useStream({
   getPositionMs,
   initialSeekMs,
   onToast,
+  health = NO_HEALTH,
 }) {
   const [stream, setStream] = useState({ mode: 'loading', rung: null, renditions: [] });
   const [reconnecting, setReconnecting] = useState(false);
@@ -42,9 +57,9 @@ export function useStream({
   // Whether the new source should start playing once it has metadata: true for the first load (autoplay), and
   // after a restart or reload whatever the viewer had at that moment (a paused film stays paused).
   const resumeRef = useRef({ play: true, held: false });
-  const latest = useRef({ edition, audioStreamId, getPositionMs, onToast });
+  const latest = useRef({ edition, audioStreamId, getPositionMs, onToast, health });
   useEffect(() => {
-    latest.current = { edition, audioStreamId, getPositionMs, onToast };
+    latest.current = { edition, audioStreamId, getPositionMs, onToast, health };
   });
 
   const editionId = edition.id;
@@ -54,7 +69,12 @@ export function useStream({
     let engine = null;
     let session = null;
     let rung = null;
-    setReconnecting(false);
+    // The notice ends (or never began): the counter hears about it wherever the flag is reset.
+    const clearReconnecting = () => {
+      setReconnecting(false);
+      latest.current.health.reconnecting(false);
+    };
+    clearReconnecting();
 
     const holdPlayState = () => {
       // Only the first change counts: a source swapped out before its metadata arrived reads paused, wrongly.
@@ -73,21 +93,29 @@ export function useStream({
     const toDirect = () => {
       if (split) {
         setStream({ mode: 'unavailable', rung: null, renditions: [] });
-        setReconnecting(false);
+        clearReconnecting();
         return;
       }
       const position = currentPosition();
       if (position > 0) pendingSeekRef.current = position;
       setStream({ mode: 'direct', rung: ORIGINAL, renditions: [] });
-      setReconnecting(false);
+      clearReconnecting();
       video.src = editionsApi.streamUrl(editionId);
+      latest.current.health.engine('direct');
+      latest.current.health.rung(ORIGINAL, latest.current.edition.file?.height ?? null);
+    };
+
+    // Streaming failed and the film direct-plays instead (a split film has no file to play, so nothing falls back).
+    const failToDirect = () => {
+      toDirect();
+      if (!split) latest.current.health.fellBack();
     };
 
     // Give up on HLS for this film: stop the engine, drop the session and direct-play from here.
     const abandon = () => {
       engine?.destroy();
       forget();
-      toDirect();
+      failToDirect();
     };
 
     const recover = () => {
@@ -96,7 +124,11 @@ export function useStream({
         (at) => now - at < RECOVERY_WINDOW_MS,
       );
       if (recoveriesRef.current.length > MAX_RECOVERIES) abandon();
-      else setGeneration((g) => g + 1);
+      else {
+        setGeneration((g) => g + 1);
+        // Counted when the rebuild begins: the expired session is the event, whether or not a new one can then be made.
+        latest.current.health.recovered();
+      }
     };
 
     const run = async () => {
@@ -127,7 +159,7 @@ export function useStream({
         isCancelled: () => cancelled,
       });
       if (!created) {
-        if (!cancelled) toDirect(); // No encoder, no keyframe index yet, or the request failed.
+        if (!cancelled) failToDirect(); // No encoder, no keyframe index yet, or the request failed.
         return;
       }
       if (cancelled) {
@@ -143,6 +175,7 @@ export function useStream({
       sessionRef.current = created;
       rung = created.startRung;
       setStream({ mode: 'hls', rung, renditions: created.renditions });
+      latest.current.health.rung(rung, heightOf(created.renditions, rung));
       engine = await startStream({
         video,
         session: created,
@@ -157,24 +190,34 @@ export function useStream({
             const text =
               initial || quality !== AUTO ? null : levelToast(created.renditions, previous, next);
             if (text) latest.current.onToast(text);
+            latest.current.health.rung(next, heightOf(created.renditions, next));
           },
-          onThroughput: (kbps) => setSamples((s) => addSample(s, kbps)),
-          onReconnecting: setReconnecting,
+          onThroughput(kbps) {
+            setSamples((s) => addSample(s, kbps));
+            latest.current.health.throughput(kbps);
+          },
+          onReconnecting(on) {
+            setReconnecting(on);
+            latest.current.health.reconnecting(on);
+          },
           onReload(ms) {
             holdPlayState();
             if (ms > 0) pendingSeekRef.current = ms;
           },
           onSessionLost: recover,
           onFatal: abandon,
+          onNetworkError: (error) => latest.current.health.networkError(error),
         },
       });
       if (cancelled) {
         engine?.destroy();
         return;
       }
-      if (!engine) {
+      if (engine) {
+        latest.current.health.engine(engine.kind);
+      } else {
         forget();
-        toDirect();
+        failToDirect();
       }
     };
     run();

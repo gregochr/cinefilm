@@ -109,6 +109,22 @@ describe('choosing how to play a session', () => {
     expect(await start(videoThat(false), { loadHls })).toBeNull();
   });
 
+  it('says which engine it started: hlsjs, with its destroy', async () => {
+    const engine = await start(videoThat(false));
+    expect(engine.kind).toBe('hlsjs');
+    expect(typeof engine.destroy).toBe('function');
+    engine.destroy();
+    expect(FakeHls.last.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('says which engine it started: native, with its destroy', async () => {
+    delete window.MediaSource;
+    const engine = await start(videoThat(true));
+    expect(engine.kind).toBe('native');
+    expect(typeof engine.destroy).toBe('function');
+    engine.destroy();
+  });
+
   it.each([
     [true, true, true, 'hlsjs'],
     [true, true, false, 'hlsjs'],
