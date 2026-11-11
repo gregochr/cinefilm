@@ -77,7 +77,7 @@ assert_file_has "passes the retry option" "$STUB_DIR/apt-calls" "Acquire::Retrie
 assert_file_has "passes the http timeout" "$STUB_DIR/apt-calls" "Acquire::http::Timeout=20"
 assert_file_has "passes the https timeout" "$STUB_DIR/apt-calls" "Acquire::https::Timeout=20"
 assert_file_has "installs ffmpeg without recommends" "$STUB_DIR/apt-calls" "install -y --no-install-recommends ffmpeg"
-LIMIT_OK=$(awk '$1 > 0 && $1 <= 300 { n++ } END { print n + 0 }' "$STUB_DIR/timeout-limits")
+LIMIT_OK=$(awk '$1 ~ /^[0-9]+$/ && $1 > 0 && $1 <= 300 { n++ } END { print n + 0 }' "$STUB_DIR/timeout-limits")
 assert_eq "both apt-gets run under a timeout of at most the default limit" 2 "$LIMIT_OK"
 
 KILL_OK=$(grep -cFx -- "--kill-after=10" "$STUB_DIR/timeout-kill-args")
@@ -131,7 +131,8 @@ OUTPUT=$(FFMPEG_INSTALL_LIMIT=42 PATH="$STUB_DIR/bin:$PATH" bash "$SCRIPT" 2>&1)
 RC=$?
 assert_eq "exits 1" 1 "$RC"
 assert_contains "message carries the custom limit" "$OUTPUT" "took longer than 42s"
-assert_file_has "timeout was given the custom limit" "$STUB_DIR/timeout-limits" "42"
+CUSTOM_OK=$(awk '$1 ~ /^[0-9]+$/ && $1 > 0 && $1 <= 42 { n++ } END { print n + 0 }' "$STUB_DIR/timeout-limits")
+assert_eq "timeout was given a positive limit of at most the custom budget" 1 "$CUSTOM_OK"
 
 echo "an exhausted budget is a timeout without running apt"
 make_stubs
