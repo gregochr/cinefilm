@@ -97,12 +97,27 @@ jobs:
       # The library scan's real-tool test (RealToolsTest) generates a clip with ffmpeg, probes it with ffprobe and
       # extracts its mov_text subtitle to WebVTT. It skips itself where the tools are missing (the dev Mac), so the
       # install must be here for it to count.
+      # On 2026-11-11 the runners could not resolve the Ubuntu mirrors and apt walked them with long waits until the
+      # job's 20-minute timeout cancelled it. apt-get update exits 0 even when mirrors fail, so only the install
+      # counts; the apt timeouts, the retries and the 6-minute step ceiling make an outage fail fast and clearly.
       - name: Install ffmpeg
         if: needs.changes.outputs.docs_only != 'true'
+        timeout-minutes: 6
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg
-          ffprobe -version | head -1
+          opts=(-o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          for attempt in 1 2 3; do
+            if sudo apt-get "${opts[@]}" update \
+              && sudo apt-get "${opts[@]}" install -y --no-install-recommends ffmpeg; then
+              ffprobe -version | head -1
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "::warning::ffmpeg install attempt ${attempt} of 3 failed; retrying in 20 seconds"
+              sleep 20
+            fi
+          done
+          echo "::error::Could not install ffmpeg from the Ubuntu apt mirrors after 3 attempts (mirror or DNS outage on the runner). Re-run the job once archive.ubuntu.com resolves."
+          exit 1
 
       # The full verify includes the integration package (Testcontainers Postgres 17; ubuntu runners
       # ship Docker), plus Checkstyle, JaCoCo per-class and bundle checks, and SpotBugs + FindSecBugs.
