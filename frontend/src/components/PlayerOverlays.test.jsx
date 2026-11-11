@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import {
   EndOverlay,
+  EnvironmentCard,
   ReconnectingNotice,
   IndicatorPill,
   Toast,
@@ -78,5 +79,72 @@ describe('EndOverlay', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Keep watching the credits' }));
     expect(handlers.onKeepWatching).toHaveBeenCalledTimes(1);
     expect(handlers.onWatched).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('EnvironmentCard', () => {
+  const NAMED =
+    'CineFilm hasn’t seen this network before: Virgin Media Limited. It will remember your answer on this device.';
+  const UNNAMED = 'CineFilm can’t tell which network this is, so it will ask again next time.';
+  const handlers = () => ({ onTrain: vi.fn(), onNo: vi.fn(), onNotNow: vi.fn() });
+
+  it('is a group named by its question and described by its text', () => {
+    render(<EnvironmentCard operator="Virgin Media Limited" {...handlers()} />);
+    const group = screen.getByRole('group', { name: 'Are you on a train?' });
+    expect(group).toHaveAccessibleDescription(NAMED);
+    expect(within(group).getByRole('heading', { level: 2 })).toHaveTextContent(
+      'Are you on a train?',
+    );
+    expect(within(group).getByText(NAMED)).toBeInTheDocument();
+  });
+
+  it('says it cannot tell which network this is when there is no name', () => {
+    render(<EnvironmentCard operator={null} {...handlers()} />);
+    expect(screen.getByRole('group', { name: 'Are you on a train?' })).toHaveAccessibleDescription(
+      UNNAMED,
+    );
+  });
+
+  it('has three plain buttons in order: Yes, on a train, No, Not now', () => {
+    render(<EnvironmentCard operator={null} {...handlers()} />);
+    const buttons = within(screen.getByRole('group')).getAllByRole('button');
+    expect(buttons.map((b) => b.textContent)).toEqual(['Yes, on a train', 'No', 'Not now']);
+    for (const button of buttons) expect(button).toHaveClass('btn--secondary');
+    for (const button of buttons) expect(button).not.toHaveClass('btn--primary');
+  });
+
+  it('takes no focus', () => {
+    render(<EnvironmentCard operator="Virgin Media Limited" {...handlers()} />);
+    for (const button of screen.getAllByRole('button')) expect(button).not.toHaveFocus();
+    expect(document.body).toHaveFocus();
+  });
+
+  it('is not a status: the player announces it', () => {
+    render(<EnvironmentCard operator="Virgin Media Limited" {...handlers()} />);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('calls the handler of the button pressed, and no other', async () => {
+    const h = handlers();
+    render(<EnvironmentCard operator={null} {...h} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Yes, on a train' }));
+    expect([
+      h.onTrain.mock.calls.length,
+      h.onNo.mock.calls.length,
+      h.onNotNow.mock.calls.length,
+    ]).toEqual([1, 0, 0]);
+    await userEvent.click(screen.getByRole('button', { name: 'No' }));
+    expect([
+      h.onTrain.mock.calls.length,
+      h.onNo.mock.calls.length,
+      h.onNotNow.mock.calls.length,
+    ]).toEqual([1, 1, 0]);
+    await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
+    expect([
+      h.onTrain.mock.calls.length,
+      h.onNo.mock.calls.length,
+      h.onNotNow.mock.calls.length,
+    ]).toEqual([1, 1, 1]);
   });
 });

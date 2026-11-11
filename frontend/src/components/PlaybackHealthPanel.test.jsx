@@ -1,7 +1,9 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { NETWORKS_KEY } from '../state/networks.js';
 import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
+import { installStorage } from '../test/storage.js';
 import PlaybackHealthPanel from './PlaybackHealthPanel.jsx';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -149,5 +151,107 @@ describe('PlaybackHealthPanel', () => {
     expect(await screen.findByRole('list', { name: 'Recent playbacks' })).toBeInTheDocument();
     expect(fetchMock.mock.calls.filter((c) => c[0] === URL)).toHaveLength(2);
     expect(screen.getAllByRole('listitem')).toHaveLength(3);
+  });
+});
+
+describe('PlaybackHealthPanel: remembered networks', () => {
+  const TITLE = 'Remembered networks on this device';
+  const VIRGIN = 'AS5089 Virgin Media Limited';
+  const RAIL = 'AS64500 Example Rail';
+  let storage;
+  beforeEach(() => {
+    storage = installStorage();
+  });
+  const remember = (list) => storage.setItem(NETWORKS_KEY, JSON.stringify(list));
+
+  it('shows no heading and no list when nothing is remembered', async () => {
+    installFetch();
+    await openPanel();
+    expect(screen.queryByRole('heading', { name: TITLE })).not.toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: TITLE })).not.toBeInTheDocument();
+  });
+
+  it('lists the networks newest first, each with the whole name and its tag', async () => {
+    remember([
+      { operator: VIRGIN, environment: 'away' },
+      { operator: RAIL, environment: 'train' },
+    ]);
+    installFetch();
+    await openPanel();
+    expect(screen.getByRole('heading', { level: 3, name: TITLE })).toBeInTheDocument();
+    const list = screen.getByRole('list', { name: TITLE });
+    const [newest, oldest] = within(list).getAllByRole('listitem');
+    expect(within(newest).getByText(RAIL)).toBeInTheDocument();
+    expect(within(newest).getByText('Train')).toBeInTheDocument();
+    expect(within(oldest).getByText(VIRGIN)).toBeInTheDocument();
+    expect(within(oldest).getByText('Away')).toBeInTheDocument();
+    expect(within(newest).getByRole('button', { name: `Forget ${RAIL}` })).toHaveTextContent(
+      'Forget',
+    );
+    expect(within(oldest).getByRole('button', { name: `Forget ${VIRGIN}` })).toHaveTextContent(
+      'Forget',
+    );
+  });
+
+  it('Forget removes the row and the stored answer, keeps the other, and moves focus to the card heading', async () => {
+    remember([
+      { operator: VIRGIN, environment: 'away' },
+      { operator: RAIL, environment: 'train' },
+    ]);
+    installFetch();
+    await openPanel();
+    await userEvent.click(screen.getByRole('button', { name: `Forget ${RAIL}` }));
+
+    const list = screen.getByRole('list', { name: TITLE });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(list).getByText(VIRGIN)).toBeInTheDocument();
+    expect(within(list).queryByText(RAIL)).not.toBeInTheDocument();
+    expect(JSON.parse(storage.getItem(NETWORKS_KEY))).toEqual([
+      { operator: VIRGIN, environment: 'away' },
+    ]);
+    expect(screen.getByRole('heading', { level: 2, name: 'Playback health' })).toHaveFocus();
+  });
+
+  it('takes the heading and the list away when the last one is forgotten', async () => {
+    remember([{ operator: RAIL, environment: 'train' }]);
+    installFetch();
+    await openPanel();
+    await userEvent.click(screen.getByRole('button', { name: `Forget ${RAIL}` }));
+    expect(screen.queryByRole('heading', { name: TITLE })).not.toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: TITLE })).not.toBeInTheDocument();
+    expect(JSON.parse(storage.getItem(NETWORKS_KEY))).toEqual([]);
+    expect(screen.getByRole('heading', { level: 2, name: 'Playback health' })).toHaveFocus();
+  });
+
+  it('shows the list while the playbacks are still loading', () => {
+    remember([{ operator: RAIL, environment: 'train' }]);
+    installFetch(() => new Promise(() => {}));
+    render(<PlaybackHealthPanel />);
+    expect(screen.getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: TITLE })).toBeInTheDocument();
+  });
+
+  it('shows the list when the playbacks request fails', async () => {
+    remember([{ operator: RAIL, environment: 'train' }]);
+    installFetch((m, url) => (url === URL ? respond(null, 500) : null));
+    render(<PlaybackHealthPanel />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load playback health.');
+    expect(screen.getByRole('list', { name: TITLE })).toBeInTheDocument();
+    expect(screen.getByText(RAIL)).toBeInTheDocument();
+  });
+
+  it('shows the list when there are no playbacks', async () => {
+    remember([{ operator: RAIL, environment: 'away' }]);
+    installFetch((m, url) => (url === URL ? respond({ playbacks: [] }) : null));
+    render(<PlaybackHealthPanel />);
+    expect(await screen.findByText('No playbacks recorded yet.')).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: TITLE })).toBeInTheDocument();
+  });
+
+  it('shows the whole name as text, never as markup', async () => {
+    remember([{ operator: 'AS1 <b>bold</b> Net', environment: 'away' }]);
+    installFetch();
+    await openPanel();
+    expect(screen.getByText('AS1 <b>bold</b> Net')).toBeInTheDocument();
   });
 });

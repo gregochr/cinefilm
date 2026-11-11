@@ -1,6 +1,9 @@
+import { useRef, useState } from 'react';
 import { adminApi } from '../api/resources.js';
 import { describePlayback, environmentLabel } from '../state/healthFormat.js';
+import { forgetNetwork, rememberedNetworks } from '../state/networks.js';
 import { usePlaybackHealth } from '../state/usePlaybackHealth.js';
+import { Button } from './Button.jsx';
 import { SkeletonBlock } from './Skeleton.jsx';
 import { ErrorState } from './StateMessages.jsx';
 
@@ -36,9 +39,43 @@ function Playbacks({ playbacks }) {
   );
 }
 
+const NETWORKS_TITLE = 'Remembered networks on this device';
+
+// The answers this browser holds for networks it has been asked about, newest first, each with Forget.
+function RememberedNetworks({ networks, onForget }) {
+  return (
+    <>
+      <h3 className="admin__subtitle">{NETWORKS_TITLE}</h3>
+      <ul className="admin__list" aria-label={NETWORKS_TITLE}>
+        {[...networks].reverse().map(({ operator, environment }) => (
+          <li key={operator} className="admin__item">
+            <div className="admin__item-head">
+              <span className="admin__item-title">{operator}</span>
+              <span className="admin__tag">{environmentLabel(environment)}</span>
+            </div>
+            <div className="admin__actions admin__item-actions">
+              <Button aria-label={`Forget ${operator}`} onClick={() => onForget(operator)}>
+                Forget
+              </Button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
 /** Admin: how the recent viewings went (plan: playback health, "Admin: the Playback health card"). */
 export default function PlaybackHealthPanel() {
   const { playbacks, error, loading, reload } = usePlaybackHealth();
+  // Read once when the card opens: no polling, no storage events.
+  const [networks, setNetworks] = useState(rememberedNetworks);
+  const heading = useRef(null);
+  // The Forget button that had focus is gone with its row: put focus on the card's own heading.
+  const forget = (operator) => {
+    setNetworks(forgetNetwork(operator));
+    heading.current?.focus();
+  };
   let body;
   if (loading && !playbacks) {
     body = (
@@ -54,11 +91,12 @@ export default function PlaybackHealthPanel() {
   return (
     <section className="admin__card" aria-labelledby="admin-playback-health-title">
       <div className="admin__head">
-        <h2 id="admin-playback-health-title" className="admin__title">
+        <h2 id="admin-playback-health-title" className="admin__title" ref={heading} tabIndex={-1}>
           Playback health
         </h2>
       </div>
       {body}
+      {networks.length > 0 ? <RememberedNetworks networks={networks} onForget={forget} /> : null}
     </section>
   );
 }

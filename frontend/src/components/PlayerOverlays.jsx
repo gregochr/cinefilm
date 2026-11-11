@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import BufferingIndicator from './BufferingIndicator.jsx';
+import { QUESTION, questionText } from '../player/environment.js';
 import { Button } from './Button.jsx';
 
 export function IndicatorPill({ text, amber = false }) {
@@ -36,6 +37,34 @@ export function SlowConnectionCard({ rung, onOk, onChoose }) {
           OK
         </Button>
         <Button onClick={onChoose}>Choose quality</Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * "Are you on a train?" on a network CineFilm has not seen. It never takes focus (Space must still pause the film
+ * and a focused button would take it as an answer), so the player announces it from its own live region.
+ * `operator` is a display name or null. All three buttons are plain: none is the answer CineFilm wants.
+ */
+export function EnvironmentCard({ operator, onTrain, onNo, onNotNow }) {
+  return (
+    <div
+      className="slow-card"
+      role="group"
+      aria-labelledby="environment-card-title"
+      aria-describedby="environment-card-text"
+    >
+      <h2 id="environment-card-title" className="slow-card__title">
+        {QUESTION}
+      </h2>
+      <p id="environment-card-text" className="slow-card__text">
+        {questionText(operator)}
+      </p>
+      <div className="slow-card__actions">
+        <Button onClick={onTrain}>Yes, on a train</Button>
+        <Button onClick={onNo}>No</Button>
+        <Button onClick={onNotNow}>Not now</Button>
       </div>
     </div>
   );

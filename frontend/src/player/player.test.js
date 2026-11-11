@@ -93,6 +93,29 @@ describe('keyboard map', () => {
   });
 });
 
+describe('Esc with the network question showing', () => {
+  const state = { menuOpen: false, question: false, fullscreen: false, endOverlay: false };
+
+  it('closes a menu before the question', () => {
+    expect(resolveEscape({ ...state, menuOpen: true, question: true, fullscreen: true })).toBe(
+      'closeMenu',
+    );
+  });
+
+  it('dismisses the question before exiting fullscreen or dismissing the end card', () => {
+    expect(resolveEscape({ ...state, question: true, fullscreen: true, endOverlay: true })).toBe(
+      'dismissQuestion',
+    );
+    expect(resolveEscape({ ...state, question: true })).toBe('dismissQuestion');
+  });
+
+  it('goes on to fullscreen, then the end card, then nothing, when there is no question', () => {
+    expect(resolveEscape({ ...state, fullscreen: true, endOverlay: true })).toBe('exitFullscreen');
+    expect(resolveEscape({ ...state, endOverlay: true })).toBe('dismissEnd');
+    expect(resolveEscape(state)).toBe('none');
+  });
+});
+
 describe('auto-hide rules', () => {
   it('only hides while playing with no menu open', () => {
     expect(canAutoHide({ playing: true, menuOpen: false })).toBe(true);

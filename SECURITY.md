@@ -45,6 +45,17 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    database publishes no host port. No Cloudflare tunnel or proxying (the DNS records are grey cloud), no `tailscale funnel`, port forward or public listener. CORS stays off.
 7. **Untrusted data in the UI.** TMDB, Plex and file metadata (titles, overviews, track names) are rendered as text,
    never with `dangerouslySetInnerHTML`. Image URLs come from the `imageUrl` helper only.
+   **The operator lookup** is the browser's one request to a host other than CineFilm and TMDB's images: when the
+   player opens away from home it asks `https://ipinfo.io/json` which network operator the device is on. It is
+   made from a hidden `sandbox="allow-scripts"` frame built from `srcdoc`, with `credentials: 'omit'` and
+   `referrerPolicy: 'no-referrer'`, so the request carries `Origin: null`, no referrer and no cookie: the service
+   sees the device's public address and nothing about CineFilm. Never give that frame `allow-same-origin`, and
+   never make the request from the page itself (it would send the app's hostname as `Origin`). The page takes a
+   message only from that frame's own window and only when the message's origin is the string `null`, which is
+   what a sandboxed frame reports: a frame that had lost its sandbox would report the app's own origin and be
+   ignored, so the lookup fails closed. It keeps only `org`, as text of 1 to 100 characters, and stores an answer
+   against it in `localStorage` only. No location is requested or stored. Any other outside request from
+   the browser needs a note in the PR.
 8. **Dependencies and CI.** No new dependency without a reason in the PR. OWASP/`npm audit` findings at High or above
    block. Workflows declare least-privilege `permissions:`, pin third-party actions, and never print secrets.
 9. **Data.** The watch history is the owner's only irreplaceable data: migrations follow expand-then-contract, and

@@ -101,7 +101,8 @@ See `design/tokens.css` for every value.
 - **Playback health** (owner, 2026-11-10; `docs/engineering/playback-health-plan.md`): the recent viewings, each with
   where it was watched (Home, Train, Away or Unknown), when and for how long, the start-up time, stalls and
   reconnects, the quality mix and download speeds, the network, and a "Full record" link to everything that was
-  measured. "No playbacks recorded yet." until there are some.
+  measured. "No playbacks recorded yet." until there are some. Under them, "Remembered networks on this device":
+  each network this browser has an answer for (decision 18), tagged Train or Away, with **Forget**.
 - **Fix match:** search TMDB, then radio-pick from results showing poster, year, director, cast and **runtime**. The runtime is often what tells same-titled films apart, e.g. The Wicker Man 1973 vs 2006.
 
 ### Responsive
@@ -148,14 +149,15 @@ Custom controls over HTML5 `<video>`.
 | C | Cycle captions: Off → English → English (forced) |
 | A | Open the Audio & Subtitles panel |
 | Q | Open the quality menu |
-| Esc | Close menu, then exit fullscreen |
+| Esc | Close menu, then the network question if it is showing (decision 18), then exit fullscreen |
 
 **Auto-hide.** Controls hide after **3 s** without mouse or keyboard input while playing. Any movement or key brings them back. They never hide while paused or while a menu is open. When hidden, only a 3px hairline progress bar remains at the bottom (`10`).
 
 **Network/quality indicator.**
 - A small pill in mono: `Auto · Original · Home`, `720p · Remote`, `480p · Remote · slow`.
 - The dot is green at home and amber when remote or degraded.
-- This is the **only** "you're remote" cue (decision 7).
+- This is the **only** "you're remote" cue (decision 7). The network question of decision 18 is a question, asked
+  once per network, and not a cue.
 
 **Quality menu**
 - Options: Auto (default), Original, 1080p, 720p, 480p.
@@ -178,7 +180,7 @@ from the moment the player opens, never 0:00.
 
 When resuming, the frame at the resume point is shown behind the startup indicator until the film plays.
 
-**Auto step-down:** a toast at the top centre reads "Switching to 720p for smoother playback". It shows for about 4 s, is non-blocking, and plays no sound.
+**Auto step-down:** a toast at the top centre reads "Switching to 720p for smoother playback". It shows for about 4 s, is non-blocking, and plays no sound. On a phone held upright the top bar fills the width (the title, then the indicator), so a toast sits just under it.
 
 **End of film**
 - Appears when playback reaches the credits marker (decision 1).
@@ -198,6 +200,7 @@ When resuming, the frame at the resume point is shown behind the startup indicat
 | Film has no subtitles | The Subtitles field reads "None for this film" (dashed, inert). The player's captions button is dimmed and C does nothing. Link: "Find subtitles in Admin" |
 | Transcode worker offline | See the quality menu above |
 | Remote on a slow connection | Indicator `480p · Remote · slow`, plus a one-off card per session (decision 11): "You're on a slow connection", then "Playing at 480p to avoid stalls. Auto will step up if things improve." Buttons: OK / Choose quality |
+| A network CineFilm hasn't seen, away from home | A one-off card in the player, in the slow-connection card's place (decision 18): "Are you on a train?", then "CineFilm hasn't seen this network before: Virgin Media Limited. It will remember your answer on this device." Buttons: Yes, on a train / No / Not now. When the network can't be named: "CineFilm can't tell which network this is, so it will ask again next time." |
 | Session expired while away | Sign-in card: "You've been signed out while you were away. Sign in again and you'll be back where you were." Password field and **Sign in**. After sign-in, return to the exact route and playback position |
 
 ## 6. Decisions (agreed with Chris, 8 Nov 2026)
@@ -208,11 +211,13 @@ When resuming, the frame at the resume point is shown behind the startup indicat
 4. **Weekly Home row:** one theme (a decade, genre or director drawn from the library) is chosen **each Monday**. It never changes while the page is open.
 5. **Search:** **live as you type** across title, actor and director. The header dropdown is undebounced and client-side (no request per keystroke); the Library page keeps its debounced server search. The header dropdown's design and rules are in `docs/design/search/`. Names everywhere link to a **Person page** listing only owned films.
 6. **Forced subtitles:** when Subtitles is **Off** and the film has an English (forced) track, the forced track plays automatically. Choosing full English replaces it. The UI shows "Off · forced when needed".
-7. **Remote cue:** only the corner indicator in the player. Nothing on browse pages.
+7. **Remote cue:** only the corner indicator in the player. Nothing on browse pages. (The network question of
+   decision 18 is in the player only, and is a question, not a cue.)
 8. **CineLight:** a **"Dim the lights"** switch next to Play on Film detail, **on by default**. Turning it off skips the Hue dimming for that playback only. CineFilm needs to tell CineLight about the skip, e.g. a flag on the play event. There's no CineLight indicator in the player.
 9. **Admin access:** through the settings icon in the header (single user; no need to hide it).
 10. **iPhone fullscreen:** custom controls inline. **Fullscreen hands off to Safari's native player**, which gives AirPlay, picture-in-picture and lock-screen controls. The custom quality menu isn't available while in native fullscreen, which is accepted.
-11. **Slow-connection message:** the card in §5 shows **once per session**; after that, only the indicator.
+11. **Slow-connection message:** the card in §5 shows **once per session**; after that, only the indicator. It
+    waits its turn behind the network question (decision 18) and does not count as shown while it waits.
 
 ## 6b. Additions agreed afterwards (from comparing with Plex, Jellyfin and Netflix)
 
@@ -260,12 +265,38 @@ When resuming, the frame at the resume point is shown behind the startup indicat
       progress bar, "{time} left" and the Continue watching menu.
     - A "+N more" tile as a fifth card was considered and rejected.
 
+18. **Where a film is watched: the network question** (owner, 2026-11-10; `docs/engineering/playback-health-plan.md`).
+    - **Why:** every viewing is recorded with where it happened (Home, Train, Away), so playback can later be
+      tuned for the place and not only for the moment.
+    - **Home is recognised silently** (the server answers within 20 ms). Nothing is asked and nothing is looked up.
+    - **Away from home** the player looks up the name of the network's operator. A network this browser already
+      has an answer for is recognised silently.
+    - **A network it hasn't seen** gets one quiet card in the player, in the slow-connection card's place and
+      style: "Are you on a train?", then "CineFilm hasn't seen this network before: Virgin Media Limited. It will
+      remember your answer on this device." Buttons: **Yes, on a train** / **No** / **Not now**. None of the three
+      is the amber primary: neither answer is the one CineFilm wants. A stored answer is confirmed by a toast,
+      "Remembered for Virgin Media Limited".
+    - **When the network can't be named** (the lookup failed, or it went out through a relay) the text is
+      "CineFilm can't tell which network this is, so it will ask again next time." and nothing is stored.
+    - **It never interrupts.** The film starts behind it. It does not take focus, so Space still pauses. Esc and
+      **Not now** close it for this viewing and remember nothing. Closing it, by any of the four ways, returns
+      the keyboard to the player.
+    - **One card at a time.** It shows before the slow-connection card when both are due, hides while a menu is
+      open, and never shows over the end card or the "can't be played" card. On a narrow upright screen the
+      startup indicator moves into the upper half while a card shows, so the two never overlap.
+    - **Remembered per browser,** not on the server. Admin lists the remembered networks under Playback health,
+      each with **Forget**.
+    - **No location** is asked for or stored: a laptop has no GPS, and the lookup's own guess at the place was
+      40 miles out.
+
 ## 7. Accessibility
 
 - Use real elements: `<button>`, `<a href>`, `<input>` with a `<label>`, `<select>`. Icon-only buttons get an `aria-label` (Back, Settings, Mark as watched, Fullscreen…).
 - Segmented controls (Sort, Show) are button groups with `aria-pressed`. Player menus use `role="menu"` with `menuitemradio` and `aria-checked`.
 - The scrubber is `role="slider"`, with `aria-valuetext` in words ("1 hour 4 minutes 31 seconds").
-- Status messages (toast, buffering, indicator) are `role="status"` (polite).
+- Status messages (toast, buffering, indicator) are `role="status"` (polite). The network question (decision 18)
+  takes no focus, so it is spoken through a polite live region the player keeps mounted; the card itself is a
+  group named by the question and described by its text.
 - Text contrast is at least 4.5:1. Muted text `#A39A8B` on `#0E0C0A` passes, so don't go dimmer for body text.
 - Touch targets are at least 44px.
 
