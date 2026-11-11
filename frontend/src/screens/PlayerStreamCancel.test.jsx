@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { measureThroughput } from '../player/probe.js';
 import { FakeHls } from '../test/fakeHls.js';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
+import { resetThroughputState } from '../player/throughput.js';
 
 // The lazy hls.js import stays pending until the test releases it.
 const gate = vi.hoisted(() => {
@@ -24,6 +25,7 @@ beforeEach(() => {
   window.MediaSource = class {};
   measureThroughput.mockReset().mockResolvedValue(null);
   sessionStorage.clear();
+  resetThroughputState();
 });
 afterEach(() => {
   delete window.MediaSource;

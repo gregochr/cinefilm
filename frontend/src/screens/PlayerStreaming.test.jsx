@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { measureThroughput } from '../player/probe.js';
 import { FakeHls } from '../test/fakeHls.js';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
+import { resetThroughputState } from '../player/throughput.js';
 
 // hls.js at its event API, and the probe as a number: both have unit tests of their own.
 vi.mock('hls.js', async () => ({ default: (await import('../test/fakeHls.js')).FakeHls }));
@@ -14,6 +15,7 @@ beforeEach(() => {
   window.MediaSource = class {};
   measureThroughput.mockReset().mockResolvedValue(null);
   sessionStorage.clear();
+  resetThroughputState();
 });
 afterEach(() => {
   delete window.MediaSource;
@@ -100,7 +102,7 @@ describe('starting a session', () => {
   it('creates an Auto session at the resume position, with the saved audio and the probe result', async () => {
     measureThroughput.mockResolvedValue(3000);
     const { log, hls } = await open();
-    expect(measureThroughput).toHaveBeenCalledWith(DIRECT);
+    expect(measureThroughput).toHaveBeenCalledWith(DIRECT, expect.any(Object));
     // Heat is saved at 3,871,000 ms and resumes 10 s earlier.
     expect(log.posted).toEqual([
       { quality: 'auto', startMs: 3861000, audioStreamId: 111, probeKbps: 3000 },
@@ -109,9 +111,14 @@ describe('starting a session', () => {
     expect(hls().config.startPosition).toBe(3861);
   });
 
-  it('leaves probeKbps out when the probe measured nothing', async () => {
+  it('sends probeKbps 0 (the lowest rung) when the probe measured nothing', async () => {
     const { log } = await open();
-    expect(log.posted[0]).toEqual({ quality: 'auto', startMs: 3861000, audioStreamId: 111 });
+    expect(log.posted[0]).toEqual({
+      quality: 'auto',
+      startMs: 3861000,
+      audioStreamId: 111,
+      probeKbps: 0,
+    });
   });
 
   it('a chosen quality pins the session to that rung and skips the probe', async () => {
@@ -157,7 +164,7 @@ describe('starting a session', () => {
     expect(screen.getByRole('button', { name: 'Quality' })).toHaveTextContent('Auto');
   });
 
-  it.each([409, 503, 404, 400])(
+  it.each([409, 404, 400])(
     'direct-plays when the session is refused with %s (no encoder, or no keyframe index yet)',
     async (status) => {
       const srv = serve({ create: () => respond({ error: 'No encoder' }, status) });
@@ -253,8 +260,12 @@ describe('automatic level changes: toasts, indicator, quality menu', () => {
   });
 });
 
+const SLOW_SEGMENT = { loaded: 250_000, loading: { start: 0, first: 0, end: 1000 } };
+
 describe('the slow-connection card (decision 11)', () => {
+  // The card needs a known speed below home: a slow segment (2,000 kbit/s) first, then the step down.
   const slowDown = async (hls) => {
+    await hlsEvent(() => hls().fragLoaded(SLOW_SEGMENT));
     await hlsEvent(() => hls().switchTo(P480));
     return screen.findByRole('dialog', { name: 'You’re on a slow connection' });
   };
@@ -392,7 +403,12 @@ describe('changing quality or audio restarts the session at the current position
     const audio = screen.getByRole('menu', { name: 'Audio' });
     await userEvent.click(within(audio).getByRole('menuitemradio', { name: /Commentary/ }));
     await instances(2);
-    expect(log.posted[1]).toEqual({ quality: 'auto', startMs: 4000000, audioStreamId: 112 });
+    expect(log.posted[1]).toEqual({
+      quality: 'auto',
+      startMs: 4000000,
+      audioStreamId: 112,
+      probeKbps: 0,
+    });
     expect(FakeHls.instances[0].destroy).toHaveBeenCalledTimes(1);
   });
 
@@ -446,7 +462,7 @@ describe('changing quality or audio restarts the session at the current position
   });
 
   it('a new audio track on a direct-played film only saves the choice', async () => {
-    const srv = serve({ create: () => respond({ error: 'No encoder' }, 503) });
+    const srv = serve({ create: () => respond({ error: 'No encoder' }, 409) });
     installFetch(srv.route);
     renderApp('/films/1/play?edition=11');
     const video = await screen.findByTestId('player-video');
@@ -484,7 +500,12 @@ describe('an expired session (404)', () => {
       hls().error({ fatal: true, type: 'networkError', response: { code: 404 } }),
     );
     await instances(2);
-    expect(log.posted[1]).toEqual({ quality: 'auto', startMs: 1000000, audioStreamId: 111 });
+    expect(log.posted[1]).toEqual({
+      quality: 'auto',
+      startMs: 1000000,
+      audioStreamId: 111,
+      probeKbps: 0,
+    });
     expect(FakeHls.instances[1].loadSource).toHaveBeenCalledWith('/api/sessions/s2/master.m3u8');
     expect(FakeHls.instances[1].config.startPosition).toBe(1000);
     video.currentTime = 0;
@@ -683,5 +704,440 @@ describe('iPhone Safari: native HLS', () => {
     await hlsEvent(() => video.dispatchEvent(new Event('error')));
     await vi.waitFor(() => expect(log.posted).toHaveLength(2));
     expect(log.posted[1].startMs).toBe(1000000);
+  });
+});
+
+// A poor link: a session request that gets no answer is asked again under "Reconnecting…", never direct-played.
+// The `online` event wakes the retry at once, so no test waits out a backoff.
+describe('a session request that gets no answer', () => {
+  const NOTICE = 'Reconnecting…';
+  const session = (n = 1) =>
+    respond(
+      { ...fixtures.session, sessionId: `s${n}`, masterUrl: `/api/sessions/s${n}/master.m3u8` },
+      201,
+    );
+  const noAnswer = () => {
+    throw new TypeError('Failed to fetch');
+  };
+  const online = () => act(async () => window.dispatchEvent(new Event('online')));
+  const noNotice = () =>
+    vi.waitFor(() => expect(screen.queryByText(NOTICE)).not.toBeInTheDocument());
+  const openPending = async (create) => {
+    const srv = serve({ create });
+    const fetchMock = installFetch(srv.route);
+    renderApp('/films/1/play?edition=11');
+    const video = await screen.findByTestId('player-video');
+    return { ...srv, fetchMock, video };
+  };
+  const chooseAudio = async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Audio and subtitles' }));
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: 'Audio' })).getByRole('menuitemradio', {
+        name: /Commentary/,
+      }),
+    );
+  };
+
+  it('shows Reconnecting… (polite), sets no src, and streams through hls.js once a later request works', async () => {
+    const { video, log } = await openPending((n) => (n === 1 ? noAnswer() : session()));
+    const notice = await screen.findByText(NOTICE);
+    expect(notice.closest('[role="status"]')).toBeInTheDocument();
+    expect(video).not.toHaveAttribute('src');
+    expect(FakeHls.instances).toHaveLength(0);
+    expect(log.posted).toHaveLength(1);
+    await online(); // no real wait: the wake-up ends the backoff
+    await instances(1);
+    await noNotice();
+    expect(log.posted).toHaveLength(2);
+    expect(video).not.toHaveAttribute('src');
+    expect(FakeHls.last.loadSource).toHaveBeenCalledWith('/api/sessions/s1/master.m3u8');
+  });
+
+  it('does the same at a recovery: the rebuild retries instead of falling back to direct play', async () => {
+    const { video, hls } = await open({
+      create: (n) => (n === 2 ? noAnswer() : session(n === 1 ? 1 : 2)),
+    });
+    await landResume(video);
+    await moveTo(video, 1000);
+    await hlsEvent(() =>
+      hls().error({ fatal: true, type: 'networkError', response: { code: 404 } }),
+    );
+    expect(await screen.findByText(NOTICE)).toBeInTheDocument();
+    expect(video).not.toHaveAttribute('src');
+    await online();
+    await instances(2);
+    await noNotice();
+    expect(video).not.toHaveAttribute('src');
+    expect(FakeHls.last.loadSource).toHaveBeenCalledWith('/api/sessions/s2/master.m3u8');
+  });
+
+  it('a 502 (a proxy whose app is down) is asked again, then streams through hls.js, never direct', async () => {
+    const { video } = await openPending((n) =>
+      n === 1 ? respond({ error: 'Bad gateway' }, 502) : session(),
+    );
+    expect(await screen.findByText(NOTICE)).toBeInTheDocument();
+    expect(video).not.toHaveAttribute('src');
+    await online();
+    await instances(1);
+    expect(video).not.toHaveAttribute('src');
+  });
+
+  it('a 401 shows the sign-in card and no Reconnecting…, and streams as soon as the viewer signs in', async () => {
+    const { log, video } = await openPending((n) =>
+      n === 1 ? respond({ error: 'Unauthorised' }, 401) : session(),
+    );
+    const card = await screen.findByRole('dialog', { name: 'Signed out' });
+    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
+    expect(FakeHls.instances).toHaveLength(0);
+    expect(video).not.toHaveAttribute('src');
+    await userEvent.type(within(card).getByLabelText('Password'), 'secret');
+    await userEvent.click(within(card).getByRole('button', { name: 'Sign in' }));
+    await instances(1);
+    expect(log.posted).toHaveLength(2);
+    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
+    expect(video).not.toHaveAttribute('src');
+  });
+
+  it('keeps the chosen start speed in a retried request when the network has not changed', async () => {
+    sessionStorage.setItem('cinefilm.speed', JSON.stringify({ kbps: 100000, at: Date.now() }));
+    const { log } = await openPending((n) => (n === 1 ? noAnswer() : session()));
+    await screen.findByText(NOTICE);
+    await vi.waitFor(() => expect(FakeHls.instances).toHaveLength(1), { timeout: 4000 }); // the retry waits its real 1 s: `online` would itself be a network change
+    expect(log.posted[1].probeKbps).toBe(100000);
+  });
+
+  it('sends probeKbps 0 in a retried request when the network changed while it was retried', async () => {
+    sessionStorage.setItem('cinefilm.speed', JSON.stringify({ kbps: 100000, at: Date.now() }));
+    const { log } = await openPending((n) => (n === 1 ? noAnswer() : session()));
+    await screen.findByText(NOTICE);
+    await act(async () => window.dispatchEvent(new Event('offline')));
+    await online();
+    await instances(1);
+    expect(log.posted[0].probeKbps).toBe(100000);
+    expect(log.posted[1].probeKbps).toBe(0);
+  });
+
+  it('asks for the audio track chosen while the request is being retried', async () => {
+    const { log } = await openPending((n) => (n === 1 ? noAnswer() : session()));
+    await screen.findByText(NOTICE);
+    await chooseAudio();
+    await online();
+    await instances(1);
+    expect(log.posted[0].audioStreamId).toBe(111);
+    expect(log.posted[1].audioStreamId).toBe(112);
+  });
+
+  it('keeps the notice for the new request when the quality changes during Reconnecting…', async () => {
+    const { log } = await openPending((n) => (n < 3 ? noAnswer() : session()));
+    await screen.findByText(NOTICE);
+    await userEvent.click(screen.getByRole('button', { name: 'Quality' }));
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: 'Quality' })).getByRole('menuitemradio', {
+        name: /720p/,
+      }),
+    );
+    await vi.waitFor(() => expect(log.posted).toHaveLength(2));
+    expect(await screen.findByText(NOTICE)).toBeInTheDocument();
+    await online();
+    await instances(1);
+    expect(log.posted[1].quality).toBe('720p');
+    expect(log.posted[2].quality).toBe('720p');
+  });
+
+  it('hands the probe a check that asks the server cheaply and hears it answer', async () => {
+    let answered = null;
+    measureThroughput.mockImplementation(async (_url, options) => {
+      answered = await options.checkReachable();
+      return null;
+    });
+    const { fetchMock } = await openPending(() => session());
+    await instances(1);
+    expect(answered).toBe(true);
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/session')).toBe(true);
+  });
+
+  it('that check says no when only a proxy answers (a 502 from /api/session)', async () => {
+    let answered = null;
+    measureThroughput.mockImplementation(async (_url, options) => {
+      answered = await options.checkReachable();
+      return null;
+    });
+    const srv = serve({ create: () => session() });
+    installFetch((method, url, init) =>
+      url === '/api/session' ? respond(null, 502) : srv.route(method, url, init),
+    );
+    renderApp('/films/1/play?edition=11');
+    await instances(1);
+    expect(answered).toBe(false);
+  });
+
+  it('sends each session request with an abort signal of its own', async () => {
+    const { fetchMock } = await openPending(() => session());
+    await instances(1);
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST');
+    expect(post[1].signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('stops listening for wake-ups at once when the viewer leaves a pending request', async () => {
+    let release;
+    const answer = new Promise((resolve) => {
+      release = resolve;
+    });
+    const srv = serve({ create: () => answer });
+    installFetch(srv.route);
+    const view = renderApp('/films/1/play?edition=11');
+    await screen.findByTestId('player-video');
+    await vi.waitFor(() => expect(srv.log.posted).toHaveLength(1));
+    const remove = vi.spyOn(window, 'removeEventListener');
+    view.unmount();
+    expect(remove.mock.calls.some(([name]) => name === 'cinefilm:signed-in')).toBe(true);
+    release(session());
+  });
+
+  it('starts nothing when the viewer leaves while the probe runs', async () => {
+    let finish;
+    measureThroughput.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const srv = serve();
+    installFetch(srv.route);
+    const view = renderApp('/films/1/play?edition=11');
+    await screen.findByTestId('player-video');
+    await vi.waitFor(() => expect(measureThroughput).toHaveBeenCalled());
+    view.unmount();
+    finish(3000);
+    await act(async () => {});
+    expect(srv.log.posted).toEqual([]);
+  });
+
+  it('does not report or retry a session request that fails after the viewer left', async () => {
+    let fail;
+    const pending = new Promise((_resolve, reject) => {
+      fail = reject;
+    });
+    const srv = serve({ create: () => pending });
+    installFetch(srv.route);
+    const view = renderApp('/films/1/play?edition=11');
+    await screen.findByTestId('player-video');
+    await vi.waitFor(() => expect(srv.log.posted).toHaveLength(1));
+    view.unmount();
+    fail(new TypeError('Failed to fetch'));
+    await act(async () => {});
+    expect(srv.log.posted).toHaveLength(1);
+    expect(FakeHls.instances).toHaveLength(0);
+  });
+
+  it('a probe that finds the server unreachable shows Reconnecting… before any session request answers', async () => {
+    measureThroughput.mockImplementation(async (_url, options) => {
+      options.onUnreachable();
+      return null;
+    });
+    let release;
+    const answer = new Promise((resolve) => {
+      release = resolve;
+    });
+    const { log } = await openPending((n) => (n === 1 ? answer : session()));
+    expect(await screen.findByText(NOTICE)).toBeInTheDocument();
+    await vi.waitFor(() => expect(log.posted).toHaveLength(1));
+    expect(FakeHls.instances).toHaveLength(0);
+    release(session());
+    await instances(1);
+    await noNotice();
+  });
+});
+
+describe('the start rung: reuse a measured speed, probe, or start low', () => {
+  const recover = async (video, hls) => {
+    await landResume(video);
+    await moveTo(video, 1000);
+    await hlsEvent(() =>
+      hls().error({ fatal: true, type: 'networkError', response: { code: 404 } }),
+    );
+  };
+
+  afterEach(() => vi.useRealTimers());
+
+  it('a recovery reuses the speed: no new probe, probeKbps from the samples', async () => {
+    measureThroughput.mockResolvedValue(3000);
+    const { log, video, hls } = await open();
+    await recover(video, hls);
+    await instances(2);
+    expect(measureThroughput).toHaveBeenCalledTimes(1);
+    expect(log.posted[1].probeKbps).toBe(3000);
+  });
+
+  it('an audio change reuses the speed too', async () => {
+    measureThroughput.mockResolvedValue(3000);
+    const { log, video } = await open();
+    await landResume(video);
+    await moveTo(video, 4000);
+    await userEvent.click(screen.getByRole('button', { name: 'Audio and subtitles' }));
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: 'Audio' })).getByRole('menuitemradio', {
+        name: /Commentary/,
+      }),
+    );
+    await instances(2);
+    expect(measureThroughput).toHaveBeenCalledTimes(1);
+    expect(log.posted[1].probeKbps).toBe(3000);
+  });
+
+  it('uses the lower middle of the samples: a probe of 100,000 and one segment at 500 start low', async () => {
+    measureThroughput.mockResolvedValue(100000);
+    const { log, video, hls } = await open();
+    await hlsEvent(() =>
+      hls().fragLoaded({ loaded: 62_500, loading: { start: 0, first: 0, end: 1000 } }),
+    ); // 500 kbit/s
+    await recover(video, hls);
+    await instances(2);
+    expect(log.posted[1].probeKbps).toBe(500);
+  });
+
+  it('a second film within 10 minutes reuses the speed, and a reused speed is not written back', async () => {
+    measureThroughput.mockResolvedValue(3000);
+    const first = await open();
+    first.view.unmount();
+    FakeHls.reset();
+    measureThroughput.mockClear();
+    const written = sessionStorage.getItem('cinefilm.speed');
+
+    const second = await open();
+    expect(measureThroughput).not.toHaveBeenCalled();
+    expect(second.log.posted[0].probeKbps).toBe(3000);
+    expect(sessionStorage.getItem('cinefilm.speed')).toBe(written); // its age stays honest
+  });
+
+  it('a film started more than 10 minutes after the speed was measured probes again', async () => {
+    // The exact boundary (599,999 ms reused, 600,000 not) is pinned in throughput.test.js.
+    sessionStorage.setItem(
+      'cinefilm.speed',
+      JSON.stringify({ kbps: 3000, at: Date.now() - 601_000 }),
+    );
+    measureThroughput.mockResolvedValue(8000);
+    const { log } = await open();
+    expect(measureThroughput).toHaveBeenCalledTimes(1);
+    expect(log.posted[0].probeKbps).toBe(8000);
+  });
+
+  it('a second film after an offline event probes again: the network changed', async () => {
+    measureThroughput.mockResolvedValue(3000);
+    const first = await open();
+    first.view.unmount();
+    FakeHls.reset();
+    measureThroughput.mockClear();
+    await act(async () => window.dispatchEvent(new Event('offline')));
+    await open();
+    expect(measureThroughput).toHaveBeenCalledTimes(1);
+  });
+
+  it('a speed measured before a network change is not reused inside the film either', async () => {
+    measureThroughput.mockResolvedValue(3000);
+    const { log, video, hls } = await open();
+    await act(async () => window.dispatchEvent(new Event('offline')));
+    await recover(video, hls);
+    await instances(2);
+    expect(measureThroughput).toHaveBeenCalledTimes(2);
+    expect(log.posted[1].probeKbps).toBe(3000); // the new probe's own figure
+  });
+
+  it('a cautious low start opens no slow card; a slow segment then does', async () => {
+    const { hls } = await open({ startLevel: P480 });
+    await hlsEvent(() => {});
+    expect(
+      screen.queryByRole('dialog', { name: 'You’re on a slow connection' }),
+    ).not.toBeInTheDocument();
+    await hlsEvent(() => hls().fragLoaded(SLOW_SEGMENT));
+    expect(
+      await screen.findByRole('dialog', { name: 'You’re on a slow connection' }),
+    ).toBeInTheDocument();
+  });
+
+  it('forgets what was measured when the network changes: the indicator no longer reads it', async () => {
+    const { hls } = await open({ startLevel: P720 });
+    await hlsEvent(() =>
+      hls().fragLoaded({ loaded: 3_750_000, loading: { start: 0, first: 0, end: 1000 } }),
+    ); // 30,000 kbit/s
+    expect(screen.getByText('Auto · 720p · Home')).toBeInTheDocument();
+    await act(async () => window.dispatchEvent(new Event('offline')));
+    expect(screen.getByText('Auto · 720p · Remote')).toBeInTheDocument();
+  });
+
+  it('a slow speed measured before a network change does not open the slow card', async () => {
+    const { hls } = await open({ startLevel: P720 });
+    await hlsEvent(() => hls().fragLoaded(SLOW_SEGMENT));
+    await act(async () => window.dispatchEvent(new Event('offline')));
+    await hlsEvent(() => hls().switchTo(P480));
+    expect(
+      screen.queryByRole('dialog', { name: 'You’re on a slow connection' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('a speed reused for the start reads on the indicator at once', async () => {
+    measureThroughput.mockResolvedValue(30000);
+    const first = await open();
+    first.view.unmount();
+    FakeHls.reset();
+    // Below the top rung, where only a known speed makes it Home.
+    await open({ startLevel: P720 });
+    expect(screen.getByText('Auto · 720p · Home')).toBeInTheDocument();
+  });
+
+  it('reuses its own samples when the remembered speed cannot be read', async () => {
+    measureThroughput.mockResolvedValue(3000);
+    const { log, video, hls } = await open();
+    sessionStorage.clear();
+    await recover(video, hls);
+    await instances(2);
+    expect(measureThroughput).toHaveBeenCalledTimes(1);
+    expect(log.posted[1].probeKbps).toBe(3000);
+  });
+
+  describe('the player’s own samples have an age too', () => {
+    // A clock the test moves; every Date.now() in the player reads it.
+    let now;
+    beforeEach(() => {
+      now = 1_000_000;
+      vi.spyOn(Date, 'now').mockImplementation(() => now);
+    });
+
+    it.each([
+      [599_999, 3000, 1],
+      [600_000, 8000, 2],
+    ])(
+      '%i ms after the last measurement a recovery uses probeKbps %i (probes: %i)',
+      async (age, kbps, probes) => {
+        measureThroughput.mockResolvedValueOnce(3000).mockResolvedValue(8000);
+        const { log, video, hls } = await open();
+        sessionStorage.clear(); // only the player’s own samples are left to reuse
+        now += age;
+        await recover(video, hls);
+        await instances(2);
+        expect(measureThroughput).toHaveBeenCalledTimes(probes);
+        expect(log.posted[1].probeKbps).toBe(kbps);
+      },
+    );
+  });
+
+  it('keeps no sample from before a network change: a later segment stands alone', async () => {
+    measureThroughput.mockResolvedValue(3000);
+    const { log, video, hls } = await open();
+    await act(async () => window.dispatchEvent(new Event('offline')));
+    await hlsEvent(() =>
+      hls().fragLoaded({ loaded: 1_125_000, loading: { start: 0, first: 0, end: 1000 } }),
+    ); // 9,000 kbit/s
+    await recover(video, hls);
+    await instances(2);
+    expect(measureThroughput).toHaveBeenCalledTimes(1);
+    expect(log.posted[1].probeKbps).toBe(9000);
+  });
+
+  it('stops listening for wake-ups once the stream has started', async () => {
+    const remove = vi.spyOn(window, 'removeEventListener');
+    await open();
+    const signedIn = remove.mock.calls.filter(([name]) => name === 'cinefilm:signed-in');
+    expect(signedIn.length).toBeGreaterThanOrEqual(1);
   });
 });

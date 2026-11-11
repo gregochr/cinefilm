@@ -167,6 +167,9 @@ risking item 1. A deeper buffer makes that loss larger.
 the next request under the same id, restarting the encoder at the requested segment. The player never sees the 404
 and keeps its buffer. A session that was ended or replaced stays gone.
 
+**Pulled forward and built on its own (2026-11-11):** it needs no owner decision and no measurement, and it changes
+no client code. Plan: `long-pause-plan.md`.
+
 ### 8. Do not probe twice (confirmed)
 
 Every Auto start probes for 1.5 s before asking for a session, including each recovery and each audio change
@@ -279,10 +282,11 @@ Each is one PR built by Sonnet under the usual gates, with a `changelog.d/` entr
 1. **Measure:** the playback health record with environment tagging, and the throttled manual check (items 11 and
    13; one expand-only migration). Plan: `playback-health-plan.md`.
 2. **Stop making a poor link worse:** items 1, 2, 3, 4 and 8, plus the status-0 retry and the `online` retry.
-   Frontend apart from the compression property and its test. It does not depend on the measurements.
-3. **A strategy per environment:** items 5, 6 and 7, set from what the record shows: on a train start low, bank
+   Frontend apart from the compression property and its test. It does not depend on the measurements. Plan:
+   `poor-link-plan.md`.
+3. **A strategy per environment:** items 5 and 6, set from what the record shows: on a train start low, bank
    deep and step up only with a reserve; at home start at the top. Needs open decisions 1 and 2 and a speed check on
-   the host.
+   the host. (Item 7 was pulled forward on its own: `long-pause-plan.md`.)
 4. **Browse:** items 9 and 10, the hls.js preload and the light build.
 
 Beyond these, only if the record asks for it: early warning (does latency climb before a dropout?) and knowledge of

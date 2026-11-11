@@ -6,6 +6,7 @@ import { measureThroughput } from '../player/probe.js';
 import { FakeHls } from '../test/fakeHls.js';
 import App from '../App.jsx';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
+import { resetThroughputState } from '../player/throughput.js';
 
 // The playback-health recorder as the player wires it: the media events and the fake hls.js go in, the body of
 // the PUT comes out. The clock is `performance.now`, which the counter reads, so every figure is exact.
@@ -18,6 +19,7 @@ beforeEach(() => {
   window.MediaSource = class {};
   measureThroughput.mockReset().mockResolvedValue(null);
   sessionStorage.clear();
+  resetThroughputState();
   clock = 1000;
   vi.spyOn(performance, 'now').mockImplementation(() => clock);
 });
@@ -334,6 +336,70 @@ describe('what is counted', () => {
     );
     await leave();
     expect(lastReport(fetchMock)).toMatchObject({ timeouts: 1, netErrors: 1 });
+  });
+
+  // The session request, with the retry woken by `online` so no test waits out a backoff.
+  async function openAfterNoAnswer(first) {
+    const later = () =>
+      respond(
+        { ...fixtures.session, sessionId: 's1', masterUrl: '/api/sessions/s1/master.m3u8' },
+        201,
+      );
+    const srv = serve({ create: (n) => (n === 1 ? first() : later()) });
+    const fetchMock = installFetch(srv.route);
+    renderApp('/films/1/play?edition=11');
+    const video = await screen.findByTestId('player-video');
+    return { ...srv, fetchMock, video };
+  }
+
+  it('counts one reconnect and a network error, and no fall back, for a session request that got no answer', async () => {
+    const { video, fetchMock } = await openAfterNoAnswer(() => {
+      throw new TypeError('Failed to fetch');
+    });
+    expect(await screen.findByText('Reconnecting…')).toBeInTheDocument();
+    clock = 2000;
+    await inAct(() => window.dispatchEvent(new Event('online')));
+    await instances(1);
+    await inAct(() => FakeHls.last.manifest(LEVELS, ORIGINAL));
+    await inAct(() => FakeHls.last.switchTo(ORIGINAL));
+    await landResume(video);
+    await firstFrame(video, 3000);
+    await leave();
+    expect(lastReport(fetchMock)).toMatchObject({
+      reconnectCount: 1,
+      netErrors: 1,
+      timeouts: 0,
+      fellBack: false,
+      engine: 'hlsjs',
+    });
+  });
+
+  it('counts no reconnect for a 401 on the session request: it waits for the sign-in', async () => {
+    const { video, fetchMock } = await openAfterNoAnswer(() => respond({ error: 'No' }, 401));
+    await screen.findByRole('dialog', { name: 'Signed out' });
+    await inAct(() => window.dispatchEvent(new CustomEvent('cinefilm:signed-in')));
+    await instances(1);
+    await inAct(() => FakeHls.last.manifest(LEVELS, ORIGINAL));
+    await inAct(() => FakeHls.last.switchTo(ORIGINAL));
+    await landResume(video);
+    await firstFrame(video, 3000);
+    await leave();
+    expect(lastReport(fetchMock)).toMatchObject({
+      reconnectCount: 0,
+      netErrors: 0,
+      fellBack: false,
+    });
+  });
+
+  it('does not count a load aborted on purpose as a network error', async () => {
+    const { video, hls, fetchMock } = await open();
+    await landResume(video);
+    await firstFrame(video, 3000);
+    await inAct(() =>
+      hls().error({ fatal: false, type: 'networkError', details: 'aborted', response: undefined }),
+    );
+    await leave();
+    expect(lastReport(fetchMock)).toMatchObject({ netErrors: 0, timeouts: 0 });
   });
 
   it('counts a session rebuilt after it expired', async () => {

@@ -65,3 +65,20 @@ describe('the amber dot', () => {
     expect(model({ quality: '480p', rung: '480p', kbps: 30000 }).amber).toBe(true);
   });
 });
+
+describe('measuredSlow: the slow-connection card needs a measured speed below home', () => {
+  it('is true for 480p at 19,999 kbit/s and false at 20,000', () => {
+    expect(model({ rung: '480p', kbps: 19999 }).measuredSlow).toBe(true);
+    expect(model({ rung: '480p', kbps: 20000 }).measuredSlow).toBe(false);
+  });
+
+  it('is false for 480p with nothing measured, though the rung is slow', () => {
+    const slow = model({ rung: '480p', kbps: null });
+    expect(slow.slow).toBe(true);
+    expect(slow.measuredSlow).toBe(false);
+  });
+
+  it('is false for 720p at 2,000 kbit/s: the rung is not slow', () => {
+    expect(model({ rung: '720p', kbps: 2000 }).measuredSlow).toBe(false);
+  });
+});

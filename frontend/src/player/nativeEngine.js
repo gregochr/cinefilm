@@ -67,6 +67,10 @@ export function startNative({
       handlers.onReconnecting(false);
     }
   };
+  // A pause is not a stall: measure from the moment the viewer pressed play.
+  const onPlay = () => {
+    lastMoveAt = now();
+  };
   const onError = () => {
     errored = true;
     check();
@@ -112,10 +116,17 @@ export function startNative({
     if (destroyed || now() - lastReloadAt < spacingMs) return;
     const stuck =
       !video.paused && !video.ended && now() - lastMoveAt >= stallMs && bufferAhead(video) <= 0.5;
-    if (errored || reconnecting || stuck) reload();
+    if (errored || reconnecting || stuck) void reload();
   }
 
+  // The connection is back while reconnecting: check now, ignoring the spacing (a check in flight finishes).
+  const onOnline = () => {
+    if (!destroyed && reconnecting) void reload();
+  };
+
+  window.addEventListener('online', onOnline);
   video.addEventListener('timeupdate', onTimeUpdate);
+  video.addEventListener('play', onPlay);
   video.addEventListener('resize', detectLevel);
   video.addEventListener('loadedmetadata', detectLevel);
   video.addEventListener('error', onError);
@@ -126,7 +137,9 @@ export function startNative({
     destroy() {
       destroyed = true;
       clearInterval(poll);
+      window.removeEventListener('online', onOnline);
       video.removeEventListener('timeupdate', onTimeUpdate);
+      video.removeEventListener('play', onPlay);
       video.removeEventListener('resize', detectLevel);
       video.removeEventListener('loadedmetadata', detectLevel);
       video.removeEventListener('error', onError);

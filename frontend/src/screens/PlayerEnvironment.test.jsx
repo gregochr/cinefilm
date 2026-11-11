@@ -8,6 +8,7 @@ import { NETWORKS_KEY } from '../state/networks.js';
 import { FakeHls } from '../test/fakeHls.js';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
 import { installStorage } from '../test/storage.js';
+import { resetThroughputState } from '../player/throughput.js';
 
 // The environment as the player wires it, with the real measurement, lookup, hook, card and recorder. Only the
 // browser's edges are faked: a PerformanceObserver that is handed an entry for /api/session, and the lookup
@@ -41,6 +42,7 @@ beforeEach(() => {
   window.MediaSource = class {};
   measureThroughput.mockReset().mockResolvedValue(null);
   sessionStorage.clear();
+  resetThroughputState();
   storage = installStorage();
   vi.stubGlobal('PerformanceObserver', FakeObserver);
 });
@@ -364,6 +366,10 @@ describe('one card at a time', () => {
     await vi.waitFor(() => expect(FakeHls.instances).toHaveLength(1));
     await inAct(() => FakeHls.last.manifest(LEVELS, ORIGINAL));
     await inAct(() => FakeHls.last.switchTo(ORIGINAL));
+    // The slow-connection card needs a known speed below home: a slow segment (2,000 kbit/s) first.
+    await inAct(() =>
+      FakeHls.last.fragLoaded({ loaded: 250_000, loading: { start: 0, first: 0, end: 1000 } }),
+    );
     return opened;
   }
 
