@@ -15,7 +15,10 @@
       },
       "director": "Michael Mann",
       "collectionId": null,
-      "sortTitle": "heat"
+      "sortTitle": "heat",
+      "inProgress": true,
+      "lastWatchedAt": "2026-11-09T20:00:00Z",
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 2,
@@ -31,7 +34,10 @@
       },
       "director": "Denis Villeneuve",
       "collectionId": null,
-      "sortTitle": "arrival"
+      "sortTitle": "arrival",
+      "inProgress": true,
+      "lastWatchedAt": "2026-11-08T20:00:00Z",
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 3,
@@ -47,7 +53,10 @@
       },
       "director": "Roman Polanski",
       "collectionId": null,
-      "sortTitle": "chinatown"
+      "sortTitle": "chinatown",
+      "inProgress": true,
+      "lastWatchedAt": "2026-11-07T20:00:00Z",
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 4,
@@ -63,7 +72,10 @@
       },
       "director": null,
       "collectionId": null,
-      "sortTitle": "paris, texas"
+      "sortTitle": "paris, texas",
+      "inProgress": true,
+      "lastWatchedAt": "2026-11-06T20:00:00Z",
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 5,
@@ -79,7 +91,10 @@
       },
       "director": null,
       "collectionId": null,
-      "sortTitle": "moon"
+      "sortTitle": "moon",
+      "inProgress": true,
+      "lastWatchedAt": "2026-11-05T20:00:00Z",
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 6,
@@ -91,7 +106,10 @@
       "progress": null,
       "director": "Ridley Scott",
       "collectionId": null,
-      "sortTitle": "blade runner"
+      "sortTitle": "blade runner",
+      "inProgress": false,
+      "lastWatchedAt": "2025-12-24T20:00:00Z",
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 7,
@@ -103,7 +121,10 @@
       "progress": null,
       "director": "Ridley Scott",
       "collectionId": 1,
-      "sortTitle": "alien"
+      "sortTitle": "alien",
+      "inProgress": false,
+      "lastWatchedAt": "2025-12-24T20:00:00Z",
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 117,
@@ -115,7 +136,10 @@
       "progress": null,
       "director": null,
       "collectionId": 1,
-      "sortTitle": "alien 3"
+      "sortTitle": "alien 3",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 100,
@@ -127,7 +151,10 @@
       "progress": null,
       "director": null,
       "collectionId": null,
-      "sortTitle": "zodiac"
+      "sortTitle": "zodiac",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 101,
@@ -139,7 +166,10 @@
       "progress": null,
       "director": null,
       "collectionId": null,
-      "sortTitle": "local hero"
+      "sortTitle": "local hero",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 102,
@@ -151,7 +181,10 @@
       "progress": null,
       "director": null,
       "collectionId": null,
-      "sortTitle": "in the mood for love"
+      "sortTitle": "in the mood for love",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 103,
@@ -163,7 +196,10 @@
       "progress": null,
       "director": null,
       "collectionId": null,
-      "sortTitle": "conversation"
+      "sortTitle": "conversation",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 104,
@@ -175,7 +211,10 @@
       "progress": null,
       "director": null,
       "collectionId": null,
-      "sortTitle": "spirited away"
+      "sortTitle": "spirited away",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 105,
@@ -187,7 +226,10 @@
       "progress": null,
       "director": null,
       "collectionId": null,
-      "sortTitle": "drive"
+      "sortTitle": "drive",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 106,
@@ -199,7 +241,10 @@
       "progress": null,
       "director": null,
       "collectionId": null,
-      "sortTitle": "third man"
+      "sortTitle": "third man",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 107,
@@ -211,7 +256,10 @@
       "progress": null,
       "director": null,
       "collectionId": null,
-      "sortTitle": "brief encounter"
+      "sortTitle": "brief encounter",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 108,
@@ -223,7 +271,10 @@
       "progress": null,
       "director": null,
       "collectionId": null,
-      "sortTitle": "lost in translation"
+      "sortTitle": "lost in translation",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 109,
@@ -235,7 +286,10 @@
       "progress": null,
       "director": null,
       "collectionId": null,
-      "sortTitle": "withnail and i"
+      "sortTitle": "withnail and i",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 110,
@@ -247,7 +301,10 @@
       "progress": null,
       "director": null,
       "collectionId": null,
-      "sortTitle": "long good friday"
+      "sortTitle": "long good friday",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 111,
@@ -259,7 +316,10 @@
       "progress": null,
       "director": null,
       "collectionId": null,
-      "sortTitle": "kes"
+      "sortTitle": "kes",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 112,
@@ -271,7 +331,10 @@
       "progress": null,
       "director": null,
       "collectionId": null,
-      "sortTitle": "conversation"
+      "sortTitle": "conversation",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 113,
@@ -283,7 +346,10 @@
       "progress": null,
       "director": null,
       "collectionId": null,
-      "sortTitle": "taxi driver"
+      "sortTitle": "taxi driver",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 114,
@@ -295,7 +361,10 @@
       "progress": null,
       "director": null,
       "collectionId": null,
-      "sortTitle": "don't look now"
+      "sortTitle": "don't look now",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 115,
@@ -307,7 +376,10 @@
       "progress": null,
       "director": null,
       "collectionId": null,
-      "sortTitle": "wicker man"
+      "sortTitle": "wicker man",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 118,
@@ -319,7 +391,10 @@
       "progress": null,
       "director": null,
       "collectionId": 3,
-      "sortTitle": "three colours: blue"
+      "sortTitle": "three colours: blue",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 119,
@@ -331,7 +406,10 @@
       "progress": null,
       "director": null,
       "collectionId": 3,
-      "sortTitle": "three colours: white"
+      "sortTitle": "three colours: white",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 120,
@@ -343,7 +421,10 @@
       "progress": null,
       "director": null,
       "collectionId": 3,
-      "sortTitle": "three colours: red"
+      "sortTitle": "three colours: red",
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     }
   ],
   "facets": {

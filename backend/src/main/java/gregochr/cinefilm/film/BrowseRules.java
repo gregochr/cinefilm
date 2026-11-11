@@ -24,16 +24,32 @@ public final class BrowseRules {
     }
 
     /**
-     * Films whose last played edition is part-way through and has not been removed from Continue watching, most
-     * recently played first. Removing only sets a flag on that edition's state; the position stays.
+     * Whether the film is in progress: its last played edition has a position of at least {@code minMs} (and at
+     * least 1 ms, so a minimum of 0 still needs some progress). The watched flag is deliberately not looked at: a
+     * rewatch keeps {@code watched = true} while its position is above 0, and reaching the end or marking as watched
+     * resets the position to 0.
      */
-    public static List<FilmView> continueWatching(List<FilmView> views) {
+    public static boolean inProgress(FilmView view, long minMs) {
+        return view.lastPlayedEdition().flatMap(view::state)
+            .map(s -> s.getPositionMs() >= Math.max(minMs, 1)).orElse(false);
+    }
+
+    /**
+     * Films in progress whose last played edition has not been removed from Continue watching, most recently
+     * played first. Removing only sets a flag on that edition's state; the position stays.
+     */
+    public static List<FilmView> continueWatching(List<FilmView> views, long minMs) {
         return views.stream()
-            .filter(v -> v.progress().isPresent())
-            .filter(v -> !v.lastPlayedEdition().flatMap(v::state)
-                .map(PlaybackState::isHiddenFromContinueWatching).orElse(false))
+            .filter(v -> inProgress(v, minMs))
+            .filter(v -> !hiddenFromContinueWatching(v))
             .sorted(Comparator.comparing(FilmView::lastPlayedAt).reversed())
             .toList();
+    }
+
+    /** Whether the film's last played edition has been removed from Continue watching. */
+    public static boolean hiddenFromContinueWatching(FilmView view) {
+        return view.lastPlayedEdition().flatMap(view::state)
+            .map(PlaybackState::isHiddenFromContinueWatching).orElse(false);
     }
 
     /** Films added within the last 30 days, newest first. */
@@ -55,11 +71,16 @@ public final class BrowseRules {
             .toList();
     }
 
-    /** Applies search, filters and sort from the library query. */
-    public static List<FilmView> filterAndSort(List<FilmView> views, LibraryQuery query) {
+    /**
+     * Applies search, filters and sort from the library query. {@code minMs} is the minimum watch time of the
+     * in-progress rule. In progress, Unwatched and Watched never overlap and together cover every film: In progress
+     * wins (a rewatch is in progress, hidden films included), Watched is "any edition watched and not in progress",
+     * Unwatched is the rest.
+     */
+    public static List<FilmView> filterAndSort(List<FilmView> views, LibraryQuery query, long minMs) {
         String show = query.show() == null ? "all" : query.show().toLowerCase(Locale.ROOT);
-        if (!List.of("all", "unwatched", "watched").contains(show)) {
-            throw new BadRequestException("show must be all, unwatched or watched");
+        if (!List.of("all", "in-progress", "unwatched", "watched").contains(show)) {
+            throw new BadRequestException("show must be all, in-progress, unwatched or watched");
         }
         Comparator<FilmView> order = comparator(query.sort());
         return views.stream()
@@ -67,9 +88,19 @@ public final class BrowseRules {
             .filter(v -> query.genre() == null || query.genre().isBlank() || hasGenre(v, query.genre()))
             .filter(v -> query.decade() == null || v.film().getYear() != null
                 && v.film().getYear() / 10 * 10 == query.decade())
-            .filter(v -> "all".equals(show) || v.watched() == "watched".equals(show))
+            .filter(v -> matchesShow(v, show, minMs))
             .sorted(order)
             .toList();
+    }
+
+    private static boolean matchesShow(FilmView view, String show, long minMs) {
+        boolean inProgress = inProgress(view, minMs);
+        return switch (show) {
+            case "in-progress" -> inProgress;
+            case "watched" -> !inProgress && view.watched();
+            case "unwatched" -> !inProgress && !view.watched();
+            default -> true;
+        };
     }
 
     /**
@@ -113,9 +144,11 @@ public final class BrowseRules {
                 .thenComparing(byTitle);
             case "imdb" -> Comparator.comparing((FilmView v) -> v.film().getImdbRating(),
                 Comparator.nullsLast(Comparator.<BigDecimal>reverseOrder())).thenComparing(byTitle);
+            case "last-watched" -> Comparator.comparing(FilmView::lastPlayedAt,
+                Comparator.nullsLast(Comparator.<Instant>reverseOrder())).thenComparing(byTitle);
             case "rt" -> Comparator.comparing((FilmView v) -> v.film().getRtScore(),
                 Comparator.nullsLast(Comparator.<Integer>reverseOrder())).thenComparing(byTitle);
-            default -> throw new BadRequestException("sort must be title, year, added, imdb or rt");
+            default -> throw new BadRequestException("sort must be title, year, added, imdb, rt or last-watched");
         };
     }
 }

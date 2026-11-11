@@ -34,20 +34,24 @@ public final class FilmMapper {
     private FilmMapper() {
     }
 
-    /** The compact card, without a collection id. */
-    public static FilmCard card(FilmView view) {
-        return card(view, Set.of());
+    /** The compact card, without a collection id; {@code minMs} is the minimum watch time of the in-progress rule. */
+    public static FilmCard card(FilmView view, long minMs) {
+        return card(view, Set.of(), minMs);
     }
 
-    /** The compact card; {@code collectionId} is set when the film's collection is in {@code qualifying}. */
-    public static FilmCard card(FilmView view, Set<Long> qualifying) {
+    /**
+     * The compact card; {@code collectionId} is set when the film's collection is in {@code qualifying}, and
+     * {@code minMs} is the minimum watch time of the in-progress rule.
+     */
+    public static FilmCard card(FilmView view, Set<Long> qualifying, long minMs) {
         Film film = view.film();
         String director = view.directorNames();
         Long collectionId = film.getCollection() != null && qualifying.contains(film.getCollection().getId())
             ? film.getCollection().getId() : null;
         return new FilmCard(film.getId(), film.getTitle(), film.getYear(), film.getPosterPath(),
             film.getBackdropPath(), view.watched(), view.progress().orElse(null),
-            director.isEmpty() ? null : director, collectionId, film.getSortTitle());
+            director.isEmpty() ? null : director, collectionId, film.getSortTitle(),
+            BrowseRules.inProgress(view, minMs), view.lastPlayedAt(), BrowseRules.hiddenFromContinueWatching(view));
     }
 
     /** A person reference. */
@@ -68,7 +72,7 @@ public final class FilmMapper {
     public static FilmDetail detail(FilmView view, Preferences preferences, boolean inCollection, EncoderMode mode,
                                     Function<MediaFile, CutList> cuts) {
         Film film = view.film();
-        FilmCard card = card(view);
+        FilmCard card = card(view, 0);
         CollectionRef collection = film.getCollection() == null || !inCollection ? null
             : new CollectionRef(film.getCollection().getId(), film.getCollection().getName());
         return new FilmDetail(card.id(), card.title(), card.year(), card.posterPath(), card.backdropPath(),

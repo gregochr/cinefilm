@@ -8,6 +8,7 @@ import gregochr.cinefilm.film.FilmDtos.FilmCard;
 import gregochr.cinefilm.film.FilmDtos.FilmDetail;
 import gregochr.cinefilm.film.FilmDtos.FilmList;
 import gregochr.cinefilm.playback.PreferencesService;
+import gregochr.cinefilm.settings.ServerSettingsService;
 import gregochr.cinefilm.transcode.KeyframeIndexService;
 import gregochr.cinefilm.transcode.Transcoder;
 import java.util.List;
@@ -28,10 +29,15 @@ public class FilmService {
     private final PreferencesService preferences;
     private final Transcoder transcoder;
     private final KeyframeIndexService indexes;
+    private final ServerSettingsService settings;
 
-    /** Creates the service over the loader, the repository, the preferences service, the transcoder and the indexes. */
+    /**
+     * Creates the service over the loader, the repository, the preferences service, the transcoder, the indexes and
+     * the server settings.
+     */
     public FilmService(LibraryLoader loader, FilmRepository films, PreferencesService preferences,
-                       Transcoder transcoder, KeyframeIndexService indexes) {
+                       Transcoder transcoder, KeyframeIndexService indexes, ServerSettingsService settings) {
+        this.settings = settings;
         this.loader = loader;
         this.films = films;
         this.preferences = preferences;
@@ -44,8 +50,9 @@ public class FilmService {
     public FilmList list(LibraryQuery query) {
         List<FilmView> all = loader.loadAll();
         Set<Long> qualifying = qualifyingCollections(all);
-        List<FilmCard> cards = BrowseRules.filterAndSort(all, query).stream()
-            .map(v -> FilmMapper.card(v, qualifying)).toList();
+        long minMs = settings.minWatchMs();
+        List<FilmCard> cards = BrowseRules.filterAndSort(all, query, minMs).stream()
+            .map(v -> FilmMapper.card(v, qualifying, minMs)).toList();
         return new FilmList(cards.size(), cards, facets(all));
     }
 

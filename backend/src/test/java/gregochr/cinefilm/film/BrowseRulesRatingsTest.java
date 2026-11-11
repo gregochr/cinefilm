@@ -28,7 +28,7 @@ class BrowseRulesRatingsTest {
     }
 
     private List<String> sorted(List<FilmView> all, String sort) {
-        return BrowseRules.filterAndSort(all, new LibraryQuery(null, sort, null, null, null)).stream()
+        return BrowseRules.filterAndSort(all, new LibraryQuery(null, sort, null, null, null), 0).stream()
             .map(v -> v.film().getTitle()).toList();
     }
 
@@ -78,6 +78,6 @@ class BrowseRulesRatingsTest {
     @Test
     void anUnknownSortSaysWhichAreValid() {
         assertThatThrownBy(() -> sorted(List.of(), "stars")).isInstanceOf(BadRequestException.class)
-            .hasMessage("sort must be title, year, added, imdb or rt");
+            .hasMessage("sort must be title, year, added, imdb, rt or last-watched");
     }
 }

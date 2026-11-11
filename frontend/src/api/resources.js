@@ -101,6 +101,13 @@ export const adminApi = {
   playbackHealthUrl: (playbackId) => `/api/admin/playback-health/${playbackId}`,
 };
 
+/** Server settings (Admin). `update` takes the minimum watch time in whole minutes, 0 to 30. */
+export const settingsApi = {
+  get: (options) => get('/api/admin/settings', options),
+  update: (continueWatchingMinMinutes) =>
+    put('/api/admin/settings', { continueWatchingMinMinutes }),
+};
+
 export const mediaFilesApi = {
   /** The WebVTT of one file's embedded subtitle stream (`index` is the stream index in the file). */
   subtitleUrl: (fileId, index) => `/api/media-files/${fileId}/subtitles/${index}.vtt`,

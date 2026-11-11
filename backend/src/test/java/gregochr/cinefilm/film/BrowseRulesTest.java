@@ -51,7 +51,8 @@ class BrowseRulesTest {
         FilmView never = filmView("Drive", 2011, 100);
         FilmView atStart = withState(filmView("Kes", 1969, 100), 0, false, ago(2), null);
 
-        List<FilmView> result = BrowseRules.continueWatching(List.of(old, finished, never, recent, atStart, middle));
+        List<FilmView> result = BrowseRules.continueWatching(
+            List.of(old, finished, never, recent, atStart, middle), 0);
 
         assertThat(result).extracting(v -> v.film().getTitle()).containsExactly("Heat", "Arrival", "Moon");
     }
@@ -59,7 +60,7 @@ class BrowseRulesTest {
     @Test
     void aWatchedFilmRestartedAppearsInContinueWatching() {
         FilmView rewatch = withState(filmView("Alien", 1979, 100), 20 * MIN, true, ago(1), ago(30));
-        assertThat(BrowseRules.continueWatching(List.of(rewatch))).hasSize(1);
+        assertThat(BrowseRules.continueWatching(List.of(rewatch), 0)).hasSize(1);
     }
 
     @Test
@@ -71,7 +72,7 @@ class BrowseRulesTest {
         });
         FilmView shown = withState(filmView("Heat", 1995, 100), 64 * MIN, false, ago(2), null);
 
-        assertThat(BrowseRules.continueWatching(List.of(removed, shown)))
+        assertThat(BrowseRules.continueWatching(List.of(removed, shown), 0))
             .extracting(v -> v.film().getTitle()).containsExactly("Heat");
         assertThat(removed.progress()).as("Resume from still works").isPresent();
         assertThat(removed.progress().orElseThrow().positionMs()).isEqualTo(10 * MIN);
@@ -86,13 +87,13 @@ class BrowseRulesTest {
         hiddenOlder.setHiddenFromContinueWatching(true);
         var visibleNewer = state(theatrical, 5 * MIN, false, ago(1), null);
 
-        assertThat(BrowseRules.continueWatching(List.of(view(film, hiddenOlder, visibleNewer)))).hasSize(1);
+        assertThat(BrowseRules.continueWatching(List.of(view(film, hiddenOlder, visibleNewer)), 0)).hasSize(1);
 
         var hiddenNewer = state(theatrical, 5 * MIN, false, ago(1), null);
         hiddenNewer.setHiddenFromContinueWatching(true);
         var visibleOlder = state(finalCut, 20 * MIN, false, ago(5), null);
 
-        assertThat(BrowseRules.continueWatching(List.of(view(film, visibleOlder, hiddenNewer)))).isEmpty();
+        assertThat(BrowseRules.continueWatching(List.of(view(film, visibleOlder, hiddenNewer)), 0)).isEmpty();
     }
 
     // recently added
@@ -196,7 +197,7 @@ class BrowseRulesTest {
     }
 
     private List<String> titles(List<FilmView> all, String q) {
-        return BrowseRules.filterAndSort(all, new LibraryQuery(q, "title", null, null, null)).stream()
+        return BrowseRules.filterAndSort(all, new LibraryQuery(q, "title", null, null, null), 0).stream()
             .map(v -> v.film().getTitle()).toList();
     }
 
@@ -214,7 +215,7 @@ class BrowseRulesTest {
     @Test
     void sameTitleSortsByYearAscending() {
         List<FilmView> all = List.of(filmView("Dune", 2021, 1), filmView("Dune", 1984, 2));
-        assertThat(BrowseRules.filterAndSort(all, new LibraryQuery(null, "title", null, null, null)).stream()
+        assertThat(BrowseRules.filterAndSort(all, new LibraryQuery(null, "title", null, null, null), 0).stream()
             .map(v -> v.film().getYear())).containsExactly(1984, 2021);
     }
 
@@ -241,7 +242,7 @@ class BrowseRulesTest {
     }
 
     private List<String> sorted(List<FilmView> all, String sort) {
-        return BrowseRules.filterAndSort(all, new LibraryQuery(null, sort, null, null, null)).stream()
+        return BrowseRules.filterAndSort(all, new LibraryQuery(null, sort, null, null, null), 0).stream()
             .map(v -> v.film().getTitle()).toList();
     }
 
@@ -250,7 +251,7 @@ class BrowseRulesTest {
         List<FilmView> all = List.of(filmView("Heat", 1995, 1));
         assertThatThrownBy(() -> sorted(all, "popularity")).isInstanceOf(BadRequestException.class);
         assertThatThrownBy(() -> BrowseRules.filterAndSort(all,
-            new LibraryQuery(null, null, null, null, "seen"))).isInstanceOf(BadRequestException.class);
+            new LibraryQuery(null, null, null, null, "seen"), 0)).isInstanceOf(BadRequestException.class);
     }
 
     // filters
@@ -258,9 +259,9 @@ class BrowseRulesTest {
     @Test
     void filtersByGenreDecadeAndShow() {
         FilmView aliens = filmView("Aliens", 1986, 1, "Sci-fi", "Action");
-        FilmView alienFilm = withState(filmView("Alien", 1979, 2, "Sci-fi", "Horror"), 100 * MIN, true, NOW, NOW);
+        FilmView alienFilm = withState(filmView("Alien", 1979, 2, "Sci-fi", "Horror"), 0, true, NOW, NOW);
         FilmView heat = filmView("Heat", 1995, 3, "Crime");
-        FilmView chinatown = withState(filmView("Chinatown", 1974, 4, "Crime", "Mystery"), 100 * MIN, true, NOW,
+        FilmView chinatown = withState(filmView("Chinatown", 1974, 4, "Crime", "Mystery"), 0, true, NOW,
             NOW);
         List<FilmView> all = List.of(aliens, alienFilm, heat, chinatown);
 
@@ -276,7 +277,7 @@ class BrowseRulesTest {
     }
 
     private List<String> query(List<FilmView> all, String genre, Integer decade, String show) {
-        return BrowseRules.filterAndSort(all, new LibraryQuery(null, "title", genre, decade, show))
+        return BrowseRules.filterAndSort(all, new LibraryQuery(null, "title", genre, decade, show), 0)
             .stream().map(v -> v.film().getTitle()).toList();
     }
 }
