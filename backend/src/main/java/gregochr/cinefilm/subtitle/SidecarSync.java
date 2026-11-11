@@ -119,6 +119,12 @@ public class SidecarSync {
         }
         Optional<byte[]> bytes = read(file.path());
         if (bytes.isEmpty()) {
+            // Changed but unreadable: its old cues are no longer the file's, so they stop playing. Size and time
+            // stay as they were, so the next scan tries again.
+            if (row != null && row.getPresence() == Presence.PRESENT) {
+                row.setPresence(Presence.MISSING);
+                row.setUpdatedAt(now);
+            }
             return;
         }
         SubtitleSidecar target = row == null ? new SubtitleSidecar() : row;

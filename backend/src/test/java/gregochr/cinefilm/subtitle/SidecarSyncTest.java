@@ -272,6 +272,46 @@ class SidecarSyncTest extends SubtitleTestBase {
     }
 
     @Test
+    void aChangedFileThatCannotBeReadStopsPlayingAndComesBackWithItsNewCuesWhenReadable() throws IOException {
+        byte[] content = bytes(CUES);
+        write("Heat.en.forced.srt", content, T1);
+        sync.sync(found(listed("Heat.en.forced.srt", content, T1)));
+        byte[] edited = bytes("1\n00:00:30,000 --> 00:00:31,000\nEdited\n");
+
+        // The walk saw a change, but the file is gone by the time it is read.
+        Files.delete(library.resolve("Heat.en.forced.srt"));
+        new SidecarSync(sidecars, mediaFiles, new LibraryRoot(library.toString()),
+            Clock.fixed(LATER, ZoneOffset.UTC)).sync(found(listed("Heat.en.forced.srt", edited, T2)));
+
+        SubtitleSidecar row = sidecars.findAll().get(0);
+        assertThat(row.getPresence()).isEqualTo(Presence.MISSING);
+        assertThat(row.getUpdatedAt()).isEqualTo(LATER);
+        assertThat(row.getSizeBytes()).isEqualTo(content.length);
+        assertThat(row.getModifiedAt()).isEqualTo(T1);
+
+        write("Heat.en.forced.srt", edited, T2);
+        sync.sync(found(listed("Heat.en.forced.srt", edited, T2)));
+
+        assertThat(row.getPresence()).isEqualTo(Presence.PRESENT);
+        assertThat(row.getCuesText()).contains("Edited");
+    }
+
+    @Test
+    void aChangedUnreadableFileThatIsAlreadyMissingIsLeftAlone() throws IOException {
+        byte[] content = bytes(CUES);
+        write("Heat.en.forced.srt", content, T1);
+        sync.sync(found(listed("Heat.en.forced.srt", content, T1)));
+        sync.sync(found());
+        Files.delete(library.resolve("Heat.en.forced.srt"));
+
+        new SidecarSync(sidecars, mediaFiles, new LibraryRoot(library.toString()),
+            Clock.fixed(LATER, ZoneOffset.UTC)).sync(found(listed("Heat.en.forced.srt", bytes("x"), T2)));
+
+        assertThat(sidecars.findAll().get(0).getPresence()).isEqualTo(Presence.MISSING);
+        assertThat(sidecars.findAll().get(0).getUpdatedAt()).isEqualTo(NOW);
+    }
+
+    @Test
     void aListedFileThatCannotBeResolvedUnderTheRootIsSkippedAndNoRowIsMade() {
         sync.sync(found(new FoundSidecar("Gone.en.forced.srt", 10, T1)));
 
