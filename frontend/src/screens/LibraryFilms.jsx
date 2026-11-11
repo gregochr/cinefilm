@@ -77,6 +77,10 @@ export default function LibraryFilms() {
   const focusUndo = useRef(false);
   const pendingFocus = useRef(null);
   const posterLinks = useRef(new Map());
+  const searchRef = useRef(null);
+  const prevAction = useRef(null);
+  const undoLost = useRef(false); // the toast went while focus was on its Undo button
+  const expiryTarget = useRef(null); // the poster focus goes to then: the next in the list, else the previous
   const [acted, setActed] = useState(0); // counts actions; an effect from before the latest one must not focus
   const actedWanted = useRef(0);
   const latestData = useRef(data);
@@ -91,6 +95,11 @@ export default function LibraryFilms() {
     }
   });
   const { films, total } = cw;
+  // When the toast goes (it expires, or the action is undone or rolled back) its button leaves with the focus on it.
+  // The button is still in the DOM while this renders.
+  if (prevAction.current && !cw.action)
+    undoLost.current = document.activeElement === undoButton.current;
+  prevAction.current = cw.action;
   const undo = () => {
     if (!cw.action) return;
     const id = cw.action.film.id;
@@ -132,12 +141,21 @@ export default function LibraryFilms() {
       }
     }
   });
+  useEffect(() => {
+    if (!undoLost.current) return;
+    undoLost.current = false;
+    // Undo and rollbacks move focus to the poster that came back (done, or still pending): leave it.
+    if (pendingFocus.current !== null || document.activeElement !== document.body) return;
+    (posterLinks.current.get(expiryTarget.current) ?? searchRef.current)?.focus();
+  });
   const registerPoster = (id) => (el) => {
     if (el) posterLinks.current.set(id, el);
     else posterLinks.current.delete(id);
   };
   const act = (kind, film) => {
     focusUndo.current = kind === 'watched' && show === 'in-progress';
+    const at = films.findIndex((f) => f.id === film.id);
+    expiryTarget.current = focusUndo.current ? (films[at + 1] ?? films[at - 1])?.id : film.id;
     awaitData.current = false;
     pendingFocus.current = null; // a new action cancels a focus still waiting for a poster
     // A poster that stays (Remove, or Mark as watched in All) may be rebuilt and loses the focus its menu item had.
@@ -217,6 +235,7 @@ export default function LibraryFilms() {
                 }
               }}
               data-global-search
+              ref={searchRef}
             />
             <kbd className="searchbox__hint" aria-hidden="true">
               /

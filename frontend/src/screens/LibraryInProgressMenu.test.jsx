@@ -282,6 +282,52 @@ describe('Library: the ⋯ menu on in-progress posters', () => {
     expect(poster('Alpha, 2001, watched')).toBeInTheDocument();
   });
 
+  describe('focus when the Undo toast expires', () => {
+    async function markWatchedInProgress(films) {
+      library(undefined, films);
+      renderApp('/library?show=in-progress&sort=last-watched');
+      await screen.findByRole('link', { name: 'Alpha, 2001' });
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(more('Alpha'));
+      await user.click(screen.getByRole('menuitem', { name: 'Mark as watched' }));
+      return user;
+    }
+
+    it('moves from Undo to the poster now in the removed film’s slot', async () => {
+      await markWatchedInProgress([ALPHA, BETA, GAMMA]);
+      expect(screen.getByRole('button', { name: 'Undo' })).toHaveFocus();
+      act(() => vi.advanceTimersByTime(8000));
+      expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
+      expect(poster('Beta, 2002')).toHaveFocus();
+    });
+
+    it('moves to the previous poster when the removed film was last', async () => {
+      library(undefined, [BETA, ALPHA]);
+      renderApp('/library?show=in-progress&sort=last-watched');
+      await screen.findByRole('link', { name: 'Alpha, 2001' });
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(more('Alpha'));
+      await user.click(screen.getByRole('menuitem', { name: 'Mark as watched' }));
+      act(() => vi.advanceTimersByTime(8000));
+      expect(poster('Beta, 2002')).toHaveFocus();
+    });
+
+    it('falls back to the search box when no poster is left', async () => {
+      await markWatchedInProgress([ALPHA]);
+      act(() => vi.advanceTimersByTime(8000));
+      expect(screen.getByRole('searchbox')).toHaveFocus();
+    });
+
+    it('leaves focus alone when it was not on Undo', async () => {
+      await markWatchedInProgress([ALPHA, BETA, GAMMA]);
+      poster('Gamma, 2003').focus();
+      act(() => vi.advanceTimersByTime(8000));
+      expect(poster('Gamma, 2003')).toHaveFocus();
+    });
+  });
+
   it('a Remove that fails after a newer action on the film re-reads the list, so Remove is offered again', async () => {
     let release;
     const gate = new Promise((resolve) => {
