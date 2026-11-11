@@ -59,6 +59,12 @@ export default function AttachPicker({ name, busy, onAttach, onCancel }) {
           Loading editions…
         </p>
       ) : null}
+      {picker.editionsError ? (
+        <div role="alert">
+          <p className="admin__warning">Couldn&rsquo;t load that film&rsquo;s editions.</p>
+          <Button onClick={picker.retryEditions}>Try again</Button>
+        </div>
+      ) : null}
       {picker.editions.length > 1 ? (
         <fieldset className="subs__choices">
           <legend className="admin__text">Edition</legend>

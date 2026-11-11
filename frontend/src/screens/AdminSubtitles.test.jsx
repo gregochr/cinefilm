@@ -577,6 +577,37 @@ describe('Admin: Subtitles panel, attaching', () => {
     expect(state.calls).toEqual([]);
   });
 
+  it('says when a film’s editions could not be loaded and loads them on Try again', async () => {
+    let fail = true;
+    const { route } = serve({
+      items: [file({ id: 2, path: 'T.en.forced.srt', state: 'unmatched', filmId: null, parts: 0 })],
+    });
+    installFetch(
+      withFilms((method, url, init) => (url === '/api/films/5' ? null : route(method, url, init))),
+    );
+    installFetch((method, url, init) => {
+      if (url === '/api/films/5' && fail) return respond(null, 500);
+      return withFilms(route)(method, url, init);
+    });
+    renderApp('/admin');
+    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    const li = (await within(panel).findByText('T.en.forced.srt')).closest('li');
+    await userEvent.click(within(li).getByRole('button', { name: /^Attach/ }));
+    const form = within(li).getByRole('form');
+    await userEvent.type(within(form).getByLabelText('Find a film'), 'two');
+    await userEvent.click(
+      await within(form).findByRole('radio', { name: 'The Two Towers (2002)' }),
+    );
+
+    expect(await within(form).findByRole('alert')).toHaveTextContent(/editions/);
+    expect(within(form).getByRole('button', { name: 'Attach' })).toBeDisabled();
+    fail = false;
+    await userEvent.click(within(form).getByRole('button', { name: 'Try again' }));
+
+    expect(await within(form).findByRole('group', { name: 'Edition' })).toBeInTheDocument();
+    expect(within(form).queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('changing the search starts again: the picked film and edition are forgotten', async () => {
     const { route } = serve({
       items: [file({ id: 2, path: 'T.en.forced.srt', state: 'unmatched', filmId: null, parts: 0 })],

@@ -59,6 +59,41 @@ describe('FilmDetail preferences', () => {
     expect(within(subtitles).getByRole('option', { name: 'Off' })).toBeInTheDocument();
   });
 
+  it('an edition with only a forced sidecar still has a Subtitles picker, Off · forced when needed', async () => {
+    filmServer(1, fixtures.heat, (f) => {
+      f.editions[0].subtitleStreams = [];
+      f.editions[0].forcedSubtitle = { source: 'SIDECAR', ownerVerified: false, version: 1 };
+    });
+    renderApp('/films/1');
+    const subtitles = await screen.findByLabelText('Subtitles');
+    expect(
+      within(subtitles).getByRole('option', { name: 'Off · forced when needed' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('None for this film')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Find subtitles in Admin' })).not.toBeInTheDocument();
+  });
+
+  it('streams with no forced one plus a forced sidecar still say forced when needed', async () => {
+    filmServer(1, fixtures.heat, (f) => {
+      for (const s of f.editions[0].subtitleStreams) s.forced = false;
+      f.editions[0].forcedSubtitle = { source: 'SIDECAR', ownerVerified: true, version: 1 };
+    });
+    renderApp('/films/1');
+    const subtitles = await screen.findByLabelText('Subtitles');
+    expect(
+      within(subtitles).getByRole('option', { name: 'Off · forced when needed' }),
+    ).toBeInTheDocument();
+  });
+
+  it('with no streams and no sidecar it still says None for this film', async () => {
+    filmServer(1, fixtures.heat, (f) => {
+      f.editions[0].subtitleStreams = [];
+    });
+    renderApp('/films/1');
+    expect(await screen.findByText('None for this film')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Find subtitles in Admin' })).toBeInTheDocument();
+  });
+
   it('picking an audio track saves its stream id', async () => {
     const fetchMock = filmServer(1, fixtures.heat);
     renderApp('/films/1');

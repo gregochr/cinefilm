@@ -20,6 +20,7 @@ import {
   resolveAudioChoice,
   resolveSubtitleChoice,
   streamKey,
+  hasSubtitleTracks,
   subtitleOptions,
 } from '../player/tracks.js';
 import { displayName } from '../state/collections.js';
@@ -98,7 +99,8 @@ export default function FilmDetail() {
     return fallback ? String(streamKey(fallback)) : '';
   })();
   const subtitleChoices = subtitleOptions(edition.subtitleStreams);
-  const hasForced = edition.subtitleStreams.some((s) => s.forced);
+  const hasForced =
+    edition.subtitleStreams.some((s) => s.forced) || Boolean(edition.forcedSubtitle);
   const subtitleValue = String(
     subtitle ?? resolveSubtitleChoice(film.editions, edition, prefs.subtitle),
   );
@@ -206,7 +208,7 @@ export default function FilmDetail() {
                 actions.savePreferences({ quality: v });
               }}
             />
-            {edition.subtitleStreams.length === 0 ? (
+            {!hasSubtitleTracks(edition) ? (
               <Picker label="Subtitles" inertText="None for this film">
                 <Link to="/admin" className="settings__link">
                   Find subtitles in Admin

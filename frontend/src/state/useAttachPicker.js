@@ -56,6 +56,8 @@ export function useAttachPicker() {
     },
     editions,
     editionsLoading: filmId != null && film.data?.id !== filmId && film.error == null,
+    editionsError: filmId != null && film.data?.id !== filmId && film.error != null,
+    retryEditions: film.reload,
     edition,
     pickEdition: (id) => {
       setEditionId(id);
