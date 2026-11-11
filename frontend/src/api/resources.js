@@ -70,7 +70,7 @@ export const healthApi = {
 };
 
 export const sessionApi = {
-  status: () => get('/api/session'),
+  status: (options) => get('/api/session', options),
   signIn: (password) => post('/api/session', { password }),
   signOut: () => del('/api/session'),
 };

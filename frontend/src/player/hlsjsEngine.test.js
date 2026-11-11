@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeHls } from '../test/fakeHls.js';
-import { RECONNECT_MS, hlsConfig, startHlsJs } from './hlsjsEngine.js';
+import { RECONNECT_MS, hlsConfig, retryNoAnswer, startHlsJs } from './hlsjsEngine.js';
 import { HEALTHY_MS } from './stepGate.js';
 
 beforeEach(() => {
@@ -72,6 +72,34 @@ describe('hls.js settings', () => {
     }
     // The 503 + Retry-After: 1 the encoder sends while it catches up must be retried, so segments get the most.
     expect(config.fragLoadPolicy.default.errorRetry.maxNumRetry).toBe(8);
+  });
+
+  it('gives a segment 120 s and keeps the playlists’ and the manifest’s 20 s', () => {
+    const config = hlsConfig(0);
+    expect(config.fragLoadPolicy.default.maxLoadTimeMs).toBe(120000);
+    expect(config.fragLoadPolicy.default.maxTimeToFirstByteMs).toBe(10000);
+    expect(config.playlistLoadPolicy.default.maxLoadTimeMs).toBe(20000);
+    expect(config.manifestLoadPolicy.default.maxLoadTimeMs).toBe(20000);
+  });
+
+  it('lets a penalised rung be chosen again after a minute', () => {
+    expect(hlsConfig(0).errorPenaltyExpireMs).toBe(60000);
+  });
+
+  it('gives every errorRetry the no-answer rule', () => {
+    const config = hlsConfig(0);
+    for (const key of ['fragLoadPolicy', 'playlistLoadPolicy', 'manifestLoadPolicy']) {
+      expect(config[key].default.errorRetry.shouldRetry).toBe(retryNoAnswer);
+    }
+    expect(config.fragLoadPolicy.default.timeoutRetry.shouldRetry).toBeUndefined();
+  });
+
+  it('plays segments through the no-progress loader built on the default loader', () => {
+    const { hls } = start();
+    expect(hls.config.fLoader).toBeTypeOf('function');
+    const loader = new hls.config.fLoader({});
+    expect(loader.inner).toBeInstanceOf(FakeHls.DefaultConfig.loader);
+    expect(hlsConfig(0).fLoader).toBeUndefined(); // set where Hls is at hand
   });
 
   it('starts at the requested position, or lets hls.js choose when it is 0', () => {
@@ -201,14 +229,72 @@ describe('throughput', () => {
   });
 });
 
+describe('retryNoAnswer: a request that got no HTTP answer is retried like a 5xx', () => {
+  const config = { maxNumRetry: 8 };
+
+  it('retries status 0 below the limit and not at it', () => {
+    expect(retryNoAnswer(config, 7, false, { code: 0 }, false)).toBe(true);
+    expect(retryNoAnswer(config, 8, false, { code: 0 }, false)).toBe(false);
+  });
+
+  it('keeps hls.js’s own answer for an HTTP answer, a timeout and no response', () => {
+    expect(retryNoAnswer(config, 0, false, { code: 404 }, false)).toBe(false);
+    expect(retryNoAnswer(config, 0, false, { code: 503 }, true)).toBe(true);
+    expect(retryNoAnswer(config, 0, false, { code: 503 }, false)).toBe(false);
+    expect(retryNoAnswer(config, 0, true, undefined, true)).toBe(true);
+    expect(retryNoAnswer(config, 0, true, undefined, false)).toBe(false);
+    expect(retryNoAnswer(config, 0, true, { code: 0 }, false)).toBe(false);
+    expect(retryNoAnswer(config, 0, false, undefined, false)).toBe(false);
+    expect(retryNoAnswer(config, 0, false, undefined, true)).toBe(true);
+  });
+});
+
+describe('a segment that timed out', () => {
+  it('counts as trouble for the step gate: Auto does not step up straight after it', () => {
+    const { hls, advance } = start();
+    hls.manifest(levels, 1);
+    advance(HEALTHY_MS - 1);
+    hls.error({
+      fatal: false,
+      type: 'networkError',
+      details: FakeHls.ErrorDetails.FRAG_LOAD_TIMEOUT,
+    });
+    advance(1); // the healthy minute has not run since the timeout
+    hls.fragLoaded(stats);
+    expect(hls.autoLevelCapping).toBe(1);
+    advance(HEALTHY_MS);
+    hls.fragLoaded(stats);
+    expect(hls.autoLevelCapping).toBe(2);
+  });
+
+  it('is not trouble when another detail fails', () => {
+    const { hls, advance } = start();
+    hls.manifest(levels, 1);
+    advance(HEALTHY_MS - 1);
+    hls.error({
+      fatal: false,
+      type: 'networkError',
+      details: FakeHls.ErrorDetails.FRAG_LOAD_ERROR,
+    });
+    advance(1);
+    hls.fragLoaded(stats);
+    expect(hls.autoLevelCapping).toBe(2);
+  });
+});
+
 describe('a dropped connection', () => {
   const networkError = { fatal: true, type: 'networkError', response: { code: 0 } };
 
-  it('shows Reconnecting once and retries at the playhead every 5 s until a fragment loads', () => {
+  // The element has metadata: it reads its playhead.
+  const withMetadata = (video, currentTime) => {
+    Object.defineProperty(video, 'readyState', { value: 4, configurable: true });
+    video.currentTime = currentTime;
+  };
+
+  it('shows Reconnecting once and restarts once, 5 s after the fatal error, at the playhead', () => {
     const { hls, video, handlers } = start();
     hls.manifest(levels, 3);
-    video.currentTime = 1234.5;
-    hls.error(networkError);
+    withMetadata(video, 1234.5);
     hls.error(networkError);
     expect(handlers.onReconnecting.mock.calls).toEqual([[true]]);
     expect(hls.startLoad).not.toHaveBeenCalled();
@@ -216,20 +302,164 @@ describe('a dropped connection', () => {
     expect(hls.startLoad).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
     expect(hls.startLoad).toHaveBeenCalledWith(1234.5);
+    // Nothing more is scheduled, however long: hls.js's own backoff does the retrying.
+    vi.advanceTimersByTime(RECONNECT_MS * 20);
+    expect(hls.startLoad).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(handlers.onReconnecting.mock.calls).toEqual([[true]]);
+    // The next fatal error schedules the next restart; the notice is still the one episode.
+    hls.error(networkError);
+    expect(handlers.onReconnecting.mock.calls).toEqual([[true]]);
     vi.advanceTimersByTime(RECONNECT_MS);
     expect(hls.startLoad).toHaveBeenCalledTimes(2);
     hls.fragLoaded(stats);
     expect(handlers.onReconnecting.mock.calls).toEqual([[true], [false]]);
-    vi.advanceTimersByTime(RECONNECT_MS * 3);
-    expect(hls.startLoad).toHaveBeenCalledTimes(2);
   });
 
-  it('reloads the master when the manifest never arrived', () => {
+  it('announces a new Reconnecting episode after the first ended', () => {
+    const { hls, handlers } = start();
+    hls.manifest(levels, 3);
+    hls.error(networkError);
+    hls.fragLoaded(stats);
+    hls.error(networkError);
+    expect(handlers.onReconnecting.mock.calls).toEqual([[true], [false], [true]]);
+  });
+
+  it('restarts with loadSource while hls.js has no levels at all (not even an empty list)', () => {
     const { hls } = start();
-    hls.error({ fatal: true, type: 'networkError', response: { code: 0 } });
+    hls.levels = undefined;
+    hls.error(networkError);
     vi.advanceTimersByTime(RECONNECT_MS);
     expect(hls.loadSource).toHaveBeenCalledTimes(2);
+  });
+
+  it('removes its online and waiting listeners on destroy', () => {
+    const remove = vi.spyOn(window, 'removeEventListener');
+    const { engine, video } = start();
+    const removeVideo = vi.spyOn(video, 'removeEventListener');
+    engine.destroy();
+    expect(remove).toHaveBeenCalledWith('online', expect.any(Function));
+    expect(removeVideo).toHaveBeenCalledWith('waiting', expect.any(Function));
+    remove.mockRestore();
+  });
+
+  it('a second fatal error while a restart is pending moves it to 5 s after the second', () => {
+    const { hls } = start();
+    hls.manifest(levels, 3);
+    hls.error(networkError);
+    vi.advanceTimersByTime(3000);
+    hls.error(networkError);
+    vi.advanceTimersByTime(RECONNECT_MS - 1);
     expect(hls.startLoad).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(hls.startLoad).toHaveBeenCalledTimes(1);
+  });
+
+  it('reloads the master when the manifest never arrived, once per fatal manifestLoadError', () => {
+    const { hls } = start();
+    const fatal = {
+      fatal: true,
+      type: 'networkError',
+      details: FakeHls.ErrorDetails.MANIFEST_LOAD_ERROR,
+      response: { code: 0 },
+    };
+    hls.error(fatal);
+    vi.advanceTimersByTime(RECONNECT_MS);
+    expect(hls.loadSource).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(RECONNECT_MS * 5);
+    expect(hls.loadSource).toHaveBeenCalledTimes(2);
+    expect(hls.startLoad).not.toHaveBeenCalled();
+    hls.error(fatal);
+    vi.advanceTimersByTime(RECONNECT_MS);
+    expect(hls.loadSource).toHaveBeenCalledTimes(3);
+  });
+
+  it('a fragment that loads cancels a pending restart', () => {
+    const { hls, handlers } = start();
+    hls.manifest(levels, 3);
+    hls.error(networkError);
+    hls.fragLoaded(stats);
+    expect(handlers.onReconnecting.mock.calls).toEqual([[true], [false]]);
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(RECONNECT_MS * 2);
+    expect(hls.startLoad).not.toHaveBeenCalled();
+  });
+
+  it('restarts at the start position before the first frame: the film start, or -1 from 0:00', () => {
+    const resumed = start({ startSeconds: 93.5 });
+    resumed.hls.manifest(levels, 3);
+    resumed.hls.error(networkError);
+    vi.advanceTimersByTime(RECONNECT_MS);
+    expect(resumed.hls.startLoad).toHaveBeenCalledWith(93.5);
+
+    const fresh = start({ startSeconds: 0 });
+    fresh.hls.manifest(levels, 3);
+    fresh.hls.error(networkError);
+    vi.advanceTimersByTime(RECONNECT_MS);
+    expect(fresh.hls.startLoad).toHaveBeenCalledWith(-1);
+  });
+
+  it('restarts at the playhead once the element has metadata, even at 0:00', () => {
+    const { hls, video } = start({ startSeconds: 93.5 });
+    hls.manifest(levels, 3);
+    withMetadata(video, 0);
+    hls.error(networkError);
+    vi.advanceTimersByTime(RECONNECT_MS);
+    expect(hls.startLoad).toHaveBeenCalledWith(0);
+  });
+
+  it('the online event makes a pending restart at once, and not again at 5 s', () => {
+    const { hls } = start();
+    hls.manifest(levels, 3);
+    hls.error(networkError);
+    window.dispatchEvent(new Event('online'));
+    expect(hls.startLoad).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(RECONNECT_MS * 2);
+    expect(hls.startLoad).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('the online event with no restart pending does nothing, while healthy or reconnecting after one', () => {
+    const { hls } = start();
+    hls.manifest(levels, 3);
+    window.dispatchEvent(new Event('online'));
+    expect(hls.startLoad).not.toHaveBeenCalled();
+    hls.error(networkError);
+    window.dispatchEvent(new Event('online'));
+    expect(hls.startLoad).toHaveBeenCalledTimes(1);
+    window.dispatchEvent(new Event('online')); // the restart was made; hls.js's backoff runs
+    expect(hls.startLoad).toHaveBeenCalledTimes(1);
+  });
+
+  it('the online event restarts with loadSource while there are no levels yet', () => {
+    const { hls } = start();
+    hls.error(networkError);
+    window.dispatchEvent(new Event('online'));
+    expect(hls.loadSource).toHaveBeenCalledTimes(2);
+    expect(hls.startLoad).not.toHaveBeenCalled();
+  });
+
+  it('the online event after destroy() does nothing', () => {
+    const { engine, hls } = start();
+    hls.manifest(levels, 3);
+    hls.error(networkError);
+    engine.destroy();
+    window.dispatchEvent(new Event('online'));
+    expect(hls.startLoad).not.toHaveBeenCalled();
+  });
+
+  it('shows no Reconnecting for an error hls.js marks offline: it waits and resumes by itself', () => {
+    const { hls, handlers } = start();
+    hls.manifest(levels, 3);
+    hls.error({
+      fatal: false,
+      type: 'networkError',
+      details: FakeHls.ErrorDetails.FRAG_LOAD_ERROR,
+      reason: 'offline',
+      response: { code: 0 },
+    });
+    expect(handlers.onReconnecting).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('does not announce Reconnecting for a fragment that loads normally', () => {
@@ -333,17 +563,41 @@ describe('network errors for the health record', () => {
     },
   );
 
-  it('does not take a detail that merely contains TimeOut for a timeout', () => {
+  it('does not count a detail that merely contains TimeOut: only loads that failed or ran out of time count', () => {
     const { hls, onNetworkError } = withHandler();
     hls.error({ fatal: false, type: 'networkError', details: 'TimeOutLater' });
-    expect(onNetworkError).toHaveBeenCalledWith({ timeout: false });
+    expect(onNetworkError).not.toHaveBeenCalled();
   });
 
-  it('reports a network error with no details as not a timeout', () => {
+  it('does not count a network error with no details', () => {
     const { hls, onNetworkError } = withHandler();
     hls.error({ fatal: false, type: 'networkError' });
-    expect(onNetworkError).toHaveBeenCalledWith({ timeout: false });
+    expect(onNetworkError).not.toHaveBeenCalled();
   });
+
+  it.each(['fragLoadError', 'levelLoadError', 'manifestLoadError'])(
+    'counts %s with no status as a network error',
+    (details) => {
+      const { hls, onNetworkError } = withHandler();
+      hls.error({ fatal: false, type: 'networkError', details });
+      expect(onNetworkError.mock.calls).toEqual([[{ timeout: false }]]);
+    },
+  );
+
+  it.each(['fragLoadTimeOut', 'levelLoadTimeOut'])('counts %s as a timeout', (details) => {
+    const { hls, onNetworkError } = withHandler();
+    hls.error({ fatal: false, type: 'networkError', details });
+    expect(onNetworkError.mock.calls).toEqual([[{ timeout: true }]]);
+  });
+
+  it.each(['aborted', 'manifestParsingError', 'levelParsingError', 'levelEmptyError'])(
+    'does not count %s: a load aborted on purpose, or a playlist that arrived but could not be read',
+    (details) => {
+      const { hls, onNetworkError } = withHandler();
+      hls.error({ fatal: false, type: 'networkError', details });
+      expect(onNetworkError).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([404, 503, 500, 403])('does not report an error that has an HTTP status (%i)', (code) => {
     const { hls, onNetworkError } = withHandler();

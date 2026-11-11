@@ -104,9 +104,10 @@ describe('choosing how to play a session', () => {
     engine.destroy();
   });
 
-  it('is null (direct play) when hls.js cannot be loaded', async () => {
+  it('is null (direct play) when hls.js cannot be loaded although the server answers', async () => {
     const loadHls = vi.fn().mockRejectedValue(new Error('chunk failed'));
     expect(await start(videoThat(false), { loadHls })).toBeNull();
+    expect(loadHls).toHaveBeenCalledTimes(2); // the first try, and one more at once
   });
 
   it('says which engine it started: hlsjs, with its destroy', async () => {
@@ -142,4 +143,155 @@ describe('choosing how to play a session', () => {
       ).toBe(expected);
     },
   );
+});
+
+// A failed hls.js chunk: ask the server before waiting. Plan: poor-link-plan.md, section 1 ("The hls.js chunk").
+describe('when hls.js cannot be loaded', () => {
+  const failing = (...results) => {
+    const loadHls = vi.fn();
+    results.forEach((result) =>
+      result === 'fail'
+        ? loadHls.mockRejectedValueOnce(new Error('chunk failed'))
+        : loadHls.mockResolvedValueOnce(FakeHls),
+    );
+    return loadHls;
+  };
+
+  it('the server answers: one more try at once, and a second try that works starts the engine', async () => {
+    const loadHls = failing('fail', 'ok');
+    const reachable = vi.fn().mockResolvedValue(true);
+    const wait = vi.fn();
+    const engine = await start(videoThat(false), { loadHls, reachable, wait });
+    expect(loadHls).toHaveBeenCalledTimes(2);
+    expect(wait).not.toHaveBeenCalled();
+    expect(engine.kind).toBe('hlsjs');
+    engine.destroy();
+  });
+
+  it('the server answers but the second try fails too: null, and no notice', async () => {
+    const onRetrying = vi.fn();
+    const loadHls = failing('fail', 'fail', 'fail');
+    const result = await start(videoThat(false), {
+      loadHls,
+      reachable: vi.fn().mockResolvedValue(true),
+      onRetrying,
+    });
+    expect(result).toBeNull();
+    expect(loadHls).toHaveBeenCalledTimes(2);
+    expect(onRetrying).not.toHaveBeenCalled();
+    expect(FakeHls.instances).toHaveLength(0);
+  });
+
+  it('the server does not answer (or answers 502): Reconnecting, tried again after 1 s, 2 s, 4 s, then the engine starts', async () => {
+    const onRetrying = vi.fn();
+    const loadHls = failing('fail', 'fail', 'fail', 'ok');
+    const reachable = vi.fn().mockResolvedValue(false);
+    const wait = vi.fn().mockResolvedValue(undefined);
+    const engine = await start(videoThat(false), { loadHls, reachable, wait, onRetrying });
+    expect(wait.mock.calls).toEqual([[1000], [2000], [4000]]);
+    expect(onRetrying.mock.calls).toEqual([[true], [false]]);
+    expect(loadHls).toHaveBeenCalledTimes(4);
+    expect(FakeHls.instances).toHaveLength(1);
+    engine.destroy();
+  });
+
+  it('keeps trying after twenty failures with no answer', async () => {
+    const loadHls = vi.fn();
+    for (let i = 0; i < 20; i += 1) loadHls.mockRejectedValueOnce(new Error('chunk failed'));
+    loadHls.mockResolvedValue(FakeHls);
+    const wait = vi.fn().mockResolvedValue(undefined);
+    const engine = await start(videoThat(false), {
+      loadHls,
+      reachable: vi.fn().mockResolvedValue(false),
+      wait,
+    });
+    expect(engine.kind).toBe('hlsjs');
+    expect(wait).toHaveBeenCalledTimes(20);
+    engine.destroy();
+  });
+
+  it('a server that answers after a failed wait gives one more try and then null, notice off', async () => {
+    const reachable = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    const onRetrying = vi.fn();
+    const result = await start(videoThat(false), {
+      loadHls: failing('fail', 'fail', 'fail'),
+      reachable,
+      wait: vi.fn().mockResolvedValue(undefined),
+      onRetrying,
+    });
+    expect(result).toBeNull();
+    expect(onRetrying.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it('cancelled during a wait: null, with hls.js never built and nothing called back after', async () => {
+    let cancelled = false;
+    const onRetrying = vi.fn();
+    const wait = vi.fn().mockImplementation(async () => {
+      cancelled = true;
+    });
+    const loadHls = failing('fail', 'ok');
+    const result = await start(videoThat(false), {
+      loadHls,
+      reachable: vi.fn().mockResolvedValue(false),
+      wait,
+      isCancelled: () => cancelled,
+      onRetrying,
+    });
+    expect(result).toBeNull();
+    expect(loadHls).toHaveBeenCalledTimes(1); // no further try after the cancelled wait
+    expect(FakeHls.instances).toHaveLength(0);
+    expect(onRetrying.mock.calls).toEqual([[true]]); // only what came before the cancellation
+  });
+
+  it('cancelled while the server is asked: null and nothing more', async () => {
+    let cancelled = false;
+    const loadHls = failing('fail', 'ok');
+    const reachable = vi.fn().mockImplementation(async () => {
+      cancelled = true;
+      return false;
+    });
+    const onRetrying = vi.fn();
+    const wait = vi.fn();
+    const result = await start(videoThat(false), {
+      loadHls,
+      reachable,
+      wait,
+      isCancelled: () => cancelled,
+      onRetrying,
+    });
+    expect(result).toBeNull();
+    expect(loadHls).toHaveBeenCalledTimes(1);
+    expect(wait).not.toHaveBeenCalled();
+    expect(onRetrying).not.toHaveBeenCalled();
+  });
+
+  it('cancelled straight after the first failure: null without asking the server', async () => {
+    const reachable = vi.fn();
+    const result = await start(videoThat(false), {
+      loadHls: failing('fail'),
+      reachable,
+      isCancelled: () => true,
+    });
+    expect(result).toBeNull();
+    expect(reachable).not.toHaveBeenCalled();
+  });
+
+  it('really waits between tries with its own timer by default', async () => {
+    vi.useFakeTimers();
+    try {
+      const loadHls = failing('fail', 'ok');
+      const pending = start(videoThat(false), {
+        loadHls,
+        reachable: vi.fn().mockResolvedValue(false),
+      });
+      await vi.advanceTimersByTimeAsync(999);
+      expect(loadHls).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      const engine = await pending;
+      expect(loadHls).toHaveBeenCalledTimes(2);
+      engine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
