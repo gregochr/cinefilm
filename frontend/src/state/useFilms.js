@@ -2,14 +2,23 @@ import { useCallback, useState } from 'react';
 import { editionsApi, filmsApi } from '../api/resources.js';
 import { useResource } from './useResource.js';
 
+const REVALIDATE = { cache: 'revalidate' };
+/** The Player's film: one Film detail loaded under a minute ago is used as it is, with no second request. */
+const PLAY_FRESH = { cache: 'fresh', maxAgeMs: 60_000 };
+
 /** The library list. `params`: { q, sort, genre, decade, collection, show }. */
 export function useFilms(params) {
   const key = `films:${JSON.stringify(params)}`;
-  return useResource(key, (options) => filmsApi.list(params, options));
+  return useResource(key, (options) => filmsApi.list(params, options), REVALIDATE);
 }
 
 export function useFilm(id) {
-  return useResource(`film:${id}`, (options) => filmsApi.get(id, options));
+  return useResource(`film:${id}`, (options) => filmsApi.get(id, options), REVALIDATE);
+}
+
+/** The film the Player starts: the same entry as `useFilm`, but never shown older than a minute and never refetched under it. */
+export function useFilmToPlay(id) {
+  return useResource(`film:${id}`, (options) => filmsApi.get(id, options), PLAY_FRESH);
 }
 
 /**

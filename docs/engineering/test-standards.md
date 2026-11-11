@@ -354,6 +354,9 @@ in jsdom.
   `new Promise(() => {})` handed to a form action/`useActionState` poisons every later submit in the file. (A
   never-settling `fetch` to hold a screen in its Loading state is fine: that is an effect, not an action.) Hand
   the test the resolver and settle it before the test ends.
+- **The browse cache is emptied after every test** by `src/test/setup.js` (`clearResourceCache()`, which also resets
+  its clock and its count of changes in flight), so no test sees another's cached answers. A test of the cache
+  itself injects a clock with `setResourceCacheClock`.
 - **A timer the code arms must not outlive the test.** Release what a test opens in `afterEach`, through the
   handle the code gives for it.
 - **Do not leak mock implementations between tests.** `installFetch` stubs the global and every file does

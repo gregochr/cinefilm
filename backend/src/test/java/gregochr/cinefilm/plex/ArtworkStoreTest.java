@@ -196,4 +196,11 @@ class ArtworkStoreTest {
         assertThat(ArtworkStore.isStored("/abc.jpg")).isFalse();
         assertThat(ArtworkStore.isStored(null)).isFalse();
     }
+
+    @Test
+    void aNameThatWouldLeaveTheFolderIsEmptyAndOneInsideIsNormalised(@TempDir Path folder) {
+        assertThat(ArtworkStore.within(folder, "../x.jpg")).isEmpty();
+        assertThat(ArtworkStore.within(folder, "a/../../x.jpg")).isEmpty();
+        assertThat(ArtworkStore.within(folder, "a/../x.jpg")).contains(folder.resolve("x.jpg"));
+    }
 }
