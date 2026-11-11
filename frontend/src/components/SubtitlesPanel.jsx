@@ -205,7 +205,7 @@ export default function SubtitlesPanel({ version }) {
             <Item
               key={item.id}
               item={item}
-              busy={subtitles.busy === item.id}
+              busy={subtitles.busy !== null}
               problem={subtitles.problem?.id === item.id ? subtitles.problem.text : null}
               actions={subtitles}
             />

@@ -359,6 +359,49 @@ describe('Admin: Subtitles panel, timing and checking', () => {
   });
 });
 
+describe('Admin: Subtitles panel, one request at a time', () => {
+  it('disables every row’s actions while one row’s request is pending, then enables them again', async () => {
+    let release;
+    const pending = new Promise((resolve) => {
+      release = resolve;
+    });
+    const items = [
+      file({ id: 1, path: 'A/One.en.forced.srt' }),
+      file({ id: 2, path: 'B/Two.en.forced.srt' }),
+    ];
+    installFetch((method, url, init) => {
+      if (url === '/api/admin/subtitles') return respond(items);
+      if (/\/cues$/.test(url)) return respond(CUES);
+      if (url === '/api/admin/subtitles/1/offset') {
+        return pending.then(() =>
+          respond({ ...items[0], offsetMs: JSON.parse(init.body).offsetMs }),
+        );
+      }
+      return null;
+    });
+    renderApp('/admin');
+    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    const rowOne = (await within(panel).findByText('A/One.en.forced.srt')).closest('li');
+    const rowTwo = within(panel).getByText('B/Two.en.forced.srt').closest('li');
+    for (const row of [rowOne, rowTwo]) {
+      await userEvent.click(within(row).getByRole('button', { name: /Show the cues/ }));
+      await within(row).findByRole('group', { name: 'Timing' });
+    }
+    const nudgeTwo = within(rowTwo).getByRole('button', { name: 'Show lines 1 second later' });
+    expect(nudgeTwo).toBeEnabled();
+
+    await userEvent.click(
+      within(rowOne).getByRole('button', { name: 'Show lines 1 second later' }),
+    );
+
+    expect(nudgeTwo).toBeDisabled();
+    expect(within(rowTwo).getByRole('button', { name: 'Looks right' })).toBeDisabled();
+    expect(within(rowTwo).getByRole('button', { name: /^Move/ })).toBeDisabled();
+    release();
+    await waitFor(() => expect(nudgeTwo).toBeEnabled());
+  });
+});
+
 describe('Admin: Subtitles panel, quick nudges', () => {
   it('a second nudge starts from the first one’s answer while the refreshed list has not arrived', async () => {
     const bodies = [];
