@@ -216,6 +216,7 @@ export function useStream({
         }
       }
       setReusedKbps(reused);
+      const chosenOn = networkGeneration();
       setStream((s) =>
         s.mode === 'unavailable' ? { mode: 'loading', rung: null, renditions: [] } : s,
       );
@@ -224,7 +225,10 @@ export function useStream({
         const next = { quality, startMs };
         const audio = latest.current.audioStreamId;
         if (audio !== null && audio !== undefined) next.audioStreamId = audio;
-        if (probeKbps !== null) next.probeKbps = probeKbps;
+        // A speed chosen on another network says nothing about this one: start low, Auto steps up.
+        if (probeKbps !== null) {
+          next.probeKbps = networkGeneration() === chosenOn ? probeKbps : 0;
+        }
         return next;
       };
       const created = await createSession(

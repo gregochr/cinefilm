@@ -798,6 +798,25 @@ describe('a session request that gets no answer', () => {
     expect(video).not.toHaveAttribute('src');
   });
 
+  it('keeps the chosen start speed in a retried request when the network has not changed', async () => {
+    sessionStorage.setItem('cinefilm.speed', JSON.stringify({ kbps: 100000, at: Date.now() }));
+    const { log } = await openPending((n) => (n === 1 ? noAnswer() : session()));
+    await screen.findByText(NOTICE);
+    await vi.waitFor(() => expect(FakeHls.instances).toHaveLength(1), { timeout: 4000 }); // the retry waits its real 1 s: `online` would itself be a network change
+    expect(log.posted[1].probeKbps).toBe(100000);
+  });
+
+  it('sends probeKbps 0 in a retried request when the network changed while it was retried', async () => {
+    sessionStorage.setItem('cinefilm.speed', JSON.stringify({ kbps: 100000, at: Date.now() }));
+    const { log } = await openPending((n) => (n === 1 ? noAnswer() : session()));
+    await screen.findByText(NOTICE);
+    await act(async () => window.dispatchEvent(new Event('offline')));
+    await online();
+    await instances(1);
+    expect(log.posted[0].probeKbps).toBe(100000);
+    expect(log.posted[1].probeKbps).toBe(0);
+  });
+
   it('asks for the audio track chosen while the request is being retried', async () => {
     const { log } = await openPending((n) => (n === 1 ? noAnswer() : session()));
     await screen.findByText(NOTICE);
