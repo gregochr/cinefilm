@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from './client.js';
 import { handle } from './fixtureServer.js';
 
 beforeEach(() => vi.useFakeTimers());
@@ -34,6 +35,8 @@ describe('fixture server', () => {
   it('serves the home payload', async () => {
     const home = await call('GET', '/api/home');
     expect(home.hero.title).toBe('Heat');
+    expect(home.hero.inProgress).toBe(true);
+    expect(home.continueWatchingTotal).toBe(1 + home.continueWatching.length);
   });
 
   describe('the film list', () => {
@@ -47,13 +50,35 @@ describe('fixture server', () => {
       expect(titles(await call('GET', '/api/films?q=HEAT'))).toEqual(['Heat']);
     });
 
-    it('filters watched and unwatched', async () => {
+    it('filters in progress, watched and unwatched: exclusive, and together every film', async () => {
+      const inProgress = await call('GET', '/api/films?show=in-progress');
       const watched = await call('GET', '/api/films?show=watched');
       const unwatched = await call('GET', '/api/films?show=unwatched');
-      expect(watched.films.every((f) => f.watched)).toBe(true);
-      expect(unwatched.films.every((f) => !f.watched)).toBe(true);
+      expect(inProgress.total).toBeGreaterThan(0);
+      expect(inProgress.films.every((f) => f.inProgress)).toBe(true);
+      expect(watched.films.every((f) => f.watched && !f.inProgress)).toBe(true);
+      expect(unwatched.films.every((f) => !f.watched && !f.inProgress)).toBe(true);
       const all = await call('GET', '/api/films');
-      expect(watched.total + unwatched.total).toBe(all.total);
+      expect(inProgress.total + watched.total + unwatched.total).toBe(all.total);
+    });
+
+    it('gives every card the in-progress fields', async () => {
+      const { films } = await call('GET', '/api/films');
+      films.forEach((f) => {
+        expect(typeof f.inProgress).toBe('boolean');
+        expect(typeof f.hiddenFromContinueWatching).toBe('boolean');
+        expect(f.lastWatchedAt === null || typeof f.lastWatchedAt === 'string').toBe(true);
+      });
+    });
+
+    it('sorts by last watched: newest first, never played last, ties by title', async () => {
+      const { films } = await call('GET', '/api/films?sort=last-watched');
+      const stamps = films.map((f) => f.lastWatchedAt);
+      const played = stamps.filter(Boolean);
+      expect(stamps.slice(0, played.length)).toEqual([...played].sort().reverse());
+      expect(stamps.slice(played.length).every((t) => t === null)).toBe(true);
+      const never = films.slice(played.length).map((f) => f.title);
+      expect(never).toEqual([...never].sort((a, b) => a.localeCompare(b)));
     });
 
     it('filters a decade as [decade, decade + 10)', async () => {
@@ -161,5 +186,93 @@ describe('fixture server: Edit editions', () => {
       filmId: 40,
       newFilmIds: [],
     });
+  });
+});
+
+describe('fixture server: Admin settings', () => {
+  afterEach(async () => {
+    await call('PUT', '/api/admin/settings', { continueWatchingMinMinutes: 5 });
+  });
+
+  it('starts at five minutes with the fixture films in progress counted', async () => {
+    expect(await call('GET', '/api/admin/settings')).toEqual({
+      continueWatchingMinMinutes: 5,
+      inProgressCount: 5,
+    });
+  });
+
+  it('recomputes the count from the new minimum', async () => {
+    expect(await call('PUT', '/api/admin/settings', { continueWatchingMinMinutes: 30 })).toEqual({
+      continueWatchingMinMinutes: 30,
+      inProgressCount: 4,
+    });
+    expect((await call('GET', '/api/admin/settings')).continueWatchingMinMinutes).toBe(30);
+    expect(await call('PUT', '/api/admin/settings', { continueWatchingMinMinutes: 0 })).toEqual({
+      continueWatchingMinMinutes: 0,
+      inProgressCount: 5,
+    });
+  });
+
+  it('moves the Library filter, Home and the other cards with the minimum', async () => {
+    const inProgressTitles = async () =>
+      titles(await call('GET', '/api/films?show=in-progress&sort=last-watched'));
+    expect(await inProgressTitles()).toEqual([
+      'Heat',
+      'Arrival',
+      'Chinatown',
+      'Paris, Texas',
+      'Moon',
+    ]);
+    const before = await call('GET', '/api/home');
+    expect(before.continueWatchingTotal).toBe(5);
+
+    await call('PUT', '/api/admin/settings', { continueWatchingMinMinutes: 30 });
+
+    expect(await inProgressTitles()).toEqual(['Heat', 'Arrival', 'Paris, Texas', 'Moon']);
+    const home = await call('GET', '/api/home');
+    expect(home.hero.title).toBe('Heat');
+    expect(home.continueWatching.map((f) => f.title)).toEqual(['Arrival', 'Paris, Texas', 'Moon']);
+    expect(home.continueWatchingTotal).toBe(4);
+    const unwatched = await call('GET', '/api/films?show=unwatched');
+    expect(titles(unwatched)).toContain('Chinatown');
+    const chinatown = (await call('GET', '/api/films?q=chinatown')).films[0];
+    expect(chinatown.inProgress).toBe(false);
+    expect(chinatown.progress).not.toBeNull();
+    const person = await call('GET', '/api/people/11');
+    person.films.forEach((entry) => {
+      expect(entry.film.inProgress).toBe(
+        !!entry.film.progress && entry.film.progress.positionMs >= 30 * 60000,
+      );
+    });
+    (await call('GET', '/api/collections/1')).parts
+      .filter((part) => part.film)
+      .forEach((part) => expect(part.film.inProgress).toBe(false));
+
+    await call('PUT', '/api/admin/settings', { continueWatchingMinMinutes: 0 });
+
+    expect(await inProgressTitles()).toHaveLength(5);
+    expect((await call('GET', '/api/home')).continueWatchingTotal).toBe(5);
+  });
+
+  // The rejection is caught before the fake clock advances, so it is never unhandled.
+  async function failure(body) {
+    const pending = handle('PUT', '/api/admin/settings', body).catch((error) => error);
+    await vi.advanceTimersByTimeAsync(80);
+    return pending;
+  }
+
+  it.each([-1, 31, 2.5, null, undefined, '5'])('refuses %s with a 400', async (minutes) => {
+    const error = await failure({ continueWatchingMinMinutes: minutes });
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(400);
+  });
+
+  it('refuses a missing body with a 400', async () => {
+    expect((await failure(undefined)).status).toBe(400);
+  });
+
+  it('keeps the old minimum after a refused change', async () => {
+    await failure({ continueWatchingMinMinutes: 99 });
+    expect((await call('GET', '/api/admin/settings')).continueWatchingMinMinutes).toBe(5);
   });
 });

@@ -32,19 +32,44 @@ class FilmMapperTest {
     private final Edition edition = edition(film, 10L, "Theatrical", 170 * MIN, null);
 
     @Test
+    void aCardOfAnUnplayedFilmIsNotInProgressHasNoLastWatchedTimeAndIsNotHidden() {
+        var card = FilmMapper.card(view(film), 0);
+
+        assertThat(card.inProgress()).isFalse();
+        assertThat(card.lastWatchedAt()).isNull();
+        assertThat(card.hiddenFromContinueWatching()).isFalse();
+        assertThat(card.progress()).isNull();
+    }
+
+    @Test
+    void aCardBelowTheMinimumKeepsItsProgressButIsNotInProgress() {
+        var played = gregochr.cinefilm.TestData.state(edition, 4 * MIN, false, NOW, null);
+        played.setHiddenFromContinueWatching(true);
+
+        var below = FilmMapper.card(view(film, played), 5 * MIN);
+        var atMinimum = FilmMapper.card(view(film, played), 4 * MIN);
+
+        assertThat(below.inProgress()).isFalse();
+        assertThat(below.progress().positionMs()).isEqualTo(4 * MIN);
+        assertThat(below.lastWatchedAt()).isEqualTo(NOW);
+        assertThat(below.hiddenFromContinueWatching()).isTrue();
+        assertThat(atMinimum.inProgress()).isTrue();
+    }
+
+    @Test
     void aCardHasACollectionIdOnlyWhenItsCollectionIsInTheQualifyingSet() {
         var saga = gregochr.cinefilm.TestData.collection("Saga");
         saga.setId(7L);
         film.setCollection(saga);
 
-        assertThat(FilmMapper.card(view(film)).sortTitle()).isEqualTo(film.getSortTitle());
+        assertThat(FilmMapper.card(view(film), 0).sortTitle()).isEqualTo(film.getSortTitle());
         film.setTitleAndSort("Zulu", "aardvark");
-        assertThat(FilmMapper.card(view(film)).sortTitle()).isEqualTo("aardvark");
-        assertThat(FilmMapper.card(view(film)).collectionId()).isNull();
-        assertThat(FilmMapper.card(view(film), java.util.Set.of(7L)).collectionId()).isEqualTo(7L);
-        assertThat(FilmMapper.card(view(film), java.util.Set.of(8L)).collectionId()).isNull();
+        assertThat(FilmMapper.card(view(film), 0).sortTitle()).isEqualTo("aardvark");
+        assertThat(FilmMapper.card(view(film), 0).collectionId()).isNull();
+        assertThat(FilmMapper.card(view(film), java.util.Set.of(7L), 0).collectionId()).isEqualTo(7L);
+        assertThat(FilmMapper.card(view(film), java.util.Set.of(8L), 0).collectionId()).isNull();
         film.setCollection(null);
-        assertThat(FilmMapper.card(view(film), java.util.Set.of(7L)).collectionId()).isNull();
+        assertThat(FilmMapper.card(view(film), java.util.Set.of(7L), 0).collectionId()).isNull();
     }
 
     @Test

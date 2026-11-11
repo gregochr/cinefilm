@@ -247,6 +247,23 @@ When resuming, the frame at the resume point is shown behind the startup indicat
     - **Elsewhere:** the Collections tab in Library, the optional "Group collections" tiles in the Films grid, and a
       link to the film's collection on Film detail. Home has no Collections row and Library no Collection filter
       (owner, 2026-11-09; `docs/design/library-collections/`).
+17. **Continue watching: one row, and a minimum watch time** (owner, 2026-11-10; plan in
+    `docs/engineering/continue-watching-row-plan.md`).
+    - **In progress:** the film's last played edition has a saved position at or above the minimum watch time (and
+      above 0). Watched status doesn't matter: a rewatch is in progress, and the position is 0 once a film is watched.
+    - **Minimum watch time:** set in Admin, 0–30 minutes, default 5. It applies at query time, so no progress is
+      changed. A film below it keeps its resume position (Film detail still offers "Resume from …") but counts as
+      unwatched, or as watched if it was watched before.
+    - **Home:** the hero (newest in progress) and **at most 4** cards in one row, at every width; films removed from
+      Continue watching are left out. The caption is "{total} in progress" (the hero included). "See all" (to
+      Library, In progress, Last watched) shows only when the total is over 5. Removing a card or marking it watched
+      slides the next film in; Undo puts it back.
+    - **Library Show:** All / In progress / Unwatched / Watched, mutually exclusive. **In progress includes films
+      removed from Continue watching** (the filter is about state, not the Home row), so its count can be higher than
+      Home's. **Watched** is watched and not in progress; **Unwatched** is the rest.
+    - **Library Sort:** adds **Last watched**; choosing In progress switches to it. In-progress posters show the
+      progress bar, "{time} left" and the Continue watching menu.
+    - A "+N more" tile as a fifth card was considered and rejected.
 
 17. **Where a film is watched: the network question** (owner, 2026-11-10; `docs/engineering/playback-health-plan.md`).
     - **Why:** every viewing is recorded with where it happened (Home, Train, Away), so playback can later be

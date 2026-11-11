@@ -10,6 +10,7 @@ import {
   peopleApi,
   sessionApi,
   sessionsApi,
+  settingsApi,
 } from './resources.js';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -162,6 +163,27 @@ describe('image URLs', () => {
     expect(adminApi.playbackHealthUrl('3f6c1d2e-8a4b-4c7e-9b15-2d0e6f7a1c34')).toBe(
       '/api/admin/playback-health/3f6c1d2e-8a4b-4c7e-9b15-2d0e6f7a1c34',
     );
+  });
+
+  it('reads the settings with GET and saves the minimum watch time with PUT', async () => {
+    const last = stubFetch();
+    await settingsApi.get();
+    expect(last()).toMatchObject({ path: '/api/admin/settings', method: 'GET' });
+    await settingsApi.update(10);
+    expect(last()).toEqual({
+      path: '/api/admin/settings',
+      method: 'PUT',
+      body: { continueWatchingMinMinutes: 10 },
+    });
+  });
+
+  it('asks for the In progress filter and the Last watched sort by name', async () => {
+    const last = stubFetch();
+    await filmsApi.list({ show: 'in-progress', sort: 'last-watched' });
+    expect(last()).toMatchObject({
+      path: '/api/films?show=in-progress&sort=last-watched',
+      method: 'GET',
+    });
   });
 
   it('creates a playback session with POST and removes it with DELETE', async () => {

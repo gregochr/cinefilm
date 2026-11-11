@@ -6,6 +6,8 @@ import static gregochr.cinefilm.TestData.credit;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.film;
 import static gregochr.cinefilm.TestData.person;
+import static gregochr.cinefilm.TestData.state;
+import static gregochr.cinefilm.TestData.view;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyCollection;
@@ -18,6 +20,7 @@ import gregochr.cinefilm.film.CreditRole;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmView;
 import gregochr.cinefilm.film.LibraryLoader;
+import gregochr.cinefilm.settings.ServerSettingsService;
 import gregochr.cinefilm.person.PersonDtos.PersonPage;
 import java.util.Collection;
 import java.util.List;
@@ -42,12 +45,15 @@ class PersonServiceTest {
     @Mock
     private LibraryLoader loader;
 
+    @Mock
+    private ServerSettingsService settings;
+
     private PersonService service;
     private Person welles;
 
     @BeforeEach
     void setUp() {
-        service = new PersonService(people, credits, loader);
+        service = new PersonService(people, credits, loader, settings);
         welles = person(PERSON_ID, "Orson Welles");
         welles.setProfilePath("/welles.jpg");
     }
@@ -104,6 +110,23 @@ class PersonServiceTest {
         assertThat(page.films().get(0).film().title()).isEqualTo("Citizen Kane");
         assertThat(page.films().get(0).roles())
             .containsExactly("Director", "as Charles Foster Kane", "Actor", "Actor");
+    }
+
+    @Test
+    void cardsUseTheServersMinimumWatchTime() {
+        when(settings.minWatchMs()).thenReturn(5 * MIN);
+        Film kane = ownedFilm(1L, "Citizen Kane", 1941);
+        Credit acted = credit(kane, welles, CreditRole.CAST, "Kane", 0);
+        when(people.findById(PERSON_ID)).thenReturn(Optional.of(welles));
+        when(credits.findByPersonId(PERSON_ID)).thenReturn(List.of(acted));
+        when(loader.views(anyCollection())).thenReturn(List.of(
+            view(kane, state(kane.getEditions().get(0), 4 * MIN, false, NOW, null))));
+
+        assertThat(service.get(PERSON_ID).films().get(0).film().inProgress()).isFalse();
+
+        when(settings.minWatchMs()).thenReturn(4 * MIN);
+
+        assertThat(service.get(PERSON_ID).films().get(0).film().inProgress()).isTrue();
     }
 
     @Test

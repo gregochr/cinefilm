@@ -13,7 +13,10 @@
         "backdropPath": null,
         "watched": true,
         "progress": null,
-        "director": "Ridley Scott"
+        "director": "Ridley Scott",
+        "inProgress": false,
+        "lastWatchedAt": "2025-12-24T20:00:00Z",
+        "hiddenFromContinueWatching": false
       }
     },
     {
@@ -32,7 +35,10 @@
         "backdropPath": null,
         "watched": false,
         "progress": null,
-        "director": null
+        "director": null,
+        "inProgress": false,
+        "lastWatchedAt": null,
+        "hiddenFromContinueWatching": false
       }
     },
     {

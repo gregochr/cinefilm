@@ -11,7 +11,10 @@
       "runtimeMs": 10200000,
       "editionId": 11
     },
-    "director": "Michael Mann"
+    "director": "Michael Mann",
+    "inProgress": true,
+    "lastWatchedAt": "2026-11-04T20:00:00Z",
+    "hiddenFromContinueWatching": false
   },
   "continueWatching": [
     {
@@ -26,7 +29,10 @@
         "runtimeMs": 6960000,
         "editionId": 21
       },
-      "director": "Denis Villeneuve"
+      "director": "Denis Villeneuve",
+      "inProgress": true,
+      "lastWatchedAt": "2026-11-03T20:00:00Z",
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 3,
@@ -40,7 +46,10 @@
         "runtimeMs": 7800000,
         "editionId": 31
       },
-      "director": "Roman Polanski"
+      "director": "Roman Polanski",
+      "inProgress": true,
+      "lastWatchedAt": "2026-11-02T20:00:00Z",
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 4,
@@ -54,7 +63,10 @@
         "runtimeMs": 7200000,
         "editionId": 41
       },
-      "director": null
+      "director": null,
+      "inProgress": true,
+      "lastWatchedAt": "2026-11-01T20:00:00Z",
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 5,
@@ -68,9 +80,13 @@
         "runtimeMs": 5820000,
         "editionId": 51
       },
-      "director": null
+      "director": null,
+      "inProgress": true,
+      "lastWatchedAt": "2026-10-31T20:00:00Z",
+      "hiddenFromContinueWatching": false
     }
   ],
+  "continueWatchingTotal": 5,
   "recentlyAdded": [
     {
       "id": 7,
@@ -80,7 +96,10 @@
       "backdropPath": null,
       "watched": true,
       "progress": null,
-      "director": "Ridley Scott"
+      "director": "Ridley Scott",
+      "inProgress": false,
+      "lastWatchedAt": "2025-12-24T20:00:00Z",
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 100,
@@ -90,7 +109,10 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 101,
@@ -100,7 +122,10 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 102,
@@ -110,7 +135,10 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 103,
@@ -120,7 +148,10 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 104,
@@ -130,7 +161,10 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 105,
@@ -140,7 +174,10 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     }
   ],
   "notWatchedInYears": [
@@ -152,7 +189,10 @@
       "backdropPath": null,
       "watched": true,
       "progress": null,
-      "director": "Ridley Scott"
+      "director": "Ridley Scott",
+      "inProgress": false,
+      "lastWatchedAt": "2025-12-24T20:00:00Z",
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 106,
@@ -162,7 +202,10 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 107,
@@ -172,7 +215,10 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 108,
@@ -182,7 +228,10 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 109,
@@ -192,7 +241,10 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 110,
@@ -202,7 +254,10 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     },
     {
       "id": 111,
@@ -212,7 +267,10 @@
       "backdropPath": null,
       "watched": false,
       "progress": null,
-      "director": null
+      "director": null,
+      "inProgress": false,
+      "lastWatchedAt": null,
+      "hiddenFromContinueWatching": false
     }
   ],
   "weeklyTheme": {
@@ -233,7 +291,10 @@
           "runtimeMs": 7800000,
           "editionId": 31
         },
-        "director": "Roman Polanski"
+        "director": "Roman Polanski",
+        "inProgress": true,
+        "lastWatchedAt": "2026-10-30T20:00:00Z",
+        "hiddenFromContinueWatching": false
       },
       {
         "id": 112,
@@ -243,7 +304,10 @@
         "backdropPath": null,
         "watched": false,
         "progress": null,
-        "director": null
+        "director": null,
+        "inProgress": false,
+        "lastWatchedAt": null,
+        "hiddenFromContinueWatching": false
       },
       {
         "id": 7,
@@ -253,7 +317,10 @@
         "backdropPath": null,
         "watched": true,
         "progress": null,
-        "director": "Ridley Scott"
+        "director": "Ridley Scott",
+        "inProgress": false,
+        "lastWatchedAt": "2025-12-24T20:00:00Z",
+        "hiddenFromContinueWatching": false
       },
       {
         "id": 113,
@@ -263,7 +330,10 @@
         "backdropPath": null,
         "watched": false,
         "progress": null,
-        "director": null
+        "director": null,
+        "inProgress": false,
+        "lastWatchedAt": null,
+        "hiddenFromContinueWatching": false
       },
       {
         "id": 114,
@@ -273,7 +343,10 @@
         "backdropPath": null,
         "watched": false,
         "progress": null,
-        "director": null
+        "director": null,
+        "inProgress": false,
+        "lastWatchedAt": null,
+        "hiddenFromContinueWatching": false
       },
       {
         "id": 115,
@@ -283,7 +356,10 @@
         "backdropPath": null,
         "watched": false,
         "progress": null,
-        "director": null
+        "director": null,
+        "inProgress": false,
+        "lastWatchedAt": null,
+        "hiddenFromContinueWatching": false
       }
     ]
   }

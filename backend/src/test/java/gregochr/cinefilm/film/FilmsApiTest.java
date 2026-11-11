@@ -132,6 +132,47 @@ class FilmsApiTest extends ApiTestBase {
     }
 
     @Test
+    void filmCardCarriesTheInProgressFields() throws Exception {
+        mvc.perform(get("/api/films").param("q", "heat"))
+            .andExpect(jsonPath("$.films[0].inProgress").value(true))
+            .andExpect(jsonPath("$.films[0].lastWatchedAt").value(NOW.minusSeconds(60).toString()))
+            .andExpect(jsonPath("$.films[0].hiddenFromContinueWatching").value(false));
+        mvc.perform(get("/api/films").param("q", "third"))
+            .andExpect(jsonPath("$.films[0].inProgress").value(false))
+            .andExpect(jsonPath("$.films[0].lastWatchedAt").value(NOW.minus(Duration.ofDays(5)).toString()));
+        mvc.perform(get("/api/films").param("q", "chinatown"))
+            .andExpect(jsonPath("$.films[0].inProgress").value(false))
+            .andExpect(jsonPath("$.films[0].lastWatchedAt").value(nullValue()))
+            .andExpect(jsonPath("$.films[0].hiddenFromContinueWatching").value(false));
+    }
+
+    @Test
+    void showInProgressAndSortLastWatchedFollowTheMinimumAndIncludeRemovedFilms() throws Exception {
+        Film tiny = film(null, "Tiny", 2001, NOW.minus(Duration.ofDays(50)));
+        Edition tinyEdition = edition(tiny, null, "Theatrical Cut", 100 * MIN, null);
+        save(tiny);
+        saveState(state(tinyEdition, 2 * MIN, false, NOW.minusSeconds(10), null));
+        Film removed = film(null, "Removed", 2002, NOW.minus(Duration.ofDays(60)));
+        Edition removedEdition = edition(removed, null, "Theatrical Cut", 100 * MIN, null);
+        save(removed);
+        var removedState = state(removedEdition, 30 * MIN, false, NOW.minusSeconds(120), null);
+        removedState.setHiddenFromContinueWatching(true);
+        saveState(removedState);
+
+        mvc.perform(get("/api/films").param("show", "in-progress").param("sort", "last-watched"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.films[*].title", contains("Heat", "Removed")))
+            .andExpect(jsonPath("$.films[1].hiddenFromContinueWatching").value(true))
+            .andExpect(jsonPath("$.films[1].inProgress").value(true));
+        mvc.perform(get("/api/films").param("q", "tiny"))
+            .andExpect(jsonPath("$.films[0].inProgress").value(false))
+            .andExpect(jsonPath("$.films[0].progress.positionMs").value(2 * MIN));
+        mvc.perform(get("/api/films").param("sort", "last-watched"))
+            .andExpect(jsonPath("$.films[*].title",
+                contains("Tiny", "Heat", "Removed", "The Third Man", "Alien", "Chinatown")));
+    }
+
+    @Test
     void cardWithoutProgressHasNullProgressAndNullDirectorWhenUncredited() throws Exception {
         mvc.perform(get("/api/films").param("q", "chinatown"))
             .andExpect(jsonPath("$.films[0].progress").value(nullValue()))
@@ -175,18 +216,19 @@ class FilmsApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.total").value(4));
         mvc.perform(get("/api/films").param("show", "watched"))
             .andExpect(jsonPath("$.films[*].title", contains("The Third Man")));
+        // Heat is in progress, so it is neither unwatched nor watched.
         mvc.perform(get("/api/films").param("show", "unwatched"))
-            .andExpect(jsonPath("$.total").value(3));
-        mvc.perform(get("/api/films").param("genre", "Thriller").param("show", "unwatched"))
+            .andExpect(jsonPath("$.films[*].title", containsInAnyOrder("Chinatown", "Alien")));
+        mvc.perform(get("/api/films").param("genre", "Thriller").param("show", "in-progress"))
             .andExpect(jsonPath("$.films[*].title", contains("Heat")));
     }
 
     @Test
     void invalidQueryValuesAreBadRequests() throws Exception {
         mvc.perform(get("/api/films").param("sort", "popularity")).andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.error").value("sort must be title, year, added, imdb or rt"));
+            .andExpect(jsonPath("$.error").value("sort must be title, year, added, imdb, rt or last-watched"));
         mvc.perform(get("/api/films").param("show", "seen")).andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.error").value("show must be all, unwatched or watched"));
+            .andExpect(jsonPath("$.error").value("show must be all, in-progress, unwatched or watched"));
         mvc.perform(get("/api/films").param("decade", "seventies")).andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.error").value("Invalid request"));
     }

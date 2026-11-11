@@ -16,7 +16,10 @@
           "runtimeMs": 10200000,
           "editionId": 11
         },
-        "director": "Michael Mann"
+        "director": "Michael Mann",
+        "inProgress": true,
+        "lastWatchedAt": "2026-10-29T20:00:00Z",
+        "hiddenFromContinueWatching": false
       },
       "roles": ["as Neil McCauley"]
     },
@@ -29,7 +32,10 @@
         "backdropPath": null,
         "watched": false,
         "progress": null,
-        "director": null
+        "director": null,
+        "inProgress": false,
+        "lastWatchedAt": null,
+        "hiddenFromContinueWatching": false
       },
       "roles": ["as Travis Bickle"]
     }

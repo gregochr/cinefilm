@@ -13,8 +13,12 @@ public final class HomeDtos {
     public record ThemeDto(String title, String caption, String kind, String value, List<FilmCard> films) {
     }
 
-    /** Everything the Home screen shows. */
-    public record Home(FilmCard hero, List<FilmCard> continueWatching, List<FilmCard> recentlyAdded,
+    /**
+     * Everything the Home screen shows. {@code continueWatching} is at most the 12 films after the hero;
+     * {@code continueWatchingTotal} is every film in Continue watching, the hero included.
+     */
+    public record Home(FilmCard hero, List<FilmCard> continueWatching, int continueWatchingTotal,
+                       List<FilmCard> recentlyAdded,
                        List<FilmCard> notWatchedInYears, ThemeDto weeklyTheme) {
     }
 }
