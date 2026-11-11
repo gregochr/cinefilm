@@ -11,6 +11,7 @@ import LibraryCollections from './screens/LibraryCollections.jsx';
 import LibraryFilms from './screens/LibraryFilms.jsx';
 import Person from './screens/Person.jsx';
 import Player from './screens/Player.jsx';
+import { useResourceCacheLifecycle } from './components/useResourceCacheLifecycle.js';
 import { useSession } from './state/useSession.js';
 
 function NotFound() {
@@ -29,6 +30,7 @@ function NotFound() {
  */
 export default function App() {
   const session = useSession();
+  useResourceCacheLifecycle();
   return (
     <>
       <Routes>

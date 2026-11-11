@@ -1,3 +1,4 @@
+import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   SESSION_EXPIRED_EVENT,
@@ -14,11 +15,13 @@ import {
   beginRequest,
   clearResourceCache,
   commit,
+  invalidateAll,
   lookup,
   setResourceCacheClock,
   SETTLE_WAIT_MS,
   whenSettled,
 } from './resourceCache.js';
+import { useResourceCacheLifecycle } from '../components/useResourceCacheLifecycle.js';
 
 let time;
 beforeEach(() => {
@@ -126,7 +129,7 @@ describe('resourceCache storing rule', () => {
 
   it('a refused answer still reports its JSON', () => {
     const token = beginRequest();
-    announceLibraryChanged();
+    invalidateAll();
     expect(commit('k', token, { a: 1 })).toEqual({
       stored: false,
       json: '{"a":1}',
@@ -236,11 +239,28 @@ describe('resourceCache events', () => {
     ['the session expired', () => window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT))],
     ['the user signed out', () => announceSignedOut()],
   ])('%s: clears everything and bumps the generation', (_, fire) => {
+    renderHook(() => useResourceCacheLifecycle());
     seed();
     const token = beginRequest();
     fire();
     expect(survivors()).toEqual([]);
     expect(commit('a', token, { a: 1 }).stored).toBe(false);
+  });
+});
+
+describe('resourceCache events, once wired', () => {
+  it('stop clearing the cache when the app unmounts', () => {
+    const { unmount } = renderHook(() => useResourceCacheLifecycle());
+    unmount();
+    store('a');
+    announceLibraryChanged();
+    expect(lookup('a')).not.toBeNull();
+  });
+
+  it('are not wired by the state layer alone', () => {
+    store('a');
+    announceLibraryChanged();
+    expect(lookup('a')).not.toBeNull();
   });
 });
 

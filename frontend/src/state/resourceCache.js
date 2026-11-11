@@ -1,6 +1,6 @@
 // A small in-memory cache for browse data (Home, Library, Film detail, ...). No JSX, no React.
 // Kept only for a short while, and emptied by every change made in this tab (see `classify`).
-import { LIBRARY_CHANGED_EVENT, SESSION_EXPIRED_EVENT, onMutation } from '../api/client.js';
+import { onMutation } from '../api/client.js';
 
 export const MAX_ENTRIES = 12;
 /** An answer this old or older is never shown. */
@@ -115,13 +115,10 @@ function invalidate({ method, path, phase }) {
   else entries.delete(`film:${what.film}`);
 }
 
-function clearAll() {
+/** Empties the cache and refuses every answer in flight (the library changed, or the session ended). */
+export function invalidateAll() {
   entries.clear();
   generation += 1;
 }
 
 onMutation(invalidate);
-if (typeof window !== 'undefined') {
-  window.addEventListener(LIBRARY_CHANGED_EVENT, clearAll);
-  window.addEventListener(SESSION_EXPIRED_EVENT, clearAll);
-}

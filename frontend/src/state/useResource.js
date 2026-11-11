@@ -84,7 +84,7 @@ export function useResource(key, fetcher, options = {}) {
             // A change made in this tab crossed the request: the answer may predate it, so ask again.
             // ...once nothing is still in flight, or the retry would cross the same change.
             // A change that hangs is not waited for twice: the next answer is shown whatever it crossed.
-            whenSettled().then((settled) => {
+            void whenSettled().then((settled) => {
               if (!controller.signal.aborted) run(settled ? retries - 1 : 0);
             });
             return;
