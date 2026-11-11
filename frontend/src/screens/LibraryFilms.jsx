@@ -86,14 +86,20 @@ export default function LibraryFilms() {
   const latestData = useRef(data);
   const awaitData = useRef(false); // the poster is rebuilt with the data being read: focus it only then
   const focusedAt = useRef(null); // the loaded data when pendingFocus was set
-  const cw = useLibraryFilmActions(data, show, reload, (film) => {
-    // A rollback brings the poster back: focus that was on Undo (or lost with the poster) follows it.
-    const at = document.activeElement;
-    if (at === document.body || at === undoButton.current) {
-      pendingFocus.current = film.id;
-      focusedAt.current = data;
-    }
-  });
+  const cw = useLibraryFilmActions(
+    data,
+    show,
+    reload,
+    (film) => {
+      // A rollback brings the poster back: focus that was on Undo (or lost with the poster) follows it.
+      const at = document.activeElement;
+      if (at === document.body || at === undoButton.current) {
+        pendingFocus.current = film.id;
+        focusedAt.current = data;
+      }
+    },
+    loading,
+  );
   const { films, total } = cw;
   // When the toast goes (it expires, or the action is undone or rolled back) its button leaves with the focus on it.
   // The button is still in the DOM while this renders.

@@ -470,4 +470,93 @@ describe('Library: the ⋯ menu on in-progress posters', () => {
     expect(await screen.findByRole('link', { name: 'Alpha, 2001, watched' })).toBeInTheDocument();
     expect(screen.getAllByTestId('poster-fill')).toHaveLength(1);
   });
+
+  describe('a list read that is still in flight when the change commits', () => {
+    /** A server whose list answers wait on `releaseList` once `hold` is set, and whose change waits on `commit`. */
+    function slowServer(films, applyChange) {
+      const state = { held: false, releaseList: null, commit: null, lists: 0 };
+      const changeGate = new Promise((resolve) => {
+        state.commit = resolve;
+      });
+      const fetchMock = installFetch((method, url) => {
+        if (url.startsWith('/api/films?')) {
+          state.lists += 1;
+          const body = respond({
+            total: films().length,
+            films: films(),
+            facets: fixtures.films.facets,
+          });
+          if (!state.held) return body;
+          return new Promise((resolve) => {
+            state.releaseList = () => resolve(body);
+          });
+        }
+        if (/\/(watched|continue-watching)$/.test(url)) {
+          return changeGate.then(() => {
+            applyChange();
+            return respond({ watched: true, previous: { positionMs: 1800000, watched: false } });
+          });
+        }
+        return null;
+      });
+      return { state, fetchMock };
+    }
+
+    it('Mark as watched under All: the list read after the change wins over the stale one', async () => {
+      let watched = false;
+      const { state } = slowServer(
+        () => [watched ? { ...ALPHA, watched: true, inProgress: false } : ALPHA, GAMMA],
+        () => {
+          watched = true;
+        },
+      );
+      renderApp('/library');
+      await screen.findByRole('link', { name: 'Alpha, 2001' });
+      await openMenu('Alpha');
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Mark as watched' }));
+
+      state.held = true; // the list read for the new sort answers with the state from before the change
+      const stale = state.lists;
+      await userEvent.click(within(screen.getByRole('group', { name: 'Sort' })).getByText('Title'));
+      await vi.waitFor(() => expect(state.lists).toBeGreaterThan(stale));
+      const first = state.releaseList;
+      state.held = false; // later reads (the re-read) answer at once
+      state.commit();
+      await vi.waitFor(() => expect(state.lists).toBeGreaterThan(stale + 1)); // the re-read
+      first(); // the stale answer arrives last, and is ignored
+
+      expect(await screen.findByRole('link', { name: 'Alpha, 2001, watched' })).toBeInTheDocument();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(poster('Alpha, 2001, watched')).toBeInTheDocument();
+      expect(screen.getAllByTestId('poster-fill')).toHaveLength(1);
+    });
+
+    it('Remove under In progress: the re-read shows the film as removed', async () => {
+      let hidden = false;
+      const { state } = slowServer(
+        () => [{ ...ALPHA, hiddenFromContinueWatching: hidden }, GAMMA],
+        () => {
+          hidden = true;
+        },
+      );
+      renderApp('/library?show=in-progress&sort=last-watched');
+      await heading('2 films in progress · sorted by last watched');
+      await openMenu('Alpha');
+      await userEvent.click(removeItem());
+
+      state.held = true;
+      const stale = state.lists;
+      await userEvent.click(within(screen.getByRole('group', { name: 'Sort' })).getByText('Title'));
+      await vi.waitFor(() => expect(state.lists).toBeGreaterThan(stale));
+      const first = state.releaseList;
+      state.held = false;
+      state.commit();
+      await vi.waitFor(() => expect(state.lists).toBeGreaterThan(stale + 1));
+      first();
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await openMenu('Alpha');
+      expect(removeItem()).not.toBeInTheDocument();
+    });
+  });
 });

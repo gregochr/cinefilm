@@ -23,13 +23,15 @@ function without(patches, filmId, keys) {
  * Mark as watched takes the poster out of the list and the total under `show === 'in-progress'`, and elsewhere keeps
  * it as a watched film without the bar.
  */
-export function useLibraryFilmActions(data, show, reload, onRollback) {
+export function useLibraryFilmActions(data, show, reload, onRollback, loading = false) {
   const [source, setSource] = useState(data);
   const [patches, setPatches] = useState({});
   const { action, begin, undo: undoAction } = useUndoableFilmActions(reload, onRollback);
   const current = useRef(data);
+  const reading = useRef(loading); // a list read is in flight
   useEffect(() => {
     current.current = data;
+    reading.current = loading;
   });
 
   if (source !== data) {
@@ -53,9 +55,11 @@ export function useLibraryFilmActions(data, show, reload, onRollback) {
         () => setPatches((p) => without(p, film.id, keys)),
         {
           source: data,
-          // The list may have been read again before the change committed, and so shows the old state.
+          // The list may have been read again before the change committed, or be being read now (its answer may
+          // predate the change): read it again, which supersedes any read in flight. Never otherwise, so other
+          // films' patches stand.
           onCommitted: () => {
-            if (current.current !== data) reload();
+            if (current.current !== data || reading.current) reload();
           },
         },
       );
