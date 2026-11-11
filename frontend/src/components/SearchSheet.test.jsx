@@ -1,7 +1,7 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildFixtureSearchIndex } from '../api/fixtureSearchIndex.js';
 import { prepareIndex, useSearchIndex } from '../state/searchIndex.js';
 import { useSearchParams } from 'react-router-dom';
@@ -74,6 +74,20 @@ async function openSheet(path = '/') {
 beforeEach(() => {
   useSearchIndex.mockReturnValue({ index: FIXTURE, status: 'ready' });
 });
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+// The Library's search box debounces its URL write; drive that clock instead of waiting on it.
+async function openSheetWithFakeClock(path) {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  setup(path);
+  await user.click(tab());
+  return user;
+}
+const pastDebounce = () => act(() => vi.advanceTimersByTimeAsync(400));
 
 describe('opening', () => {
   it('the Search tab opens the sheet on the current route, focuses the input and is current', async () => {
@@ -154,7 +168,9 @@ describe('results', () => {
     useSearchIndex.mockReturnValue({ index: null, status: 'loading' });
     const user = await openSheet();
     await user.type(input(), 'heat');
-    expect(within(sheet()).getByTestId('search-live')).toHaveTextContent('Loading…');
+    expect(within(sheet()).getByRole('status', { name: 'Search status' })).toHaveTextContent(
+      'Loading…',
+    );
     expect(options()).toHaveLength(0);
     await user.keyboard('{Enter}');
     expect(where()).toBe('/library?q=heat');
@@ -165,7 +181,9 @@ describe('results', () => {
     useSearchIndex.mockReturnValue({ index: null, status: 'error' });
     const user = await openSheet();
     await user.type(input(), 'heat');
-    expect(within(sheet()).getByTestId('search-live')).toHaveTextContent(/Search isn’t available/);
+    expect(within(sheet()).getByRole('status', { name: 'Search status' })).toHaveTextContent(
+      /Search isn’t available/,
+    );
     await user.keyboard('{Enter}');
     expect(where()).toBe('/library?q=heat');
   });
@@ -225,21 +243,44 @@ describe('opening a result', () => {
   });
 });
 
+describe('option ids', () => {
+  it('are unique per combobox: the sheet points at its own rows after the header was used', async () => {
+    const user = setup('/');
+    const header = screen.getByRole('combobox', { name: 'Search the library' });
+    await user.type(header, 'ha');
+    expect(options().length).toBeGreaterThan(0);
+    await user.click(tab());
+    // the header dropdown steps aside for the sheet
+    expect(header).toHaveAttribute('aria-expanded', 'false');
+    await user.type(input(), 'ha');
+    const target = input().getAttribute('aria-activedescendant');
+    expect(target).toBeTruthy();
+    expect(within(sheet()).getAllByRole('option')[0]).toHaveAttribute('id', target);
+    const ids = screen
+      .queryAllByRole('option')
+      .concat(screen.queryAllByRole('listbox'))
+      .map((n) => n.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(header).not.toHaveAttribute('aria-activedescendant');
+    expect(header.getAttribute('aria-controls')).not.toBe(input().getAttribute('aria-controls'));
+  });
+});
+
 describe('See all from the Library', () => {
   it('applies the query in the Library and keeps it', async () => {
-    const user = await openSheet('/library');
+    const user = await openSheetWithFakeClock('/library');
     await user.type(input(), 'wa');
     await user.click(screen.getByRole('link', { name: /See all \d+ results/ }));
     expect(screen.getByLabelText('Library search text')).toHaveTextContent('wa');
-    await new Promise((resolve) => setTimeout(resolve, 400)); // past the debounce
+    await pastDebounce();
     expect(where()).toBe('/library?q=wa');
     expect(screen.getByLabelText('Library search text')).toHaveTextContent('wa');
   });
 
   it('Enter does the same', async () => {
-    const user = await openSheet('/library?q=old');
+    const user = await openSheetWithFakeClock('/library?q=old');
     await user.type(input(), 'qzxqzx{Enter}');
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await pastDebounce();
     expect(where()).toBe('/library?q=qzxqzx');
     expect(screen.getByLabelText('Library search text')).toHaveTextContent('qzxqzx');
   });

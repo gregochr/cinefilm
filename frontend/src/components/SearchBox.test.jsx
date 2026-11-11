@@ -33,6 +33,9 @@ function setup(path = '/') {
   return { user, box: screen.getByRole('combobox', { name: 'Search the library' }) };
 }
 
+// The option id carries a per-instance prefix; tests compare the stable tail (`titles-1`).
+const stem = (o) => o.id.replace(/^.*-opt-/, '');
+const live = () => screen.getByRole('status', { name: 'Search status' });
 const where = () => screen.getByLabelText('Location').textContent;
 const options = () => screen.queryAllByRole('option');
 const optionNames = () => options().map((o) => within(o).getByTestId('search-name').textContent);
@@ -110,12 +113,7 @@ describe('groups and rows', () => {
     const { user, box } = setup();
     await user.type(box, 'zed');
     expect(groups()).toEqual(['Titles', 'Collections', 'Actors', 'Directors']);
-    expect(options().map((o) => o.id)).toEqual([
-      'search-opt-titles-1',
-      'search-opt-collections-2',
-      'search-opt-actors-3',
-      'search-opt-directors-4',
-    ]);
+    expect(options().map(stem)).toEqual(['titles-1', 'collections-2', 'actors-3', 'directors-4']);
   });
 
   it('finds the "ha" sample results', async () => {
@@ -241,9 +239,9 @@ describe('groups and rows', () => {
   it('a person who is an actor and a director has distinct option ids in both groups', async () => {
     const { user, box } = setup();
     await user.type(box, 'peter b');
-    const ids = options().map((o) => o.id);
-    expect(ids).toContain('search-opt-actors-305');
-    expect(ids).toContain('search-opt-directors-305');
+    const ids = options().map(stem);
+    expect(ids).toContain('actors-305');
+    expect(ids).toContain('directors-305');
     expect(new Set(ids).size).toBe(ids.length);
   });
 });
@@ -330,7 +328,7 @@ describe('keyboard', () => {
     );
     const { user, box } = setup();
     await user.type(box, 'saga');
-    expect(options()[0].id).toBe('search-opt-collections-40');
+    expect(stem(options()[0])).toBe('collections-40');
     await user.keyboard('{Enter}');
     expect(where()).toBe('/collections/40');
   });
@@ -364,8 +362,8 @@ describe('keyboard', () => {
     const { user, box } = setup();
     await user.type(box, 'ha');
     const all = options();
-    const lastTitle = all.findLastIndex((o) => o.id.startsWith('search-opt-titles-'));
-    const firstCollection = all.findIndex((o) => o.id.startsWith('search-opt-collections-'));
+    const lastTitle = all.findLastIndex((o) => stem(o).startsWith('titles-'));
+    const firstCollection = all.findIndex((o) => stem(o).startsWith('collections-'));
     expect(firstCollection).toBe(lastTitle + 1);
 
     await user.keyboard('{ArrowUp}');
@@ -387,7 +385,7 @@ describe('keyboard', () => {
     await user.type(box, 'ha');
     await user.keyboard('{ArrowDown}');
     const second = options()[1];
-    const target = second.id.replace('search-opt-titles-', '/films/');
+    const target = stem(second).replace('titles-', '/films/');
     await user.keyboard('{Enter}');
     expect(where()).toBe(target);
   });
@@ -554,14 +552,14 @@ describe('states', () => {
     const { user, box } = setup();
     await user.type(box, 'blade runner');
     // Announced once, by the one polite live region; the visible note is plain text.
-    expect(screen.getByTestId('search-live')).toHaveTextContent('Loading…');
-    expect(screen.getAllByRole('status')).toContain(screen.getByTestId('search-live'));
-    expect(screen.getByTestId('search-live')).toHaveAttribute('aria-live', 'polite');
-    expect(screen.getByTestId('search-live')).toHaveAttribute('aria-atomic', 'true');
+    expect(live()).toHaveTextContent('Loading…');
+    expect(screen.getAllByRole('status')).toContain(live());
+    expect(live()).toHaveAttribute('aria-live', 'polite');
+    expect(live()).toHaveAttribute('aria-atomic', 'true');
     expect(screen.getAllByText('Loading…')).toHaveLength(2);
     // The live region is the only status that says it; the visible note is plain text.
     const saying = screen.getAllByRole('status').filter((n) => n.textContent === 'Loading…');
-    expect(saying).toEqual([screen.getByTestId('search-live')]);
+    expect(saying).toEqual([live()]);
     expect(screen.queryAllByRole('alert')).toHaveLength(0);
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     expect(options()).toHaveLength(0);
@@ -574,7 +572,7 @@ describe('states', () => {
     useSearchIndex.mockReturnValue({ index: null, status: 'error' });
     const { user, box } = setup();
     await user.type(box, 'heat');
-    expect(screen.getByTestId('search-live')).toHaveTextContent(
+    expect(live()).toHaveTextContent(
       'Search isn’t available right now. Enter searches the Library.',
     );
     expect(screen.getAllByText(/Search isn’t available right now/)).toHaveLength(2);
@@ -612,34 +610,34 @@ describe('aria', () => {
     for (const group of screen.getAllByRole('group')) {
       expect(group).toHaveAccessibleName();
     }
-    for (const option of options()) expect(option.id).toMatch(/^search-opt-/);
+    for (const option of options()) expect(option.id).toMatch(/-opt-/);
   });
 
   it('announces the count, and only when it changes', async () => {
     const { user, box } = setup();
-    const live = screen.getByTestId('search-live');
-    expect(live).toHaveTextContent('');
+    const region = live();
+    expect(region).toHaveTextContent('');
     await user.type(box, 'w');
-    const first = live.textContent;
+    const first = region.textContent;
     expect(first).toMatch(/^\d+ results$/);
     await user.type(box, 'ar');
-    const second = live.textContent;
+    const second = region.textContent;
     expect(second).toMatch(/^\d+ results?$/);
     expect(second).not.toBe(first);
     await user.type(box, 'rior');
-    expect(live).toHaveTextContent('1 result');
+    expect(region).toHaveTextContent('1 result');
     await user.type(box, 'zzzz');
-    expect(live).toHaveTextContent('No matches for “warriorzzzz”');
+    expect(region).toHaveTextContent('No matches for “warriorzzzz”');
     await user.keyboard('{Escape}');
-    expect(live).toHaveTextContent('');
+    expect(region).toHaveTextContent('');
   });
 
   it('does not rewrite the live text when a hover changes nothing about the count', async () => {
     const { user, box } = setup();
     await user.type(box, 'ha');
-    const live = screen.getByTestId('search-live');
+    const region = live();
     const watch = new MutationObserver(() => {});
-    watch.observe(live, { childList: true, characterData: true, subtree: true });
+    watch.observe(region, { childList: true, characterData: true, subtree: true });
     await user.hover(options()[2]);
     await user.keyboard('{ArrowDown}');
     expect(watch.takeRecords()).toHaveLength(0);

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSearchIndex } from '../state/searchIndex.js';
+import { isSheetOpen } from '../state/searchSheet.js';
 import {
   announcement,
   hasQuery,
@@ -33,14 +34,15 @@ const RIGHT = { align: 'right', width: null };
  */
 export default function SearchBox() {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const { index, status } = useSearchIndex();
-  const { state, result, rows, dispatch, setQuery } = useSearchCombobox(index);
+  const uid = useId();
+  const { state, result, rows, dispatch, setQuery } = useSearchCombobox(index, `${uid}-opt`);
   const inputRef = useRef(null);
   const panelRef = useRef(null);
   const boxRef = useRef(null);
   const [placement, setPlacement] = useState(RIGHT);
-  const listboxId = useId();
+  const listboxId = `${uid}-listbox`;
   const open = state.open;
   const activeRow = open && status === 'ready' ? (rows[state.active] ?? null) : null;
 
@@ -69,6 +71,12 @@ export default function SearchBox() {
   useEffect(() => {
     dispatch({ type: 'close' });
   }, [pathname, dispatch]);
+
+  // The phone sheet has its own list: the header dropdown steps aside when it opens.
+  const sheetOpen = isSheetOpen(search);
+  useEffect(() => {
+    if (sheetOpen) dispatch({ type: 'close' });
+  }, [sheetOpen, dispatch]);
 
   const finish = useCallback(() => {
     dispatch({ type: 'clear' });
@@ -141,6 +149,7 @@ export default function SearchBox() {
         role="status"
         aria-live="polite"
         aria-atomic="true"
+        aria-label="Search status"
         data-testid="search-live"
       >
         {message}

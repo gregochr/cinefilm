@@ -25,9 +25,10 @@ export default function SearchSheet() {
   const navigate = useNavigate();
   const location = useLocation();
   const { index, status } = useSearchIndex();
-  const { state, result, rows, dispatch, setQuery } = useSearchCombobox(index);
+  const uid = useId();
+  const { state, result, rows, dispatch, setQuery } = useSearchCombobox(index, `${uid}-opt`);
   const inputRef = useRef(null);
-  const listboxId = useId();
+  const listboxId = `${uid}-listbox`;
   const open = hasQuery(state.query);
   const activeRow = open && status === 'ready' ? (rows[state.active] ?? null) : null;
   const message = announcement({ open, status, result });
@@ -161,6 +162,7 @@ export default function SearchSheet() {
         role="status"
         aria-live="polite"
         aria-atomic="true"
+        aria-label="Search status"
         data-testid="search-live"
       >
         {message}

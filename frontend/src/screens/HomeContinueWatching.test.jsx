@@ -8,9 +8,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-// The header's search live region is also a status; the toast is the other one.
-const toastRegion = () =>
-  screen.getAllByRole('status').find((n) => n.classList.contains('undo-toast-region'));
+// The header's search live region is also a status; the toast is told apart by its name.
+const toastRegion = () => screen.getByRole('status', { name: 'Notification' });
 
 const EMPTY = {
   hero: null,
