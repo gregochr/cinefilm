@@ -26,7 +26,9 @@ import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Admin's view of the forced subtitle files and the owner's actions on them: attach one to an edition (and part),
@@ -46,16 +48,19 @@ public class SubtitleAdminService {
     private final SidecarSync sync;
     private final Clock clock;
     private final LibraryLock lock;
+    private final TransactionTemplate tx;
 
     /** Creates the service. */
     public SubtitleAdminService(SubtitleSidecarRepository sidecars, MediaFileRepository files,
-                                EditionRepository editions, SidecarSync sync, Clock clock, LibraryLock lock) {
+                                EditionRepository editions, SidecarSync sync, Clock clock, LibraryLock lock,
+                                PlatformTransactionManager transactions) {
         this.sidecars = sidecars;
         this.files = files;
         this.editions = editions;
         this.sync = sync;
         this.clock = clock;
         this.lock = lock;
+        this.tx = new TransactionTemplate(transactions);
     }
 
     /** Every forced subtitle file with where it belongs and how it reads. */
@@ -96,7 +101,6 @@ public class SubtitleAdminService {
      * @throws NotFoundException when the file or the edition is unknown
      * @throws BadRequestException when there is no edition id, the edition has no film file or has no such part
      */
-    @Transactional
     public SidecarDto attach(Long id, AttachRequest request) {
         return locked(() -> attachLocked(id, request));
     }
@@ -130,7 +134,6 @@ public class SubtitleAdminService {
      * @return the file as listed afterwards
      * @throws NotFoundException when there is no such file
      */
-    @Transactional
     public SidecarDto detach(Long id) {
         return locked(() -> detachLocked(id));
     }
@@ -154,7 +157,6 @@ public class SubtitleAdminService {
      * @throws NotFoundException when there is no such file
      * @throws BadRequestException when the offset is missing or too large
      */
-    @Transactional
     public SidecarDto offset(Long id, OffsetRequest request) {
         return locked(() -> offsetLocked(id, request));
     }
@@ -180,7 +182,6 @@ public class SubtitleAdminService {
      * @throws NotFoundException when there is no such file
      * @throws BadRequestException when the file is not attached to a film yet
      */
-    @Transactional
     public SidecarDto verify(Long id) {
         return locked(() -> verifyLocked(id));
     }
@@ -205,7 +206,6 @@ public class SubtitleAdminService {
      * @return the file as listed afterwards
      * @throws NotFoundException when there is no such file
      */
-    @Transactional
     public SidecarDto unverify(Long id) {
         return locked(() -> unverifyLocked(id));
     }
@@ -217,13 +217,16 @@ public class SubtitleAdminService {
         return one(id);
     }
 
-    /** A scan rewrites the sidecar rows, so a change is refused (409) while one runs, as Fix match is. */
+    /**
+     * A scan rewrites the sidecar rows, so a change is refused (409) while one runs, as Fix match is. The lock is
+     * taken outside the transaction and given back only after it has committed.
+     */
     private SidecarDto locked(Supplier<SidecarDto> work) {
         if (!lock.tryAcquire(LibraryLock.SUBTITLE)) {
             throw new ConflictException("A scan is running");
         }
         try {
-            return work.get();
+            return tx.execute(status -> work.get());
         } finally {
             lock.release();
         }
