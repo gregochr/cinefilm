@@ -2,6 +2,7 @@ package gregochr.cinefilm.transcode;
 
 import gregochr.cinefilm.TestData;
 import java.io.IOException;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
@@ -9,6 +10,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -165,6 +167,38 @@ final class SessionFakes {
             timeouts.add(timeout);
             whileWaiting.run();
             condition.getAsBoolean();
+        }
+    }
+
+    /**
+     * File stamps that are fixed unless the test says otherwise: one stamp for every path, per-path overrides, paths
+     * that are missing ({@link NoSuchFileException}) and paths that cannot be read (a plain {@link IOException}).
+     * An optional hook runs once, at the start of the next read, so a test can do something while a read is under
+     * way; every path read is recorded.
+     */
+    static final class FakeStamps implements FileStamps {
+        static final Stamp DEFAULT = new Stamp(1000, 5000);
+        final Map<Path, Stamp> overrides = new HashMap<>();
+        final Set<Path> missing = new HashSet<>();
+        final Set<Path> unreadable = new HashSet<>();
+        final List<Path> reads = new ArrayList<>();
+        Runnable hook;
+
+        @Override
+        public Stamp read(Path file) throws IOException {
+            reads.add(file);
+            Runnable once = hook;
+            hook = null;
+            if (once != null) {
+                once.run();
+            }
+            if (missing.contains(file)) {
+                throw new NoSuchFileException(file.toString());
+            }
+            if (unreadable.contains(file)) {
+                throw new IOException("cannot read " + file);
+            }
+            return overrides.getOrDefault(file, DEFAULT);
         }
     }
 

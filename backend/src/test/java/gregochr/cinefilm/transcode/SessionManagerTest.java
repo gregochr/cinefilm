@@ -7,6 +7,7 @@ import gregochr.cinefilm.TestData;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.transcode.SessionFakes.FakeFiles;
 import gregochr.cinefilm.transcode.SessionFakes.FakeScheduler;
+import gregochr.cinefilm.transcode.SessionFakes.FakeStamps;
 import gregochr.cinefilm.transcode.SessionFakes.FakeTranscoder;
 import gregochr.cinefilm.transcode.SessionFakes.MutableClock;
 import gregochr.cinefilm.transcode.SessionFakes.ScriptedWaiter;
@@ -44,7 +45,7 @@ class SessionManagerTest {
     private final MutableClock clock = new MutableClock();
     private int counter;
     private final SessionManager manager = new SessionManager(transcoder, files, waiter, scheduler, clock,
-        new SessionSettings(IDLE, EXPIRY, 1000, 2, DEVICE), HLS, () -> new UUID(0, ++counter));
+        new SessionSettings(IDLE, EXPIRY, 1000, 2, DEVICE), new FakeStamps(), HLS, () -> new UUID(0, ++counter));
 
     private static String id(int n) {
         return new UUID(0, n).toString();
@@ -360,7 +361,7 @@ class SessionManagerTest {
     }
 
     @Test
-    void theSessionIsDeletedAfterTenMinutesAndLaterRequestsGet404() {
+    void theSessionIsDeletedAfterTenMinutesAndOnceEndedLaterRequestsGet404() {
         String id = create(7, 0);
         write(1, "original", 0, 3);
 
@@ -373,6 +374,7 @@ class SessionManagerTest {
 
         assertThat(manager.sessions()).isEmpty();
         assertThat(files.deletedTrees).containsExactly(HLS.resolve(id(1)));
+        manager.end(id);
         assertThatThrownBy(() -> manager.segment(id, "original", 0)).isInstanceOf(NotFoundException.class)
             .hasMessage("No such session");
         assertThatThrownBy(() -> manager.view(id)).isInstanceOf(NotFoundException.class);

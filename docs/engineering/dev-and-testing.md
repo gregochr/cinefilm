@@ -258,6 +258,11 @@ On each profile, with a film on Auto:
 4. Open Admin, Playback health: the viewing is there, and its start-up time, stalls and reconnects match what you
    saw (`playback-health-plan.md`).
 
+Once per release, with no throttling: let a film bank its buffer, pause it for more than ten minutes (or close the
+lid for longer) and play. It must carry on at once from its buffer under the same session id (DevTools: no new
+`POST …/sessions`, no new `master.m3u8`), with no "Reconnecting…", and Playback health must show no recovery and no
+reload for that viewing (`long-pause-plan.md`).
+
 - DevTools throttles the page's own requests (the hls.js segments included) and only while DevTools is open. It
   does not reach Safari: use Network Link Conditioner there (macOS: Additional Tools for Xcode; iPhone: Settings,
   Developer).
