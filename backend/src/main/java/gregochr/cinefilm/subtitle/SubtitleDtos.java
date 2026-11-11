@@ -28,11 +28,13 @@ public final class SubtitleDtos {
      * @param offsetMs the owner's timing nudge in milliseconds
      * @param verified true while the owner's check counts (see {@code verified_parts} in the migration)
      * @param endsAfterRuntime true when the last cue ends after the edition's runtime: wrong film or cut?
+     * @param version when the row last changed (epoch milliseconds, a scan that replaced the cues included): a
+     *     client that holds the cues asks for them again when it changes
      */
     public record SidecarDto(Long id, String path, String presence, String state, Long filmId, String filmTitle,
                              Long editionId, String editionName, int parts, Integer part, boolean whole,
                              boolean ownerAttached, int cueCount, String parseReport, int offsetMs,
-                             boolean verified, boolean endsAfterRuntime) {
+                             boolean verified, boolean endsAfterRuntime, long version) {
     }
 
     /**

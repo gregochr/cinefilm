@@ -35,7 +35,8 @@ class SubtitleAdminServiceTest extends SubtitleTestBase {
         SubtitleSidecar row = sidecar("Alien.en.forced.srt", null, false);
 
         assertThat(listed(row.getId())).isEqualTo(new SidecarDto(row.getId(), "Alien.en.forced.srt", "PRESENT",
-            "unmatched", null, null, null, null, 0, null, false, false, 2, "No problems found", 0, false, false));
+            "unmatched", null, null, null, null, 0, null, false, false, 2, "No problems found", 0, false, false,
+            NOW.toEpochMilli()));
     }
 
     @Test
@@ -48,7 +49,7 @@ class SubtitleAdminServiceTest extends SubtitleTestBase {
 
         assertThat(dto).isEqualTo(new SidecarDto(row.getId(), "Taken.en.forced.srt", "PRESENT", "matched",
             taken.getId(), "Taken", taken.getEditions().get(0).getId(), "Original", 1, 1, false, false, 2,
-            "No problems found", -250, false, false));
+            "No problems found", -250, false, false, NOW.toEpochMilli()));
     }
 
     @Test
@@ -254,6 +255,37 @@ class SubtitleAdminServiceTest extends SubtitleTestBase {
 
         assertThat(row.getMediaFileId()).isEqualTo(fileId(taken, 1));
         assertThat(row.isWholeEdition()).isFalse();
+    }
+
+    @Test
+    void aWholeFilmAttachToASingleFileIsFileRelativeSoALaterJoinPlaysItAfterTheFirstFile() {
+        Film other = filmWithParts("Other", 1, 60);
+        Film taken = filmWithParts("Taken", 1, 90);
+        SubtitleSidecar row = sidecar("Other name.en.forced.srt", null, false);
+        Long edition = taken.getEditions().get(0).getId();
+
+        SidecarDto dto = admin.attach(row.getId(), new AttachRequest(edition, null));
+
+        assertThat(row.getMediaFileId()).isEqualTo(fileId(taken, 1));
+        assertThat(row.isWholeEdition()).isFalse();
+        assertThat(dto.whole()).isFalse();
+        assertThat(dto.part()).isEqualTo(1);
+
+        // Another file is joined before it (lower id, same part number): Taken's file now starts 60 minutes in.
+        mediaFiles.moveToEdition(List.of(fileId(other, 1)), editionRepository.findById(edition).orElseThrow());
+
+        assertThat(forced.vtt(edition)).startsWith("WEBVTT\n\n01:00:10.000 --> 01:00:12.000\nHello");
+        assertThat(admin.cues(row.getId()).cues().get(0).startMs()).isEqualTo(60 * 60_000L + 10_000);
+    }
+
+    @Test
+    void aWholeFilmAttachToASplitEditionIsStillWholeEdition() {
+        Film towers = filmWithParts("Towers", 2, 60);
+        SubtitleSidecar row = sidecar("Other name.en.forced.srt", null, false);
+
+        admin.attach(row.getId(), new AttachRequest(towers.getEditions().get(0).getId(), null));
+
+        assertThat(row.isWholeEdition()).isTrue();
     }
 
     @Test

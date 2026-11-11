@@ -16,7 +16,8 @@
     "parseReport": "No problems found",
     "offsetMs": 0,
     "verified": false,
-    "endsAfterRuntime": false
+    "endsAfterRuntime": false,
+    "version": 1700000000000
   },
   {
     "id": 2,
@@ -35,6 +36,7 @@
     "parseReport": "read as Windows-1252, 3 blocks skipped",
     "offsetMs": 0,
     "verified": false,
-    "endsAfterRuntime": false
+    "endsAfterRuntime": false,
+    "version": 1700000000000
   }
 ]

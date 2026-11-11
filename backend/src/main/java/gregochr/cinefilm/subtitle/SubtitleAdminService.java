@@ -120,7 +120,8 @@ public class SubtitleAdminService {
             : parts.stream().filter(p -> p.getPartNumber() == request.part()).findFirst()
                 .orElseThrow(() -> new BadRequestException("That edition has no part " + request.part()));
         sidecar.setMediaFileId(target.getId());
-        sidecar.setWholeEdition(request.part() == null);
+        // A single file is timed from its own start, so it stays right if another file is joined before it later.
+        sidecar.setWholeEdition(request.part() == null && parts.size() > 1);
         sidecar.setOwnerAttached(true);
         changed(sidecar);
         return one(id);
@@ -281,7 +282,7 @@ public class SubtitleAdminService {
         if (file == null) {
             return new SidecarDto(s.getId(), s.getPath(), s.getPresence().name(), "unmatched", null, null, null, null,
                 0, null, false, s.isOwnerAttached(), s.getCueCount(), s.getParseReport(), s.getOffsetMs(), false,
-                false);
+                false, s.getUpdatedAt().toEpochMilli());
         }
         Edition edition = file.getEdition();
         List<Long> partIds = partIds(edition);
@@ -292,7 +293,7 @@ public class SubtitleAdminService {
             edition.getFilm().getId(), edition.getFilm().getTitle(), edition.getId(), edition.getName(),
             partIds.size(), s.isWholeEdition() ? null : file.getPartNumber(), s.isWholeEdition(),
             s.isOwnerAttached(), s.getCueCount(), s.getParseReport(), s.getOffsetMs(), s.isVerifiedFor(partIds),
-            endsAfter);
+            endsAfter, s.getUpdatedAt().toEpochMilli());
     }
 
     private static List<Long> partIds(Edition edition) {

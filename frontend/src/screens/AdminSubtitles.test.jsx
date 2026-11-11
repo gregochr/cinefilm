@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
@@ -434,6 +434,51 @@ describe('Admin: Subtitles panel, quick nudges', () => {
     );
 
     await waitFor(() => expect(bodies).toEqual([{ offsetMs: 1000 }, { offsetMs: 2000 }]));
+  });
+});
+
+describe('Admin: Subtitles panel, cues after a scan changes the file', () => {
+  it('reads the open cues again when the row’s version changes though its attachment and offset do not', async () => {
+    let scans = 0;
+    let changed = false;
+    installFetch((method, url) => {
+      if (url === '/api/admin/scan') {
+        scans += 1;
+        if (scans > 1) changed = true;
+        return respond(
+          scans === 1
+            ? {
+                ...fixtures.adminScan,
+                running: true,
+                progress: { processed: 5, total: 40, current: 'x' },
+              }
+            : {
+                ...fixtures.adminScan,
+                lastScan: { ...fixtures.adminScan.lastScan, finishedAt: '2026-11-09T04:31:00Z' },
+              },
+        );
+      }
+      if (url === '/api/admin/subtitles') {
+        return respond([file({ version: changed ? 1700000099999 : 1700000000000 })]);
+      }
+      if (url === '/api/admin/subtitles/1/cues') {
+        return respond({
+          offsetMs: 0,
+          cues: [{ startMs: 1000, endMs: 2000, text: changed ? 'New text' : 'Old text' }],
+        });
+      }
+      return null;
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderApp('/admin');
+    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    const li = (await within(panel).findByText('Heat (1995)/Heat.en.forced.srt')).closest('li');
+    await userEvent.click(within(li).getByRole('button', { name: /Show the cues/ }));
+    expect(await within(li).findByText('Old text')).toBeInTheDocument();
+
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+
+    expect(await within(panel).findByText('New text')).toBeInTheDocument();
   });
 });
 

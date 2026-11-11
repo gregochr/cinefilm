@@ -32,7 +32,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class SubtitleAdminControllerTest {
 
     private static final SidecarDto DTO = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L,
-        "Taken", 70L, "Original", 1, 1, false, true, 12, "No problems found", -250, true, false);
+        "Taken", 70L, "Original", 1, 1, false, true, 12, "No problems found", -250, true, false, 1700000000000L);
 
     @Autowired
     private MockMvc mvc;
@@ -67,7 +67,8 @@ class SubtitleAdminControllerTest {
             .andExpect(jsonPath("$[0].parseReport").value("No problems found"))
             .andExpect(jsonPath("$[0].offsetMs").value(-250))
             .andExpect(jsonPath("$[0].verified").value(true))
-            .andExpect(jsonPath("$[0].endsAfterRuntime").value(false));
+            .andExpect(jsonPath("$[0].endsAfterRuntime").value(false))
+            .andExpect(jsonPath("$[0].version").value(1700000000000L));
     }
 
     @Test

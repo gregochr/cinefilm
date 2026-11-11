@@ -72,7 +72,9 @@ export function useSubtitles(version) {
  */
 export function useSubtitleCues(item) {
   const place = `${item.editionId}:${item.whole}:${item.part}`;
-  return useResource(`admin-subtitle-cues:${item.id}:${place}:${item.offsetMs}`, (options) =>
-    adminApi.subtitleCues(item.id, options),
+  // `version` is when the row last changed, so a scan that replaced the file's cues is read again too.
+  return useResource(
+    `admin-subtitle-cues:${item.id}:${place}:${item.offsetMs}:${item.version}`,
+    (options) => adminApi.subtitleCues(item.id, options),
   );
 }
