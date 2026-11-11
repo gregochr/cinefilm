@@ -471,7 +471,7 @@ describe('useContinueWatching: a stale failure does not roll back a newer action
 
   it('Remove, Undo, Remove, then the first fails: the card stays removed', async () => {
     const seq = sequenced('/api/editions/30/continue-watching');
-    const { result } = setup(DATA, seq.route);
+    const { result, reload } = setup(DATA, seq.route);
     act(() => result.current.remove(B));
     await flush();
     act(() => {
@@ -485,9 +485,12 @@ describe('useContinueWatching: a stale failure does not roll back a newer action
     await flush();
     expect(ids(result.current.row)).toEqual([2, 4]);
     expect(result.current.action).toMatchObject({ kind: 'remove', film: B });
+    expect(reload).not.toHaveBeenCalled(); // not until the newer Remove has settled
 
     await act(async () => seq.gates[1](respond({ hidden: true })));
     expect(ids(result.current.row)).toEqual([2, 4]);
+    await flush();
+    expect(reload).toHaveBeenCalledOnce(); // then the list is read again
   });
 
   it('Mark watched, Undo, Mark watched, then the first fails: the override stays', async () => {

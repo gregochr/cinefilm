@@ -179,7 +179,7 @@ describe('Admin: Library scan panel', () => {
   it('shows a loading skeleton while the status loads', () => {
     installFetch(() => new Promise(() => {}));
     renderApp('/admin');
-    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(5);
+    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(6);
   });
 
   it('scrolls the panel into view for the empty-library link (#library-scan)', async () => {
@@ -335,11 +335,11 @@ describe('Admin: Films needing attention panel', () => {
 });
 
 describe('Admin: page', () => {
-  it('has the Admin heading, its six panels, and the TMDB credit', async () => {
+  it('has the Admin heading, its seven panels, and the TMDB credit', async () => {
     installFetch();
     renderApp('/admin');
     expect(await screen.findByRole('heading', { level: 1, name: 'Admin' })).toBeInTheDocument();
-    expect(screen.getAllByRole('region')).toHaveLength(6);
+    expect(screen.getAllByRole('region')).toHaveLength(7);
     expect(
       screen.getByText('This product uses the TMDB API but is not endorsed or certified by TMDB.'),
     ).toBeInTheDocument();

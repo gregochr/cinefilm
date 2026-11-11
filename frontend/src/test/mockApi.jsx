@@ -106,6 +106,9 @@ export function defaultRoute(method, url) {
           lastImport: null,
         });
   }
+  if (path === '/api/admin/settings') {
+    return json({ continueWatchingMinMinutes: 5, inProgressCount: 3 });
+  }
   if (path === '/api/admin/playback-health') return json(adminPlaybackHealth);
   if (path === '/api/admin/transcoding') return json(adminTranscoding);
   if (/^\/api\/admin\/transcoding\/sessions\//.test(path)) return json(null, 204);

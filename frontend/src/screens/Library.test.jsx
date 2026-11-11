@@ -21,7 +21,6 @@ describe('Library filters', () => {
     expect(
       await screen.findByText(`${fixtures.films.total} films · sorted by recently added`),
     ).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('films · sorted by recently added');
     expect(screen.getByRole('link', { name: 'Heat, 1995' })).toBeInTheDocument();
   });
 

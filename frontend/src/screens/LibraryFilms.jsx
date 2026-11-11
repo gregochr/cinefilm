@@ -1,12 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import CollectionTile from '../components/CollectionTile.jsx';
 import { Picker, Segmented, Switch } from '../components/Controls.jsx';
 import { SearchIcon } from '../components/icons.jsx';
-import { Poster } from '../components/Poster.jsx';
+import { PosterWithMenu } from '../components/PosterWithMenu.jsx';
 import { GridSkeleton } from '../components/Skeleton.jsx';
 import { EmptyLibrary, ErrorState, NoResults } from '../components/StateMessages.jsx';
+import UndoToast from '../components/UndoToast.jsx';
 import { groupFilms } from '../state/collections.js';
+import { useLibraryFilmActions } from '../state/useLibraryFilmActions.js';
 import { useCollections } from '../state/usePeopleAndCollections.js';
 import { useGroupCollections } from '../state/useGroupCollections.js';
 import { useUrlSearch } from '../state/useUrlSearch.js';
@@ -71,15 +73,43 @@ export default function LibraryFilms() {
   const query = { q, sort, genre, decade, show: show === 'all' ? '' : show };
   const { data, error, loading, reload } = useFilms(query);
 
+  const undoButton = useRef(null);
+  const focusUndo = useRef(false);
+  const pendingFocus = useRef(null);
+  const posterLinks = useRef(new Map());
+  const cw = useLibraryFilmActions(data, show, reload, (film) => {
+    // A rollback brings the poster back: focus that was on Undo (or lost with the poster) follows it.
+    const at = document.activeElement;
+    if (at === document.body || at === undoButton.current) pendingFocus.current = film.id;
+  });
+  const { films, total } = cw;
   const filtersActive = Boolean(q || genre || decade || show !== 'all');
   const facets = data?.facets || { genres: [], decades: [] };
-  const total = data?.total ?? 0;
+
+  // A poster that leaves the list takes focus with it: focus moves to Undo, or back to the poster if it returns.
+  useEffect(() => {
+    if (focusUndo.current) {
+      focusUndo.current = false;
+      undoButton.current?.focus();
+    } else if (pendingFocus.current !== null) {
+      posterLinks.current.get(pendingFocus.current)?.focus();
+      pendingFocus.current = null;
+    }
+  });
+  const registerPoster = (id) => (el) => {
+    if (el) posterLinks.current.set(id, el);
+    else posterLinks.current.delete(id);
+  };
+  const act = (kind, film) => {
+    focusUndo.current = kind === 'watched' && show === 'in-progress';
+    (kind === 'remove' ? cw.remove : cw.markWatched)(film);
+  };
   // Search and In progress never group: they show individual films even with the switch on.
   const grouping = groupPreference && !q && show !== 'in-progress';
   const items =
     data && grouping
-      ? groupFilms(data.films, collectionsData?.collections || [], sort)
-      : (data?.films || []).map((film) => ({ type: 'film', film }));
+      ? groupFilms(films, collectionsData?.collections || [], sort)
+      : films.map((film) => ({ type: 'film', film }));
   const plural = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
   const sortedBy = `sorted by ${SORT_PHRASE[sort] || 'recently added'}`;
   let countLabel = '';
@@ -103,7 +133,13 @@ export default function LibraryFilms() {
       <div className={`poster-grid${loading ? ' poster-grid--busy' : ''}`}>
         {items.map((item) =>
           item.type === 'film' ? (
-            <Poster key={item.film.id} film={item.film} />
+            <PosterWithMenu
+              key={item.film.id}
+              film={item.film}
+              linkRef={registerPoster(item.film.id)}
+              onRemove={(film) => act('remove', film)}
+              onMarkWatched={(film) => act('watched', film)}
+            />
           ) : (
             <CollectionTile
               key={`collection-${item.collection.id}`}
@@ -171,6 +207,7 @@ export default function LibraryFilms() {
       </div>
 
       {body}
+      <UndoToast action={cw.action} undoRef={undoButton} onUndo={cw.undo} />
 
       <div className="hints" aria-hidden="true">
         <span>/ search</span>

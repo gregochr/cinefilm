@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Button } from '../components/Button.jsx';
 import { SkeletonBlock } from '../components/Skeleton.jsx';
@@ -9,6 +9,13 @@ import Toast from '../components/Toast.jsx';
 import TranscodingPanel from '../components/TranscodingPanel.jsx';
 import { ErrorState } from '../components/StateMessages.jsx';
 import { formatRuntime } from '../player/time.js';
+import {
+  MAX_MINUTES,
+  MIN_MINUTES,
+  RANGE_ERROR,
+  describeInProgress,
+  useSettings,
+} from '../state/useSettings.js';
 import { useSignOut } from '../state/useSignOut.js';
 import { useToast } from '../state/useToast.js';
 import { useAttention, useGroupingReport, usePlexImport, useScan } from '../state/useAdmin.js';
@@ -394,6 +401,86 @@ function TmdbMark() {
   );
 }
 
+/** The minimum watch time for Continue watching. It saves on blur or Enter: there is nothing to batch. */
+function ContinueWatchingPanel() {
+  const { settings, loadError, loading, reload, draft, edit, commit, error, status } =
+    useSettings();
+  const inputId = useId();
+  const helpId = useId();
+  const errorId = useId();
+  let body;
+  if (loading && !settings) {
+    body = (
+      <div role="status" aria-label="Loading">
+        <SkeletonBlock style={{ height: 120 }} />
+      </div>
+    );
+  } else if (loadError && !settings) {
+    body = <ErrorState onRetry={reload}>Couldn&rsquo;t load the settings.</ErrorState>;
+  } else if (settings) {
+    const value = draft ?? String(settings.continueWatchingMinMinutes);
+    body = (
+      <>
+        <div className="admin__setting">
+          <label htmlFor={inputId} className="admin__setting-label">
+            Minimum watched before a film counts as in progress
+          </label>
+          <div className="admin__setting-row">
+            <input
+              id={inputId}
+              type="number"
+              inputMode="numeric"
+              className="admin__number"
+              min={MIN_MINUTES}
+              max={MAX_MINUTES}
+              step={1}
+              value={value}
+              aria-invalid={error === RANGE_ERROR ? 'true' : undefined}
+              aria-describedby={error === RANGE_ERROR ? `${helpId} ${errorId}` : helpId}
+              onChange={(event) => edit(event.target.value)}
+              onBlur={() => commit(draft)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  commit(draft);
+                }
+              }}
+            />
+            <span className="admin__suffix" aria-hidden="true">
+              minutes
+            </span>
+          </div>
+          <p id={helpId} className="admin__text">
+            Films you&rsquo;ve watched for less than this stay out of Continue watching. Their place
+            is still saved.
+          </p>
+          {error ? (
+            <p id={errorId} className="admin__field-error">
+              {error}
+            </p>
+          ) : null}
+        </div>
+        <p className="admin__mono admin__ratings-line">
+          {describeInProgress(settings.inProgressCount)}
+        </p>
+      </>
+    );
+  }
+  return (
+    <section className="admin__card" aria-labelledby="admin-continue-title">
+      <div className="admin__head">
+        <h2 id="admin-continue-title" className="admin__title">
+          Continue watching
+        </h2>
+        <span className="admin__notice" role="status">
+          {status}
+        </span>
+      </div>
+      {body}
+    </section>
+  );
+}
+
 function SessionPanel() {
   const { signingOut, error, signOut } = useSignOut();
   return (
@@ -510,6 +597,7 @@ export default function Admin() {
           onImport={plexImport.startImport}
           onRecheck={plexImport.reload}
         />
+        <ContinueWatchingPanel />
         <TranscodingPanel />
         <PlaybackHealthPanel />
         <SessionPanel />
