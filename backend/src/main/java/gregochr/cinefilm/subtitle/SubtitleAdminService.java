@@ -166,7 +166,7 @@ public class SubtitleAdminService {
         if (request == null || request.offsetMs() == null) {
             throw new BadRequestException("An offset is required");
         }
-        if (Math.abs(request.offsetMs()) > MAX_OFFSET_MS) {
+        if (request.offsetMs() < -MAX_OFFSET_MS || request.offsetMs() > MAX_OFFSET_MS) {
             throw new BadRequestException("The offset must be within 10 minutes either way");
         }
         sidecar.setOffsetMs(request.offsetMs());

@@ -367,6 +367,18 @@ class SubtitleAdminServiceTest extends SubtitleTestBase {
     }
 
     @Test
+    void theExtremeIntegersAreRefusedNotOverflowedPastTheCheck() {
+        SubtitleSidecar row = sidecar("Taken.en.forced.srt", null, false);
+
+        for (int extreme : new int[] {Integer.MIN_VALUE, Integer.MAX_VALUE}) {
+            assertThatThrownBy(() -> admin.offset(row.getId(), new OffsetRequest(extreme)))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("The offset must be within 10 minutes either way");
+        }
+        assertThat(row.getOffsetMs()).isZero();
+    }
+
+    @Test
     void anOffsetNeedsAValueAndAKnownFile() {
         SubtitleSidecar row = sidecar("Taken.en.forced.srt", null, false);
 
