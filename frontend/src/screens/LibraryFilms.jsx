@@ -84,22 +84,17 @@ export default function LibraryFilms() {
   const [acted, setActed] = useState(0); // counts actions; an effect from before the latest one must not focus
   const actedWanted = useRef(0);
   const latestData = useRef(data);
+  const leftTo = useRef(null); // where focus goes if the poster focused for a failed Undo is not coming back
   const awaitData = useRef(false); // the poster is rebuilt with the data being read: focus it only then
   const focusedAt = useRef(null); // the loaded data when pendingFocus was set
-  const cw = useLibraryFilmActions(
-    data,
-    show,
-    reload,
-    (film) => {
-      // A rollback brings the poster back: focus that was on Undo (or lost with the poster) follows it.
-      const at = document.activeElement;
-      if (at === document.body || at === undoButton.current) {
-        pendingFocus.current = film.id;
-        focusedAt.current = data;
-      }
-    },
-    loading,
-  );
+  const cw = useLibraryFilmActions(data, show, reload, (film) => {
+    // A rollback brings the poster back: focus that was on Undo (or lost with the poster) follows it.
+    const at = document.activeElement;
+    if (at === document.body || at === undoButton.current) {
+      pendingFocus.current = film.id;
+      focusedAt.current = data;
+    }
+  });
   const { films, total } = cw;
   // When the toast goes (it expires, or the action is undone or rolled back) its button leaves with the focus on it.
   // The button is still in the DOM while this renders.
@@ -111,12 +106,16 @@ export default function LibraryFilms() {
     const id = cw.action.film.id;
     pendingFocus.current = id; // focus follows the poster that comes back
     focusedAt.current = data;
-    cw.undo().then((reloading) => {
-      // The list is being read again and the poster is rebuilt with it: focus it once that data arrives.
-      if (!reloading) return;
+    // The poster that took the film's slot when the action began (the list no longer has the film in it).
+    const neighbour = expiryTarget.current === id ? undefined : expiryTarget.current;
+    cw.undo().then((result) => {
+      // The list is being read again and the poster is rebuilt with it (or, after a failed Undo, may be gone again):
+      // focus it once that data arrives, or else the poster in its slot.
+      if (result !== 'reloading' && result !== 'failed') return;
       pendingFocus.current = id;
       focusedAt.current = latestData.current;
       awaitData.current = true;
+      leftTo.current = neighbour;
     });
   };
   const filtersActive = Boolean(q || genre || decade || show !== 'all');
@@ -137,6 +136,7 @@ export default function LibraryFilms() {
       if (awaitData.current && !arrived) return;
       if (link) {
         awaitData.current = false;
+        leftTo.current = null;
         link.focus();
         pendingFocus.current = null;
       } else if (arrived) {
@@ -144,6 +144,10 @@ export default function LibraryFilms() {
         // The poster may still be on its way (Undo after a reload waits for the list); once newer data arrives
         // without it, it is not coming, and a late focus must not be stolen.
         pendingFocus.current = null;
+        if (leftTo.current !== null && document.activeElement === document.body) {
+          (posterLinks.current.get(leftTo.current) ?? searchRef.current)?.focus();
+        }
+        leftTo.current = null;
       }
     }
   });
@@ -163,6 +167,7 @@ export default function LibraryFilms() {
     const at = films.findIndex((f) => f.id === film.id);
     expiryTarget.current = focusUndo.current ? (films[at + 1] ?? films[at - 1])?.id : film.id;
     awaitData.current = false;
+    leftTo.current = null;
     pendingFocus.current = null; // a new action cancels a focus still waiting for a poster
     // A poster that stays (Remove, or Mark as watched in All) may be rebuilt and loses the focus its menu item had.
     if (!focusUndo.current) {

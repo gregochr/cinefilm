@@ -14,7 +14,9 @@ export const UNDO_MS = 8000;
  * Requests for one edition are serialised (each starts after the previous one settled), so a quick Remove, Undo,
  * Remove reaches the server in that order. `reload` is called if an Undo cannot be sent, to resynchronise with the
  * server. `onRollback(film)` is called after a failed request has been restored. `begin` returns false (and
- * changes nothing) when the film has no edition to act on. `meta` (optional) is spread onto the `action` entry; `meta.onCommitted()` is called when the request succeeded and nothing newer has happened to the film.
+ * changes nothing) when the film has no edition to act on. `undo()` resolves to 'done' once the server has reversed
+ * the action, 'failed' when the reversal could not be sent (the list is then read again) and 'none' when there was
+ * nothing to undo. `meta` (optional) is spread onto the `action` entry; `meta.onCommitted()` is called when the request succeeded and nothing newer has happened to the film.
  */
 export function useUndoableFilmActions(reload, onRollback) {
   const [action, setAction] = useState(null);
@@ -115,7 +117,7 @@ export function useUndoableFilmActions(reload, onRollback) {
 
   const undo = useCallback(async () => {
     const entry = current.current;
-    if (!entry) return false;
+    if (!entry) return 'none';
     clearAction(entry);
     bump(entry.film.id);
     entry.restore();
@@ -133,10 +135,10 @@ export function useUndoableFilmActions(reload, onRollback) {
           await editionsApi.restoreState(entry.editionId, result.previous);
         }
       });
-      return true;
+      return 'done';
     } catch {
       reload();
-      return false;
+      return 'failed';
     }
   }, [clearAction, reload, enqueue, bump]);
 

@@ -330,6 +330,41 @@ describe('Library: the ⋯ menu on in-progress posters', () => {
     });
   });
 
+  describe.each([
+    ['the first film', 'Alpha', 'Beta, 2002'],
+    ['a middle film', 'Beta', 'Gamma, 2003'],
+    ['the last film', 'Gamma', 'Beta, 2002'],
+  ])('a failed Undo under In progress on %s', (_, title, expected) => {
+    it(`moves focus to ${expected} when the film goes again`, async () => {
+      let watched = false; // what the server has
+      const marked = { Alpha: ALPHA, Beta: BETA, Gamma: GAMMA }[title];
+      installFetch((method, url) => {
+        if (url.startsWith('/api/films?')) {
+          const films = FILMS.slice(0, 3).filter((f) => !(watched && f === marked));
+          return respond({ total: films.length, films, facets: fixtures.films.facets });
+        }
+        if (/\/watched$/.test(url)) {
+          watched = true;
+          return respond({ watched: true, previous: { positionMs: 1800000, watched: false } });
+        }
+        if (/\/playback-state$/.test(url)) return respond({}, 500); // the reversal fails
+        return null;
+      });
+      renderApp('/library?show=in-progress&sort=last-watched');
+      await heading('3 films in progress · sorted by last watched');
+      await openMenu(title);
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Mark as watched' }));
+      await vi.waitFor(() => expect(watched).toBe(true));
+      expect(screen.getByRole('button', { name: 'Undo' })).toHaveFocus();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+
+      // The list is read again: the film is still watched there, so its poster goes and focus moves to its slot.
+      await vi.waitFor(() => expect(maybePoster(`${marked.title}, ${marked.year}`)).toBeNull());
+      await vi.waitFor(() => expect(poster(expected)).toHaveFocus());
+    });
+  });
+
   it('a Remove that fails after a newer action on the film re-reads the list, so Remove is offered again', async () => {
     let release;
     const gate = new Promise((resolve) => {
@@ -466,7 +501,8 @@ describe('Library: the ⋯ menu on in-progress posters', () => {
     const before = listCalls();
     await userEvent.click(within(screen.getByRole('group', { name: 'Sort' })).getByText('Title'));
     await vi.waitFor(() => expect(listCalls()).toBeGreaterThan(before));
-    await vi.waitFor(() => expect(poster('Alpha, 2001')).toBeInTheDocument()); // the old state
+    // The answer for the new sort predates the change and crossed it: it is not shown (it is read again).
+    expect(poster('Alpha, 2001, watched')).toBeInTheDocument();
 
     finish();
     expect(await screen.findByRole('link', { name: 'Alpha, 2001, watched' })).toBeInTheDocument();
@@ -528,11 +564,11 @@ describe('Library: the ⋯ menu on in-progress posters', () => {
       const first = state.releaseList;
       state.held = false; // later reads (the re-read) answer at once
       state.commit();
-      await vi.waitFor(() => expect(state.lists).toBeGreaterThan(stale + 1)); // the re-read
       await act(async () => {
-        first(); // the stale answer arrives last, and is ignored
+        first(); // the answer for the new sort arrives after the change: it crossed it
         await settle();
       });
+      await vi.waitFor(() => expect(state.lists).toBeGreaterThan(stale + 1)); // the stale answer is read again
 
       expect(await screen.findByRole('link', { name: 'Alpha, 2001, watched' })).toBeInTheDocument();
       expect(poster('Alpha, 2001, watched')).toBeInTheDocument();
@@ -564,11 +600,11 @@ describe('Library: the ⋯ menu on in-progress posters', () => {
       const first = state.releaseList;
       state.held = false;
       await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
-      await vi.waitFor(() => expect(state.lists).toBeGreaterThan(stale + 1)); // the re-read
       await act(async () => {
         first();
         await settle();
       });
+      await vi.waitFor(() => expect(state.lists).toBeGreaterThan(stale + 1)); // the stale answer is read again
 
       expect(await screen.findByRole('link', { name: 'Alpha, 2001' })).toBeInTheDocument();
       expect(screen.getAllByTestId('poster-fill')).toHaveLength(2);
@@ -594,11 +630,11 @@ describe('Library: the ⋯ menu on in-progress posters', () => {
       const first = state.releaseList;
       state.held = false;
       state.commit();
-      await vi.waitFor(() => expect(state.lists).toBeGreaterThan(stale + 1));
       await act(async () => {
         first();
         await settle();
       });
+      await vi.waitFor(() => expect(state.lists).toBeGreaterThan(stale + 1)); // the stale answer is read again
 
       await openMenu('Alpha');
       expect(removeItem()).not.toBeInTheDocument();

@@ -23,15 +23,13 @@ function without(patches, filmId, keys) {
  * Mark as watched takes the poster out of the list and the total under `show === 'in-progress'`, and elsewhere keeps
  * it as a watched film without the bar.
  */
-export function useLibraryFilmActions(data, show, reload, onRollback, loading = false) {
+export function useLibraryFilmActions(data, show, reload, onRollback) {
   const [source, setSource] = useState(data);
   const [patches, setPatches] = useState({});
   const { action, begin, undo: undoAction } = useUndoableFilmActions(reload, onRollback);
   const current = useRef(data);
-  const reading = useRef(loading); // a list read is in flight
   useEffect(() => {
     current.current = data;
-    reading.current = loading;
   });
 
   if (source !== data) {
@@ -55,11 +53,11 @@ export function useLibraryFilmActions(data, show, reload, onRollback, loading = 
         () => setPatches((p) => without(p, film.id, keys)),
         {
           source: data,
-          // The list may have been read again before the change committed, or be being read now (its answer may
-          // predate the change): read it again, which supersedes any read in flight. Never otherwise, so other
-          // films' patches stand.
+          // The list may have been read again before the change committed. A read still in flight is not our concern:
+          // `useResource` never stores or shows an answer that crossed a change, and reads it again. Reload only
+          // when the data was replaced, so other films' patches stand.
           onCommitted: () => {
-            if (current.current !== data || reading.current) reload();
+            if (current.current !== data) reload();
           },
         },
       );
@@ -71,14 +69,16 @@ export function useLibraryFilmActions(data, show, reload, onRollback, loading = 
   const markWatched = useCallback((film) => apply('watched', film), [apply]);
 
   // New data drops the patches, so an Undo after a reload has nothing to put back: once the server has reversed the
-  // action, read the list again to show it. (`undo()` resolves to true when it asked for that reload.)
+  // action, read the list again to show it. `undo()` resolves to 'none' (nothing to undo), 'done' (reversed, nothing
+  // more to read), 'reloading' (reversed, and the list is being read again because it was replaced) or 'failed'
+  // (the reversal was not sent: the list is being read again to show what the server has).
   const undo = useCallback(async () => {
     const taken = action?.source;
-    const reversed = await undoAction();
-    // Replaced, or a read in flight whose answer may predate the reversal: read again (which supersedes it).
-    const reloading = reversed && (taken !== current.current || reading.current);
-    if (reloading) reload();
-    return reloading;
+    const result = await undoAction();
+    if (result !== 'done') return result;
+    if (taken === current.current) return 'done';
+    reload();
+    return 'reloading';
   }, [action, undoAction, reload]);
 
   const all = data?.films ?? [];
