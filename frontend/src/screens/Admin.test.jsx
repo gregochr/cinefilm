@@ -179,7 +179,7 @@ describe('Admin: Library scan panel', () => {
   it('shows a loading skeleton while the status loads', () => {
     installFetch(() => new Promise(() => {}));
     renderApp('/admin');
-    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(6);
+    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(7);
   });
 
   it('scrolls the panel into view for the empty-library link (#library-scan)', async () => {
@@ -334,12 +334,42 @@ describe('Admin: Films needing attention panel', () => {
   });
 });
 
+describe('Admin: Subtitles refresh', () => {
+  it('reads the subtitle files again when a scan finishes, so new files show without reopening Admin', async () => {
+    let scans = 0;
+    const fetchMock = installFetch((method, url) => {
+      if (url === '/api/admin/scan') {
+        scans += 1;
+        return respond(
+          scans === 1
+            ? running(5)
+            : {
+                ...fixtures.adminScan,
+                lastScan: { ...fixtures.adminScan.lastScan, finishedAt: '2026-11-09T04:31:00Z' },
+              },
+        );
+      }
+      return null;
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderApp('/admin');
+    await screen.findByText('5 / 40 files');
+    const calls = () => fetchMock.mock.calls.filter((c) => c[0] === '/api/admin/subtitles').length;
+    const before = calls();
+
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+
+    await waitFor(() => expect(calls()).toBeGreaterThan(before));
+  });
+});
+
 describe('Admin: page', () => {
-  it('has the Admin heading, its seven panels, and the TMDB credit', async () => {
+  it('has the Admin heading, its eight panels, and the TMDB credit', async () => {
     installFetch();
     renderApp('/admin');
     expect(await screen.findByRole('heading', { level: 1, name: 'Admin' })).toBeInTheDocument();
-    expect(screen.getAllByRole('region')).toHaveLength(7);
+    expect(screen.getAllByRole('region')).toHaveLength(8);
+    expect(screen.getByRole('region', { name: 'Subtitles' })).toBeInTheDocument();
     expect(
       screen.getByText('This product uses the TMDB API but is not endorsed or certified by TMDB.'),
     ).toBeInTheDocument();

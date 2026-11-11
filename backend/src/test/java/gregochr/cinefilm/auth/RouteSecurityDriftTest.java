@@ -105,7 +105,11 @@ class RouteSecurityDriftTest {
             "GET /api/admin/films/{id}/editions", "PUT /api/admin/films/{id}/editions",
             "PUT /api/playback-health/{playbackId}", "GET /api/admin/playback-health",
             "GET /api/admin/settings", "PUT /api/admin/settings",
-            "GET /api/admin/playback-health/{playbackId}");
+            "GET /api/admin/playback-health/{playbackId}", "GET /api/editions/{id}/forced-subtitles.vtt",
+            "GET /api/admin/subtitles", "GET /api/admin/subtitles/{id}/cues",
+            "POST /api/admin/subtitles/{id}/attach", "POST /api/admin/subtitles/{id}/detach",
+            "PUT /api/admin/subtitles/{id}/offset", "POST /api/admin/subtitles/{id}/verify",
+            "DELETE /api/admin/subtitles/{id}/verify");
     }
 
     @Test
@@ -141,7 +145,10 @@ class RouteSecurityDriftTest {
     @Test
     void theStreamingSessionRoutesThatChangeStateAlsoNeedTheCsrfHeaderWhenSignedIn() throws Exception {
         List<String> mutating = List.of("POST /api/editions/{id}/sessions", "DELETE /api/sessions/{id}",
-            "DELETE /api/admin/transcoding/sessions/{id}", "PUT /api/playback-health/{playbackId}");
+            "DELETE /api/admin/transcoding/sessions/{id}", "PUT /api/playback-health/{playbackId}",
+            "POST /api/admin/subtitles/{id}/attach", "POST /api/admin/subtitles/{id}/detach",
+            "PUT /api/admin/subtitles/{id}/offset", "POST /api/admin/subtitles/{id}/verify",
+            "DELETE /api/admin/subtitles/{id}/verify");
         assertThat(apiRoutes()).containsAll(mutating);
 
         for (String route : mutating) {

@@ -1,5 +1,6 @@
 package gregochr.cinefilm.library;
 
+import gregochr.cinefilm.subtitle.SidecarNames;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.FileVisitResult;
@@ -15,7 +16,7 @@ import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Component;
 
-/** Walks the library folder for film files. Read-only: nothing here writes to the media mount. */
+/** Walks the library folder for film files and forced subtitle files. Read-only: nothing writes to the mount. */
 @Component
 public class LibraryScanner {
 
@@ -51,18 +52,36 @@ public class LibraryScanner {
     }
 
     /**
+     * A forced English subtitle file found beside the films ({@code <stem>.en.forced.srt} or
+     * {@code <stem>.forced.en.srt}).
+     *
+     * @param path path relative to the library root, with forward slashes
+     * @param sizeBytes file size
+     * @param modifiedAt last-modified time
+     */
+    public record FoundSidecar(String path, long sizeBytes, Instant modifiedAt) {
+    }
+
+    /**
      * The result of a walk.
      *
      * @param files every candidate film file found
      * @param rejected candidate files refused because they resolve outside the library root
      * @param unreadable folders (or files) under the root that could not be read, relative to it; what is below
      *     them is unknown, not gone
+     * @param sidecars every forced English subtitle file found
      */
-    public record Found(List<FoundFile> files, int rejected, List<String> unreadable) {
+    public record Found(List<FoundFile> files, int rejected, List<String> unreadable,
+                        List<FoundSidecar> sidecars) {
 
-        /** A walk that read everything it tried to. */
+        /** A walk that read everything it tried to and found no subtitle files. */
         public Found(List<FoundFile> files, int rejected) {
-            this(files, rejected, List.of());
+            this(files, rejected, List.of(), List.of());
+        }
+
+        /** A walk that found no subtitle files. */
+        public Found(List<FoundFile> files, int rejected, List<String> unreadable) {
+            this(files, rejected, unreadable, List.of());
         }
 
         /** True when the path is, or is inside, a folder or file the walk could not read. */
@@ -74,7 +93,8 @@ public class LibraryScanner {
     /**
      * Walks the library recursively for {@code .m4v}, {@code .mp4}, {@code .mov} (playable) and {@code .avi},
      * {@code .mkv} (needs conversion), skipping hidden files and folders, Plex's
-     * {@code Plex Versions} folders and AppleDouble {@code ._*} files. There is no size filter.
+     * {@code Plex Versions} folders and AppleDouble {@code ._*} files. There is no size filter. The same walk collects
+     * forced English subtitle files ({@code .en.forced.srt}, {@code .forced.en.srt}, any case) with the same skips.
      *
      * @return the files found; an unreadable or missing root yields an {@link UncheckedIOException}
      */
@@ -82,6 +102,7 @@ public class LibraryScanner {
         List<FoundFile> files = new ArrayList<>();
         int[] rejected = {0};
         List<String> unreadable = new ArrayList<>();
+        List<FoundSidecar> sidecars = new ArrayList<>();
         try {
             Files.walkFileTree(root.root(), new SimpleFileVisitor<>() {
                 @Override
@@ -98,6 +119,17 @@ public class LibraryScanner {
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                     String name = file.getFileName().toString();
                     if (name.startsWith(".")) {
+                        return FileVisitResult.CONTINUE;
+                    }
+                    if (SidecarNames.matches(name)) {
+                        String relative = root.relativize(file);
+                        Optional<Path> real = root.resolveFile(relative);
+                        if (real.isEmpty()) {
+                            rejected[0]++;
+                            return FileVisitResult.CONTINUE;
+                        }
+                        BasicFileAttributes actual = Files.readAttributes(real.get(), BasicFileAttributes.class);
+                        sidecars.add(new FoundSidecar(relative, actual.size(), actual.lastModifiedTime().toInstant()));
                         return FileVisitResult.CONTINUE;
                     }
                     String extension = extension(name);
@@ -130,7 +162,8 @@ public class LibraryScanner {
             throw new UncheckedIOException("Cannot read the library folder", e);
         }
         files.sort((a, b) -> a.path().compareToIgnoreCase(b.path()));
-        return new Found(List.copyOf(files), rejected[0], List.copyOf(unreadable));
+        sidecars.sort((a, b) -> a.path().compareToIgnoreCase(b.path()));
+        return new Found(List.copyOf(files), rejected[0], List.copyOf(unreadable), List.copyOf(sidecars));
     }
 
     /** When the file was created; file systems with no creation time report the epoch, so use the modified time. */

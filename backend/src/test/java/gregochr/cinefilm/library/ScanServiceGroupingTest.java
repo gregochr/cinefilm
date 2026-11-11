@@ -10,9 +10,12 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import gregochr.cinefilm.film.MediaFileRepository.Known;
 import gregochr.cinefilm.film.Playability;
+import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.library.LibraryScanner.Found;
 import gregochr.cinefilm.library.LibraryScanner.FoundFile;
+import gregochr.cinefilm.subtitle.SidecarSync;
 import gregochr.cinefilm.tmdb.MatchOutcome;
 import gregochr.cinefilm.tmdb.MatchOutcome.Status;
 import gregochr.cinefilm.tmdb.TmdbApi;
@@ -46,13 +49,14 @@ class ScanServiceGroupingTest {
     private final TmdbMatcher matcher = mock(TmdbMatcher.class);
     private final LibraryIngest ingest = mock(LibraryIngest.class);
     private final LibraryGrouping grouping = mock(LibraryGrouping.class);
+    private final SidecarSync sidecars = mock(SidecarSync.class);
     private ScanService service;
     private ProbeResult probe;
 
     @BeforeEach
     void setUp() {
         service = new ScanService(new LibraryRoot(library.toString()), scanner, ffprobe, tmdb, matcher, ingest,
-            Runnable::run, CLOCK, new LibraryLock(), event -> { }, grouping);
+            Runnable::run, CLOCK, new LibraryLock(), event -> { }, grouping, sidecars);
         when(tmdb.enabled()).thenReturn(true);
         when(ingest.startRun("admin", CLOCK.instant())).thenReturn(5L);
         when(ingest.known()).thenReturn(Map.of());
@@ -239,5 +243,54 @@ class ScanServiceGroupingTest {
         verify(matcher).matchTagged(949L, null);
         verifyNoMoreInteractions(matcher);
         verify(ingest, never()).pending();
+    }
+
+    @Test
+    void forcedSubtitleFilesAreSyncedWithTheWalkAfterGroupingAndBeforeTheRetries() {
+        Found found = new Found(List.of(), 0, List.of("Locked"),
+            List.of(new LibraryScanner.FoundSidecar("Taken.en.forced.srt", 10, T1)));
+        when(scanner.scan()).thenReturn(found);
+
+        service.start("admin");
+
+        InOrder order = inOrder(grouping, sidecars, ingest);
+        order.verify(grouping).group();
+        order.verify(sidecars).sync(found);
+        order.verify(ingest).pending();
+    }
+
+    @Test
+    void forcedSubtitleFilesAreSyncedEvenWhenNoFilmChanged() {
+        Found found = new Found(List.of(), 0, List.of(), List.of());
+        when(scanner.scan()).thenReturn(found);
+
+        service.start("admin");
+
+        verify(sidecars).sync(found);
+    }
+
+    @Test
+    void aFailureSyncingForcedSubtitlesIsCountedAndTheRestOfTheScanStillRuns() {
+        Found found = new Found(List.of(), 0);
+        when(scanner.scan()).thenReturn(found);
+        doThrow(new IllegalStateException("boom")).when(sidecars).sync(found);
+
+        service.start("admin");
+
+        verify(ingest).pending();
+        verify(grouping).refreshDefaults();
+        verify(ingest).finishRun(5L, CLOCK.instant(), 0, 0, 0, "1 files could not be processed");
+    }
+
+    @Test
+    void whenTheLibraryLooksEmptyOrUnavailableNothingIsSyncedSoNoSubtitleIsMarkedMissing() {
+        when(ingest.known()).thenReturn(Map.of("Heat.m4v", new Known(1L, "Heat.m4v", 10L, T1, Presence.PRESENT,
+            Playability.PLAYABLE, "yuv420p")));
+        when(scanner.scan()).thenReturn(new Found(List.of(), 0, List.of(),
+            List.of(new LibraryScanner.FoundSidecar("Heat.en.forced.srt", 10, T1))));
+
+        service.start("admin");
+
+        verifyNoInteractions(sidecars);
     }
 }

@@ -22,6 +22,9 @@ public class LibraryLock {
     /** Holder name of an Edit editions save. */
     public static final String EDIT = "edit";
 
+    /** Holder name of an Admin change to a forced subtitle file. */
+    public static final String SUBTITLE = "subtitle";
+
     private final AtomicReference<String> holder = new AtomicReference<>();
 
     /**

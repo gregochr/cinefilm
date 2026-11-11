@@ -1,0 +1,191 @@
+package gregochr.cinefilm.subtitle;
+
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import gregochr.cinefilm.auth.SecurityConfig;
+import gregochr.cinefilm.config.BadRequestException;
+import gregochr.cinefilm.config.NotFoundException;
+import gregochr.cinefilm.subtitle.SubtitleDtos.AttachRequest;
+import gregochr.cinefilm.subtitle.SubtitleDtos.CueDto;
+import gregochr.cinefilm.subtitle.SubtitleDtos.CuesDto;
+import gregochr.cinefilm.subtitle.SubtitleDtos.OffsetRequest;
+import gregochr.cinefilm.subtitle.SubtitleDtos.SidecarDto;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+
+@WebMvcTest(SubtitleAdminController.class)
+@Import(SecurityConfig.class)
+class SubtitleAdminControllerTest {
+
+    private static final SidecarDto DTO = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L,
+        "Taken", 70L, "Original", 1, 1, false, true, 12, "No problems found", -250, true, false, 1700000000000L);
+
+    @Autowired
+    private MockMvc mvc;
+
+    @MockitoBean
+    private SubtitleAdminService service;
+
+    private static MockHttpServletRequestBuilder signedIn(MockHttpServletRequestBuilder builder) {
+        return builder.with(user("owner")).header("X-CineFilm", "1").contentType("application/json");
+    }
+
+    @Test
+    void listReturnsEveryFileWithItsShape() throws Exception {
+        when(service.list()).thenReturn(List.of(DTO));
+
+        mvc.perform(get("/api/admin/subtitles").with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$[0].id").value(5))
+            .andExpect(jsonPath("$[0].path").value("Taken.en.forced.srt"))
+            .andExpect(jsonPath("$[0].presence").value("PRESENT"))
+            .andExpect(jsonPath("$[0].state").value("matched"))
+            .andExpect(jsonPath("$[0].filmId").value(7))
+            .andExpect(jsonPath("$[0].filmTitle").value("Taken"))
+            .andExpect(jsonPath("$[0].editionId").value(70))
+            .andExpect(jsonPath("$[0].editionName").value("Original"))
+            .andExpect(jsonPath("$[0].parts").value(1))
+            .andExpect(jsonPath("$[0].part").value(1))
+            .andExpect(jsonPath("$[0].whole").value(false))
+            .andExpect(jsonPath("$[0].ownerAttached").value(true))
+            .andExpect(jsonPath("$[0].cueCount").value(12))
+            .andExpect(jsonPath("$[0].parseReport").value("No problems found"))
+            .andExpect(jsonPath("$[0].offsetMs").value(-250))
+            .andExpect(jsonPath("$[0].verified").value(true))
+            .andExpect(jsonPath("$[0].endsAfterRuntime").value(false))
+            .andExpect(jsonPath("$[0].version").value(1700000000000L));
+    }
+
+    @Test
+    void cuesReturnsTheOffsetAndTheCues() throws Exception {
+        when(service.cues(5L)).thenReturn(new CuesDto(1500, List.of(new CueDto(11_500, 13_500, "Hello"))));
+
+        mvc.perform(get("/api/admin/subtitles/5/cues").with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.offsetMs").value(1500))
+            .andExpect(jsonPath("$.cues[0].startMs").value(11_500))
+            .andExpect(jsonPath("$.cues[0].endMs").value(13_500))
+            .andExpect(jsonPath("$.cues[0].text").value("Hello"));
+    }
+
+    @Test
+    void cuesOfAnUnknownFileIs404WithTheMessage() throws Exception {
+        when(service.cues(9L)).thenThrow(new NotFoundException("No such subtitle"));
+
+        mvc.perform(get("/api/admin/subtitles/9/cues").with(user("owner")))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.error").value("No such subtitle"));
+    }
+
+    @Test
+    void attachPassesTheEditionAndThePart() throws Exception {
+        when(service.attach(5L, new AttachRequest(70L, 2))).thenReturn(DTO);
+        when(service.attach(5L, new AttachRequest(70L, null))).thenReturn(DTO);
+
+        mvc.perform(signedIn(post("/api/admin/subtitles/5/attach")).content("{\"editionId\":70,\"part\":2}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(5));
+        mvc.perform(signedIn(post("/api/admin/subtitles/5/attach")).content("{\"editionId\":70,\"part\":null}"))
+            .andExpect(status().isOk());
+        mvc.perform(signedIn(post("/api/admin/subtitles/5/attach")).content("{\"editionId\":70}"))
+            .andExpect(status().isOk());
+        verify(service).attach(5L, new AttachRequest(70L, 2));
+    }
+
+    @Test
+    void attachErrorsMapTo400And404WithTheirMessages() throws Exception {
+        when(service.attach(5L, new AttachRequest(null, null))).thenThrow(new BadRequestException("Pick an edition"));
+        when(service.attach(5L, new AttachRequest(9L, null))).thenThrow(new NotFoundException("No such edition"));
+
+        mvc.perform(signedIn(post("/api/admin/subtitles/5/attach")).content("{}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Pick an edition"));
+        mvc.perform(signedIn(post("/api/admin/subtitles/5/attach")).content("{\"editionId\":9}"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.error").value("No such edition"));
+    }
+
+    @Test
+    void aMalformedBodyOrIdIs400InvalidRequest() throws Exception {
+        mvc.perform(signedIn(post("/api/admin/subtitles/5/attach")).content("not json"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+        mvc.perform(signedIn(post("/api/admin/subtitles/5/attach")).content("{\"editionId\":\"x\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+        mvc.perform(signedIn(post("/api/admin/subtitles/abc/detach")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+    }
+
+    @Test
+    void detachVerifyAndUnverifyCallTheService() throws Exception {
+        when(service.detach(5L)).thenReturn(DTO);
+        when(service.verify(5L)).thenReturn(DTO);
+        when(service.unverify(5L)).thenReturn(DTO);
+
+        mvc.perform(signedIn(post("/api/admin/subtitles/5/detach"))).andExpect(status().isOk());
+        mvc.perform(signedIn(post("/api/admin/subtitles/5/verify"))).andExpect(status().isOk());
+        mvc.perform(signedIn(delete("/api/admin/subtitles/5/verify"))).andExpect(status().isOk())
+            .andExpect(jsonPath("$.verified").value(true));
+        verify(service).detach(5L);
+        verify(service).verify(5L);
+        verify(service).unverify(5L);
+    }
+
+    @Test
+    void offsetPassesTheValueAndErrorsComeBackAs400() throws Exception {
+        when(service.offset(5L, new OffsetRequest(-1250))).thenReturn(DTO);
+        when(service.offset(5L, new OffsetRequest(700_000)))
+            .thenThrow(new BadRequestException("The offset must be within 10 minutes either way"));
+
+        mvc.perform(signedIn(put("/api/admin/subtitles/5/offset")).content("{\"offsetMs\":-1250}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(5));
+        mvc.perform(signedIn(put("/api/admin/subtitles/5/offset")).content("{\"offsetMs\":700000}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("The offset must be within 10 minutes either way"));
+        verify(service).offset(5L, new OffsetRequest(-1250));
+    }
+
+    @Test
+    void everyRouteIs401SignedOutWithTheJsonBody() throws Exception {
+        mvc.perform(get("/api/admin/subtitles")).andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Authentication required"));
+        mvc.perform(get("/api/admin/subtitles/5/cues")).andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Authentication required"));
+        for (MockHttpServletRequestBuilder request : List.of(post("/api/admin/subtitles/5/attach"),
+            post("/api/admin/subtitles/5/detach"), put("/api/admin/subtitles/5/offset"),
+            post("/api/admin/subtitles/5/verify"), delete("/api/admin/subtitles/5/verify"))) {
+            mvc.perform(request.header("X-CineFilm", "1").contentType("application/json").content("{}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("Authentication required"));
+        }
+    }
+
+    @Test
+    void everyChangeWithoutTheCsrfHeaderIs403() throws Exception {
+        for (MockHttpServletRequestBuilder request : List.of(post("/api/admin/subtitles/5/attach"),
+            post("/api/admin/subtitles/5/detach"), put("/api/admin/subtitles/5/offset"),
+            post("/api/admin/subtitles/5/verify"), delete("/api/admin/subtitles/5/verify"))) {
+            mvc.perform(request.with(user("owner")).contentType("application/json").content("{}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
+        }
+    }
+}

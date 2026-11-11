@@ -1,0 +1,42 @@
+[
+  {
+    "id": 1,
+    "path": "Heat (1995)/Heat.en.forced.srt",
+    "presence": "PRESENT",
+    "state": "matched",
+    "filmId": 1,
+    "filmTitle": "Heat",
+    "editionId": 11,
+    "editionName": "Theatrical Cut",
+    "parts": 1,
+    "part": 1,
+    "whole": false,
+    "ownerAttached": false,
+    "cueCount": 12,
+    "parseReport": "No problems found",
+    "offsetMs": 0,
+    "verified": false,
+    "endsAfterRuntime": false,
+    "version": 1700000000000
+  },
+  {
+    "id": 2,
+    "path": "The Lord of the Rings - The Two Towers.en.forced.srt",
+    "presence": "PRESENT",
+    "state": "unmatched",
+    "filmId": null,
+    "filmTitle": null,
+    "editionId": null,
+    "editionName": null,
+    "parts": 0,
+    "part": null,
+    "whole": false,
+    "ownerAttached": false,
+    "cueCount": 41,
+    "parseReport": "read as Windows-1252, 3 blocks skipped",
+    "offsetMs": 0,
+    "verified": false,
+    "endsAfterRuntime": false,
+    "version": 1700000000000
+  }
+]

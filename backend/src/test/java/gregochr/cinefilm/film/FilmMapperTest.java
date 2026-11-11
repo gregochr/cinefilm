@@ -129,6 +129,27 @@ class FilmMapperTest {
             .containsExactly("Theatrical");
     }
 
+    @Test
+    void anEditionCarriesTheForcedSubtitleTheCallerGaveForItAndNullWhenNone() {
+        Edition other = edition(film, 11L, "Director's Cut", 100 * MIN, null);
+        file(edition, "heat.mp4");
+        file(other, "heat-dc.mp4");
+        var forced = new FilmDtos.ForcedSubtitleDto("SIDECAR", true, 1_700_000_000_000L);
+
+        var editions = FilmMapper.detail(view(film), null, false, EncoderMode.SOFTWARE, f -> null,
+            e -> e.getId().equals(other.getId()) ? forced : null).editions();
+
+        assertThat(editions).extracting(FilmDtos.EditionDto::forcedSubtitle).containsExactly(null, forced);
+    }
+
+    @Test
+    void withoutAForcedSubtitleLookupEveryEditionHasNone() {
+        file(edition, "heat.mp4");
+
+        assertThat(FilmMapper.detail(view(film), null, false, EncoderMode.SOFTWARE).editions().get(0)
+            .forcedSubtitle()).isNull();
+    }
+
     private java.util.List<FilmDtos.QualityDto> qualities(int height, EncoderMode mode) {
         MediaFile original = file(edition, "heat.mp4");
         original.setVideoCodec("H.264");
