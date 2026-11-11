@@ -9,6 +9,7 @@ import {
   useSearchCombobox,
 } from '../state/useSearchCombobox.js';
 import { SearchIcon } from './icons.jsx';
+import { containTab } from './useDialog.js';
 import { releaseKeyboardProxy } from './searchKeyboard.js';
 import SearchResults from './SearchResults.jsx';
 
@@ -81,7 +82,9 @@ export default function SearchSheet() {
     if (event.key === 'Escape' && !event.nativeEvent?.isComposing) {
       event.preventDefault();
       cancel();
+      return;
     }
+    containTab(event, event.currentTarget);
   };
 
   const clear = () => {
@@ -90,7 +93,7 @@ export default function SearchSheet() {
   };
 
   return (
-    // The dialog only listens for Esc, bubbled from the controls inside it.
+    // The dialog only listens for Esc and Tab, bubbled from the controls inside it.
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <div
       className="search-sheet"

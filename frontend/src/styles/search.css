@@ -211,6 +211,7 @@ body.search-sheet-open {
 }
 .search-sheet__field:focus-within {
   border-color: var(--cf-text);
+  box-shadow: var(--cf-focus-ring);
 }
 .search-sheet__input {
   flex: 1;
@@ -225,7 +226,7 @@ body.search-sheet-open {
 }
 .search-sheet__input:focus-visible {
   outline: 0;
-  box-shadow: none; /* the ring is the field's border */
+  box-shadow: none; /* the ring is drawn on the wrapping .search-sheet__field */
 }
 .search-sheet__input::placeholder {
   color: var(--cf-text-muted);

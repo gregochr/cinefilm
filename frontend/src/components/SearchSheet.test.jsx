@@ -4,6 +4,8 @@ import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-rou
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildFixtureSearchIndex } from '../api/fixtureSearchIndex.js';
 import { prepareIndex, useSearchIndex } from '../state/searchIndex.js';
+import { useSearchParams } from 'react-router-dom';
+import { useUrlSearch } from '../state/useUrlSearch.js';
 import Layout from './Layout.jsx';
 
 vi.mock('../state/searchIndex.js', async (importOriginal) => ({
@@ -27,6 +29,18 @@ function Where() {
   );
 }
 
+// Stands in for the Library: its search box is driven by the URL's q through useUrlSearch.
+function LibraryProbe() {
+  const [params, setParams] = useSearchParams();
+  const { text } = useUrlSearch(params, setParams);
+  return (
+    <>
+      <output aria-label="Library search text">{text}</output>
+      <Where />
+    </>
+  );
+}
+
 function setup(path = '/') {
   const user = userEvent.setup();
   render(
@@ -34,7 +48,7 @@ function setup(path = '/') {
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Where />} />
-          <Route path="/library" element={<Where />} />
+          <Route path="/library" element={<LibraryProbe />} />
           <Route path="/films/:id" element={<Where />} />
         </Route>
       </Routes>
@@ -207,6 +221,46 @@ describe('opening a result', () => {
     expect(sheet()).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'history back' }));
     expect(where()).toBe('/');
+  });
+});
+
+describe('See all from the Library', () => {
+  it('applies the query in the Library and keeps it', async () => {
+    const user = await openSheet('/library');
+    await user.type(input(), 'wa');
+    await user.click(screen.getByRole('link', { name: /See all \d+ results/ }));
+    expect(screen.getByLabelText('Library search text')).toHaveTextContent('wa');
+    await new Promise((resolve) => setTimeout(resolve, 400)); // past the debounce
+    expect(where()).toBe('/library?q=wa');
+    expect(screen.getByLabelText('Library search text')).toHaveTextContent('wa');
+  });
+
+  it('Enter does the same', async () => {
+    const user = await openSheet('/library?q=old');
+    await user.type(input(), 'qzxqzx{Enter}');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(where()).toBe('/library?q=qzxqzx');
+    expect(screen.getByLabelText('Library search text')).toHaveTextContent('qzxqzx');
+  });
+});
+
+describe('focus containment', () => {
+  const focusables = () => [
+    ...within(sheet()).queryAllByRole('combobox'),
+    ...within(sheet()).queryAllByRole('button'),
+    ...within(sheet()).queryAllByRole('link'),
+  ];
+
+  it('Tab from the last control wraps to the first, Shift+Tab from the input wraps to the last', async () => {
+    const user = await openSheet('/library');
+    await user.type(input(), 'ha');
+    const items = focusables();
+    items.at(-1).focus();
+    await user.tab();
+    expect(items[0]).toHaveFocus();
+    expect(items[0]).toBe(input());
+    await user.tab({ shift: true });
+    expect(items.at(-1)).toHaveFocus();
   });
 });
 
