@@ -169,6 +169,31 @@ describe('stalls', () => {
   });
 });
 
+describe('playing again after a long pause', () => {
+  it('waits the stall window from play, not from the last progress, before reloading', async () => {
+    const { video, fetchImpl, handlers } = start({ playing: false });
+    video.currentTime = 600;
+    await tick(STALL_MS * 4);
+    video.play();
+    await tick(STALL_MS - POLL_MS);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(handlers.onReconnecting).not.toHaveBeenCalled();
+    await tick(POLL_MS);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('still reloads exactly once when nothing moves for the stall window after play', async () => {
+    const { video, fetchImpl, handlers } = start({ playing: false });
+    video.currentTime = 600;
+    await tick(STALL_MS * 4);
+    video.play();
+    await tick(STALL_MS + POLL_MS);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(handlers.onReload).toHaveBeenCalledTimes(1);
+    expect(video.load).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('reloading at the playhead', () => {
   it('tells the caller where to seek back to, then reloads the same source', async () => {
     const { video, handlers } = start();
@@ -338,6 +363,7 @@ describe('destroy', () => {
     setHeight(720);
     video.dispatchEvent(new Event('resize'));
     video.dispatchEvent(new Event('error'));
+    video.dispatchEvent(new Event('play'));
     await tick(STALL_MS * 2);
     expect(handlers.onLevel).not.toHaveBeenCalled();
     expect(fetchImpl).not.toHaveBeenCalled();

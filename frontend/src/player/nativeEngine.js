@@ -67,6 +67,10 @@ export function startNative({
       handlers.onReconnecting(false);
     }
   };
+  // A pause is not a stall: measure from the moment the viewer pressed play.
+  const onPlay = () => {
+    lastMoveAt = now();
+  };
   const onError = () => {
     errored = true;
     check();
@@ -122,6 +126,7 @@ export function startNative({
 
   window.addEventListener('online', onOnline);
   video.addEventListener('timeupdate', onTimeUpdate);
+  video.addEventListener('play', onPlay);
   video.addEventListener('resize', detectLevel);
   video.addEventListener('loadedmetadata', detectLevel);
   video.addEventListener('error', onError);
@@ -134,6 +139,7 @@ export function startNative({
       clearInterval(poll);
       window.removeEventListener('online', onOnline);
       video.removeEventListener('timeupdate', onTimeUpdate);
+      video.removeEventListener('play', onPlay);
       video.removeEventListener('resize', detectLevel);
       video.removeEventListener('loadedmetadata', detectLevel);
       video.removeEventListener('error', onError);
