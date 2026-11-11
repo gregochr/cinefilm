@@ -838,10 +838,11 @@ describe('Admin: Subtitles panel, attaching', () => {
 
   it('asks nothing of the library for a search that is too short', async () => {
     const { li, fetchMock } = await openUnmatched();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     await userEvent.click(within(li).getByRole('button', { name: /^Attach/ }));
 
     await userEvent.type(within(li).getByLabelText('Find a film'), 'h');
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await act(() => vi.advanceTimersByTimeAsync(400)); // past the search debounce
 
     expect(fetchMock.mock.calls.some((c) => String(c[0]).startsWith('/api/films?'))).toBe(false);
     expect(within(li).queryByRole('radio')).not.toBeInTheDocument();
