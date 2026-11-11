@@ -474,10 +474,14 @@ describe('the fixture index narrowing', () => {
 
 // The aim is 16 ms (one frame); coverage instrumentation on a loaded CI box roughly doubles it, so the guard is 30.
 // Stryker's mutation instrumentation costs far more: on this index the exact query takes about 2 ms plain and 16 ms
-// under it, the fuzzy one about 2 ms and 57 ms, and its dry run stops on any failing test. Stryker sets
-// STRYKER_MUTATOR_WORKER in the processes that run the tests, and there the guard is 20 times wider: it still fails on
-// an O(n²), the reason for the guard (docs/engineering/search-plan.md), while `npm test` and CI keep the 30 ms.
-const BOUND_MS = process.env.STRYKER_MUTATOR_WORKER === undefined ? 30 : 600;
+// under it, the fuzzy one about 2 ms and 57 ms on its own, and over a second in the full dry run on a loaded laptop.
+// Its dry run stops on any failing test, Vitest's 5 s per-test timeout included, which five such queries would pass.
+// Stryker sets STRYKER_MUTATOR_WORKER in the processes that run the tests, and there each query runs once, not five
+// times, against a bound of 10 s: that only catches a search that has become orders of magnitude slower. `npm test`
+// and CI keep the real 30 ms, median of 5.
+const UNDER_STRYKER = process.env.STRYKER_MUTATOR_WORKER !== undefined;
+const BOUND_MS = UNDER_STRYKER ? 10000 : 30;
+const RUNS = UNDER_STRYKER ? 1 : 5;
 
 describe('speed', () => {
   const syllables = ['ba', 'ko', 'ri', 'tu', 'me', 'sa', 'lo', 'vi', 'ne', 'du', 'pa', 'ge'];
@@ -500,12 +504,12 @@ describe('speed', () => {
   const index = prepareIndex(raw);
 
   const median = (query) => {
-    const times = Array.from({ length: 5 }, () => {
+    const times = Array.from({ length: RUNS }, () => {
       const start = performance.now();
       search(index, query);
       return performance.now() - start;
     }).sort((a, b) => a - b);
-    return times[2];
+    return times[Math.floor(RUNS / 2)];
   };
 
   it('answers an exact query in under 30 ms (median of 5)', () => {
