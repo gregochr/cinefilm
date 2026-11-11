@@ -20,6 +20,7 @@ import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.library.LibraryIngest.Pending;
 import gregochr.cinefilm.library.LibraryScanner.Found;
 import gregochr.cinefilm.library.LibraryScanner.FoundFile;
+import gregochr.cinefilm.subtitle.SidecarSync;
 import gregochr.cinefilm.tmdb.MatchOutcome;
 import gregochr.cinefilm.tmdb.MatchOutcome.Status;
 import gregochr.cinefilm.tmdb.TmdbApi;
@@ -55,6 +56,7 @@ class ScanServiceTest {
     private final TmdbMatcher matcher = mock(TmdbMatcher.class);
     private final LibraryIngest ingest = mock(LibraryIngest.class);
     private final LibraryGrouping grouping = mock(LibraryGrouping.class);
+    private final SidecarSync sidecars = mock(SidecarSync.class);
     private final List<Runnable> queued = new ArrayList<>();
     private final List<Object> events = new ArrayList<>();
     private ScanService service;
@@ -64,9 +66,9 @@ class ScanServiceTest {
     void setUp() {
         LibraryRoot root = new LibraryRoot(library.toString());
         service = new ScanService(root, scanner, ffprobe, tmdb, matcher, ingest, Runnable::run, CLOCK,
-            new LibraryLock(), events::add, grouping);
+            new LibraryLock(), events::add, grouping, sidecars);
         deferred = new ScanService(root, scanner, ffprobe, tmdb, matcher, ingest, queued::add, CLOCK,
-            new LibraryLock(), events::add, grouping);
+            new LibraryLock(), events::add, grouping, sidecars);
         when(tmdb.enabled()).thenReturn(true);
         when(ingest.startRun("admin", CLOCK.instant())).thenReturn(5L);
         when(ingest.known()).thenReturn(Map.of());
@@ -666,7 +668,7 @@ class ScanServiceTest {
             throw new java.util.concurrent.RejectedExecutionException("shutting down");
         };
         ScanService stopped = new ScanService(new LibraryRoot(library.toString()), scanner, ffprobe, tmdb, matcher,
-            ingest, refusing, CLOCK, new LibraryLock(), events::add, grouping);
+            ingest, refusing, CLOCK, new LibraryLock(), events::add, grouping, sidecars);
 
         assertThatThrownBy(() -> stopped.start("admin")).isInstanceOf(
             java.util.concurrent.RejectedExecutionException.class);

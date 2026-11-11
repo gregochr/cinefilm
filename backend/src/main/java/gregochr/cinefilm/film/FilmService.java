@@ -9,6 +9,7 @@ import gregochr.cinefilm.film.FilmDtos.FilmList;
 import gregochr.cinefilm.film.FilmDtos.LibraryCard;
 import gregochr.cinefilm.playback.PreferencesService;
 import gregochr.cinefilm.settings.ServerSettingsService;
+import gregochr.cinefilm.subtitle.ForcedSubtitleService;
 import gregochr.cinefilm.transcode.KeyframeIndexService;
 import gregochr.cinefilm.transcode.Transcoder;
 import java.util.List;
@@ -30,14 +31,17 @@ public class FilmService {
     private final Transcoder transcoder;
     private final KeyframeIndexService indexes;
     private final ServerSettingsService settings;
+    private final ForcedSubtitleService forcedSubtitles;
 
     /**
      * Creates the service over the loader, the repository, the preferences service, the transcoder, the indexes and
-     * the server settings.
+     * the server settings and the forced subtitles.
      */
     public FilmService(LibraryLoader loader, FilmRepository films, PreferencesService preferences,
-                       Transcoder transcoder, KeyframeIndexService indexes, ServerSettingsService settings) {
+                       Transcoder transcoder, KeyframeIndexService indexes, ServerSettingsService settings,
+                       ForcedSubtitleService forcedSubtitles) {
         this.settings = settings;
+        this.forcedSubtitles = forcedSubtitles;
         this.loader = loader;
         this.films = films;
         this.preferences = preferences;
@@ -65,9 +69,10 @@ public class FilmService {
         boolean inCollection = film.getCollection() != null
             && films.findByCollectionId(film.getCollection().getId()).stream().filter(Film::browsable).count()
                 >= CollectionService.MIN_OWNED;
+        Map<Long, FilmDtos.ForcedSubtitleDto> forced = forcedSubtitles.forEditions(film.getEditions());
         return FilmMapper.detail(view, preferences.resolve(film), inCollection,
             transcoder.mode(), file -> indexes.cachedFor(file, file.getEdition().partCount() > 1)
-                .map(KeyframeIndexService.Index::cuts).orElse(null));
+                .map(KeyframeIndexService.Index::cuts).orElse(null), edition -> forced.get(edition.getId()));
     }
 
     /** The ids of the collections with at least {@link CollectionService#MIN_OWNED} films in the library. */

@@ -5,6 +5,7 @@ import { SkeletonBlock } from '../components/Skeleton.jsx';
 import EditEditions from '../components/EditEditions.jsx';
 import FixMatchPanel from '../components/FixMatchPanel.jsx';
 import PlaybackHealthPanel from '../components/PlaybackHealthPanel.jsx';
+import SubtitlesPanel from '../components/SubtitlesPanel.jsx';
 import Toast from '../components/Toast.jsx';
 import TranscodingPanel from '../components/TranscodingPanel.jsx';
 import { ErrorState } from '../components/StateMessages.jsx';
@@ -590,6 +591,7 @@ export default function Admin() {
           error={grouping.error}
           onRetry={grouping.reload}
         />
+        <SubtitlesPanel />
         <PlexPanel
           plex={plexImport.plex}
           starting={plexImport.starting}

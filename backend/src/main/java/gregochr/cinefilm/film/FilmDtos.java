@@ -74,6 +74,18 @@ public final class FilmDtos {
                                     String format) {
     }
 
+    /**
+     * The forced English subtitle an edition plays by itself when Subtitles is Off, served by
+     * {@code GET /api/editions/{id}/forced-subtitles.vtt}.
+     *
+     * @param source where it comes from; {@code SIDECAR} (a {@code .srt} file beside the film) is the only one today
+     * @param ownerVerified true while the owner has checked it and the edition's parts have not changed since
+     * @param version the latest change time of the files it is made from, in epoch milliseconds: it goes on the
+     *     subtitle URL so a nudge in Admin is fetched again
+     */
+    public record ForcedSubtitleDto(String source, boolean ownerVerified, long version) {
+    }
+
     /** A selectable quality. */
     public record QualityDto(String id, Long bitrate, boolean premade, boolean available) {
     }
@@ -82,10 +94,12 @@ public final class FilmDtos {
      * One edition with its streams and qualities. {@code parts} is how many files the edition is made of (1 for a film
      * in one piece): a split film plays as one continuous film (times are edition times, from the start of part 1), is
      * never direct-played and shows no part numbers; the audio and subtitle streams are part 1's, the logical ones.
+     * {@code forcedSubtitle} is null when the edition has no forced subtitle to play.
      */
     public record EditionDto(Long id, String name, Integer year, long runtimeMs, String note, Long creditsMarkerMs,
                              long positionMs, boolean watched, FileInfo file, List<AudioStreamDto> audioStreams,
-                             List<SubtitleStreamDto> subtitleStreams, List<QualityDto> qualities, int parts) {
+                             List<SubtitleStreamDto> subtitleStreams, List<QualityDto> qualities, int parts,
+                             ForcedSubtitleDto forcedSubtitle) {
     }
 
     /** Remembered per-film choices. */

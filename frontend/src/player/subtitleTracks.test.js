@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SUBTITLE_OFF, activeSubtitleKey } from './tracks.js';
+import { FORCED_KEY, SUBTITLE_OFF, activeSubtitleKey, hasSubtitleTracks } from './tracks.js';
 
 const english = { id: 10, index: 3, language: 'English', forced: false };
 const englishForced = { id: 11, index: 4, language: 'English', forced: true };
@@ -47,5 +47,48 @@ describe('activeSubtitleKey (decision 6: forced subtitles)', () => {
 
   it('identifies streams by index when the API sent no id', () => {
     expect(activeSubtitleKey([{ index: 4, language: 'English', forced: true }])).toBe(4);
+  });
+});
+
+describe('the forced-subtitle track of an edition (a sidecar .srt)', () => {
+  const forcedSubtitle = { source: 'SIDECAR', ownerVerified: false, version: 1700000000000 };
+
+  it('shows by itself when Subtitles is Off, under its own key', () => {
+    expect(activeSubtitleKey([], SUBTITLE_OFF, forcedSubtitle)).toBe(FORCED_KEY);
+    expect(FORCED_KEY).toBe('forced');
+  });
+
+  it('beats the embedded forced track, because the API already chose the winner', () => {
+    expect(activeSubtitleKey([english, englishForced], SUBTITLE_OFF, forcedSubtitle)).toBe(
+      FORCED_KEY,
+    );
+  });
+
+  it('is hidden when a full track is chosen', () => {
+    expect(activeSubtitleKey([english, englishForced], 10, forcedSubtitle)).toBe(10);
+    expect(activeSubtitleKey([english, englishForced], 11, forcedSubtitle)).toBe(11);
+  });
+
+  it('is hidden for a choice that is not one of the streams, as no stream shows then either', () => {
+    expect(activeSubtitleKey([english], 99, forcedSubtitle)).toBeNull();
+  });
+
+  it('is not there when the edition has none: the embedded forced track still shows', () => {
+    expect(activeSubtitleKey([english, englishForced], SUBTITLE_OFF, null)).toBe(11);
+    expect(activeSubtitleKey([english], SUBTITLE_OFF, undefined)).toBeNull();
+  });
+});
+
+describe('hasSubtitleTracks', () => {
+  it('is true with streams, or with only a forced subtitle, and false with neither', () => {
+    expect(hasSubtitleTracks({ subtitleStreams: [english], forcedSubtitle: null })).toBe(true);
+    expect(
+      hasSubtitleTracks({
+        subtitleStreams: [],
+        forcedSubtitle: { source: 'SIDECAR', ownerVerified: true, version: 1 },
+      }),
+    ).toBe(true);
+    expect(hasSubtitleTracks({ subtitleStreams: [], forcedSubtitle: null })).toBe(false);
+    expect(hasSubtitleTracks({ subtitleStreams: [] })).toBe(false);
   });
 });
