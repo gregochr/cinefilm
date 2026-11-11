@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -90,11 +91,44 @@ class TranscodeRealToolsTest {
         }
     }
 
+    /** The real clock plus an offset the test sets: the manager's idea of time only, so a pause takes no wall time. */
+    private static final class ShiftedClock extends Clock {
+        private final Clock base;
+        private volatile Duration shift = Duration.ZERO;
+
+        ShiftedClock(Clock base) {
+            this.base = base;
+        }
+
+        void shiftBy(Duration by) {
+            shift = shift.plus(by);
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return base.getZone();
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return new ShiftedClock(base.withZone(zone));
+        }
+
+        @Override
+        public Instant instant() {
+            return base.instant().plus(shift);
+        }
+    }
+
     private SessionManager newManager(Path hls) {
+        return newManager(hls, real);
+    }
+
+    private SessionManager newManager(Path hls, Clock managerClock) {
         Transcoder transcoder = new FfmpegTranscoder(null, new ProcessEncoderFactory(0), "ffmpeg", "software");
         manager = new SessionManager(transcoder, new NioSegmentFiles(), new PollingSegmentWaiter(real),
-            new FakeScheduler(), real, new SessionSettings(Duration.ofMinutes(2), Duration.ofMinutes(10),
-            Long.MAX_VALUE, 2, "/dev/dri/renderD128"), hls, UUID::randomUUID);
+            new FakeScheduler(), managerClock, new SessionSettings(Duration.ofMinutes(2), Duration.ofMinutes(10),
+            Long.MAX_VALUE, 2, "/dev/dri/renderD128"), new NioFileStamps(), hls, UUID::randomUUID);
         return manager;
     }
 
@@ -209,6 +243,47 @@ class TranscodeRealToolsTest {
             }
         }
 
+        assertThat(actual).isEqualTo(expected);
+        for (Path segment : fetched) {
+            assertDecodes(segment);
+        }
+    }
+
+    @Test
+    void aSessionThatExpiredFromIdlenessCarriesOnUnderTheSameIdWithTheSamePtsAsAFromZeroRun() throws IOException {
+        ShiftedClock shifted = new ShiftedClock(real);
+        newManager(work.resolve("hls"), shifted);
+        int count = index.cuts().segmentCount();
+        int resume = 2;
+        String zero = session(1, 0).id();
+        Map<String, String> expected = new LinkedHashMap<>();
+        for (int n = resume; n < count; n++) {
+            for (String rung : List.of("original", "360p")) {
+                expected.put(rung + "/" + n, firstVideoPts(fetch(zero, rung, n)));
+            }
+        }
+        String id = session(2, 0).id();
+        for (int n = 0; n < resume; n++) {
+            for (String rung : List.of("original", "360p")) {
+                assertDecodes(fetch(id, rung, n));
+            }
+        }
+
+        shifted.shiftBy(Duration.ofMinutes(10));
+        manager.sweep();
+        assertThat(manager.sessions()).isEmpty();
+
+        Map<String, String> actual = new LinkedHashMap<>();
+        List<Path> fetched = new ArrayList<>();
+        for (int n = resume; n < count; n++) {
+            for (String rung : List.of("original", "360p")) {
+                Path segment = fetch(id, rung, n);
+                fetched.add(segment);
+                actual.put(rung + "/" + n, firstVideoPts(segment));
+            }
+        }
+
+        assertThat(manager.sessions()).extracting(SessionDtos.SessionRow::id).containsExactly(id);
         assertThat(actual).isEqualTo(expected);
         for (Path segment : fetched) {
             assertDecodes(segment);

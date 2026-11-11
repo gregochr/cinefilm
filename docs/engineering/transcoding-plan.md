@@ -110,9 +110,13 @@ read of the file. Direct play of the file remains only as a fallback.
   untouched).
 - **Newest wins**: a new session for an edition replaces the older one; at most **3 sessions**, a 4th replaces the
   least recently used — playback is never refused.
-- **Expiry**: no request for 2 minutes ⇒ encoder stopped; 10 minutes ⇒ dir deleted; requests then get **404 on the
-  session** and the player silently creates a new one at `currentTime`. Startup deletes leftover `hls/` dirs. An
-  active session is never evicted; `hls/` is capped (5 GB) by evicting idle sessions only.
+- **Expiry**: no request for 2 minutes ⇒ encoder stopped; 10 minutes ⇒ dir deleted and only the session's spec kept
+  in memory (at most 8, for up to a day). Its next request **rebuilds it under the same id** and restarts the encoder
+  at the segment asked for, so the player keeps its playlists and its buffer (`long-pause-plan.md`, 2026-11-11). A
+  session that was ended, replaced, pushed out at the cap or out of the 8, whose encoder failed, lost to a restart,
+  a day old, or whose file has changed answers **404**, and the player silently creates a new one at `currentTime`.
+  Startup deletes leftover `hls/` dirs. An active session is never evicted;
+  `hls/` is capped (5 GB) by evicting idle sessions only (which are remembered like expired ones).
 
 ## API
 

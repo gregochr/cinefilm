@@ -3,8 +3,10 @@ package gregochr.cinefilm.transcode;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.transcode.SessionFakes.FakeFiles;
 import gregochr.cinefilm.transcode.SessionFakes.FakeScheduler;
+import gregochr.cinefilm.transcode.SessionFakes.FakeStamps;
 import gregochr.cinefilm.transcode.SessionFakes.FakeTranscoder;
 import gregochr.cinefilm.transcode.SessionFakes.MutableClock;
 import gregochr.cinefilm.transcode.SessionFakes.ScriptedWaiter;
@@ -43,9 +45,11 @@ class SessionManagerPartsTest {
     private final ScriptedWaiter waiter = new ScriptedWaiter();
     private final FakeScheduler scheduler = new FakeScheduler();
     private final MutableClock clock = new MutableClock();
+    private final FakeStamps stamps = new FakeStamps();
     private int counter;
     private final SessionManager manager = new SessionManager(transcoder, files, waiter, scheduler, clock,
-        new SessionSettings(IDLE, EXPIRY, 1000, 2, "/dev/dri/renderD129"), HLS, () -> new UUID(0, ++counter));
+        new SessionSettings(IDLE, EXPIRY, 1000, 2, "/dev/dri/renderD129"), stamps, HLS,
+        () -> new UUID(0, ++counter));
 
     private static String id(int n) {
         return new UUID(0, n).toString();
@@ -454,5 +458,104 @@ class SessionManagerPartsTest {
         assertThat(PlaylistWriter.media(view.cuts()))
             .contains("seg-59.ts\n#EXT-X-DISCONTINUITY\n#EXTINF:4.000,\nseg-60.ts");
         assertThat(view.cuts().segmentCount()).isEqualTo(B_LAST + 1);
+    }
+
+    private void expire() {
+        clock.advance(EXPIRY);
+        manager.sweep();
+    }
+
+    @Test
+    void everyPartIsStampedInOrderWhenTheSessionIsMadeAndAgainWhenItIsRebuilt() {
+        String session = create(0);
+        assertThat(stamps.reads).containsExactly(PART_A, PART_B);
+        expire();
+
+        manager.view(session);
+
+        assertThat(stamps.reads).containsExactly(PART_A, PART_B, PART_A, PART_B);
+    }
+
+    @Test
+    void aSplitFilmRebuiltByAPlaylistRequestNearTheJoinStartsNothingEvenWhenSwept() {
+        String session = create(30); // 120 s before the join: within the 180 s look-ahead
+        expire();
+
+        manager.view(session);
+        manager.sweep();
+
+        assertThat(transcoder.plans).hasSize(1);
+        assertThat(manager.sessions()).hasSize(1);
+    }
+
+    @Test
+    void aSplitFilmRebuiltByASegmentRequestInTheSecondPartRestartsThereWithFilmWideNumbering() {
+        String session = create(0);
+        expire();
+        waiter.whileWaiting = () -> writeAll(75, 76);
+
+        assertThat(manager.segment(session, "original", 75)).isEqualTo(seg("original", 75));
+
+        assertThat(transcoder.plans).hasSize(2);
+        TranscodePlan restarted = plan(1);
+        assertThat(restarted.source()).isEqualTo(PART_B);
+        assertThat(restarted.audioIndex()).isZero();
+        assertThat(restarted.fps()).isEqualTo(24.0);
+        assertThat(restarted.startSegment()).isEqualTo(15);
+        assertThat(restarted.startNumber()).isEqualTo(75);
+        assertThat(restarted.partStartMs()).isEqualTo(240_000);
+    }
+
+    @Test
+    void aChangeToTheSecondPartsFileAloneMakesTheRebuildA404() {
+        String session = create(0);
+        expire();
+        stamps.overrides.put(PART_B, new FileStamps.Stamp(1001, 5000));
+
+        assertThatThrownBy(() -> manager.view(session)).isInstanceOf(NotFoundException.class)
+            .hasMessage("No such session");
+
+        assertThat(transcoder.plans).hasSize(1);
+        assertThat(manager.sessions()).isEmpty();
+    }
+
+    @Test
+    void anUnreadableFirstPartWithAnUnchangedSecondIs503AndKeepsTheSessionRemembered() {
+        String session = create(0);
+        expire();
+        stamps.unreadable.add(PART_A);
+
+        assertThatThrownBy(() -> manager.view(session)).isInstanceOf(SegmentNotReadyException.class)
+            .hasMessage("The film's file cannot be read right now");
+
+        stamps.unreadable.clear();
+        assertThat(manager.view(session).id()).isEqualTo(session);
+    }
+
+    @Test
+    void anUnreadableFirstPartDoesNotHideAChangeToTheSecond() {
+        String session = create(0);
+        expire();
+        stamps.unreadable.add(PART_A);
+        stamps.overrides.put(PART_B, new FileStamps.Stamp(1000, 5001));
+
+        assertThatThrownBy(() -> manager.view(session)).isInstanceOf(NotFoundException.class)
+            .hasMessage("No such session");
+
+        stamps.unreadable.clear();
+        stamps.overrides.clear();
+        assertThatThrownBy(() -> manager.view(session)).isInstanceOf(NotFoundException.class)
+            .hasMessage("No such session");
+    }
+
+    @Test
+    void aMissingFirstPartIs404EvenWhenTheSecondIsUnreadable() {
+        String session = create(0);
+        expire();
+        stamps.missing.add(PART_A);
+        stamps.unreadable.add(PART_B);
+
+        assertThatThrownBy(() -> manager.view(session)).isInstanceOf(NotFoundException.class)
+            .hasMessage("No such session");
     }
 }

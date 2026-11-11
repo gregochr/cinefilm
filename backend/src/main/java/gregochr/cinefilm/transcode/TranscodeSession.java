@@ -3,6 +3,7 @@ package gregochr.cinefilm.transcode;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -17,7 +18,10 @@ final class TranscodeSession {
         RUNNING,
         /** Exited with status 0: every segment from its start to the end of its part is written. */
         FINISHED,
-        /** Stopped by the manager (seek, look-ahead, idle, shutdown). */
+        /**
+         * Stopped by the manager (seek, look-ahead, idle, shutdown), or a placeholder for a session that was rebuilt
+         * and has no encoder started yet.
+         */
         STOPPED,
         /** Exited with an error on its own. */
         CRASHED
@@ -68,8 +72,15 @@ final class TranscodeSession {
      * instead.
      */
     final Map<Integer, Integer> finishedFrom = new HashMap<>();
+    /**
+     * The size and modification time of each of the spec's files when the session was made, in part order; null when
+     * any of them could not be read, so the session plays as usual but is never remembered.
+     */
+    final List<FileStamps.Stamp> stamps;
+    /** True for a rebuilt session until its first encoder run has started. */
+    boolean awaitingFirstRun;
 
-    TranscodeSession(String id, SessionSpec spec, Path dir, Instant now) {
+    TranscodeSession(String id, SessionSpec spec, Path dir, Instant now, List<FileStamps.Stamp> stamps) {
         this.id = id;
         this.spec = spec;
         this.dir = dir;
@@ -78,6 +89,36 @@ final class TranscodeSession {
         this.lastRung = spec.startRung().id();
         this.playhead = spec.startSegment();
         this.deletedBelow = spec.startSegment();
+        this.stamps = stamps;
+    }
+
+    private TranscodeSession(String id, SessionSpec spec, Path dir, Instant startedAt, Instant now,
+                             List<FileStamps.Stamp> stamps, String lastRung, int playhead) {
+        this.id = id;
+        this.spec = spec;
+        this.dir = dir;
+        this.startedAt = startedAt;
+        this.lastRequest = now;
+        this.lastRung = lastRung;
+        this.playhead = playhead;
+        this.deletedBelow = playhead;
+        this.stamps = stamps;
+        this.awaitingFirstRun = true;
+        CutList cuts = spec.cuts();
+        int part = cuts.partOfSegment(playhead);
+        Run placeholder = new Run(playhead, part, cuts.lastSegmentOfPart(part));
+        placeholder.status = Status.STOPPED;
+        this.run = placeholder;
+    }
+
+    /**
+     * A session rebuilt from what was remembered: the same id, folder, spec, start time and last rung, the playhead
+     * and the behind-deletion mark at the remembered playhead, a fresh crash budget, and a stopped placeholder run
+     * (no process) so every path sees "no encoder" until the first segment request starts one.
+     */
+    static TranscodeSession rebuilt(String id, SessionSpec spec, Path dir, Instant startedAt, Instant now,
+                                    List<FileStamps.Stamp> stamps, String lastRung, int playhead) {
+        return new TranscodeSession(id, spec, dir, startedAt, now, stamps, lastRung, playhead);
     }
 
     Path segmentFile(String rungId, int n) {

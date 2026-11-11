@@ -33,7 +33,15 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    untrusted input. Transcoding: `-protocol_whitelist file`, input only the database-known path under the library root,
    outputs only under the session directory (`cache/hls/<uuid>/`), every session URL segment regex-validated and
    bounded, the MP4 box reader bounds every size it reads, and resources are capped (3 sessions, idle stop, look-ahead
-   cap, `hls/` cap, bounded threads, encoders killed on shutdown). `/dev/dri` is the only device passed in. The
+   cap, `hls/` cap, bounded threads, encoders killed on shutdown). A session that went quiet (no request for 10
+   minutes, or idle while `hls/` is over its cap) is kept in memory only as what rebuilding it needs: the spec the
+   database gave when it was made, its files' size and modification time, and its start time, last request, playhead
+   and last rung. At most 8 are kept, and none is rebuilt 24 hours or more after its last request. Its next request
+   rebuilds it under the same id only while every file still has that size and modification time (the database is not
+   asked again). A rebuilt session counts towards the 3, pushes out the least recently used session for good at the
+   cap (even when a playlist request rebuilt it), and starts no encoder until a segment is asked for. A session that
+   was ended, replaced or pushed out at the cap, whose encoder could not run, or that was lost to a restart is never
+   rebuilt (`docs/engineering/long-pause-plan.md`). `/dev/dri` is the only device passed in. The
    resume still (`GET /api/editions/{id}/still`) takes one number from the request (`atMs`, bounds-checked against the
    edition); the input is the database-known path, `-protocol_whitelist file`, output only under `cache/stills/`, at
    most 2 grabs at once, a 10 s timeout, and the cache is capped at 300 files.
