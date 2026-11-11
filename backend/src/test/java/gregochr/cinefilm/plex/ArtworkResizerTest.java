@@ -5,12 +5,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import gregochr.cinefilm.plex.ArtworkResizer.Probe;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Optional;
 import java.util.Random;
+import java.util.zip.CRC32;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -106,6 +109,39 @@ class ArtworkResizerTest {
         assertThat(image.getColorModel().hasAlpha()).isTrue();
         assertThat(Arrays.copyOf(resized, 4)).containsExactly((byte) 0x89, 'P', 'N', 'G');
         assertThat(image.getRGB(10, 10) >>> 24).isBetween(0x70, 0x90);
+    }
+
+    @Test
+    void aPngWhoseTransparencyIsATrnsChunkKeepsItsTransparentPixelsTransparent() throws IOException {
+        BufferedImage image = new BufferedImage(1000, 200, BufferedImage.TYPE_INT_RGB);
+        for (int y = 0; y < 200; y++) {
+            for (int x = 0; x < 1000; x++) {
+                image.setRGB(x, y, x < 500 ? 0x000000 : 0xffffff);
+            }
+        }
+        ByteArrayOutputStream plain = new ByteArrayOutputStream();
+        assertThat(ImageIO.write(image, "png", plain)).isTrue();
+        byte[] png = plain.toByteArray();
+        // tRNS for an RGB image: one 16-bit sample per channel; black (0, 0, 0) is the transparent colour.
+        byte[] type = {'t', 'R', 'N', 'S'};
+        byte[] samples = new byte[6];
+        CRC32 crc = new CRC32();
+        crc.update(type);
+        crc.update(samples);
+        ByteBuffer chunk = ByteBuffer.allocate(4 + 4 + 6 + 4).putInt(6).put(type).put(samples)
+            .putInt((int) crc.getValue());
+        int afterHeader = 8 + 4 + 4 + 13 + 4;
+        ByteArrayOutputStream withTrns = new ByteArrayOutputStream();
+        withTrns.write(png, 0, afterHeader);
+        withTrns.write(chunk.array());
+        withTrns.write(png, afterHeader, png.length - afterHeader);
+        Path file = Files.write(dir.resolve("trns.png"), withTrns.toByteArray());
+
+        BufferedImage resized = decode(resizer.resize(file, "trns.png", 500).orElseThrow());
+
+        assertThat(resized.getColorModel().hasAlpha()).isTrue();
+        assertThat(resized.getRGB(10, 10) >>> 24).isZero();
+        assertThat(resized.getRGB(490, 10) >>> 24).isEqualTo(255);
     }
 
     @Test

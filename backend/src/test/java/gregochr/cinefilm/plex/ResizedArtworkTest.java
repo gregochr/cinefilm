@@ -1,5 +1,7 @@
 package gregochr.cinefilm.plex;
 
+import static gregochr.cinefilm.TestData.CLOCK;
+import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -77,7 +79,7 @@ class ResizedArtworkTest {
     }
 
     private ResizedArtwork service(long cap) {
-        return new ResizedArtwork(resizer, cache.toString(), cap, 2, Duration.ofMillis(50));
+        return new ResizedArtwork(resizer, CLOCK, cache.toString(), cap, 2, Duration.ofMillis(50));
     }
 
     private Path copy(String name) {
@@ -184,7 +186,7 @@ class ResizedArtworkTest {
 
     @Test
     void overTheCapThePruneRemovesTheOldestDownToNinetyPercentAndKeepsTheNewestFile() throws IOException {
-        Instant now = Instant.now();
+        Instant now = NOW;
         Path oldest = seed("oldest.jpg", 400, now.minusSeconds(300));
         Path middle = seed("middle.jpg", 400, now.minusSeconds(200));
         Path newer = seed("newer.jpg", 100, now.minusSeconds(100));
@@ -200,7 +202,7 @@ class ResizedArtworkTest {
 
     @Test
     void thePruneKeepsRemovingUntilItIsAtNinetyPercentButNeverTheFileJustWritten() throws IOException {
-        Instant now = Instant.now();
+        Instant now = NOW;
         Path a = seed("a1.jpg", 400, now.minusSeconds(300));
         Path b = seed("b1.jpg", 400, now.minusSeconds(200));
 
@@ -214,7 +216,7 @@ class ResizedArtworkTest {
 
     @Test
     void thePruneStopsAsSoonAsTheFolderIsAtMostNinetyPercentOfTheCap() throws IOException {
-        Instant now = Instant.now();
+        Instant now = NOW;
         Path a = seed("a1.jpg", 200, now.minusSeconds(300));
         Path b = seed("b1.jpg", 200, now.minusSeconds(200));
         Path c = seed("c1.jpg", 400, now.minusSeconds(100));
@@ -229,7 +231,7 @@ class ResizedArtworkTest {
 
     @Test
     void aTotalAtExactlyTheCapDoesNotPrune() throws IOException {
-        Path a = seed("a1.jpg", 700, Instant.now().minusSeconds(300));
+        Path a = seed("a1.jpg", 700, NOW.minusSeconds(300));
 
         service(1000).resized("new.jpg", stored, 342);
 
@@ -237,9 +239,20 @@ class ResizedArtworkTest {
     }
 
     @Test
+    void aTemporaryFileIsStaleOnlyWhenOlderThanExactlyOneHour() throws IOException {
+        Path over = seed("over.tmp", 10, NOW.minus(Duration.ofHours(1)).minusMillis(1));
+        Path exactly = seed("exactly.tmp", 10, NOW.minus(Duration.ofHours(1)));
+
+        service(100).resized("a.jpg", stored, 342);
+
+        assertThat(over).doesNotExist();
+        assertThat(exactly).exists();
+    }
+
+    @Test
     void aTemporaryFileOlderThanAnHourIsDeletedAndANewerOneKept() throws IOException {
-        Path stale = seed("stale.tmp", 10, Instant.now().minus(Duration.ofHours(2)));
-        Path fresh = seed("fresh.tmp", 10, Instant.now().minus(Duration.ofMinutes(5)));
+        Path stale = seed("stale.tmp", 10, NOW.minus(Duration.ofHours(2)));
+        Path fresh = seed("fresh.tmp", 10, NOW.minus(Duration.ofMinutes(5)));
 
         service(100).resized("a.jpg", stored, 342);
 
@@ -268,7 +281,7 @@ class ResizedArtworkTest {
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         AtomicInteger prunes = new AtomicInteger();
-        ResizedArtwork service = new ResizedArtwork(resizer, cache.toString(), 100, 2, Duration.ofMillis(50)) {
+        ResizedArtwork service = new ResizedArtwork(resizer, CLOCK, cache.toString(), 100, 2, Duration.ofMillis(50)) {
             @Override
             void prune(Path keep) {
                 if (prunes.incrementAndGet() == 1) {
@@ -291,11 +304,11 @@ class ResizedArtworkTest {
 
     @Test
     void aWriteQueuedBehindAPruneThatFixedTheTotalDoesNotPrune() throws Exception {
-        seed("old.jpg", 800, Instant.now().minusSeconds(300));
+        seed("old.jpg", 800, NOW.minusSeconds(300));
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         AtomicInteger prunes = new AtomicInteger();
-        ResizedArtwork service = new ResizedArtwork(resizer, cache.toString(), 1000, 2, Duration.ofMillis(50)) {
+        ResizedArtwork service = new ResizedArtwork(resizer, CLOCK, cache.toString(), 1000, 2, Duration.ofMillis(50)) {
             @Override
             void prune(Path keep) throws IOException {
                 prunes.incrementAndGet();
@@ -321,10 +334,10 @@ class ResizedArtworkTest {
 
     @Test
     void aWriteThatLandsDuringAPruneKeepsItsSizeInTheRunningTotal() throws Exception {
-        seed("old.jpg", 800, Instant.now().minusSeconds(300));
+        seed("old.jpg", 800, NOW.minusSeconds(300));
         CountDownLatch walked = new CountDownLatch(1);
         ResizedArtwork[] holder = new ResizedArtwork[1];
-        ResizedArtwork service = new ResizedArtwork(resizer, cache.toString(), 1000, 2, Duration.ofMillis(50)) {
+        ResizedArtwork service = new ResizedArtwork(resizer, CLOCK, cache.toString(), 1000, 2, Duration.ofMillis(50)) {
             @Override
             void afterWalk() {
                 walked.countDown();
@@ -366,10 +379,10 @@ class ResizedArtworkTest {
 
     @Test
     void aCopyThatCannotBeDeletedIsKeptAndCountedAndThePruneTakesTheNextOldest() throws IOException {
-        Instant now = Instant.now();
+        Instant now = NOW;
         Path stuck = seed("stuck.jpg", 400, now.minusSeconds(300));
         Path next = seed("next.jpg", 400, now.minusSeconds(200));
-        ResizedArtwork service = new ResizedArtwork(resizer, cache.toString(), 1000, 2, Duration.ofMillis(50)) {
+        ResizedArtwork service = new ResizedArtwork(resizer, CLOCK, cache.toString(), 1000, 2, Duration.ofMillis(50)) {
             @Override
             boolean delete(Path file) {
                 return !file.equals(stuck) && super.delete(file);
@@ -397,8 +410,8 @@ class ResizedArtworkTest {
 
     @Test
     void aStaleTemporaryFileThatCannotBeDeletedIsStillCounted() throws IOException {
-        Path stale = seed("stale.tmp", 10, Instant.now().minus(Duration.ofHours(2)));
-        ResizedArtwork service = new ResizedArtwork(resizer, cache.toString(), 100, 2, Duration.ofMillis(50)) {
+        Path stale = seed("stale.tmp", 10, NOW.minus(Duration.ofHours(2)));
+        ResizedArtwork service = new ResizedArtwork(resizer, CLOCK, cache.toString(), 100, 2, Duration.ofMillis(50)) {
             @Override
             boolean delete(Path file) {
                 return false;
@@ -414,7 +427,7 @@ class ResizedArtworkTest {
     @Test
     void aPruneThatFailsIsLoggedTheBytesAreStillReturnedAndTheNextWriteTriesAgain() {
         AtomicInteger prunes = new AtomicInteger();
-        ResizedArtwork service = new ResizedArtwork(resizer, cache.toString(), 100, 2, Duration.ofMillis(50)) {
+        ResizedArtwork service = new ResizedArtwork(resizer, CLOCK, cache.toString(), 100, 2, Duration.ofMillis(50)) {
             @Override
             void prune(Path keep) throws IOException {
                 prunes.incrementAndGet();
@@ -432,8 +445,8 @@ class ResizedArtworkTest {
 
     @Test
     void aCachedFileRemovedBetweenTheCheckAndTheReadIsMadeAgain() throws IOException {
-        seed("a.jpg", 50, Instant.now());
-        ResizedArtwork service = new ResizedArtwork(resizer, cache.toString(), ResizedArtwork.MAX_BYTES, 2,
+        seed("a.jpg", 50, NOW);
+        ResizedArtwork service = new ResizedArtwork(resizer, CLOCK, cache.toString(), ResizedArtwork.MAX_BYTES, 2,
             Duration.ofMillis(50)) {
             @Override
             byte[] read(Path file) throws IOException {
@@ -452,8 +465,8 @@ class ResizedArtworkTest {
 
     @Test
     void aCachedFileThatCannotBeReadIsAlsoAMiss() throws IOException {
-        seed("a.jpg", 50, Instant.now());
-        ResizedArtwork service = new ResizedArtwork(resizer, cache.toString(), ResizedArtwork.MAX_BYTES, 2,
+        seed("a.jpg", 50, NOW);
+        ResizedArtwork service = new ResizedArtwork(resizer, CLOCK, cache.toString(), ResizedArtwork.MAX_BYTES, 2,
             Duration.ofMillis(50)) {
             @Override
             byte[] read(Path file) throws IOException {
@@ -514,7 +527,7 @@ class ResizedArtworkTest {
 
     @Test
     void aFailureInsideTheResizeReleasesTheSlot() {
-        ResizedArtwork service = new ResizedArtwork(resizer, cache.toString(), ResizedArtwork.MAX_BYTES, 1,
+        ResizedArtwork service = new ResizedArtwork(resizer, CLOCK, cache.toString(), ResizedArtwork.MAX_BYTES, 1,
             Duration.ofMillis(50));
         resizer.inResize = () -> {
             throw new IllegalStateException("boom");

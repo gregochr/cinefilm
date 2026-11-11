@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -84,6 +85,7 @@ public class ResizedArtwork {
     }
 
     private final ArtworkResizer resizer;
+    private final Clock clock;
     private final Path artDir;
     private final long maxBytes;
     private final Semaphore slots;
@@ -94,12 +96,14 @@ public class ResizedArtwork {
 
     /** Creates the service; the cache folder is {@code cinefilm.cache.dir}. */
     @Autowired
-    public ResizedArtwork(@Value("${cinefilm.cache.dir}") String cacheDir) {
-        this(new ArtworkResizer(), cacheDir, MAX_BYTES, MAX_CONCURRENT, ACQUIRE_TIMEOUT);
+    public ResizedArtwork(Clock clock, @Value("${cinefilm.cache.dir}") String cacheDir) {
+        this(new ArtworkResizer(), clock, cacheDir, MAX_BYTES, MAX_CONCURRENT, ACQUIRE_TIMEOUT);
     }
 
-    ResizedArtwork(ArtworkResizer resizer, String cacheDir, long maxBytes, int concurrent, Duration acquireTimeout) {
+    ResizedArtwork(ArtworkResizer resizer, Clock clock, String cacheDir, long maxBytes, int concurrent,
+                   Duration acquireTimeout) {
         this.resizer = resizer;
+        this.clock = clock;
         this.artDir = Path.of(cacheDir).toAbsolutePath().normalize().resolve("art");
         this.maxBytes = maxBytes;
         this.slots = new Semaphore(concurrent);
@@ -294,7 +298,7 @@ public class ResizedArtwork {
      * cap, and brings the running total to the real figure.
      */
     void prune(Path keep) throws IOException {
-        long now = System.currentTimeMillis();
+        long now = clock.millis();
         long before = total.get();
         long remaining = 0;
         List<Entry> copies = new ArrayList<>();

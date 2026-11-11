@@ -45,7 +45,7 @@ public class ArtworkResizer {
     }
 
     /** A header that passed the limits. */
-    private record Header(int width, boolean alpha) {
+    private record Header(int width) {
     }
 
     /** One open reader over a file; closing it disposes the reader and closes the input. */
@@ -75,7 +75,7 @@ public class ArtworkResizer {
                 || (long) width * height > MAX_PIXELS || deeperThanEightBits(type)) {
                 return Optional.empty();
             }
-            return Optional.of(new Header(width, type.getColorModel().hasAlpha()));
+            return Optional.of(new Header(width));
         }
 
         BufferedImage read() throws IOException {
@@ -134,8 +134,9 @@ public class ArtworkResizer {
             if (session.warned()) {
                 return Optional.empty();
             }
+            // Alpha from the decoded image: a tRNS chunk gives alpha that the raw image type does not show.
             boolean png = isPng(name);
-            return Optional.of(encode(scale(source, targetWidth, png && header.get().alpha()), png));
+            return Optional.of(encode(scale(source, targetWidth, png && source.getColorModel().hasAlpha()), png));
         } catch (IOException | RuntimeException e) {
             return Optional.empty();
         }
