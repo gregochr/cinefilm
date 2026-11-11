@@ -7,7 +7,7 @@ import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx'
 import { resetThroughputState } from '../player/throughput.js';
 
 // hls.js at its event API, and the probe as a number: both have unit tests of their own.
-vi.mock('hls.js', async () => ({ default: (await import('../test/fakeHls.js')).FakeHls }));
+vi.mock('hls.js/light', async () => ({ default: (await import('../test/fakeHls.js')).FakeHls }));
 vi.mock('../player/probe.js', () => ({ measureThroughput: vi.fn() }));
 
 beforeEach(() => {

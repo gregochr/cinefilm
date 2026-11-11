@@ -8,7 +8,7 @@ import { resetThroughputState } from '../player/throughput.js';
 
 // A film split across several files plays as one continuous film: every time is an edition time (from the start
 // of part 1), it is never direct-played, and nothing on screen names a part.
-vi.mock('hls.js', async () => ({ default: (await import('../test/fakeHls.js')).FakeHls }));
+vi.mock('hls.js/light', async () => ({ default: (await import('../test/fakeHls.js')).FakeHls }));
 vi.mock('../player/probe.js', () => ({ measureThroughput: vi.fn() }));
 
 beforeEach(() => {

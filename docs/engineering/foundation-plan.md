@@ -194,6 +194,9 @@ The "Dim the lights" switch is stored in the play request (`?dim=0`) and has no 
   and whose lower rungs (1080p/720p/480p/360p) are transcoded live with VAAPI on dockermacmini, ABR in hls.js and
   Safari, the same policy at home and away. Server-side pre-made "travel copies" (decision 15) are replaced by a later
   "Download for offline"; the separate worker and workhorse failover wait until dockermacmini proves too slow.
+  The frontend loads the light build (`hls.js/light`, about 65 KB smaller gzipped, parsed on every first play): it
+  lacks alternate renditions, EME and HEVC/AC-3 in TS, none of which CineFilm sends; an HEVC copy rung or `#EXT-X-MEDIA`
+  would need the full build again.
 - **Phase 4 — Plex import.** Import films, posters and watch history from Plex; Admin import panel. Plan: `docs/engineering/plex-import-plan.md` (brought forward; built in the "import the library from Plex" PR).
 - **Phase 5 — ship.** Production polish: the undrawn mobile screens (Library, Person, Admin), Apple TV
   focus-navigation groundwork. (Packaging, deploy, backups and HTTPS behind Tailscale moved to
