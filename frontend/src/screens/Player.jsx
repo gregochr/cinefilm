@@ -174,7 +174,7 @@ function PlayerView({ film, edition, startAtZero, openedAt }) {
   // The slow-connection card waits while the network question is due (decision 18).
   const questionDue = environment.question !== null;
   const slowCard = useSlowCard(
-    stream.mode === 'hls' && quality === AUTO && indicator.slow && !questionDue,
+    stream.mode === 'hls' && quality === AUTO && indicator.measuredSlow && !questionDue,
   );
 
   const hasSubtitles = edition.subtitleStreams.length > 0;

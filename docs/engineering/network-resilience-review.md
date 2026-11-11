@@ -282,7 +282,8 @@ Each is one PR built by Sonnet under the usual gates, with a `changelog.d/` entr
 1. **Measure:** the playback health record with environment tagging, and the throttled manual check (items 11 and
    13; one expand-only migration). Plan: `playback-health-plan.md`.
 2. **Stop making a poor link worse:** items 1, 2, 3, 4 and 8, plus the status-0 retry and the `online` retry.
-   Frontend apart from the compression property and its test. It does not depend on the measurements.
+   Frontend apart from the compression property and its test. It does not depend on the measurements. Plan:
+   `poor-link-plan.md`.
 3. **A strategy per environment:** items 5 and 6, set from what the record shows: on a train start low, bank
    deep and step up only with a reserve; at home start at the top. Needs open decisions 1 and 2 and a speed check on
    the host. (Item 7 was pulled forward on its own: `long-pause-plan.md`.)

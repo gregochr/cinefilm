@@ -1,10 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { editionsApi, sessionsApi } from '../api/resources.js';
+import { editionsApi, sessionApi, sessionsApi } from '../api/resources.js';
 import { AUTO, ORIGINAL, levelToast, workerOffline } from './ladder.js';
-import { createSession } from './createSession.js';
+import { REACH_TIMEOUT_MS, createSession } from './createSession.js';
 import { measureThroughput } from './probe.js';
+import { createWaiter, reachable } from './retry.js';
 import { startStream } from './streamSource.js';
-import { addSample, median } from './throughput.js';
+import {
+  addSample,
+  lowerMiddle,
+  median,
+  networkGeneration,
+  REMEMBER_MS,
+  recallSpeed,
+  rememberSpeed,
+} from './throughput.js';
 
 // What `useStream` calls when no health recorder is given: every other caller and test is unaffected.
 const noop = () => {};
@@ -48,7 +57,11 @@ export function useStream({
 }) {
   const [stream, setStream] = useState({ mode: 'loading', rung: null, renditions: [] });
   const [reconnecting, setReconnecting] = useState(false);
+  // The samples live in a ref (read by the effect's run, never inside a state updater) and are mirrored to state
+  // for the render; `network` is the network counter they were taken under.
   const [samples, setSamples] = useState([]);
+  const [reusedKbps, setReusedKbps] = useState(null);
+  const samplesRef = useRef({ list: [], network: networkGeneration(), at: 0 });
   const [generation, setGeneration] = useState(0);
   const pendingSeekRef = useRef(initialSeekMs > 0 ? initialSeekMs : null);
   const startedRef = useRef(false);
@@ -69,8 +82,18 @@ export function useStream({
     let engine = null;
     let session = null;
     let rung = null;
+    // One switch per run for "Reconnecting…", acting only on a change: the probe's "unreachable", the session
+    // request's retries and the engine's own are one episode. A cancelled run changes nothing.
+    let noticeOn = false;
+    const setNotice = (on) => {
+      if (cancelled || on === noticeOn) return;
+      noticeOn = on;
+      setReconnecting(on);
+      latest.current.health.reconnecting(on);
+    };
     // The notice ends (or never began): the counter hears about it wherever the flag is reset.
     const clearReconnecting = () => {
+      noticeOn = false;
       setReconnecting(false);
       latest.current.health.reconnecting(false);
     };
@@ -131,7 +154,37 @@ export function useStream({
       }
     };
 
-    const run = async () => {
+    // This run's waits end at once when the effect is cleaned up (`dispose` lets a pending wait go); the waiter
+    // hears `online` and sign-ins meanwhile.
+    const waiter = createWaiter();
+    const { wait, untilSignedIn } = waiter;
+    const serverAnswers = () =>
+      reachable((signal) => sessionApi.status({ signal }), { timeoutMs: REACH_TIMEOUT_MS });
+
+    // A measurement from the probe or a segment: kept under the current network, and remembered for the next start.
+    const addMeasured = (kbps) => {
+      const kept = samplesRef.current;
+      const network = networkGeneration();
+      const base = kept.network === network ? kept.list : [];
+      const list = addSample(base, kbps);
+      samplesRef.current = { list, network, at: Date.now() };
+      setSamples(list);
+      if (list !== base) rememberSpeed(lowerMiddle(list));
+    };
+    // The start rung's speed: this player's own measurements under this network, else the one remembered.
+    // They have an age: ten minutes after the last measurement (or a network change) they are discarded.
+    const knownSpeed = () => {
+      const kept = samplesRef.current;
+      const usable = kept.network === networkGeneration() && Date.now() - kept.at < REMEMBER_MS;
+      if (!usable && kept.list.length > 0) {
+        samplesRef.current = { list: [], network: networkGeneration(), at: 0 };
+        setSamples([]);
+      }
+      const own = usable ? lowerMiddle(kept.list) : null;
+      return own === null ? { kbps: recallSpeed(), own: false } : { kbps: own, own: true };
+    };
+
+    const go = async () => {
       const position = currentPosition();
       if (startedRef.current && position > 0) pendingSeekRef.current = position;
       startedRef.current = true;
@@ -141,23 +194,58 @@ export function useStream({
         toDirect();
         return;
       }
+      // Auto's start rung: a speed measured lately is reused; else a film in one piece probes, and anything
+      // still unmeasured starts on the lowest rung (probeKbps 0).
       let probeKbps = null;
-      if (quality === AUTO && !split) {
-        probeKbps = await measureThroughput(editionsApi.streamUrl(editionId));
-        if (cancelled) return;
-        if (probeKbps) setSamples((s) => addSample(s, probeKbps));
+      let reused = null;
+      if (quality === AUTO) {
+        const known = knownSpeed();
+        if (known.kbps) {
+          probeKbps = Math.round(known.kbps);
+          if (!known.own) reused = probeKbps;
+        } else if (split) {
+          probeKbps = 0;
+        } else {
+          const measured = await measureThroughput(editionsApi.streamUrl(editionId), {
+            checkReachable: serverAnswers,
+            onUnreachable: () => setNotice(true),
+          });
+          if (cancelled) return;
+          if (measured) addMeasured(measured);
+          probeKbps = measured ? Math.round(lowerMiddle(samplesRef.current.list)) : 0;
+        }
       }
-      const body = { quality, startMs };
-      if (latest.current.audioStreamId !== null && latest.current.audioStreamId !== undefined)
-        body.audioStreamId = latest.current.audioStreamId;
-      if (probeKbps) body.probeKbps = probeKbps;
+      setReusedKbps(reused);
+      const chosenOn = networkGeneration();
       setStream((s) =>
         s.mode === 'unavailable' ? { mode: 'loading', rung: null, renditions: [] } : s,
       );
-      const created = await createSession(() => sessionsApi.create(editionId, body), {
-        retryWhenPreparing: split,
-        isCancelled: () => cancelled,
-      });
+      // The body is built on each attempt, so an audio track chosen while the request retries is the one asked for.
+      const buildBody = () => {
+        const next = { quality, startMs };
+        const audio = latest.current.audioStreamId;
+        if (audio !== null && audio !== undefined) next.audioStreamId = audio;
+        // A speed chosen on another network says nothing about this one: start low, Auto steps up.
+        if (probeKbps !== null) {
+          next.probeKbps = networkGeneration() === chosenOn ? probeKbps : 0;
+        }
+        return next;
+      };
+      const created = await createSession(
+        (signal) => sessionsApi.create(editionId, buildBody(), { signal }),
+        {
+          retryWhenPreparing: split,
+          isCancelled: () => cancelled,
+          wait,
+          untilSignedIn,
+          reachable: serverAnswers,
+          onRetrying: setNotice,
+          onNoAnswer: (error) => {
+            if (!cancelled) latest.current.health.networkError(error);
+          },
+        },
+      );
+      setNotice(false);
       if (!created) {
         if (!cancelled) failToDirect(); // No encoder, no keyframe index yet, or the request failed.
         return;
@@ -182,6 +270,9 @@ export function useStream({
         auto: quality === AUTO,
         startSeconds: startMs / 1000,
         isCancelled: () => cancelled,
+        reachable: serverAnswers,
+        onRetrying: setNotice,
+        wait,
         handlers: {
           onLevel(next, { initial }) {
             const previous = rung;
@@ -193,13 +284,10 @@ export function useStream({
             latest.current.health.rung(next, heightOf(created.renditions, next));
           },
           onThroughput(kbps) {
-            setSamples((s) => addSample(s, kbps));
+            addMeasured(kbps);
             latest.current.health.throughput(kbps);
           },
-          onReconnecting(on) {
-            setReconnecting(on);
-            latest.current.health.reconnecting(on);
-          },
+          onReconnecting: setNotice,
           onReload(ms) {
             holdPlayState();
             if (ms > 0) pendingSeekRef.current = ms;
@@ -220,10 +308,18 @@ export function useStream({
         failToDirect();
       }
     };
-    run();
+    const run = async () => {
+      try {
+        await go();
+      } finally {
+        waiter.dispose();
+      }
+    };
+    void run();
 
     return () => {
       cancelled = true;
+      waiter.dispose();
       holdPlayState();
       engine?.destroy();
       if (session) {
@@ -232,6 +328,22 @@ export function useStream({
       }
     };
   }, [editionId, quality, generation, videoRef]);
+
+  // The network changed (offline or online): what was measured on the old one says nothing about the new, so the
+  // samples and a reused speed go, and the indicator and the slow card stop reading them.
+  useEffect(() => {
+    const forgetMeasurements = () => {
+      samplesRef.current = { list: [], network: networkGeneration(), at: 0 };
+      setSamples([]);
+      setReusedKbps(null);
+    };
+    window.addEventListener('offline', forgetMeasurements);
+    window.addEventListener('online', forgetMeasurements);
+    return () => {
+      window.removeEventListener('offline', forgetMeasurements);
+      window.removeEventListener('online', forgetMeasurements);
+    };
+  }, []);
 
   // Closing the tab: tell the server so it stops encoding now rather than after the idle timeout.
   useEffect(() => {
@@ -257,7 +369,7 @@ export function useStream({
     rung: stream.rung,
     renditions: stream.renditions,
     reconnecting,
-    kbps: median(samples),
+    kbps: median(samples) ?? reusedKbps,
     pendingSeekRef,
     takePlayAfterLoad,
     restart,
