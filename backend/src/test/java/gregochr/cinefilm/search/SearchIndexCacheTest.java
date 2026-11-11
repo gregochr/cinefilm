@@ -1,7 +1,6 @@
 package gregochr.cinefilm.search;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,6 +11,7 @@ import gregochr.cinefilm.search.SearchIndexDtos.CollectionEntry;
 import gregochr.cinefilm.search.SearchIndexDtos.FilmEntry;
 import gregochr.cinefilm.search.SearchIndexDtos.PersonEntry;
 import gregochr.cinefilm.search.SearchIndexDtos.SearchIndex;
+import gregochr.cinefilm.web.JsonEtag;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -74,16 +74,7 @@ class SearchIndexCacheTest {
 
         // sha256('{"films":[],"collections":[],"people":[]}')
         assertThat(snapshot.etag()).matches("W/\"[0-9a-f]{16}\"");
-        assertThat(snapshot.etag()).isEqualTo(SearchIndexCache.etag("SHA-256", snapshot.body()));
-        assertThat(SearchIndexCache.etag("SHA-256", "abc".getBytes(StandardCharsets.UTF_8)))
-            .isEqualTo("W/\"ba7816bf8f01cfea\"");
-    }
-
-    @Test
-    void anUnknownDigestAlgorithmIsAnError() {
-        assertThatThrownBy(() -> SearchIndexCache.etag("NOPE-1", new byte[0]))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessage("NOPE-1 is not available");
+        assertThat(snapshot.etag()).isEqualTo(JsonEtag.etag(snapshot.body()));
     }
 
     @Test
