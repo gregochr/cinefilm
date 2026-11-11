@@ -350,4 +350,78 @@ describe('Library: the ⋯ menu on in-progress posters', () => {
     expect(within(row).getByTestId('poster-fill')).toBeInTheDocument();
     expect(within(row).queryAllByRole('button')).toHaveLength(0);
   });
+
+  describe('focus after an action that keeps the poster', () => {
+    it('Remove under In progress leaves focus on the poster', async () => {
+      library();
+      renderApp('/library?show=in-progress&sort=last-watched');
+      await heading('4 films in progress · sorted by last watched');
+      await openMenu('Alpha');
+      await userEvent.click(removeItem());
+      expect(poster('Alpha, 2001')).toHaveFocus();
+    });
+
+    it('Remove under All leaves focus on the poster', async () => {
+      library();
+      renderApp('/library');
+      await screen.findByRole('link', { name: 'Alpha, 2001' });
+      await openMenu('Alpha');
+      await userEvent.click(removeItem());
+      expect(poster('Alpha, 2001')).toHaveFocus();
+    });
+
+    it('Mark as watched under All, from the menu, leaves focus on the poster', async () => {
+      library();
+      renderApp('/library');
+      await screen.findByRole('link', { name: 'Alpha, 2001' });
+      await openMenu('Alpha');
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Mark as watched' }));
+      expect(poster('Alpha, 2001, watched')).toHaveFocus();
+    });
+
+    it('the M shortcut under All leaves focus on the poster', async () => {
+      library();
+      renderApp('/library');
+      await screen.findByRole('link', { name: 'Alpha, 2001' });
+      poster('Alpha, 2001').focus();
+      await userEvent.keyboard('m');
+      expect(poster('Alpha, 2001, watched')).toHaveFocus();
+    });
+  });
+
+  it('a change that commits after the list was read again is read again, so it shows', async () => {
+    let watched = false;
+    let finish;
+    const gate = new Promise((resolve) => {
+      finish = resolve;
+    });
+    const fetchMock = installFetch((method, url) => {
+      if (url.startsWith('/api/films')) {
+        const alpha = watched ? { ...ALPHA, watched: true, inProgress: false } : ALPHA;
+        return respond({ total: 2, films: [alpha, GAMMA], facets: fixtures.films.facets });
+      }
+      if (/\/watched$/.test(url)) {
+        return gate.then(() => {
+          watched = true;
+          return respond({ watched: true, previous: { positionMs: 1800000, watched: false } });
+        });
+      }
+      return null;
+    });
+    renderApp('/library');
+    await screen.findByRole('link', { name: 'Alpha, 2001' });
+
+    await openMenu('Alpha');
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Mark as watched' }));
+    const listCalls = () =>
+      fetchMock.mock.calls.filter((c) => c[0].startsWith('/api/films')).length;
+    const before = listCalls();
+    await userEvent.click(within(screen.getByRole('group', { name: 'Sort' })).getByText('Title'));
+    await vi.waitFor(() => expect(listCalls()).toBeGreaterThan(before));
+    await vi.waitFor(() => expect(poster('Alpha, 2001')).toBeInTheDocument()); // the old state
+
+    finish();
+    expect(await screen.findByRole('link', { name: 'Alpha, 2001, watched' })).toBeInTheDocument();
+    expect(screen.getAllByTestId('poster-fill')).toHaveLength(1);
+  });
 });

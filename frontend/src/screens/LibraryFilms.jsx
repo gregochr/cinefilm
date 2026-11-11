@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import CollectionTile from '../components/CollectionTile.jsx';
 import { Picker, Segmented, Switch } from '../components/Controls.jsx';
@@ -77,6 +77,8 @@ export default function LibraryFilms() {
   const focusUndo = useRef(false);
   const pendingFocus = useRef(null);
   const posterLinks = useRef(new Map());
+  const [acted, setActed] = useState(0); // counts actions; an effect from before the latest one must not focus
+  const actedWanted = useRef(0);
   const latestData = useRef(data);
   const awaitData = useRef(false); // the poster is rebuilt with the data being read: focus it only then
   const focusedAt = useRef(null); // the loaded data when pendingFocus was set
@@ -114,6 +116,7 @@ export default function LibraryFilms() {
       focusUndo.current = false;
       undoButton.current?.focus();
     } else if (pendingFocus.current !== null) {
+      if (actedWanted.current > acted) return; // a render from before the action: its posters are stale
       const link = posterLinks.current.get(pendingFocus.current);
       const arrived = data !== focusedAt.current;
       if (awaitData.current && !arrived) return;
@@ -137,6 +140,13 @@ export default function LibraryFilms() {
     focusUndo.current = kind === 'watched' && show === 'in-progress';
     awaitData.current = false;
     pendingFocus.current = null; // a new action cancels a focus still waiting for a poster
+    // A poster that stays (Remove, or Mark as watched in All) may be rebuilt and loses the focus its menu item had.
+    if (!focusUndo.current) {
+      pendingFocus.current = film.id;
+      focusedAt.current = data;
+      actedWanted.current = acted + 1;
+      setActed(acted + 1);
+    }
     (kind === 'remove' ? cw.remove : cw.markWatched)(film);
   };
   // Search and In progress never group: they show individual films even with the switch on.

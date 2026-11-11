@@ -51,10 +51,16 @@ export function useLibraryFilmActions(data, show, reload, onRollback) {
         film,
         () => setPatches((p) => ({ ...p, [film.id]: { ...p[film.id], ...patch } })),
         () => setPatches((p) => without(p, film.id, keys)),
-        { source: data },
+        {
+          source: data,
+          // The list may have been read again before the change committed, and so shows the old state.
+          onCommitted: () => {
+            if (current.current !== data) reload();
+          },
+        },
       );
     },
-    [begin, show, data],
+    [begin, show, data, reload],
   );
 
   const remove = useCallback((film) => apply('remove', film), [apply]);

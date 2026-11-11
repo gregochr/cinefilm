@@ -14,7 +14,7 @@ export const UNDO_MS = 8000;
  * Requests for one edition are serialised (each starts after the previous one settled), so a quick Remove, Undo,
  * Remove reaches the server in that order. `reload` is called if an Undo cannot be sent, to resynchronise with the
  * server. `onRollback(film)` is called after a failed request has been restored. `begin` returns false (and
- * changes nothing) when the film has no edition to act on. `meta` (optional) is spread onto the `action` entry.
+ * changes nothing) when the film has no edition to act on. `meta` (optional) is spread onto the `action` entry; `meta.onCommitted()` is called when the request succeeded and nothing newer has happened to the film.
  */
 export function useUndoableFilmActions(reload, onRollback) {
   const [action, setAction] = useState(null);
@@ -86,6 +86,13 @@ export function useUndoableFilmActions(reload, onRollback) {
           ? () => editionsApi.setHiddenFromContinueWatching(editionId, true)
           : () => editionsApi.setWatched(editionId, true);
       entry.call = enqueue(editionId, call);
+      entry.call.then(
+        () => {
+          // Committed, and nothing newer has happened to this film since.
+          if (versions.current.get(film.id) === entry.version) entry.onCommitted?.();
+        },
+        () => {}, // the failure is handled below
+      );
       entry.call.catch(() => {
         clearAction(entry);
         // Only roll back if nothing newer has happened to this film since (Undo, another action). Otherwise
