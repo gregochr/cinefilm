@@ -26,6 +26,6 @@ public class SettingsController {
     @PutMapping("/api/admin/settings")
     Settings update(@RequestBody(required = false) SettingsUpdate body) {
         // A body of JSON null (or none) reaches the service as a missing value, which it answers with a 400.
-        return settings.update(body == null ? null : body.continueWatchingMinMinutes());
+        return settings.update(body == null ? null : body.minutes());
     }
 }

@@ -76,6 +76,27 @@ class SettingsApiTest extends ApiTestBase {
     }
 
     @Test
+    void onlyAWholeJsonNumberIsAcceptedNotAFractionAStringABooleanAnObjectOrAnOverflow() throws Exception {
+        for (String value : new String[] {"-0.5", "5.9", "5.0", "\"5\"", "true", "{}", "[5]", "3000000000"}) {
+            mvc.perform(put("/api/admin/settings").content("{\"continueWatchingMinMinutes\":" + value + "}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error")
+                    .value("continueWatchingMinMinutes must be a whole number from 0 to 30"));
+        }
+
+        mvc.perform(get("/api/admin/settings")).andExpect(jsonPath("$.continueWatchingMinMinutes").value(5));
+    }
+
+    @Test
+    void wholeNumbersFiveZeroAndThirtyAreAccepted() throws Exception {
+        for (int minutes : new int[] {5, 0, 30}) {
+            mvc.perform(put("/api/admin/settings").content("{\"continueWatchingMinMinutes\":" + minutes + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.continueWatchingMinMinutes").value(minutes));
+        }
+    }
+
+    @Test
     void aBodyOfJsonNullIs400WithTheValidationMessage() throws Exception {
         mvc.perform(put("/api/admin/settings").content("null"))
             .andExpect(status().isBadRequest())
