@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { measureThroughput } from '../player/probe.js';
 import { FakeHls } from '../test/fakeHls.js';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
+import { resetThroughputState } from '../player/throughput.js';
 
 // A film split across several files plays as one continuous film: every time is an edition time (from the start
 // of part 1), it is never direct-played, and nothing on screen names a part.
@@ -15,6 +16,7 @@ beforeEach(() => {
   window.MediaSource = class {};
   measureThroughput.mockReset().mockResolvedValue(null);
   sessionStorage.clear();
+  resetThroughputState();
 });
 afterEach(() => {
   delete window.MediaSource;
@@ -108,7 +110,9 @@ describe('playing a film split across several files', () => {
     const { log } = await open();
 
     // Saved at 12,500,000 ms of the whole edition; resume is 10 s earlier.
-    expect(log.posted).toEqual([{ quality: 'auto', startMs: 12_490_000, audioStreamId: 111 }]);
+    expect(log.posted).toEqual([
+      { quality: 'auto', startMs: 12_490_000, audioStreamId: 111, probeKbps: 0 },
+    ]);
     expect(measureThroughput).not.toHaveBeenCalled();
     expect(FakeHls.last.config.startPosition).toBe(12490);
   });
@@ -231,6 +235,27 @@ describe('playing a film split across several files', () => {
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     expect(video).not.toHaveAttribute('src');
+  });
+
+  it('shows Reconnecting…, not the card, when the session request gets no answer, and streams once it works', async () => {
+    const srv = serve({
+      create: (n) => {
+        if (n === 1) throw new TypeError('Failed to fetch');
+        return null;
+      },
+    });
+    installFetch(srv.route);
+    renderApp('/films/1/play?edition=11');
+    const video = await screen.findByTestId('player-video');
+    const notice = await screen.findByText('Reconnecting…');
+    expect(notice.closest('[role="status"]')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(video).not.toHaveAttribute('src');
+    await hlsEvent(() => window.dispatchEvent(new Event('online')));
+    await instances(1);
+    await vi.waitFor(() => expect(screen.queryByText('Reconnecting…')).not.toBeInTheDocument());
+    expect(srv.log.posted).toHaveLength(2);
+    expect(measureThroughput).not.toHaveBeenCalled();
   });
 
   it('names no part anywhere on the player', async () => {

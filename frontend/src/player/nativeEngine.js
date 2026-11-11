@@ -115,6 +115,12 @@ export function startNative({
     if (errored || reconnecting || stuck) reload();
   }
 
+  // The connection is back while reconnecting: check now, ignoring the spacing (a check in flight finishes).
+  const onOnline = () => {
+    if (!destroyed && reconnecting) reload();
+  };
+
+  window.addEventListener('online', onOnline);
   video.addEventListener('timeupdate', onTimeUpdate);
   video.addEventListener('resize', detectLevel);
   video.addEventListener('loadedmetadata', detectLevel);
@@ -126,6 +132,7 @@ export function startNative({
     destroy() {
       destroyed = true;
       clearInterval(poll);
+      window.removeEventListener('online', onOnline);
       video.removeEventListener('timeupdate', onTimeUpdate);
       video.removeEventListener('resize', detectLevel);
       video.removeEventListener('loadedmetadata', detectLevel);

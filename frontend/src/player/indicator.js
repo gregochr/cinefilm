@@ -20,5 +20,7 @@ export function indicatorModel({ quality, rung, top, kbps }) {
     text: parts.join(' · '),
     amber: !home || slow || (quality === AUTO && rung !== top),
     slow,
+    // Slow *and* a known speed below home: the slow-connection card needs a measurement, not a cautious start.
+    measuredSlow: slow && kbps !== null && kbps < HOME_KBPS,
   };
 }

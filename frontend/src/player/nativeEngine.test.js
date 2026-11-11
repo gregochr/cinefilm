@@ -356,3 +356,62 @@ describe('destroy', () => {
     expect(video.load).not.toHaveBeenCalled();
   });
 });
+
+describe('the connection coming back', () => {
+  const online = () => window.dispatchEvent(new Event('online'));
+
+  it('checks at once while reconnecting, ignoring the 5 s spacing', async () => {
+    const offline = vi.fn(async () => {
+      throw new TypeError('offline');
+    });
+    const { video, fetchImpl, handlers } = start({ fetchImpl: offline });
+    video.currentTime = 900;
+    await tick(STALL_MS);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(handlers.onReconnecting.mock.calls).toEqual([[true]]);
+    fetchImpl.mockImplementation(async () => ({ status: 200 }));
+    await tick(1000); // well inside the 5 s spacing
+    online();
+    await tick(0);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(handlers.onReload).toHaveBeenCalledWith(900000);
+  });
+
+  it('leaves a check already in flight to finish', async () => {
+    const slow = vi.fn(() => new Promise(() => {}));
+    const { video, fetchImpl } = start({ fetchImpl: slow });
+    video.currentTime = 10;
+    await tick(STALL_MS);
+    online();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing while playing', async () => {
+    const { fetchImpl } = start();
+    online();
+    await tick(0);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('removes its online listener on destroy', () => {
+    const remove = vi.spyOn(window, 'removeEventListener');
+    const { engine } = start();
+    engine.destroy();
+    expect(remove).toHaveBeenCalledWith('online', expect.any(Function));
+    remove.mockRestore();
+  });
+
+  it('does nothing after destroy()', async () => {
+    const offline = vi.fn(async () => {
+      throw new TypeError('offline');
+    });
+    const { engine, video, fetchImpl } = start({ fetchImpl: offline });
+    video.currentTime = 900;
+    await tick(STALL_MS);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    engine.destroy();
+    online();
+    await tick(0);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
