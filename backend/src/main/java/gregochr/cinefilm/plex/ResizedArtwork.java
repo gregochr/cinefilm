@@ -10,6 +10,7 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -65,6 +66,21 @@ public class ResizedArtwork {
         static Result of(Outcome outcome) {
             return new Result(outcome, null);
         }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Result that && outcome == that.outcome && Arrays.equals(bytes, that.bytes);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * outcome.hashCode() + Arrays.hashCode(bytes);
+        }
+
+        @Override
+        public String toString() {
+            return "Result[outcome=" + outcome + ", bytes=" + (bytes == null ? "none" : bytes.length + " bytes") + "]";
+        }
     }
 
     private final ArtworkResizer resizer;
@@ -119,7 +135,10 @@ public class ResizedArtwork {
      * @return what to serve
      */
     public Result resized(String name, Path stored, int width) {
-        Path cached = artDir.resolve(Integer.toString(width)).resolve(name);
+        Path cached = artDir.resolve(Integer.toString(width)).resolve(name).normalize();
+        if (!cached.startsWith(artDir)) {
+            return Result.of(Outcome.UNREADABLE);
+        }
         byte[] hit = readCached(cached);
         if (hit != null) {
             return new Result(Outcome.RESIZED, hit);

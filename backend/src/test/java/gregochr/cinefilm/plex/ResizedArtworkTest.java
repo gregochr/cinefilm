@@ -567,4 +567,29 @@ class ResizedArtworkTest {
     void noWidthIsInvalidHere() {
         assertThat(ResizedArtwork.parseWidth(null)).isEmpty();
     }
+
+    @Test
+    void aNameThatEscapesTheCacheFolderIsUnreadableAndTouchesNothing() throws IOException {
+        Result result = service(ResizedArtwork.MAX_BYTES).resized("../../x.jpg", stored, 342);
+
+        assertThat(result.outcome()).isEqualTo(Outcome.UNREADABLE);
+        assertThat(resizer.resizes).hasValue(0);
+        assertThat(cache.resolve("art")).doesNotExist();
+        assertThat(base.resolve("x.jpg")).doesNotExist();
+    }
+
+    @Test
+    void aResultComparesAndPrintsByTheContentOfItsBytes() {
+        Result one = new Result(Outcome.RESIZED, new byte[] {1, 2});
+
+        assertThat(one).isEqualTo(new Result(Outcome.RESIZED, new byte[] {1, 2}));
+        assertThat(one).hasSameHashCodeAs(new Result(Outcome.RESIZED, new byte[] {1, 2}));
+        assertThat(one).isNotEqualTo(new Result(Outcome.RESIZED, new byte[] {1, 3}));
+        assertThat(one).isNotEqualTo(new Result(Outcome.NOT_WIDER, new byte[] {1, 2}));
+        assertThat(one).isNotEqualTo("text");
+        assertThat(Result.of(Outcome.BUSY)).isEqualTo(Result.of(Outcome.BUSY));
+        assertThat(Result.of(Outcome.BUSY)).isNotEqualTo(one);
+        assertThat(one).hasToString("Result[outcome=RESIZED, bytes=2 bytes]");
+        assertThat(Result.of(Outcome.BUSY)).hasToString("Result[outcome=BUSY, bytes=none]");
+    }
 }
