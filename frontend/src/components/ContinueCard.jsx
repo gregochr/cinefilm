@@ -12,9 +12,10 @@ export const LONG_PRESS_MS = 500;
 /**
  * A 16:9 "continue watching" card with a progress fill and time left, a ⋯ menu (Remove, Mark as
  * watched, Start from beginning) and, while it has focus, Delete/Backspace to remove and M to mark watched.
- * The ⋯ button is a sibling of the link, never inside it.
+ * The ⋯ button is a sibling of the link, never inside it. `entering` marks a card that has just joined the row
+ * (it slides in, unless the user prefers reduced motion).
  */
-export function ContinueCard({ film, onRemove, onMarkWatched, linkRef }) {
+export function ContinueCard({ film, onRemove, onMarkWatched, linkRef, entering = false }) {
   const progress = film.progress;
   const pct = progress?.runtimeMs
     ? Math.round((progress.positionMs / progress.runtimeMs) * 100)
@@ -81,6 +82,7 @@ export function ContinueCard({ film, onRemove, onMarkWatched, linkRef }) {
       <Link
         to={`/films/${film.id}`}
         className="continue-card__link"
+        data-entering={entering ? 'true' : undefined}
         aria-label={`${film.title}, ${left}`}
         ref={linkRef}
       >

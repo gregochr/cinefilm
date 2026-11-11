@@ -16,6 +16,7 @@ const SORTS = [
   { value: 'title', label: 'Title' },
   { value: 'year', label: 'Year' },
   { value: 'added', label: 'Recently added' },
+  { value: 'last-watched', label: 'Last watched' },
   { value: 'imdb', label: 'IMDb rating' },
   { value: 'rt', label: 'Rotten Tomatoes' },
 ];
@@ -23,11 +24,13 @@ const SORT_PHRASE = {
   title: 'title',
   year: 'year',
   added: 'recently added',
+  'last-watched': 'last watched',
   imdb: 'IMDb rating',
   rt: 'Rotten Tomatoes',
 };
 const SHOWS = [
   { value: 'all', label: 'All' },
+  { value: 'in-progress', label: 'In progress' },
   { value: 'unwatched', label: 'Unwatched' },
   { value: 'watched', label: 'Watched' },
 ];
@@ -51,6 +54,15 @@ export default function LibraryFilms() {
     setParams(next, { replace: true });
   };
 
+  // In progress is a list of what was last watched, so choosing it also sorts that way (in one update).
+  const changeShow = (value) => {
+    const next = new URLSearchParams(params);
+    if (value === 'all') next.delete('show');
+    else next.set('show', value);
+    if (value === 'in-progress') next.set('sort', 'last-watched');
+    setParams(next, { replace: true });
+  };
+
   const clearAll = () => {
     setText('');
     setParams(new URLSearchParams(), { replace: true });
@@ -62,8 +74,8 @@ export default function LibraryFilms() {
   const filtersActive = Boolean(q || genre || decade || show !== 'all');
   const facets = data?.facets || { genres: [], decades: [] };
   const total = data?.total ?? 0;
-  // Search never groups: a search shows individual films even with the switch on.
-  const grouping = groupPreference && !q;
+  // Search and In progress never group: they show individual films even with the switch on.
+  const grouping = groupPreference && !q && show !== 'in-progress';
   const items =
     data && grouping
       ? groupFilms(data.films, collectionsData?.collections || [], sort)
@@ -74,7 +86,7 @@ export default function LibraryFilms() {
   if (data) {
     countLabel = grouping
       ? `${plural(total, 'film')} in ${plural(items.length, 'tile')} · ${sortedBy}`
-      : `${plural(total, 'film')} · ${sortedBy}`;
+      : `${plural(total, 'film')}${show === 'in-progress' ? ' in progress' : ''} · ${sortedBy}`;
   }
 
   useEffect(() => {
@@ -154,12 +166,7 @@ export default function LibraryFilms() {
             ...facets.decades.map((d) => ({ value: String(d), label: `${d}s` })),
           ]}
         />
-        <Segmented
-          label="Show"
-          options={SHOWS}
-          value={show}
-          onChange={(v) => update('show', v, 'all')}
-        />
+        <Segmented label="Show" options={SHOWS} value={show} onChange={changeShow} />
         <Switch label="Group collections" checked={groupPreference} onChange={setGroupPreference} />
       </div>
 

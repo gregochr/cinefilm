@@ -71,7 +71,7 @@ describe('Home rows', () => {
     renderApp('/');
     await screen.findByRole('region', { name: 'Resume Heat' });
     const continueRow = screen.getByRole('region', { name: 'Continue watching' });
-    expect(within(continueRow).getByText('4 in progress')).toBeInTheDocument();
+    expect(within(continueRow).getByText('5 in progress')).toBeInTheDocument();
     expect(within(continueRow).queryByRole('link', { name: /See all/ })).not.toBeInTheDocument();
     const recent = screen.getByRole('region', { name: 'Recently added' });
     expect(within(recent).getByText('Last 30 days')).toBeInTheDocument();

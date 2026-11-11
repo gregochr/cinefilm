@@ -59,19 +59,72 @@ function Hero({ film }) {
   );
 }
 
+/** How many Continue watching cards Home shows: one row, after the hero. The rest are spares for backfill. */
+export const VISIBLE_CARDS = 4;
+/** "See all" appears only when films are left out: more than the hero and the visible row. */
+const SEE_ALL_OVER = VISIBLE_CARDS + 1;
+const NONE = new Set();
+
+/**
+ * The one Continue watching row. A card that joined the visible cards after the first render (a backfill, or
+ * an Undo restoring a film) is marked `entering` for the slide-in; the cards already there just shift.
+ */
+function ContinueRow({ films, total, onAct, linkRef, headingRef }) {
+  const shown = films.slice(0, VISIBLE_CARDS);
+  const before = useRef(null);
+  const entering = before.current
+    ? new Set(shown.filter((f) => !before.current.has(f.id)).map((f) => f.id))
+    : NONE;
+  useEffect(() => {
+    before.current = new Set(shown.map((f) => f.id));
+  });
+  const seeAll = total > SEE_ALL_OVER;
+  return (
+    <FilmRow
+      title="Continue watching"
+      sub={`${total} in progress`}
+      seeAllTo={seeAll ? '/library?show=in-progress&sort=last-watched' : undefined}
+      seeAllLabel={`See all ${total} films in progress`}
+      headingRef={headingRef}
+      variant="stills"
+    >
+      {shown.map((f) => (
+        <ContinueCard
+          key={f.id}
+          film={f}
+          entering={entering.has(f.id)}
+          onRemove={(film) => onAct('remove', film)}
+          onMarkWatched={(film) => onAct('watched', film)}
+          linkRef={linkRef(f.id)}
+        />
+      ))}
+    </FilmRow>
+  );
+}
+
 export default function Home() {
   const { data, error, loading, reload } = useHome();
-  const cw = useContinueWatching(data, reload);
   const cardLinks = useRef(new Map());
   const undoButton = useRef(null);
+  const rowHeading = useRef(null);
   const pendingFocus = useRef(null);
+  const cw = useContinueWatching(data, reload, (film) => {
+    // A rollback can push the backfilled card, which has focus, out of the visible row: follow focus to the
+    // reinstated film, but only if focus was in the row (anything else keeps its focus).
+    const section = rowHeading.current?.closest('section');
+    if (section?.contains(document.activeElement)) pendingFocus.current = film.id;
+  });
 
-  // After a removal focus moves to a neighbouring card (or Undo); after Undo, to the restored card.
+  // After a removal focus moves to the card now in that slot, else the previous card, else the row heading
+  // (or Undo if the row has gone); after Undo, to the restored card.
   useEffect(() => {
     const target = pendingFocus.current;
     if (target === null) return;
     pendingFocus.current = null;
-    (target === 'undo' ? undoButton.current : cardLinks.current.get(target))?.focus();
+    (target === 'undo'
+      ? undoButton.current
+      : (cardLinks.current.get(target) ?? rowHeading.current)
+    )?.focus();
   });
 
   if (loading && !data) return <HomeSkeleton />;
@@ -81,11 +134,12 @@ export default function Home() {
   const { hero, row: continueWatching } = cw;
   const { recentlyAdded = [], notWatchedInYears = [] } = data;
 
-  const act = (run, film) => {
+  const act = (kind, film) => {
     const at = continueWatching.findIndex((f) => f.id === film.id);
+    // The next film in the list is the one that moves into this slot (the backfilled card, at the end).
     const next = continueWatching[at + 1] ?? continueWatching[at - 1];
     pendingFocus.current = next ? next.id : 'undo';
-    run(film);
+    (kind === 'remove' ? cw.remove : cw.markWatched)(film);
   };
   const undo = () => {
     pendingFocus.current = cw.action.film.id;
@@ -118,21 +172,13 @@ export default function Home() {
     <div className="page__stack">
       {hero ? <Hero film={seen(hero)} /> : null}
       {continueWatching.length ? (
-        <FilmRow
-          title="Continue watching"
-          sub={`${continueWatching.length} in progress`}
-          variant="stills"
-        >
-          {continueWatching.map((f) => (
-            <ContinueCard
-              key={f.id}
-              film={f}
-              onRemove={(film) => act(cw.remove, film)}
-              onMarkWatched={(film) => act(cw.markWatched, film)}
-              linkRef={registerCard(f.id)}
-            />
-          ))}
-        </FilmRow>
+        <ContinueRow
+          films={continueWatching}
+          total={cw.total}
+          onAct={act}
+          linkRef={registerCard}
+          headingRef={rowHeading}
+        />
       ) : null}
       {recentlyAdded.length ? (
         <FilmRow title="Recently added" sub="Last 30 days" seeAllTo="/library?sort=added">

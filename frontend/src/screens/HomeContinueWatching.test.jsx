@@ -63,7 +63,7 @@ describe('Home: removing a film from Continue watching', () => {
     await removeViaMenu('Arrival');
 
     expect(maybeCard('Arrival, 56m left')).not.toBeInTheDocument();
-    expect(within(row()).getByText('3 in progress')).toBeInTheDocument();
+    expect(within(row()).getByText('4 in progress')).toBeInTheDocument();
     expect(toastRegion()).toHaveTextContent('Arrival removed from Continue watching');
     const [put] = calls(fetchMock, '/api/editions/21/continue-watching');
     expect(put[1].method).toBe('PUT');
@@ -77,7 +77,7 @@ describe('Home: removing a film from Continue watching', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
 
     expect(hrefs()).toEqual(['/films/2', '/films/3', '/films/4', '/films/5']);
-    expect(within(row()).getByText('4 in progress')).toBeInTheDocument();
+    expect(within(row()).getByText('5 in progress')).toBeInTheDocument();
     expect(toastRegion()).toBeEmptyDOMElement();
     expect(cardLink('Arrival, 56m left')).toHaveFocus();
     await vi.waitFor(() =>
@@ -176,7 +176,7 @@ describe('Home: removing a film from Continue watching', () => {
   it('Delete and M do nothing when no Continue watching card has focus', async () => {
     const fetchMock = await open();
     await userEvent.keyboard('{Delete}m');
-    expect(within(row()).getByText('4 in progress')).toBeInTheDocument();
+    expect(within(row()).getByText('5 in progress')).toBeInTheDocument();
     expect(calls(fetchMock, '/api/editions/21/continue-watching')).toHaveLength(0);
     expect(calls(fetchMock, '/api/editions/21/watched')).toHaveLength(0);
   });
@@ -193,7 +193,7 @@ describe('Home: removing a film from Continue watching', () => {
       await within(row()).findByRole('link', { name: 'Arrival, 56m left' }),
     ).toBeInTheDocument();
     expect(toastRegion()).toBeEmptyDOMElement();
-    expect(within(row()).getByText('4 in progress')).toBeInTheDocument();
+    expect(within(row()).getByText('5 in progress')).toBeInTheDocument();
   });
 
   it('hides the whole row when the last card goes, focuses Undo, and Undo brings the row back', async () => {
@@ -296,5 +296,271 @@ describe('Home: a film marked watched shows as watched in the other rows', () =>
     const old = screen.getByRole('region', { name: 'Not watched in years' });
     expect(within(old).getByRole('link', { name: 'Moon, 2005, watched' })).toBeInTheDocument();
     expect(within(old).getByRole('link', { name: 'Zodiac, 2007' })).toBeInTheDocument();
+  });
+});
+
+// Twelve spares after the hero, as the API sends them; film N has edition N * 10 and the link name "Film N, 9m left".
+const spare = (n) =>
+  film(n, `Film ${n}`, { progress: { positionMs: 60000, runtimeMs: 600000, editionId: n * 10 } });
+const SPARES = Array.from({ length: 12 }, (_, i) => spare(i + 10));
+const HERO = film(1, 'Heat', { progress: { positionMs: 60000, runtimeMs: 600000, editionId: 11 } });
+const crowded = (total = 91, list = SPARES) =>
+  homeWith({ hero: HERO, continueWatching: list, continueWatchingTotal: total });
+const shown = () =>
+  within(row())
+    .getAllByRole('link', { name: /^Film / })
+    .map((l) => l.getAttribute('href').replace('/films/', ''));
+const named = (n) => cardLink(new RegExp(`^Film ${n},`));
+const caption = (text) => within(row()).getByText(text);
+
+describe('Home: one row of Continue watching', () => {
+  it('shows the hero and only four cards when twelve come in, and does not repeat the hero', async () => {
+    crowded();
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    expect(shown()).toEqual(['10', '11', '12', '13']);
+    expect(maybeCard(/^Heat/)).not.toBeInTheDocument();
+    expect(caption('91 in progress')).toBeInTheDocument();
+  });
+
+  it('offers no See all at a total of five, and the hero and four cards are everything', async () => {
+    crowded(5, SPARES.slice(0, 4));
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    expect(caption('5 in progress')).toBeInTheDocument();
+    expect(within(row()).queryByRole('link', { name: /See all/ })).not.toBeInTheDocument();
+  });
+
+  it('offers See all at a total of six, to the In progress list sorted by last watched', async () => {
+    crowded(6, SPARES.slice(0, 5));
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    expect(shown()).toEqual(['10', '11', '12', '13']);
+    expect(
+      within(row()).getByRole('link', { name: 'See all 6 films in progress' }),
+    ).toHaveAttribute('href', '/library?show=in-progress&sort=last-watched');
+  });
+
+  it('takes the count down on Remove and up again on Undo, and drops See all at five', async () => {
+    crowded(6, SPARES.slice(0, 5));
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    await removeViaMenu('Film 11');
+    expect(caption('5 in progress')).toBeInTheDocument();
+    expect(within(row()).queryByRole('link', { name: /See all/ })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(caption('6 in progress')).toBeInTheDocument();
+    expect(
+      within(row()).getByRole('link', { name: 'See all 6 films in progress' }),
+    ).toBeInTheDocument();
+  });
+
+  it('counts 91, 90 and 91 again through Remove and Undo', async () => {
+    crowded();
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    await removeViaMenu('Film 11');
+    expect(caption('90 in progress')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(caption('91 in progress')).toBeInTheDocument();
+  });
+
+  it('backfills: removing the second card brings the fifth film in as the fourth card', async () => {
+    crowded();
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    await removeViaMenu('Film 11');
+    expect(shown()).toEqual(['10', '12', '13', '14']);
+  });
+
+  it('Undo after a backfill puts the original back and pushes the backfilled card out', async () => {
+    crowded();
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    await removeViaMenu('Film 11');
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(shown()).toEqual(['10', '11', '12', '13']);
+    expect(maybeCard(/^Film 14,/)).not.toBeInTheDocument();
+  });
+
+  it('two Removes inside the Undo window, then Undo, restore the second film to its slot', async () => {
+    crowded();
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    await removeViaMenu('Film 11');
+    await removeViaMenu('Film 13');
+    expect(shown()).toEqual(['10', '12', '14', '15']);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(shown()).toEqual(['10', '12', '13', '14']);
+    expect(caption('90 in progress')).toBeInTheDocument();
+  });
+
+  it('a failed Remove puts the row and the count back', async () => {
+    installFetch((method, url) => {
+      if (url === '/api/home') {
+        return respond({
+          ...EMPTY,
+          hero: HERO,
+          continueWatching: SPARES,
+          continueWatchingTotal: 91,
+        });
+      }
+      return url === '/api/editions/110/continue-watching' ? respond({ error: 'no' }, 500) : null;
+    });
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    await removeViaMenu('Film 11');
+
+    await vi.waitFor(() => expect(shown()).toEqual(['10', '11', '12', '13']));
+    expect(caption('91 in progress')).toBeInTheDocument();
+    expect(toastRegion()).toBeEmptyDOMElement();
+  });
+
+  it('focus goes to the card now in the removed card’s slot, the backfilled one at the end', async () => {
+    crowded();
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    await removeViaMenu('Film 11');
+    expect(named(12)).toHaveFocus();
+
+    await removeViaMenu('Film 14');
+    expect(named(15)).toHaveFocus();
+  });
+
+  it('focus goes to the previous card when the removed one was last in the list', async () => {
+    crowded(4, SPARES.slice(0, 3));
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    await removeViaMenu('Film 12');
+    expect(named(11)).toHaveFocus();
+  });
+
+  it('focus goes to Undo when the row has gone, and to the restored card on Undo', async () => {
+    crowded(2, SPARES.slice(0, 1));
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    await removeViaMenu('Film 10');
+    expect(screen.queryByRole('region', { name: 'Continue watching' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Undo' })).toHaveFocus();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(named(10)).toHaveFocus();
+  });
+
+  it('the row heading can be focused by script only', async () => {
+    crowded();
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    const heading = within(row()).getByRole('heading', { name: 'Continue watching' });
+    expect(heading).toHaveAttribute('tabindex', '-1');
+    await userEvent.tab();
+    expect(heading).not.toHaveFocus();
+  });
+
+  it('with one film in progress, Home shows the hero and no row', async () => {
+    homeWith({ hero: HERO, continueWatching: [], continueWatchingTotal: 1 });
+    renderApp('/');
+    expect(await screen.findByRole('region', { name: 'Resume Heat' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Continue watching' })).not.toBeInTheDocument();
+  });
+
+  it('with none in progress, Home shows no hero and no row and starts with Recently added', async () => {
+    homeWith({
+      continueWatching: [],
+      continueWatchingTotal: 0,
+      recentlyAdded: [film(7, 'Zodiac')],
+    });
+    renderApp('/');
+    const recent = await screen.findByRole('region', { name: 'Recently added' });
+    expect(screen.queryByRole('region', { name: /^Resume / })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Continue watching' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 2 })[0]).toBe(
+      within(recent).getByRole('heading', { name: 'Recently added' }),
+    );
+  });
+
+  it('only a card that joins after the first render is marked as entering', async () => {
+    crowded();
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    for (const n of [10, 11, 12, 13]) expect(named(n)).not.toHaveAttribute('data-entering');
+
+    await removeViaMenu('Film 11');
+    expect(named(14)).toHaveAttribute('data-entering', 'true');
+    for (const n of [10, 12, 13]) expect(named(n)).not.toHaveAttribute('data-entering');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(named(11)).toHaveAttribute('data-entering', 'true');
+  });
+
+  it('See all opens Library on In progress, sorted by Last watched', async () => {
+    crowded(6, SPARES.slice(0, 5));
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    await userEvent.click(within(row()).getByRole('link', { name: 'See all 6 films in progress' }));
+
+    expect(
+      await screen.findByText(/films in progress · sorted by last watched/),
+    ).toBeInTheDocument();
+    const show = screen.getByRole('group', { name: 'Show' });
+    expect(within(show).getByRole('button', { name: 'In progress' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    const sort = screen.getByRole('group', { name: 'Sort' });
+    expect(within(sort).getByRole('button', { name: 'Last watched' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+});
+
+describe('Home: a failed Remove after focus has moved', () => {
+  // The API refuses Remove for Film 13 (edition 130) only once `fail()` is called.
+  function failLater() {
+    let fail;
+    const gate = new Promise((resolve) => {
+      fail = () => resolve(respond({ error: 'no' }, 500));
+    });
+    installFetch((method, url) => {
+      if (url === '/api/home') {
+        return respond({
+          ...EMPTY,
+          hero: HERO,
+          continueWatching: SPARES.slice(0, 5),
+          continueWatchingTotal: 6,
+        });
+      }
+      return url === '/api/editions/130/continue-watching' ? gate : null;
+    });
+    return fail;
+  }
+
+  it('moves focus to the reinstated card when the rollback pushes the focused backfill out', async () => {
+    const fail = failLater();
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    await removeViaMenu('Film 13');
+    expect(named(14)).toHaveFocus();
+
+    fail();
+    await vi.waitFor(() => expect(named(13)).toHaveFocus());
+    expect(shown()).toEqual(['10', '11', '12', '13']);
+  });
+
+  it('leaves focus alone when it is outside the row', async () => {
+    const fail = failLater();
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    await removeViaMenu('Film 13');
+    const resume = screen.getByRole('link', { name: /^Resume from/ });
+    resume.focus();
+    expect(resume).toHaveFocus();
+
+    fail();
+    await vi.waitFor(() => expect(shown()).toEqual(['10', '11', '12', '13']));
+    expect(resume).toHaveFocus();
   });
 });

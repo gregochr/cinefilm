@@ -41,6 +41,25 @@ describe('FilmRow', () => {
     );
   });
 
+  it('names See all from seeAllLabel when one is given', () => {
+    wrap({ seeAllTo: '/library', seeAllLabel: 'See all 6 films in progress' });
+    expect(screen.getByRole('link', { name: 'See all 6 films in progress' })).toHaveAttribute(
+      'href',
+      '/library',
+    );
+    expect(screen.queryByRole('link', { name: 'See all: Recently added' })).not.toBeInTheDocument();
+  });
+
+  it('hands its heading to headingRef, focusable by script and not by Tab', () => {
+    const headingRef = { current: null };
+    wrap({ headingRef });
+    const heading = screen.getByRole('heading', { name: 'Recently added' });
+    expect(headingRef.current).toBe(heading);
+    heading.focus();
+    expect(heading).toHaveFocus();
+    expect(heading).toHaveAttribute('tabindex', '-1');
+  });
+
   it('has no See all link unless given a destination', () => {
     wrap({});
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
