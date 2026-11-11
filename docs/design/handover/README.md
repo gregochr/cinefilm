@@ -180,7 +180,7 @@ from the moment the player opens, never 0:00.
 
 When resuming, the frame at the resume point is shown behind the startup indicator until the film plays.
 
-**Auto step-down:** a toast at the top centre reads "Switching to 720p for smoother playback". It shows for about 4 s, is non-blocking, and plays no sound.
+**Auto step-down:** a toast at the top centre reads "Switching to 720p for smoother playback". It shows for about 4 s, is non-blocking, and plays no sound. On a phone held upright the top bar fills the width (the title, then the indicator), so a toast sits just under it.
 
 **End of film**
 - Appears when playback reaches the credits marker (decision 1).
@@ -262,10 +262,11 @@ When resuming, the frame at the resume point is shown behind the startup indicat
     - **When the network can't be named** (the lookup failed, or it went out through a relay) the text is
       "CineFilm can't tell which network this is, so it will ask again next time." and nothing is stored.
     - **It never interrupts.** The film starts behind it. It does not take focus, so Space still pauses. Esc and
-      **Not now** close it until the player is next opened and remember nothing. Closing it, by any of the four
-      ways, returns the keyboard to the player.
+      **Not now** close it for this viewing and remember nothing. Closing it, by any of the four ways, returns
+      the keyboard to the player.
     - **One card at a time.** It shows before the slow-connection card when both are due, hides while a menu is
-      open, and never shows over the end card or the "can't be played" card.
+      open, and never shows over the end card or the "can't be played" card. On a narrow upright screen the
+      startup indicator moves into the upper half while a card shows, so the two never overlap.
     - **Remembered per browser,** not on the server. Admin lists the remembered networks under Playback health,
       each with **Forget**.
     - **No location** is asked for or stored: a laptop has no GPS, and the lookup's own guess at the place was

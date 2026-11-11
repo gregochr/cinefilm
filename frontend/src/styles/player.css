@@ -502,6 +502,7 @@
 .slow-card__text {
   margin: 8px 0 16px;
   color: var(--cf-text-2);
+  overflow-wrap: anywhere;
 }
 .slow-card__actions {
   display: flex;
@@ -519,6 +520,7 @@
   border: 1px solid var(--cf-line);
   font-size: var(--cf-size-ui);
   pointer-events: none;
+  overflow-wrap: anywhere;
 }
 .player__hairline {
   position: absolute;
@@ -608,6 +610,10 @@
   .end__title {
     font-size: 48px;
   }
+  /* The top bar fills a phone's width (the title, then the indicator), so a toast goes under it. */
+  .toast {
+    top: 84px;
+  }
 }
 @media (max-height: 500px) and (orientation: landscape) {
   .player__top {
@@ -636,5 +642,13 @@
   .menu--panel {
     flex-direction: row;
     max-height: 70vh;
+  }
+}
+
+/* A card sits in the lower half of the player. On a narrow, upright screen it would lie on the startup or
+   buffering indicator, so while a card shows the indicator is centred in the upper half instead. */
+@media (max-width: 900px) and (orientation: portrait) {
+  .player:has(.slow-card) .buffering {
+    bottom: 50%;
   }
 }

@@ -41,9 +41,13 @@ export function keyToAction(event, { hasSubtitles = true } = {}) {
   }
 }
 
-/** Esc closes a menu first, then exits fullscreen, then dismisses the end overlay. */
-export function resolveEscape({ menuOpen, fullscreen, endOverlay }) {
+/**
+ * Esc closes a menu first, then the network question when its card is showing, then exits fullscreen, then
+ * dismisses the end overlay.
+ */
+export function resolveEscape({ menuOpen, question, fullscreen, endOverlay }) {
   if (menuOpen) return 'closeMenu';
+  if (question) return 'dismissQuestion';
   if (fullscreen) return 'exitFullscreen';
   if (endOverlay) return 'dismissEnd';
   return 'none';

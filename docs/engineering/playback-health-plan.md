@@ -149,8 +149,10 @@ design: the client keeps to them and the server enforces them.
 
 ## The environment (PR 3)
 
-Decided when the player opens, in this order. The film starts regardless: nothing here delays it, and nothing here
-can break it (the rules inside the player apply).
+Decided once for each viewing, when its player mounts (the film's details have just loaded, so the server is
+evidently reachable), in this order. The film starts regardless: nothing here delays it, and nothing here can break
+it (the rules inside the player apply). The environment lives and dies with the viewing's recorder: another film or
+edition in the same open player is a new viewing and is measured again.
 
 1. **Latency** (`src/player/latency.js`). Small `GET /api/session` requests, one after another, each given up after
    4 s: one that is timed, then two more. The browser's own timing of each request (`responseStart − requestStart`
@@ -181,12 +183,12 @@ can break it (the rules inside the player apply).
 
    With an operator the answer is kept in `localStorage` (at most 50 operators, the oldest dropped) and a toast
    says "Remembered for Virgin Media Limited"; when storage fails there is no toast and the answer holds until
-   the player is left. With no operator the text is "CineFilm can’t tell which network this is, so it will ask
-   again next time." and the answer holds until the player is left: nothing is stored, because an answer with no
-   network to hang it on would be handed to the next network whose lookup fails. **Yes, on a train** is `train`;
-   **No** is `away`.
-4. Until it is answered the environment is `unknown`. **Not now** and Escape close the card until the player is
-   next opened and remember nothing.
+   the viewing ends. With no operator the text is "CineFilm can’t tell which network this is, so it will ask
+   again next time." and the answer holds for this viewing: nothing is stored, because an answer with no network
+   to hang it on would be handed to the next network whose lookup fails. **Yes, on a train** is `train`; **No** is
+   `away`.
+4. Until it is answered the environment is `unknown`. **Not now** and Escape close the card for this viewing and
+   remember nothing.
 
 Whatever is known is handed to the recorder as it becomes known (`health.environment({ environment, operator,
 latencyMs })`), so the next report carries it: the latency as soon as it is measured, the operator when the lookup
@@ -202,8 +204,9 @@ The operator's display name is the lookup's `org` without its leading `AS<digits
 - **The 20 ms line is a guess.** Away measured 48 ms; home is expected to be a few ms. Every viewing records its
   latency, so the first home viewings confirm or move it. A slow day at home shows the card; **No** is the right
   answer and costs nothing.
-- **Decided at the open, once.** A film paused in one place and carried on in another without leaving the player
-  keeps the label it opened with. Leaving the player and coming back measures again.
+- **Decided once for a viewing.** A film paused in one place and carried on in another without leaving the player
+  keeps the label it opened with. Leaving the player and coming back measures again, and so does changing to
+  another film or edition.
 - **A relay is not a network.** iCloud Private Relay, and Safari's "Hide IP address from trackers" if it treats the
   lookup as a tracker, send the lookup out through Akamai, Cloudflare or Fastly, so the operator named is theirs
   wherever the viewer is. An operator whose name contains one of those three is recorded with the viewing but
@@ -332,9 +335,9 @@ The recorder runs inside the code that plays the film, so:
 3. `useStream`'s effect reaches the recorder only through its `latest` ref. Its dependency array does not change.
    New engine handlers are optional (`handlers.onNetworkError?.()`).
 4. The counter lives in a ref. Recording never sets React state, so no event causes a render.
-5. Each new hook has one effect per concern, keyed on what it belongs to (the recorder's on the viewing, the
-   environment's on the player being open); it keeps every timer id, clears them all on cleanup, aborts what is in
-   flight and sets a closed flag its callbacks check. Nothing is guarded by "ran once": under StrictMode an effect
+5. Each new hook has one effect per concern and belongs to the viewing (both are called in the component that is
+   keyed by the edition); it keeps every timer id, clears them all on cleanup, aborts what is in flight and sets a
+   closed flag its callbacks check. Nothing is guarded by "ran once": under StrictMode an effect
    is mounted, cleaned up and mounted again, and must restart.
 6. A send can outlive the test that started it (the suite unstubs `fetch` before the player unmounts), so every
    rejection and every synchronous throw is swallowed.
@@ -446,6 +449,10 @@ the pieces in a real browser:
 - **The card:** it hides while a menu is open, its three buttons are equals (no amber), and the question is spoken
   through a live region the player keeps mounted, because a region inserted already filled often is not.
 - **Admin** shows the whole `org`, and moves focus to the card's heading after Forget.
+- **The environment is decided for each viewing,** not once for the open player: a second viewing in the same
+  player would otherwise have inherited the first one's answer without measuring anything.
+- **Seen in a browser:** on an upright phone the card lay on the startup indicator, which now moves into the upper
+  half while a card shows, and every toast sat on the top bar, which it now goes under.
 - The remembered answers live in `src/state/networks.js`, not `src/player`.
 
 ## Later steps (not this plan)

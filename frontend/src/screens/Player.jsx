@@ -19,6 +19,7 @@ import {
 import { AudioSubtitlesPanel, QualityMenu } from '../components/PlayerMenus.jsx';
 import {
   EndOverlay,
+  EnvironmentCard,
   IndicatorPill,
   ReconnectingNotice,
   SlowConnectionCard,
@@ -29,6 +30,7 @@ import Scrubber from '../components/Scrubber.jsx';
 import { ErrorState } from '../components/StateMessages.jsx';
 import { useAutoHide } from '../player/autohide.js';
 import { toggleFullscreen } from '../player/fullscreen.js';
+import { QUESTION, questionText } from '../player/environment.js';
 import { clampVolume, keyToAction, resolveEscape } from '../player/keymap.js';
 import { indicatorModel } from '../player/indicator.js';
 import { AUTO, ORIGINAL, resolveQuality, rungName, topRung } from '../player/ladder.js';
@@ -48,10 +50,12 @@ import {
   subtitleLabel,
   subtitleOptions,
 } from '../player/tracks.js';
+import { operatorName } from '../state/healthFormat.js';
 import { useFilm } from '../state/useFilms.js';
 import { usePageExitReport } from '../player/exitReport.js';
 import { usePlayback } from '../state/usePlayback.js';
 import { useHealthReport } from '../player/useHealthReport.js';
+import { useEnvironment } from '../player/useEnvironment.js';
 
 function bufferedEnd(video) {
   const { buffered, currentTime } = video;
@@ -146,6 +150,9 @@ function PlayerView({ film, edition, startAtZero, openedAt }) {
   // Resuming (a start position above 0) also gets a still of the resume frame behind PREPARING.
   const [still, dispatchStill] = useReducer(stillReducer, initialSeekMs, initialStill);
   const health = useHealthReport({ editionId: edition.id, quality, openedAt });
+  // Decided once for each viewing, when its player mounts (the film has just loaded, so the server is evidently
+  // reachable). Another film or edition in the same Player is a new viewing and is measured again.
+  const environment = useEnvironment();
   const stream = useStream({
     videoRef,
     edition,
@@ -164,12 +171,21 @@ function PlayerView({ film, edition, startAtZero, openedAt }) {
     top: topRung(stream.renditions),
     kbps: stream.kbps,
   });
-  const slowCard = useSlowCard(stream.mode === 'hls' && quality === AUTO && indicator.slow);
+  // The slow-connection card waits while the network question is due (decision 17).
+  const questionDue = environment.question !== null;
+  const slowCard = useSlowCard(
+    stream.mode === 'hls' && quality === AUTO && indicator.slow && !questionDue,
+  );
 
   const hasSubtitles = edition.subtitleStreams.length > 0;
   const atEnd = hasReachedEnd(positionMs, durationMs, edition.creditsMarkerMs);
   const endOverlay = atEnd && !endDismissed;
   const { visible, poke } = useAutoHide({ playing, menuOpen: menu !== null, ended: endOverlay });
+  // One card at a time: the question waits for the slow-connection card, the end card and the unavailable card,
+  // and hides while a menu is open (on a phone it would lie over it).
+  const questionShowing =
+    questionDue && menu === null && !slowCard.open && !endOverlay && stream.mode !== 'unavailable';
+  const questionName = questionDue ? operatorName(environment.question.operator) : null;
 
   // Before the source has loaded, positionRef is only the display value (the resume point, 10 s before the
   // saved position): reporting it would move the saved position back.
@@ -193,6 +209,13 @@ function PlayerView({ film, edition, startAtZero, openedAt }) {
     const id = setTimeout(() => dispatchStill('faded'), STILL_FADE_MS);
     return () => clearTimeout(id);
   }, [still]);
+
+  // What is known about where the film is watched goes to the recorder as it becomes known; a new PlayerView
+  // (another edition) hands it over again.
+  const { environment: where, operator, latencyMs } = environment;
+  useEffect(() => {
+    health.environment({ environment: where, operator, latencyMs });
+  }, [health, where, operator, latencyMs]);
 
   usePageExitReport({ editionId: edition.id, getPositionMs: getReportPositionMs });
 
@@ -316,6 +339,19 @@ function PlayerView({ film, edition, startAtZero, openedAt }) {
     containerRef.current?.focus();
   };
 
+  const dismissQuestion = () => {
+    environment.dismiss();
+    containerRef.current?.focus();
+  };
+
+  const answerQuestion = (value) => {
+    // Read before the answer closes the question.
+    const shown = environment.question;
+    const stored = environment.answer(value);
+    if (stored) setToast(`Remembered for ${operatorName(shown.operator) ?? shown.operator}`);
+    containerRef.current?.focus();
+  };
+
   const onKeyDown = (event) => {
     poke();
     const target = event.target;
@@ -350,8 +386,14 @@ function PlayerView({ film, edition, startAtZero, openedAt }) {
         setMenu('quality');
         break;
       case 'escape': {
-        const step = resolveEscape({ menuOpen: menu !== null, fullscreen, endOverlay });
+        const step = resolveEscape({
+          menuOpen: menu !== null,
+          question: questionShowing,
+          fullscreen,
+          endOverlay,
+        });
         if (step === 'closeMenu') closeMenu();
+        else if (step === 'dismissQuestion') dismissQuestion();
         else if (step === 'exitFullscreen') document.exitFullscreen?.();
         else if (step === 'dismissEnd') setEndDismissed(true);
         break;
@@ -534,6 +576,24 @@ function PlayerView({ film, edition, startAtZero, openedAt }) {
         <BufferingIndicator label={started ? 'BUFFERING' : 'PREPARING'} />
       ) : null}
       {toast ? <Toast>{toast}</Toast> : null}
+      {questionShowing ? (
+        <EnvironmentCard
+          operator={questionName}
+          onTrain={() => answerQuestion('train')}
+          onNo={() => answerQuestion('away')}
+          onNotNow={dismissQuestion}
+        />
+      ) : null}
+      {/* Mounted for the whole life of the player: a live region inserted already filled is often not spoken, and
+          the card takes no focus to be read from. */}
+      <div
+        className="sr-only"
+        aria-live="polite"
+        aria-atomic="true"
+        data-testid="player-announcement"
+      >
+        {questionShowing ? `${QUESTION} ${questionText(questionName)}` : ''}
+      </div>
 
       <div className="player__chrome">
         <div className="player__top">
