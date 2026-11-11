@@ -185,6 +185,16 @@ Rules:
   copy to the repository; that is also why `tempDirName` stays inside the repo. ESLint fails a test that names a
   `../…/backend/` or `../…/docs/` path. No PR check runs Stryker: after adding a test that reads a file outside
   `frontend/`, run `npx stryker run --dryRunOnly` (a few minutes, no mutants).
+- **A wall-clock budget in a test widens under Stryker.** Its instrumentation makes hot loops many times slower (the
+  search speed tests in `search.test.js`: the fuzzy query takes 2 ms plain, 57 ms instrumented on its own and over a
+  second in the full dry run, against a 30 ms bound), and the dry run fails on any failing test, Vitest's 5 s per-test
+  timeout included. Stryker sets `STRYKER_MUTATOR_WORKER` in the processes that run the tests, so such a test reads
+  `process.env.STRYKER_MUTATOR_WORKER`, widens its bound there and measures once instead of five times
+  (`search.test.js`: 30 ms to 10 s, which only catches a search that has become orders of magnitude slower); `npm test`
+  and CI keep the real budget. Check with `npm run test:mutation -- --dryRunOnly`.
+- **The dry run has a limit of its own**: `dryRunTimeoutMinutes` is 15 in `stryker.config.mjs` (Stryker's default is 5). The
+  initial test run took 1 minute 27 seconds for 938 tests on the runner on 2026-11-10 and takes 3.5 to 5 minutes for
+  1,500 on a loaded laptop; "Initial test run timed out" means the machine is too busy or the suite has outgrown it.
 - **Stryker's incremental file** (`reports/stryker-incremental.json`) lets a run re-test only what changed. It cannot
   see changes to `setup.js`, `vite.config.js` or dependencies, so the workflow forces a full run on the first
   scheduled run of each month; force one yourself with `npx stryker run --force`. The workflow keeps the file as an
