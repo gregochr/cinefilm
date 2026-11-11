@@ -4,9 +4,9 @@ import gregochr.cinefilm.collection.CollectionService;
 import gregochr.cinefilm.collection.FilmCollection;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.FilmDtos.Facets;
-import gregochr.cinefilm.film.FilmDtos.FilmCard;
 import gregochr.cinefilm.film.FilmDtos.FilmDetail;
 import gregochr.cinefilm.film.FilmDtos.FilmList;
+import gregochr.cinefilm.film.FilmDtos.LibraryCard;
 import gregochr.cinefilm.playback.PreferencesService;
 import gregochr.cinefilm.settings.ServerSettingsService;
 import gregochr.cinefilm.transcode.KeyframeIndexService;
@@ -51,8 +51,8 @@ public class FilmService {
         List<FilmView> all = loader.loadAll();
         Set<Long> qualifying = qualifyingCollections(all);
         long minMs = settings.minWatchMs();
-        List<FilmCard> cards = BrowseRules.filterAndSort(all, query, minMs).stream()
-            .map(v -> FilmMapper.card(v, qualifying, minMs)).toList();
+        List<LibraryCard> cards = BrowseRules.filterAndSort(all, query, minMs).stream()
+            .map(v -> FilmMapper.libraryCard(v, qualifying, minMs)).toList();
         return new FilmList(cards.size(), cards, facets(all));
     }
 

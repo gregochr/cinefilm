@@ -8,6 +8,7 @@ import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static gregochr.cinefilm.TestData.state;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasSize;
@@ -121,7 +122,7 @@ class FilmsApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.films[0].title").value("Heat"))
             .andExpect(jsonPath("$.films[0].year").value(1995))
             .andExpect(jsonPath("$.films[0].posterPath").value("/heat.jpg"))
-            .andExpect(jsonPath("$.films[0].backdropPath").value("/heat-bg.jpg"))
+            .andExpect(jsonPath("$.films[0].backdropPath").doesNotExist())
             .andExpect(jsonPath("$.films[0].watched").value(false))
             .andExpect(jsonPath("$.films[0].director").value("Michael Mann"))
             .andExpect(jsonPath("$.films[0].progress.positionMs").value(64 * MIN))
@@ -129,6 +130,50 @@ class FilmsApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.films[0].progress.editionId").value(heatEdition.getId()))
             .andExpect(jsonPath("$.films[0].collectionId").value(nullValue()))
             .andExpect(jsonPath("$.films[0].sortTitle").value("heat"));
+    }
+
+    @Test
+    void onlyTheLibraryListLeavesOutTheBackdropWhileHomeAndDetailKeepIt() throws Exception {
+        mvc.perform(get("/api/home"))
+            .andExpect(jsonPath("$.hero.title").value("Heat"))
+            .andExpect(jsonPath("$.hero.backdropPath").value("/heat-bg.jpg"));
+        mvc.perform(get("/api/films/{id}", heat.getId()))
+            .andExpect(jsonPath("$.backdropPath").value("/heat-bg.jpg"));
+    }
+
+    @Test
+    void aConditionalListAfterMarkAsWatchedIsA200ShowingTheFilmWatchedWithANewEtag() throws Exception {
+        String before = mvc.perform(get("/api/films").param("q", "heat"))
+            .andExpect(jsonPath("$.films[0].watched").value(false))
+            .andReturn().getResponse().getHeader("ETag");
+        mvc.perform(get("/api/films").param("q", "heat").header("If-None-Match", before))
+            .andExpect(status().isNotModified());
+
+        mvc.perform(post("/api/editions/{id}/watched", heatEdition.getId()).content("{\"watched\":true}"))
+            .andExpect(status().isOk());
+
+        String after = mvc.perform(get("/api/films").param("q", "heat").header("If-None-Match", before))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.films[0].watched").value(true))
+            .andReturn().getResponse().getHeader("ETag");
+        assertThat(after).matches("W/\"[0-9a-f]{16}\"").isNotEqualTo(before);
+    }
+
+    @Test
+    void aConditionalHomeAfterRemoveFromContinueWatchingIsA200WithoutTheFilmAndWithANewEtag() throws Exception {
+        String before = mvc.perform(get("/api/home"))
+            .andExpect(jsonPath("$.hero.title").value("Heat"))
+            .andReturn().getResponse().getHeader("ETag");
+        mvc.perform(get("/api/home").header("If-None-Match", before)).andExpect(status().isNotModified());
+
+        mvc.perform(put("/api/editions/{id}/continue-watching", heatEdition.getId()).content("{\"hidden\":true}"))
+            .andExpect(status().isOk());
+
+        String after = mvc.perform(get("/api/home").header("If-None-Match", before))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.hero").value(nullValue()))
+            .andReturn().getResponse().getHeader("ETag");
+        assertThat(after).matches("W/\"[0-9a-f]{16}\"").isNotEqualTo(before);
     }
 
     @Test

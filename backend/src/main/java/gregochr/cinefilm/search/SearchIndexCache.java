@@ -2,10 +2,8 @@ package gregochr.cinefilm.search;
 
 import gregochr.cinefilm.library.ScanFinished;
 import gregochr.cinefilm.plex.PlexImportFinished;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import gregochr.cinefilm.web.JsonEtag;
 import java.util.Arrays;
-import java.util.HexFormat;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
@@ -22,8 +20,6 @@ import tools.jackson.databind.json.JsonMapper;
  */
 @Component
 public class SearchIndexCache {
-
-    private static final int ETAG_HEX_CHARS = 16;
 
     /** The serialised index and the weak ETag that goes with it. */
     public record Snapshot(byte[] body, String etag) {
@@ -86,7 +82,7 @@ public class SearchIndexCache {
         // lands at any point from here on leaves the stored generation behind, so the next get() rebuilds.
         long before = generation.get();
         byte[] body = mapper.writeValueAsBytes(service.build());
-        Snapshot built = new Snapshot(body, etag("SHA-256", body));
+        Snapshot built = new Snapshot(body, JsonEtag.etag(body));
         current = new Held(built, before);
         return built;
     }
@@ -112,15 +108,5 @@ public class SearchIndexCache {
     @TransactionalEventListener(fallbackExecution = true)
     void onLibraryChanged(LibraryChanged event) {
         invalidate();
-    }
-
-    /** The weak ETag for these bytes: the first 16 hex characters of their digest, quoted, with a {@code W/}. */
-    static String etag(String algorithm, byte[] body) {
-        try {
-            String hex = HexFormat.of().formatHex(MessageDigest.getInstance(algorithm).digest(body));
-            return "W/\"" + hex.substring(0, ETAG_HEX_CHARS) + "\"";
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(algorithm + " is not available", e);
-        }
     }
 }

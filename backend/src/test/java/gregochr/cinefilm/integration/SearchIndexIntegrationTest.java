@@ -81,7 +81,7 @@ class SearchIndexIntegrationTest extends IntegrationTestBase {
     void servesCommittedDataWithAnEtagThenA304() throws Exception {
         String etag = index(null)
             .andExpect(status().isOk())
-            .andExpect(header().string("Cache-Control", "no-cache"))
+            .andExpect(header().string("Cache-Control", "no-cache, private"))
             .andExpect(jsonPath("$.films", hasSize(1)))
             .andExpect(jsonPath("$.films[0].t").value("Warrior"))
             .andExpect(jsonPath("$.people[0].n").value("Tom Hardy"))
