@@ -113,7 +113,10 @@ describe('Admin: Continue watching card', () => {
 
     expect(await screen.findByText('Could not save the setting.')).toBeInTheDocument();
     expect(field).toHaveValue(5);
-    expect(within(await card()).getByRole('status')).toBeEmptyDOMElement();
+    // The failure is announced in the live status region, not only shown in the page.
+    expect(within(await card()).getByRole('status')).toHaveTextContent(
+      'Could not save the setting.',
+    );
     expect(bodies(fetchMock)).toEqual([{ continueWatchingMinMinutes: 12 }]);
   });
 

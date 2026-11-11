@@ -454,7 +454,7 @@ function ContinueWatchingPanel() {
             Films you&rsquo;ve watched for less than this stay out of Continue watching. Their place
             is still saved.
           </p>
-          {error ? (
+          {error === RANGE_ERROR ? (
             <p id={errorId} className="admin__field-error">
               {error}
             </p>
@@ -473,7 +473,7 @@ function ContinueWatchingPanel() {
           Continue watching
         </h2>
         <span className="admin__notice" role="status">
-          {status}
+          {status ?? (error === RANGE_ERROR ? null : error)}
         </span>
       </div>
       {body}
