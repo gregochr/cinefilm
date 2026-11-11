@@ -437,6 +437,54 @@ describe('Admin: Subtitles panel, quick nudges', () => {
   });
 });
 
+describe('Admin: Subtitles panel, a list that fails to refresh', () => {
+  it('keeps the files shown, says the refresh failed, and reloads on Try again', async () => {
+    let scans = 0;
+    let fail = false;
+    installFetch((method, url) => {
+      if (url === '/api/admin/scan') {
+        scans += 1;
+        return respond(
+          scans === 1
+            ? {
+                ...fixtures.adminScan,
+                running: true,
+                progress: { processed: 5, total: 40, current: 'x' },
+              }
+            : {
+                ...fixtures.adminScan,
+                lastScan: { ...fixtures.adminScan.lastScan, finishedAt: '2026-11-09T04:31:00Z' },
+              },
+        );
+      }
+      if (url === '/api/admin/subtitles') {
+        if (scans > 1) fail = true;
+        return fail ? respond(null, 500) : respond([file()]);
+      }
+      return null;
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderApp('/admin');
+    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    expect(await within(panel).findByText('Heat (1995)/Heat.en.forced.srt')).toBeInTheDocument();
+
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+
+    expect(
+      await within(panel).findByText(/Couldn.t refresh the subtitle files/),
+    ).toBeInTheDocument();
+    expect(within(panel).getByText('Heat (1995)/Heat.en.forced.srt')).toBeInTheDocument();
+    fail = false;
+    scans = 0;
+    await userEvent.click(within(panel).getByRole('button', { name: 'Try again' }));
+    await waitFor(() =>
+      expect(
+        within(panel).queryByText(/Couldn.t refresh the subtitle files/),
+      ).not.toBeInTheDocument(),
+    );
+  });
+});
+
 describe('Admin: Subtitles panel, cues that fail to refresh', () => {
   it('shows the error and Try again after a nudge, hides the old cues and their links, and recovers on retry', async () => {
     let offset = 0;
@@ -809,16 +857,22 @@ describe('Admin: Subtitles panel, attaching', () => {
     expect(await within(li).findByText('No film by that name.')).toBeInTheDocument();
   });
 
-  it('says when the search failed', async () => {
+  it('says when the search failed and searches again on Try again', async () => {
+    let fail = true;
     const served = await openUnmatched();
     installFetch((method, url, init) =>
-      url.startsWith('/api/films?') ? respond(null, 500) : served.route(method, url, init),
+      url.startsWith('/api/films?') && fail ? respond(null, 500) : served.route(method, url, init),
     );
     await userEvent.click(within(served.li).getByRole('button', { name: /^Attach/ }));
 
     await userEvent.type(within(served.li).getByLabelText('Find a film'), 'heat');
 
     expect(await within(served.li).findByRole('alert')).toHaveTextContent(/search the library/);
+    fail = false;
+    await userEvent.click(within(served.li).getByRole('button', { name: 'Try again' }));
+    expect(
+      await within(served.li).findByRole('radio', { name: 'Heat (1995)' }),
+    ).toBeInTheDocument();
   });
 
   it('shows the server’s message and keeps the form open when the attach is refused', async () => {

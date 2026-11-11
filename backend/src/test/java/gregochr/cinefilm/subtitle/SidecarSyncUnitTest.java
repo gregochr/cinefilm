@@ -5,7 +5,7 @@ import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.film.MediaFileRepository.Known;
@@ -54,17 +54,21 @@ class SidecarSyncUnitTest {
 
     @BeforeEach
     void setUp() {
-        lenient().when(sidecars.findAll()).thenAnswer(call -> List.copyOf(rows));
-        lenient().when(sidecars.save(any(SubtitleSidecar.class))).thenAnswer(call -> {
-            SubtitleSidecar row = call.getArgument(0);
-            if (!rows.contains(row)) {
-                rows.add(row);
-            }
-            return row;
-        });
-        lenient().when(files.findKnownOriginals()).thenReturn(List.of(
-            new Known(1L, "Taken.m4v", 10L, T1, Presence.PRESENT, Playability.PLAYABLE, "yuv420p")));
         sync = new SidecarSync(sidecars, files, new LibraryRoot(library.toString()), CLOCK);
+    }
+
+    /** The in-memory table and the one film file every test that syncs needs, stubbed where it is used. */
+    private void stubRepositories() {
+        when(sidecars.findAll()).thenAnswer(call -> List.copyOf(rows));
+        when(sidecars.save(any(SubtitleSidecar.class))).thenAnswer(call -> {
+            SubtitleSidecar saved = call.getArgument(0);
+            if (!rows.contains(saved)) {
+                rows.add(saved);
+            }
+            return saved;
+        });
+        when(files.findKnownOriginals()).thenReturn(List.of(
+            new Known(1L, "Taken.m4v", 10L, T1, Presence.PRESENT, Playability.PLAYABLE, "yuv420p")));
     }
 
     private SidecarSync at(Instant instant) {
@@ -86,6 +90,7 @@ class SidecarSyncUnitTest {
 
     @Test
     void aNewFileIsParsedStoredAndMatchedByExactName() throws IOException {
+        stubRepositories();
         sync.sync(found(write("Taken.en.forced.srt", CUES, T1)));
 
         assertThat(rows).singleElement().satisfies(row -> {
@@ -102,6 +107,7 @@ class SidecarSyncUnitTest {
 
     @Test
     void aNameThatIsNotExactlyAFilmsIsLeftUnmatched() throws IOException {
+        stubRepositories();
         sync.sync(found(write("Taken - pt1.en.forced.srt", CUES, T1)));
 
         assertThat(rows).singleElement().satisfies(row -> assertThat(row.getMediaFileId()).isNull());
@@ -109,6 +115,7 @@ class SidecarSyncUnitTest {
 
     @Test
     void anUnchangedFileIsNotReadAgainAndAMissingOneComesBackPresent() throws IOException {
+        stubRepositories();
         FoundSidecar listed = write("Taken.en.forced.srt", CUES, T1);
         sync.sync(found(listed));
         sync.sync(found());
@@ -124,6 +131,7 @@ class SidecarSyncUnitTest {
 
     @Test
     void aChangedFileIsReadAgainAndLosesTheOwnersCheckButKeepsTheOffset() throws IOException {
+        stubRepositories();
         sync.sync(found(write("Taken.en.forced.srt", CUES, T1)));
         rows.get(0).setOffsetMs(250);
         rows.get(0).setOwnerVerifiedAt(NOW);
@@ -140,6 +148,7 @@ class SidecarSyncUnitTest {
 
     @Test
     void aFileNotFoundIsMissingUnlessItIsUnderAnUnreadableFolder() throws IOException {
+        stubRepositories();
         sync.sync(found(write("Taken.en.forced.srt", CUES, T1)));
         Files.createDirectories(library.resolve("Locked"));
         sync.sync(found(write("Locked/Heat.en.forced.srt", CUES, T1)));
@@ -154,6 +163,7 @@ class SidecarSyncUnitTest {
 
     @Test
     void aChangedFileThatCannotBeReadStopsPlayingAndANewOneThatCannotIsSkipped() throws IOException {
+        stubRepositories();
         sync.sync(found(write("Taken.en.forced.srt", CUES, T1)));
         Files.delete(library.resolve("Taken.en.forced.srt"));
 
@@ -169,6 +179,7 @@ class SidecarSyncUnitTest {
 
     @Test
     void anOwnerAttachedFileIsNeverMatchedAgainButRematchGivesOneBack() throws IOException {
+        stubRepositories();
         sync.sync(found(write("Taken.en.forced.srt", CUES, T1)));
         SubtitleSidecar row = rows.get(0);
         row.setOwnerAttached(true);

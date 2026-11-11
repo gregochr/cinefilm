@@ -227,6 +227,11 @@ export default function SubtitlesPanel({ version }) {
       </div>
     ));
   }
+  // A failed refresh keeps the list that is there and says so, with a way to try again.
+  const refreshFailure =
+    error && items ? (
+      <ErrorState onRetry={reload}>Couldn&rsquo;t refresh the subtitle files.</ErrorState>
+    ) : null;
   return (
     <section className="admin__card" aria-labelledby="admin-subtitles-title">
       <div className="admin__head">
@@ -234,6 +239,7 @@ export default function SubtitlesPanel({ version }) {
           Subtitles
         </h2>
       </div>
+      {refreshFailure}
       {body}
     </section>
   );

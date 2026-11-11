@@ -48,6 +48,7 @@ export function useAttachPicker() {
     results: (found.data?.films ?? []).slice(0, MAX_RESULTS),
     searchLoading: searching && found.loading,
     searchError: searching && found.error != null,
+    retrySearch: found.reload,
     filmId,
     pickFilm: (id) => {
       setFilmId(id);
@@ -56,7 +57,7 @@ export function useAttachPicker() {
     },
     editions,
     editionsLoading: filmId != null && film.data?.id !== filmId && film.error == null,
-    editionsError: filmId != null && film.data?.id !== filmId && film.error != null,
+    editionsError: filmId != null && film.error != null,
     retryEditions: film.reload,
     edition,
     pickEdition: (id) => {

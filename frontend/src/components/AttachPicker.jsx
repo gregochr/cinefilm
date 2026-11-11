@@ -29,9 +29,10 @@ export default function AttachPicker({ name, busy, onAttach, onCancel }) {
         />
       </label>
       {picker.searching && picker.searchError ? (
-        <p className="admin__warning" role="alert">
-          Couldn&rsquo;t search the library. Try again.
-        </p>
+        <div role="alert">
+          <p className="admin__warning">Couldn&rsquo;t search the library.</p>
+          <Button onClick={picker.retrySearch}>Try again</Button>
+        </div>
       ) : null}
       {picker.searching && !picker.searchError && picker.results.length === 0 ? (
         <p className="admin__text" role="status">

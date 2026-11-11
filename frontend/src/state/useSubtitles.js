@@ -17,6 +17,7 @@ export function useSubtitles(version) {
   // What an action answered for its file, shown until the list read again arrives: a second nudge in the
   // meantime must start from the new offset, not the one the old list still holds.
   const [answers, setAnswers] = useState({ base: null, rows: {} });
+  const running = useRef(false);
   const latest = useRef(data);
   latest.current = data;
   const [busy, setBusy] = useState(null);
@@ -24,6 +25,9 @@ export function useSubtitles(version) {
 
   const act = useCallback(
     async (id, call) => {
+      // One request at a time, whatever the buttons say: a second call while one is in flight is dropped.
+      if (running.current) return false;
+      running.current = true;
       setBusy(id);
       setProblem(null);
       try {
@@ -41,6 +45,7 @@ export function useSubtitles(version) {
         setProblem({ id, text: subtitleProblem(failure) });
         return false;
       } finally {
+        running.current = false;
         setBusy(null);
       }
     },
