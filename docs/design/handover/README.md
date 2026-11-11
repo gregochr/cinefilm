@@ -119,6 +119,7 @@ See `design/tokens.css` for every value.
 ### Images and data (remote use matters)
 
 - All posters and backdrops are `loading="lazy"`, sized to need. Suggested TMDB sizes: posters `w342` (grid) or `w500` (detail); backdrops `w1280` desktop or `w780` phone.
+- Artwork the server stores (imported from Plex) is served at the widths each screen asks for (342, 500, 780, 1280), resized on first request and never upscaled.
 - Reserve the aspect ratio (2:3 posters, 16:9 stills) so nothing shifts while loading.
 - Skeletons are **static** (no shimmer).
 
