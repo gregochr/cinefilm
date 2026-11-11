@@ -14,6 +14,8 @@ export function useSlashFocus() {
     const onKeyDown = (event) => {
       if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return;
       if (isTypingTarget(event.target)) return;
+      // A modal dialog owns the keyboard: nothing behind it may take focus.
+      if (event.target.closest?.('[aria-modal="true"]')) return;
       const field = document.querySelector('[data-global-search]');
       if (!field) return;
       event.preventDefault();
