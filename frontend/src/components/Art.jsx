@@ -1,5 +1,7 @@
-import { BACKDROP_SIZE, POSTER_SIZE, imageUrl } from '../api/images.js';
+import { BACKDROP_SIZE, POSTER_SIZE, STILL_SIZE, imageUrl } from '../api/images.js';
 import { placeholderColor } from './placeholder.js';
+
+const DEFAULT_SIZES = { poster: POSTER_SIZE, still: STILL_SIZE, backdrop: BACKDROP_SIZE };
 
 /**
  * Poster (2:3), still (16:9) or backdrop artwork. Reserves its aspect ratio, lazy-loads, and
@@ -15,7 +17,7 @@ export default function Art({
   className = '',
   children,
 }) {
-  const defaultSize = kind === 'poster' ? POSTER_SIZE : BACKDROP_SIZE;
+  const defaultSize = DEFAULT_SIZES[kind] ?? BACKDROP_SIZE;
   const url = imageUrl(path, size || defaultSize);
   const classes = `art art--${kind} ${className}`.trim();
   if (url) {

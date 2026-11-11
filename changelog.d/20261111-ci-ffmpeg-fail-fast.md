@@ -1,0 +1,3 @@
+### Fixed — CI: an apt mirror outage fails the ffmpeg install in minutes instead of hanging the backend job
+
+On 2026-11-11 the GitHub runners could not resolve the Ubuntu apt mirrors, and a single `apt-get update` spent about six minutes on DNS waits that apt's own timeouts do not cover, so the `Install ffmpeg` step hung until the job's 20-minute timeout cancelled it with no message. The step now runs `scripts/ci-install-ffmpeg.sh`, which gives `apt-get update` and `install` one shared 5-minute budget and prints a clear error annotation when it runs out or when apt fails. The script has its own stub-based shell tests.

@@ -48,7 +48,7 @@ describe('CollectionCard', () => {
     expect(screen.getAllByTestId('fan-poster')).toHaveLength(3);
   });
 
-  it('uses /api/art/ paths as they are', () => {
+  it('asks the server for the poster width of /api/art/ paths', () => {
     const art = `/api/art/${'b'.repeat(64)}.jpg`;
     wrap({
       id: 9,
@@ -58,7 +58,7 @@ describe('CollectionCard', () => {
       posterPaths: [art, '/t.jpg'],
     });
     const srcs = screen.getAllByAltText('').map((i) => i.getAttribute('src'));
-    expect(srcs).toContain(art);
+    expect(srcs).toContain(`${art}?w=342`);
     expect(srcs).toContain('https://image.tmdb.org/t/p/w342/t.jpg');
   });
 });
