@@ -44,17 +44,17 @@
     </module>
     <module name="RegexpSingleline">
         <property name="id" value="bannedTestDisabled"/>
-        <property name="format" value="@Disabled\b"/>
+        <property name="format" value="@(\w+\s*\.\s*)*Disabled\b"/>
         <property name="message" value="No @Disabled tests: fix the test or delete it (test-standards.md, backend &quot;Do not&quot; list)."/>
     </module>
     <module name="RegexpSingleline">
         <property name="id" value="bannedTestRealClock"/>
-        <property name="format" value="\b(Instant|LocalDate|LocalDateTime|LocalTime|ZonedDateTime|OffsetDateTime|OffsetTime|Year|YearMonth|MonthDay)\s*\.\s*now\s*\(\s*\)|\bClock\s*\.\s*(systemDefaultZone|systemUTC)\s*\(|\bZoneId\s*\.\s*systemDefault\s*\(|\bSystem\s*\.\s*currentTimeMillis\s*\(|\bnew\s+Date\s*\(\s*\)"/>
+        <property name="format" value="\b(Instant|LocalDate|LocalDateTime|LocalTime|ZonedDateTime|OffsetDateTime|OffsetTime|Year|YearMonth|MonthDay)\s*\.\s*now\s*\(\s*\)|\bClock\s*\.\s*(systemDefaultZone|systemUTC)\s*\(|\bZoneId\s*\.\s*systemDefault\s*\(|\bSystem\s*\.\s*currentTimeMillis\s*\(|\bnew\s+Date\s*\(\s*\)|\bimport\s+static\s+java\s*\.\s*(time\s*\.\s*(Instant|LocalDate|LocalDateTime|LocalTime|ZonedDateTime|OffsetDateTime|OffsetTime|Year|YearMonth|MonthDay)\s*\.\s*(now|\*)|time\s*\.\s*Clock\s*\.\s*(systemUTC|systemDefaultZone|\*)|time\s*\.\s*ZoneId\s*\.\s*(systemDefault|\*)|lang\s*\.\s*System\s*\.\s*(currentTimeMillis|\*))\b"/>
         <property name="message" value="No real clock or machine zone in tests: use TestData.CLOCK, or build your own Clock.fixed(...) (test-standards.md, &quot;Time&quot;)."/>
     </module>
     <module name="RegexpSingleline">
         <property name="id" value="bannedMainRealClock"/>
-        <property name="format" value="\b(Instant|LocalDate|LocalDateTime|LocalTime|ZonedDateTime|OffsetDateTime|OffsetTime|Year|YearMonth|MonthDay)\s*\.\s*now\s*\(\s*\)|\bClock\s*\.\s*(systemDefaultZone|systemUTC)\s*\(|\bZoneId\s*\.\s*systemDefault\s*\(|\bSystem\s*\.\s*currentTimeMillis\s*\(|\bnew\s+Date\s*\(\s*\)"/>
+        <property name="format" value="\b(Instant|LocalDate|LocalDateTime|LocalTime|ZonedDateTime|OffsetDateTime|OffsetTime|Year|YearMonth|MonthDay)\s*\.\s*now\s*\(\s*\)|\bClock\s*\.\s*(systemDefaultZone|systemUTC)\s*\(|\bZoneId\s*\.\s*systemDefault\s*\(|\bSystem\s*\.\s*currentTimeMillis\s*\(|\bnew\s+Date\s*\(\s*\)|\bimport\s+static\s+java\s*\.\s*(time\s*\.\s*(Instant|LocalDate|LocalDateTime|LocalTime|ZonedDateTime|OffsetDateTime|OffsetTime|Year|YearMonth|MonthDay)\s*\.\s*(now|\*)|time\s*\.\s*Clock\s*\.\s*(systemUTC|systemDefaultZone|\*)|time\s*\.\s*ZoneId\s*\.\s*(systemDefault|\*)|lang\s*\.\s*System\s*\.\s*(currentTimeMillis|\*))\b"/>
         <property name="message" value="Production code reads the time only through the injected java.time.Clock: use LocalDate.now(clock), clock.instant() (test-standards.md, &quot;Time&quot;)."/>
     </module>
 

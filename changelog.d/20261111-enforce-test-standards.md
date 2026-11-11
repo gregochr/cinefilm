@@ -8,3 +8,6 @@ setTimeout(r, n))` sleeps, and class-name reads in frontend tests. The two exist
 (`ServerSettingsServiceTest` stubs the row where it is read; the stale-hls.js test waits with `vi.dynamicImportSettled()`
 instead of a 20 ms sleep, and `SearchSheet.test.jsx` matches the id it asserts). `test-standards.md` marks each rule as
 enforced. No production behaviour changed.
+
+The rules also catch the forms that went round them: `test.concurrent.skip`, `test.each(rows).skip`, `.skipIf` and
+`.runIf` in tests, the fully qualified `@org.junit.jupiter.api.Disabled`, and static imports of the real-clock methods.

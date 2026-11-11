@@ -96,7 +96,7 @@ client depend on. A new `@SpringBootTest` needs a reason a slice or a unit test 
 - Checkstyle enforces both halves of this (`bannedMainRealClock` in `src/main`, `bannedTestRealClock` in tests): a
   no-argument `Instant|LocalDate|LocalDateTime|LocalTime|ZonedDateTime|OffsetDateTime|Year|YearMonth|MonthDay.now()`,
   `Clock.systemDefaultZone()`, `Clock.systemUTC()`, `ZoneId.systemDefault()`, `System.currentTimeMillis()` and
-  `new Date()` fail the build. `Clock.system(zone)` and `now(clock)` are allowed. The one test that reads the real
+  `new Date()` fail the build. The static imports of those methods fail too. `Clock.system(zone)` and `now(clock)` are allowed. The one test that reads the real
   clock on purpose (`TranscodeRealToolsTest`, real ffmpeg) has a `checkstyle-suppressions.xml` entry saying why.
 - **No `Instant.now()` and no `Clock.systemDefaultZone()` in a test.** A test that needs a different instant builds
   its own `Clock.fixed(...)` in the zone it is testing, and picks dates that exercise an edge: an ISO-week rollover
@@ -191,7 +191,7 @@ Mutating production code to prove a test can fail is encouraged. Restoring it is
 
 - Do not add tests that assert nothing meaningful (a constructor sets a field) to move a coverage number.
 - Do not add `@Disabled` tests or `lenient()` stubs: fix them or delete them. Checkstyle enforces both
-  (`bannedTestDisabled`, `bannedTestLenient`).
+  (`bannedTestDisabled`, `bannedTestLenient`; `@Disabled` is caught fully qualified and with a reason too).
 - Do not test private methods directly; test through the public API.
 - Do not read the real clock in a test, or depend on the machine's time zone or locale (`bannedTestRealClock`
   catches the clock and zone calls; locale is not machine-checked).
@@ -468,7 +468,9 @@ Mutating production code by hand to prove a test can fail is also encouraged. Re
   wrong level.
 - Do not `vi.mock` the API modules; stub `fetch`.
 - Do not skip or disable a test. Fix it or delete it. ESLint fails `.skip`, `.only`, `.todo`, `xit`, `xdescribe`, `fit`
-  and `fdescribe`.
+  and `fdescribe`, anywhere in a chain from `it`/`test`/`describe` (`test.concurrent.skip`, `test.each(rows).skip`). It
+  also fails `.skipIf` and `.runIf`: the standards do not name them, but a conditional skip is a skip that hides on
+  some machines.
 - Do not snapshot a tree.
 - Do not assert inside a raw `requestAnimationFrame` or `setTimeout` callback and settle a promise after it: a
   throw there never reaches the `resolve()`, and the test hangs to the timeout with the real error detached.

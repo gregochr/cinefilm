@@ -73,9 +73,11 @@ export default [
         },
         {
           selector:
-            'CallExpression[callee.object.name=/^(it|test|describe)$/][callee.property.name=/^(skip|only|todo)$/]',
+            // A skip/only/todo/skipIf/runIf member anywhere in a chain rooted at it/test/describe: it.skip,
+            // test.concurrent.skip, test.each(rows).skip, describe.concurrent.only, test.skipIf(c)(...), test.runIf(c)(...).
+            'MemberExpression[property.name=/^(skip|only|todo|skipIf|runIf)$/][object.name=/^(it|test|describe)$/], MemberExpression[property.name=/^(skip|only|todo|skipIf|runIf)$/][object.object.name=/^(it|test|describe)$/], MemberExpression[property.name=/^(skip|only|todo|skipIf|runIf)$/][object.callee.object.name=/^(it|test|describe)$/], MemberExpression[property.name=/^(skip|only|todo|skipIf|runIf)$/][object.callee.object.object.name=/^(it|test|describe)$/]',
           message:
-            'No it/test/describe .skip, .only or .todo: fix the test or delete it (test-standards.md, Frontend "Do not" list).',
+            'No it/test/describe .skip, .only, .todo, .skipIf or .runIf (conditional skips included): fix the test or delete it (test-standards.md, Frontend "Do not" list).',
         },
         {
           selector: 'CallExpression[callee.name=/^(xit|xtest|xdescribe|fit|fdescribe)$/]',
