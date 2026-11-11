@@ -206,6 +206,50 @@ describe('Admin: Continue watching card', () => {
     expect(field).toHaveValue(5);
   });
 
+  it('keeps what is typed while a save is in flight, and the later blur still saves it', async () => {
+    const gates = [];
+    const { fetchMock, field } = await open({
+      onPut: (body) =>
+        new Promise((resolve) => {
+          gates.push({ body, resolve });
+        }),
+    });
+    await userEvent.clear(field);
+    await userEvent.type(field, '10{Enter}');
+    await vi.waitFor(() => expect(gates).toHaveLength(1));
+    await userEvent.clear(field);
+    await userEvent.type(field, '12');
+    gates[0].resolve(respond({ continueWatchingMinMinutes: 10, inProgressCount: 4 }));
+
+    expect(await screen.findByText('4 films currently in progress')).toBeInTheDocument();
+    expect(field).toHaveValue(12);
+    await userEvent.tab();
+    await vi.waitFor(() => expect(gates).toHaveLength(2));
+    expect(bodies(fetchMock)).toEqual([
+      { continueWatchingMinMinutes: 10 },
+      { continueWatchingMinMinutes: 12 },
+    ]);
+  });
+
+  it('keeps what is typed when the save in flight fails', async () => {
+    const gates = [];
+    const { field } = await open({
+      onPut: (body) =>
+        new Promise((resolve) => {
+          gates.push({ body, resolve });
+        }),
+    });
+    await userEvent.clear(field);
+    await userEvent.type(field, '10{Enter}');
+    await vi.waitFor(() => expect(gates).toHaveLength(1));
+    await userEvent.clear(field);
+    await userEvent.type(field, '12');
+    gates[0].resolve(respond({}, 500));
+
+    expect(await screen.findByText('Could not save the setting.')).toBeInTheDocument();
+    expect(field).toHaveValue(12);
+  });
+
   it('a settings load failure shows the error in the card and leaves the other cards alone', async () => {
     admin({ get: () => respond({}, 500) });
     renderApp('/admin');

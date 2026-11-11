@@ -141,6 +141,7 @@ describe('Library: the ⋯ menu on in-progress posters', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
 
+    expect(poster('Beta, 2002')).toHaveFocus();
     expect(screen.getByText('4 films in progress · sorted by last watched')).toBeInTheDocument();
     expect(
       screen.getAllByRole('link', { name: /, 200\d$/ }).map((l) => l.getAttribute('href')),
@@ -171,6 +172,40 @@ describe('Library: the ⋯ menu on in-progress posters', () => {
     expect(poster('Alpha, 2001')).toBeInTheDocument();
     expect(screen.getAllByTestId('poster-fill')).toHaveLength(3);
     expect(more('Alpha')).toBeInTheDocument();
+  });
+
+  it('Undo after the list was replaced reads it again, so the film is in progress once more', async () => {
+    let watched = false;
+    const fetchMock = installFetch((method, url) => {
+      if (url.startsWith('/api/films')) {
+        const alpha = watched ? { ...ALPHA, watched: true, inProgress: false } : ALPHA;
+        return respond({ total: 2, films: [alpha, GAMMA], facets: fixtures.films.facets });
+      }
+      if (/\/watched$/.test(url)) {
+        watched = true;
+        return respond({ watched: true, previous: { positionMs: 1800000, watched: false } });
+      }
+      if (/\/playback-state$/.test(url)) {
+        watched = false;
+        return respond({});
+      }
+      return null;
+    });
+    renderApp('/library');
+    await screen.findByRole('link', { name: 'Alpha, 2001' });
+
+    await openMenu('Alpha');
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Mark as watched' }));
+    await vi.waitFor(() => expect(calls(fetchMock, '/api/editions/10/watched')).toHaveLength(1));
+    await userEvent.click(within(screen.getByRole('group', { name: 'Sort' })).getByText('Title'));
+    await screen.findByRole('link', { name: 'Alpha, 2001, watched' });
+    expect(screen.getAllByTestId('poster-fill')).toHaveLength(1); // only Gamma's
+
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+
+    expect(await screen.findByRole('link', { name: 'Alpha, 2001' })).toBeInTheDocument();
+    expect(screen.getAllByTestId('poster-fill')).toHaveLength(2);
+    await vi.waitFor(() => expect(poster('Alpha, 2001')).toHaveFocus());
   });
 
   it('a failed Remove rolls the poster back to offering Remove', async () => {

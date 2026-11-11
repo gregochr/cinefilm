@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useUndoableFilmActions } from './useUndoableFilmActions.js';
 
 /** What a Mark as watched does to a card: it leaves the In progress list, or stays as a watched film. */
@@ -26,7 +26,11 @@ function without(patches, filmId, keys) {
 export function useLibraryFilmActions(data, show, reload, onRollback) {
   const [source, setSource] = useState(data);
   const [patches, setPatches] = useState({});
-  const { action, begin, undo } = useUndoableFilmActions(reload, onRollback);
+  const { action, begin, undo: undoAction } = useUndoableFilmActions(reload, onRollback);
+  const current = useRef(data);
+  useEffect(() => {
+    current.current = data;
+  });
 
   if (source !== data) {
     setSource(data);
@@ -47,13 +51,24 @@ export function useLibraryFilmActions(data, show, reload, onRollback) {
         film,
         () => setPatches((p) => ({ ...p, [film.id]: { ...p[film.id], ...patch } })),
         () => setPatches((p) => without(p, film.id, keys)),
+        { source: data },
       );
     },
-    [begin, show],
+    [begin, show, data],
   );
 
   const remove = useCallback((film) => apply('remove', film), [apply]);
   const markWatched = useCallback((film) => apply('watched', film), [apply]);
+
+  // New data drops the patches, so an Undo after a reload has nothing to put back: once the server has reversed the
+  // action, read the list again to show it. (`undo()` resolves to true when it asked for that reload.)
+  const undo = useCallback(async () => {
+    const taken = action?.source;
+    const reversed = await undoAction();
+    const reloading = reversed && taken !== current.current;
+    if (reloading) reload();
+    return reloading;
+  }, [action, undoAction, reload]);
 
   const all = data?.films ?? [];
   const films = all.flatMap((film) => {

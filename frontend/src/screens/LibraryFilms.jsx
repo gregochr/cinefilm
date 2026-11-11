@@ -77,23 +77,56 @@ export default function LibraryFilms() {
   const focusUndo = useRef(false);
   const pendingFocus = useRef(null);
   const posterLinks = useRef(new Map());
+  const latestData = useRef(data);
+  const awaitData = useRef(false); // the poster is rebuilt with the data being read: focus it only then
+  const focusedAt = useRef(null); // the loaded data when pendingFocus was set
   const cw = useLibraryFilmActions(data, show, reload, (film) => {
     // A rollback brings the poster back: focus that was on Undo (or lost with the poster) follows it.
     const at = document.activeElement;
-    if (at === document.body || at === undoButton.current) pendingFocus.current = film.id;
+    if (at === document.body || at === undoButton.current) {
+      pendingFocus.current = film.id;
+      focusedAt.current = data;
+    }
   });
   const { films, total } = cw;
+  const undo = () => {
+    if (!cw.action) return;
+    const id = cw.action.film.id;
+    pendingFocus.current = id; // focus follows the poster that comes back
+    focusedAt.current = data;
+    cw.undo().then((reloading) => {
+      // The list is being read again and the poster is rebuilt with it: focus it once that data arrives.
+      if (!reloading) return;
+      pendingFocus.current = id;
+      focusedAt.current = latestData.current;
+      awaitData.current = true;
+    });
+  };
   const filtersActive = Boolean(q || genre || decade || show !== 'all');
   const facets = data?.facets || { genres: [], decades: [] };
 
+  useEffect(() => {
+    latestData.current = data;
+  });
   // A poster that leaves the list takes focus with it: focus moves to Undo, or back to the poster if it returns.
   useEffect(() => {
     if (focusUndo.current) {
       focusUndo.current = false;
       undoButton.current?.focus();
     } else if (pendingFocus.current !== null) {
-      posterLinks.current.get(pendingFocus.current)?.focus();
-      pendingFocus.current = null;
+      const link = posterLinks.current.get(pendingFocus.current);
+      const arrived = data !== focusedAt.current;
+      if (awaitData.current && !arrived) return;
+      if (link) {
+        awaitData.current = false;
+        link.focus();
+        pendingFocus.current = null;
+      } else if (arrived) {
+        awaitData.current = false;
+        // The poster may still be on its way (Undo after a reload waits for the list); once newer data arrives
+        // without it, it is not coming, and a late focus must not be stolen.
+        pendingFocus.current = null;
+      }
     }
   });
   const registerPoster = (id) => (el) => {
@@ -102,6 +135,8 @@ export default function LibraryFilms() {
   };
   const act = (kind, film) => {
     focusUndo.current = kind === 'watched' && show === 'in-progress';
+    awaitData.current = false;
+    pendingFocus.current = null; // a new action cancels a focus still waiting for a poster
     (kind === 'remove' ? cw.remove : cw.markWatched)(film);
   };
   // Search and In progress never group: they show individual films even with the switch on.
@@ -207,7 +242,7 @@ export default function LibraryFilms() {
       </div>
 
       {body}
-      <UndoToast action={cw.action} undoRef={undoButton} onUndo={cw.undo} />
+      <UndoToast action={cw.action} undoRef={undoButton} onUndo={undo} />
 
       <div className="hints" aria-hidden="true">
         <span>/ search</span>

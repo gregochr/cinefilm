@@ -108,7 +108,7 @@ export function useUndoableFilmActions(reload, onRollback) {
 
   const undo = useCallback(async () => {
     const entry = current.current;
-    if (!entry) return;
+    if (!entry) return false;
     clearAction(entry);
     bump(entry.film.id);
     entry.restore();
@@ -126,8 +126,10 @@ export function useUndoableFilmActions(reload, onRollback) {
           await editionsApi.restoreState(entry.editionId, result.previous);
         }
       });
+      return true;
     } catch {
       reload();
+      return false;
     }
   }, [clearAction, reload, enqueue, bump]);
 

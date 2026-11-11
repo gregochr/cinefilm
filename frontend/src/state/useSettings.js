@@ -37,6 +37,7 @@ export function useSettings() {
   const [error, setError] = useState(null);
   const [status, setStatus] = useState(null);
   const latest = useRef(0); // the number of the newest save
+  const draftRev = useRef(0); // advanced by every edit, so a save only clears the draft it was made from
   const inFlight = useRef(0);
   const chain = useRef(Promise.resolve()); // saves run one after another, so the server ends on the last one sent
   const intended = useRef(null); // the minutes the server will have once the saves in flight land
@@ -56,6 +57,7 @@ export function useSettings() {
   );
 
   const edit = useCallback((text) => {
+    draftRev.current += 1;
     setDraft(text);
     setError(null);
     setStatus(null);
@@ -80,6 +82,7 @@ export function useSettings() {
       latest.current += 1;
       inFlight.current += 1;
       const mine = latest.current;
+      const rev = draftRev.current;
       setStatus(null);
       try {
         const request = chain.current.then(() => settingsApi.update(minutes));
@@ -88,12 +91,12 @@ export function useSettings() {
         if (mine !== latest.current) return;
         intended.current = response.continueWatchingMinMinutes;
         setSaved(response);
-        setDraft(null);
+        if (draftRev.current === rev) setDraft(null); // typing since then stays
         setStatus('Saved');
       } catch {
         if (mine !== latest.current) return;
         intended.current = lastSaved;
-        setDraft(null);
+        if (draftRev.current === rev) setDraft(null);
         setError(SAVE_ERROR);
         reload();
       } finally {

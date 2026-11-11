@@ -149,8 +149,12 @@ export default function Home() {
     if (el) cardLinks.current.set(id, el);
     else cardLinks.current.delete(id);
   };
-  // A film marked watched here shows as watched in every other row too, until the page data is reloaded.
-  const seen = (f) => (f.id in cw.watched ? { ...f, watched: cw.watched[f.id] } : f);
+  // A film marked watched here shows as watched, and no longer in progress, in every other row too, until the page
+  // data is reloaded. Only the film acted on is changed: a rewatch elsewhere keeps its progress.
+  const seen = (f) =>
+    f.id in cw.watched
+      ? { ...f, watched: cw.watched[f.id], ...(cw.watched[f.id] ? { inProgress: false } : {}) }
+      : f;
   const toast = <UndoToast action={cw.action} undoRef={undoButton} onUndo={undo} />;
   const theme = data.weeklyTheme;
   const empty =
