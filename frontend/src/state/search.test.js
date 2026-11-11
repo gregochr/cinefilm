@@ -473,7 +473,11 @@ describe('the fixture index narrowing', () => {
 });
 
 // The aim is 16 ms (one frame); coverage instrumentation on a loaded CI box roughly doubles it, so the guard is 30.
-const BOUND_MS = 30;
+// Stryker's mutation instrumentation costs far more: on this index the exact query takes about 2 ms plain and 16 ms
+// under it, the fuzzy one about 2 ms and 57 ms, and its dry run stops on any failing test. Stryker sets
+// STRYKER_MUTATOR_WORKER in the processes that run the tests, and there the guard is 20 times wider: it still fails on
+// an O(n²), the reason for the guard (docs/engineering/search-plan.md), while `npm test` and CI keep the 30 ms.
+const BOUND_MS = process.env.STRYKER_MUTATOR_WORKER === undefined ? 30 : 600;
 
 describe('speed', () => {
   const syllables = ['ba', 'ko', 'ri', 'tu', 'me', 'sa', 'lo', 'vi', 'ne', 'du', 'pa', 'ge'];

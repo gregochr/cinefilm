@@ -185,6 +185,12 @@ Rules:
   copy to the repository; that is also why `tempDirName` stays inside the repo. ESLint fails a test that names a
   `../…/backend/` or `../…/docs/` path. No PR check runs Stryker: after adding a test that reads a file outside
   `frontend/`, run `npx stryker run --dryRunOnly` (a few minutes, no mutants).
+- **A wall-clock budget in a test widens under Stryker.** Its instrumentation makes hot loops many times slower (the
+  search speed tests in `search.test.js`: 2 ms plain, 16 ms exact and 57 ms fuzzy instrumented, against a 30 ms bound),
+  and the dry run fails on any failing test. Stryker sets `STRYKER_MUTATOR_WORKER` in the processes that run the tests,
+  so such a test reads `process.env.STRYKER_MUTATOR_WORKER` and widens its bound there (`search.test.js`: 30 ms to
+  600 ms, which still catches an O(n²)); `npm test` and CI keep the real budget. Check with
+  `npm run test:mutation -- --dryRunOnly`.
 - **Stryker's incremental file** (`reports/stryker-incremental.json`) lets a run re-test only what changed. It cannot
   see changes to `setup.js`, `vite.config.js` or dependencies, so the workflow forces a full run on the first
   scheduled run of each month; force one yourself with `npx stryker run --force`. The workflow keeps the file as an
