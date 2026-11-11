@@ -1,10 +1,13 @@
 // The network operator's name, looked up by a hidden, sandboxed frame so the request carries no origin of
 // ours, no referrer and no cookie. Nothing but the `org` string leaves this module, and it is untrusted text:
 // it is only ever rendered as text. Detection can never break playback: nothing here rejects or throws.
+// The page accepts a message only from that frame's own window AND from an opaque origin (see SANDBOXED_ORIGIN).
 
 export const LOOKUP_URL = 'https://ipinfo.io/json';
 export const LOOKUP_TIMEOUT_MS = 15000;
 export const MAX_OPERATOR_LENGTH = 100;
+/** The `origin` of a message from a sandboxed frame without allow-same-origin: its origin is opaque. */
+export const SANDBOXED_ORIGIN = 'null';
 /** What the dev fixture server reports: no frame, no request. */
 export const FIXTURE_OPERATOR = 'AS64496 Example Rail Wi-Fi';
 
@@ -25,7 +28,8 @@ export function cleanOperator(value) {
 
 /**
  * Resolves the operator's `org` (cleaned) or null: when the lookup fails, times out after 15 s, or `signal`
- * aborts. Never rejects. Ending removes the frame, the `message` listener, the timer and the abort listener.
+ * aborts. Only a message from the frame's own window with the opaque origin `'null'` counts: a frame that had
+ * lost its sandbox would report the page's origin and be ignored. Never rejects. Ending removes the frame, the `message` listener, the timer and the abort listener.
  */
 export function lookupOperator({
   signal,
@@ -53,7 +57,8 @@ export function lookupOperator({
       resolve(value);
     };
     const onMessage = (event) => {
-      if (event.source !== frame.contentWindow) return;
+      // From the frame itself, and sandboxed: a frame that kept our origin has lost its sandbox, so fail closed.
+      if (event.source !== frame.contentWindow || event.origin !== SANDBOXED_ORIGIN) return;
       const data = Object(event.data); // null, a string or a number have no such key
       if (!Object.hasOwn(data, 'cinefilmOperator')) return;
       end(cleanOperator(data.cinefilmOperator));

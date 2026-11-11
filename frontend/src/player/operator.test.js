@@ -23,7 +23,9 @@ afterEach(() => {
 const frameNow = () => screen.getByTestId('operator-lookup');
 // What the frame's own script would post, with the frame's window as the source.
 const fromFrame = (data) =>
-  window.dispatchEvent(new MessageEvent('message', { data, source: frameNow().contentWindow }));
+  window.dispatchEvent(
+    new MessageEvent('message', { data, origin: 'null', source: frameNow().contentWindow }),
+  );
 const org = (value) => fromFrame({ cinefilmOperator: value });
 const settled = (promise) => {
   const state = { done: false };
@@ -116,16 +118,44 @@ describe('the answer', () => {
     const promise = lookupOperator();
     const state = settled(promise);
     window.dispatchEvent(
-      new MessageEvent('message', { data: { cinefilmOperator: 'AS1 Impostor' }, source: window }),
+      new MessageEvent('message', {
+        data: { cinefilmOperator: 'AS1 Impostor' },
+        origin: 'null',
+        source: window,
+      }),
     );
     window.dispatchEvent(
-      new MessageEvent('message', { data: { cinefilmOperator: 'AS1 Impostor' }, source: null }),
+      new MessageEvent('message', {
+        data: { cinefilmOperator: 'AS1 Impostor' },
+        origin: 'null',
+        source: null,
+      }),
     );
     await vi.advanceTimersByTimeAsync(0);
     expect(state.done).toBe(false);
     expect(screen.getByTestId('operator-lookup')).toBeInTheDocument();
     org('AS2 Real');
     expect(await promise).toBe('AS2 Real');
+  });
+
+  it('ignores a message from the frame that comes from another origin or from none, and a later good one lands', async () => {
+    const promise = lookupOperator();
+    const state = settled(promise);
+    const source = frameNow().contentWindow;
+    for (const origin of ['https://cinefilm.example', '']) {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { cinefilmOperator: 'AS1 Unsandboxed' },
+          origin,
+          source,
+        }),
+      );
+    }
+    await vi.advanceTimersByTimeAsync(0);
+    expect(state.done).toBe(false);
+    expect(screen.getByTestId('operator-lookup')).toBeInTheDocument();
+    org('AS2 Sandboxed');
+    expect(await promise).toBe('AS2 Sandboxed');
   });
 
   it('ignores a message from the frame that does not carry the key, and a later good one lands', async () => {
@@ -230,6 +260,7 @@ describe('the end of a lookup', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         data: { cinefilmOperator: 'AS1 Late' },
+        origin: 'null',
         source: frame.contentWindow,
       }),
     );
@@ -251,6 +282,7 @@ describe('the end of a lookup', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         data: { cinefilmOperator: 'AS2 Second' },
+        origin: 'null',
         source: frame.contentWindow,
       }),
     );

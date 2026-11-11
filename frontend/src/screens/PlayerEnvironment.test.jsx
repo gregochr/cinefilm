@@ -123,7 +123,11 @@ async function answerLookup(org) {
   const frame = await screen.findByTestId('operator-lookup');
   await inAct(() =>
     window.dispatchEvent(
-      new MessageEvent('message', { data: { cinefilmOperator: org }, source: frame.contentWindow }),
+      new MessageEvent('message', {
+        data: { cinefilmOperator: org },
+        origin: 'null',
+        source: frame.contentWindow,
+      }),
     ),
   );
 }
@@ -516,7 +520,7 @@ describe('a new viewing in the same player', () => {
 
     await inAct(() =>
       window.dispatchEvent(
-        new MessageEvent('message', { data: { cinefilmOperator: RAIL }, source }),
+        new MessageEvent('message', { data: { cinefilmOperator: RAIL }, origin: 'null', source }),
       ),
     );
     await startFilm(next);

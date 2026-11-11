@@ -51,8 +51,10 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    `referrerPolicy: 'no-referrer'`, so the request carries `Origin: null`, no referrer and no cookie: the service
    sees the device's public address and nothing about CineFilm. Never give that frame `allow-same-origin`, and
    never make the request from the page itself (it would send the app's hostname as `Origin`). The page takes a
-   message only from that frame's own window, keeps only `org`, as text of 1 to 100 characters, and stores an
-   answer against it in `localStorage` only. No location is requested or stored. Any other outside request from
+   message only from that frame's own window and only when the message's origin is the string `null`, which is
+   what a sandboxed frame reports: a frame that had lost its sandbox would report the app's own origin and be
+   ignored, so the lookup fails closed. It keeps only `org`, as text of 1 to 100 characters, and stores an answer
+   against it in `localStorage` only. No location is requested or stored. Any other outside request from
    the browser needs a note in the PR.
 8. **Dependencies and CI.** No new dependency without a reason in the PR. OWASP/`npm audit` findings at High or above
    block. Workflows declare least-privilege `permissions:`, pin third-party actions, and never print secrets.

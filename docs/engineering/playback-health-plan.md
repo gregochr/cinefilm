@@ -218,8 +218,10 @@ The operator's display name is the lookup's `org` without its leading `AS<digits
 - **The lookup** runs in a hidden `sandbox="allow-scripts"` frame built from `srcdoc`. Its one request
   (`https://ipinfo.io/json`, `credentials: 'omit'`, `referrerPolicy: 'no-referrer'`) was seen by an echo service
   to carry `Origin: null`, no `Referer` and no cookie. The frame posts `org` to the page and nothing else. The page
-  accepts a message only from that frame's own window, keeps a trimmed string of 1–100 characters, and removes the
-  frame when it answers, after 15 s, or when the player is left. A `srcdoc` frame inherits the page's
+  accepts a message only from that frame's own window and only when its origin is the string `null` (what a
+  sandboxed frame reports; a frame that had lost its sandbox would report the app's own origin and be ignored, so
+  the lookup fails closed), keeps a trimmed string of 1–100 characters, and removes the frame when it answers,
+  after 15 s, or when the viewing ends. A `srcdoc` frame inherits the page's
   Content-Security-Policy: CineFilm sends none today, and one added later must allow this frame's inline script and
   its request, or every lookup ends as "can't tell which network this is".
 
