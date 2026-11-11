@@ -6,11 +6,14 @@ import gregochr.cinefilm.transcode.TranscodeSession.Status;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +31,10 @@ import org.springframework.stereotype.Component;
  * A film split across several files is encoded one file at a time: a run covers one part, and when it ends cleanly
  * the next run starts at the first segment of the next part (unless the player is far behind), so the player sees one
  * continuous film. A restart or a clean-up touches only the run's own part.
+ * A session that went quiet (no request for the expiry, or idle while {@code hls/} is over its cap) is deleted but
+ * remembered: its spec, its files' size and modification time and a little bookkeeping stay in memory, and its next
+ * request rebuilds it under the same id (see {@link #revive}), so a paused film's player keeps its playlists and its
+ * buffer. Every other ending (ended, replaced, pushed out at the cap, unavailable) is final.
  * State changes happen under one lock; waiting for a segment happens outside it, on the caller's virtual thread.
  * Time comes from the injected clock, periodic upkeep from the injected scheduler, and file questions from
  * {@link SegmentFiles}, so the whole thing runs in tests without a process, a disk or a sleep.
@@ -46,7 +53,11 @@ public class SessionManager {
     static final int MAX_SESSIONS = 3;
     /** A segment this many ahead of the encoder's newest is waited for; further than that restarts the encoder. */
     static final int WAIT_AHEAD_SEGMENTS = 10;
-    /** The longest a segment request waits before answering 503. */
+    /** The most quiet sessions remembered for rebuilding; the eldest is forgotten beyond it. */
+    static final int MAX_REMEMBERED = 8;
+    /** A remembered session is never rebuilt this long or longer after its last request. */
+    static final Duration REMEMBER_FOR = Duration.ofHours(24);
+    /** The longest a segment request waits (counted from its arrival) before answering 503. */
     static final Duration WAIT_MAX = Duration.ofSeconds(6);
     /** The encoder is killed when it is this far past the player. */
     static final Duration LOOK_AHEAD = Duration.ofMinutes(3);
@@ -68,24 +79,29 @@ public class SessionManager {
     private final Supplier<UUID> ids;
     private final Object lock = new Object();
     private final Map<String, TranscodeSession> sessions = new LinkedHashMap<>();
+    /** The quiet sessions that can be rebuilt, eldest first; guarded by {@link #lock}. */
+    private final Map<String, Remembered> remembered = new LinkedHashMap<>();
+    private final FileStamps stamps;
     private Runnable cancelSweep = () -> { };
 
     /** Creates the manager; sessions live under {@code <cinefilm.cache.dir>/hls}. */
     @Autowired
     SessionManager(Transcoder transcoder, SegmentFiles files, SegmentWaiter waiter, SessionScheduler scheduler,
-                   Clock clock, SessionSettings settings, @Value("${cinefilm.cache.dir}") String cacheDir) {
-        this(transcoder, files, waiter, scheduler, clock, settings,
+                   Clock clock, SessionSettings settings, FileStamps stamps,
+                   @Value("${cinefilm.cache.dir}") String cacheDir) {
+        this(transcoder, files, waiter, scheduler, clock, settings, stamps,
             Path.of(cacheDir).toAbsolutePath().normalize().resolve("hls"), UUID::randomUUID);
     }
 
     SessionManager(Transcoder transcoder, SegmentFiles files, SegmentWaiter waiter, SessionScheduler scheduler,
-                   Clock clock, SessionSettings settings, Path hlsRoot, Supplier<UUID> ids) {
+                   Clock clock, SessionSettings settings, FileStamps stamps, Path hlsRoot, Supplier<UUID> ids) {
         this.transcoder = transcoder;
         this.files = files;
         this.waiter = waiter;
         this.scheduler = scheduler;
         this.clock = clock;
         this.settings = settings;
+        this.stamps = stamps;
         this.hlsRoot = hlsRoot;
         this.ids = ids;
     }
@@ -109,6 +125,7 @@ public class SessionManager {
     void shutdown() {
         synchronized (lock) {
             cancelSweep.run();
+            remembered.clear();
             for (TranscodeSession session : sessions.values()) {
                 if (session.run.running()) {
                     kill(session.run);
@@ -119,14 +136,16 @@ public class SessionManager {
 
     /**
      * Creates a session and starts its encoder at the first segment. A session for the same edition is replaced; at
-     * the cap the least recently used one is.
+     * the cap the least recently used one is, and a remembered (quiet) session of the same edition is forgotten.
      *
      * @param spec the validated session
      * @return the new session
      * @throws SessionStartException when the encoder cannot be started
      */
     public SessionView create(SessionSpec spec) {
+        List<FileStamps.Stamp> read = readStamps(spec);
         synchronized (lock) {
+            remembered.values().removeIf(r -> r.spec().editionId() == spec.editionId());
             for (TranscodeSession older : List.copyOf(sessions.values())) {
                 if (older.spec.editionId() == spec.editionId()) {
                     destroy(older);
@@ -136,7 +155,7 @@ public class SessionManager {
                 destroy(sessions.values().stream().min(Comparator.comparing(s -> s.lastRequest)).orElseThrow());
             }
             String id = ids.get().toString();
-            TranscodeSession session = new TranscodeSession(id, spec, hlsRoot.resolve(id), clock.instant());
+            TranscodeSession session = new TranscodeSession(id, spec, hlsRoot.resolve(id), clock.instant(), read);
             try {
                 startRun(session, spec.startSegment());
             } catch (IOException e) {
@@ -149,13 +168,25 @@ public class SessionManager {
     }
 
     /**
-     * A session's description for the playlist endpoints; counts as a request.
+     * A session's description for the playlist endpoints; counts as a request. A session that went quiet is rebuilt
+     * first (without starting an encoder).
      *
      * @param id the session id
      * @return the session
-     * @throws NotFoundException when there is no such session (never created, ended or expired)
+     * @throws NotFoundException when the session is neither live nor rebuildable (never created, ended, replaced,
+     *     pushed out, too old or its file changed)
+     * @throws SegmentNotReadyException when the session must be rebuilt and its file cannot be read right now (503)
      */
     public SessionView view(String id) {
+        try {
+            return viewLive(id);
+        } catch (NotLive e) {
+            revive(id);
+            return viewLive(id);
+        }
+    }
+
+    private SessionView viewLive(String id) {
         synchronized (lock) {
             return view(require(id));
         }
@@ -163,17 +194,30 @@ public class SessionManager {
 
     /**
      * The file of a completed segment, waiting for it when the encoder will make it soon and restarting the encoder
-     * when it will not.
+     * when it will not. A session that went quiet is rebuilt first and its encoder restarted at this segment. The
+     * wait counts from the request's arrival, so a slow rebuild leaves less of {@link #WAIT_MAX}.
      *
      * @param id the session id
      * @param rungId one of the session's rung ids
      * @param n the segment number
      * @return the segment file inside the session's folder
-     * @throws NotFoundException when the session, rung or segment does not exist
-     * @throws SegmentNotReadyException when it was not made within {@link #WAIT_MAX}
+     * @throws NotFoundException when the session is neither live nor rebuildable, or the rung or segment does not
+     *     exist
+     * @throws SegmentNotReadyException when it was not made within {@link #WAIT_MAX}, or the session must be rebuilt
+     *     and its file cannot be read right now (503)
      * @throws SessionUnavailableException when the encoder failed twice
      */
     public Path segment(String id, String rungId, int n) {
+        Instant arrived = clock.instant();
+        try {
+            return segmentLive(id, rungId, n, arrived);
+        } catch (NotLive e) {
+            revive(id);
+            return segmentLive(id, rungId, n, arrived);
+        }
+    }
+
+    private Path segmentLive(String id, String rungId, int n, Instant arrived) {
         TranscodeSession session;
         synchronized (lock) {
             session = require(id);
@@ -191,7 +235,8 @@ public class SessionManager {
             }
             ensureReaching(session, n);
         }
-        waiter.await(() -> settled(session, rungId, n), WAIT_MAX);
+        Duration left = WAIT_MAX.minus(Duration.between(arrived, clock.instant()));
+        waiter.await(() -> settled(session, rungId, n), left.isNegative() ? Duration.ZERO : left);
         synchronized (lock) {
             if (sessions.get(id) != session) {
                 throw new NotFoundException("No such session");
@@ -206,9 +251,13 @@ public class SessionManager {
         }
     }
 
-    /** Ends a session: its encoder is stopped and its folder deleted. Ending an unknown session does nothing. */
+    /**
+     * Ends a session for good: its encoder is stopped and its folder deleted, and it is forgotten if it was only
+     * remembered. Ending an unknown session does nothing.
+     */
     public void end(String id) {
         synchronized (lock) {
+            remembered.remove(id);
             TranscodeSession session = sessions.get(id);
             if (session != null) {
                 destroy(session);
@@ -216,7 +265,7 @@ public class SessionManager {
         }
     }
 
-    /** The live sessions, oldest first, for Admin. */
+    /** The live sessions, in the order they were made or last rebuilt, for Admin. */
     public List<SessionDtos.SessionRow> sessions() {
         synchronized (lock) {
             return sessions.values().stream().map(this::info).toList();
@@ -248,7 +297,7 @@ public class SessionManager {
     private void maintain(TranscodeSession session, Instant now) {
         Duration idle = Duration.between(session.lastRequest, now);
         if (idle.compareTo(settings.expiry()) >= 0) {
-            destroy(session);
+            expire(session);
             return;
         }
         Run run = session.run;
@@ -275,7 +324,7 @@ public class SessionManager {
                 return;
             }
             remaining -= files.size(session.dir);
-            destroy(session);
+            expire(session);
         }
     }
 
@@ -301,7 +350,7 @@ public class SessionManager {
     private TranscodeSession require(String id) {
         TranscodeSession session = sessions.get(id);
         if (session == null) {
-            throw new NotFoundException("No such session");
+            throw new NotLive();
         }
         session.lastRequest = clock.instant();
         return session;
@@ -355,6 +404,10 @@ public class SessionManager {
             startRun(session, n);
         } catch (IOException e) {
             LOG.warn("Cannot restart the encoder for session {}: {}", session.id, e.getMessage());
+            if (session.awaitingFirstRun) {
+                destroy(session);
+                throw new NotFoundException("No such session");
+            }
             session.unavailable = true;
             throw new SessionUnavailableException();
         }
@@ -379,6 +432,7 @@ public class SessionManager {
             part < film.partCount() - 1);
         run.process = transcoder.start(plan, new RunListener(session, run));
         session.run = run;
+        session.awaitingFirstRun = false;
         session.deletedBelow = Math.min(session.deletedBelow, segment);
     }
 
@@ -435,6 +489,117 @@ public class SessionManager {
             }
         }
         session.deletedBelow = Math.max(session.deletedBelow, below);
+    }
+
+    /** A session went quiet: it is deleted like any other ending, and remembered so a later request can rebuild it. */
+    private void expire(TranscodeSession session) {
+        destroy(session);
+        remember(session);
+    }
+
+    /** Keeps what rebuilding the session needs; never an unavailable session or one whose files could not be read. */
+    private void remember(TranscodeSession session) {
+        if (session.unavailable || session.stamps == null) {
+            return;
+        }
+        remembered.put(session.id, new Remembered(session.id, session.dir, session.spec, session.stamps,
+            session.startedAt, session.lastRequest, session.playhead, session.lastRung));
+        while (remembered.size() > MAX_REMEMBERED) {
+            Iterator<Remembered> eldest = remembered.values().iterator();
+            eldest.next();
+            eldest.remove();
+        }
+    }
+
+    /** Reads every part's stamp, outside the lock; null when any of them cannot be read. */
+    private List<FileStamps.Stamp> readStamps(SessionSpec spec) {
+        List<FileStamps.Stamp> read = new ArrayList<>();
+        for (SessionSpec.PartSource part : spec.parts()) {
+            try {
+                read.add(stamps.read(part.source()));
+            } catch (IOException e) {
+                return null;
+            }
+        }
+        return read;
+    }
+
+    /**
+     * Makes a quiet session live again under its own id, from what was remembered and nothing from the request: the
+     * id string, folder and spec are the remembered record's. The files are read outside the lock (the share can be
+     * slow), then everything is decided again under it. Returns when the id is live; throws {@link NotFoundException}
+     * when it is not rebuildable and {@link SegmentNotReadyException} when a file cannot be read just now. Package
+     * private so a test can show the step that finds the id already live (a request that rebuilt it first).
+     */
+    void revive(String id) {
+        Remembered first;
+        synchronized (lock) {
+            if (sessions.containsKey(id)) {
+                return;
+            }
+            first = remembered.get(id);
+            if (first == null) {
+                throw new NotFoundException("No such session");
+            }
+            if (tooOld(first, clock.instant())) {
+                remembered.remove(id);
+                throw new NotFoundException("No such session");
+            }
+        }
+        boolean gone = false;
+        boolean unreadable = false;
+        List<FileStamps.Stamp> read = new ArrayList<>();
+        for (SessionSpec.PartSource part : first.spec().parts()) {
+            try {
+                read.add(stamps.read(part.source()));
+            } catch (NoSuchFileException e) {
+                gone = true;
+                read.add(null);
+            } catch (IOException e) {
+                unreadable = true;
+                read.add(null);
+            }
+        }
+        synchronized (lock) {
+            if (sessions.containsKey(id)) {
+                return;
+            }
+            Instant now = clock.instant();
+            Remembered r = remembered.get(id);
+            if (r == null) {
+                throw new NotFoundException("No such session");
+            }
+            if (tooOld(r, now) || gone || changed(r.stamps(), read)) {
+                remembered.remove(id);
+                throw new NotFoundException("No such session");
+            }
+            if (unreadable) {
+                throw new SegmentNotReadyException("The film's file cannot be read right now");
+            }
+            remembered.remove(id);
+            while (sessions.size() >= MAX_SESSIONS) {
+                destroy(sessions.values().stream().min(Comparator.comparing(s -> s.lastRequest)).orElseThrow());
+            }
+            files.deleteTree(r.dir());
+            sessions.put(r.id(), TranscodeSession.rebuilt(r.id(), r.spec(), r.dir(), r.startedAt(), now, r.stamps(),
+                r.lastRung(), r.playhead()));
+            LOG.info("Rebuilt session {} after {} quiet", r.id(), Duration.between(r.lastRequest(), now));
+        }
+    }
+
+    /** True when the session's last request was {@link #REMEMBER_FOR} or more before {@code now}. */
+    private static boolean tooOld(Remembered r, Instant now) {
+        return Duration.between(r.lastRequest(), now).compareTo(REMEMBER_FOR) >= 0;
+    }
+
+    /** True when a stamp that was read differs from the remembered one; a part that could not be read is skipped. */
+    private static boolean changed(List<FileStamps.Stamp> kept, List<FileStamps.Stamp> read) {
+        for (int i = 0; i < read.size(); i++) {
+            if (read.get(i) != null && !read.get(i).equals(kept.get(i))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void destroy(TranscodeSession session) {
@@ -496,6 +661,21 @@ public class SessionManager {
         } catch (IOException e) {
             LOG.warn("Cannot start the next part's encoder for session {}: {}", session.id, e.getMessage());
             session.unavailable = true;
+        }
+    }
+
+    /** What a quiet session needs to be rebuilt: all of it chosen by the server when the session was made. */
+    private record Remembered(String id, Path dir, SessionSpec spec, List<FileStamps.Stamp> stamps, Instant startedAt,
+                              Instant lastRequest, int playhead, String lastRung) {
+    }
+
+    /** The session is not live; only {@link #require} throws it, so callers can tell it from other 404s. */
+    private static final class NotLive extends NotFoundException {
+
+        private static final long serialVersionUID = 1L;
+
+        NotLive() {
+            super("No such session");
         }
     }
 
