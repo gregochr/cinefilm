@@ -101,8 +101,13 @@ public class ArtworkStore {
         if (!NAME.matcher(name).matches()) {
             return Optional.empty();
         }
-        Path file = dir.resolve(name);
-        return Files.isRegularFile(file) ? Optional.of(file) : Optional.empty();
+        return within(dir, name).filter(Files::isRegularFile);
+    }
+
+    /** The normalised path of a name under a folder, or empty when it would leave the folder (belt and braces). */
+    static Optional<Path> within(Path folder, String name) {
+        Path file = folder.resolve(name).normalize();
+        return file.startsWith(folder) ? Optional.of(file) : Optional.empty();
     }
 
     /** The content type to serve a stored name with, from its extension. */

@@ -218,10 +218,49 @@ describe('image URLs', () => {
 });
 
 describe('imageUrl for artwork stored by the server', () => {
-  it('passes a /api/art/ path through unchanged, whatever the size', () => {
-    const path = `/api/art/${'a'.repeat(64)}.jpg`;
-    expect(imageUrl(path)).toBe(path);
-    expect(imageUrl(path, 'w500')).toBe(path);
+  const stored = `/api/art/${'a'.repeat(64)}.jpg`;
+
+  it.each([
+    ['w92', 342],
+    ['w185', 342],
+    ['w342', 342],
+    ['w500', 500],
+    ['w780', 780],
+    ['w1280', 1280],
+  ])('asks the server for the %s size as ?w=%i', (size, width) => {
+    expect(imageUrl(stored, size)).toBe(`${stored}?w=${width}`);
+  });
+
+  it.each([
+    ['w92', 'w92'],
+    ['w185', 'w185'],
+    ['w342', 'w342'],
+    ['w500', 'w500'],
+    ['w780', 'w780'],
+    ['w1280', 'w1280'],
+  ])('builds the TMDB URL at %s for a TMDB path', (size, token) => {
+    expect(imageUrl('/p.jpg', size)).toBe(`https://image.tmdb.org/t/p/${token}/p.jpg`);
+  });
+
+  it('defaults a stored path to the poster width and a TMDB path to the poster size', () => {
+    expect(imageUrl(stored)).toBe(`${stored}?w=342`);
+    expect(imageUrl('/p.jpg')).toBe('https://image.tmdb.org/t/p/w342/p.jpg');
+  });
+
+  it('serves a stored path whole for a size with no matching width', () => {
+    expect(imageUrl(stored, 'original')).toBe(stored);
+    expect(imageUrl(stored, 'w999')).toBe(stored);
+    expect(imageUrl(stored, 'constructor')).toBe(stored);
+  });
+
+  it('gives null for a missing path, stored or not', () => {
+    expect(imageUrl(null)).toBeNull();
+    expect(imageUrl('')).toBeNull();
+    expect(imageUrl(undefined, 'w780')).toBeNull();
+  });
+
+  it('adds the leading slash a TMDB path lacks', () => {
+    expect(imageUrl('p.jpg', 'w500')).toBe('https://image.tmdb.org/t/p/w500/p.jpg');
   });
 
   it('still builds TMDB URLs for other paths, including ones that merely contain api/art', () => {
