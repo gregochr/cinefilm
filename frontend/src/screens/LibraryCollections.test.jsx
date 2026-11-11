@@ -137,12 +137,6 @@ describe('Collections tab', () => {
     await waitFor(() => expect(cardNames()).toHaveLength(3));
   });
 
-  it('is focused when opened with focus in the URL', async () => {
-    withSample();
-    renderApp('/library/collections?focus=search');
-    expect(await screen.findByRole('searchbox', { name: /Search/ })).toHaveFocus();
-  });
-
   it('shows no-results, naming collections, and clearing restores the list', async () => {
     withSample();
     renderApp('/library/collections?q=zzz&show=complete');

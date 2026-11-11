@@ -8,6 +8,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// The header's search live region is also a status; the toast is told apart by its name.
+const toastRegion = () => screen.getByRole('status', { name: 'Notification' });
+
 const EMPTY = {
   hero: null,
   continueWatching: [],
@@ -61,7 +64,7 @@ describe('Home: removing a film from Continue watching', () => {
 
     expect(maybeCard('Arrival, 56m left')).not.toBeInTheDocument();
     expect(within(row()).getByText('3 in progress')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Arrival removed from Continue watching');
+    expect(toastRegion()).toHaveTextContent('Arrival removed from Continue watching');
     const [put] = calls(fetchMock, '/api/editions/21/continue-watching');
     expect(put[1].method).toBe('PUT');
     expect(body(put)).toEqual({ hidden: true });
@@ -75,7 +78,7 @@ describe('Home: removing a film from Continue watching', () => {
 
     expect(hrefs()).toEqual(['/films/2', '/films/3', '/films/4', '/films/5']);
     expect(within(row()).getByText('4 in progress')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    expect(toastRegion()).toBeEmptyDOMElement();
     expect(cardLink('Arrival, 56m left')).toHaveFocus();
     await vi.waitFor(() =>
       expect(calls(fetchMock, '/api/editions/21/continue-watching').map(body)).toEqual([
@@ -91,7 +94,7 @@ describe('Home: removing a film from Continue watching', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: 'Mark as watched' }));
 
     expect(maybeCard(/^Chinatown/)).not.toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Chinatown marked as watched');
+    expect(toastRegion()).toHaveTextContent('Chinatown marked as watched');
     expect(body(calls(fetchMock, '/api/editions/31/watched')[0])).toEqual({ watched: true });
 
     await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
@@ -134,8 +137,8 @@ describe('Home: removing a film from Continue watching', () => {
     await userEvent.click(more('Moon'));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Mark as watched' }));
 
-    expect(screen.getByRole('status')).toHaveTextContent('Moon marked as watched');
-    expect(screen.getByRole('status')).not.toHaveTextContent('Arrival');
+    expect(toastRegion()).toHaveTextContent('Moon marked as watched');
+    expect(toastRegion()).not.toHaveTextContent('Arrival');
   });
 
   it('Delete on a focused card removes it and moves focus to the next card', async () => {
@@ -166,7 +169,7 @@ describe('Home: removing a film from Continue watching', () => {
     expect(cardLink(/^Chinatown/)).toHaveFocus();
     await userEvent.keyboard('m');
     expect(body(calls(fetchMock, '/api/editions/31/watched')[0])).toEqual({ watched: true });
-    expect(screen.getByRole('status')).toHaveTextContent('Chinatown marked as watched');
+    expect(toastRegion()).toHaveTextContent('Chinatown marked as watched');
     expect(cardLink(/^Paris, Texas/)).toHaveFocus();
   });
 
@@ -189,7 +192,7 @@ describe('Home: removing a film from Continue watching', () => {
     expect(
       await within(row()).findByRole('link', { name: 'Arrival, 56m left' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    expect(toastRegion()).toBeEmptyDOMElement();
     expect(within(row()).getByText('4 in progress')).toBeInTheDocument();
   });
 
@@ -215,7 +218,7 @@ describe('Home: removing a film from Continue watching', () => {
     await removeViaMenu('Moon');
 
     expect(screen.queryByRole('region', { name: 'Resume Moon' })).not.toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Moon removed from Continue watching');
+    expect(toastRegion()).toHaveTextContent('Moon removed from Continue watching');
 
     await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(screen.getByRole('region', { name: 'Resume Moon' })).toBeInTheDocument();
@@ -227,7 +230,7 @@ describe('Home: removing a film from Continue watching', () => {
     await screen.findByRole('region', { name: 'Continue watching' });
     await removeViaMenu('Moon');
 
-    expect(screen.getByRole('status')).toHaveTextContent('Moon removed from Continue watching');
+    expect(toastRegion()).toHaveTextContent('Moon removed from Continue watching');
     expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
   });
 

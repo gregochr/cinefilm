@@ -20,6 +20,20 @@ function Page({ withSearch = true }) {
 }
 
 describe('"/" focuses search', () => {
+  it('ignores "/" pressed inside an open modal dialog', async () => {
+    render(
+      <>
+        <Page />
+        <div role="dialog" aria-modal="true" aria-label="Modal">
+          <button type="button">Inside</button>
+        </div>
+      </>,
+    );
+    screen.getByRole('button', { name: 'Inside' }).focus();
+    await userEvent.keyboard('/');
+    expect(screen.getByRole('searchbox', { name: 'Search' })).not.toHaveFocus();
+  });
+
   it('focuses the search field when nothing is being typed into', async () => {
     render(<Page />);
     await userEvent.keyboard('/');

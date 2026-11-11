@@ -164,7 +164,9 @@ describe('Home states', () => {
   it('shows nothing for a successful but empty (null) response', async () => {
     installFetch((m, url) => (url === '/api/home' ? respond(null, 204) : null));
     renderApp('/');
-    await vi.waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    await vi.waitFor(() =>
+      expect(screen.queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument(),
+    );
     expect(screen.getByRole('main')).toBeEmptyDOMElement();
   });
 });

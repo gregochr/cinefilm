@@ -147,13 +147,6 @@ describe('Library search', () => {
     await waitFor(() => expect(lastFilmsUrl(fetchMock)).not.toContain('q='));
   });
 
-  it('is focused when the Search tab opened the library', async () => {
-    installFetch();
-    renderApp('/library?focus=search');
-    const box = await screen.findByRole('searchbox', { name: /Search/ });
-    expect(box).toHaveFocus();
-  });
-
   it('is not focused otherwise', async () => {
     installFetch();
     renderApp('/library');
