@@ -171,7 +171,7 @@ function PlayerView({ film, edition, startAtZero, openedAt }) {
     top: topRung(stream.renditions),
     kbps: stream.kbps,
   });
-  // The slow-connection card waits while the network question is due (decision 17).
+  // The slow-connection card waits while the network question is due (decision 18).
   const questionDue = environment.question !== null;
   const slowCard = useSlowCard(
     stream.mode === 'hls' && quality === AUTO && indicator.slow && !questionDue,

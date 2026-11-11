@@ -239,7 +239,7 @@ fullscreen is the browser's. The card uses the slow-connection card's style and 
 menu is open (on a phone the card would cover it), and waits while the slow-connection card is open. The
 slow-connection card waits while the question is due (showing, or waiting its turn), and does not count as shown
 while it waits. The indicator pill keeps its own rule (measured speed) until the strategy step. This is handover
-decision 17.
+decision 18.
 
 **Admin** lists what this browser remembers under the playbacks, newest first, each with **Forget** (see the Admin
 card below).

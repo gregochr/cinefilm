@@ -262,7 +262,7 @@ On each profile, with a film on Auto:
   does not reach Safari: use Network Link Conditioner there (macOS: Additional Tools for Xcode; iPhone: Settings,
   Developer).
 - The added latency makes the player take home for somewhere else, so it may ask "Are you on a train?" (handover
-  decision 17). Answer **No** or **Not now**. A wrong answer is undone in Admin, Playback health, "Remembered
+  decision 18). Answer **No** or **Not now**. A wrong answer is undone in Admin, Playback health, "Remembered
   networks on this device", **Forget**.
 - The question card can be seen without a backend: `VITE_FIXTURES=1 npm run dev` gives the player a latency of
   48 ms and the operator "Example Rail Wi-Fi", so the card shows on any film until it is answered; **Forget** in
