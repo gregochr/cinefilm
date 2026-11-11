@@ -43,7 +43,7 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
   // for is waiting: that wait is seek wait, not watched time.
   let moving = false;
   let stalled = false;
-  let seeking = false;
+  let seekOpen = false;
   let reloading = false;
   let reconnectingNow = false;
   let lastBeatAt = openedAt; // moving is only ever true after playing(), which sets it
@@ -123,7 +123,7 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
     // Start-up is counted like everything else, so a sleep is not in it. The step that ends at the first frame
     // counts (first is set after this runs); the step that ends at play() after a refusal does not.
     if (!first && !waitingForViewer) startingMs += dt;
-    if (moving && !seeking) {
+    if (moving && !seekOpen) {
       const to = Math.min(t, lastBeatAt + BEAT_GRACE_MS);
       if (to > from) {
         watchedMs += to - from;
@@ -139,7 +139,7 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
       credit(from, t, 'stalled');
       changed();
     }
-    if (seeking) {
+    if (seekOpen) {
       seekWaitMs += dt;
       changed();
     }
@@ -250,7 +250,7 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
       moving = true;
       lastBeatAt = t;
       endStall();
-      seeking = false;
+      seekOpen = false;
       reloading = false;
     },
     canPlay(paused) {
@@ -266,24 +266,36 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
       advance();
       if (!first || reloading) return;
       moving = false;
-      if (seeking || stalled) return;
+      if (seekOpen || stalled) return;
       stalled = true;
       stallCount += 1;
       changed();
     },
+    // A seek the viewer made with the player's own controls (seekTo calls this).
     seek() {
       advance();
       if (!first || reloading) return;
       seekCount += 1;
-      seeking = true;
+      seekOpen = true;
+      endStall();
+      changed();
+    },
+    // The element's `seeking` event: a seek made outside the player's controls (Safari's native scrubber in
+    // fullscreen, the system's media keys on a direct-played file). Not counted twice for a seek seek() has
+    // already opened, and never on hls.js, which sets currentTime itself and so fires this event too.
+    seeking() {
+      advance();
+      if (!first || reloading || seekOpen || engineKind === 'hlsjs') return;
+      seekCount += 1;
+      seekOpen = true;
       endStall();
       changed();
     },
     seeked() {
       const t = advance();
       // The wait is over and the picture goes on: the next beat interval starts now, not at a stale beat.
-      if (seeking && moving) lastBeatAt = t;
-      seeking = false;
+      if (seekOpen && moving) lastBeatAt = t;
+      seekOpen = false;
     },
     ended() {
       advance();
@@ -295,7 +307,7 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
       if (!first) return;
       moving = false;
       endStall();
-      seeking = false;
+      seekOpen = false;
       if (!reloading) {
         reloading = true;
         reloadCount += 1;

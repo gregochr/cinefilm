@@ -242,11 +242,23 @@ describe('a send that finishes', () => {
 });
 
 describe('failures', () => {
-  it('swallows a rejection that carries no error at all', async () => {
-    stubFetch(() => Promise.reject(undefined));
-    const { result } = mount();
-    result.current.playing();
+  it('swallows a rejection that carries no error at all, and keeps sending', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetchMock = stubFetch(() => Promise.reject(undefined));
+    const { result, unmount } = mount();
+    expect(() => result.current.playing()).not.toThrow();
     await advance(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await advance(REPORT_INTERVAL_MS); // nothing succeeded, so the tick sends again
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    unmount(); // and so does leaving
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[2][1].keepalive).toBe(true);
+    await advance(0);
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('warns once per viewing about a 400, and about nothing else', async () => {
@@ -260,7 +272,7 @@ describe('failures', () => {
     expect(warn).toHaveBeenCalledTimes(1);
     await advance(REPORT_INTERVAL_MS);
     await advance(REPORT_INTERVAL_MS);
-    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+    expect(fetchMock).toHaveBeenCalledTimes(3); // the first frame, then the ticks at 60 s and 120 s
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
@@ -288,23 +300,42 @@ describe('failures', () => {
     expect(log).not.toHaveBeenCalled();
   });
 
-  it('swallows a send when fetch is gone altogether', async () => {
+  it('swallows a send when fetch is gone altogether, and sends again once it is back', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.stubGlobal('fetch', undefined);
     const { result, unmount } = mount();
-    result.current.playing();
+    expect(() => result.current.playing()).not.toThrow();
     await advance(START_GRACE_MS + REPORT_INTERVAL_MS);
-    window.dispatchEvent(new Event('pagehide'));
+    expect(() => window.dispatchEvent(new Event('pagehide'))).not.toThrow();
+    expect(vi.getTimerCount()).toBe(1); // the interval is still armed; no abort timer is left over
+    const fetchMock = stubFetch();
+    await advance(REPORT_INTERVAL_MS);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // nothing had succeeded, so the tick sends
     unmount();
     await advance(0);
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('swallows a fetch that throws at once', async () => {
-    vi.stubGlobal('fetch', () => {
+  it('swallows a fetch that throws at once, and keeps sending', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetchMock = stubFetch(() => {
       throw new Error('boom');
     });
-    const { result } = mount();
-    result.current.playing();
-    await advance(START_GRACE_MS);
+    const { result, unmount } = mount();
+    expect(() => result.current.playing()).not.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await advance(REPORT_INTERVAL_MS);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    unmount();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    await advance(0);
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 
@@ -435,6 +466,8 @@ describe('the object it returns', () => {
       api.paused();
       api.waiting();
       api.seek();
+      api.seeking();
+      api.seeking();
       api.seeked();
       api.ended();
       api.sourceChanged();
@@ -475,6 +508,7 @@ describe('the object it returns', () => {
       'rung',
       'seek',
       'seeked',
+      'seeking',
       'sourceChanged',
       'throughput',
       'waiting',

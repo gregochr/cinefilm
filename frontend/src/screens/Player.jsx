@@ -475,6 +475,10 @@ function PlayerView({ film, edition, startAtZero, openedAt }) {
           setBuffering(true);
           health.waiting();
         }}
+        onSeeking={() => {
+          // The player's own seek back to the resume point (still pending) is not the viewer's.
+          if (pendingSeekRef.current === null) health.seeking();
+        }}
         onSeeked={() => {
           settle();
           health.seeked();

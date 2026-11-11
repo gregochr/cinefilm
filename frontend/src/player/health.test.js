@@ -678,6 +678,124 @@ describe('a seek', () => {
   });
 });
 
+describe('a seek made outside the controls (the element’s seeking event)', () => {
+  const on = (engine) => {
+    const m = make();
+    m.h.engine(engine);
+    m.at(0);
+    m.h.playing();
+    m.at(1000);
+    m.h.beat(1000);
+    return m;
+  };
+
+  it.each(['native', 'direct'])(
+    'counts one seek and its wait, none of it watched, on %s',
+    (engine) => {
+      const m = on(engine);
+      m.h.seeking();
+      m.at(1800);
+      m.h.seeked();
+      expect(m.report()).toMatchObject({ seekCount: 1, seekWaitMs: 800, watchedMs: 1000 });
+    },
+  );
+
+  it('counts nothing on hls.js, which corrects the position itself, and the time is watched', () => {
+    const m = on('hlsjs');
+    m.h.seeking();
+    m.at(1800);
+    m.h.seeked();
+    expect(m.report()).toMatchObject({ seekCount: 0, seekWaitMs: 0, watchedMs: 1800 });
+  });
+
+  it('counts a seek once when seek() has already opened it', () => {
+    const m = on('native');
+    m.h.seek();
+    m.h.seeking();
+    m.at(1800);
+    m.h.seeked();
+    expect(m.report()).toMatchObject({ seekCount: 1, seekWaitMs: 800 });
+  });
+
+  it('counts again for a second seek after the first has ended', () => {
+    const m = on('native');
+    m.h.seeking();
+    m.at(1500);
+    m.h.seeked();
+    m.h.seeking();
+    expect(m.report().seekCount).toBe(2);
+  });
+
+  it('counts nothing before the first frame or during a reload', () => {
+    const before = make();
+    before.h.engine('native');
+    before.at(500);
+    before.h.seeking();
+    expect(before.report().seekCount).toBe(0);
+
+    const m = on('native');
+    m.h.sourceChanged();
+    m.h.seeking();
+    m.at(3000);
+    expect(m.report()).toMatchObject({ seekCount: 0, seekWaitMs: 0 });
+  });
+
+  it('a waiting after an element seek is not a stall on native, and is one on hls.js', () => {
+    const native = on('native');
+    native.h.seeking();
+    native.at(1200);
+    native.h.waiting();
+    native.at(2000);
+    native.h.playing();
+    expect(native.report()).toMatchObject({
+      stallCount: 0,
+      stallMs: 0,
+      seekCount: 1,
+      seekWaitMs: 1000,
+    });
+
+    const hls = on('hlsjs');
+    hls.h.seeking();
+    hls.at(1200);
+    hls.h.waiting();
+    hls.at(2000);
+    hls.h.playing();
+    expect(hls.report()).toMatchObject({ stallCount: 1, stallMs: 800, seekCount: 0 });
+  });
+
+  it('ends a stall that is open', () => {
+    const m = on('native');
+    m.h.waiting();
+    m.at(1500);
+    m.h.seeking();
+    m.at(2500);
+    m.h.seeked();
+    m.at(9000);
+    expect(m.report()).toMatchObject({
+      stallCount: 1,
+      stallMs: 500,
+      seekCount: 1,
+      seekWaitMs: 1000,
+    });
+  });
+
+  it('is a change when it counts', () => {
+    const m = on('native');
+    m.h.paused();
+    const v = m.h.version();
+    m.h.seeking();
+    expect(m.h.version()).not.toBe(v);
+  });
+
+  it('is not a change when it is ignored', () => {
+    const m = on('hlsjs');
+    m.h.paused();
+    const v = m.h.version();
+    m.h.seeking();
+    expect(m.h.version()).toBe(v);
+  });
+});
+
 describe('a source change', () => {
   it('stops the picture, starts a reload and counts its time', () => {
     const m = started(0);

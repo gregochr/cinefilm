@@ -17,6 +17,7 @@ const INPUTS = [
   'paused',
   'waiting',
   'seek',
+  'seeking',
   'seeked',
   'ended',
   'sourceChanged',
@@ -167,7 +168,7 @@ export function useHealthReport({
           controller.abort();
         }, SEND_TIMEOUT_MS);
         timed.add(entry);
-        post(snapshot, { signal: controller.signal }, entry);
+        void post(snapshot, { signal: controller.signal }, entry);
       } catch {
         // never throws into the player
       }
@@ -176,7 +177,7 @@ export function useHealthReport({
     const sendExit = () => {
       try {
         if (counter.version() === viewing.lastOk) return;
-        post(counter.snapshot(), { keepalive: true }, null);
+        void post(counter.snapshot(), { keepalive: true }, null);
       } catch {
         // never throws into the player
       }

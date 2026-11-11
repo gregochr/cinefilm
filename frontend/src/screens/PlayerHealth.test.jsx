@@ -369,6 +369,57 @@ describe('what is counted', () => {
   });
 });
 
+describe('seeks made outside the controls, on the native engine', () => {
+  async function openNative() {
+    delete window.MediaSource;
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('maybe');
+    const srv = serve();
+    const fetchMock = installFetch(srv.route);
+    renderApp('/films/1/play?edition=11');
+    const video = await screen.findByTestId('player-video');
+    await vi.waitFor(() => expect(video).toHaveAttribute('src', '/api/sessions/s1/master.m3u8'));
+    return { fetchMock, video };
+  }
+
+  it('reports the element’s seeking event as one seek, with its wait', async () => {
+    const { fetchMock, video } = await openNative();
+    await landResume(video);
+    await firstFrame(video, 10000);
+    await inAct(() => fireEvent.seeking(video));
+    clock = 10800;
+    await inAct(() => fireEvent.seeked(video));
+    await leave();
+    expect(lastReport(fetchMock)).toMatchObject({
+      engine: 'native',
+      seekCount: 1,
+      seekWaitMs: 800,
+    });
+  });
+
+  it('does not report the seek that restores the resume point while it is still pending', async () => {
+    const { fetchMock, video } = await openNative();
+    await inAct(() => fireEvent.loadedMetadata(video)); // the restoring seek is now pending
+    await firstFrame(video, 10000);
+    await inAct(() => fireEvent.seeking(video));
+    clock = 10800;
+    await inAct(() => fireEvent.seeked(video));
+    await leave();
+    expect(lastReport(fetchMock)).toMatchObject({ seekCount: 0, seekWaitMs: 0 });
+  });
+
+  it('reports a seek through the controls once, not twice', async () => {
+    const { fetchMock, video } = await openNative();
+    await landResume(video);
+    await firstFrame(video, 10000);
+    await userEvent.click(screen.getByRole('button', { name: 'Forward 10 seconds' }));
+    await inAct(() => fireEvent.seeking(video)); // the event the element fires for that seek
+    clock = 11200;
+    await inAct(() => fireEvent.seeked(video));
+    await leave();
+    expect(lastReport(fetchMock)).toMatchObject({ seekCount: 1, seekWaitMs: 1200 });
+  });
+});
+
 describe('a refused autoplay', () => {
   it('leaves the wait for the viewer out of the start-up', async () => {
     const play = vi.spyOn(HTMLMediaElement.prototype, 'play');
