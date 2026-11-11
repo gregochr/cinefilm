@@ -555,10 +555,13 @@ describe('states', () => {
     await user.type(box, 'blade runner');
     // Announced once, by the one polite live region; the visible note is plain text.
     expect(screen.getByTestId('search-live')).toHaveTextContent('Loading…');
+    expect(screen.getAllByRole('status')).toContain(screen.getByTestId('search-live'));
     expect(screen.getByTestId('search-live')).toHaveAttribute('aria-live', 'polite');
     expect(screen.getByTestId('search-live')).toHaveAttribute('aria-atomic', 'true');
     expect(screen.getAllByText('Loading…')).toHaveLength(2);
-    expect(screen.queryAllByRole('status').map((n) => n.textContent)).not.toContain('Loading…');
+    // The live region is the only status that says it; the visible note is plain text.
+    const saying = screen.getAllByRole('status').filter((n) => n.textContent === 'Loading…');
+    expect(saying).toEqual([screen.getByTestId('search-live')]);
     expect(screen.queryAllByRole('alert')).toHaveLength(0);
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     expect(options()).toHaveLength(0);

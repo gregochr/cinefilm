@@ -1,20 +1,20 @@
 import { act, renderHook } from '@testing-library/react';
-import { MemoryRouter, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { routerWrapper } from '../test/routerWrapper.jsx';
 import { SEARCH_DEBOUNCE_MS, useUrlSearch } from './useUrlSearch.js';
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 function setup(path = '/library') {
-  const wrapper = ({ children }) => <MemoryRouter initialEntries={[path]}>{children}</MemoryRouter>;
   return renderHook(
     () => {
       const [params, setParams] = useSearchParams();
       const navigate = useNavigate();
       return { ...useUrlSearch(params, setParams), params, navigate };
     },
-    { wrapper },
+    { wrapper: routerWrapper(path) },
   );
 }
 

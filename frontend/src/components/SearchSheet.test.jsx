@@ -132,7 +132,7 @@ describe('results', () => {
 
   it('announces in the polite live region', async () => {
     const user = await openSheet();
-    const live = within(sheet()).getByTestId('search-live');
+    const live = within(sheet()).getByRole('status');
     expect(live).toHaveAttribute('aria-live', 'polite');
     expect(live).toHaveAttribute('aria-atomic', 'true');
     expect(live).toHaveTextContent('');

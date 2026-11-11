@@ -156,7 +156,13 @@ export default function SearchSheet() {
           Cancel
         </button>
       </div>
-      <p className="sr-only" aria-live="polite" aria-atomic="true" data-testid="search-live">
+      <p
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        data-testid="search-live"
+      >
         {message}
       </p>
       <div className="search-sheet__body">
