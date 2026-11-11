@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeHls } from '../test/fakeHls.js';
 import { chooseEngine, HLS_MIME, startStream } from './streamSource.js';
 
-vi.mock('hls.js', async () => ({ default: (await import('../test/fakeHls.js')).FakeHls }));
+vi.mock('hls.js/light', async () => ({ default: (await import('../test/fakeHls.js')).FakeHls }));
+// The full build must never be imported: loading it fails the test that tries.
+vi.mock('hls.js', () => {
+  throw new Error('the full hls.js build was imported; the player uses hls.js/light');
+});
 
 beforeEach(() => {
   FakeHls.reset();
@@ -70,6 +74,11 @@ describe('choosing how to play a session', () => {
     expect(video.getAttribute('src')).toBeNull();
     engine.destroy();
     expect(FakeHls.last.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads the light build of hls.js, never the full one', async () => {
+    await start(videoThat(false));
+    expect(FakeHls.instances).toHaveLength(1);
   });
 
   it('hands hls.js the start position and whether Auto is on', async () => {
