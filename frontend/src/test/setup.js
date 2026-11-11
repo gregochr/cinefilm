@@ -1,12 +1,14 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach } from 'vitest';
 import { cleanup, configure } from '@testing-library/react';
+import { clearResourceCache } from '../state/resourceCache.js';
 
 // Whole-suite runs (and CI) are slow; a screen that loads two resources needs more than the 1 s default.
 configure({ asyncUtilTimeout: 5000 });
 
 afterEach(() => {
   cleanup();
+  clearResourceCache(); // no test sees another's answers
 });
 
 // jsdom does not implement media playback: track `paused` ourselves so play() and pause() behave
