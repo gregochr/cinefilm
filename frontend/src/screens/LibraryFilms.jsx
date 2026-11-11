@@ -1,12 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import CollectionTile from '../components/CollectionTile.jsx';
 import { Picker, Segmented, Switch } from '../components/Controls.jsx';
 import { SearchIcon } from '../components/icons.jsx';
-import { Poster } from '../components/Poster.jsx';
+import { PosterWithMenu } from '../components/PosterWithMenu.jsx';
 import { GridSkeleton } from '../components/Skeleton.jsx';
 import { EmptyLibrary, ErrorState, NoResults } from '../components/StateMessages.jsx';
+import UndoToast from '../components/UndoToast.jsx';
 import { groupFilms } from '../state/collections.js';
+import { useLibraryFilmActions } from '../state/useLibraryFilmActions.js';
 import { useCollections } from '../state/usePeopleAndCollections.js';
 import { useGroupCollections } from '../state/useGroupCollections.js';
 import { useUrlSearch } from '../state/useUrlSearch.js';
@@ -71,15 +73,117 @@ export default function LibraryFilms() {
   const query = { q, sort, genre, decade, show: show === 'all' ? '' : show };
   const { data, error, loading, reload } = useFilms(query);
 
+  const undoButton = useRef(null);
+  const focusUndo = useRef(false);
+  const pendingFocus = useRef(null);
+  const posterLinks = useRef(new Map());
+  const searchRef = useRef(null);
+  const prevAction = useRef(null);
+  const undoLost = useRef(false); // the toast went while focus was on its Undo button
+  const expiryTarget = useRef(null); // the poster focus goes to then: the next in the list, else the previous
+  const [acted, setActed] = useState(0); // counts actions; an effect from before the latest one must not focus
+  const actedWanted = useRef(0);
+  const latestData = useRef(data);
+  const leftTo = useRef(null); // where focus goes if the poster focused for a failed Undo is not coming back
+  const awaitData = useRef(false); // the poster is rebuilt with the data being read: focus it only then
+  const focusedAt = useRef(null); // the loaded data when pendingFocus was set
+  const cw = useLibraryFilmActions(data, show, reload, (film) => {
+    // A rollback brings the poster back: focus that was on Undo (or lost with the poster) follows it.
+    const at = document.activeElement;
+    if (at === document.body || at === undoButton.current) {
+      pendingFocus.current = film.id;
+      focusedAt.current = data;
+    }
+  });
+  const { films, total } = cw;
+  // When the toast goes (it expires, or the action is undone or rolled back) its button leaves with the focus on it.
+  // The button is still in the DOM while this renders.
+  if (prevAction.current && !cw.action)
+    undoLost.current = document.activeElement === undoButton.current;
+  prevAction.current = cw.action;
+  const undo = () => {
+    if (!cw.action) return;
+    const id = cw.action.film.id;
+    pendingFocus.current = id; // focus follows the poster that comes back
+    focusedAt.current = data;
+    // The poster that took the film's slot when the action began (the list no longer has the film in it).
+    const neighbour = expiryTarget.current === id ? undefined : expiryTarget.current;
+    cw.undo().then((result) => {
+      // The list is being read again and the poster is rebuilt with it (or, after a failed Undo, may be gone again):
+      // focus it once that data arrives, or else the poster in its slot.
+      if (result !== 'reloading' && result !== 'failed') return;
+      pendingFocus.current = id;
+      focusedAt.current = latestData.current;
+      awaitData.current = true;
+      leftTo.current = neighbour;
+    });
+  };
   const filtersActive = Boolean(q || genre || decade || show !== 'all');
   const facets = data?.facets || { genres: [], decades: [] };
-  const total = data?.total ?? 0;
+
+  useEffect(() => {
+    latestData.current = data;
+  });
+  // A poster that leaves the list takes focus with it: focus moves to Undo, or back to the poster if it returns.
+  useEffect(() => {
+    if (focusUndo.current) {
+      focusUndo.current = false;
+      undoButton.current?.focus();
+    } else if (pendingFocus.current !== null) {
+      if (actedWanted.current > acted) return; // a render from before the action: its posters are stale
+      const link = posterLinks.current.get(pendingFocus.current);
+      const arrived = data !== focusedAt.current;
+      if (awaitData.current && !arrived) return;
+      if (link) {
+        awaitData.current = false;
+        leftTo.current = null;
+        link.focus();
+        pendingFocus.current = null;
+      } else if (arrived) {
+        awaitData.current = false;
+        // The poster may still be on its way (Undo after a reload waits for the list); once newer data arrives
+        // without it, it is not coming, and a late focus must not be stolen.
+        pendingFocus.current = null;
+        if (leftTo.current !== null && document.activeElement === document.body) {
+          (posterLinks.current.get(leftTo.current) ?? searchRef.current)?.focus();
+        }
+        leftTo.current = null;
+      }
+    }
+  });
+  useEffect(() => {
+    if (!undoLost.current) return;
+    undoLost.current = false;
+    // Undo and rollbacks move focus to the poster that came back (done, or still pending): leave it.
+    if (pendingFocus.current !== null || document.activeElement !== document.body) return;
+    (posterLinks.current.get(expiryTarget.current) ?? searchRef.current)?.focus();
+  });
+  const registerPoster = (id) => (el) => {
+    if (el) posterLinks.current.set(id, el);
+    else posterLinks.current.delete(id);
+  };
+  const act = (kind, film) => {
+    focusUndo.current = kind === 'watched' && show === 'in-progress';
+    const at = films.findIndex((f) => f.id === film.id);
+    expiryTarget.current = focusUndo.current ? (films[at + 1] ?? films[at - 1])?.id : film.id;
+    awaitData.current = false;
+    leftTo.current = null;
+    pendingFocus.current = null; // a new action cancels a focus still waiting for a poster
+    // A poster that stays (Remove, or Mark as watched in All) may be rebuilt and loses the focus its menu item had.
+    if (!focusUndo.current) {
+      pendingFocus.current = film.id;
+      focusedAt.current = data;
+      actedWanted.current = acted + 1;
+      setActed(acted + 1);
+    }
+    (kind === 'remove' ? cw.remove : cw.markWatched)(film);
+  };
   // Search and In progress never group: they show individual films even with the switch on.
   const grouping = groupPreference && !q && show !== 'in-progress';
   const items =
     data && grouping
-      ? groupFilms(data.films, collectionsData?.collections || [], sort)
-      : (data?.films || []).map((film) => ({ type: 'film', film }));
+      ? groupFilms(films, collectionsData?.collections || [], sort)
+      : films.map((film) => ({ type: 'film', film }));
   const plural = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
   const sortedBy = `sorted by ${SORT_PHRASE[sort] || 'recently added'}`;
   let countLabel = '';
@@ -103,7 +207,13 @@ export default function LibraryFilms() {
       <div className={`poster-grid${loading ? ' poster-grid--busy' : ''}`}>
         {items.map((item) =>
           item.type === 'film' ? (
-            <Poster key={item.film.id} film={item.film} />
+            <PosterWithMenu
+              key={item.film.id}
+              film={item.film}
+              linkRef={registerPoster(item.film.id)}
+              onRemove={(film) => act('remove', film)}
+              onMarkWatched={(film) => act('watched', film)}
+            />
           ) : (
             <CollectionTile
               key={`collection-${item.collection.id}`}
@@ -136,6 +246,7 @@ export default function LibraryFilms() {
                 }
               }}
               data-global-search
+              ref={searchRef}
             />
             <kbd className="searchbox__hint" aria-hidden="true">
               /
@@ -171,6 +282,7 @@ export default function LibraryFilms() {
       </div>
 
       {body}
+      <UndoToast action={cw.action} undoRef={undoButton} onUndo={undo} />
 
       <div className="hints" aria-hidden="true">
         <span>/ search</span>

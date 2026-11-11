@@ -297,6 +297,35 @@ describe('Home: a film marked watched shows as watched in the other rows', () =>
     expect(within(old).getByRole('link', { name: 'Moon, 2005, watched' })).toBeInTheDocument();
     expect(within(old).getByRole('link', { name: 'Zodiac, 2007' })).toBeInTheDocument();
   });
+
+  it('drops the bar and time left from the same film in other rows, and Undo brings them back', async () => {
+    const inProgress = { ...moon, inProgress: true };
+    const rewatch = film(8, 'Heat', {
+      watched: true,
+      inProgress: true,
+      progress: { positionMs: 60000, runtimeMs: 600000, editionId: 80 },
+    });
+    homeWith({
+      continueWatching: [inProgress],
+      recentlyAdded: [inProgress, rewatch],
+    });
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Continue watching' });
+    const recent = screen.getByRole('region', { name: 'Recently added' });
+    expect(within(recent).getAllByTestId('poster-fill')).toHaveLength(2);
+
+    await userEvent.click(more('Moon'));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Mark as watched' }));
+    const moonPoster = within(recent).getByRole('link', { name: 'Moon, 2005, watched' });
+    expect(moonPoster).not.toHaveTextContent('left');
+    expect(within(moonPoster).queryByTestId('poster-fill')).toBeNull();
+    // A rewatch keeps its progress.
+    expect(within(recent).getAllByTestId('poster-fill')).toHaveLength(1);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(within(recent).getAllByTestId('poster-fill')).toHaveLength(2);
+    expect(within(recent).getByRole('link', { name: 'Moon, 2005' })).toHaveTextContent('left');
+  });
 });
 
 // Twelve spares after the hero, as the API sends them; film N has edition N * 10 and the link name "Film N, 9m left".

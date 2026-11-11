@@ -8,8 +8,17 @@ const itemsOf = (menu) => [...menu.querySelectorAll('[role="menuitem"]')];
 /**
  * The ⋯ menu of a Continue watching card: a popover under the button, or (`sheet`) a bottom sheet with a
  * header and a separate Cancel. `onClose(returnFocus)` closes it; Esc returns focus to the ⋯ button.
+ * `canRemove` false leaves out Remove from Continue watching (the film is already out of it).
  */
-export default function ContinueMenu({ film, sheet, anchorRef, onClose, onRemove, onMarkWatched }) {
+export default function ContinueMenu({
+  film,
+  sheet,
+  anchorRef,
+  onClose,
+  onRemove,
+  onMarkWatched,
+  canRemove = true,
+}) {
   const panelRef = useRef(null);
   const menuRef = useRef(null);
   const cancelRef = useRef(null);
@@ -117,22 +126,24 @@ export default function ContinueMenu({ film, sheet, anchorRef, onClose, onRemove
           ref={menuRef}
           className={sheet ? 'cmenu__list' : 'cmenu cmenu__list'}
         >
-          <button
-            type="button"
-            role="menuitem"
-            className="cmenu__item"
-            aria-labelledby={labelId}
-            aria-describedby={subId}
-            onClick={() => {
-              onClose(false);
-              onRemove();
-            }}
-          >
-            <span id={labelId}>Remove from Continue watching</span>
-            <span id={subId} className="cmenu__sub">
-              Keeps your place if you come back to it
-            </span>
-          </button>
+          {canRemove ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="cmenu__item"
+              aria-labelledby={labelId}
+              aria-describedby={subId}
+              onClick={() => {
+                onClose(false);
+                onRemove();
+              }}
+            >
+              <span id={labelId}>Remove from Continue watching</span>
+              <span id={subId} className="cmenu__sub">
+                Keeps your place if you come back to it
+              </span>
+            </button>
+          ) : null}
           <button
             type="button"
             role="menuitem"

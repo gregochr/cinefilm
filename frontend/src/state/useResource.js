@@ -92,9 +92,11 @@ export function useResource(key, fetcher, options = {}) {
           setState((s) => {
             const has = s.dataKey === key;
             // Revalidating over what is shown: the shown answer may be newer than this one, so it stands.
-            if (has && ((!result.stored && hit) || s.json === result.json)) return settled(s);
+            // A reload() always shows what the server answered: callers drop local changes when the data is replaced.
+            if (has && ((!result.stored && hit) || (!forced && s.json === result.json)))
+              return settled(s);
             return {
-              data: result.data,
+              data: forced ? data : result.data, // the cache hands back its own object for an equal answer
               json: result.json,
               dataKey: key,
               error: null,

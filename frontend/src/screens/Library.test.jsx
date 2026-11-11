@@ -21,7 +21,11 @@ describe('Library filters', () => {
     expect(
       await screen.findByText(`${fixtures.films.total} films · sorted by recently added`),
     ).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('films · sorted by recently added');
+    // The Undo toast is a status region too: the count is the one with the film count in it.
+    const count = screen
+      .getAllByRole('status')
+      .find((el) => /films · sorted by/.test(el.textContent));
+    expect(count).toHaveTextContent('films · sorted by recently added');
     expect(screen.getByRole('link', { name: 'Heat, 1995' })).toBeInTheDocument();
   });
 

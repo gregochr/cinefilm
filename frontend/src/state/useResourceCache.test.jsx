@@ -91,6 +91,24 @@ describe("useResource cache: 'revalidate'", () => {
     expect(lookup('k').data).toBe(first);
   });
 
+  it('a background check keeps the shown object for an equal answer, a reload() replaces it', async () => {
+    const first = { n: 1 };
+    seed('k', first);
+    const { fetcher, resolve } = held();
+    const { result } = renderHook(() => useResource('k', fetcher, REVALIDATE));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    await resolve(0, { n: 1 });
+    expect(result.current.data).toBe(first); // background revalidation: same object
+
+    act(() => result.current.reload());
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+    await resolve(1, { n: 1 });
+    // A reload() always shows what the server answered (callers drop their local changes when the data is replaced).
+    expect(result.current.data).toEqual({ n: 1 });
+    expect(result.current.data).not.toBe(first);
+    expect(result.current.loading).toBe(false);
+  });
+
   it('replaces the shown answer with a different one and stores it', async () => {
     seed('k', { n: 1 });
     const { fetcher, resolve } = held();
