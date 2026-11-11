@@ -175,9 +175,16 @@ Rules:
   raise the floor in the same PR; never lower one without the owner's say-so. A new class or file should arrive with
   tests that kill its mutants, not with a lower floor.
 - **Never switch Stryker to `inPlace`** (it would mutate your working tree and a killed run leaves it mutated). The
-  default sandbox copies the project into `frontend/.stryker-tmp/` and mutates the copy; no test reads outside
-  `frontend/`, so none is needed. Interrupt a run with SIGINT (Ctrl-C), not SIGKILL, so it cleans up.
-  `frontend/reports/` and `.stryker-tmp/` are git-ignored.
+  default sandbox copies `frontend/` into `frontend/.stryker-tmp/sandbox-*` and mutates the copy. Interrupt a run
+  with SIGINT (Ctrl-C), not SIGKILL, so it cleans up. `frontend/reports/` and `.stryker-tmp/` are git-ignored.
+- **The whole suite has to pass from that copy**, or the dry run fails before any mutant is tested. The copy holds
+  only `frontend/`, so a relative import that climbs out of it, or a path built on `process.cwd()`, leads nowhere
+  there. The two tests that read a table the backend suite reads too
+  (`backend/src/test/resources/shared/edition-validation-cases.json`, `docs/design/search/vectors.json`) load it
+  with `readRepoJson('<path from the repo root>')` from `frontend/src/test/repoFile.js`, which walks up from the
+  copy to the repository; that is also why `tempDirName` stays inside the repo. ESLint fails a test that names a
+  `../…/backend/` or `../…/docs/` path. No PR check runs Stryker: after adding a test that reads a file outside
+  `frontend/`, run `npx stryker run --dryRunOnly` (a few minutes, no mutants).
 - **Stryker's incremental file** (`reports/stryker-incremental.json`) lets a run re-test only what changed. It cannot
   see changes to `setup.js`, `vite.config.js` or dependencies, so the workflow forces a full run on the first
   scheduled run of each month; force one yourself with `npx stryker run --force`. The workflow keeps the file as an

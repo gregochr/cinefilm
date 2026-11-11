@@ -37,7 +37,8 @@ export default [
     languageOptions: { globals: { ...globals.vitest, ...globals.node } },
   },
   {
-    // Banned test patterns (docs/engineering/test-standards.md: "Queries", "userEvent", "Keyboard tests").
+    // Banned test patterns (docs/engineering/test-standards.md: "Queries", "userEvent", "Keyboard tests",
+    // "A table both suites run").
     files: ['**/*.test.{js,jsx}', 'src/test/**'],
     rules: {
       'no-restricted-syntax': [
@@ -63,6 +64,12 @@ export default [
             "CallExpression[callee.object.name='fireEvent'][callee.property.name='keyDown']:not([arguments.0.object.name='document'][arguments.0.property.name='activeElement'])",
           message:
             'Send keys where the browser would: userEvent.keyboard, or on a frozen fake clock fireEvent.keyDown(document.activeElement, ...) (test-standards.md, "Keyboard tests").',
+        },
+        {
+          // The two forms that broke the Stryker dry run: an import, or a path string, that climbs out of frontend/.
+          selector: 'Literal[value=/^(\\.\\.\\/)+(backend|docs)\\//]',
+          message:
+            'No relative path out of frontend/ in tests: load the file with readRepoJson (src/test/repoFile.js), or the Stryker run fails (test-standards.md, "A table both suites run").',
         },
       ],
     },
