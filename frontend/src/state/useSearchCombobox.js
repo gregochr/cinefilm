@@ -67,18 +67,21 @@ export function rowPath(groupKey, item) {
   return `/people/${item.id}`;
 }
 
-/** The option id: stable, and distinct for a person who is in both Actors and Directors. */
-export const optionId = (groupKey, id) => `search-opt-${groupKey}-${id}`;
+/**
+ * The option id: stable, distinct for a person who is in both Actors and Directors, and namespaced by `prefix` so the
+ * header dropdown and the phone sheet never share an id when both lists are mounted.
+ */
+export const optionId = (groupKey, id, prefix = 'search-opt') => `${prefix}-${groupKey}-${id}`;
 
 /** All rows of all groups in display order, each with its flat `index`, its option `id` and the `path` it opens. */
-export function flattenRows(result) {
+export function flattenRows(result, prefix) {
   const rows = [];
   for (const group of result.groups) {
     for (const item of group.items) {
       rows.push({
         index: rows.length,
         groupKey: group.key,
-        id: optionId(group.key, item.id),
+        id: optionId(group.key, item.id, prefix),
         path: rowPath(group.key, item),
         item,
       });
@@ -116,12 +119,15 @@ export function announcement({ open, status, result }) {
   return result.total === 1 ? '1 result' : `${result.total} results`;
 }
 
-/** The search box's state over the shared index: `{ state, result, rows, dispatch, setQuery }`. */
-export function useSearchCombobox(index) {
+/**
+ * The search box's state over the shared index: `{ state, result, rows, dispatch, setQuery }`. `idPrefix` namespaces the
+ * option ids of this combobox (pass a `useId()`-based string).
+ */
+export function useSearchCombobox(index, idPrefix) {
   const [state, dispatch] = useReducer(comboboxReducer, INITIAL_COMBOBOX);
   // Runs on every keystroke, undebounced; memoised so a hover or an active-row change never searches again.
   const result = useMemo(() => search(index, state.query), [index, state.query]);
-  const rows = useMemo(() => flattenRows(result), [result]);
+  const rows = useMemo(() => flattenRows(result, idPrefix), [result, idPrefix]);
   const setQuery = useCallback((query) => dispatch({ type: 'type', query }), []);
   return { state, result, rows, dispatch, setQuery };
 }

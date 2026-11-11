@@ -4,7 +4,7 @@ export default function UndoToast({ action, onUndo, undoRef }) {
     ? `${action.film.title} ${action.kind === 'remove' ? 'removed from Continue watching' : 'marked as watched'}`
     : null;
   return (
-    <div className="undo-toast-region" role="status">
+    <div className="undo-toast-region" role="status" aria-label="Notification">
       {action ? (
         <div className="undo-toast">
           <span className="undo-toast__text">{text}</span>

@@ -14,6 +14,26 @@ function reducedMotion() {
   );
 }
 
+/** Keeps Tab and Shift+Tab inside `dialog`: wraps at either end and pulls stray focus back in. */
+export function containTab(event, dialog) {
+  if (event.key !== 'Tab') return;
+  const items = [...dialog.querySelectorAll(FOCUSABLE)];
+  if (items.length === 0) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  const active = document.activeElement;
+  if (!dialog.contains(active)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+  } else if (event.shiftKey && active === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 /**
  * Behaviour of a modal dialog: a focus trap, Esc, focus on open and focus returned to what opened it, a page that
  * does not scroll behind it, and a short fade out before it closes (none under reduced motion).
@@ -44,22 +64,7 @@ export function useDialog({ onEscape, opener }) {
         escape.current();
         return;
       }
-      if (event.key !== 'Tab') return;
-      const items = [...dialog.querySelectorAll(FOCUSABLE)];
-      if (items.length === 0) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      const active = document.activeElement;
-      if (!dialog.contains(active)) {
-        event.preventDefault();
-        (event.shiftKey ? last : first).focus();
-      } else if (event.shiftKey && active === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && active === last) {
-        event.preventDefault();
-        first.focus();
-      }
+      containTab(event, dialog);
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);

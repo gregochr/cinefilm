@@ -37,6 +37,9 @@ export default {
   mutator: { excludedMutations: ['StringLiteral'] },
   timeoutMS: 30000,
   timeoutFactor: 2,
+  // The initial test run (the dry run) has a limit of its own, 5 minutes by default. It took 1 minute 27 seconds for 938
+  // tests on the runner on 2026-11-10; with 1,500 tests it takes 3.5 to 5 minutes on a loaded laptop.
+  dryRunTimeoutMinutes: 15,
   concurrency: 4,
   incremental: true,
   incrementalFile: 'reports/stryker-incremental.json',

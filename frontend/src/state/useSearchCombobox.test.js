@@ -126,6 +126,7 @@ describe('rows', () => {
     expect(rowPath('collections', { id: 5 })).toBe('/collections/5');
     expect(rowPath('directors', { id: 5 })).toBe('/people/5');
     expect(optionId('actors', 7)).toBe('search-opt-actors-7');
+    expect(optionId('actors', 7, 'x-opt')).toBe('x-opt-actors-7');
   });
 });
 

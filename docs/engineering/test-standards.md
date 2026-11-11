@@ -229,6 +229,11 @@ from `src/test/repoFile.js`, never with a relative import or `process.cwd()`: St
 `frontend/`, where those lead nowhere and the weekly run fails before it tests a mutant (`dev-and-testing.md`
 "Mutation testing"). ESLint fails a `../…/backend/` or `../…/docs/` path in a test or a `src/test/` helper.
 
+**A wall-clock budget widens under Stryker.** Its instrumentation slows hot loops many times over and its dry run fails
+on any failing test, so a test with a time bound reads `process.env.STRYKER_MUTATOR_WORKER` (set only in Stryker's
+runs) and widens the bound there; the real budget stays in `npm test` and CI (`search.test.js`, `speed`;
+`dev-and-testing.md` "Mutation testing").
+
 **`userEvent` is the default** for everything a person does: click, type, tab, keyboard, select, hover. Use
 `userEvent.setup()` when one test needs state across calls (a held mouse button, a drag). `fireEvent` is for what
 `userEvent` cannot produce: media element events (`loadedMetadata`, `timeUpdate`, `waiting`, `ended`), `change` on
