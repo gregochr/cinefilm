@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { announceLibraryChanged } from '../api/client.js';
 import { adminApi } from '../api/resources.js';
 import { nudgedOffset, subtitleProblem } from './subtitleAdmin.js';
@@ -10,10 +10,15 @@ import { useResource } from './useResource.js';
  * film page see the new timing. `busy` is the id of the file an action is running on, `problem` the last failure
  * as `{ id, text }`.
  */
-export function useSubtitles() {
-  const { data, error, loading, reload } = useResource('admin-subtitles', (options) =>
+export function useSubtitles(version) {
+  const { data, error, loading, reload } = useResource(`admin-subtitles:${version}`, (options) =>
     adminApi.subtitles(options),
   );
+  // What an action answered for its file, shown until the list read again arrives: a second nudge in the
+  // meantime must start from the new offset, not the one the old list still holds.
+  const [answers, setAnswers] = useState({ base: null, rows: {} });
+  const latest = useRef(data);
+  latest.current = data;
   const [busy, setBusy] = useState(null);
   const [problem, setProblem] = useState(null);
 
@@ -22,7 +27,13 @@ export function useSubtitles() {
       setBusy(id);
       setProblem(null);
       try {
-        await call();
+        const answer = await call();
+        if (answer?.id === id) {
+          setAnswers((prev) => ({
+            base: latest.current,
+            rows: { ...(prev.base === latest.current ? prev.rows : {}), [id]: answer },
+          }));
+        }
         announceLibraryChanged();
         reload();
         return true;
@@ -37,7 +48,9 @@ export function useSubtitles() {
   );
 
   return {
-    items: data ?? null,
+    items: data
+      ? data.map((row) => (answers.base === data ? answers.rows[row.id] : undefined) ?? row)
+      : null,
     error,
     loading,
     reload,

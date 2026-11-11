@@ -359,6 +359,41 @@ describe('Admin: Subtitles panel, timing and checking', () => {
   });
 });
 
+describe('Admin: Subtitles panel, quick nudges', () => {
+  it('a second nudge starts from the first one’s answer while the refreshed list has not arrived', async () => {
+    const bodies = [];
+    let lists = 0;
+    installFetch((method, url, init) => {
+      if (url === '/api/admin/subtitles') {
+        lists += 1;
+        return lists === 1 ? respond([file()]) : new Promise(() => {}); // the refresh is slow
+      }
+      if (url === '/api/admin/subtitles/1/offset') {
+        const body = JSON.parse(init.body);
+        bodies.push(body);
+        return respond(file({ offsetMs: body.offsetMs }));
+      }
+      if (url === '/api/admin/subtitles/1/cues') return respond(CUES);
+      return null;
+    });
+    renderApp('/admin');
+    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    const li = (await within(panel).findByText('Heat (1995)/Heat.en.forced.srt')).closest('li');
+    await userEvent.click(within(li).getByRole('button', { name: /Show the cues/ }));
+    const timing = await within(li).findByRole('group', { name: 'Timing' });
+
+    await userEvent.click(
+      within(timing).getByRole('button', { name: 'Show lines 1 second later' }),
+    );
+    await waitFor(() => expect(within(timing).getByRole('status')).toHaveTextContent('+1 s'));
+    await userEvent.click(
+      within(timing).getByRole('button', { name: 'Show lines 1 second later' }),
+    );
+
+    await waitFor(() => expect(bodies).toEqual([{ offsetMs: 1000 }, { offsetMs: 2000 }]));
+  });
+});
+
 describe('Admin: Subtitles panel, cues after a re-attach', () => {
   it('reads the open cue list again when the file is attached to another part, so Play from here is not stale', async () => {
     let part = 1;

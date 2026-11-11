@@ -175,8 +175,8 @@ function Item({ item, busy, problem, actions }) {
  * Matched); each shows how it was read, can be attached to a film by hand, its cues read, its timing nudged and its
  * lines marked as checked. The cue text is untrusted: it is only ever rendered as text.
  */
-export default function SubtitlesPanel() {
-  const subtitles = useSubtitles();
+export default function SubtitlesPanel({ version }) {
+  const subtitles = useSubtitles(version);
   const { items, loading, error, reload } = subtitles;
   let body;
   if (loading && !items) {
