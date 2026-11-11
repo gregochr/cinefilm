@@ -648,6 +648,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
               audioStreams={edition.audioStreams}
               audioValue={audio}
               subtitleStreams={edition.subtitleStreams}
+              hasForcedSubtitle={Boolean(edition.forcedSubtitle)}
               subtitleValue={subtitle}
               onAudio={chooseAudio}
               onSubtitle={chooseSubtitle}

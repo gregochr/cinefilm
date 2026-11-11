@@ -88,6 +88,7 @@ export function AudioSubtitlesPanel({
   audioStreams,
   audioValue,
   subtitleStreams,
+  hasForcedSubtitle = false,
   subtitleValue,
   onAudio,
   onSubtitle,
@@ -127,7 +128,7 @@ export function AudioSubtitlesPanel({
         onKeyDown={onMenuKeyDown}
       >
         <div className="menu__heading">Subtitles</div>
-        {subtitleStreams.length === 0 ? (
+        {subtitleStreams.length === 0 && !hasForcedSubtitle ? (
           <div className="menu__empty">None for this film</div>
         ) : (
           options.map((o) => (

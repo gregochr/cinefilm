@@ -129,6 +129,18 @@ describe('the forced subtitle of an edition (a sidecar .srt)', () => {
     expect(screen.getByRole('group', { name: 'Audio and subtitles' })).toBeInTheDocument();
   });
 
+  it('the panel of a sidecar-only film offers Off with its note, not None for this film', async () => {
+    await openPlayer(heatWith(sidecarOnly));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Audio and subtitles' }));
+
+    const menu = screen.getByRole('menu', { name: 'Subtitles' });
+    expect(within(menu).getByRole('menuitemradio', { name: /^Off/ })).toHaveTextContent(
+      'forced if needed',
+    );
+    expect(screen.queryByText('None for this film')).not.toBeInTheDocument();
+  });
+
   it('a film with neither streams nor a forced subtitle keeps its dimmed captions button', async () => {
     await openPlayer(
       heatWith((f) => {
