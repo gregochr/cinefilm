@@ -34,6 +34,27 @@ export function announceLibraryChanged() {
   emit(LIBRARY_CHANGED_EVENT);
 }
 
+const mutationListeners = new Set();
+
+/**
+ * Registers `listener({ method, path, phase })`, called with `phase` `'start'` before a POST, PUT, PATCH or DELETE
+ * is sent and `'end'` once it has settled (success, HTTP error, rejected fetch or abort). Returns the unsubscribe.
+ */
+export function onMutation(listener) {
+  mutationListeners.add(listener);
+  return () => mutationListeners.delete(listener);
+}
+
+function notifyMutation(event) {
+  for (const listener of [...mutationListeners]) {
+    try {
+      listener(event);
+    } catch {
+      // a listener never breaks the request it watches
+    }
+  }
+}
+
 async function fixtureRequest(method, path, body) {
   // VITE_FIXTURES is a build-time constant, so this branch is dropped from production builds.
   const mod = await import('./fixtureServer.js');
@@ -52,7 +73,17 @@ async function failureBody(response) {
  * Sends a request to the API. Returns parsed JSON (or null for 204 / empty bodies).
  * A 401 from anything except the session endpoint emits the session-expired event.
  */
-export async function request(method, path, { body, signal, keepalive } = {}) {
+export async function request(method, path, options = {}) {
+  if (!MUTATING.has(method)) return perform(method, path, options);
+  notifyMutation({ method, path, phase: 'start' });
+  try {
+    return await perform(method, path, options);
+  } finally {
+    notifyMutation({ method, path, phase: 'end' });
+  }
+}
+
+async function perform(method, path, { body, signal, keepalive }) {
   if (import.meta.env.VITE_FIXTURES === '1') {
     return fixtureRequest(method, path, body);
   }
