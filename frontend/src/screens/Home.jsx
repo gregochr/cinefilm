@@ -104,11 +104,16 @@ function ContinueRow({ films, total, onAct, linkRef, headingRef }) {
 
 export default function Home() {
   const { data, error, loading, reload } = useHome();
-  const cw = useContinueWatching(data, reload);
   const cardLinks = useRef(new Map());
   const undoButton = useRef(null);
   const rowHeading = useRef(null);
   const pendingFocus = useRef(null);
+  const cw = useContinueWatching(data, reload, (film) => {
+    // A rollback can push the backfilled card, which has focus, out of the visible row: follow focus to the
+    // reinstated film, but only if focus was in the row (anything else keeps its focus).
+    const section = rowHeading.current?.closest('section');
+    if (section?.contains(document.activeElement)) pendingFocus.current = film.id;
+  });
 
   // After a removal focus moves to the card now in that slot, else the previous card, else the row heading
   // (or Undo if the row has gone); after Undo, to the restored card.

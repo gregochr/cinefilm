@@ -494,4 +494,73 @@ describe('Home: one row of Continue watching', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(named(11)).toHaveAttribute('data-entering', 'true');
   });
+
+  it('See all opens Library on In progress, sorted by Last watched', async () => {
+    crowded(6, SPARES.slice(0, 5));
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    await userEvent.click(within(row()).getByRole('link', { name: 'See all 6 films in progress' }));
+
+    expect(
+      await screen.findByText(/films in progress · sorted by last watched/),
+    ).toBeInTheDocument();
+    const show = screen.getByRole('group', { name: 'Show' });
+    expect(within(show).getByRole('button', { name: 'In progress' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    const sort = screen.getByRole('group', { name: 'Sort' });
+    expect(within(sort).getByRole('button', { name: 'Last watched' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+});
+
+describe('Home: a failed Remove after focus has moved', () => {
+  // The API refuses Remove for Film 13 (edition 130) only once `fail()` is called.
+  function failLater() {
+    let fail;
+    const gate = new Promise((resolve) => {
+      fail = () => resolve(respond({ error: 'no' }, 500));
+    });
+    installFetch((method, url) => {
+      if (url === '/api/home') {
+        return respond({
+          ...EMPTY,
+          hero: HERO,
+          continueWatching: SPARES.slice(0, 5),
+          continueWatchingTotal: 6,
+        });
+      }
+      return url === '/api/editions/130/continue-watching' ? gate : null;
+    });
+    return fail;
+  }
+
+  it('moves focus to the reinstated card when the rollback pushes the focused backfill out', async () => {
+    const fail = failLater();
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    await removeViaMenu('Film 13');
+    expect(named(14)).toHaveFocus();
+
+    fail();
+    await vi.waitFor(() => expect(named(13)).toHaveFocus());
+    expect(shown()).toEqual(['10', '11', '12', '13']);
+  });
+
+  it('leaves focus alone when it is outside the row', async () => {
+    const fail = failLater();
+    renderApp('/');
+    await screen.findByRole('region', { name: 'Resume Heat' });
+    await removeViaMenu('Film 13');
+    const resume = screen.getByRole('link', { name: /^Resume from/ });
+    resume.focus();
+    expect(resume).toHaveFocus();
+
+    fail();
+    await vi.waitFor(() => expect(shown()).toEqual(['10', '11', '12', '13']));
+    expect(resume).toHaveFocus();
+  });
 });

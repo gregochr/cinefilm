@@ -27,14 +27,15 @@ function withFilmAt(list, film, index) {
 /**
  * The Continue watching list (up to 12 films after the hero), its total and the hero over the Home payload, with optimistic Remove / Mark as watched
  * and a single undoable action (the latest). The API is called straight away; Undo reverses it.
- * `reload` is called if an Undo cannot be sent, to resynchronise with the server.
+ * `reload` is called if an Undo cannot be sent, to resynchronise with the server. `onRollback(film)` is
+ * called after a failed request has put its film back (not when something newer has happened to it).
  * Requests for one edition are serialised (each starts after the previous one settled), so a quick
  * Remove, Undo, Remove reaches the server in that order. `watched` holds local watched overrides by film
  * id (set while a Mark as watched stands) for the other Home rows to apply. The screen shows the first few
  * of `row`, so the next film backfills a removal and an Undo pushes it out again with no extra state;
  * `total` counts every film in progress (the hero included), not just those in `row`.
  */
-export function useContinueWatching(data, reload) {
+export function useContinueWatching(data, reload, onRollback) {
   const [source, setSource] = useState(data);
   const [list, setList] = useState(() => seed(data));
   const { row, total } = list;
@@ -44,6 +45,7 @@ export function useContinueWatching(data, reload) {
   const current = useRef(null);
   const timer = useRef(null);
   const chains = useRef(new Map());
+  const rolledBack = useRef(onRollback);
   const versions = useRef(new Map()); // film id -> bumped by every action and Undo on it
 
   if (source !== data) {
@@ -53,6 +55,9 @@ export function useContinueWatching(data, reload) {
     setWatched({});
   }
 
+  useEffect(() => {
+    rolledBack.current = onRollback;
+  });
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const enqueue = useCallback((editionId, run) => {
@@ -109,6 +114,7 @@ export function useContinueWatching(data, reload) {
         if (kind === 'watched') dropOverride(film.id);
         setList((l) => withFilmAt(l, film, index));
         if (entry.heroWas) setHero(entry.heroWas);
+        rolledBack.current?.(film);
       });
       current.current = entry;
       setAction(entry);

@@ -20,7 +20,14 @@ describe('Library sort by rating', () => {
       within(group)
         .getAllByRole('button')
         .map((b) => b.textContent),
-    ).toEqual(['Title', 'Year', 'Recently added', 'IMDb rating', 'Rotten Tomatoes']);
+    ).toEqual([
+      'Title',
+      'Year',
+      'Recently added',
+      'Last watched',
+      'IMDb rating',
+      'Rotten Tomatoes',
+    ]);
   });
 
   it('choosing IMDb rating refetches sorted by imdb and says so', async () => {
