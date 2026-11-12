@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Fits the start times of a forced subtitle file to the start times of the full English subtitle track inside the
@@ -104,7 +105,23 @@ public final class TimingFit {
     }
 
     /** An offset and how well it lines the files up. */
-    private record Score(long offsetMs, int matched, long distance, long[] residuals) {
+    record Score(long offsetMs, int matched, long distance, long[] residuals) {
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Score that && offsetMs == that.offsetMs && matched == that.matched
+                && distance == that.distance && Arrays.equals(residuals, that.residuals);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * Objects.hash(offsetMs, matched, distance) + Arrays.hashCode(residuals);
+        }
+
+        @Override
+        public String toString() {
+            return "Score[offsetMs=" + offsetMs + ", matched=" + matched + ", distance=" + distance
+                + ", residuals=" + Arrays.toString(residuals) + "]";
+        }
     }
 
     /** The result for a film with no usable reference track. */

@@ -371,4 +371,18 @@ class TimingFitTest {
         assertThat(result.matchedCount()).isEqualTo(8);
         assertThat(result.medianResidualMs()).isLessThan(60);
     }
+
+    @Test
+    void scoresWithEqualResidualContentsAreEqualWithTheSameHashAndText() {
+        TimingFit.Score a = new TimingFit.Score(100, 2, 30, new long[] {10, 20});
+        TimingFit.Score b = new TimingFit.Score(100, 2, 30, new long[] {10, 20});
+
+        assertThat(a).isEqualTo(b).hasSameHashCodeAs(b);
+        assertThat(a.toString()).contains("residuals=[10, 20]");
+        assertThat(a).isNotEqualTo(new TimingFit.Score(100, 2, 30, new long[] {10, 21}))
+            .isNotEqualTo(new TimingFit.Score(101, 2, 30, new long[] {10, 20}))
+            .isNotEqualTo(new TimingFit.Score(100, 3, 30, new long[] {10, 20}))
+            .isNotEqualTo(new TimingFit.Score(100, 2, 31, new long[] {10, 20}))
+            .isNotEqualTo("not a score");
+    }
 }
