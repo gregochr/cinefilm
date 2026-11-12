@@ -60,11 +60,24 @@ public final class TmdbModels {
      * @param cast the top ten cast in billing order
      * @param collection the collection it belongs to, or null
      * @param imdbId the IMDb id (for example {@code tt0113277}), or null when TMDB has none
+     * @param originalLanguage the original language code (lower case, for example {@code en}), or null when TMDB has
+     *     none or it is not a valid code
+     * @param spokenLanguages the spoken language codes in TMDB's order: lower case, valid and without duplicates
      */
     public record MovieDetails(long id, String title, String originalTitle, Integer year, String overview,
                                Integer runtimeMinutes, List<String> genres, String posterPath, String backdropPath,
                                double popularity, List<Credit> directors, List<Credit> cast,
-                               CollectionRef collection, String imdbId) {
+                               CollectionRef collection, String imdbId, String originalLanguage,
+                               List<String> spokenLanguages) {
+
+        /** A film with an IMDb id and no known languages. */
+        public MovieDetails(long id, String title, String originalTitle, Integer year, String overview,
+                            Integer runtimeMinutes, List<String> genres, String posterPath, String backdropPath,
+                            double popularity, List<Credit> directors, List<Credit> cast,
+                            CollectionRef collection, String imdbId) {
+            this(id, title, originalTitle, year, overview, runtimeMinutes, genres, posterPath, backdropPath,
+                popularity, directors, cast, collection, imdbId, null, List.of());
+        }
 
         /** A film with no IMDb id. */
         public MovieDetails(long id, String title, String originalTitle, Integer year, String overview,

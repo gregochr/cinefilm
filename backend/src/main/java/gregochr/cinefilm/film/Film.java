@@ -117,6 +117,22 @@ public class Film {
     /** When OMDb was last asked about this film (a film with nothing to show is stamped too); null = never. */
     private Instant ratingsFetchedAt;
 
+    /** TMDB's original-language code (lower case, for example {@code en}); null when unknown or not asked. */
+    @Column(length = 8)
+    private String originalLanguage;
+
+    /** TMDB's spoken-language codes, comma-separated ({@link SpokenLanguages}); empty = none listed, null = unknown. */
+    @Column(length = SpokenLanguages.MAX_LENGTH)
+    private String spokenLanguages;
+
+    /** When TMDB was last asked for the languages (a film TMDB no longer has is stamped too); null = not yet. */
+    private Instant languagesFetchedAt;
+
+    /** The owner's choice on forced subtitles; null = decided automatically. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 16)
+    private ForcedNeedChoice forcedNeedOwner;
+
     /**
      * Sets the TMDB id. A film stamped as "no ratings" only because it had no identity at all (no TMDB id, no IMDb id)
      * is un-stamped when it gains a different TMDB id, so the next refresh retries it instead of waiting out the

@@ -53,6 +53,61 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
         "select f.id from Film f order by f.ratingsFetchedAt asc nulls first, f.id asc")
     List<Long> findIdsByRatingsOldestFirst();
 
+    /**
+     * A film and the TMDB id it was matched to.
+     *
+     * @param id the film
+     * @param tmdbId its TMDB id
+     */
+    record TmdbRef(Long id, Long tmdbId) {
+    }
+
+    /** Films matched to TMDB whose languages have never been asked for, oldest first. */
+    @org.springframework.data.jpa.repository.Query(
+        "select new gregochr.cinefilm.film.FilmRepository$TmdbRef(f.id, f.tmdbId) from Film f "
+            + "where f.tmdbId is not null and f.languagesFetchedAt is null order by f.id")
+    List<TmdbRef> findWithoutLanguages();
+
+    /**
+     * Stores TMDB's languages and stamps the film, in one statement that only matches while the film still has the
+     * TMDB id they were fetched for: a film rematched meanwhile is left alone.
+     *
+     * @return the rows changed: 1, or 0 when the film has gone or now has another TMDB id
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query(
+        "update Film f set f.originalLanguage = :original, f.spokenLanguages = :spoken, "
+            + "f.languagesFetchedAt = :at where f.id = :id and f.tmdbId = :tmdbId")
+    int saveLanguages(@org.springframework.data.repository.query.Param("id") Long id,
+                      @org.springframework.data.repository.query.Param("tmdbId") Long tmdbId,
+                      @org.springframework.data.repository.query.Param("original") String original,
+                      @org.springframework.data.repository.query.Param("spoken") String spoken,
+                      @org.springframework.data.repository.query.Param("at") java.time.Instant at);
+
+    /**
+     * What the forced-subtitle need is worked out from, for one film.
+     *
+     * @param id the film
+     * @param title its title
+     * @param year its year, or null
+     * @param tmdbId its TMDB id, or null
+     * @param originalLanguage TMDB's original language, or null
+     * @param spokenLanguages TMDB's spoken languages as stored, or null
+     * @param languagesFetchedAt when TMDB was asked, or null
+     * @param owner the owner's choice, or null
+     */
+    record NeedRow(Long id, String title, Integer year, Long tmdbId, String originalLanguage, String spokenLanguages,
+                   java.time.Instant languagesFetchedAt, ForcedNeedChoice owner) {
+    }
+
+    /** Every film with the columns the need is worked out from, by sort title. */
+    @org.springframework.data.jpa.repository.Query(
+        "select new gregochr.cinefilm.film.FilmRepository$NeedRow(f.id, f.title, f.year, f.tmdbId, "
+            + "f.originalLanguage, f.spokenLanguages, f.languagesFetchedAt, f.forcedNeedOwner) from Film f "
+            + "order by f.sortTitle, f.id")
+    List<NeedRow> findNeedRows();
+
     /** When ratings were last fetched for any film, or null when never. */
     @org.springframework.data.jpa.repository.Query("select max(f.ratingsFetchedAt) from Film f")
     java.time.Instant findLatestRatingsFetchedAt();

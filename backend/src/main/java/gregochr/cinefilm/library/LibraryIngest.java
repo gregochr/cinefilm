@@ -19,6 +19,7 @@ import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.film.MediaFileRepository.Known;
 import gregochr.cinefilm.film.Playability;
 import gregochr.cinefilm.film.Presence;
+import gregochr.cinefilm.film.SpokenLanguages;
 import gregochr.cinefilm.film.SubtitleStream;
 import gregochr.cinefilm.library.FileNameParser.ParsedName;
 import gregochr.cinefilm.library.LibraryScanner.FoundFile;
@@ -32,6 +33,7 @@ import gregochr.cinefilm.tmdb.TmdbModels.CollectionDetails;
 import gregochr.cinefilm.tmdb.TmdbModels.CollectionRef;
 import gregochr.cinefilm.tmdb.TmdbModels.MovieDetails;
 import gregochr.cinefilm.tmdb.TmdbUnavailableException;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
@@ -68,11 +70,13 @@ public class LibraryIngest {
     private final FilmCollectionRepository collections;
     private final ScanRunRepository runs;
     private final TmdbApi tmdb;
+    private final Clock clock;
 
-    /** Creates the ingest over the repositories and TMDB (for collection parts). */
+    /** Creates the ingest over the repositories, TMDB (for collection parts) and the clock (for the stamps). */
     public LibraryIngest(FilmRepository films, EditionRepository editions, MediaFileRepository files,
                          PersonRepository people, FilmPreferenceRepository preferences,
-                         FilmCollectionRepository collections, ScanRunRepository runs, TmdbApi tmdb) {
+                         FilmCollectionRepository collections, ScanRunRepository runs, TmdbApi tmdb, Clock clock) {
+        this.clock = clock;
         this.films = films;
         this.editions = editions;
         this.files = files;
@@ -408,6 +412,9 @@ public class LibraryIngest {
         film.setMatchStatus(MatchStatus.MATCHED);
         film.setMatchCandidates(null);
         applyImdbId(film, movie.imdbId());
+        film.setOriginalLanguage(movie.originalLanguage());
+        film.setSpokenLanguages(SpokenLanguages.store(movie.spokenLanguages()));
+        film.setLanguagesFetchedAt(clock.instant());
         film.setCollection(movie.collection() == null ? null : collection(movie.collection()));
         film.getCredits().clear();
         int order = 0;
