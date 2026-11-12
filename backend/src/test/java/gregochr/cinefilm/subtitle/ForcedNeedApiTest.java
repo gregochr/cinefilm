@@ -69,6 +69,31 @@ class ForcedNeedApiTest extends SubtitleTestBase {
     }
 
     @Test
+    void anOpenSubtitlesSearchOfTheFilmsCurrentImdbIdMakesItNeededAndIsShownInTheList() throws Exception {
+        Film searched = withLanguages("A Searched", "en", "en");
+        searched.setImdbId("tt0936501");
+        films.saveAndFlush(searched);
+        films.saveOpenSubtitles(searched.getId(), "tt0936501", 7, "{\"id\":1}", NOW);
+        Film empty = withLanguages("B Empty", "en", "en");
+        empty.setImdbId("tt0000002");
+        films.saveAndFlush(empty);
+        films.saveOpenSubtitles(empty.getId(), "tt0000002", 0, null, NOW);
+        withLanguages("C Never", "en", "en");
+
+        mvc.perform(get("/api/admin/forced-subtitles/films"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.films[0].need").value("NEEDED"))
+            .andExpect(jsonPath("$.films[0].reason").value("OPENSUBTITLES"))
+            .andExpect(jsonPath("$.films[0].openSubtitlesForcedCount").value(7))
+            .andExpect(jsonPath("$.films[0].openSubtitlesSearchedAt").value("2024-03-31T23:30:00Z"))
+            .andExpect(jsonPath("$.films[1].need").value("NOT_NEEDED"))
+            .andExpect(jsonPath("$.films[1].openSubtitlesForcedCount").value(0))
+            .andExpect(jsonPath("$.films[2].openSubtitlesForcedCount").value((Object) null))
+            .andExpect(jsonPath("$.films[2].openSubtitlesSearchedAt").value((Object) null))
+            .andExpect(jsonPath("$.counts.needed").value(1));
+    }
+
+    @Test
     void theOwnersChoiceIsSavedAnsweredAndShownInTheList() throws Exception {
         Film film = withLanguages("Taken", "en", "en");
 

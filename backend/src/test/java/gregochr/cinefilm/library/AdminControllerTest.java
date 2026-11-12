@@ -34,7 +34,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class AdminControllerTest {
 
     private static final ScanStatusDto IDLE = new ScanStatusDto(false, "/media", null, null,
-        new CountsDto(5, 1, 2, 3, 4, 6, 7), null, false, false);
+        new CountsDto(5, 1, 2, 3, 4, 6, 7), null, false, false, null, false, false);
 
     @Autowired
     private MockMvc mvc;
@@ -109,13 +109,16 @@ class AdminControllerTest {
     @Test
     void getScanReturnsTheStatusThePollingPanelReads() throws Exception {
         when(admin.status()).thenReturn(new ScanStatusDto(true, "/media", new ProgressDto(3, 10, "Heat.m4v"), null,
-            new CountsDto(5, 1, 2, 3, 4, 6, 7), NOW, true, true));
+            new CountsDto(5, 1, 2, 3, 4, 6, 7), NOW, true, true, NOW.minusSeconds(60), true, true));
 
         mvc.perform(get("/api/admin/scan").with(user("owner")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.ratingsLastRefreshedAt").value("2024-03-31T23:30:00Z"))
             .andExpect(jsonPath("$.ratingsRunning").value(true))
             .andExpect(jsonPath("$.ratingsEnabled").value(true))
+            .andExpect(jsonPath("$.openSubtitlesLastSearchedAt").value("2024-03-31T23:29:00Z"))
+            .andExpect(jsonPath("$.openSubtitlesRunning").value(true))
+            .andExpect(jsonPath("$.openSubtitlesEnabled").value(true))
             .andExpect(jsonPath("$.running").value(true))
             .andExpect(jsonPath("$.folder").value("/media"))
             .andExpect(jsonPath("$.progress.processed").value(3))

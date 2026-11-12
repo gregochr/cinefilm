@@ -604,12 +604,18 @@ public class LibraryIngest {
      * Stores TMDB's IMDb id. A blank or missing id changes nothing (an id found earlier is kept); a different id means
      * a different film, so the ratings fetched for the old one are dropped and will be fetched again.
      */
-    private static void applyImdbId(Film film, String imdbId) {
+    private void applyImdbId(Film film, String imdbId) {
         if (imdbId == null || imdbId.isBlank() || imdbId.strip().length() > IMDB_ID_MAX
             || imdbId.strip().equals(film.getImdbId())) {
             return;
         }
+        // The setter forgets what OpenSubtitles said about the old film in the entity; the statement writes that to
+        // the row too (after flushing the id change), so a search that committed for the old id meanwhile cannot
+        // survive. A film not saved yet has no row, and its insert writes every column.
         film.setImdbId(imdbId.strip());
+        if (film.getId() != null) {
+            films.clearOpenSubtitles(film.getId());
+        }
         film.setImdbRating(null);
         film.setImdbVotes(null);
         film.setRtScore(null);

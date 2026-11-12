@@ -28,6 +28,7 @@ Configuration comes from the environment, never from committed files:
 | `CINEFILM_CACHE_DIR` | `$TMPDIR/cinefilm-cache` | `/app/cache` by default (the deploy mounts the writable cache there; checked by `scripts/test/config-agreement.test.sh`); generated WebVTT subtitles live here |
 | `TMDB_READ_TOKEN` | empty (TMDB off) | the owner's TMDB Read Access Token (sent as a Bearer header, never logged) |
 | `OMDB_API_KEY` | empty (ratings off) | the owner's OMDb API key (IMDb and Rotten Tomatoes ratings; sent as a query parameter, so the URL is never logged) |
+| `OPENSUBTITLES_API_KEY` | empty (subtitle search off) | the owner's OpenSubtitles API key (forced-subtitle search only; sent in the `Api-Key` header, never in a URL or log) |
 
 The prod profile has no fallbacks for the database values, so a missing one fails start-up. The library values have
 defaults; `ffprobe` and `ffmpeg` must be on the PATH (`brew install ffmpeg` on a Mac) for a real scan. The dev profile applies every Flyway migration

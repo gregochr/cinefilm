@@ -179,8 +179,9 @@ class ForcedNeedQueriesTest extends SubtitleTestBase {
 
         assertThat(rows).extracting(NeedRow::title).containsExactly("Alien", "Zulu");
         assertThat(rows.get(0)).isEqualTo(new NeedRow(alien.getId(), "Alien", 2000, 348L, "en", "en,es", LATER,
-            ForcedNeedChoice.NEEDED));
-        assertThat(rows.get(1)).isEqualTo(new NeedRow(zulu.getId(), "Zulu", 2000, null, null, null, null, null));
+            ForcedNeedChoice.NEEDED, null, null, null, null));
+        assertThat(rows.get(1)).isEqualTo(new NeedRow(zulu.getId(), "Zulu", 2000, null, null, null, null, null,
+            null, null, null, null));
     }
 
     @Test

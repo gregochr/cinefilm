@@ -60,4 +60,16 @@ class RequestPacerTest {
 
         assertThat(sleeps).containsExactly(Duration.ofMillis(50), Duration.ofMillis(100));
     }
+
+    @Test
+    void aPacerWithItsOwnIntervalSpacesRequestsByIt() throws InterruptedException {
+        RequestPacer slower = new RequestPacer(nanos::get, sleeps::add, Duration.ofMillis(250));
+
+        slower.await();
+        slower.await();
+        nanos.addAndGet(Duration.ofMillis(100).toNanos());
+        slower.await();
+
+        assertThat(sleeps).containsExactly(Duration.ofMillis(250), Duration.ofMillis(400));
+    }
 }

@@ -91,7 +91,7 @@ class ForcedNeedServiceTest {
 
     private static NeedRow row(long id, String title, Long tmdbId, String original, String spoken, Instant asked,
                                ForcedNeedChoice owner) {
-        return new NeedRow(id, title, 2000, tmdbId, original, spoken, asked, owner);
+        return new NeedRow(id, title, 2000, tmdbId, original, spoken, asked, owner, null, null, null, null);
     }
 
     private static NeedRow english(long id, String title) {
@@ -156,7 +156,7 @@ class ForcedNeedServiceTest {
         FilmNeedDto dto = service.list().films().get(0);
 
         assertThat(dto).isEqualTo(new FilmNeedDto(1L, "Taken", 2000, "NOT_NEEDED", "OWNER", "NOT_NEEDED", "en",
-            List.of("en", "fr", "sq"), true));
+            List.of("en", "fr", "sq"), true, null, null));
     }
 
     @Test
@@ -288,6 +288,102 @@ class ForcedNeedServiceTest {
         assertThat(list.counts()).isEqualTo(new CountsDto(0, 0, 0, 0, 0));
     }
 
+    /** An English-only film (rule 7 says NOT_NEEDED) with an OpenSubtitles search of {@code searchedFor}. */
+    private static NeedRow searched(String imdbId, Integer count, String searchedFor) {
+        return new NeedRow(1L, "Taken", 2008, 8681L, "en", "en", ASKED, null, imdbId, count, NOW, searchedFor);
+    }
+
+    private FilmNeedDto listed(NeedRow row) {
+        when(films.findNeedRows()).thenReturn(List.of(row));
+        when(sidecars.findFilmIdsWithPresentSidecar()).thenReturn(List.of());
+        when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of());
+        return service.list().films().get(0);
+    }
+
+    @Test
+    void aCountAboveZeroFromASearchOfTheCurrentImdbIdMakesTheFilmNeededAndIsReported() {
+        FilmNeedDto dto = listed(searched("tt0936501", 7, "tt0936501"));
+
+        assertThat(dto.need()).isEqualTo("NEEDED");
+        assertThat(dto.reason()).isEqualTo("OPENSUBTITLES");
+        assertThat(dto.openSubtitlesForcedCount()).isEqualTo(7);
+        assertThat(dto.openSubtitlesSearchedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void aCountOfOneIsEnough() {
+        assertThat(listed(searched("tt0936501", 1, "tt0936501")).reason()).isEqualTo("OPENSUBTITLES");
+    }
+
+    @Test
+    void aCountOfZeroFallsThroughToTheLanguagesButIsStillReported() {
+        FilmNeedDto dto = listed(searched("tt0936501", 0, "tt0936501"));
+
+        assertThat(dto.need()).isEqualTo("NOT_NEEDED");
+        assertThat(dto.reason()).isEqualTo("ENGLISH_ONLY");
+        assertThat(dto.openSubtitlesForcedCount()).isZero();
+        assertThat(dto.openSubtitlesSearchedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void aCountFromASearchOfAnotherImdbIdIsIgnoredAndNotReported() {
+        FilmNeedDto dto = listed(searched("tt0936501", 7, "tt0000001"));
+
+        assertThat(dto.need()).isEqualTo("NOT_NEEDED");
+        assertThat(dto.reason()).isEqualTo("ENGLISH_ONLY");
+        assertThat(dto.openSubtitlesForcedCount()).isNull();
+        assertThat(dto.openSubtitlesSearchedAt()).isNull();
+    }
+
+    @Test
+    void aCountWithNoSearchedImdbIdOrNoImdbIdIsIgnored() {
+        FilmNeedDto noSearchedId = listed(searched("tt0936501", 7, null));
+        FilmNeedDto noImdbId = listed(searched(null, 7, "tt0936501"));
+
+        assertThat(noSearchedId.reason()).isEqualTo("ENGLISH_ONLY");
+        assertThat(noSearchedId.openSubtitlesForcedCount()).isNull();
+        assertThat(noImdbId.reason()).isEqualTo("ENGLISH_ONLY");
+        assertThat(noImdbId.openSubtitlesForcedCount()).isNull();
+    }
+
+    @Test
+    void aFilmNeverSearchedHasNoCount() {
+        FilmNeedDto dto = listed(searched("tt0936501", null, null));
+
+        assertThat(dto.openSubtitlesForcedCount()).isNull();
+        assertThat(dto.openSubtitlesSearchedAt()).isNull();
+    }
+
+    @Test
+    void theOwnersChoiceAndAFileStillBeatAnOpenSubtitlesCount() {
+        NeedRow owner = new NeedRow(1L, "Taken", 2008, 8681L, "en", "en", ASKED, ForcedNeedChoice.NOT_NEEDED,
+            "tt0936501", 7, NOW, "tt0936501");
+
+        FilmNeedDto dto = listed(owner);
+
+        assertThat(dto.reason()).isEqualTo("OWNER");
+        assertThat(dto.need()).isEqualTo("NOT_NEEDED");
+        assertThat(dto.openSubtitlesForcedCount()).isEqualTo(7);
+    }
+
+    @Test
+    void choosingAnswersTheRowWithTheFilmsOpenSubtitlesCount() {
+        Film taken = stored(7L, "en", "en", null);
+        taken.setImdbId("tt0936501");
+        taken.setOsForcedCount(3);
+        taken.setOsSearchedAt(NOW);
+        taken.setOsSearchedImdbId("tt0936501");
+        when(films.findByIdForUpdate(7L)).thenReturn(Optional.of(taken));
+        when(sidecars.countPresentForFilm(7L)).thenReturn(0L);
+        when(files.countEmbeddedForcedForFilm(7L)).thenReturn(0L);
+
+        FilmNeedDto dto = service.choose(7L, new ChoiceRequest(null));
+
+        assertThat(dto.reason()).isEqualTo("OPENSUBTITLES");
+        assertThat(dto.openSubtitlesForcedCount()).isEqualTo(3);
+        assertThat(dto.openSubtitlesSearchedAt()).isEqualTo(NOW);
+    }
+
     @Test
     void choosingStoresTheChoiceAndAnswersTheFilmsRowWithTheLockHeldUntilTheCommit() {
         Film taken = withEdition(stored(7L, "en", "en,fr", null));
@@ -301,7 +397,7 @@ class ForcedNeedServiceTest {
 
         assertThat(taken.getForcedNeedOwner()).isEqualTo(ForcedNeedChoice.NOT_NEEDED);
         assertThat(dto).isEqualTo(new FilmNeedDto(7L, "Taken", 2008, "NOT_NEEDED", "OWNER", "NOT_NEEDED", "en",
-            List.of("en", "fr"), true));
+            List.of("en", "fr"), true, null, null));
         assertThat(events).containsExactly("begin, lock subtitle", "commit, lock subtitle");
         assertThat(lock.holder()).isNull();
     }
