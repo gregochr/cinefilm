@@ -12,6 +12,7 @@ import {
   needTitle,
   needWords,
   reasonText,
+  searchNote,
   resetLanguageNames,
   subtitleNote,
 } from './forcedNeed.js';
@@ -197,4 +198,30 @@ describe('needProblem', () => {
       expect(needProblem(failure)).toBe("Couldn't save: try again");
     },
   );
+});
+
+describe('OpenSubtitles evidence', () => {
+  it('counts the foreign-parts-only files in the reason, singular and plural', () => {
+    const os = (n) => row({ reason: 'OPENSUBTITLES', openSubtitlesForcedCount: n });
+    expect(reasonText(os(7))).toBe('OpenSubtitles has 7 foreign-parts-only files');
+    expect(reasonText(os(1))).toBe('OpenSubtitles has 1 foreign-parts-only file');
+  });
+
+  it('falls back to the plain reason when the count is not known or is none', () => {
+    const plain = 'OpenSubtitles has foreign-parts-only subtitles';
+    expect(reasonText(row({ reason: 'OPENSUBTITLES' }))).toBe(plain);
+    expect(reasonText(row({ reason: 'OPENSUBTITLES', openSubtitlesForcedCount: 0 }))).toBe(plain);
+  });
+
+  it('notes "not searched yet" only for an unsure or unknown film that has not been searched', () => {
+    const note = 'OpenSubtitles not searched yet';
+    expect(searchNote(row({ need: 'UNSURE', openSubtitlesSearchedAt: null }))).toBe(note);
+    expect(searchNote(row({ need: 'UNKNOWN', openSubtitlesSearchedAt: null }))).toBe(note);
+    expect(searchNote(row({ need: 'UNKNOWN' }))).toBe(note);
+    expect(
+      searchNote(row({ need: 'UNSURE', openSubtitlesSearchedAt: '2026-11-12T06:00:00Z' })),
+    ).toBeNull();
+    expect(searchNote(row({ need: 'NEEDED', openSubtitlesSearchedAt: null }))).toBeNull();
+    expect(searchNote(row({ need: 'NOT_NEEDED', openSubtitlesSearchedAt: null }))).toBeNull();
+  });
 });

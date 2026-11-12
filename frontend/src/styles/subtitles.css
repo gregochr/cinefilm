@@ -122,3 +122,27 @@
     grid-column: 2;
   }
 }
+
+/* The OpenSubtitles check on a file: words, not colour. No amber; the attention state is the full-strength text colour. */
+.subs__check {
+  margin-top: 6px;
+  font-size: var(--cf-size-ui);
+}
+.subs__check-label {
+  color: var(--cf-text-muted);
+  font-weight: 500;
+}
+.subs__check--check .subs__check-label {
+  color: var(--cf-text);
+  font-weight: 600;
+}
+.subs__check-reasons {
+  margin: 2px 0 0;
+  padding-left: 18px;
+  color: var(--cf-text-2);
+}
+.subs__check-note {
+  margin: 2px 0 0;
+  color: var(--cf-text-muted);
+  font-size: var(--cf-size-label);
+}

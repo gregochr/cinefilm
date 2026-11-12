@@ -22,5 +22,10 @@
   },
   "ratingsLastRefreshedAt": "2026-11-08T12:41:10Z",
   "ratingsRunning": false,
-  "ratingsEnabled": true
+  "ratingsEnabled": true,
+  "openSubtitlesLastSearchedAt": "2026-11-12T06:00:00Z",
+  "openSubtitlesRunning": false,
+  "openSubtitlesEnabled": true,
+  "subtitleChecksRunning": false,
+  "subtitleChecksLastFinishedAt": "2026-11-12T06:10:00Z"
 }

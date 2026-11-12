@@ -22,6 +22,7 @@ import gregochr.cinefilm.library.AdminDtos.Attention;
 import gregochr.cinefilm.library.AdminDtos.AttentionItem;
 import gregochr.cinefilm.library.AdminDtos.ScanStatusDto;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesRefresher;
+import gregochr.cinefilm.subtitle.SidecarCheckRefresher;
 import gregochr.cinefilm.ratings.RatingsRefresher;
 import java.time.Duration;
 import java.time.Instant;
@@ -45,6 +46,7 @@ class AdminServiceTest extends ApiTestBase {
     private ScanService scans;
     private RatingsRefresher ratings;
     private OpenSubtitlesRefresher subtitleSearch;
+    private SidecarCheckRefresher subtitleChecks;
     private AdminService admin;
 
     @BeforeEach
@@ -52,8 +54,9 @@ class AdminServiceTest extends ApiTestBase {
         scans = mock(ScanService.class);
         ratings = mock(RatingsRefresher.class);
         subtitleSearch = mock(OpenSubtitlesRefresher.class);
+        subtitleChecks = mock(SidecarCheckRefresher.class);
         admin = new AdminService(scans, runs, films, mediaFiles, new LibraryRoot("/media/films"), ratings,
-            subtitleSearch, groupingChanges);
+            subtitleSearch, subtitleChecks, groupingChanges);
     }
 
     @Test
@@ -84,6 +87,19 @@ class AdminServiceTest extends ApiTestBase {
         assertThat(status.openSubtitlesLastSearchedAt()).isNull();
         assertThat(status.openSubtitlesRunning()).isFalse();
         assertThat(status.openSubtitlesEnabled()).isFalse();
+        assertThat(status.subtitleChecksRunning()).isFalse();
+        assertThat(status.subtitleChecksLastFinishedAt()).isNull();
+    }
+
+    @Test
+    void theStatusReportsWhetherASubtitleCheckRunsAndWhenTheLastOneEnded() {
+        when(subtitleChecks.isRunning()).thenReturn(true);
+        when(subtitleChecks.lastFinishedAt()).thenReturn(NOW.minusSeconds(30));
+
+        ScanStatusDto status = admin.status();
+
+        assertThat(status.subtitleChecksRunning()).isTrue();
+        assertThat(status.subtitleChecksLastFinishedAt()).isEqualTo(NOW.minusSeconds(30));
     }
 
     @Test

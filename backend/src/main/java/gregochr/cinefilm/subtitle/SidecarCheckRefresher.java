@@ -60,6 +60,7 @@ public class SidecarCheckRefresher {
     private final int dailyLimit;
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean pending = new AtomicBoolean();
+    private volatile Instant lastFinishedAt;
 
     /** Why a run ends early: the budget is spent or OpenSubtitles' limit is reached. Not an error. */
     private static final class Stop extends RuntimeException {
@@ -136,7 +137,12 @@ public class SidecarCheckRefresher {
     private void worker() {
         try {
             while (pending.getAndSet(false)) {
-                run();
+                try {
+                    run();
+                } finally {
+                    // Stamped when a pass ends, however it ends: Admin reads the files again when this changes.
+                    lastFinishedAt = clock.instant();
+                }
             }
         } finally {
             running.set(false);
@@ -145,6 +151,16 @@ public class SidecarCheckRefresher {
         if (pending.get()) {
             launch();
         }
+    }
+
+    /** True while a check run is going (Admin polls for it). */
+    public boolean isRunning() {
+        return running.get();
+    }
+
+    /** When the last pass over the due editions ended, success or not; null until one has since start-up. */
+    public Instant lastFinishedAt() {
+        return lastFinishedAt;
     }
 
     /** One pass over the due editions. */

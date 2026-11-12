@@ -195,6 +195,36 @@ describe('Admin: Library scan panel', () => {
     }
   });
 
+  it('does not scroll again, or show a loading state, when the status is polled in the background', async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      let scans = 0;
+      installFetch((method, url) => {
+        if (url !== '/api/admin/scan') return null;
+        scans += 1;
+        return respond({
+          ...fixtures.adminScan,
+          counts: { ...fixtures.adminScan.counts, films: 600 + scans },
+        });
+      });
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      renderApp('/admin#library-scan');
+      const card = await screen.findByRole('region', { name: 'Library scan' });
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+
+      await act(() => vi.advanceTimersByTimeAsync(60000));
+
+      // The idle poll answered with new numbers, with the old ones on screen until then and no skeleton in between.
+      expect(await within(card).findByText('602')).toBeVisible();
+      expect(scans).toBeGreaterThan(1);
+      expect(within(card).queryByRole('status', { name: 'Loading' })).not.toBeInTheDocument();
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    } finally {
+      delete Element.prototype.scrollIntoView;
+    }
+  });
+
   it('does not scroll without the hash', async () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;

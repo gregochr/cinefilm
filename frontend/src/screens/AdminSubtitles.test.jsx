@@ -923,3 +923,155 @@ describe('Admin: Subtitles panel, attaching', () => {
     ).not.toBeInTheDocument();
   });
 });
+
+const CHECK = {
+  verdict: 'AGREES',
+  reasons: [],
+  bestOffsetMs: 0,
+  matchedShare: 0.9,
+  servedCount: 12,
+  referenceCount: 13,
+  referenceRelease: 'Heat.1995.1080p.BluRay',
+  checkedAt: '2026-11-12T06:10:00Z',
+};
+
+const itemOf = async (panel, path) => (await within(panel).findByText(path)).closest('li');
+
+describe('Admin: Subtitles panel, the OpenSubtitles check', () => {
+  it('says a file agrees, with the timing hint and the reference line', async () => {
+    const { panel } = await openPanel({
+      items: [
+        file({
+          check: { ...CHECK, reasons: ["OpenSubtitles' file is 1.2 s later"], bestOffsetMs: 1200 },
+        }),
+      ],
+    });
+    const item = await itemOf(panel, 'Heat (1995)/Heat.en.forced.srt');
+    expect(within(item).getByText('Agrees with OpenSubtitles')).toBeVisible();
+    expect(within(item).getByText("OpenSubtitles' file is 1.2 s later")).toBeVisible();
+    expect(
+      within(item).getByText('Compared with Heat.1995.1080p.BluRay · checked 12 Nov 06:10'),
+    ).toBeVisible();
+    expect(within(item).queryByText('Needs checking')).not.toBeInTheDocument();
+  });
+
+  it('says a file needs checking and lists the reasons', async () => {
+    const reasons = [
+      'OpenSubtitles has 41 lines, this file has 12',
+      'Probably full subtitles, not forced',
+    ];
+    const { panel } = await openPanel({
+      items: [file({ check: { ...CHECK, verdict: 'CHECK', reasons } })],
+    });
+    const item = await itemOf(panel, 'Heat (1995)/Heat.en.forced.srt');
+    expect(within(item).getByText('Needs checking')).toBeVisible();
+    const list = within(item).getByRole('list', { name: 'Needs checking: details' });
+    expect(
+      within(list)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual(reasons);
+  });
+
+  it('says Unchecked, quietly, for a served file with no check', async () => {
+    const { panel } = await openPanel({ items: [file({ check: null })] });
+    const item = await itemOf(panel, 'Heat (1995)/Heat.en.forced.srt');
+    expect(within(item).getByText('Unchecked')).toBeVisible();
+    expect(within(item).getByText('No OpenSubtitles file to compare with yet')).toBeVisible();
+  });
+
+  it('says nothing about a check for a file that is not served', async () => {
+    const { panel } = await openPanel({
+      items: [file({ state: 'unmatched', filmId: null, served: false, check: null })],
+    });
+    const item = await itemOf(panel, 'Heat (1995)/Heat.en.forced.srt');
+    expect(within(item).queryByText('Unchecked')).not.toBeInTheDocument();
+    expect(within(item).queryByText('Needs checking')).not.toBeInTheDocument();
+  });
+
+  it('shows both the owner check and Needs checking, and the owner can still undo theirs', async () => {
+    const { panel } = await openPanel({
+      items: [
+        file({ verified: true, check: { ...CHECK, verdict: 'CHECK', reasons: ['x lines'] } }),
+      ],
+    });
+    const item = await itemOf(panel, 'Heat (1995)/Heat.en.forced.srt');
+    expect(within(item).getByText('Checked')).toBeVisible();
+    expect(within(item).getByText('Needs checking')).toBeVisible();
+  });
+
+  const FILTER_ITEMS = [
+    file({ id: 1, path: 'A/Agrees.en.forced.srt', check: CHECK }),
+    file({
+      id: 2,
+      path: 'B/Check.en.forced.srt',
+      check: { ...CHECK, verdict: 'CHECK', reasons: ['r'] },
+    }),
+    file({ id: 3, path: 'C/Unchecked.en.forced.srt', check: null }),
+    file({
+      id: 4,
+      path: 'D/Unmatched.en.forced.srt',
+      state: 'unmatched',
+      filmId: null,
+      served: false,
+      check: null,
+    }),
+  ];
+  const chip = (panel, name) =>
+    within(within(panel).getByRole('group', { name: 'Show subtitle files' })).getByRole('button', {
+      name,
+    });
+
+  it('filters the list: All, Needs checking, Unchecked, with counts', async () => {
+    const { panel } = await openPanel({ items: FILTER_ITEMS });
+    await within(panel).findByText('A/Agrees.en.forced.srt');
+    expect(
+      within(within(panel).getByRole('group', { name: 'Show subtitle files' }))
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['All (4)', 'Needs checking (1)', 'Unchecked (1)']);
+    expect(chip(panel, /^All/)).toHaveAttribute('aria-pressed', 'true');
+
+    await userEvent.click(chip(panel, /^Needs checking/));
+    expect(chip(panel, /^Needs checking/)).toHaveAttribute('aria-pressed', 'true');
+    expect(chip(panel, /^All/)).toHaveAttribute('aria-pressed', 'false');
+    expect(within(panel).getByText('B/Check.en.forced.srt')).toBeVisible();
+    expect(within(panel).queryByText('A/Agrees.en.forced.srt')).not.toBeInTheDocument();
+    expect(within(panel).getByRole('heading', { level: 3, name: 'Matched (1)' })).toBeVisible();
+
+    await userEvent.click(chip(panel, /^Unchecked/));
+    expect(within(panel).getByText('C/Unchecked.en.forced.srt')).toBeVisible();
+    expect(within(panel).queryByText('B/Check.en.forced.srt')).not.toBeInTheDocument();
+
+    await userEvent.click(chip(panel, /^All/));
+    expect(within(panel).getByText('D/Unmatched.en.forced.srt')).toBeVisible();
+  });
+
+  it('says there are no files for a filter that lists none', async () => {
+    const { panel } = await openPanel({ items: [file({ check: CHECK })] });
+    await within(panel).findByText('Heat (1995)/Heat.en.forced.srt');
+    await userEvent.click(chip(panel, /^Unchecked/));
+    expect(within(panel).getByText('No files here.')).toBeVisible();
+  });
+
+  it('keeps the chosen filter when the list is read again after an action', async () => {
+    const { panel } = await openPanel({
+      items: [
+        file({ id: 1, path: 'A/Agrees.en.forced.srt', check: CHECK }),
+        file({
+          id: 2,
+          path: 'B/Check.en.forced.srt',
+          check: { ...CHECK, verdict: 'CHECK', reasons: ['r'] },
+        }),
+      ],
+    });
+    await within(panel).findByText('A/Agrees.en.forced.srt');
+    await userEvent.click(chip(panel, /^Needs checking/));
+    const item = within(panel).getByText('B/Check.en.forced.srt').closest('li');
+    await userEvent.click(within(item).getByRole('button', { name: /^Show the cues of/ }));
+    await userEvent.click(await within(item).findByRole('button', { name: 'Looks right' }));
+    expect(await within(item).findByText('Checked')).toBeVisible();
+    expect(chip(panel, /^Needs checking/)).toHaveAttribute('aria-pressed', 'true');
+    expect(within(panel).queryByText('A/Agrees.en.forced.srt')).not.toBeInTheDocument();
+  });
+});

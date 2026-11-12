@@ -43,6 +43,7 @@ export function useResource(key, fetcher, options = {}) {
   });
   const [tick, setTick] = useState(0);
   const seenTick = useRef(0);
+  const quietTick = useRef(false);
   const fetcherRef = useRef(fetcher);
   useEffect(() => {
     fetcherRef.current = fetcher;
@@ -63,12 +64,15 @@ export function useResource(key, fetcher, options = {}) {
   useEffect(() => {
     const forced = seenTick.current !== tick; // reload() and a sign-in always fetch, and show loading
     seenTick.current = tick;
+    // A refresh() is a background look: the answer replaces the data, but `loading` and `error` are left alone.
+    const quiet = forced && quietTick.current;
+    quietTick.current = false;
     const hit = forced ? null : cached(key, cache, maxAgeMs);
     if (hit) setState((s) => (s.dataKey === key ? s : shown(hit, key)));
     if (hit && cache === 'fresh') return undefined;
 
     const controller = new AbortController();
-    if (!hit) setState((s) => ({ ...s, loading: true, error: null }));
+    if (!hit && !quiet) setState((s) => ({ ...s, loading: true, error: null }));
     const run = (retries) => {
       const token = cache ? beginRequest() : null;
       Promise.resolve()
@@ -113,7 +117,15 @@ export function useResource(key, fetcher, options = {}) {
     return () => controller.abort();
   }, [key, tick, cache, maxAgeMs]);
 
-  const reload = useCallback(() => setTick((n) => n + 1), []);
+  const reload = useCallback(() => {
+    quietTick.current = false;
+    setTick((n) => n + 1);
+  }, []);
+  // Like reload, for polling: the data on screen stays and `loading` does not flip while the new answer is fetched.
+  const refresh = useCallback(() => {
+    quietTick.current = true;
+    setTick((n) => n + 1);
+  }, []);
   const { data, error, loading } = state;
-  return { data, error, loading, reload };
+  return { data, error, loading, reload, refresh };
 }

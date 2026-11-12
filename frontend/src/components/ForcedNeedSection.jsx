@@ -9,6 +9,7 @@ import {
   needTitle,
   needWords,
   reasonText,
+  searchNote,
   subtitleNote,
 } from '../state/forcedNeed.js';
 import { useForcedNeed } from '../state/useForcedNeed.js';
@@ -20,6 +21,7 @@ function NeedRow({ row, problem, saving, onChoose }) {
   const title = needTitle(row);
   const note = subtitleNote(row);
   const reason = reasonText(row);
+  const notSearched = searchNote(row);
   return (
     <li className="admin__item" aria-busy={saving}>
       <div className="admin__item-head">
@@ -28,6 +30,7 @@ function NeedRow({ row, problem, saving, onChoose }) {
         {note ? <span className="admin__text">{note}</span> : null}
       </div>
       {reason ? <div className="admin__item-detail">{reason}</div> : null}
+      {notSearched ? <div className="admin__item-detail">{notSearched}</div> : null}
       {problem ? (
         <p className="admin__warning" role="status">
           {problem}

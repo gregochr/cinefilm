@@ -14,6 +14,7 @@ import adminEditions from '../test/fixtures/admin-editions.json';
 import adminMatch from '../test/fixtures/admin-match.json';
 import adminTranscoding from '../test/fixtures/admin-transcoding.json';
 import adminPlaybackHealth from '../test/fixtures/admin-playback-health.json';
+import adminSubtitles from '../test/fixtures/admin-subtitles.json';
 import adminForcedNeed from '../test/fixtures/admin-forced-need.json';
 import collection from '../test/fixtures/collection.json';
 import collections from '../test/fixtures/collections.json';
@@ -172,6 +173,7 @@ export async function handle(method, path, body) {
   if (route === '/api/admin/settings') {
     return method === 'PUT' ? updateSettings(body) : settingsView();
   }
+  if (route === '/api/admin/subtitles') return adminSubtitles;
   if (route === '/api/admin/forced-subtitles/films') return forcedNeedList();
   match = route.match(/^\/api\/admin\/films\/(\d+)\/forced-need$/);
   if (match && method === 'PUT') return setForcedNeed(Number(match[1]), body);

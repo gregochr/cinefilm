@@ -1,9 +1,13 @@
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  FILE_FILTERS,
   NUDGES,
+  checkSummary,
   cueTime,
+  fileFilterCounts,
   fileName,
+  filterSidecars,
   formatOffset,
   placement,
   playFromHereMs,
@@ -106,6 +110,26 @@ function Check({ item, busy, actions }) {
   );
 }
 
+/** What the comparison with OpenSubtitles says about a file, as words (never colour alone). */
+function CheckLine({ item }) {
+  const summary = checkSummary(item);
+  if (!summary) return null;
+  return (
+    <div className={`subs__check subs__check--${summary.kind}`}>
+      <span className="subs__check-label">{summary.label}</span>
+      {summary.kind === 'unchecked' ? <p className="subs__check-note">{summary.lines[0]}</p> : null}
+      {summary.kind !== 'unchecked' && summary.lines.length > 0 ? (
+        <ul className="subs__check-reasons" aria-label={`${summary.label}: details`}>
+          {summary.lines.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      ) : null}
+      {summary.reference ? <p className="subs__check-note">{summary.reference}</p> : null}
+    </div>
+  );
+}
+
 function Item({ item, busy, problem, actions }) {
   const [open, setOpen] = useState(false);
   const [attaching, setAttaching] = useState(false);
@@ -123,6 +147,7 @@ function Item({ item, busy, problem, actions }) {
       </div>
       <div className="admin__item-detail">{placement(item)}</div>
       <div className="admin__item-files admin__mono">{reportLine(item)}</div>
+      <CheckLine item={item} />
       {warningsFor(item).map((warning) => (
         <p key={warning} className="admin__warning" role="status">
           {warning}
@@ -192,6 +217,9 @@ function Item({ item, busy, problem, actions }) {
 export default function SubtitlesPanel({ version }) {
   const subtitles = useSubtitles(version);
   const { items, loading, error, reload } = subtitles;
+  const [filter, setFilter] = useState('all');
+  const counts = useMemo(() => (items ? fileFilterCounts(items) : null), [items]);
+  const shown = useMemo(() => (items ? filterSidecars(items, filter) : []), [items, filter]);
   let body;
   if (loading && !items) {
     body = (
@@ -209,24 +237,43 @@ export default function SubtitlesPanel({ version }) {
       </p>
     );
   } else {
-    body = sidecarGroups(items).map((group) => (
-      <div key={group.key} className="subs__group">
-        <h3 className="admin__subtitle">
-          {group.title} ({group.items.length})
-        </h3>
-        <ul className="admin__list" aria-label={`${group.title} subtitles`}>
-          {group.items.map((item) => (
-            <Item
-              key={item.id}
-              item={item}
-              busy={subtitles.busy !== null}
-              problem={subtitles.problem?.id === item.id ? subtitles.problem.text : null}
-              actions={subtitles}
-            />
+    const groups = sidecarGroups(shown);
+    body = (
+      <>
+        <div className="segmented subs__segmented" role="group" aria-label="Show subtitle files">
+          {FILE_FILTERS.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              className="segmented__btn"
+              aria-pressed={filter === f.key}
+              onClick={() => setFilter(f.key)}
+            >
+              {f.label} ({counts[f.key]})
+            </button>
           ))}
-        </ul>
-      </div>
-    ));
+        </div>
+        {groups.length === 0 ? <p className="admin__text">No files here.</p> : null}
+        {groups.map((group) => (
+          <div key={group.key} className="subs__group">
+            <h3 className="admin__subtitle">
+              {group.title} ({group.items.length})
+            </h3>
+            <ul className="admin__list" aria-label={`${group.title} subtitles`}>
+              {group.items.map((item) => (
+                <Item
+                  key={item.id}
+                  item={item}
+                  busy={subtitles.busy !== null}
+                  problem={subtitles.problem?.id === item.id ? subtitles.problem.text : null}
+                  actions={subtitles}
+                />
+              ))}
+            </ul>
+          </div>
+        ))}
+      </>
+    );
   }
   // A failed refresh keeps the list that is there and says so, with a way to try again.
   const refreshFailure =

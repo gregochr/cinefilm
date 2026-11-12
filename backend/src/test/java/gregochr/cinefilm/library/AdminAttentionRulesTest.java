@@ -17,6 +17,7 @@ import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.library.AdminDtos.AttentionItem;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesRefresher;
+import gregochr.cinefilm.subtitle.SidecarCheckRefresher;
 import gregochr.cinefilm.ratings.RatingsRefresher;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,7 +44,8 @@ class AdminAttentionRulesTest extends ApiTestBase {
     @BeforeEach
     void setUp() {
         admin = new AdminService(mock(ScanService.class), runs, films, mediaFiles, new LibraryRoot("/media/films"),
-            mock(RatingsRefresher.class), mock(OpenSubtitlesRefresher.class), groupingChanges);
+            mock(RatingsRefresher.class), mock(OpenSubtitlesRefresher.class), mock(SidecarCheckRefresher.class),
+            groupingChanges);
     }
 
     /** One film with one edition per path, each 100 minutes (or the given runtime) long. */

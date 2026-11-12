@@ -17,7 +17,18 @@
     "offsetMs": 0,
     "verified": false,
     "endsAfterRuntime": false,
-    "version": 1700000000000
+    "version": 1700000000000,
+    "check": {
+      "verdict": "AGREES",
+      "reasons": ["OpenSubtitles' file is 1.2 s later"],
+      "bestOffsetMs": 1200,
+      "matchedShare": 0.92,
+      "servedCount": 12,
+      "referenceCount": 13,
+      "referenceRelease": "Heat.1995.1080p.BluRay.x264",
+      "checkedAt": "2026-11-12T06:10:00Z"
+    },
+    "served": true
   },
   {
     "id": 2,
@@ -37,6 +48,94 @@
     "offsetMs": 0,
     "verified": false,
     "endsAfterRuntime": false,
-    "version": 1700000000000
+    "version": 1700000000000,
+    "check": null,
+    "served": false
+  },
+  {
+    "id": 3,
+    "path": "Taken (2008)/Taken.en.forced.srt",
+    "presence": "PRESENT",
+    "state": "matched",
+    "filmId": 2,
+    "filmTitle": "Taken",
+    "editionId": 21,
+    "editionName": "Theatrical Cut",
+    "parts": 1,
+    "part": 1,
+    "whole": false,
+    "ownerAttached": false,
+    "cueCount": 12,
+    "parseReport": "No problems found",
+    "offsetMs": 0,
+    "verified": true,
+    "endsAfterRuntime": false,
+    "version": 1700000000000,
+    "check": {
+      "verdict": "CHECK",
+      "reasons": ["OpenSubtitles has 41 lines, this file has 12"],
+      "bestOffsetMs": 0,
+      "matchedShare": 0.4,
+      "servedCount": 12,
+      "referenceCount": 41,
+      "referenceRelease": "Taken.2008.720p.BluRay",
+      "checkedAt": "2026-11-12T06:12:00Z"
+    },
+    "served": true
+  },
+  {
+    "id": 4,
+    "path": "Das Boot (1981)/Das Boot.en.forced.srt",
+    "presence": "PRESENT",
+    "state": "matched",
+    "filmId": 3,
+    "filmTitle": "Das Boot",
+    "editionId": 31,
+    "editionName": "Director's Cut",
+    "parts": 1,
+    "part": 1,
+    "whole": false,
+    "ownerAttached": false,
+    "cueCount": 900,
+    "parseReport": "No problems found",
+    "offsetMs": 0,
+    "verified": false,
+    "endsAfterRuntime": false,
+    "version": 1700000000000,
+    "check": {
+      "verdict": "CHECK",
+      "reasons": [
+        "This file has 900 lines, OpenSubtitles has 120: probably full subtitles, not forced"
+      ],
+      "bestOffsetMs": 0,
+      "matchedShare": 0.9,
+      "servedCount": 900,
+      "referenceCount": 120,
+      "referenceRelease": null,
+      "checkedAt": "2026-11-12T06:14:00Z"
+    },
+    "served": true
+  },
+  {
+    "id": 5,
+    "path": "Alien (1979)/Alien.en.forced.srt",
+    "presence": "PRESENT",
+    "state": "matched",
+    "filmId": 5,
+    "filmTitle": "Alien",
+    "editionId": 51,
+    "editionName": "Theatrical Cut",
+    "parts": 1,
+    "part": 1,
+    "whole": false,
+    "ownerAttached": false,
+    "cueCount": 6,
+    "parseReport": "No problems found",
+    "offsetMs": 0,
+    "verified": false,
+    "endsAfterRuntime": false,
+    "version": 1700000000000,
+    "check": null,
+    "served": true
   }
 ]

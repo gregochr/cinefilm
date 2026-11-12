@@ -1,15 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '../api/client.js';
 import {
+  FILE_FILTERS,
   MAX_OFFSET_MS,
   NUDGES,
   PLAY_LEAD_MS,
+  checkSummary,
   cueTime,
   editionLabel,
+  fileFilterCounts,
   fileName,
+  filterSidecars,
   filmLabel,
   formatOffset,
   groupKey,
+  isServed,
   nudgedOffset,
   partOptions,
   placement,
@@ -39,6 +44,7 @@ const file = (over = {}) => ({
   offsetMs: 0,
   verified: false,
   endsAfterRuntime: false,
+  served: true,
   ...over,
 });
 
@@ -257,5 +263,132 @@ describe('subtitleProblem', () => {
     expect(subtitleProblem(new TypeError('Failed to fetch'))).toBe(
       'Something went wrong. Try again.',
     );
+  });
+});
+
+const checkOf = (over = {}) => ({
+  verdict: 'AGREES',
+  reasons: [],
+  bestOffsetMs: 0,
+  matchedShare: 0.9,
+  servedCount: 12,
+  referenceCount: 13,
+  referenceRelease: 'Taken.2008.720p.BluRay',
+  checkedAt: '2026-11-12T06:10:00Z',
+  ...over,
+});
+
+describe('isServed', () => {
+  it('is true only when the server says playback serves the file', () => {
+    expect(isServed(file())).toBe(true);
+    expect(isServed(file({ served: false }))).toBe(false);
+    expect(isServed(file({ served: undefined }))).toBe(false);
+  });
+});
+
+describe('checkSummary', () => {
+  it('says AGREES with the server worded timing hint and the reference line', () => {
+    const summary = checkSummary(
+      file({
+        check: checkOf({ reasons: ["OpenSubtitles' file is 1.2 s later"], bestOffsetMs: 1200 }),
+      }),
+    );
+    expect(summary).toEqual({
+      kind: 'agrees',
+      label: 'Agrees with OpenSubtitles',
+      lines: ["OpenSubtitles' file is 1.2 s later"],
+      reference: 'Compared with Taken.2008.720p.BluRay · checked 12 Nov 06:10',
+    });
+  });
+
+  it('shows the server hint as it is, and builds none from the best offset', () => {
+    const hint = "OpenSubtitles' file is 1.2 s earlier";
+    expect(
+      checkSummary(file({ check: checkOf({ reasons: [hint], bestOffsetMs: -1200 }) })).lines,
+    ).toEqual([hint]);
+    expect(checkSummary(file({ check: checkOf({ bestOffsetMs: -1500 }) })).lines).toEqual([]);
+  });
+
+  it('has no hint line for a file in sync', () => {
+    expect(checkSummary(file({ check: checkOf() })).lines).toEqual([]);
+  });
+
+  it('lists the reasons of a CHECK, hint included', () => {
+    const reasons = [
+      'OpenSubtitles has 41 lines, this file has 12',
+      "OpenSubtitles' file is 2.0 s later",
+    ];
+    const summary = checkSummary(file({ check: checkOf({ verdict: 'CHECK', reasons }) }));
+    expect(summary.kind).toBe('check');
+    expect(summary.label).toBe('Needs checking');
+    expect(summary.lines).toEqual(reasons);
+  });
+
+  it('copes with a CHECK with no reasons list, no release and no time', () => {
+    const summary = checkSummary(
+      file({
+        check: checkOf({
+          verdict: 'CHECK',
+          reasons: undefined,
+          referenceRelease: null,
+          checkedAt: null,
+        }),
+      }),
+    );
+    expect(summary.lines).toEqual([]);
+    expect(summary.reference).toBeNull();
+  });
+
+  it('shows only the time when the release is not known, and only the release when there is no time', () => {
+    expect(checkSummary(file({ check: checkOf({ referenceRelease: null }) })).reference).toBe(
+      'checked 12 Nov 06:10',
+    );
+    expect(checkSummary(file({ check: checkOf({ checkedAt: null }) })).reference).toBe(
+      'Compared with Taken.2008.720p.BluRay',
+    );
+  });
+
+  it('says Unchecked, quietly, for a served file with no check', () => {
+    expect(checkSummary(file({ check: null }))).toEqual({
+      kind: 'unchecked',
+      label: 'Unchecked',
+      lines: ['No OpenSubtitles file to compare with yet'],
+      reference: null,
+    });
+    expect(checkSummary(file())).toMatchObject({ kind: 'unchecked' });
+  });
+
+  it('says nothing for a file playback does not serve', () => {
+    expect(checkSummary(file({ served: false, check: null }))).toBeNull();
+    expect(checkSummary(file({ state: 'conflict', served: false, check: null }))).toBeNull();
+  });
+});
+
+describe('file filters', () => {
+  const items = [
+    file({ id: 1, check: checkOf() }),
+    file({ id: 2, check: checkOf({ verdict: 'CHECK' }), verified: true }),
+    file({ id: 3, check: null }),
+    file({ id: 4, state: 'unmatched', served: false, check: null }),
+    file({ id: 5, check: checkOf({ verdict: 'CHECK' }) }),
+  ];
+
+  it('are All, Needs checking and Unchecked, in that order', () => {
+    expect(FILE_FILTERS.map((f) => f.label)).toEqual(['All', 'Needs checking', 'Unchecked']);
+  });
+
+  it('lists the files of each chip; a verified file that needs checking still counts', () => {
+    expect(filterSidecars(items, 'all').map((i) => i.id)).toEqual([1, 2, 3, 4, 5]);
+    expect(filterSidecars(items, 'check').map((i) => i.id)).toEqual([2, 5]);
+    expect(filterSidecars(items, 'unchecked').map((i) => i.id)).toEqual([3]);
+  });
+
+  it('lists everything for an unknown key', () => {
+    expect(filterSidecars(items, 'nope')).toHaveLength(5);
+  });
+
+  it('counts each chip', () => {
+    expect(fileFilterCounts(items)).toEqual({ all: 5, check: 2, unchecked: 1 });
+    expect(fileFilterCounts([])).toEqual({ all: 0, check: 0, unchecked: 0 });
   });
 });

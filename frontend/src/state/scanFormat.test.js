@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   countTiles,
   describeLastScan,
+  describeSubtitleSearch,
   formatScanTime,
   kindLabel,
   progressPercent,
@@ -98,5 +99,36 @@ describe('attention labels', () => {
   it('adds the year to a title when there is one', () => {
     expect(titleWithYear('Dune', 1984)).toBe('Dune (1984)');
     expect(titleWithYear('Dune', null)).toBe('Dune');
+  });
+});
+
+describe('describeSubtitleSearch', () => {
+  const state = (over = {}) => ({
+    enabled: true,
+    running: false,
+    lastSearchedAt: '2026-11-12T06:00:00Z',
+    ...over,
+  });
+
+  it('says when subtitles were last searched', () => {
+    expect(describeSubtitleSearch(state(), formatScanTime)).toBe('Subtitles searched 12 Nov 06:00');
+  });
+
+  it('says searching while a search runs, whatever the last time was', () => {
+    expect(describeSubtitleSearch(state({ running: true }), formatScanTime)).toBe(
+      'Searching for subtitles…',
+    );
+  });
+
+  it('says not searched yet before the first search', () => {
+    expect(describeSubtitleSearch(state({ lastSearchedAt: null }), formatScanTime)).toBe(
+      'Subtitles not searched yet',
+    );
+  });
+
+  it('says nothing when the search is off', () => {
+    expect(
+      describeSubtitleSearch(state({ enabled: false, running: true }), formatScanTime),
+    ).toBeNull();
   });
 });

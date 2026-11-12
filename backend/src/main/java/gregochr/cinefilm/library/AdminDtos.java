@@ -63,11 +63,14 @@ public final class AdminDtos {
      * @param openSubtitlesLastSearchedAt when OpenSubtitles was last searched for any film, or null if never
      * @param openSubtitlesRunning true while a subtitle search runs
      * @param openSubtitlesEnabled true when an OpenSubtitles API key is configured
+     * @param subtitleChecksRunning true while the forced subtitle files are being compared with OpenSubtitles'
+     * @param subtitleChecksLastFinishedAt when the last comparison pass ended (success or not), or null since start-up
      */
     public record ScanStatusDto(boolean running, String folder, ProgressDto progress, LastScanDto lastScan,
                                 CountsDto counts, Instant ratingsLastRefreshedAt, boolean ratingsRunning,
                                 boolean ratingsEnabled, Instant openSubtitlesLastSearchedAt,
-                                boolean openSubtitlesRunning, boolean openSubtitlesEnabled) {
+                                boolean openSubtitlesRunning, boolean openSubtitlesEnabled,
+                                boolean subtitleChecksRunning, Instant subtitleChecksLastFinishedAt) {
     }
 
     /**

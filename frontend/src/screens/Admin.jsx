@@ -20,6 +20,7 @@ import {
 import { useSignOut } from '../state/useSignOut.js';
 import { useToast } from '../state/useToast.js';
 import { useAttention, useGroupingReport, usePlexImport, useScan } from '../state/useAdmin.js';
+import { useDocumentVisible } from '../components/useDocumentVisible.js';
 import {
   describeLastImport,
   moreText,
@@ -33,12 +34,30 @@ import {
   changeLabel,
   countTiles,
   describeLastScan,
+  describeSubtitleSearch,
   formatScanTime,
   kindLabel,
   progressPercent,
   progressText,
   titleWithYear,
 } from '../state/scanFormat.js';
+
+function SubtitleSearchLine({ scan }) {
+  const text = describeSubtitleSearch(
+    {
+      enabled: Boolean(scan.openSubtitlesEnabled),
+      running: Boolean(scan.openSubtitlesRunning),
+      lastSearchedAt: scan.openSubtitlesLastSearchedAt,
+    },
+    formatScanTime,
+  );
+  if (!text) return null;
+  return (
+    <p className="admin__mono admin__ratings-line" role="status">
+      {text}
+    </p>
+  );
+}
 
 function RatingsLine({ scan, starting, notice, onRefresh }) {
   const running = Boolean(scan.ratingsRunning);
@@ -148,6 +167,7 @@ function ScanPanel({
           notice={ratingsNotice}
           onRefresh={onRefreshRatings}
         />
+        <SubtitleSearchLine scan={scan} />
       </>
     );
   }
@@ -507,6 +527,7 @@ function SessionPanel() {
 }
 
 export default function Admin() {
+  const visible = useDocumentVisible();
   const {
     scan,
     error,
@@ -518,7 +539,7 @@ export default function Admin() {
     ratingsNotice,
     refreshRatings,
     reload,
-  } = useScan();
+  } = useScan(visible);
   const plexImport = usePlexImport();
   // The list refreshes when a scan or a Plex import finishes: both settle matches.
   const attention = useAttention(
@@ -549,11 +570,14 @@ export default function Admin() {
     reload();
   };
 
+  // Scrolls to the scan card when the page opens on its anchor (once the card is there) or the hash changes; a
+  // background refresh of the status does not move the page.
+  const scanShown = scan != null;
   useEffect(() => {
-    if (hash === '#library-scan') {
+    if (hash === '#library-scan' && scanShown) {
       document.getElementById('library-scan')?.scrollIntoView?.();
     }
-  }, [hash, loading]);
+  }, [hash, scanShown]);
 
   return (
     <div className="page__stack">
@@ -590,7 +614,10 @@ export default function Admin() {
           error={grouping.error}
           onRetry={grouping.reload}
         />
-        <SubtitlesPanel version={settledAt} />
+        {/* Read again when a scan, a subtitle search or a subtitle check finishes (new checks and evidence). */}
+        <SubtitlesPanel
+          version={`${settledAt}|${scan?.openSubtitlesLastSearchedAt ?? 'never'}|${scan?.subtitleChecksLastFinishedAt ?? 'never'}`}
+        />
         <PlexPanel
           plex={plexImport.plex}
           starting={plexImport.starting}
