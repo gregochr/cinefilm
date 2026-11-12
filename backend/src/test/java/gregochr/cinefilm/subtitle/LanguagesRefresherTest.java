@@ -200,6 +200,96 @@ class LanguagesRefresherTest {
         assertThat(queued).hasSize(2);
     }
 
+    /** The refresher on an executor that runs the work at once, so a trigger can arrive from inside a run. */
+    private LanguagesRefresher synchronous() {
+        return new LanguagesRefresher(tmdb, films, CLOCK, Runnable::run);
+    }
+
+    @Test
+    void aTriggerDuringARunMakesExactlyOneMoreRun() {
+        LanguagesRefresher inline = synchronous();
+        when(tmdb.enabled()).thenReturn(true);
+        List<Boolean> started = new ArrayList<>();
+        when(films.findWithoutLanguages()).thenAnswer(call -> {
+            if (started.isEmpty()) {
+                started.add(inline.startDue());
+            }
+            return List.of();
+        });
+
+        assertThat(inline.startDue()).isTrue();
+
+        assertThat(started).containsExactly(false);
+        verify(films, org.mockito.Mockito.times(2)).findWithoutLanguages();
+        assertThat(inline.isRunning()).isFalse();
+    }
+
+    @Test
+    void severalTriggersDuringOneRunStillMakeOnlyOneMoreRun() {
+        LanguagesRefresher inline = synchronous();
+        when(tmdb.enabled()).thenReturn(true);
+        List<Integer> calls = new ArrayList<>();
+        when(films.findWithoutLanguages()).thenAnswer(call -> {
+            calls.add(calls.size());
+            if (calls.size() == 1) {
+                inline.startDue();
+                inline.onScanFinished(new ScanFinished("admin"));
+                inline.onPlexImportFinished(new PlexImportFinished());
+            }
+            return List.of();
+        });
+
+        inline.startDue();
+
+        assertThat(calls).hasSize(2);
+        assertThat(inline.isRunning()).isFalse();
+    }
+
+    @Test
+    void aTriggerDuringTheExtraRunMakesYetAnotherAndNoTriggerMakesNoRerun() {
+        LanguagesRefresher inline = synchronous();
+        when(tmdb.enabled()).thenReturn(true);
+        List<Integer> calls = new ArrayList<>();
+        when(films.findWithoutLanguages()).thenAnswer(call -> {
+            calls.add(calls.size());
+            if (calls.size() <= 2) {
+                inline.startDue();
+            }
+            return List.of();
+        });
+
+        inline.startDue();
+
+        assertThat(calls).hasSize(3);
+    }
+
+    @Test
+    void aRunWithNoTriggerDuringItRunsOnce() {
+        LanguagesRefresher inline = synchronous();
+        when(tmdb.enabled()).thenReturn(true);
+        when(films.findWithoutLanguages()).thenReturn(List.of());
+
+        assertThat(inline.startDue()).isTrue();
+
+        verify(films).findWithoutLanguages();
+    }
+
+    @Test
+    void aTriggerDuringARunWhileTmdbIsOffMakesNoRerun() {
+        LanguagesRefresher inline = synchronous();
+        when(tmdb.enabled()).thenReturn(true, false);
+        List<Boolean> started = new ArrayList<>();
+        when(films.findWithoutLanguages()).thenAnswer(call -> {
+            started.add(inline.startDue());
+            return List.of();
+        });
+
+        assertThat(inline.startDue()).isTrue();
+
+        assertThat(started).containsExactly(false);
+        verify(films).findWithoutLanguages();
+    }
+
     @Test
     void nothingHappensWhenTmdbIsOff() {
         when(tmdb.enabled()).thenReturn(false);

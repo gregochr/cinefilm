@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
+import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmDtos.ForcedSubtitleDto;
 import gregochr.cinefilm.film.FilmRepository;
@@ -57,6 +58,9 @@ class ForcedNeedServiceTest {
     private MediaFileRepository files;
 
     @Mock
+    private EditionRepository editions;
+
+    @Mock
     private ForcedSubtitleService forcedSubtitles;
 
     private final LibraryLock lock = new LibraryLock();
@@ -82,7 +86,7 @@ class ForcedNeedServiceTest {
                 events.add("rollback, lock " + lock.holder());
             }
         };
-        service = new ForcedNeedService(films, sidecars, files, forcedSubtitles, lock, manager);
+        service = new ForcedNeedService(films, sidecars, files, editions, forcedSubtitles, lock, manager);
     }
 
     private static NeedRow row(long id, String title, Long tmdbId, String original, String spoken, Instant asked,
@@ -123,7 +127,7 @@ class ForcedNeedServiceTest {
         when(sidecars.findFilmIdsWithPresentSidecar()).thenReturn(List.of(2L));
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of(3L));
         Film two = withEdition(stored(2L, "en", "en", null));
-        when(films.findAllById(Set.of(2L))).thenReturn(List.of(two));
+        when(editions.findWithFilesByFilmIdIn(Set.of(2L))).thenReturn(two.getEditions());
         playbackServes(two, true);
 
         NeedListDto list = service.list();
@@ -135,7 +139,7 @@ class ForcedNeedServiceTest {
         verify(films).findNeedRows();
         verify(sidecars).findFilmIdsWithPresentSidecar();
         verify(files).findFilmIdsWithEmbeddedForced();
-        verify(films).findAllById(Set.of(2L));
+        verify(editions).findWithFilesByFilmIdIn(Set.of(2L));
         verifyNoMoreInteractions(films, sidecars, files);
     }
 
@@ -146,7 +150,7 @@ class ForcedNeedServiceTest {
         when(sidecars.findFilmIdsWithPresentSidecar()).thenReturn(List.of(1L));
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of());
         Film taken = withEdition(stored(1L, "en", "en", null));
-        when(films.findAllById(Set.of(1L))).thenReturn(List.of(taken));
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(taken.getEditions());
         playbackServes(taken, true);
 
         FilmNeedDto dto = service.list().films().get(0);
@@ -220,7 +224,7 @@ class ForcedNeedServiceTest {
         when(sidecars.findFilmIdsWithPresentSidecar()).thenReturn(List.of(1L));
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of(2L));
         Film hasFile = withEdition(stored(1L, "en", "en", null));
-        when(films.findAllById(Set.of(1L))).thenReturn(List.of(hasFile));
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(hasFile.getEditions());
         playbackServes(hasFile, true);
         when(films.findNeedRows()).thenReturn(List.of(
             english(1, "Has file"), english(2, "Embedded only"),
@@ -243,7 +247,8 @@ class ForcedNeedServiceTest {
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of());
         Film conflict = withEdition(stored(1L, "en", "en", null));
         Film fine = withEdition(stored(2L, "en", "en", null));
-        when(films.findAllById(Set.of(1L, 2L))).thenReturn(List.of(conflict, fine));
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L, 2L)))
+            .thenReturn(List.of(conflict.getEditions().get(0), fine.getEditions().get(0)));
         when(forcedSubtitles.forEditions(List.of(conflict.getEditions().get(0), fine.getEditions().get(0))))
             .thenReturn(Map.of(fine.getEditions().get(0).getId(), new ForcedSubtitleDto("SIDECAR", false, 1L)));
 
@@ -260,6 +265,7 @@ class ForcedNeedServiceTest {
         Film taken = withEdition(stored(7L, "en", "en", null));
         when(films.findByIdForUpdate(7L)).thenReturn(Optional.of(taken));
         when(sidecars.countPresentForFilm(7L)).thenReturn(2L);
+        when(editions.findWithFilesByFilmIdIn(List.of(7L))).thenReturn(taken.getEditions());
         when(files.countEmbeddedForcedForFilm(7L)).thenReturn(0L);
         playbackServes(taken, false);
 
@@ -287,6 +293,7 @@ class ForcedNeedServiceTest {
         Film taken = withEdition(stored(7L, "en", "en,fr", null));
         when(films.findByIdForUpdate(7L)).thenReturn(Optional.of(taken));
         when(sidecars.countPresentForFilm(7L)).thenReturn(1L);
+        when(editions.findWithFilesByFilmIdIn(List.of(7L))).thenReturn(taken.getEditions());
         playbackServes(taken, true);
         when(files.countEmbeddedForcedForFilm(7L)).thenReturn(0L);
 

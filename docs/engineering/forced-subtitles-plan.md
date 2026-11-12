@@ -291,7 +291,9 @@ served). Only the films with rule-2 evidence are evaluated.
   `{filmId, title, year, need, reason, ownerChoice, originalLanguage, spokenLanguages[], hasForcedSubtitle}` and
   `counts {needed, neededMissing, unsure, unknown, notNeeded}`. Built from **three queries** (films with language
   columns; film ids with an attached present sidecar; film ids with an embedded English or language-less forced
-  stream), never one query per film. 1,077 films is about 150 KB; no paging.
+  stream), plus one bounded fetch of the editions and files of the films with sidecar evidence and playback's own
+  sidecar query (for `hasForcedSubtitle`), never one query per film (a test counts statements for 1 and 3 evidence
+  films). 1,077 films is about 150 KB; no paging.
 - **Write:** `PUT /api/admin/films/{id}/forced-need` `{choice: "NEEDED" | "NOT_NEEDED" | null}` → that film's row.
   Under `LibraryLock` (`LibraryLock.SUBTITLE`) in a `TransactionTemplate`, lock released after commit (409 while a
   scan holds it, 404 for an unknown film, 400 for another value), as in `SubtitleAdminService`.

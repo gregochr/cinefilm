@@ -38,6 +38,7 @@ public class LanguagesRefresher {
     private final Clock clock;
     private final Executor executor;
     private final AtomicBoolean running = new AtomicBoolean();
+    private final AtomicBoolean pending = new AtomicBoolean();
 
     /** Creates the service; the executor is {@code languagesExecutor}. */
     public LanguagesRefresher(TmdbApi tmdb, FilmRepository films, Clock clock,
@@ -74,27 +75,47 @@ public class LanguagesRefresher {
     }
 
     /**
-     * Starts a backfill in the background, unless TMDB is off or one is already running.
+     * Asks for a backfill in the background, unless TMDB is off. When one is already running the request is not lost:
+     * the running one goes round again before it finishes, so films a scan or import just added are covered.
+     * Several requests during one run cause one more pass.
      *
-     * @return true when a backfill was started
+     * @return true when this call started a run; false when TMDB is off or a run was already going
      */
     public boolean startDue() {
-        if (!tmdb.enabled() || !running.compareAndSet(false, true)) {
+        if (!tmdb.enabled()) {
+            return false;
+        }
+        // Set before trying to take the run: a run that is just finishing re-checks it after giving the run up.
+        pending.set(true);
+        return launch();
+    }
+
+    private boolean launch() {
+        if (!running.compareAndSet(false, true)) {
             return false;
         }
         try {
-            executor.execute(() -> {
-                try {
-                    run();
-                } finally {
-                    running.set(false);
-                }
-            });
+            executor.execute(this::worker);
         } catch (RuntimeException e) {
             running.set(false);
             throw e;
         }
         return true;
+    }
+
+    /** Passes over the films for as long as a request is pending, then gives the run up. */
+    private void worker() {
+        try {
+            while (pending.getAndSet(false)) {
+                run();
+            }
+        } finally {
+            running.set(false);
+        }
+        // A request that arrived after the last check but before the run was given up would otherwise be lost.
+        if (pending.get()) {
+            launch();
+        }
     }
 
     /** One pass over the films without languages. */

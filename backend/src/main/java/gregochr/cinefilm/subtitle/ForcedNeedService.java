@@ -4,6 +4,7 @@ import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.Edition;
+import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.NeedRow;
@@ -19,6 +20,7 @@ import gregochr.cinefilm.subtitle.ForcedNeedDtos.CountsDto;
 import gregochr.cinefilm.subtitle.ForcedNeedDtos.FilmNeedDto;
 import gregochr.cinefilm.subtitle.ForcedNeedDtos.NeedListDto;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -38,17 +40,19 @@ public class ForcedNeedService {
     private final FilmRepository films;
     private final SubtitleSidecarRepository sidecars;
     private final MediaFileRepository files;
+    private final EditionRepository editions;
     private final ForcedSubtitleService forcedSubtitles;
     private final LibraryLock lock;
     private final TransactionTemplate tx;
 
     /** Creates the service. */
     public ForcedNeedService(FilmRepository films, SubtitleSidecarRepository sidecars, MediaFileRepository files,
-                             ForcedSubtitleService forcedSubtitles, LibraryLock lock,
+                             EditionRepository editions, ForcedSubtitleService forcedSubtitles, LibraryLock lock,
                              PlatformTransactionManager transactions) {
         this.films = films;
         this.sidecars = sidecars;
         this.files = files;
+        this.editions = editions;
         this.forcedSubtitles = forcedSubtitles;
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
@@ -61,7 +65,7 @@ public class ForcedNeedService {
         Set<Long> withSidecar = new HashSet<>(sidecars.findFilmIdsWithPresentSidecar());
         Set<Long> withEmbedded = new HashSet<>(files.findFilmIdsWithEmbeddedForced());
         // Only the films with sidecar evidence (a couple of dozen) are asked what playback would serve.
-        Set<Long> served = withSidecar.isEmpty() ? Set.of() : servedFilmIds(films.findAllById(withSidecar));
+        Set<Long> served = withSidecar.isEmpty() ? Set.of() : servedFilmIds(withSidecar);
         List<FilmNeedDto> dtos = new ArrayList<>();
         for (NeedRow row : rows) {
             dtos.add(dto(row, withSidecar.contains(row.id()), served.contains(row.id()),
@@ -100,21 +104,23 @@ public class ForcedNeedService {
         NeedRow row = new NeedRow(film.getId(), film.getTitle(), film.getYear(), film.getTmdbId(),
             film.getOriginalLanguage(), film.getSpokenLanguages(), film.getLanguagesFetchedAt(), choice);
         boolean hasSidecar = sidecars.countPresentForFilm(filmId) > 0;
-        boolean served = hasSidecar && !servedFilmIds(List.of(film)).isEmpty();
+        boolean served = hasSidecar && !servedFilmIds(List.of(filmId)).isEmpty();
         return dto(row, hasSidecar, served, files.countEmbeddedForcedForFilm(filmId) > 0);
     }
 
     /**
      * The films among these with an edition that playback would serve a forced subtitle for: the same code playback
-     * uses decides ({@link ForcedSubtitleService#forEditions}), so an empty file or a conflict is not counted.
+     * uses decides ({@link ForcedSubtitleService#forEditions}), so an empty file or a conflict is not counted. Their
+     * editions and files come in one fetch and playback's own sidecar query runs once, so the cost does not grow with
+     * the number of films.
      */
-    private Set<Long> servedFilmIds(List<Film> candidates) {
-        List<Edition> editions = candidates.stream().flatMap(f -> f.getEditions().stream()).toList();
-        Set<Long> servedEditions = forcedSubtitles.forEditions(editions).keySet();
+    private Set<Long> servedFilmIds(Collection<Long> filmIds) {
+        List<Edition> fetched = editions.findWithFilesByFilmIdIn(filmIds);
+        Set<Long> servedEditions = forcedSubtitles.forEditions(fetched).keySet();
         Set<Long> served = new HashSet<>();
-        for (Film candidate : candidates) {
-            if (candidate.getEditions().stream().anyMatch(e -> servedEditions.contains(e.getId()))) {
-                served.add(candidate.getId());
+        for (Edition edition : fetched) {
+            if (servedEditions.contains(edition.getId())) {
+                served.add(edition.getFilm().getId());
             }
         }
         return served;
