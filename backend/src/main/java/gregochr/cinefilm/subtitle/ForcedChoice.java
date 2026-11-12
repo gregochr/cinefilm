@@ -104,9 +104,11 @@ public final class ForcedChoice {
      * @param downloadReasons why each download plays or not, by id
      * @param hasLiveDownload true when the edition has a download that has not failed (it plays, or is waiting to
      *     be proven): nothing more needs downloading
+     * @param fileReplaced true when a download plays in place of the owner's file because the file failed its checks
+     *     (the owner can answer "Looks right")
      */
     public record Decision(Step step, Source source, Long downloadId, String fileReason,
-                           Map<Long, String> downloadReasons, boolean hasLiveDownload) {
+                           Map<Long, String> downloadReasons, boolean hasLiveDownload, boolean fileReplaced) {
     }
 
     /**
@@ -160,7 +162,7 @@ public final class ForcedChoice {
             reasons.put(d.id(), downloadReason(d, step, playingId));
         }
         return new Decision(step, source, playingId, file == null ? null : fileReason(file, step, playing),
-            Map.copyOf(reasons), !live.isEmpty());
+            Map.copyOf(reasons), !live.isEmpty(), fileTrust == Trust.FAILED && source == Source.DOWNLOAD);
     }
 
     /** The best download of a trust level: the lowest id. */

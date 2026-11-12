@@ -119,6 +119,8 @@ export const adminApi = {
   /** Says the file's lines are right and in sync ("Looks right"); `unverifySubtitle` undoes it. */
   verifySubtitle: (id) => post(`/api/admin/subtitles/${id}/verify`),
   unverifySubtitle: (id) => del(`/api/admin/subtitles/${id}/verify`),
+  /** Removes an OpenSubtitles download (never the owner's own file); CineFilm will not use it for that edition again. */
+  removeSubtitle: (id) => del(`/api/admin/subtitles/${id}`),
   /** Every film with whether it needs forced subtitles and why: `{ films: [...], counts: {...} }`. */
   forcedNeed: (options) => get('/api/admin/forced-subtitles/films', options),
   /**

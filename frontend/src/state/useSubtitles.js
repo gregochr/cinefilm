@@ -22,6 +22,9 @@ export function useSubtitles(version) {
   latest.current = data;
   const [busy, setBusy] = useState(null);
   const [problem, setProblem] = useState(null);
+  // Removed downloads stay out of the list at once: row ids are never reused, and a refresh that was already in
+  // flight when the removal finished must not bring the row back.
+  const [removedIds, setRemovedIds] = useState(() => new Set());
   // How many actions succeeded: views that depend on the files (which films have a forced subtitle) read again.
   const [changes, setChanges] = useState(0);
 
@@ -57,7 +60,9 @@ export function useSubtitles(version) {
 
   return {
     items: data
-      ? data.map((row) => (answers.base === data ? answers.rows[row.id] : undefined) ?? row)
+      ? data
+          .filter((row) => !removedIds.has(row.id))
+          .map((row) => (answers.base === data ? answers.rows[row.id] : undefined) ?? row)
       : null,
     error,
     loading,
@@ -72,6 +77,12 @@ export function useSubtitles(version) {
     resetTiming: (id) => act(id, () => adminApi.setSubtitleOffset(id, 0)),
     verify: (id) => act(id, () => adminApi.verifySubtitle(id)),
     unverify: (id) => act(id, () => adminApi.unverifySubtitle(id)),
+    /** Removes an OpenSubtitles download; resolves true once it is gone. */
+    remove: async (id) => {
+      const removed = await act(id, () => adminApi.removeSubtitle(id));
+      if (removed) setRemovedIds((prev) => new Set(prev).add(id));
+      return removed;
+    },
   };
 }
 

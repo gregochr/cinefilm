@@ -284,9 +284,31 @@ describe('fixture server: Admin settings', () => {
       'CHECK',
       'CHECK',
       null,
+      'AGREES',
+      'CHECK',
+      null,
+      null,
     ]);
     const scan = await call('GET', '/api/admin/scan');
     expect(scan).toMatchObject({ openSubtitlesEnabled: true, openSubtitlesRunning: false });
+  });
+
+  it('removes a download on DELETE, refuses the owner’s file, and 404s a row that is gone', async () => {
+    const failure = async (id) => {
+      const pending = handle('DELETE', `/api/admin/subtitles/${id}`).catch((e) => e);
+      await vi.advanceTimersByTimeAsync(80);
+      return pending;
+    };
+    const before = await call('GET', '/api/admin/subtitles');
+    expect(before.map((f) => f.id)).toContain(8);
+
+    expect(await call('DELETE', '/api/admin/subtitles/8')).toBeNull();
+    const after = await call('GET', '/api/admin/subtitles');
+    expect(after.map((f) => f.id)).not.toContain(8);
+
+    expect((await failure(8)).status).toBe(404);
+    expect((await failure(1)).status).toBe(400);
+    expect((await failure(999)).status).toBe(404);
   });
 
   it('serves the forced-subtitle list, and a PUT applies the owner’s choice and Automatic restores the rule', async () => {

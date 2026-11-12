@@ -37,7 +37,7 @@ class SubtitleAdminControllerTest {
 
     private static final SidecarDto DTO = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L,
         "Taken", 70L, "Original", 1, 1, false, true, 12, "No problems found", -250, true, false, 1700000000000L,
-        true, null, null, null, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet");
+        true, null, null, null, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet", false);
 
     @Autowired
     private MockMvc mvc;
@@ -192,7 +192,7 @@ class SubtitleAdminControllerTest {
         SidecarDto download = new SidecarDto(8L, "opensubtitles:70:5011", "PRESENT", "matched", 7L, "Taken", 70L,
             "Original", 1, null, true, false, 12, "Downloaded from OpenSubtitles", 0, false, false,
             1700000000000L, true, null, null, null, "OPENSUBTITLES", "Taken.2008.BluRay", 5011L,
-            "Plays: it agrees with OpenSubtitles");
+            "Plays: it agrees with OpenSubtitles", false);
         when(service.list()).thenReturn(List.of(download, DTO));
 
         mvc.perform(get("/api/admin/subtitles").with(user("owner")))
@@ -201,11 +201,25 @@ class SubtitleAdminControllerTest {
             .andExpect(jsonPath("$[0].release").value("Taken.2008.BluRay"))
             .andExpect(jsonPath("$[0].openSubtitlesFileId").value(5011))
             .andExpect(jsonPath("$[0].servedReason").value("Plays: it agrees with OpenSubtitles"))
+            .andExpect(jsonPath("$[0].replacedByDownload").value(false))
+            .andExpect(jsonPath("$[1].replacedByDownload").value(false))
             .andExpect(jsonPath("$[1].origin").value("FILE"))
             .andExpect(jsonPath("$[1].release").value((Object) null))
             .andExpect(jsonPath("$[1].openSubtitlesFileId").value((Object) null))
             .andExpect(jsonPath("$[1].servedReason")
                 .value("Plays: nothing says it is wrong, but it is not proven yet"));
+    }
+
+    @Test
+    void aFileADownloadHasReplacedSaysSoInTheJson() throws Exception {
+        SidecarDto replaced = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L, "Taken", 70L,
+            "Original", 1, 1, false, false, 12, "No problems found", 0, false, false, 1700000000000L, false, null,
+            null, null, "FILE", null, null, "Replaced by an OpenSubtitles download that agrees", true);
+        when(service.list()).thenReturn(List.of(replaced));
+
+        mvc.perform(get("/api/admin/subtitles").with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].replacedByDownload").value(true));
     }
 
     @Test
@@ -243,7 +257,7 @@ class SubtitleAdminControllerTest {
             Instant.parse("2024-04-01T01:30:00Z"));
         SidecarDto checked = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L, "Taken", 70L,
             "Original", 1, 1, false, true, 12, "No problems found", -250, true, false, 1700000000000L, true, check,
-            null, null, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet");
+            null, null, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet", false);
         when(service.list()).thenReturn(List.of(checked, DTO));
 
         mvc.perform(get("/api/admin/subtitles").with(user("owner")))
@@ -266,13 +280,13 @@ class SubtitleAdminControllerTest {
             true, Instant.parse("2024-04-01T02:30:00Z"));
         SidecarDto fitted = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L, "Taken", 70L,
             "Original", 1, 1, false, true, 12, "No problems found", 900, false, false, 1700000000000L, true, null,
-            "AUTO", alignment, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet");
+            "AUTO", alignment, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet", false);
         SubtitleDtos.AlignmentDto doubtful = new SubtitleDtos.AlignmentDto("CHECK",
             List.of("Only 4 of 12 lines line up with the film's English track"), 600, 0.33, 4, 12, false,
             Instant.parse("2024-04-01T02:30:00Z"));
         SidecarDto checked = new SidecarDto(6L, "Alien.en.forced.srt", "PRESENT", "matched", 8L, "Alien", 80L,
             "Original", 1, 1, false, true, 12, "No problems found", 0, false, false, 1700000000000L, true, null,
-            null, doubtful, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet");
+            null, doubtful, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet", false);
         when(service.list()).thenReturn(List.of(fitted, checked, DTO));
 
         mvc.perform(get("/api/admin/subtitles").with(user("owner")))
