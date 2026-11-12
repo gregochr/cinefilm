@@ -113,14 +113,19 @@ function updateSettings(body) {
 }
 
 const CHOICES = new Set(['NEEDED', 'NOT_NEEDED']);
-/** The owner's choice per film, kept in memory; the fixture's own need and reason stand in for "automatic". */
+/**
+ * The owner's choice per film, kept in memory: absent means the fixture as loaded, NEEDED or NOT_NEEDED an explicit
+ * choice, null an explicit "Automatic" (the baseline below, with no owner choice).
+ */
 const forcedChoices = new Map();
+/** What the automatic rule says for a fixture film that is loaded with an owner choice. */
+const AUTOMATIC_BASELINE = { 7: { need: 'NOT_NEEDED', reason: 'ENGLISH_ONLY' } };
 
-function forcedRow(automatic) {
-  const choice = forcedChoices.get(automatic.filmId);
-  return choice
-    ? { ...automatic, need: choice, reason: 'OWNER', ownerChoice: choice }
-    : { ...automatic, ...(forcedChoices.has(automatic.filmId) ? { ownerChoice: null } : {}) };
+function forcedRow(loaded) {
+  if (!forcedChoices.has(loaded.filmId)) return loaded;
+  const choice = forcedChoices.get(loaded.filmId);
+  if (choice) return { ...loaded, need: choice, reason: 'OWNER', ownerChoice: choice };
+  return { ...loaded, ...AUTOMATIC_BASELINE[loaded.filmId], ownerChoice: null };
 }
 
 function forcedNeedList() {
@@ -144,8 +149,7 @@ function setForcedNeed(filmId, body) {
   const choice = body?.choice ?? null;
   if (choice !== null && !CHOICES.has(choice))
     throw new ApiError(400, 'choice must be NEEDED, NOT_NEEDED or null');
-  if (choice === null) forcedChoices.delete(filmId);
-  else forcedChoices.set(filmId, choice);
+  forcedChoices.set(filmId, choice);
   return forcedRow(automatic);
 }
 

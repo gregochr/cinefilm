@@ -303,6 +303,25 @@ describe('fixture server: Admin settings', () => {
     expect(await call('PUT', '/api/admin/films/2/forced-need', {})).toEqual(automatic);
   });
 
+  it('clears a choice the fixture is loaded with: Automatic gives the baseline, and choosing again works', async () => {
+    const loaded = (await call('GET', '/api/admin/forced-subtitles/films')).films.find(
+      (f) => f.filmId === 7,
+    );
+    expect(loaded).toMatchObject({ ownerChoice: 'NOT_NEEDED', reason: 'OWNER' });
+
+    const cleared = await call('PUT', '/api/admin/films/7/forced-need', { choice: null });
+    expect(cleared).toMatchObject({
+      ownerChoice: null,
+      need: 'NOT_NEEDED',
+      reason: 'ENGLISH_ONLY',
+    });
+    const list = await call('GET', '/api/admin/forced-subtitles/films');
+    expect(list.films.find((f) => f.filmId === 7)).toEqual(cleared);
+
+    const again = await call('PUT', '/api/admin/films/7/forced-need', { choice: 'NEEDED' });
+    expect(again).toMatchObject({ ownerChoice: 'NEEDED', need: 'NEEDED', reason: 'OWNER' });
+  });
+
   it('refuses a choice for an unknown film (404) or a bad value (400)', async () => {
     const refused = async (path, body) => {
       const pending = handle('PUT', path, body).catch((error) => error);
