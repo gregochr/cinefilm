@@ -201,7 +201,7 @@ When resuming, the frame at the resume point is shown behind the startup indicat
 | Film has no subtitles | The Subtitles field reads "None for this film" (dashed, inert). The player's captions button is dimmed and C does nothing. Link: "Find subtitles in Admin" |
 | Transcode worker offline | See the quality menu above |
 | Remote on a slow connection | Indicator `480p · Remote · slow`, plus a one-off card per session (decision 11): "You're on a slow connection", then "Playing at 480p to avoid stalls. Auto will step up if things improve." Buttons: OK / Choose quality |
-| A network CineFilm hasn't seen, away from home | A one-off card in the player, in the slow-connection card's place (decision 18): "Are you on a train?", then "CineFilm hasn't seen this network before: Virgin Media Limited. It will remember your answer on this device." Buttons: Yes, on a train / No / Not now. When the network can't be named: "CineFilm can't tell which network this is, so it will ask again next time." |
+| A network CineFilm hasn't seen, away from home | A one-off card in the player, in the slow-connection card's place (decision 18): "Where are you watching?", then "CineFilm hasn't seen this network before: Virgin Media Limited. It will remember your answer on this device." Buttons: On a train / Hotel or away / Not now. When the network can't be named: "CineFilm can't tell which network this is, so it will ask again next time." |
 | Session expired while away | Sign-in card: "You've been signed out while you were away. Sign in again and you'll be back where you were." Password field and **Sign in**. After sign-in, return to the exact route and playback position |
 
 ## 6. Decisions (agreed with Chris, 8 Nov 2026)
@@ -273,8 +273,10 @@ When resuming, the frame at the resume point is shown behind the startup indicat
     - **Away from home** the player looks up the name of the network's operator. A network this browser already
       has an answer for is recognised silently.
     - **A network it hasn't seen** gets one quiet card in the player, in the slow-connection card's place and
-      style: "Are you on a train?", then "CineFilm hasn't seen this network before: Virgin Media Limited. It will
-      remember your answer on this device." Buttons: **Yes, on a train** / **No** / **Not now**. None of the three
+      style: "Where are you watching?", then "CineFilm hasn't seen this network before: Virgin Media Limited. It
+      will remember your answer on this device." Buttons: **On a train** / **Hotel or away** / **Not now**. (Until
+      2026-11-12 it asked "Are you on a train?" with Yes / No, which read oddly in a hotel; the stored answers,
+      `train` and `away`, did not change.) None of the three
       is the amber primary: neither answer is the one CineFilm wants. A stored answer is confirmed by a toast,
       "Remembered for Virgin Media Limited".
     - **When the network can't be named** (the lookup failed, or it went out through a relay) the text is

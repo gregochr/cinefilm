@@ -1,4 +1,4 @@
-// What this browser remembers about the networks it has been asked about: the answer to "Are you on a train?"
+// What this browser remembers about the networks it has been asked about: the answer to "Where are you watching?"
 // for each network operator, in localStorage. Storage can be blocked or full, so every access is guarded and a
 // failure just means nothing is remembered. No JSX, no component.
 
