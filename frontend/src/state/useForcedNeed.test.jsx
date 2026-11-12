@@ -69,58 +69,7 @@ describe('useForcedNeed', () => {
     expect(puts[0].body).toEqual({ choice: null });
   });
 
-  it('lets a newer click on the same film win even when the older answer arrives last', async () => {
-    const { puts } = deferredPuts();
-    const { result } = await loaded();
-
-    let first;
-    let second;
-    act(() => {
-      first = result.current.choose(2, 'NEEDED');
-      second = result.current.choose(2, null);
-    });
-    expect(puts[0].signal.aborted).toBe(true);
-    expect(puts[1].signal.aborted).toBe(false);
-    await act(async () => {
-      puts[1].resolve(answered(2, null));
-      await second;
-      puts[0].resolve(answered(2, 'NEEDED')); // too late: its request was aborted
-      await first;
-    });
-
-    expect(rowOf(result, 2).ownerChoice).toBeNull();
-    expect(result.current.saving).toEqual({});
-    expect(result.current.problems).toEqual({});
-  });
-
-  it('ignores the older answer even if the transport delivered it after the newer click', async () => {
-    const puts = [];
-    installFetch((method, url, init) => {
-      if (!FORCED.test(url)) return null;
-      // A fetch that ignores the abort signal, as a response already on the wire would.
-      return new Promise((resolve) => {
-        puts.push({ body: JSON.parse(init.body), resolve });
-      });
-    });
-    const { result } = await loaded();
-
-    let first;
-    let second;
-    act(() => {
-      first = result.current.choose(2, 'NEEDED');
-      second = result.current.choose(2, 'NOT_NEEDED');
-    });
-    await act(async () => {
-      puts[1].resolve(respond(answered(2, 'NOT_NEEDED')));
-      await second;
-      puts[0].resolve(respond(answered(2, 'NEEDED')));
-      await first;
-    });
-
-    expect(rowOf(result, 2).ownerChoice).toBe('NOT_NEEDED');
-  });
-
-  it('does not show the failure of an older request that a newer click replaced', async () => {
+  it('sends one write at a time: a second click waits for the first, and the last answer shows', async () => {
     const { puts } = deferredPuts();
     const { result } = await loaded();
     let first;
@@ -129,11 +78,101 @@ describe('useForcedNeed', () => {
       first = result.current.choose(2, 'NEEDED');
       second = result.current.choose(2, 'NOT_NEEDED');
     });
+    expect(puts).toHaveLength(1);
+    expect(puts[0].signal.aborted).toBe(false);
+    await act(async () => {
+      puts[0].resolve(answered(2, 'NEEDED'));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(puts).toHaveLength(2));
+    expect(puts.map((p) => p.body)).toEqual([{ choice: 'NEEDED' }, { choice: 'NOT_NEEDED' }]);
+    expect(result.current.saving).toEqual({ 2: true });
+    expect(rowOf(result, 2).ownerChoice).toBeNull(); // the server's row, until the chain ends
     await act(async () => {
       puts[1].resolve(answered(2, 'NOT_NEEDED'));
       await Promise.all([first, second]);
     });
+    expect(rowOf(result, 2).ownerChoice).toBe('NOT_NEEDED');
+    expect(result.current.saving).toEqual({});
     expect(result.current.problems).toEqual({});
+  });
+
+  it('sends only the first and the last of three quick clicks', async () => {
+    const { puts } = deferredPuts();
+    const { result } = await loaded();
+    let first;
+    act(() => {
+      first = result.current.choose(2, 'NEEDED');
+      result.current.choose(2, 'NOT_NEEDED');
+      result.current.choose(2, null);
+    });
+    await act(async () => {
+      puts[0].resolve(answered(2, 'NEEDED'));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(puts).toHaveLength(2));
+    await act(async () => {
+      puts[1].resolve(answered(2, null));
+      await first;
+    });
+    expect(puts.map((p) => p.body)).toEqual([{ choice: 'NEEDED' }, { choice: null }]);
+    expect(rowOf(result, 2).ownerChoice).toBeNull();
+  });
+
+  it('still sends the waiting choice when the first write fails, and reports no error when that one succeeds', async () => {
+    const { puts } = deferredPuts();
+    const { result } = await loaded();
+    let first;
+    act(() => {
+      first = result.current.choose(2, 'NEEDED');
+      result.current.choose(2, 'NOT_NEEDED');
+    });
+    await act(async () => {
+      puts[0].reject(new Error('offline'));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(puts).toHaveLength(2));
+    await act(async () => {
+      puts[1].resolve(answered(2, 'NOT_NEEDED'));
+      await first;
+    });
+    expect(result.current.problems).toEqual({});
+    expect(rowOf(result, 2).ownerChoice).toBe('NOT_NEEDED');
+  });
+
+  it('reports the last write’s failure and keeps the last answer the server gave', async () => {
+    const { puts } = deferredPuts();
+    const { result } = await loaded();
+    let first;
+    act(() => {
+      first = result.current.choose(2, 'NEEDED');
+      result.current.choose(2, 'NOT_NEEDED');
+    });
+    await act(async () => {
+      puts[0].resolve(answered(2, 'NEEDED'));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(puts).toHaveLength(2));
+    await act(async () => {
+      puts[1].reject(new Error('offline'));
+      await first;
+    });
+    expect(result.current.problems).toEqual({ 2: "Couldn't save: try again" });
+    expect(rowOf(result, 2)).toMatchObject({ ownerChoice: 'NEEDED' });
+    expect(result.current.saving).toEqual({});
+  });
+
+  it('never sends a waiting choice after it unmounts', async () => {
+    const { puts } = deferredPuts();
+    const { result, unmount } = await loaded();
+    let first;
+    act(() => {
+      first = result.current.choose(2, 'NEEDED');
+      result.current.choose(2, 'NOT_NEEDED');
+    });
+    unmount();
+    await first;
+    expect(puts).toHaveLength(1);
   });
 
   it('keeps other films free: two films save at once', async () => {
@@ -146,7 +185,7 @@ describe('useForcedNeed', () => {
       b = result.current.choose(3, 'NOT_NEEDED');
     });
     expect(result.current.saving).toEqual({ 2: true, 3: true });
-    expect(puts.map((p) => p.signal.aborted)).toEqual([false, false]);
+    expect(puts).toHaveLength(2); // another film's click goes straight through
     await act(async () => {
       puts[0].resolve(answered(2, 'NOT_NEEDED'));
       puts[1].resolve(answered(3, 'NOT_NEEDED'));

@@ -11,10 +11,12 @@ const without = (record, key) => {
 /**
  * The Admin list of which films need forced subtitles, and the owner's choice per film. `refreshKey` changes
  * whenever the subtitle files may have changed (a scan, a file attached, moved or detached), and the list is read
- * again. A choice is one request per film: a newer click on the same film aborts the older request and wins, other
- * films stay free, and a failure leaves the row as it was with `problems[filmId]` saying why. The answer of a
- * request is applied to its row; nothing is refetched, and a list read that started before the save arrived cannot
- * undo it.
+ * again. A choice is one write per film at a time, never aborted (the server may still process it): a newer
+ * click on a film that is saving waits and replaces any earlier waiting choice, and is sent when the write settles,
+ * even if that write failed. Only the last write's answer is applied to the row (`saving[filmId]` is set until
+ * then) and only its failure is reported in `problems[filmId]`, with the row left at the last answer the server
+ * gave. Other films stay free. Nothing is refetched, and a list read that started before the save arrived cannot
+ * undo it. On unmount the write in flight is aborted and no waiting choice is sent.
  */
 export function useForcedNeed(refreshKey) {
   // One counter orders everything: a list read is numbered when it starts, a saved choice when its answer arrives.
@@ -31,40 +33,55 @@ export function useForcedNeed(refreshKey) {
   const [saved, setSaved] = useState({});
   const [problems, setProblems] = useState({});
   const [saving, setSaving] = useState({});
-  // The request each film is waiting on: only the answer of the one in this map is used.
-  const inflight = useRef(new Map());
+  // The write each film is waiting on, with the choice a newer click wants sent next: `{ pending: null | { choice } }`.
+  const chains = useRef(new Map());
+  const mounted = useRef(true);
 
   useEffect(() => {
-    const requests = inflight.current;
+    mounted.current = true;
+    const running = chains.current;
     return () => {
-      requests.forEach((request) => request.controller.abort());
-      requests.clear();
+      mounted.current = false;
+      running.forEach((chain) => chain.controller.abort());
+      running.clear();
     };
   }, []);
 
   const choose = useCallback(async (filmId, choice) => {
-    inflight.current.get(filmId)?.controller.abort();
-    const request = { controller: new AbortController() };
-    inflight.current.set(filmId, request);
+    const running = chains.current.get(filmId);
+    if (running) {
+      // One write per film at a time, never aborted: the newest wish waits its turn and replaces an older one.
+      running.pending = { choice };
+      return;
+    }
+    const chain = { controller: new AbortController(), pending: null };
+    chains.current.set(filmId, chain);
     setProblems((prev) => without(prev, filmId));
     setSaving((prev) => ({ ...prev, [filmId]: true }));
-    const current = () => inflight.current.get(filmId) === request;
-    try {
-      const row = await adminApi.setForcedNeed(filmId, choice, {
-        signal: request.controller.signal,
-      });
-      if (!current()) return;
+    let next = { choice };
+    let row = null; // the last answer the server gave in this chain
+    let failure = null; // the failure of the last write, if it failed
+    while (next) {
+      chain.pending = null;
+      try {
+        row = await adminApi.setForcedNeed(filmId, next.choice, {
+          signal: chain.controller.signal,
+        });
+        failure = null;
+      } catch (error) {
+        if (!mounted.current) return;
+        failure = error; // only the last write's failure is reported; a queued choice is still sent
+      }
+      if (!mounted.current) return;
+      next = chain.pending;
+    }
+    chains.current.delete(filmId);
+    if (row) {
       const answeredAt = ++sequence.current;
       setSaved((prev) => ({ ...prev, [filmId]: { row, answeredAt } }));
-    } catch (failure) {
-      if (!current()) return;
-      setProblems((prev) => ({ ...prev, [filmId]: needProblem(failure) }));
-    } finally {
-      if (current()) {
-        inflight.current.delete(filmId);
-        setSaving((prev) => without(prev, filmId));
-      }
     }
+    if (failure) setProblems((prev) => ({ ...prev, [filmId]: needProblem(failure) }));
+    setSaving((prev) => without(prev, filmId));
   }, []);
 
   const rows = useMemo(() => {
