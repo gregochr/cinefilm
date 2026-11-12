@@ -1,7 +1,8 @@
 # Forced English subtitles — plan
 
-Written 2026-11-11. Status: **draft, reviewed once (adversarial review against the code, findings folded in). Phase 1
-is built (uncommitted, awaiting review); phases 2 to 4 are not.**
+Written 2026-11-11. Status (2026-11-12): **phase 1 merged (#105) and released (v0.4.0); phase 2a merged (#109),
+2b in review; 2c, 2d and phases 3 to 6 not started.** Phases 5 and 6 were added on 2026-11-12: the owner says
+solving subtitles is what would let them stop depending on Plex.
 
 ## What the owner wants
 
@@ -377,6 +378,60 @@ in detail once 2c is merged and login and `/download` have been tried with one r
   3. download if needed (phase 4);
   4. align (phase 3);
   5. wait in Admin for the owner's spot-check.
+
+### Phase 5 — full English subtitles for foreign-language films
+
+Forced subtitles cover English-language films with some foreign dialogue. A film made in another language needs
+**full** English subtitles from start to finish, which phases 1–4 deliberately leave out (rule 6 marks it
+`FOREIGN_LANGUAGE_FILM`). Plex handles these today; CineFilm must too before the owner can leave Plex.
+
+- **Which films:** rule 6's films (TMDB `original_language` not English), plus any the owner marks. Admin lists them
+  with the same filters as phase 2b ("Full subtitles: needed, none yet").
+- **The audio in the owner's copy decides, not only TMDB.** A survey on 2026-11-12 found 19 of 1,074 films with a
+  non-English original language, and several are English for the owner:
+  - *Léon* is mostly English (TMDB says French because it is a French production);
+  - the three Leone westerns, *Crouching Tiger* and *Ballerina* have English-labelled audio;
+  - the animated films are probably English dubs.
+
+  So a film whose playing audio track is English is not a foreign-language film. Most files carry no audio language,
+  so those stay `UNSURE` for the owner's one tap. The likely real list: *Oldboy*, the two Millennium films,
+  *Martyrs*, *The Assassin*, the Bruce Lee films, *33 Days*.
+- **Scale of the forced-subtitle `UNSURE` pile:** the same survey found 378 English-language films that list other
+  spoken languages. Phase 2c's OpenSubtitles evidence has to settle most of these, so the owner isn't left with 378
+  taps.
+- **Find:**
+  - Full English `.srt` files beside the film (`<stem>.en.srt`, `<stem>.eng.srt`) are matched as in phase 1, by exact
+    name.
+  - Otherwise OpenSubtitles is searched without `foreign_parts_only` and the download goes through phase 4's queue and
+    ranking (not hearing-impaired by default).
+- **Check:** phase 3's alignment. Hundreds of lines make speech alignment far more reliable than for forced files.
+  Phase 2d's comparison against a second OpenSubtitles file catches the wrong cut.
+- **Play:** a normal choice in the player's Subtitles menu ("English"), on by default for these films, never shown
+  when Subtitles is Off. The forced track still plays when it is Off. The saved subtitle preference keeps working.
+- **Model:** phase 4's `downloaded_subtitle` and phase 1's `subtitle_sidecar` gain a `kind` (`FORCED | FULL`) rather
+  than new tables.
+- **To decide at the start of the phase:** whether full subtitles are also wanted for English-language films (for
+  hard-to-hear dialogue). Out of scope unless the owner asks.
+
+### Phase 6 — subtitles stored as pictures inside the file
+
+About 60 rips carry their subtitle tracks as pictures (`dvd_subtitle`, DVD-style bitmaps), not text: about 25 full
+English tracks, 3 real forced tracks (the LOTR theatrical cuts) and about 33 empty placeholders. Browsers cannot
+display them; Plex burns them into the video while transcoding.
+
+Two ways, to be settled by a spike at the start of the phase:
+- **A. Convert once to text (recommended).** OCR each picture track to `.srt` (ffmpeg extracts the bitmaps; an OCR
+  tool turns them into text), store it like a downloaded subtitle, and check it with phases 2d and 3.
+  - Pros: it plays everywhere, including iPhone native fullscreen and direct play, at no cost per playback.
+  - The OCR output is also the timing reference phase 3 wants.
+  - Risk: OCR errors (italics, `l`/`I`). Mitigation: comparison with an OpenSubtitles file and the owner's spot-check
+    in Admin.
+- **B. Burn in during transcoding (fallback).** An ffmpeg overlay in the HLS encode.
+  - Only works when transcoding, so it forces a transcode even when the file could direct-play.
+  - It costs CPU on every playback and cannot be switched off mid-stream.
+
+Empty placeholder tracks are detected (no packets, or no bitmaps after OCR) and hidden. Phase 6 may shrink a lot if
+phases 4–5 find text versions for most of these films: measure first.
 
 ## Owner decisions needed
 
