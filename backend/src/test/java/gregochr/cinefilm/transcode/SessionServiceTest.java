@@ -71,7 +71,7 @@ class SessionServiceTest {
 
         service.create(EDITION_ID, request(null, null, "auto", null));
 
-        assertThat(created().rungs()).extracting(Rung::id).containsExactly("original", "720p", "480p", "360p");
+        assertThat(created().rungs()).extracting(Rung::id).containsExactly("original", "720p", "480p", "360p", "240p");
         assertThat(created().hardwareDecode()).isTrue();
     }
 
@@ -82,7 +82,8 @@ class SessionServiceTest {
 
         SessionCreated result = service.create(EDITION_ID, request(null, null, "auto", null));
 
-        assertThat(result.renditions()).extracting(RenditionDto::id).containsExactly("1080p", "720p", "480p", "360p");
+        assertThat(result.renditions()).extracting(RenditionDto::id).containsExactly("1080p", "720p", "480p", "360p",
+            "240p");
         assertThat(result.renditions()).noneMatch(RenditionDto::copy);
         assertThat(result.startRung()).isEqualTo("1080p");
         assertThat(created().rungs().get(0).height()).isEqualTo(1080);
@@ -156,7 +157,8 @@ class SessionServiceTest {
         assertThat(result.startRung()).isEqualTo("original");
         assertThat(result.renditions()).containsExactly(
             new RenditionDto("original", 1080, 15_000_000, true), new RenditionDto("720p", 720, 2_500_000, false),
-            new RenditionDto("480p", 480, 1_000_000, false), new RenditionDto("360p", 360, 600_000, false));
+            new RenditionDto("480p", 480, 1_000_000, false), new RenditionDto("360p", 360, 600_000, false),
+            new RenditionDto("240p", 240, 250_000, false));
         SessionSpec spec = created();
         assertThat(spec.editionId()).isEqualTo(EDITION_ID);
         assertThat(spec.filmTitle()).isEqualTo("Heat");
@@ -166,7 +168,7 @@ class SessionServiceTest {
         assertThat(spec.parts().get(0).fps()).isEqualTo(25.0);
         assertThat(spec.width()).isEqualTo(1920);
         assertThat(spec.height()).isEqualTo(1080);
-        assertThat(spec.rungs()).extracting(Rung::id).containsExactly("original", "720p", "480p", "360p");
+        assertThat(spec.rungs()).extracting(Rung::id).containsExactly("original", "720p", "480p", "360p", "240p");
         assertThat(spec.startRung().id()).isEqualTo("original");
         assertThat(spec.pinned()).isNull();
         assertThat(spec.startSegment()).isZero();
@@ -180,7 +182,7 @@ class SessionServiceTest {
 
         assertThat(result.startRung()).isEqualTo("720p");
         assertThat(created().startRung().id()).isEqualTo("720p");
-        assertThat(created().rungs()).hasSize(4);
+        assertThat(created().rungs()).hasSize(5);
     }
 
     @Test
@@ -190,7 +192,7 @@ class SessionServiceTest {
         SessionCreated result = service.create(EDITION_ID, request(null, null, "480p", 100_000L));
 
         assertThat(result.startRung()).isEqualTo("480p");
-        assertThat(result.renditions()).hasSize(4);
+        assertThat(result.renditions()).hasSize(5);
         SessionSpec spec = created();
         assertThat(spec.rungs()).extracting(Rung::id).containsExactly("480p");
         assertThat(spec.startRung().id()).isEqualTo("480p");
@@ -249,7 +251,7 @@ class SessionServiceTest {
         assertThatThrownBy(() -> service.create(EDITION_ID, request(null, null, "auto", -1L)))
             .isInstanceOf(BadRequestException.class).hasMessage("Invalid probe");
 
-        assertThat(service.create(EDITION_ID, request(null, null, "auto", 0L)).startRung()).isEqualTo("360p");
+        assertThat(service.create(EDITION_ID, request(null, null, "auto", 0L)).startRung()).isEqualTo("240p");
     }
 
     @Test
@@ -333,11 +335,12 @@ class SessionServiceTest {
     void originalWithoutACopyRungIs409ButAnotherMissingRungIs400() {
         CutList sparse = CutList.fromKeyframes(List.of(30_000L), DURATION);
         assertThat(sparse.copyOk()).isFalse();
+        file.setHeight(360);
         ready(EncoderMode.VAAPI, new KeyframeIndexService.Index(sparse, null));
 
         assertThatThrownBy(() -> service.create(EDITION_ID, request(null, null, "original", null)))
             .isInstanceOf(ConflictException.class).hasMessage("The original cannot be copied for this film");
-        assertThatThrownBy(() -> service.create(EDITION_ID, request(null, null, "240p", null)))
+        assertThatThrownBy(() -> service.create(EDITION_ID, request(null, null, "720p", null)))
             .isInstanceOf(BadRequestException.class).hasMessage("Quality not available for this film");
     }
 
@@ -346,7 +349,7 @@ class SessionServiceTest {
         readyToCreate(EncoderMode.SOFTWARE, INDEX);
 
         SessionCreated auto = service.create(EDITION_ID, request(null, null, "auto", null));
-        assertThat(auto.renditions()).extracting(RenditionDto::id).containsExactly("original", "480p", "360p");
+        assertThat(auto.renditions()).extracting(RenditionDto::id).containsExactly("original", "480p", "360p", "240p");
 
         assertThatThrownBy(() -> service.create(EDITION_ID, request(null, null, "720p", null)))
             .isInstanceOf(BadRequestException.class).hasMessage("Quality not available for this film");

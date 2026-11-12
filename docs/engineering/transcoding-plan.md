@@ -59,17 +59,19 @@ read of the file. Direct play of the file remains only as a fallback.
 | top (no copy rung) | `h264_vaapi` at the **source height** (capped 1080), named by height: above 720 ⇒ `1080p` 5 Mbps, above 480 ⇒ `720p` 2.5 Mbps, above 360 ⇒ `480p` 1 Mbps, above 240 ⇒ `360p` 0.6 Mbps, else `240p` 0.4 Mbps | only when the file has no copy rung; the rungs below follow the same rule as with a copy rung |
 | `720p` | 2.5 Mbps | source above 720 lines |
 | `480p` | 1 Mbps | source above 480 lines |
-| `360p` | 0.6 Mbps | source above 360 lines (owner: yes; the floor for the worst links) |
+| `360p` | 0.6 Mbps | source above 360 lines |
+| `240p` | 0.25 Mbps | source above 240 lines: the floor of every ladder, for a train's bad spells (owner, 2026-11-12; `train-link-plan.md`). Until then 240p was 0.4 Mbps and only for sources of 360 lines or fewer |
 
 - **Every rung is strictly shorter than the one above it** (a transcoded rung exists only below the source height;
-  a source of 360 lines or fewer has its top rung only, plus a 240p 0.4 Mbps rung if it is above 240). So heights
+  a source of 240 lines or fewer has its top rung only). So heights
   are unique per film and the player can always tell the active rung from `videoHeight`.
 
-- Audio on every rung: the chosen audio stream as **AAC stereo 128 kbps** (96 kbps on 360p); Chrome never meets AC-3.
+- Audio on every rung: the chosen audio stream as **AAC stereo 128 kbps** (96 kbps on 360p and on a small film's
+  single 240p rung, 64 kbps on the 240p floor); Chrome never meets AC-3.
 - `BANDWIDTH` in the master playlist is the rung's **peak** per-segment bitrate (from the index and file sizes for
   the copy rung; the target × 1.2 for transcoded rungs), so ABR never picks a rung the link can't carry.
 - Quality ids: `auto | original | 1080p | 720p | 480p | 360p | 240p`; `PreferencesService` and `FilmMapper` accept
-  `360p` and `240p` (240p only exists for sources of 360 lines or fewer, common among the older SD rips).
+  `360p` and `240p` (every film above 240 lines has both).
 
 ## The encoder: one ffmpeg per session, all rungs
 
@@ -96,7 +98,8 @@ read of the file. Direct play of the file remains only as a fallback.
 - **Processes**: a long-running `EncoderProcess` abstraction (start, `-progress pipe:1`, stop, exit), separate from the
   synchronous `ProcessCommandRunner`; `-nostdin`, `-protocol_whitelist file`, bounded `-threads`, `nice`; destroyed
   on session end and JVM shutdown; compose `init: true`.
-- **Software fallback**: VAAPI unavailable ⇒ `libx264 -preset veryfast`, transcoded rungs trimmed to 480p and 360p,
+- **Software fallback**: VAAPI unavailable ⇒ `libx264 -preset veryfast`, transcoded rungs trimmed to 480p, 360p and
+  240p,
   the copy rung unchanged; logged once and shown in Admin. ffmpeg unusable ⇒ the handover's **"worker offline"**
   state: Auto and lower qualities disabled with its footer copy; the original plays by direct play.
 - **In the CineFilm container** behind a `Transcoder` interface rather than the foundation plan's separate worker:

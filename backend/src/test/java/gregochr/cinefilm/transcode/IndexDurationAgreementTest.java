@@ -95,7 +95,7 @@ class IndexDurationAgreementTest {
         List<String> ladder = sessions.create(10L, new SessionDtos.CreateRequest(null, null, "auto", null))
             .renditions().stream().map(SessionDtos.RenditionDto::id).toList();
 
-        assertThat(ladder).containsExactly("original", "720p", "480p", "360p");
+        assertThat(ladder).containsExactly("original", "720p", "480p", "360p", "240p");
         assertThat(detail.qualities()).extracting(QualityDto::id).containsExactlyElementsOf(
             java.util.stream.Stream.concat(java.util.stream.Stream.of("auto"), ladder.stream()).toList());
         assertThat(detail.qualities()).filteredOn(q -> q.id().equals("original"))

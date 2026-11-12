@@ -134,7 +134,7 @@ The browse GETs (`/api/home`, `/api/films`, `/api/films/{id}`, `/api/people/{id}
 is not in `GET /api/collections`, has no `FilmCard.collectionId` and is `null` as `FilmDetail.collection`. `GET
 /api/collections/{id}` still answers for it, so an old link keeps working.
 
-**FilmDetail:** FilmCard fields plus `{ overview, genres, collection: {id,name}|null, directors: Person[], cast: [{ person, character }], editions: [{ id, name, year, runtimeMs, note, creditsMarkerMs (nullable), positionMs, watched, file: { id, videoCodec, width, height, audioSummary, addedAt }, audioStreams, subtitleStreams, qualities: [{ id: "auto"\|"original"\|"1080p"\|"720p"\|"480p", bitrate, premade, available }], parts, forcedSubtitle: { source: "SIDECAR"\|"DOWNLOAD", ownerVerified, version } \| null }], preferences: { editionId, quality, audioStreamId, subtitle } }`
+**FilmDetail:** FilmCard fields plus `{ overview, genres, collection: {id,name}|null, directors: Person[], cast: [{ person, character }], editions: [{ id, name, year, runtimeMs, note, creditsMarkerMs (nullable), positionMs, watched, file: { id, videoCodec, width, height, audioSummary, addedAt }, audioStreams, subtitleStreams, qualities: [{ id: "auto"\|"original"\|"1080p"\|"720p"\|"480p"\|"360p"\|"240p", bitrate, premade, available }], parts, forcedSubtitle: { source: "SIDECAR"\|"DOWNLOAD", ownerVerified, version } \| null }], preferences: { editionId, quality, audioStreamId, subtitle } }`
 
 In phase 1 `qualities` lists only `auto` and `original` as available; lower qualities appear with
 `available: false` until phase 3.
@@ -209,7 +209,7 @@ The "Dim the lights" switch is stored in the play request (`?dim=0`) and has no 
   "Group as editions", Admin: Library scan panel, Films needing attention, Fix match (TMDB search with runtime).
 - **Phase 3 — transcoding and network resilience (owner's top priority, 2026-11-09).** Plan:
   `docs/engineering/transcoding-plan.md` — one HLS stream per playback whose top rung is the original (video copied)
-  and whose lower rungs (1080p/720p/480p/360p) are transcoded live with VAAPI on dockermacmini, ABR in hls.js and
+  and whose lower rungs (1080p/720p/480p/360p/240p) are transcoded live with VAAPI on dockermacmini, ABR in hls.js and
   Safari, the same policy at home and away. Server-side pre-made "travel copies" (decision 15) are replaced by a later
   "Download for offline"; the separate worker and workhorse failover wait until dockermacmini proves too slow.
   The frontend loads the light build (`hls.js/light`, about 65 KB smaller gzipped, parsed on every first play): it

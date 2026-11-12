@@ -14,6 +14,7 @@ class FfmpegCommandBuilderTest {
     private static final Rung R720 = new Rung("720p", 720, 2_500_000, false);
     private static final Rung R480 = new Rung("480p", 480, 1_000_000, false);
     private static final Rung R360 = new Rung("360p", 360, 600_000, false);
+    private static final Rung R240 = new Rung("240p", 240, 250_000, false);
     private static final CutList CUTS = CutList.parse("0,4000,8008", 12_000);
     private static final CutList FOUR = CutList.parse("0,4000,8008,12000", 16_000);
 
@@ -72,6 +73,24 @@ class FfmpegCommandBuilderTest {
             copyOutput("3.980000,7.988000", 0),
             vaapiOutput("[v0]", "2500000", "3.980000,7.988000", "128000", "3.980000,7.988000", 0, "720p"),
             vaapiOutput("[v1]", "1000000", "3.980000,7.988000", "128000", "3.980000,7.988000", 0, "480p")));
+    }
+
+    @Test
+    void theFloorRungIsASplitOutputAt250kVideoAnd64kAudio() {
+        List<String> command = FfmpegCommandBuilder.build("ffmpeg", plan(List.of(ORIGINAL, R720, R480, R360, R240),
+            CUTS, 0, EncoderMode.VAAPI, 25.0));
+
+        assertThat(command).isEqualTo(join(HEAD,
+            List.of("-copyts", "-hwaccel", "vaapi", "-hwaccel_device", "/dev/dri/renderD128",
+                "-hwaccel_output_format", "vaapi", "-threads", "2", "-i", "/films/Heat (1995).mp4",
+                "-filter_complex", "[0:v]split=4[s0][s1][s2][s3];[s0]scale_vaapi=w=-2:h=720[v0];"
+                    + "[s1]scale_vaapi=w=-2:h=480[v1];[s2]scale_vaapi=w=-2:h=360[v2];"
+                    + "[s3]scale_vaapi=w=-2:h=240[v3]"),
+            copyOutput("3.980000,7.988000", 0),
+            vaapiOutput("[v0]", "2500000", "3.980000,7.988000", "128000", "3.980000,7.988000", 0, "720p"),
+            vaapiOutput("[v1]", "1000000", "3.980000,7.988000", "128000", "3.980000,7.988000", 0, "480p"),
+            vaapiOutput("[v2]", "600000", "3.980000,7.988000", "96000", "3.980000,7.988000", 0, "360p"),
+            vaapiOutput("[v3]", "250000", "3.980000,7.988000", "64000", "3.980000,7.988000", 0, "240p")));
     }
 
     @Test

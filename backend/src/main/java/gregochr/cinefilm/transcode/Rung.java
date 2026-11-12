@@ -16,14 +16,23 @@ public record Rung(String id, int height, long videoBitrate, boolean copy) {
     /** Peak factor applied to a transcoded rung's target bitrate (rate control overshoot). */
     static final double TRANSCODED_PEAK_FACTOR = 1.2;
 
-    /** AAC bits per second on every rung except the two lowest. */
+    /** Target video bits per second of the 240p floor rung every film above 240 lines has. */
+    public static final long FLOOR_VIDEO_BITRATE = 250_000;
+
+    /** AAC bits per second on the 240p floor rung (a transcoded rung at or below {@link #FLOOR_VIDEO_BITRATE}). */
+    public static final long FLOOR_AUDIO_BITRATE = 64_000;
+
+    /** AAC bits per second on every rung except the 360p, 240p and floor rungs. */
     public static final long AUDIO_BITRATE = 128_000;
 
-    /** AAC bits per second on the 360p and 240p rungs. */
+    /** AAC bits per second on the 360p rung and on a 240p rung above the floor bitrate. */
     public static final long LOW_AUDIO_BITRATE = 96_000;
 
     /** AAC stereo bits per second for this rung. */
     public long audioBitrate() {
+        if (!copy && videoBitrate <= FLOOR_VIDEO_BITRATE) {
+            return FLOOR_AUDIO_BITRATE;
+        }
         return Ladder.Q_360.equals(id) || Ladder.Q_240.equals(id) ? LOW_AUDIO_BITRATE : AUDIO_BITRATE;
     }
 
