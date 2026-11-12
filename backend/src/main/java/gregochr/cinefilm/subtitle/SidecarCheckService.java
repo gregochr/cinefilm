@@ -104,7 +104,8 @@ public class SidecarCheckService {
             }
             List<OpenSubtitlesResult> filmCandidates = singleFile(ref.osCandidates());
             Set<Long> tried = new HashSet<>();
-            ledger.stream().filter(l -> l.getEditionId().equals(edition.getId()) && l.getImdbId().equals(ref.imdbId()))
+            String key = edition.getId() + "/" + ref.imdbId();
+            ledger.stream().filter(l -> key.equals(l.getEditionId() + "/" + l.getImdbId()))
                 .forEach(l -> tried.add(l.getOsFileId()));
             addFileCheck(due, edition, resolution, ref, filmCandidates, Set.copyOf(tried));
             for (DownloadState download : resolution.downloads()) {

@@ -330,6 +330,25 @@ class ForcedNeedServiceTest {
         assertThat(service.isNeeded(8L)).isFalse();
         assertThat(service.isNeeded(9L)).isFalse();
         assertThat(service.isNeeded(10L)).isFalse();
+
+    }
+
+    @Test
+    void anEmbeddedForcedTrackShowsTheNeedForTheRecheck() {
+        Film embedded = stored(11L, "en", "en", null);
+        when(films.findById(11L)).thenReturn(Optional.of(embedded));
+        when(files.countEmbeddedForcedForFilm(11L)).thenReturn(1L);
+
+        assertThat(service.isNeeded(11L)).isTrue();
+    }
+
+    @Test
+    void anAttachedFileShowsTheNeedForTheRecheck() {
+        Film attached = stored(12L, "en", "en", null);
+        when(films.findById(12L)).thenReturn(Optional.of(attached));
+        when(sidecars.countPresentForFilm(12L)).thenReturn(1L);
+
+        assertThat(service.isNeeded(12L)).isTrue();
     }
 
     @Test

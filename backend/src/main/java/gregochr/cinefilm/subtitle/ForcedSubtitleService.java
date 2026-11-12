@@ -6,12 +6,11 @@ import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.EditionTimeline;
 import gregochr.cinefilm.film.FilmDtos.ForcedSubtitleDto;
 import gregochr.cinefilm.subtitle.ForcedChoice.Source;
+import gregochr.cinefilm.web.JsonEtag;
 import gregochr.cinefilm.subtitle.ForcedResolver.Resolution;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Pick;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Slot;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -80,20 +79,8 @@ public class ForcedSubtitleService {
             key.append('|').append(s.getId()).append('@').append(slot.partIndex()).append('/').append(s.getOffsetMs())
                 .append('/').append(s.getUpdatedAt().toEpochMilli());
         }
-        byte[] digest = sha256().digest(key.toString().getBytes(StandardCharsets.UTF_8));
-        long hash = 0;
-        for (int i = 0; i < 6; i++) {
-            hash = hash << 8 | (digest[i] & 0xFF);
-        }
-        return hash;
-    }
-
-    private static MessageDigest sha256() {
-        try {
-            return MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is always available", e);
-        }
+        // The first 12 hex characters (48 bits) of the SHA-256 of the key.
+        return Long.parseLong(JsonEtag.etag(key.toString().getBytes(StandardCharsets.UTF_8)).substring(3, 3 + 12), 16);
     }
 
     /**

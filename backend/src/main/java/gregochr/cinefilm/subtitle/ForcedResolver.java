@@ -237,10 +237,10 @@ public class ForcedResolver {
             row.getServedCount(), row.getReferenceCount(), reference.getRelease(), row.getCheckedAt());
     }
 
-    /** True when the reference's file is still one of the film's stored single-file candidates. */
+    /** True when the reference's file is still one of the film's stored candidates (only single files are stored). */
     private static boolean isCandidate(Film film, OpenSubtitlesReference reference) {
         return film.getOsCandidates() != null && OpenSubtitlesResult.listFromJson(film.getOsCandidates()).stream()
-            .anyMatch(c -> c.isSingleFile() && c.fileId() == reference.getOsFileId());
+            .anyMatch(c -> c.fileId() == reference.getOsFileId());
     }
 
     /** Why each subtitle attached to the edition plays or does not. */
