@@ -52,7 +52,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const NAME = 'Are you on a train?';
+const NAME = 'Where are you watching?';
 const RAIL = 'AS64500 Example Rail';
 const NEW_NETWORK =
   'CineFilm hasn’t seen this network before: Example Rail. It will remember your answer on this device.';
@@ -173,7 +173,7 @@ describe('the question', () => {
     expect(video.paused).toBe(false);
 
     await userEvent.tab();
-    const yes = screen.getByRole('button', { name: 'Yes, on a train' });
+    const yes = screen.getByRole('button', { name: 'On a train' });
     expect(yes).toHaveFocus();
     await userEvent.keyboard(' ');
 
@@ -185,11 +185,11 @@ describe('the question', () => {
     expect(player()).toHaveFocus();
   });
 
-  it('Yes, on a train closes it, says so, remembers it and reports the train, the operator and the latency', async () => {
+  it('On a train closes it, says so, remembers it and reports the train, the operator and the latency', async () => {
     const { video, fetchMock } = await open();
     await startFilm(video);
     await answerLookup(RAIL);
-    await userEvent.click(await screen.findByRole('button', { name: 'Yes, on a train' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'On a train' }));
 
     noCard();
     expect(screen.getByText('Remembered for Example Rail')).toBeInTheDocument();
@@ -206,11 +206,11 @@ describe('the question', () => {
     });
   });
 
-  it('No remembers away', async () => {
+  it('Hotel or away remembers away', async () => {
     const { video, fetchMock } = await open();
     await startFilm(video);
     await answerLookup(RAIL);
-    await userEvent.click(await screen.findByRole('button', { name: 'No' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Hotel or away' }));
 
     noCard();
     expect(screen.getByText('Remembered for Example Rail')).toBeInTheDocument();
@@ -324,7 +324,7 @@ describe('when the network cannot be named', () => {
     expect(group).toHaveAccessibleDescription(NO_NETWORK);
     expect(announcement()).toHaveTextContent(`${NAME} ${NO_NETWORK}`);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Yes, on a train' }));
+    await userEvent.click(screen.getByRole('button', { name: 'On a train' }));
     noCard();
     expect(screen.queryByText(/Remembered for/)).not.toBeInTheDocument();
     expect(storage.getItem(NETWORKS_KEY)).toBeNull();
@@ -346,7 +346,7 @@ describe('when the network cannot be named', () => {
     const group = await screen.findByRole('group', { name: NAME });
     expect(group).toHaveAccessibleDescription(NO_NETWORK);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Yes, on a train' }));
+    await userEvent.click(screen.getByRole('button', { name: 'On a train' }));
     expect(screen.queryByText(/Remembered for/)).not.toBeInTheDocument();
     expect(storage.getItem(NETWORKS_KEY)).toBe(before);
     await leave();
@@ -382,7 +382,7 @@ describe('one card at a time', () => {
     expect(slowDialog()).not.toBeInTheDocument();
     expect(card()).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'No' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Hotel or away' }));
     expect(
       await screen.findByRole('dialog', { name: 'You’re on a slow connection' }),
     ).toBeInTheDocument();
