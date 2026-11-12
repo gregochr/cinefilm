@@ -1,0 +1,82 @@
+{
+  "films": [
+    {
+      "filmId": 1,
+      "title": "Heat",
+      "year": 1995,
+      "need": "NOT_NEEDED",
+      "reason": "ENGLISH_ONLY",
+      "ownerChoice": null,
+      "originalLanguage": "en",
+      "spokenLanguages": ["en"],
+      "hasForcedSubtitle": false
+    },
+    {
+      "filmId": 2,
+      "title": "Taken",
+      "year": 2008,
+      "need": "NEEDED",
+      "reason": "OTHER_LANGUAGES",
+      "ownerChoice": null,
+      "originalLanguage": "en",
+      "spokenLanguages": ["en", "fr", "ru"],
+      "hasForcedSubtitle": false
+    },
+    {
+      "filmId": 3,
+      "title": "Das Boot",
+      "year": 1981,
+      "need": "NEEDED",
+      "reason": "FOREIGN_LANGUAGE_FILM",
+      "ownerChoice": null,
+      "originalLanguage": "de",
+      "spokenLanguages": ["de"],
+      "hasForcedSubtitle": false
+    },
+    {
+      "filmId": 4,
+      "title": "Inglourious Basterds",
+      "year": 2009,
+      "need": "NEEDED",
+      "reason": "SIDECAR",
+      "ownerChoice": null,
+      "originalLanguage": "en",
+      "spokenLanguages": ["en", "de", "fr"],
+      "hasForcedSubtitle": true
+    },
+    {
+      "filmId": 5,
+      "title": "Alien",
+      "year": 1979,
+      "need": "UNSURE",
+      "reason": "EMBEDDED_FORCED",
+      "ownerChoice": null,
+      "originalLanguage": "en",
+      "spokenLanguages": ["en"],
+      "hasForcedSubtitle": false
+    },
+    {
+      "filmId": 6,
+      "title": "Obscure Film",
+      "year": null,
+      "need": "UNKNOWN",
+      "reason": "NO_LANGUAGES",
+      "ownerChoice": null,
+      "originalLanguage": null,
+      "spokenLanguages": [],
+      "hasForcedSubtitle": false
+    },
+    {
+      "filmId": 7,
+      "title": "Quiet Film",
+      "year": 2001,
+      "need": "NOT_NEEDED",
+      "reason": "OWNER",
+      "ownerChoice": "NOT_NEEDED",
+      "originalLanguage": "en",
+      "spokenLanguages": ["en", "fr"],
+      "hasForcedSubtitle": false
+    }
+  ],
+  "counts": { "needed": 3, "neededMissing": 2, "unsure": 1, "unknown": 1, "notNeeded": 2 }
+}

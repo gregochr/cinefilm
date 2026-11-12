@@ -82,7 +82,13 @@ describe('Admin: Subtitles panel, the list', () => {
       within(panel)
         .getAllByRole('heading', { level: 3 })
         .map((h) => h.textContent),
-    ).toEqual(['Unmatched (1)', 'Conflicts (2)', 'Missing (1)', 'Matched (1)']);
+    ).toEqual([
+      'Which films need them',
+      'Unmatched (1)',
+      'Conflicts (2)',
+      'Missing (1)',
+      'Matched (1)',
+    ]);
     expect(within(panel).getByRole('list', { name: 'Conflicts subtitles' })).toBeInTheDocument();
   });
 
