@@ -292,6 +292,20 @@ describe('Forced subtitle resources', () => {
     expect(editionsApi.forcedSubtitleUrl(40)).toBe('/api/editions/40/forced-subtitles.vtt');
   });
 
+  it('lists which films need forced subtitles and records the owner’s choice for one', async () => {
+    const last = stubFetch();
+    await adminApi.forcedNeed();
+    expect(last()).toMatchObject({ path: '/api/admin/forced-subtitles/films', method: 'GET' });
+    await adminApi.setForcedNeed(7, 'NEEDED');
+    expect(last()).toMatchObject({
+      path: '/api/admin/films/7/forced-need',
+      method: 'PUT',
+      body: { choice: 'NEEDED' },
+    });
+    await adminApi.setForcedNeed(7, null);
+    expect(last().body).toEqual({ choice: null });
+  });
+
   it('lists the files and reads one file’s cues', async () => {
     const last = stubFetch();
     await adminApi.subtitles();

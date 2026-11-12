@@ -14,6 +14,7 @@ import adminEditions from '../test/fixtures/admin-editions.json';
 import adminMatch from '../test/fixtures/admin-match.json';
 import adminTranscoding from '../test/fixtures/admin-transcoding.json';
 import adminPlaybackHealth from '../test/fixtures/admin-playback-health.json';
+import adminForcedNeed from '../test/fixtures/admin-forced-need.json';
 import collection from '../test/fixtures/collection.json';
 import collections from '../test/fixtures/collections.json';
 import session from '../test/fixtures/session.json';
@@ -111,10 +112,52 @@ function updateSettings(body) {
   return settingsView();
 }
 
+const CHOICES = new Set(['NEEDED', 'NOT_NEEDED']);
+/**
+ * The owner's choice per film, kept in memory: absent means the fixture as loaded, NEEDED or NOT_NEEDED an explicit
+ * choice, null an explicit "Automatic" (the baseline below, with no owner choice).
+ */
+const forcedChoices = new Map();
+/** What the automatic rule says for a fixture film that is loaded with an owner choice. */
+const AUTOMATIC_BASELINE = { 7: { need: 'NOT_NEEDED', reason: 'ENGLISH_ONLY' } };
+
+function forcedRow(loaded) {
+  if (!forcedChoices.has(loaded.filmId)) return loaded;
+  const choice = forcedChoices.get(loaded.filmId);
+  if (choice) return { ...loaded, need: choice, reason: 'OWNER', ownerChoice: choice };
+  return { ...loaded, ...AUTOMATIC_BASELINE[loaded.filmId], ownerChoice: null };
+}
+
+function forcedNeedList() {
+  const rows = adminForcedNeed.films.map(forcedRow);
+  const count = (need) => rows.filter((r) => r.need === need).length;
+  return {
+    films: rows,
+    counts: {
+      needed: count('NEEDED'),
+      neededMissing: rows.filter((r) => r.need === 'NEEDED' && !r.hasForcedSubtitle).length,
+      unsure: count('UNSURE'),
+      unknown: count('UNKNOWN'),
+      notNeeded: count('NOT_NEEDED'),
+    },
+  };
+}
+
+function setForcedNeed(filmId, body) {
+  const automatic = adminForcedNeed.films.find((f) => f.filmId === filmId);
+  if (!automatic) throw new ApiError(404, 'No such film');
+  const choice = body?.choice ?? null;
+  if (choice !== null && !CHOICES.has(choice))
+    throw new ApiError(400, 'choice must be NEEDED, NOT_NEEDED or null');
+  forcedChoices.set(filmId, choice);
+  return forcedRow(automatic);
+}
+
 export async function handle(method, path, body) {
   await delay(80);
   const url = new URL(path, 'http://fixtures.local');
   const route = url.pathname;
+  let match;
   if (route === '/api/session') return method === 'GET' ? { authenticated: true } : { ok: true };
   if (route === '/api/home') return liveHome();
   if (route === '/api/admin/scan') return adminScan;
@@ -129,13 +172,16 @@ export async function handle(method, path, body) {
   if (route === '/api/admin/settings') {
     return method === 'PUT' ? updateSettings(body) : settingsView();
   }
+  if (route === '/api/admin/forced-subtitles/films') return forcedNeedList();
+  match = route.match(/^\/api\/admin\/films\/(\d+)\/forced-need$/);
+  if (match && method === 'PUT') return setForcedNeed(Number(match[1]), body);
   if (route === '/api/admin/playback-health') return adminPlaybackHealth;
   if (route === '/api/admin/transcoding') return adminTranscoding;
   if (/^\/api\/admin\/transcoding\/sessions\//.test(route)) return null;
   if (/^\/api\/editions\/\d+\/sessions$/.test(route)) return session;
   if (/^\/api\/sessions\//.test(route)) return null;
   if (route === '/api/films') return listFilms(url.searchParams);
-  let match = route.match(/^\/api\/films\/(\d+)$/);
+  match = route.match(/^\/api\/films\/(\d+)$/);
   if (match) return details[match[1]] || heat;
   if (/^\/api\/people\/\d+$/.test(route)) return livePerson();
   if (route === '/api/search-index') return buildFixtureSearchIndex();

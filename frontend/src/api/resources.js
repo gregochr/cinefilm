@@ -119,6 +119,14 @@ export const adminApi = {
   /** Says the file's lines are right and in sync ("Looks right"); `unverifySubtitle` undoes it. */
   verifySubtitle: (id) => post(`/api/admin/subtitles/${id}/verify`),
   unverifySubtitle: (id) => del(`/api/admin/subtitles/${id}/verify`),
+  /** Every film with whether it needs forced subtitles and why: `{ films: [...], counts: {...} }`. */
+  forcedNeed: (options) => get('/api/admin/forced-subtitles/films', options),
+  /**
+   * Records the owner's choice for a film (`'NEEDED'`, `'NOT_NEEDED'`, or null for the automatic rule) and returns
+   * that film's row. A 409 means a scan is running; a 404 an unknown film.
+   */
+  setForcedNeed: (filmId, choice, options) =>
+    put(`/api/admin/films/${filmId}/forced-need`, { choice }, options),
 };
 
 /** Server settings (Admin). `update` takes the minimum watch time in whole minutes, 0 to 30. */
