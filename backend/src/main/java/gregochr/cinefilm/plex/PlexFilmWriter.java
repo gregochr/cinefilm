@@ -207,8 +207,14 @@ public class PlexFilmWriter {
         Map<Long, MediaFile> after = load(ids);
         Film film = films.findById(targetId).orElseThrow();
         if (plex.tmdbId() != null) {
+            boolean idChanged = !plex.tmdbId().equals(film.getTmdbId());
             film.setTmdbId(plex.tmdbId());
-            if (write.movie() != null) {
+            if (write.movie() == null) {
+                if (idChanged) {
+                    // The setter forgot the old languages in the entity; write that to the row too.
+                    ingest.writeLanguages(film);
+                }
+            } else {
                 // applyMovie sets TMDB's poster and backdrop; artwork already stored from Plex must survive it.
                 String poster = film.getPosterPath();
                 String backdrop = film.getBackdropPath();

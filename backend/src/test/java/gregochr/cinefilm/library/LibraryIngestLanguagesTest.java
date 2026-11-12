@@ -9,6 +9,7 @@ import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.tmdb.TmdbModels.MovieDetails;
 import java.time.Duration;
 import java.util.List;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -17,6 +18,9 @@ class LibraryIngestLanguagesTest extends ApiTestBase {
 
     @Autowired
     private LibraryIngest ingest;
+
+    @Autowired
+    private EntityManager em;
 
     private static MovieDetails movie(String original, List<String> spoken) {
         return new MovieDetails(949, "Heat", "Heat", 1995, null, 170, List.of(), null, null, 0, List.of(),
@@ -57,6 +61,41 @@ class LibraryIngestLanguagesTest extends ApiTestBase {
         assertThat(film.getOriginalLanguage()).isEqualTo("en");
         assertThat(film.getSpokenLanguages()).isEqualTo("en");
         assertThat(film.getLanguagesFetchedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void languagesTheBackfillSavedForTheOldTmdbFilmAreOverwrittenWhenARematchAppliesAFilmWithNone() {
+        Film saved = film(null, "Heat", 1995, NOW);
+        saved.setTmdbId(111L);
+        Long id = films.saveAndFlush(saved).getId();
+        em.clear();
+        Film loaded = films.findById(id).orElseThrow();
+        // Meanwhile the backfill saves the old TMDB film's languages: the entity loaded null and will set null.
+        assertThat(films.saveLanguages(id, 111L, "fr", "fr,de", NOW.minusSeconds(5))).isEqualTo(1);
+
+        ingest.applyMovie(loaded, movie(null, List.of()));
+        em.flush();
+        em.clear();
+
+        Film result = films.findById(id).orElseThrow();
+        assertThat(result.getTmdbId()).isEqualTo(949L);
+        assertThat(result.getOriginalLanguage()).isNull();
+        assertThat(result.getSpokenLanguages()).isEmpty();
+        assertThat(result.getLanguagesFetchedAt()).isEqualTo(NOW);
+        assertThat(films.saveLanguages(id, 111L, "fr", "fr", NOW)).as("a late backfill for the old id").isZero();
+    }
+
+    @Test
+    void aFilmNotSavedYetIsLeftToItsInsert() {
+        Film fresh = film(null, "Heat", 1995, NOW);
+
+        ingest.applyMovie(fresh, movie("en", List.of("en")));
+        Long id = films.saveAndFlush(fresh).getId();
+        em.clear();
+
+        Film result = films.findById(id).orElseThrow();
+        assertThat(result.getOriginalLanguage()).isEqualTo("en");
+        assertThat(result.getLanguagesFetchedAt()).isEqualTo(NOW);
     }
 
     @Test

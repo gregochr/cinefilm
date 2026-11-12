@@ -12,6 +12,7 @@ import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmPreference;
+import gregochr.cinefilm.film.ForcedNeedChoice;
 import gregochr.cinefilm.film.MatchStatus;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
@@ -760,5 +761,43 @@ class EditionJoinTest extends ApiTestBase {
         assertThatThrownBy(() -> join.unfold(editionId, List.of(List.of(first, second), List.of())))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("The groups must split all of the edition's files, at least two ways");
+    }
+
+    @Test
+    void joiningFilmsKeepsTheOwnersForcedNeedChoiceOfTheAbsorbedFilm() {
+        Film one = film("Towers", MatchStatus.MATCHED, "Towers - pt1.m4v", 90);
+        Film two = film("Towers - pt2", MatchStatus.NEEDS_MATCH, "Towers - pt2.m4v", 110);
+        two.setForcedNeedOwner(ForcedNeedChoice.NOT_NEEDED);
+        films.saveAndFlush(two);
+        Long first = fileId(one);
+        Long second = fileId(two);
+        reset();
+
+        join.join(List.of(first, second));
+        reset();
+
+        assertThat(films.findAll()).singleElement().satisfies(f -> {
+            assertThat(f.getId()).isEqualTo(one.getId());
+            assertThat(f.getForcedNeedOwner()).isEqualTo(ForcedNeedChoice.NOT_NEEDED);
+        });
+    }
+
+    @Test
+    void joiningFilmsKeepsTheSurvivingFilmsOwnChoiceWhenBothHaveOne() {
+        Film one = film("Towers", MatchStatus.MATCHED, "Towers - pt1.m4v", 90);
+        one.setForcedNeedOwner(ForcedNeedChoice.NEEDED);
+        films.saveAndFlush(one);
+        Film two = film("Towers - pt2", MatchStatus.NEEDS_MATCH, "Towers - pt2.m4v", 110);
+        two.setForcedNeedOwner(ForcedNeedChoice.NOT_NEEDED);
+        films.saveAndFlush(two);
+        Long first = fileId(one);
+        Long second = fileId(two);
+        reset();
+
+        join.join(List.of(first, second));
+        reset();
+
+        assertThat(films.findAll()).singleElement()
+            .satisfies(f -> assertThat(f.getForcedNeedOwner()).isEqualTo(ForcedNeedChoice.NEEDED));
     }
 }

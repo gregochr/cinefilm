@@ -86,6 +86,22 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
                       @org.springframework.data.repository.query.Param("at") java.time.Instant at);
 
     /**
+     * Writes a film's languages and stamp straight to the row, whatever the entity thinks it loaded. A rematch uses it
+     * in its own transaction after the TMDB id change has been flushed: the entity (with {@code @DynamicUpdate}) skips
+     * a column it loaded as null and sets to null, so a backfill that committed the old film's languages meanwhile
+     * would survive; this statement overwrites it, and a backfill still waiting on the row finds its TMDB id gone.
+     * The persistence context is kept, so the entity must already hold these values.
+     */
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query(
+        "update Film f set f.originalLanguage = :original, f.spokenLanguages = :spoken, "
+            + "f.languagesFetchedAt = :at where f.id = :id")
+    int writeLanguages(@org.springframework.data.repository.query.Param("id") Long id,
+                       @org.springframework.data.repository.query.Param("original") String original,
+                       @org.springframework.data.repository.query.Param("spoken") String spoken,
+                       @org.springframework.data.repository.query.Param("at") java.time.Instant at);
+
+    /**
      * What the forced-subtitle need is worked out from, for one film.
      *
      * @param id the film
