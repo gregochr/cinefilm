@@ -40,4 +40,21 @@ public class SubtitleStream {
     private String title;
 
     private String format;
+
+    /**
+     * True when a stored stream language is English or not stated. The scan stores a language as its English name
+     * ({@code English}, from {@code eng}), a code it does not know as it came, and nothing for an undetermined one, so
+     * this accepts the name and the raw codes, in any case. The forced-track queries in {@link MediaFileRepository}
+     * spell the same list in JPQL.
+     *
+     * @param language the stored language, or null
+     * @return true for null, {@code English}, {@code eng}, {@code en} and {@code und}
+     */
+    public static boolean isEnglishOrUnlabelled(String language) {
+        if (language == null) {
+            return true;
+        }
+        String lower = language.toLowerCase(java.util.Locale.ROOT);
+        return "english".equals(lower) || "eng".equals(lower) || "en".equals(lower) || "und".equals(lower);
+    }
 }

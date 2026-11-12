@@ -177,8 +177,9 @@ class ForcedResolverUnitTest {
 
     @Test
     void anEmbeddedForcedTrackInEnglishOfNoLanguageOrAnyCaseCountsAndOthersDoNot() {
+        embedded("French", true);
         embedded("fra", true);
-        embedded("eng", false);
+        embedded("English", false);
         assertThat(resolve().embedded()).isFalse();
 
         embedded("ENG", true);
@@ -188,7 +189,7 @@ class ForcedResolverUnitTest {
 
     @Test
     void anEmbeddedTrackWithAShortCodeNoLanguageOrUndeterminedCountsToo() {
-        for (String language : new String[] {"en", "und", null}) {
+        for (String language : new String[] {"English", "ENGLISH", "en", "und", null}) {
             part.getSubtitleStreams().clear();
             embedded(language, true);
             assertThat(resolve().embedded()).as("language %s", language).isTrue();

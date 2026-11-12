@@ -321,6 +321,16 @@ Each: what was chosen, why, and the alternative. Numbers continue 2e's.
 57. **`servedReason` is built by `ForcedChoice`**, one short sentence per subtitle of the edition (the owner's files, the
     downloads, files that are missing, empty, unmatched, in conflict or beaten by a whole-edition file), from the same
     decision that picks what plays.
+58. **A stored stream language is English when it is `English` (the scan's name for `eng`), `eng`, `en`, `und` or empty,
+    in any case** (`SubtitleStream.isEnglishOrUnlabelled`, and the same list in the two `MediaFileRepository` forced
+    queries). `FfprobeParser` stores `eng` as `English`, so the earlier `eng`/`en` checks in the 2a queries (the need's
+    `EMBEDDED_FORCED` evidence) and in `hasEmbeddedForced` missed real English forced tracks; fixed in all three places, with
+    a test on the stored form. `EmbeddedStreams` reads ffprobe's raw codes itself and was right.
+59. **The need is re-read under the library lock before a download is added**, and **a film the owner marked "not needed"
+    serves no download** (`Downloads.of` returns none for it, so playback, the checks and the timing fit all ignore them).
+    The owner's own files and the film's embedded track still play: the owner chose those, a download is CineFilm's
+    addition. Nothing is deleted; choosing automatic again brings the downloads back. **Alternative:** "serves nothing"
+    including the owner's own files (a behaviour change to phase 1: not made).
 
 ### Judgement calls made building phase 3a (2026-11-12, owner away)
 

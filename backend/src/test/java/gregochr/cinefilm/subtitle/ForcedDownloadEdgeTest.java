@@ -7,6 +7,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.ForcedNeedChoice;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.subtitle.DownloadPlan.Kind;
@@ -226,6 +227,35 @@ class ForcedDownloadEdgeTest extends ForcedDownloadTestBase {
         films.saveAndFlush(film);
 
         assertThat(resolve(film).fileCheck()).isNull();
+    }
+
+    @Test
+    void anAddIsDroppedWhenTheOwnerSaidNotNeededAfterTheRunDecided() {
+        Film film = film();
+        OpenSubtitlesReference reference = reference(film, 5011);
+        DueDownload due = service.due().get(0);
+        film.setForcedNeedOwner(ForcedNeedChoice.NOT_NEEDED);
+        films.saveAndFlush(film);
+
+        assertThat(service.add(due, reference, LATER)).isEqualTo(AddOutcome.DROPPED);
+        assertThat(sidecars.findAll()).isEmpty();
+    }
+
+    @Test
+    void aFilmTheOwnerMarkedNotNeededServesNoDownloadAndSaysWhy() {
+        Film film = film();
+        SubtitleSidecar download = download(film, 5011);
+        assertThat(resolve(film).decision().source()).isEqualTo(ForcedChoice.Source.DOWNLOAD);
+
+        film.setForcedNeedOwner(ForcedNeedChoice.NOT_NEEDED);
+        films.saveAndFlush(film);
+
+        ForcedResolver.Resolution resolution = resolve(film);
+        assertThat(resolution.downloads()).isEmpty();
+        assertThat(resolution.decision().source()).isEqualTo(ForcedChoice.Source.NONE);
+        assertThat(resolution.reasons().get(download.getId()))
+            .isEqualTo("Not used: you marked this film as not needing forced subtitles");
+        assertThat(forced.forEditions(film.getEditions())).isEmpty();
     }
 
     @Test

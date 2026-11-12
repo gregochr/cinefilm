@@ -109,6 +109,32 @@ class ForcedNeedQueriesTest extends SubtitleTestBase {
     }
 
     @Test
+    void aForcedTrackInTheNameTheScanStoresForEnglishCounts() {
+        // FfprobeParser stores "eng" as "English" and a language it does not know as the raw code.
+        Film stored = filmWithParts("Stored", 1, 90);
+        Film french = filmWithParts("French", 1, 90);
+        Film unknown = filmWithParts("Unknown code", 1, 90);
+        stream(stored, "English", true);
+        stream(french, "French", true);
+        stream(unknown, "xyz", true);
+
+        assertThat(mediaFiles.findFilmIdsWithEmbeddedForced()).containsExactly(stored.getId());
+        assertThat(mediaFiles.countEmbeddedForcedForFilm(stored.getId())).isEqualTo(1);
+        assertThat(mediaFiles.countEmbeddedForcedForFilm(french.getId())).isZero();
+        assertThat(mediaFiles.countEmbeddedForcedForFilm(unknown.getId())).isZero();
+    }
+
+    @Test
+    void theHelperAcceptsEveryStoredFormOfEnglishAndNothingElse() {
+        for (String language : new String[] {null, "English", "english", "ENG", "en", "und"}) {
+            assertThat(SubtitleStream.isEnglishOrUnlabelled(language)).as("%s", language).isTrue();
+        }
+        for (String language : new String[] {"French", "fra", "xyz", "Spanish", ""}) {
+            assertThat(SubtitleStream.isEnglishOrUnlabelled(language)).as("%s", language).isFalse();
+        }
+    }
+
+    @Test
     void aForcedTrackInAnotherLanguageOrAnEnglishTrackThatIsNotForcedDoesNotCount() {
         Film french = filmWithParts("French", 1, 90);
         Film plain = filmWithParts("Plain", 1, 90);

@@ -101,12 +101,30 @@ public class ForcedNeedService {
         }
     }
 
+    /**
+     * Whether a film's need is shown right now (the owner's choice and the rule, as {@link #list} would say), read from
+     * the stored inputs.
+     *
+     * @param filmId the film
+     * @return true when its need is {@code NEEDED}; false for any other need and for a film that is gone
+     */
+    @Transactional(readOnly = true)
+    public boolean isNeeded(Long filmId) {
+        Film film = films.findById(filmId).orElse(null);
+        return film != null && "NEEDED".equals(dto(row(film, film.getForcedNeedOwner()),
+            sidecars.countPresentForFilm(filmId) > 0, false, files.countEmbeddedForcedForFilm(filmId) > 0).need());
+    }
+
+    private static NeedRow row(Film film, ForcedNeedChoice choice) {
+        return new NeedRow(film.getId(), film.getTitle(), film.getYear(), film.getTmdbId(),
+            film.getOriginalLanguage(), film.getSpokenLanguages(), film.getLanguagesFetchedAt(), choice,
+            film.getImdbId(), film.getOsForcedCount(), film.getOsSearchedAt(), film.getOsSearchedImdbId());
+    }
+
     private FilmNeedDto chooseLocked(Long filmId, ForcedNeedChoice choice) {
         Film film = films.findByIdForUpdate(filmId).orElseThrow(() -> new NotFoundException("No such film"));
         film.setForcedNeedOwner(choice);
-        NeedRow row = new NeedRow(film.getId(), film.getTitle(), film.getYear(), film.getTmdbId(),
-            film.getOriginalLanguage(), film.getSpokenLanguages(), film.getLanguagesFetchedAt(), choice,
-            film.getImdbId(), film.getOsForcedCount(), film.getOsSearchedAt(), film.getOsSearchedImdbId());
+        NeedRow row = row(film, choice);
         boolean hasSidecar = sidecars.countPresentForFilm(filmId) > 0;
         boolean served = sidecars.countPresentSubtitlesForFilm(filmId) > 0
             && !servedFilmIds(List.of(filmId)).isEmpty();

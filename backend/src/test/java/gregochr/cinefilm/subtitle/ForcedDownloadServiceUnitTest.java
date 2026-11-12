@@ -304,6 +304,7 @@ class ForcedDownloadServiceUnitTest {
         DueDownload due = new DueDownload(Kind.MISSING, 1L, 40L, IMDB, "Original", null, List.of(candidate(5011)), 3,
             null);
         when(films.findById(1L)).thenReturn(Optional.of(film));
+        when(need.isNeeded(1L)).thenReturn(true);
         when(editions.findWithFilesByFilmIdIn(List.of(1L))).thenReturn(List.of(edition));
         when(blocks.findByEditionIdIn(List.of(40L))).thenReturn(List.of());
         when(sidecars.findByMediaFileIdIn(List.of(10L))).thenReturn(List.of());

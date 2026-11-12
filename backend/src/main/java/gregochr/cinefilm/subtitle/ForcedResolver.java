@@ -22,7 +22,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
@@ -260,6 +259,7 @@ public class ForcedResolver {
                 String reason = decision.downloadReasons().get(s.getId());
                 reasons.put(s.getId(), reason != null ? reason
                     : s.getPresence() != Presence.PRESENT ? "Not used: the download is missing"
+                    : Downloads.isNotNeeded(edition) ? "Not used: you marked this film as not needing forced subtitles"
                     : !Downloads.madeFor(edition, s) ? "Not used: it was made for another edition"
                     : "Not used: it was fetched for another IMDb id");
             } else if (slotIds.contains(s.getId())) {
@@ -284,9 +284,7 @@ public class ForcedResolver {
                 continue;
             }
             for (SubtitleStream stream : file.getSubtitleStreams()) {
-                String language = stream.getLanguage() == null ? null : stream.getLanguage().toLowerCase(Locale.ROOT);
-                if (stream.isForced() && (language == null || "eng".equals(language) || "en".equals(language)
-                    || "und".equals(language))) {
+                if (stream.isForced() && SubtitleStream.isEnglishOrUnlabelled(stream.getLanguage())) {
                     return true;
                 }
             }

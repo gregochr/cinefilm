@@ -236,6 +236,10 @@ public class ForcedDownloadService {
             || !DownloadPlan.promotable(reference) || film.getOsCandidates() == null) {
             return AddOutcome.DROPPED;
         }
+        // The owner may have said "not needed" since the run decided: that choice takes the same lock, so it shows.
+        if (!need.isNeeded(due.filmId())) {
+            return AddOutcome.DROPPED;
+        }
         boolean candidate = OpenSubtitlesResult.listFromJson(film.getOsCandidates()).stream()
             .anyMatch(c -> c.isSingleFile() && c.fileId() == reference.getOsFileId());
         Edition edition = editions.findWithFilesByFilmIdIn(List.of(due.filmId())).stream()

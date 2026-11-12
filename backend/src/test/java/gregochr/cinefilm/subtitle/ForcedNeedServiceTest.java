@@ -317,6 +317,22 @@ class ForcedNeedServiceTest {
     }
 
     @Test
+    void aFilmsNeedIsReadFromItsStoredInputsForTheDownloadRunsRecheck() {
+        Film shown = stored(7L, "en", "en", ForcedNeedChoice.NEEDED);
+        Film notNeeded = stored(8L, "en", "en", ForcedNeedChoice.NOT_NEEDED);
+        Film automatic = stored(9L, "en", "en", null);
+        when(films.findById(7L)).thenReturn(Optional.of(shown));
+        when(films.findById(8L)).thenReturn(Optional.of(notNeeded));
+        when(films.findById(9L)).thenReturn(Optional.of(automatic));
+        when(films.findById(10L)).thenReturn(Optional.empty());
+
+        assertThat(service.isNeeded(7L)).isTrue();
+        assertThat(service.isNeeded(8L)).isFalse();
+        assertThat(service.isNeeded(9L)).isFalse();
+        assertThat(service.isNeeded(10L)).isFalse();
+    }
+
+    @Test
     void anEmptyLibraryHasEmptyCounts() {
         when(films.findNeedRows()).thenReturn(List.of());
         when(sidecars.findFilmIdsWithPresentSidecar()).thenReturn(List.of());
