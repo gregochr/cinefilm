@@ -920,4 +920,32 @@ class SidecarCheckRefresherTest {
         assertThat(saved.getValue().isFinal()).isTrue();
         assertThat(saved.getValue().getFailedDownloads()).isEqualTo(3);
     }
+
+    @Test
+    void threeChargedTransientFailuresInThreeRunsMakeTheFileFinalAndAFourthRunDoesNotDownload() {
+        DueCheck due = due(1, 10, 5011);
+        OpenSubtitlesReference[] kept = new OpenSubtitlesReference[1];
+        when(service.due()).thenReturn(List.of(due));
+        when(references.findByFilmIdAndOsFileId(1L, 5011)).thenAnswer(call -> Optional.ofNullable(kept[0]));
+        when(references.saveAndFlush(any(OpenSubtitlesReference.class))).thenAnswer(call -> {
+            kept[0] = call.getArgument(0);
+            return kept[0];
+        });
+        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(api.download(5011)).thenThrow(new OpenSubtitlesChargedException("request failed", false));
+        when(api.downloadsEnabled()).thenReturn(true);
+
+        for (int run = 1; run <= 4; run++) {
+            queued.clear();
+            refresher.startDue();
+            queued.get(0).run();
+            if (run <= 3) {
+                assertThat(kept[0].getFailedDownloads()).isEqualTo(run);
+                assertThat(kept[0].isFinal()).isEqualTo(run == 3);
+            }
+        }
+
+        verify(api, times(3)).download(5011);
+        verify(budget, times(3)).take(DAY, LIMIT);
+    }
 }

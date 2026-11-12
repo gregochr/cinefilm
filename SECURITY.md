@@ -99,7 +99,8 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
     `POST /api/v1/download` (`{"file_id": n}`, a number from a search reply): nothing in a request comes from the browser.
     Redirects are not followed (a 3xx is an error), connect and read time out at 10 s, at most 1 MB of a JSON reply is
     read (more is an error), requests are paced to under 5 a second and logins to one a second, and 429 and 5xx are
-    retried at most three times. The login token is kept in memory only and a login is made again only after a 401, once.
+    retried at most three times, except `POST /download`, which costs a download: only a 429 is retried, and a timeout, reset or 5xx is
+    never sent again (it may already have been charged). The login token is kept in memory only and a login is made again only after a 401, once.
     **The download link is untrusted**: it is fetched only when it is `https`, has no user info and the default port, and
     its host is a plain name below `opensubtitles.com` (checked before any request, so another host gets none); the fetch
     is a GET that carries neither the key nor the token nor a cookie, asks for `identity` encoding, and at most 2 MB is read

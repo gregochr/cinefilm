@@ -174,7 +174,7 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
         }
         boolean hadSession = hasSession();
         String bearer = session();
-        Answer<String> answer = retrying(() -> downloadOnce(bearer, fileId));
+        Answer<String> answer = retryingDownload(() -> downloadOnce(bearer, fileId));
         if (answer.status() == UNAUTHORIZED) {
             // The session ran out: log in again, once, and only when this call did not just log in.
             dropSession();
@@ -182,7 +182,7 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
                 throw new OpenSubtitlesUnavailableException("OpenSubtitles rejected the session");
             }
             String renewed = session();
-            answer = retrying(() -> downloadOnce(renewed, fileId));
+            answer = retryingDownload(() -> downloadOnce(renewed, fileId));
             if (answer.status() == UNAUTHORIZED) {
                 dropSession();
                 throw new OpenSubtitlesUnavailableException("OpenSubtitles rejected the session");
@@ -200,10 +200,16 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
             throw new OpenSubtitlesUnavailableException("OpenSubtitles download answered status " + answer.status());
         }
         if (answer.body() == null) {
-            throw new OpenSubtitlesUnavailableException(
-                "OpenSubtitles answered more than " + maxBodyBytes + " bytes");
+            throw new OpenSubtitlesChargedException("OpenSubtitles answered more than " + maxBodyBytes + " bytes",
+                false);
         }
-        JsonNode root = json(answer.body(), "OpenSubtitles returned unreadable JSON");
+        JsonNode root;
+        try {
+            root = json(answer.body(), "OpenSubtitles returned unreadable JSON");
+        } catch (OpenSubtitlesUnavailableException e) {
+            // A 2xx we cannot read: the download may have been charged.
+            throw new OpenSubtitlesChargedException(e.getMessage(), false);
+        }
         Instant reset = resetOf(root);
         JsonNode link = root.path("link");
         if (!link.isString()) {
@@ -211,7 +217,8 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
             if (message.isString() && LIMIT_MESSAGE.matcher(message.asString()).find()) {
                 throw new OpenSubtitlesQuotaException(reset);
             }
-            throw new OpenSubtitlesUnavailableException("OpenSubtitles returned an unexpected download reply");
+            // A 2xx with no link and no limit message: the download may have been charged.
+            throw new OpenSubtitlesChargedException("OpenSubtitles returned an unexpected download reply", false);
         }
         // From here on OpenSubtitles has issued a link and charged the account: every failure is a charged one.
         URI uri;
@@ -361,6 +368,20 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
      * handed back for the caller to read; a request that never gets through is an exception.
      */
     private <T> Answer<T> retrying(Attempt<T> attempt) {
+        return retrying(attempt, false);
+    }
+
+    /**
+     * The chargeable {@code POST /download}: only a clear rejection (429) is retried. A request that got no answer
+     * (the JDK client cannot tell "refused before anything was sent" from "sent, then timed out or reset", so every
+     * transport failure counts as the second) or a 5xx may already have been charged, and sending it again could charge
+     * it again: those are {@link OpenSubtitlesChargedException}s (transient), never retried.
+     */
+    private Answer<String> retryingDownload(Attempt<String> attempt) {
+        return retrying(attempt, true);
+    }
+
+    private <T> Answer<T> retrying(Attempt<T> attempt, boolean chargeable) {
         for (int attemptNumber = 1; ; attemptNumber++) {
             Answer<T> answer;
             try {
@@ -378,6 +399,9 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
                 return answer;
             }
             String what = answer == null ? "no response" : "status " + answer.status();
+            if (chargeable && (answer == null || answer.status() != TOO_MANY_REQUESTS)) {
+                throw new OpenSubtitlesChargedException("OpenSubtitles download request failed: " + what, false);
+            }
             if (attemptNumber == MAX_ATTEMPTS) {
                 throw new OpenSubtitlesUnavailableException(
                     "OpenSubtitles unavailable after " + MAX_ATTEMPTS + " attempts: " + what);

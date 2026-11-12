@@ -428,20 +428,22 @@ class OpenSubtitlesClientDownloadTest {
     }
 
     @Test
-    void theDownloadIsRetriedOn429WithRetryAfterAnd5xxThenGivenUp() {
+    void theDownloadIsRetriedOn429WithRetryAfterThenGivenUpAsAnUnchargedOutage() {
         expectLogin();
         server.expect(once(), requestTo(DOWNLOAD_URL)).andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS)
             .header(HttpHeaders.RETRY_AFTER, "7"));
         expectDownload(download(LINK));
         expectFile(SRT);
-        server.expect(times(4), requestTo(DOWNLOAD_URL)).andRespond(withStatus(HttpStatus.BAD_GATEWAY));
+        server.expect(times(4), requestTo(DOWNLOAD_URL)).andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS)
+            .header(HttpHeaders.RETRY_AFTER, "2"));
 
         assertThat(client.download(1).parsed().cues()).hasSize(2);
         assertThat(sleeps).containsExactly(Duration.ofSeconds(7));
         sleeps.clear();
-        assertThatThrownBy(() -> client.download(1))
-            .hasMessage("OpenSubtitles unavailable after 4 attempts: status 502");
-        assertThat(sleeps).containsExactly(Duration.ofMillis(500), Duration.ofSeconds(1), Duration.ofSeconds(2));
+        // A clear rejection is retried, and when it never clears nothing was charged: a plain outage.
+        assertThatThrownBy(() -> client.download(1)).isNotInstanceOf(OpenSubtitlesChargedException.class)
+            .hasMessage("OpenSubtitles unavailable after 4 attempts: status 429");
+        assertThat(sleeps).containsExactly(Duration.ofSeconds(2), Duration.ofSeconds(2), Duration.ofSeconds(2));
         server.verify();
     }
 
@@ -455,6 +457,43 @@ class OpenSubtitlesClientDownloadTest {
         assertThatThrownBy(() -> client.download(1)).hasMessage("OpenSubtitles rejected the login");
         assertThatThrownBy(() -> client.download(1)).hasMessage("OpenSubtitles login answered status 400");
         server.verify();
+    }
+
+    @Test
+    void aTimeoutOrResetOnTheDownloadRequestIsSentOnceAndIsAChargedTransientFailureWithNoRetry() {
+        expectLogin();
+        server.expect(once(), requestTo(DOWNLOAD_URL)).andRespond(withException(new IOException("read timed out")));
+
+        assertCharged(org.assertj.core.api.Assertions.catchThrowable(() -> client.download(1)), false);
+
+        server.verify();
+        assertThat(sleeps).isEmpty();
+    }
+
+    @Test
+    void a5xxOnTheDownloadRequestIsSentOnceAndIsAChargedTransientFailureWithNoRetry() {
+        expectLogin();
+        server.expect(once(), requestTo(DOWNLOAD_URL)).andRespond(withStatus(HttpStatus.BAD_GATEWAY));
+        server.expect(once(), requestTo(DOWNLOAD_URL)).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+
+        assertThatThrownBy(() -> client.download(1)).hasMessage("OpenSubtitles download request failed: status 502")
+            .isInstanceOfSatisfying(OpenSubtitlesChargedException.class, e -> assertThat(e.permanent()).isFalse());
+        assertThatThrownBy(() -> client.download(1)).hasMessage("OpenSubtitles download request failed: status 503");
+
+        server.verify();
+        assertThat(sleeps).isEmpty();
+    }
+
+    @Test
+    void aDownloadReplyThatCannotBeReadOrHasNoLinkIsAChargedTransientFailure() {
+        expectLogin();
+        expectDownload("{\"message\":\"something else\"}");
+        expectDownload("not json");
+        expectDownload("{\"link\":42}");
+
+        for (int i = 0; i < 3; i++) {
+            assertCharged(org.assertj.core.api.Assertions.catchThrowable(() -> client.download(1)), false);
+        }
     }
 
     @Test
@@ -762,12 +801,10 @@ class OpenSubtitlesClientDownloadTest {
     void aFailureBeforeOrDuringTheDownloadRequestIsNeverAChargedOne() {
         server.expect(once(), requestTo(LOGIN_URL)).andRespond(withStatus(HttpStatus.UNAUTHORIZED));
         expectLogin();
-        server.expect(times(4), requestTo(DOWNLOAD_URL)).andRespond(withStatus(HttpStatus.BAD_GATEWAY));
-        expectDownload("{\"message\":\"something else\"}");
-        expectDownload("not json");
+        server.expect(times(4), requestTo(DOWNLOAD_URL)).andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
         server.expect(once(), requestTo(DOWNLOAD_URL)).andRespond(withStatus(HttpStatus.NOT_FOUND));
 
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 3; i++) {
             assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> client.download(1)))
                 .isInstanceOf(OpenSubtitlesUnavailableException.class)
                 .isNotInstanceOf(OpenSubtitlesChargedException.class);
