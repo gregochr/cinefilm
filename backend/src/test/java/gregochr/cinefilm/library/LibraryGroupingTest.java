@@ -15,6 +15,7 @@ import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmPreference;
+import gregochr.cinefilm.film.ForcedNeedChoice;
 import gregochr.cinefilm.film.GroupingChange;
 import gregochr.cinefilm.film.GroupingChangeRepository;
 import gregochr.cinefilm.film.GroupingSource;
@@ -689,6 +690,23 @@ class LibraryGroupingTest extends ApiTestBase {
             assertThat(fact.joinable()).isTrue();
             assertThat(fact.extraFiles()).isTrue();
             assertThat(fact.parsed().comparisonTitle()).isEqualTo("heat");
+        });
+    }
+
+    @Test
+    void joiningPartFilmsKeepsTheOwnersForcedNeedChoiceOfTheAbsorbedOne() {
+        Film pt1 = film("Towers", MatchStatus.MATCHED, 121L, "Original", 90, "Towers - pt1.m4v");
+        Film pt2 = film("Towers 2", MatchStatus.PENDING, null, "Original", 110, "Towers - pt2.m4v");
+        pt2.setForcedNeedOwner(ForcedNeedChoice.NEEDED);
+        films.saveAndFlush(pt2);
+        reset();
+
+        grouping.group();
+        reset();
+
+        assertThat(films.findAll()).singleElement().satisfies(f -> {
+            assertThat(f.getId()).isEqualTo(pt1.getId());
+            assertThat(f.getForcedNeedOwner()).isEqualTo(ForcedNeedChoice.NEEDED);
         });
     }
 }

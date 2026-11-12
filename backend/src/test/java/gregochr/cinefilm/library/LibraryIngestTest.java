@@ -14,6 +14,7 @@ import gregochr.cinefilm.film.CreditRole;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.ForcedNeedChoice;
 import gregochr.cinefilm.film.MatchStatus;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
@@ -597,5 +598,25 @@ class LibraryIngestTest extends ApiTestBase {
         assertThat(collection.getName()).isEqualTo("Collection");
         assertThat(collection.getParts()).singleElement().satisfies(p -> assertThat(p.getTitle())
             .isEqualTo("Untitled"));
+    }
+
+    @Test
+    void aRetriedFileThatJoinsAFilmWeAlreadyHaveBringsTheOwnersForcedNeedChoiceWithIt() {
+        MovieDetails heat = movie(949, "Heat", 1995, null);
+        ingest.addNew(found("Heat.m4v", 10), Playability.PLAYABLE, probe(1), new TitleGuess("Heat", 1995),
+            matched(heat));
+        ingest.addNew(found("Heat - HD.m4v", 11), Playability.PLAYABLE, probe(1), new TitleGuess("Heat - HD", null),
+            null);
+        Long orphanFilmId = ingest.pending().get(0).filmId();
+        Film orphan = films.findById(orphanFilmId).orElseThrow();
+        orphan.setForcedNeedOwner(ForcedNeedChoice.NEEDED);
+        films.saveAndFlush(orphan);
+        Long keeperId = films.findFirstByTmdbIdOrderByIdAsc(949L).orElseThrow().getId();
+
+        ingest.applyOutcome(orphanFilmId, matched(heat));
+        em.flush();
+        em.clear();
+
+        assertThat(films.findById(keeperId).orElseThrow().getForcedNeedOwner()).isEqualTo(ForcedNeedChoice.NEEDED);
     }
 }

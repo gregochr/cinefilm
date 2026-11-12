@@ -19,6 +19,7 @@ import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.film.MediaFileRepository.Known;
 import gregochr.cinefilm.film.Playability;
 import gregochr.cinefilm.film.Presence;
+import gregochr.cinefilm.film.SpokenLanguages;
 import gregochr.cinefilm.film.SubtitleStream;
 import gregochr.cinefilm.library.FileNameParser.ParsedName;
 import gregochr.cinefilm.library.LibraryScanner.FoundFile;
@@ -32,6 +33,7 @@ import gregochr.cinefilm.tmdb.TmdbModels.CollectionDetails;
 import gregochr.cinefilm.tmdb.TmdbModels.CollectionRef;
 import gregochr.cinefilm.tmdb.TmdbModels.MovieDetails;
 import gregochr.cinefilm.tmdb.TmdbUnavailableException;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
@@ -68,11 +70,13 @@ public class LibraryIngest {
     private final FilmCollectionRepository collections;
     private final ScanRunRepository runs;
     private final TmdbApi tmdb;
+    private final Clock clock;
 
-    /** Creates the ingest over the repositories and TMDB (for collection parts). */
+    /** Creates the ingest over the repositories, TMDB (for collection parts) and the clock (for the stamps). */
     public LibraryIngest(FilmRepository films, EditionRepository editions, MediaFileRepository files,
                          PersonRepository people, FilmPreferenceRepository preferences,
-                         FilmCollectionRepository collections, ScanRunRepository runs, TmdbApi tmdb) {
+                         FilmCollectionRepository collections, ScanRunRepository runs, TmdbApi tmdb, Clock clock) {
+        this.clock = clock;
         this.films = films;
         this.editions = editions;
         this.files = files;
@@ -329,9 +333,9 @@ public class LibraryIngest {
 
     /**
      * Folds one film into another: every edition (with its files, streams and watch state, which follow the edition
-     * id) and the remembered choices move to the survivor, then the emptied film is deleted (its credits and genres
-     * go with it). Because the bulk move clears the persistence context, callers must reload the survivor before
-     * writing to it.
+     * id) and the remembered choices (preferences, and the owner's forced-subtitle choice unless the survivor has
+     * one) move to the survivor, then the emptied film is deleted (its credits and genres go with it). Because the
+     * bulk move clears the persistence context, callers must reload the survivor before writing to it.
      *
      * @param fromId the film that goes away
      * @param toId the film that keeps everything
@@ -340,6 +344,10 @@ public class LibraryIngest {
     public void merge(Long fromId, Long toId) {
         Film from = films.findById(fromId).orElseThrow();
         Film to = films.findById(toId).orElseThrow();
+        // The owner's choice survives the merge; if both films have one the survivor's wins. Flushed by moveAll.
+        if (to.getForcedNeedOwner() == null) {
+            to.setForcedNeedOwner(from.getForcedNeedOwner());
+        }
         editions.moveAll(from, to);
         mergePreferences(fromId, toId);
         films.delete(films.findById(fromId).orElseThrow());
@@ -408,6 +416,10 @@ public class LibraryIngest {
         film.setMatchStatus(MatchStatus.MATCHED);
         film.setMatchCandidates(null);
         applyImdbId(film, movie.imdbId());
+        film.setOriginalLanguage(movie.originalLanguage());
+        film.setSpokenLanguages(SpokenLanguages.store(movie.spokenLanguages()));
+        film.setLanguagesFetchedAt(clock.instant());
+        writeLanguages(film);
         film.setCollection(movie.collection() == null ? null : collection(movie.collection()));
         film.getCredits().clear();
         int order = 0;
@@ -417,6 +429,20 @@ public class LibraryIngest {
         order = 0;
         for (var actor : movie.cast()) {
             film.getCredits().add(credit(film, actor, CreditRole.CAST, actor.character(), order++));
+        }
+    }
+
+    /**
+     * Writes the film's languages to its row with an explicit statement, after flushing the TMDB id change. Call it
+     * whenever a film's TMDB id may have changed (the entity has by then forgotten or replaced the languages). The
+     * entity alone is not enough: it skips a column it loaded as null and sets to null, so languages the backfill
+     * committed for the old TMDB film meanwhile would stay. See {@link FilmRepository#writeLanguages}. A film not
+     * saved yet has no row, and its insert writes every column.
+     */
+    public void writeLanguages(Film film) {
+        if (film.getId() != null) {
+            films.writeLanguages(film.getId(), film.getOriginalLanguage(), film.getSpokenLanguages(),
+                film.getLanguagesFetchedAt());
         }
     }
 

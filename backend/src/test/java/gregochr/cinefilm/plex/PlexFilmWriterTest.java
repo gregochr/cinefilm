@@ -11,6 +11,8 @@ import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmPreference;
+import gregochr.cinefilm.film.FilmRepository;
+import gregochr.cinefilm.film.ForcedNeedChoice;
 import gregochr.cinefilm.film.MatchStatus;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.playback.PlaybackState;
@@ -184,6 +186,42 @@ class PlexFilmWriterTest extends ApiTestBase {
         assertThat(result.getTmdbId()).isEqualTo(949L);
         assertThat(result.getRatingsFetchedAt()).isNull();
         assertThat(films.findIdsWithRatingsDueBefore(cutoff)).contains(film.getId());
+    }
+
+    @Test
+    void anImportThatGivesAFilmATmdbIdWithoutMovieDetailsLeavesItDueForTheLanguagesBackfill() {
+        Film film = saved("heat file", null, "Heat.m4v");
+        film.setOriginalLanguage("fr");
+        film.setSpokenLanguages("fr,de");
+        film.setLanguagesFetchedAt(NOW);
+        films.saveAndFlush(film);
+
+        writer.apply(write(plex(949L, "Heat"), List.of(fileId(film, 0)), null));
+
+        Film result = reload(film.getId());
+        assertThat(result.getTmdbId()).isEqualTo(949L);
+        assertThat(result.getOriginalLanguage()).isNull();
+        assertThat(result.getSpokenLanguages()).isNull();
+        assertThat(result.getLanguagesFetchedAt()).isNull();
+        assertThat(films.findWithoutLanguages()).contains(new FilmRepository.TmdbRef(film.getId(), 949L));
+    }
+
+    @Test
+    void languagesSavedBehindTheImportsBackAreWipedFromTheRowWhenItGivesTheFilmAnIdWithoutMovieDetails() {
+        Film film = saved("heat file", null, "Heat.m4v");
+        em.createNativeQuery("update film set original_language = 'fr', spoken_languages = 'fr', "
+            + "languages_fetched_at = ?1 where id = ?2").setParameter(1, NOW).setParameter(2, film.getId())
+            .executeUpdate();
+
+        writer.apply(write(plex(949L, "Heat"), List.of(fileId(film, 0)), null));
+
+        em.flush();
+        em.clear();
+        Film result = films.findById(film.getId()).orElseThrow();
+        assertThat(result.getTmdbId()).isEqualTo(949L);
+        assertThat(result.getOriginalLanguage()).isNull();
+        assertThat(result.getSpokenLanguages()).isNull();
+        assertThat(result.getLanguagesFetchedAt()).isNull();
     }
 
     @Test
@@ -644,5 +682,37 @@ class PlexFilmWriterTest extends ApiTestBase {
         em.clear();
 
         assertThat(writer.preflight(List.of(fileId(survivor, 0), fileId(later, 0)), 949L).needsTmdb()).isFalse();
+    }
+
+    @Test
+    void mergingTwoFilmsWithThePlexTmdbIdKeepsTheOwnersForcedNeedChoice() {
+        Film first = saved("Heat", 949L, "Heat.m4v");
+        Film second = saved("Heat again", 949L, "Heat (Director's Cut).m4v");
+        second.setForcedNeedOwner(ForcedNeedChoice.NEEDED);
+        films.saveAndFlush(second);
+
+        writer.apply(write(plex(949L, "Heat (Plex)"), List.of(fileId(first, 0), fileId(second, 0)),
+            tmdb(949, "Heat")));
+
+        em.flush();
+        em.clear();
+        assertThat(films.findById(first.getId()).orElseThrow().getForcedNeedOwner())
+            .isEqualTo(ForcedNeedChoice.NEEDED);
+        assertThat(films.findById(second.getId())).isEmpty();
+    }
+
+    @Test
+    void aFilmEmptiedByThePlexImportPassesItsForcedNeedChoiceToTheFilmTheFilesMovedTo() {
+        Film wrong = saved("Wrong", 111L, "Heat.m4v");
+        wrong.setForcedNeedOwner(ForcedNeedChoice.NOT_NEEDED);
+        films.saveAndFlush(wrong);
+
+        writer.apply(write(plex(949L, "Heat"), List.of(fileId(wrong, 0)), null));
+
+        em.flush();
+        em.clear();
+        assertThat(films.findById(wrong.getId())).isEmpty();
+        assertThat(films.findAll()).singleElement()
+            .satisfies(f -> assertThat(f.getForcedNeedOwner()).isEqualTo(ForcedNeedChoice.NOT_NEEDED));
     }
 }

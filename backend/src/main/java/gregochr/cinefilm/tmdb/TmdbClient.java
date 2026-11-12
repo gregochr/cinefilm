@@ -9,6 +9,7 @@ import gregochr.cinefilm.tmdb.TmdbModels.SearchHit;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import gregochr.cinefilm.film.SpokenLanguages;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -158,7 +159,17 @@ public class TmdbClient implements TmdbApi {
         return new MovieDetails(m.path("id").asLong(), text(m, "title"), text(m, "original_title"), year(m),
             text(m, "overview"), runtime > 0 ? runtime : null, List.copyOf(genres), text(m, "poster_path"),
             text(m, "backdrop_path"), m.path("popularity").asDouble(0), List.copyOf(directors),
-            List.copyOf(cast), collection, text(m, "imdb_id"));
+            List.copyOf(cast), collection, text(m, "imdb_id"), SpokenLanguages.code(text(m, "original_language")),
+            spokenLanguages(m));
+    }
+
+    /** The valid {@code iso_639_1} codes of {@code spoken_languages}, in TMDB's order; TMDB text is untrusted. */
+    private static List<String> spokenLanguages(JsonNode m) {
+        List<String> raw = new ArrayList<>();
+        for (JsonNode language : m.path("spoken_languages")) {
+            raw.add(text(language, "iso_639_1"));
+        }
+        return SpokenLanguages.codes(raw);
     }
 
     private static Credit credit(JsonNode c, String character) {

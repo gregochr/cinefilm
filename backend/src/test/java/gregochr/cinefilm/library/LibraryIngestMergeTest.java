@@ -11,6 +11,7 @@ import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmPreference;
 import gregochr.cinefilm.tmdb.TmdbApi;
+import gregochr.cinefilm.film.ForcedNeedChoice;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -81,5 +82,50 @@ class LibraryIngestMergeTest extends ApiTestBase {
         em.clear();
         assertThat(preferences.findById(to.getId()).orElseThrow().getSubtitle()).isEqualTo("French");
         assertThat(preferences.findById(from.getId())).isEmpty();
+    }
+
+    @Test
+    void theOwnersForcedNeedChoiceMovesToTheSurvivorWhenItHasNone() {
+        Film from = film("From", "From.m4v");
+        from.setForcedNeedOwner(ForcedNeedChoice.NEEDED);
+        films.saveAndFlush(from);
+        Film to = film("To", "To.m4v");
+
+        ingest.merge(from.getId(), to.getId());
+
+        em.flush();
+        em.clear();
+        assertThat(films.findById(to.getId()).orElseThrow().getForcedNeedOwner()).isEqualTo(ForcedNeedChoice.NEEDED);
+    }
+
+    @Test
+    void theSurvivorsOwnForcedNeedChoiceWinsWhenBothFilmsHaveOne() {
+        Film from = film("From", "From.m4v");
+        from.setForcedNeedOwner(ForcedNeedChoice.NEEDED);
+        films.saveAndFlush(from);
+        Film to = film("To", "To.m4v");
+        to.setForcedNeedOwner(ForcedNeedChoice.NOT_NEEDED);
+        films.saveAndFlush(to);
+
+        ingest.merge(from.getId(), to.getId());
+
+        em.flush();
+        em.clear();
+        assertThat(films.findById(to.getId()).orElseThrow().getForcedNeedOwner())
+            .isEqualTo(ForcedNeedChoice.NOT_NEEDED);
+    }
+
+    @Test
+    void aSurvivorKeepsItsChoiceAndANullSourceChoiceChangesNothing() {
+        Film from = film("From", "From.m4v");
+        Film to = film("To", "To.m4v");
+        to.setForcedNeedOwner(ForcedNeedChoice.NEEDED);
+        films.saveAndFlush(to);
+
+        ingest.merge(from.getId(), to.getId());
+
+        em.flush();
+        em.clear();
+        assertThat(films.findById(to.getId()).orElseThrow().getForcedNeedOwner()).isEqualTo(ForcedNeedChoice.NEEDED);
     }
 }

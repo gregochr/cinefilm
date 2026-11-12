@@ -20,6 +20,7 @@ import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.config.ServiceUnavailableException;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.ForcedNeedChoice;
 import gregochr.cinefilm.film.GroupingChange;
 import gregochr.cinefilm.film.GroupingChangeRepository;
 import gregochr.cinefilm.film.MatchStatus;
@@ -258,5 +259,23 @@ class FixMatchTest extends ApiTestBase {
         fix.apply(other.getId(), 7L);
 
         assertThat(groupingChanges.findTop20ByOrderByHappenedAtDescIdDesc().get(0).getSummary()).hasSize(500);
+    }
+
+    @Test
+    void joiningIntoAnotherFilmWithFixMatchBringsTheOwnersForcedNeedChoiceAcross() {
+        Film existing = film(null, "The Wicker Man", 1973, NOW);
+        existing.setTmdbId(16307L);
+        existing.setMatchStatus(MatchStatus.MATCHED);
+        file(edition(existing, null, "Original", 93 * MIN, null), "The Wicker Man.m4v");
+        existing = save(existing);
+        Film other = unmatched("Summerisle", "Summerisle Cut.m4v");
+        other.setForcedNeedOwner(ForcedNeedChoice.NOT_NEEDED);
+        films.saveAndFlush(other);
+        when(tmdb.movie(16307)).thenReturn(Optional.of(movie(16307, "The Wicker Man", 1973)));
+
+        fix.apply(other.getId(), 16307L);
+
+        assertThat(films.findById(existing.getId()).orElseThrow().getForcedNeedOwner())
+            .isEqualTo(ForcedNeedChoice.NOT_NEEDED);
     }
 }
