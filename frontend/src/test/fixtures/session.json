@@ -6,6 +6,7 @@
     { "id": "original", "height": 1080, "bitrate": 24000000, "copy": true },
     { "id": "720p", "height": 720, "bitrate": 2500000, "copy": false },
     { "id": "480p", "height": 480, "bitrate": 1000000, "copy": false },
-    { "id": "360p", "height": 360, "bitrate": 600000, "copy": false }
+    { "id": "360p", "height": 360, "bitrate": 600000, "copy": false },
+    { "id": "240p", "height": 240, "bitrate": 250000, "copy": false }
   ]
 }

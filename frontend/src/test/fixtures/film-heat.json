@@ -156,6 +156,12 @@
           "bitrate": 600000,
           "premade": false,
           "available": false
+        },
+        {
+          "id": "240p",
+          "bitrate": 250000,
+          "premade": false,
+          "available": false
         }
       ]
     }

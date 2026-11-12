@@ -30,9 +30,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * The whole streaming path against the real ffmpeg and ffprobe, on the software encoder: a 30 s clip with B-frames
- * and irregular, forced keyframes is indexed, and a real {@link SessionManager} makes a session whose copy rung and
- * 360p rung are checked at every segment. CI installs ffmpeg (with libx264); the test skips itself where the tools
- * are not on the PATH, as on the dev Mac. Every wait is bounded by {@link #DEADLINE}.
+ * and irregular, forced keyframes is indexed, and a real {@link SessionManager} makes a session whose copy rung,
+ * 360p rung and 240p floor rung are checked at every segment. CI installs ffmpeg (with libx264); the test skips
+ * itself where the tools are not on the PATH, as on the dev Mac. Every wait is bounded by {@link #DEADLINE}.
  *
  * <p>The real clock is read here on purpose: the encoder really runs, and the deadline is wall time.
  */
@@ -174,12 +174,12 @@ class TranscodeRealToolsTest {
     }
 
     @Test
-    void theIndexHasIrregularCutsThatTheCopyRungCanFollowAndTheLadderHasBothRungs() {
+    void theIndexHasIrregularCutsThatTheCopyRungCanFollowAndTheLadderHasAllThreeRungs() {
         assertThat(index.cuts().segmentCount()).isGreaterThanOrEqualTo(4);
         assertThat(index.cuts().startMs(0)).isZero();
         assertThat(index.cuts().copyOk()).isTrue();
         assertThat(index.fps()).isBetween(24.9, 25.1);
-        assertThat(rungs).extracting(Rung::id).containsExactly("original", "360p");
+        assertThat(rungs).extracting(Rung::id).containsExactly("original", "360p", "240p");
     }
 
     @Test
@@ -191,8 +191,9 @@ class TranscodeRealToolsTest {
             view.height());
         String media = PlaylistWriter.media(view.cuts());
 
-        assertThat(master).startsWith("#EXTM3U\n").contains("original/index.m3u8\n", "360p/index.m3u8\n");
-        assertThat(master.lines().filter(line -> line.startsWith("#EXT-X-STREAM-INF:")).count()).isEqualTo(2);
+        assertThat(master).startsWith("#EXTM3U\n").contains("original/index.m3u8\n", "360p/index.m3u8\n",
+            "240p/index.m3u8\n");
+        assertThat(master.lines().filter(line -> line.startsWith("#EXT-X-STREAM-INF:")).count()).isEqualTo(3);
         assertThat(media).startsWith("#EXTM3U\n").endsWith("#EXT-X-ENDLIST\n").contains("#EXT-X-PLAYLIST-TYPE:VOD");
         List<String> lines = media.lines().toList();
         List<Double> durations = lines.stream().filter(line -> line.startsWith("#EXTINF:"))
@@ -204,7 +205,7 @@ class TranscodeRealToolsTest {
     }
 
     @Test
-    void everySegmentOfBothRungsDecodesAndStartsAtTheSamePtsOnEveryRung() throws IOException {
+    void everySegmentOfEveryRungDecodesAndStartsAtTheSamePtsOnEveryRung() throws IOException {
         newManager(work.resolve("hls"));
         String id = session(1, 0).id();
         int count = index.cuts().segmentCount();
@@ -212,9 +213,13 @@ class TranscodeRealToolsTest {
         for (int n = 0; n < count; n++) {
             Path copy = fetch(id, "original", n);
             Path small = fetch(id, "360p", n);
+            Path floor = fetch(id, "240p", n);
             assertDecodes(copy);
             assertDecodes(small);
+            assertDecodes(floor);
             assertThat(firstVideoPts(small)).as("first video pts of segment %d on 360p vs the copy", n)
+                .isEqualTo(firstVideoPts(copy));
+            assertThat(firstVideoPts(floor)).as("first video pts of segment %d on 240p vs the copy", n)
                 .isEqualTo(firstVideoPts(copy));
         }
     }
@@ -227,7 +232,7 @@ class TranscodeRealToolsTest {
         String zero = session(1, 0).id();
         Map<String, String> expected = new LinkedHashMap<>();
         for (int n = restart; n < count; n++) {
-            for (String rung : List.of("original", "360p")) {
+            for (String rung : List.of("original", "360p", "240p")) {
                 expected.put(rung + "/" + n, firstVideoPts(fetch(zero, rung, n)));
             }
         }
@@ -236,7 +241,7 @@ class TranscodeRealToolsTest {
         Map<String, String> actual = new LinkedHashMap<>();
         List<Path> fetched = new ArrayList<>();
         for (int n = restart; n < count; n++) {
-            for (String rung : List.of("original", "360p")) {
+            for (String rung : List.of("original", "360p", "240p")) {
                 Path segment = fetch(later, rung, n);
                 fetched.add(segment);
                 actual.put(rung + "/" + n, firstVideoPts(segment));
@@ -258,13 +263,13 @@ class TranscodeRealToolsTest {
         String zero = session(1, 0).id();
         Map<String, String> expected = new LinkedHashMap<>();
         for (int n = resume; n < count; n++) {
-            for (String rung : List.of("original", "360p")) {
+            for (String rung : List.of("original", "360p", "240p")) {
                 expected.put(rung + "/" + n, firstVideoPts(fetch(zero, rung, n)));
             }
         }
         String id = session(2, 0).id();
         for (int n = 0; n < resume; n++) {
-            for (String rung : List.of("original", "360p")) {
+            for (String rung : List.of("original", "360p", "240p")) {
                 assertDecodes(fetch(id, rung, n));
             }
         }
@@ -276,7 +281,7 @@ class TranscodeRealToolsTest {
         Map<String, String> actual = new LinkedHashMap<>();
         List<Path> fetched = new ArrayList<>();
         for (int n = resume; n < count; n++) {
-            for (String rung : List.of("original", "360p")) {
+            for (String rung : List.of("original", "360p", "240p")) {
                 Path segment = fetch(id, rung, n);
                 fetched.add(segment);
                 actual.put(rung + "/" + n, firstVideoPts(segment));
@@ -297,16 +302,17 @@ class TranscodeRealToolsTest {
         String reference = session(2, 0).id();
         Map<String, String> expected = new LinkedHashMap<>();
         for (int n = 0; n <= 1; n++) {
-            for (String rung : List.of("original", "360p")) {
+            for (String rung : List.of("original", "360p", "240p")) {
                 expected.put(rung + "/" + n, firstVideoPts(fetch(reference, rung, n)));
             }
         }
         String id = session(1, last).id();
         assertDecodes(fetch(id, "360p", last));
+        assertDecodes(fetch(id, "240p", last));
 
         Map<String, String> actual = new LinkedHashMap<>();
         for (int n = 0; n <= 1; n++) {
-            for (String rung : List.of("original", "360p")) {
+            for (String rung : List.of("original", "360p", "240p")) {
                 Path segment = fetch(id, rung, n);
                 assertDecodes(segment);
                 actual.put(rung + "/" + n, firstVideoPts(segment));

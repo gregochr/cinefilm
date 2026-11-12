@@ -8,10 +8,11 @@ import org.junit.jupiter.api.Test;
 
 class StartRungTest {
 
-    // peak: original 6,128,000 (4 Mbps * 1.5 + 128k); 720p 3,128,000; 480p 1,328,000; 360p 816,000
+    // peak: original 6,128,000 (4 Mbps * 1.5 + 128k); 720p 3,128,000; 480p 1,328,000; 360p 816,000; 240p 364,000
     private static final List<Rung> RUNGS = List.of(new Rung("original", 1080, 4_000_000, true),
         new Rung("720p", 720, 2_500_000, false), new Rung("480p", 480, 1_000_000, false),
-        new Rung("360p", 360, 600_000, false));
+        new Rung("360p", 360, 600_000, false),
+        new Rung("240p", 240, 250_000, false));
 
     @Test
     void noProbeStartsOnTheTopRung() {
@@ -33,12 +34,16 @@ class StartRungTest {
         // 360p: 816,000 * 1.25 = 1,020,000; 480p: 1,328,000 * 1.25 = 1,660,000
         assertThat(StartRung.pick(RUNGS, 1_660L).id()).isEqualTo("480p");
         assertThat(StartRung.pick(RUNGS, 1_659L).id()).isEqualTo("360p");
+        assertThat(StartRung.pick(RUNGS, 1_020L).id()).isEqualTo("360p");
+        assertThat(StartRung.pick(RUNGS, 1_019L).id()).isEqualTo("240p");
+        // 240p: 364,000 * 1.25 = 455,000
+        assertThat(StartRung.pick(RUNGS, 455L).id()).isEqualTo("240p");
     }
 
     @Test
     void aProbeBelowEveryRungStartsOnTheLowest() {
-        assertThat(StartRung.pick(RUNGS, 100L).id()).isEqualTo("360p");
-        assertThat(StartRung.pick(RUNGS, 0L).id()).isEqualTo("360p");
+        assertThat(StartRung.pick(RUNGS, 100L).id()).isEqualTo("240p");
+        assertThat(StartRung.pick(RUNGS, 0L).id()).isEqualTo("240p");
     }
 
     @Test

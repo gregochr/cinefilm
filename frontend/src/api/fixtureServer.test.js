@@ -165,7 +165,13 @@ describe('fixture server', () => {
   it('creates and removes a playback session', async () => {
     const session = await call('POST', '/api/editions/11/sessions', { quality: 'auto' });
     expect(session.masterUrl).toBe(`/api/sessions/${session.sessionId}/master.m3u8`);
-    expect(session.renditions.map((r) => r.id)).toEqual(['original', '720p', '480p', '360p']);
+    expect(session.renditions.map((r) => r.id)).toEqual([
+      'original',
+      '720p',
+      '480p',
+      '360p',
+      '240p',
+    ]);
     expect(await call('DELETE', `/api/sessions/${session.sessionId}`)).toBeNull();
   });
 

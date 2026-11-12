@@ -159,9 +159,9 @@ class FilmMapperTest {
     }
 
     @Test
-    void withVaapiAFullHdFilmOffersOriginalThen720p480pAnd360p() {
+    void withVaapiAFullHdFilmOffersOriginalThen720p480p360pAnd240p() {
         assertThat(qualities(1080, EncoderMode.VAAPI)).extracting(FilmDtos.QualityDto::id)
-            .containsExactly("auto", "original", "720p", "480p", "360p");
+            .containsExactly("auto", "original", "720p", "480p", "360p", "240p");
         assertThat(qualities(1080, EncoderMode.VAAPI)).extracting(FilmDtos.QualityDto::available)
             .containsOnly(true);
     }
@@ -169,7 +169,7 @@ class FilmMapperTest {
     @Test
     void withTheSoftwareEncoderOnlyTheLowRungsAreOffered() {
         assertThat(qualities(1080, EncoderMode.SOFTWARE)).extracting(FilmDtos.QualityDto::id)
-            .containsExactly("auto", "original", "480p", "360p");
+            .containsExactly("auto", "original", "480p", "360p", "240p");
     }
 
     @Test
@@ -185,9 +185,9 @@ class FilmMapperTest {
         var list = qualities(1080, EncoderMode.UNAVAILABLE);
 
         assertThat(list).extracting(FilmDtos.QualityDto::id).containsExactly("auto", "original", "720p", "480p",
-            "360p");
+            "360p", "240p");
         assertThat(list).extracting(FilmDtos.QualityDto::available).containsExactly(false, true, false, false,
-            false);
+            false, false);
     }
 
     @Test
@@ -250,7 +250,7 @@ class FilmMapperTest {
     void anHevcSourceListsItsTopTranscodedRungByHeightAndStillListsOriginal() {
         source("HEVC", "yuv420p");
 
-        assertThat(listedRungs(DENSE)).containsExactly("original", "1080p", "720p", "480p", "360p");
+        assertThat(listedRungs(DENSE)).containsExactly("original", "1080p", "720p", "480p", "360p", "240p");
         assertThat(FilmMapper.detail(view(film), null, false, EncoderMode.VAAPI, f -> DENSE).editions().get(0)
             .qualities()).filteredOn(q -> q.id().equals("1080p")).extracting(FilmDtos.QualityDto::available)
             .containsExactly(true);
@@ -273,14 +273,14 @@ class FilmMapperTest {
     void aCutListThatForbidsCopyingListsTheTopTranscodedRungEvenForH264() {
         source("H.264", "yuv420p");
 
-        assertThat(listedRungs(SPARSE)).containsExactly("original", "1080p", "720p", "480p", "360p");
-        assertThat(listedRungs(DENSE)).containsExactly("original", "720p", "480p", "360p");
+        assertThat(listedRungs(SPARSE)).containsExactly("original", "1080p", "720p", "480p", "360p", "240p");
+        assertThat(listedRungs(DENSE)).containsExactly("original", "720p", "480p", "360p", "240p");
     }
 
     @Test
     void withoutAnIndexTheCodecAndPixelFormatDecideAlone() {
         source("H.264", "yuv420p");
-        assertThat(listedRungs(null)).containsExactly("original", "720p", "480p", "360p");
+        assertThat(listedRungs(null)).containsExactly("original", "720p", "480p", "360p", "240p");
     }
 
     @Test
@@ -295,6 +295,7 @@ class FilmMapperTest {
         assertThat(sessionRungs(hevc, SPARSE)).containsExactlyElementsOf(
             listedRungs(SPARSE).stream().filter(id -> !id.equals("original")).toList());
         assertThat(Ladder.forSource(1080, 9_000_000, "H.264", "yuv420p", () -> DENSE, EncoderMode.VAAPI))
-            .extracting(gregochr.cinefilm.transcode.Rung::id).containsExactly("original", "720p", "480p", "360p");
+            .extracting(gregochr.cinefilm.transcode.Rung::id)
+            .containsExactly("original", "720p", "480p", "360p", "240p");
     }
 }
