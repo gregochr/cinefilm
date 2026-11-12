@@ -3,7 +3,7 @@
 
 /** A round trip under this is taken to be home. A guess: every viewing records its latency, so it can move. */
 export const HOME_LATENCY_MS = 20;
-export const QUESTION = 'Are you on a train?';
+export const QUESTION = 'Where are you watching?';
 
 const RELAYS = ['akamai', 'cloudflare', 'fastly'];
 

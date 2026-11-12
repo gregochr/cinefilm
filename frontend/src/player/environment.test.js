@@ -121,6 +121,6 @@ describe('questionText', () => {
   });
 
   it('asks the question the handover words', () => {
-    expect(QUESTION).toBe('Are you on a train?');
+    expect(QUESTION).toBe('Where are you watching?');
   });
 });

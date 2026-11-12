@@ -293,8 +293,8 @@ Once per change to how a session starts (`poor-link-plan.md`):
 - DevTools throttles the page's own requests (the hls.js segments included) and only while DevTools is open. It
   does not reach Safari: use Network Link Conditioner there (macOS: Additional Tools for Xcode; iPhone: Settings,
   Developer).
-- The added latency makes the player take home for somewhere else, so it may ask "Are you on a train?" (handover
-  decision 18). Answer **No** or **Not now**. A wrong answer is undone in Admin, Playback health, "Remembered
+- The added latency makes the player take home for somewhere else, so it may ask "Where are you watching?" (handover
+  decision 18). Answer **Hotel or away** or **Not now**. A wrong answer is undone in Admin, Playback health, "Remembered
   networks on this device", **Forget**.
 - The question card can be seen without a backend: `VITE_FIXTURES=1 npm run dev` gives the player a latency of
   48 ms and the operator "Example Rail Wi-Fi", so the card shows on any film until it is answered; **Forget** in
@@ -305,15 +305,20 @@ Once per change to how a session starts (`poor-link-plan.md`):
 Every PR costs a 10–15 minute CI run on dockermacmini, and every Codex finding on the PR costs another. Most of
 those findings can be had locally first: the same reviewer, reading the same `AGENTS.md`, on the laptop.
 
-- **When:** after Sonnet's gates are green and the planner's own read of the diff is done, before the commit. Any
-  code change, UI or not.
+- **When:** before **every** push, not only the first. That means before opening the PR, and again before each push
+  of fixes for a PR or Codex finding. Run it after Sonnet's gates are green and after the planner's own read of the
+  diff. It applies to any code change, UI or not. Skipping it on fix rounds cost PR #105 four Codex rounds (owner,
+  2026-11-11).
+- **What:** the whole branch (`codex review --base origin/main`), not only the latest fix: a fix can expose a sibling
+  of the problem it fixed (for example, the same check needed on another screen).
 - **How:** the planner runs it in Sonnet's worktree, from the repo root (Codex reads `AGENTS.md` there by itself):
   `codex review --uncommitted` for work not yet committed, or `codex review --base origin/main` once it is. Run it
   in the background with its output sent to a scratch file; it takes about two minutes. The log is long (every
   command Codex ran); its verdict and findings are the last block, after the final `codex` line. The CLI is
   signed in on the owner's laptop (`codex login status`).
 - **Then:** send each finding to Sonnet, or reject it with a reason, as for a PR finding. Sonnet fixes, re-runs the
-  gates, and the planner runs Codex again. Stop when a run finds nothing new, then commit and open the PR.
+  gates, and the planner runs Codex again. Codex does not find the same things on every run, so one clean run is
+  weak evidence. Stop after **two runs in a row** find nothing new, then commit and push (or open the PR).
 - **Still request the PR review.** The PR's Codex run is the merge gate (`CLAUDE.md` step 6); the local run only
   makes it likely to be clean the first time.
 

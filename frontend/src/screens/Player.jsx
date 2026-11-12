@@ -603,7 +603,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
         <EnvironmentCard
           operator={questionName}
           onTrain={() => answerQuestion('train')}
-          onNo={() => answerQuestion('away')}
+          onAway={() => answerQuestion('away')}
           onNotNow={dismissQuestion}
         />
       ) : null}

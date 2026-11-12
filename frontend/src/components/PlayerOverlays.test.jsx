@@ -86,29 +86,29 @@ describe('EnvironmentCard', () => {
   const NAMED =
     'CineFilm hasn’t seen this network before: Virgin Media Limited. It will remember your answer on this device.';
   const UNNAMED = 'CineFilm can’t tell which network this is, so it will ask again next time.';
-  const handlers = () => ({ onTrain: vi.fn(), onNo: vi.fn(), onNotNow: vi.fn() });
+  const handlers = () => ({ onTrain: vi.fn(), onAway: vi.fn(), onNotNow: vi.fn() });
 
   it('is a group named by its question and described by its text', () => {
     render(<EnvironmentCard operator="Virgin Media Limited" {...handlers()} />);
-    const group = screen.getByRole('group', { name: 'Are you on a train?' });
+    const group = screen.getByRole('group', { name: 'Where are you watching?' });
     expect(group).toHaveAccessibleDescription(NAMED);
     expect(within(group).getByRole('heading', { level: 2 })).toHaveTextContent(
-      'Are you on a train?',
+      'Where are you watching?',
     );
     expect(within(group).getByText(NAMED)).toBeInTheDocument();
   });
 
   it('says it cannot tell which network this is when there is no name', () => {
     render(<EnvironmentCard operator={null} {...handlers()} />);
-    expect(screen.getByRole('group', { name: 'Are you on a train?' })).toHaveAccessibleDescription(
-      UNNAMED,
-    );
+    expect(
+      screen.getByRole('group', { name: 'Where are you watching?' }),
+    ).toHaveAccessibleDescription(UNNAMED);
   });
 
-  it('has three plain buttons in order: Yes, on a train, No, Not now', () => {
+  it('has three plain buttons in order: On a train, Hotel or away, Not now', () => {
     render(<EnvironmentCard operator={null} {...handlers()} />);
     const buttons = within(screen.getByRole('group')).getAllByRole('button');
-    expect(buttons.map((b) => b.textContent)).toEqual(['Yes, on a train', 'No', 'Not now']);
+    expect(buttons.map((b) => b.textContent)).toEqual(['On a train', 'Hotel or away', 'Not now']);
     for (const button of buttons) expect(button).toHaveClass('btn--secondary');
     for (const button of buttons) expect(button).not.toHaveClass('btn--primary');
   });
@@ -128,22 +128,22 @@ describe('EnvironmentCard', () => {
   it('calls the handler of the button pressed, and no other', async () => {
     const h = handlers();
     render(<EnvironmentCard operator={null} {...h} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Yes, on a train' }));
+    await userEvent.click(screen.getByRole('button', { name: 'On a train' }));
     expect([
       h.onTrain.mock.calls.length,
-      h.onNo.mock.calls.length,
+      h.onAway.mock.calls.length,
       h.onNotNow.mock.calls.length,
     ]).toEqual([1, 0, 0]);
-    await userEvent.click(screen.getByRole('button', { name: 'No' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Hotel or away' }));
     expect([
       h.onTrain.mock.calls.length,
-      h.onNo.mock.calls.length,
+      h.onAway.mock.calls.length,
       h.onNotNow.mock.calls.length,
     ]).toEqual([1, 1, 0]);
     await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
     expect([
       h.onTrain.mock.calls.length,
-      h.onNo.mock.calls.length,
+      h.onAway.mock.calls.length,
       h.onNotNow.mock.calls.length,
     ]).toEqual([1, 1, 1]);
   });

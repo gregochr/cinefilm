@@ -43,11 +43,11 @@ export function SlowConnectionCard({ rung, onOk, onChoose }) {
 }
 
 /**
- * "Are you on a train?" on a network CineFilm has not seen. It never takes focus (Space must still pause the film
+ * "Where are you watching?" on a network CineFilm has not seen. It never takes focus (Space must still pause the film
  * and a focused button would take it as an answer), so the player announces it from its own live region.
  * `operator` is a display name or null. All three buttons are plain: none is the answer CineFilm wants.
  */
-export function EnvironmentCard({ operator, onTrain, onNo, onNotNow }) {
+export function EnvironmentCard({ operator, onTrain, onAway, onNotNow }) {
   return (
     <div
       className="slow-card"
@@ -62,8 +62,8 @@ export function EnvironmentCard({ operator, onTrain, onNo, onNotNow }) {
         {questionText(operator)}
       </p>
       <div className="slow-card__actions">
-        <Button onClick={onTrain}>Yes, on a train</Button>
-        <Button onClick={onNo}>No</Button>
+        <Button onClick={onTrain}>On a train</Button>
+        <Button onClick={onAway}>Hotel or away</Button>
         <Button onClick={onNotNow}>Not now</Button>
       </div>
     </div>
