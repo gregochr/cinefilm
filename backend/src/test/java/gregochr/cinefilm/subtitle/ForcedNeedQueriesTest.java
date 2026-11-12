@@ -69,6 +69,18 @@ class ForcedNeedQueriesTest extends SubtitleTestBase {
     }
 
     @Test
+    void aSidecarWithNoCuesIsNoEvidence() {
+        Film empty = filmWithParts("Empty", 1, 90);
+        Film cued = filmWithParts("Cued", 1, 90);
+        sidecar("Empty.en.forced.srt", fileId(empty, 1), false).setCueCount(0);
+        sidecar("Cued.en.forced.srt", fileId(cued, 1), false);
+
+        assertThat(sidecars.findFilmIdsWithPresentSidecar()).containsExactly(cued.getId());
+        assertThat(sidecars.countPresentForFilm(empty.getId())).isZero();
+        assertThat(sidecars.countPresentForFilm(cued.getId())).isEqualTo(1);
+    }
+
+    @Test
     void severalSidecarsOnOneFilmListItOnceAndAreCounted() {
         Film split = filmWithParts("Towers", 2, 60);
         sidecar("Towers - pt1.en.forced.srt", fileId(split, 1), false);

@@ -19,7 +19,8 @@ public final class ForcedNeedDtos {
      * @param ownerChoice {@code NEEDED}, {@code NOT_NEEDED} or null for automatic
      * @param originalLanguage TMDB's original language code, or null
      * @param spokenLanguages TMDB's spoken language codes (empty when none or unknown)
-     * @param hasForcedSubtitle true when a present forced subtitle file is attached to one of the film's files
+     * @param hasForcedSubtitle true when at least one edition of the film has a forced subtitle that playback
+     *     would serve (the film detail's rules: a file with no cues, or a conflict, is not served)
      */
     public record FilmNeedDto(Long filmId, String title, Integer year, String need, String reason,
                               String ownerChoice, String originalLanguage, List<String> spokenLanguages,

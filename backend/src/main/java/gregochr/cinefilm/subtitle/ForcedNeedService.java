@@ -3,6 +3,7 @@ package gregochr.cinefilm.subtitle;
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
+import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.NeedRow;
@@ -37,15 +38,18 @@ public class ForcedNeedService {
     private final FilmRepository films;
     private final SubtitleSidecarRepository sidecars;
     private final MediaFileRepository files;
+    private final ForcedSubtitleService forcedSubtitles;
     private final LibraryLock lock;
     private final TransactionTemplate tx;
 
     /** Creates the service. */
     public ForcedNeedService(FilmRepository films, SubtitleSidecarRepository sidecars, MediaFileRepository files,
-                             LibraryLock lock, PlatformTransactionManager transactions) {
+                             ForcedSubtitleService forcedSubtitles, LibraryLock lock,
+                             PlatformTransactionManager transactions) {
         this.films = films;
         this.sidecars = sidecars;
         this.files = files;
+        this.forcedSubtitles = forcedSubtitles;
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
     }
@@ -56,9 +60,12 @@ public class ForcedNeedService {
         List<NeedRow> rows = films.findNeedRows();
         Set<Long> withSidecar = new HashSet<>(sidecars.findFilmIdsWithPresentSidecar());
         Set<Long> withEmbedded = new HashSet<>(files.findFilmIdsWithEmbeddedForced());
+        // Only the films with sidecar evidence (a couple of dozen) are asked what playback would serve.
+        Set<Long> served = withSidecar.isEmpty() ? Set.of() : servedFilmIds(films.findAllById(withSidecar));
         List<FilmNeedDto> dtos = new ArrayList<>();
         for (NeedRow row : rows) {
-            dtos.add(dto(row, withSidecar.contains(row.id()), withEmbedded.contains(row.id())));
+            dtos.add(dto(row, withSidecar.contains(row.id()), served.contains(row.id()),
+                withEmbedded.contains(row.id())));
         }
         return new NeedListDto(dtos, counts(dtos));
     }
@@ -92,7 +99,25 @@ public class ForcedNeedService {
         film.setForcedNeedOwner(choice);
         NeedRow row = new NeedRow(film.getId(), film.getTitle(), film.getYear(), film.getTmdbId(),
             film.getOriginalLanguage(), film.getSpokenLanguages(), film.getLanguagesFetchedAt(), choice);
-        return dto(row, sidecars.countPresentForFilm(filmId) > 0, files.countEmbeddedForcedForFilm(filmId) > 0);
+        boolean hasSidecar = sidecars.countPresentForFilm(filmId) > 0;
+        boolean served = hasSidecar && !servedFilmIds(List.of(film)).isEmpty();
+        return dto(row, hasSidecar, served, files.countEmbeddedForcedForFilm(filmId) > 0);
+    }
+
+    /**
+     * The films among these with an edition that playback would serve a forced subtitle for: the same code playback
+     * uses decides ({@link ForcedSubtitleService#forEditions}), so an empty file or a conflict is not counted.
+     */
+    private Set<Long> servedFilmIds(List<Film> candidates) {
+        List<Edition> editions = candidates.stream().flatMap(f -> f.getEditions().stream()).toList();
+        Set<Long> servedEditions = forcedSubtitles.forEditions(editions).keySet();
+        Set<Long> served = new HashSet<>();
+        for (Film candidate : candidates) {
+            if (candidate.getEditions().stream().anyMatch(e -> servedEditions.contains(e.getId()))) {
+                served.add(candidate.getId());
+            }
+        }
+        return served;
     }
 
     private static ForcedNeedChoice parse(ChoiceRequest request) {
@@ -106,7 +131,7 @@ public class ForcedNeedService {
         }
     }
 
-    private static FilmNeedDto dto(NeedRow row, boolean hasSidecar, boolean hasEmbeddedForced) {
+    private static FilmNeedDto dto(NeedRow row, boolean hasSidecar, boolean served, boolean hasEmbeddedForced) {
         List<String> spoken = SpokenLanguages.parse(row.spokenLanguages());
         // TMDB counts as asked once stamped and while the film still has an id; a film it no longer has has no
         // languages at all.
@@ -116,7 +141,7 @@ public class ForcedNeedService {
         // No OpenSubtitles evidence exists yet (phase 2c): null means it has not been asked.
         Decision decision = ForcedNeed.decide(row.owner(), hasSidecar, hasEmbeddedForced, null, languages);
         return new FilmNeedDto(row.id(), row.title(), row.year(), decision.need().name(), decision.reason().name(),
-            row.owner() == null ? null : row.owner().name(), row.originalLanguage(), spoken, hasSidecar);
+            row.owner() == null ? null : row.owner().name(), row.originalLanguage(), spoken, served);
     }
 
     private static CountsDto counts(List<FilmNeedDto> rows) {

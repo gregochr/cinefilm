@@ -103,6 +103,72 @@ class ForcedNeedApiTest extends SubtitleTestBase {
             .andExpect(jsonPath("$.hasForcedSubtitle").value(true));
     }
 
+    private Film zeroCueOnly() {
+        Film film = withLanguages("Zero cues", "en", "en");
+        sidecar("Zero cues.en.forced.srt", fileId(film, 1), false).setCueCount(0);
+        return film;
+    }
+
+    private Film conflicting() {
+        Film film = withLanguages("Conflict", "en", "en");
+        sidecar("Conflict.en.forced.srt", fileId(film, 1), false);
+        sidecar("Conflict.forced.en.srt", fileId(film, 1), false);
+        return film;
+    }
+
+    private Film normal() {
+        Film film = withLanguages("Normal", "en", "en");
+        sidecar("Normal.en.forced.srt", fileId(film, 1), false);
+        return film;
+    }
+
+    @Test
+    void aFileWithNoCuesIsNoEvidenceAndAConflictIsEvidenceThatPlaybackDoesNotServe() throws Exception {
+        normal();
+        conflicting();
+        zeroCueOnly();
+
+        mvc.perform(get("/api/admin/forced-subtitles/films"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.films[0].title").value("Conflict"))
+            .andExpect(jsonPath("$.films[0].need").value("NEEDED"))
+            .andExpect(jsonPath("$.films[0].reason").value("SIDECAR"))
+            .andExpect(jsonPath("$.films[0].hasForcedSubtitle").value(false))
+            .andExpect(jsonPath("$.films[1].title").value("Normal"))
+            .andExpect(jsonPath("$.films[1].need").value("NEEDED"))
+            .andExpect(jsonPath("$.films[1].hasForcedSubtitle").value(true))
+            .andExpect(jsonPath("$.films[2].title").value("Zero cues"))
+            .andExpect(jsonPath("$.films[2].need").value("NOT_NEEDED"))
+            .andExpect(jsonPath("$.films[2].reason").value("ENGLISH_ONLY"))
+            .andExpect(jsonPath("$.films[2].hasForcedSubtitle").value(false))
+            .andExpect(jsonPath("$.counts.needed").value(2))
+            .andExpect(jsonPath("$.counts.neededMissing").value(1))
+            .andExpect(jsonPath("$.counts.notNeeded").value(1));
+    }
+
+    @Test
+    void theSameThreeCasesThroughThePutResponse() throws Exception {
+        Film normal = normal();
+        Film conflict = conflicting();
+        Film zero = zeroCueOnly();
+
+        mvc.perform(put("/api/admin/films/{id}/forced-need", normal.getId()).content("{\"choice\":null}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.need").value("NEEDED"))
+            .andExpect(jsonPath("$.reason").value("SIDECAR"))
+            .andExpect(jsonPath("$.hasForcedSubtitle").value(true));
+        mvc.perform(put("/api/admin/films/{id}/forced-need", conflict.getId()).content("{\"choice\":null}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.need").value("NEEDED"))
+            .andExpect(jsonPath("$.reason").value("SIDECAR"))
+            .andExpect(jsonPath("$.hasForcedSubtitle").value(false));
+        mvc.perform(put("/api/admin/films/{id}/forced-need", zero.getId()).content("{\"choice\":null}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.need").value("NOT_NEEDED"))
+            .andExpect(jsonPath("$.reason").value("ENGLISH_ONLY"))
+            .andExpect(jsonPath("$.hasForcedSubtitle").value(false));
+    }
+
     @Test
     void anUnknownFilmIs404AnotherValueIs400AndABusyLibraryIs409() throws Exception {
         Film film = withLanguages("Taken", "en", "en");

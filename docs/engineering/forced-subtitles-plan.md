@@ -258,7 +258,7 @@ of `forced_need` + `forced_need_source`.
 | # | Input | Need | Reason |
 |---|---|---|---|
 | 1 | Owner chose | that | `OWNER` |
-| 2 | A `PRESENT` sidecar is attached to a file of the film | `NEEDED` | `SIDECAR` |
+| 2 | A `PRESENT` sidecar with at least one cue is attached to a `PRESENT` file of the film (a file with no cues is no evidence; a conflicting pair still is, though playback serves neither) | `NEEDED` | `SIDECAR` |
 | 3 | A file of the film has an embedded forced track in English (`eng`, `en`) or with no language (null, `und`) | `NEEDED` | `EMBEDDED_FORCED` (pictures: cannot be shown yet) |
 | 4 | (2c) OpenSubtitles has English foreign-parts-only results | `NEEDED` | `OPENSUBTITLES` |
 | 5 | TMDB not asked yet, or no TMDB match | `UNKNOWN` | `NO_LANGUAGES` |
@@ -266,8 +266,10 @@ of `forced_need` + `forced_need_source`.
 | 7 | Spoken languages are exactly English | `NOT_NEEDED` | `ENGLISH_ONLY` |
 | 8 | Anything else (other spoken languages, or none listed) | `UNSURE` | `OTHER_LANGUAGES` / `NO_SPOKEN_LANGUAGES` |
 
-TMDB's `xx` ("no language") is ignored in the spoken list and as the original language (a film whose original language is `xx` falls through to the spoken-language rules, not rule 6). "Has a forced subtitle" for the Admin filter means rule 2:
-the sidecar plays.
+TMDB's `xx` ("no language") is ignored in the spoken list and as the original language (a film whose original language is `xx` falls through to the spoken-language rules, not rule 6). `hasForcedSubtitle` (the Admin "has a forced subtitle"
+filter, and `neededMissing`) is stricter than rule 2: at least one edition has a forced subtitle that playback would
+serve (`ForcedSubtitleService.forEditions`, so `SidecarPrecedence` decides: empty files and conflicting files are not
+served). Only the films with rule-2 evidence are evaluated.
 
 **2a — backend: TMDB languages, the rule, the owner's choice** (no UI)
 - `V14__forced_need.sql` (expand-only): `film.original_language varchar(8)`, `film.spoken_languages varchar(200)`
