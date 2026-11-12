@@ -46,7 +46,8 @@ class FilmOpenSubtitlesInterleavingIntegrationTest extends IntegrationTestBase {
 
         rematch.executeWithoutResult(status -> {
             Film loaded = films.findById(id).orElseThrow();
-            Integer written = search.execute(inner -> films.saveOpenSubtitles(id, "tt0880001", 7, "{\"id\":1}", NOW));
+            Integer written = search.execute(
+                inner -> films.saveOpenSubtitles(id, "tt0880001", 7, "{\"id\":1}", "[]", NOW));
             assertThat(written).isEqualTo(1);
 
             ingest.applyMovie(loaded, newFilm);
@@ -58,6 +59,7 @@ class FilmOpenSubtitlesInterleavingIntegrationTest extends IntegrationTestBase {
         assertThat(result.getOsSearchedAt()).isNull();
         assertThat(result.getOsSearchedImdbId()).isNull();
         assertThat(result.getOsBest()).isNull();
-        assertThat(films.saveOpenSubtitles(id, "tt0880001", 7, "{}", NOW)).as("a late search for the old id").isZero();
+        assertThat(films.saveOpenSubtitles(id, "tt0880001", 7, "{}", "[]", NOW)).as("a late search for the old id")
+            .isZero();
     }
 }

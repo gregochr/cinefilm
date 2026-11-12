@@ -34,6 +34,7 @@ class FilmOpenSubtitlesQueriesTest extends ApiTestBase {
         film.setOsSearchedImdbId(searchedFor);
         film.setOsForcedCount(count);
         film.setOsSearchedAt(at);
+        film.setOsCandidates("[]");
         return films.saveAndFlush(film).getId();
     }
 
@@ -108,7 +109,7 @@ class FilmOpenSubtitlesQueriesTest extends ApiTestBase {
     void savingWritesTheCountTheBestResultTheImdbIdAndTheStampForTheImdbIdSearched() {
         Long id = films.saveAndFlush(unsearched("Taken", "tt0936501")).getId();
 
-        int changed = films.saveOpenSubtitles(id, "tt0936501", 7, "{\"id\":1,\"fileCount\":1}", NOW);
+        int changed = films.saveOpenSubtitles(id, "tt0936501", 7, "{\"id\":1,\"fileCount\":1}", "[]", NOW);
         entityManager.clear();
 
         assertThat(changed).isEqualTo(1);
@@ -124,7 +125,7 @@ class FilmOpenSubtitlesQueriesTest extends ApiTestBase {
     void aSearchWithNoResultIsSavedAsZeroAndNoBest() {
         Long id = films.saveAndFlush(unsearched("Taken", "tt0936501")).getId();
 
-        films.saveOpenSubtitles(id, "tt0936501", 0, null, NOW);
+        films.saveOpenSubtitles(id, "tt0936501", 0, null, "[]", NOW);
         entityManager.clear();
 
         Film reloaded = films.findById(id).orElseThrow();
@@ -141,7 +142,7 @@ class FilmOpenSubtitlesQueriesTest extends ApiTestBase {
         changed.setImdbId("tt0113277");
         films.saveAndFlush(changed);
 
-        int rows = films.saveOpenSubtitles(id, "tt0936501", 7, "{\"id\":1,\"fileCount\":1}", NOW);
+        int rows = films.saveOpenSubtitles(id, "tt0936501", 7, "{\"id\":1,\"fileCount\":1}", "[]", NOW);
         entityManager.clear();
 
         assertThat(rows).isZero();
@@ -156,7 +157,7 @@ class FilmOpenSubtitlesQueriesTest extends ApiTestBase {
 
     @Test
     void aFilmThatHasGoneChangesNoRow() {
-        assertThat(films.saveOpenSubtitles(987_654L, "tt0936501", 7, null, NOW)).isZero();
+        assertThat(films.saveOpenSubtitles(987_654L, "tt0936501", 7, null, "[]", NOW)).isZero();
     }
 
     @Test
@@ -166,7 +167,7 @@ class FilmOpenSubtitlesQueriesTest extends ApiTestBase {
         Film loaded = films.findById(id).orElseThrow();
         // A search commits the old IMDb id's result after the entity was loaded: the entity still holds nulls, so
         // setting them to null again changes nothing for Hibernate; only the explicit statement removes the row's.
-        assertThat(films.saveOpenSubtitles(id, "tt0936501", 7, "{\"id\":1}", NOW)).isEqualTo(1);
+        assertThat(films.saveOpenSubtitles(id, "tt0936501", 7, "{\"id\":1}", "[]", NOW)).isEqualTo(1);
         loaded.setImdbId("tt0113277");
 
         int rows = films.clearOpenSubtitles(id);
@@ -225,5 +226,39 @@ class FilmOpenSubtitlesQueriesTest extends ApiTestBase {
         films.flush();
 
         assertThat(dueIds()).containsExactly(old, unsearchedYet);
+    }
+
+    @Test
+    void aFilmSearchedBeforeTheCandidatesWereKeptIsDueAgainWithOneThatHasAResultFirst() {
+        Long noResultLegacy = searched("A no result", "tt0000031", "tt0000031", 0, NOW);
+        Long bestLegacy = searched("B best", "tt0000032", "tt0000032", 3, NOW);
+        Long current = searched("C current", "tt0000033", "tt0000033", 3, NOW);
+        Long unsearchedYet = films.saveAndFlush(unsearched("Never", "tt0000034")).getId();
+        films.findById(noResultLegacy).orElseThrow().setOsCandidates(null);
+        Film best = films.findById(bestLegacy).orElseThrow();
+        best.setOsCandidates(null);
+        best.setOsBest("{\"id\":1,\"fileId\":2,\"release\":null,\"fileCount\":1}");
+        films.findById(current).orElseThrow().setOsBest("{\"id\":1,\"fileId\":2,\"fileCount\":1}");
+        films.flush();
+
+        assertThat(dueIds()).containsExactly(bestLegacy, unsearchedYet, noResultLegacy);
+    }
+
+    @Test
+    void savingWritesTheCandidatesAndAnImdbIdChangeForgetsThem() {
+        Long id = films.saveAndFlush(unsearched("Taken", "tt0936501")).getId();
+
+        films.saveOpenSubtitles(id, "tt0936501", 1, "{\"id\":1,\"fileId\":2}", "[{\"id\":1,\"fileId\":2}]", NOW);
+        entityManager.clear();
+        assertThat(films.findById(id).orElseThrow().getOsCandidates()).isEqualTo("[{\"id\":1,\"fileId\":2}]");
+
+        Film loaded = films.findById(id).orElseThrow();
+        loaded.setImdbId("tt0113277");
+        assertThat(loaded.getOsCandidates()).isNull();
+        films.saveAndFlush(loaded);
+        films.saveOpenSubtitles(id, "tt0113277", 1, "{\"id\":1,\"fileId\":2}", "[]", NOW);
+        films.clearOpenSubtitles(id);
+        entityManager.clear();
+        assertThat(films.findById(id).orElseThrow().getOsCandidates()).isNull();
     }
 }

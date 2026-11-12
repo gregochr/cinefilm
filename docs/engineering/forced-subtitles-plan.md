@@ -1,9 +1,8 @@
 # Forced English subtitles — plan
 
 Written 2026-11-11. Status (2026-11-12): **phase 1 merged (#105) and released (v0.4.0); phase 2a merged (#109),
-2b in review; 2c built (PR in review); 2d built (PR #113 in review); phase 3a (timing check against the film's own
-embedded English track) built (PR to open, Admin display to follow); phases 3b (speech, only if still needed), 4, 5 and 6
-not started.** Phases 5 and 6 were added on 2026-11-12: the owner says
+2b, 2c, 2d, the Admin display and phase 3a merged (#109 to #115); 2e (robust against bad reference files) in review;
+phases 3b (speech, only if still needed), 4, 5 and 6 not started.** Phases 5 and 6 were added on 2026-11-12: the owner says
 solving subtitles is what would let them stop depending on Plex.
 
 ## Decisions made while the owner was away (2026-11-12)
@@ -56,11 +55,6 @@ Judgement calls made while building 2d without the owner. Each: what was chosen,
     - A sidecar that cannot be checked at all (no reference, no alignment possible) keeps playing and is listed in
       Admin as **"Unchecked"**.
     - 2d only makes the verdict available per served edition; **no playback change in this PR.**
-
-### Judgement calls made building phase 3a (2026-11-12, owner away)
-
-Each: what was chosen, why, and the alternative.
-
 12. **The embedded track is found by the reader's own `ffprobe` listing, not from the stored streams.** `FfprobeParser`
     keeps only text subtitle streams (`subrip`, `ass`, `mov_text`, ...), so the picture tracks (PGS, DVD) this phase is
     for are not in the database. Alternative: store every subtitle stream at scan time (a model and scan change for
@@ -149,6 +143,70 @@ Each: what was chosen, why, and the alternative.
 33. **Every new service has an isolated unit test** (AGENTS.md rule 5): `SidecarTimingServiceUnitTest` (repositories faked, no
     Spring) beside the H2 `SidecarTimingServiceTest`; the reader, refresher, scheduler, keys, streams, packets, codec,
     fit and trust already had one.
+34. **2e: a reference that is really full subtitles is judged by timing only (2026-11-12).** Evidence, the first live
+    run (20 editions, 11 `AGREES`, 9 `CHECK`): OpenSubtitles' "foreign parts only" file for Spectre (1,362 lines),
+    Taken 3 (1,456) and The Revenant (834) is full subtitles with a wrong flag, so the owner's 39, 13 and 138-line files
+    were flagged "incomplete". A reference with **at least 300 cues** (`SubtitleComparison.FULL_LINES`) is "full";
+    completeness is not judged. Instead the subset check: the share of served cues with a reference start within 2 s at
+    the best offset must be **at least 70%** and the best offset **at most 10 s** either way, else `CHECK`. Reasons:
+    "OpenSubtitles only had full subtitles; this file's lines are in them and in time" / "...and this file's lines don't
+    line up with them". Alternatives: 200 or 500 as the line (a genuine forced file is well under 150 lines and a
+    feature's full subtitles over 600, so anything from about 200 to 400 separates them in the live data; 300 is the
+    brief's); a 50% subset share (too loose: a different cut shares many lines with the right one); judging against the
+    film's runtime and cue density instead (needs data the check does not have).
+35. **2e: "probably full subtitles, not forced" needs a served file of 300 lines or more.** Taken 2 (39 lines against 16)
+    said it. Below 300 the "This file has M lines, OpenSubtitles has N" part stays (it is still a `CHECK`: more than
+    twice the reference) without the guess. The completeness reason ("OpenSubtitles has N lines, this file has M") is
+    unchanged.
+36. **2e: the check walks up to three candidate files, not one.** `film.os_candidates` (V18) holds the film's single-file
+    results in ranked order: the top 3 and then the best result of each cut tag (Extended, Director's Cut, Special
+    Edition, Unrated, Theatrical) that is not among them, at most 8, so an edition's own cut can be found when it is not
+    the film's overall favourite (the brief said "top 3"; with only 3 stored, an Extended file ranked 5th could never be
+    reached). `os_best` stays the film-level best (2c's need rule, Admin's search evidence). Legacy rows have
+    `os_candidates` null: the search's due query includes them, those with a best result first, and the checker leaves a
+    film alone until it has them. A film searched with no single-file result stores `[]`, which is "none", not "legacy".
+37. **2e: the candidates are re-ordered for each edition by the cut its name says.** `CutTag` reads the release name, the
+    first file's name (`files[0].file_name`, now kept as `fileName`) and the edition's name, case-insensitively and
+    ignoring punctuation: `extended`, `director's cut` (also `directors cut`, `director.s.cut`), `special edition`,
+    `unrated`, `theatrical`. Each tag the result shares with the edition is +1; each tag of the opposite cut is -1
+    (Theatrical is the opposite of every other tag, and every other tag of Theatrical; a tag the edition itself carries
+    is never an opposite). The fit comes first, the film-level order breaks ties; an edition with no tag keeps the film
+    order. The library's default edition name is "Theatrical Cut" (and "Original" in some fixtures); the owner names
+    extra editions ("Extended Edition"), so only some names carry a tag. Alternatives: the fit after the frame rate (a
+    poorly timed file of the right cut would lose to a well-timed file of the wrong one, which is the case this exists
+    for); treating Director's Cut as the opposite of Extended (no evidence they differ in timing).
+38. **2e: when to move to the next candidate, and the cap.** After a `CHECK`, the walk moves on when (a) the reference was
+    full, or (b) the result looks like another cut: the best offset is **more than 30 s** either way, **or fewer than 30%**
+    of served cues line up **while both files have at least 8 lines**. Live evidence: Bourne Supremacy -114 s, Taken 2
+    -339 s and 15%, Dances with Wolves 19% at +54.5 s: all (b); an honest incomplete file (12 of 41 lines, all in time)
+    is not (b) and is stored as it is. 30 s is above the timing drift seen (the Revenant's -100 ms) and below the shortest
+    cut difference in the evidence (54.5 s); 30% leaves a wide gap under the 70% `AGREES` line. Exact integer arithmetic
+    (`matched * 100 < served * 30`). Deliberately *not* (b): an `AGREES` (even at a far offset, which only phase 3's
+    timing alignment can judge), and a served file that is itself full subtitles (300 lines or more and more than twice
+    the reference: Amsterdam, 2,431 lines against 43, and Olympus Has Fallen, 1,300 against 29, are real catches that
+    another file would not change, so they stay `CHECK`). RotK (3 lines against 12, 0% matched) is not (b) either (it
+    has only 3 lines): the edition-name fit is what should find the extended file there. **At most 3 files are ever
+    compared per edition and IMDb id**, persisted in `forced_check_candidate` (V18, seeded from the existing checks); a
+    reused stored reference counts as one. A budget that is spent, a quota answer, an outage or a charged transient
+    failure ends the run with nothing saved for that edition (the stored references are reused next time, so nothing is
+    downloaded twice); a charged download is never refunded and counts on the ledger.
+39. **2e: which result is kept.** The first `AGREES`. Otherwise the most plausible `CHECK`: a non-full reference with the
+    most served lines lining up, then full references by the same count (all attempts compare the same served cues, so
+    the count orders them exactly as the share would); ties keep the earlier candidate. When several files were tried and
+    none agreed, the reasons begin "Tried N OpenSubtitles files; they look like a different cut" (every file was full
+    or looked like another cut) or "...; none of them agreed with this file". Reasons are stored whole up to the column's
+    1,000 characters.
+40. **2e: `rules_version` and re-evaluation without downloads.** `forced_subtitle_check.rules_version` (V18; 1 = 2d,
+    2 = 2e, `ForcedSubtitleCheck.RULES_VERSION`) makes every 2d row stale. `opensubtitles_reference` keeps the normalised
+    cues, so a stale check is compared again locally with the stored references first, and only a candidate with no
+    stored reference (within the cap) is downloaded. A check also records `best_file_id` (the film's best result then):
+    the reference may be any candidate, so a changed best file, not the reference's own file id, makes it stale, and
+    Admin's existing `isCurrent` call keeps working unchanged (its `bestFileId` argument now means that). A check whose
+    reference is no longer one of the film's candidates is stale too, and a result is dropped on save when it is.
+
+### Judgement calls made building phase 3a (2026-11-12, owner away)
+
+Each: what was chosen, why, and the alternative.
 
 ## What the owner wants
 
@@ -536,6 +594,33 @@ Built from the documented API: the live login/download test was denied (see "Dec
 - **Deviations / doubts:** no `checkVerdict` on need rows; the "pending set after the last check" tail of the worker loop is
   not unit-testable (one branch uncovered, as in the search refresher); the CI-only Postgres test
   (`SidecarCheckIntegrationTest`) was not run locally (no Docker).
+
+**2e — robust against bad reference files: built (2026-11-12).** Backend only, no response shape changes (`check.reasons`
+is still a list of sentences; the Admin file row shows them as sent). Decisions 34 to 40 above.
+- **Evidence from the first live run** (20 editions, 11 `AGREES`, 9 `CHECK`). Real catches, left as `CHECK`: Amsterdam
+  (2,431 lines against 43) and Olympus Has Fallen (1,300 against 29): the owner's "forced" file is full subtitles.
+  Mislabelled reference (full subtitles flagged foreign-parts-only): Spectre 1,362 against 39 at offset 0, Taken 3 1,456
+  against 13 at 0, The Revenant 834 against 138 at -100 ms: now `AGREES` by the subset check. Probably another cut or
+  release: RotK (likely extended; 3 against 12 lines, 0%), Dances with Wolves (19%, +54.5 s), Bourne Supremacy (53 against
+  12, -114 s), Taken 2 (39 against 16, 15%, -339 s): the next candidate is tried. Wording bug: Taken 2 said "probably
+  full subtitles" about 39 lines.
+- **Search** (`OpenSubtitlesParser`, `OpenSubtitlesRanking.candidates`, `OpenSubtitlesRefresher`): `fileName` read from
+  `files[0].file_name`; `OpenSubtitlesSearch.candidates`; written as `film.os_candidates` with `os_best` in the one
+  conditional statement (`saveOpenSubtitles`).
+- **Comparison** (`SubtitleComparison`): `Result` gains `matched` (exact count) and `fullReference`; the full path and
+  the wording rule above.
+- **Walk** (`ReferenceWalk`, pure; `SidecarCheckRefresher.walk`): the decisions (move on, keep, reasons) and the loop with
+  the ledger. `SidecarCheckService.due` carries each edition's ordered candidates and ledger; `markTried` records a file;
+  `save` checks the reference is still a candidate and writes `rules_version` and `best_file_id`.
+- **Logging (INFO, per edition):** which file was used and how many were compared ("Edition 10: used OpenSubtitles file
+  5012 (compared 3), CHECK"), and why a candidate was skipped (full subtitles / another cut, trying the next; could not
+  be read; already tried three). Only ids and counts: no key, token or link is ever logged.
+- **Doubts:** (1) the 30 s / 30% / 8-line numbers are chosen from nine live results, not tuned; check them against the
+  next run's log. (2) The ledger counts a reused stored reference, so an edition whose first three candidates were all
+  stored for other editions never reaches a fourth (a deliberate, strict reading of "3 per edition"). (3) A check saved
+  from a walk that ran out of candidates is not re-walked when a later search adds a better one, unless the best file
+  changes. (4) The Postgres-only tests (`SidecarCheckIntegrationTest`: V18 columns, ledger, candidates JSON) did not run
+  locally (no Docker).
 
 ### Phase 3 — automatic timing check
 

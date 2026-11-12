@@ -116,4 +116,111 @@ class OpenSubtitlesRankingTest {
         assertThat(best.id()).isEqualTo(3);
         assertThat(best.isMultiFile()).isTrue();
     }
+
+    /** A single-file result, ranked below {@code id} 1 on downloads, with a release name and a file name. */
+    private static OpenSubtitlesResult named(long id, String release, String fileName, int downloads) {
+        return new OpenSubtitlesResult(id, id + 1000, release, 23.976, downloads, true, false, null, null, 1,
+            fileName);
+    }
+
+    private static List<Long> ids(List<OpenSubtitlesResult> results) {
+        return results.stream().map(OpenSubtitlesResult::id).toList();
+    }
+
+    @Test
+    void rankGivesTheFilmLevelOrderInFull() {
+        assertThat(ids(OpenSubtitlesRanking.rank(List.of(result(3, 25.0, false, false, 1),
+            result(1, 23.976, false, false, 1), split(2, 2))))).containsExactly(1L, 3L, 2L);
+    }
+
+    @Test
+    void anEditionThatSaysExtendedRanksExtendedThenUntaggedThenTheatrical() {
+        OpenSubtitlesResult theatrical = named(1, "Rings.2003.Theatrical.BluRay", null, 9_000);
+        OpenSubtitlesResult plain = named(2, "Rings.2003.BluRay", null, 500);
+        OpenSubtitlesResult extended = named(3, "Rings.2003.Extended.BluRay", null, 10);
+
+        assertThat(ids(OpenSubtitlesRanking.rankFor(List.of(theatrical, plain, extended), "Extended Edition")))
+            .containsExactly(3L, 2L, 1L);
+    }
+
+    @Test
+    void anEditionThatSaysTheatricalRanksTheatricalThenUntaggedThenExtended() {
+        OpenSubtitlesResult theatrical = named(1, "Rings.2003.Theatrical.BluRay", null, 10);
+        OpenSubtitlesResult plain = named(2, "Rings.2003.BluRay", null, 500);
+        OpenSubtitlesResult extended = named(3, "Rings.2003.Extended.BluRay", null, 9_000);
+
+        assertThat(ids(OpenSubtitlesRanking.rankFor(List.of(extended, plain, theatrical), "Theatrical Cut")))
+            .containsExactly(1L, 2L, 3L);
+    }
+
+    @Test
+    void theFileNameCountsAsMuchAsTheReleaseName() {
+        OpenSubtitlesResult plain = named(1, "Rings.2003.BluRay", "rings.srt", 9_000);
+        OpenSubtitlesResult byFile = named(2, "Rings.2003.BluRay", "Rings.Extended.srt", 10);
+
+        assertThat(ids(OpenSubtitlesRanking.rankFor(List.of(plain, byFile), "Extended"))).containsExactly(2L, 1L);
+    }
+
+    @Test
+    void anEditionWithNoTagKeepsTheFilmLevelOrder() {
+        OpenSubtitlesResult theatrical = named(1, "Rings.2003.Theatrical.BluRay", null, 10);
+        OpenSubtitlesResult extended = named(2, "Rings.2003.Extended.BluRay", null, 9_000);
+        OpenSubtitlesResult plain = named(3, "Rings.2003.BluRay", null, 500);
+
+        assertThat(ids(OpenSubtitlesRanking.rankFor(List.of(theatrical, extended, plain), "Original")))
+            .isEqualTo(ids(OpenSubtitlesRanking.rank(List.of(theatrical, extended, plain))));
+        assertThat(ids(OpenSubtitlesRanking.rankFor(List.of(theatrical, extended, plain), null)))
+            .containsExactly(2L, 3L, 1L);
+    }
+
+    @Test
+    void aResultWithBothTagsFitsAnExtendedEditionNoBetterThanOneWithJustExtended() {
+        OpenSubtitlesResult both = named(1, "Rings.Extended.Theatrical.2003", null, 9_000);
+        OpenSubtitlesResult extended = named(2, "Rings.Extended.2003", null, 10);
+
+        assertThat(ids(OpenSubtitlesRanking.rankFor(List.of(both, extended), "Extended Edition")))
+            .containsExactly(2L, 1L);
+    }
+
+    @Test
+    void aSingleFileResultStillBeatsAMultiFileOneOfTheRightCut() {
+        OpenSubtitlesResult single = named(1, "Rings.2003.Theatrical.BluRay", null, 10);
+        OpenSubtitlesResult splitExtended = new OpenSubtitlesResult(2, 1002, "Rings.Extended", 23.976, 9_000, true,
+            false, null, null, 2, null);
+
+        assertThat(ids(OpenSubtitlesRanking.rankFor(List.of(splitExtended, single), "Extended Edition")))
+            .containsExactly(2L, 1L);
+    }
+
+    @Test
+    void candidatesAreTheTopThreeSingleFileResultsInRankedOrder() {
+        List<OpenSubtitlesResult> results = List.of(named(5, "r5", null, 10), named(1, "r1", null, 500),
+            split(9, 2), named(3, "r3", null, 100), named(2, "r2", null, 300), named(4, "r4", null, 50));
+
+        assertThat(ids(OpenSubtitlesRanking.candidates(results))).containsExactly(1L, 2L, 3L);
+    }
+
+    @Test
+    void candidatesAlsoKeepTheBestResultOfEachCutTagEvenWhenItIsNotInTheTopThree() {
+        List<OpenSubtitlesResult> results = List.of(named(1, "r1", null, 900), named(2, "r2", null, 800),
+            named(3, "r3", null, 700), named(4, "r4.Extended", null, 600), named(5, "r5.Extended", null, 500),
+            named(6, "r6.Theatrical", null, 400), named(7, "r7.Directors.Cut.Unrated", null, 300));
+
+        assertThat(ids(OpenSubtitlesRanking.candidates(results))).containsExactly(1L, 2L, 3L, 4L, 6L, 7L);
+    }
+
+    @Test
+    void candidatesNeverExceedEightAndAreEmptyWhenNothingIsSingleFile() {
+        List<OpenSubtitlesResult> tagged = new java.util.ArrayList<>();
+        String[] words = {"Extended", "Directors.Cut", "Special.Edition", "Unrated", "Theatrical"};
+        for (int i = 0; i < 12; i++) {
+            tagged.add(named(i + 1, i < 7 ? "plain" + i : words[i - 7], null, 1_000 - i));
+        }
+
+        assertThat(OpenSubtitlesRanking.candidates(tagged)).hasSize(8);
+        assertThat(OpenSubtitlesRanking.MAX_CANDIDATES).isEqualTo(8);
+        assertThat(OpenSubtitlesRanking.TOP_CANDIDATES).isEqualTo(3);
+        assertThat(OpenSubtitlesRanking.candidates(List.of(split(1, 2), split(2, 3)))).isEmpty();
+        assertThat(OpenSubtitlesRanking.candidates(List.of())).isEmpty();
+    }
 }

@@ -20,8 +20,14 @@ import java.util.Map;
  * offset.
  *
  * <p>The verdict is {@link Verdict#CHECK} when under 70% of the served cues match, when the served file has fewer than
- * half the reference's cues (incomplete), or more than twice as many (probably full subtitles, not forced); otherwise
+ * half the reference's cues (incomplete), or more than twice as many (a different cut; "probably full subtitles, not
+ * forced" is said only when the served file has at least {@value #FULL_LINES} lines); otherwise
  * {@link Verdict#AGREES}. The best offset is kept whatever the verdict and is only ever a hint.
+ *
+ * <p>A reference with at least {@value #FULL_LINES} cues is full subtitles (OpenSubtitles' "foreign parts only" flag is
+ * sometimes wrong). The served file cannot be judged complete against it, so only the timing of its lines is checked
+ * (a subset check): {@link Verdict#AGREES} when at least 70% of the served cues have a reference start within 2 seconds
+ * at the best offset and that offset is at most 10 seconds either way. All shares are compared in whole numbers.
  */
 public final class SubtitleComparison {
 
@@ -35,6 +41,15 @@ public final class SubtitleComparison {
     static final int MAX_CANDIDATES = 500;
     /** An offset at least this large is mentioned as a hint (inclusive). */
     static final long HINT_MS = 500;
+    /**
+     * A reference with at least this many cues is full subtitles, and a served file with at least this many lines is
+     * probably full subtitles too (inclusive).
+     */
+    public static final int FULL_LINES = 300;
+    /** A subset check agrees only when the best offset is no larger than this, either way (inclusive). */
+    static final long SUBSET_MAX_OFFSET_MS = 10_000;
+    /** The share of served cues that must match, in percent (inclusive). */
+    static final long AGREE_PERCENT = 70;
 
     private SubtitleComparison() {
     }
@@ -58,9 +73,17 @@ public final class SubtitleComparison {
      * @param verdict {@link Verdict#AGREES} or {@link Verdict#CHECK}
      * @param reasons plain sentences for the owner: why it is {@code CHECK}, and the timing hint when the best offset
      *     is half a second or more
+     * @param matched how many served cues line up at the best offset (the exact count behind {@code matchedShare})
+     * @param fullReference true when the reference has at least {@value #FULL_LINES} cues (judged by timing only)
      */
     public record Result(int servedCount, int referenceCount, double matchedShare, int bestOffsetMs, Verdict verdict,
-                         List<String> reasons) {
+                         List<String> reasons, int matched, boolean fullReference) {
+
+        /** The same result with other reasons (the walk over several references words its own). */
+        public Result withReasons(List<String> other) {
+            return new Result(servedCount, referenceCount, matchedShare, bestOffsetMs, verdict, List.copyOf(other),
+                matched, fullReference);
+        }
     }
 
     /** An offset and how well it lines the files up. */
@@ -83,32 +106,44 @@ public final class SubtitleComparison {
         int referenceCount = reference.size();
         if (referenceCount == 0) {
             return new Result(servedCount, 0, 0.0, 0, Verdict.CHECK,
-                List.of("OpenSubtitles' file has no lines to compare with"));
+                List.of("OpenSubtitles' file has no lines to compare with"), 0, false);
         }
         long[] s = starts(served);
         long[] r = starts(reference);
         Score best = servedCount == 0 ? new Score(0, 0, 0) : best(s, r, maxCandidates);
         double share = servedCount == 0 ? 0.0 : (double) best.matched() / servedCount;
-        List<String> reasons = new ArrayList<>();
-        if (servedCount > 0 && best.matched() * 100L < servedCount * 70L) {
-            long percent = best.matched() * 100L / servedCount;
-            reasons.add("Only " + percent + "% of this file's lines line up with OpenSubtitles' (within 2 seconds)");
-        }
-        if (servedCount * 2L < referenceCount) {
-            reasons.add("OpenSubtitles has " + referenceCount + (referenceCount == 1 ? " line" : " lines")
-                + ", this file has " + servedCount);
-        }
-        if (servedCount > referenceCount * 2L) {
-            reasons.add("This file has " + servedCount + " lines, OpenSubtitles has " + referenceCount
-                + ": probably full subtitles, not forced");
-        }
-        Verdict verdict = reasons.isEmpty() ? Verdict.AGREES : Verdict.CHECK;
+        boolean full = referenceCount >= FULL_LINES;
         long offset = best.offsetMs();
+        List<String> reasons = new ArrayList<>();
+        Verdict verdict;
+        if (full) {
+            verdict = servedCount > 0 && best.matched() * 100L >= servedCount * AGREE_PERCENT
+                && Math.abs(offset) <= SUBSET_MAX_OFFSET_MS ? Verdict.AGREES : Verdict.CHECK;
+            reasons.add(verdict == Verdict.AGREES
+                ? "OpenSubtitles only had full subtitles; this file's lines are in them and in time"
+                : "OpenSubtitles only had full subtitles, and this file's lines don't line up with them");
+        } else {
+            if (servedCount > 0 && best.matched() * 100L < servedCount * AGREE_PERCENT) {
+                long percent = best.matched() * 100L / servedCount;
+                reasons.add("Only " + percent
+                    + "% of this file's lines line up with OpenSubtitles' (within 2 seconds)");
+            }
+            if (servedCount * 2L < referenceCount) {
+                reasons.add("OpenSubtitles has " + referenceCount + (referenceCount == 1 ? " line" : " lines")
+                    + ", this file has " + servedCount);
+            }
+            if (servedCount > referenceCount * 2L) {
+                reasons.add("This file has " + servedCount + " lines, OpenSubtitles has " + referenceCount
+                    + (servedCount >= FULL_LINES ? ": probably full subtitles, not forced" : ""));
+            }
+            verdict = reasons.isEmpty() ? Verdict.AGREES : Verdict.CHECK;
+        }
         if (Math.abs(offset) >= HINT_MS) {
             reasons.add("OpenSubtitles' file is " + String.format(Locale.ROOT, "%.1f", Math.abs(offset) / 1000.0)
                 + " s " + (offset > 0 ? "later" : "earlier"));
         }
-        return new Result(servedCount, referenceCount, share, (int) offset, verdict, List.copyOf(reasons));
+        return new Result(servedCount, referenceCount, share, (int) offset, verdict, List.copyOf(reasons),
+            best.matched(), full);
     }
 
     private static long[] starts(List<SubtitleCue> cues) {

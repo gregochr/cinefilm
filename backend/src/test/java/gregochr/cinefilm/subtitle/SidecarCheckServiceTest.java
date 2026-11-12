@@ -16,6 +16,7 @@ import gregochr.cinefilm.subtitle.SubtitleComparison.Verdict;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -36,6 +37,20 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
     @Autowired
     private OpenSubtitlesReferenceRepository references;
 
+    @Autowired
+    private ForcedCheckCandidateRepository candidates;
+
+    private static OpenSubtitlesResult result(long fileId, String release, Integer fileCount) {
+        return new OpenSubtitlesResult(fileId - 1000, fileId, release, 23.976, 10, true, false, null, null,
+            fileCount);
+    }
+
+    private Film withCandidates(Film film, OpenSubtitlesResult... results) {
+        film.setOsBest(results[0].toJson());
+        film.setOsCandidates(OpenSubtitlesResult.listToJson(List.of(results)));
+        return films.saveAndFlush(film);
+    }
+
     /** A film with one edition of {@code parts} files, an IMDb id and a best OpenSubtitles result for that id. */
     private Film searchedFilm(String title, int parts, String imdbId, long fileId) {
         Film film = filmWithParts(title, parts, 60);
@@ -43,9 +58,7 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
         film.setOsSearchedImdbId(imdbId);
         film.setOsForcedCount(3);
         film.setOsSearchedAt(NOW);
-        film.setOsBest(new OpenSubtitlesResult(fileId - 1000, fileId, title + ".2008.BluRay", 23.976, 10, true,
-            false, null, null).toJson());
-        return films.saveAndFlush(film);
+        return withCandidates(film, result(fileId, title + ".2008.BluRay", 1));
     }
 
     private OpenSubtitlesReference reference(Film film, long fileId) {
@@ -60,7 +73,7 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
         return references.saveAndFlush(reference);
     }
 
-    private static final Result AGREES = new Result(2, 2, 1.0, 0, Verdict.AGREES, List.of());
+    private static final Result AGREES = new Result(2, 2, 1.0, 0, Verdict.AGREES, List.of(), 2, false);
 
     private DueCheck onlyDue() {
         List<DueCheck> due = service.due();
@@ -69,15 +82,15 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
     }
 
     @Test
-    void anEditionWithAServedSubtitleAndABestResultIsDueWithEverythingTheCheckNeeds() {
+    void anEditionWithAServedSubtitleAndCandidatesIsDueWithEverythingTheCheckNeeds() {
         Film film = searchedFilm("Taken", 1, "tt0936501", 5011);
         SubtitleSidecar row = sidecar("Taken.en.forced.srt", fileId(film, 1), false);
 
         DueCheck due = onlyDue();
 
-        assertThat(due).isEqualTo(new DueCheck(film.getId(), film.getEditions().get(0).getId(), "tt0936501", 5011,
-            "Taken.2008.BluRay", 1, "p" + fileId(film, 1) + "|" + row.getId() + "@0/0/"
-            + ForcedSubtitleServedTest.fingerprint(CUES), false,
+        assertThat(due).isEqualTo(new DueCheck(film.getId(), film.getEditions().get(0).getId(), "tt0936501",
+            "Original", List.of(result(5011, "Taken.2008.BluRay", 1)), Set.of(), "p" + fileId(film, 1) + "|"
+            + row.getId() + "@0/0/" + ForcedSubtitleServedTest.fingerprint(CUES), false,
             List.of(new SubtitleCue(10_000, 12_000, "Hello"), new SubtitleCue(20_000, 22_500, "World"))));
     }
 
@@ -120,14 +133,16 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
     }
 
     @Test
-    void aBestResultThatIsNotUsableJsonIsSkippedNotAnError() {
+    void candidatesThatAreNotUsableJsonLeaveNoCandidatesButAreNotAnError() {
         Film bad = searchedFilm("Bad", 1, "tt1", 5001);
-        bad.setOsBest("{not json");
+        bad.setOsCandidates("{not json");
         sidecar("Bad.en.forced.srt", fileId(bad, 1), false);
         Film good = searchedFilm("Good", 1, "tt2", 5002);
         sidecar("Good.en.forced.srt", fileId(good, 1), false);
 
-        assertThat(service.due()).extracting(DueCheck::filmId).containsExactly(good.getId());
+        assertThat(service.due()).extracting(DueCheck::filmId).containsExactlyInAnyOrder(bad.getId(), good.getId());
+        assertThat(service.due().stream().filter(d -> d.filmId().equals(bad.getId())).findFirst().orElseThrow()
+            .candidates()).isEmpty();
     }
 
     @Test
@@ -142,6 +157,7 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
         sidecar("Unmatched.en.forced.srt", null, false);
 
         assertThat(noSidecar.getId()).isNotNull();
+        assertThat(unmatched.getId()).isNotNull();
         assertThat(service.due()).isEmpty();
     }
 
@@ -175,13 +191,12 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
         film.setImdbId("tt0000001");
         film.setOsSearchedImdbId("tt0000001");
         film.setOsForcedCount(1);
-        film.setOsBest(new OpenSubtitlesResult(1, 6011, "Other", null, 0, false, false, null, null).toJson());
-        films.saveAndFlush(film);
+        withCandidates(film, new OpenSubtitlesResult(1, 6011, "Other", null, 0, false, false, null, null));
 
         DueCheck due = onlyDue();
 
         assertThat(due.imdbId()).isEqualTo("tt0000001");
-        assertThat(due.osFileId()).isEqualTo(6011);
+        assertThat(due.candidates()).extracting(OpenSubtitlesResult::fileId).containsExactly(6011L);
     }
 
     @Test
@@ -209,7 +224,7 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
         DueCheck due = onlyDue();
         OpenSubtitlesReference reference = reference(film, 5011);
         Result result = new Result(12, 41, 0.75, 1200, Verdict.CHECK,
-            List.of("OpenSubtitles has 41 lines, this file has 12", "OpenSubtitles' file is 1.2 s later"));
+            List.of("OpenSubtitles has 41 lines, this file has 12", "OpenSubtitles' file is 1.2 s later"), 9, false);
 
         boolean saved = service.save(due, reference, result, LATER);
 
@@ -230,6 +245,7 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
         assertThat(row.reasonList()).containsExactly("OpenSubtitles has 41 lines, this file has 12",
             "OpenSubtitles' file is 1.2 s later");
         assertThat(row.getCheckedAt()).isEqualTo(LATER);
+        assertThat(row.getRulesVersion()).isEqualTo(ForcedSubtitleCheck.RULES_VERSION);
     }
 
     @Test
@@ -242,7 +258,7 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
         DueCheck again = onlyDue();
 
         boolean saved = service.save(again, reference, new Result(2, 9, 0.5, 0, Verdict.CHECK,
-            List.of("x")), LATER);
+            List.of("x"), 1, false), LATER);
 
         assertThat(saved).isTrue();
         List<ForcedSubtitleCheck> rows = checks.findAll();
@@ -322,10 +338,10 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
         sidecar("Taken.en.forced.srt", fileId(film, 1), false);
         DueCheck due = onlyDue();
         OpenSubtitlesReference reference = reference(film, 5011);
-        DueCheck noFilm = new DueCheck(film.getId() + 999, due.editionId(), due.imdbId(), due.osFileId(),
-            due.osRelease(), 1, due.servedVersion(), false, due.cues());
-        DueCheck noEdition = new DueCheck(film.getId(), due.editionId() + 999, due.imdbId(), due.osFileId(),
-            due.osRelease(), 1, due.servedVersion(), false, due.cues());
+        DueCheck noFilm = new DueCheck(film.getId() + 999, due.editionId(), due.imdbId(), "Original",
+            due.candidates(), Set.of(), due.servedVersion(), false, due.cues());
+        DueCheck noEdition = new DueCheck(film.getId(), due.editionId() + 999, due.imdbId(), "Original",
+            due.candidates(), Set.of(), due.servedVersion(), false, due.cues());
 
         assertThat(service.save(noFilm, reference, AGREES, LATER)).isFalse();
         assertThat(service.save(noEdition, reference, AGREES, LATER)).isFalse();
@@ -333,12 +349,12 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
     }
 
     @Test
-    void theBestResultsFileCountIsCarriedSoTheRefresherCanSkipASplitSubtitle() {
+    void aFilmWhoseOnlyResultsAreSplitOverSeveralFilesIsDueWithNoCandidatesSoTheRefresherCanSkipIt() {
         Film film = searchedFilm("Towers", 1, "tt1", 5001);
-        film.setOsBest(new OpenSubtitlesResult(1, 5001, "Extended", 23.976, 1, true, false, null, null, 2).toJson());
+        withCandidates(film, result(5001, "Extended", 2));
         sidecar("Towers.en.forced.srt", fileId(film, 1), false);
 
-        assertThat(onlyDue().osFileCount()).isEqualTo(2);
+        assertThat(onlyDue().candidates()).isEmpty();
     }
 
     @Test
@@ -353,28 +369,35 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
     }
 
     @Test
-    void aChangedBestFileMakesTheEditionDueAgainEvenWithTheSameServedVersion() {
+    void aCheckWhoseReferenceIsNoLongerOneOfTheFilmsCandidatesIsStaleAndTheEditionIsDueAgain() {
         Film film = searchedFilm("Taken", 1, "tt0936501", 5011);
         sidecar("Taken.en.forced.srt", fileId(film, 1), false);
         service.save(onlyDue(), reference(film, 5011), AGREES, LATER);
         assertThat(service.due()).isEmpty();
 
-        film.setOsBest(new OpenSubtitlesResult(2, 6022, "Better", 23.976, 1, true, false, null, null).toJson());
-        films.saveAndFlush(film);
+        withCandidates(film, result(6022, "Better", 1));
 
-        DueCheck due = onlyDue();
-        assertThat(due.osFileId()).isEqualTo(6022);
+        assertThat(onlyDue().candidates()).extracting(OpenSubtitlesResult::fileId).containsExactly(6022L);
     }
 
     @Test
-    void aResultIsDroppedWhenTheFilmsBestFileChangedBetweenDueAndSaveButTheReferenceIsKept() {
+    void aCheckWhoseReferenceIsAnyOfTheFilmsCandidatesNotOnlyTheBestStaysCurrent() {
+        Film film = searchedFilm("Taken", 1, "tt0936501", 5011);
+        withCandidates(film, result(5011, "Taken", 1), result(5012, "Taken.Extended", 1));
+        sidecar("Taken.en.forced.srt", fileId(film, 1), false);
+        service.save(onlyDue(), reference(film, 5012), AGREES, LATER);
+
+        assertThat(service.due()).isEmpty();
+    }
+
+    @Test
+    void aResultIsDroppedWhenItsReferenceIsNoLongerOneOfTheFilmsCandidatesButTheReferenceIsKept() {
         Film film = searchedFilm("Taken", 1, "tt0936501", 5011);
         sidecar("Taken.en.forced.srt", fileId(film, 1), false);
         DueCheck due = onlyDue();
         OpenSubtitlesReference reference = reference(film, 5011);
 
-        film.setOsBest(new OpenSubtitlesResult(2, 6022, "Better", 23.976, 1, true, false, null, null).toJson());
-        films.saveAndFlush(film);
+        withCandidates(film, result(6022, "Better", 1));
 
         assertThat(service.save(due, reference, AGREES, LATER)).isFalse();
         assertThat(checks.findAll()).isEmpty();
@@ -382,7 +405,21 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
     }
 
     @Test
-    void aResultIsDroppedWhenTheFilmHasNoBestResultAnyMore() {
+    void aResultIsDroppedWhenTheFilmHasNoCandidatesAnyMore() {
+        Film film = searchedFilm("Taken", 1, "tt0936501", 5011);
+        sidecar("Taken.en.forced.srt", fileId(film, 1), false);
+        DueCheck due = onlyDue();
+        OpenSubtitlesReference reference = reference(film, 5011);
+
+        film.setOsCandidates(null);
+        films.saveAndFlush(film);
+
+        assertThat(service.save(due, reference, AGREES, LATER)).isFalse();
+        assertThat(checks.findAll()).isEmpty();
+    }
+
+    @Test
+    void aResultIsDroppedWhenTheFilmHasNoBestResultAnyMoreEvenIfCandidatesRemain() {
         Film film = searchedFilm("Taken", 1, "tt0936501", 5011);
         sidecar("Taken.en.forced.srt", fileId(film, 1), false);
         DueCheck due = onlyDue();
@@ -392,16 +429,37 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
         films.saveAndFlush(film);
 
         assertThat(service.save(due, reference, AGREES, LATER)).isFalse();
+    }
+
+    @Test
+    void anUnreadableBestResultStillAllowsACheckAndRecordsNoBestFile() {
+        Film film = searchedFilm("Taken", 1, "tt0936501", 5011);
+        film.setOsBest("{not json");
+        films.saveAndFlush(film);
+        sidecar("Taken.en.forced.srt", fileId(film, 1), false);
+
+        assertThat(service.save(onlyDue(), reference(film, 5011), AGREES, LATER)).isTrue();
+
+        assertThat(checks.findAll().get(0).getBestFileId()).isZero();
+    }
+
+    @Test
+    void aResultIsNotSavedAgainstAReferenceThatIsNowOnlyAMultiFileCandidate() {
+        Film film = searchedFilm("Taken", 1, "tt0936501", 5011);
+        sidecar("Taken.en.forced.srt", fileId(film, 1), false);
+        DueCheck due = onlyDue();
+        OpenSubtitlesReference reference = reference(film, 5011);
+
+        withCandidates(film, result(5011, "Taken", 2));
+
+        assertThat(service.save(due, reference, AGREES, LATER)).isFalse();
         assertThat(checks.findAll()).isEmpty();
     }
 
-    private static final String LEGACY_BEST = "{\"id\":4011,\"fileId\":5011,\"release\":\"Taken\",\"fps\":23.976,"
-        + "\"downloadCount\":10,\"fromTrusted\":true,\"hearingImpaired\":false}";
-
     @Test
-    void aBestResultStoredBeforeTheFileCountWasKeptIsNotDueUntilTheSearchWritesItAgain() {
+    void aFilmSearchedBeforeItsCandidatesWereKeptIsNotDueUntilTheSearchWritesThemAgain() {
         Film film = searchedFilm("Taken", 1, "tt0936501", 5011);
-        film.setOsBest(LEGACY_BEST);
+        film.setOsCandidates(null);
         sidecar("Taken.en.forced.srt", fileId(film, 1), false);
         films.saveAndFlush(film);
 
@@ -409,19 +467,61 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
     }
 
     @Test
-    void aResultIsNotSavedAgainstALegacyOrMultiFileBestResult() {
+    void aCheckMadeByOlderRulesIsStaleAndTheEditionIsDueAgain() {
         Film film = searchedFilm("Taken", 1, "tt0936501", 5011);
         sidecar("Taken.en.forced.srt", fileId(film, 1), false);
+        service.save(onlyDue(), reference(film, 5011), AGREES, LATER);
+        assertThat(service.due()).isEmpty();
+
+        ForcedSubtitleCheck row = checks.findAll().get(0);
+        row.setRulesVersion(ForcedSubtitleCheck.RULES_VERSION - 1);
+        checks.saveAndFlush(row);
+
+        assertThat(service.due()).hasSize(1);
+    }
+
+    @Test
+    void theCandidatesAreOrderedForTheEditionsCutAndCarryWhatWasAlreadyTried() {
+        Film film = searchedFilm("Rings", 1, "tt0167260", 5011);
+        withCandidates(film, result(5011, "Rings.Theatrical.2003", 1), result(5012, "Rings.Extended.Edition.2003", 1),
+            result(5013, "Rings.2003", 1));
+        film.getEditions().get(0).setName("Extended Edition");
+        films.saveAndFlush(film);
+        Long editionId = film.getEditions().get(0).getId();
+        sidecar("Rings.en.forced.srt", fileId(film, 1), false);
+        service.markTried(editionId, "tt0167260", 5012, NOW);
+        service.markTried(editionId, "tt0000001", 5011, NOW);
+
         DueCheck due = onlyDue();
-        OpenSubtitlesReference reference = reference(film, 5011);
 
-        film.setOsBest(LEGACY_BEST);
-        films.saveAndFlush(film);
-        assertThat(service.save(due, reference, AGREES, LATER)).isFalse();
+        assertThat(due.editionName()).isEqualTo("Extended Edition");
+        assertThat(due.candidates()).extracting(OpenSubtitlesResult::fileId).containsExactly(5012L, 5013L, 5011L);
+        assertThat(due.triedFileIds()).containsExactly(5012L);
+    }
 
-        film.setOsBest(new OpenSubtitlesResult(1, 5011, "x", 23.976, 1, true, false, null, null, 2).toJson());
-        films.saveAndFlush(film);
-        assertThat(service.save(due, reference, AGREES, LATER)).isFalse();
-        assertThat(checks.findAll()).isEmpty();
+    @Test
+    void markingACandidateTriedTwiceKeepsOneRow() {
+        Film film = searchedFilm("Taken", 1, "tt0936501", 5011);
+        Long editionId = film.getEditions().get(0).getId();
+
+        service.markTried(editionId, "tt0936501", 5011, NOW);
+        service.markTried(editionId, "tt0936501", 5011, LATER);
+
+        assertThat(candidates.findByEditionIdIn(List.of(editionId))).singleElement().satisfies(row -> {
+            assertThat(row.getOsFileId()).isEqualTo(5011L);
+            assertThat(row.getImdbId()).isEqualTo("tt0936501");
+            assertThat(row.getTriedAt()).isEqualTo(NOW);
+        });
+    }
+
+    @Test
+    void reasonsAreJoinedWholeAndNeverPastTheColumn() {
+        String long900 = "x".repeat(900);
+
+        assertThat(SidecarCheckService.joined(List.of("a", "b"))).isEqualTo("a\nb");
+        assertThat(SidecarCheckService.joined(List.of())).isEmpty();
+        assertThat(SidecarCheckService.joined(List.of(long900, "y".repeat(99)))).hasSize(1000);
+        assertThat(SidecarCheckService.joined(List.of(long900, "y".repeat(100)))).isEqualTo(long900);
+        assertThat(SidecarCheckService.joined(List.of("z".repeat(1001), "short"))).isEmpty();
     }
 }

@@ -31,7 +31,7 @@ class OpenSubtitlesParserTest {
             .set("from_trusted", "true").set("hearing_impaired", "true"));
 
         assertThat(result).isEqualTo(new OpenSubtitlesResult(1234, 6234, "Taken.2008.BluRay.x264", 24.0, 321, true,
-            true, "2020-01-02T03:04:05Z", "Gold member"));
+            true, "2020-01-02T03:04:05Z", "Gold member", 1, "a.srt"));
     }
 
     @Test
@@ -259,5 +259,34 @@ class OpenSubtitlesParserTest {
         assertThat(only(item(1).set("nb_cd", "-4")).fileCount()).isEqualTo(1);
         assertThat(only(item(1).set("nb_cd", "99999")).fileCount()).isEqualTo(1000);
         assertThat(only(item(1).remove("nb_cd")).fileCount()).isEqualTo(1);
+    }
+
+    @Test
+    void theFirstFilesNameIsKeptCleanedAndCutToTwoHundredCharactersOrIsNullWhenMissing() {
+        assertThat(only(item(1)).fileName()).isEqualTo("a.srt");
+        assertThat(only(item(1).set("files", "[{\"file_id\":11,\"file_name\":\"x\\ty\\n\"}]")).fileName())
+            .isEqualTo("x y");
+        assertThat(only(item(1).set("files", "[{\"file_id\":11,\"file_name\":\"" + "n".repeat(300) + "\"}]"))
+            .fileName()).hasSize(OpenSubtitlesParser.RELEASE_MAX);
+        assertThat(only(item(1).set("files", "[{\"file_id\":11}]")).fileName()).isNull();
+        assertThat(only(item(1).set("files", "[{\"file_id\":11,\"file_name\":5}]")).fileName()).isNull();
+    }
+
+    @Test
+    void theSearchCarriesTheCandidatesInRankedOrderSingleFileOnlyWithTheBestFirst() {
+        String two = "[{\"file_id\":11},{\"file_id\":22}]";
+        OpenSubtitlesSearch search = parse(item(1).set("download_count", "10"), item(2).set("download_count", "500"),
+            item(3).set("files", two).set("download_count", "9999"), item(4).set("ai_translated", "true"),
+            item(5).set("release", "\"Taken.Extended.2008\"").set("download_count", "5"));
+
+        assertThat(search.count()).isEqualTo(4);
+        assertThat(search.best().id()).isEqualTo(2);
+        assertThat(search.candidates()).extracting(OpenSubtitlesResult::id).containsExactly(2L, 1L, 5L);
+    }
+
+    @Test
+    void aSearchWithNoResultsHasNoCandidates() {
+        assertThat(parse().candidates()).isEmpty();
+        assertThat(parse(item(1).set("files", "[{\"file_id\":11},{\"file_id\":22}]")).candidates()).isEmpty();
     }
 }

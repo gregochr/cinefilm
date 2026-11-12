@@ -26,7 +26,7 @@ public final class OpenSubtitlesParser {
      *
      * @param json the body of {@code GET /api/v1/subtitles}
      * @param imdbNumber the IMDb id that was asked for, as a number (without {@code tt} or leading zeros)
-     * @return how many results remain and the best of them
+     * @return how many results remain, the best of them and the candidates to compare with
      * @throws OpenSubtitlesUnavailableException when the body is not JSON or has no {@code data} list: an answer
      *     that cannot be read is never "no results"
      */
@@ -47,7 +47,8 @@ public final class OpenSubtitlesParser {
                 kept.add(result);
             }
         }
-        return new OpenSubtitlesSearch(kept.size(), OpenSubtitlesRanking.best(kept).orElse(null));
+        return new OpenSubtitlesSearch(kept.size(), OpenSubtitlesRanking.best(kept).orElse(null),
+            OpenSubtitlesRanking.candidates(kept));
     }
 
     private static OpenSubtitlesResult result(JsonNode item, long imdbNumber) {
@@ -68,7 +69,8 @@ public final class OpenSubtitlesParser {
         return new OpenSubtitlesResult(id, fileId, text(attributes, "release", RELEASE_MAX), fps(attributes),
             downloadCount(attributes), flag(attributes, "from_trusted"), flag(attributes, "hearing_impaired"),
             text(attributes, "upload_date", SHORT_TEXT_MAX),
-            text(attributes.path("uploader"), "rank", SHORT_TEXT_MAX), fileCount(attributes));
+            text(attributes.path("uploader"), "rank", SHORT_TEXT_MAX), fileCount(attributes),
+            text(attributes.path("files").path(0), "file_name", RELEASE_MAX));
     }
 
     /** The larger of {@code nb_cd} and how many files are listed, at least 1 and at most 1,000. */

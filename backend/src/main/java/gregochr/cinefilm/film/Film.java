@@ -148,6 +148,13 @@ public class Film {
     private String osBest;
 
     /**
+     * JSON array of the single-file OpenSubtitles results the check may compare with, in ranked order
+     * ({@code OpenSubtitlesResult.listToJson}); {@code []} = none usable; null = stored before it was kept.
+     */
+    @Column(columnDefinition = "TEXT")
+    private String osCandidates;
+
+    /**
      * Sets the IMDb id. A different id means a different film, so what OpenSubtitles said about the old one is
      * forgotten in the entity (the explicit row write is {@link FilmRepository#clearOpenSubtitles}).
      */
@@ -157,6 +164,7 @@ public class Film {
             osSearchedAt = null;
             osSearchedImdbId = null;
             osBest = null;
+            osCandidates = null;
         }
         this.imdbId = newImdbId;
     }
