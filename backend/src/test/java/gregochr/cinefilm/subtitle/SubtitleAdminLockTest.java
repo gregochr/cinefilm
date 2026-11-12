@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.library.LibraryLock;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.subtitle.SubtitleDtos.OffsetRequest;
 import java.util.ArrayList;
 import java.util.List;
@@ -49,7 +50,8 @@ class SubtitleAdminLockTest {
         when(sidecars.findById(5L)).thenReturn(Optional.of(row));
         when(sidecars.findAllByOrderByPathAscIdAsc()).thenReturn(List.of(row));
         SubtitleAdminService service = new SubtitleAdminService(sidecars, mock(MediaFileRepository.class),
-            mock(EditionRepository.class), mock(SidecarSync.class), CLOCK, lock, manager);
+            mock(EditionRepository.class), mock(SidecarSync.class), mock(ForcedSubtitleCheckRepository.class),
+            mock(OpenSubtitlesReferenceRepository.class), CLOCK, lock, manager);
 
         service.offset(5L, new OffsetRequest(250));
 

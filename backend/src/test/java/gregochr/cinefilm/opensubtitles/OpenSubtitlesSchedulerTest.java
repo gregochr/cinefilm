@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 
 class OpenSubtitlesSchedulerTest {
@@ -17,7 +18,7 @@ class OpenSubtitlesSchedulerTest {
     private final OpenSubtitlesApi api = mock(OpenSubtitlesApi.class);
     private final List<Runnable> queued = new ArrayList<>();
     private final OpenSubtitlesRefresher refresher = new OpenSubtitlesRefresher(api, mock(FilmRepository.class), CLOCK,
-        queued::add);
+        queued::add, mock(ApplicationEventPublisher.class));
 
     @Test
     void theDailyRunStartsASearchOfTheDueFilms() {

@@ -1,5 +1,6 @@
 package gregochr.cinefilm.subtitle;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -25,6 +26,23 @@ final class VttWriter {
      */
     static String write(List<SubtitleCue> cues, long offsetMs) {
         StringBuilder out = new StringBuilder("WEBVTT\n");
+        for (SubtitleCue cue : shift(cues, offsetMs)) {
+            out.append('\n').append(time(cue.startMs())).append(" --> ").append(time(cue.endMs())).append('\n')
+                .append(escape(cue.text())).append('\n');
+        }
+        return out.toString();
+    }
+
+    /**
+     * The cues as they are shown after an offset: a cue that is over before 0 is dropped, one that starts before 0
+     * starts at 0, and a cue with no duration lasts {@link #MIN_DISPLAY_MS}. What {@link #write} writes.
+     *
+     * @param cues the cues in time order
+     * @param offsetMs milliseconds added to every cue time
+     * @return the cues that are shown, in the same order
+     */
+    static List<SubtitleCue> shift(List<SubtitleCue> cues, long offsetMs) {
+        List<SubtitleCue> shown = new ArrayList<>();
         for (SubtitleCue cue : cues) {
             long end = cue.endMs() + offsetMs;
             boolean noDuration = cue.endMs() <= cue.startMs();
@@ -35,10 +53,9 @@ final class VttWriter {
             if (end <= start) {
                 end = start + MIN_DISPLAY_MS;
             }
-            out.append('\n').append(time(start)).append(" --> ").append(time(end)).append('\n')
-                .append(escape(cue.text())).append('\n');
+            shown.add(new SubtitleCue(start, end, cue.text()));
         }
-        return out.toString();
+        return shown;
     }
 
     /** {@code hh:mm:ss.mmm}. */

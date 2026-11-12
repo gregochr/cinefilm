@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
@@ -25,7 +26,8 @@ import org.springframework.stereotype.Service;
  * Each result is saved with one statement that only matches while the film still has the IMDb id it was searched
  * for, so a film whose IMDb id changed meanwhile keeps what the change wrote and is left for the next run. An outage
  * stops the run without stamping anything, so the films are searched again; it is never recorded as "no results".
- * Nothing here throws to its caller.
+ * When a pass ends an {@link OpenSubtitlesSearchFinished} event is published (the check of the owner's subtitle files
+ * listens). Nothing here throws to its caller.
  */
 @Service
 public class OpenSubtitlesRefresher {
@@ -39,16 +41,19 @@ public class OpenSubtitlesRefresher {
     private final FilmRepository films;
     private final Clock clock;
     private final Executor executor;
+    private final ApplicationEventPublisher events;
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean pending = new AtomicBoolean();
 
     /** Creates the service; the executor is {@code openSubtitlesExecutor}. */
     public OpenSubtitlesRefresher(OpenSubtitlesApi api, FilmRepository films, Clock clock,
-                                  @Qualifier("openSubtitlesExecutor") Executor executor) {
+                                  @Qualifier("openSubtitlesExecutor") Executor executor,
+                                  ApplicationEventPublisher events) {
         this.api = api;
         this.films = films;
         this.clock = clock;
         this.executor = executor;
+        this.events = events;
     }
 
     /** True when an OpenSubtitles API key is configured. */
@@ -150,6 +155,16 @@ public class OpenSubtitlesRefresher {
             LOG.info("Subtitle search finished: {} saved, {} changed meanwhile, {} failed", saved, skipped, failed);
         } catch (RuntimeException e) {
             LOG.error("Subtitle search failed", e);
+        }
+        announce();
+    }
+
+    /** Says the pass has ended, so the best results can be used; a listener's failure does not touch the run. */
+    private void announce() {
+        try {
+            events.publishEvent(new OpenSubtitlesSearchFinished());
+        } catch (RuntimeException e) {
+            LOG.warn("A listener of the subtitle search failed: {}", e.getClass().getSimpleName());
         }
     }
 

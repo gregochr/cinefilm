@@ -66,11 +66,21 @@ grep -q '^CINEFILM_PASSWORD=' .env || { echo "CINEFILM_PASSWORD=${PW}" >> .env; 
 grep -q '^TMDB_READ_TOKEN=' .env || echo "TMDB_READ_TOKEN=" >> .env
 grep -q '^OMDB_API_KEY=' .env || echo "OMDB_API_KEY=" >> .env
 grep -q '^OPENSUBTITLES_API_KEY=' .env || echo "OPENSUBTITLES_API_KEY=" >> .env
+grep -q '^OPENSUBTITLES_USERNAME=' .env || echo "OPENSUBTITLES_USERNAME=" >> .env
+grep -q '^OPENSUBTITLES_PASSWORD=' .env || echo "OPENSUBTITLES_PASSWORD=" >> .env
 ```
 
 Compare the result with `deploy/.env.example` for any other keys it lists.
 
 `TMDB_READ_TOKEN` stays empty until the TMDB phase. Never commit `.env`; never paste it anywhere.
+
+**OpenSubtitles downloads** (the check of the forced `.srt` files beside the films) are off while `OPENSUBTITLES_API_KEY`,
+`OPENSUBTITLES_USERNAME` or `OPENSUBTITLES_PASSWORD` is blank; the search needs only the key. Edit the lines in
+`~/cinefilm/.env`; do not paste them into chat or a commit. At most 90 downloads a day are made
+(`cinefilm.opensubtitles.daily-download-limit`, counted per UTC day in `opensubtitles_budget`; the account's dev-mode
+allowance is 100, the rest is for the owner's own use) and the run stops for the day when OpenSubtitles says its limit is
+reached. Each file is downloaded once and kept (`opensubtitles_reference`). Checks run after each search run and scan,
+at start-up and daily at 06:30 (London).
 
 **IMDb and Rotten Tomatoes ratings** come from OMDb and are off while `OMDB_API_KEY` is blank (Admin then says
 *Ratings need an OMDb API key*). Get a free key at https://www.omdbapi.com/apikey.aspx (1,000 requests a day) and put

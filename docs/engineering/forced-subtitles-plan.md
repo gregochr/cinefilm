@@ -1,8 +1,59 @@
 # Forced English subtitles — plan
 
 Written 2026-11-11. Status (2026-11-12): **phase 1 merged (#105) and released (v0.4.0); phase 2a merged (#109),
-2b in review; 2c built (PR in review); 2d and phases 3 to 6 not started.** Phases 5 and 6 were added on 2026-11-12: the owner says
+2b in review; 2c built (PR in review); 2d built (PR to open); phases 3 to 6 not started.** Phases 5 and 6 were added on 2026-11-12: the owner says
 solving subtitles is what would let them stop depending on Plex.
+
+## Decisions made while the owner was away (2026-11-12)
+
+Judgement calls made while building 2d without the owner. Each: what was chosen, why, and the alternative.
+
+1. **The live OpenSubtitles test was blocked, so 2d was built from the documented API.** Login, `/download` and the link
+   fetch have never been run against the real service. Chosen: build from the documented v1 REST API and fail loudly and
+   safely (anything unexpected is an outage, never "no match", nothing wrong is stored). Alternative: wait for a real
+   download. **First real run: watch the log** and fix any difference (header names, `base_url`, the link host) in a small
+   follow-up.
+2. **Daily download limit 90 of the 100.** Why: leaves 10 of the dev-mode 100 for the owner's own use.
+   Alternative: 100. Setting: `cinefilm.opensubtitles.daily-download-limit`.
+3. **Thresholds 70% / 0.5x / 2x and a +-2 s match window**, from the plan's own wording. Alternatives: stricter or looser
+   share; a 1 s window (more false `CHECK` on a loose file).
+4. **Checks run per edition on the served (stitched) subtitle**, not per file: a split edition's per-part files are
+   compared as the one timeline the player gets. Why: the owner's file is only right or wrong as played. Alternative: per
+   file, which cannot judge a part against a whole-film reference.
+5. **Owner-verified files are still checked for completeness.** "Looks right" is about lines and timing a person saw;
+   it cannot see a missing half. They are checked after the unverified ones.
+6. **Best offset: the best fit, not just the smallest offset.** Equal match counts are separated by the least total
+   distance before the plan's "smallest |offset|" rule, because with a 2 s window a 1.2 s shift matches at offset 0 too and
+   the hint would always say 0. Alternative: the literal tie-break (hint always near 0).
+7. **Multi-CD OpenSubtitles results are never compared (coordinator, 2026-11-12).** A result split over several files
+   (`nb_cd` above 1, or several `files[]`) is only part of the film. The parser reads both counts (`fileCount` is the
+   larger); ranking puts single-file results above every multi-file one; when the best result left is multi-file, the
+   edition is skipped (log: "Only multi-part subtitles on OpenSubtitles"), with no download and no verdict stored.
+   A best result stored by 2c without `fileCount` is treated as unknown: the search's due query (`findOpenSubtitlesDue`)
+   includes films whose `os_best` JSON lacks `fileCount` and searches them first, so the next run rewrites it with the
+   count (chosen over treating a missing count as multi-file, which would skip those films for good).
+8. **No `checkVerdict` on the film need rows.** Their cheap place would add a query and change a response the Admin UI is
+   being built against; the verdict is on the subtitle list's `check` instead. Alternative: add it with the Admin display PR.
+9. **A download that cannot be read is kept as an unusable reference** (no cues, or over 1 MB normalised) so that file id
+   is never fetched again; a changed best result (new file id) is a new reference.
+10a. **No refund once OpenSubtitles has issued its link** (the account is charged then). The client throws
+    `OpenSubtitlesChargedException` for any failure after the link (link refused or file too big: permanent; timeout, 5xx,
+    other status: transient); the refresher never refunds those. Permanent failures and zero-cue files make that file id
+    final at once (`opensubtitles_reference.failed_downloads` = 3); a transient one counts one charged attempt, stops the
+    run, and the file is tried again later, at most 3 charged attempts in all. A check is current only while its
+    reference's file id is still the film's best (`os_best`) file id, as well as the served version and IMDb id.
+10. **A download is given back to the budget on an outage** (before or during `/download`, nothing charged) (the request did not count at OpenSubtitles) and the whole day
+    is spent on a quota answer or `remaining` of 0 or less, until the reset time it gave (at most 36 hours ahead) or the
+    next UTC midnight.
+11. **Owner decision (2026-11-12): trust only proven `.srt` files.** The owner will not routinely watch films to mark
+    subtitles "Looks right", so "proven" comes from the automatic checks; "Looks right" is an optional override.
+    - A sidecar keeps playing if the owner verified it, **or** 2d says `AGREES`, **or** phase 3 says `ALIGNED`.
+    - A sidecar that fails both automatic checks and is not owner-verified is **replaced by an automatically checked
+      download** in phase 4. An automatically checked download plays straight away, with no owner step. This replaces
+      the earlier "a sidecar always wins" rule (Phase 4 below is updated).
+    - A sidecar that cannot be checked at all (no reference, no alignment possible) keeps playing and is listed in
+      Admin as **"Unchecked"**.
+    - 2d only makes the verdict available per served edition; **no playback change in this PR.**
 
 ## What the owner wants
 
@@ -356,8 +407,40 @@ served). Only the films with rule-2 evidence are evaluated.
   - The connect and read timeouts are 10 s each; the read timeout covers the wait for the response headers, as for
     TMDB and OMDb (the body read is capped in size, not in time).
 
-**2d — the cross-check of existing sidecars** (login, `/download`, quota, comparison, Admin `CHECK` reason). Planned
-in detail once 2c is merged and login and `/download` have been tried with one real download.
+**2d — the cross-check of existing sidecars: built (2026-11-12).** Backend only; the Admin display is a separate PR.
+Built from the documented API: the live login/download test was denied (see "Decisions made while the owner was away").
+- **Client** (`OpenSubtitlesClient`, interface `OpenSubtitlesApi.download(fileId)`): `POST /api/v1/login` (token kept in
+  memory, one re-login after a 401, only when the call did not just log in), `POST /api/v1/download`, then a GET of the
+  link: https only, host below `opensubtitles.com` (checked before any request), no redirects, 2 MB read from the wire,
+  no key or token sent to it. 406, or a reply with no link whose message says limit or quota, is `OpenSubtitlesQuotaException`
+  (with `reset_time_utc`); everything else unexpected is an outage. `base_url` is used only when it is a host below
+  `.opensubtitles.com`. Settings: `cinefilm.opensubtitles.username` / `.password` (blank = downloads off, search still on),
+  `.daily-download-limit=90`.
+- **Budget** (`opensubtitles_budget`, a table of its own rather than generalising `RatingsBudget`, because it also keeps
+  `blocked_until`): `take` / `refund` / `exhaust` per UTC day, one conditional statement each.
+- **Tables** (`V16`): `opensubtitles_reference` (unique per film and file id, cues as normalised SRT, `cue_count` 0 =
+  unusable), `forced_subtitle_check` (one row per edition, cascade on the edition and the reference), `opensubtitles_budget`.
+- **Served version** (`ServedSubtitle`, `ServedSubtitles`): `p<part file ids>|<sidecar id>@<start>/<offset>/<hash>,...`,
+  each file's own state in serve order, the hash being the first 16 hex characters of the SHA-256 of its cues (no
+  timestamp, so changes in the same millisecond cannot hide), so an attach, move, nudge, changed file, changed part list
+  or changed part duration makes a check stale (`forced_subtitle_check.served_version` is 1,000 characters).
+  `ForcedSubtitleService.served` gives the cues playback serves (same pick, offsets applied by `VttWriter.shift`, parts
+  stitched with `EditionTimeline`).
+- **Comparison** (`SubtitleComparison`, pure): candidate offsets from start-time differences within +-10 min, bucketed to
+  100 ms (half rounds up), the 500 most frequent tried; score = matched share within 2 s (inclusive); best = most matches,
+  then least total distance, then smallest |offset|, then lower. `CHECK` when share under 70%, served under half or over
+  twice the reference; reasons as in the changelog; the offset hint at 500 ms or more.
+- **Refresher** (`SidecarCheckRefresher`, executor `sidecarCheckExecutor`, `SidecarCheckScheduler` 06:30): same `pending`
+  re-run as the search; triggers: `OpenSubtitlesSearchFinished` (new event, published when a search pass ends), `ScanFinished`,
+  start-up, daily. Due (`SidecarCheckService.due`): the film's best result is from a search of its current IMDb id and is a
+  single file, playback serves the edition a forced sidecar, and no check matches the served version and the film's IMDb
+  id; owner-unverified first. Per edition: stored reference, else download within budget (stored at once), compare, save
+  only if the served version is still the one compared (else dropped). Budget spent or quota stops the run; an outage stops
+  it with nothing stored; one edition failing is counted and skipped.
+- **API:** `check` on each `SidecarDto` (for the files an edition serves); `foundation-plan.md` updated.
+- **Deviations / doubts:** no `checkVerdict` on need rows; the "pending set after the last check" tail of the worker loop is
+  not unit-testable (one branch uncovered, as in the search refresher); the CI-only Postgres test
+  (`SidecarCheckIntegrationTest`) was not run locally (no Docker).
 
 ### Phase 3 — automatic timing check
 
@@ -398,7 +481,13 @@ in detail once 2c is merged and login and `/download` have been tried with one r
 - Downloads go through a queue within the daily quota, and the rest carries to the next day. Each is stored and
   aligned at once (phase 3). A `CHECK` result tries the next candidate (at most 3). Admin shows the candidates, so the
   owner can pick another or remove a download.
-- A sidecar always wins: if the owner later drops a `.srt` beside the film, it replaces the download for playback.
+- **Trust only proven `.srt` files (owner decision 2026-11-12; replaces "a sidecar always wins").** A sidecar plays
+  while it is owner-verified, `AGREES` (2d) or `ALIGNED` (phase 3), or cannot be checked at all (then Admin lists it as
+  "Unchecked"). One that fails both checks and is not owner-verified is replaced for playback by an automatically
+  checked download, which plays at once with no owner step. A `.srt` the owner drops in later is checked like the others.
+- **Multi-CD results:** a result split over several CDs can be used when its CD count equals the edition's part count,
+  each CD placed at its part's start with `EditionTimeline`. Otherwise prefer a single-file result; 2d already skips an
+  edition whose best result is multi-file.
 - **Every new film** then runs the whole chain on the scan that finds it:
   1. match a sidecar (phase 1);
   2. decide the need and cross-check (phase 2);

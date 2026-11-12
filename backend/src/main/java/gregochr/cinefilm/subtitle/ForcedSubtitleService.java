@@ -62,6 +62,29 @@ public class ForcedSubtitleService {
     }
 
     /**
+     * What each of some editions serves as cues on its timeline, for checking it against another source. The same
+     * pick as {@link #forEditions} and {@link #vtt}; an edition with nothing served, or whose later part's start on the
+     * timeline is unknown, is absent.
+     *
+     * @param forEditions editions (their files must be loadable)
+     * @return the served subtitle by edition id
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, ServedSubtitle> served(Collection<Edition> forEditions) {
+        List<Long> allIds = forEditions.stream().flatMap(e -> partIds(e).stream()).toList();
+        List<SubtitleSidecar> found = allIds.isEmpty() ? List.of() : sidecars.findByMediaFileIdIn(allIds);
+        Map<Long, ServedSubtitle> byEdition = new HashMap<>();
+        for (Edition edition : forEditions) {
+            Pick pick = SidecarPrecedence.pick(partIds(edition), found);
+            ServedSubtitle served = pick.slots().isEmpty() ? null : ServedSubtitles.of(edition, pick);
+            if (served != null) {
+                byEdition.put(edition.getId(), served);
+            }
+        }
+        return byEdition;
+    }
+
+    /**
      * The edition's forced subtitle as WebVTT on its timeline.
      *
      * @param editionId the edition

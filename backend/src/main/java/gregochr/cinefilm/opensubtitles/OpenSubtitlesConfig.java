@@ -41,4 +41,14 @@ public class OpenSubtitlesConfig {
             return thread;
         });
     }
+
+    /** A single daemon thread: only one check of the owner's subtitle files against OpenSubtitles runs at a time. */
+    @Bean
+    public Executor sidecarCheckExecutor() {
+        return Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "subtitle-check");
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
 }

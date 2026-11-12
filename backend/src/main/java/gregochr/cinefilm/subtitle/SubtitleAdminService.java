@@ -6,11 +6,16 @@ import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.EditionTimeline;
+import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.library.LibraryLock;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Pick;
 import gregochr.cinefilm.subtitle.SubtitleDtos.AttachRequest;
+import gregochr.cinefilm.subtitle.SubtitleDtos.CheckDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.CueDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.CuesDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.OffsetRequest;
@@ -46,18 +51,23 @@ public class SubtitleAdminService {
     private final MediaFileRepository files;
     private final EditionRepository editions;
     private final SidecarSync sync;
+    private final ForcedSubtitleCheckRepository checks;
+    private final OpenSubtitlesReferenceRepository references;
     private final Clock clock;
     private final LibraryLock lock;
     private final TransactionTemplate tx;
 
     /** Creates the service. */
     public SubtitleAdminService(SubtitleSidecarRepository sidecars, MediaFileRepository files,
-                                EditionRepository editions, SidecarSync sync, Clock clock, LibraryLock lock,
+                                EditionRepository editions, SidecarSync sync, ForcedSubtitleCheckRepository checks,
+                                OpenSubtitlesReferenceRepository references, Clock clock, LibraryLock lock,
                                 PlatformTransactionManager transactions) {
         this.sidecars = sidecars;
         this.files = files;
         this.editions = editions;
         this.sync = sync;
+        this.checks = checks;
+        this.references = references;
         this.clock = clock;
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
@@ -267,22 +277,64 @@ public class SubtitleAdminService {
             }
         }
         Set<Long> conflicting = new HashSet<>();
+        Map<Long, String> versions = new HashMap<>();
+        Set<Long> served = new HashSet<>();
         byEdition.forEach((editionId, group) -> {
-            Pick pick = SidecarPrecedence.pick(partIds(editionById.get(editionId)), group);
+            Edition edition = editionById.get(editionId);
+            Pick pick = SidecarPrecedence.pick(partIds(edition), group);
             conflicting.addAll(pick.conflicting());
+            String version = pick.slots().isEmpty() ? null : ServedSubtitles.version(edition, pick);
+            if (version != null) {
+                versions.put(editionId, version);
+                pick.slots().forEach(slot -> served.add(slot.sidecar().getId()));
+            }
         });
+        Map<Long, CheckDto> checkByEdition = currentChecks(versions, editionById);
         List<SidecarDto> dtos = new ArrayList<>();
         for (SubtitleSidecar sidecar : all) {
-            dtos.add(dto(sidecar, fileById.get(sidecar.getMediaFileId()), conflicting.contains(sidecar.getId())));
+            MediaFile file = fileById.get(sidecar.getMediaFileId());
+            CheckDto check = file == null || !served.contains(sidecar.getId()) ? null
+                : checkByEdition.get(file.getEdition().getId());
+            dtos.add(dto(sidecar, file, conflicting.contains(sidecar.getId()), served.contains(sidecar.getId()),
+                check));
         }
         return dtos;
     }
 
-    private static SidecarDto dto(SubtitleSidecar s, MediaFile file, boolean conflict) {
+    /**
+     * The checks that still describe what their edition serves (the same served version, a reference fetched for the
+     * film's current IMDb id), by edition id. Two queries however many editions there are.
+     */
+    private Map<Long, CheckDto> currentChecks(Map<Long, String> versions, Map<Long, Edition> editionById) {
+        if (versions.isEmpty()) {
+            return Map.of();
+        }
+        List<ForcedSubtitleCheck> found = checks.findByEditionIdIn(versions.keySet());
+        Map<Long, OpenSubtitlesReference> referenceById = new HashMap<>();
+        references.findAllById(found.stream().map(ForcedSubtitleCheck::getReferenceId).toList())
+            .forEach(r -> referenceById.put(r.getId(), r));
+        Map<Long, CheckDto> current = new HashMap<>();
+        for (ForcedSubtitleCheck check : found) {
+            Long editionId = check.getEditionId();
+            OpenSubtitlesReference reference = referenceById.get(check.getReferenceId());
+            Film film = editionById.get(editionId).getFilm();
+            OpenSubtitlesResult best = film.getOsBest() == null ? null : OpenSubtitlesResult.fromJson(film.getOsBest());
+            if (best != null && best.isSingleFile() && check.isCurrent(versions.get(editionId), film.getImdbId(),
+                reference, best.fileId())) {
+                current.put(editionId, new CheckDto(check.getVerdict(), check.reasonList(), check.getBestOffsetMs(),
+                    check.getMatchedShare(), check.getServedCount(), check.getReferenceCount(),
+                    reference.getRelease(), check.getCheckedAt()));
+            }
+        }
+        return current;
+    }
+
+    private static SidecarDto dto(SubtitleSidecar s, MediaFile file, boolean conflict, boolean isServed,
+                                   CheckDto check) {
         if (file == null) {
             return new SidecarDto(s.getId(), s.getPath(), s.getPresence().name(), "unmatched", null, null, null, null,
                 0, null, false, s.isOwnerAttached(), s.getCueCount(), s.getParseReport(), s.getOffsetMs(), false,
-                false, s.getUpdatedAt().toEpochMilli());
+                false, s.getUpdatedAt().toEpochMilli(), false, null);
         }
         Edition edition = file.getEdition();
         List<Long> partIds = partIds(edition);
@@ -293,7 +345,7 @@ public class SubtitleAdminService {
             edition.getFilm().getId(), edition.getFilm().getTitle(), edition.getId(), edition.getName(),
             partIds.size(), s.isWholeEdition() ? null : file.getPartNumber(), s.isWholeEdition(),
             s.isOwnerAttached(), s.getCueCount(), s.getParseReport(), s.getOffsetMs(), s.isVerifiedFor(partIds),
-            endsAfter, s.getUpdatedAt().toEpochMilli());
+            endsAfter, s.getUpdatedAt().toEpochMilli(), isServed, check);
     }
 
     private static List<Long> partIds(Edition edition) {

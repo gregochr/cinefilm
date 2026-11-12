@@ -68,7 +68,14 @@ public final class OpenSubtitlesParser {
         return new OpenSubtitlesResult(id, fileId, text(attributes, "release", RELEASE_MAX), fps(attributes),
             downloadCount(attributes), flag(attributes, "from_trusted"), flag(attributes, "hearing_impaired"),
             text(attributes, "upload_date", SHORT_TEXT_MAX),
-            text(attributes.path("uploader"), "rank", SHORT_TEXT_MAX));
+            text(attributes.path("uploader"), "rank", SHORT_TEXT_MAX), fileCount(attributes));
+    }
+
+    /** The larger of {@code nb_cd} and how many files are listed, at least 1 and at most 1,000. */
+    private static int fileCount(JsonNode attributes) {
+        long discs = attributes.path("nb_cd").isIntegralNumber() ? attributes.path("nb_cd").asLong() : 1;
+        long listed = attributes.path("files").size();
+        return (int) Math.max(1, Math.min(1000, Math.max(discs, listed)));
     }
 
     private static boolean flag(JsonNode node, String name) {

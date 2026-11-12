@@ -53,7 +53,8 @@ class OpenSubtitlesClientTest {
     private final ListAppender<ILoggingEvent> logged = new ListAppender<>();
 
     private OpenSubtitlesClient clientWith(Sleeper sleeper, LongSupplier nanos, String version, int maxBytes) {
-        return new OpenSubtitlesClient(builder.build(), KEY, version, sleeper, nanos, maxBytes);
+        return new OpenSubtitlesClient(builder.build(), KEY, "", "", version, sleeper, nanos, maxBytes,
+            OpenSubtitlesClient.MAX_FILE_BYTES);
     }
 
     @BeforeEach
@@ -331,8 +332,8 @@ class OpenSubtitlesClientTest {
     @Test
     void aBlankOrMissingKeyDisablesTheClientAndASearchThrowsWithoutAnyRequest() {
         for (String blank : new String[] {"", "   ", null}) {
-            OpenSubtitlesClient off = new OpenSubtitlesClient(builder.build(), blank, "0.4.0", sleeps::add, clock,
-                OpenSubtitlesClient.MAX_BODY_BYTES);
+            OpenSubtitlesClient off = new OpenSubtitlesClient(builder.build(), blank, "", "", "0.4.0", sleeps::add,
+                clock, OpenSubtitlesClient.MAX_BODY_BYTES, OpenSubtitlesClient.MAX_FILE_BYTES);
 
             assertThat(off.enabled()).isFalse();
             assertThatThrownBy(() -> off.searchForced("tt0936501"))
@@ -348,8 +349,8 @@ class OpenSubtitlesClientTest {
         server.expect(once(), requestTo(TAKEN_URL)).andExpect(header("Api-Key", KEY))
             .andRespond(withSuccess(ONE_RESULT, json()));
 
-        new OpenSubtitlesClient(builder.build(), "  " + KEY + "\n", "0.4.0", sleeps::add, clock,
-            OpenSubtitlesClient.MAX_BODY_BYTES).searchForced("tt0936501");
+        new OpenSubtitlesClient(builder.build(), "  " + KEY + "\n", "", "", "0.4.0", sleeps::add, clock,
+            OpenSubtitlesClient.MAX_BODY_BYTES, OpenSubtitlesClient.MAX_FILE_BYTES).searchForced("tt0936501");
 
         server.verify();
     }

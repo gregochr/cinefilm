@@ -14,10 +14,12 @@ import gregochr.cinefilm.auth.SecurityConfig;
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.subtitle.SubtitleDtos.AttachRequest;
+import gregochr.cinefilm.subtitle.SubtitleDtos.CheckDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.CueDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.CuesDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.OffsetRequest;
 import gregochr.cinefilm.subtitle.SubtitleDtos.SidecarDto;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +34,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class SubtitleAdminControllerTest {
 
     private static final SidecarDto DTO = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L,
-        "Taken", 70L, "Original", 1, 1, false, true, 12, "No problems found", -250, true, false, 1700000000000L);
+        "Taken", 70L, "Original", 1, 1, false, true, 12, "No problems found", -250, true, false, 1700000000000L,
+        true, null);
 
     @Autowired
     private MockMvc mvc;
@@ -68,7 +71,8 @@ class SubtitleAdminControllerTest {
             .andExpect(jsonPath("$[0].offsetMs").value(-250))
             .andExpect(jsonPath("$[0].verified").value(true))
             .andExpect(jsonPath("$[0].endsAfterRuntime").value(false))
-            .andExpect(jsonPath("$[0].version").value(1700000000000L));
+            .andExpect(jsonPath("$[0].version").value(1700000000000L))
+            .andExpect(jsonPath("$[0].served").value(true));
     }
 
     @Test
@@ -187,5 +191,28 @@ class SubtitleAdminControllerTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
         }
+    }
+
+    @Test
+    void aFileServedByItsEditionCarriesTheOpenSubtitlesCheckAndOtherFilesCarryNull() throws Exception {
+        CheckDto check = new CheckDto("CHECK", List.of("OpenSubtitles has 41 lines, this file has 12",
+            "OpenSubtitles' file is 1.2 s later"), 1200, 0.5, 12, 41, "Taken.2008.BluRay",
+            Instant.parse("2024-04-01T01:30:00Z"));
+        SidecarDto checked = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L, "Taken", 70L,
+            "Original", 1, 1, false, true, 12, "No problems found", -250, true, false, 1700000000000L, true, check);
+        when(service.list()).thenReturn(List.of(checked, DTO));
+
+        mvc.perform(get("/api/admin/subtitles").with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].check.verdict").value("CHECK"))
+            .andExpect(jsonPath("$[0].check.reasons[0]").value("OpenSubtitles has 41 lines, this file has 12"))
+            .andExpect(jsonPath("$[0].check.reasons[1]").value("OpenSubtitles' file is 1.2 s later"))
+            .andExpect(jsonPath("$[0].check.bestOffsetMs").value(1200))
+            .andExpect(jsonPath("$[0].check.matchedShare").value(0.5))
+            .andExpect(jsonPath("$[0].check.servedCount").value(12))
+            .andExpect(jsonPath("$[0].check.referenceCount").value(41))
+            .andExpect(jsonPath("$[0].check.referenceRelease").value("Taken.2008.BluRay"))
+            .andExpect(jsonPath("$[0].check.checkedAt").value("2024-04-01T01:30:00Z"))
+            .andExpect(jsonPath("$[1].check").value(org.hamcrest.Matchers.nullValue()));
     }
 }

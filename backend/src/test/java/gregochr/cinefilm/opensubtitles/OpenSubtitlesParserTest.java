@@ -233,4 +233,31 @@ class OpenSubtitlesParserTest {
     private static String q(String text) {
         return "\"" + text + "\"";
     }
+
+    @Test
+    void aSingleFileResultHasFileCountOne() {
+        assertThat(only(item(1)).fileCount()).isEqualTo(1);
+        assertThat(only(item(1).set("nb_cd", "1")).fileCount()).isEqualTo(1);
+    }
+
+    @Test
+    void theFileCountIsTheLargerOfTheDiscCountAndTheFilesListed() {
+        String two = "[{\"file_id\":11},{\"file_id\":12}]";
+        assertThat(only(item(1).set("nb_cd", "2")).fileCount()).isEqualTo(2);
+        assertThat(only(item(1).set("files", two)).fileCount()).isEqualTo(2);
+        assertThat(only(item(1).set("nb_cd", "3").set("files", two)).fileCount()).isEqualTo(3);
+        assertThat(only(item(1).set("nb_cd", "1").set("files", two)).fileCount()).isEqualTo(2);
+        // the file id is the first file's
+        assertThat(only(item(1).set("files", two)).fileId()).isEqualTo(11);
+    }
+
+    @Test
+    void aDiscCountThatIsNotAWholeNumberOrIsOutOfRangeIsOneOrClamped() {
+        assertThat(only(item(1).set("nb_cd", "\"2\"")).fileCount()).isEqualTo(1);
+        assertThat(only(item(1).set("nb_cd", "null")).fileCount()).isEqualTo(1);
+        assertThat(only(item(1).set("nb_cd", "0")).fileCount()).isEqualTo(1);
+        assertThat(only(item(1).set("nb_cd", "-4")).fileCount()).isEqualTo(1);
+        assertThat(only(item(1).set("nb_cd", "99999")).fileCount()).isEqualTo(1000);
+        assertThat(only(item(1).remove("nb_cd")).fileCount()).isEqualTo(1);
+    }
 }

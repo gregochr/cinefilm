@@ -91,16 +91,29 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
     for a copy that could not be resized, `no-store` when the resizer was busy); and the resume still
     (`private, max-age=86400`). HLS playlists and segments are `no-store`. Nothing under `/api/admin`, no session
     route and no mutating response is cached. Any other exception needs a note in the PR.
-12. **OpenSubtitles (outbound).** CineFilm's one call to OpenSubtitles is `GET /api/v1/subtitles` on
-    `https://api.opensubtitles.com`, the only host, with fixed parameters (`foreign_parts_only=only`, `languages=en`)
-    and an IMDb id that matches `^tt\d{1,10}$` (sent as its number): nothing in the request comes from the browser or
-    from the response. It is search only: no login, no download, and no other method. Redirects are not followed (a
-    3xx is an error), connect and read time out at 10 s, at most 1 MB of the reply is read (more is an error), requests
-    are paced to under 5 a second, and 429 and 5xx are retried at most three times. The reply is untrusted: it is
-    parsed, never evaluated; a field of the wrong type is dropped; text (`release`, 200 characters) is cleaned of
-    control characters and only ever stored and shown as text. A result for another film's IMDb id is dropped. The key
-    is `OPENSUBTITLES_API_KEY`: the search is off while it is blank. Phase 2d adds login and `/download`; that PR adds
-    its own rules here (host allowlist for the download link, size cap before decompression).
+12. **OpenSubtitles (outbound).** CineFilm's calls to OpenSubtitles go to `https://api.opensubtitles.com` (or, after a
+    login, the account's own API host, used only when `base_url` is a plain host name that ends in `.opensubtitles.com`;
+    anything else in `base_url` is ignored) and to the one download link each `/download` answers with. Search is
+    `GET /api/v1/subtitles` with fixed parameters (`foreign_parts_only=only`, `languages=en`) and an IMDb id that matches
+    `^tt\d{1,10}$` (sent as its number). Download is `POST /api/v1/login` (username and password in a JSON body) and
+    `POST /api/v1/download` (`{"file_id": n}`, a number from a search reply): nothing in a request comes from the browser.
+    Redirects are not followed (a 3xx is an error), connect and read time out at 10 s, at most 1 MB of a JSON reply is
+    read (more is an error), requests are paced to under 5 a second and logins to one a second, and 429 and 5xx are
+    retried at most three times, except `POST /download`, which costs a download: only a 429 is retried, and a timeout, reset or 5xx is
+    never sent again (it may already have been charged). The login token is kept in memory only and a login is made again only after a 401, once.
+    **The download link is untrusted**: it is fetched only when it is `https`, has no user info and the default port, and
+    its host is a plain name below `opensubtitles.com` (checked before any request, so another host gets none); the fetch
+    is a GET that carries neither the key nor the token nor a cookie, sends no `Accept-Encoding`, and at most 2 MB is read
+    from the wire (more is an error, enforced while reading). A gzip payload (magic bytes or `Content-Encoding: gzip`) is
+    inflated after that with its own 2 MB cap; a corrupt or oversized one is a charged failure, never a refund. The file is parsed as SRT, never
+    evaluated, and kept as normalised text (at most 1 MB). All replies are untrusted: a field of the wrong type is dropped;
+    text (`release`, 200 characters) is cleaned of control characters and only ever stored and shown as text; a result for
+    another film's IMDb id is dropped; a reset time further than 36 hours ahead is not believed. Anything unexpected is an
+    outage, never "no results" and never a verdict, and nothing is stored from it. The key is `OPENSUBTITLES_API_KEY`
+    (search is off while it is blank); downloads also need `OPENSUBTITLES_USERNAME` and `OPENSUBTITLES_PASSWORD` and are
+    off while either is blank. The key, username, password and token never appear in a log, an error message, a cause, a
+    URL or a response. Downloads are counted per UTC day (`cinefilm.opensubtitles.daily-download-limit`, 90) in the
+    database and stop when OpenSubtitles says its limit is reached, until the time it gave.
 
 ## Reporting
 
