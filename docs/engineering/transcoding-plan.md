@@ -157,7 +157,9 @@ read of the file. Direct play of the file remains only as a fallback.
   (this film's segments, or another film's in the same browser session) is reused instead of probing; a probe that
   measures nothing, and a split film with no recent speed, start on the lowest rung (`poor-link-plan.md`). Then let
   ABR run: hls.js steps
-  down at once and up one level after ~60 s healthy (decision 3, via `autoLevelCapping`/`nextAutoLevel`); iPhone's
+  down at once and up one level after ~60 s healthy (decision 3, via `autoLevelCapping`/`nextAutoLevel`). The cap
+  follows the level hls.js starts to *fetch* (`LEVEL_SWITCHING`), not the level that reaches the screen
+  (`LEVEL_SWITCHED`), which comes later by as much as is buffered (`train-link-plan.md`). iPhone's
   native HLS adapts on its own (it can't be gated) and the player reads changes from `resize`/`videoHeight`, which
   identifies the rung because heights are unique per film (Rungs: a transcoded rung exists only *strictly below*
   the source height, so `original` and e.g. `480p` never share a height; a test asserts uniqueness for every

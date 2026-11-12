@@ -500,6 +500,7 @@ describe('the object it returns', () => {
       'engine',
       'environment',
       'fellBack',
+      'fetching',
       'networkError',
       'paused',
       'play',
@@ -732,5 +733,26 @@ describe('when the recorder cannot be made', () => {
     expect(Object.keys(inert.result.current).sort()).toEqual(
       Object.keys(working.result.current).sort(),
     );
+  });
+});
+
+describe('fetching', () => {
+  it('reaches the counter: the rung being fetched is in the minute that is sent', async () => {
+    const fetchMock = stubFetch();
+    const { result } = mount();
+    result.current.fetching('480p');
+    result.current.throughput(900);
+    result.current.playing();
+    expect(bodies(fetchMock)[0].minutes).toEqual([[0, 900, 0, 0, 0, 0, 4]]);
+  });
+
+  it('does not throw into the caller when the counter throws', () => {
+    stubFetch();
+    const { result } = mount({
+      now: () => {
+        throw new Error('clock broke');
+      },
+    });
+    expect(() => result.current.fetching('480p')).not.toThrow();
   });
 });

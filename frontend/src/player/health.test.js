@@ -536,8 +536,8 @@ describe('a stall', () => {
     // The minute is 60,000 ms: 55,000 to 60,000 is minute 0, 60,000 to 70,000 minute 1.
     expect(m.report()).toMatchObject({ stallMs: 15000, longestStallMs: 15000, watchedMs: 1500 });
     expect(m.report().minutes).toEqual([
-      [0, 0, 3, 1500, 5000],
-      [1, 0, 3, 0, 10000],
+      [0, 0, 3, 1500, 5000, 0, 0],
+      [1, 0, 3, 0, 10000, 0, 0],
     ]);
   });
 });
@@ -615,11 +615,11 @@ describe('a seek', () => {
       watchedMs: 2000,
       rungMs: { '720p': 2000 },
     });
-    expect(m.report().minutes).toEqual([[0, 0, 3, 2000, 0]]);
+    expect(m.report().minutes).toEqual([[0, 0, 3, 2000, 0, 0, 0]]);
     m.at(2650);
     m.h.beat(3000);
     expect(m.report()).toMatchObject({ watchedMs: 2250, rungMs: { '720p': 2250 } });
-    expect(m.report().minutes).toEqual([[0, 0, 3, 2250, 0]]);
+    expect(m.report().minutes).toEqual([[0, 0, 3, 2250, 0, 0, 0]]);
   });
 
   it('credits the first beat interval after a seek wait longer than the grace', () => {
@@ -1120,8 +1120,8 @@ describe('minutes', () => {
     m.h.throughput(1000);
     m.playFor(50000); // to 90 s
     expect(m.report().minutes).toEqual([
-      [0, 800, 3, 60000, 0],
-      [1, 0, 3, 30000, 0],
+      [0, 800, 3, 60000, 0, 0, 0],
+      [1, 0, 3, 30000, 0, 0, 0],
     ]);
   });
 
@@ -1131,8 +1131,8 @@ describe('minutes', () => {
     m.at(65000);
     m.h.throughput(300);
     expect(m.report().minutes).toEqual([
-      [0, 500, 0, 0, 0],
-      [1, 300, 0, 0, 0],
+      [0, 500, 0, 0, 0, 0, 0],
+      [1, 300, 0, 0, 0, 0, 0],
     ]);
   });
 
@@ -1142,7 +1142,7 @@ describe('minutes', () => {
     for (let i = 0; i < 2000; i += 1) m.h.throughput(1);
     for (let i = 0; i < 2000; i += 1) m.h.throughput(1000);
     // Kept: 2,000 ones and 2,000 thousands, so the median is rank 2,000, a one.
-    expect(m.report().minutes).toEqual([[0, 1, 0, 0, 0]]);
+    expect(m.report().minutes).toEqual([[0, 1, 0, 0, 0, 0, 0]]);
   });
 
   it('lists minutes in order even when the clock went back before a sample', () => {
@@ -1158,7 +1158,7 @@ describe('minutes', () => {
     const m = started(50000);
     m.h.waiting();
     m.at(60000);
-    expect(m.report().minutes).toEqual([[0, 0, 0, 0, 10000]]);
+    expect(m.report().minutes).toEqual([[0, 0, 0, 0, 10000, 0, 0]]);
   });
 
   it('puts time that crosses two boundaries in each of three minutes', () => {
@@ -1166,10 +1166,10 @@ describe('minutes', () => {
     m.h.waiting();
     m.at(190000);
     expect(m.report().minutes).toEqual([
-      [0, 0, 0, 0, 10000],
-      [1, 0, 0, 0, 60000],
-      [2, 0, 0, 0, 60000],
-      [3, 0, 0, 0, 10000],
+      [0, 0, 0, 0, 10000, 0, 0],
+      [1, 0, 0, 0, 60000, 0, 0],
+      [2, 0, 0, 0, 60000, 0, 0],
+      [3, 0, 0, 0, 10000, 0, 0],
     ]);
   });
 
@@ -1183,8 +1183,8 @@ describe('minutes', () => {
     m.h.playing();
     m.playFor(2000);
     expect(m.report().minutes).toEqual([
-      [0, 0, 3, 1000, 0],
-      [6, 0, 3, 2000, 0],
+      [0, 0, 3, 1000, 0, 0, 0],
+      [6, 0, 3, 2000, 0, 0, 0],
     ]);
   });
 
@@ -1196,9 +1196,9 @@ describe('minutes', () => {
     m.h.waiting();
     m.at(130000);
     expect(m.report().minutes).toEqual([
-      [0, 0, 4, 0, 10000],
-      [1, 0, 4, 0, 60000],
-      [2, 0, 4, 0, 10000],
+      [0, 0, 4, 0, 10000, 0, 0],
+      [1, 0, 4, 0, 60000, 0, 0],
+      [2, 0, 4, 0, 10000, 0, 0],
     ]);
   });
 
@@ -1206,14 +1206,14 @@ describe('minutes', () => {
     const m = started(0);
     m.h.waiting();
     m.at(5000);
-    expect(m.report().minutes).toEqual([[0, 0, 0, 0, 5000]]);
+    expect(m.report().minutes).toEqual([[0, 0, 0, 0, 5000, 0, 0]]);
   });
 
   it('lists a minute that has only a sample', () => {
     const m = make();
     m.at(130000);
     m.h.throughput(700);
-    expect(m.report().minutes).toEqual([[2, 700, 0, 0, 0]]);
+    expect(m.report().minutes).toEqual([[2, 700, 0, 0, 0, 0, 0]]);
   });
 
   it.each([
@@ -1229,7 +1229,7 @@ describe('minutes', () => {
     m.h.rung(id, 100);
     m.h.playing();
     m.playFor(1000);
-    expect(m.report().minutes).toEqual([[0, 0, code, 1000, 0]]);
+    expect(m.report().minutes).toEqual([[0, 0, code, 1000, 0, 0, 0]]);
   });
 
   it('codes a minute by the rung last credited in it', () => {
@@ -1239,7 +1239,7 @@ describe('minutes', () => {
     m.playFor(30000);
     m.h.rung('480p', 480);
     m.playFor(20000);
-    expect(m.report().minutes).toEqual([[0, 0, 4, 50000, 0]]);
+    expect(m.report().minutes).toEqual([[0, 0, 4, 50000, 0, 0, 0]]);
   });
 
   it('adds no minute once there are 360, though the totals keep counting', () => {
@@ -1253,8 +1253,16 @@ describe('minutes', () => {
     m.playFor(2000);
     const r = m.report();
     expect(r.minutes).toHaveLength(MAX_MINUTES);
-    expect(r.minutes[0]).toEqual([0, 100, 0, 0, 0]);
-    expect(r.minutes[MAX_MINUTES - 1]).toEqual([MAX_MINUTES - 1, 100 + MAX_MINUTES - 1, 0, 0, 0]);
+    expect(r.minutes[0]).toEqual([0, 100, 0, 0, 0, 0, 0]);
+    expect(r.minutes[MAX_MINUTES - 1]).toEqual([
+      MAX_MINUTES - 1,
+      100 + MAX_MINUTES - 1,
+      0,
+      0,
+      0,
+      0,
+      0,
+    ]);
     expect(r.kbpsSamples).toBe(MAX_MINUTES + 40);
     expect(r.watchedMs).toBe(2000);
     expect(r.rungMs).toEqual({});
@@ -1267,6 +1275,130 @@ describe('minutes', () => {
       m.h.throughput(100);
     }
     expect(m.report().minutes).toHaveLength(MAX_MINUTES);
+  });
+});
+
+describe('buffered ahead and the rung being fetched', () => {
+  it('keeps the last figure a minute was given, as whole seconds', () => {
+    const m = make();
+    m.at(1000);
+    m.h.beat(1000, 30);
+    m.at(2000);
+    m.h.beat(2000, 12.6);
+    expect(m.report().minutes).toEqual([[0, 0, 0, 0, 0, 13, 0]]);
+  });
+
+  it('is 0 for a minute in which no beat carried a figure', () => {
+    const m = make();
+    m.at(1000);
+    m.h.beat(1000, 30);
+    m.at(61000);
+    m.h.beat(2000);
+    m.h.throughput(500);
+    expect(m.report().minutes).toEqual([
+      [0, 0, 0, 0, 0, 30, 0],
+      [1, 500, 0, 0, 0, 0, 0],
+    ]);
+  });
+
+  it.each([
+    ['NaN', Number.NaN],
+    ['undefined', undefined],
+    ['a negative number', -3],
+    ['a string', '20'],
+    ['Infinity', Number.POSITIVE_INFINITY],
+  ])('ignores %s and leaves the earlier figure', (_name, value) => {
+    const m = make();
+    m.at(1000);
+    m.h.beat(1000, 20);
+    m.at(2000);
+    m.h.beat(2000, value);
+    expect(m.report().minutes).toEqual([[0, 0, 0, 0, 0, 20, 0]]);
+  });
+
+  it('takes 0 as a figure, replacing an earlier one', () => {
+    const m = make();
+    m.at(1000);
+    m.h.beat(1000, 20);
+    m.at(2000);
+    m.h.beat(2000, 0);
+    expect(m.report().minutes).toEqual([[0, 0, 0, 0, 0, 0, 0]]);
+  });
+
+  it('records the figure even when the position has not moved', () => {
+    const m = make();
+    m.at(1000);
+    m.h.beat(5000, 10);
+    m.at(2000);
+    m.h.beat(5000, 44);
+    expect(m.report().minutes).toEqual([[0, 0, 0, 0, 0, 44, 0]]);
+  });
+
+  it('records the figure when the position is not a number', () => {
+    const m = make();
+    m.at(1000);
+    m.h.beat(Number.NaN, 8);
+    expect(m.report().minutes).toEqual([[0, 0, 0, 0, 0, 8, 0]]);
+  });
+
+  it('puts the rung being fetched in a minute where time was credited', () => {
+    const m = make();
+    m.h.rung('720p', 720);
+    m.h.fetching('480p');
+    m.h.playing();
+    m.playFor(2000);
+    expect(m.report().minutes).toEqual([[0, 0, 3, 2000, 0, 0, 4]]);
+  });
+
+  it('puts the rung being fetched in a minute that only had a speed sample', () => {
+    const m = make();
+    m.h.fetching('360p');
+    m.at(61000);
+    m.h.throughput(900);
+    expect(m.report().minutes).toEqual([[1, 900, 0, 0, 0, 0, 5]]);
+  });
+
+  it('is 0 before any fetching call and for an id outside the ladder', () => {
+    const m = make();
+    m.h.playing();
+    m.playFor(1000);
+    m.h.fetching('mystery');
+    m.at(61000);
+    m.h.throughput(100);
+    expect(m.report().minutes).toEqual([
+      [0, 0, 0, 2500, 0, 0, 0],
+      [1, 100, 0, 0, 0, 0, 0],
+    ]);
+  });
+
+  it('is not a change of the report by itself', () => {
+    const m = make();
+    const before = m.h.version();
+    m.h.fetching('480p');
+    expect(m.h.version()).toBe(before);
+  });
+
+  it('gives every row seven figures', () => {
+    const m = make();
+    m.h.rung('720p', 720);
+    m.h.fetching('480p');
+    m.h.playing();
+    m.playFor(3000);
+    m.h.beat(9000, 5);
+    m.at(120000);
+    m.h.throughput(10);
+    for (const row of m.report().minutes) expect(row).toHaveLength(7);
+  });
+
+  it('still stops at 360 minutes when the beats carry figures', () => {
+    const m = make();
+    for (let n = 0; n < MAX_MINUTES + 5; n += 1) {
+      m.at(n * 60000 + 1);
+      m.h.beat(n, 7);
+    }
+    const { minutes } = m.report();
+    expect(minutes).toHaveLength(MAX_MINUTES);
+    expect(minutes[MAX_MINUTES - 1]).toEqual([MAX_MINUTES - 1, 0, 0, 0, 0, 7, 0]);
   });
 });
 
