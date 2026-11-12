@@ -48,6 +48,17 @@ class ForcedChoiceTest {
     }
 
     @Test
+    void theFileIsReplacedOnlyWhenADownloadPlaysInPlaceOfAFileThatFailed() {
+        assertThat(decide(file(FAILED), false, download(1, UNCHECKED)).fileReplaced()).isTrue();
+        assertThat(decide(file(FAILED), false, download(1, AGREES)).fileReplaced()).isTrue();
+        assertThat(decide(file(FAILED), false).fileReplaced()).isFalse();
+        assertThat(decide(file(FAILED), true, download(1, UNCHECKED)).fileReplaced()).isFalse();
+        assertThat(decide(file(UNCHECKED), false, download(1, AGREES)).fileReplaced()).isFalse();
+        assertThat(decide(file(AGREES), false, download(1, AGREES)).fileReplaced()).isFalse();
+        assertThat(decide(null, false, download(1, UNCHECKED)).fileReplaced()).isFalse();
+    }
+
+    @Test
     void eachWayOfProvingAFileIsSaidInPlainWords() {
         assertThat(decide(file(VERIFIED), false).fileReason()).isEqualTo("Plays: you checked it");
         assertThat(decide(file(AGREES), false).fileReason()).isEqualTo("Plays: it agrees with OpenSubtitles");

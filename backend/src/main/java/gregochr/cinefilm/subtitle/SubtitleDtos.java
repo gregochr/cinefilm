@@ -47,13 +47,16 @@ public final class SubtitleDtos {
      * @param openSubtitlesFileId the OpenSubtitles file id of a download, or null for a file
      * @param servedReason one short sentence on why playback chose or skipped this subtitle for its edition, for
      *     example "Replaced by an OpenSubtitles download that agrees" (built from {@code ForcedChoice})
+     * @param replacedByDownload true when playback serves a download in place of this owner file because the file
+     *     failed its checks (decided by {@code ForcedChoice}); the owner can then answer "Looks right"
      */
     public record SidecarDto(Long id, String path, String presence, String state, Long filmId, String filmTitle,
                              Long editionId, String editionName, int parts, Integer part, boolean whole,
                              boolean ownerAttached, int cueCount, String parseReport, int offsetMs,
                              boolean verified, boolean endsAfterRuntime, long version, boolean served, CheckDto check,
                              String offsetSource, AlignmentDto alignment, String origin, String release,
-                             Long openSubtitlesFileId, String servedReason) {
+                             Long openSubtitlesFileId, String servedReason,
+                             boolean replacedByDownload) {
     }
 
     /**

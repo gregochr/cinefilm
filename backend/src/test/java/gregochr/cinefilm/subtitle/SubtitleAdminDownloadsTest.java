@@ -81,6 +81,8 @@ class SubtitleAdminDownloadsTest extends ForcedDownloadTestBase {
         assertThat(file.release()).isNull();
         assertThat(file.openSubtitlesFileId()).isNull();
         assertThat(file.served()).isFalse();
+        assertThat(file.replacedByDownload()).isTrue();
+        assertThat(replacement.replacedByDownload()).isFalse();
         assertThat(file.check().verdict()).isEqualTo("CHECK");
         assertThat(file.servedReason()).isEqualTo(
             "Replaced by an OpenSubtitles download that has not been checked yet; this file failed its checks");
@@ -111,6 +113,7 @@ class SubtitleAdminDownloadsTest extends ForcedDownloadTestBase {
         downloadCheck(film, download, "AGREES", reference(film, 5012));
 
         assertThat(listed(owner).served()).isFalse();
+        assertThat(listed(owner).replacedByDownload()).isFalse();
         assertThat(listed(owner).servedReason()).isEqualTo("Not used: a proven OpenSubtitles download plays instead");
     }
 

@@ -1,18 +1,25 @@
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   FILE_FILTERS,
   NUDGES,
+  REMOVED_NOTICE,
+  REMOVE_CONFIRM,
+  alignmentSummary,
   checkSummary,
   cueTime,
   fileFilterCounts,
   fileName,
   filterSidecars,
   formatOffset,
+  isDownload,
+  originLine,
+  ownerTimingLine,
   placement,
   playFromHereMs,
   playerPath,
   reportLine,
+  servedLine,
   sidecarGroups,
   warningsFor,
 } from '../state/subtitleAdmin.js';
@@ -90,7 +97,7 @@ function Timing({ item, busy, actions }) {
   );
 }
 
-function Check({ item, busy, actions }) {
+function Check({ item, busy, actions, replaced }) {
   if (item.verified) {
     return (
       <div className="admin__actions">
@@ -101,11 +108,85 @@ function Check({ item, busy, actions }) {
       </div>
     );
   }
+  // A replaced file has its own, more prominent button on the row.
+  if (replaced) return null;
   return (
     <div className="admin__actions">
       <Button disabled={busy} onClick={() => actions.verify(item.id)}>
         Looks right
       </Button>
+    </div>
+  );
+}
+
+/** What fitting the file to the film's own English track says, and "Timing set by you"; never colour alone. */
+function TimingLine({ item }) {
+  const summary = alignmentSummary(item);
+  const owner = ownerTimingLine(item);
+  if (!summary && !owner) return null;
+  return (
+    <div className={`subs__check subs__check--${summary ? summary.kind : 'unchecked'}`}>
+      {summary ? (
+        <>
+          <span className="subs__check-label">{summary.label}</span>
+          {summary.note ? <p className="subs__check-note">{summary.note}</p> : null}
+          {summary.lines.length > 0 ? (
+            <ul className="subs__check-reasons" aria-label={`${summary.label}: details`}>
+              {summary.lines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : null}
+        </>
+      ) : null}
+      {owner ? <p className="subs__check-note">{owner}</p> : null}
+    </div>
+  );
+}
+
+/** Removing a download: "Remove", then an inline confirmation. Focus goes to the safe choice, and back on cancel. */
+function RemoveDownload({ item, name, busy, failed, actions, onRemoved }) {
+  const [confirming, setConfirming] = useState(false);
+  const removeRef = useRef(null);
+  const keepRef = useRef(null);
+  const returnFocus = useRef(false);
+  useEffect(() => {
+    if (confirming) keepRef.current?.focus();
+    else if (returnFocus.current) {
+      returnFocus.current = false;
+      removeRef.current?.focus();
+    }
+  }, [confirming]);
+  const confirm = async () => {
+    if (await actions.remove(item.id)) onRemoved();
+  };
+  const cancel = () => {
+    returnFocus.current = true;
+    setConfirming(false);
+  };
+  if (!confirming) {
+    return (
+      <Button
+        ref={removeRef}
+        aria-label={`Remove the OpenSubtitles download ${name}`}
+        disabled={busy}
+        onClick={() => setConfirming(true)}
+      >
+        Remove
+      </Button>
+    );
+  }
+  return (
+    <div className="subs__confirm" role="group" aria-label="Remove this download">
+      <p className="admin__text">{REMOVE_CONFIRM}</p>
+      <div className="admin__actions">
+        <Button disabled={busy} onClick={confirm}>
+          {failed ? 'Try again' : 'Remove download'}
+        </Button>
+        <Button ref={keepRef} disabled={busy} onClick={cancel}>
+          Keep it
+        </Button>
+      </div>
     </div>
   );
 }
@@ -130,24 +211,40 @@ function CheckLine({ item }) {
   );
 }
 
-function Item({ item, busy, problem, actions }) {
+function Item({ item, busy, problem, actions, onRemoved }) {
   const [open, setOpen] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const cuesId = useId();
-  const name = fileName(item.path);
+  const origin = originLine(item);
+  const download = isDownload(item);
+  const name = download ? (origin.release ?? 'download') : fileName(item.path);
   const matched = item.filmId != null;
+  const replaced = item.replacedByDownload === true;
+  const served = servedLine(item);
   const attach = async (target) => {
     if (await actions.attach(item.id, target)) setAttaching(false);
   };
   return (
     <li className="admin__item">
       <div className="admin__item-head">
-        <span className="admin__item-title admin__mono">{item.path}</span>
+        {download ? (
+          <>
+            <span className="admin__item-title">{origin.title}</span>
+            {origin.release ? (
+              <span className="admin__mono subs__release">{origin.release}</span>
+            ) : null}
+          </>
+        ) : (
+          <span className="admin__item-title admin__mono">{origin.title}</span>
+        )}
         {item.verified ? <span className="admin__tag">Checked</span> : null}
+        {item.served ? <span className="admin__tag">Playing</span> : null}
       </div>
+      {served ? <p className="subs__served">{served}</p> : null}
       <div className="admin__item-detail">{placement(item)}</div>
       <div className="admin__item-files admin__mono">{reportLine(item)}</div>
       <CheckLine item={item} />
+      <TimingLine item={item} />
       {warningsFor(item).map((warning) => (
         <p key={warning} className="admin__warning" role="status">
           {warning}
@@ -159,14 +256,21 @@ function Item({ item, busy, problem, actions }) {
         </p>
       ) : null}
       <div className="admin__actions admin__item-actions subs__actions">
-        <Button
-          aria-label={`${matched ? 'Move' : 'Attach'} ${name} ${matched ? 'to another film' : 'to a film'}`}
-          aria-expanded={attaching}
-          disabled={busy}
-          onClick={() => setAttaching(!attaching)}
-        >
-          {matched ? 'Move to…' : 'Attach to…'}
-        </Button>
+        {replaced && !item.verified ? (
+          <Button variant="primary" disabled={busy} onClick={() => actions.verify(item.id)}>
+            Use my file (looks right)
+          </Button>
+        ) : null}
+        {download ? null : (
+          <Button
+            aria-label={`${matched ? 'Move' : 'Attach'} ${name} ${matched ? 'to another film' : 'to a film'}`}
+            aria-expanded={attaching}
+            disabled={busy}
+            onClick={() => setAttaching(!attaching)}
+          >
+            {matched ? 'Move to…' : 'Attach to…'}
+          </Button>
+        )}
         {item.ownerAttached ? (
           <Button
             aria-label={`Give ${name} back to automatic matching`}
@@ -184,6 +288,16 @@ function Item({ item, busy, problem, actions }) {
         >
           {open ? 'Hide cues' : 'Show cues'}
         </Button>
+        {download ? (
+          <RemoveDownload
+            item={item}
+            name={name}
+            busy={busy}
+            failed={problem !== null}
+            actions={actions}
+            onRemoved={onRemoved}
+          />
+        ) : null}
       </div>
       {attaching ? (
         <AttachPicker
@@ -198,7 +312,7 @@ function Item({ item, busy, problem, actions }) {
           {matched ? (
             <>
               <Timing item={item} busy={busy} actions={actions} />
-              <Check item={item} busy={busy} actions={actions} />
+              <Check item={item} busy={busy} actions={actions} replaced={replaced} />
             </>
           ) : null}
           {/* A new key remounts the list, so cues for another attachment, offset or version are never shown. */}
@@ -218,6 +332,22 @@ export default function SubtitlesPanel({ version }) {
   const subtitles = useSubtitles(version);
   const { items, loading, error, reload } = subtitles;
   const [filter, setFilter] = useState('all');
+  const [removals, setRemovals] = useState(0);
+  const noticeRef = useRef(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    // Set on every setup: Strict Mode runs setup, cleanup, setup again.
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (removals > 0) noticeRef.current?.focus();
+  }, [removals]);
+  const onRemoved = () => {
+    if (mounted.current) setRemovals((n) => n + 1);
+  };
   const counts = useMemo(() => (items ? fileFilterCounts(items) : null), [items]);
   const shown = useMemo(() => (items ? filterSidecars(items, filter) : []), [items, filter]);
   let body;
@@ -264,6 +394,7 @@ export default function SubtitlesPanel({ version }) {
                 <Item
                   key={item.id}
                   item={item}
+                  onRemoved={onRemoved}
                   busy={subtitles.busy !== null}
                   problem={subtitles.problem?.id === item.id ? subtitles.problem.text : null}
                   actions={subtitles}
@@ -288,6 +419,17 @@ export default function SubtitlesPanel({ version }) {
         </h2>
       </div>
       <ForcedNeedSection refreshKey={`${version}:${subtitles.changes}`} />
+      {removals > 0 ? (
+        <p
+          key={removals}
+          className="admin__text subs__notice"
+          role="status"
+          tabIndex={-1}
+          ref={noticeRef}
+        >
+          {REMOVED_NOTICE}
+        </p>
+      ) : null}
       {refreshFailure}
       {body}
     </section>

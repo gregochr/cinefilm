@@ -344,7 +344,11 @@ public class SubtitleAdminService {
         Map<Long, CheckDto> checks = new HashMap<>();
         Map<Long, AlignmentDto> alignments = new HashMap<>();
         Map<Long, String> reasons = new HashMap<>();
+        Set<Long> replaced = new HashSet<>();
         for (Resolution resolution : resolutions.values()) {
+            if (resolution.decision().fileReplaced()) {
+                resolution.filePick().slots().forEach(slot -> replaced.add(slot.sidecar().getId()));
+            }
             // A file on an edition whose later part's start is unknown cannot be placed on its timeline: not served.
             if (!resolution.chosen().slots().isEmpty()
                 && ServedSubtitles.version(resolution.edition(), resolution.chosen()) != null) {
@@ -370,19 +374,19 @@ public class SubtitleAdminService {
             MediaFile file = fileById.get(sidecar.getMediaFileId());
             Long id = sidecar.getId();
             dtos.add(dto(sidecar, file, conflicting.contains(id), served.contains(id), checks.get(id),
-                alignments.get(id), reasons.get(id)));
+                alignments.get(id), reasons.get(id), replaced.contains(id)));
         }
         return dtos;
     }
 
     private static SidecarDto dto(SubtitleSidecar s, MediaFile file, boolean conflict, boolean isServed,
-                                   CheckDto check, AlignmentDto alignment, String reason) {
+                                   CheckDto check, AlignmentDto alignment, String reason, boolean replaced) {
         String source = s.getOffsetSource() == null ? null : s.getOffsetSource().name();
         if (file == null) {
             return new SidecarDto(s.getId(), s.getPath(), s.getPresence().name(), "unmatched", null, null, null, null,
                 0, null, false, s.isOwnerAttached(), s.getCueCount(), s.getParseReport(), s.getOffsetMs(), false,
                 false, s.getUpdatedAt().toEpochMilli(), false, null, source, null, s.getOrigin().name(),
-                s.getRelease(), s.getOpenSubtitlesFileId(), "Not used: it is not attached to a film");
+                s.getRelease(), s.getOpenSubtitlesFileId(), "Not used: it is not attached to a film", false);
         }
         Edition edition = file.getEdition();
         List<Long> partIds = partIds(edition);
@@ -394,7 +398,7 @@ public class SubtitleAdminService {
             partIds.size(), s.isWholeEdition() ? null : file.getPartNumber(), s.isWholeEdition(),
             s.isOwnerAttached(), s.getCueCount(), s.getParseReport(), s.getOffsetMs(), s.isVerifiedFor(partIds),
             endsAfter, s.getUpdatedAt().toEpochMilli(), isServed, check, source, alignment, s.getOrigin().name(),
-            s.getRelease(), s.getOpenSubtitlesFileId(), reason);
+            s.getRelease(), s.getOpenSubtitlesFileId(), reason, replaced);
     }
 
     private static List<Long> partIds(Edition edition) {

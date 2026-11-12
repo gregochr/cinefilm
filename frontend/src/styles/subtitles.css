@@ -146,3 +146,19 @@
   color: var(--cf-text-muted);
   font-size: var(--cf-size-label);
 }
+.subs__release {
+  color: var(--cf-text-muted);
+  font-size: var(--cf-size-label);
+}
+.subs__served {
+  margin: 2px 0 0;
+  color: var(--cf-text-muted);
+  font-size: var(--cf-size-label);
+}
+.subs__confirm {
+  flex-basis: 100%;
+}
+.subs__notice:focus-visible {
+  outline: none;
+  box-shadow: var(--cf-focus-ring);
+}

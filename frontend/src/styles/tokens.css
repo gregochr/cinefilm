@@ -1,44 +1,44 @@
 /* CineFilm — Projection Booth tokens (dark only) */
 :root {
   /* Ground and surfaces */
-  --cf-bg: #0E0C0A;            /* page ground (warm black) */
-  --cf-bg-deep: #000000;       /* player */
-  --cf-surface: #15120F;       /* admin cards */
-  --cf-surface-2: #1A1713;     /* inputs, segmented controls, skeletons */
-  --cf-surface-3: #211C16;     /* selected row */
-  --cf-line: #2A251F;          /* hairlines, borders */
-  --cf-line-strong: #4A4339;   /* secondary button border */
+  --cf-bg: #0e0c0a; /* page ground (warm black) */
+  --cf-bg-deep: #000000; /* player */
+  --cf-surface: #15120f; /* admin cards */
+  --cf-surface-2: #1a1713; /* inputs, segmented controls, skeletons */
+  --cf-surface-3: #211c16; /* selected row */
+  --cf-line: #2a251f; /* hairlines, borders */
+  --cf-line-strong: #4a4339; /* secondary button border */
   --cf-overlay: rgba(20, 17, 14, 0.96); /* player menus, toast */
-  --cf-chip: rgba(14, 12, 10, 0.72);    /* round buttons over artwork */
+  --cf-chip: rgba(14, 12, 10, 0.72); /* round buttons over artwork */
   --cf-chip-hover: rgba(14, 12, 10, 0.9);
 
   /* Text */
-  --cf-text: #EDE6DA;          /* primary */
-  --cf-text-2: #D5CCBE;        /* secondary (meta, plot) */
-  --cf-text-muted: #A39A8B;    /* labels, captions — 4.5:1+ on --cf-bg */
-  --cf-text-disabled: #6F675B;
+  --cf-text: #ede6da; /* primary */
+  --cf-text-2: #d5ccbe; /* secondary (meta, plot) */
+  --cf-text-muted: #a39a8b; /* labels, captions — 4.5:1+ on --cf-bg */
+  --cf-text-disabled: #6f675b;
   --cf-on-poster: rgba(255, 248, 236, 0.9);
-  --cf-search-hit-underline: #6F675B; /* underline under the matched part of a search result */
-  --cf-search-row-active: #2A251F;    /* the active search row */
-  --cf-scrim: rgba(14, 12, 10, 0.6);  /* dims the page behind the search dropdown */
+  --cf-search-hit-underline: #6f675b; /* underline under the matched part of a search result */
+  --cf-search-row-active: #2a251f; /* the active search row */
+  --cf-scrim: rgba(14, 12, 10, 0.6); /* dims the page behind the search dropdown */
   --cf-shadow-panel: 0 24px 60px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.4);
 
   /* Accent — use sparingly: primary action, progress, current-nav underline, eyebrow */
-  --cf-amber: #E8B25A;
-  --cf-dust: #FFF3DC;          /* dust specks in the buffering beam */
-  --cf-on-amber: #1A1206;
-  --cf-ok: #9FD3A8;            /* worker online, home network dot */
+  --cf-amber: #e8b25a;
+  --cf-dust: #fff3dc; /* dust specks in the buffering beam */
+  --cf-on-amber: #1a1206;
+  --cf-ok: #9fd3a8; /* worker online, home network dot */
 
   /* Type */
   --cf-font-display: 'Instrument Serif', Georgia, serif;
   --cf-font-ui: Inter, system-ui, -apple-system, sans-serif;
   --cf-font-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
-  --cf-size-hero: 104px;       /* detail title (88px on Home hero, 52-56px on phone) */
-  --cf-size-h1: 64px;          /* Library / Admin page titles */
-  --cf-size-h2: 32px;          /* row headings (26px on phone) */
-  --cf-size-body: 17px;        /* plot */
+  --cf-size-hero: 104px; /* detail title (88px on Home hero, 52-56px on phone) */
+  --cf-size-h1: 64px; /* Library / Admin page titles */
+  --cf-size-h2: 32px; /* row headings (26px on phone) */
+  --cf-size-body: 17px; /* plot */
   --cf-size-ui: 14px;
-  --cf-size-label: 12px;       /* uppercase, letter-spacing .1–.14em */
+  --cf-size-label: 12px; /* uppercase, letter-spacing .1–.14em */
 
   /* Shape and spacing */
   --cf-radius-poster: 8px;
@@ -47,7 +47,7 @@
   --cf-radius-hero: 14px;
   --cf-radius-pill: 999px;
   --cf-content-max: 1360px;
-  --cf-gutter: 40px;           /* 16px on phone */
+  --cf-gutter: 40px; /* 16px on phone */
   --cf-row-gap: 56px;
   --cf-grid-gap: 20px;
 

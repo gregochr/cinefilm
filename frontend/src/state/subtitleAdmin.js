@@ -161,11 +161,76 @@ export function checkSummary(item) {
   return { kind: 'agrees', label: 'Agrees with OpenSubtitles', lines: reasons, reference };
 }
 
+/** Whether the file is an OpenSubtitles download (the server says so in `origin`); anything else is the owner's file. */
+export function isDownload(item) {
+  return item.origin === 'OPENSUBTITLES';
+}
+
+/**
+ * Where a file came from, as words: `{ kind: 'download', title: 'Downloaded from OpenSubtitles', release }` for a
+ * download (`release` is the muted release name, or null), or `{ kind: 'file', title: <path>, release: null }` for the
+ * owner's own file.
+ */
+export function originLine(item) {
+  if (isDownload(item)) {
+    return {
+      kind: 'download',
+      title: 'Downloaded from OpenSubtitles',
+      release: item.release ?? null,
+    };
+  }
+  return { kind: 'file', title: item.path, release: null };
+}
+
+/** The server's own sentence on what playback does with this file, shown exactly as sent (null when it sends none). */
+export function servedLine(item) {
+  return item.servedReason || null;
+}
+
+/** "+1.2 s" or "−0.4 s": the fitted offset with its sign and one decimal. */
+export function formatFittedOffset(ms) {
+  return `${ms < 0 ? '−' : '+'}${(Math.abs(ms) / 1000).toFixed(1)} s`;
+}
+
+/**
+ * What fitting the file to the film's own English track says, in words: `{ kind, label, lines, note }` or null when
+ * there is no result. `kind` is `aligned`, `check` or `unchecked`; `lines` are the server's reasons; `note` is the
+ * "Timing set automatically (+1.2 s)" line of an applied fit. The verdict itself is the server's; nothing is derived.
+ */
+export function alignmentSummary(item) {
+  const fit = item.alignment;
+  if (!fit) return null;
+  const lines = fit.reasons ?? [];
+  if (fit.verdict === 'ALIGNED') {
+    const note = fit.applied
+      ? `Timing set automatically (${formatFittedOffset(fit.fittedOffsetMs)})`
+      : null;
+    return { kind: 'aligned', label: "Lines up with the film's English track", lines, note };
+  }
+  if (fit.verdict === 'CHECK') {
+    return { kind: 'check', label: 'Timing needs checking', lines, note: null };
+  }
+  return { kind: 'unchecked', label: 'Timing not checked', lines, note: null };
+}
+
+/** "Timing set by you" when the owner's own nudge set the offset, else null. */
+export function ownerTimingLine(item) {
+  return item.offsetSource === 'OWNER' ? 'Timing set by you' : null;
+}
+
+/** What the inline confirmation says before a download is removed. */
+export const REMOVE_CONFIRM =
+  "Remove this download? CineFilm won't use this file for this edition again.";
+
+/** What the panel says once a download is gone. */
+export const REMOVED_NOTICE = "Download removed. CineFilm won't use it for this edition again.";
+
 /** The filter chips on the file list, in order; `matches` says which files a chip lists. */
 export const FILE_FILTERS = [
   { key: 'all', label: 'All', matches: () => true },
   { key: 'check', label: 'Needs checking', matches: (item) => item.check?.verdict === 'CHECK' },
   { key: 'unchecked', label: 'Unchecked', matches: (item) => !item.check && isServed(item) },
+  { key: 'downloads', label: 'Downloads', matches: isDownload },
 ];
 
 /** The files a chip lists (all of them for an unknown key). */

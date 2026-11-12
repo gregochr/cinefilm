@@ -325,6 +325,7 @@ class ForcedDownloadIntegrationTest extends IntegrationTestBase {
         assertThat(json.get("release").asString()).isEqualTo("Taken.2008.BluRay");
         assertThat(json.get("openSubtitlesFileId").asLong()).isEqualTo(5011L);
         assertThat(json.get("servedReason").asString()).isEqualTo("Plays: nothing else is available; not checked yet");
+        assertThat(json.get("replacedByDownload").asBoolean()).isFalse();
         assertThat(json.get("whole").asBoolean()).isTrue();
         assertThat(json.get("served").asBoolean()).isTrue();
     }

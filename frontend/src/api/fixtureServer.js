@@ -113,6 +113,19 @@ function updateSettings(body) {
   return settingsView();
 }
 
+/** The downloads removed so far, kept in memory: the list leaves them out, as the server would. */
+const removedSubtitleIds = new Set();
+
+function removeSubtitle(id) {
+  const row = adminSubtitles.find((r) => r.id === id && !removedSubtitleIds.has(r.id));
+  if (!row) throw new ApiError(404, 'No such subtitle file');
+  if (row.origin !== 'OPENSUBTITLES') {
+    throw new ApiError(400, 'Only a download can be removed');
+  }
+  removedSubtitleIds.add(id);
+  return null;
+}
+
 const CHOICES = new Set(['NEEDED', 'NOT_NEEDED']);
 /**
  * The owner's choice per film, kept in memory: absent means the fixture as loaded, NEEDED or NOT_NEEDED an explicit
@@ -173,7 +186,11 @@ export async function handle(method, path, body) {
   if (route === '/api/admin/settings') {
     return method === 'PUT' ? updateSettings(body) : settingsView();
   }
-  if (route === '/api/admin/subtitles') return adminSubtitles;
+  if (route === '/api/admin/subtitles') {
+    return adminSubtitles.filter((row) => !removedSubtitleIds.has(row.id));
+  }
+  match = route.match(/^\/api\/admin\/subtitles\/(\d+)$/);
+  if (match && method === 'DELETE') return removeSubtitle(Number(match[1]));
   if (route === '/api/admin/forced-subtitles/films') return forcedNeedList();
   match = route.match(/^\/api\/admin\/films\/(\d+)\/forced-need$/);
   if (match && method === 'PUT') return setForcedNeed(Number(match[1]), body);

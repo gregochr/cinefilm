@@ -5,6 +5,9 @@ import {
   MAX_OFFSET_MS,
   NUDGES,
   PLAY_LEAD_MS,
+  REMOVED_NOTICE,
+  REMOVE_CONFIRM,
+  alignmentSummary,
   checkSummary,
   cueTime,
   editionLabel,
@@ -14,13 +17,17 @@ import {
   filmLabel,
   formatOffset,
   groupKey,
+  isDownload,
   isServed,
   nudgedOffset,
+  originLine,
+  ownerTimingLine,
   partOptions,
   placement,
   playFromHereMs,
   playerPath,
   reportLine,
+  servedLine,
   sidecarGroups,
   subtitleProblem,
   warningsFor,
@@ -374,7 +381,12 @@ describe('file filters', () => {
   ];
 
   it('are All, Needs checking and Unchecked, in that order', () => {
-    expect(FILE_FILTERS.map((f) => f.label)).toEqual(['All', 'Needs checking', 'Unchecked']);
+    expect(FILE_FILTERS.map((f) => f.label)).toEqual([
+      'All',
+      'Needs checking',
+      'Unchecked',
+      'Downloads',
+    ]);
   });
 
   it('lists the files of each chip; a verified file that needs checking still counts', () => {
@@ -388,7 +400,136 @@ describe('file filters', () => {
   });
 
   it('counts each chip', () => {
-    expect(fileFilterCounts(items)).toEqual({ all: 5, check: 2, unchecked: 1 });
-    expect(fileFilterCounts([])).toEqual({ all: 0, check: 0, unchecked: 0 });
+    expect(fileFilterCounts(items)).toEqual({ all: 5, check: 2, unchecked: 1, downloads: 0 });
+    expect(fileFilterCounts([])).toEqual({ all: 0, check: 0, unchecked: 0, downloads: 0 });
+  });
+
+  it('lists the downloads by origin, and counts them', () => {
+    const mixed = [
+      file({ id: 1 }),
+      file({ id: 2, origin: 'FILE' }),
+      file({ id: 3, origin: 'OPENSUBTITLES' }),
+      file({ id: 4, origin: 'OPENSUBTITLES', check: checkOf() }),
+    ];
+    expect(filterSidecars(mixed, 'downloads').map((i) => i.id)).toEqual([3, 4]);
+    expect(fileFilterCounts(mixed).downloads).toBe(2);
+  });
+});
+
+describe('where a file came from', () => {
+  it('names the owner file by its path', () => {
+    expect(originLine(file({ origin: 'FILE' }))).toEqual({
+      kind: 'file',
+      title: 'Taken (2008)/Taken.en.forced.srt',
+      release: null,
+    });
+    expect(isDownload(file())).toBe(false);
+  });
+
+  it('says a download came from OpenSubtitles, with its release', () => {
+    const download = file({ origin: 'OPENSUBTITLES', release: 'Taken.2008.720p' });
+    expect(isDownload(download)).toBe(true);
+    expect(originLine(download)).toEqual({
+      kind: 'download',
+      title: 'Downloaded from OpenSubtitles',
+      release: 'Taken.2008.720p',
+    });
+  });
+
+  it('has no release when the server sends none', () => {
+    expect(originLine(file({ origin: 'OPENSUBTITLES' })).release).toBeNull();
+  });
+});
+
+describe('what plays', () => {
+  it('passes the server’s reason through unchanged', () => {
+    const reason = '  Replaced by an OpenSubtitles download that agrees ';
+    expect(servedLine(file({ servedReason: reason }))).toBe(reason);
+  });
+
+  it('has no line when the server sends none', () => {
+    expect(servedLine(file())).toBeNull();
+    expect(servedLine(file({ servedReason: '' }))).toBeNull();
+  });
+});
+
+describe('timing against the film’s English track', () => {
+  const fitOf = (over = {}) => ({
+    verdict: 'ALIGNED',
+    reasons: [],
+    fittedOffsetMs: 1200,
+    matchedShare: 0.9,
+    matchedCount: 9,
+    servedCount: 10,
+    applied: false,
+    checkedAt: '2026-11-12T06:00:00Z',
+    ...over,
+  });
+
+  it('says nothing without a result', () => {
+    expect(alignmentSummary(file())).toBeNull();
+    expect(alignmentSummary(file({ alignment: null }))).toBeNull();
+  });
+
+  it('says an aligned file lines up, without a note when the timing was not set', () => {
+    expect(alignmentSummary(file({ alignment: fitOf() }))).toEqual({
+      kind: 'aligned',
+      label: "Lines up with the film's English track",
+      lines: [],
+      note: null,
+    });
+  });
+
+  it('adds when the timing was set automatically, with its sign and one decimal', () => {
+    const note = (ms) =>
+      alignmentSummary(file({ alignment: fitOf({ applied: true, fittedOffsetMs: ms }) })).note;
+    expect(note(1200)).toBe('Timing set automatically (+1.2 s)');
+    expect(note(-400)).toBe('Timing set automatically (−0.4 s)');
+    expect(note(1000)).toBe('Timing set automatically (+1.0 s)');
+    expect(note(0)).toBe('Timing set automatically (+0.0 s)');
+  });
+
+  it('says a file that does not line up needs checking, with the server’s reasons', () => {
+    expect(
+      alignmentSummary(file({ alignment: fitOf({ verdict: 'CHECK', reasons: ['Only 3 of 9'] }) })),
+    ).toEqual({
+      kind: 'check',
+      label: 'Timing needs checking',
+      lines: ['Only 3 of 9'],
+      note: null,
+    });
+  });
+
+  it('says timing was not checked for TOO_FEW and NO_REFERENCE, with the reason', () => {
+    for (const verdict of ['TOO_FEW', 'NO_REFERENCE']) {
+      expect(alignmentSummary(file({ alignment: fitOf({ verdict, reasons: ['why'] }) }))).toEqual({
+        kind: 'unchecked',
+        label: 'Timing not checked',
+        lines: ['why'],
+        note: null,
+      });
+    }
+  });
+
+  it('copes with a result that has no reasons list', () => {
+    expect(
+      alignmentSummary(file({ alignment: fitOf({ verdict: 'CHECK', reasons: undefined }) })).lines,
+    ).toEqual([]);
+  });
+
+  it('says when the timing was set by the owner', () => {
+    expect(ownerTimingLine(file({ offsetSource: 'OWNER' }))).toBe('Timing set by you');
+    expect(ownerTimingLine(file({ offsetSource: 'AUTO' }))).toBeNull();
+    expect(ownerTimingLine(file({ offsetSource: null }))).toBeNull();
+    expect(ownerTimingLine(file())).toBeNull();
+  });
+});
+
+describe('removing a download', () => {
+  it('asks and answers in the agreed words', () => {
+    expect(REMOVE_CONFIRM).toBe(
+      "Remove this download? CineFilm won't use this file for this edition again.",
+    );
+    expect(REMOVED_NOTICE).toBe("Download removed. CineFilm won't use it for this edition again.");
   });
 });

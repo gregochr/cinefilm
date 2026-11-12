@@ -89,6 +89,6 @@ class SidecarTrustTest {
     private static SidecarDto listed(boolean verified, CheckDto check, AlignmentDto alignment) {
         return new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L, "Taken", 70L, "Original", 1, 1,
             false, false, 12, "No problems found", 0, verified, false, 1L, true, check, null, alignment,
-            "FILE", null, null, null);
+            "FILE", null, null, null, false);
     }
 }
