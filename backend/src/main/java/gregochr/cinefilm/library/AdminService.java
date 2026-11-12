@@ -22,6 +22,7 @@ import gregochr.cinefilm.library.AdminDtos.ScanStatusDto;
 import gregochr.cinefilm.library.FileNameParser.ParsedName;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesRefresher;
 import gregochr.cinefilm.plex.RuntimeSignal;
+import gregochr.cinefilm.subtitle.SidecarCheckRefresher;
 import gregochr.cinefilm.ratings.RatingsRefresher;
 import gregochr.cinefilm.tmdb.MatchOutcome.Candidate;
 import java.util.ArrayList;
@@ -53,6 +54,7 @@ public class AdminService {
     private final LibraryRoot root;
     private final RatingsRefresher ratings;
     private final OpenSubtitlesRefresher subtitleSearch;
+    private final SidecarCheckRefresher subtitleChecks;
     private final GroupingChangeRepository changes;
 
     /**
@@ -61,9 +63,11 @@ public class AdminService {
      */
     public AdminService(ScanService scans, ScanRunRepository runs, FilmRepository films,
                         MediaFileRepository files, LibraryRoot root, RatingsRefresher ratings,
-                        OpenSubtitlesRefresher subtitleSearch, GroupingChangeRepository changes) {
+                        OpenSubtitlesRefresher subtitleSearch, SidecarCheckRefresher subtitleChecks,
+                        GroupingChangeRepository changes) {
         this.ratings = ratings;
         this.subtitleSearch = subtitleSearch;
+        this.subtitleChecks = subtitleChecks;
         this.changes = changes;
         this.scans = scans;
         this.runs = runs;
@@ -89,7 +93,8 @@ public class AdminService {
         return new ScanStatusDto(scans.isRunning(), root.root().toString(),
             progress == null ? null : new ProgressDto(progress.processed(), progress.total(), progress.current()),
             last, counts, films.findLatestRatingsFetchedAt(), ratings.isRunning(), ratings.enabled(),
-            films.findLatestOpenSubtitlesSearchedAt(), subtitleSearch.isRunning(), subtitleSearch.enabled());
+            films.findLatestOpenSubtitlesSearchedAt(), subtitleSearch.isRunning(), subtitleSearch.enabled(),
+            subtitleChecks.isRunning(), subtitleChecks.lastFinishedAt());
     }
 
     /**

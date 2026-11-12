@@ -69,4 +69,37 @@ describe('Admin: the subtitle search line in the Library scan card', () => {
     await waitFor(() => expect(fileReads).toBeGreaterThan(1));
     expect(within(card).queryByText('Searching for subtitles…')).not.toBeInTheDocument();
   });
+
+  it('keeps polling while the checks run after the search, then reads the files again and shows the verdicts', async () => {
+    const unchecked = { ...fixtures.adminSubtitles[0], check: null };
+    const checked = {
+      ...unchecked,
+      check: { ...fixtures.adminSubtitles[0].check, verdict: 'CHECK', reasons: ['Too few lines'] },
+    };
+    let polls = 0;
+    let checksDone = false;
+    installFetch((method, url) => {
+      if (url === '/api/admin/subtitles') return respond([checksDone ? checked : unchecked]);
+      if (url !== '/api/admin/scan') return null;
+      polls += 1;
+      // The search has ended (its time is set) but the check run goes on, then ends later.
+      checksDone = polls >= 3;
+      return respond({
+        ...fixtures.adminScan,
+        subtitleChecksRunning: !checksDone,
+        subtitleChecksLastFinishedAt: checksDone ? '2026-11-13T06:09:00Z' : null,
+      });
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderApp('/admin');
+    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    expect(await within(panel).findByText('Unchecked')).toBeVisible();
+
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+
+    expect(await within(panel).findByText('Needs checking')).toBeVisible();
+    expect(within(panel).getByText('Too few lines')).toBeVisible();
+    expect(within(panel).queryByText('Unchecked')).not.toBeInTheDocument();
+  });
 });

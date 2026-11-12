@@ -609,8 +609,10 @@ export default function Admin() {
           error={grouping.error}
           onRetry={grouping.reload}
         />
-        {/* Read again when a scan or a subtitle search finishes (new checks and evidence). */}
-        <SubtitlesPanel version={`${settledAt}|${scan?.openSubtitlesLastSearchedAt ?? 'never'}`} />
+        {/* Read again when a scan, a subtitle search or a subtitle check finishes (new checks and evidence). */}
+        <SubtitlesPanel
+          version={`${settledAt}|${scan?.openSubtitlesLastSearchedAt ?? 'never'}|${scan?.subtitleChecksLastFinishedAt ?? 'never'}`}
+        />
         <PlexPanel
           plex={plexImport.plex}
           starting={plexImport.starting}

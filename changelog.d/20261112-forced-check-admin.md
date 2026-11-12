@@ -6,3 +6,4 @@ there is nothing to compare with yet; a timing hint such as "OpenSubtitles' file
 applied. The file list can be filtered to All, Needs checking or Unchecked. "Which films need them" says how many
 foreign-parts-only files OpenSubtitles has for a film, and notes films OpenSubtitles has not been searched for. The
 Library scan card shows when subtitles were last searched.
+Admin keeps checking the scan status while a search or a comparison with OpenSubtitles runs, and reads the subtitle lists again when either finishes, so new verdicts appear without a reload. The status gained `subtitleChecksRunning` and `subtitleChecksLastFinishedAt`.

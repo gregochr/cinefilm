@@ -756,6 +756,32 @@ class SidecarCheckRefresherTest {
     }
 
     @Test
+    void theRunningFlagAndTheFinishTimeAreSetAndClearedAroundARun() {
+        when(api.downloadsEnabled()).thenReturn(true);
+        when(service.due()).thenReturn(List.of());
+        assertThat(refresher.isRunning()).isFalse();
+        assertThat(refresher.lastFinishedAt()).isNull();
+
+        assertThat(refresher.startDue()).isTrue();
+        assertThat(refresher.isRunning()).isTrue();
+        assertThat(refresher.lastFinishedAt()).isNull();
+        queued.get(0).run();
+
+        assertThat(refresher.isRunning()).isFalse();
+        assertThat(refresher.lastFinishedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void aRunThatFailsStillClearsTheRunningFlagAndStampsTheFinishTime() {
+        when(service.due()).thenThrow(new IllegalStateException("database down"));
+
+        startAndRun();
+
+        assertThat(refresher.isRunning()).isFalse();
+        assertThat(refresher.lastFinishedAt()).isEqualTo(NOW);
+    }
+
+    @Test
     void nothingDueIsAQuietFinish() {
         when(service.due()).thenReturn(List.of());
 
