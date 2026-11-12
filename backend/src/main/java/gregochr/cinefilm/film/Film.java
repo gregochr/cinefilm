@@ -146,6 +146,13 @@ public class Film {
             rtScore = null;
             rtUrl = null;
         }
+        if (!java.util.Objects.equals(tmdbId, newTmdbId)) {
+            // The languages belong to the old TMDB film: forget them so the backfill asks again for the new one, and
+            // the need is never worked out from another film's languages. applyMovie sets the id first, then these.
+            originalLanguage = null;
+            spokenLanguages = null;
+            languagesFetchedAt = null;
+        }
         this.tmdbId = newTmdbId;
     }
 

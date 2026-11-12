@@ -70,4 +70,20 @@ class LibraryIngestLanguagesTest extends ApiTestBase {
         assertThat(film.getSpokenLanguages()).isEmpty();
         assertThat(film.getLanguagesFetchedAt()).isEqualTo(NOW);
     }
+
+    @Test
+    void applyingAMovieWithANewTmdbIdKeepsTheNewLanguagesNotTheOldOnes() {
+        Film film = film(null, "Heat", 1995, NOW);
+        film.setTmdbId(111L);
+        film.setOriginalLanguage("fr");
+        film.setSpokenLanguages("fr,de");
+        film.setLanguagesFetchedAt(NOW.minus(Duration.ofDays(9)));
+
+        ingest.applyMovie(film, movie("en", List.of("en", "es")));
+
+        assertThat(film.getTmdbId()).isEqualTo(949L);
+        assertThat(film.getOriginalLanguage()).isEqualTo("en");
+        assertThat(film.getSpokenLanguages()).isEqualTo("en,es");
+        assertThat(film.getLanguagesFetchedAt()).isEqualTo(NOW);
+    }
 }

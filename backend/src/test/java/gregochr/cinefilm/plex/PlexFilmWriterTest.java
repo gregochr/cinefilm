@@ -11,6 +11,7 @@ import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmPreference;
+import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.MatchStatus;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.playback.PlaybackState;
@@ -184,6 +185,24 @@ class PlexFilmWriterTest extends ApiTestBase {
         assertThat(result.getTmdbId()).isEqualTo(949L);
         assertThat(result.getRatingsFetchedAt()).isNull();
         assertThat(films.findIdsWithRatingsDueBefore(cutoff)).contains(film.getId());
+    }
+
+    @Test
+    void anImportThatGivesAFilmATmdbIdWithoutMovieDetailsLeavesItDueForTheLanguagesBackfill() {
+        Film film = saved("heat file", null, "Heat.m4v");
+        film.setOriginalLanguage("fr");
+        film.setSpokenLanguages("fr,de");
+        film.setLanguagesFetchedAt(NOW);
+        films.saveAndFlush(film);
+
+        writer.apply(write(plex(949L, "Heat"), List.of(fileId(film, 0)), null));
+
+        Film result = reload(film.getId());
+        assertThat(result.getTmdbId()).isEqualTo(949L);
+        assertThat(result.getOriginalLanguage()).isNull();
+        assertThat(result.getSpokenLanguages()).isNull();
+        assertThat(result.getLanguagesFetchedAt()).isNull();
+        assertThat(films.findWithoutLanguages()).contains(new FilmRepository.TmdbRef(film.getId(), 949L));
     }
 
     @Test
