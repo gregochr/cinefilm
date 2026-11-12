@@ -161,7 +161,9 @@ Custom controls over HTML5 `<video>`.
   once per network, and not a cue.
 
 **Quality menu**
-- Options: Auto (default), Original, 1080p, 720p, 480p.
+- Options: Auto (default), Original, 1080p, 720p, 480p. Below them, 360p and 240p for the worst links: every film
+  above 240 lines lists both (owner, 2026-11-12; `docs/engineering/train-link-plan.md`). A film lists only the
+  qualities below its own height.
 - Each row shows its bitrate in mono. Auto shows what it's currently using ("now Original").
 - The current choice gets an amber tick.
 - **Worker offline:** Auto and any lower quality that **isn't pre-made** are disabled. A footer reads "Lower qualities unavailable right now — the transcode worker is offline. Pre-made versions still play." (`13`).

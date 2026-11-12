@@ -275,7 +275,7 @@ describe('Player', () => {
     await userEvent.keyboard('q');
     const menu = screen.getByRole('menu', { name: 'Quality' });
     const rows = within(menu).getAllByRole('menuitemradio');
-    expect(rows).toHaveLength(6); // Auto, Original, 1080p, 720p, 480p and the new 360p
+    expect(rows).toHaveLength(7); // Auto, Original, 1080p, 720p, 480p, 360p and the 240p floor
     expect(within(menu).getByRole('menuitemradio', { name: /^360p/ })).toBeDisabled();
     expect(within(menu).getByRole('menuitemradio', { name: /Auto/ })).toHaveAttribute(
       'aria-checked',

@@ -98,7 +98,7 @@ class FilmMapperPartsTest {
         EditionDto dto = dto(EncoderMode.VAAPI, f -> DENSE);
 
         assertThat(dto.qualities()).extracting(QualityDto::id).containsExactly("auto", "original", "720p", "480p",
-            "360p");
+            "360p", "240p");
         assertThat(available(dto, "original")).isTrue();
         assertThat(available(dto, "auto")).isTrue();
     }

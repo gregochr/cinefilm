@@ -7,7 +7,8 @@ import java.util.function.Supplier;
 
 /**
  * Which rungs a film has: a pure function of the source height, whether the original can be copied, and what the
- * encoder can do. Rungs are listed best first. Every rung is strictly shorter than the one above it (apart from a
+ * encoder can do. Rungs are listed best first; a ladder whose top rung is above 240 lines ends in the 240p floor
+ * rung, which a very slow link can still carry. Every rung is strictly shorter than the one above it (apart from a
  * top rung that is transcoded at the source's own height), so heights are unique within a film and a player can tell
  * the active rung from {@code videoHeight}.
  */
@@ -25,7 +26,12 @@ public final class Ladder {
     public static final String Q_480 = "480p";
     /** Quality id: 360 lines. */
     public static final String Q_360 = "360p";
-    /** Quality id: 240 lines, only for sources of 360 lines or fewer. */
+    /**
+     * Quality id: 240 lines. A ladder whose top rung is above 240 lines ends in it as the floor rung at
+     * {@link Rung#FLOOR_VIDEO_BITRATE}; a source that cannot be copied and has 241 lines or fewer is encoded at 240
+     * lines or fewer and has it as its only rung at 400 kbit/s; so the id has two possible bitrates and never both
+     * in one film.
+     */
     public static final String Q_240 = "240p";
 
     /** Every quality id the API accepts, in the order the player lists them. */
@@ -47,8 +53,9 @@ public final class Ladder {
     private static final Level TOP_480 = new Level(Q_480, 480, 1_000_000);
     private static final Level TOP_360 = new Level(Q_360, 360, 600_000);
     private static final Level TOP_240 = new Level(Q_240, 240, 400_000);
+    private static final Level FLOOR_240 = new Level(Q_240, 240, Rung.FLOOR_VIDEO_BITRATE);
 
-    private static final List<Level> LOWER = List.of(TOP_720, TOP_480, TOP_360, TOP_240);
+    private static final List<Level> LOWER = List.of(TOP_720, TOP_480, TOP_360, FLOOR_240);
 
     private Ladder() {
     }
@@ -80,8 +87,7 @@ public final class Ladder {
             limit = top;
         }
         for (Level level : LOWER) {
-            boolean smallSourceOnly = level == TOP_240 && sourceHeight > 360;
-            if (level.height() < limit && !smallSourceOnly) {
+            if (level.height() < limit) {
                 transcoded.add(new Rung(level.id(), level.height(), level.bitrate(), false));
             }
         }

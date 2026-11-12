@@ -292,6 +292,14 @@ Once per change to how a session starts (`poor-link-plan.md`):
 12. On the host, restart the app (`docker restart cinefilm`) just as a film is opened: "Reconnecting…" while the
     proxy answers 502, then the sign-in card (a restart forgets sign-ins), then it streams.
 
+Once per change to the ladder or the buffer (`train-link-plan.md`):
+
+13. Choose Quality, 240p on a film: it plays, and the picture is one you would sit through a bad spell with. While
+    a film plays on Auto, Admin, Transcoding shows the encoder's speed: it now makes one more rung, and must stay
+    well above 1×.
+14. On "Train, typical" Auto plays at 240p without stalling. On "Train, bad" from a cold start some stalling is
+    expected: 300 kbit/s is under the 340 or so the floor needs on the wire, and only a banked buffer covers that.
+
 - DevTools throttles the page's own requests (the hls.js segments included) and only while DevTools is open. It
   does not reach Safari: use Network Link Conditioner there (macOS: Additional Tools for Xcode; iPhone: Settings,
   Developer).

@@ -323,11 +323,13 @@ class FilmsApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.editions[0].subtitleStreams[0].forced").value(false))
             .andExpect(jsonPath("$.editions[0].subtitleStreams[0].format").value("SRT"))
             .andExpect(jsonPath("$.editions[0].qualities[*].id",
-                contains("auto", "original", "480p", "360p")))
+                contains("auto", "original", "480p", "360p", "240p")))
             .andExpect(jsonPath("$.editions[0].qualities[*].available",
-                contains(true, true, true, true)))
+                contains(true, true, true, true, true)))
             .andExpect(jsonPath("$.editions[0].qualities[1].bitrate").value(9_000_000))
             .andExpect(jsonPath("$.editions[0].qualities[3].premade").value(false))
+            .andExpect(jsonPath("$.editions[0].qualities[4].bitrate").value(250_000))
+            .andExpect(jsonPath("$.editions[0].qualities[4].premade").value(false))
             .andExpect(jsonPath("$.preferences.editionId").value(heatEdition.getId()))
             .andExpect(jsonPath("$.preferences.quality").value("auto"))
             .andExpect(jsonPath("$.preferences.audioStreamId").exists())

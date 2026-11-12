@@ -71,6 +71,22 @@ class PlaylistWriterTest {
     }
 
     @Test
+    void theFloorRungLists364kPeak314kAverageAtTheFloorResolution() {
+        List<Rung> rungs = List.of(RUNGS.get(0), new Rung("240p", 240, 250_000, false));
+
+        assertThat(PlaylistWriter.master(rungs, rungs.get(1), null, 1920, 1080)).isEqualTo(String.join("\n",
+            "#EXTM3U",
+            "#EXT-X-VERSION:3",
+            "#EXT-X-INDEPENDENT-SEGMENTS",
+            "#EXT-X-STREAM-INF:BANDWIDTH=364000,AVERAGE-BANDWIDTH=314000,RESOLUTION=426x240,"
+                + "CODECS=\"avc1.64001e,mp4a.40.2\"",
+            "240p/index.m3u8",
+            "#EXT-X-STREAM-INF:BANDWIDTH=12128000,AVERAGE-BANDWIDTH=8128000,RESOLUTION=1920x1080,"
+                + "CODECS=\"avc1.640028,mp4a.40.2\"",
+            "original/index.m3u8", ""));
+    }
+
+    @Test
     void aPinnedQualityListsOnlyThatRung() {
         String master = PlaylistWriter.master(RUNGS, RUNGS.get(0), "360p", 1920, 1080);
 
