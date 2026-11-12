@@ -5,6 +5,7 @@ import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.OsBestRef;
+import gregochr.cinefilm.opensubtitles.CutTag;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesRanking;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
@@ -100,7 +101,8 @@ public class SidecarCheckService {
             ForcedSubtitleCheck current = checkByEdition.get(edition.getId());
             if (current != null && current.isCurrent(subtitle.version(), ref.imdbId(),
                 referenceById.get(current.getReferenceId()), bestFileId(ref.osBest()))
-                && candidateIds.contains(referenceById.get(current.getReferenceId()).getOsFileId())) {
+                && candidateIds.contains(referenceById.get(current.getReferenceId()).getOsFileId())
+                && current.getCutTags().equals(CutTag.key(edition.getName()))) {
                 continue;
             }
             Set<Long> tried = new HashSet<>();
@@ -193,6 +195,7 @@ public class SidecarCheckService {
         row.setBestOffsetMs(result.bestOffsetMs());
         row.setReasons(joined(result.reasons()));
         row.setRulesVersion(ForcedSubtitleCheck.RULES_VERSION);
+        row.setCutTags(CutTag.key(due.editionName()));
         row.setBestFileId(bestFileId(film.getOsBest()));
         row.setCheckedAt(now);
         checks.save(row);

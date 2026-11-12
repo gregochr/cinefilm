@@ -203,6 +203,10 @@ Judgement calls made while building 2d without the owner. Each: what was chosen,
     the reference may be any candidate, so a changed best file, not the reference's own file id, makes it stale, and
     Admin's existing `isCurrent` call keeps working unchanged (its `bestFileId` argument now means that). A check whose
     reference is no longer one of the film's candidates is stale too, and a result is dropped on save when it is.
+    The check also stores `cut_tags` (the sorted `CutTag` names of the edition's name when it was made): renaming an
+    edition so its tags change (Theatrical Cut to Extended Edition) reorders the candidates, so it makes the check
+    stale. When the ledger is full, an untried candidate that now ranks first is skipped and the tried (stored) ones
+    below it are still compared, which costs no download.
 
 ### Judgement calls made building phase 3a (2026-11-12, owner away)
 

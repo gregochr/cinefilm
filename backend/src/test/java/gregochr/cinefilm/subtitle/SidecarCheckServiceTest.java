@@ -467,6 +467,31 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
     }
 
     @Test
+    void renamingTheEditionSoItsCutTagsChangeMakesTheCheckStaleButKeepingTheTagDoesNot() {
+        Film film = searchedFilm("Rings", 1, "tt0167260", 5011);
+        film.getEditions().get(0).setName("Theatrical Cut");
+        films.saveAndFlush(film);
+        sidecar("Rings.en.forced.srt", fileId(film, 1), false);
+        service.save(onlyDue(), reference(film, 5011), AGREES, LATER);
+        assertThat(checks.findAll().get(0).getCutTags()).isEqualTo("THEATRICAL");
+        assertThat(service.due()).isEmpty();
+
+        film.getEditions().get(0).setName("Theatrical Cut (restored)");
+        films.saveAndFlush(film);
+        assertThat(service.due()).isEmpty();
+        film.getEditions().get(0).setName("The Final Cut");
+        films.saveAndFlush(film);
+        assertThat(service.due()).hasSize(1);
+
+        film.getEditions().get(0).setName("Theatrical Cut");
+        films.saveAndFlush(film);
+        assertThat(service.due()).isEmpty();
+        film.getEditions().get(0).setName("Extended Edition");
+        films.saveAndFlush(film);
+        assertThat(onlyDue().editionName()).isEqualTo("Extended Edition");
+    }
+
+    @Test
     void aCheckMadeByOlderRulesIsStaleAndTheEditionIsDueAgain() {
         Film film = searchedFilm("Taken", 1, "tt0936501", 5011);
         sidecar("Taken.en.forced.srt", fileId(film, 1), false);

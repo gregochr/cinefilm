@@ -52,6 +52,17 @@ public enum CutTag {
     }
 
     /**
+     * The tags in a text as a stable key (sorted names joined by commas; empty for none), for noting which cut an
+     * edition's name asked for.
+     *
+     * @param text an edition name; null reads as no tags
+     * @return the key
+     */
+    public static String key(String text) {
+        return in(text).stream().map(Enum::name).sorted().collect(java.util.stream.Collectors.joining(","));
+    }
+
+    /**
      * What a result's tags say about an edition's tags: one point for each tag they share, minus one for each tag
      * of the opposite cut. Theatrical is the opposite of every other tag, and every other tag is the opposite of
      * Theatrical; a tag the edition itself carries is never an opposite. An edition with no tag has no preference (0).

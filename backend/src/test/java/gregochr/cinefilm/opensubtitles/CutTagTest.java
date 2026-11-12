@@ -36,6 +36,14 @@ class CutTagTest {
     }
 
     @Test
+    void theKeyIsTheSortedTagNamesOrEmpty() {
+        assertThat(CutTag.key("Extended Director's Cut")).isEqualTo("DIRECTORS_CUT,EXTENDED");
+        assertThat(CutTag.key("Theatrical Cut")).isEqualTo("THEATRICAL");
+        assertThat(CutTag.key("Original")).isEmpty();
+        assertThat(CutTag.key(null)).isEmpty();
+    }
+
+    @Test
     void aWordThatOnlyContainsATagIsNotATag() {
         assertThat(CutTag.in("Extendedly")).isEmpty();
         assertThat(CutTag.in("Untheatrical")).isEmpty();

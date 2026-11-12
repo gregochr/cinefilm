@@ -14,6 +14,10 @@ ALTER TABLE forced_subtitle_check ADD COLUMN rules_version INTEGER NOT NULL DEFA
 -- reference may be another candidate, so it can no longer stand for it); a check goes stale when the best file changes.
 -- Null for rows made by phase 2d, which always used the best file.
 ALTER TABLE forced_subtitle_check ADD COLUMN best_file_id BIGINT;
+-- forced_subtitle_check.cut_tags: the cut tags of the edition's name when the check was made (sorted names, comma-
+-- separated, '' for none). They order the candidates, so renaming an edition (Theatrical Cut to Extended Edition) makes
+-- the check stale. Rows made by phase 2d are stale by rules_version anyway.
+ALTER TABLE forced_subtitle_check ADD COLUMN cut_tags VARCHAR(100) NOT NULL DEFAULT '';
 
 -- forced_check_candidate: the OpenSubtitles files an edition has been compared with, per IMDb id: the ledger of the
 -- cap of three candidates per edition and IMDb id, ever. A row is added once a candidate's reference is in hand

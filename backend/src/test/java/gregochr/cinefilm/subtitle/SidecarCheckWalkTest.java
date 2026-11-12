@@ -324,6 +324,26 @@ class SidecarCheckWalkTest {
     }
 
     @Test
+    void anUntriedCandidateRankedAheadIsSkippedWhenTheLedgerIsFullAndTheTriedOnesBelowItAreStillReused() {
+        // The edition was renamed, so a file it never tried now ranks first.
+        DueCheck due = due(Set.of(5011L, 5012L, 5013L), 5014, 5011, 5012, 5013);
+        storedIs(stored(8, 5011, matching(0)));
+        OpenSubtitlesReference best = stored(9, 5012, matching(2));
+        storedIs(best);
+        storedIs(stored(10, 5013, matching(0)));
+        savingEverything();
+
+        run(due);
+
+        verify(references, never()).findByFilmIdAndImdbIdAndOsFileId(FILM, IMDB, 5014);
+        verify(api, never()).download(5014);
+        verify(service, never()).markTried(EDITION, IMDB, 5014, NOW);
+        assertThat(savedResult(due, best).reasons().get(0)).startsWith("Tried 3 OpenSubtitles files;");
+        assertThat(messages()).contains(
+            "Edition 10: candidate 1 (file 5014) skipped, 3 OpenSubtitles files were already tried");
+    }
+
+    @Test
     void anEditionWhoseLedgerIsFullAndWhoseCandidatesAreAllNewDoesNothingAtAll() {
         DueCheck due = due(Set.of(6001L, 6002L, 6003L), 5011, 5012);
 

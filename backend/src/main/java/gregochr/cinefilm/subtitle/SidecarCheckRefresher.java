@@ -239,7 +239,8 @@ public class SidecarCheckRefresher {
             if (!known && tried.size() >= ReferenceWalk.MAX_CANDIDATES) {
                 LOG.info("Edition {}: candidate {} (file {}) skipped, {} OpenSubtitles files were already tried",
                     due.editionId(), position, candidate.fileId(), tried.size());
-                break;
+                // Files already tried further down are still reused: that costs no download and keeps the cap.
+                continue;
             }
             OpenSubtitlesReference reference = tried(due, candidate, known);
             tried.add(candidate.fileId());

@@ -67,6 +67,13 @@ public class ForcedSubtitleCheck {
      */
     private Long bestFileId;
 
+    /**
+     * The cut tags of the edition's name when the check was made ({@code CutTag.key}); they order the candidates, so a
+     * rename that changes them makes the check stale. Empty when the name has none.
+     */
+    @Column(nullable = false, length = 100)
+    private String cutTags = "";
+
     /** The version of the comparison rules that made this row; an older one is stale ({@link #RULES_VERSION}). */
     @Column(nullable = false)
     private int rulesVersion = RULES_VERSION;
