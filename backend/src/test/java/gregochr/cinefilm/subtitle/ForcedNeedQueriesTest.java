@@ -121,6 +121,38 @@ class ForcedNeedQueriesTest extends SubtitleTestBase {
     }
 
     @Test
+    void aMissingFilmFileCountsForNothingNeitherItsEmbeddedForcedTrackNorASidecarBesideIt() {
+        Film gone = filmWithParts("Gone", 1, 90);
+        Film here = filmWithParts("Here", 1, 90);
+        stream(gone, "eng", true);
+        stream(here, "eng", true);
+        sidecar("Gone.en.forced.srt", fileId(gone, 1), false);
+        MediaFile missing = gone.getEditions().get(0).originalParts().get(0);
+        missing.setPresence(Presence.MISSING);
+        mediaFiles.saveAndFlush(missing);
+
+        assertThat(mediaFiles.findFilmIdsWithEmbeddedForced()).containsExactly(here.getId());
+        assertThat(mediaFiles.countEmbeddedForcedForFilm(gone.getId())).isZero();
+        assertThat(mediaFiles.countEmbeddedForcedForFilm(here.getId())).isEqualTo(1);
+        assertThat(sidecars.findFilmIdsWithPresentSidecar()).isEmpty();
+        assertThat(sidecars.countPresentForFilm(gone.getId())).isZero();
+    }
+
+    @Test
+    void aFilmWithOnePresentAndOneMissingFileStillCountsThePresentOnes() {
+        Film split = filmWithParts("Towers", 2, 60);
+        stream(split, "eng", true);
+        sidecar("Towers - pt2.en.forced.srt", fileId(split, 2), false);
+        MediaFile first = split.getEditions().get(0).originalParts().get(0);
+        first.setPresence(Presence.MISSING);
+        mediaFiles.saveAndFlush(first);
+
+        assertThat(mediaFiles.findFilmIdsWithEmbeddedForced()).isEmpty();
+        assertThat(sidecars.findFilmIdsWithPresentSidecar()).containsExactly(split.getId());
+        assertThat(sidecars.countPresentForFilm(split.getId())).isEqualTo(1);
+    }
+
+    @Test
     void theNeedRowsComeInSortTitleOrderWithTheColumnsTheNeedIsWorkedOutFrom() {
         Film zulu = filmWithParts("Zulu", 1, 90);
         Film alien = filmWithParts("Alien", 1, 90);

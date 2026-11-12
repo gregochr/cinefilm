@@ -85,16 +85,18 @@ public interface MediaFileRepository extends JpaRepository<MediaFile, Long> {
     long countOriginals(Presence presence);
 
     /**
-     * Ids of the films with a forced subtitle track inside one of their files whose language is English or not
+     * Ids of the films with a forced subtitle track inside one of their present files whose language is English or not
      * stated ({@code eng}, {@code en}, {@code und} or none). A forced track in another language does not count.
      */
     @Query("select distinct e.film.id from SubtitleStream s join s.mediaFile m join m.edition e "
-        + "where s.forced = true and (s.language is null or lower(s.language) in ('eng', 'en', 'und'))")
+        + "where m.presence = gregochr.cinefilm.film.Presence.PRESENT "
+        + "and s.forced = true and (s.language is null or lower(s.language) in ('eng', 'en', 'und'))")
     List<Long> findFilmIdsWithEmbeddedForced();
 
     /** How many forced tracks in English or of no stated language the film's files have. */
     @Query("select count(s) from SubtitleStream s join s.mediaFile m join m.edition e where e.film.id = :filmId "
-        + "and s.forced = true and (s.language is null or lower(s.language) in ('eng', 'en', 'und'))")
+        + "and m.presence = gregochr.cinefilm.film.Presence.PRESENT and s.forced = true "
+        + "and (s.language is null or lower(s.language) in ('eng', 'en', 'und'))")
     long countEmbeddedForcedForFilm(Long filmId);
 
     /** How many original files are present with the given playability. */
