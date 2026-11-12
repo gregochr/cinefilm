@@ -387,6 +387,18 @@ Forced subtitles cover English-language films with some foreign dialogue. A film
 
 - **Which films:** rule 6's films (TMDB `original_language` not English), plus any the owner marks. Admin lists them
   with the same filters as phase 2b ("Full subtitles: needed, none yet").
+- **The audio in the owner's copy decides, not only TMDB.** A survey on 2026-11-12 found 19 of 1,074 films with a
+  non-English original language, and several are English for the owner:
+  - *Léon* is mostly English (TMDB says French because it is a French production);
+  - the three Leone westerns, *Crouching Tiger* and *Ballerina* have English-labelled audio;
+  - the animated films are probably English dubs.
+
+  So a film whose playing audio track is English is not a foreign-language film. Most files carry no audio language,
+  so those stay `UNSURE` for the owner's one tap. The likely real list: *Oldboy*, the two Millennium films,
+  *Martyrs*, *The Assassin*, the Bruce Lee films, *33 Days*.
+- **Scale of the forced-subtitle `UNSURE` pile:** the same survey found 378 English-language films that list other
+  spoken languages. Phase 2c's OpenSubtitles evidence has to settle most of these, so the owner isn't left with 378
+  taps.
 - **Find:**
   - Full English `.srt` files beside the film (`<stem>.en.srt`, `<stem>.eng.srt`) are matched as in phase 1, by exact
     name.
