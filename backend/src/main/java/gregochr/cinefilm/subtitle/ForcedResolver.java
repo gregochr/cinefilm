@@ -277,16 +277,20 @@ public class ForcedResolver {
         return Map.copyOf(reasons);
     }
 
-    /** True when a present file of the edition has a forced English (or unlabelled) text subtitle track. */
+    /**
+     * True when the edition plays a forced English (or unlabelled) text track of its own. Playback offers only the
+     * streams of part 1 (the logical stream; {@code EditionSubtitleService.targets}), so a forced track that exists
+     * only in a later part is never selectable and does not count here. (The film's need still counts it: see
+     * {@code ForcedNeed}.) The scan stores text tracks only, so every stored stream can be played.
+     */
     private static boolean hasEmbeddedForced(Edition edition) {
-        for (MediaFile file : edition.originalParts()) {
-            if (file.getPresence() != Presence.PRESENT) {
-                continue;
-            }
-            for (SubtitleStream stream : file.getSubtitleStreams()) {
-                if (stream.isForced() && SubtitleStream.isEnglishOrUnlabelled(stream.getLanguage())) {
-                    return true;
-                }
+        List<MediaFile> parts = edition.originalParts();
+        if (parts.isEmpty() || parts.get(0).getPresence() != Presence.PRESENT) {
+            return false;
+        }
+        for (SubtitleStream stream : parts.get(0).getSubtitleStreams()) {
+            if (stream.isForced() && SubtitleStream.isEnglishOrUnlabelled(stream.getLanguage())) {
+                return true;
             }
         }
         return false;

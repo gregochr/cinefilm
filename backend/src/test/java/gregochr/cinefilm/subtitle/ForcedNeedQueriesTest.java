@@ -125,6 +125,24 @@ class ForcedNeedQueriesTest extends SubtitleTestBase {
     }
 
     @Test
+    void aForcedTrackInALaterPartStillCountsAsEvidenceOfTheNeed() {
+        // The film has forced dialogue wherever the track is; whether it can be played is the resolver's question.
+        Film split = filmWithParts("Split", 2, 90);
+        MediaFile second = split.getEditions().get(0).originalParts().get(1);
+        SubtitleStream stream = new SubtitleStream();
+        stream.setMediaFile(second);
+        stream.setIndex(10);
+        stream.setLanguage("English");
+        stream.setForced(true);
+        stream.setFormat("subrip");
+        second.getSubtitleStreams().add(stream);
+        mediaFiles.saveAndFlush(second);
+
+        assertThat(mediaFiles.findFilmIdsWithEmbeddedForced()).containsExactly(split.getId());
+        assertThat(mediaFiles.countEmbeddedForcedForFilm(split.getId())).isEqualTo(1);
+    }
+
+    @Test
     void theHelperAcceptsEveryStoredFormOfEnglishAndNothingElse() {
         for (String language : new String[] {null, "English", "english", "ENG", "en", "und"}) {
             assertThat(SubtitleStream.isEnglishOrUnlabelled(language)).as("%s", language).isTrue();

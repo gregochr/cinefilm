@@ -331,6 +331,14 @@ Each: what was chosen, why, and the alternative. Numbers continue 2e's.
     The owner's own files and the film's embedded track still play: the owner chose those, a download is CineFilm's
     addition. Nothing is deleted; choosing automatic again brings the downloads back. **Alternative:** "serves nothing"
     including the owner's own files (a behaviour change to phase 1: not made).
+60. **"Embedded forced track plays" looks at part 1 only; "the film has forced dialogue" looks at every part.** Playback
+    offers only part 1's streams (`FilmMapper.edition`, `EditionSubtitleService.targets`), so a forced English track
+    that exists only in a later part cannot be selected: `ForcedResolver.hasEmbeddedForced` ignores it, which lets an
+    owner file or a download serve instead of nothing. The need evidence (`MediaFileRepository` forced queries, the
+    `EMBEDDED_FORCED` reason) still counts any present part: the film does have forced dialogue, so it is NEEDED, and
+    the page shows "needed, nothing playing" rather than "no need". Picture tracks are never stored (the scan keeps
+    text codecs only), so every stored stream is playable text. **Alternative:** restrict the need evidence to part 1
+    too (then a film whose only forced track is in part 2 would read "not needed" and get no download: worse).
 
 ### Judgement calls made building phase 3a (2026-11-12, owner away)
 

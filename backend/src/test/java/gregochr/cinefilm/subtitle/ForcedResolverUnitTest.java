@@ -197,6 +197,25 @@ class ForcedResolverUnitTest {
     }
 
     @Test
+    void aForcedTrackOnlyInALaterPartIsNotPlayableSoItDoesNotCount() {
+        MediaFile second = file(edition, "Taken-2.m4v");
+        second.setId(11L);
+        second.setPartNumber(2);
+        second.setDurationMs(90 * MIN);
+        SubtitleStream stream = new SubtitleStream();
+        stream.setMediaFile(second);
+        stream.setIndex(7);
+        stream.setLanguage("English");
+        stream.setForced(true);
+        second.getSubtitleStreams().add(stream);
+
+        assertThat(resolve().embedded()).isFalse();
+
+        embedded("English", true);
+        assertThat(resolve().embedded()).isTrue();
+    }
+
+    @Test
     void anEmbeddedTrackInAFileThatIsNotPresentIsNotCounted() {
         embedded("eng", true);
         part.setPresence(Presence.MISSING);
