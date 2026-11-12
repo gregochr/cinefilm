@@ -31,8 +31,9 @@ files or workflows itself. Docs (this file, `docs/`, `AGENTS.md`) may be written
 2. **Delegate the build to a Sonnet subagent** (Agent tool, `model: "sonnet"`, its own worktree). The brief carries
    the plan, the files, the tests to write, the gates below and the `changelog.d/` entry. Sonnet runs the gates
    until green; the planner reviews the diff read-only and sends fixes back to Sonnet.
-   **Before committing, run Codex locally** in Sonnet's worktree (`codex review --uncommitted`) and send its
-   findings to Sonnet until a run finds nothing new; each round here saves a CI run (`dev-and-testing.md`).
+   **Before every push (the first and every fix round), run Codex locally** on the whole branch in Sonnet's worktree
+   (`codex review --base origin/main`, or `--uncommitted` before the first commit). Send its findings to Sonnet
+   until two runs in a row find nothing new; each round here saves a CI run (`dev-and-testing.md`).
 3. **Commit** on a feature branch (conventional commit, changelog entry).
 4. **Push and open a ready PR** (not a draft) against `main`.
 5. **Wait for CI and Codex, fix what they find** through Sonnet, push again. Codex reviews a PR when it opens and
