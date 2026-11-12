@@ -3,6 +3,9 @@ import { resolutionLabel } from '../state/resolution.js';
 
 export const SUBTITLE_OFF = 'off';
 
+/** The key of the forced-subtitle track: its own key, not a stream's, since it is not a menu choice. */
+export const FORCED_KEY = 'forced';
+
 /** Streams are identified by `id` when the API sends one, else by `index`. */
 export const streamKey = (stream) => stream.id ?? stream.index;
 
@@ -79,17 +82,25 @@ export function resolveSubtitleChoice(editions, edition, saved) {
 const isEnglishOrUnlabelled = (stream) => !stream.language || /^english$/i.test(stream.language);
 
 /**
- * The subtitle stream key that should be showing. A chosen stream shows. When Subtitles is Off the
- * forced English track (language unknown counts) shows by itself, because forced tracks translate
- * the foreign-language lines a film expects you not to understand (decision 6). Otherwise none.
+ * The subtitle track key that should be showing. A chosen stream shows (and hides the forced track). When
+ * Subtitles is Off the forced English lines show by themselves, because they translate the foreign-language
+ * lines a film expects you not to understand (decision 6): the edition's `forcedSubtitle` (the API already chose
+ * the winner, so it beats an embedded forced stream) as `FORCED_KEY`, else an embedded forced English stream
+ * (language unknown counts). Otherwise none.
  */
-export function activeSubtitleKey(streams = [], choice = SUBTITLE_OFF) {
+export function activeSubtitleKey(streams = [], choice = SUBTITLE_OFF, forcedSubtitle = null) {
   if (choice !== SUBTITLE_OFF) {
     const chosen = streams.find((s) => String(streamKey(s)) === String(choice));
     return chosen ? streamKey(chosen) : null;
   }
+  if (forcedSubtitle) return FORCED_KEY;
   const forced = streams.find((s) => s.forced && isEnglishOrUnlabelled(s));
   return forced ? streamKey(forced) : null;
+}
+
+/** True when the edition has anything to show: subtitle streams, or a forced subtitle of its own. */
+export function hasSubtitleTracks(edition) {
+  return edition.subtitleStreams.length > 0 || Boolean(edition.forcedSubtitle);
 }
 
 export function formatBitrate(bps) {

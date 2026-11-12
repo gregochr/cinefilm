@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FIRST_BYTE_MS, PROBE_CHECK_MS, PROBE_MS, measureThroughput } from './probe.js';
 
-beforeEach(() => vi.useFakeTimers());
+beforeEach(() => {
+  vi.useFakeTimers();
+  due = [];
+});
 afterEach(() => vi.useRealTimers());
 
 // A response whose body hands out `chunks` (byte counts) one read at a time.
@@ -74,7 +77,7 @@ describe('measureThroughput', () => {
       return response;
     });
     const pending = measureThroughput('/s', { fetchImpl, now: clockOf(0, 100), boxMs: 1500 });
-    await vi.advanceTimersByTimeAsync(1500);
+    await advance(1500);
     expect(await pending).toBe(240); // 3000 bytes = 24 kbit over 100 ms
   });
 
@@ -115,7 +118,10 @@ describe('measureThroughput', () => {
 });
 
 // A body whose chunks arrive at the given times ([[ms after the request, bytes], ...], on fake time); after the
-// last it hangs until aborted, as a stalled link does. Aborting rejects the read and clears its timer.
+// last it hangs until aborted, as a stalled link does. The test owns the schedule: `advance` (below) moves the fake
+// clock and releases each chunk when its time comes, so no timer is armed here (test-standards.md, "No sleeps").
+// Aborting rejects the read and drops the chunk.
+let due = [];
 function timedBody(schedule, t) {
   return async (url, { signal }) => {
     t.signal = signal;
@@ -124,28 +130,43 @@ function timedBody(schedule, t) {
     const reader = {
       read: () =>
         new Promise((resolve, reject) => {
-          let timer = null;
+          let chunk = null;
           const abort = () => {
-            clearTimeout(timer);
+            due = due.filter((c) => c !== chunk);
             reject(new Error('aborted'));
           };
           signal.addEventListener('abort', abort);
           if (signal.aborted) return abort();
           if (i >= schedule.length) return undefined;
           const [at, bytes] = schedule[i++];
-          timer = setTimeout(
-            () => {
+          chunk = {
+            at: start + at,
+            release: () => {
               signal.removeEventListener('abort', abort);
               resolve({ done: false, value: new Uint8Array(bytes) });
             },
-            Math.max(0, start + at - Date.now()),
-          );
+          };
+          due.push(chunk);
           return undefined;
         }),
       cancel: async () => {},
     };
     return { ok: true, body: { getReader: () => reader } };
   };
+}
+// Moves the fake clock forward `ms`, handing over every chunk that falls due on the way, in time order.
+async function advance(ms) {
+  const end = Date.now() + ms;
+  await vi.advanceTimersByTimeAsync(0); // let a request just made reach its first read
+  for (;;) {
+    const next = due.filter((c) => c.at <= end).sort((x, y) => x.at - y.at)[0];
+    if (!next) break;
+    due = due.filter((c) => c !== next);
+    await vi.advanceTimersByTimeAsync(Math.max(0, next.at - Date.now()));
+    next.release();
+    await vi.advanceTimersByTimeAsync(0);
+  }
+  await vi.advanceTimersByTimeAsync(Math.max(0, end - Date.now()));
 }
 const clock = () => Date.now();
 
@@ -168,10 +189,10 @@ describe('the first byte may take 10 s, and the 1.5 s box starts there', () => {
       ),
       now: clock,
     });
-    await vi.advanceTimersByTimeAsync(11498);
+    await advance(11498);
     expect(t.signal.aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(1); // 11,499: the box (1,500 ms after the first byte) ends it
-    await vi.advanceTimersByTimeAsync(1);
+    await advance(1); // 11,499: the box (1,500 ms after the first byte) ends it
+    await advance(1);
     expect(t.signal.aborted).toBe(true);
     // 250,000 bytes = 2,000 kbit over 1,499 ms
     expect(await pending).toBe(Math.round(2000000 / 1499));
@@ -181,9 +202,9 @@ describe('the first byte may take 10 s, and the 1.5 s box starts there', () => {
   it('is null when no first byte comes by 10,000 ms', async () => {
     const t = {};
     const pending = measureThroughput('/s', { fetchImpl: timedBody([[10000, 10]], t), now: clock });
-    await vi.advanceTimersByTimeAsync(9999);
+    await advance(9999);
     expect(t.signal.aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(1);
+    await advance(1);
     expect(t.signal.aborted).toBe(true);
     expect(await pending).toBeNull();
     expect(vi.getTimerCount()).toBe(0);
@@ -192,12 +213,12 @@ describe('the first byte may take 10 s, and the 1.5 s box starts there', () => {
   it('does not start the 1,500 ms box with the request', async () => {
     const t = {};
     const pending = measureThroughput('/s', { fetchImpl: timedBody([[2000, 10]], t), now: clock });
-    await vi.advanceTimersByTimeAsync(1999);
+    await advance(1999);
     expect(t.signal.aborted).toBe(false); // the old box (from the request) would have fired at 1,500
-    await vi.advanceTimersByTimeAsync(1); // the first byte arrives: the box starts now
-    await vi.advanceTimersByTimeAsync(1499);
+    await advance(1); // the first byte arrives: the box starts now
+    await advance(1499);
     expect(t.signal.aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(1);
+    await advance(1);
     expect(t.signal.aborted).toBe(true);
     expect(await pending).toBeNull(); // only the first byte arrived
     expect(vi.getTimerCount()).toBe(0);
@@ -215,9 +236,9 @@ describe('a probe with no first byte asks whether the server answers', () => {
       now: clock,
       checkReachable,
     });
-    await vi.advanceTimersByTimeAsync(5001);
+    await advance(5001);
     expect(checkReachable).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1500);
+    await advance(1500);
     expect(await pending).toBeNull();
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -226,15 +247,15 @@ describe('a probe with no first byte asks whether the server answers', () => {
     const t = {};
     const checkReachable = vi.fn().mockResolvedValue(true);
     const pending = measureThroughput('/s', { fetchImpl: stuck(t), now: clock, checkReachable });
-    await vi.advanceTimersByTimeAsync(4999);
+    await advance(4999);
     expect(checkReachable).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1);
+    await advance(1);
     expect(checkReachable).toHaveBeenCalledTimes(1);
     // Reachable: the probe waits on to 10,000 ms.
     expect(t.signal.aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(4999);
+    await advance(4999);
     expect(t.signal.aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(1);
+    await advance(1);
     expect(t.signal.aborted).toBe(true);
     expect(await pending).toBeNull();
     expect(vi.getTimerCount()).toBe(0);
@@ -249,11 +270,11 @@ describe('a probe with no first byte asks whether the server answers', () => {
       checkReachable: vi.fn().mockResolvedValue(false),
       onUnreachable,
     });
-    await vi.advanceTimersByTimeAsync(5000);
+    await advance(5000);
     expect(onUnreachable).toHaveBeenCalledTimes(1);
     expect(t.signal.aborted).toBe(true);
     expect(await pending).toBeNull();
-    await vi.advanceTimersByTimeAsync(20000);
+    await advance(20000);
     expect(onUnreachable).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -275,13 +296,13 @@ describe('a probe with no first byte asks whether the server answers', () => {
       checkReachable: vi.fn(() => new Promise((resolve) => (answer = resolve))),
       onUnreachable,
     });
-    await vi.advanceTimersByTimeAsync(5000); // the check starts, no answer yet
-    await vi.advanceTimersByTimeAsync(700); // the first byte, then the rest, arrive
+    await advance(5000); // the check starts, no answer yet
+    await advance(700); // the first byte, then the rest, arrive
     answer(false);
-    await vi.advanceTimersByTimeAsync(0);
+    await advance(0);
     expect(onUnreachable).not.toHaveBeenCalled();
     expect(t.signal.aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(1500); // the box ends
+    await advance(1500); // the box ends
     expect(await pending).toBe(10000); // 250,000 bytes over 200 ms
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -296,7 +317,7 @@ describe('a probe with no first byte asks whether the server answers', () => {
       checkReachable: vi.fn(() => new Promise((resolve) => (answer = resolve))),
       onUnreachable,
     });
-    await vi.advanceTimersByTimeAsync(10000); // the first-byte limit ends the probe; the check is still out
+    await advance(10000); // the first-byte limit ends the probe; the check is still out
     expect(onUnreachable).not.toHaveBeenCalled();
     answer(false);
     expect(await pending).toBeNull();
@@ -314,7 +335,7 @@ describe('a probe with no first byte asks whether the server answers', () => {
       checkReachable: vi.fn(() => new Promise((resolve) => (answer = resolve))),
       onUnreachable,
     });
-    await vi.advanceTimersByTimeAsync(10000);
+    await advance(10000);
     answer(true);
     expect(await pending).toBeNull();
     expect(onUnreachable).not.toHaveBeenCalled();
@@ -329,19 +350,19 @@ describe('a probe with no first byte asks whether the server answers', () => {
       checkReachable: vi.fn().mockRejectedValue(new Error('broken')),
       onUnreachable,
     });
-    await vi.advanceTimersByTimeAsync(5000);
+    await advance(5000);
     expect(t.signal.aborted).toBe(false);
     expect(onUnreachable).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(5000);
+    await advance(5000);
     expect(await pending).toBeNull();
   });
 
   it('just waits the 10 s with no checkReachable', async () => {
     const t = {};
     const pending = measureThroughput('/s', { fetchImpl: stuck(t), now: clock });
-    await vi.advanceTimersByTimeAsync(9999);
+    await advance(9999);
     expect(t.signal.aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(1);
+    await advance(1);
     expect(await pending).toBeNull();
   });
 });
@@ -361,7 +382,7 @@ describe('what the probe leaves behind', () => {
     const t = {};
     const pending = measureThroughput('/s', { fetchImpl: timedBody([[60000, 10]], t), now: clock });
     expect(vi.getTimerCount()).toBe(1);
-    await vi.advanceTimersByTimeAsync(10000);
+    await advance(10000);
     expect(await pending).toBeNull();
   });
 
@@ -372,7 +393,7 @@ describe('what the probe leaves behind', () => {
     const checkReachable = vi.fn();
     expect(await measureThroughput('/s', { fetchImpl, checkReachable })).toBeNull();
     expect(vi.getTimerCount()).toBe(0);
-    await vi.advanceTimersByTimeAsync(20000);
+    await advance(20000);
     expect(checkReachable).not.toHaveBeenCalled();
   });
 

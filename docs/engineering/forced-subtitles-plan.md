@@ -1,7 +1,7 @@
 # Forced English subtitles — plan
 
-Written 2026-11-11. Status: **draft, reviewed once (adversarial review against the code, findings folded in), nothing
-built.**
+Written 2026-11-11. Status: **draft, reviewed once (adversarial review against the code, findings folded in). Phase 1
+is built (uncommitted, awaiting review); phases 2 to 4 are not.**
 
 ## What the owner wants
 
@@ -26,7 +26,7 @@ planning session's scratchpad, not the repo.
 |---|---|---|
 | Film files (`.m4v`) | 1,108 | 23.976 fps in every file sampled |
 | Forced `.srt` files beside a film | 28 | `<stem>.en.forced.srt` (one `.forced.en.srt`); the sample was UTF-8 with a BOM |
-| …that match a film by name (group key, which ignores case) | 21 | includes `No Time to Die` → `No Time To Die.m4v` |
+| …that match a film by exact name (ignoring case) | 21 | includes `No Time to Die` → `No Time To Die.m4v` |
 | …that do not | 7 | 3 LOTR theatrical (`.srt` has no `{edition-Theatrical Cut}` tag, and the film has two editions); 3 LOTR extended (one `.srt` for a film split into `pt1`/`pt2`; Fellowship's also says "The Fellowship"); see phase 1 |
 | Files with embedded subtitle tracks | 61 | **All** `dvd_subtitle` (pictures), all `eng`, **none** flagged forced |
 | …with a real forced track | 3 | LOTR theatrical cuts (3–41 lines). Each also has a `.srt`, so no OCR is needed |
@@ -130,6 +130,37 @@ on its own; after it ships, measure (how many films are still unsure or missing)
 
 ### Phase 1 — use the forced `.srt` files that already exist, and let the owner check them
 
+**Status: built.** Deviations from the plan above, with the reason:
+
+- **The iPhone/HLS spike was not run** (it needs the owner's phone) and the HLS rendition is not built; Phase 1 serves
+  the `<track>` only.
+- **`subtitle_sidecar` has no `sync_status` or `sync_detail`** (phase 3 adds them when something sets them). It has
+  `whole_edition`, `cue_count`, `last_end_ms` (the end of the last cue, for the "ends after the film" flag without
+  re-parsing) and `verified_parts` instead. `owner_verified_at` alone would not reset when editions change, so the
+  check is `owner_verified_at` set **and** `verified_parts` equal to the edition's current part ids joined with commas.
+  Nothing in `EditionArranger` or `EditionJoin` was touched: a file moved into or out of an edition changes the
+  edition's parts, and that is the reset.
+- **`media_file_id` is a plain column with a foreign key, not a JPA relation**, so a sidecar follows its file through
+  `MediaFileRepository.moveToEdition` with no code of its own. Original files are never deleted (only renditions are),
+  so the foreign key cannot block an edit.
+- **A conflict in a whole-edition slot stops the edition playing any sidecar** (a whole-edition file is meant to beat
+  per-part ones, so falling through would hide the conflict). A conflict in one part's slot leaves only that part with
+  none; the other parts still play.
+- **A nudge, an attach, and any change to a file on disk clear the owner's check** (the lines or timing the owner
+  looked at are no longer the ones that play). `offset_ms` is kept when a file changes on disk.
+- **Stitching** reuses `VttShifter.join` on one WebVTT per part (`VttWriter` applies the offset); a first part with no
+  file is replaced by an empty header so the later part is still shifted.
+- **A cue with no duration** is kept and counted, and shown for one second in the WebVTT (a browser drops a cue that
+  ends when it starts).
+- **A markup tag** is `<` followed by a letter or `/` and a letter, up to `>`, so "5 < 6" survives; ASS overrides
+  (`{\an8}`) are dropped too.
+- **"Detach"** (Admin: "Back to automatic") clears the owner's attachment and matches the file by name at once.
+- **Admin's film search** uses `GET /api/films?q=` and `GET /api/films/{id}` (no new endpoint); the Player's `at`
+  value is an edition time in milliseconds that starts playback exactly there (clamped to the runtime), instead of the
+  resume point.
+- **`GET /api/admin/subtitles`** lists every file with its `state` (`matched`, `unmatched`, `conflict`); Admin groups
+  them as Unmatched, Conflicts, Missing (a `MISSING` file wherever it belongs) and Matched.
+
 Gives forced subtitles to the 28 films that have them, with no external service.
 
 - **Spike first:** the iPhone/HLS check above, which decides between `<track>` and `<track>` + HLS rendition.
@@ -142,13 +173,13 @@ Gives forced subtitles to the 28 films that have them, with no external service.
   `PRESENT` again.
 - **Matching** runs on every scan, after `groupLibrary`, for every sidecar. It does not wait for the film to change:
   unchanged films are skipped by the scan, and a `.srt` added later must still be found. Owner attachments are never
-  re-matched. Otherwise strip the suffix, parse the stem with `FileNameParser`, and match the media file with the same
-  group key and part tag:
-  - stem with a part tag (`- pt1`) → that part's file;
-  - stem without one, for an edition of one file → that file;
-  - stem without one, for a split edition (the group key matches, the files carry part tags) → a whole-edition
-    sidecar, stored against part 1 and flagged `whole_edition`, so it is served on the edition timeline as it is;
-  - stem without an edition tag when the film has several editions, or no match → **unmatched**.
+  re-matched. **Owner decision 2026-11-11: exact names only; anything else is attached in Admin.** A sidecar attaches
+  by itself only when its path minus the `.en.forced.srt` / `.forced.en.srt` suffix equals a known original file's
+  path minus its video extension, ignoring case, in the same folder (`Taken.en.forced.srt` → `Taken.m4v`,
+  `X - pt1.en.forced.srt` → `X - pt1.m4v`, `No Time to Die.en.forced.srt` → `No Time To Die.m4v`). Several matches
+  (`.m4v` and `.mkv` with one stem) → unmatched. Whole-edition files for split editions, names without the edition
+  tag and near-misses stay **unmatched** for the owner to attach in Admin; automatic matching never sets
+  `whole_edition` (only an owner's attach with no part on a split edition does).
 - **Admin → Subtitles:**
   - Unmatched files, each with "Attach to…" (an edition and, for a split edition, whole or a part). That covers the
     7 LOTR files without renaming anything on the owner's disk.

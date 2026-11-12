@@ -11,6 +11,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import gregochr.cinefilm.film.FilmRepository;
+import gregochr.cinefilm.subtitle.SidecarSync;
 import gregochr.cinefilm.tmdb.TmdbApi;
 import gregochr.cinefilm.tmdb.TmdbMatcher;
 import java.nio.file.Path;
@@ -32,7 +33,7 @@ class LibraryLockTest {
     private ScanService scans() {
         return new ScanService(new LibraryRoot(library.toString()), mock(LibraryScanner.class),
             mock(FfprobeService.class), mock(TmdbApi.class), mock(TmdbMatcher.class), ingest, queued::add, CLOCK, lock,
-            event -> { }, mock(LibraryGrouping.class));
+            event -> { }, mock(LibraryGrouping.class), mock(SidecarSync.class));
     }
 
     @Test
@@ -66,6 +67,18 @@ class LibraryLockTest {
         assertThat(scans.progress()).isNull();
         assertThat(lock.heldBy(LibraryLock.IMPORT)).isTrue();
         verifyNoInteractions(ingest);
+    }
+
+    @Test
+    void aScanCannotStartWhileASubtitleIsBeingChangedAndSaysSo() {
+        lock.tryAcquire(LibraryLock.SUBTITLE);
+        ScanService scans = scans();
+
+        assertThatThrownBy(() -> scans.start("admin")).isInstanceOf(ScanAlreadyRunningException.class)
+            .hasMessage("A subtitle is being changed");
+
+        assertThat(queued).isEmpty();
+        assertThat(lock.heldBy(LibraryLock.SUBTITLE)).isTrue();
     }
 
     @Test

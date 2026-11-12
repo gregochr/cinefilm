@@ -20,6 +20,7 @@ import gregochr.cinefilm.film.FilmDtos.FilmList;
 import gregochr.cinefilm.film.FilmDtos.Preferences;
 import gregochr.cinefilm.playback.PreferencesService;
 import gregochr.cinefilm.settings.ServerSettingsService;
+import gregochr.cinefilm.subtitle.ForcedSubtitleService;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,11 +54,14 @@ class FilmServiceTest {
     @Mock
     private KeyframeIndexService indexes;
 
+    @Mock
+    private ForcedSubtitleService forcedSubtitles;
+
     private FilmService service;
 
     @BeforeEach
     void setUp() {
-        service = new FilmService(loader, films, preferences, transcoder, indexes, settings);
+        service = new FilmService(loader, films, preferences, transcoder, indexes, settings, forcedSubtitles);
     }
 
     private static Film owned(long id, String title, int year, String... genres) {
@@ -213,6 +217,19 @@ class FilmServiceTest {
         assertThat(detail.editions()).hasSize(1);
         assertThat(detail.editions().get(0).qualities()).extracting(FilmDtos.QualityDto::available)
             .containsOnly(false, true);
+    }
+
+    @Test
+    void detailGivesEachEditionItsForcedSubtitleFromTheForcedSubtitleService() {
+        Film heat = owned(1L, "Heat", 1995, "Crime");
+        Long editionId = heat.getEditions().get(0).getId();
+        var forced = new FilmDtos.ForcedSubtitleDto("SIDECAR", false, 1_700_000_000_000L);
+        when(films.findById(1L)).thenReturn(Optional.of(heat));
+        when(loader.views(List.of(heat))).thenReturn(List.of(view(heat)));
+        when(forcedSubtitles.forEditions(heat.getEditions())).thenReturn(java.util.Map.of(editionId, forced));
+        when(transcoder.mode()).thenReturn(EncoderMode.UNAVAILABLE);
+
+        assertThat(service.detail(1L).editions().get(0).forcedSubtitle()).isEqualTo(forced);
     }
 
     @Test

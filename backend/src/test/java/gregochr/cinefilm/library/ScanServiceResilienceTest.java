@@ -14,6 +14,7 @@ import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.library.LibraryIngest.Pending;
 import gregochr.cinefilm.library.LibraryScanner.Found;
 import gregochr.cinefilm.library.LibraryScanner.FoundFile;
+import gregochr.cinefilm.subtitle.SidecarSync;
 import gregochr.cinefilm.tmdb.MatchOutcome;
 import gregochr.cinefilm.tmdb.MatchOutcome.Status;
 import gregochr.cinefilm.tmdb.TmdbApi;
@@ -43,12 +44,13 @@ class ScanServiceResilienceTest {
     private final TmdbMatcher matcher = mock(TmdbMatcher.class);
     private final LibraryIngest ingest = mock(LibraryIngest.class);
     private final LibraryGrouping grouping = mock(LibraryGrouping.class);
+    private final SidecarSync sidecars = mock(SidecarSync.class);
     private ScanService service;
 
     @BeforeEach
     void setUp() {
         service = new ScanService(new LibraryRoot(library.toString()), scanner, ffprobe, tmdb, matcher, ingest,
-            Runnable::run, CLOCK, new LibraryLock(), event -> { }, grouping);
+            Runnable::run, CLOCK, new LibraryLock(), event -> { }, grouping, sidecars);
         when(tmdb.enabled()).thenReturn(true);
         when(ingest.startRun("admin", CLOCK.instant())).thenReturn(5L);
         when(ingest.known()).thenReturn(Map.of());

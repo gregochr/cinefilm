@@ -42,6 +42,12 @@ export const editionsApi = {
    */
   subtitleUrl: (editionId, index) => `/api/editions/${editionId}/subtitles/${index}.vtt`,
   /**
+   * The WebVTT of the edition's forced English subtitle on the edition's timeline. `version` (from the film detail's
+   * `forcedSubtitle`) only busts the browser's cache after a nudge in Admin: the server ignores it.
+   */
+  forcedSubtitleUrl: (editionId, version) =>
+    `/api/editions/${editionId}/forced-subtitles.vtt${version ? `?v=${version}` : ''}`,
+  /**
    * The JPEG of the frame at `atMs` (edition time). Floored to whole seconds, as the server does, so the browser
    * cache key matches the server's cache.
    */
@@ -99,6 +105,20 @@ export const adminApi = {
   playbackHealth: (options) => get('/api/admin/playback-health', options),
   /** The whole report of one playback as JSON: a link, not a fetch. */
   playbackHealthUrl: (playbackId) => `/api/admin/playback-health/${playbackId}`,
+  /** Every forced subtitle file beside the films, with where it belongs and how it reads. */
+  subtitles: (options) => get('/api/admin/subtitles', options),
+  /** One file's cues on the edition's timeline, its offset applied. */
+  subtitleCues: (id, options) => get(`/api/admin/subtitles/${id}/cues`, options),
+  /** Attaches a file to an edition: `part` is the 1-based part, or null for the whole edition. */
+  attachSubtitle: (id, { editionId, part }) =>
+    post(`/api/admin/subtitles/${id}/attach`, { editionId, part }),
+  /** Gives a hand-attached file back to matching by name. */
+  detachSubtitle: (id) => post(`/api/admin/subtitles/${id}/detach`),
+  /** Sets the file's timing offset in milliseconds (the server allows ten minutes either way). */
+  setSubtitleOffset: (id, offsetMs) => put(`/api/admin/subtitles/${id}/offset`, { offsetMs }),
+  /** Says the file's lines are right and in sync ("Looks right"); `unverifySubtitle` undoes it. */
+  verifySubtitle: (id) => post(`/api/admin/subtitles/${id}/verify`),
+  unverifySubtitle: (id) => del(`/api/admin/subtitles/${id}/verify`),
 };
 
 /** Server settings (Admin). `update` takes the minimum watch time in whole minutes, 0 to 30. */

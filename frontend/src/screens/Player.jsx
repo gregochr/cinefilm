@@ -34,14 +34,16 @@ import { QUESTION, questionText } from '../player/environment.js';
 import { clampVolume, keyToAction, resolveEscape } from '../player/keymap.js';
 import { indicatorModel } from '../player/indicator.js';
 import { AUTO, ORIGINAL, resolveQuality, rungName, topRung } from '../player/ladder.js';
-import { hasReachedEnd, resumePosition, seekLanded } from '../player/resume.js';
+import { hasReachedEnd, parseStartAt, seekLanded, startPosition } from '../player/resume.js';
 import { STILL_FADE_MS, initialStill, stillReducer, stillRendered } from '../player/resumeStill.js';
 import { useSlowCard } from '../player/slowCard.js';
 import { useStream } from '../player/useStream.js';
 import { formatClock, formatRemaining } from '../player/time.js';
 import {
+  FORCED_KEY,
   SUBTITLE_OFF,
   activeSubtitleKey,
+  hasSubtitleTracks,
   nextSubtitle,
   qualityName,
   resolveAudioChoice,
@@ -99,6 +101,7 @@ export default function Player() {
       film={film}
       edition={edition}
       startAtZero={params.get('start') === '0'}
+      startAtMs={parseStartAt(params.get('at'))}
       openedAt={opened.at}
     />
   );
@@ -107,10 +110,18 @@ export default function Player() {
 /** Gives up waiting for the final progress report after this long, so a dead network never traps the viewer. */
 export const LEAVE_REPORT_CAP_MS = 1500;
 
-function PlayerView({ film, edition, startAtZero, openedAt }) {
+function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
   const navigate = useNavigate();
-  // Computed once: the clock, remaining time and scrubber show the resume point from the first render.
-  const [initialSeekMs] = useState(() => (startAtZero ? 0 : resumePosition(edition.positionMs)));
+  // Computed once: the clock, remaining time and scrubber show the start point from the first render. A time in
+  // the address (`at`, "Play from here" in Admin) beats the resume point.
+  const [initialSeekMs] = useState(() =>
+    startPosition({
+      at: startAtMs,
+      startAtZero,
+      savedMs: edition.positionMs,
+      runtimeMs: edition.runtimeMs,
+    }),
+  );
   const containerRef = useRef(null);
   const videoRef = useRef(null);
   const positionRef = useRef(initialSeekMs);
@@ -177,7 +188,7 @@ function PlayerView({ film, edition, startAtZero, openedAt }) {
     stream.mode === 'hls' && quality === AUTO && indicator.measuredSlow && !questionDue,
   );
 
-  const hasSubtitles = edition.subtitleStreams.length > 0;
+  const hasSubtitles = hasSubtitleTracks(edition);
   const atEnd = hasReachedEnd(positionMs, durationMs, edition.creditsMarkerMs);
   const endOverlay = atEnd && !endDismissed;
   const { visible, poke } = useAutoHide({ playing, menuOpen: menu !== null, ended: endOverlay });
@@ -226,13 +237,11 @@ function PlayerView({ film, edition, startAtZero, openedAt }) {
   // Show the chosen subtitle track, or the forced one when Subtitles is Off. Tracks that are not showing stay
   // disabled, so the browser only fetches (and the server only extracts) a track when it is wanted.
   const applySubtitleModes = useCallback(() => {
-    const showing = activeSubtitleKey(edition.subtitleStreams, subtitle);
-    edition.subtitleStreams.forEach((subtitleStream) => {
-      const key = streamKey(subtitleStream);
-      const track = trackRefs.current.get(key)?.track;
-      if (track) track.mode = key === showing ? 'showing' : 'disabled';
+    const showing = activeSubtitleKey(edition.subtitleStreams, subtitle, edition.forcedSubtitle);
+    trackRefs.current.forEach((element, key) => {
+      if (element.track) element.track.mode = key === showing ? 'showing' : 'disabled';
     });
-  }, [edition.subtitleStreams, subtitle]);
+  }, [edition.subtitleStreams, edition.forcedSubtitle, subtitle]);
   useEffect(applySubtitleModes, [applySubtitleModes]);
 
   useEffect(() => {
@@ -545,6 +554,20 @@ function PlayerView({ film, edition, startAtZero, openedAt }) {
             src={editionsApi.subtitleUrl(edition.id, stream.index)}
           />
         ))}
+        {edition.forcedSubtitle ? (
+          <track
+            key={FORCED_KEY}
+            ref={(element) => {
+              if (element) trackRefs.current.set(FORCED_KEY, element);
+              else trackRefs.current.delete(FORCED_KEY);
+            }}
+            kind="subtitles"
+            srcLang="en"
+            data-testid="forced-subtitle-track"
+            label="English (forced)"
+            src={editionsApi.forcedSubtitleUrl(edition.id, edition.forcedSubtitle.version)}
+          />
+        ) : null}
       </video>
       {stillRendered(still) ? (
         <img
@@ -625,6 +648,7 @@ function PlayerView({ film, edition, startAtZero, openedAt }) {
               audioStreams={edition.audioStreams}
               audioValue={audio}
               subtitleStreams={edition.subtitleStreams}
+              hasForcedSubtitle={Boolean(edition.forcedSubtitle)}
               subtitleValue={subtitle}
               onAudio={chooseAudio}
               onSubtitle={chooseSubtitle}

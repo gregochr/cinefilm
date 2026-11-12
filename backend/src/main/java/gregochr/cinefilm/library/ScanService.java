@@ -7,6 +7,7 @@ import gregochr.cinefilm.library.FileNameParser.ParsedName;
 import gregochr.cinefilm.library.LibraryIngest.Pending;
 import gregochr.cinefilm.library.LibraryScanner.Found;
 import gregochr.cinefilm.library.LibraryScanner.FoundFile;
+import gregochr.cinefilm.subtitle.SidecarSync;
 import gregochr.cinefilm.tmdb.MatchOutcome;
 import gregochr.cinefilm.tmdb.MatchOutcome.Status;
 import gregochr.cinefilm.tmdb.TmdbApi;
@@ -50,13 +51,14 @@ public class ScanService {
     private final LibraryLock lock;
     private final ApplicationEventPublisher events;
     private final LibraryGrouping grouping;
+    private final SidecarSync sidecars;
     private final AtomicReference<Progress> progress = new AtomicReference<>();
 
     /** Creates the service; the executor runs scans in the background, the lock keeps scans and imports apart. */
     public ScanService(LibraryRoot root, LibraryScanner scanner, FfprobeService ffprobe, TmdbApi tmdb,
                        TmdbMatcher matcher, LibraryIngest ingest,
                        @Qualifier("scanExecutor") Executor scanExecutor, Clock clock, LibraryLock lock,
-                       ApplicationEventPublisher events, LibraryGrouping grouping) {
+                       ApplicationEventPublisher events, LibraryGrouping grouping, SidecarSync sidecars) {
         this.root = root;
         this.scanner = scanner;
         this.ffprobe = ffprobe;
@@ -68,6 +70,7 @@ public class ScanService {
         this.lock = lock;
         this.events = events;
         this.grouping = grouping;
+        this.sidecars = sidecars;
     }
 
     /**
@@ -101,6 +104,7 @@ public class ScanService {
             throw lock.heldBy(LibraryLock.SCAN) ? new ScanAlreadyRunningException()
                 : lock.heldBy(LibraryLock.IMPORT) ? new ScanAlreadyRunningException("A Plex import is running")
                 : lock.heldBy(LibraryLock.EDIT) ? new ScanAlreadyRunningException("Editions are being edited")
+                : lock.heldBy(LibraryLock.SUBTITLE) ? new ScanAlreadyRunningException("A subtitle is being changed")
                 : new ScanAlreadyRunningException("A match is being fixed");
         }
         progress.set(new Progress(0, 0, null));
@@ -190,6 +194,7 @@ public class ScanService {
         }
         ingest.markMissing(vanished);
         groupLibrary(run);
+        syncSidecars(run);
         retryPending(run);
         completeCollections(run);
         refreshDefaults(run);
@@ -278,6 +283,16 @@ public class ScanService {
         } catch (RuntimeException e) {
             run.failed++;
             LOG.warn("Could not group the library: {}", e.getClass().getSimpleName());
+        }
+    }
+
+    /** Forced subtitle files: record what the walk found, then match them to films on every scan. */
+    private void syncSidecars(Run run) {
+        try {
+            sidecars.sync(run.found);
+        } catch (RuntimeException e) {
+            run.failed++;
+            LOG.warn("Could not sync the forced subtitle files: {}", e.getClass().getSimpleName());
         }
     }
 

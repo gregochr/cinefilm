@@ -283,3 +283,48 @@ describe('Edit editions resources', () => {
     expect(last()).toEqual({ path: '/api/admin/films/40/editions', method: 'PUT', body: request });
   });
 });
+
+describe('Forced subtitle resources', () => {
+  it('builds the forced subtitle URL with the version only when there is one', () => {
+    expect(editionsApi.forcedSubtitleUrl(40, 1700000000000)).toBe(
+      '/api/editions/40/forced-subtitles.vtt?v=1700000000000',
+    );
+    expect(editionsApi.forcedSubtitleUrl(40)).toBe('/api/editions/40/forced-subtitles.vtt');
+  });
+
+  it('lists the files and reads one file’s cues', async () => {
+    const last = stubFetch();
+    await adminApi.subtitles();
+    expect(last()).toMatchObject({ path: '/api/admin/subtitles', method: 'GET' });
+    await adminApi.subtitleCues(5);
+    expect(last()).toMatchObject({ path: '/api/admin/subtitles/5/cues', method: 'GET' });
+  });
+
+  it('attaches by POST with the edition and the part, detaches by POST', async () => {
+    const last = stubFetch();
+    await adminApi.attachSubtitle(5, { editionId: 70, part: null });
+    expect(last()).toEqual({
+      path: '/api/admin/subtitles/5/attach',
+      method: 'POST',
+      body: { editionId: 70, part: null },
+    });
+    await adminApi.attachSubtitle(5, { editionId: 70, part: 2 });
+    expect(last().body).toEqual({ editionId: 70, part: 2 });
+    await adminApi.detachSubtitle(5);
+    expect(last()).toMatchObject({ path: '/api/admin/subtitles/5/detach', method: 'POST' });
+  });
+
+  it('sets the offset by PUT and checks and unchecks with POST and DELETE', async () => {
+    const last = stubFetch();
+    await adminApi.setSubtitleOffset(5, -250);
+    expect(last()).toEqual({
+      path: '/api/admin/subtitles/5/offset',
+      method: 'PUT',
+      body: { offsetMs: -250 },
+    });
+    await adminApi.verifySubtitle(5);
+    expect(last()).toMatchObject({ path: '/api/admin/subtitles/5/verify', method: 'POST' });
+    await adminApi.unverifySubtitle(5);
+    expect(last()).toMatchObject({ path: '/api/admin/subtitles/5/verify', method: 'DELETE' });
+  });
+});

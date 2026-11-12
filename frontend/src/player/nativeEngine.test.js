@@ -307,13 +307,21 @@ describe('one recovery check at a time', () => {
   });
 
   it('ignores a response that arrives after playback resumed (stale generation)', async () => {
-    const fetchImpl = vi.fn(() => new Promise((r) => setTimeout(() => r({ status: 200 }), 3000)));
+    let answer;
+    const fetchImpl = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
     const { video, handlers } = start({ fetchImpl });
     video.currentTime = 10;
     await tick(STALL_MS);
     video.currentTime = 11;
     video.dispatchEvent(new Event('timeupdate')); // recovered by itself
     await tick(3000);
+    answer({ status: 200 }); // the late answer, 3 s after the check began
+    await tick(0);
     expect(handlers.onReload).not.toHaveBeenCalled();
     expect(handlers.onSessionLost).not.toHaveBeenCalled();
     expect(video.load).not.toHaveBeenCalled();

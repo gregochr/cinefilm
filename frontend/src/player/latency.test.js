@@ -49,11 +49,12 @@ const entry = (ms, { name = URL, requestStart = 100 } = {}) => ({
   responseStart: requestStart + ms,
 });
 
-// One step per request: { rt } is found by takeRecords as soon as the body is read, { late, at } is delivered
-// to the callback `at` ms later, { none } answers with no entry, { fail } rejects, { hang } never settles (it
+// One step per request: { rt } is found by takeRecords as soon as the body is read, { late } is held until the test
+// calls `deliverLate()` (after advancing the fake clock to the moment it should arrive), { none } answers with no entry, { fail } rejects, { hang } never settles (it
 // rejects when its signal aborts, as fetch does), { status } sets the HTTP status.
 function scenario(steps) {
   const calls = [];
+  const late = [];
   const texts = { read: 0 };
   const fetchImpl = vi.fn((url, init) => {
     const step = steps[calls.length] ?? { fail: true };
@@ -70,7 +71,7 @@ function scenario(steps) {
     if (step.rt !== undefined) observer.queued.push(entry(step.rt, step.entry));
     if (step.now !== undefined) observer.deliver([entry(step.now, step.entry)]);
     if (step.late !== undefined) {
-      setTimeout(() => observer.deliver([entry(step.late, step.entry)]), step.at);
+      late.push(() => observer.deliver([entry(step.late, step.entry)]));
     }
     return Promise.resolve({
       ok: (step.status ?? 200) < 400,
@@ -81,7 +82,8 @@ function scenario(steps) {
       },
     });
   });
-  return { fetchImpl, calls, texts };
+  const deliverLate = () => late.splice(0).forEach((deliver) => deliver());
+  return { fetchImpl, calls, texts, deliverLate };
 }
 
 const run = (fetchImpl, extra = {}) =>
@@ -214,9 +216,10 @@ describe('measureLatency: the figure', () => {
 
 describe('measureLatency: the entry that arrives late', () => {
   it('is found when the callback delivers it at 199 ms', async () => {
-    const { fetchImpl } = scenario([{ late: 41, at: 199 }, { rt: 50 }, { rt: 50 }]);
+    const { fetchImpl, deliverLate } = scenario([{ late: 41 }, { rt: 50 }, { rt: 50 }]);
     const promise = run(fetchImpl);
     await vi.advanceTimersByTimeAsync(199);
+    deliverLate();
     await settle();
     expect(await promise).toBe(41);
     expect(allDisconnected()).toBe(true);
@@ -232,14 +235,15 @@ describe('measureLatency: the entry that arrives late', () => {
   });
 
   it('stops waiting as soon as the callback delivers it', async () => {
-    const { fetchImpl } = scenario([{ late: 41, at: 10 }, { rt: 50 }, { rt: 50 }]);
+    const { fetchImpl, deliverLate } = scenario([{ late: 41 }, { rt: 50 }, { rt: 50 }]);
     const promise = run(fetchImpl);
     await vi.advanceTimersByTimeAsync(9);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     // Delivered at 10 ms: the two further tries follow at once, long before the 200 ms wait would end.
     await vi.advanceTimersByTimeAsync(1);
-    expect(fetchImpl).toHaveBeenCalledTimes(LATENCY_SAMPLES);
+    deliverLate();
     await settle();
+    expect(fetchImpl).toHaveBeenCalledTimes(LATENCY_SAMPLES);
     expect(await promise).toBe(41);
     expect(vi.getTimerCount()).toBe(0);
   });

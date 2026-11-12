@@ -64,7 +64,8 @@ describe('a stale hls.js load', () => {
       gate.release();
       await gate.promise;
     });
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    // Let the released import and everything chained on it finish before asserting that none of it ran.
+    await vi.dynamicImportSettled();
 
     expect(FakeHls.instances).toHaveLength(0);
     expect(video).toHaveAttribute('src', '/api/editions/11/stream');

@@ -1,0 +1,107 @@
+/* Admin: Subtitles (forced subtitle files). Plain Admin style; amber only on the one primary "Attach". */
+.subs__group + .subs__group {
+  margin-top: 24px;
+}
+.subs__actions {
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.subs__details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+.subs__timing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.subs__timing > output {
+  min-width: 112px;
+  color: var(--cf-text-2);
+}
+.subs__cues {
+  margin: 0;
+  padding: 0;
+  max-height: 360px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--cf-line);
+  border-radius: 8px;
+}
+.subs__cue {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--cf-line);
+  font-size: var(--cf-size-ui);
+}
+.subs__cue:last-child {
+  border-bottom: 0;
+}
+.subs__time {
+  color: var(--cf-text-muted);
+}
+.subs__text {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.subs__attach {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--cf-line);
+}
+.subs__choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.subs__choices legend {
+  margin-bottom: 8px;
+}
+.subs__choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--cf-line);
+  border-radius: var(--cf-radius-card);
+  cursor: pointer;
+}
+.subs__choice:has(input:checked) {
+  background: var(--cf-surface-3);
+  border-color: var(--cf-line-strong);
+}
+.subs__choice:has(input:focus-visible) {
+  box-shadow: var(--cf-focus-ring);
+}
+.subs__choice input {
+  accent-color: var(--cf-amber);
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+.subs__choice input:focus-visible {
+  box-shadow: none;
+}
+
+@media (max-width: 600px) {
+  .subs__cue {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+  .subs__cue .admin__link {
+    grid-column: 2;
+  }
+}

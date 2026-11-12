@@ -253,7 +253,7 @@ describe('option ids', () => {
     expect(header).toHaveAttribute('aria-expanded', 'false');
     await user.type(input(), 'ha');
     const target = input().getAttribute('aria-activedescendant');
-    expect(target).toBeTruthy();
+    expect(target).toMatch(/\S/);
     expect(within(sheet()).getAllByRole('option')[0]).toHaveAttribute('id', target);
     const ids = screen
       .queryAllByRole('option')
