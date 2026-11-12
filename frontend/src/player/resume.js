@@ -2,7 +2,9 @@
 
 export const RESUME_REWIND_MS = 10000;
 export const PROGRESS_INTERVAL_MS = 10000;
-export const END_FRACTION = 0.92;
+// Where the "The end" overlay appears when there is no credits marker. This is the overlay only: the backend's
+// WatchedRule decides "watched" (still 92%, handover decision 1).
+export const END_OVERLAY_FRACTION = 0.97;
 
 /** Where playback starts: the saved position minus 10 s, never below 0. */
 export function resumePosition(savedMs) {
@@ -25,10 +27,10 @@ export function startPosition({ at = null, startAtZero = false, savedMs = 0, run
   return startAtZero ? 0 : resumePosition(savedMs);
 }
 
-/** The point at which the end-of-film overlay appears: credits marker, else 92%. */
+/** The point at which the end-of-film overlay appears: credits marker, else 97%. */
 export function endThresholdMs(runtimeMs, creditsMarkerMs) {
   if (Number.isFinite(creditsMarkerMs) && creditsMarkerMs > 0) return creditsMarkerMs;
-  return Math.floor(runtimeMs * END_FRACTION);
+  return Math.floor(runtimeMs * END_OVERLAY_FRACTION);
 }
 
 export function hasReachedEnd(positionMs, runtimeMs, creditsMarkerMs) {

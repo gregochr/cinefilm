@@ -152,13 +152,13 @@ describe('playing a film split across several files', () => {
     expect(log.progress.at(-1)).toBe(Math.round((JOIN_S + 600) * 1000));
   });
 
-  it('offers the end of the film at 92% of the summed runtime, not of a part', async () => {
+  it('offers the end of the film at 97% of the summed runtime, not of a part', async () => {
     const { video } = await open();
     await landResume(video);
-    await moveTo(video, 12_971);
+    await moveTo(video, 13_676);
     expect(screen.queryByText('Mark as watched')).not.toBeInTheDocument();
 
-    await moveTo(video, 12_972);
+    await moveTo(video, 13_677);
     expect(await screen.findByText('Mark as watched')).toBeInTheDocument();
   });
 

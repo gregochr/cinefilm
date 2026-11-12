@@ -314,10 +314,13 @@ describe('Player', () => {
     expect(screen.queryByText(/Subtitles:/)).not.toBeInTheDocument();
   });
 
-  it('shows the end-of-film overlay at 92% and Esc keeps watching', async () => {
+  it('shows the end-of-film overlay at 97% and Esc keeps watching', async () => {
     const { video, player } = await openPlayer();
     player.focus();
     video.currentTime = 9400;
+    fireEvent.timeUpdate(video);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    video.currentTime = 9900;
     fireEvent.timeUpdate(video);
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('The end')).toBeInTheDocument();
