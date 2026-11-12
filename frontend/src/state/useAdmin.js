@@ -38,14 +38,15 @@ export function useScan() {
   const [ratingsNotice, setRatingsNotice] = useState(null);
   const running = Boolean(data?.running);
   const ratingsRunning = Boolean(data?.ratingsRunning);
+  const subtitlesRunning = Boolean(data?.openSubtitlesRunning);
   useAnnounceWhenFinished(data ? (data.lastScan?.finishedAt ?? null) : undefined);
 
-  // The same status carries the ratings refresh, so one poll follows whichever is running.
+  // The same status carries the ratings refresh, so one poll follows whichever is running (scan, ratings or subtitle search).
   useEffect(() => {
-    if (!running && !ratingsRunning) return undefined;
+    if (!running && !ratingsRunning && !subtitlesRunning) return undefined;
     const id = setTimeout(reload, SCAN_POLL_MS);
     return () => clearTimeout(id);
-  }, [running, ratingsRunning, data, error, reload]);
+  }, [running, ratingsRunning, subtitlesRunning, data, error, reload]);
 
   const refreshRatings = useCallback(async () => {
     setRatingsStarting(true);

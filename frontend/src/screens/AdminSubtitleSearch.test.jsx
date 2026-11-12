@@ -1,8 +1,11 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
 async function openScanCard(over) {
   installFetch((method, url) =>
@@ -35,5 +38,35 @@ describe('Admin: the subtitle search line in the Library scan card', () => {
     await within(card).findByText(/Ratings last refreshed/);
     expect(within(card).queryByText(/ubtitles/)).not.toBeInTheDocument();
     expect(within(card).queryByText(/Searching/)).not.toBeInTheDocument();
+  });
+
+  it('keeps polling while a search runs alone, then shows when it finished', async () => {
+    let polls = 0;
+    let fileReads = 0;
+    installFetch((method, url) => {
+      if (url === '/api/admin/subtitles') {
+        fileReads += 1;
+        return null;
+      }
+      if (url !== '/api/admin/scan') return null;
+      polls += 1;
+      return respond(
+        polls < 3
+          ? { ...fixtures.adminScan, openSubtitlesRunning: true }
+          : { ...fixtures.adminScan, openSubtitlesLastSearchedAt: '2026-11-13T06:05:00Z' },
+      );
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderApp('/admin');
+    const card = await screen.findByRole('region', { name: 'Library scan' });
+    expect(await within(card).findByText('Searching for subtitles…')).toBeVisible();
+
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+
+    expect(await within(card).findByText('Subtitles searched 13 Nov 06:05')).toBeVisible();
+    // The subtitle files are read again, so the new checks and evidence show.
+    await waitFor(() => expect(fileReads).toBeGreaterThan(1));
+    expect(within(card).queryByText('Searching for subtitles…')).not.toBeInTheDocument();
   });
 });
