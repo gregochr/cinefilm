@@ -278,3 +278,46 @@ describe('Which films need them: loading and failing', () => {
     await waitFor(() => expect(state.lists).toBe(2));
   });
 });
+
+describe('Which films need them: OpenSubtitles evidence', () => {
+  const item = (name) =>
+    screen.getByRole('group', { name: `Forced subtitles for ${name}` }).closest('li');
+
+  it('says how many foreign-parts-only files OpenSubtitles has, one or several', async () => {
+    await open({
+      films: [
+        film(1, {
+          year: null,
+          reason: 'OPENSUBTITLES',
+          openSubtitlesForcedCount: 7,
+          openSubtitlesSearchedAt: '2026-11-12T06:00:00Z',
+        }),
+        film(2, {
+          year: null,
+          reason: 'OPENSUBTITLES',
+          openSubtitlesForcedCount: 1,
+          openSubtitlesSearchedAt: '2026-11-12T06:00:00Z',
+        }),
+      ],
+    });
+    expect(
+      within(item('Film 1')).getByText('OpenSubtitles has 7 foreign-parts-only files'),
+    ).toBeVisible();
+    expect(
+      within(item('Film 2')).getByText('OpenSubtitles has 1 foreign-parts-only file'),
+    ).toBeVisible();
+  });
+
+  it('notes OpenSubtitles has not been searched for an unsure film, and only then', async () => {
+    await open();
+    await userEvent.click(chip(/^All/));
+    expect(within(item('Alien (1979)')).getByText('OpenSubtitles not searched yet')).toBeVisible();
+    expect(within(item('Obscure Film')).getByText('OpenSubtitles not searched yet')).toBeVisible();
+    expect(
+      within(item('Heat (1995)')).queryByText('OpenSubtitles not searched yet'),
+    ).not.toBeInTheDocument();
+    expect(
+      within(item('Taken (2008)')).queryByText('OpenSubtitles not searched yet'),
+    ).not.toBeInTheDocument();
+  });
+});

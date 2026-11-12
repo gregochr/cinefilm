@@ -74,3 +74,15 @@ const CHANGE_LABELS = { split: 'Split', join: 'Joined', flag: 'Check' };
 export function changeLabel(kind) {
   return CHANGE_LABELS[kind] ?? kind;
 }
+
+/**
+ * The Library scan card's OpenSubtitles line: "Subtitles searched 12 Nov 06:00", "Searching for subtitles…" while a
+ * search runs, "Subtitles not searched yet" before the first; null when the search is off. `format` formats the time.
+ */
+export function describeSubtitleSearch({ enabled, running, lastSearchedAt }, format) {
+  if (!enabled) return null;
+  if (running) return 'Searching for subtitles…';
+  return lastSearchedAt
+    ? `Subtitles searched ${format(lastSearchedAt)}`
+    : 'Subtitles not searched yet';
+}

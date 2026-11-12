@@ -110,8 +110,11 @@ export function reasonText(row) {
       return "TMDB hasn't been asked yet";
     case 'OWNER':
       return 'Your choice';
-    case 'OPENSUBTITLES':
-      return 'OpenSubtitles has foreign-parts-only subtitles';
+    case 'OPENSUBTITLES': {
+      const n = row.openSubtitlesForcedCount;
+      if (!(n > 0)) return 'OpenSubtitles has foreign-parts-only subtitles';
+      return `OpenSubtitles has ${n} foreign-parts-only ${n === 1 ? 'file' : 'files'}`;
+    }
     default:
       return '';
   }
@@ -123,4 +126,10 @@ export function needProblem(failure) {
     return 'A scan is running: try again when it finishes';
   }
   return "Couldn't save: try again";
+}
+
+/** "OpenSubtitles not searched yet" for an unsure or unknown film that has not been searched; null for any other. */
+export function searchNote(row) {
+  const open = row.need === 'UNSURE' || row.need === 'UNKNOWN';
+  return open && row.openSubtitlesSearchedAt == null ? 'OpenSubtitles not searched yet' : null;
 }

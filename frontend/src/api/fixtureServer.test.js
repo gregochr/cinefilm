@@ -276,6 +276,19 @@ describe('fixture server: Admin settings', () => {
     expect((await call('GET', '/api/admin/settings')).continueWatchingMinMinutes).toBe(5);
   });
 
+  it('serves the subtitle files with every check state, and the scan status with the search fields', async () => {
+    const files = await call('GET', '/api/admin/subtitles');
+    expect(files.map((f) => f.check?.verdict ?? null)).toEqual([
+      'AGREES',
+      null,
+      'CHECK',
+      'CHECK',
+      null,
+    ]);
+    const scan = await call('GET', '/api/admin/scan');
+    expect(scan).toMatchObject({ openSubtitlesEnabled: true, openSubtitlesRunning: false });
+  });
+
   it('serves the forced-subtitle list, and a PUT applies the owner’s choice and Automatic restores the rule', async () => {
     const before = await call('GET', '/api/admin/forced-subtitles/films');
     expect(before.films).toHaveLength(7);

@@ -1,7 +1,7 @@
 // Display and rule helpers for the Admin "Subtitles" panel. No JSX: the Apple TV and native clients reuse them.
 import { ApiError } from '../api/client.js';
 import { formatClock } from '../player/time.js';
-import { titleWithYear } from './scanFormat.js';
+import { formatScanTime, titleWithYear } from './scanFormat.js';
 
 /** The server allows a timing offset of this many milliseconds either way. */
 export const MAX_OFFSET_MS = 600000;
@@ -125,4 +125,73 @@ export function subtitleProblem(failure) {
     return failure.body?.error ?? 'That was not accepted. Check it and try again.';
   if (status === 404) return 'That is no longer there. Reload the list and look again.';
   return 'Something went wrong. Try again.';
+}
+
+/** Whether playback serves this file (the server says): only those are compared with OpenSubtitles. */
+export function isServed(item) {
+  return item.served === true;
+}
+
+/** The server words a timing hint from this offset (half a second); a hint is built here only when it sent none. */
+const HINT_MS = 500;
+
+/** "OpenSubtitles' file is 1.2 s later": a positive offset means OpenSubtitles' lines come later than this file's. */
+export function offsetHint(bestOffsetMs) {
+  if (Math.abs(bestOffsetMs) < HINT_MS) return null;
+  const seconds = (Math.abs(bestOffsetMs) / 1000).toFixed(1);
+  return `OpenSubtitles' file is ${seconds} s ${bestOffsetMs > 0 ? 'later' : 'earlier'}`;
+}
+
+const isHint = (reason) => /^OpenSubtitles' file is [\d.]+ s (later|earlier)$/.test(reason);
+
+/**
+ * What a file's check says, in words: `{ kind, label, lines, reference }`, or null for a file that is not served
+ * (nothing to compare). `kind` is `agrees`, `check` or `unchecked`; `lines` are the reasons (CHECK), the timing hint
+ * (AGREES) or the quiet explanation (unchecked); `reference` is the muted "Compared with ... · checked ..." line.
+ */
+export function checkSummary(item) {
+  const check = item.check;
+  if (!check) {
+    if (!isServed(item)) return null;
+    return {
+      kind: 'unchecked',
+      label: 'Unchecked',
+      lines: ['No OpenSubtitles file to compare with yet'],
+      reference: null,
+    };
+  }
+  const reasons = check.reasons ?? [];
+  const when = check.checkedAt ? `checked ${formatScanTime(check.checkedAt)}` : null;
+  const reference =
+    [check.referenceRelease ? `Compared with ${check.referenceRelease}` : null, when]
+      .filter(Boolean)
+      .join(' · ') || null;
+  if (check.verdict === 'CHECK') {
+    return { kind: 'check', label: 'Needs checking', lines: reasons, reference };
+  }
+  const hint = reasons.find(isHint) ?? offsetHint(check.bestOffsetMs);
+  return {
+    kind: 'agrees',
+    label: 'Agrees with OpenSubtitles',
+    lines: hint ? [hint] : [],
+    reference,
+  };
+}
+
+/** The filter chips on the file list, in order; `matches` says which files a chip lists. */
+export const FILE_FILTERS = [
+  { key: 'all', label: 'All', matches: () => true },
+  { key: 'check', label: 'Needs checking', matches: (item) => item.check?.verdict === 'CHECK' },
+  { key: 'unchecked', label: 'Unchecked', matches: (item) => !item.check && isServed(item) },
+];
+
+/** The files a chip lists (all of them for an unknown key). */
+export function filterSidecars(items, key) {
+  const filter = FILE_FILTERS.find((f) => f.key === key) ?? FILE_FILTERS[0];
+  return items.filter(filter.matches);
+}
+
+/** How many files each chip lists, by chip key. */
+export function fileFilterCounts(items) {
+  return Object.fromEntries(FILE_FILTERS.map((f) => [f.key, items.filter(f.matches).length]));
 }
