@@ -236,6 +236,97 @@ No source says outright whether a film needs them. CineFilm combines signals and
   - The download link comes from a response, so it is fetched GET-only, from an allowlist of OpenSubtitles hosts,
     without following redirects off them, with a size cap enforced while reading (before any decompression).
 
+#### Phase 2 build: four small PRs (planned 2026-11-12)
+
+**API facts checked on 2026-11-12** (one live search from dockermacmini with the owner's key):
+- `GET https://api.opensubtitles.com/api/v1/subtitles?foreign_parts_only=only&imdb_id=936501&languages=en` with
+  `Api-Key` and `User-Agent` headers answers 200 **without logging in**. Parameters are sent in alphabetical order and
+  the IMDb id without `tt` or leading zeros (the API redirects otherwise).
+- Rate limit: 5 requests a second (`ratelimit-*` headers). Responses carry `cache-control: max-age=86400`.
+- Each result: `id`, and `attributes` with `foreign_parts_only`, `fps`, `download_count`, `from_trusted`,
+  `hearing_impaired`, `machine_translated`, `ai_translated`, `release`, `upload_date`, `uploader.rank`,
+  `feature_details.imdb_id`, and `files[].file_id` (what `/download` takes). Paged: `total_count`, `per_page` 50.
+- *Taken* (tt0936501) returns 7 results, 23.976 to 25 fps. Login and `/download` are still unchecked (phase 2d).
+
+**Model change from the design above:** the need is **worked out when read**, not stored. Only its inputs are stored:
+the owner's choice, TMDB's languages and (2c) the OpenSubtitles evidence. A stored verdict would go stale whenever a
+sidecar was attached or moved. So `film` gains `forced_need_owner` (`NEEDED | NOT_NEEDED`, null = automatic) instead
+of `forced_need` + `forced_need_source`.
+
+**The rule** (`ForcedNeed.decide`, pure, first match wins):
+
+| # | Input | Need | Reason |
+|---|---|---|---|
+| 1 | Owner chose | that | `OWNER` |
+| 2 | A `PRESENT` sidecar is attached to a file of the film | `NEEDED` | `SIDECAR` |
+| 3 | A file of the film has an embedded forced track in English (`eng`, `en`) or with no language (null, `und`) | `NEEDED` | `EMBEDDED_FORCED` (pictures: cannot be shown yet) |
+| 4 | (2c) OpenSubtitles has English foreign-parts-only results | `NEEDED` | `OPENSUBTITLES` |
+| 5 | TMDB not asked yet, or no TMDB match | `UNKNOWN` | `NO_LANGUAGES` |
+| 6 | `original_language` is not `en` | `UNSURE` | `FOREIGN_LANGUAGE_FILM` (needs full subtitles: out of scope) |
+| 7 | Spoken languages are exactly English | `NOT_NEEDED` | `ENGLISH_ONLY` |
+| 8 | Anything else (other spoken languages, or none listed) | `UNSURE` | `OTHER_LANGUAGES` / `NO_SPOKEN_LANGUAGES` |
+
+TMDB's `xx` ("no language") is ignored in the spoken list. "Has a forced subtitle" for the Admin filter means rule 2:
+the sidecar plays.
+
+**2a — backend: TMDB languages, the rule, the owner's choice** (no UI)
+- `V14__forced_need.sql` (expand-only): `film.original_language varchar(8)`, `film.spoken_languages varchar(200)`
+  (ISO 639-1 codes, lower case, comma-separated, TMDB's order, duplicates dropped, cut at a whole code to fit; empty string = TMDB lists none),
+  `film.languages_fetched_at timestamptz` (null = not asked yet), `film.forced_need_owner varchar(16)` with a check
+  constraint.
+- `TmdbModels.MovieDetails` gains `originalLanguage` and `spokenLanguages` (`spoken_languages[].iso_639_1`). Keep the
+  existing shorter constructors working. Codes are validated (`^[a-z]{2,3}$`) and anything else is dropped: TMDB text is
+  untrusted.
+- `LibraryIngest.applyMovie` stores both and stamps `languages_fetched_at` from the injected `Clock`. Every scan,
+  Plex import and Fix match then keeps them current.
+- **Backfill** (`LanguagesRefresher`, modelled on `RatingsRefresher`): films with a `tmdb_id` and no
+  `languages_fetched_at`, one run at a time on its own executor, started after `ScanFinished`, `PlexImportFinished` and
+  at start-up. Uses `TmdbApi.movie(id)` (paced by `TmdbClient`). Saves with one targeted update
+  `... where id = :id and tmdb_id = :tmdbId` (a film rematched meanwhile is left for the next run). A TMDB outage stops
+  the run; nothing is stamped, so it is retried. A film TMDB no longer has is stamped with null languages, so it is
+  not asked again every scan (it shows `UNKNOWN`). No periodic refresh: languages do not change.
+- **Read:** `GET /api/admin/forced-subtitles/films` → every film (sorted by sort title):
+  `{filmId, title, year, need, reason, ownerChoice, originalLanguage, spokenLanguages[], hasForcedSubtitle}` and
+  `counts {needed, neededMissing, unsure, unknown, notNeeded}`. Built from **three queries** (films with language
+  columns; film ids with an attached present sidecar; film ids with an embedded English or language-less forced
+  stream), never one query per film. 1,077 films is about 150 KB; no paging.
+- **Write:** `PUT /api/admin/films/{id}/forced-need` `{choice: "NEEDED" | "NOT_NEEDED" | null}` → that film's row.
+  Under `LibraryLock` (`LibraryLock.SUBTITLE`) in a `TransactionTemplate`, lock released after commit (409 while a
+  scan holds it, 404 for an unknown film, 400 for another value), as in `SubtitleAdminService`.
+- **Tests:** the rule table row by row, including `xx`, upper-case codes, empty lists and every precedence pair;
+  TMDB parsing (missing, empty, malformed fields); `applyMovie` stamping; the refresher (outage stops it, a rematch
+  during the call is not overwritten, a vanished film is stamped, one run at a time); the three-query read
+  (`@DataJpaTest`, including a `MISSING` sidecar and an unmatched sidecar not counting); the controller contract;
+  the `V14` migration in the integration suite. `foundation-plan.md` API section updated.
+
+**2b — frontend: Admin → Subtitles, "Which films need them"**
+- A section above the file list. Filters (radio chips): **Needed, none yet** (default), **Unsure**, **Unknown**,
+  **Not needed**, **All**, each with its count.
+- Each row: title (year), the need and a plain reason ("Forced subtitle file attached", "Forced track inside the file
+  (pictures: can't be shown yet)", "Not in English originally: needs full subtitles", "English only (TMDB)", "Also
+  spoken: French, Russian (TMDB)", "TMDB hasn't been asked yet"), and three buttons: **Needed**, **Not needed**,
+  **Automatic** (the current one pressed, `aria-pressed`). The owner's choice is labelled "Your choice".
+- Language names from `Intl.DisplayNames` (fallback: the code). Data and logic in `frontend/src/api` and
+  `frontend/src/state`, no JSX there.
+- A change applies the returned row and refreshes the counts. One request per film at a time; a newer click on the
+  same film wins; a failed request restores the row and says so beside it. A refresh error shows with Try again even
+  while the old list is shown.
+- Shown 100 rows at a time with "Show more" (the All filter has 1,077 rows).
+
+**2c — backend: OpenSubtitles search (evidence for rule 4)**
+- `OpenSubtitlesClient` (search only; no login, no download): key from `OPENSUBTITLES_API_KEY`, `User-Agent`
+  `CineFilm v<version>`, never logged. Paced under 5 a second, retries 429 with `Retry-After`, a timeout, and a
+  response-size cap. Off when the key is absent (as OMDb is).
+- `film.os_forced_count int`, `film.os_searched_at timestamptz`, `film.os_best json` (the top-ranked result's id,
+  file id, release, fps, download count; ≤ 2 KB). Searched for films with an IMDb id whose need is not settled by rules
+  1–3, never searched before or searched more than 30 days ago with no result, after each scan and daily.
+- Rule 4 switches on. Admin rows show "OpenSubtitles: 7 foreign-parts-only files" (2c includes that small frontend
+  change, or it rides with 2d's).
+- `SECURITY.md` gains OpenSubtitles as an outbound service.
+
+**2d — the cross-check of existing sidecars** (login, `/download`, quota, comparison, Admin `CHECK` reason). Planned
+in detail once 2c is merged and login and `/download` have been tried with one real download.
+
 ### Phase 3 — automatic timing check
 
 - **Reference first, speech second:**
