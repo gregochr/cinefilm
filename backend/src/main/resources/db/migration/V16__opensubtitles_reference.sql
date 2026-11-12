@@ -1,7 +1,7 @@
 -- Checking the owner's forced subtitle files against OpenSubtitles (expand-only: three new tables).
 --
 -- opensubtitles_reference: a subtitle downloaded from OpenSubtitles as the reference for a film, kept and reused (phases
--- 3 and 4 read it too) so the same file is never downloaded twice for a film. os_file_id is the file id /download took.
+-- 3 and 4 read it too) so the same file is never downloaded twice for a film and IMDb id (a reference fetched for another IMDb id is never reused). os_file_id is the file id /download took.
 -- cues_text is the cues normalised to SRT (at most 1 MB); cue_count 0 means the download could not be read: it is kept
 -- (as an unusable reference) so that file id is never fetched again. failed_downloads counts downloads that were charged
 -- but gave no usable file; at 3 (or at once for a permanent failure: link refused, too big, no cues) it is final. imdb_id is the IMDb id it was fetched for, so a
@@ -16,7 +16,7 @@ CREATE TABLE opensubtitles_reference (
     cue_count INTEGER NOT NULL,
     failed_downloads INTEGER NOT NULL DEFAULT 0,
     fetched_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    CONSTRAINT opensubtitles_reference_film_file_uq UNIQUE (film_id, os_file_id)
+    CONSTRAINT opensubtitles_reference_film_file_uq UNIQUE (film_id, imdb_id, os_file_id)
 );
 
 -- opensubtitles_budget: the downloads spent per UTC day, so a restart does not hand out a fresh daily allowance.

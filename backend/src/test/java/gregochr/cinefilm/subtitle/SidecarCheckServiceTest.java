@@ -365,4 +365,33 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
         DueCheck due = onlyDue();
         assertThat(due.osFileId()).isEqualTo(6022);
     }
+
+    @Test
+    void aResultIsDroppedWhenTheFilmsBestFileChangedBetweenDueAndSaveButTheReferenceIsKept() {
+        Film film = searchedFilm("Taken", 1, "tt0936501", 5011);
+        sidecar("Taken.en.forced.srt", fileId(film, 1), false);
+        DueCheck due = onlyDue();
+        OpenSubtitlesReference reference = reference(film, 5011);
+
+        film.setOsBest(new OpenSubtitlesResult(2, 6022, "Better", 23.976, 1, true, false, null, null).toJson());
+        films.saveAndFlush(film);
+
+        assertThat(service.save(due, reference, AGREES, LATER)).isFalse();
+        assertThat(checks.findAll()).isEmpty();
+        assertThat(references.findById(reference.getId())).isPresent();
+    }
+
+    @Test
+    void aResultIsDroppedWhenTheFilmHasNoBestResultAnyMore() {
+        Film film = searchedFilm("Taken", 1, "tt0936501", 5011);
+        sidecar("Taken.en.forced.srt", fileId(film, 1), false);
+        DueCheck due = onlyDue();
+        OpenSubtitlesReference reference = reference(film, 5011);
+
+        film.setOsBest(null);
+        films.saveAndFlush(film);
+
+        assertThat(service.save(due, reference, AGREES, LATER)).isFalse();
+        assertThat(checks.findAll()).isEmpty();
+    }
 }

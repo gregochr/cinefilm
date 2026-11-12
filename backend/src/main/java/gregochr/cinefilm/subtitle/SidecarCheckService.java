@@ -116,6 +116,11 @@ public class SidecarCheckService {
         if (film == null || !reference.getImdbId().equals(film.getImdbId())) {
             return false;
         }
+        // The film's best file must still be the one that was compared with (the reference is kept either way).
+        OpenSubtitlesResult best = film.getOsBest() == null ? null : OpenSubtitlesResult.fromJson(film.getOsBest());
+        if (best == null || best.fileId() != due.osFileId()) {
+            return false;
+        }
         Edition edition = editions.findWithFilesByFilmIdIn(List.of(due.filmId())).stream()
             .filter(e -> e.getId().equals(due.editionId())).findFirst().orElse(null);
         if (edition == null) {

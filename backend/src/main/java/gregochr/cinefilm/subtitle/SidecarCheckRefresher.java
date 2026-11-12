@@ -202,7 +202,9 @@ public class SidecarCheckRefresher {
      * before anything else is done with it.
      */
     private OpenSubtitlesReference reference(DueCheck due) {
-        OpenSubtitlesReference stored = references.findByFilmIdAndOsFileId(due.filmId(), due.osFileId()).orElse(null);
+        // Only a reference fetched for the film's current IMDb id may be reused.
+        OpenSubtitlesReference stored = references
+            .findByFilmIdAndImdbIdAndOsFileId(due.filmId(), due.imdbId(), due.osFileId()).orElse(null);
         if (stored != null && stored.isFinal()) {
             return stored;
         }
@@ -281,7 +283,8 @@ public class SidecarCheckRefresher {
             return references.saveAndFlush(reference);
         } catch (DataIntegrityViolationException e) {
             // Another writer stored it first: use theirs.
-            return references.findByFilmIdAndOsFileId(due.filmId(), due.osFileId()).orElseThrow(() -> e);
+            return references.findByFilmIdAndImdbIdAndOsFileId(due.filmId(), due.imdbId(), due.osFileId())
+                .orElseThrow(() -> e);
         }
     }
 

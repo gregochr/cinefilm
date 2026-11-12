@@ -93,7 +93,8 @@ class SidecarCheckIntegrationTest extends IntegrationTestBase {
         assertThat(loaded.getBestOffsetMs()).isEqualTo(-300);
         assertThat(loaded.getReasons()).hasSize(1000);
         assertThat(loaded.getCheckedAt()).isEqualTo(NOW);
-        assertThat(references.findByFilmIdAndOsFileId(film.getId(), 5011).orElseThrow().getRelease()).hasSize(200);
+        assertThat(references.findByFilmIdAndImdbIdAndOsFileId(film.getId(), "tt0936501", 5011)
+            .orElseThrow().getRelease()).hasSize(200);
     }
 
     @Test
