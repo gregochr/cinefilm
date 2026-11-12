@@ -71,7 +71,7 @@ class SubtitleAdminCheckTest extends SubtitleTestBase {
     }
 
     private String versionOf(Film film, SubtitleSidecar row) {
-        return "v" + row.getUpdatedAt().toEpochMilli() + "|" + fileId(film, 1) + "|" + row.getId() + "@0";
+        return forced.served(film.getEditions()).get(film.getEditions().get(0).getId()).version();
     }
 
     @Test
@@ -119,8 +119,8 @@ class SubtitleAdminCheckTest extends SubtitleTestBase {
         Film film = filmWithImdb("Towers", 2);
         SubtitleSidecar whole = sidecar("Towers.en.forced.srt", fileId(film, 1), true);
         SubtitleSidecar part = sidecar("Towers - pt2.en.forced.srt", fileId(film, 2), false);
-        check(film, "v" + NOW.toEpochMilli() + "|" + fileId(film, 1) + "," + fileId(film, 2) + "|" + whole.getId()
-            + "@0", reference(film, "tt0936501"));
+        check(film, "p" + fileId(film, 1) + "," + fileId(film, 2) + "|" + whole.getId() + "@0/0/"
+            + ForcedSubtitleServedTest.fingerprint(CUES), reference(film, "tt0936501"));
 
         assertThat(listed(whole).check()).isNotNull();
         assertThat(listed(part).check()).isNull();

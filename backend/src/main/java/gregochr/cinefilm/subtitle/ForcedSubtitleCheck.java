@@ -32,7 +32,7 @@ public class ForcedSubtitleCheck {
     private Long editionId;
 
     /** What was compared: see {@link ServedSubtitles#version}. */
-    @Column(nullable = false, length = 400)
+    @Column(nullable = false, length = 1000)
     private String servedVersion;
 
     @Column(nullable = false)

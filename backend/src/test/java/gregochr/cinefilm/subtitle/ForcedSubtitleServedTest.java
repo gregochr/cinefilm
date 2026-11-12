@@ -6,7 +6,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.Presence;
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -23,6 +22,12 @@ class ForcedSubtitleServedTest extends SubtitleTestBase {
         return forced.served(film.getEditions());
     }
 
+    /** The first 16 hex characters of the SHA-256 of some cue text. */
+    static String fingerprint(String cues) {
+        return gregochr.cinefilm.web.JsonEtag.etag(cues.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+            .substring(3, 19);
+    }
+
     private static SubtitleCue cue(long start, long end, String text) {
         return new SubtitleCue(start, end, text);
     }
@@ -36,8 +41,8 @@ class ForcedSubtitleServedTest extends SubtitleTestBase {
 
         assertThat(served.cues()).containsExactly(cue(10_000, 12_000, "Hello"), cue(20_000, 22_500, "World"));
         assertThat(served.ownerVerified()).isFalse();
-        assertThat(served.version()).isEqualTo("v" + NOW.toEpochMilli() + "|" + fileId(film, 1) + "|" + row.getId()
-            + "@0");
+        assertThat(served.version()).isEqualTo("p" + fileId(film, 1) + "|" + row.getId() + "@0/0/"
+            + fingerprint(CUES));
     }
 
     @Test
@@ -72,8 +77,8 @@ class ForcedSubtitleServedTest extends SubtitleTestBase {
 
         assertThat(served.cues()).containsExactly(cue(10_000, 12_000, "Hello"), cue(20_000, 22_500, "World"),
             cue(HOUR + 10_500, HOUR + 12_500, "Hello"), cue(HOUR + 20_500, HOUR + 23_000, "World"));
-        assertThat(served.version()).isEqualTo("v" + NOW.toEpochMilli() + "|" + fileId(film, 1) + ","
-            + fileId(film, 2) + "|" + first.getId() + "@0," + second.getId() + "@" + HOUR);
+        assertThat(served.version()).isEqualTo("p" + fileId(film, 1) + "," + fileId(film, 2) + "|" + first.getId()
+            + "@0/0/" + fingerprint(CUES) + "," + second.getId() + "@" + HOUR + "/500/" + fingerprint(CUES));
     }
 
     @Test
@@ -96,7 +101,7 @@ class ForcedSubtitleServedTest extends SubtitleTestBase {
         ServedSubtitle served = served(film).get(film.getEditions().get(0).getId());
 
         assertThat(served.cues()).containsExactly(cue(10_000, 12_000, "Hello"), cue(20_000, 22_500, "World"));
-        assertThat(served.version()).endsWith("|" + whole.getId() + "@0");
+        assertThat(served.version()).endsWith("|" + whole.getId() + "@0/0/" + fingerprint(CUES));
     }
 
     @Test
@@ -106,7 +111,7 @@ class ForcedSubtitleServedTest extends SubtitleTestBase {
         Long editionId = film.getEditions().get(0).getId();
         String original = served(film).get(editionId).version();
 
-        row.setUpdatedAt(NOW.plus(Duration.ofMinutes(1)));
+        row.setCuesText(CUES.replace("Hello", "Hallo"));
         String touched = served(film).get(editionId).version();
         row.setMediaFileId(fileId(film, 1));
         String moved = served(film).get(editionId).version();
@@ -191,5 +196,54 @@ class ForcedSubtitleServedTest extends SubtitleTestBase {
 
         assertThat(served.cues()).extracting(SubtitleCue::startMs).containsExactly(HOUR + 10_000, HOUR + 20_000,
             2 * HOUR + 10_000, 2 * HOUR + 20_000);
+    }
+
+    @Test
+    void anOffsetChangeWithTheSameUpdatedAtStillChangesTheVersion() {
+        Film film = filmWithParts("Taken", 1, 90);
+        SubtitleSidecar row = sidecar("Taken.en.forced.srt", fileId(film, 1), false);
+        Long editionId = film.getEditions().get(0).getId();
+        String before = served(film).get(editionId).version();
+
+        row.setOffsetMs(250);
+
+        assertThat(row.getUpdatedAt()).isEqualTo(NOW);
+        assertThat(served(film).get(editionId).version()).isNotEqualTo(before);
+    }
+
+    @Test
+    void aCueChangeWithTheSameUpdatedAtStillChangesTheVersion() {
+        Film film = filmWithParts("Taken", 1, 90);
+        SubtitleSidecar row = sidecar("Taken.en.forced.srt", fileId(film, 1), false);
+        Long editionId = film.getEditions().get(0).getId();
+        String before = served(film).get(editionId).version();
+
+        row.setCuesText(CUES.replace("Hello", "Hallo"));
+
+        assertThat(row.getUpdatedAt()).isEqualTo(NOW);
+        assertThat(served(film).get(editionId).version()).isNotEqualTo(before);
+    }
+
+    @Test
+    void aSecondFileSharingTheLatestTimestampCannotHideAChangeInTheFirst() {
+        Film film = filmWithParts("Towers", 2, 60);
+        SubtitleSidecar first = sidecar("Towers - pt1.en.forced.srt", fileId(film, 1), false);
+        sidecar("Towers - pt2.en.forced.srt", fileId(film, 2), false);
+        Long editionId = film.getEditions().get(0).getId();
+        String before = served(film).get(editionId).version();
+
+        first.setOffsetMs(-100);
+
+        assertThat(served(film).get(editionId).version()).isNotEqualTo(before);
+    }
+
+    @Test
+    void unchangedStateGivesAnIdenticalVersionOnEveryCall() {
+        Film film = filmWithParts("Towers", 2, 60);
+        sidecar("Towers - pt1.en.forced.srt", fileId(film, 1), false);
+        sidecar("Towers - pt2.en.forced.srt", fileId(film, 2), false);
+        Long editionId = film.getEditions().get(0).getId();
+
+        assertThat(served(film).get(editionId).version()).isEqualTo(served(film).get(editionId).version());
     }
 }

@@ -76,7 +76,8 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
         DueCheck due = onlyDue();
 
         assertThat(due).isEqualTo(new DueCheck(film.getId(), film.getEditions().get(0).getId(), "tt0936501", 5011,
-            "Taken.2008.BluRay", 1, "v" + NOW.toEpochMilli() + "|" + fileId(film, 1) + "|" + row.getId() + "@0", false,
+            "Taken.2008.BluRay", 1, "p" + fileId(film, 1) + "|" + row.getId() + "@0/0/"
+            + ForcedSubtitleServedTest.fingerprint(CUES), false,
             List.of(new SubtitleCue(10_000, 12_000, "Hello"), new SubtitleCue(20_000, 22_500, "World"))));
     }
 
@@ -237,7 +238,7 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
         SubtitleSidecar sidecar = sidecar("Taken.en.forced.srt", fileId(film, 1), false);
         OpenSubtitlesReference reference = reference(film, 5011);
         service.save(onlyDue(), reference, AGREES, NOW);
-        sidecar.setUpdatedAt(LATER);
+        sidecar.setOffsetMs(300);
         DueCheck again = onlyDue();
 
         boolean saved = service.save(again, reference, new Result(2, 9, 0.5, 0, Verdict.CHECK,
@@ -269,7 +270,7 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
         DueCheck due = onlyDue();
         OpenSubtitlesReference reference = reference(film, 5011);
 
-        row.setUpdatedAt(LATER);
+        row.setOffsetMs(300);
 
         assertThat(service.save(due, reference, AGREES, LATER)).isFalse();
         assertThat(checks.findAll()).isEmpty();

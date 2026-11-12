@@ -4,7 +4,9 @@ import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionTimeline;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Pick;
+import gregochr.cinefilm.web.JsonEtag;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Slot;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -54,14 +56,18 @@ final class ServedSubtitles {
         return starts == null ? null : version(partIds(edition), pick, starts);
     }
 
+    /**
+     * Built from each served file's own state, in serve order: {@code id@start/offset/fingerprint}, where the
+     * fingerprint is the first 16 hex characters of the SHA-256 of its cues (hashing a few small files per call is
+     * cheap). No timestamp is used, so two changes in the same millisecond cannot leave it unchanged.
+     */
     private static String version(List<Long> partIds, Pick pick, List<Long> starts) {
-        long updated = pick.slots().stream().mapToLong(s -> s.sidecar().getUpdatedAt().toEpochMilli()).max()
-            .orElseThrow();
-        StringBuilder version = new StringBuilder("v").append(updated).append('|')
-            .append(SubtitleSidecar.partsKey(partIds)).append('|');
+        StringBuilder version = new StringBuilder("p").append(SubtitleSidecar.partsKey(partIds)).append('|');
         for (int i = 0; i < pick.slots().size(); i++) {
-            version.append(i == 0 ? "" : ",").append(pick.slots().get(i).sidecar().getId()).append('@')
-                .append(starts.get(i));
+            SubtitleSidecar sidecar = pick.slots().get(i).sidecar();
+            String tag = JsonEtag.etag(sidecar.getCuesText().getBytes(StandardCharsets.UTF_8));
+            version.append(i == 0 ? "" : ",").append(sidecar.getId()).append('@').append(starts.get(i)).append('/')
+                .append(sidecar.getOffsetMs()).append('/').append(tag, 3, 3 + 16);
         }
         return version.toString();
     }

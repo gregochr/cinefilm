@@ -420,8 +420,10 @@ Built from the documented API: the live login/download test was denied (see "Dec
   `blocked_until`): `take` / `refund` / `exhaust` per UTC day, one conditional statement each.
 - **Tables** (`V16`): `opensubtitles_reference` (unique per film and file id, cues as normalised SRT, `cue_count` 0 =
   unusable), `forced_subtitle_check` (one row per edition, cascade on the edition and the reference), `opensubtitles_budget`.
-- **Served version** (`ServedSubtitle`, `ServedSubtitles`): `v<latest sidecar change>|<part file ids>|<sidecar id>@<start>,...`,
-  so an attach, move, nudge, changed file, changed part list or changed part duration makes a check stale.
+- **Served version** (`ServedSubtitle`, `ServedSubtitles`): `p<part file ids>|<sidecar id>@<start>/<offset>/<hash>,...`,
+  each file's own state in serve order, the hash being the first 16 hex characters of the SHA-256 of its cues (no
+  timestamp, so changes in the same millisecond cannot hide), so an attach, move, nudge, changed file, changed part list
+  or changed part duration makes a check stale (`forced_subtitle_check.served_version` is 1,000 characters).
   `ForcedSubtitleService.served` gives the cues playback serves (same pick, offsets applied by `VttWriter.shift`, parts
   stitched with `EditionTimeline`).
 - **Comparison** (`SubtitleComparison`, pure): candidate offsets from start-time differences within +-10 min, bucketed to
