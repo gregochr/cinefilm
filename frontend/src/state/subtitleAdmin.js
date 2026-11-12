@@ -132,22 +132,10 @@ export function isServed(item) {
   return item.served === true;
 }
 
-/** The server words a timing hint from this offset (half a second); a hint is built here only when it sent none. */
-const HINT_MS = 500;
-
-/** "OpenSubtitles' file is 1.2 s later": a positive offset means OpenSubtitles' lines come later than this file's. */
-export function offsetHint(bestOffsetMs) {
-  if (Math.abs(bestOffsetMs) < HINT_MS) return null;
-  const seconds = (Math.abs(bestOffsetMs) / 1000).toFixed(1);
-  return `OpenSubtitles' file is ${seconds} s ${bestOffsetMs > 0 ? 'later' : 'earlier'}`;
-}
-
-const isHint = (reason) => /^OpenSubtitles' file is [\d.]+ s (later|earlier)$/.test(reason);
-
 /**
  * What a file's check says, in words: `{ kind, label, lines, reference }`, or null for a file that is not served
- * (nothing to compare). `kind` is `agrees`, `check` or `unchecked`; `lines` are the reasons (CHECK), the timing hint
- * (AGREES) or the quiet explanation (unchecked); `reference` is the muted "Compared with ... · checked ..." line.
+ * (nothing to compare). `kind` is `agrees`, `check` or `unchecked`; `lines` are the server's reasons (a timing hint
+ * for AGREES) or the quiet explanation (unchecked); `reference` is the muted "Compared with ... · checked ..." line.
  */
 export function checkSummary(item) {
   const check = item.check;
@@ -169,13 +157,8 @@ export function checkSummary(item) {
   if (check.verdict === 'CHECK') {
     return { kind: 'check', label: 'Needs checking', lines: reasons, reference };
   }
-  const hint = reasons.find(isHint) ?? offsetHint(check.bestOffsetMs);
-  return {
-    kind: 'agrees',
-    label: 'Agrees with OpenSubtitles',
-    lines: hint ? [hint] : [],
-    reference,
-  };
+  // The server words the reasons, a timing hint included ("OpenSubtitles' file is 1.2 s later"); nothing is derived here.
+  return { kind: 'agrees', label: 'Agrees with OpenSubtitles', lines: reasons, reference };
 }
 
 /** The filter chips on the file list, in order; `matches` says which files a chip lists. */

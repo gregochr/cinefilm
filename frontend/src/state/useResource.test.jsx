@@ -93,6 +93,44 @@ describe('useResource', () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
   });
 
+  it('refresh fetches again in the background: the data stays and loading does not flip', async () => {
+    let n = 0;
+    const fetcher = vi.fn(async () => ({ n: (n += 1) }));
+    const { result } = renderHook(() => useResource('k', fetcher));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const seen = [];
+
+    act(() => result.current.refresh());
+    seen.push(result.current.loading, result.current.data);
+    await waitFor(() => expect(result.current.data).toEqual({ n: 2 }));
+
+    expect(seen).toEqual([false, { n: 1 }]);
+    expect(result.current.loading).toBe(false);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('a refresh that fails shows the error and keeps the data; a reload after it shows loading', async () => {
+    let fail = false;
+    const boom = new Error('boom');
+    const fetcher = vi.fn(async () => {
+      if (fail) throw boom;
+      return 'x';
+    });
+    const { result } = renderHook(() => useResource('k', fetcher));
+    await waitFor(() => expect(result.current.data).toBe('x'));
+
+    fail = true;
+    act(() => result.current.refresh());
+    await waitFor(() => expect(result.current.error).toBe(boom));
+    expect(result.current.data).toBe('x');
+    expect(result.current.loading).toBe(false);
+
+    fail = false;
+    act(() => result.current.reload());
+    expect(result.current.loading).toBe(true);
+    await waitFor(() => expect(result.current.error).toBeNull());
+  });
+
   it('reloads after a sign-in that follows a session expiry', async () => {
     const fetcher = vi.fn(async () => 'x');
     const { result } = renderHook(() => useResource('k', fetcher));

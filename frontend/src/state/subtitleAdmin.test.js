@@ -16,7 +16,6 @@ import {
   groupKey,
   isServed,
   nudgedOffset,
-  offsetHint,
   partOptions,
   placement,
   playFromHereMs,
@@ -287,22 +286,6 @@ describe('isServed', () => {
   });
 });
 
-describe('offsetHint', () => {
-  it('says nothing under half a second', () => {
-    expect(offsetHint(0)).toBeNull();
-    expect(offsetHint(499)).toBeNull();
-    expect(offsetHint(-499)).toBeNull();
-  });
-
-  it('says later for a positive offset and earlier for a negative one, to one decimal place', () => {
-    expect(offsetHint(1200)).toBe("OpenSubtitles' file is 1.2 s later");
-    expect(offsetHint(-1200)).toBe("OpenSubtitles' file is 1.2 s earlier");
-    expect(offsetHint(500)).toBe("OpenSubtitles' file is 0.5 s later");
-    expect(offsetHint(1250)).toBe("OpenSubtitles' file is 1.3 s later");
-    expect(offsetHint(-2000)).toBe("OpenSubtitles' file is 2.0 s earlier");
-  });
-});
-
 describe('checkSummary', () => {
   it('says AGREES with the server worded timing hint and the reference line', () => {
     const summary = checkSummary(
@@ -318,10 +301,12 @@ describe('checkSummary', () => {
     });
   });
 
-  it('builds the hint from the best offset when the reasons carry none', () => {
-    expect(checkSummary(file({ check: checkOf({ bestOffsetMs: -1500 }) })).lines).toEqual([
-      "OpenSubtitles' file is 1.5 s earlier",
-    ]);
+  it('shows the server hint as it is, and builds none from the best offset', () => {
+    const hint = "OpenSubtitles' file is 1.2 s earlier";
+    expect(
+      checkSummary(file({ check: checkOf({ reasons: [hint], bestOffsetMs: -1200 }) })).lines,
+    ).toEqual([hint]);
+    expect(checkSummary(file({ check: checkOf({ bestOffsetMs: -1500 }) })).lines).toEqual([]);
   });
 
   it('has no hint line for a file in sync', () => {

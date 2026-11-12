@@ -570,11 +570,14 @@ export default function Admin() {
     reload();
   };
 
+  // Scrolls to the scan card when the page opens on its anchor (once the card is there) or the hash changes; a
+  // background refresh of the status does not move the page.
+  const scanShown = scan != null;
   useEffect(() => {
-    if (hash === '#library-scan') {
+    if (hash === '#library-scan' && scanShown) {
       document.getElementById('library-scan')?.scrollIntoView?.();
     }
-  }, [hash, loading]);
+  }, [hash, scanShown]);
 
   return (
     <div className="page__stack">

@@ -33,7 +33,7 @@ function useAnnounceWhenFinished(finishedAt) {
  * `visible` (the tab is shown; the UI layer knows) pauses the polling, and a change back to true reads once.
  */
 export function useScan(visible = true) {
-  const { data, error, loading, reload } = useResource('admin-scan', (options) =>
+  const { data, error, loading, reload, refresh } = useResource('admin-scan', (options) =>
     adminApi.scan(options),
   );
   const [starting, setStarting] = useState(false);
@@ -54,9 +54,9 @@ export function useScan(visible = true) {
   // does not poll.
   useEffect(() => {
     if (!visible) return undefined;
-    const id = setTimeout(reload, busy ? SCAN_POLL_MS : SCAN_IDLE_POLL_MS);
+    const id = setTimeout(refresh, busy ? SCAN_POLL_MS : SCAN_IDLE_POLL_MS);
     return () => clearTimeout(id);
-  }, [visible, busy, data, error, reload]);
+  }, [visible, busy, data, error, refresh]);
 
   // Coming back to a hidden tab reads the status once at once: it may be long out of date.
   const wasHidden = useRef(false);
@@ -65,9 +65,9 @@ export function useScan(visible = true) {
       wasHidden.current = true;
     } else if (wasHidden.current) {
       wasHidden.current = false;
-      reload();
+      refresh();
     }
-  }, [visible, reload]);
+  }, [visible, refresh]);
 
   const refreshRatings = useCallback(async () => {
     setRatingsStarting(true);
