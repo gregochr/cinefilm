@@ -275,4 +275,64 @@ describe('fixture server: Admin settings', () => {
     await failure({ continueWatchingMinMinutes: 99 });
     expect((await call('GET', '/api/admin/settings')).continueWatchingMinMinutes).toBe(5);
   });
+
+  it('serves the forced-subtitle list, and a PUT applies the owner’s choice and Automatic restores the rule', async () => {
+    const before = await call('GET', '/api/admin/forced-subtitles/films');
+    expect(before.films).toHaveLength(7);
+    expect(before.counts).toEqual({
+      needed: 3,
+      neededMissing: 2,
+      unsure: 1,
+      unknown: 1,
+      notNeeded: 2,
+    });
+
+    const chosen = await call('PUT', '/api/admin/films/2/forced-need', { choice: 'NOT_NEEDED' });
+    expect(chosen).toMatchObject({
+      filmId: 2,
+      need: 'NOT_NEEDED',
+      reason: 'OWNER',
+      ownerChoice: 'NOT_NEEDED',
+    });
+    const after = await call('GET', '/api/admin/forced-subtitles/films');
+    expect(after.films.find((f) => f.filmId === 2).need).toBe('NOT_NEEDED');
+    expect(after.counts).toMatchObject({ needed: 2, neededMissing: 1, notNeeded: 3 });
+
+    const automatic = await call('PUT', '/api/admin/films/2/forced-need', { choice: null });
+    expect(automatic).toEqual(before.films.find((f) => f.filmId === 2));
+    expect(await call('PUT', '/api/admin/films/2/forced-need', {})).toEqual(automatic);
+  });
+
+  it('clears a choice the fixture is loaded with: Automatic gives the baseline, and choosing again works', async () => {
+    const loaded = (await call('GET', '/api/admin/forced-subtitles/films')).films.find(
+      (f) => f.filmId === 7,
+    );
+    expect(loaded).toMatchObject({ ownerChoice: 'NOT_NEEDED', reason: 'OWNER' });
+
+    const cleared = await call('PUT', '/api/admin/films/7/forced-need', { choice: null });
+    expect(cleared).toMatchObject({
+      ownerChoice: null,
+      need: 'NOT_NEEDED',
+      reason: 'ENGLISH_ONLY',
+    });
+    const list = await call('GET', '/api/admin/forced-subtitles/films');
+    expect(list.films.find((f) => f.filmId === 7)).toEqual(cleared);
+
+    const again = await call('PUT', '/api/admin/films/7/forced-need', { choice: 'NEEDED' });
+    expect(again).toMatchObject({ ownerChoice: 'NEEDED', need: 'NEEDED', reason: 'OWNER' });
+  });
+
+  it('refuses a choice for an unknown film (404) or a bad value (400)', async () => {
+    const refused = async (path, body) => {
+      const pending = handle('PUT', path, body).catch((error) => error);
+      await vi.advanceTimersByTimeAsync(80);
+      return pending;
+    };
+    expect(await refused('/api/admin/films/99/forced-need', { choice: 'NEEDED' })).toMatchObject({
+      status: 404,
+    });
+    expect(await refused('/api/admin/films/2/forced-need', { choice: 'MAYBE' })).toMatchObject({
+      status: 400,
+    });
+  });
 });

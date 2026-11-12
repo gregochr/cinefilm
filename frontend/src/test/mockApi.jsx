@@ -18,6 +18,7 @@ import adminPlex from './fixtures/admin-plex.json';
 import adminTranscoding from './fixtures/admin-transcoding.json';
 import adminPlaybackHealth from './fixtures/admin-playback-health.json';
 import adminSubtitles from './fixtures/admin-subtitles.json';
+import adminForcedNeed from './fixtures/admin-forced-need.json';
 import session from './fixtures/session.json';
 import home from './fixtures/home.json';
 import person from './fixtures/person.json';
@@ -41,6 +42,7 @@ export const fixtures = {
   adminTranscoding,
   adminPlaybackHealth,
   adminSubtitles,
+  adminForcedNeed,
   session,
 };
 
@@ -113,6 +115,7 @@ export function defaultRoute(method, url) {
   }
   if (path === '/api/admin/playback-health') return json(adminPlaybackHealth);
   if (path === '/api/admin/subtitles') return json(adminSubtitles);
+  if (path === '/api/admin/forced-subtitles/films') return json(adminForcedNeed);
   if (path === '/api/admin/transcoding') return json(adminTranscoding);
   if (/^\/api\/admin\/transcoding\/sessions\//.test(path)) return json(null, 204);
   if (/^\/api\/playback-health\/[^/]+$/.test(path)) return json(null, 204);

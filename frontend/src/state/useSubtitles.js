@@ -22,6 +22,8 @@ export function useSubtitles(version) {
   latest.current = data;
   const [busy, setBusy] = useState(null);
   const [problem, setProblem] = useState(null);
+  // How many actions succeeded: views that depend on the files (which films have a forced subtitle) read again.
+  const [changes, setChanges] = useState(0);
 
   const act = useCallback(
     async (id, call) => {
@@ -39,6 +41,7 @@ export function useSubtitles(version) {
           }));
         }
         announceLibraryChanged();
+        setChanges((n) => n + 1);
         reload();
         return true;
       } catch (failure) {
@@ -61,6 +64,7 @@ export function useSubtitles(version) {
     reload,
     busy,
     problem,
+    changes,
     attach: (id, target) => act(id, () => adminApi.attachSubtitle(id, target)),
     detach: (id) => act(id, () => adminApi.detachSubtitle(id)),
     nudge: (item, delta) =>
