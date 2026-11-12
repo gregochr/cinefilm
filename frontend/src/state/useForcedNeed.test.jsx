@@ -232,3 +232,90 @@ describe('useForcedNeed', () => {
     await done;
   });
 });
+
+describe('useForcedNeed: a refresh that overlaps a save', () => {
+  const LIST_URL = '/api/admin/forced-subtitles/films';
+
+  /** The first list read answers at once; later ones and every PUT wait for the test. */
+  function overlapping() {
+    const gets = [];
+    const puts = [];
+    let reads = 0;
+    installFetch((method, url, init) => {
+      if (url === LIST_URL) {
+        reads += 1;
+        if (reads === 1) return respond(LIST);
+        return new Promise((resolve) => gets.push(resolve)).then((list) => respond(list));
+      }
+      if (!FORCED.test(url)) return null;
+      return new Promise((resolve) => puts.push({ body: JSON.parse(init.body), resolve })).then(
+        (row) => respond(row),
+      );
+    });
+    return { gets, puts };
+  }
+
+  const loadedFirst = async () => {
+    const hook = renderHook(({ key }) => useForcedNeed(key), { initialProps: { key: 'a' } });
+    await waitFor(() => expect(hook.result.current.rows).toEqual(LIST.films));
+    return hook;
+  };
+
+  const save = async (result, puts, index, filmId, choice) => {
+    let done;
+    act(() => {
+      done = result.current.choose(filmId, choice);
+    });
+    await act(async () => {
+      puts[index].resolve(answered(filmId, choice));
+      await done;
+    });
+  };
+
+  it('keeps a saved choice when a list read that started before the save answers with the old row', async () => {
+    const { gets, puts } = overlapping();
+    const { result, rerender } = await loadedFirst();
+
+    rerender({ key: 'b' }); // the refresh starts and waits
+    await waitFor(() => expect(gets).toHaveLength(1));
+    await save(result, puts, 0, 2, 'NOT_NEEDED');
+    await act(async () => {
+      gets[0](LIST); // the old snapshot, read before the save
+    });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(rowOf(result, 2).ownerChoice).toBe('NOT_NEEDED');
+  });
+
+  it('lets a list read that started after the save replace it', async () => {
+    const { gets, puts } = overlapping();
+    const { result, rerender } = await loadedFirst();
+    await save(result, puts, 0, 2, 'NOT_NEEDED');
+
+    rerender({ key: 'b' });
+    await waitFor(() => expect(gets).toHaveLength(1));
+    await act(async () => {
+      gets[0]({
+        ...LIST,
+        films: LIST.films.map((f) => (f.filmId === 2 ? answered(2, 'NEEDED') : f)),
+      });
+    });
+    await waitFor(() => expect(rowOf(result, 2).ownerChoice).toBe('NEEDED'));
+  });
+
+  it('shows the last click when two saves of one film surround a refresh', async () => {
+    const { gets, puts } = overlapping();
+    const { result, rerender } = await loadedFirst();
+    await save(result, puts, 0, 2, 'NEEDED');
+
+    rerender({ key: 'b' });
+    await waitFor(() => expect(gets).toHaveLength(1));
+    await save(result, puts, 1, 2, 'NOT_NEEDED');
+    await act(async () => {
+      gets[0](LIST);
+    });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(rowOf(result, 2).ownerChoice).toBe('NOT_NEEDED');
+  });
+});

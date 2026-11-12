@@ -13,19 +13,24 @@ const without = (record, key) => {
  * whenever the subtitle files may have changed (a scan, a file attached, moved or detached), and the list is read
  * again. A choice is one request per film: a newer click on the same film aborts the older request and wins, other
  * films stay free, and a failure leaves the row as it was with `problems[filmId]` saying why. The answer of a
- * request is applied to its row; nothing is refetched.
+ * request is applied to its row; nothing is refetched, and a list read that started before the save arrived cannot
+ * undo it.
  */
 export function useForcedNeed(refreshKey) {
+  // One counter orders everything: a list read is numbered when it starts, a saved choice when its answer arrives.
+  const sequence = useRef(0);
   const { data, error, loading, reload } = useResource(
     `admin-forced-need:${refreshKey}`,
-    (options) => adminApi.forcedNeed(options),
+    async (options) => {
+      const startedAt = ++sequence.current;
+      return { ...(await adminApi.forcedNeed(options)), startedAt };
+    },
   );
-  // The rows answered since `base` was read: a list read again replaces them, so the server's list wins.
-  const [applied, setApplied] = useState({ base: null, rows: [] });
+  // The latest saved row of each film and when its answer arrived. A list that started reading before that may
+  // predate the save, so the row is laid over it; a list that started after it already holds the save.
+  const [saved, setSaved] = useState({});
   const [problems, setProblems] = useState({});
   const [saving, setSaving] = useState({});
-  const latest = useRef(data);
-  latest.current = data;
   // The request each film is waiting on: only the answer of the one in this map is used.
   const inflight = useRef(new Map());
 
@@ -49,10 +54,8 @@ export function useForcedNeed(refreshKey) {
         signal: request.controller.signal,
       });
       if (!current()) return;
-      setApplied((prev) => ({
-        base: latest.current,
-        rows: [...(prev.base === latest.current ? prev.rows : []), row],
-      }));
+      const answeredAt = ++sequence.current;
+      setSaved((prev) => ({ ...prev, [filmId]: { row, answeredAt } }));
     } catch (failure) {
       if (!current()) return;
       setProblems((prev) => ({ ...prev, [filmId]: needProblem(failure) }));
@@ -66,10 +69,10 @@ export function useForcedNeed(refreshKey) {
 
   const rows = useMemo(() => {
     if (!data) return null;
-    return applied.base === data
-      ? applied.rows.reduce((list, row) => applyRow(list, row), data.films)
-      : data.films;
-  }, [data, applied]);
+    return Object.values(saved)
+      .filter((entry) => entry.answeredAt > data.startedAt)
+      .reduce((list, entry) => applyRow(list, entry.row), data.films);
+  }, [data, saved]);
 
   return { rows, error, loading, reload, problems, saving, choose };
 }
