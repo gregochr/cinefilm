@@ -102,9 +102,7 @@ public class SidecarSync {
         Long fileId = match == null ? null : match.mediaFileId();
         // Matching by name is never "whole edition": only the owner's attach sets that.
         if (!Objects.equals(row.getMediaFileId(), fileId) || row.isWholeEdition()) {
-            row.setMediaFileId(fileId);
-            row.dropAutoOffset();
-            row.setWholeEdition(false);
+            row.retarget(fileId, false);
             row.setUpdatedAt(now);
         }
     }

@@ -302,6 +302,24 @@ class SidecarTimingRefresherTest {
     }
 
     @Test
+    void aFileThatChangedSinceItsFailedReadIsReadAtOnce() {
+        ReferenceRead changed = new ReferenceRead(70L, "Taken.m4v", "2000:2");
+        when(service.dueFilmIds()).thenReturn(List.of(7L));
+        when(service.readsFor(7L)).thenReturn(List.of(read(70L)), List.of(changed));
+        when(service.fitJobs(7L)).thenReturn(List.of());
+        when(root.resolveFile("Taken.m4v")).thenReturn(Optional.of(FILE));
+        when(reader.read(FILE)).thenThrow(new ReadException("x")).thenReturn(usable());
+        when(service.saveReference(changed, usable(), NOW.plus(Duration.ofMinutes(1)))).thenReturn(SaveOutcome.SAVED);
+
+        startAndRun();
+        queued.clear();
+        now = NOW.plus(Duration.ofMinutes(1));
+        startAndRun();
+
+        verify(reader, times(2)).read(FILE);
+    }
+
+    @Test
     void aFileThatReadsAgainAfterAFailureIsNoLongerLeftAlone() {
         when(service.dueFilmIds()).thenReturn(List.of(7L));
         when(service.readsFor(7L)).thenReturn(List.of(read(70L)));

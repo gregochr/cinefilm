@@ -101,10 +101,15 @@ Each: what was chosen, why, and the alternative.
     The identity is the film file, the whole-edition flag and the cue hash; the reference key is each reference file's id and
     fingerprint (plus each part's start for a whole-edition file). Applying an offset does make 2d's check stale (its
     version includes the offset): it re-runs on its own, which is correct.
-23. **`offset_source` is backfilled `OWNER` for every offset that is not 0** (only the owner could have set one so far), and
+23. **`offset_source` is backfilled `OWNER` for every offset that is not 0** (only the owner could have set one so far) and for any
+    file the owner attached by hand or verified (an old reset to 0 cannot be told from never set, so a touched file is
+    treated as the owner's), and
     an `AUTO` offset is dropped (back to 0, never set) when the file's cues change or it moves to another film file, in the
     scan, attach and detach. A file rewritten with the same cues keeps it (changed after review: the alignment's identity
-    is unchanged, so clearing it would never be fitted again). Alternative: keep a stale automatic offset until the next
+    is unchanged, so clearing it would never be fitted again). One rule, `SubtitleSidecar.retarget`, serves the scan, attach and "Back to automatic": the offset is dropped only when the film
+    file or the whole flag changes, so a re-attach or rematch to the same place keeps it.
+    The 0.80 share and 0.4 margin are compared as exact integer counts (a double 17/20 - 9/20 is 0.39999...), with
+    boundary tests. Alternative: keep a stale automatic offset until the next
     fit replaces it (wrong in between).
 24. **Each sidecar is fitted on the timeline of the span it covers, so "restrict the reference to the span" is by
     construction:** a per-part file against its own part's track in part time (the offset is the same as on the edition

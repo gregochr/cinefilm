@@ -158,28 +158,54 @@ class SubtitleAdminTimingTest extends SubtitleTestBase {
     }
 
     @Test
-    void attachingOrDetachingAFileTakesAnAutomaticOffsetAwayButNotTheOwnersOwn() {
-        Film film = stampedFilm("Taken", 1);
-        SubtitleSidecar automatic = timed("Taken.en.forced.srt", film, 1);
+    void attachingToADifferentPlaceTakesAnAutomaticOffsetAwayButNotTheOwnersOwn() {
+        Film film = stampedFilm("Towers", 2);
+        SubtitleSidecar automatic = timed("Towers - pt1.en.forced.srt", film, 1);
         automatic.setOffsetMs(900);
         automatic.setOffsetSource(SubtitleSidecar.OffsetSource.AUTO);
-        SubtitleSidecar owners = timed("Taken.forced.en.srt", film, 1);
+        SubtitleSidecar owners = timed("Towers - pt2.en.forced.srt", film, 2);
         owners.setOffsetMs(-250);
         owners.setOffsetSource(SubtitleSidecar.OffsetSource.OWNER);
         Long editionId = film.getEditions().get(0).getId();
 
-        SidecarDto attached = admin.attach(automatic.getId(), new AttachRequest(editionId, null));
-        SidecarDto ownersAttached = admin.attach(owners.getId(), new AttachRequest(editionId, null));
+        SidecarDto attached = admin.attach(automatic.getId(), new AttachRequest(editionId, 2));
+        SidecarDto ownersAttached = admin.attach(owners.getId(), new AttachRequest(editionId, 1));
 
         assertThat(attached.offsetMs()).isZero();
         assertThat(attached.offsetSource()).isNull();
         assertThat(ownersAttached.offsetMs()).isEqualTo(-250);
         assertThat(ownersAttached.offsetSource()).isEqualTo("OWNER");
+    }
 
-        automatic.setOffsetMs(900);
-        automatic.setOffsetSource(SubtitleSidecar.OffsetSource.AUTO);
-        SidecarDto detached = admin.detach(automatic.getId());
+    @Test
+    void attachingOrRematchingToTheSamePlaceKeepsAnAutomaticOffset() {
+        Film film = stampedFilm("Taken", 1);
+        SubtitleSidecar row = timed("Taken.en.forced.srt", film, 1);
+        row.setOffsetMs(900);
+        row.setOffsetSource(SubtitleSidecar.OffsetSource.AUTO);
+        Long editionId = film.getEditions().get(0).getId();
 
+        SidecarDto attached = admin.attach(row.getId(), new AttachRequest(editionId, null));
+        SidecarDto detached = admin.detach(row.getId());
+
+        assertThat(attached.offsetMs()).isEqualTo(900);
+        assertThat(attached.offsetSource()).isEqualTo("AUTO");
+        assertThat(detached.offsetMs()).isEqualTo(900);
+        assertThat(detached.offsetSource()).isEqualTo("AUTO");
+        assertThat(detached.ownerAttached()).isFalse();
+    }
+
+    @Test
+    void aRematchThatLeavesNoFileDropsAnAutomaticOffset() {
+        Film film = stampedFilm("Taken", 1);
+        SubtitleSidecar row = timed("Taken.en.forced.srt", film, 1);
+        row.setPath("Unrelated name.en.forced.srt");
+        row.setOffsetMs(900);
+        row.setOffsetSource(SubtitleSidecar.OffsetSource.AUTO);
+
+        SidecarDto detached = admin.detach(row.getId());
+
+        assertThat(detached.state()).isEqualTo("unmatched");
         assertThat(detached.offsetMs()).isZero();
         assertThat(detached.offsetSource()).isNull();
     }

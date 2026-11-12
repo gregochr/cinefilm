@@ -114,6 +114,22 @@ public class SubtitleSidecar {
         }
     }
 
+    /**
+     * Points the file at a film file, as a whole-edition file or not. The timing check's identity names the film file
+     * and the whole flag, so an automatic offset (fitted for the old target) is dropped only when either changes; a
+     * re-attach or re-match to the same place keeps it, because the check would never fit it again.
+     *
+     * @param fileId the film file, or null for none
+     * @param whole true when the file is timed for a whole split edition
+     */
+    public void retarget(Long fileId, boolean whole) {
+        if (!java.util.Objects.equals(mediaFileId, fileId) || wholeEdition != whole) {
+            dropAutoOffset();
+        }
+        mediaFileId = fileId;
+        wholeEdition = whole;
+    }
+
     /** The comma-joined ids of an edition's part files in play order: what {@link #verifiedParts} is compared with. */
     public static String partsKey(List<Long> partIds) {
         return partIds.stream().map(String::valueOf).collect(Collectors.joining(","));

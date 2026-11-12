@@ -188,6 +188,11 @@ class SubtitleAdminServiceUnitTest {
         row.setOwnerAttached(true);
         row.setMediaFileId(10L);
         row.setWholeEdition(true);
+        // The real rematch gives the file back to where its name says: here, nowhere.
+        org.mockito.Mockito.doAnswer(call -> {
+            row.retarget(null, false);
+            return null;
+        }).when(sync).rematch(row);
 
         service.detach(5L);
 

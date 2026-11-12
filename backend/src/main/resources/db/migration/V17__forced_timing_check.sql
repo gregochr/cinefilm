@@ -3,10 +3,12 @@
 --
 -- subtitle_sidecar.offset_source says who set offset_ms: NULL = never set (it is 0), OWNER = the owner put it in (a reset
 -- to 0 included), AUTO = the timing check set it. The timing check never changes an OWNER offset. An offset that is not 0
--- can only have come from the owner so far, so it is backfilled as OWNER.
+-- can only have come from the owner so far, so it is backfilled as OWNER. An old reset to 0 cannot be told from "never
+-- set", so any file the owner touched at all (attached by hand, or marked "Looks right") is conservatively OWNER too.
 ALTER TABLE subtitle_sidecar ADD COLUMN offset_source VARCHAR(10);
 ALTER TABLE subtitle_sidecar ADD CONSTRAINT subtitle_sidecar_offset_source_ck CHECK (offset_source IN ('OWNER', 'AUTO'));
-UPDATE subtitle_sidecar SET offset_source = 'OWNER' WHERE offset_ms <> 0;
+UPDATE subtitle_sidecar SET offset_source = 'OWNER'
+WHERE offset_ms <> 0 OR owner_attached OR owner_verified_at IS NOT NULL;
 
 -- embedded_cue_starts: what was read from the full English subtitle track inside one media file, so a film is read once
 -- (reading demuxes the whole file: minutes over SMB). fingerprint is the file's size and modification time when read; a

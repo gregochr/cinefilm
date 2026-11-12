@@ -56,7 +56,11 @@ public class SidecarTimingRefresher {
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean pending = new AtomicBoolean();
     private final AtomicBoolean deferred = new AtomicBoolean();
-    private final Map<Long, Instant> failedAt = new ConcurrentHashMap<>();
+    private final Map<Long, Failure> failedAt = new ConcurrentHashMap<>();
+
+    /** A read that failed: of which version of the file, and when. A changed file is not held back by it. */
+    private record Failure(String fingerprint, Instant at) {
+    }
 
     /** Why a run ends early: playback is encoding, or the library lock is taken. Not an error. */
     private static final class Wait extends RuntimeException {
@@ -189,8 +193,9 @@ public class SidecarTimingRefresher {
             if (sessions.isEncoding()) {
                 throw new Wait("a film is being transcoded");
             }
-            Instant failed = failedAt.get(read.mediaFileId());
-            if (failed != null && clock.instant().isBefore(failed.plus(BACKOFF))) {
+            Failure failed = failedAt.get(read.mediaFileId());
+            if (failed != null && failed.fingerprint().equals(read.fingerprint())
+                && clock.instant().isBefore(failed.at().plus(BACKOFF))) {
                 continue;
             }
             try {
@@ -206,7 +211,7 @@ public class SidecarTimingRefresher {
                     counts[0]++;
                 }
             } catch (EmbeddedCueReader.ReadException e) {
-                failedAt.put(read.mediaFileId(), clock.instant());
+                failedAt.put(read.mediaFileId(), new Failure(read.fingerprint(), clock.instant()));
                 counts[3]++;
                 LOG.warn("Could not read the embedded subtitles of film file {}: {}", read.mediaFileId(),
                     e.getMessage());

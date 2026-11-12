@@ -132,10 +132,8 @@ public class SubtitleAdminService {
         MediaFile target = request.part() == null ? parts.get(0)
             : parts.stream().filter(p -> p.getPartNumber() == request.part()).findFirst()
                 .orElseThrow(() -> new BadRequestException("That edition has no part " + request.part()));
-        sidecar.setMediaFileId(target.getId());
-        sidecar.dropAutoOffset();
         // A single file is timed from its own start, so it stays right if another file is joined before it later.
-        sidecar.setWholeEdition(request.part() == null && parts.size() > 1);
+        sidecar.retarget(target.getId(), request.part() == null && parts.size() > 1);
         sidecar.setOwnerAttached(true);
         changed(sidecar);
         return one(id);
@@ -156,9 +154,8 @@ public class SubtitleAdminService {
     private SidecarDto detachLocked(Long id) {
         SubtitleSidecar sidecar = find(id);
         sidecar.setOwnerAttached(false);
-        sidecar.setMediaFileId(null);
-        sidecar.dropAutoOffset();
-        sidecar.setWholeEdition(false);
+        // The rematch below puts it back where its name says, or nowhere; an automatic offset survives a rematch to the
+        // same place.
         changed(sidecar);
         sync.rematch(sidecar);
         return one(id);

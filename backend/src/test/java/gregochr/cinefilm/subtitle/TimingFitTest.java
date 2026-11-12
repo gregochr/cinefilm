@@ -206,6 +206,63 @@ class TimingFitTest {
     }
 
     @Test
+    void twelveIrregularCuesFitNineHundredMillisecondsLateAgainstThemselves() {
+        // The integration test's data: 12 cues at gaps of 3 s plus n squared times 131 mod 4001 ms.
+        List<Long> starts = new ArrayList<>();
+        long at = 10_000;
+        for (int n = 0; n < 12; n++) {
+            starts.add(at);
+            at += 3_000 + (long) n * n * 131 % 4_001;
+        }
+
+        Result result = TimingFit.fit(starts, starts.stream().map(s -> s + 900).toList());
+
+        assertThat(result.verdict()).isEqualTo(Verdict.ALIGNED);
+        assertThat(result.fittedOffsetMs()).isEqualTo(900);
+    }
+
+    @Test
+    void exactlyEightyPercentMatchedIsEnoughAndOneLessIsNot() {
+        List<Long> track = track(600, 7);
+        // 20 cues: the first 16 are every 30th track cue, shifted 400 ms; the rest are far beyond the track's end.
+        List<Long> sixteen = new ArrayList<>(forcedFrom(track, 37, 400).subList(0, 16));
+        List<Long> fifteen = new ArrayList<>(sixteen.subList(0, 15));
+        for (int i = 0; i < 4; i++) {
+            sixteen.add(100_000_000L + i * 10_000L);
+        }
+        for (int i = 0; i < 5; i++) {
+            fifteen.add(100_000_000L + i * 10_000L);
+        }
+
+        Result atBoundary = TimingFit.fit(sixteen, track);
+        Result below = TimingFit.fit(fifteen, track);
+
+        assertThat(atBoundary.matchedCount()).isEqualTo(16);
+        assertThat(atBoundary.servedCount()).isEqualTo(20);
+        assertThat(atBoundary.matchedShare()).isEqualTo(0.8);
+        assertThat(atBoundary.verdict()).isEqualTo(Verdict.ALIGNED);
+        assertThat(below.matchedCount()).isEqualTo(15);
+        assertThat(below.verdict()).isEqualTo(Verdict.CHECK);
+        assertThat(below.reasons()).containsExactly("Only 15 of 20 lines line up with the film's English track");
+    }
+
+    @Test
+    void theShareAndMarginThresholdsAreExactAtTheirBoundaries() {
+        assertThat(TimingFit.enoughMatched(16, 20)).isTrue();
+        assertThat(TimingFit.enoughMatched(15, 20)).isFalse();
+        assertThat(TimingFit.enoughMatched(8, 10)).isTrue();
+        assertThat(TimingFit.enoughMatched(24, 30)).isTrue();
+        // 17/20 less 9/20 is 0.39999... as doubles but exactly 0.4: it must pass.
+        assertThat(17 / 20.0 - 9 / 20.0).isLessThan(0.4);
+        assertThat(TimingFit.clearOfChance(17, 9, 20)).isTrue();
+        assertThat(TimingFit.clearOfChance(17, 10, 20)).isFalse();
+        assertThat(TimingFit.clearOfChance(10, 2, 20)).isTrue();
+        assertThat(TimingFit.clearOfChance(10, 3, 20)).isFalse();
+        assertThat(TimingFit.clearOfChance(12, 0, 30)).isTrue();
+        assertThat(TimingFit.clearOfChance(11, 0, 30)).isFalse();
+    }
+
+    @Test
     void aSparseTrackKeepsTheMarginTheGuardAsksFor() {
         List<Long> track = track(80, 21);
 

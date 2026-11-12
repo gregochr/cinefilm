@@ -81,4 +81,31 @@ class SubtitleSidecarTest {
         assertThat(sidecar.getOffsetMs()).isZero();
         assertThat(sidecar.getOffsetSource()).isNull();
     }
+
+    @Test
+    void retargetingDropsAnAutomaticOffsetOnlyWhenTheFileOrTheWholeFlagChanges() {
+        SubtitleSidecar sidecar = new SubtitleSidecar();
+        sidecar.setMediaFileId(10L);
+        sidecar.setOffsetMs(900);
+        sidecar.setOffsetSource(SubtitleSidecar.OffsetSource.AUTO);
+
+        sidecar.retarget(10L, false);
+        assertThat(sidecar.getOffsetMs()).isEqualTo(900);
+
+        sidecar.retarget(10L, true);
+        assertThat(sidecar.getOffsetMs()).isZero();
+        assertThat(sidecar.isWholeEdition()).isTrue();
+
+        sidecar.setOffsetMs(900);
+        sidecar.setOffsetSource(SubtitleSidecar.OffsetSource.AUTO);
+        sidecar.retarget(11L, true);
+        assertThat(sidecar.getOffsetMs()).isZero();
+        assertThat(sidecar.getMediaFileId()).isEqualTo(11L);
+
+        sidecar.setOffsetMs(-250);
+        sidecar.setOffsetSource(SubtitleSidecar.OffsetSource.OWNER);
+        sidecar.retarget(null, false);
+        assertThat(sidecar.getOffsetMs()).isEqualTo(-250);
+        assertThat(sidecar.getMediaFileId()).isNull();
+    }
 }

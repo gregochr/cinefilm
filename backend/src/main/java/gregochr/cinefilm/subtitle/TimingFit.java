@@ -55,6 +55,12 @@ public final class TimingFit {
     static final long MAX_MEDIAN_RESIDUAL_MS = 120;
     /** How far the best share must beat the share at a wrong offset. */
     static final double MIN_MARGIN = 0.4;
+    /** {@link #MIN_SHARE} as a fraction (4/5), for exact comparison of match counts. */
+    private static final int MIN_SHARE_NUM = 4;
+    private static final int MIN_SHARE_DEN = 5;
+    /** {@link #MIN_MARGIN} as a fraction (2/5), for exact comparison of match counts. */
+    private static final int MIN_MARGIN_NUM = 2;
+    private static final int MIN_MARGIN_DEN = 5;
     /**
      * The deliberately wrong offsets (added to the best) the chance share is measured at, the best of them counting.
      * Several, none a round number: a track with a nearly regular period would match at one probe offset by design.
@@ -132,24 +138,36 @@ public final class TimingFit {
         for (long wrong : WRONG_OFFSETS_MS) {
             chanceMatches = Math.max(chanceMatches, score(s, r, best.offsetMs() + wrong).matched());
         }
-        double chance = chanceMatches / (double) servedCount;
+        // Counts, not shares: a share such as 17/20 less 9/20 is 0.39999... as a double, and must still meet 0.4.
+        boolean enough = enoughMatched(best.matched(), servedCount);
+        boolean clearOfChance = clearOfChance(best.matched(), chanceMatches, servedCount);
         List<String> reasons = new ArrayList<>();
-        if (share < MIN_SHARE) {
+        if (!enough) {
             reasons.add("Only " + best.matched() + " of " + servedCount
                 + " lines line up with the film's English track");
         }
         if (Math.abs(best.offsetMs()) > MAX_ALIGNED_OFFSET_MS) {
             reasons.add("Best fit is more than 10 s out (" + seconds(best.offsetMs()) + ")");
         }
-        if (share >= MIN_SHARE && median > MAX_MEDIAN_RESIDUAL_MS) {
+        if (enough && median > MAX_MEDIAN_RESIDUAL_MS) {
             reasons.add("The lines line up only loosely (typically " + median + " ms off)");
         }
-        if (share >= MIN_SHARE && share - chance < MIN_MARGIN) {
+        if (enough && !clearOfChance) {
             reasons.add("The film's English track has so many lines that this fit could be chance");
         }
         Verdict verdict = reasons.isEmpty() ? Verdict.ALIGNED : Verdict.CHECK;
         return new Result(verdict, (int) best.offsetMs(), share, best.matched(), servedCount, median,
             List.copyOf(reasons));
+    }
+
+    /** True when at least 80% of the served cues matched, in exact integer arithmetic. */
+    static boolean enoughMatched(int matched, int served) {
+        return matched * MIN_SHARE_DEN >= served * MIN_SHARE_NUM;
+    }
+
+    /** True when the matches beat the matches at a wrong offset by at least 40% of the served cues, exactly. */
+    static boolean clearOfChance(int matched, int chanceMatched, int served) {
+        return (matched - chanceMatched) * MIN_MARGIN_DEN >= served * MIN_MARGIN_NUM;
     }
 
     private static String seconds(long offsetMs) {

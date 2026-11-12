@@ -30,7 +30,6 @@ import gregochr.cinefilm.subtitle.TimingFit.Verdict;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.List;
-import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,7 +47,18 @@ import tools.jackson.databind.json.JsonMapper;
 @Transactional
 class SidecarTimingIntegrationTest extends IntegrationTestBase {
 
-    private static final List<Long> STARTS = IntStream.range(0, 12).mapToObj(i -> 10_000L + i * 7_000L).toList();
+    /** Twelve cues at irregular gaps (a regular grid would be rejected as a fit that could be chance). */
+    private static final List<Long> STARTS = irregular();
+
+    private static List<Long> irregular() {
+        List<Long> starts = new java.util.ArrayList<>();
+        long at = 10_000;
+        for (int n = 0; n < 12; n++) {
+            starts.add(at);
+            at += 3_000 + (long) n * n * 131 % 4_001;
+        }
+        return starts;
+    }
 
     @Autowired
     private FilmRepository films;
