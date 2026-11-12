@@ -98,6 +98,18 @@ class ForcedNeedTest {
     }
 
     @Test
+    void xxAsTheOriginalLanguageIsAbsentSoTheSpokenLanguagesDecide() {
+        for (String none : List.of("xx", "XX")) {
+            assertThat(byLanguages(new Languages(none, List.of("en")))).isEqualTo(
+                decision(Need.NOT_NEEDED, Reason.ENGLISH_ONLY));
+            assertThat(byLanguages(new Languages(none, List.of()))).isEqualTo(
+                decision(Need.UNSURE, Reason.NO_SPOKEN_LANGUAGES));
+            assertThat(byLanguages(new Languages(none, List.of("fr")))).isEqualTo(
+                decision(Need.UNSURE, Reason.OTHER_LANGUAGES));
+        }
+    }
+
+    @Test
     void xxAloneIsNoSpokenLanguages() {
         assertThat(byLanguages(new Languages("en", List.of("xx")))).isEqualTo(
             decision(Need.UNSURE, Reason.NO_SPOKEN_LANGUAGES));

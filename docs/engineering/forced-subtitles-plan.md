@@ -266,7 +266,7 @@ of `forced_need` + `forced_need_source`.
 | 7 | Spoken languages are exactly English | `NOT_NEEDED` | `ENGLISH_ONLY` |
 | 8 | Anything else (other spoken languages, or none listed) | `UNSURE` | `OTHER_LANGUAGES` / `NO_SPOKEN_LANGUAGES` |
 
-TMDB's `xx` ("no language") is ignored in the spoken list. "Has a forced subtitle" for the Admin filter means rule 2:
+TMDB's `xx` ("no language") is ignored in the spoken list and as the original language (a film whose original language is `xx` falls through to the spoken-language rules, not rule 6). "Has a forced subtitle" for the Admin filter means rule 2:
 the sidecar plays.
 
 **2a — backend: TMDB languages, the rule, the owner's choice** (no UI)

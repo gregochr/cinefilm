@@ -13,7 +13,7 @@ public final class ForcedNeed {
 
     private static final String ENGLISH = "en";
 
-    /** TMDB's code for "no language" (a silent film, say); it says nothing about what is spoken. */
+    /** TMDB's code for "no language" (a silent film, say): it says nothing about what is spoken or the origin. */
     private static final String NO_LANGUAGE = "xx";
 
     private ForcedNeed() {
@@ -100,7 +100,7 @@ public final class ForcedNeed {
             return new Decision(Need.UNKNOWN, Reason.NO_LANGUAGES);
         }
         String original = SpokenLanguages.code(languages.originalLanguage());
-        if (original != null && !ENGLISH.equals(original)) {
+        if (original != null && !ENGLISH.equals(original) && !NO_LANGUAGE.equals(original)) {
             return new Decision(Need.UNSURE, Reason.FOREIGN_LANGUAGE_FILM);
         }
         List<String> spoken = SpokenLanguages.codes(languages.spokenLanguages()).stream()
