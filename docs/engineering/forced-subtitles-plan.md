@@ -82,9 +82,12 @@ Each: what was chosen, why, and the alternative.
 17. **The 10 ms refinement covers +-300 ms (a window), not +-100 ms (a bucket)** around the best bucket, so cues that wander
     either side of one offset are fitted in the middle and not at a bucket only half of them fall in. 61 scored offsets:
     nothing.
-18. **The chance guard takes the better of best+5 s and best-5 s**: a single wrong offset could land on a coincidence. A
-    fit needs to beat it by 0.4. A track dense enough that a true subset cannot clear that is `CHECK` ("...could be
-    chance"), never `ALIGNED`: the safe side.
+18. **The chance guard takes the best share over four wrong offsets: +3.7 s, -4.3 s, +7.1 s and -9.3 s** (changed after
+    CI: the first version probed exactly +-5 s, and a fixture with a cue every 5 s matched everywhere there). One fixed
+    probe is fragile and a round one can sit on a period; four odd ones, the highest counting, are not. A fit needs to beat
+    it by 0.4. A track dense or regular enough that a true subset cannot clear that is `CHECK` ("...could be chance"),
+    never `ALIGNED`: the safe side. The real-tool fixture now uses irregular gaps (3 to 7 s), and a unit test runs
+    `TimingFit.fit` on the exact fixture lists.
 19. **`TOO_FEW` is its own verdict** (under 8 lines), as is `NO_REFERENCE`; both show as Unchecked in Admin and neither
     counts as proof. With no reference at all `NO_REFERENCE` wins over `TOO_FEW` (nothing could be compared either way).
 20. **The cached cue starts are comma-separated gaps in a `TEXT` column, not `bigint[]`.** The same column works on
@@ -100,13 +103,17 @@ Each: what was chosen, why, and the alternative.
     version includes the offset): it re-runs on its own, which is correct.
 23. **`offset_source` is backfilled `OWNER` for every offset that is not 0** (only the owner could have set one so far), and
     an `AUTO` offset is dropped (back to 0, never set) when the file's cues change or it moves to another film file, in the
-    scan, attach and detach. Alternative: keep a stale automatic offset until the next fit replaces it (wrong in between).
+    scan, attach and detach. A file rewritten with the same cues keeps it (changed after review: the alignment's identity
+    is unchanged, so clearing it would never be fitted again). Alternative: keep a stale automatic offset until the next
+    fit replaces it (wrong in between).
 24. **Each sidecar is fitted on the timeline of the span it covers, so "restrict the reference to the span" is by
     construction:** a per-part file against its own part's track in part time (the offset is the same as on the edition
     timeline), a whole-edition file against every part's track shifted by `EditionTimeline`. A whole-edition file waits
     until every part has been read; one part with no track makes it `NO_REFERENCE` ("Part 2: ...").
 25. **The fit is saved under `LibraryLock` and revalidated; a taken lock stops the run and an hourly nudge picks it up.** A
     scan and Admin's edits rewrite the same sidecar rows, so the save holds the lock (never across the 20 minute read).
+    The read cache's write takes it too (check of the file's fingerprint and write as one step, a taken lock drops that
+    read to be redone: changed after review).
     A run stopped for the lock or for playback sets a flag; `SidecarTimingScheduler.hourly` (at :15) starts a run only when
     that flag is set. Alternative: wait for the next day.
 26. **`SessionManager.isEncoding()` is new**: there was no "is anything transcoding" signal. It is true while any session's
@@ -125,6 +132,18 @@ Each: what was chosen, why, and the alternative.
     lines, not a real file: **the first real run on a PGS film should be watched** (the log says how many files were read).
     (b) The "pending set after the last pass" tail of the worker loop is not unit-testable (one branch uncovered, as in the
     other refreshers).
+
+31. **Only codecs whose empty packets can be told apart are references** (changed after review). Accepted: `subrip`/`srt`,
+    `ass`/`ssa` (one event per packet), `mov_text`/`tx3g` (an MP4 writes a 2-byte empty end sample per cue, dropped by
+    size: a sample with text is 3 bytes or more), `hdmv_pgs_subtitle` (clear packets under 50 bytes dropped) and
+    `dvd_subtitle`. Excluded as a reference rather than guessed: `webvtt` (an MP4 one writes empty cue-end boxes of a size a
+    short real cue can share), `dvb_subtitle` (erase pages), `xsub`, teletext, `text` and any unknown codec.
+32. **`applied` in the DTO is derived**, not the stored flag: the alignment is `ALIGNED`, `offsetSource` is `AUTO` and
+    `offsetMs` equals `fittedOffsetMs`. An owner's nudge or reset therefore clears it at once. The column stays as the
+    record of what the last save did.
+33. **Every new service has an isolated unit test** (AGENTS.md rule 5): `SidecarTimingServiceUnitTest` (repositories faked, no
+    Spring) beside the H2 `SidecarTimingServiceTest`; the reader, refresher, scheduler, keys, streams, packets, codec,
+    fit and trust already had one.
 
 ## What the owner wants
 
@@ -560,7 +579,7 @@ next PR.** Package `gregochr.cinefilm.subtitle`; migration `V17__forced_timing_c
 - **Fit** (`TimingFit`, pure): candidate offsets from start differences within +-60 s (100 ms buckets, the 40 most frequent
   scored, then refined at 10 ms around the best); a served cue matches a reference start within +-300 ms; best = most matched,
   then least total distance, then smallest |offset|. `ALIGNED`: at least 8 cues, share at least 0.80, |offset| at most 10 s,
-  median residual at most 120 ms, and a share that beats the share at best+-5 s by at least 0.4. Under 8 cues is `TOO_FEW`;
+  median residual at most 120 ms, and a share that beats the best share at four wrong offsets (+3.7, -4.3, +7.1, -9.3 s) by at least 0.4. Under 8 cues is `TOO_FEW`;
   no track is `NO_REFERENCE`; anything else `CHECK` with plain reasons ("Only 4 of 12 lines line up with the film's English
   track", "Best fit is more than 10 s out (14.0 s later)", "The lines line up only loosely (typically 250 ms off)", "The
   film's English track has so many lines that this fit could be chance").

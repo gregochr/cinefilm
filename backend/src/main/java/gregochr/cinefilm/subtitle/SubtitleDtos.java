@@ -77,7 +77,8 @@ public final class SubtitleDtos {
      * @param matchedShare the share (0 to 1) of this file's lines that line up at that offset
      * @param matchedCount how many lines that is
      * @param servedCount how many lines the file has
-     * @param applied true while this file's offset is the one the check set from this result
+     * @param applied true while this file's offset is the one the check set from this result (derived now: the offset
+     *     source is {@code AUTO} and the offset equals {@code fittedOffsetMs}, so an owner's nudge or reset clears it)
      * @param checkedAt when the fit was made
      */
     public record AlignmentDto(String verdict, List<String> reasons, int fittedOffsetMs, double matchedShare,

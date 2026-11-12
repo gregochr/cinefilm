@@ -129,6 +129,7 @@ public class SidecarSync {
             return;
         }
         SubtitleSidecar target = row == null ? new SubtitleSidecar() : row;
+        String before = target.getCuesText();
         SrtParser.Parsed parsed = SrtParser.parse(bytes.get());
         target.setPath(file.path());
         target.setSizeBytes(file.sizeBytes());
@@ -139,8 +140,11 @@ public class SidecarSync {
         target.setCueCount(parsed.cues().size());
         target.setLastEndMs(parsed.cues().stream().mapToLong(SubtitleCue::endMs).max().orElse(0));
         target.clearVerification();
-        // An automatic offset was fitted for the old cues; the timing check fits the new ones afresh.
-        target.dropAutoOffset();
+        // An automatic offset was fitted for the old cues; the timing check fits changed ones afresh. A rewritten file
+        // with the same cues keeps it (the check's identity is unchanged, so nothing would fit it again).
+        if (!target.getCuesText().equals(before)) {
+            target.dropAutoOffset();
+        }
         target.setUpdatedAt(now);
         sidecars.save(target);
     }

@@ -198,7 +198,11 @@ public class SidecarTimingRefresher {
                     .orElseThrow(() -> new EmbeddedCueReader.ReadException("The film file cannot be found"));
                 EmbeddedCueReader.Reading reading = reader.read(file);
                 failedAt.remove(read.mediaFileId());
-                if (service.saveReference(read, reading, clock.instant())) {
+                SaveOutcome saved = service.saveReference(read, reading, clock.instant());
+                if (saved == SaveOutcome.BUSY) {
+                    throw new Wait("a scan or an edit is using the library");
+                }
+                if (saved == SaveOutcome.SAVED) {
                     counts[0]++;
                 }
             } catch (EmbeddedCueReader.ReadException e) {

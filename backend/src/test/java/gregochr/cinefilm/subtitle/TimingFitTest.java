@@ -194,6 +194,18 @@ class TimingFitTest {
     }
 
     @Test
+    void theRealToolFixtureIsAlignedAtTwoAndAHalfSecondsEarly() {
+        List<Long> full = EmbeddedCueReaderRealToolsTest.irregular(120, 5_000);
+        List<Long> early = EmbeddedCueReaderRealToolsTest.everyTenth(full).stream().map(s -> s - 2_500).toList();
+
+        Result result = TimingFit.fit(early, full);
+
+        assertThat(result.verdict()).isEqualTo(Verdict.ALIGNED);
+        assertThat(result.fittedOffsetMs()).isEqualTo(2_500);
+        assertThat(result.servedCount()).isEqualTo(12);
+    }
+
+    @Test
     void aSparseTrackKeepsTheMarginTheGuardAsksFor() {
         List<Long> track = track(80, 21);
 

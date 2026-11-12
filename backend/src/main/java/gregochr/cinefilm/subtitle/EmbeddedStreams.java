@@ -10,7 +10,8 @@ import java.util.regex.Pattern;
 /**
  * Which subtitle track inside a film's media file is the full English one to time a forced subtitle against. Pure.
  *
- * <p>A candidate is an English track that is not forced (not flagged, and not titled "forced", "foreign" or "signs").
+ * <p>A candidate is an English track, in a codec whose packets can be told from empty ones, that is not forced (not
+ * flagged, and not titled "forced", "foreign" or "signs").
  * Among the candidates that hold at least {@value #MIN_FULL_CUES} cues (fewer is a forced or signs-only track, not a
  * full one) the choice is, in order: text over picture (no clear-packet ambiguity), a track flagged default or titled
  * as the full track, then the one with the most cues, then the lowest stream index.
@@ -23,6 +24,13 @@ final class EmbeddedStreams {
     private static final Set<String> ENGLISH = Set.of("eng", "en");
     private static final Set<String> PICTURE = Set.of("hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle", "xsub",
         "dvb_teletext");
+    /**
+     * The codecs whose packets are one cue each, or whose empty end packets {@link SubtitlePackets} can tell apart by
+     * size. Others are never a reference: {@code webvtt} (an MP4 one writes empty cue-end boxes of a size a short real
+     * cue can share), {@code dvb_subtitle} (erase pages), {@code xsub}, teletext, and any codec not known.
+     */
+    private static final Set<String> RELIABLE = Set.of("subrip", "srt", "ass", "ssa", "mov_text", "tx3g",
+        "hdmv_pgs_subtitle", "dvd_subtitle");
     private static final Pattern NOT_FULL = Pattern.compile("(?i)forced|foreign|\\bsigns?\\b");
     private static final Pattern FULL = Pattern.compile("(?i)\\b(full|sdh|cc|complete|dialogue|dialog)\\b");
 
@@ -59,7 +67,7 @@ final class EmbeddedStreams {
 
     /** The English tracks that are not forced, in stream order: the ones worth reading. */
     static List<Stream> candidates(List<Stream> streams) {
-        return streams.stream().filter(s -> english(s.language()) && !s.forced()
+        return streams.stream().filter(s -> english(s.language()) && !s.forced() && reliable(s.codec())
             && (s.title() == null || !NOT_FULL.matcher(s.title()).find()))
             .sorted(Comparator.comparingInt(Stream::index)).toList();
     }
@@ -92,6 +100,10 @@ final class EmbeddedStreams {
             return new Choice(null, List.of(), "The English subtitle track has too few lines to be a full track");
         }
         return new Choice(chosen, startsByIndex.get(chosen.index()), null);
+    }
+
+    private static boolean reliable(String codec) {
+        return codec != null && RELIABLE.contains(codec.toLowerCase(Locale.ROOT));
     }
 
     private static boolean labelled(Stream stream) {

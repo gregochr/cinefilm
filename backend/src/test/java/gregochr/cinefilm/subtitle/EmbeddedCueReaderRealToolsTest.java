@@ -71,7 +71,7 @@ class EmbeddedCueReaderRealToolsTest {
         Files.writeString(library.resolve("forced.srt"), srt(forcedStarts));
         Path clip = library.resolve("Test Film.mkv");
         CommandRunner.Result made = RUNNER.run(List.of("ffmpeg", "-v", "error", "-nostdin", "-y",
-            "-f", "lavfi", "-i", "color=c=black:s=64x48:r=1:d=620",
+            "-f", "lavfi", "-i", "color=c=black:s=64x48:r=1:d=1200",
             "-i", library.resolve("forced.srt").toString(),
             "-i", library.resolve("full.srt").toString(),
             "-map", "0:v", "-map", "1:0", "-map", "2:0",
@@ -85,14 +85,30 @@ class EmbeddedCueReaderRealToolsTest {
         return clip;
     }
 
+    /** A track with irregular gaps of 3 to 7 seconds, like real dialogue (no period a wrong offset could match). */
+    static List<Long> irregular(int count, long from) {
+        List<Long> starts = new java.util.ArrayList<>();
+        long at = from;
+        for (int i = 0; i < count; i++) {
+            starts.add(at);
+            at += 3_000 + (long) i * i * 131 % 4_001;
+        }
+        return starts;
+    }
+
+    /** The forced file's cues: every tenth line of the full track. */
+    static List<Long> everyTenth(List<Long> full) {
+        return IntStream.range(0, full.size()).filter(i -> i % 10 == 0).mapToObj(full::get).toList();
+    }
+
     private static List<Long> every(long gap, int count, long from) {
         return IntStream.range(0, count).mapToObj(i -> from + i * gap).toList();
     }
 
     @Test
     void theFullEnglishTrackIsReadNotTheForcedOneAndAShiftedForcedFileFitsIt() throws IOException {
-        List<Long> full = every(5_000, FULL_CUES, 5_000);
-        List<Long> forced = every(50_000, 12, 5_000);
+        List<Long> full = irregular(FULL_CUES, 5_000);
+        List<Long> forced = everyTenth(full);
         Path clip = clip(full, forced);
         EmbeddedCueReader reader = new EmbeddedCueReader(RUNNER, new ProcessLineStreamRunner(), "ffprobe", 10);
 
@@ -103,6 +119,7 @@ class EmbeddedCueReaderRealToolsTest {
         assertThat(reading.streamIndex()).isEqualTo(2);
         assertThat(reading.codec()).isEqualTo("subrip");
         assertThat(reading.startsMs()).containsExactlyElementsOf(full);
+        assertThat(full.get(full.size() - 1)).isLessThan(1_200_000L);
 
         // The owner's forced file is 2.5 s early: its cues are the film's, minus 2.5 s.
         List<Long> early = forced.stream().map(start -> start - 2_500).toList();

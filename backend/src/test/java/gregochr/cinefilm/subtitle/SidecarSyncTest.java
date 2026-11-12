@@ -205,6 +205,24 @@ class SidecarSyncTest extends SubtitleTestBase {
     }
 
     @Test
+    void aRewrittenFileWithTheSameCuesKeepsItsAutomaticOffset() throws IOException {
+        filmWithParts("Taken", 1, 90);
+        byte[] content = bytes(CUES);
+        write("Taken.en.forced.srt", content, T1);
+        sync.sync(found(listed("Taken.en.forced.srt", content, T1)));
+        SubtitleSidecar row = sidecars.findAll().get(0);
+        row.setOffsetMs(900);
+        row.setOffsetSource(SubtitleSidecar.OffsetSource.AUTO);
+        byte[] rewritten = bytes(CUES.replace("\n", "\r\n"));
+        write("Taken.en.forced.srt", rewritten, T2);
+
+        sync.sync(found(listed("Taken.en.forced.srt", rewritten, T2)));
+
+        assertThat(row.getOffsetMs()).isEqualTo(900);
+        assertThat(row.getOffsetSource()).isEqualTo(SubtitleSidecar.OffsetSource.AUTO);
+    }
+
+    @Test
     void aFileThatMovesToAnotherFilmFileLosesAnAutomaticOffset() {
         Film taken = filmWithParts("Taken", 1, 90);
         Film alien = filmWithParts("Alien", 1, 90);

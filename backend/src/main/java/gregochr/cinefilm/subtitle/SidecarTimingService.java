@@ -162,19 +162,32 @@ public class SidecarTimingService {
 
     /**
      * Stores what was read from a film file, but only while the file is still the one that was read: it exists, is
-     * present and has the same fingerprint (a rescan that found it changed makes the read stale and drops it).
+     * present and has the same fingerprint (a rescan that found it changed makes the read stale and drops it). The
+     * check and the write are one step under the {@link LibraryLock} (a scan rewrites the file rows), taken only for
+     * this short write, never across the read.
      *
      * @param read the read that was asked for
      * @param reading what ffprobe found
      * @param now the time to stamp
-     * @return true when stored; false when the file changed or went meanwhile
+     * @return {@code SAVED}; {@code DROPPED} when the file changed or went meanwhile; {@code BUSY} when a scan or an
+     *     edit holds the lock (the read is lost and the file is read again later)
      */
-    @Transactional
-    public boolean saveReference(ReferenceRead read, EmbeddedCueReader.Reading reading, Instant now) {
+    public SaveOutcome saveReference(ReferenceRead read, EmbeddedCueReader.Reading reading, Instant now) {
+        if (!lock.tryAcquire(LibraryLock.SUBTITLE)) {
+            return SaveOutcome.BUSY;
+        }
+        try {
+            return tx.execute(status -> saveReferenceLocked(read, reading, now));
+        } finally {
+            lock.release();
+        }
+    }
+
+    private SaveOutcome saveReferenceLocked(ReferenceRead read, EmbeddedCueReader.Reading reading, Instant now) {
         MediaFile file = files.findById(read.mediaFileId()).orElse(null);
         if (file == null || file.getPresence() != Presence.PRESENT
             || !read.fingerprint().equals(TimingKeys.fingerprint(file))) {
-            return false;
+            return SaveOutcome.DROPPED;
         }
         EmbeddedCueStarts row = cache.findById(file.getId()).orElseGet(EmbeddedCueStarts::new);
         row.setMediaFileId(file.getId());
@@ -187,7 +200,7 @@ public class SidecarTimingService {
         row.setReason(reading.reason());
         row.setReadAt(now);
         cache.save(row);
-        return true;
+        return SaveOutcome.SAVED;
     }
 
     /**
@@ -341,7 +354,9 @@ public class SidecarTimingService {
                 TimingKeys.referenceKey(s.edition(), s.sidecar(), reads))) {
                 current.put(s.sidecar().getId(), new AlignmentDto(row.getVerdict().name(), row.reasonList(),
                     row.getFittedOffsetMs(), row.getMatchedShare(), row.getMatchedCount(), row.getServedCount(),
-                    row.isApplied(), row.getCheckedAt()));
+                    row.getVerdict() == TimingFit.Verdict.ALIGNED
+                        && s.sidecar().getOffsetSource() == SubtitleSidecar.OffsetSource.AUTO
+                        && s.sidecar().getOffsetMs() == row.getFittedOffsetMs(), row.getCheckedAt()));
             }
         }
         return current;

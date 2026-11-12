@@ -24,7 +24,12 @@ final class SubtitlePackets {
     /** Starts this close together are one cue. */
     static final long MERGE_MS = 50;
 
-    private static final String PGS = "hdmv_pgs_subtitle";
+    /**
+     * The smallest packet that is a cue, by codec. {@code mov_text} (MP4) writes a 2-byte empty sample (a zero length
+     * prefix) to end each cue, while a sample with any text is at least 3 bytes.
+     */
+    private static final Map<String, Integer> MIN_BYTES = Map.of("hdmv_pgs_subtitle", PGS_MIN_BYTES, "mov_text", 3,
+        "tx3g", 3);
 
     private final Map<Integer, String> codecs;
     private final Map<Integer, List<Long>> starts = new HashMap<>();
@@ -57,7 +62,8 @@ final class SubtitlePackets {
             || !codecs.containsKey(index)) {
             return;
         }
-        if (PGS.equals(codecs.get(index)) && (size == null || size < PGS_MIN_BYTES)) {
+        Integer minimum = MIN_BYTES.get(codecs.get(index));
+        if (minimum != null && (size == null || size < minimum)) {
             return;
         }
         starts.get(index).add(Math.round(seconds * 1000));

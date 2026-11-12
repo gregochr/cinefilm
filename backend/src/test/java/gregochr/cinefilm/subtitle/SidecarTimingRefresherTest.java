@@ -130,7 +130,7 @@ class SidecarTimingRefresherTest {
         when(service.readsFor(7L)).thenReturn(List.of(read(70L)));
         when(root.resolveFile("Taken.m4v")).thenReturn(Optional.of(FILE));
         when(reader.read(FILE)).thenReturn(usable());
-        when(service.saveReference(read(70L), usable(), NOW)).thenReturn(true);
+        when(service.saveReference(read(70L), usable(), NOW)).thenReturn(SaveOutcome.SAVED);
         when(service.fitJobs(7L)).thenReturn(List.of(job(7L, 5L)));
     }
 
@@ -189,7 +189,7 @@ class SidecarTimingRefresherTest {
         when(service.readsFor(7L)).thenReturn(List.of(read(70L)));
         when(root.resolveFile("Taken.m4v")).thenReturn(Optional.of(FILE));
         when(reader.read(FILE)).thenReturn(usable());
-        when(service.saveReference(read(70L), usable(), NOW)).thenReturn(false);
+        when(service.saveReference(read(70L), usable(), NOW)).thenReturn(SaveOutcome.DROPPED);
         when(service.fitJobs(7L)).thenReturn(List.of());
 
         startAndRun();
@@ -230,7 +230,7 @@ class SidecarTimingRefresherTest {
         when(sessions.isEncoding()).thenReturn(false, false, true);
         when(root.resolveFile("Taken.m4v")).thenReturn(Optional.of(FILE));
         when(reader.read(FILE)).thenReturn(usable());
-        when(service.saveReference(read(70L), usable(), NOW)).thenReturn(true);
+        when(service.saveReference(read(70L), usable(), NOW)).thenReturn(SaveOutcome.SAVED);
 
         startAndRun();
 
@@ -250,6 +250,24 @@ class SidecarTimingRefresherTest {
 
         verify(service, never()).readsFor(8L);
         verify(service, never()).save(job(7L, 6L), TimingFit.fit(STARTS, TRACK), NOW);
+        assertThat(messages()).containsExactly("Subtitle timing checks wait: a scan or an edit is using the library",
+            FINISHED.formatted(0, 0, 0, 0));
+        queued.clear();
+        refresher.startIfDeferred();
+        assertThat(queued).hasSize(1);
+    }
+
+    @Test
+    void aReadThatCannotBeSavedBecauseTheLibraryIsLockedStopsTheRunForLater() {
+        when(service.dueFilmIds()).thenReturn(List.of(7L));
+        when(service.readsFor(7L)).thenReturn(List.of(read(70L)));
+        when(root.resolveFile("Taken.m4v")).thenReturn(Optional.of(FILE));
+        when(reader.read(FILE)).thenReturn(usable());
+        when(service.saveReference(read(70L), usable(), NOW)).thenReturn(SaveOutcome.BUSY);
+
+        startAndRun();
+
+        verify(service, never()).fitJobs(any());
         assertThat(messages()).containsExactly("Subtitle timing checks wait: a scan or an edit is using the library",
             FINISHED.formatted(0, 0, 0, 0));
         queued.clear();
@@ -290,9 +308,9 @@ class SidecarTimingRefresherTest {
         when(service.fitJobs(7L)).thenReturn(List.of());
         when(root.resolveFile("Taken.m4v")).thenReturn(Optional.of(FILE));
         when(reader.read(FILE)).thenThrow(new ReadException("x")).thenReturn(usable(), usable());
-        when(service.saveReference(read(70L), usable(), NOW.plus(Duration.ofHours(7)))).thenReturn(true);
+        when(service.saveReference(read(70L), usable(), NOW.plus(Duration.ofHours(7)))).thenReturn(SaveOutcome.SAVED);
         when(service.saveReference(read(70L), usable(), NOW.plus(Duration.ofHours(7).plusMinutes(1))))
-            .thenReturn(true);
+            .thenReturn(SaveOutcome.SAVED);
 
         startAndRun();
         queued.clear();

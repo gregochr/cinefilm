@@ -42,6 +42,23 @@ class EmbeddedStreamsTest {
     }
 
     @Test
+    void onlyCodecsWhoseEmptyPacketsCanBeToldApartAreCandidates() {
+        List<Stream> streams = List.of(
+            new Stream(1, "subrip", "eng", false, false, null), new Stream(2, "srt", "eng", false, false, null),
+            new Stream(3, "ass", "eng", false, false, null), new Stream(4, "ssa", "eng", false, false, null),
+            new Stream(5, "mov_text", "eng", false, false, null), new Stream(6, "tx3g", "eng", false, false, null),
+            new Stream(7, "hdmv_pgs_subtitle", "eng", false, false, null),
+            new Stream(8, "dvd_subtitle", "eng", false, false, null),
+            new Stream(9, "webvtt", "eng", false, false, null),
+            new Stream(10, "dvb_subtitle", "eng", false, false, null),
+            new Stream(11, "xsub", "eng", false, false, null), new Stream(12, "text", "eng", false, false, null),
+            new Stream(13, null, "eng", false, false, null));
+
+        assertThat(EmbeddedStreams.candidates(streams)).extracting(Stream::index)
+            .containsExactly(1, 2, 3, 4, 5, 6, 7, 8);
+    }
+
+    @Test
     void aTextTrackBeatsAPictureTrackEvenWithFewerCues() {
         List<Stream> streams = List.of(picture(2, "eng", false, true, "Full"), text(3, "eng", false, false, null));
 

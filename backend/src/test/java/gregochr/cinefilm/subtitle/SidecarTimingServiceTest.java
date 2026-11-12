@@ -219,7 +219,7 @@ class SidecarTimingServiceTest extends SubtitleTestBase {
         ReferenceRead ask = new ReferenceRead(fileId(film, 1), "Taken.m4v", "1000:" + NOW.toEpochMilli());
 
         assertThat(service.saveReference(ask, new EmbeddedCueReader.Reading(EmbeddedCueStarts.Status.USABLE, 3, 2,
-            "hdmv_pgs_subtitle", List.of(1_000L, 3_500L), null), NOW)).isTrue();
+            "hdmv_pgs_subtitle", List.of(1_000L, 3_500L), null), NOW)).isEqualTo(SaveOutcome.SAVED);
         EmbeddedCueStarts stored = cache.findById(ask.mediaFileId()).orElseThrow();
 
         assertThat(stored.getStatus()).isEqualTo(EmbeddedCueStarts.Status.USABLE);
@@ -233,7 +233,7 @@ class SidecarTimingServiceTest extends SubtitleTestBase {
         assertThat(stored.getReadAt()).isEqualTo(NOW);
 
         assertThat(service.saveReference(ask, new EmbeddedCueReader.Reading(EmbeddedCueStarts.Status.NO_REFERENCE, 0,
-            null, null, List.of(), "The file has no subtitle track"), LATER)).isTrue();
+            null, null, List.of(), "The file has no subtitle track"), LATER)).isEqualTo(SaveOutcome.SAVED);
         EmbeddedCueStarts replaced = cache.findById(ask.mediaFileId()).orElseThrow();
 
         assertThat(replaced.getStatus()).isEqualTo(EmbeddedCueStarts.Status.NO_REFERENCE);
@@ -252,13 +252,13 @@ class SidecarTimingServiceTest extends SubtitleTestBase {
         MediaFile file = file(film, 1);
 
         assertThat(service.saveReference(new ReferenceRead(file.getId(), "Taken.m4v", "1000:1"), reading, NOW))
-            .isFalse();
+            .isEqualTo(SaveOutcome.DROPPED);
         assertThat(service.saveReference(new ReferenceRead(999_999L, "x", "1000:" + NOW.toEpochMilli()), reading, NOW))
-            .isFalse();
+            .isEqualTo(SaveOutcome.DROPPED);
         file.setPresence(Presence.MISSING);
         mediaFiles.saveAndFlush(file);
         assertThat(service.saveReference(new ReferenceRead(file.getId(), "Taken.m4v",
-            "1000:" + NOW.toEpochMilli()), reading, NOW)).isFalse();
+            "1000:" + NOW.toEpochMilli()), reading, NOW)).isEqualTo(SaveOutcome.DROPPED);
         assertThat(cache.count()).isZero();
     }
 

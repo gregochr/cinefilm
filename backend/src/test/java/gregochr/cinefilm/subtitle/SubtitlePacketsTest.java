@@ -62,6 +62,20 @@ class SubtitlePacketsTest {
     }
 
     @Test
+    void anMp4MovTextEmptyEndSampleIsNotACueButAnyTextIs() {
+        SubtitlePackets packets = read(Map.of(2, "mov_text", 3, "tx3g"), List.of(
+            "stream_index=2|pts_time=1.000000|duration_time=2.000000|size=9",
+            "stream_index=2|pts_time=3.000000|duration_time=1.000000|size=2",
+            "stream_index=2|pts_time=4.000000|duration_time=1.000000|size=3",
+            "stream_index=2|pts_time=5.000000|duration_time=1.000000|size=N/A",
+            "stream_index=3|pts_time=6.000000|duration_time=1.000000|size=2",
+            "stream_index=3|pts_time=7.000000|duration_time=1.000000|size=12"));
+
+        assertThat(packets.starts().get(2)).containsExactly(1_000L, 4_000L);
+        assertThat(packets.starts().get(3)).containsExactly(7_000L);
+    }
+
+    @Test
     void fieldOrderDoesNotMatter() {
         SubtitlePackets packets = read(Map.of(2, "subrip"), List.of(
             "size=12|duration_time=1.500000|pts_time=1.000000|stream_index=2"));

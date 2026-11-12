@@ -95,6 +95,7 @@ class SubtitleAdminTimingTest extends SubtitleTestBase {
         timing.save(readyJob(film), new Result(Verdict.ALIGNED, 900, 1.0, 12, 12, 10, List.of()), LATER);
         assertThat(listed(row).offsetSource()).isEqualTo("AUTO");
         admin.offset(row.getId(), new OffsetRequest(0));
+        assertThat(listed(row).alignment().applied()).isFalse();
         MediaFile changed = film.getEditions().get(0).originalParts().get(0);
         changed.setModifiedAt(NOW.plusSeconds(1));
         mediaFiles.saveAndFlush(changed);

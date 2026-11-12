@@ -26,9 +26,9 @@ import java.util.Map;
  *
  * <p>{@link Verdict#ALIGNED} needs at least {@value #MIN_CUES} served cues, a matched share of at least 0.80, a fitted
  * offset within 10 s, a median residual of at most {@value #MAX_MEDIAN_RESIDUAL_MS} ms, and a share that beats the
- * share at deliberately wrong offsets (best plus and minus 5 s) by at least 0.4, so a dense reference cannot produce
- * a fit by chance. Fewer than {@value #MIN_CUES} cues is {@link Verdict#TOO_FEW}; anything else is
- * {@link Verdict#CHECK} with reasons in plain words.
+ * share at deliberately wrong offsets (the best plus 3.7 s, minus 4.3 s, plus 7.1 s and minus 9.3 s, the highest
+ * counting) by at least 0.4, so a dense reference cannot produce a fit by chance. Fewer than {@value #MIN_CUES} cues
+ * is {@link Verdict#TOO_FEW}; anything else is {@link Verdict#CHECK} with reasons in plain words.
  */
 public final class TimingFit {
 
@@ -55,8 +55,11 @@ public final class TimingFit {
     static final long MAX_MEDIAN_RESIDUAL_MS = 120;
     /** How far the best share must beat the share at a wrong offset. */
     static final double MIN_MARGIN = 0.4;
-    /** The deliberately wrong offsets the chance share is measured at (either side of the best). */
-    static final long WRONG_OFFSET_MS = 5_000;
+    /**
+     * The deliberately wrong offsets (added to the best) the chance share is measured at, the best of them counting.
+     * Several, none a round number: a track with a nearly regular period would match at one probe offset by design.
+     */
+    static final long[] WRONG_OFFSETS_MS = {3_700, -4_300, 7_100, -9_300};
 
     /** Most matches, then the least total distance, then the smaller absolute offset, then the lower offset. */
     private static final Comparator<Score> BEST_FIRST = Comparator.comparingInt(Score::matched).reversed()
@@ -125,8 +128,11 @@ public final class TimingFit {
         Score best = best(s, r);
         double share = (double) best.matched() / servedCount;
         int median = median(best.residuals());
-        double chance = Math.max(score(s, r, best.offsetMs() + WRONG_OFFSET_MS).matched(),
-            score(s, r, best.offsetMs() - WRONG_OFFSET_MS).matched()) / (double) servedCount;
+        int chanceMatches = 0;
+        for (long wrong : WRONG_OFFSETS_MS) {
+            chanceMatches = Math.max(chanceMatches, score(s, r, best.offsetMs() + wrong).matched());
+        }
+        double chance = chanceMatches / (double) servedCount;
         List<String> reasons = new ArrayList<>();
         if (share < MIN_SHARE) {
             reasons.add("Only " + best.matched() + " of " + servedCount
