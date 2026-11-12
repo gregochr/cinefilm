@@ -103,8 +103,9 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
     never sent again (it may already have been charged). The login token is kept in memory only and a login is made again only after a 401, once.
     **The download link is untrusted**: it is fetched only when it is `https`, has no user info and the default port, and
     its host is a plain name below `opensubtitles.com` (checked before any request, so another host gets none); the fetch
-    is a GET that carries neither the key nor the token nor a cookie, asks for `identity` encoding, and at most 2 MB is read
-    from the wire (more is an error, enforced while reading, before any decoding). The file is parsed as SRT, never
+    is a GET that carries neither the key nor the token nor a cookie, sends no `Accept-Encoding`, and at most 2 MB is read
+    from the wire (more is an error, enforced while reading). A gzip payload (magic bytes or `Content-Encoding: gzip`) is
+    inflated after that with its own 2 MB cap; a corrupt or oversized one is a charged failure, never a refund. The file is parsed as SRT, never
     evaluated, and kept as normalised text (at most 1 MB). All replies are untrusted: a field of the wrong type is dropped;
     text (`release`, 200 characters) is cleaned of control characters and only ever stored and shown as text; a result for
     another film's IMDb id is dropped; a reset time further than 36 hours ahead is not believed. Anything unexpected is an

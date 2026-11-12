@@ -556,7 +556,7 @@ class OpenSubtitlesClientDownloadTest {
             .andExpect(headerDoesNotExist(HttpHeaders.AUTHORIZATION)).andExpect(headerDoesNotExist("Api-Key"))
             .andExpect(headerDoesNotExist(HttpHeaders.COOKIE))
             .andExpect(header(HttpHeaders.USER_AGENT, "CineFilm v0.4.0"))
-            .andExpect(header(HttpHeaders.ACCEPT_ENCODING, "identity"))
+            .andExpect(headerDoesNotExist(HttpHeaders.ACCEPT_ENCODING))
             .andRespond(withSuccess(SRT, MediaType.TEXT_PLAIN));
 
         client.download(1);
@@ -809,5 +809,134 @@ class OpenSubtitlesClientDownloadTest {
                 .isInstanceOf(OpenSubtitlesUnavailableException.class)
                 .isNotInstanceOf(OpenSubtitlesChargedException.class);
         }
+    }
+
+    private static byte[] gzip(byte[] plain) {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        try (java.util.zip.GZIPOutputStream zip = new java.util.zip.GZIPOutputStream(out)) {
+            zip.write(plain);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+        return out.toByteArray();
+    }
+
+    private void expectBytes(byte[] body, String contentEncoding) {
+        server.expect(once(), requestTo(LINK)).andRespond(request -> {
+            MockClientHttpResponse response = new MockClientHttpResponse(body, HttpStatus.OK);
+            if (contentEncoding != null) {
+                response.getHeaders().add(HttpHeaders.CONTENT_ENCODING, contentEncoding);
+            }
+            return response;
+        });
+    }
+
+    @Test
+    void aPlainFileIsReadAsItIs() {
+        expectLogin();
+        expectDownload(download(LINK));
+        expectBytes(SRT.getBytes(java.nio.charset.StandardCharsets.UTF_8), null);
+
+        assertThat(client.download(1).parsed().cues()).hasSize(2);
+    }
+
+    @Test
+    void aGzippedFileIsInflatedWhetherTheMagicBytesOrTheContentEncodingSaySo() {
+        byte[] zipped = gzip(SRT.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        expectLogin();
+        expectDownload(download(LINK));
+        expectBytes(zipped, null);
+        expectDownload(download(LINK));
+        expectBytes(zipped, "gzip");
+
+        assertThat(client.download(1).parsed().cues()).hasSize(2);
+        assertThat(client.download(1).parsed().cues()).hasSize(2);
+    }
+
+    @Test
+    void aFileThatSaysGzipButIsNotIsACorruptChargedFailureAndSoIsATruncatedOne() {
+        byte[] zipped = gzip(SRT.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        expectLogin();
+        expectDownload(download(LINK));
+        expectBytes(SRT.getBytes(java.nio.charset.StandardCharsets.UTF_8), "gzip");
+        expectDownload(download(LINK));
+        expectBytes(java.util.Arrays.copyOf(zipped, zipped.length - 6), null);
+
+        for (int i = 0; i < 2; i++) {
+            assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> client.download(1)))
+                .hasMessage("OpenSubtitles file could not be unzipped")
+                .isInstanceOfSatisfying(OpenSubtitlesChargedException.class,
+                    e -> assertThat(e.permanent()).isTrue());
+        }
+    }
+
+    @Test
+    void aGzipFileThatInflatesPastTheCapIsAChargedFailureAndOneExactlyAtItIsRead() {
+        // The client's file cap is 100 bytes: 100 inflated bytes pass, 101 do not, although both zip to far less.
+        String exactly = SRT + " ".repeat(100 - SRT.length());
+        expectLogin();
+        expectDownload(download(LINK));
+        expectBytes(gzip(exactly.getBytes(java.nio.charset.StandardCharsets.UTF_8)), null);
+        expectDownload(download(LINK));
+        expectBytes(gzip((exactly + " ").getBytes(java.nio.charset.StandardCharsets.UTF_8)), null);
+
+        assertThat(client.download(1).parsed().cues()).hasSize(2);
+        assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> client.download(1)))
+            .hasMessage("OpenSubtitles file is larger than 100 bytes once unzipped")
+            .isInstanceOfSatisfying(OpenSubtitlesChargedException.class, e -> assertThat(e.permanent()).isTrue());
+    }
+
+    @Test
+    void aWireBodyOverTheCapIsRefusedBeforeAnyInflating() {
+        byte[] big = gzip(("x".repeat(10_000)).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        OpenSubtitlesClient tiny = clientWith(sleeps::add, clock, 1_000_000, 10);
+        expectLogin();
+        expectDownload(download(LINK));
+        expectBytes(big, "gzip");
+
+        assertThat(big.length).isGreaterThan(10);
+        assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> tiny.download(1)))
+            .hasMessage("OpenSubtitles file is larger than 10 bytes");
+    }
+
+    @Test
+    void hostNamesAreCheckedLabelByLabelWithoutARegex() {
+        for (String bad : new String[] {"a..opensubtitles.com", "-a.opensubtitles.com", "a-.opensubtitles.com",
+            "a_b.opensubtitles.com", "a b.opensubtitles.com", "A.opensubtitles.com".replace("A", "\u00e9"),
+            "x".repeat(250) + ".opensubtitles.com"}) {
+            server.reset();
+            server.expect(once(), requestTo(LOGIN_URL)).andRespond(withSuccess(login(TOKEN, bad), json()));
+            expectDownload(download(LINK));
+            expectFile(SRT);
+
+            clientWith(sleeps::add, clock, 1_000_000, 100).download(1);
+
+            server.verify();
+        }
+        server.reset();
+        server.expect(once(), requestTo(LOGIN_URL))
+            .andRespond(withSuccess(login(TOKEN, "a-b.c1.opensubtitles.com"), json()));
+        server.expect(once(), requestTo("https://a-b.c1.opensubtitles.com/api/v1/download"))
+            .andRespond(withSuccess(download(LINK), json()));
+        expectFile(SRT);
+
+        clientWith(sleeps::add, clock, 1_000_000, 100).download(1);
+
+        server.verify();
+    }
+
+    @Test
+    void anotherContentEncodingOrAFirstGzipByteAloneDoesNotMakeAFileGzip() {
+        expectLogin();
+        expectDownload(download(LINK));
+        expectBytes(SRT.getBytes(java.nio.charset.StandardCharsets.UTF_8), "identity");
+        expectDownload(download(LINK));
+        expectBytes(new byte[] {0x1f, 0x41, 0x42}, null);
+        expectDownload(download(LINK));
+        expectBytes(new byte[] {0x41}, null);
+
+        assertThat(client.download(1).parsed().cues()).hasSize(2);
+        assertThat(client.download(1).parsed().cues()).isEmpty();
+        assertThat(client.download(1).parsed().cues()).isEmpty();
     }
 }

@@ -3,6 +3,7 @@ package gregochr.cinefilm.opensubtitles;
 import gregochr.cinefilm.subtitle.SrtParser;
 import gregochr.cinefilm.tmdb.RequestPacer;
 import gregochr.cinefilm.tmdb.Sleeper;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -16,6 +17,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.function.LongSupplier;
 import java.util.regex.Pattern;
+import java.util.zip.GZIPInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -61,15 +63,15 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
 
     private static final Pattern IMDB_ID = Pattern.compile("tt\\d{1,10}");
     private static final Pattern VERSION = Pattern.compile("\\d[A-Za-z0-9.+-]*");
-    /** A plain lower-case host name: letters, digits, hyphens and dots. */
-    private static final Pattern HOST =
-        Pattern.compile("[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*");
     /** A JWT or anything shaped like one: safe to send in a header. */
     private static final Pattern TOKEN = Pattern.compile("[A-Za-z0-9._~+/=-]{1,4096}");
     private static final Pattern LIMIT_MESSAGE = Pattern.compile("(?i)limit|quota");
     private static final String HOST_SUFFIX = ".opensubtitles.com";
     private static final String LINK_REFUSED = "OpenSubtitles download link refused";
     private static final int HTTPS_PORT = 443;
+    private static final int MAX_HOST_CHARS = 253;
+    private static final int GZIP_FIRST = 0x1f;
+    private static final int GZIP_SECOND = 0x8b;
     private static final int UNAUTHORIZED = 401;
     private static final int FORBIDDEN = 403;
     private static final int NOT_ACCEPTABLE = 406;
@@ -88,7 +90,7 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
     private final int maxFileBytes;
 
     /** The session token from the last login, or null; guarded by {@code this}. */
-    private String token;
+    private String sessionToken;
     /** The account's own API host from the last login when it is acceptable, or null; guarded by {@code this}. */
     private String downloadHost;
 
@@ -230,7 +232,7 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
         JsonNode remaining = root.path("remaining");
         Integer left = remaining.isIntegralNumber()
             ? (int) Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, remaining.asLong())) : null;
-        Answer<SrtParser.Parsed> file;
+        Answer<Fetched> file;
         try {
             file = retrying(() -> fetchOnce(uri));
         } catch (OpenSubtitlesUnavailableException e) {
@@ -243,7 +245,11 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
             throw new OpenSubtitlesChargedException("OpenSubtitles file is larger than " + maxFileBytes + " bytes",
                 true);
         }
-        return new OpenSubtitlesDownload(file.body(), left, reset);
+        if (file.body().problem() != null) {
+            // The link was issued and the download counted: a payload that cannot be used is never a refund.
+            throw new OpenSubtitlesChargedException(file.body().problem(), true);
+        }
+        return new OpenSubtitlesDownload(file.body().parsed(), left, reset);
     }
 
     /**
@@ -266,9 +272,28 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
         return uri;
     }
 
-    /** True for a plain host name below {@code opensubtitles.com} (the bare domain itself does not count). */
+    /** True for a plain host name below {@code opensubtitles.com} (the bare domain has an empty first label). */
     private static boolean isOpenSubtitlesHost(String host) {
-        return HOST.matcher(host).matches() && host.endsWith(HOST_SUFFIX) && host.length() > HOST_SUFFIX.length();
+        return isPlainHost(host) && host.endsWith(HOST_SUFFIX);
+    }
+
+    /** A plain lower-case host name: dot-separated labels of letters, digits and inner hyphens (no regex, no IPv6). */
+    private static boolean isPlainHost(String host) {
+        if (host.isEmpty() || host.length() > MAX_HOST_CHARS) {
+            return false;
+        }
+        for (String label : host.split("\\.", -1)) {
+            if (label.isEmpty() || label.startsWith("-") || label.endsWith("-")) {
+                return false;
+            }
+            for (int i = 0; i < label.length(); i++) {
+                char c = label.charAt(i);
+                if (!(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-')) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     /** The reset time a reply states ({@code reset_time_utc}), or null; a reply that is not JSON has none. */
@@ -309,20 +334,20 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
     }
 
     private synchronized boolean hasSession() {
-        return token != null;
+        return sessionToken != null;
     }
 
     /** The session token, logging in when there is none. Logins are rate limited, so the token is kept. */
     private synchronized String session() {
-        if (token == null) {
+        if (sessionToken == null) {
             login();
         }
-        return token;
+        return sessionToken;
     }
 
     /** Forgets a token that was refused: the next download logs in again. */
     private synchronized void dropSession() {
-        token = null;
+        sessionToken = null;
     }
 
     private synchronized String downloadHost() {
@@ -346,7 +371,7 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
         if (!value.isString() || !TOKEN.matcher(value.asString()).matches()) {
             throw new OpenSubtitlesUnavailableException("OpenSubtitles returned an unexpected login reply");
         }
-        token = value.asString();
+        sessionToken = value.asString();
         // The account's own API host (a VIP account has another one) is used only when it is a plain host name below
         // opensubtitles.com; anything else is ignored.
         JsonNode base = root.path("base_url");
@@ -450,14 +475,19 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
                 response.getHeaders().getFirst(HttpHeaders.RETRY_AFTER), response.getBody(), true));
     }
 
+    /** A fetched file: read as SRT, or the reason it could not be (a gzip payload that is corrupt or too large). */
+    private record Fetched(SrtParser.Parsed parsed, String problem) {
+    }
+
     /**
      * Fetches the file behind a download link: a GET with none of the account's headers (the link host is never given
-     * the key or the session). At most {@code maxFileBytes} are read, from the wire, before anything is decoded.
+     * the key or the session) and no {@code Accept-Encoding}. At most {@code maxFileBytes} are read from the wire; a
+     * gzip payload (the magic bytes or {@code Content-Encoding: gzip}) is then inflated with its own cap of the same
+     * size, so neither the wire nor the inflated text can exceed it.
      */
-    private Answer<SrtParser.Parsed> fetchOnce(URI link) throws InterruptedException {
+    private Answer<Fetched> fetchOnce(URI link) throws InterruptedException {
         pacer.await();
         return client.get().uri(link).header(HttpHeaders.USER_AGENT, userAgent)
-            .header(HttpHeaders.ACCEPT_ENCODING, "identity")
             .exchange((request, response) -> {
                 int status = response.getStatusCode().value();
                 String retryAfter = response.getHeaders().getFirst(HttpHeaders.RETRY_AFTER);
@@ -465,8 +495,28 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
                     return new Answer<>(status, retryAfter, null);
                 }
                 byte[] bytes = response.getBody().readNBytes(maxFileBytes + 1);
-                return new Answer<>(status, retryAfter, bytes.length > maxFileBytes ? null : SrtParser.parse(bytes));
+                if (bytes.length > maxFileBytes) {
+                    return new Answer<>(status, retryAfter, null);
+                }
+                String encoding = response.getHeaders().getFirst(HttpHeaders.CONTENT_ENCODING);
+                boolean gzip = encoding != null && "gzip".equalsIgnoreCase(encoding.strip())
+                    || bytes.length >= 2 && (bytes[0] & 0xff) == GZIP_FIRST && (bytes[1] & 0xff) == GZIP_SECOND;
+                Fetched fetched = gzip ? inflated(bytes) : new Fetched(SrtParser.parse(bytes), null);
+                return new Answer<>(status, retryAfter, fetched);
             });
+    }
+
+    /** Inflates a gzip payload up to {@code maxFileBytes}; a corrupt or too large one is a problem, not a throw. */
+    private Fetched inflated(byte[] gzipped) {
+        try (GZIPInputStream in = new GZIPInputStream(new ByteArrayInputStream(gzipped))) {
+            byte[] text = in.readNBytes(maxFileBytes + 1);
+            if (text.length > maxFileBytes) {
+                return new Fetched(null, "OpenSubtitles file is larger than " + maxFileBytes + " bytes once unzipped");
+            }
+            return new Fetched(SrtParser.parse(text), null);
+        } catch (IOException e) {
+            return new Fetched(null, "OpenSubtitles file could not be unzipped");
+        }
     }
 
     /** The answer with its body read as text for a 2xx (and a 406 when asked), null when over the cap. */

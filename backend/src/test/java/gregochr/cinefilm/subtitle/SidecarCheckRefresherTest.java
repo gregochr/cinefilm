@@ -973,4 +973,17 @@ class SidecarCheckRefresherTest {
         assertThat(saved.getValue().getImdbId()).isEqualTo("tt9");
         assertThat(saved.getValue().getId()).isEqualTo(77L);
     }
+
+    @Test
+    void anEditionWhoseBestResultHasAnUnknownFileCountIsSkippedWithNoDownload() {
+        DueCheck unknown = new DueCheck(1L, 10L, "tt1", 5011, "Legacy", null, "v10", false, CUES);
+        when(service.due()).thenReturn(List.of(unknown));
+
+        startAndRun();
+
+        verify(api).downloadsEnabled();
+        verify(budget).blockedUntil(NOW);
+        verifyNoMoreInteractions(api, budget);
+        assertThat(messages()).contains("Edition 10 not checked: Only multi-part subtitles on OpenSubtitles");
+    }
 }
