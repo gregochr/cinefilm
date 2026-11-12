@@ -1,6 +1,9 @@
 /* Film detail */
 .detail {
   position: relative;
+  /* A block formatting context, so .detail__body's top margin stays inside and does not push the
+     absolutely positioned backdrop down by the same amount. */
+  display: flow-root;
 }
 .detail__backdrop {
   position: absolute;
@@ -10,6 +13,10 @@
   height: 560px;
   border-radius: 0;
   aspect-ratio: auto;
+}
+.detail__backdrop .art__img {
+  /* Crop from near the top: a centred crop of a 16:9 still cuts off the heads of standing figures. */
+  object-position: 50% 15%;
 }
 .detail__scrim {
   position: absolute;
