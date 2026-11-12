@@ -20,11 +20,12 @@ import tools.jackson.databind.json.JsonMapper;
  * @param uploadDate the upload date as OpenSubtitles wrote it, or null
  * @param uploaderRank the uploader's rank as OpenSubtitles wrote it, or null
  * @param fileCount how many files (discs) the subtitle is split over: the larger of {@code nb_cd} and the number
- *     of files listed, at least 1; above 1 it is only part of the film ({@code fileId} is the first file)
+ *     of files listed, at least 1; above 1 it is only part of the film ({@code fileId} is the first file); null when
+ *     unknown (a result stored before the count was kept)
  */
 public record OpenSubtitlesResult(long id, long fileId, String release, Double fps, int downloadCount,
                                   boolean fromTrusted, boolean hearingImpaired, String uploadDate,
-                                  String uploaderRank, int fileCount) {
+                                  String uploaderRank, Integer fileCount) {
 
     /** A single-file result (the usual kind). */
     public OpenSubtitlesResult(long id, long fileId, String release, Double fps, int downloadCount,
@@ -35,7 +36,12 @@ public record OpenSubtitlesResult(long id, long fileId, String release, Double f
 
     /** True when the subtitle is split over several files, so one file is only part of the film. */
     public boolean isMultiFile() {
-        return fileCount > 1;
+        return fileCount != null && fileCount > 1;
+    }
+
+    /** True only when the count is known and is 1: the one kind of result that is a whole film. */
+    public boolean isSingleFile() {
+        return fileCount != null && fileCount == 1;
     }
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -67,8 +73,9 @@ public record OpenSubtitlesResult(long id, long fileId, String release, Double f
             fileCountOf(root.path("fileCount")));
     }
 
-    private static int fileCountOf(JsonNode node) {
-        return node.isIntegralNumber() ? (int) Math.max(1, Math.min(1000, node.asLong())) : 1;
+    /** The stored count clamped to 1 to 1,000; null when there is none (legacy JSON) or it is not a whole number. */
+    private static Integer fileCountOf(JsonNode node) {
+        return node.isIntegralNumber() ? (int) Math.max(1, Math.min(1000, node.asLong())) : null;
     }
 
     /**

@@ -50,11 +50,13 @@ class OpenSubtitlesResultTest {
     }
 
     @Test
-    void storedJsonFromBeforeTheFileCountExistedReadsAsSingleFile() {
+    void storedJsonFromBeforeTheFileCountExistedHasAnUnknownCountNotOne() {
         OpenSubtitlesResult back = OpenSubtitlesResult.fromJson("{\"id\":1,\"fileId\":2,\"release\":null,"
             + "\"fps\":null,\"downloadCount\":0,\"fromTrusted\":false,\"hearingImpaired\":false}");
 
-        assertThat(back.fileCount()).isEqualTo(1);
+        assertThat(back.fileCount()).isNull();
+        assertThat(back.isSingleFile()).isFalse();
+        assertThat(back.isMultiFile()).isFalse();
         assertThat(back.release()).isNull();
         assertThat(back.fps()).isNull();
     }
@@ -64,7 +66,12 @@ class OpenSubtitlesResultTest {
         for (String count : new String[] {"0", "-3", "\"x\"", "5000", "null"}) {
             OpenSubtitlesResult back = OpenSubtitlesResult.fromJson(
                 "{\"id\":1,\"fileId\":2,\"fileCount\":" + count + "}");
-            assertThat(back.fileCount()).as(count).isEqualTo("5000".equals(count) ? 1000 : 1);
+            assertThat(back.fileCount()).as(count).isEqualTo(
+                switch (count) {
+                    case "5000" -> 1000;
+                    case "0", "-3" -> 1;
+                    default -> null;
+                });
         }
     }
 
@@ -84,5 +91,13 @@ class OpenSubtitlesResultTest {
             true, true, null, null).toJson();
 
         assertThat(json.length()).isLessThan(2000);
+    }
+
+    @Test
+    void onlyAKnownCountOfOneIsASingleFile() {
+        assertThat(new OpenSubtitlesResult(1, 2, null, null, 0, false, false, null, null, 1).isSingleFile()).isTrue();
+        assertThat(new OpenSubtitlesResult(1, 2, null, null, 0, false, false, null, null, 2).isSingleFile()).isFalse();
+        assertThat(new OpenSubtitlesResult(1, 2, null, null, 0, false, false, null, null, null).isSingleFile())
+            .isFalse();
     }
 }

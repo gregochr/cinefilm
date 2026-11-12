@@ -31,13 +31,15 @@ public final class SubtitleDtos {
      * @param endsAfterRuntime true when the last cue ends after the edition's runtime: wrong film or cut?
      * @param version when the row last changed (epoch milliseconds, a scan that replaced the cues included): a
      *     client that holds the cues asks for them again when it changes
+     * @param served true when playback serves this file for its edition (the edition's forced subtitle is made from
+     *     it): false for an unmatched, empty, missing or conflicting file, or one that a whole-edition file beats
      * @param check the comparison with OpenSubtitles' file for the edition this file is served for, or null when the
      *     edition does not serve this file, has not been compared yet, or what is served changed since
      */
     public record SidecarDto(Long id, String path, String presence, String state, Long filmId, String filmTitle,
                              Long editionId, String editionName, int parts, Integer part, boolean whole,
                              boolean ownerAttached, int cueCount, String parseReport, int offsetMs,
-                             boolean verified, boolean endsAfterRuntime, long version, CheckDto check) {
+                             boolean verified, boolean endsAfterRuntime, long version, boolean served, CheckDto check) {
     }
 
     /**

@@ -394,4 +394,34 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
         assertThat(service.save(due, reference, AGREES, LATER)).isFalse();
         assertThat(checks.findAll()).isEmpty();
     }
+
+    private static final String LEGACY_BEST = "{\"id\":4011,\"fileId\":5011,\"release\":\"Taken\",\"fps\":23.976,"
+        + "\"downloadCount\":10,\"fromTrusted\":true,\"hearingImpaired\":false}";
+
+    @Test
+    void aBestResultStoredBeforeTheFileCountWasKeptIsNotDueUntilTheSearchWritesItAgain() {
+        Film film = searchedFilm("Taken", 1, "tt0936501", 5011);
+        film.setOsBest(LEGACY_BEST);
+        sidecar("Taken.en.forced.srt", fileId(film, 1), false);
+        films.saveAndFlush(film);
+
+        assertThat(service.due()).isEmpty();
+    }
+
+    @Test
+    void aResultIsNotSavedAgainstALegacyOrMultiFileBestResult() {
+        Film film = searchedFilm("Taken", 1, "tt0936501", 5011);
+        sidecar("Taken.en.forced.srt", fileId(film, 1), false);
+        DueCheck due = onlyDue();
+        OpenSubtitlesReference reference = reference(film, 5011);
+
+        film.setOsBest(LEGACY_BEST);
+        films.saveAndFlush(film);
+        assertThat(service.save(due, reference, AGREES, LATER)).isFalse();
+
+        film.setOsBest(new OpenSubtitlesResult(1, 5011, "x", 23.976, 1, true, false, null, null, 2).toJson());
+        films.saveAndFlush(film);
+        assertThat(service.save(due, reference, AGREES, LATER)).isFalse();
+        assertThat(checks.findAll()).isEmpty();
+    }
 }

@@ -162,7 +162,7 @@ public class SidecarCheckRefresher {
             }
             for (DueCheck due : service.due()) {
                 try {
-                    if (due.osFileCount() > 1) {
+                    if (due.osFileCount() == null || due.osFileCount() > 1) {
                         // Never compare part of a film against the whole: no download, no verdict.
                         multiPart++;
                         LOG.info("Edition {} not checked: {}", due.editionId(), MULTI_PART);

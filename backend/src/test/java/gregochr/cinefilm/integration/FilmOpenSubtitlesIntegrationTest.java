@@ -20,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class FilmOpenSubtitlesIntegrationTest extends IntegrationTestBase {
 
+    /** A best result as 2c now writes it (with the file count): only a result without one is due again. */
+    private static final String BEST = "{\"id\":1,\"fileId\":2,\"fileCount\":1}";
     private static final Instant CUTOFF = NOW.minus(Duration.ofDays(30));
 
     @Autowired
@@ -64,20 +66,20 @@ class FilmOpenSubtitlesIntegrationTest extends IntegrationTestBase {
         saved("No Imdb Id", null);
         films.saveOpenSubtitles(zeroOld.getId(), "tt0000012", 0, null, CUTOFF.minusMillis(1));
         films.saveOpenSubtitles(zeroFresh.getId(), "tt0000013", 0, null, CUTOFF);
-        films.saveOpenSubtitles(results.getId(), "tt0000014", 4, "{}", NOW.minus(Duration.ofDays(900)));
-        films.saveOpenSubtitles(other.getId(), "tt0000015", 4, "{}", NOW);
+        films.saveOpenSubtitles(results.getId(), "tt0000014", 4, BEST, NOW.minus(Duration.ofDays(900)));
+        films.saveOpenSubtitles(other.getId(), "tt0000015", 4, BEST, NOW);
         entityManager.clear();
         // The film then gets another IMDb id.
         Film moved = films.findById(other.getId()).orElseThrow();
         moved.setImdbId("tt0000099");
         films.saveAndFlush(moved);
         films.clearOpenSubtitles(other.getId());
-        films.saveOpenSubtitles(other.getId(), "tt0000099", 4, "{}", NOW);
+        films.saveOpenSubtitles(other.getId(), "tt0000099", 4, BEST, NOW);
         films.flush();
         entityManager.clear();
         // A search of the old id is still on the row for this one: due again.
         Film stale = saved("Stale Marker", "tt0000016");
-        films.saveOpenSubtitles(stale.getId(), "tt0000016", 4, "{}", NOW);
+        films.saveOpenSubtitles(stale.getId(), "tt0000016", 4, BEST, NOW);
         entityManager.clear();
         Film staleLoaded = films.findById(stale.getId()).orElseThrow();
         staleLoaded.setOsSearchedImdbId("tt0000001");

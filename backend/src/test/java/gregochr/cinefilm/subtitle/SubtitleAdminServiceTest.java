@@ -36,7 +36,7 @@ class SubtitleAdminServiceTest extends SubtitleTestBase {
 
         assertThat(listed(row.getId())).isEqualTo(new SidecarDto(row.getId(), "Alien.en.forced.srt", "PRESENT",
             "unmatched", null, null, null, null, 0, null, false, false, 2, "No problems found", 0, false, false,
-            NOW.toEpochMilli(), null));
+            NOW.toEpochMilli(), false, null));
     }
 
     @Test
@@ -49,7 +49,7 @@ class SubtitleAdminServiceTest extends SubtitleTestBase {
 
         assertThat(dto).isEqualTo(new SidecarDto(row.getId(), "Taken.en.forced.srt", "PRESENT", "matched",
             taken.getId(), "Taken", taken.getEditions().get(0).getId(), "Original", 1, 1, false, false, 2,
-            "No problems found", -250, false, false, NOW.toEpochMilli(), null));
+            "No problems found", -250, false, false, NOW.toEpochMilli(), true, null));
     }
 
     @Test
@@ -501,5 +501,13 @@ class SubtitleAdminServiceTest extends SubtitleTestBase {
         assertThatThrownBy(() -> admin.offset(row.getId(), new OffsetRequest(600_001)))
             .isInstanceOf(BadRequestException.class);
         assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void aServedFileIsFlaggedServedInTheList() {
+        Film taken = filmWithParts("Taken", 1, 90);
+        SubtitleSidecar row = sidecar("Taken.en.forced.srt", fileId(taken, 1), false);
+
+        assertThat(listed(row.getId()).served()).isTrue();
     }
 }

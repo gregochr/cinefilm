@@ -81,7 +81,9 @@ public class SidecarCheckService {
             ServedSubtitle subtitle = served.get(edition.getId());
             OsBestRef ref = best.get(edition.getFilm().getId());
             OpenSubtitlesResult result = subtitle == null ? null : OpenSubtitlesResult.fromJson(ref.osBest());
-            if (result == null) {
+            // An unreadable best result, or one stored before the file count was kept (it may be one disc of
+            // several), is not checked against until the search has written it again.
+            if (result == null || result.fileCount() == null) {
                 continue;
             }
             ForcedSubtitleCheck current = checkByEdition.get(edition.getId());
@@ -118,7 +120,7 @@ public class SidecarCheckService {
         }
         // The film's best file must still be the one that was compared with (the reference is kept either way).
         OpenSubtitlesResult best = film.getOsBest() == null ? null : OpenSubtitlesResult.fromJson(film.getOsBest());
-        if (best == null || best.fileId() != due.osFileId()) {
+        if (best == null || !best.isSingleFile() || best.fileId() != due.osFileId()) {
             return false;
         }
         Edition edition = editions.findWithFilesByFilmIdIn(List.of(due.filmId())).stream()

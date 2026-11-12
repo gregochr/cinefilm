@@ -10,11 +10,12 @@ import java.util.List;
  * @param imdbId the film's IMDb id the best result was searched for
  * @param osFileId the file id of the film's best OpenSubtitles result
  * @param osRelease that result's release name, or null
- * @param osFileCount how many files that result is split over (above 1: only part of the film)
+ * @param osFileCount how many files that result is split over (above 1: only part of the film); unknown results
+ *     (stored before the count was kept) are never due
  * @param servedVersion the version of what the edition serves now (see {@link ServedSubtitle})
  * @param ownerVerified true when the owner has said what is served looks right
  * @param cues what the edition serves, on its timeline
  */
 public record DueCheck(Long filmId, Long editionId, String imdbId, long osFileId, String osRelease,
-                       int osFileCount, String servedVersion, boolean ownerVerified, List<SubtitleCue> cues) {
+                       Integer osFileCount, String servedVersion, boolean ownerVerified, List<SubtitleCue> cues) {
 }

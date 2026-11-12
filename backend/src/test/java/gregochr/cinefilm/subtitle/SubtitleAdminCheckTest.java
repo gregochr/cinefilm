@@ -170,4 +170,50 @@ class SubtitleAdminCheckTest extends SubtitleTestBase {
 
         assertThat(listed(row).check()).isNull();
     }
+
+    @Test
+    void aCheckAgainstABestResultThatIsNowMultiFileOrLegacyIsNotShown() {
+        Film film = filmWithImdb("Taken", 1);
+        SubtitleSidecar row = sidecar("Taken.en.forced.srt", fileId(film, 1), false);
+        check(film, versionOf(film, row), reference(film, "tt0936501"));
+
+        film.setOsBest(new gregochr.cinefilm.opensubtitles.OpenSubtitlesResult(1, 5011, "r", 23.976, 1, true, false,
+            null, null, 2).toJson());
+        films.saveAndFlush(film);
+        assertThat(listed(row).check()).isNull();
+
+        film.setOsBest("{\"id\":1,\"fileId\":5011}");
+        films.saveAndFlush(film);
+        assertThat(listed(row).check()).isNull();
+    }
+
+    @Test
+    void servedIsTrueOnlyForTheFilesPlaybackServes() {
+        Film film = filmWithImdb("Towers", 2);
+        SubtitleSidecar whole = sidecar("Towers.en.forced.srt", fileId(film, 1), true);
+        SubtitleSidecar beaten = sidecar("Towers - pt2.en.forced.srt", fileId(film, 2), false);
+        SubtitleSidecar unmatched = sidecar("Other.en.forced.srt", null, false);
+        Film conflicted = filmWithImdb("Conflict", 1);
+        SubtitleSidecar one = sidecar("Conflict.en.forced.srt", fileId(conflicted, 1), false);
+        SubtitleSidecar two = sidecar("Conflict.forced.en.srt", fileId(conflicted, 1), false);
+        Film empty = filmWithImdb("Empty", 1);
+        SubtitleSidecar none = sidecar("Empty.en.forced.srt", fileId(empty, 1), false);
+        none.setCueCount(0);
+
+        assertThat(listed(whole).served()).isTrue();
+        assertThat(listed(beaten).served()).isFalse();
+        assertThat(listed(unmatched).served()).isFalse();
+        assertThat(listed(one).served()).isFalse();
+        assertThat(listed(two).served()).isFalse();
+        assertThat(listed(none).served()).isFalse();
+    }
+
+    @Test
+    void aFileOnAnEditionWhoseTimelineIsUnknownIsNotServed() {
+        Film film = filmWithImdb("Towers", 2);
+        SubtitleSidecar part = sidecar("Towers - pt2.en.forced.srt", fileId(film, 2), false);
+        film.getEditions().get(0).originalParts().get(0).setDurationMs(null);
+
+        assertThat(listed(part).served()).isFalse();
+    }
 }

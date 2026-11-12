@@ -295,7 +295,8 @@ public class SubtitleAdminService {
             MediaFile file = fileById.get(sidecar.getMediaFileId());
             CheckDto check = file == null || !served.contains(sidecar.getId()) ? null
                 : checkByEdition.get(file.getEdition().getId());
-            dtos.add(dto(sidecar, file, conflicting.contains(sidecar.getId()), check));
+            dtos.add(dto(sidecar, file, conflicting.contains(sidecar.getId()), served.contains(sidecar.getId()),
+                check));
         }
         return dtos;
     }
@@ -318,8 +319,8 @@ public class SubtitleAdminService {
             OpenSubtitlesReference reference = referenceById.get(check.getReferenceId());
             Film film = editionById.get(editionId).getFilm();
             OpenSubtitlesResult best = film.getOsBest() == null ? null : OpenSubtitlesResult.fromJson(film.getOsBest());
-            if (best != null && check.isCurrent(versions.get(editionId), film.getImdbId(), reference,
-                best.fileId())) {
+            if (best != null && best.isSingleFile() && check.isCurrent(versions.get(editionId), film.getImdbId(),
+                reference, best.fileId())) {
                 current.put(editionId, new CheckDto(check.getVerdict(), check.reasonList(), check.getBestOffsetMs(),
                     check.getMatchedShare(), check.getServedCount(), check.getReferenceCount(),
                     reference.getRelease(), check.getCheckedAt()));
@@ -328,11 +329,12 @@ public class SubtitleAdminService {
         return current;
     }
 
-    private static SidecarDto dto(SubtitleSidecar s, MediaFile file, boolean conflict, CheckDto check) {
+    private static SidecarDto dto(SubtitleSidecar s, MediaFile file, boolean conflict, boolean isServed,
+                                   CheckDto check) {
         if (file == null) {
             return new SidecarDto(s.getId(), s.getPath(), s.getPresence().name(), "unmatched", null, null, null, null,
                 0, null, false, s.isOwnerAttached(), s.getCueCount(), s.getParseReport(), s.getOffsetMs(), false,
-                false, s.getUpdatedAt().toEpochMilli(), null);
+                false, s.getUpdatedAt().toEpochMilli(), false, null);
         }
         Edition edition = file.getEdition();
         List<Long> partIds = partIds(edition);
@@ -343,7 +345,7 @@ public class SubtitleAdminService {
             edition.getFilm().getId(), edition.getFilm().getTitle(), edition.getId(), edition.getName(),
             partIds.size(), s.isWholeEdition() ? null : file.getPartNumber(), s.isWholeEdition(),
             s.isOwnerAttached(), s.getCueCount(), s.getParseReport(), s.getOffsetMs(), s.isVerifiedFor(partIds),
-            endsAfter, s.getUpdatedAt().toEpochMilli(), check);
+            endsAfter, s.getUpdatedAt().toEpochMilli(), isServed, check);
     }
 
     private static List<Long> partIds(Edition edition) {

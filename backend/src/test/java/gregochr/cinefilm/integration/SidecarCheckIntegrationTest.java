@@ -46,9 +46,16 @@ class SidecarCheckIntegrationTest extends IntegrationTestBase {
     private EntityManager entityManager;
 
     private Film saved() {
+        return saved(true);
+    }
+
+    /** A film with one edition, with or without a film file (a file's child rows would block deleting it). */
+    private Film saved(boolean withFile) {
         Film film = film(null, "Taken", 2008, NOW);
         Edition edition = edition(film, null, "Original", 90 * MIN, null);
-        file(edition, "Taken.m4v");
+        if (withFile) {
+            file(edition, "Taken.m4v");
+        }
         film.setImdbId("tt0936501");
         return films.saveAndFlush(film);
     }
@@ -110,13 +117,11 @@ class SidecarCheckIntegrationTest extends IntegrationTestBase {
 
     @Test
     void deletingAnEditionDeletesItsCheckAndDeletingAFilmItsReferences() {
-        Film film = saved();
+        Film film = saved(false);
         OpenSubtitlesReference reference = reference(film, 5011);
         ForcedSubtitleCheck row = check(film, reference);
         entityManager.clear();
 
-        entityManager.createNativeQuery("delete from media_file where edition_id = :id")
-            .setParameter("id", row.getEditionId()).executeUpdate();
         editions.deleteByIds(java.util.List.of(row.getEditionId()));
         entityManager.clear();
         assertThat(checks.findByEditionId(row.getEditionId())).isEmpty();
@@ -149,7 +154,7 @@ class SidecarCheckIntegrationTest extends IntegrationTestBase {
         Film film = saved();
         film.setOsSearchedImdbId("tt0936501");
         film.setOsForcedCount(2);
-        film.setOsBest("{\"id\":1,\"fileId\":2}");
+        film.setOsBest("{\"id\":1,\"fileId\":2,\"fileCount\":1}");
         films.saveAndFlush(film);
 
         assertThat(films.findOpenSubtitlesBest()).hasSize(1);
