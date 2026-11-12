@@ -48,11 +48,11 @@ describe('resume', () => {
     expect(resumePosition(0)).toBe(0);
   });
 
-  it('ends at the credits marker, else 92%', () => {
+  it('ends at the credits marker, else 97%', () => {
     expect(endThresholdMs(1000000, 900000)).toBe(900000);
-    expect(endThresholdMs(1000000, null)).toBe(920000);
-    expect(hasReachedEnd(919999, 1000000, null)).toBe(false);
-    expect(hasReachedEnd(920000, 1000000, null)).toBe(true);
+    expect(endThresholdMs(1000000, null)).toBe(970000);
+    expect(hasReachedEnd(969999, 1000000, null)).toBe(false);
+    expect(hasReachedEnd(970000, 1000000, null)).toBe(true);
     expect(hasReachedEnd(500000, 1000000, 400000)).toBe(true);
   });
 });

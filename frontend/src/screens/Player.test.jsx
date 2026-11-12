@@ -532,7 +532,7 @@ describe('Player keyboard', () => {
 describe('Player end of film', () => {
   const reachEnd = async () => {
     const opened = await openPlayer();
-    opened.video.currentTime = 9400;
+    opened.video.currentTime = 9900;
     fireEvent.timeUpdate(opened.video);
     return { ...opened, dialog: await screen.findByRole('dialog', { name: 'Heat' }) };
   };
@@ -572,7 +572,7 @@ describe('Player end of film', () => {
         delete f.directors;
       }),
     ).then(async ({ video }) => {
-      video.currentTime = 9400;
+      video.currentTime = 9900;
       fireEvent.timeUpdate(video);
     });
     expect(

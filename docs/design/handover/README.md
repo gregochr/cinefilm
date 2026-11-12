@@ -184,7 +184,8 @@ When resuming, the frame at the resume point is shown behind the startup indicat
 **Auto step-down:** a toast at the top centre reads "Switching to 720p for smoother playback". It shows for about 4 s, is non-blocking, and plays no sound. On a phone held upright the top bar fills the width (the title, then the indicator), so a toast sits just under it.
 
 **End of film**
-- Appears when playback reaches the credits marker (decision 1).
+- Appears when playback reaches the credits marker, or **97%** of runtime if there's no marker (owner, 2026-11-12:
+  92% interrupted climaxes). Watched still follows decision 1.
 - Shows "The end", the title, and the year · director.
 - Primary: **Mark as watched**, focused by default.
 - Secondary: **Back to library**.

@@ -412,7 +412,7 @@ describe('one card at a time', () => {
     await answerLookup(RAIL);
     await screen.findByRole('group', { name: NAME });
 
-    video.currentTime = 9400;
+    video.currentTime = 9900;
     await inAct(() => fireEvent.timeUpdate(video));
     const end = await screen.findByRole('dialog', { name: 'Heat' });
     noCard();

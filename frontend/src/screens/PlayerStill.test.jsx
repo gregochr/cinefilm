@@ -128,7 +128,7 @@ describe('the resume still', () => {
     Object.defineProperty(video, 'duration', { value: 10200, configurable: true });
     fireEvent.loadedMetadata(video);
     fireEvent.timeUpdate(video); // the resume seek lands
-    video.currentTime = 9400;
+    video.currentTime = 9900;
     fireEvent.timeUpdate(video);
     await screen.findByRole('dialog', { name: 'Heat' });
 
