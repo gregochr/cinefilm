@@ -108,13 +108,13 @@ class FilmOpenSubtitlesQueriesTest extends ApiTestBase {
     void savingWritesTheCountTheBestResultTheImdbIdAndTheStampForTheImdbIdSearched() {
         Long id = films.saveAndFlush(unsearched("Taken", "tt0936501")).getId();
 
-        int changed = films.saveOpenSubtitles(id, "tt0936501", 7, "{\"id\":1}", NOW);
+        int changed = films.saveOpenSubtitles(id, "tt0936501", 7, "{\"id\":1,\"fileCount\":1}", NOW);
         entityManager.clear();
 
         assertThat(changed).isEqualTo(1);
         Film reloaded = films.findById(id).orElseThrow();
         assertThat(reloaded.getOsForcedCount()).isEqualTo(7);
-        assertThat(reloaded.getOsBest()).isEqualTo("{\"id\":1}");
+        assertThat(reloaded.getOsBest()).isEqualTo("{\"id\":1,\"fileCount\":1}");
         assertThat(reloaded.getOsSearchedImdbId()).isEqualTo("tt0936501");
         assertThat(reloaded.getOsSearchedAt()).isEqualTo(NOW);
         assertThat(films.findOpenSubtitlesDue(CUTOFF)).isEmpty();
@@ -141,7 +141,7 @@ class FilmOpenSubtitlesQueriesTest extends ApiTestBase {
         changed.setImdbId("tt0113277");
         films.saveAndFlush(changed);
 
-        int rows = films.saveOpenSubtitles(id, "tt0936501", 7, "{\"id\":1}", NOW);
+        int rows = films.saveOpenSubtitles(id, "tt0936501", 7, "{\"id\":1,\"fileCount\":1}", NOW);
         entityManager.clear();
 
         assertThat(rows).isZero();
@@ -211,5 +211,19 @@ class FilmOpenSubtitlesQueriesTest extends ApiTestBase {
         films.saveAndFlush(unsearched("Never", "tt0000003"));
 
         assertThat(films.findLatestOpenSubtitlesSearchedAt()).isEqualTo(NOW.minus(Duration.ofDays(1)));
+    }
+
+    @Test
+    void aBestResultStoredBeforeTheFileCountWasKeptMakesTheFilmDueAgainAndFirst() {
+        Long old = searched("Old best", "tt0000021", "tt0000021", 3, NOW);
+        Long current = searched("Current best", "tt0000022", "tt0000022", 3, NOW);
+        Long unsearchedYet = films.saveAndFlush(unsearched("Never", "tt0000023")).getId();
+        Film oldFilm = films.findById(old).orElseThrow();
+        oldFilm.setOsBest("{\"id\":1,\"fileId\":2,\"release\":null}");
+        Film currentFilm = films.findById(current).orElseThrow();
+        currentFilm.setOsBest("{\"id\":1,\"fileId\":2,\"release\":null,\"fileCount\":1}");
+        films.flush();
+
+        assertThat(dueIds()).containsExactly(old, unsearchedYet);
     }
 }

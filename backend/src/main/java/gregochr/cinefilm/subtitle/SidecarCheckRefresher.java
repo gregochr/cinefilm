@@ -3,6 +3,7 @@ package gregochr.cinefilm.subtitle;
 import gregochr.cinefilm.library.ScanFinished;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesApi;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesBudget;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesChargedException;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesDownload;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesQuotaException;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
@@ -202,7 +203,7 @@ public class SidecarCheckRefresher {
      */
     private OpenSubtitlesReference reference(DueCheck due) {
         OpenSubtitlesReference stored = references.findByFilmIdAndOsFileId(due.filmId(), due.osFileId()).orElse(null);
-        if (stored != null) {
+        if (stored != null && stored.isFinal()) {
             return stored;
         }
         Instant now = clock.instant();
@@ -216,31 +217,66 @@ public class SidecarCheckRefresher {
         } catch (OpenSubtitlesQuotaException e) {
             budget.exhaust(day, dailyLimit, cap(e.resetTimeUtc(), now));
             throw new Stop("OpenSubtitles' download limit is reached");
+        } catch (OpenSubtitlesChargedException e) {
+            // OpenSubtitles issued its link, so the account is charged: no refund, whatever went wrong after.
+            OpenSubtitlesReference failed = recordFailure(due, stored, e.permanent(), now);
+            if (e.permanent()) {
+                return failed;
+            }
+            throw e;
         } catch (OpenSubtitlesUnavailableException e) {
-            // The request did not (or may not have) reached the counter: give the download back.
+            // Nothing was charged (the failure came before or during /download): give the download back.
             budget.refund(day);
             throw e;
         }
-        OpenSubtitlesReference saved = store(due, download, now);
+        OpenSubtitlesReference saved = store(due, stored, download, now);
         if (download.remaining() != null && download.remaining() <= 0) {
             budget.exhaust(day, dailyLimit, cap(download.resetTimeUtc(), now));
         }
         return saved;
     }
 
-    /** Stores a download as the film's reference: an unreadable or oversized one is kept as unusable. */
-    private OpenSubtitlesReference store(DueCheck due, OpenSubtitlesDownload download, Instant now) {
-        List<SubtitleCue> cues = download.parsed().cues();
-        String text = SrtParser.format(cues);
-        boolean usable = !cues.isEmpty() && text.length() <= MAX_REFERENCE_CHARS;
-        OpenSubtitlesReference reference = new OpenSubtitlesReference();
+    /**
+     * Records a charged download that gave no file: a permanent failure makes the file id final at once, a transient
+     * one counts towards {@link OpenSubtitlesReference#MAX_FAILED_DOWNLOADS}.
+     */
+    private OpenSubtitlesReference recordFailure(DueCheck due, OpenSubtitlesReference stored, boolean permanent,
+                                                 Instant now) {
+        OpenSubtitlesReference reference = blank(due, stored, now);
+        reference.setCuesText("");
+        reference.setCueCount(0);
+        reference.setFailedDownloads(permanent ? OpenSubtitlesReference.MAX_FAILED_DOWNLOADS
+            : Math.min(OpenSubtitlesReference.MAX_FAILED_DOWNLOADS, reference.getFailedDownloads() + 1));
+        return save(due, reference);
+    }
+
+    /** The stored row to update, or a new one for the film's best file. */
+    private static OpenSubtitlesReference blank(DueCheck due, OpenSubtitlesReference stored, Instant now) {
+        OpenSubtitlesReference reference = stored != null ? stored : new OpenSubtitlesReference();
         reference.setFilmId(due.filmId());
         reference.setImdbId(due.imdbId());
         reference.setOsFileId(due.osFileId());
         reference.setRelease(due.osRelease());
+        reference.setFetchedAt(now);
+        return reference;
+    }
+
+    /** Stores a download as the film's reference: an unreadable or oversized one is kept as unusable and final. */
+    private OpenSubtitlesReference store(DueCheck due, OpenSubtitlesReference stored, OpenSubtitlesDownload download,
+                                         Instant now) {
+        List<SubtitleCue> cues = download.parsed().cues();
+        String text = SrtParser.format(cues);
+        boolean usable = !cues.isEmpty() && text.length() <= MAX_REFERENCE_CHARS;
+        OpenSubtitlesReference reference = blank(due, stored, now);
         reference.setCuesText(usable ? text : "");
         reference.setCueCount(usable ? cues.size() : 0);
-        reference.setFetchedAt(now);
+        if (!usable) {
+            reference.setFailedDownloads(OpenSubtitlesReference.MAX_FAILED_DOWNLOADS);
+        }
+        return save(due, reference);
+    }
+
+    private OpenSubtitlesReference save(DueCheck due, OpenSubtitlesReference reference) {
         try {
             return references.saveAndFlush(reference);
         } catch (DataIntegrityViolationException e) {

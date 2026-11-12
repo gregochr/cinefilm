@@ -12,6 +12,7 @@ class ForcedSubtitleCheckTest {
         OpenSubtitlesReference reference = new OpenSubtitlesReference();
         reference.setId(id);
         reference.setImdbId(imdbId);
+        reference.setOsFileId(9);
         return reference;
     }
 
@@ -26,12 +27,14 @@ class ForcedSubtitleCheckTest {
     void itIsCurrentOnlyWhenTheVersionTheReferenceAndTheImdbIdAllMatch() {
         ForcedSubtitleCheck check = check();
 
-        assertThat(check.isCurrent("v1", "tt1", reference(5L, "tt1"))).isTrue();
-        assertThat(check.isCurrent("v2", "tt1", reference(5L, "tt1"))).isFalse();
-        assertThat(check.isCurrent("v1", "tt1", reference(6L, "tt1"))).isFalse();
-        assertThat(check.isCurrent("v1", "tt2", reference(5L, "tt1"))).isFalse();
-        assertThat(check.isCurrent("v1", "tt1", null)).isFalse();
-        assertThat(check.isCurrent(null, "tt1", reference(5L, "tt1"))).isFalse();
+        assertThat(check.isCurrent("v1", "tt1", reference(5L, "tt1"), 9)).isTrue();
+        assertThat(check.isCurrent("v2", "tt1", reference(5L, "tt1"), 9)).isFalse();
+        assertThat(check.isCurrent("v1", "tt1", reference(6L, "tt1"), 9)).isFalse();
+        assertThat(check.isCurrent("v1", "tt2", reference(5L, "tt1"), 9)).isFalse();
+        assertThat(check.isCurrent("v1", "tt1", null, 9)).isFalse();
+        // The film's best file is another one now.
+        assertThat(check.isCurrent("v1", "tt1", reference(5L, "tt1"), 10)).isFalse();
+        assertThat(check.isCurrent(null, "tt1", reference(5L, "tt1"), 9)).isFalse();
     }
 
     @Test

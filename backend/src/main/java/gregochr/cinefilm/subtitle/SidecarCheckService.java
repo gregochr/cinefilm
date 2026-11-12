@@ -49,9 +49,9 @@ public class SidecarCheckService {
     /**
      * The editions to check: the film has a best OpenSubtitles result from a search of its current IMDb id, playback
      * serves a forced subtitle for the edition (the same pick as playback), and the edition has no check that still
-     * describes what is served (same served version, a reference fetched for the film's current IMDb id). The owner's
-     * unverified files come first, then the verified ones (still worth checking for completeness); then by film and
-     * edition.
+     * describes what is served (same served version, and a reference for the film's current IMDb id and best
+     * file). The owner's unverified files come first, then the verified ones (still worth checking for
+     * completeness); then by film and edition.
      *
      * @return the due editions in the order to check them
      */
@@ -86,7 +86,7 @@ public class SidecarCheckService {
             }
             ForcedSubtitleCheck current = checkByEdition.get(edition.getId());
             if (current != null && current.isCurrent(subtitle.version(), ref.imdbId(),
-                referenceById.get(current.getReferenceId()))) {
+                referenceById.get(current.getReferenceId()), result.fileId())) {
                 continue;
             }
             due.add(new DueCheck(ref.id(), edition.getId(), ref.imdbId(), result.fileId(), result.release(),

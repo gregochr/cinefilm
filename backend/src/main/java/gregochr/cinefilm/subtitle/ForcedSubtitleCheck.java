@@ -63,15 +63,17 @@ public class ForcedSubtitleCheck {
 
     /**
      * True while the check still describes what is served: it was made for the same served version, against a
-     * reference that was fetched for the film's current IMDb id.
+     * reference that was fetched for the film's current IMDb id and is the file the film's best OpenSubtitles result
+     * names now (a better file found later makes the check stale).
      *
      * @param version the edition's served version now
      * @param filmImdbId the film's IMDb id now
      * @param reference this check's reference
+     * @param bestFileId the file id of the film's best OpenSubtitles result now
      */
-    public boolean isCurrent(String version, String filmImdbId, OpenSubtitlesReference reference) {
+    public boolean isCurrent(String version, String filmImdbId, OpenSubtitlesReference reference, long bestFileId) {
         return servedVersion.equals(version) && reference != null && reference.getId().equals(referenceId)
-            && reference.getImdbId().equals(filmImdbId);
+            && reference.getImdbId().equals(filmImdbId) && reference.getOsFileId() == bestFileId;
     }
 
     /** The reasons as a list (empty when there are none). */

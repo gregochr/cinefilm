@@ -133,13 +133,17 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
 
     /**
      * Films with an IMDb id whose OpenSubtitles search is due: never searched, searched under another IMDb id, or
-     * searched with no result before the cutoff. Never-searched first, then the oldest search.
+     * searched with no result before the cutoff, or holding a best result stored before the file count was kept (no
+     * {@code fileCount} in its JSON: it may be one disc of several, so it is searched again, those first).
+     * Never-searched next, then the oldest search.
      */
     @org.springframework.data.jpa.repository.Query(
         "select new gregochr.cinefilm.film.FilmRepository$ImdbRef(f.id, f.imdbId) from Film f "
             + "where f.imdbId is not null and (f.osSearchedAt is null or f.osSearchedImdbId is null "
-            + "or f.osSearchedImdbId <> f.imdbId or (f.osForcedCount = 0 and f.osSearchedAt < :cutoff)) "
-            + "order by f.osSearchedAt asc nulls first, f.id asc")
+            + "or f.osSearchedImdbId <> f.imdbId or (f.osForcedCount = 0 and f.osSearchedAt < :cutoff) "
+            + "or (f.osBest is not null and f.osBest not like '%\"fileCount\"%')) "
+            + "order by case when f.osBest is not null and f.osBest not like '%\"fileCount\"%' then 0 else 1 end, "
+            + "f.osSearchedAt asc nulls first, f.id asc")
     List<ImdbRef> findOpenSubtitlesDue(
         @org.springframework.data.repository.query.Param("cutoff") java.time.Instant cutoff);
 

@@ -6,10 +6,12 @@ import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.EditionTimeline;
+import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Pick;
 import gregochr.cinefilm.subtitle.SubtitleDtos.AttachRequest;
@@ -314,8 +316,10 @@ public class SubtitleAdminService {
         for (ForcedSubtitleCheck check : found) {
             Long editionId = check.getEditionId();
             OpenSubtitlesReference reference = referenceById.get(check.getReferenceId());
-            if (check.isCurrent(versions.get(editionId), editionById.get(editionId).getFilm().getImdbId(),
-                reference)) {
+            Film film = editionById.get(editionId).getFilm();
+            OpenSubtitlesResult best = film.getOsBest() == null ? null : OpenSubtitlesResult.fromJson(film.getOsBest());
+            if (best != null && check.isCurrent(versions.get(editionId), film.getImdbId(), reference,
+                best.fileId())) {
                 current.put(editionId, new CheckDto(check.getVerdict(), check.reasonList(), check.getBestOffsetMs(),
                     check.getMatchedShare(), check.getServedCount(), check.getReferenceCount(),
                     reference.getRelease(), check.getCheckedAt()));

@@ -48,8 +48,20 @@ public class OpenSubtitlesReference {
     @Column(nullable = false)
     private int cueCount;
 
+    /** Downloads that were charged but gave no usable file; {@link #MAX_FAILED_DOWNLOADS} makes it final. */
+    @Column(nullable = false)
+    private int failedDownloads;
+
     @Column(nullable = false)
     private Instant fetchedAt;
+
+    /** Charged failed downloads of one file id after which it is never fetched again. */
+    public static final int MAX_FAILED_DOWNLOADS = 3;
+
+    /** True when there is nothing more to try: it is usable, or its file id has failed the most times allowed. */
+    public boolean isFinal() {
+        return isUsable() || failedDownloads >= MAX_FAILED_DOWNLOADS;
+    }
 
     /** True when the download had at least one cue, so it can be compared with. */
     public boolean isUsable() {

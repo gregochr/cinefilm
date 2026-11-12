@@ -17,6 +17,7 @@ import ch.qos.logback.core.read.ListAppender;
 import gregochr.cinefilm.library.ScanFinished;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesApi;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesBudget;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesChargedException;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesDownload;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesQuotaException;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
@@ -107,6 +108,7 @@ class SidecarCheckRefresherTest {
         reference.setOsFileId(fileId);
         reference.setCuesText(SrtParser.format(cues));
         reference.setCueCount(cues.size());
+        reference.setFailedDownloads(cues.isEmpty() ? OpenSubtitlesReference.MAX_FAILED_DOWNLOADS : 0);
         reference.setFetchedAt(NOW);
         return reference;
     }
@@ -788,5 +790,134 @@ class SidecarCheckRefresherTest {
 
         assertThat(queued).hasSize(1);
         assertThat(messages()).isEmpty();
+    }
+
+    private ArgumentCaptor<OpenSubtitlesReference> failureStored(DueCheck due, OpenSubtitlesReference existing,
+                                                                 boolean permanent) {
+        when(service.due()).thenReturn(List.of(due));
+        when(references.findByFilmIdAndOsFileId(due.filmId(), due.osFileId()))
+            .thenReturn(Optional.ofNullable(existing));
+        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(api.download(due.osFileId())).thenThrow(new OpenSubtitlesChargedException("OpenSubtitles file refused",
+            permanent));
+        storingReferences();
+        ArgumentCaptor<OpenSubtitlesReference> saved = ArgumentCaptor.forClass(OpenSubtitlesReference.class);
+        startAndRun();
+        verify(references).saveAndFlush(saved.capture());
+        return saved;
+    }
+
+    @Test
+    void aFailureAfterTheLinkWasIssuedIsNeverGivenBackToTheBudgetWhateverItWas() {
+        for (boolean permanent : new boolean[] {true, false}) {
+            queued.clear();
+            org.mockito.Mockito.reset(service, references, api, budget);
+            failureStored(due(1, 10, 5011), null, permanent);
+
+            verify(budget).take(DAY, LIMIT);
+            verify(budget).blockedUntil(NOW);
+            verifyNoMoreInteractions(budget);
+        }
+    }
+
+    @Test
+    void aPermanentFailureAfterChargingMakesTheFileFinalAtOnceAndTheRunCarriesOn() {
+        DueCheck first = due(1, 10, 5011);
+        DueCheck second = due(2, 20, 5022);
+        OpenSubtitlesReference two = stored(9, 2, 5022, CUES);
+        when(service.due()).thenReturn(List.of(first, second));
+        when(references.findByFilmIdAndOsFileId(1L, 5011)).thenReturn(Optional.empty());
+        when(references.findByFilmIdAndOsFileId(2L, 5022)).thenReturn(Optional.of(two));
+        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(api.download(5011)).thenThrow(new OpenSubtitlesChargedException("OpenSubtitles file refused", true));
+        storingReferences();
+        when(service.save(second, two, AGREES, NOW)).thenReturn(true);
+        ArgumentCaptor<OpenSubtitlesReference> saved = ArgumentCaptor.forClass(OpenSubtitlesReference.class);
+
+        startAndRun();
+
+        verify(references).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getOsFileId()).isEqualTo(5011L);
+        assertThat(saved.getValue().getCueCount()).isZero();
+        assertThat(saved.getValue().getCuesText()).isEmpty();
+        assertThat(saved.getValue().getFailedDownloads()).isEqualTo(3);
+        assertThat(saved.getValue().isFinal()).isTrue();
+        verify(service).save(second, two, AGREES, NOW);
+        assertThat(messages()).containsExactly(
+            "Subtitle file checks finished: 1 saved, 0 changed meanwhile, 1 unusable references, 0 failed");
+    }
+
+    @Test
+    void aTransientFailureAfterChargingCountsOneAttemptKeepsTheFileRetryableAndStopsTheRun() {
+        ArgumentCaptor<OpenSubtitlesReference> saved = failureStored(due(1, 10, 5011), null, false);
+
+        assertThat(saved.getValue().getFailedDownloads()).isEqualTo(1);
+        assertThat(saved.getValue().isFinal()).isFalse();
+        assertThat(saved.getValue().getCueCount()).isZero();
+        assertThat(messages()).containsExactly("Subtitle file checks stopped: OpenSubtitles file refused",
+            NOTHING_DONE);
+    }
+
+    @Test
+    void theThirdChargedTransientFailureMakesTheFileFinalAndAFourthAttemptNeverHappens() {
+        OpenSubtitlesReference twice = stored(8, 1, 5011, List.of());
+        twice.setFailedDownloads(2);
+
+        ArgumentCaptor<OpenSubtitlesReference> saved = failureStored(due(1, 10, 5011), twice, false);
+
+        assertThat(saved.getValue()).isSameAs(twice);
+        assertThat(twice.getFailedDownloads()).isEqualTo(3);
+        assertThat(twice.isFinal()).isTrue();
+    }
+
+    @Test
+    void aFileThatHasFailedThreeChargedTimesIsNotDownloadedAgain() {
+        OpenSubtitlesReference spent = stored(8, 1, 5011, List.of());
+        spent.setFailedDownloads(3);
+        when(service.due()).thenReturn(List.of(due(1, 10, 5011)));
+        when(references.findByFilmIdAndOsFileId(1L, 5011)).thenReturn(Optional.of(spent));
+
+        startAndRun();
+
+        verify(api).downloadsEnabled();
+        verify(budget).blockedUntil(NOW);
+        verifyNoMoreInteractions(api, budget);
+    }
+
+    @Test
+    void aFileWithTwoFailuresIsTriedAgainAndASuccessUpdatesTheSameRow() {
+        DueCheck due = due(1, 10, 5011);
+        OpenSubtitlesReference twice = stored(8, 1, 5011, List.of());
+        twice.setFailedDownloads(2);
+        when(service.due()).thenReturn(List.of(due));
+        when(references.findByFilmIdAndOsFileId(1L, 5011)).thenReturn(Optional.of(twice));
+        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(api.download(5011)).thenReturn(downloaded(CUES, 50, null));
+        storingReferences();
+        when(service.save(due, twice, AGREES, NOW)).thenReturn(true);
+
+        startAndRun();
+
+        verify(references).saveAndFlush(twice);
+        assertThat(twice.isUsable()).isTrue();
+        assertThat(twice.getCueCount()).isEqualTo(2);
+        assertThat(twice.getFailedDownloads()).isEqualTo(2);
+        verify(service).save(due, twice, AGREES, NOW);
+    }
+
+    @Test
+    void aDownloadWithNoCuesIsFinalAtOnce() {
+        when(service.due()).thenReturn(List.of(due(1, 10, 5011)));
+        when(references.findByFilmIdAndOsFileId(1L, 5011)).thenReturn(Optional.empty());
+        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(api.download(5011)).thenReturn(downloaded(List.of(), 50, null));
+        storingReferences();
+        ArgumentCaptor<OpenSubtitlesReference> saved = ArgumentCaptor.forClass(OpenSubtitlesReference.class);
+
+        startAndRun();
+
+        verify(references).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().isFinal()).isTrue();
+        assertThat(saved.getValue().getFailedDownloads()).isEqualTo(3);
     }
 }

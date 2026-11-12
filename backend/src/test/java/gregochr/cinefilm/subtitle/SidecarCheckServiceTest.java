@@ -350,4 +350,18 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
 
         assertThat(onlyDue().editionId()).isEqualTo(film.getEditions().get(0).getId());
     }
+
+    @Test
+    void aChangedBestFileMakesTheEditionDueAgainEvenWithTheSameServedVersion() {
+        Film film = searchedFilm("Taken", 1, "tt0936501", 5011);
+        sidecar("Taken.en.forced.srt", fileId(film, 1), false);
+        service.save(onlyDue(), reference(film, 5011), AGREES, LATER);
+        assertThat(service.due()).isEmpty();
+
+        film.setOsBest(new OpenSubtitlesResult(2, 6022, "Better", 23.976, 1, true, false, null, null).toJson());
+        films.saveAndFlush(film);
+
+        DueCheck due = onlyDue();
+        assertThat(due.osFileId()).isEqualTo(6022);
+    }
 }

@@ -727,4 +727,50 @@ class OpenSubtitlesClientDownloadTest {
                 .doesNotContain(KEY).doesNotContain("opensubtitles.com"));
         assertThat(logged.list).allSatisfy(event -> assertThat(event.getThrowableProxy()).isNull());
     }
+
+    private static void assertCharged(Throwable thrown, boolean permanent) {
+        assertThat(thrown).isInstanceOfSatisfying(OpenSubtitlesChargedException.class,
+            e -> assertThat(e.permanent()).isEqualTo(permanent));
+    }
+
+    @Test
+    void everyFailureAfterTheLinkWasIssuedIsAChargedOneAndPermanentOnlyWhenRetryingCouldNeverHelp() {
+        expectLogin();
+        expectDownload(download("https://evil.com/x.srt"));
+        expectDownload(download(LINK));
+        server.expect(once(), requestTo(LINK)).andRespond(withStatus(HttpStatus.FOUND));
+        expectDownload(download(LINK));
+        server.expect(once(), requestTo(LINK)).andRespond(withStatus(HttpStatus.NOT_FOUND));
+        expectDownload(download(LINK));
+        server.expect(times(4), requestTo(LINK)).andRespond(withStatus(HttpStatus.BAD_GATEWAY));
+        expectDownload(download(LINK));
+        server.expect(times(4), requestTo(LINK)).andRespond(withException(new IOException("boom")));
+        expectDownload(download(LINK));
+        expectFile("x".repeat(101));
+
+        // link refused, too big: never worth another try
+        assertCharged(org.assertj.core.api.Assertions.catchThrowable(() -> client.download(1)), true);
+        // a redirect, a 404, retries that ran out, a transport failure: worth trying again later
+        assertCharged(org.assertj.core.api.Assertions.catchThrowable(() -> client.download(1)), false);
+        assertCharged(org.assertj.core.api.Assertions.catchThrowable(() -> client.download(1)), false);
+        assertCharged(org.assertj.core.api.Assertions.catchThrowable(() -> client.download(1)), false);
+        assertCharged(org.assertj.core.api.Assertions.catchThrowable(() -> client.download(1)), false);
+        assertCharged(org.assertj.core.api.Assertions.catchThrowable(() -> client.download(1)), true);
+    }
+
+    @Test
+    void aFailureBeforeOrDuringTheDownloadRequestIsNeverAChargedOne() {
+        server.expect(once(), requestTo(LOGIN_URL)).andRespond(withStatus(HttpStatus.UNAUTHORIZED));
+        expectLogin();
+        server.expect(times(4), requestTo(DOWNLOAD_URL)).andRespond(withStatus(HttpStatus.BAD_GATEWAY));
+        expectDownload("{\"message\":\"something else\"}");
+        expectDownload("not json");
+        server.expect(once(), requestTo(DOWNLOAD_URL)).andRespond(withStatus(HttpStatus.NOT_FOUND));
+
+        for (int i = 0; i < 5; i++) {
+            assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> client.download(1)))
+                .isInstanceOf(OpenSubtitlesUnavailableException.class)
+                .isNotInstanceOf(OpenSubtitlesChargedException.class);
+        }
+    }
 }

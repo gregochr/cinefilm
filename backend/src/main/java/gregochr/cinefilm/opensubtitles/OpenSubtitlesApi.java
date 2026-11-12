@@ -31,8 +31,10 @@ public interface OpenSubtitlesApi {
      * @return the subtitle read as SRT, and the allowance left
      * @throws IllegalArgumentException when the id is not positive
      * @throws OpenSubtitlesQuotaException when the download allowance is used up
+     * @throws OpenSubtitlesChargedException when the link was issued (the account is charged) but the file could not
+     *     be fetched or was refused: never to be given back to a budget
      * @throws OpenSubtitlesUnavailableException when OpenSubtitles cannot answer, answers something unexpected, or
-     *     downloads are off
+     *     downloads are off (nothing was charged)
      */
     OpenSubtitlesDownload download(long fileId);
 }

@@ -28,7 +28,15 @@ class SubtitleAdminCheckTest extends SubtitleTestBase {
     private Film filmWithImdb(String title, int parts) {
         Film film = filmWithParts(title, parts, 60);
         film.setImdbId("tt0936501");
+        film.setOsSearchedImdbId("tt0936501");
+        film.setOsForcedCount(1);
+        film.setOsBest(best(5011));
         return films.saveAndFlush(film);
+    }
+
+    private static String best(long fileId) {
+        return new gregochr.cinefilm.opensubtitles.OpenSubtitlesResult(1, fileId, "r", 23.976, 1, true, false, null,
+            null).toJson();
     }
 
     private OpenSubtitlesReference reference(Film film, String imdbId) {
@@ -136,5 +144,30 @@ class SubtitleAdminCheckTest extends SubtitleTestBase {
         film.getEditions().get(0).originalParts().get(0).setDurationMs(null);
 
         assertThat(listed(part).check()).isNull();
+    }
+
+    @Test
+    void aCheckIsNotShownOnceTheFilmsBestOpenSubtitlesFileIsAnotherOne() {
+        Film film = filmWithImdb("Taken", 1);
+        SubtitleSidecar row = sidecar("Taken.en.forced.srt", fileId(film, 1), false);
+        check(film, versionOf(film, row), reference(film, "tt0936501"));
+        assertThat(listed(row).check()).isNotNull();
+
+        film.setOsBest(best(6022));
+        films.saveAndFlush(film);
+
+        assertThat(listed(row).check()).isNull();
+    }
+
+    @Test
+    void aCheckIsNotShownWhenTheFilmHasNoBestResultAtAll() {
+        Film film = filmWithImdb("Taken", 1);
+        SubtitleSidecar row = sidecar("Taken.en.forced.srt", fileId(film, 1), false);
+        check(film, versionOf(film, row), reference(film, "tt0936501"));
+
+        film.setOsBest(null);
+        films.saveAndFlush(film);
+
+        assertThat(listed(row).check()).isNull();
     }
 }

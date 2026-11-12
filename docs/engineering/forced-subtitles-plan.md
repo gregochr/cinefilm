@@ -29,13 +29,20 @@ Judgement calls made while building 2d without the owner. Each: what was chosen,
    (`nb_cd` above 1, or several `files[]`) is only part of the film. The parser reads both counts (`fileCount` is the
    larger); ranking puts single-file results above every multi-file one; when the best result left is multi-file, the
    edition is skipped (log: "Only multi-part subtitles on OpenSubtitles"), with no download and no verdict stored.
-   Results stored before this PR have no count and read as single-file until the film is searched again (a changed IMDb
-   id, or no result after 30 days): a known gap.
+   A best result stored by 2c without `fileCount` is treated as unknown: the search's due query (`findOpenSubtitlesDue`)
+   includes films whose `os_best` JSON lacks `fileCount` and searches them first, so the next run rewrites it with the
+   count (chosen over treating a missing count as multi-file, which would skip those films for good).
 8. **No `checkVerdict` on the film need rows.** Their cheap place would add a query and change a response the Admin UI is
    being built against; the verdict is on the subtitle list's `check` instead. Alternative: add it with the Admin display PR.
 9. **A download that cannot be read is kept as an unusable reference** (no cues, or over 1 MB normalised) so that file id
    is never fetched again; a changed best result (new file id) is a new reference.
-10. **A download is given back to the budget on an outage** (the request did not count at OpenSubtitles) and the whole day
+10a. **No refund once OpenSubtitles has issued its link** (the account is charged then). The client throws
+    `OpenSubtitlesChargedException` for any failure after the link (link refused or file too big: permanent; timeout, 5xx,
+    other status: transient); the refresher never refunds those. Permanent failures and zero-cue files make that file id
+    final at once (`opensubtitles_reference.failed_downloads` = 3); a transient one counts one charged attempt, stops the
+    run, and the file is tried again later, at most 3 charged attempts in all. A check is current only while its
+    reference's file id is still the film's best (`os_best`) file id, as well as the served version and IMDb id.
+10. **A download is given back to the budget on an outage** (before or during `/download`, nothing charged) (the request did not count at OpenSubtitles) and the whole day
     is spent on a quota answer or `remaining` of 0 or less, until the reset time it gave (at most 36 hours ahead) or the
     next UTC midnight.
 11. **Owner decision (2026-11-12): trust only proven `.srt` files.** The owner will not routinely watch films to mark

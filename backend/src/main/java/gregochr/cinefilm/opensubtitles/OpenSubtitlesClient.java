@@ -213,17 +213,28 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
             }
             throw new OpenSubtitlesUnavailableException("OpenSubtitles returned an unexpected download reply");
         }
-        URI uri = allowedLink(link.asString());
+        // From here on OpenSubtitles has issued a link and charged the account: every failure is a charged one.
+        URI uri;
+        try {
+            uri = allowedLink(link.asString());
+        } catch (OpenSubtitlesUnavailableException e) {
+            throw new OpenSubtitlesChargedException(e.getMessage(), true);
+        }
         JsonNode remaining = root.path("remaining");
         Integer left = remaining.isIntegralNumber()
             ? (int) Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, remaining.asLong())) : null;
-        Answer<SrtParser.Parsed> file = retrying(() -> fetchOnce(uri));
+        Answer<SrtParser.Parsed> file;
+        try {
+            file = retrying(() -> fetchOnce(uri));
+        } catch (OpenSubtitlesUnavailableException e) {
+            throw new OpenSubtitlesChargedException(e.getMessage(), false);
+        }
         if (file.status() / 100 != 2) {
-            throw new OpenSubtitlesUnavailableException("OpenSubtitles file answered status " + file.status());
+            throw new OpenSubtitlesChargedException("OpenSubtitles file answered status " + file.status(), false);
         }
         if (file.body() == null) {
-            throw new OpenSubtitlesUnavailableException(
-                "OpenSubtitles file is larger than " + maxFileBytes + " bytes");
+            throw new OpenSubtitlesChargedException("OpenSubtitles file is larger than " + maxFileBytes + " bytes",
+                true);
         }
         return new OpenSubtitlesDownload(file.body(), left, reset);
     }
