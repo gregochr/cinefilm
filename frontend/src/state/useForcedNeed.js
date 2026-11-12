@@ -16,7 +16,8 @@ const without = (record, key) => {
  * even if that write failed. Only the last write's answer is applied to the row (`saving[filmId]` is set until
  * then) and only its failure is reported in `problems[filmId]`, with the row left at the last answer the server
  * gave. Other films stay free. Nothing is refetched, and a list read that started before the save arrived cannot
- * undo it. On unmount the write in flight is aborted and no waiting choice is sent.
+ * undo it. After unmount the write in flight is never aborted, its result is ignored (no state is set) and no waiting
+ * choice is sent.
  */
 export function useForcedNeed(refreshKey) {
   // One counter orders everything: a list read is numbered when it starts, a saved choice when its answer arrives.
@@ -39,11 +40,9 @@ export function useForcedNeed(refreshKey) {
 
   useEffect(() => {
     mounted.current = true;
-    const running = chains.current;
     return () => {
+      // Nothing is aborted: a write in flight settles on the server, and its result is ignored here.
       mounted.current = false;
-      running.forEach((chain) => chain.controller.abort());
-      running.clear();
     };
   }, []);
 
@@ -54,7 +53,7 @@ export function useForcedNeed(refreshKey) {
       running.pending = { choice };
       return;
     }
-    const chain = { controller: new AbortController(), pending: null };
+    const chain = { pending: null };
     chains.current.set(filmId, chain);
     setProblems((prev) => without(prev, filmId));
     setSaving((prev) => ({ ...prev, [filmId]: true }));
@@ -64,9 +63,7 @@ export function useForcedNeed(refreshKey) {
     while (next) {
       chain.pending = null;
       try {
-        const row = await adminApi.setForcedNeed(filmId, next.choice, {
-          signal: chain.controller.signal,
-        });
+        const row = await adminApi.setForcedNeed(filmId, next.choice);
         answer = { row, answeredAt: ++sequence.current };
         failure = null;
       } catch (error) {

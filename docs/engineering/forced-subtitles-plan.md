@@ -314,7 +314,8 @@ served). Only the films with rule-2 evidence are evaluated.
   `frontend/src/state`, no JSX there.
 - A change applies the returned row and refreshes the counts. One write per film at a time, never aborted (the
   server may still process an aborted one, so two writes could land out of order, and the second would meet the
-  library lock): a newer click on a film that is saving waits and replaces any earlier waiting click, and is sent
+  library lock). When Admin closes, the write in flight still finishes, its result is ignored and no waiting click is
+  sent. A newer click on a film that is saving waits and replaces any earlier waiting click, and is sent
   when the write in flight settles, even if that one failed. Only the last write's answer is shown and only its
   failure is reported beside the row, which stays at the last answer the server gave. A refresh error shows with Try
   again even while the old list is shown, and a list read that began before a save cannot undo it.

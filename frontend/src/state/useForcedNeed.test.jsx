@@ -79,7 +79,6 @@ describe('useForcedNeed', () => {
       second = result.current.choose(2, 'NOT_NEEDED');
     });
     expect(puts).toHaveLength(1);
-    expect(puts[0].signal.aborted).toBe(false);
     await act(async () => {
       puts[0].resolve(answered(2, 'NEEDED'));
       await Promise.resolve();
@@ -160,19 +159,6 @@ describe('useForcedNeed', () => {
     expect(result.current.problems).toEqual({ 2: "Couldn't save: try again" });
     expect(rowOf(result, 2)).toMatchObject({ ownerChoice: 'NEEDED' });
     expect(result.current.saving).toEqual({});
-  });
-
-  it('never sends a waiting choice after it unmounts', async () => {
-    const { puts } = deferredPuts();
-    const { result, unmount } = await loaded();
-    let first;
-    act(() => {
-      first = result.current.choose(2, 'NEEDED');
-      result.current.choose(2, 'NOT_NEEDED');
-    });
-    unmount();
-    await first;
-    expect(puts).toHaveLength(1);
   });
 
   it('keeps other films free: two films save at once', async () => {
@@ -259,16 +245,22 @@ describe('useForcedNeed', () => {
     expect(rowOf(result, 2).ownerChoice).toBe('NOT_NEEDED');
   });
 
-  it('aborts a request that is still in flight when it unmounts', async () => {
+  it('does not abort a write in flight when it unmounts, and ignores its result without a warning', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { puts } = deferredPuts();
     const { result, unmount } = await loaded();
     let done;
     act(() => {
       done = result.current.choose(2, 'NEEDED');
+      result.current.choose(2, 'NOT_NEEDED');
     });
     unmount();
-    expect(puts[0].signal.aborted).toBe(true);
+    expect(puts[0].signal).toBeUndefined();
+    puts[0].resolve(answered(2, 'NEEDED'));
     await done;
+    expect(puts).toHaveLength(1); // the waiting choice is not sent
+    expect(errors).not.toHaveBeenCalled();
+    errors.mockRestore();
   });
 });
 
