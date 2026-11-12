@@ -112,15 +112,76 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
      * @param spokenLanguages TMDB's spoken languages as stored, or null
      * @param languagesFetchedAt when TMDB was asked, or null
      * @param owner the owner's choice, or null
+     * @param imdbId its IMDb id, or null
+     * @param osForcedCount how many foreign-parts-only files OpenSubtitles had, or null when never searched
+     * @param osSearchedAt when OpenSubtitles was last searched, or null
+     * @param osSearchedImdbId the IMDb id that search was for, or null
      */
     record NeedRow(Long id, String title, Integer year, Long tmdbId, String originalLanguage, String spokenLanguages,
-                   java.time.Instant languagesFetchedAt, ForcedNeedChoice owner) {
+                   java.time.Instant languagesFetchedAt, ForcedNeedChoice owner, String imdbId,
+                   Integer osForcedCount, java.time.Instant osSearchedAt, String osSearchedImdbId) {
     }
+
+    /**
+     * A film and its IMDb id.
+     *
+     * @param id the film
+     * @param imdbId its IMDb id
+     */
+    record ImdbRef(Long id, String imdbId) {
+    }
+
+    /**
+     * Films with an IMDb id whose OpenSubtitles search is due: never searched, searched under another IMDb id, or
+     * searched with no result before the cutoff. Never-searched first, then the oldest search.
+     */
+    @org.springframework.data.jpa.repository.Query(
+        "select new gregochr.cinefilm.film.FilmRepository$ImdbRef(f.id, f.imdbId) from Film f "
+            + "where f.imdbId is not null and (f.osSearchedAt is null or f.osSearchedImdbId is null "
+            + "or f.osSearchedImdbId <> f.imdbId or (f.osForcedCount = 0 and f.osSearchedAt < :cutoff)) "
+            + "order by f.osSearchedAt asc nulls first, f.id asc")
+    List<ImdbRef> findOpenSubtitlesDue(
+        @org.springframework.data.repository.query.Param("cutoff") java.time.Instant cutoff);
+
+    /**
+     * Stores what OpenSubtitles said and stamps the film, in one statement that only matches while the film still
+     * has the IMDb id it was searched for: a film whose IMDb id changed meanwhile is left alone.
+     *
+     * @return the rows changed: 1, or 0 when the film has gone or now has another IMDb id
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query(
+        "update Film f set f.osForcedCount = :count, f.osBest = :best, f.osSearchedImdbId = :imdbId, "
+            + "f.osSearchedAt = :at where f.id = :id and f.imdbId = :imdbId")
+    int saveOpenSubtitles(@org.springframework.data.repository.query.Param("id") Long id,
+                          @org.springframework.data.repository.query.Param("imdbId") String imdbId,
+                          @org.springframework.data.repository.query.Param("count") int count,
+                          @org.springframework.data.repository.query.Param("best") String best,
+                          @org.springframework.data.repository.query.Param("at") java.time.Instant at);
+
+    /**
+     * Forgets what OpenSubtitles said about a film, straight on the row. A change of IMDb id uses it in its own
+     * transaction after the id change has been flushed (the flush is automatic): the entity (with
+     * {@code @DynamicUpdate}) skips a column it loaded as null and sets to null, so a search that committed the old
+     * film's result meanwhile would survive; this statement removes it, and a search still waiting on the row finds
+     * its IMDb id gone. The persistence context is kept, so the entity must already hold these values.
+     */
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query(
+        "update Film f set f.osForcedCount = null, f.osBest = null, f.osSearchedImdbId = null, "
+            + "f.osSearchedAt = null where f.id = :id")
+    int clearOpenSubtitles(@org.springframework.data.repository.query.Param("id") Long id);
+
+    /** When OpenSubtitles was last searched for any film, or null when never. */
+    @org.springframework.data.jpa.repository.Query("select max(f.osSearchedAt) from Film f")
+    java.time.Instant findLatestOpenSubtitlesSearchedAt();
 
     /** Every film with the columns the need is worked out from, by sort title. */
     @org.springframework.data.jpa.repository.Query(
         "select new gregochr.cinefilm.film.FilmRepository$NeedRow(f.id, f.title, f.year, f.tmdbId, "
-            + "f.originalLanguage, f.spokenLanguages, f.languagesFetchedAt, f.forcedNeedOwner) from Film f "
+            + "f.originalLanguage, f.spokenLanguages, f.languagesFetchedAt, f.forcedNeedOwner, "
+            + "f.imdbId, f.osForcedCount, f.osSearchedAt, f.osSearchedImdbId) from Film f "
             + "order by f.sortTitle, f.id")
     List<NeedRow> findNeedRows();
 

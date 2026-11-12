@@ -45,10 +45,11 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    resume still (`GET /api/editions/{id}/still`) takes one number from the request (`atMs`, bounds-checked against the
    edition); the input is the database-known path, `-protocol_whitelist file`, output only under `cache/stills/`, at
    most 2 grabs at once, a 10 s timeout, and the cache is capped at 300 files.
-5. **Secrets.** `CINEFILM_PASSWORD`, `CINEFILM_DB_*`, `TMDB_READ_TOKEN`, Plex tokens and the CineLight credentials come
-   from the environment, never from the repo, and never reach the browser, API responses, logs, error messages or
+5. **Secrets.** `CINEFILM_PASSWORD`, `CINEFILM_DB_*`, `TMDB_READ_TOKEN`, `OMDB_API_KEY`, `OPENSUBTITLES_*`, Plex tokens and
+   the CineLight credentials come from the environment, never from the repo, and never reach the browser, API responses, logs, error messages or
    `/actuator`. The Plex token is sent only in the `X-Plex-Token` header, never in a URL, and logs and errors name the
-   call ("plex sections"), never an address or the token. Only `health` and `info` are exposed by actuator.
+   call ("plex sections"), never an address or the token. The OpenSubtitles key is sent only in the `Api-Key` header,
+   and its client's errors and logs name the status, never the key, a URL or a cause. Only `health` and `info` are exposed by actuator.
 6. **Network exposure.** The app binds to `127.0.0.1` on the host and is published only through the tailnet-bound Caddy proxy (and `tailscale serve`). Caddy never binds 0.0.0.0, the LAN or port 80, and its Cloudflare token is DNS-edit scoped to one zone. The
    database publishes no host port. No Cloudflare tunnel or proxying (the DNS records are grey cloud), no `tailscale funnel`, port forward or public listener. CORS stays off.
 7. **Untrusted data in the UI.** TMDB, Plex and file metadata (titles, overviews, track names) are rendered as text,
@@ -90,6 +91,16 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
     for a copy that could not be resized, `no-store` when the resizer was busy); and the resume still
     (`private, max-age=86400`). HLS playlists and segments are `no-store`. Nothing under `/api/admin`, no session
     route and no mutating response is cached. Any other exception needs a note in the PR.
+12. **OpenSubtitles (outbound).** CineFilm's one call to OpenSubtitles is `GET /api/v1/subtitles` on
+    `https://api.opensubtitles.com`, the only host, with fixed parameters (`foreign_parts_only=only`, `languages=en`)
+    and an IMDb id that matches `^tt\d{1,10}$` (sent as its number): nothing in the request comes from the browser or
+    from the response. It is search only: no login, no download, and no other method. Redirects are not followed (a
+    3xx is an error), connect and read time out at 10 s, at most 1 MB of the reply is read (more is an error), requests
+    are paced to under 5 a second, and 429 and 5xx are retried at most three times. The reply is untrusted: it is
+    parsed, never evaluated; a field of the wrong type is dropped; text (`release`, 200 characters) is cleaned of
+    control characters and only ever stored and shown as text. A result for another film's IMDb id is dropped. The key
+    is `OPENSUBTITLES_API_KEY`: the search is off while it is blank. Phase 2d adds login and `/download`; that PR adds
+    its own rules here (host allowlist for the download link, size cap before decompression).
 
 ## Reporting
 

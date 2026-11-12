@@ -20,6 +20,7 @@ import gregochr.cinefilm.library.AdminDtos.LastScanDto;
 import gregochr.cinefilm.library.AdminDtos.ProgressDto;
 import gregochr.cinefilm.library.AdminDtos.ScanStatusDto;
 import gregochr.cinefilm.library.FileNameParser.ParsedName;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesRefresher;
 import gregochr.cinefilm.plex.RuntimeSignal;
 import gregochr.cinefilm.ratings.RatingsRefresher;
 import gregochr.cinefilm.tmdb.MatchOutcome.Candidate;
@@ -51,13 +52,18 @@ public class AdminService {
     private final MediaFileRepository files;
     private final LibraryRoot root;
     private final RatingsRefresher ratings;
+    private final OpenSubtitlesRefresher subtitleSearch;
     private final GroupingChangeRepository changes;
 
-    /** Creates the service over the scan service, the repositories, the library root and the ratings refresher. */
+    /**
+     * Creates the service over the scan service, the repositories, the library root and the ratings and subtitle
+     * search refreshers.
+     */
     public AdminService(ScanService scans, ScanRunRepository runs, FilmRepository films,
                         MediaFileRepository files, LibraryRoot root, RatingsRefresher ratings,
-                        GroupingChangeRepository changes) {
+                        OpenSubtitlesRefresher subtitleSearch, GroupingChangeRepository changes) {
         this.ratings = ratings;
+        this.subtitleSearch = subtitleSearch;
         this.changes = changes;
         this.scans = scans;
         this.runs = runs;
@@ -82,7 +88,8 @@ public class AdminService {
             files.countPresent(Playability.UNREADABLE));
         return new ScanStatusDto(scans.isRunning(), root.root().toString(),
             progress == null ? null : new ProgressDto(progress.processed(), progress.total(), progress.current()),
-            last, counts, films.findLatestRatingsFetchedAt(), ratings.isRunning(), ratings.enabled());
+            last, counts, films.findLatestRatingsFetchedAt(), ratings.isRunning(), ratings.enabled(),
+            films.findLatestOpenSubtitlesSearchedAt(), subtitleSearch.isRunning(), subtitleSearch.enabled());
     }
 
     /**

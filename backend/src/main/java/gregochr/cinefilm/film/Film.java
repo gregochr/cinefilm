@@ -133,6 +133,34 @@ public class Film {
     @Column(length = 16)
     private ForcedNeedChoice forcedNeedOwner;
 
+    /** How many English foreign-parts-only subtitles OpenSubtitles had at the last search; null = never searched. */
+    private Integer osForcedCount;
+
+    /** When OpenSubtitles was last searched for this film; null = never. */
+    private Instant osSearchedAt;
+
+    /** The IMDb id the OpenSubtitles result belongs to: the result counts only while it equals {@link #imdbId}. */
+    @Column(length = 16)
+    private String osSearchedImdbId;
+
+    /** JSON of the best OpenSubtitles result ({@code OpenSubtitlesResult}); null when there is none. */
+    @Column(length = 2000)
+    private String osBest;
+
+    /**
+     * Sets the IMDb id. A different id means a different film, so what OpenSubtitles said about the old one is
+     * forgotten in the entity (the explicit row write is {@link FilmRepository#clearOpenSubtitles}).
+     */
+    public void setImdbId(String newImdbId) {
+        if (!java.util.Objects.equals(imdbId, newImdbId)) {
+            osForcedCount = null;
+            osSearchedAt = null;
+            osSearchedImdbId = null;
+            osBest = null;
+        }
+        this.imdbId = newImdbId;
+    }
+
     /**
      * Sets the TMDB id. A film stamped as "no ratings" only because it had no identity at all (no TMDB id, no IMDb id)
      * is un-stamped when it gains a different TMDB id, so the next refresh retries it instead of waiting out the

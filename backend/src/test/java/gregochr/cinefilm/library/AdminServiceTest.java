@@ -21,6 +21,7 @@ import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.library.AdminDtos.Attention;
 import gregochr.cinefilm.library.AdminDtos.AttentionItem;
 import gregochr.cinefilm.library.AdminDtos.ScanStatusDto;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesRefresher;
 import gregochr.cinefilm.ratings.RatingsRefresher;
 import java.time.Duration;
 import java.time.Instant;
@@ -43,14 +44,46 @@ class AdminServiceTest extends ApiTestBase {
 
     private ScanService scans;
     private RatingsRefresher ratings;
+    private OpenSubtitlesRefresher subtitleSearch;
     private AdminService admin;
 
     @BeforeEach
     void setUp() {
         scans = mock(ScanService.class);
         ratings = mock(RatingsRefresher.class);
+        subtitleSearch = mock(OpenSubtitlesRefresher.class);
         admin = new AdminService(scans, runs, films, mediaFiles, new LibraryRoot("/media/films"), ratings,
-            groupingChanges);
+            subtitleSearch, groupingChanges);
+    }
+
+    @Test
+    void theStatusReportsWhenOpenSubtitlesWasLastSearchedForAnyFilmAndWhetherASearchRuns() {
+        Film older = saved("Older", 2000, "a.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.PRESENT);
+        older.setOsSearchedAt(NOW.minus(Duration.ofDays(3)));
+        films.save(older);
+        Film newer = saved("Newer", 2001, "b.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.PRESENT);
+        newer.setOsSearchedAt(NOW.minus(Duration.ofDays(1)));
+        films.save(newer);
+        saved("Never", 2002, "c.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.PRESENT);
+        when(subtitleSearch.isRunning()).thenReturn(true);
+        when(subtitleSearch.enabled()).thenReturn(true);
+
+        ScanStatusDto status = admin.status();
+
+        assertThat(status.openSubtitlesLastSearchedAt()).isEqualTo(NOW.minus(Duration.ofDays(1)));
+        assertThat(status.openSubtitlesRunning()).isTrue();
+        assertThat(status.openSubtitlesEnabled()).isTrue();
+    }
+
+    @Test
+    void theStatusReportsNoSubtitleSearchWhenNoneHasRunAndTheKeyIsMissing() {
+        saved("Never", 2002, "c.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.PRESENT);
+
+        ScanStatusDto status = admin.status();
+
+        assertThat(status.openSubtitlesLastSearchedAt()).isNull();
+        assertThat(status.openSubtitlesRunning()).isFalse();
+        assertThat(status.openSubtitlesEnabled()).isFalse();
     }
 
     @Test

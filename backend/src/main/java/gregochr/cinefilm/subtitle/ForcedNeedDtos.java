@@ -1,5 +1,6 @@
 package gregochr.cinefilm.subtitle;
 
+import java.time.Instant;
 import java.util.List;
 
 /** The shapes of the Admin "which films need forced subtitles" API. */
@@ -21,10 +22,14 @@ public final class ForcedNeedDtos {
      * @param spokenLanguages TMDB's spoken language codes (empty when none or unknown)
      * @param hasForcedSubtitle true when at least one edition of the film has a forced subtitle that playback
      *     would serve (the film detail's rules: a file with no cues, or a conflict, is not served)
+     * @param openSubtitlesForcedCount how many English foreign-parts-only subtitles OpenSubtitles had when last
+     *     searched for the film's current IMDb id; null when it has not been searched (or the IMDb id changed since)
+     * @param openSubtitlesSearchedAt when that search was made; null with the count
      */
     public record FilmNeedDto(Long filmId, String title, Integer year, String need, String reason,
                               String ownerChoice, String originalLanguage, List<String> spokenLanguages,
-                              boolean hasForcedSubtitle) {
+                              boolean hasForcedSubtitle, Integer openSubtitlesForcedCount,
+                              Instant openSubtitlesSearchedAt) {
     }
 
     /**

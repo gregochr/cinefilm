@@ -60,10 +60,14 @@ public final class AdminDtos {
      * @param ratingsLastRefreshedAt when ratings were last fetched for any film, or null if never
      * @param ratingsRunning true while a ratings refresh runs
      * @param ratingsEnabled true when an OMDb API key is configured
+     * @param openSubtitlesLastSearchedAt when OpenSubtitles was last searched for any film, or null if never
+     * @param openSubtitlesRunning true while a subtitle search runs
+     * @param openSubtitlesEnabled true when an OpenSubtitles API key is configured
      */
     public record ScanStatusDto(boolean running, String folder, ProgressDto progress, LastScanDto lastScan,
                                 CountsDto counts, Instant ratingsLastRefreshedAt, boolean ratingsRunning,
-                                boolean ratingsEnabled) {
+                                boolean ratingsEnabled, Instant openSubtitlesLastSearchedAt,
+                                boolean openSubtitlesRunning, boolean openSubtitlesEnabled) {
     }
 
     /**

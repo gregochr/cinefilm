@@ -19,6 +19,7 @@ import gregochr.cinefilm.subtitle.ForcedNeedDtos.ChoiceRequest;
 import gregochr.cinefilm.subtitle.ForcedNeedDtos.CountsDto;
 import gregochr.cinefilm.subtitle.ForcedNeedDtos.FilmNeedDto;
 import gregochr.cinefilm.subtitle.ForcedNeedDtos.NeedListDto;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -102,7 +103,8 @@ public class ForcedNeedService {
         Film film = films.findByIdForUpdate(filmId).orElseThrow(() -> new NotFoundException("No such film"));
         film.setForcedNeedOwner(choice);
         NeedRow row = new NeedRow(film.getId(), film.getTitle(), film.getYear(), film.getTmdbId(),
-            film.getOriginalLanguage(), film.getSpokenLanguages(), film.getLanguagesFetchedAt(), choice);
+            film.getOriginalLanguage(), film.getSpokenLanguages(), film.getLanguagesFetchedAt(), choice,
+            film.getImdbId(), film.getOsForcedCount(), film.getOsSearchedAt(), film.getOsSearchedImdbId());
         boolean hasSidecar = sidecars.countPresentForFilm(filmId) > 0;
         boolean served = hasSidecar && !servedFilmIds(List.of(filmId)).isEmpty();
         return dto(row, hasSidecar, served, files.countEmbeddedForcedForFilm(filmId) > 0);
@@ -144,10 +146,15 @@ public class ForcedNeedService {
         boolean known = row.tmdbId() != null && row.languagesFetchedAt() != null
             && (row.originalLanguage() != null || row.spokenLanguages() != null);
         Languages languages = known ? new Languages(row.originalLanguage(), spoken) : null;
-        // No OpenSubtitles evidence exists yet (phase 2c): null means it has not been asked.
-        Decision decision = ForcedNeed.decide(row.owner(), hasSidecar, hasEmbeddedForced, null, languages);
+        // A search counts only while it was for the film's current IMDb id: a stale one (the id changed and the reset
+        // did not reach the row) is as good as no search, so null, "not asked".
+        boolean searched = row.imdbId() != null && row.imdbId().equals(row.osSearchedImdbId());
+        Integer openSubtitles = searched ? row.osForcedCount() : null;
+        Instant openSubtitlesAt = searched ? row.osSearchedAt() : null;
+        Decision decision = ForcedNeed.decide(row.owner(), hasSidecar, hasEmbeddedForced, openSubtitles, languages);
         return new FilmNeedDto(row.id(), row.title(), row.year(), decision.need().name(), decision.reason().name(),
-            row.owner() == null ? null : row.owner().name(), row.originalLanguage(), spoken, served);
+            row.owner() == null ? null : row.owner().name(), row.originalLanguage(), spoken, served, openSubtitles,
+            openSubtitlesAt);
     }
 
     private static CountsDto counts(List<FilmNeedDto> rows) {

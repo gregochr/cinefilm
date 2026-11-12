@@ -39,7 +39,7 @@ public final class ForcedNeed {
         SIDECAR,
         /** One of the film's files has a forced track in English or of no stated language. */
         EMBEDDED_FORCED,
-        /** OpenSubtitles has English foreign-parts-only subtitles (not yet looked up). */
+        /** OpenSubtitles has English foreign-parts-only subtitles for the film. */
         OPENSUBTITLES,
         /** TMDB has not been asked, or has no film. */
         NO_LANGUAGES,
@@ -78,7 +78,7 @@ public final class ForcedNeed {
      * @param hasSidecar true when a present forced subtitle file is attached to one of the film's files
      * @param hasEmbeddedForced true when one of the film's files has a forced track in English or of no language
      * @param openSubtitlesForcedCount how many English foreign-parts-only files OpenSubtitles has for the film; null
-     *     when it has not been asked (nothing supplies it yet: callers pass null)
+     *     when it has not been asked, or was asked for another IMDb id than the film has now
      * @param languages what TMDB said, or null when it has not been asked or has no film
      * @return the verdict and its reason
      */

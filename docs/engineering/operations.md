@@ -65,6 +65,7 @@ grep -q '^CINEFILM_DB_PASSWORD=' .env || echo "CINEFILM_DB_PASSWORD=${DBPW}" >> 
 grep -q '^CINEFILM_PASSWORD=' .env || { echo "CINEFILM_PASSWORD=${PW}" >> .env; echo "Sign-in password: ${PW}"; }   # note it in your password manager, then clear the terminal
 grep -q '^TMDB_READ_TOKEN=' .env || echo "TMDB_READ_TOKEN=" >> .env
 grep -q '^OMDB_API_KEY=' .env || echo "OMDB_API_KEY=" >> .env
+grep -q '^OPENSUBTITLES_API_KEY=' .env || echo "OPENSUBTITLES_API_KEY=" >> .env
 ```
 
 Compare the result with `deploy/.env.example` for any other keys it lists.

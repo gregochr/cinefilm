@@ -16,6 +16,7 @@ import gregochr.cinefilm.subtitle.ForcedNeedDtos.ChoiceRequest;
 import gregochr.cinefilm.subtitle.ForcedNeedDtos.CountsDto;
 import gregochr.cinefilm.subtitle.ForcedNeedDtos.FilmNeedDto;
 import gregochr.cinefilm.subtitle.ForcedNeedDtos.NeedListDto;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,7 +31,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class ForcedNeedControllerTest {
 
     private static final FilmNeedDto TAKEN = new FilmNeedDto(7L, "Taken", 2008, "NEEDED", "OWNER", "NEEDED", "en",
-        List.of("en", "fr", "sq"), true);
+        List.of("en", "fr", "sq"), true, 7, Instant.parse("2024-03-31T23:30:00Z"));
 
     @Autowired
     private MockMvc mvc;
@@ -59,6 +60,8 @@ class ForcedNeedControllerTest {
             .andExpect(jsonPath("$.films[0].spokenLanguages[0]").value("en"))
             .andExpect(jsonPath("$.films[0].spokenLanguages[2]").value("sq"))
             .andExpect(jsonPath("$.films[0].hasForcedSubtitle").value(true))
+            .andExpect(jsonPath("$.films[0].openSubtitlesForcedCount").value(7))
+            .andExpect(jsonPath("$.films[0].openSubtitlesSearchedAt").value("2024-03-31T23:30:00Z"))
             .andExpect(jsonPath("$.counts.needed").value(1))
             .andExpect(jsonPath("$.counts.neededMissing").value(0))
             .andExpect(jsonPath("$.counts.unsure").value(2))

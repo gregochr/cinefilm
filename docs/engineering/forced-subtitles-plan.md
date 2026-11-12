@@ -1,7 +1,7 @@
 # Forced English subtitles — plan
 
 Written 2026-11-11. Status (2026-11-12): **phase 1 merged (#105) and released (v0.4.0); phase 2a merged (#109),
-2b in review; 2c, 2d and phases 3 to 6 not started.** Phases 5 and 6 were added on 2026-11-12: the owner says
+2b in review; 2c built (PR in review); 2d and phases 3 to 6 not started.** Phases 5 and 6 were added on 2026-11-12: the owner says
 solving subtitles is what would let them stop depending on Plex.
 
 ## What the owner wants
@@ -328,6 +328,29 @@ served). Only the films with rule-2 evidence are evaluated.
 - Rule 4 switches on. Admin rows show "OpenSubtitles: 7 foreign-parts-only files" (2c includes that small frontend
   change, or it rides with 2d's).
 - `SECURITY.md` gains OpenSubtitles as an outbound service.
+- **Built (2026-11-12)**, with these differences from the plan above:
+  - Package `gregochr.cinefilm.opensubtitles`: `OpenSubtitlesApi`/`Client`/`Config`, `OpenSubtitlesParser` and
+    `OpenSubtitlesRanking` (pure), `OpenSubtitlesRefresher` (same `pending` re-run flag as `LanguagesRefresher`, its own
+    `openSubtitlesExecutor`) and `OpenSubtitlesScheduler` (06:00, off with `cinefilm.scan.schedule=false`).
+    `RequestPacer` (tmdb) became public and takes an interval, so the client uses it at 250 ms.
+  - **Every film with an IMDb id is searched**, not only those rules 1–3 leave open: phase 2d needs `os_best` for
+    films that already have sidecars, and a search costs no download quota. Due: never searched, `os_searched_imdb_id`
+    differs from `imdb_id`, or `os_forced_count = 0` and searched more than 30 days ago (never searched first, then the
+    oldest).
+  - `os_best` is `varchar(2000)` holding JSON `{id, fileId, release, fps, downloadCount, fromTrusted,
+    hearingImpaired}` (not a `json` column); `film.os_searched_imdb_id` was added. A count only counts while
+    `os_searched_imdb_id = imdb_id` (rule 4 and the DTO ignore a stale one), and a change of IMDb id resets all four
+    columns (`Film.setImdbId` in the entity, `FilmRepository.clearOpenSubtitles` on the row, flushed after the id).
+  - The reply is read from `attributes` (`files[0].file_id`, `feature_details.imdb_id`); `id` may be a number or a
+    digit string (OpenSubtitles writes a string). A result with no usable id or file id is dropped. A reply that is not
+    JSON or has no `data` list is an outage, never "no results". Only the first page (50) is read.
+  - The DTO gained `openSubtitlesForcedCount` and `openSubtitlesSearchedAt`; `ScanStatus` gained
+    `openSubtitlesLastSearchedAt`, `openSubtitlesRunning` and `openSubtitlesEnabled`. The Admin wording ("7
+    foreign-parts-only files") is a frontend change for a later PR.
+  - The User-Agent version is `cinefilm.version`, which is `${APP_VERSION:1}` (the image's build argument, so a release
+    sends `CineFilm v0.4.1`; a dev build or an unusable value sends `CineFilm v1`).
+  - The connect and read timeouts are 10 s each; the read timeout covers the wait for the response headers, as for
+    TMDB and OMDb (the body read is capped in size, not in time).
 
 **2d — the cross-check of existing sidecars** (login, `/download`, quota, comparison, Admin `CHECK` reason). Planned
 in detail once 2c is merged and login and `/download` have been tried with one real download.
