@@ -59,14 +59,15 @@ export function useForcedNeed(refreshKey) {
     setProblems((prev) => without(prev, filmId));
     setSaving((prev) => ({ ...prev, [filmId]: true }));
     let next = { choice };
-    let row = null; // the last answer the server gave in this chain
+    let answer = null; // the last answer the server gave in this chain, stamped when it arrived
     let failure = null; // the failure of the last write, if it failed
     while (next) {
       chain.pending = null;
       try {
-        row = await adminApi.setForcedNeed(filmId, next.choice, {
+        const row = await adminApi.setForcedNeed(filmId, next.choice, {
           signal: chain.controller.signal,
         });
+        answer = { row, answeredAt: ++sequence.current };
         failure = null;
       } catch (error) {
         if (!mounted.current) return;
@@ -76,10 +77,7 @@ export function useForcedNeed(refreshKey) {
       next = chain.pending;
     }
     chains.current.delete(filmId);
-    if (row) {
-      const answeredAt = ++sequence.current;
-      setSaved((prev) => ({ ...prev, [filmId]: { row, answeredAt } }));
-    }
+    if (answer) setSaved((prev) => ({ ...prev, [filmId]: answer }));
     if (failure) setProblems((prev) => ({ ...prev, [filmId]: needProblem(failure) }));
     setSaving((prev) => without(prev, filmId));
   }, []);

@@ -287,9 +287,9 @@ describe('useForcedNeed: a refresh that overlaps a save', () => {
         return new Promise((resolve) => gets.push(resolve)).then((list) => respond(list));
       }
       if (!FORCED.test(url)) return null;
-      return new Promise((resolve) => puts.push({ body: JSON.parse(init.body), resolve })).then(
-        (row) => respond(row),
-      );
+      return new Promise((resolve, reject) =>
+        puts.push({ body: JSON.parse(init.body), resolve, reject }),
+      ).then((row) => respond(row));
     });
     return { gets, puts };
   }
@@ -356,5 +356,66 @@ describe('useForcedNeed: a refresh that overlaps a save', () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(rowOf(result, 2).ownerChoice).toBe('NOT_NEEDED');
+  });
+
+  const refreshed = {
+    ...LIST,
+    films: LIST.films.map((f) => (f.filmId === 2 ? { ...f, hasForcedSubtitle: true } : f)),
+  };
+
+  it('lets a refresh that landed between two writes win over the first write’s older row, and shows the failure', async () => {
+    const { gets, puts } = overlapping();
+    const { result, rerender } = await loadedFirst();
+    let first;
+    act(() => {
+      first = result.current.choose(2, 'NEEDED');
+      result.current.choose(2, 'NOT_NEEDED');
+    });
+    await act(async () => {
+      puts[0].resolve(answered(2, 'NEEDED'));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(puts).toHaveLength(2));
+
+    rerender({ key: 'b' });
+    await waitFor(() => expect(gets).toHaveLength(1));
+    await act(async () => {
+      gets[0](refreshed);
+    });
+    await waitFor(() => expect(rowOf(result, 2).hasForcedSubtitle).toBe(true));
+    await act(async () => {
+      puts[1].reject(new Error('offline'));
+      await first;
+    });
+
+    expect(rowOf(result, 2)).toMatchObject({ hasForcedSubtitle: true, ownerChoice: null });
+    expect(result.current.problems).toEqual({ 2: "Couldn't save: try again" });
+  });
+
+  it('lets the first write’s answer win when the refresh resolved before it arrived', async () => {
+    const { gets, puts } = overlapping();
+    const { result, rerender } = await loadedFirst();
+    let first;
+    act(() => {
+      first = result.current.choose(2, 'NEEDED');
+      result.current.choose(2, 'NOT_NEEDED');
+    });
+    rerender({ key: 'b' });
+    await waitFor(() => expect(gets).toHaveLength(1));
+    await act(async () => {
+      gets[0](refreshed);
+    });
+    await act(async () => {
+      puts[0].resolve(answered(2, 'NEEDED'));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(puts).toHaveLength(2));
+    await act(async () => {
+      puts[1].reject(new Error('offline'));
+      await first;
+    });
+
+    expect(rowOf(result, 2).ownerChoice).toBe('NEEDED');
+    expect(result.current.problems).toEqual({ 2: "Couldn't save: try again" });
   });
 });
