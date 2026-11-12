@@ -244,14 +244,14 @@ public class ForcedDownloadRefresher {
         }
         int limit = due.kind() == Kind.MISSING ? DownloadShares.forMissing(dailyLimit)
             : DownloadShares.forReplacements(dailyLimit);
-        int fetches = 0;
+        if (due.remainingFetches() <= 0) {
+            LOG.info("Edition {}: no more OpenSubtitles files are tried (at most {} are ever made into downloads)",
+                due.editionId(), DownloadPlan.MAX_DOWNLOADS);
+            return false;
+        }
+        // The cap counts files made into downloads; a candidate that is full or unreadable is stored (never fetched
+        // again) and the next one is tried at once, bounded by the candidate list and the day's quota.
         for (OpenSubtitlesResult candidate : due.candidates()) {
-            if (fetches >= due.remainingFetches()) {
-                LOG.info("Edition {}: no more OpenSubtitles files are tried (at most {} are ever made into downloads)",
-                    due.editionId(), DownloadPlan.MAX_DOWNLOADS);
-                break;
-            }
-            fetches++;
             OpenSubtitlesReference reference = fetcher.fetch(due.filmId(), due.imdbId(), candidate, limit);
             if (!DownloadPlan.promotable(reference)) {
                 LOG.info("Edition {}: OpenSubtitles file {} skipped, {}", due.editionId(), candidate.fileId(),

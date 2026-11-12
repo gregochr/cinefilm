@@ -385,21 +385,35 @@ class ForcedDownloadRefresherTest {
     }
 
     @Test
-    void anEditionIsNeverTriedWithMoreFilesThanItHasLeftUnderTheCap() {
+    void anEditionWithNoDownloadsLeftUnderTheCapIsNotTriedAtAll() {
+        DueDownload due = new DueDownload(Kind.MISSING, 1L, 10L, "tt1", "Original", null,
+            List.of(candidate(5011), candidate(5012)), 0, null);
+        when(service.due()).thenReturn(List.of(due));
+
+        startAndRun();
+
+        verify(api, never()).download(5011);
+        verify(service, never()).add(any(), any(), any());
+        assertThat(messages()).contains(
+            "Edition 10: no more OpenSubtitles files are tried (at most 3 are ever made into downloads)");
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    void aRejectedCandidateDoesNotUseUpTheCapSoTheNextOneIsTried() {
         DueDownload due = new DueDownload(Kind.MISSING, 1L, 10L, "tt1", "Original", null,
             List.of(candidate(5011), candidate(5012)), 1, null);
         when(service.due()).thenReturn(List.of(due));
         when(budget.take(DAY, LIMIT)).thenReturn(true);
         when(api.download(5011)).thenReturn(downloaded(lines(300)));
+        when(api.download(5012)).thenReturn(downloaded(CUES));
         storingReferences();
+        when(service.add(eq(due), any(OpenSubtitlesReference.class), eq(NOW))).thenReturn(AddOutcome.ADDED);
 
         startAndRun();
 
-        verify(api, never()).download(5012);
-        verify(service, never()).add(any(), any(), any());
-        assertThat(messages()).contains(
-            "Edition 10: no more OpenSubtitles files are tried (at most 3 are ever made into downloads)");
-        verifyNoInteractions(events);
+        verify(api).download(5012);
+        verify(service).add(eq(due), argThat(r -> r.getOsFileId() == 5012), eq(NOW));
     }
 
     @Test
