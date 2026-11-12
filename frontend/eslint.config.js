@@ -71,6 +71,53 @@ export default [
           message:
             'No relative path out of frontend/ in tests: load the file with readRepoJson (src/test/repoFile.js), or the Stryker run fails (test-standards.md, "A table both suites run").',
         },
+        {
+          selector:
+            // A skip/only/todo/skipIf/runIf member anywhere in a chain rooted at it/test/describe: it.skip,
+            // test.concurrent.skip, test.each(rows).skip, describe.concurrent.only, test.skipIf(c)(...), test.runIf(c)(...).
+            'MemberExpression[property.name=/^(skip|only|todo|skipIf|runIf)$/][object.name=/^(it|test|describe)$/], MemberExpression[property.name=/^(skip|only|todo|skipIf|runIf)$/][object.object.name=/^(it|test|describe)$/], MemberExpression[property.name=/^(skip|only|todo|skipIf|runIf)$/][object.callee.object.name=/^(it|test|describe)$/], MemberExpression[property.name=/^(skip|only|todo|skipIf|runIf)$/][object.callee.object.object.name=/^(it|test|describe)$/]',
+          message:
+            'No it/test/describe .skip, .only, .todo, .skipIf or .runIf (conditional skips included): fix the test or delete it (test-standards.md, Frontend "Do not" list).',
+        },
+        {
+          selector: 'CallExpression[callee.name=/^(xit|xtest|xdescribe|fit|fdescribe)$/]',
+          message:
+            'No xit, xtest, xdescribe, fit or fdescribe: fix the test or delete it (test-standards.md, Frontend "Do not" list).',
+        },
+        {
+          selector: 'CallExpression[callee.property.name=/^toBeTruthy$/]',
+          message:
+            'No toBeTruthy(): assert the value (toHaveAttribute, toHaveTextContent, toBe(...)); getBy* already throws and queryBy* passes for the wrong element (test-standards.md, "Assertions").',
+        },
+        {
+          selector:
+            'CallExpression[callee.object.name=/^vi$/][callee.property.name=/^(mock|doMock)$/][arguments.0.value=/(^|\\/)api(\\/|$)/]',
+          message:
+            'Do not vi.mock anything under src/api: stub fetch with installFetch (src/test/mockApi.jsx) so the API client stays under test (test-standards.md, "CineFilm conventions").',
+        },
+        {
+          selector:
+            'CallExpression[callee.property.name=/^(toMatchSnapshot|toMatchInlineSnapshot|toMatchFileSnapshot)$/]',
+          message:
+            'No snapshots: assert the values the handover promises (test-standards.md, "Assertions").',
+        },
+        {
+          // Any call at all, bare or on window/globalThis. (vi.spyOn(window, 'setTimeout') is a string, not a call.)
+          selector:
+            "CallExpression:matches([callee.name='setTimeout'], [callee.property.name='setTimeout'])",
+          message:
+            'No setTimeout in tests: wait for the UI with findBy* or vi.waitFor, drive a fake clock (vi.advanceTimersByTimeAsync), or hand the test the promise resolver (test-standards.md, "No sleeps").',
+        },
+        {
+          selector: 'MemberExpression[property.name=/^(className|classList)$/]',
+          message:
+            'No class-name reads in tests: query by role or data-testid (test-standards.md, "Queries").',
+        },
+        {
+          selector: 'CallExpression[callee.property.name=/^getElementsBy(ClassName|TagName)$/]',
+          message:
+            'No getElementsByClassName or getElementsByTagName in tests: query by role or data-testid (test-standards.md, "Queries").',
+        },
       ],
     },
   },

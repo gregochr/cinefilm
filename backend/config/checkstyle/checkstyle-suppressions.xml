@@ -7,6 +7,14 @@
     <!-- Test sources are exempt from the missing-javadoc checks (MissingJavadocType and
          MissingJavadocMethod) only. The "checks" value is a regex matched against the check name. -->
     <suppress checks="MissingJavadoc" files="[\\/]src[\\/]test[\\/]"/>
-    <!-- The banned-test-pattern regexes (RegexpSingleline, RegexpMultiline) apply to test sources only. -->
-    <suppress checks="Regexp(Singleline|Multiline)" files="[\\/]src[\\/]main[\\/]"/>
+    <!-- The banned-test-pattern regexes (ids bannedTest*) apply to test sources only, and bannedMain* to src/main only.
+         A suppress id is matched exactly, so each id is listed. -->
+    <suppress id="bannedTestSleep" files="[\\/]src[\\/]main[\\/]"/>
+    <suppress id="bannedTestVerifyAny" files="[\\/]src[\\/]main[\\/]"/>
+    <suppress id="bannedTestLenient" files="[\\/]src[\\/]main[\\/]"/>
+    <suppress id="bannedTestDisabled" files="[\\/]src[\\/]main[\\/]"/>
+    <suppress id="bannedTestRealClock" files="[\\/]src[\\/]main[\\/]"/>
+    <suppress id="bannedMainRealClock" files="[\\/]src[\\/]test[\\/]"/>
+    <!-- Reads the real clock on purpose: it runs the real ffmpeg and the deadline is wall time (see its class Javadoc). -->
+    <suppress id="bannedTestRealClock" files="[\\/]TranscodeRealToolsTest\.java$"/>
 </suppressions>

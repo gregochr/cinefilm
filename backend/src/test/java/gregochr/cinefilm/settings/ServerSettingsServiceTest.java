@@ -8,7 +8,6 @@ import static gregochr.cinefilm.TestData.state;
 import static gregochr.cinefilm.TestData.view;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -45,8 +44,10 @@ class ServerSettingsServiceTest {
     void setUp() {
         service = new ServerSettingsService(repository, loader);
         row = new ServerSetting();
-        // Lenient: validation fails before the row is read in some tests.
-        lenient().when(repository.findById(ServerSetting.ONLY_ROW)).thenReturn(Optional.of(row));
+    }
+
+    private void theRowIsStored() {
+        when(repository.findById(ServerSetting.ONLY_ROW)).thenReturn(Optional.of(row));
     }
 
     private FilmView playedTo(long id, long positionMs) {
@@ -57,11 +58,13 @@ class ServerSettingsServiceTest {
 
     @Test
     void theMinimumDefaultsToFiveMinutes() {
+        theRowIsStored();
         assertThat(service.minWatchMs()).isEqualTo(5 * MIN);
     }
 
     @Test
     void currentCountsFilmsInProgressUnderTheStoredMinimumHiddenFilmsIncluded() {
+        theRowIsStored();
         FilmView hidden = playedTo(3, 20 * MIN);
         hidden.states().values().forEach(s -> s.setHiddenFromContinueWatching(true));
         when(loader.loadAll()).thenReturn(List.of(playedTo(1, 4 * MIN), playedTo(2, 5 * MIN), hidden));
@@ -71,6 +74,7 @@ class ServerSettingsServiceTest {
 
     @Test
     void updateStoresTheMinimumAndRecomputesTheCount() {
+        theRowIsStored();
         when(loader.loadAll()).thenReturn(List.of(playedTo(1, 4 * MIN), playedTo(2, 5 * MIN)));
         when(repository.save(row)).thenReturn(row);
 
@@ -83,6 +87,7 @@ class ServerSettingsServiceTest {
 
     @Test
     void theBoundsZeroAndThirtyAreAccepted() {
+        theRowIsStored();
         when(loader.loadAll()).thenReturn(List.of());
         when(repository.save(row)).thenReturn(row);
 
