@@ -55,6 +55,9 @@ class SubtitleAdminServiceUnitTest {
     private OpenSubtitlesReferenceRepository references;
 
     @Mock
+    private SidecarTimingService timing;
+
+    @Mock
     private PlatformTransactionManager transactions;
 
     private final LibraryLock lock = new LibraryLock();
@@ -64,8 +67,8 @@ class SubtitleAdminServiceUnitTest {
 
     @BeforeEach
     void setUp() {
-        service = new SubtitleAdminService(sidecars, files, editions, sync, checks, references, CLOCK, lock,
-            transactions);
+        service = new SubtitleAdminService(sidecars, files, editions, sync, checks, references, timing, CLOCK,
+            lock, transactions);
         row = new SubtitleSidecar();
         row.setId(5L);
         row.setPath("A/Other.en.forced.srt");
@@ -185,6 +188,11 @@ class SubtitleAdminServiceUnitTest {
         row.setOwnerAttached(true);
         row.setMediaFileId(10L);
         row.setWholeEdition(true);
+        // The real rematch gives the file back to where its name says: here, nowhere.
+        org.mockito.Mockito.doAnswer(call -> {
+            row.retarget(null, false);
+            return null;
+        }).when(sync).rematch(row);
 
         service.detach(5L);
 

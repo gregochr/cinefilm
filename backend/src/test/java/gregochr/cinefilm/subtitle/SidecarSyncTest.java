@@ -177,6 +177,67 @@ class SidecarSyncTest extends SubtitleTestBase {
     }
 
     @Test
+    void aChangedFileLosesAnAutomaticOffsetButKeepsTheOwnersOwn() throws IOException {
+        filmWithParts("Taken", 1, 90);
+        filmWithParts("Alien", 1, 90);
+        byte[] content = bytes(CUES);
+        write("Taken.en.forced.srt", content, T1);
+        write("Alien.en.forced.srt", content, T1);
+        sync.sync(found(listed("Taken.en.forced.srt", content, T1), listed("Alien.en.forced.srt", content, T1)));
+        SubtitleSidecar taken = sidecars.findAll().stream().filter(r -> r.getPath().startsWith("Taken")).findFirst()
+            .orElseThrow();
+        taken.setOffsetMs(900);
+        taken.setOffsetSource(SubtitleSidecar.OffsetSource.AUTO);
+        SubtitleSidecar alien = sidecars.findAll().stream().filter(r -> r.getPath().startsWith("Alien")).findFirst()
+            .orElseThrow();
+        alien.setOffsetMs(-250);
+        alien.setOffsetSource(SubtitleSidecar.OffsetSource.OWNER);
+        byte[] edited = bytes("1\n00:00:30,000 --> 00:00:31,000\nEdited\n");
+        write("Taken.en.forced.srt", edited, T2);
+        write("Alien.en.forced.srt", edited, T2);
+
+        sync.sync(found(listed("Taken.en.forced.srt", edited, T2), listed("Alien.en.forced.srt", edited, T2)));
+
+        assertThat(taken.getOffsetMs()).isZero();
+        assertThat(taken.getOffsetSource()).isNull();
+        assertThat(alien.getOffsetMs()).isEqualTo(-250);
+        assertThat(alien.getOffsetSource()).isEqualTo(SubtitleSidecar.OffsetSource.OWNER);
+    }
+
+    @Test
+    void aRewrittenFileWithTheSameCuesKeepsItsAutomaticOffset() throws IOException {
+        filmWithParts("Taken", 1, 90);
+        byte[] content = bytes(CUES);
+        write("Taken.en.forced.srt", content, T1);
+        sync.sync(found(listed("Taken.en.forced.srt", content, T1)));
+        SubtitleSidecar row = sidecars.findAll().get(0);
+        row.setOffsetMs(900);
+        row.setOffsetSource(SubtitleSidecar.OffsetSource.AUTO);
+        byte[] rewritten = bytes(CUES.replace("\n", "\r\n"));
+        write("Taken.en.forced.srt", rewritten, T2);
+
+        sync.sync(found(listed("Taken.en.forced.srt", rewritten, T2)));
+
+        assertThat(row.getOffsetMs()).isEqualTo(900);
+        assertThat(row.getOffsetSource()).isEqualTo(SubtitleSidecar.OffsetSource.AUTO);
+    }
+
+    @Test
+    void aFileThatMovesToAnotherFilmFileLosesAnAutomaticOffset() {
+        Film taken = filmWithParts("Taken", 1, 90);
+        Film alien = filmWithParts("Alien", 1, 90);
+        SubtitleSidecar row = sidecar("Taken.en.forced.srt", fileId(alien, 1), false);
+        row.setOffsetMs(900);
+        row.setOffsetSource(SubtitleSidecar.OffsetSource.AUTO);
+
+        sync.rematch(row);
+
+        assertThat(row.getMediaFileId()).isEqualTo(fileId(taken, 1));
+        assertThat(row.getOffsetMs()).isZero();
+        assertThat(row.getOffsetSource()).isNull();
+    }
+
+    @Test
     void aSameSizeFileWithANewModifiedTimeIsReadAgain() throws IOException {
         byte[] content = bytes(CUES);
         write("Heat.en.forced.srt", content, T1);

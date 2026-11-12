@@ -35,11 +35,16 @@ public final class SubtitleDtos {
      *     it): false for an unmatched, empty, missing or conflicting file, or one that a whole-edition file beats
      * @param check the comparison with OpenSubtitles' file for the edition this file is served for, or null when the
      *     edition does not serve this file, has not been compared yet, or what is served changed since
+     * @param offsetSource who set {@code offsetMs}: null when it was never set, {@code OWNER} or {@code AUTO} (the
+     *     timing check set it, so the UI can say "Timing set automatically")
+     * @param alignment the fit of this file's cue times to the film's own English subtitle track, or null when the
+     *     file is not served, has not been checked yet, or the file or the track changed since
      */
     public record SidecarDto(Long id, String path, String presence, String state, Long filmId, String filmTitle,
                              Long editionId, String editionName, int parts, Integer part, boolean whole,
                              boolean ownerAttached, int cueCount, String parseReport, int offsetMs,
-                             boolean verified, boolean endsAfterRuntime, long version, boolean served, CheckDto check) {
+                             boolean verified, boolean endsAfterRuntime, long version, boolean served, CheckDto check,
+                             String offsetSource, AlignmentDto alignment) {
     }
 
     /**
@@ -58,6 +63,26 @@ public final class SubtitleDtos {
      */
     public record CheckDto(String verdict, List<String> reasons, int bestOffsetMs, double matchedShare,
                            int servedCount, int referenceCount, String referenceRelease, Instant checkedAt) {
+    }
+
+    /**
+     * What fitting a file's cue times to the full English subtitle track inside the film's own media file found
+     * ({@code TimingFit}).
+     *
+     * @param verdict {@code ALIGNED}, {@code CHECK} (the lines do not line up), {@code TOO_FEW} (too few lines to
+     *     tell) or {@code NO_REFERENCE} (the film has no full English track): the last two show as Unchecked
+     * @param reasons plain sentences: why it is not {@code ALIGNED}
+     * @param fittedOffsetMs the milliseconds to add to this file's cues to line up with the track (what was set when
+     *     {@code applied}); 0 when nothing was compared
+     * @param matchedShare the share (0 to 1) of this file's lines that line up at that offset
+     * @param matchedCount how many lines that is
+     * @param servedCount how many lines the file has
+     * @param applied true while this file's offset is the one the check set from this result (derived now: the offset
+     *     source is {@code AUTO} and the offset equals {@code fittedOffsetMs}, so an owner's nudge or reset clears it)
+     * @param checkedAt when the fit was made
+     */
+    public record AlignmentDto(String verdict, List<String> reasons, int fittedOffsetMs, double matchedShare,
+                               int matchedCount, int servedCount, boolean applied, Instant checkedAt) {
     }
 
     /**

@@ -76,6 +76,15 @@ public class SubtitleSidecar {
     @Column(nullable = false)
     private int offsetMs;
 
+    /**
+     * Who set {@link #offsetMs}: null when it was never set (it is 0), {@link OffsetSource#OWNER} once the owner has
+     * put in an offset (a reset to 0 included), {@link OffsetSource#AUTO} when the timing check set it. An owner's
+     * offset is never replaced automatically.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 10)
+    private OffsetSource offsetSource;
+
     /** When the owner said the lines are right and in sync; null when they have not. */
     private Instant ownerVerifiedAt;
 
@@ -85,6 +94,41 @@ public class SubtitleSidecar {
 
     @Column(nullable = false)
     private Instant updatedAt;
+
+    /** Who set a file's timing offset. */
+    public enum OffsetSource {
+        /** The owner put the offset in (0 included: "Reset timing"): the timing check never changes it. */
+        OWNER,
+        /** The timing check against the film's own English track set it. */
+        AUTO
+    }
+
+    /**
+     * Takes an automatically set offset away (back to 0, never set), because the file it was fitted for changed or
+     * moved to another film file. An offset the owner set is left alone.
+     */
+    public void dropAutoOffset() {
+        if (offsetSource == OffsetSource.AUTO) {
+            offsetMs = 0;
+            offsetSource = null;
+        }
+    }
+
+    /**
+     * Points the file at a film file, as a whole-edition file or not. The timing check's identity names the film file
+     * and the whole flag, so an automatic offset (fitted for the old target) is dropped only when either changes; a
+     * re-attach or re-match to the same place keeps it, because the check would never fit it again.
+     *
+     * @param fileId the film file, or null for none
+     * @param whole true when the file is timed for a whole split edition
+     */
+    public void retarget(Long fileId, boolean whole) {
+        if (!java.util.Objects.equals(mediaFileId, fileId) || wholeEdition != whole) {
+            dropAutoOffset();
+        }
+        mediaFileId = fileId;
+        wholeEdition = whole;
+    }
 
     /** The comma-joined ids of an edition's part files in play order: what {@link #verifiedParts} is compared with. */
     public static String partsKey(List<Long> partIds) {

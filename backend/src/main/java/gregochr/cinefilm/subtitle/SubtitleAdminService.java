@@ -14,6 +14,7 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Pick;
+import gregochr.cinefilm.subtitle.SubtitleDtos.AlignmentDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.AttachRequest;
 import gregochr.cinefilm.subtitle.SubtitleDtos.CheckDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.CueDto;
@@ -53,6 +54,7 @@ public class SubtitleAdminService {
     private final SidecarSync sync;
     private final ForcedSubtitleCheckRepository checks;
     private final OpenSubtitlesReferenceRepository references;
+    private final SidecarTimingService timing;
     private final Clock clock;
     private final LibraryLock lock;
     private final TransactionTemplate tx;
@@ -60,14 +62,15 @@ public class SubtitleAdminService {
     /** Creates the service. */
     public SubtitleAdminService(SubtitleSidecarRepository sidecars, MediaFileRepository files,
                                 EditionRepository editions, SidecarSync sync, ForcedSubtitleCheckRepository checks,
-                                OpenSubtitlesReferenceRepository references, Clock clock, LibraryLock lock,
-                                PlatformTransactionManager transactions) {
+                                OpenSubtitlesReferenceRepository references, SidecarTimingService timing,
+                                Clock clock, LibraryLock lock, PlatformTransactionManager transactions) {
         this.sidecars = sidecars;
         this.files = files;
         this.editions = editions;
         this.sync = sync;
         this.checks = checks;
         this.references = references;
+        this.timing = timing;
         this.clock = clock;
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
@@ -129,9 +132,8 @@ public class SubtitleAdminService {
         MediaFile target = request.part() == null ? parts.get(0)
             : parts.stream().filter(p -> p.getPartNumber() == request.part()).findFirst()
                 .orElseThrow(() -> new BadRequestException("That edition has no part " + request.part()));
-        sidecar.setMediaFileId(target.getId());
         // A single file is timed from its own start, so it stays right if another file is joined before it later.
-        sidecar.setWholeEdition(request.part() == null && parts.size() > 1);
+        sidecar.retarget(target.getId(), request.part() == null && parts.size() > 1);
         sidecar.setOwnerAttached(true);
         changed(sidecar);
         return one(id);
@@ -152,8 +154,8 @@ public class SubtitleAdminService {
     private SidecarDto detachLocked(Long id) {
         SubtitleSidecar sidecar = find(id);
         sidecar.setOwnerAttached(false);
-        sidecar.setMediaFileId(null);
-        sidecar.setWholeEdition(false);
+        // The rematch below puts it back where its name says, or nowhere; an automatic offset survives a rematch to the
+        // same place.
         changed(sidecar);
         sync.rematch(sidecar);
         return one(id);
@@ -181,6 +183,8 @@ public class SubtitleAdminService {
             throw new BadRequestException("The offset must be within 10 minutes either way");
         }
         sidecar.setOffsetMs(request.offsetMs());
+        // The owner's word, even a reset to 0: the timing check never changes this file's offset again.
+        sidecar.setOffsetSource(SubtitleSidecar.OffsetSource.OWNER);
         changed(sidecar);
         return one(id);
     }
@@ -279,6 +283,8 @@ public class SubtitleAdminService {
         Set<Long> conflicting = new HashSet<>();
         Map<Long, String> versions = new HashMap<>();
         Set<Long> served = new HashSet<>();
+        Map<Long, Edition> editionBySidecarId = new HashMap<>();
+        List<SubtitleSidecar> servedSidecars = new ArrayList<>();
         byEdition.forEach((editionId, group) -> {
             Edition edition = editionById.get(editionId);
             Pick pick = SidecarPrecedence.pick(partIds(edition), group);
@@ -286,17 +292,22 @@ public class SubtitleAdminService {
             String version = pick.slots().isEmpty() ? null : ServedSubtitles.version(edition, pick);
             if (version != null) {
                 versions.put(editionId, version);
-                pick.slots().forEach(slot -> served.add(slot.sidecar().getId()));
+                pick.slots().forEach(slot -> {
+                    served.add(slot.sidecar().getId());
+                    servedSidecars.add(slot.sidecar());
+                    editionBySidecarId.put(slot.sidecar().getId(), edition);
+                });
             }
         });
         Map<Long, CheckDto> checkByEdition = currentChecks(versions, editionById);
+        Map<Long, AlignmentDto> alignmentBySidecar = timing.current(editionBySidecarId, servedSidecars);
         List<SidecarDto> dtos = new ArrayList<>();
         for (SubtitleSidecar sidecar : all) {
             MediaFile file = fileById.get(sidecar.getMediaFileId());
             CheckDto check = file == null || !served.contains(sidecar.getId()) ? null
                 : checkByEdition.get(file.getEdition().getId());
             dtos.add(dto(sidecar, file, conflicting.contains(sidecar.getId()), served.contains(sidecar.getId()),
-                check));
+                check, alignmentBySidecar.get(sidecar.getId())));
         }
         return dtos;
     }
@@ -330,11 +341,12 @@ public class SubtitleAdminService {
     }
 
     private static SidecarDto dto(SubtitleSidecar s, MediaFile file, boolean conflict, boolean isServed,
-                                   CheckDto check) {
+                                   CheckDto check, AlignmentDto alignment) {
+        String source = s.getOffsetSource() == null ? null : s.getOffsetSource().name();
         if (file == null) {
             return new SidecarDto(s.getId(), s.getPath(), s.getPresence().name(), "unmatched", null, null, null, null,
                 0, null, false, s.isOwnerAttached(), s.getCueCount(), s.getParseReport(), s.getOffsetMs(), false,
-                false, s.getUpdatedAt().toEpochMilli(), false, null);
+                false, s.getUpdatedAt().toEpochMilli(), false, null, source, null);
         }
         Edition edition = file.getEdition();
         List<Long> partIds = partIds(edition);
@@ -345,7 +357,7 @@ public class SubtitleAdminService {
             edition.getFilm().getId(), edition.getFilm().getTitle(), edition.getId(), edition.getName(),
             partIds.size(), s.isWholeEdition() ? null : file.getPartNumber(), s.isWholeEdition(),
             s.isOwnerAttached(), s.getCueCount(), s.getParseReport(), s.getOffsetMs(), s.isVerifiedFor(partIds),
-            endsAfter, s.getUpdatedAt().toEpochMilli(), isServed, check);
+            endsAfter, s.getUpdatedAt().toEpochMilli(), isServed, check, source, alignment);
     }
 
     private static List<Long> partIds(Edition edition) {

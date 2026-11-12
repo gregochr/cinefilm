@@ -272,6 +272,16 @@ public class SessionManager {
         }
     }
 
+    /**
+     * True while any session's encoder is running (a quiet session whose encoder stopped does not count). Background
+     * work that competes with playback for the disk and the CPU, such as the subtitle timing check, waits while it is.
+     */
+    public boolean isEncoding() {
+        synchronized (lock) {
+            return sessions.values().stream().anyMatch(session -> session.run.running());
+        }
+    }
+
     /** How many bytes {@code hls/} holds. */
     public long hlsBytes() {
         return files.size(hlsRoot);
