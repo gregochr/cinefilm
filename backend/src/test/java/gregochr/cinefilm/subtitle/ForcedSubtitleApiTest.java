@@ -26,7 +26,7 @@ class ForcedSubtitleApiTest extends SubtitleTestBase {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.editions[0].forcedSubtitle.source").value("SIDECAR"))
             .andExpect(jsonPath("$.editions[0].forcedSubtitle.ownerVerified").value(false))
-            .andExpect(jsonPath("$.editions[0].forcedSubtitle.version").value(NOW.plusMillis(1234).toEpochMilli()));
+            .andExpect(jsonPath("$.editions[0].forcedSubtitle.version").isNumber());
     }
 
     @Test

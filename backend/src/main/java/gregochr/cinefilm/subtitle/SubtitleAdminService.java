@@ -6,14 +6,12 @@ import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.EditionTimeline;
-import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.library.LibraryLock;
-import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
-import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
-import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
-import gregochr.cinefilm.subtitle.SidecarPrecedence.Pick;
+import gregochr.cinefilm.subtitle.ForcedResolver.DownloadState;
+import gregochr.cinefilm.subtitle.ForcedResolver.Resolution;
+import gregochr.cinefilm.subtitle.SidecarPrecedence.Slot;
 import gregochr.cinefilm.subtitle.SubtitleDtos.AlignmentDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.AttachRequest;
 import gregochr.cinefilm.subtitle.SubtitleDtos.CheckDto;
@@ -31,19 +29,26 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Admin's view of the forced subtitle files and the owner's actions on them: attach one to an edition (and part),
- * give it back to automatic matching, nudge its timing, and say it looks right. Every action takes the row id of a
- * file and, for an attach, the id of an edition: nothing takes a path. A nudge or a re-attach takes the owner's check
- * away; so does any change to the edition's parts (see {@link SubtitleSidecar#isVerifiedFor}).
+ * Admin's view of the forced subtitle files and downloads and the owner's actions on them: attach a file to an edition
+ * (and part), give it back to automatic matching, nudge its timing, say it looks right (which is also "use my file":
+ * a verified file is proven and plays first), and remove a download (never offered again for that edition). Every
+ * action takes the row id of a subtitle and, for an attach, the id of an edition: nothing takes a path. A nudge or a
+ * re-attach takes the owner's check away; so does any change to the edition's parts (see
+ * {@link SubtitleSidecar#isVerifiedFor}).
  */
 @Service
 public class SubtitleAdminService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(SubtitleAdminService.class);
 
     /** The largest nudge either way, in milliseconds (ten minutes). */
     public static final int MAX_OFFSET_MS = 600_000;
@@ -52,28 +57,28 @@ public class SubtitleAdminService {
     private final MediaFileRepository files;
     private final EditionRepository editions;
     private final SidecarSync sync;
-    private final ForcedSubtitleCheckRepository checks;
-    private final OpenSubtitlesReferenceRepository references;
-    private final SidecarTimingService timing;
+    private final ForcedResolver resolver;
+    private final ForcedDownloadBlockRepository blocks;
     private final Clock clock;
     private final LibraryLock lock;
     private final TransactionTemplate tx;
+    private final ApplicationEventPublisher events;
 
     /** Creates the service. */
     public SubtitleAdminService(SubtitleSidecarRepository sidecars, MediaFileRepository files,
-                                EditionRepository editions, SidecarSync sync, ForcedSubtitleCheckRepository checks,
-                                OpenSubtitlesReferenceRepository references, SidecarTimingService timing,
-                                Clock clock, LibraryLock lock, PlatformTransactionManager transactions) {
+                                EditionRepository editions, SidecarSync sync, ForcedResolver resolver,
+                                ForcedDownloadBlockRepository blocks, Clock clock, LibraryLock lock,
+                                PlatformTransactionManager transactions, ApplicationEventPublisher events) {
         this.sidecars = sidecars;
         this.files = files;
         this.editions = editions;
         this.sync = sync;
-        this.checks = checks;
-        this.references = references;
-        this.timing = timing;
+        this.resolver = resolver;
+        this.blocks = blocks;
         this.clock = clock;
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
+        this.events = events;
     }
 
     /** Every forced subtitle file with where it belongs and how it reads. */
@@ -119,7 +124,7 @@ public class SubtitleAdminService {
     }
 
     private SidecarDto attachLocked(Long id, AttachRequest request) {
-        SubtitleSidecar sidecar = find(id);
+        SubtitleSidecar sidecar = findFile(id);
         if (request == null || request.editionId() == null) {
             throw new BadRequestException("Pick an edition");
         }
@@ -152,7 +157,7 @@ public class SubtitleAdminService {
     }
 
     private SidecarDto detachLocked(Long id) {
-        SubtitleSidecar sidecar = find(id);
+        SubtitleSidecar sidecar = findFile(id);
         sidecar.setOwnerAttached(false);
         // The rematch below puts it back where its name says, or nowhere; an automatic offset survives a rematch to the
         // same place.
@@ -233,10 +238,57 @@ public class SubtitleAdminService {
     }
 
     /**
+     * Removes a subtitle downloaded from OpenSubtitles. The file is blocked for its edition (and IMDb id) for good, so
+     * no later run offers it again; the next best candidate is looked for (an event starts the download run). A
+     * subtitle beside the film is never removed here: it is the owner's file ("Looks right" says to use it).
+     *
+     * @param id the download's row id
+     * @throws NotFoundException when there is no such subtitle
+     * @throws BadRequestException when it is not a download
+     * @throws ConflictException when a scan is running
+     */
+    public void remove(Long id) {
+        Long editionId = lockedRun(() -> removeLocked(id));
+        // The removal has committed: a listener that fails (say, its executor refuses the run) must not turn it into an
+        // error the client would retry.
+        try {
+            events.publishEvent(new SubtitleDownloadRemoved(editionId));
+        } catch (RuntimeException e) {
+            LOG.warn("A listener of the subtitle download removal failed: {}", e.getClass().getSimpleName());
+        }
+    }
+
+    private Long removeLocked(Long id) {
+        SubtitleSidecar sidecar = find(id);
+        if (!sidecar.isDownload()) {
+            throw new BadRequestException("Only a subtitle downloaded from OpenSubtitles can be removed");
+        }
+        // The edition it was made for, which is not where its file is now if an edit moved the file.
+        Long editionId = Downloads.madeForEditionId(sidecar);
+        // An edit may have deleted that edition: there is nothing left to block for then (and the key would not hold).
+        if (editions.existsById(editionId) && !blocks.existsByEditionIdAndImdbIdAndOsFileId(editionId,
+            sidecar.getImdbId(), sidecar.getOpenSubtitlesFileId())) {
+            ForcedDownloadBlock block = new ForcedDownloadBlock();
+            block.setEditionId(editionId);
+            block.setImdbId(sidecar.getImdbId());
+            block.setOsFileId(sidecar.getOpenSubtitlesFileId());
+            block.setRemovedAt(clock.instant());
+            blocks.save(block);
+        }
+        // Its timing fit and comparison go with it (foreign keys cascade).
+        sidecars.delete(sidecar);
+        return editionId;
+    }
+
+    /**
      * A scan rewrites the sidecar rows, so a change is refused (409) while one runs, as Fix match is. The lock is
      * taken outside the transaction and given back only after it has committed.
      */
     private SidecarDto locked(Supplier<SidecarDto> work) {
+        return lockedRun(work);
+    }
+
+    private <T> T lockedRun(Supplier<T> work) {
         if (!lock.tryAcquire(LibraryLock.SUBTITLE)) {
             throw new ConflictException("A scan is running");
         }
@@ -256,6 +308,15 @@ public class SubtitleAdminService {
         return sidecars.findById(id).orElseThrow(() -> new NotFoundException("No such subtitle"));
     }
 
+    /** A subtitle beside the film: a download has no file to attach or give back to matching. */
+    private SubtitleSidecar findFile(Long id) {
+        SubtitleSidecar sidecar = find(id);
+        if (sidecar.isDownload()) {
+            throw new BadRequestException("A downloaded subtitle belongs to its edition and cannot be attached");
+        }
+        return sidecar;
+    }
+
     private MediaFile file(SubtitleSidecar sidecar) {
         return sidecar.getMediaFileId() == null ? null : files.findById(sidecar.getMediaFileId()).orElse(null);
     }
@@ -271,82 +332,57 @@ public class SubtitleAdminService {
         Map<Long, MediaFile> fileById = new HashMap<>();
         files.findAllById(fileIds).forEach(f -> fileById.put(f.getId(), f));
         Map<Long, Edition> editionById = new HashMap<>();
-        Map<Long, List<SubtitleSidecar>> byEdition = new HashMap<>();
         for (SubtitleSidecar sidecar : all) {
             MediaFile file = fileById.get(sidecar.getMediaFileId());
             if (file != null) {
-                Edition edition = file.getEdition();
-                editionById.put(edition.getId(), edition);
-                byEdition.computeIfAbsent(edition.getId(), k -> new ArrayList<>()).add(sidecar);
+                editionById.put(file.getEdition().getId(), file.getEdition());
             }
         }
-        Set<Long> conflicting = new HashSet<>();
-        Map<Long, String> versions = new HashMap<>();
+        Map<Long, Resolution> resolutions = resolver.resolve(editionById.values());
         Set<Long> served = new HashSet<>();
-        Map<Long, Edition> editionBySidecarId = new HashMap<>();
-        List<SubtitleSidecar> servedSidecars = new ArrayList<>();
-        byEdition.forEach((editionId, group) -> {
-            Edition edition = editionById.get(editionId);
-            Pick pick = SidecarPrecedence.pick(partIds(edition), group);
-            conflicting.addAll(pick.conflicting());
-            String version = pick.slots().isEmpty() ? null : ServedSubtitles.version(edition, pick);
-            if (version != null) {
-                versions.put(editionId, version);
-                pick.slots().forEach(slot -> {
-                    served.add(slot.sidecar().getId());
-                    servedSidecars.add(slot.sidecar());
-                    editionBySidecarId.put(slot.sidecar().getId(), edition);
-                });
+        Set<Long> conflicting = new HashSet<>();
+        Map<Long, CheckDto> checks = new HashMap<>();
+        Map<Long, AlignmentDto> alignments = new HashMap<>();
+        Map<Long, String> reasons = new HashMap<>();
+        for (Resolution resolution : resolutions.values()) {
+            // A file on an edition whose later part's start is unknown cannot be placed on its timeline: not served.
+            if (!resolution.chosen().slots().isEmpty()
+                && ServedSubtitles.version(resolution.edition(), resolution.chosen()) != null) {
+                resolution.chosen().slots().forEach(slot -> served.add(slot.sidecar().getId()));
             }
-        });
-        Map<Long, CheckDto> checkByEdition = currentChecks(versions, editionById);
-        Map<Long, AlignmentDto> alignmentBySidecar = timing.current(editionBySidecarId, servedSidecars);
+            conflicting.addAll(resolution.filePick().conflicting());
+            // The owner's files share the edition's one comparison; each download has its own.
+            for (Slot slot : resolution.filePick().slots()) {
+                if (resolution.fileCheck() != null) {
+                    checks.put(slot.sidecar().getId(), resolution.fileCheck());
+                }
+            }
+            for (DownloadState download : resolution.downloads()) {
+                if (download.check() != null) {
+                    checks.put(download.sidecar().getId(), download.check());
+                }
+            }
+            alignments.putAll(resolution.alignments());
+            reasons.putAll(resolution.reasons());
+        }
         List<SidecarDto> dtos = new ArrayList<>();
         for (SubtitleSidecar sidecar : all) {
             MediaFile file = fileById.get(sidecar.getMediaFileId());
-            CheckDto check = file == null || !served.contains(sidecar.getId()) ? null
-                : checkByEdition.get(file.getEdition().getId());
-            dtos.add(dto(sidecar, file, conflicting.contains(sidecar.getId()), served.contains(sidecar.getId()),
-                check, alignmentBySidecar.get(sidecar.getId())));
+            Long id = sidecar.getId();
+            dtos.add(dto(sidecar, file, conflicting.contains(id), served.contains(id), checks.get(id),
+                alignments.get(id), reasons.get(id)));
         }
         return dtos;
     }
 
-    /**
-     * The checks that still describe what their edition serves (the same served version, a reference fetched for the
-     * film's current IMDb id), by edition id. Two queries however many editions there are.
-     */
-    private Map<Long, CheckDto> currentChecks(Map<Long, String> versions, Map<Long, Edition> editionById) {
-        if (versions.isEmpty()) {
-            return Map.of();
-        }
-        List<ForcedSubtitleCheck> found = checks.findByEditionIdIn(versions.keySet());
-        Map<Long, OpenSubtitlesReference> referenceById = new HashMap<>();
-        references.findAllById(found.stream().map(ForcedSubtitleCheck::getReferenceId).toList())
-            .forEach(r -> referenceById.put(r.getId(), r));
-        Map<Long, CheckDto> current = new HashMap<>();
-        for (ForcedSubtitleCheck check : found) {
-            Long editionId = check.getEditionId();
-            OpenSubtitlesReference reference = referenceById.get(check.getReferenceId());
-            Film film = editionById.get(editionId).getFilm();
-            OpenSubtitlesResult best = film.getOsBest() == null ? null : OpenSubtitlesResult.fromJson(film.getOsBest());
-            if (best != null && best.isSingleFile() && check.isCurrent(versions.get(editionId), film.getImdbId(),
-                reference, best.fileId())) {
-                current.put(editionId, new CheckDto(check.getVerdict(), check.reasonList(), check.getBestOffsetMs(),
-                    check.getMatchedShare(), check.getServedCount(), check.getReferenceCount(),
-                    reference.getRelease(), check.getCheckedAt()));
-            }
-        }
-        return current;
-    }
-
     private static SidecarDto dto(SubtitleSidecar s, MediaFile file, boolean conflict, boolean isServed,
-                                   CheckDto check, AlignmentDto alignment) {
+                                   CheckDto check, AlignmentDto alignment, String reason) {
         String source = s.getOffsetSource() == null ? null : s.getOffsetSource().name();
         if (file == null) {
             return new SidecarDto(s.getId(), s.getPath(), s.getPresence().name(), "unmatched", null, null, null, null,
                 0, null, false, s.isOwnerAttached(), s.getCueCount(), s.getParseReport(), s.getOffsetMs(), false,
-                false, s.getUpdatedAt().toEpochMilli(), false, null, source, null);
+                false, s.getUpdatedAt().toEpochMilli(), false, null, source, null, s.getOrigin().name(),
+                s.getRelease(), s.getOpenSubtitlesFileId(), "Not used: it is not attached to a film");
         }
         Edition edition = file.getEdition();
         List<Long> partIds = partIds(edition);
@@ -357,7 +393,8 @@ public class SubtitleAdminService {
             edition.getFilm().getId(), edition.getFilm().getTitle(), edition.getId(), edition.getName(),
             partIds.size(), s.isWholeEdition() ? null : file.getPartNumber(), s.isWholeEdition(),
             s.isOwnerAttached(), s.getCueCount(), s.getParseReport(), s.getOffsetMs(), s.isVerifiedFor(partIds),
-            endsAfter, s.getUpdatedAt().toEpochMilli(), isServed, check, source, alignment);
+            endsAfter, s.getUpdatedAt().toEpochMilli(), isServed, check, source, alignment, s.getOrigin().name(),
+            s.getRelease(), s.getOpenSubtitlesFileId(), reason);
     }
 
     private static List<Long> partIds(Edition edition) {

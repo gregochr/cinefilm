@@ -109,6 +109,50 @@ class ForcedNeedQueriesTest extends SubtitleTestBase {
     }
 
     @Test
+    void aForcedTrackInTheNameTheScanStoresForEnglishCounts() {
+        // FfprobeParser stores "eng" as "English" and a language it does not know as the raw code.
+        Film stored = filmWithParts("Stored", 1, 90);
+        Film french = filmWithParts("French", 1, 90);
+        Film unknown = filmWithParts("Unknown code", 1, 90);
+        stream(stored, "English", true);
+        stream(french, "French", true);
+        stream(unknown, "xyz", true);
+
+        assertThat(mediaFiles.findFilmIdsWithEmbeddedForced()).containsExactly(stored.getId());
+        assertThat(mediaFiles.countEmbeddedForcedForFilm(stored.getId())).isEqualTo(1);
+        assertThat(mediaFiles.countEmbeddedForcedForFilm(french.getId())).isZero();
+        assertThat(mediaFiles.countEmbeddedForcedForFilm(unknown.getId())).isZero();
+    }
+
+    @Test
+    void aForcedTrackInALaterPartStillCountsAsEvidenceOfTheNeed() {
+        // The film has forced dialogue wherever the track is; whether it can be played is the resolver's question.
+        Film split = filmWithParts("Split", 2, 90);
+        MediaFile second = split.getEditions().get(0).originalParts().get(1);
+        SubtitleStream stream = new SubtitleStream();
+        stream.setMediaFile(second);
+        stream.setIndex(10);
+        stream.setLanguage("English");
+        stream.setForced(true);
+        stream.setFormat("subrip");
+        second.getSubtitleStreams().add(stream);
+        mediaFiles.saveAndFlush(second);
+
+        assertThat(mediaFiles.findFilmIdsWithEmbeddedForced()).containsExactly(split.getId());
+        assertThat(mediaFiles.countEmbeddedForcedForFilm(split.getId())).isEqualTo(1);
+    }
+
+    @Test
+    void theHelperAcceptsEveryStoredFormOfEnglishAndNothingElse() {
+        for (String language : new String[] {null, "English", "english", "ENG", "en", "und"}) {
+            assertThat(SubtitleStream.isEnglishOrUnlabelled(language)).as("%s", language).isTrue();
+        }
+        for (String language : new String[] {"French", "fra", "xyz", "Spanish", ""}) {
+            assertThat(SubtitleStream.isEnglishOrUnlabelled(language)).as("%s", language).isFalse();
+        }
+    }
+
+    @Test
     void aForcedTrackInAnotherLanguageOrAnEnglishTrackThatIsNotForcedDoesNotCount() {
         Film french = filmWithParts("French", 1, 90);
         Film plain = filmWithParts("Plain", 1, 90);

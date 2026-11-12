@@ -33,7 +33,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * subtitle track inside each film's own media file: which films are due, which files must be read, what to fit, and
  * saving a result. Kept apart from {@link SidecarTimingRefresher} (which runs ffprobe) so each can be tested alone.
  *
- * <p>Only a sidecar that playback serves ({@link SidecarPrecedence}) is checked. A result is saved only while the file
+ * <p>Only a subtitle that playback could serve is checked: the owner's files as {@link SidecarPrecedence} picks them
+ * and the edition's live downloads ({@link Downloads}). A result is saved only while the file
  * is still the one that was fitted (its {@link TimingKeys#identity}) and the reference is still the one it was fitted
  * to ({@link TimingKeys#referenceKey}); the save takes the {@link LibraryLock} (a scan and Admin's edits rewrite the
  * same rows) and sets the file's offset only when {@link #shouldApply} says so, judged on the row as it is then, not
@@ -117,7 +118,7 @@ public class SidecarTimingService {
      */
     @Transactional(readOnly = true)
     public List<Long> dueFilmIds() {
-        List<Served> served = served(new HashSet<>(sidecars.findFilmIdsWithPresentSidecar()));
+        List<Served> served = served(new HashSet<>(sidecars.findFilmIdsWithPresentSubtitle()));
         Map<Long, EmbeddedCueStarts> reads = reads(served);
         Map<Long, ForcedSubtitleAlignment> fits = fits(served);
         Map<Long, boolean[]> due = new LinkedHashMap<>();
@@ -398,6 +399,11 @@ public class SidecarTimingService {
             Pick pick = SidecarPrecedence.pick(partIds, candidates);
             for (Slot slot : pick.slots()) {
                 served.add(new Served(edition, slot.sidecar(), partIds));
+            }
+            // A download is fitted whether or not it plays now: its proof is what lets it win (the owner's file may
+            // be the one playing until then), and the fit is read from the film's own track, which costs nothing more.
+            for (SubtitleSidecar download : Downloads.of(edition, partIds, candidates)) {
+                served.add(new Served(edition, download, partIds));
             }
         }
         return served;

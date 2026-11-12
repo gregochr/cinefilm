@@ -4,8 +4,6 @@ import gregochr.cinefilm.library.ScanFinished;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesApi;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesBudget;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesChargedException;
-import gregochr.cinefilm.opensubtitles.OpenSubtitlesDownload;
-import gregochr.cinefilm.opensubtitles.OpenSubtitlesQuotaException;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
@@ -16,8 +14,6 @@ import gregochr.cinefilm.subtitle.SubtitleComparison.Result;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -29,8 +25,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 /**
@@ -54,44 +50,40 @@ public class SidecarCheckRefresher {
     private static final Logger LOG = LoggerFactory.getLogger(SidecarCheckRefresher.class);
 
     /** A reset time further ahead than this is not believed (the reply is untrusted). */
-    static final Duration MAX_BLOCK = Duration.ofHours(36);
+    static final Duration MAX_BLOCK = ReferenceFetcher.MAX_BLOCK;
     /** Why an edition is not checked when OpenSubtitles only has subtitles split over several files. */
     static final String MULTI_PART = "Only multi-part subtitles on OpenSubtitles";
     /** The largest reference kept, in characters of normalised SRT. */
-    static final int MAX_REFERENCE_CHARS = 1024 * 1024;
+    static final int MAX_REFERENCE_CHARS = ReferenceFetcher.MAX_REFERENCE_CHARS;
 
     private final OpenSubtitlesApi api;
     private final OpenSubtitlesBudget budget;
-    private final OpenSubtitlesReferenceRepository references;
+    private final ReferenceFetcher fetcher;
     private final SidecarCheckService service;
     private final Clock clock;
     private final Executor executor;
-    private final int dailyLimit;
+    private final int checkLimit;
+    private final ApplicationEventPublisher events;
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean pending = new AtomicBoolean();
     private volatile Instant lastFinishedAt;
-
-    /** Why a run ends early: the budget is spent or OpenSubtitles' limit is reached. Not an error. */
-    private static final class Stop extends RuntimeException {
-        private static final long serialVersionUID = 1L;
-
-        Stop(String message) {
-            super(message, null, false, false);
-        }
-    }
 
     /** Creates the service; the executor is {@code sidecarCheckExecutor}. */
     public SidecarCheckRefresher(OpenSubtitlesApi api, OpenSubtitlesBudget budget,
                                  OpenSubtitlesReferenceRepository references, SidecarCheckService service, Clock clock,
                                  @Qualifier("sidecarCheckExecutor") Executor executor,
-                                 @Value("${cinefilm.opensubtitles.daily-download-limit:90}") int dailyLimit) {
+                                 @Value("${cinefilm.opensubtitles.daily-download-limit:90}") int dailyLimit,
+                                 ApplicationEventPublisher events) {
         this.api = api;
         this.budget = budget;
-        this.references = references;
+        this.fetcher = new ReferenceFetcher(api, budget, references, clock);
         this.service = service;
         this.clock = clock;
         this.executor = executor;
-        this.dailyLimit = dailyLimit;
+        // The comparisons may bring the day's total only to their share, so downloads of missing and replacement
+        // subtitles are never starved (DownloadShares).
+        this.checkLimit = DownloadShares.forChecks(dailyLimit);
+        this.events = events;
     }
 
     /** Checks at start-up, and says so when the check is off. */
@@ -112,6 +104,21 @@ public class SidecarCheckRefresher {
     /** Checks after a search run ends (films may have new candidates). */
     @EventListener
     public void onSearchFinished(OpenSubtitlesSearchFinished event) {
+        startDue();
+    }
+
+    /**
+     * Checks after a download was added: with the timing check off nothing else would ask for its second opinion (with
+     * it on, the download waits for its fit and the timing pass's own event asks).
+     */
+    @EventListener
+    public void onDownloadsFinished(SubtitleDownloadsFinished event) {
+        startDue();
+    }
+
+    /** Checks after a timing pass fitted something (a download its timing could not prove is compared instead). */
+    @EventListener
+    public void onTimingFinished(SidecarTimingFinished event) {
         startDue();
     }
 
@@ -201,7 +208,7 @@ public class SidecarCheckRefresher {
                     } else {
                         dropped++;
                     }
-                } catch (Stop e) {
+                } catch (ReferenceFetcher.Stop e) {
                     LOG.info("Subtitle file checks stopped: {}", e.getMessage());
                     break;
                 } catch (OpenSubtitlesUnavailableException e) {
@@ -215,8 +222,20 @@ public class SidecarCheckRefresher {
             }
             LOG.info("Subtitle file checks finished: {} saved, {} changed meanwhile, {} unusable references, "
                 + "{} failed", saved, dropped, unusable, failed);
+            if (saved > 0) {
+                announce();
+            }
         } catch (RuntimeException e) {
             LOG.error("Subtitle file checks failed", e);
+        }
+    }
+
+    /** Says a check was saved, so a file that failed can be replaced; a listener's failure does not touch the run. */
+    private void announce() {
+        try {
+            events.publishEvent(new SidecarChecksFinished());
+        } catch (RuntimeException e) {
+            LOG.warn("A listener of the subtitle file checks failed: {}", e.getClass().getSimpleName());
         }
     }
 
@@ -283,104 +302,8 @@ public class SidecarCheckRefresher {
         return reference;
     }
 
-    /**
-     * The reference for one OpenSubtitles file: the stored one, or a download within the budget, stored before
-     * anything else is done with it.
-     */
+    /** The reference for one candidate, within the share of the budget the checks may use. */
     private OpenSubtitlesReference reference(DueCheck due, OpenSubtitlesResult candidate) {
-        // Only a reference fetched for the film's current IMDb id may be reused.
-        OpenSubtitlesReference stored = references
-            .findByFilmIdAndImdbIdAndOsFileId(due.filmId(), due.imdbId(), candidate.fileId()).orElse(null);
-        if (stored != null && stored.isFinal()) {
-            return stored;
-        }
-        Instant now = clock.instant();
-        LocalDate day = LocalDate.ofInstant(now, ZoneOffset.UTC);
-        if (!budget.take(day, dailyLimit)) {
-            throw new Stop("today's download budget is spent");
-        }
-        OpenSubtitlesDownload download;
-        try {
-            download = api.download(candidate.fileId());
-        } catch (OpenSubtitlesQuotaException e) {
-            budget.exhaust(day, dailyLimit, cap(e.resetTimeUtc(), now));
-            throw new Stop("OpenSubtitles' download limit is reached");
-        } catch (OpenSubtitlesChargedException e) {
-            // OpenSubtitles issued its link, so the account is charged: no refund, whatever went wrong after.
-            OpenSubtitlesReference failed = recordFailure(due, candidate, stored, e.permanent(), now);
-            if (e.permanent()) {
-                return failed;
-            }
-            throw e;
-        } catch (OpenSubtitlesUnavailableException e) {
-            // Nothing was charged (the failure came before or during /download): give the download back.
-            budget.refund(day);
-            throw e;
-        }
-        OpenSubtitlesReference saved = store(due, candidate, stored, download, now);
-        if (download.remaining() != null && download.remaining() <= 0) {
-            budget.exhaust(day, dailyLimit, cap(download.resetTimeUtc(), now));
-        }
-        return saved;
-    }
-
-    /**
-     * Records a charged download that gave no file: a permanent failure makes the file id final at once, a transient
-     * one counts towards {@link OpenSubtitlesReference#MAX_FAILED_DOWNLOADS}.
-     */
-    private OpenSubtitlesReference recordFailure(DueCheck due, OpenSubtitlesResult candidate,
-                                                 OpenSubtitlesReference stored, boolean permanent, Instant now) {
-        OpenSubtitlesReference reference = blank(due, candidate, stored, now);
-        reference.setCuesText("");
-        reference.setCueCount(0);
-        reference.setFailedDownloads(permanent ? OpenSubtitlesReference.MAX_FAILED_DOWNLOADS
-            : Math.min(OpenSubtitlesReference.MAX_FAILED_DOWNLOADS, reference.getFailedDownloads() + 1));
-        return save(due, candidate, reference);
-    }
-
-    /** The stored row to update, or a new one for the candidate's file. */
-    private static OpenSubtitlesReference blank(DueCheck due, OpenSubtitlesResult candidate,
-                                                OpenSubtitlesReference stored, Instant now) {
-        OpenSubtitlesReference reference = stored != null ? stored : new OpenSubtitlesReference();
-        reference.setFilmId(due.filmId());
-        reference.setImdbId(due.imdbId());
-        reference.setOsFileId(candidate.fileId());
-        reference.setRelease(candidate.release());
-        reference.setFetchedAt(now);
-        return reference;
-    }
-
-    /** Stores a download as the film's reference: an unreadable or oversized one is kept as unusable and final. */
-    private OpenSubtitlesReference store(DueCheck due, OpenSubtitlesResult candidate, OpenSubtitlesReference stored,
-                                         OpenSubtitlesDownload download, Instant now) {
-        List<SubtitleCue> cues = download.parsed().cues();
-        String text = SrtParser.format(cues);
-        boolean usable = !cues.isEmpty() && text.length() <= MAX_REFERENCE_CHARS;
-        OpenSubtitlesReference reference = blank(due, candidate, stored, now);
-        reference.setCuesText(usable ? text : "");
-        reference.setCueCount(usable ? cues.size() : 0);
-        if (!usable) {
-            reference.setFailedDownloads(OpenSubtitlesReference.MAX_FAILED_DOWNLOADS);
-        }
-        return save(due, candidate, reference);
-    }
-
-    private OpenSubtitlesReference save(DueCheck due, OpenSubtitlesResult candidate, OpenSubtitlesReference reference) {
-        try {
-            return references.saveAndFlush(reference);
-        } catch (DataIntegrityViolationException e) {
-            // Another writer stored it first: use theirs.
-            return references.findByFilmIdAndImdbIdAndOsFileId(due.filmId(), due.imdbId(), candidate.fileId())
-                .orElseThrow(() -> e);
-        }
-    }
-
-    /** The reset time, but never further ahead than {@link #MAX_BLOCK}; null stays null. */
-    private static Instant cap(Instant reset, Instant now) {
-        if (reset == null) {
-            return null;
-        }
-        Instant latest = now.plus(MAX_BLOCK);
-        return reset.isAfter(latest) ? latest : reset;
+        return fetcher.fetch(due.filmId(), due.imdbId(), candidate, checkLimit);
     }
 }

@@ -5,82 +5,120 @@ import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.EditionTimeline;
 import gregochr.cinefilm.film.FilmDtos.ForcedSubtitleDto;
-import gregochr.cinefilm.film.MediaFile;
+import gregochr.cinefilm.subtitle.ForcedChoice.Source;
+import gregochr.cinefilm.web.JsonEtag;
+import gregochr.cinefilm.subtitle.ForcedResolver.Resolution;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Pick;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Slot;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The forced English subtitle an edition plays when Subtitles is Off: which sidecar files win
- * ({@link SidecarPrecedence}), and their cues as one WebVTT file on the edition's timeline (the owner's offset applied;
- * the files of a split edition's parts moved by each part's start and joined). Built on each request: the files are
- * small. Nothing from a request becomes a path: the cues come from the database.
+ * The forced English subtitle an edition plays when Subtitles is Off: which subtitle wins
+ * ({@link ForcedChoice}, through {@link ForcedResolver}: only proven files are trusted), and its cues as one WebVTT
+ * file on the edition's timeline (the offset applied; the files of a split edition's parts moved by each part's start
+ * and joined). Built on each request: the files are small. Nothing from a request becomes a path: the cues come from
+ * the database. When the winner is the film's own embedded forced track nothing is served from here (the player picks
+ * the track itself).
  */
 @Service
 public class ForcedSubtitleService {
 
     private static final String SIDECAR = "SIDECAR";
+    private static final String DOWNLOAD = "DOWNLOAD";
 
-    private final SubtitleSidecarRepository sidecars;
     private final EditionRepository editions;
+    private final ForcedResolver resolver;
 
     /** Creates the service. */
-    public ForcedSubtitleService(SubtitleSidecarRepository sidecars, EditionRepository editions) {
-        this.sidecars = sidecars;
+    public ForcedSubtitleService(EditionRepository editions, ForcedResolver resolver) {
         this.editions = editions;
+        this.resolver = resolver;
     }
 
     /**
      * The forced subtitle each of some editions plays, for the film detail.
      *
      * @param forEditions editions (their files must be loadable)
-     * @return the subtitle by edition id; an edition with none is absent
+     * @return the subtitle by edition id; an edition with none is absent (so is one that plays its embedded track)
      */
     @Transactional(readOnly = true)
     public Map<Long, ForcedSubtitleDto> forEditions(Collection<Edition> forEditions) {
-        List<Long> allIds = forEditions.stream().flatMap(e -> partIds(e).stream()).toList();
-        List<SubtitleSidecar> found = allIds.isEmpty() ? List.of() : sidecars.findByMediaFileIdIn(allIds);
         Map<Long, ForcedSubtitleDto> byEdition = new HashMap<>();
-        for (Edition edition : forEditions) {
-            List<Long> partIds = partIds(edition);
-            Pick pick = SidecarPrecedence.pick(partIds, found);
+        resolver.resolve(forEditions).forEach((editionId, resolution) -> {
+            Pick pick = resolution.chosen();
             if (!pick.slots().isEmpty()) {
-                boolean verified = pick.slots().stream().allMatch(s -> s.sidecar().isVerifiedFor(partIds));
-                long version = pick.slots().stream().mapToLong(s -> s.sidecar().getUpdatedAt().toEpochMilli())
-                    .max().orElseThrow();
-                byEdition.put(edition.getId(), new ForcedSubtitleDto(SIDECAR, verified, version));
+                boolean verified = pick.slots().stream().allMatch(s -> s.sidecar().isVerifiedFor(resolution.partIds()));
+                String source = resolution.decision().source() == Source.DOWNLOAD ? DOWNLOAD : SIDECAR;
+                long version = version(source, pick);
+                byEdition.put(editionId, new ForcedSubtitleDto(source, verified, version));
             }
-        }
+        });
         return byEdition;
     }
 
     /**
-     * What each of some editions serves as cues on its timeline, for checking it against another source. The same
-     * pick as {@link #forEditions} and {@link #vtt}; an edition with nothing served, or whose later part's start on the
-     * timeline is unknown, is absent.
+     * The cache-buster of the subtitle URL: a stable 48-bit hash of where the served rows come from and which they are
+     * (ids, part, offset and last change), so switching between an owner's file and a download, a nudge, a changed file
+     * or another stitch each give another number, and the same choice the same one. 48 bits stay exact as a JSON
+     * number in JavaScript.
+     */
+    static long version(String source, Pick pick) {
+        StringBuilder key = new StringBuilder(source);
+        for (Slot slot : pick.slots()) {
+            SubtitleSidecar s = slot.sidecar();
+            key.append('|').append(s.getId()).append('@').append(slot.partIndex()).append('/').append(s.getOffsetMs())
+                .append('/').append(s.getUpdatedAt().toEpochMilli());
+        }
+        // The first 12 hex characters (48 bits) of the SHA-256 of the key.
+        return Long.parseLong(JsonEtag.etag(key.toString().getBytes(StandardCharsets.UTF_8)).substring(3, 3 + 12), 16);
+    }
+
+    /**
+     * The editions among some for which playback would show a forced subtitle: one served from here or the film's own
+     * embedded forced track.
+     *
+     * @param forEditions editions (their files must be loadable)
+     * @return the ids of the editions that show one
+     */
+    @Transactional(readOnly = true)
+    public Set<Long> playableEditionIds(Collection<Edition> forEditions) {
+        Set<Long> playable = new HashSet<>();
+        resolver.resolve(forEditions).forEach((editionId, resolution) -> {
+            if (resolution.decision().source() != Source.NONE) {
+                playable.add(editionId);
+            }
+        });
+        return playable;
+    }
+
+    /**
+     * What each of some editions serves as cues on its timeline. The same choice as {@link #forEditions} and
+     * {@link #vtt}; an edition with nothing served from here, or whose later part's start on the timeline is unknown,
+     * is absent.
      *
      * @param forEditions editions (their files must be loadable)
      * @return the served subtitle by edition id
      */
     @Transactional(readOnly = true)
     public Map<Long, ServedSubtitle> served(Collection<Edition> forEditions) {
-        List<Long> allIds = forEditions.stream().flatMap(e -> partIds(e).stream()).toList();
-        List<SubtitleSidecar> found = allIds.isEmpty() ? List.of() : sidecars.findByMediaFileIdIn(allIds);
         Map<Long, ServedSubtitle> byEdition = new HashMap<>();
-        for (Edition edition : forEditions) {
-            Pick pick = SidecarPrecedence.pick(partIds(edition), found);
-            ServedSubtitle served = pick.slots().isEmpty() ? null : ServedSubtitles.of(edition, pick);
+        resolver.resolve(forEditions).forEach((editionId, resolution) -> {
+            Pick pick = resolution.chosen();
+            ServedSubtitle served = pick.slots().isEmpty() ? null : ServedSubtitles.of(resolution.edition(), pick);
             if (served != null) {
-                byEdition.put(edition.getId(), served);
+                byEdition.put(editionId, served);
             }
-        }
+        });
         return byEdition;
     }
 
@@ -89,14 +127,13 @@ public class ForcedSubtitleService {
      *
      * @param editionId the edition
      * @return the WebVTT text
-     * @throws NotFoundException when the edition is unknown, nothing plays for it, or its timeline is unknown
+     * @throws NotFoundException when the edition is unknown, nothing plays for it from here, or its timeline is unknown
      */
     @Transactional(readOnly = true)
     public String vtt(Long editionId) {
         Edition edition = editions.findById(editionId).orElseThrow(() -> new NotFoundException("No such edition"));
-        List<Long> partIds = partIds(edition);
-        List<Slot> slots = partIds.isEmpty() ? List.of()
-            : SidecarPrecedence.pick(partIds, sidecars.findByMediaFileIdIn(partIds)).slots();
+        Resolution resolution = resolver.resolve(List.of(edition)).get(edition.getId());
+        List<Slot> slots = resolution.chosen().slots();
         if (slots.isEmpty()) {
             throw new NotFoundException("No forced subtitles");
         }
@@ -122,9 +159,5 @@ public class ForcedSubtitleService {
         } catch (IllegalArgumentException e) {
             throw new NotFoundException("Forced subtitles are not available");
         }
-    }
-
-    private static List<Long> partIds(Edition edition) {
-        return edition.originalParts().stream().map(MediaFile::getId).toList();
     }
 }

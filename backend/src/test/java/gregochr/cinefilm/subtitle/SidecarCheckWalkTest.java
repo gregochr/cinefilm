@@ -37,6 +37,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.slf4j.LoggerFactory;
 
 /**
@@ -49,6 +50,8 @@ class SidecarCheckWalkTest {
 
     private static final LocalDate DAY = LocalDate.of(2024, 3, 31);
     private static final int LIMIT = 90;
+    /** What the checks may bring the day's downloads to: half the limit. */
+    private static final int CHECK_LIMIT = 45;
     private static final long FILM = 1;
     private static final long EDITION = 10;
     private static final String IMDB = "tt1";
@@ -58,6 +61,9 @@ class SidecarCheckWalkTest {
 
     @Mock
     private OpenSubtitlesApi api;
+
+    @Mock
+    private ApplicationEventPublisher events;
 
     @Mock
     private OpenSubtitlesBudget budget;
@@ -75,7 +81,7 @@ class SidecarCheckWalkTest {
 
     @BeforeEach
     void setUp() {
-        refresher = new SidecarCheckRefresher(api, budget, references, service, CLOCK, queued::add, LIMIT);
+        refresher = new SidecarCheckRefresher(api, budget, references, service, CLOCK, queued::add, LIMIT, events);
         logged.start();
         refresherLog.addAppender(logged);
     }
@@ -175,7 +181,7 @@ class SidecarCheckWalkTest {
 
         Result result = savedResult(due, second);
         assertThat(result.verdict()).isEqualTo(Verdict.AGREES);
-        verify(budget, never()).take(DAY, LIMIT);
+        verify(budget, never()).take(DAY, CHECK_LIMIT);
         verify(api, never()).download(5012);
         assertThat(messages()).contains(
             "Edition 10: candidate 1 (file 5011) was full subtitles, trying the next",
@@ -188,7 +194,7 @@ class SidecarCheckWalkTest {
         OpenSubtitlesReference otherCut = stored(8, 5011, matching(0));
         storedIs(otherCut);
         notStored(5012);
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5012)).thenReturn(downloaded(SERVED));
         when(references.saveAndFlush(any(OpenSubtitlesReference.class))).thenAnswer(call -> {
             OpenSubtitlesReference saved = call.getArgument(0);
@@ -201,7 +207,7 @@ class SidecarCheckWalkTest {
 
         InOrder order = inOrder(references, budget, api, service);
         order.verify(references).findByFilmIdAndImdbIdAndOsFileId(FILM, IMDB, 5011);
-        order.verify(budget).take(DAY, LIMIT);
+        order.verify(budget).take(DAY, CHECK_LIMIT);
         order.verify(api).download(5012);
         ArgumentCaptor<OpenSubtitlesReference> kept = ArgumentCaptor.forClass(OpenSubtitlesReference.class);
         ArgumentCaptor<Result> result = ArgumentCaptor.forClass(Result.class);
@@ -316,7 +322,7 @@ class SidecarCheckWalkTest {
         run(due);
 
         verify(references, never()).findByFilmIdAndImdbIdAndOsFileId(FILM, IMDB, 5014);
-        verify(budget, never()).take(DAY, LIMIT);
+        verify(budget, never()).take(DAY, CHECK_LIMIT);
         verify(api, never()).download(5014);
         verify(service, never()).markTried(EDITION, IMDB, 5014, NOW);
         assertThat(messages()).contains(
@@ -365,7 +371,7 @@ class SidecarCheckWalkTest {
         storedIs(stored(8, 5011, matching(0)));
         storedIs(stored(9, 5012, matching(0)));
         notStored(5013);
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5013)).thenReturn(downloaded(matching(0)));
         when(references.saveAndFlush(any(OpenSubtitlesReference.class))).thenAnswer(call -> {
             OpenSubtitlesReference saved = call.getArgument(0);
@@ -414,7 +420,7 @@ class SidecarCheckWalkTest {
         DueCheck due = due(Set.of(5011L), 5011, 5012);
         storedIs(stored(8, 5011, matching(0)));
         notStored(5012);
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5012)).thenThrow(new OpenSubtitlesChargedException("OpenSubtitles file refused", false));
         when(references.saveAndFlush(any(OpenSubtitlesReference.class))).thenAnswer(call -> call.getArgument(0));
 
@@ -432,7 +438,7 @@ class SidecarCheckWalkTest {
         DueCheck due = due(Set.of(5011L), 5011, 5012);
         storedIs(stored(8, 5011, matching(0)));
         notStored(5012);
-        when(budget.take(DAY, LIMIT)).thenReturn(false);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(false);
 
         run(due);
 

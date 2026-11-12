@@ -31,6 +31,7 @@ class SubtitleAdminCheckTest extends SubtitleTestBase {
         film.setOsSearchedImdbId("tt0936501");
         film.setOsForcedCount(1);
         film.setOsBest(best(5011));
+        film.setOsCandidates("[" + best(5011) + "]");
         return films.saveAndFlush(film);
     }
 

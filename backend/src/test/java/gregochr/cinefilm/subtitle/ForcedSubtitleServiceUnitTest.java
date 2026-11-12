@@ -14,6 +14,7 @@ import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.FilmDtos.ForcedSubtitleDto;
 import gregochr.cinefilm.film.MediaFile;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -35,6 +36,18 @@ class ForcedSubtitleServiceUnitTest {
     @Mock
     private EditionRepository editions;
 
+    @Mock
+    private ForcedSubtitleCheckRepository checks;
+
+    @Mock
+    private ForcedDownloadCheckRepository downloadChecks;
+
+    @Mock
+    private OpenSubtitlesReferenceRepository references;
+
+    @Mock
+    private SidecarTimingService timing;
+
     private ForcedSubtitleService service;
     private Edition edition;
     private MediaFile first;
@@ -42,7 +55,8 @@ class ForcedSubtitleServiceUnitTest {
 
     @BeforeEach
     void setUp() {
-        service = new ForcedSubtitleService(sidecars, editions);
+        service = new ForcedSubtitleService(editions,
+            new ForcedResolver(sidecars, checks, downloadChecks, references, timing));
         edition = edition(film(1L, "Towers", 2002, NOW), 40L, "Original", 120 * MIN, null);
         first = part(10L, 1);
         second = part(20L, 2);
@@ -127,8 +141,8 @@ class ForcedSubtitleServiceUnitTest {
 
         Map<Long, ForcedSubtitleDto> unverified = service.forEditions(List.of(edition));
 
-        assertThat(unverified.get(40L)).isEqualTo(new ForcedSubtitleDto("SIDECAR", false,
-            NOW.plusSeconds(2).toEpochMilli()));
+        assertThat(unverified.get(40L).source()).isEqualTo("SIDECAR");
+        assertThat(unverified.get(40L).ownerVerified()).isFalse();
 
         b.setOwnerVerifiedAt(NOW);
         b.setVerifiedParts("10,20");

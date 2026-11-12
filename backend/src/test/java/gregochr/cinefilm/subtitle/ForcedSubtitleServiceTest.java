@@ -144,8 +144,8 @@ class ForcedSubtitleServiceTest extends SubtitleTestBase {
         Map<Long, ForcedSubtitleDto> dtos = forced.forEditions(film.getEditions());
 
         assertThat(dtos).containsOnlyKeys(edition.getId());
-        assertThat(dtos.get(edition.getId())).isEqualTo(new ForcedSubtitleDto("SIDECAR", false,
-            later.toEpochMilli()));
+        assertThat(dtos.get(edition.getId()).source()).isEqualTo("SIDECAR");
+        assertThat(dtos.get(edition.getId()).ownerVerified()).isFalse();
     }
 
     @Test

@@ -20,6 +20,11 @@ import lombok.Setter;
  * A forced English {@code .srt} file found beside the films. The row hangs off the film <em>file</em> it belongs to
  * (not the edition), so it follows the file when editions are edited, joined or merged; no file means unmatched.
  * Rows are never deleted: a file that is not found is marked {@link Presence#MISSING}.
+ *
+ * <p>A row with {@link Origin#OPENSUBTITLES} is a subtitle CineFilm downloaded for an edition (phase 4). It uses the
+ * same columns, so precedence, the served version, the checks and the timing fit treat it like a file. It has a made-up
+ * {@code path}, is stored against the edition's part 1 as a whole-edition file, and the scan never changes, matches or
+ * marks it missing.
  */
 @Entity
 @Table(name = "subtitle_sidecar")
@@ -94,6 +99,39 @@ public class SubtitleSidecar {
 
     @Column(nullable = false)
     private Instant updatedAt;
+
+    /** Where the subtitle came from: a file beside the film, or a download from OpenSubtitles. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private Origin origin = Origin.FILE;
+
+    /** The OpenSubtitles file id a download was made from; null for a file beside the film. */
+    @Column(name = "opensubtitles_file_id")
+    private Long openSubtitlesFileId;
+
+    /** The release name of a download (as OpenSubtitles gave it); null for a file. */
+    @Column(length = 200)
+    private String release;
+
+    /** The IMDb id a download was fetched for (it is removed when the film's IMDb id changes); null for a file. */
+    @Column(length = 16)
+    private String imdbId;
+
+    /** When a download was made; null for a file. */
+    private Instant downloadedAt;
+
+    /** Where a subtitle came from. */
+    public enum Origin {
+        /** A {@code .srt} file the scan found beside the film. */
+        FILE,
+        /** A download from OpenSubtitles: never touched by the scan, tied to an edition like a whole-edition file. */
+        OPENSUBTITLES
+    }
+
+    /** True for a download from OpenSubtitles. */
+    public boolean isDownload() {
+        return origin == Origin.OPENSUBTITLES;
+    }
 
     /** Who set a file's timing offset. */
     public enum OffsetSource {

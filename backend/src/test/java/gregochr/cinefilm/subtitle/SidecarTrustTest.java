@@ -57,8 +57,38 @@ class SidecarTrustTest {
         assertThat(SidecarTrust.isProven(listed(false, null, alignment("CHECK")))).isFalse();
     }
 
+    @Test
+    void assessingSaysProvenFailedOrUncheckedAndWhatProvedIt() {
+        assertThat(SidecarTrust.assess(true, "CHECK", false))
+            .isEqualTo(new SidecarTrust.Assessment(SidecarTrust.Trust.PROVEN, SidecarTrust.Proof.VERIFIED));
+        assertThat(SidecarTrust.assess(false, "AGREES", true))
+            .isEqualTo(new SidecarTrust.Assessment(SidecarTrust.Trust.PROVEN, SidecarTrust.Proof.AGREES));
+        assertThat(SidecarTrust.assess(false, "CHECK", true))
+            .isEqualTo(new SidecarTrust.Assessment(SidecarTrust.Trust.PROVEN, SidecarTrust.Proof.ALIGNED));
+        assertThat(SidecarTrust.assess(false, null, true))
+            .isEqualTo(new SidecarTrust.Assessment(SidecarTrust.Trust.PROVEN, SidecarTrust.Proof.ALIGNED));
+        assertThat(SidecarTrust.assess(false, "CHECK", false))
+            .isEqualTo(new SidecarTrust.Assessment(SidecarTrust.Trust.FAILED, SidecarTrust.Proof.NONE));
+        assertThat(SidecarTrust.assess(false, null, false))
+            .isEqualTo(new SidecarTrust.Assessment(SidecarTrust.Trust.UNCHECKED, SidecarTrust.Proof.NONE));
+    }
+
+    @Test
+    void aTimingFitThatCouldNotProveAnythingLeavesTheFileUncheckedNotFailed() {
+        // 3a not ALIGNED alone is not a failure: only a CHECK from OpenSubtitles fails a file.
+        assertThat(SidecarTrust.assess(false, null, false).trust()).isEqualTo(SidecarTrust.Trust.UNCHECKED);
+    }
+
+    @Test
+    void alignedMeansACurrentAlignedFitOnly() {
+        assertThat(SidecarTrust.isAligned(null)).isFalse();
+        assertThat(SidecarTrust.isAligned(alignment("CHECK"))).isFalse();
+        assertThat(SidecarTrust.isAligned(alignment("ALIGNED"))).isTrue();
+    }
+
     private static SidecarDto listed(boolean verified, CheckDto check, AlignmentDto alignment) {
         return new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L, "Taken", 70L, "Original", 1, 1,
-            false, false, 12, "No problems found", 0, verified, false, 1L, true, check, null, alignment);
+            false, false, 12, "No problems found", 0, verified, false, 1L, true, check, null, alignment,
+            "FILE", null, null, null);
     }
 }

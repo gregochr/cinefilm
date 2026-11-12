@@ -615,6 +615,8 @@ public class LibraryIngest {
         film.setImdbId(imdbId.strip());
         if (film.getId() != null) {
             films.clearOpenSubtitles(film.getId());
+            // Subtitles downloaded for the old IMDb id are for another film: the only automatic removal of a download.
+            films.deleteOpenSubtitlesDownloads(film.getId());
         }
         film.setImdbRating(null);
         film.setImdbVotes(null);

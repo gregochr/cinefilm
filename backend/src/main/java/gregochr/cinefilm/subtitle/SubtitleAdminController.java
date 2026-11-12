@@ -5,6 +5,7 @@ import gregochr.cinefilm.subtitle.SubtitleDtos.CuesDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.OffsetRequest;
 import gregochr.cinefilm.subtitle.SubtitleDtos.SidecarDto;
 import java.util.List;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -52,6 +53,13 @@ public class SubtitleAdminController {
     @PostMapping("/api/admin/subtitles/{id}/verify")
     SidecarDto verify(@PathVariable Long id) {
         return service.verify(id);
+    }
+
+    /** Removes a subtitle downloaded from OpenSubtitles (never an owner's file) and blocks it for its edition. */
+    @DeleteMapping("/api/admin/subtitles/{id}")
+    ResponseEntity<Void> remove(@PathVariable Long id) {
+        service.remove(id);
+        return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/api/admin/subtitles/{id}/verify")

@@ -1,5 +1,6 @@
 package gregochr.cinefilm.subtitle;
 
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -7,6 +8,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -35,7 +37,7 @@ class SubtitleAdminControllerTest {
 
     private static final SidecarDto DTO = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L,
         "Taken", 70L, "Original", 1, 1, false, true, 12, "No problems found", -250, true, false, 1700000000000L,
-        true, null, null, null);
+        true, null, null, null, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet");
 
     @Autowired
     private MockMvc mvc;
@@ -168,6 +170,45 @@ class SubtitleAdminControllerTest {
     }
 
     @Test
+    void removingADownloadIs204AndPassesTheRowIdAndErrorsComeBackWithTheirBodies() throws Exception {
+        doThrow(new BadRequestException("Only a subtitle downloaded from OpenSubtitles can be removed"))
+            .when(service).remove(5L);
+        doThrow(new NotFoundException("No such subtitle")).when(service).remove(9L);
+
+        mvc.perform(signedIn(delete("/api/admin/subtitles/7")))
+            .andExpect(status().isNoContent())
+            .andExpect(content().string(""));
+        verify(service).remove(7L);
+        mvc.perform(signedIn(delete("/api/admin/subtitles/5")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Only a subtitle downloaded from OpenSubtitles can be removed"));
+        mvc.perform(signedIn(delete("/api/admin/subtitles/9")))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.error").value("No such subtitle"));
+    }
+
+    @Test
+    void aDownloadsOriginReleaseFileIdAndReasonAreInTheJson() throws Exception {
+        SidecarDto download = new SidecarDto(8L, "opensubtitles:70:5011", "PRESENT", "matched", 7L, "Taken", 70L,
+            "Original", 1, null, true, false, 12, "Downloaded from OpenSubtitles", 0, false, false,
+            1700000000000L, true, null, null, null, "OPENSUBTITLES", "Taken.2008.BluRay", 5011L,
+            "Plays: it agrees with OpenSubtitles");
+        when(service.list()).thenReturn(List.of(download, DTO));
+
+        mvc.perform(get("/api/admin/subtitles").with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].origin").value("OPENSUBTITLES"))
+            .andExpect(jsonPath("$[0].release").value("Taken.2008.BluRay"))
+            .andExpect(jsonPath("$[0].openSubtitlesFileId").value(5011))
+            .andExpect(jsonPath("$[0].servedReason").value("Plays: it agrees with OpenSubtitles"))
+            .andExpect(jsonPath("$[1].origin").value("FILE"))
+            .andExpect(jsonPath("$[1].release").value((Object) null))
+            .andExpect(jsonPath("$[1].openSubtitlesFileId").value((Object) null))
+            .andExpect(jsonPath("$[1].servedReason")
+                .value("Plays: nothing says it is wrong, but it is not proven yet"));
+    }
+
+    @Test
     void everyRouteIs401SignedOutWithTheJsonBody() throws Exception {
         mvc.perform(get("/api/admin/subtitles")).andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.error").value("Authentication required"));
@@ -175,7 +216,8 @@ class SubtitleAdminControllerTest {
             .andExpect(jsonPath("$.error").value("Authentication required"));
         for (MockHttpServletRequestBuilder request : List.of(post("/api/admin/subtitles/5/attach"),
             post("/api/admin/subtitles/5/detach"), put("/api/admin/subtitles/5/offset"),
-            post("/api/admin/subtitles/5/verify"), delete("/api/admin/subtitles/5/verify"))) {
+            post("/api/admin/subtitles/5/verify"), delete("/api/admin/subtitles/5/verify"),
+            delete("/api/admin/subtitles/5"))) {
             mvc.perform(request.header("X-CineFilm", "1").contentType("application/json").content("{}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error").value("Authentication required"));
@@ -186,7 +228,8 @@ class SubtitleAdminControllerTest {
     void everyChangeWithoutTheCsrfHeaderIs403() throws Exception {
         for (MockHttpServletRequestBuilder request : List.of(post("/api/admin/subtitles/5/attach"),
             post("/api/admin/subtitles/5/detach"), put("/api/admin/subtitles/5/offset"),
-            post("/api/admin/subtitles/5/verify"), delete("/api/admin/subtitles/5/verify"))) {
+            post("/api/admin/subtitles/5/verify"), delete("/api/admin/subtitles/5/verify"),
+            delete("/api/admin/subtitles/5"))) {
             mvc.perform(request.with(user("owner")).contentType("application/json").content("{}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
@@ -200,7 +243,7 @@ class SubtitleAdminControllerTest {
             Instant.parse("2024-04-01T01:30:00Z"));
         SidecarDto checked = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L, "Taken", 70L,
             "Original", 1, 1, false, true, 12, "No problems found", -250, true, false, 1700000000000L, true, check,
-            null, null);
+            null, null, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet");
         when(service.list()).thenReturn(List.of(checked, DTO));
 
         mvc.perform(get("/api/admin/subtitles").with(user("owner")))
@@ -223,13 +266,13 @@ class SubtitleAdminControllerTest {
             true, Instant.parse("2024-04-01T02:30:00Z"));
         SidecarDto fitted = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L, "Taken", 70L,
             "Original", 1, 1, false, true, 12, "No problems found", 900, false, false, 1700000000000L, true, null,
-            "AUTO", alignment);
+            "AUTO", alignment, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet");
         SubtitleDtos.AlignmentDto doubtful = new SubtitleDtos.AlignmentDto("CHECK",
             List.of("Only 4 of 12 lines line up with the film's English track"), 600, 0.33, 4, 12, false,
             Instant.parse("2024-04-01T02:30:00Z"));
         SidecarDto checked = new SidecarDto(6L, "Alien.en.forced.srt", "PRESENT", "matched", 8L, "Alien", 80L,
             "Original", 1, 1, false, true, 12, "No problems found", 0, false, false, 1700000000000L, true, null,
-            null, doubtful);
+            null, doubtful, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet");
         when(service.list()).thenReturn(List.of(fitted, checked, DTO));
 
         mvc.perform(get("/api/admin/subtitles").with(user("owner")))

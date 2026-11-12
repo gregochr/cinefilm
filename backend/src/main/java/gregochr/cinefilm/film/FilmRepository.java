@@ -182,6 +182,18 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
     int clearOpenSubtitles(@org.springframework.data.repository.query.Param("id") Long id);
 
     /**
+     * Removes the subtitles downloaded from OpenSubtitles for a film's editions (a change of IMDb id means they were
+     * for another film). The scan and everything else leave downloads alone; this and the owner's removal are the only
+     * deletions. The timing and comparison rows of a download go with it (foreign keys cascade).
+     */
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query(
+        "delete from SubtitleSidecar s "
+            + "where s.origin = gregochr.cinefilm.subtitle.SubtitleSidecar.Origin.OPENSUBTITLES "
+            + "and s.mediaFileId in (select m.id from MediaFile m join m.edition e where e.film.id = :id)")
+    int deleteOpenSubtitlesDownloads(@org.springframework.data.repository.query.Param("id") Long id);
+
+    /**
      * A film's best OpenSubtitles result.
      *
      * @param id the film

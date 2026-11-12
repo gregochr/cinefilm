@@ -7,9 +7,11 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Which forced subtitle files an edition plays. Only files that are present and have at least one cue compete. One
- * whole-edition file beats per-part files; two whole-edition files are a conflict and nothing plays. Otherwise each
- * part plays its own file, and two files for one part are a conflict that leaves that part with none. Pure.
+ * Which of the owner's forced subtitle files an edition would play (a download is never in this pick:
+ * {@link ForcedChoice} chooses between the owner's files, downloads and the embedded track). Only files that are
+ * present and have at least one cue compete. One whole-edition file beats per-part files; two whole-edition files are
+ * a conflict and nothing plays. Otherwise each part plays its own file, and two files for one part are a conflict that
+ * leaves that part with none. Pure.
  */
 final class SidecarPrecedence {
 
@@ -33,12 +35,12 @@ final class SidecarPrecedence {
      * Picks what an edition plays.
      *
      * @param partIds the ids of the edition's part files in play order
-     * @param sidecars the files attached to the edition's parts (others are ignored)
+     * @param sidecars the files attached to the edition's parts (others, and downloads, are ignored)
      * @return the files to play and the ones in conflict
      */
     static Pick pick(List<Long> partIds, List<SubtitleSidecar> sidecars) {
         List<SubtitleSidecar> playable = sidecars.stream()
-            .filter(s -> s.getMediaFileId() != null && partIds.contains(s.getMediaFileId())
+            .filter(s -> !s.isDownload() && s.getMediaFileId() != null && partIds.contains(s.getMediaFileId())
                 && s.getPresence() == Presence.PRESENT
                 && s.getCueCount() > 0)
             .toList();
