@@ -64,22 +64,22 @@ class FilmOpenSubtitlesIntegrationTest extends IntegrationTestBase {
         Film results = saved("Has Results", "tt0000014");
         Film other = saved("Searched Other", "tt0000015");
         saved("No Imdb Id", null);
-        films.saveOpenSubtitles(zeroOld.getId(), "tt0000012", 0, null, CUTOFF.minusMillis(1));
-        films.saveOpenSubtitles(zeroFresh.getId(), "tt0000013", 0, null, CUTOFF);
-        films.saveOpenSubtitles(results.getId(), "tt0000014", 4, BEST, NOW.minus(Duration.ofDays(900)));
-        films.saveOpenSubtitles(other.getId(), "tt0000015", 4, BEST, NOW);
+        films.saveOpenSubtitles(zeroOld.getId(), "tt0000012", 0, null, "[]", CUTOFF.minusMillis(1));
+        films.saveOpenSubtitles(zeroFresh.getId(), "tt0000013", 0, null, "[]", CUTOFF);
+        films.saveOpenSubtitles(results.getId(), "tt0000014", 4, BEST, "[]", NOW.minus(Duration.ofDays(900)));
+        films.saveOpenSubtitles(other.getId(), "tt0000015", 4, BEST, "[]", NOW);
         entityManager.clear();
         // The film then gets another IMDb id.
         Film moved = films.findById(other.getId()).orElseThrow();
         moved.setImdbId("tt0000099");
         films.saveAndFlush(moved);
         films.clearOpenSubtitles(other.getId());
-        films.saveOpenSubtitles(other.getId(), "tt0000099", 4, BEST, NOW);
+        films.saveOpenSubtitles(other.getId(), "tt0000099", 4, BEST, "[]", NOW);
         films.flush();
         entityManager.clear();
         // A search of the old id is still on the row for this one: due again.
         Film stale = saved("Stale Marker", "tt0000016");
-        films.saveOpenSubtitles(stale.getId(), "tt0000016", 4, BEST, NOW);
+        films.saveOpenSubtitles(stale.getId(), "tt0000016", 4, BEST, "[]", NOW);
         entityManager.clear();
         Film staleLoaded = films.findById(stale.getId()).orElseThrow();
         staleLoaded.setOsSearchedImdbId("tt0000001");
@@ -95,8 +95,8 @@ class FilmOpenSubtitlesIntegrationTest extends IntegrationTestBase {
         Film due = saved("Due", "tt0000021");
         Film changed = saved("Changed", "tt0000022");
 
-        int saved = films.saveOpenSubtitles(due.getId(), "tt0000021", 3, "{\"id\":1}", NOW);
-        int refused = films.saveOpenSubtitles(changed.getId(), "tt0000999", 3, "{\"id\":1}", NOW);
+        int saved = films.saveOpenSubtitles(due.getId(), "tt0000021", 3, "{\"id\":1}", "[]", NOW);
+        int refused = films.saveOpenSubtitles(changed.getId(), "tt0000999", 3, "{\"id\":1}", "[]", NOW);
         entityManager.clear();
 
         assertThat(saved).isEqualTo(1);
@@ -112,7 +112,7 @@ class FilmOpenSubtitlesIntegrationTest extends IntegrationTestBase {
     @Test
     void theResetAndTheNeedRowsAndTheLatestSearchRunOnPostgres() {
         Film film = saved("Reset", "tt0000031");
-        films.saveOpenSubtitles(film.getId(), "tt0000031", 2, "{}", NOW);
+        films.saveOpenSubtitles(film.getId(), "tt0000031", 2, "{}", "[]", NOW);
         entityManager.clear();
 
         List<NeedRow> rows = films.findNeedRows();

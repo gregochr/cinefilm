@@ -38,6 +38,26 @@ class ForcedSubtitleCheckTest {
     }
 
     @Test
+    void aCheckMadeByOlderRulesIsStale() {
+        ForcedSubtitleCheck check = check();
+        assertThat(check.getRulesVersion()).isEqualTo(ForcedSubtitleCheck.RULES_VERSION);
+
+        check.setRulesVersion(ForcedSubtitleCheck.RULES_VERSION - 1);
+
+        assertThat(check.isCurrent("v1", "tt1", reference(5L, "tt1"), 9)).isFalse();
+    }
+
+    @Test
+    void theBestFileItWasMadeAgainstIsWhatIsComparedNotTheReferencesOwnFile() {
+        ForcedSubtitleCheck check = check();
+        check.setBestFileId(4L);
+
+        // The reference is the film's second candidate (file 9); the best file was 4 then.
+        assertThat(check.isCurrent("v1", "tt1", reference(5L, "tt1"), 4)).isTrue();
+        assertThat(check.isCurrent("v1", "tt1", reference(5L, "tt1"), 9)).isFalse();
+    }
+
+    @Test
     void reasonsAreSplitOnNewlinesAndNoneIsAnEmptyList() {
         ForcedSubtitleCheck check = check();
 

@@ -1,8 +1,10 @@
 package gregochr.cinefilm.opensubtitles;
 
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Which of several subtitles is the best to compare with, in order: a single file (a subtitle split over several
@@ -23,6 +25,11 @@ public final class OpenSubtitlesRanking {
         .thenComparing(OpenSubtitlesResult::downloadCount, Comparator.reverseOrder())
         .thenComparingLong(OpenSubtitlesResult::id);
 
+    /** The most of the film's ranked single-file results stored as candidates before the per-tag extras. */
+    static final int TOP_CANDIDATES = 3;
+    /** The most candidates stored in all (the top ones plus the best result of each cut tag). */
+    static final int MAX_CANDIDATES = 8;
+
     private OpenSubtitlesRanking() {
     }
 
@@ -38,5 +45,50 @@ public final class OpenSubtitlesRanking {
      */
     public static Optional<OpenSubtitlesResult> best(List<OpenSubtitlesResult> results) {
         return results.stream().min(ORDER);
+    }
+
+    /**
+     * Every result in the film-level ranked order.
+     *
+     * @param results the results, in any order
+     * @return a new list, best first
+     */
+    public static List<OpenSubtitlesResult> rank(List<OpenSubtitlesResult> results) {
+        return results.stream().sorted(ORDER).toList();
+    }
+
+    /**
+     * The results re-ordered for one edition: first by how well each result's release name and file name fit the
+     * edition's name ({@link CutTag#affinity}), then by the film-level order. An edition whose name carries no cut
+     * tag keeps the film-level order.
+     *
+     * @param results the results, in any order
+     * @param editionName the edition's name, for example {@code Extended Edition}; null reads as no tags
+     * @return a new list, best first
+     */
+    public static List<OpenSubtitlesResult> rankFor(List<OpenSubtitlesResult> results, String editionName) {
+        Set<CutTag> wanted = CutTag.in(editionName);
+        Comparator<OpenSubtitlesResult> byFit = Comparator
+            .comparingInt((OpenSubtitlesResult r) -> CutTag.affinity(wanted, r.cutTags())).reversed();
+        return results.stream().sorted(byFit.thenComparing(ORDER)).toList();
+    }
+
+    /**
+     * The results the check may compare with, in the film-level ranked order: the single-file ones only (a file split
+     * over discs is part of a film), the top {@value #TOP_CANDIDATES}, then the best of each cut tag (Extended,
+     * Theatrical and so on) not already among them, so that an edition's own cut can be found when it is not
+     * the film's overall favourite; at most {@value #MAX_CANDIDATES}.
+     *
+     * @param results the results, in any order
+     * @return the candidates, best first (empty when no result is a single file)
+     */
+    public static List<OpenSubtitlesResult> candidates(List<OpenSubtitlesResult> results) {
+        List<OpenSubtitlesResult> ranked = rank(results).stream().filter(OpenSubtitlesResult::isSingleFile).toList();
+        Set<OpenSubtitlesResult> chosen = new LinkedHashSet<>(
+            ranked.subList(0, Math.min(TOP_CANDIDATES, ranked.size())));
+        for (CutTag tag : CutTag.values()) {
+            ranked.stream().filter(r -> r.cutTags().contains(tag)).findFirst().ifPresent(chosen::add);
+        }
+        return ranked.stream().filter(chosen::contains).limit(MAX_CANDIDATES).toList();
     }
 }

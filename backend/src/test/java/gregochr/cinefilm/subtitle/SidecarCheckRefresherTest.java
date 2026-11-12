@@ -22,6 +22,7 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesDownload;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesQuotaException;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesSearchFinished;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesUnavailableException;
 import gregochr.cinefilm.subtitle.SubtitleComparison.Result;
@@ -32,6 +33,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,7 +62,10 @@ class SidecarCheckRefresherTest {
         "Subtitle file checks finished: 0 saved, 0 changed meanwhile, 0 unusable references, 0 failed";
     private static final List<SubtitleCue> CUES = List.of(new SubtitleCue(10_000, 11_000, "a"),
         new SubtitleCue(20_000, 21_000, "b"));
-    private static final Result AGREES = new Result(2, 2, 1.0, 0, Verdict.AGREES, List.of());
+    private static final String USED_10 = "Edition 10: used OpenSubtitles file 5011 (compared 1), AGREES";
+    private static final String USED_20 = "Edition 20: used OpenSubtitles file 5022 (compared 1), AGREES";
+    private static final String UNREADABLE_10 = "Edition 10: candidate 1 (file 5011) skipped, it could not be read";
+    private static final Result AGREES = new Result(2, 2, 1.0, 0, Verdict.AGREES, List.of(), 2, false);
 
     @Mock
     private OpenSubtitlesApi api;
@@ -95,9 +100,14 @@ class SidecarCheckRefresherTest {
         return logged.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
     }
 
+    private static OpenSubtitlesResult candidate(long fileId, String release) {
+        return new OpenSubtitlesResult(fileId - 1000, fileId, release, 23.976, 10, true, false, null, null);
+    }
+
+    /** An edition with one candidate, already on its ledger (so a run does not write it again). */
     private static DueCheck due(long filmId, long editionId, long fileId) {
-        return new DueCheck(filmId, editionId, "tt" + filmId, fileId, "Release " + fileId, 1, "v" + editionId, false,
-            CUES);
+        return new DueCheck(filmId, editionId, "tt" + filmId, "Original",
+            List.of(candidate(fileId, "Release " + fileId)), Set.of(fileId), "v" + editionId, false, CUES);
     }
 
     private static OpenSubtitlesReference stored(long id, long filmId, long fileId, List<SubtitleCue> cues) {
@@ -262,7 +272,7 @@ class SidecarCheckRefresherTest {
         verify(api).downloadsEnabled();
         verify(budget).blockedUntil(NOW);
         verifyNoMoreInteractions(api, budget);
-        assertThat(messages()).containsExactly("Subtitle file checks finished: 1 saved, 0 changed meanwhile, "
+        assertThat(messages()).containsExactly(USED_10, "Subtitle file checks finished: 1 saved, 0 changed meanwhile, "
             + "0 unusable references, 0 failed");
     }
 
@@ -274,7 +284,8 @@ class SidecarCheckRefresherTest {
         OpenSubtitlesReference stored = stored(8, 1, 5011, reference);
         when(service.due()).thenReturn(List.of(due));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.of(stored));
-        Result expected = new Result(2, 2, 1.0, 1200, Verdict.AGREES, List.of("OpenSubtitles' file is 1.2 s later"));
+        Result expected = new Result(2, 2, 1.0, 1200, Verdict.AGREES, List.of("OpenSubtitles' file is 1.2 s later"),
+            2, false);
         when(service.save(due, stored, expected, NOW)).thenReturn(true);
 
         startAndRun();
@@ -586,8 +597,8 @@ class SidecarCheckRefresherTest {
 
         verify(service).save(first, one, AGREES, NOW);
         verify(service).save(second, two, AGREES, NOW);
-        assertThat(messages()).containsExactly("Subtitle file checks finished: 1 saved, 1 changed meanwhile, "
-            + "0 unusable references, 0 failed");
+        assertThat(messages()).containsExactly(USED_10, USED_20,
+            "Subtitle file checks finished: 1 saved, 1 changed meanwhile, 0 unusable references, 0 failed");
     }
 
     @Test
@@ -608,8 +619,8 @@ class SidecarCheckRefresherTest {
         assertThat(saved.getValue().getCuesText()).isEmpty();
         assertThat(saved.getValue().getOsFileId()).isEqualTo(5011L);
         verifyNoMoreInteractions(service);
-        assertThat(messages()).containsExactly("Subtitle file checks finished: 0 saved, 0 changed meanwhile, "
-            + "1 unusable references, 0 failed");
+        assertThat(messages()).containsExactly(UNREADABLE_10,
+            "Subtitle file checks finished: 0 saved, 0 changed meanwhile, 1 unusable references, 0 failed");
     }
 
     @Test
@@ -629,8 +640,9 @@ class SidecarCheckRefresherTest {
         verify(budget, times(2)).blockedUntil(NOW);
         verify(service, times(2)).due();
         verifyNoMoreInteractions(api, budget, service);
-        assertThat(messages()).containsExactly(
+        assertThat(messages()).containsExactly(UNREADABLE_10,
             "Subtitle file checks finished: 0 saved, 0 changed meanwhile, 1 unusable references, 0 failed",
+            UNREADABLE_10,
             "Subtitle file checks finished: 0 saved, 0 changed meanwhile, 1 unusable references, 0 failed");
     }
 
@@ -688,7 +700,8 @@ class SidecarCheckRefresherTest {
         startAndRun();
 
         verify(service).save(second, two, AGREES, NOW);
-        assertThat(messages()).containsExactly("Could not check the subtitle of edition 10: IllegalStateException",
+        assertThat(messages()).containsExactly(USED_10,
+            "Could not check the subtitle of edition 10: IllegalStateException", USED_20,
             "Subtitle file checks finished: 1 saved, 0 changed meanwhile, 0 unusable references, 1 failed");
     }
 
@@ -792,7 +805,7 @@ class SidecarCheckRefresherTest {
 
     @Test
     void anEditionWhoseBestOpenSubtitlesResultIsSplitOverSeveralFilesIsSkippedWithNoDownloadAndNoVerdict() {
-        DueCheck split = new DueCheck(1L, 10L, "tt1", 5011, "LOTR.Extended", 2, "v10", false, CUES);
+        DueCheck split = new DueCheck(1L, 10L, "tt1", "Extended Edition", List.of(), Set.of(), "v10", false, CUES);
         DueCheck single = due(2, 20, 5022);
         OpenSubtitlesReference two = stored(9, 2, 5022, CUES);
         when(service.due()).thenReturn(List.of(split, single));
@@ -806,7 +819,7 @@ class SidecarCheckRefresherTest {
         verify(budget).blockedUntil(NOW);
         verifyNoMoreInteractions(api, budget);
         assertThat(messages()).containsExactly("Edition 10 not checked: Only multi-part subtitles on OpenSubtitles",
-            "Subtitle file checks finished: 1 saved, 0 changed meanwhile, 0 unusable references, 0 failed");
+            USED_20, "Subtitle file checks finished: 1 saved, 0 changed meanwhile, 0 unusable references, 0 failed");
         assertThat(SidecarCheckRefresher.MULTI_PART).isEqualTo("Only multi-part subtitles on OpenSubtitles");
     }
 
@@ -825,11 +838,11 @@ class SidecarCheckRefresherTest {
                                                                  boolean permanent) {
         when(service.due()).thenReturn(List.of(due));
         when(references.findByFilmIdAndImdbIdAndOsFileId(due.filmId(), due.imdbId(),
-            due.osFileId()))
+            due.candidates().get(0).fileId()))
             .thenReturn(Optional.ofNullable(existing));
         when(budget.take(DAY, LIMIT)).thenReturn(true);
-        when(api.download(due.osFileId())).thenThrow(new OpenSubtitlesChargedException("OpenSubtitles file refused",
-            permanent));
+        when(api.download(due.candidates().get(0).fileId()))
+            .thenThrow(new OpenSubtitlesChargedException("OpenSubtitles file refused", permanent));
         storingReferences();
         ArgumentCaptor<OpenSubtitlesReference> saved = ArgumentCaptor.forClass(OpenSubtitlesReference.class);
         startAndRun();
@@ -873,7 +886,7 @@ class SidecarCheckRefresherTest {
         assertThat(saved.getValue().getFailedDownloads()).isEqualTo(3);
         assertThat(saved.getValue().isFinal()).isTrue();
         verify(service).save(second, two, AGREES, NOW);
-        assertThat(messages()).containsExactly(
+        assertThat(messages()).containsExactly(UNREADABLE_10, USED_20,
             "Subtitle file checks finished: 1 saved, 0 changed meanwhile, 1 unusable references, 0 failed");
     }
 
@@ -982,7 +995,8 @@ class SidecarCheckRefresherTest {
 
     @Test
     void aReferenceFetchedForAnOldImdbIdIsNotReusedAndTheNewIdGetsItsOwnDownloadAndCheck() {
-        DueCheck due = new DueCheck(1L, 10L, "tt9", 5011, "Release", 1, "v10", false, CUES);
+        DueCheck due = new DueCheck(1L, 10L, "tt9", "Original", List.of(candidate(5011, "Release")), Set.of(5011L),
+            "v10", false, CUES);
         when(service.due()).thenReturn(List.of(due));
         // Only the lookup for the film's current IMDb id is asked, and nothing is stored under it.
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt9", 5011)).thenReturn(Optional.empty());
@@ -998,18 +1012,5 @@ class SidecarCheckRefresherTest {
         verify(api).download(5011);
         assertThat(saved.getValue().getImdbId()).isEqualTo("tt9");
         assertThat(saved.getValue().getId()).isEqualTo(77L);
-    }
-
-    @Test
-    void anEditionWhoseBestResultHasAnUnknownFileCountIsSkippedWithNoDownload() {
-        DueCheck unknown = new DueCheck(1L, 10L, "tt1", 5011, "Legacy", null, "v10", false, CUES);
-        when(service.due()).thenReturn(List.of(unknown));
-
-        startAndRun();
-
-        verify(api).downloadsEnabled();
-        verify(budget).blockedUntil(NOW);
-        verifyNoMoreInteractions(api, budget);
-        assertThat(messages()).contains("Edition 10 not checked: Only multi-part subtitles on OpenSubtitles");
     }
 }

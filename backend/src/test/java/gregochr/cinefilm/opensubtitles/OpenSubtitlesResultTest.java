@@ -2,6 +2,7 @@ package gregochr.cinefilm.opensubtitles;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /** The JSON kept on the film. */
@@ -14,6 +15,49 @@ class OpenSubtitlesResultTest {
 
         assertThat(result.toJson()).isEqualTo("{\"id\":42,\"fileId\":99,\"release\":\"Taken.2008\",\"fps\":23.976,"
             + "\"downloadCount\":300,\"fromTrusted\":true,\"hearingImpaired\":false,\"fileCount\":1}");
+    }
+
+    @Test
+    void theFileNameIsKeptWhenThereIsOneAndReadBackAndReadsAsNullWhenAbsent() {
+        OpenSubtitlesResult named = new OpenSubtitlesResult(42, 99, "Taken.2008", 23.976, 300, true, false, null, null,
+            1, "Taken.Extended.srt");
+
+        assertThat(named.toJson()).endsWith("\"fileCount\":1,\"fileName\":\"Taken.Extended.srt\"}");
+        assertThat(OpenSubtitlesResult.fromJson(named.toJson()).fileName()).isEqualTo("Taken.Extended.srt");
+        assertThat(OpenSubtitlesResult.fromJson("{\"id\":1,\"fileId\":2,\"fileName\":7}").fileName()).isNull();
+        assertThat(OpenSubtitlesResult.fromJson(named.toJson()).cutTags()).containsExactly(CutTag.EXTENDED);
+    }
+
+    @Test
+    void theCutTagsComeFromTheReleaseAndTheFileNameTogether() {
+        OpenSubtitlesResult both = new OpenSubtitlesResult(1, 2, "Film.Extended.BluRay", null, 0, false, false, null,
+            null, 1, "film.theatrical.srt");
+
+        assertThat(both.cutTags()).containsExactlyInAnyOrder(CutTag.EXTENDED, CutTag.THEATRICAL);
+        assertThat(new OpenSubtitlesResult(1, 2, null, null, 0, false, false, null, null).cutTags()).isEmpty();
+    }
+
+    @Test
+    void aListOfResultsRoundTripsInOrderAndSkipsWhatCannotBeRead() {
+        OpenSubtitlesResult first = new OpenSubtitlesResult(1, 11, "a", 23.976, 5, true, false, null, null, 1, "a.srt");
+        OpenSubtitlesResult second = new OpenSubtitlesResult(2, 22, null, null, 0, false, true, null, null, 2);
+
+        String json = OpenSubtitlesResult.listToJson(List.of(first, second));
+
+        assertThat(json).startsWith("[{\"id\":1,\"fileId\":11").endsWith("\"fileCount\":2}]");
+        assertThat(OpenSubtitlesResult.listFromJson(json)).extracting(OpenSubtitlesResult::fileId)
+            .containsExactly(11L, 22L);
+        assertThat(OpenSubtitlesResult.listFromJson(json).get(0).fileName()).isEqualTo("a.srt");
+        assertThat(OpenSubtitlesResult.listFromJson("[{\"id\":1,\"fileId\":11},{\"id\":0,\"fileId\":5},7]"))
+            .extracting(OpenSubtitlesResult::fileId).containsExactly(11L);
+        assertThat(OpenSubtitlesResult.listToJson(List.of())).isEqualTo("[]");
+        assertThat(OpenSubtitlesResult.listFromJson("[]")).isEmpty();
+    }
+
+    @Test
+    void aStoredListThatIsNotAJsonArrayReadsAsEmpty() {
+        assertThat(OpenSubtitlesResult.listFromJson("{\"id\":1,\"fileId\":2}")).isEmpty();
+        assertThat(OpenSubtitlesResult.listFromJson("not json")).isEmpty();
     }
 
     @Test

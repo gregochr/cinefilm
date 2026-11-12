@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
  * never searched, was searched under another IMDb id, or was searched with no result more than 30 days ago (subtitles
  * get uploaded later); never searched first, then the oldest. A search costs no download quota, and films that already
  * have a subtitle file are searched too (a later phase compares with the best result). The client paces the requests.
+ * The top single-file candidates are saved with the best result (a legacy film with none is searched again, first).
  * Each result is saved with one statement that only matches while the film still has the IMDb id it was searched
  * for, so a film whose IMDb id changed meanwhile keeps what the change wrote and is left for the next run. An outage
  * stops the run without stamping anything, so the films are searched again; it is never recorded as "no results".
@@ -172,6 +173,7 @@ public class OpenSubtitlesRefresher {
     private boolean search(ImdbRef ref) {
         OpenSubtitlesSearch found = api.searchForced(ref.imdbId());
         String best = found.best() == null ? null : found.best().toJson();
-        return films.saveOpenSubtitles(ref.id(), ref.imdbId(), found.count(), best, clock.instant()) > 0;
+        String candidates = OpenSubtitlesResult.listToJson(found.candidates());
+        return films.saveOpenSubtitles(ref.id(), ref.imdbId(), found.count(), best, candidates, clock.instant()) > 0;
     }
 }

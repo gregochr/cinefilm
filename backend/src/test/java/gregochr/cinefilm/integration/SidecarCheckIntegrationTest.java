@@ -14,16 +14,22 @@ import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesBudget;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
+import gregochr.cinefilm.subtitle.ForcedCheckCandidate;
+import gregochr.cinefilm.subtitle.ForcedCheckCandidateRepository;
 import gregochr.cinefilm.subtitle.ForcedSubtitleCheck;
 import gregochr.cinefilm.subtitle.ForcedSubtitleCheckRepository;
+import gregochr.cinefilm.subtitle.ReferenceWalk;
+import gregochr.cinefilm.subtitle.SidecarCheckService;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
-/** V16's tables on PostgreSQL: the unique keys, the cascades and the budget's atomic statements. */
+/** V16's and V18's tables on PostgreSQL: the unique keys, the cascades and the budget's atomic statements. */
 @Transactional
 class SidecarCheckIntegrationTest extends IntegrationTestBase {
 
@@ -161,5 +167,143 @@ class SidecarCheckIntegrationTest extends IntegrationTestBase {
         film.setOsSearchedImdbId("tt9999999");
         films.saveAndFlush(film);
         assertThat(films.findOpenSubtitlesBest()).isEmpty();
+    }
+
+    // ---- V18: candidates, rules version, best file id and the ledger of candidates ----
+
+    @Autowired
+    private ForcedCheckCandidateRepository candidates;
+
+    @Autowired
+    private SidecarCheckService checkService;
+
+    @Test
+    void theCandidatesJsonRoundTripsAtFullLengthAndAnImdbIdChangeForgetsIt() {
+        Film film = saved();
+        OpenSubtitlesResult first = new OpenSubtitlesResult(1, 11, "a".repeat(200), 23.976, 5, true, false, null, null,
+            1, "b".repeat(200));
+        OpenSubtitlesResult second = new OpenSubtitlesResult(2, 22, "Rings.Extended", null, 0, false, true, null, null);
+        String json = OpenSubtitlesResult.listToJson(java.util.List.of(first, second));
+        films.saveOpenSubtitles(film.getId(), "tt0936501", 2, first.toJson(), json, NOW);
+        entityManager.clear();
+
+        Film loaded = films.findById(film.getId()).orElseThrow();
+
+        assertThat(loaded.getOsCandidates()).isEqualTo(json);
+        assertThat(OpenSubtitlesResult.listFromJson(loaded.getOsCandidates())).extracting(OpenSubtitlesResult::fileId)
+            .containsExactly(11L, 22L);
+        loaded.setOsCandidates("x".repeat(9000));
+        films.saveAndFlush(loaded);
+        entityManager.clear();
+        assertThat(films.findById(film.getId()).orElseThrow().getOsCandidates()).hasSize(9000);
+        Film changed = films.findById(film.getId()).orElseThrow();
+        changed.setImdbId("tt0000002");
+        assertThat(changed.getOsCandidates()).isNull();
+    }
+
+    @Test
+    void theDueQueryAndTheBestQueryUnderstandCandidates() {
+        Film film = saved();
+        films.saveOpenSubtitles(film.getId(), "tt0936501", 2, "{\"id\":1,\"fileId\":2,\"fileCount\":1}", "[]", NOW);
+        entityManager.clear();
+        assertThat(films.findOpenSubtitlesDue(NOW.minusSeconds(1))).isEmpty();
+        assertThat(films.findOpenSubtitlesBest()).singleElement()
+            .satisfies(ref -> assertThat(ref.osCandidates()).isEqualTo("[]"));
+
+        Film legacy = films.findById(film.getId()).orElseThrow();
+        legacy.setOsCandidates(null);
+        films.saveAndFlush(legacy);
+        entityManager.clear();
+
+        assertThat(films.findOpenSubtitlesDue(NOW.minusSeconds(1))).extracting(FilmRepository.ImdbRef::id)
+            .containsExactly(film.getId());
+    }
+
+    @Test
+    void aCheckRowMadeWithNoRulesVersionOrBestFileReadsAsVersionOneWithNoBestFile() {
+        Film film = saved();
+        OpenSubtitlesReference reference = reference(film, 5011);
+        Long editionId = film.getEditions().get(0).getId();
+        entityManager.createNativeQuery("insert into forced_subtitle_check (edition_id, served_version, reference_id,"
+            + " verdict, matched_share, served_count, reference_count, best_offset_ms, reasons, checked_at) values "
+            + "(:edition, 'v', :reference, 'AGREES', 1.0, 1, 1, 0, '', :at)")
+            .setParameter("edition", editionId).setParameter("reference", reference.getId()).setParameter("at", NOW)
+            .executeUpdate();
+        entityManager.clear();
+
+        ForcedSubtitleCheck loaded = checks.findByEditionId(editionId).orElseThrow();
+
+        assertThat(loaded.getRulesVersion()).isEqualTo(1);
+        assertThat(loaded.getBestFileId()).isNull();
+        assertThat(loaded.isCurrent("v", "tt0936501", reference, 5011)).isFalse();
+    }
+
+    @Test
+    void aSavedCheckCarriesTheCurrentRulesVersionAndTheBestFileId() {
+        Film film = saved();
+        ForcedSubtitleCheck row = check(film, reference(film, 5011));
+        row.setBestFileId(4000L);
+        checks.saveAndFlush(row);
+        entityManager.clear();
+
+        ForcedSubtitleCheck loaded = checks.findByEditionId(row.getEditionId()).orElseThrow();
+
+        assertThat(loaded.getRulesVersion()).isEqualTo(ForcedSubtitleCheck.RULES_VERSION);
+        assertThat(loaded.getBestFileId()).isEqualTo(4000L);
+    }
+
+    @Test
+    void theLedgerOfCandidatesIsPersistedOncePerEditionImdbIdAndFileAndCapsAtThree() {
+        Film film = saved();
+        Long editionId = film.getEditions().get(0).getId();
+
+        checkService.markTried(editionId, "tt0936501", 5011, NOW);
+        checkService.markTried(editionId, "tt0936501", 5011, NOW);
+        checkService.markTried(editionId, "tt0936501", 5012, NOW);
+        checkService.markTried(editionId, "tt0936501", 5013, NOW);
+        checkService.markTried(editionId, "tt0000002", 5011, NOW);
+        entityManager.flush();
+        entityManager.clear();
+
+        List<ForcedCheckCandidate> rows = candidates.findByEditionIdIn(List.of(editionId));
+        assertThat(rows).hasSize(4);
+        List<ForcedCheckCandidate> forFilm = rows.stream().filter(r -> r.getImdbId().equals("tt0936501")).toList();
+        assertThat(forFilm).extracting(ForcedCheckCandidate::getOsFileId).containsExactlyInAnyOrder(5011L, 5012L,
+            5013L);
+        assertThat(forFilm).hasSize(ReferenceWalk.MAX_CANDIDATES);
+        assertThat(candidates.existsByEditionIdAndImdbIdAndOsFileId(editionId, "tt0936501", 5011)).isTrue();
+        assertThat(candidates.existsByEditionIdAndImdbIdAndOsFileId(editionId, "tt0936501", 5014)).isFalse();
+    }
+
+    private ForcedCheckCandidate ledgerRow(Long editionId) {
+        ForcedCheckCandidate row = new ForcedCheckCandidate();
+        row.setEditionId(editionId);
+        row.setImdbId("tt0936501");
+        row.setOsFileId(5011);
+        row.setTriedAt(NOW);
+        return row;
+    }
+
+    @Test
+    void theLedgerKeepsOneRowPerEditionImdbIdAndFile() {
+        Long editionId = saved(false).getEditions().get(0).getId();
+        candidates.saveAndFlush(ledgerRow(editionId));
+        ForcedCheckCandidate duplicate = ledgerRow(editionId);
+
+        // Last in the test: on PostgreSQL the failed statement aborts the transaction.
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> candidates.saveAndFlush(duplicate))
+            .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void theLedgerGoesWithItsEdition() {
+        Long editionId = saved(false).getEditions().get(0).getId();
+        candidates.saveAndFlush(ledgerRow(editionId));
+        entityManager.clear();
+
+        editions.deleteByIds(List.of(editionId));
+        entityManager.clear();
+
+        assertThat(candidates.findByEditionIdIn(List.of(editionId))).isEmpty();
     }
 }

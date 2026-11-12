@@ -8,14 +8,20 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesDownload;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesQuotaException;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesSearchFinished;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesUnavailableException;
+import gregochr.cinefilm.subtitle.ReferenceWalk.Attempt;
+import gregochr.cinefilm.subtitle.SubtitleComparison.Result;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
@@ -28,16 +34,19 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 /**
- * Checks the forced subtitle each edition serves against OpenSubtitles' file for the film
+ * Checks the forced subtitle each edition serves against OpenSubtitles' files for the film
  * ({@link SubtitleComparison}), in the background and one run at a time: after the OpenSubtitles search ends, after a
  * scan, at start-up and daily. It is off while downloads are off (no username and password).
  *
- * <p>For each due edition ({@link SidecarCheckService#due}) it reuses the reference already downloaded for the film's
- * best file, or downloads it within the daily budget and stores it at once (a download is never repeated, and one that
- * cannot be read is stored as unusable and never fetched again). The result is saved only while the edition still
- * serves the version that was compared. A spent budget or an OpenSubtitles limit ends the run until the budget comes
- * back; an outage ends it with nothing stored (never a verdict); a failure on one edition is counted and the run
- * goes on. A request that arrives while a run is going makes it go round once more. Nothing here throws to its caller.
+ * <p>For each due edition ({@link SidecarCheckService#due}) it walks the film's candidate files, the best fit for the
+ * edition's cut first ({@link ReferenceWalk}): each is reused when already downloaded, or downloaded within the daily
+ * budget and stored at once (a download is never repeated, and one that cannot be read is stored as unusable and never
+ * fetched again). It stops at the first file that agrees, or moves to the next when a file was full subtitles or looks
+ * like another cut, comparing with at most three files per edition and IMDb id, ever. The best result found is saved
+ * only while the edition still serves the version that was compared. A spent budget or an OpenSubtitles limit ends the
+ * run until the budget comes back; an outage ends it with nothing stored (never a verdict); a failure on one edition
+ * is counted and the run goes on. A request that arrives while a run is going makes it go round once more. Nothing
+ * here throws to its caller.
  */
 @Service
 public class SidecarCheckRefresher {
@@ -100,7 +109,7 @@ public class SidecarCheckRefresher {
         startDue();
     }
 
-    /** Checks after a search run ends (films may have a new best result). */
+    /** Checks after a search run ends (films may have new candidates). */
     @EventListener
     public void onSearchFinished(OpenSubtitlesSearchFinished event) {
         startDue();
@@ -178,18 +187,16 @@ public class SidecarCheckRefresher {
             }
             for (DueCheck due : service.due()) {
                 try {
-                    if (due.osFileCount() == null || due.osFileCount() > 1) {
+                    if (due.candidates().isEmpty()) {
                         // Never compare part of a film against the whole: no download, no verdict.
                         multiPart++;
                         LOG.info("Edition {} not checked: {}", due.editionId(), MULTI_PART);
                         continue;
                     }
-                    OpenSubtitlesReference reference = reference(due);
-                    if (!reference.isUsable()) {
+                    Attempt kept = walk(due);
+                    if (kept == null) {
                         unusable++;
-                    } else if (service.save(due, reference,
-                        SubtitleComparison.compare(due.cues(), SrtParser.cues(reference.getCuesText())),
-                        clock.instant())) {
+                    } else if (service.save(due, kept.reference(), kept.result(), clock.instant())) {
                         saved++;
                     } else {
                         dropped++;
@@ -214,13 +221,76 @@ public class SidecarCheckRefresher {
     }
 
     /**
-     * The reference for the film's best OpenSubtitles file: the stored one, or a download within the budget, stored
-     * before anything else is done with it.
+     * Compares the edition's served cues with its OpenSubtitles candidates, the best fit first, and says which result
+     * to keep ({@link ReferenceWalk}). A candidate whose reference is stored is compared locally, with no download; a
+     * new one is downloaded within the budget. At most {@value ReferenceWalk#MAX_CANDIDATES} files are ever compared
+     * per edition and IMDb id (the ledger is persisted). An outage, a spent budget or a charged transient failure on
+     * the way ends the walk with nothing saved; the references already stored are used again by the next walk.
+     *
+     * @return the reference and result to save, or null when no candidate had a usable reference
      */
-    private OpenSubtitlesReference reference(DueCheck due) {
+    private Attempt walk(DueCheck due) {
+        Set<Long> tried = new HashSet<>(due.triedFileIds());
+        List<Attempt> attempts = new ArrayList<>();
+        int position = 0;
+        for (OpenSubtitlesResult candidate : due.candidates()) {
+            position++;
+            boolean known = tried.contains(candidate.fileId());
+            if (!known && tried.size() >= ReferenceWalk.MAX_CANDIDATES) {
+                LOG.info("Edition {}: candidate {} (file {}) skipped, {} OpenSubtitles files were already tried",
+                    due.editionId(), position, candidate.fileId(), tried.size());
+                // Files already tried further down are still reused: that costs no download and keeps the cap.
+                continue;
+            }
+            OpenSubtitlesReference reference = tried(due, candidate, known);
+            tried.add(candidate.fileId());
+            if (!reference.isUsable()) {
+                LOG.info("Edition {}: candidate {} (file {}) skipped, it could not be read", due.editionId(),
+                    position, candidate.fileId());
+                continue;
+            }
+            Result result = SubtitleComparison.compare(due.cues(), SrtParser.cues(reference.getCuesText()));
+            attempts.add(new Attempt(reference, result));
+            if (!ReferenceWalk.moveOn(result)) {
+                break;
+            }
+            LOG.info("Edition {}: candidate {} (file {}) was {}, trying the next", due.editionId(), position,
+                candidate.fileId(), result.fullReference() ? "full subtitles" : "probably another cut");
+        }
+        if (attempts.isEmpty()) {
+            return null;
+        }
+        Attempt kept = ReferenceWalk.choose(attempts);
+        LOG.info("Edition {}: used OpenSubtitles file {} (compared {}), {}", due.editionId(),
+            kept.reference().getOsFileId(), attempts.size(), kept.result().verdict());
+        return new Attempt(kept.reference(), kept.result().withReasons(ReferenceWalk.reasons(attempts, kept)));
+    }
+
+    /** The candidate's reference, put on the ledger of the edition's candidates (a charged failure counts too). */
+    private OpenSubtitlesReference tried(DueCheck due, OpenSubtitlesResult candidate, boolean known) {
+        OpenSubtitlesReference reference;
+        try {
+            reference = reference(due, candidate);
+        } catch (OpenSubtitlesChargedException e) {
+            if (!known) {
+                service.markTried(due.editionId(), due.imdbId(), candidate.fileId(), clock.instant());
+            }
+            throw e;
+        }
+        if (!known) {
+            service.markTried(due.editionId(), due.imdbId(), candidate.fileId(), clock.instant());
+        }
+        return reference;
+    }
+
+    /**
+     * The reference for one OpenSubtitles file: the stored one, or a download within the budget, stored before
+     * anything else is done with it.
+     */
+    private OpenSubtitlesReference reference(DueCheck due, OpenSubtitlesResult candidate) {
         // Only a reference fetched for the film's current IMDb id may be reused.
         OpenSubtitlesReference stored = references
-            .findByFilmIdAndImdbIdAndOsFileId(due.filmId(), due.imdbId(), due.osFileId()).orElse(null);
+            .findByFilmIdAndImdbIdAndOsFileId(due.filmId(), due.imdbId(), candidate.fileId()).orElse(null);
         if (stored != null && stored.isFinal()) {
             return stored;
         }
@@ -231,13 +301,13 @@ public class SidecarCheckRefresher {
         }
         OpenSubtitlesDownload download;
         try {
-            download = api.download(due.osFileId());
+            download = api.download(candidate.fileId());
         } catch (OpenSubtitlesQuotaException e) {
             budget.exhaust(day, dailyLimit, cap(e.resetTimeUtc(), now));
             throw new Stop("OpenSubtitles' download limit is reached");
         } catch (OpenSubtitlesChargedException e) {
             // OpenSubtitles issued its link, so the account is charged: no refund, whatever went wrong after.
-            OpenSubtitlesReference failed = recordFailure(due, stored, e.permanent(), now);
+            OpenSubtitlesReference failed = recordFailure(due, candidate, stored, e.permanent(), now);
             if (e.permanent()) {
                 return failed;
             }
@@ -247,7 +317,7 @@ public class SidecarCheckRefresher {
             budget.refund(day);
             throw e;
         }
-        OpenSubtitlesReference saved = store(due, stored, download, now);
+        OpenSubtitlesReference saved = store(due, candidate, stored, download, now);
         if (download.remaining() != null && download.remaining() <= 0) {
             budget.exhaust(day, dailyLimit, cap(download.resetTimeUtc(), now));
         }
@@ -258,48 +328,49 @@ public class SidecarCheckRefresher {
      * Records a charged download that gave no file: a permanent failure makes the file id final at once, a transient
      * one counts towards {@link OpenSubtitlesReference#MAX_FAILED_DOWNLOADS}.
      */
-    private OpenSubtitlesReference recordFailure(DueCheck due, OpenSubtitlesReference stored, boolean permanent,
-                                                 Instant now) {
-        OpenSubtitlesReference reference = blank(due, stored, now);
+    private OpenSubtitlesReference recordFailure(DueCheck due, OpenSubtitlesResult candidate,
+                                                 OpenSubtitlesReference stored, boolean permanent, Instant now) {
+        OpenSubtitlesReference reference = blank(due, candidate, stored, now);
         reference.setCuesText("");
         reference.setCueCount(0);
         reference.setFailedDownloads(permanent ? OpenSubtitlesReference.MAX_FAILED_DOWNLOADS
             : Math.min(OpenSubtitlesReference.MAX_FAILED_DOWNLOADS, reference.getFailedDownloads() + 1));
-        return save(due, reference);
+        return save(due, candidate, reference);
     }
 
-    /** The stored row to update, or a new one for the film's best file. */
-    private static OpenSubtitlesReference blank(DueCheck due, OpenSubtitlesReference stored, Instant now) {
+    /** The stored row to update, or a new one for the candidate's file. */
+    private static OpenSubtitlesReference blank(DueCheck due, OpenSubtitlesResult candidate,
+                                                OpenSubtitlesReference stored, Instant now) {
         OpenSubtitlesReference reference = stored != null ? stored : new OpenSubtitlesReference();
         reference.setFilmId(due.filmId());
         reference.setImdbId(due.imdbId());
-        reference.setOsFileId(due.osFileId());
-        reference.setRelease(due.osRelease());
+        reference.setOsFileId(candidate.fileId());
+        reference.setRelease(candidate.release());
         reference.setFetchedAt(now);
         return reference;
     }
 
     /** Stores a download as the film's reference: an unreadable or oversized one is kept as unusable and final. */
-    private OpenSubtitlesReference store(DueCheck due, OpenSubtitlesReference stored, OpenSubtitlesDownload download,
-                                         Instant now) {
+    private OpenSubtitlesReference store(DueCheck due, OpenSubtitlesResult candidate, OpenSubtitlesReference stored,
+                                         OpenSubtitlesDownload download, Instant now) {
         List<SubtitleCue> cues = download.parsed().cues();
         String text = SrtParser.format(cues);
         boolean usable = !cues.isEmpty() && text.length() <= MAX_REFERENCE_CHARS;
-        OpenSubtitlesReference reference = blank(due, stored, now);
+        OpenSubtitlesReference reference = blank(due, candidate, stored, now);
         reference.setCuesText(usable ? text : "");
         reference.setCueCount(usable ? cues.size() : 0);
         if (!usable) {
             reference.setFailedDownloads(OpenSubtitlesReference.MAX_FAILED_DOWNLOADS);
         }
-        return save(due, reference);
+        return save(due, candidate, reference);
     }
 
-    private OpenSubtitlesReference save(DueCheck due, OpenSubtitlesReference reference) {
+    private OpenSubtitlesReference save(DueCheck due, OpenSubtitlesResult candidate, OpenSubtitlesReference reference) {
         try {
             return references.saveAndFlush(reference);
         } catch (DataIntegrityViolationException e) {
             // Another writer stored it first: use theirs.
-            return references.findByFilmIdAndImdbIdAndOsFileId(due.filmId(), due.imdbId(), due.osFileId())
+            return references.findByFilmIdAndImdbIdAndOsFileId(due.filmId(), due.imdbId(), candidate.fileId())
                 .orElseThrow(() -> e);
         }
     }

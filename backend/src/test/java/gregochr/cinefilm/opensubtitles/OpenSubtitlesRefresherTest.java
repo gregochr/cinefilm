@@ -101,15 +101,15 @@ class OpenSubtitlesRefresherTest {
         when(films.findOpenSubtitlesDue(CUTOFF)).thenReturn(List.of(TAKEN, HEAT));
         when(api.searchForced("tt0936501")).thenReturn(new OpenSubtitlesSearch(7, best));
         when(api.searchForced("tt0113277")).thenReturn(new OpenSubtitlesSearch(2, result(5)));
-        when(films.saveOpenSubtitles(1L, "tt0936501", 7, best.toJson(), NOW)).thenReturn(1);
-        when(films.saveOpenSubtitles(2L, "tt0113277", 2, result(5).toJson(), NOW)).thenReturn(1);
+        when(films.saveOpenSubtitles(1L, "tt0936501", 7, best.toJson(), "[]", NOW)).thenReturn(1);
+        when(films.saveOpenSubtitles(2L, "tt0113277", 2, result(5).toJson(), "[]", NOW)).thenReturn(1);
 
         startAndRun();
 
         verify(films).saveOpenSubtitles(1L, "tt0936501", 7, "{\"id\":77,\"fileId\":1077,\"release\":\"Taken.2008\","
             + "\"fps\":23.976,\"downloadCount\":300,\"fromTrusted\":true,\"hearingImpaired\":false,"
-            + "\"fileCount\":1}", NOW);
-        verify(films).saveOpenSubtitles(2L, "tt0113277", 2, result(5).toJson(), NOW);
+            + "\"fileCount\":1}", "[]", NOW);
+        verify(films).saveOpenSubtitles(2L, "tt0113277", 2, result(5).toJson(), "[]", NOW);
         assertThat(messages()).contains("Subtitle search finished: 2 saved, 0 changed meanwhile, 0 failed");
         assertThat(refresher.isRunning()).isFalse();
     }
@@ -118,11 +118,11 @@ class OpenSubtitlesRefresherTest {
     void aSearchWithNoResultsIsSavedAsACountOfZeroAndNoBest() {
         when(films.findOpenSubtitlesDue(CUTOFF)).thenReturn(List.of(TAKEN));
         when(api.searchForced("tt0936501")).thenReturn(new OpenSubtitlesSearch(0, null));
-        when(films.saveOpenSubtitles(1L, "tt0936501", 0, null, NOW)).thenReturn(1);
+        when(films.saveOpenSubtitles(1L, "tt0936501", 0, null, "[]", NOW)).thenReturn(1);
 
         startAndRun();
 
-        verify(films).saveOpenSubtitles(1L, "tt0936501", 0, null, NOW);
+        verify(films).saveOpenSubtitles(1L, "tt0936501", 0, null, "[]", NOW);
     }
 
     @Test
@@ -131,9 +131,9 @@ class OpenSubtitlesRefresherTest {
         when(api.searchForced("tt0211915")).thenReturn(new OpenSubtitlesSearch(0, null));
         when(api.searchForced("tt0936501")).thenReturn(new OpenSubtitlesSearch(0, null));
         when(api.searchForced("tt0113277")).thenReturn(new OpenSubtitlesSearch(0, null));
-        when(films.saveOpenSubtitles(3L, "tt0211915", 0, null, NOW)).thenReturn(1);
-        when(films.saveOpenSubtitles(1L, "tt0936501", 0, null, NOW)).thenReturn(1);
-        when(films.saveOpenSubtitles(2L, "tt0113277", 0, null, NOW)).thenReturn(1);
+        when(films.saveOpenSubtitles(3L, "tt0211915", 0, null, "[]", NOW)).thenReturn(1);
+        when(films.saveOpenSubtitles(1L, "tt0936501", 0, null, "[]", NOW)).thenReturn(1);
+        when(films.saveOpenSubtitles(2L, "tt0113277", 0, null, "[]", NOW)).thenReturn(1);
 
         startAndRun();
 
@@ -148,12 +148,12 @@ class OpenSubtitlesRefresherTest {
         when(films.findOpenSubtitlesDue(CUTOFF)).thenReturn(List.of(TAKEN, HEAT, AMELIE));
         when(api.searchForced("tt0936501")).thenReturn(new OpenSubtitlesSearch(1, result(5)));
         when(api.searchForced("tt0113277")).thenThrow(new OpenSubtitlesUnavailableException("OpenSubtitles is down"));
-        when(films.saveOpenSubtitles(1L, "tt0936501", 1, result(5).toJson(), NOW)).thenReturn(1);
+        when(films.saveOpenSubtitles(1L, "tt0936501", 1, result(5).toJson(), "[]", NOW)).thenReturn(1);
 
         startAndRun();
 
         verify(films).findOpenSubtitlesDue(CUTOFF);
-        verify(films).saveOpenSubtitles(1L, "tt0936501", 1, result(5).toJson(), NOW);
+        verify(films).saveOpenSubtitles(1L, "tt0936501", 1, result(5).toJson(), "[]", NOW);
         verifyNoMoreInteractions(films);
         verify(api).searchForced("tt0936501");
         verify(api).searchForced("tt0113277");
@@ -180,13 +180,13 @@ class OpenSubtitlesRefresherTest {
         when(api.searchForced("tt0936501")).thenReturn(new OpenSubtitlesSearch(7, result(5)));
         when(api.searchForced("tt0113277")).thenReturn(new OpenSubtitlesSearch(2, result(6)));
         // The statement matches on the IMDb id the search was for: a change makes it update no row.
-        when(films.saveOpenSubtitles(1L, "tt0936501", 7, result(5).toJson(), NOW)).thenReturn(0);
-        when(films.saveOpenSubtitles(2L, "tt0113277", 2, result(6).toJson(), NOW)).thenReturn(1);
+        when(films.saveOpenSubtitles(1L, "tt0936501", 7, result(5).toJson(), "[]", NOW)).thenReturn(0);
+        when(films.saveOpenSubtitles(2L, "tt0113277", 2, result(6).toJson(), "[]", NOW)).thenReturn(1);
 
         startAndRun();
 
-        verify(films).saveOpenSubtitles(1L, "tt0936501", 7, result(5).toJson(), NOW);
-        verify(films).saveOpenSubtitles(2L, "tt0113277", 2, result(6).toJson(), NOW);
+        verify(films).saveOpenSubtitles(1L, "tt0936501", 7, result(5).toJson(), "[]", NOW);
+        verify(films).saveOpenSubtitles(2L, "tt0113277", 2, result(6).toJson(), "[]", NOW);
         assertThat(messages()).contains("Subtitle search finished: 1 saved, 1 changed meanwhile, 0 failed");
     }
 
@@ -196,13 +196,13 @@ class OpenSubtitlesRefresherTest {
         when(api.searchForced("tt0936501")).thenThrow(new IllegalArgumentException("Not an IMDb id"));
         when(api.searchForced("tt0113277")).thenThrow(new IllegalStateException("bad json"));
         when(api.searchForced("tt0211915")).thenReturn(new OpenSubtitlesSearch(0, null));
-        when(films.saveOpenSubtitles(3L, "tt0211915", 0, null, NOW)).thenReturn(1);
+        when(films.saveOpenSubtitles(3L, "tt0211915", 0, null, "[]", NOW)).thenReturn(1);
 
         startAndRun();
 
         InOrder order = inOrder(films);
         order.verify(films).findOpenSubtitlesDue(CUTOFF);
-        order.verify(films).saveOpenSubtitles(3L, "tt0211915", 0, null, NOW);
+        order.verify(films).saveOpenSubtitles(3L, "tt0211915", 0, null, "[]", NOW);
         order.verifyNoMoreInteractions();
         assertThat(messages()).contains("Could not search subtitles for film 1: IllegalArgumentException",
             "Could not search subtitles for film 2: IllegalStateException",
@@ -214,8 +214,8 @@ class OpenSubtitlesRefresherTest {
         when(films.findOpenSubtitlesDue(CUTOFF)).thenReturn(List.of(TAKEN, HEAT));
         when(api.searchForced("tt0936501")).thenReturn(new OpenSubtitlesSearch(0, null));
         when(api.searchForced("tt0113277")).thenReturn(new OpenSubtitlesSearch(0, null));
-        when(films.saveOpenSubtitles(1L, "tt0936501", 0, null, NOW)).thenThrow(new IllegalStateException("db"));
-        when(films.saveOpenSubtitles(2L, "tt0113277", 0, null, NOW)).thenReturn(1);
+        when(films.saveOpenSubtitles(1L, "tt0936501", 0, null, "[]", NOW)).thenThrow(new IllegalStateException("db"));
+        when(films.saveOpenSubtitles(2L, "tt0113277", 0, null, "[]", NOW)).thenReturn(1);
 
         startAndRun();
 
@@ -449,5 +449,21 @@ class OpenSubtitlesRefresherTest {
 
         assertThat(messages()).contains("A listener of the subtitle search failed: IllegalStateException");
         assertThat(refresher.isRunning()).isFalse();
+    }
+
+    @Test
+    void theCandidatesAreSavedAsAJsonArrayInRankedOrderAlongsideTheBest() {
+        OpenSubtitlesResult best = result(77);
+        OpenSubtitlesResult second = result(5);
+        when(films.findOpenSubtitlesDue(CUTOFF)).thenReturn(List.of(TAKEN));
+        when(api.searchForced("tt0936501")).thenReturn(new OpenSubtitlesSearch(2, best, List.of(best, second)));
+        when(films.saveOpenSubtitles(1L, "tt0936501", 2, best.toJson(),
+            OpenSubtitlesResult.listToJson(List.of(best, second)), NOW)).thenReturn(1);
+
+        startAndRun();
+
+        verify(films).saveOpenSubtitles(1L, "tt0936501", 2, best.toJson(),
+            "[" + best.toJson() + "," + second.toJson() + "]", NOW);
+        assertThat(messages()).contains("Subtitle search finished: 1 saved, 0 changed meanwhile, 0 failed");
     }
 }

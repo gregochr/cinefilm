@@ -134,15 +134,18 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
     /**
      * Films with an IMDb id whose OpenSubtitles search is due: never searched, searched under another IMDb id, or
      * searched with no result before the cutoff, or holding a best result stored before the file count was kept (no
-     * {@code fileCount} in its JSON: it may be one disc of several, so it is searched again, those first).
+     * {@code fileCount} in its JSON: it may be one disc of several, so it is searched again, those first), or
+     * searched before the candidates were kept ({@code os_candidates} null: those with a best result first).
      * Never-searched next, then the oldest search.
      */
     @org.springframework.data.jpa.repository.Query(
         "select new gregochr.cinefilm.film.FilmRepository$ImdbRef(f.id, f.imdbId) from Film f "
             + "where f.imdbId is not null and (f.osSearchedAt is null or f.osSearchedImdbId is null "
             + "or f.osSearchedImdbId <> f.imdbId or (f.osForcedCount = 0 and f.osSearchedAt < :cutoff) "
+            + "or f.osCandidates is null "
             + "or (f.osBest is not null and f.osBest not like '%\"fileCount\"%')) "
-            + "order by case when f.osBest is not null and f.osBest not like '%\"fileCount\"%' then 0 else 1 end, "
+            + "order by case when f.osBest is not null and (f.osCandidates is null "
+            + "or f.osBest not like '%\"fileCount\"%') then 0 else 1 end, "
             + "f.osSearchedAt asc nulls first, f.id asc")
     List<ImdbRef> findOpenSubtitlesDue(
         @org.springframework.data.repository.query.Param("cutoff") java.time.Instant cutoff);
@@ -156,12 +159,13 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
     @org.springframework.data.jpa.repository.Modifying
     @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Query(
-        "update Film f set f.osForcedCount = :count, f.osBest = :best, f.osSearchedImdbId = :imdbId, "
-            + "f.osSearchedAt = :at where f.id = :id and f.imdbId = :imdbId")
+        "update Film f set f.osForcedCount = :count, f.osBest = :best, f.osCandidates = :candidates, "
+            + "f.osSearchedImdbId = :imdbId, f.osSearchedAt = :at where f.id = :id and f.imdbId = :imdbId")
     int saveOpenSubtitles(@org.springframework.data.repository.query.Param("id") Long id,
                           @org.springframework.data.repository.query.Param("imdbId") String imdbId,
                           @org.springframework.data.repository.query.Param("count") int count,
                           @org.springframework.data.repository.query.Param("best") String best,
+                          @org.springframework.data.repository.query.Param("candidates") String candidates,
                           @org.springframework.data.repository.query.Param("at") java.time.Instant at);
 
     /**
@@ -173,8 +177,8 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
      */
     @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
     @org.springframework.data.jpa.repository.Query(
-        "update Film f set f.osForcedCount = null, f.osBest = null, f.osSearchedImdbId = null, "
-            + "f.osSearchedAt = null where f.id = :id")
+        "update Film f set f.osForcedCount = null, f.osBest = null, f.osCandidates = null, "
+            + "f.osSearchedImdbId = null, f.osSearchedAt = null where f.id = :id")
     int clearOpenSubtitles(@org.springframework.data.repository.query.Param("id") Long id);
 
     /**
@@ -183,8 +187,10 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
      * @param id the film
      * @param imdbId its current IMDb id
      * @param osBest the top-ranked result as JSON ({@code OpenSubtitlesResult.toJson})
+     * @param osCandidates the candidates as a JSON array ({@code OpenSubtitlesResult.listToJson}); null when stored
+     *     before they were kept
      */
-    record OsBestRef(Long id, String imdbId, String osBest) {
+    record OsBestRef(Long id, String imdbId, String osBest, String osCandidates) {
     }
 
     /**
@@ -192,8 +198,8 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
      * count or result from a search under another IMDb id does not count.
      */
     @org.springframework.data.jpa.repository.Query(
-        "select new gregochr.cinefilm.film.FilmRepository$OsBestRef(f.id, f.imdbId, f.osBest) from Film f "
-            + "where f.imdbId is not null and f.osSearchedImdbId = f.imdbId and f.osForcedCount > 0 "
+        "select new gregochr.cinefilm.film.FilmRepository$OsBestRef(f.id, f.imdbId, f.osBest, f.osCandidates) "
+            + "from Film f where f.imdbId is not null and f.osSearchedImdbId = f.imdbId and f.osForcedCount > 0 "
             + "and f.osBest is not null order by f.id")
     List<OsBestRef> findOpenSubtitlesBest();
 

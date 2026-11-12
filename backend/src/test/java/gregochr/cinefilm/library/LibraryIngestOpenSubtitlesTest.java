@@ -99,12 +99,12 @@ class LibraryIngestOpenSubtitlesTest extends ApiTestBase {
         em.clear();
         Film loaded = films.findById(id).orElseThrow();
         // Meanwhile the search saves the old IMDb id's result: the entity loaded nulls and will set nulls.
-        assertThat(films.saveOpenSubtitles(id, "tt0000001", 7, "{\"id\":1}", NOW)).isEqualTo(1);
+        assertThat(films.saveOpenSubtitles(id, "tt0000001", 7, "{\"id\":1}", "[]", NOW)).isEqualTo(1);
 
         ingest.applyMovie(loaded, movie("tt0113277"));
 
         assertRowForgotten(id);
-        assertThat(films.saveOpenSubtitles(id, "tt0000001", 7, "{\"id\":1}", NOW)).as("a late search").isZero();
+        assertThat(films.saveOpenSubtitles(id, "tt0000001", 7, "{\"id\":1}", "[]", NOW)).as("a late search").isZero();
         assertThat(films.findById(id).orElseThrow().getOsForcedCount()).isNull();
     }
 
