@@ -107,6 +107,15 @@ public class SidecarCheckRefresher {
         startDue();
     }
 
+    /**
+     * Checks after a download was added: with the timing check off nothing else would ask for its second opinion (with
+     * it on, the download waits for its fit and the timing pass's own event asks).
+     */
+    @EventListener
+    public void onDownloadsFinished(SubtitleDownloadsFinished event) {
+        startDue();
+    }
+
     /** Checks after a timing pass fitted something (a download its timing could not prove is compared instead). */
     @EventListener
     public void onTimingFinished(SidecarTimingFinished event) {

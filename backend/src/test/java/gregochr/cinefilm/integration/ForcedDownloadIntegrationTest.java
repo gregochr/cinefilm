@@ -179,21 +179,30 @@ class ForcedDownloadIntegrationTest extends IntegrationTestBase {
         assertThat(file.getDownloadedAt()).isNull();
     }
 
+    // On PostgreSQL a failed statement aborts the transaction, so each expected violation is the last statement of its
+    // own test.
+
     @Test
-    void anOriginThatIsNotFileOrOpenSubtitlesIsRefusedAndADownloadNeedsItsFileId() {
+    void anOriginThatIsNotFileOrOpenSubtitlesIsRefused() {
         Film film = saved("Taken", "tt0936501");
         SubtitleSidecar owner = owners(film);
-        SubtitleSidecar download = download(film, 5011);
 
         assertThatThrownBy(() -> jdbc.update("update subtitle_sidecar set origin = 'ROBOT' where id = ?",
             owner.getId())).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void aDownloadNeedsItsOpenSubtitlesFileId() {
+        Film film = saved("Taken", "tt0936501");
+        SubtitleSidecar download = download(film, 5011);
+
         assertThatThrownBy(() -> jdbc.update(
             "update subtitle_sidecar set opensubtitles_file_id = null where id = ?", download.getId()))
             .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
-    void aDownloadHasOneComparisonWithFullLengthTextAndDeletingTheDownloadDeletesIt() {
+    void aDownloadsComparisonRoundTripsFullLengthTextAndDeletingTheDownloadDeletesIt() {
         Film film = saved("Taken", "tt0936501");
         SubtitleSidecar download = download(film, 5011);
         ForcedDownloadCheck row = check(download, reference(film, 5012));
@@ -207,8 +216,6 @@ class ForcedDownloadIntegrationTest extends IntegrationTestBase {
         assertThat(loaded.getBestOffsetMs()).isEqualTo(-1_200);
         assertThat(loaded.getBestFileId()).isEqualTo(5011L);
         assertThat(loaded.getRulesVersion()).isEqualTo(SubtitleCheckBase.RULES_VERSION);
-        assertThatThrownBy(() -> check(download, reference(film, 5013)))
-            .isInstanceOf(DataIntegrityViolationException.class);
 
         entityManager.clear();
         sidecars.deleteById(download.getId());
@@ -216,6 +223,16 @@ class ForcedDownloadIntegrationTest extends IntegrationTestBase {
         entityManager.clear();
 
         assertThat(downloadChecks.findById(row.getId())).isEmpty();
+    }
+
+    @Test
+    void aDownloadHasOnlyOneComparison() {
+        Film film = saved("Taken", "tt0936501");
+        SubtitleSidecar download = download(film, 5011);
+        check(download, reference(film, 5012));
+        OpenSubtitlesReference other = reference(film, 5013);
+
+        assertThatThrownBy(() -> check(download, other)).isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test

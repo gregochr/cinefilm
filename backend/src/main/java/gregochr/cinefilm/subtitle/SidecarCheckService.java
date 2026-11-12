@@ -121,10 +121,8 @@ public class SidecarCheckService {
         if (resolution.filePick().slots().isEmpty()) {
             return;
         }
-        boolean current = resolution.fileCheck() != null && filmCandidates.stream()
-            .anyMatch(c -> c.fileId() == resolution.fileReferenceFileId().longValue())
-            && resolution.fileCheckCutTags().equals(CutTag.key(edition.getName()));
-        if (current) {
+        // The resolver only reports a check that still holds (version, rules, IMDb id, candidate and cut tags).
+        if (resolution.fileCheck() != null) {
             return;
         }
         ServedSubtitle served = ServedSubtitles.of(edition, resolution.filePick());

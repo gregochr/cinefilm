@@ -242,6 +242,20 @@ class SubtitleAdminServiceUnitTest {
     }
 
     @Test
+    void aListenerThatFailsAfterTheRemovalCommittedDoesNotMakeItAnError() {
+        SubtitleSidecar download = downloadRow();
+        when(sidecars.findById(8L)).thenReturn(Optional.of(download));
+        when(editions.existsById(40L)).thenReturn(true);
+        org.mockito.Mockito.doThrow(new IllegalStateException("executor refused")).when(events)
+            .publishEvent(new SubtitleDownloadRemoved(40L));
+
+        service.remove(8L);
+
+        verify(sidecars).delete(download);
+        assertThat(lock.holder()).isNull();
+    }
+
+    @Test
     void aFileAlreadyBlockedForTheEditionIsNotBlockedAgain() {
         SubtitleSidecar download = downloadRow();
         when(sidecars.findById(8L)).thenReturn(Optional.of(download));

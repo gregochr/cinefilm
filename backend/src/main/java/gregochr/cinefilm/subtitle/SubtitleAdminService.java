@@ -29,6 +29,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -45,6 +47,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 @Service
 public class SubtitleAdminService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(SubtitleAdminService.class);
 
     /** The largest nudge either way, in milliseconds (ten minutes). */
     public static final int MAX_OFFSET_MS = 600_000;
@@ -245,7 +249,13 @@ public class SubtitleAdminService {
      */
     public void remove(Long id) {
         Long editionId = lockedRun(() -> removeLocked(id));
-        events.publishEvent(new SubtitleDownloadRemoved(editionId));
+        // The removal has committed: a listener that fails (say, its executor refuses the run) must not turn it into an
+        // error the client would retry.
+        try {
+            events.publishEvent(new SubtitleDownloadRemoved(editionId));
+        } catch (RuntimeException e) {
+            LOG.warn("A listener of the subtitle download removal failed: {}", e.getClass().getSimpleName());
+        }
     }
 
     private Long removeLocked(Long id) {

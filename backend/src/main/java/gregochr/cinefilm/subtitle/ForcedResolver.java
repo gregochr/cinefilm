@@ -5,6 +5,7 @@ import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.film.SubtitleStream;
+import gregochr.cinefilm.opensubtitles.CutTag;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
@@ -83,8 +84,6 @@ public class ForcedResolver {
      * @param fileCheck the files' comparison with OpenSubtitles while that still describes them, else null
      * @param fileReferenceFileId the OpenSubtitles file id {@code fileCheck} was compared with, or null when there is
      *     no current check
-     * @param fileCheckCutTags the cut tags of the edition's name when {@code fileCheck} was made, or null when there is
-     *     no current check
      * @param alignments the current timing fit of each of the files and downloads, by sidecar id
      * @param downloads the live downloads, lowest id first
      * @param embedded true when a file of the edition has an English (or unlabelled) forced text track
@@ -93,7 +92,6 @@ public class ForcedResolver {
      */
     public record Resolution(Edition edition, List<Long> partIds, Pick filePick, String fileVersion,
                              Assessment fileAssessment, CheckDto fileCheck, Long fileReferenceFileId,
-                             String fileCheckCutTags,
                              Map<Long, AlignmentDto> alignments,
                              List<DownloadState> downloads, boolean embedded, Decision decision,
                              Map<Long, String> reasons) {
@@ -178,7 +176,7 @@ public class ForcedResolver {
         Film film = edition.getFilm();
         boolean hasFile = !filePick.slots().isEmpty();
         String fileVersion = hasFile ? ServedSubtitles.version(edition, filePick) : null;
-        CheckDto fileCheck = fileRow == null ? null : currentCheck(fileRow, fileVersion, film, referenceById);
+        CheckDto fileCheck = fileRow == null ? null : currentCheck(fileRow, fileVersion, edition, referenceById);
         Assessment fileAssessment = null;
         FileSide fileSide = null;
         Map<Long, AlignmentDto> alignments = new HashMap<>();
@@ -196,7 +194,7 @@ public class ForcedResolver {
         for (SubtitleSidecar d : downloads) {
             String version = ServedSubtitles.version(edition, Downloads.pick(d));
             ForcedDownloadCheck row = downloadRows.get(d.getId());
-            CheckDto check = row == null ? null : currentCheck(row, version, film, referenceById);
+            CheckDto check = row == null ? null : currentCheck(row, version, edition, referenceById);
             AlignmentDto alignment = alignmentBySidecar.get(d.getId());
             putIfPresent(alignments, d.getId(), alignmentBySidecar);
             Assessment assessment = SidecarTrust.assess(d.isVerifiedFor(partIds),
@@ -208,9 +206,7 @@ public class ForcedResolver {
         Decision decision = ForcedChoice.decide(new ForcedChoice.Input(fileSide, sides, embedded));
         Map<Long, String> reasons = reasons(edition, found, filePick, decision);
         Long fileReferenceFileId = fileCheck == null ? null : referenceById.get(fileRow.getReferenceId()).getOsFileId();
-        String fileCheckCutTags = fileCheck == null ? null : fileRow.getCutTags();
         return new Resolution(edition, partIds, filePick, fileVersion, fileAssessment, fileCheck, fileReferenceFileId,
-            fileCheckCutTags,
             Map.copyOf(alignments), List.copyOf(states), embedded, decision, reasons);
     }
 
@@ -223,19 +219,29 @@ public class ForcedResolver {
 
     /**
      * The check when it still describes what was checked: made for this served version, by the current rules, against a
-     * reference fetched for the film's current IMDb id, while the film's best OpenSubtitles result is still the single
-     * file it was.
+     * reference fetched for the film's current IMDb id that is still one of the film's single-file candidates, for the
+     * edition's name as it reads now (its cut tags order the candidates), while the film's best OpenSubtitles result is
+     * still the single file it was. One test for the owner's files and for every download, used for trust and for what
+     * is due, so a check that no longer holds is neither believed nor skipped.
      */
-    private static CheckDto currentCheck(SubtitleCheckBase row, String version, Film film,
+    private static CheckDto currentCheck(SubtitleCheckBase row, String version, Edition edition,
                                          Map<Long, OpenSubtitlesReference> referenceById) {
+        Film film = edition.getFilm();
         OpenSubtitlesResult best = film.getOsBest() == null ? null : OpenSubtitlesResult.fromJson(film.getOsBest());
         OpenSubtitlesReference reference = referenceById.get(row.getReferenceId());
         if (best == null || !best.isSingleFile()
-            || !row.isCurrent(version, film.getImdbId(), reference, best.fileId())) {
+            || !row.isCurrent(version, film.getImdbId(), reference, best.fileId())
+            || !row.getCutTags().equals(CutTag.key(edition.getName())) || !isCandidate(film, reference)) {
             return null;
         }
         return new CheckDto(row.getVerdict(), row.reasonList(), row.getBestOffsetMs(), row.getMatchedShare(),
             row.getServedCount(), row.getReferenceCount(), reference.getRelease(), row.getCheckedAt());
+    }
+
+    /** True when the reference's file is still one of the film's stored single-file candidates. */
+    private static boolean isCandidate(Film film, OpenSubtitlesReference reference) {
+        return film.getOsCandidates() != null && OpenSubtitlesResult.listFromJson(film.getOsCandidates()).stream()
+            .anyMatch(c -> c.isSingleFile() && c.fileId() == reference.getOsFileId());
     }
 
     /** Why each subtitle attached to the edition plays or does not. */

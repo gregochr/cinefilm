@@ -345,6 +345,15 @@ class SidecarCheckRefresherTest {
     }
 
     @Test
+    void aDownloadThatWasAddedStartsAComparisonSoItIsAskedForWithTheTimingCheckOffToo() {
+        when(api.downloadsEnabled()).thenReturn(true);
+
+        refresher.onDownloadsFinished(new SubtitleDownloadsFinished());
+
+        assertThat(queued).hasSize(1);
+    }
+
+    @Test
     void aTimingPassThatFittedSomethingStartsAComparisonOfTheDownloadsItCouldNotProve() {
         when(api.downloadsEnabled()).thenReturn(true);
 

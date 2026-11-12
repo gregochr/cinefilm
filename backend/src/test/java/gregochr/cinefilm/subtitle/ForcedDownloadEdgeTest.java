@@ -193,6 +193,42 @@ class ForcedDownloadEdgeTest extends ForcedDownloadTestBase {
     }
 
     @Test
+    void aDownloadsCheckStopsCountingWhenItsReferenceLeavesTheCandidatesOrTheCutTagsChange() {
+        Film film = searchedFilm("Taken", 1, result(5011, "Taken.2008.BluRay"), result(5012, "Taken.2008.WEB"),
+            result(5013, "Taken.2008.DVD"));
+        SubtitleSidecar download = download(film, 5011);
+        ForcedDownloadCheck check = downloadCheck(film, download, "AGREES", reference(film, 5012));
+        assertThat(resolve(film).downloads().get(0).check()).isNotNull();
+        assertThat(checkService.due()).isEmpty();
+
+        check.setCutTags("EXTENDED");
+        downloadChecks.saveAndFlush(check);
+        assertThat(resolve(film).downloads().get(0).check()).isNull();
+        assertThat(checkService.due()).extracting(DueCheck::downloadSidecarId).containsExactly(download.getId());
+
+        check.setCutTags("");
+        downloadChecks.saveAndFlush(check);
+        film.setOsCandidates(OpenSubtitlesResult.listToJson(List.of(result(5011, "Taken.2008.BluRay"),
+            result(5013, "Taken.2008.DVD"))));
+        films.saveAndFlush(film);
+        assertThat(resolve(film).downloads().get(0).check()).isNull();
+        assertThat(checkService.due()).extracting(DueCheck::downloadSidecarId).containsExactly(download.getId());
+    }
+
+    @Test
+    void anOwnersFileCheckAlsoStopsCountingWhenTheFilmHasNoCandidatesStored() {
+        Film film = film();
+        sidecar("Taken.en.forced.srt", fileId(film, 1), false);
+        fileCheck(film, "CHECK", reference(film, 5011));
+        assertThat(resolve(film).fileAssessment().trust()).isEqualTo(SidecarTrust.Trust.FAILED);
+
+        film.setOsCandidates(null);
+        films.saveAndFlush(film);
+
+        assertThat(resolve(film).fileCheck()).isNull();
+    }
+
+    @Test
     void aLedgerRowOfAnotherImdbIdIsNotTheEditionsLedger() {
         Film film = film();
         download(film, 5011);

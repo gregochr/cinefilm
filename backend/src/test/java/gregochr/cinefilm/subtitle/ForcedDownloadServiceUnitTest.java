@@ -156,7 +156,7 @@ class ForcedDownloadServiceUnitTest {
         }
         FileSide side = file == null || conflict ? null : new FileSide(file, 1);
         return new Resolution(edition, List.of(10L), pick, slots.isEmpty() ? null : "fv",
-            file == null || conflict ? null : file, null, null, null, Map.of(), states, embedded,
+            file == null || conflict ? null : file, null, null, Map.of(), states, embedded,
             ForcedChoice.decide(new Input(side, sides, embedded)), Map.of());
     }
 
@@ -267,7 +267,7 @@ class ForcedDownloadServiceUnitTest {
         searched();
         Resolution failed = resolution(FAILED, false, false);
         Resolution withKept = new Resolution(failed.edition(), failed.partIds(), failed.filePick(),
-            failed.fileVersion(), failed.fileAssessment(), null, 5011L, null, Map.of(), List.of(), false,
+            failed.fileVersion(), failed.fileAssessment(), null, 5011L, Map.of(), List.of(), false,
             failed.decision(), Map.of());
         resolves(withKept);
         when(references.findByFilmIdIn(Set.of(1L))).thenReturn(List.of(stored(5011, 1)));
