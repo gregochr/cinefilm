@@ -1,0 +1,19 @@
+stream_index=3|pts_time=62.563000|duration_time=N/A|size=18234
+stream_index=3|pts_time=64.940000|duration_time=N/A|size=30
+stream_index=4|pts_time=64.000000|duration_time=N/A|size=9120
+stream_index=4|pts_time=66.250000|duration_time=N/A|size=31
+stream_index=3|pts_time=70.070000|duration_time=N/A|size=22871
+stream_index=3|pts_time=73.114000|duration_time=N/A|size=30
+stream_index=3|pts_time=75.900000|duration_time=N/A|size=412
+stream_index=3|pts_time=77.150000|duration_time=N/A|size=30
+stream_index=3|pts_time=77.151000|duration_time=N/A|size=388
+stream_index=3|pts_time=80.000000|duration_time=N/A|size=65
+stream_index=3|pts_time=81.500000|duration_time=N/A|size=49
+stream_index=3|pts_time=83.000000|duration_time=N/A|size=50
+stream_index=3|pts_time=N/A|duration_time=N/A|size=9000
+stream_index=3|pts_time=90.000000|duration_time=N/A|size=N/A
+not a packet line
+stream_index=7|pts_time=95.000000|duration_time=N/A|size=9000
+stream_index=3|pts_time=-1.000000|duration_time=N/A|size=9000
+stream_index=3|pts_time=3601.250000|duration_time=N/A|size=15012
+stream_index=3|pts_time=3603.500000|duration_time=N/A|size=30

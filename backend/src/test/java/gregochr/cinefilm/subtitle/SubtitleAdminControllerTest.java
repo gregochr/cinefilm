@@ -35,7 +35,7 @@ class SubtitleAdminControllerTest {
 
     private static final SidecarDto DTO = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L,
         "Taken", 70L, "Original", 1, 1, false, true, 12, "No problems found", -250, true, false, 1700000000000L,
-        true, null);
+        true, null, null, null);
 
     @Autowired
     private MockMvc mvc;
@@ -199,7 +199,8 @@ class SubtitleAdminControllerTest {
             "OpenSubtitles' file is 1.2 s later"), 1200, 0.5, 12, 41, "Taken.2008.BluRay",
             Instant.parse("2024-04-01T01:30:00Z"));
         SidecarDto checked = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L, "Taken", 70L,
-            "Original", 1, 1, false, true, 12, "No problems found", -250, true, false, 1700000000000L, true, check);
+            "Original", 1, 1, false, true, 12, "No problems found", -250, true, false, 1700000000000L, true, check,
+            null, null);
         when(service.list()).thenReturn(List.of(checked, DTO));
 
         mvc.perform(get("/api/admin/subtitles").with(user("owner")))
@@ -214,5 +215,40 @@ class SubtitleAdminControllerTest {
             .andExpect(jsonPath("$[0].check.referenceRelease").value("Taken.2008.BluRay"))
             .andExpect(jsonPath("$[0].check.checkedAt").value("2024-04-01T01:30:00Z"))
             .andExpect(jsonPath("$[1].check").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    void aFileCarriesWhoSetItsOffsetAndItsTimingFitAndOtherFilesCarryNull() throws Exception {
+        SubtitleDtos.AlignmentDto alignment = new SubtitleDtos.AlignmentDto("ALIGNED", List.of(), 900, 0.92, 11, 12,
+            true, Instant.parse("2024-04-01T02:30:00Z"));
+        SidecarDto fitted = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L, "Taken", 70L,
+            "Original", 1, 1, false, true, 12, "No problems found", 900, false, false, 1700000000000L, true, null,
+            "AUTO", alignment);
+        SubtitleDtos.AlignmentDto doubtful = new SubtitleDtos.AlignmentDto("CHECK",
+            List.of("Only 4 of 12 lines line up with the film's English track"), 600, 0.33, 4, 12, false,
+            Instant.parse("2024-04-01T02:30:00Z"));
+        SidecarDto checked = new SidecarDto(6L, "Alien.en.forced.srt", "PRESENT", "matched", 8L, "Alien", 80L,
+            "Original", 1, 1, false, true, 12, "No problems found", 0, false, false, 1700000000000L, true, null,
+            null, doubtful);
+        when(service.list()).thenReturn(List.of(fitted, checked, DTO));
+
+        mvc.perform(get("/api/admin/subtitles").with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].offsetSource").value("AUTO"))
+            .andExpect(jsonPath("$[0].alignment.verdict").value("ALIGNED"))
+            .andExpect(jsonPath("$[0].alignment.reasons").isEmpty())
+            .andExpect(jsonPath("$[0].alignment.fittedOffsetMs").value(900))
+            .andExpect(jsonPath("$[0].alignment.matchedShare").value(0.92))
+            .andExpect(jsonPath("$[0].alignment.matchedCount").value(11))
+            .andExpect(jsonPath("$[0].alignment.servedCount").value(12))
+            .andExpect(jsonPath("$[0].alignment.applied").value(true))
+            .andExpect(jsonPath("$[0].alignment.checkedAt").value("2024-04-01T02:30:00Z"))
+            .andExpect(jsonPath("$[1].offsetSource").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$[1].alignment.verdict").value("CHECK"))
+            .andExpect(jsonPath("$[1].alignment.reasons[0]")
+                .value("Only 4 of 12 lines line up with the film's English track"))
+            .andExpect(jsonPath("$[1].alignment.applied").value(false))
+            .andExpect(jsonPath("$[2].offsetSource").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$[2].alignment").value(org.hamcrest.Matchers.nullValue()));
     }
 }

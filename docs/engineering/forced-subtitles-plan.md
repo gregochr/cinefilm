@@ -1,7 +1,9 @@
 # Forced English subtitles — plan
 
 Written 2026-11-11. Status (2026-11-12): **phase 1 merged (#105) and released (v0.4.0); phase 2a merged (#109),
-2b in review; 2c built (PR in review); 2d built (PR to open); phases 3 to 6 not started.** Phases 5 and 6 were added on 2026-11-12: the owner says
+2b in review; 2c built (PR in review); 2d built (PR #113 in review); phase 3a (timing check against the film's own
+embedded English track) built (PR to open, Admin display to follow); phases 3b (speech, only if still needed), 4, 5 and 6
+not started.** Phases 5 and 6 were added on 2026-11-12: the owner says
 solving subtitles is what would let them stop depending on Plex.
 
 ## Decisions made while the owner was away (2026-11-12)
@@ -54,6 +56,75 @@ Judgement calls made while building 2d without the owner. Each: what was chosen,
     - A sidecar that cannot be checked at all (no reference, no alignment possible) keeps playing and is listed in
       Admin as **"Unchecked"**.
     - 2d only makes the verdict available per served edition; **no playback change in this PR.**
+
+### Judgement calls made building phase 3a (2026-11-12, owner away)
+
+Each: what was chosen, why, and the alternative.
+
+12. **The embedded track is found by the reader's own `ffprobe` listing, not from the stored streams.** `FfprobeParser`
+    keeps only text subtitle streams (`subrip`, `ass`, `mov_text`, ...), so the picture tracks (PGS, DVD) this phase is
+    for are not in the database. Alternative: store every subtitle stream at scan time (a model and scan change for
+    something phase 6 will need anyway; left to it).
+13. **One packet pass reads every candidate track at once** (`-select_streams s`, with `stream_index` in the output) instead
+    of one run per stream with `-select_streams <index>`. A pass demuxes the whole file (minutes over SMB), and choosing
+    "the most packets" needs the counts, so one pass is both cheaper and the only way to rank by cue count. The cost is a
+    few KB of other tracks' packets parsed and dropped.
+14. **The packet output is `compact` (`key=value|...`), not `csv=p=0`.** It does not depend on the order ffprobe prints its
+    fields in, which could not be checked against a real ffprobe on the dev Mac (no ffmpeg there; the CI real-tool test
+    proves it). Alternative: csv with a pinned field order.
+15. **The PGS clear-packet threshold is 50 bytes, not about 100.** In a Matroska file a clear display set is a presentation
+    composition (no objects), a window definition and an end segment: about 30 bytes. The smallest display set that draws
+    anything adds a palette and a picture object and is more than 60. 50 sits between them with room either side; 100
+    could drop a real one-word cue. A packet with no size is dropped. DVD and text packets are never filtered by size.
+16. **Offsets are searched within +-60 s, but accepted only within 10 s.** Searching only +-10 s would show a file that is
+    14 s out as "only 4 of 12 lines line up" instead of the useful "Best fit is more than 10 s out". Such a file is `CHECK`
+    and never auto-applied. Alternative: +-10 s exactly (as the brief).
+17. **The 10 ms refinement covers +-300 ms (a window), not +-100 ms (a bucket)** around the best bucket, so cues that wander
+    either side of one offset are fitted in the middle and not at a bucket only half of them fall in. 61 scored offsets:
+    nothing.
+18. **The chance guard takes the better of best+5 s and best-5 s**: a single wrong offset could land on a coincidence. A
+    fit needs to beat it by 0.4. A track dense enough that a true subset cannot clear that is `CHECK` ("...could be
+    chance"), never `ALIGNED`: the safe side.
+19. **`TOO_FEW` is its own verdict** (under 8 lines), as is `NO_REFERENCE`; both show as Unchecked in Admin and neither
+    counts as proof. With no reference at all `NO_REFERENCE` wins over `TOO_FEW` (nothing could be compared either way).
+20. **The cached cue starts are comma-separated gaps in a `TEXT` column, not `bigint[]`.** The same column works on
+    PostgreSQL and the H2 the tests run on (no custom Hibernate type), a few thousand cues is a few tens of KB, and the
+    rows are only ever read whole. Alternative: `bigint[]` (about the same size, needs a type per database).
+21. **The read cache's fingerprint is the `media_file` row's size and modification time as last scanned**, not a fresh
+    `stat`: that is what the scan already uses to tell a file changed, so one rule decides. A file with no size or time is
+    not read (it could not be told apart from a changed one).
+22. **An alignment row is keyed by the raw file's identity and the reference's key, never by the served version.** The
+    served version includes the offset, so keying on it would make applying an offset stale its own check and loop forever.
+    The identity is the film file, the whole-edition flag and the cue hash; the reference key is each reference file's id and
+    fingerprint (plus each part's start for a whole-edition file). Applying an offset does make 2d's check stale (its
+    version includes the offset): it re-runs on its own, which is correct.
+23. **`offset_source` is backfilled `OWNER` for every offset that is not 0** (only the owner could have set one so far), and
+    an `AUTO` offset is dropped (back to 0, never set) when the file's cues change or it moves to another film file, in the
+    scan, attach and detach. Alternative: keep a stale automatic offset until the next fit replaces it (wrong in between).
+24. **Each sidecar is fitted on the timeline of the span it covers, so "restrict the reference to the span" is by
+    construction:** a per-part file against its own part's track in part time (the offset is the same as on the edition
+    timeline), a whole-edition file against every part's track shifted by `EditionTimeline`. A whole-edition file waits
+    until every part has been read; one part with no track makes it `NO_REFERENCE` ("Part 2: ...").
+25. **The fit is saved under `LibraryLock` and revalidated; a taken lock stops the run and an hourly nudge picks it up.** A
+    scan and Admin's edits rewrite the same sidecar rows, so the save holds the lock (never across the 20 minute read).
+    A run stopped for the lock or for playback sets a flag; `SidecarTimingScheduler.hourly` (at :15) starts a run only when
+    that flag is set. Alternative: wait for the next day.
+26. **`SessionManager.isEncoding()` is new**: there was no "is anything transcoding" signal. It is true while any session's
+    encoder process is running. It is checked before each film and before each read; a read already under way is not
+    interrupted (it is niced and capped at 20 minutes).
+27. **A failed read (ffprobe missing, an error, the timeout) is not stored; the file is left alone for 6 hours in memory.**
+    Stored failures would hide a transient SMB outage for good; no backoff would re-read a broken file at every scan.
+28. **`SidecarTrust.isProven(boolean ownerVerified, CheckDto, AlignmentDto)`** takes the verified flag rather than the
+    sidecar (verification needs the edition's part ids), with a null check or alignment meaning "none, or not current"; an
+    overload takes a listed `SidecarDto`. Phase 4 uses it; nothing does yet.
+29. **The test profile switches the check off** (`cinefilm.subtitles.timing-check.enabled=false`), so no Spring test context
+    starts a background run at start-up; the refresher's own tests construct it enabled.
+30. **Doubts.** (a) The `ffprobe` stream listing (`-show_streams -select_streams s` JSON) and the `compact` packet lines
+    were written against ffprobe's documented output and are proven only by `EmbeddedCueReaderRealToolsTest`, which runs in
+    CI; picture subtitles cannot be generated from text by ffmpeg, so PGS is covered by a fixture of real-looking packet
+    lines, not a real file: **the first real run on a PGS film should be watched** (the log says how many files were read).
+    (b) The "pending set after the last pass" tail of the worker loop is not unit-testable (one branch uncovered, as in the
+    other refreshers).
 
 ## What the owner wants
 
@@ -467,6 +538,58 @@ Built from the documented API: the live login/download test was denied (see "Dec
   subtitles are never re-aligned.
 - **Running it:** one job at a time, `nice`, a 10-minute timeout, and only while no HLS session is encoding
   (playback comes first).
+
+#### Phase 3a build (planned 2026-11-12)
+
+**Built (2026-11-12). Backend only; the Admin display ("Timing set automatically", the alignment verdict and reasons) is the
+next PR.** Package `gregochr.cinefilm.subtitle`; migration `V17__forced_timing_check.sql` (expand-only).
+
+- **Why.** About 25 films carry a full English subtitle track inside the file, often as pictures (PGS `hdmv_pgs_subtitle`,
+  `dvd_subtitle`). Cue *times* can be read from packet timestamps without OCR. A full track contains every line, the
+  translations of the foreign dialogue included, so the forced cues are a subset of it in time: a far stronger timing
+  reference than OpenSubtitles or speech.
+- **Reading** (`EmbeddedCueReader`, `EmbeddedStreams`, `SubtitlePackets`). One quick `ffprobe` lists the subtitle streams; one
+  pass over the subtitle packets (`-protocol_whitelist file`, an argument list, the file last and absolute, `nice`, a 20
+  minute timeout, the process killed on timeout) gives every candidate's cue starts. Candidates are English tracks that are
+  not forced (not flagged, and not titled forced, foreign or signs). Choice: text over picture, then flagged default or titled
+  full/SDH/CC, then most cues, then lowest index; a track under 100 cues is not a full track. PGS: packets under 50 bytes are
+  clear packets and dropped; DVD and text: every packet is a cue. Starts are sorted and merged within 50 ms.
+- **Cache** (`embedded_cue_starts`, `EmbeddedCueStarts`): one row per media file, keyed by its fingerprint (size and
+  modification time); the starts as gap text; `NO_REFERENCE` is stored too (with the stream count and the reason) so it is not
+  re-read; a failed read is not stored. A changed file is read again.
+- **Fit** (`TimingFit`, pure): candidate offsets from start differences within +-60 s (100 ms buckets, the 40 most frequent
+  scored, then refined at 10 ms around the best); a served cue matches a reference start within +-300 ms; best = most matched,
+  then least total distance, then smallest |offset|. `ALIGNED`: at least 8 cues, share at least 0.80, |offset| at most 10 s,
+  median residual at most 120 ms, and a share that beats the share at best+-5 s by at least 0.4. Under 8 cues is `TOO_FEW`;
+  no track is `NO_REFERENCE`; anything else `CHECK` with plain reasons ("Only 4 of 12 lines line up with the film's English
+  track", "Best fit is more than 10 s out (14.0 s later)", "The lines line up only loosely (typically 250 ms off)", "The
+  film's English track has so many lines that this fit could be chance").
+- **Applying** (`SidecarTimingService.save`, under `LibraryLock`, revalidated): only for `ALIGNED`, only when the fit differs
+  from the current offset by 100 ms or more, never for an owner-verified file (as the edition's parts are now), never when
+  `offset_source` is `OWNER` (the owner's `PUT`, a reset to 0 included, sets it). It sets `offset_ms`, `offset_source = AUTO`
+  and `updated_at` (a player holding the cues asks again) and logs at INFO (film, sidecar, old to new offset, share). An
+  owner-verified file is still checked and its verdict stored.
+- **Storage.** `forced_subtitle_alignment` (one row per sidecar, cascade on the sidecar, CHECK on the verdict; keyed by
+  `sidecar_identity` and `reference_key`, neither including the offset, so an apply never makes a check stale);
+  `embedded_cue_starts` (cascade on the media file); `subtitle_sidecar.offset_source` (CHECK `OWNER`/`AUTO`).
+- **Running** (`SidecarTimingRefresher`, `subtitle-timing` executor, `SidecarTimingScheduler`): same `running` and `pending`
+  flags as the other refreshers; triggers: `ScanFinished`, start-up, daily 07:00 and an hourly nudge that only starts a run
+  when the last one waited; off with `cinefilm.scan.schedule=false` (the scheduler) or
+  `cinefilm.subtitles.timing-check.enabled=false` (the check). One film at a time: due films are those with a served sidecar
+  that has no read or no current fit, owner-unverified first, then never-checked, then by film. Reads run with no lock; a
+  scan or edit holding the library lock, or any encoding HLS session (`SessionManager.isEncoding()`), stops the run to be
+  tried again. No owner event triggers it: an attach or nudge is picked up by the next run.
+- **API.** `SidecarDto` gains `offsetSource` and `alignment` (`foundation-plan.md` updated). `SidecarTrust.isProven` (owner
+  verified, or 2d `AGREES`, or 3a `ALIGNED`, each only while current) is ready for phase 4; no playback change here.
+- **Tests.** Unit: `TimingFitTest` (exact, +-0.3 s, 2 s, 9.9 s, over 10 s, dense references, jitter, subsets, too few,
+  split-edition parts), `EmbeddedStreamsTest`, `SubtitlePacketsTest` (PGS fixture `ffprobe/pgs-packets.txt`),
+  `EmbeddedCueReaderTest` (commands, failures), `TimingKeysTest` (fingerprint invalidation), `SidecarTimingServiceTest` (due
+  order, apply rules, no endless re-check, save revalidation), `SidecarTimingRefresherTest` (concurrency, pending re-run,
+  transcode-busy skip, lock busy, backoff, disabled), `SubtitleAdminTimingTest` (the owner's `PUT` sets `OWNER`),
+  `SidecarTrustTest`, `SessionManagerEncodingTest`. Integration (Testcontainers): `SidecarTimingIntegrationTest` (migration
+  constraints, cascades, a targeted save, the DTO JSON). Real tool: `EmbeddedCueReaderRealToolsTest` generates a Matroska clip
+  with a full and a forced `subrip` track, reads it with the real reader and fits a shifted forced file: `ALIGNED` with the
+  right offset. ffmpeg cannot make picture subtitles from text, so PGS is covered by the packet fixture only.
 
 ### Phase 4 — download what is missing
 

@@ -103,6 +103,7 @@ public class SidecarSync {
         // Matching by name is never "whole edition": only the owner's attach sets that.
         if (!Objects.equals(row.getMediaFileId(), fileId) || row.isWholeEdition()) {
             row.setMediaFileId(fileId);
+            row.dropAutoOffset();
             row.setWholeEdition(false);
             row.setUpdatedAt(now);
         }
@@ -138,6 +139,8 @@ public class SidecarSync {
         target.setCueCount(parsed.cues().size());
         target.setLastEndMs(parsed.cues().stream().mapToLong(SubtitleCue::endMs).max().orElse(0));
         target.clearVerification();
+        // An automatic offset was fitted for the old cues; the timing check fits the new ones afresh.
+        target.dropAutoOffset();
         target.setUpdatedAt(now);
         sidecars.save(target);
     }

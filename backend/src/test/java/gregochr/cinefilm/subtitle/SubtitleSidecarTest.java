@@ -47,4 +47,38 @@ class SubtitleSidecarTest {
         assertThat(sidecar.getVerifiedParts()).isNull();
         assertThat(sidecar.isVerifiedFor(List.of(5L))).isFalse();
     }
+
+    @Test
+    void anAutomaticOffsetIsDroppedBackToNeverSet() {
+        SubtitleSidecar sidecar = new SubtitleSidecar();
+        sidecar.setOffsetMs(1_200);
+        sidecar.setOffsetSource(SubtitleSidecar.OffsetSource.AUTO);
+
+        sidecar.dropAutoOffset();
+
+        assertThat(sidecar.getOffsetMs()).isZero();
+        assertThat(sidecar.getOffsetSource()).isNull();
+    }
+
+    @Test
+    void anOffsetTheOwnerSetIsNeverDropped() {
+        SubtitleSidecar sidecar = new SubtitleSidecar();
+        sidecar.setOffsetMs(-250);
+        sidecar.setOffsetSource(SubtitleSidecar.OffsetSource.OWNER);
+
+        sidecar.dropAutoOffset();
+
+        assertThat(sidecar.getOffsetMs()).isEqualTo(-250);
+        assertThat(sidecar.getOffsetSource()).isEqualTo(SubtitleSidecar.OffsetSource.OWNER);
+    }
+
+    @Test
+    void aFileWhoseOffsetWasNeverSetIsLeftAlone() {
+        SubtitleSidecar sidecar = new SubtitleSidecar();
+
+        sidecar.dropAutoOffset();
+
+        assertThat(sidecar.getOffsetMs()).isZero();
+        assertThat(sidecar.getOffsetSource()).isNull();
+    }
 }
