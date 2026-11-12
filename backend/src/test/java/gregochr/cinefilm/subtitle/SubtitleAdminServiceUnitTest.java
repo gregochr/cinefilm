@@ -8,6 +8,8 @@ import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -19,7 +21,6 @@ import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.library.LibraryLock;
-import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.subtitle.SubtitleDtos.AttachRequest;
 import gregochr.cinefilm.subtitle.SubtitleDtos.OffsetRequest;
 import gregochr.cinefilm.subtitle.SubtitleDtos.SidecarDto;
@@ -30,6 +31,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.PlatformTransactionManager;
 
 /** The Admin subtitle service's rules, with the repositories faked. */
@@ -49,13 +51,13 @@ class SubtitleAdminServiceUnitTest {
     private SidecarSync sync;
 
     @Mock
-    private ForcedSubtitleCheckRepository checks;
+    private ForcedResolver resolver;
 
     @Mock
-    private OpenSubtitlesReferenceRepository references;
+    private ForcedDownloadBlockRepository blocks;
 
     @Mock
-    private SidecarTimingService timing;
+    private ApplicationEventPublisher events;
 
     @Mock
     private PlatformTransactionManager transactions;
@@ -67,8 +69,8 @@ class SubtitleAdminServiceUnitTest {
 
     @BeforeEach
     void setUp() {
-        service = new SubtitleAdminService(sidecars, files, editions, sync, checks, references, timing, CLOCK,
-            lock, transactions);
+        service = new SubtitleAdminService(sidecars, files, editions, sync, resolver, blocks, CLOCK, lock,
+            transactions, events);
         row = new SubtitleSidecar();
         row.setId(5L);
         row.setPath("A/Other.en.forced.srt");
@@ -208,6 +210,113 @@ class SubtitleAdminServiceUnitTest {
         row.setOffsetMs(-15_000);
 
         assertThat(service.cues(5L).cues()).extracting(SubtitleDtos.CueDto::startMs).containsExactly(0L);
+    }
+
+    private SubtitleSidecar downloadRow() {
+        SubtitleSidecar download = new SubtitleSidecar();
+        download.setId(8L);
+        download.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
+        download.setMediaFileId(10L);
+        download.setWholeEdition(true);
+        download.setImdbId("tt0167261");
+        download.setOpenSubtitlesFileId(5011L);
+        download.setPath("opensubtitles:40:5011");
+        download.setUpdatedAt(NOW);
+        return download;
+    }
+
+    @Test
+    void removingADownloadDeletesItBlocksItsFileForTheEditionAndPublishesTheEventAfterTheCommit() {
+        SubtitleSidecar download = downloadRow();
+        when(sidecars.findById(8L)).thenReturn(Optional.of(download));
+        when(editions.existsById(40L)).thenReturn(true);
+        when(blocks.existsByEditionIdAndImdbIdAndOsFileId(40L, "tt0167261", 5011L)).thenReturn(false);
+
+        service.remove(8L);
+
+        verify(sidecars).delete(download);
+        verify(blocks).save(argThat(block -> block.getEditionId().equals(40L) && block.getImdbId().equals("tt0167261")
+            && block.getOsFileId() == 5011L && block.getRemovedAt().equals(NOW)));
+        verify(events).publishEvent(new SubtitleDownloadRemoved(40L));
+        assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void aFileAlreadyBlockedForTheEditionIsNotBlockedAgain() {
+        SubtitleSidecar download = downloadRow();
+        when(sidecars.findById(8L)).thenReturn(Optional.of(download));
+        when(editions.existsById(40L)).thenReturn(true);
+        when(blocks.existsByEditionIdAndImdbIdAndOsFileId(40L, "tt0167261", 5011L)).thenReturn(true);
+
+        service.remove(8L);
+
+        verify(blocks, never()).save(argThat(block -> true));
+        verify(sidecars).delete(download);
+    }
+
+    @Test
+    void aDownloadWhoseFileMovedToAnotherEditionBlocksTheEditionItWasMadeFor() {
+        SubtitleSidecar download = downloadRow();
+        download.setPath("opensubtitles:77:5011");
+        when(sidecars.findById(8L)).thenReturn(Optional.of(download));
+        when(editions.existsById(77L)).thenReturn(true);
+        when(blocks.existsByEditionIdAndImdbIdAndOsFileId(77L, "tt0167261", 5011L)).thenReturn(false);
+
+        service.remove(8L);
+
+        verify(blocks).save(argThat(block -> block.getEditionId().equals(77L) && block.getOsFileId() == 5011L));
+        verify(sidecars).delete(download);
+        verify(events).publishEvent(new SubtitleDownloadRemoved(77L));
+    }
+
+    @Test
+    void aDownloadWhoseEditionWasDeletedIsRemovedWithNoBlock() {
+        SubtitleSidecar download = downloadRow();
+        download.setPath("opensubtitles:99:5011");
+        when(sidecars.findById(8L)).thenReturn(Optional.of(download));
+        when(editions.existsById(99L)).thenReturn(false);
+
+        service.remove(8L);
+
+        verify(sidecars).delete(download);
+        verify(blocks, never()).save(argThat(block -> true));
+    }
+
+    @Test
+    void aFileBesideTheFilmCannotBeRemovedAndNothingIsDeletedOrPublished() {
+        when(sidecars.findById(5L)).thenReturn(Optional.of(row));
+
+        assertThatThrownBy(() -> service.remove(5L)).isInstanceOf(BadRequestException.class)
+            .hasMessage("Only a subtitle downloaded from OpenSubtitles can be removed");
+
+        verify(sidecars, never()).delete(row);
+        verify(events, never()).publishEvent(new SubtitleDownloadRemoved(null));
+        assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void aDownloadCannotBeAttachedOrDetachedAndKeepsItsPlace() {
+        SubtitleSidecar download = downloadRow();
+        when(sidecars.findById(8L)).thenReturn(Optional.of(download));
+
+        assertThatThrownBy(() -> service.attach(8L, new AttachRequest(40L, null)))
+            .isInstanceOf(BadRequestException.class)
+            .hasMessage("A downloaded subtitle belongs to its edition and cannot be attached");
+        assertThatThrownBy(() -> service.detach(8L)).isInstanceOf(BadRequestException.class)
+            .hasMessage("A downloaded subtitle belongs to its edition and cannot be attached");
+
+        assertThat(download.getMediaFileId()).isEqualTo(10L);
+        assertThat(download.isWholeEdition()).isTrue();
+        verify(sync, never()).rematch(download);
+    }
+
+    @Test
+    void removalIsRefusedWithAConflictWhileTheLibraryLockIsHeld() {
+        lock.tryAcquire(LibraryLock.SCAN);
+
+        assertThatThrownBy(() -> service.remove(8L)).isInstanceOf(ConflictException.class)
+            .hasMessage("A scan is running");
+        assertThat(lock.holder()).isEqualTo(LibraryLock.SCAN);
     }
 
     @Test

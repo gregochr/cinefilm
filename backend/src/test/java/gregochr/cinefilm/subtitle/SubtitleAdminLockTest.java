@@ -8,12 +8,12 @@ import static org.mockito.Mockito.when;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.library.LibraryLock;
-import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.subtitle.SubtitleDtos.OffsetRequest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
@@ -50,8 +50,8 @@ class SubtitleAdminLockTest {
         when(sidecars.findById(5L)).thenReturn(Optional.of(row));
         when(sidecars.findAllByOrderByPathAscIdAsc()).thenReturn(List.of(row));
         SubtitleAdminService service = new SubtitleAdminService(sidecars, mock(MediaFileRepository.class),
-            mock(EditionRepository.class), mock(SidecarSync.class), mock(ForcedSubtitleCheckRepository.class),
-            mock(OpenSubtitlesReferenceRepository.class), mock(SidecarTimingService.class), CLOCK, lock, manager);
+            mock(EditionRepository.class), mock(SidecarSync.class), mock(ForcedResolver.class),
+            mock(ForcedDownloadBlockRepository.class), CLOCK, lock, manager, mock(ApplicationEventPublisher.class));
 
         service.offset(5L, new OffsetRequest(250));
 

@@ -16,7 +16,6 @@ import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
-import gregochr.cinefilm.film.FilmDtos.ForcedSubtitleDto;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.NeedRow;
 import gregochr.cinefilm.film.ForcedNeedChoice;
@@ -29,7 +28,6 @@ import gregochr.cinefilm.subtitle.ForcedNeedDtos.NeedListDto;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -116,15 +114,15 @@ class ForcedNeedServiceTest {
 
     /** What playback says it serves for the film's editions: its first edition has a subtitle, or nothing does. */
     private void playbackServes(Film film, boolean serves) {
-        Map<Long, ForcedSubtitleDto> served = serves
-            ? Map.of(film.getEditions().get(0).getId(), new ForcedSubtitleDto("SIDECAR", false, 1L)) : Map.of();
-        when(forcedSubtitles.forEditions(film.getEditions())).thenReturn(served);
+        Set<Long> served = serves ? Set.of(film.getEditions().get(0).getId()) : Set.of();
+        when(forcedSubtitles.playableEditionIds(film.getEditions())).thenReturn(served);
     }
 
     @Test
     void theListIsBuiltFromExactlyThreeQueriesInTheRepositoriesOrder() {
         when(films.findNeedRows()).thenReturn(List.of(english(1, "A"), english(2, "B"), english(3, "C")));
         when(sidecars.findFilmIdsWithPresentSidecar()).thenReturn(List.of(2L));
+        when(sidecars.findFilmIdsWithPresentSubtitle()).thenReturn(List.of(2L));
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of(3L));
         Film two = withEdition(stored(2L, "en", "en", null));
         when(editions.findWithFilesByFilmIdIn(Set.of(2L))).thenReturn(two.getEditions());
@@ -138,6 +136,7 @@ class ForcedNeedServiceTest {
             .containsExactly("ENGLISH_ONLY", "SIDECAR", "EMBEDDED_FORCED");
         verify(films).findNeedRows();
         verify(sidecars).findFilmIdsWithPresentSidecar();
+        verify(sidecars).findFilmIdsWithPresentSubtitle();
         verify(files).findFilmIdsWithEmbeddedForced();
         verify(editions).findWithFilesByFilmIdIn(Set.of(2L));
         verifyNoMoreInteractions(films, sidecars, files);
@@ -148,6 +147,7 @@ class ForcedNeedServiceTest {
         when(films.findNeedRows()).thenReturn(List.of(
             row(1, "Taken", 8681L, "en", "en,fr,sq", ASKED, ForcedNeedChoice.NOT_NEEDED)));
         when(sidecars.findFilmIdsWithPresentSidecar()).thenReturn(List.of(1L));
+        when(sidecars.findFilmIdsWithPresentSubtitle()).thenReturn(List.of(1L));
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of());
         Film taken = withEdition(stored(1L, "en", "en", null));
         when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(taken.getEditions());
@@ -163,6 +163,7 @@ class ForcedNeedServiceTest {
     void aFilmWithNoAttachedFileAndNoOwnerChoiceHasANullChoiceAndNoSubtitle() {
         when(films.findNeedRows()).thenReturn(List.of(row(1, "Taken", 8681L, "en", "en,fr", ASKED, null)));
         when(sidecars.findFilmIdsWithPresentSidecar()).thenReturn(List.of());
+        when(sidecars.findFilmIdsWithPresentSubtitle()).thenReturn(List.of());
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of());
 
         FilmNeedDto dto = service.list().films().get(0);
@@ -177,6 +178,7 @@ class ForcedNeedServiceTest {
     void anEmbeddedTrackNeedsASubtitleButDoesNotCountAsAnAttachedFile() {
         when(films.findNeedRows()).thenReturn(List.of(english(1, "A")));
         when(sidecars.findFilmIdsWithPresentSidecar()).thenReturn(List.of());
+        when(sidecars.findFilmIdsWithPresentSubtitle()).thenReturn(List.of());
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of(1L));
 
         FilmNeedDto dto = service.list().films().get(0);
@@ -192,6 +194,7 @@ class ForcedNeedServiceTest {
             row(2, "No match", null, "en", "en", ASKED, null),
             row(3, "Gone from TMDB", 30L, null, null, ASKED, null)));
         when(sidecars.findFilmIdsWithPresentSidecar()).thenReturn(List.of());
+        when(sidecars.findFilmIdsWithPresentSubtitle()).thenReturn(List.of());
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of());
 
         List<FilmNeedDto> rows = service.list().films();
@@ -210,6 +213,7 @@ class ForcedNeedServiceTest {
             row(3, "None listed", 30L, "en", "", ASKED, null),
             row(4, "Foreign", 40L, "fr", "fr", ASKED, null)));
         when(sidecars.findFilmIdsWithPresentSidecar()).thenReturn(List.of());
+        when(sidecars.findFilmIdsWithPresentSubtitle()).thenReturn(List.of());
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of());
 
         List<FilmNeedDto> rows = service.list().films();
@@ -222,6 +226,7 @@ class ForcedNeedServiceTest {
     @Test
     void theCountsSplitNeededIntoThoseWithAndWithoutAnAttachedFile() {
         when(sidecars.findFilmIdsWithPresentSidecar()).thenReturn(List.of(1L));
+        when(sidecars.findFilmIdsWithPresentSubtitle()).thenReturn(List.of(1L));
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of(2L));
         Film hasFile = withEdition(stored(1L, "en", "en", null));
         when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(hasFile.getEditions());
@@ -244,13 +249,14 @@ class ForcedNeedServiceTest {
     void filmsWithSidecarEvidenceThatPlaybackWouldNotServeStayNeededButCountAsMissing() {
         when(films.findNeedRows()).thenReturn(List.of(english(1, "Conflict"), english(2, "Fine")));
         when(sidecars.findFilmIdsWithPresentSidecar()).thenReturn(List.of(1L, 2L));
+        when(sidecars.findFilmIdsWithPresentSubtitle()).thenReturn(List.of(1L, 2L));
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of());
         Film conflict = withEdition(stored(1L, "en", "en", null));
         Film fine = withEdition(stored(2L, "en", "en", null));
         when(editions.findWithFilesByFilmIdIn(Set.of(1L, 2L)))
             .thenReturn(List.of(conflict.getEditions().get(0), fine.getEditions().get(0)));
-        when(forcedSubtitles.forEditions(List.of(conflict.getEditions().get(0), fine.getEditions().get(0))))
-            .thenReturn(Map.of(fine.getEditions().get(0).getId(), new ForcedSubtitleDto("SIDECAR", false, 1L)));
+        when(forcedSubtitles.playableEditionIds(List.of(conflict.getEditions().get(0), fine.getEditions().get(0))))
+            .thenReturn(Set.of(fine.getEditions().get(0).getId()));
 
         NeedListDto list = service.list();
 
@@ -261,10 +267,44 @@ class ForcedNeedServiceTest {
     }
 
     @Test
+    void aFilmWithOnlyADownloadIsAskedWhatPlaybackServesButItIsNotEvidenceOfAnOwnersFile() {
+        when(films.findNeedRows()).thenReturn(List.of(english(1, "Downloaded")));
+        when(sidecars.findFilmIdsWithPresentSidecar()).thenReturn(List.of());
+        when(sidecars.findFilmIdsWithPresentSubtitle()).thenReturn(List.of(1L));
+        when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of());
+        Film downloaded = withEdition(stored(1L, "en", "en", null));
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(downloaded.getEditions());
+        playbackServes(downloaded, true);
+
+        FilmNeedDto dto = service.list().films().get(0);
+
+        assertThat(dto.hasForcedSubtitle()).isTrue();
+        assertThat(dto.reason()).isEqualTo("ENGLISH_ONLY");
+        assertThat(dto.need()).isEqualTo("NOT_NEEDED");
+    }
+
+    @Test
+    void theAnsweredRowOfAFilmWithOnlyADownloadSaysItIsServed() {
+        Film taken = withEdition(stored(7L, "en", "en", ForcedNeedChoice.NEEDED));
+        when(films.findByIdForUpdate(7L)).thenReturn(Optional.of(taken));
+        when(sidecars.countPresentForFilm(7L)).thenReturn(0L);
+        when(sidecars.countPresentSubtitlesForFilm(7L)).thenReturn(1L);
+        when(editions.findWithFilesByFilmIdIn(List.of(7L))).thenReturn(taken.getEditions());
+        playbackServes(taken, true);
+        when(files.countEmbeddedForcedForFilm(7L)).thenReturn(0L);
+
+        FilmNeedDto dto = service.choose(7L, new ChoiceRequest("NEEDED"));
+
+        assertThat(dto.reason()).isEqualTo("OWNER");
+        assertThat(dto.hasForcedSubtitle()).isTrue();
+    }
+
+    @Test
     void theAnsweredRowOfAFilmWhosePlaybackServesNothingHasNoForcedSubtitleButStillSaysSidecar() {
         Film taken = withEdition(stored(7L, "en", "en", null));
         when(films.findByIdForUpdate(7L)).thenReturn(Optional.of(taken));
         when(sidecars.countPresentForFilm(7L)).thenReturn(2L);
+        when(sidecars.countPresentSubtitlesForFilm(7L)).thenReturn(2L);
         when(editions.findWithFilesByFilmIdIn(List.of(7L))).thenReturn(taken.getEditions());
         when(files.countEmbeddedForcedForFilm(7L)).thenReturn(0L);
         playbackServes(taken, false);
@@ -280,6 +320,7 @@ class ForcedNeedServiceTest {
     void anEmptyLibraryHasEmptyCounts() {
         when(films.findNeedRows()).thenReturn(List.of());
         when(sidecars.findFilmIdsWithPresentSidecar()).thenReturn(List.of());
+        when(sidecars.findFilmIdsWithPresentSubtitle()).thenReturn(List.of());
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of());
 
         NeedListDto list = service.list();
@@ -296,6 +337,7 @@ class ForcedNeedServiceTest {
     private FilmNeedDto listed(NeedRow row) {
         when(films.findNeedRows()).thenReturn(List.of(row));
         when(sidecars.findFilmIdsWithPresentSidecar()).thenReturn(List.of());
+        when(sidecars.findFilmIdsWithPresentSubtitle()).thenReturn(List.of());
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of());
         return service.list().films().get(0);
     }
@@ -389,6 +431,7 @@ class ForcedNeedServiceTest {
         Film taken = withEdition(stored(7L, "en", "en,fr", null));
         when(films.findByIdForUpdate(7L)).thenReturn(Optional.of(taken));
         when(sidecars.countPresentForFilm(7L)).thenReturn(1L);
+        when(sidecars.countPresentSubtitlesForFilm(7L)).thenReturn(1L);
         when(editions.findWithFilesByFilmIdIn(List.of(7L))).thenReturn(taken.getEditions());
         playbackServes(taken, true);
         when(files.countEmbeddedForcedForFilm(7L)).thenReturn(0L);

@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
@@ -43,6 +44,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.slf4j.LoggerFactory;
@@ -58,6 +60,8 @@ class SidecarCheckRefresherTest {
     /** The UTC day of {@code NOW} (in London it is already 1 April). */
     private static final LocalDate DAY = LocalDate.of(2024, 3, 31);
     private static final int LIMIT = 90;
+    /** What the checks may bring the day's downloads to: half the limit. */
+    private static final int CHECK_LIMIT = 45;
     private static final String NOTHING_DONE =
         "Subtitle file checks finished: 0 saved, 0 changed meanwhile, 0 unusable references, 0 failed";
     private static final List<SubtitleCue> CUES = List.of(new SubtitleCue(10_000, 11_000, "a"),
@@ -69,6 +73,9 @@ class SidecarCheckRefresherTest {
 
     @Mock
     private OpenSubtitlesApi api;
+
+    @Mock
+    private ApplicationEventPublisher events;
 
     @Mock
     private OpenSubtitlesBudget budget;
@@ -86,7 +93,7 @@ class SidecarCheckRefresherTest {
 
     @BeforeEach
     void setUp() {
-        refresher = new SidecarCheckRefresher(api, budget, references, service, CLOCK, queued::add, LIMIT);
+        refresher = new SidecarCheckRefresher(api, budget, references, service, CLOCK, queued::add, LIMIT, events);
         logged.start();
         refresherLog.addAppender(logged);
     }
@@ -215,7 +222,7 @@ class SidecarCheckRefresherTest {
         SidecarCheckRefresher refusing = new SidecarCheckRefresher(api, budget, references, service, CLOCK,
             command -> {
                 throw new RejectedExecutionException("full");
-            }, LIMIT);
+            }, LIMIT, events);
         when(api.downloadsEnabled()).thenReturn(true);
 
         assertThatThrownBy(refusing::startDue).isInstanceOf(RejectedExecutionException.class);
@@ -224,7 +231,7 @@ class SidecarCheckRefresherTest {
 
     /** The refresher on an executor that runs the work at once, so a trigger can arrive from inside a run. */
     private SidecarCheckRefresher synchronous() {
-        return new SidecarCheckRefresher(api, budget, references, service, CLOCK, Runnable::run, LIMIT);
+        return new SidecarCheckRefresher(api, budget, references, service, CLOCK, Runnable::run, LIMIT, events);
     }
 
     @Test
@@ -294,11 +301,64 @@ class SidecarCheckRefresherTest {
     }
 
     @Test
+    void aPassThatSavedAResultAnnouncesItSoAFailedFileCanBeReplaced() {
+        DueCheck due = due(1, 10, 5011);
+        OpenSubtitlesReference reference = stored(8, 1, 5011, CUES);
+        when(service.due()).thenReturn(List.of(due));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.of(reference));
+        when(service.save(due, reference, AGREES, NOW)).thenReturn(true);
+
+        startAndRun();
+
+        verify(events).publishEvent(new SidecarChecksFinished());
+    }
+
+    @Test
+    void aPassThatSavedNothingAnnouncesNothingSoTheChainEndsInsteadOfGoingRoundForever() {
+        DueCheck due = due(1, 10, 5011);
+        OpenSubtitlesReference reference = stored(8, 1, 5011, CUES);
+        when(service.due()).thenReturn(List.of(due));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.of(reference));
+        when(service.save(due, reference, AGREES, NOW)).thenReturn(false);
+
+        startAndRun();
+
+        verifyNoInteractions(events);
+        assertThat(messages()).contains("Subtitle file checks finished: 0 saved, 1 changed meanwhile, "
+            + "0 unusable references, 0 failed");
+    }
+
+    @Test
+    void aFailingListenerOfTheChecksDoesNotTouchTheRun() {
+        DueCheck due = due(1, 10, 5011);
+        OpenSubtitlesReference reference = stored(8, 1, 5011, CUES);
+        when(service.due()).thenReturn(List.of(due));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.of(reference));
+        when(service.save(due, reference, AGREES, NOW)).thenReturn(true);
+        org.mockito.Mockito.doThrow(new IllegalStateException("listener")).when(events)
+            .publishEvent(new SidecarChecksFinished());
+
+        startAndRun();
+
+        assertThat(messages()).contains("A listener of the subtitle file checks failed: IllegalStateException");
+        assertThat(refresher.isRunning()).isFalse();
+    }
+
+    @Test
+    void aTimingPassThatFittedSomethingStartsAComparisonOfTheDownloadsItCouldNotProve() {
+        when(api.downloadsEnabled()).thenReturn(true);
+
+        refresher.onTimingFinished(new SidecarTimingFinished());
+
+        assertThat(queued).hasSize(1);
+    }
+
+    @Test
     void aMissingReferenceIsDownloadedWithinTheBudgetStoredAtOnceAndThenUsed() {
         DueCheck due = due(1, 10, 5011);
         when(service.due()).thenReturn(List.of(due));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5011)).thenReturn(downloaded(CUES, 50, Instant.parse("2024-04-01T00:00:00Z")));
         storingReferences();
         savingEverything();
@@ -307,7 +367,7 @@ class SidecarCheckRefresherTest {
         startAndRun();
 
         InOrder order = inOrder(budget, api, references, service);
-        order.verify(budget).take(DAY, LIMIT);
+        order.verify(budget).take(DAY, CHECK_LIMIT);
         order.verify(api).download(5011);
         order.verify(references).saveAndFlush(saved.capture());
         order.verify(service).save(due, saved.getValue(), AGREES, NOW);
@@ -328,18 +388,18 @@ class SidecarCheckRefresherTest {
         DueCheck due = due(1, 10, 5011);
         when(service.due()).thenReturn(List.of(due));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
-        when(budget.take(DAY, LIMIT)).thenReturn(false);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(false);
 
         startAndRun();
 
-        verify(budget).take(DAY, LIMIT);
+        verify(budget).take(DAY, CHECK_LIMIT);
         assertThat(CLOCK.getZone().getId()).isEqualTo("Europe/London");
     }
 
     @Test
-    void theDailyLimitIsWhatTheBudgetIsAskedFor() {
+    void theChecksShareOfTheDailyLimitIsWhatTheBudgetIsAskedFor() {
         SidecarCheckRefresher five = new SidecarCheckRefresher(api, budget, references, service, CLOCK,
-            queued::add, 5);
+            queued::add, 11, events);
         DueCheck due = due(1, 10, 5011);
         when(api.downloadsEnabled()).thenReturn(true);
         when(service.due()).thenReturn(List.of(due));
@@ -349,6 +409,7 @@ class SidecarCheckRefresherTest {
         five.startDue();
         queued.get(0).run();
 
+        // Half of 11, rounded down: the other half of the day's downloads is kept for missing subtitles.
         verify(budget).take(DAY, 5);
     }
 
@@ -365,7 +426,7 @@ class SidecarCheckRefresherTest {
             kept[0].setId(77L);
             return kept[0];
         });
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5011)).thenReturn(downloaded(CUES, 50, null));
         savingEverything();
 
@@ -382,7 +443,7 @@ class SidecarCheckRefresherTest {
     void whenTheBudgetIsSpentTheRunStopsWithNothingDownloadedOrStoredAndLaterEditionsAreLeftForTomorrow() {
         when(service.due()).thenReturn(List.of(due(1, 10, 5011), due(2, 20, 5022)));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
-        when(budget.take(DAY, LIMIT)).thenReturn(false);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(false);
 
         startAndRun();
 
@@ -401,13 +462,13 @@ class SidecarCheckRefresherTest {
         when(service.due()).thenReturn(List.of(stored, missing));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.of(reference));
         when(references.findByFilmIdAndImdbIdAndOsFileId(2L, "tt2", 5022)).thenReturn(Optional.empty());
-        when(budget.take(DAY, LIMIT)).thenReturn(false);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(false);
         when(service.save(stored, reference, AGREES, NOW)).thenReturn(true);
 
         startAndRun();
 
         verify(service).save(stored, reference, AGREES, NOW);
-        verify(budget).take(DAY, LIMIT);
+        verify(budget).take(DAY, CHECK_LIMIT);
     }
 
     @Test
@@ -418,7 +479,7 @@ class SidecarCheckRefresherTest {
         when(service.due()).thenReturn(List.of(first, second));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
         when(references.findByFilmIdAndImdbIdAndOsFileId(2L, "tt2", 5022)).thenReturn(Optional.empty());
-        when(budget.take(DAY, LIMIT)).thenReturn(true, false);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true, false);
         when(api.download(5011)).thenReturn(downloaded(CUES, 0, reset));
         storingReferences();
         savingEverything();
@@ -427,11 +488,11 @@ class SidecarCheckRefresherTest {
 
         ArgumentCaptor<OpenSubtitlesReference> kept = ArgumentCaptor.forClass(OpenSubtitlesReference.class);
         InOrder order = inOrder(budget, service);
-        order.verify(budget).take(DAY, LIMIT);
-        order.verify(budget).exhaust(DAY, LIMIT, reset);
+        order.verify(budget).take(DAY, CHECK_LIMIT);
+        order.verify(budget).exhaust(DAY, CHECK_LIMIT, reset);
         order.verify(service).save(org.mockito.ArgumentMatchers.eq(first), kept.capture(),
             org.mockito.ArgumentMatchers.eq(AGREES), org.mockito.ArgumentMatchers.eq(NOW));
-        order.verify(budget).take(DAY, LIMIT);
+        order.verify(budget).take(DAY, CHECK_LIMIT);
         assertThat(kept.getValue().getOsFileId()).isEqualTo(5011L);
         assertThat(messages()).contains("Subtitle file checks stopped: today's download budget is spent");
     }
@@ -442,18 +503,18 @@ class SidecarCheckRefresherTest {
             DueCheck due = due(1, 10, 5011);
             when(service.due()).thenReturn(List.of(due));
             when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
-            when(budget.take(DAY, LIMIT)).thenReturn(true);
+            when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
             when(api.download(5011)).thenReturn(downloaded(CUES, remaining, null));
             storingReferences();
             when(api.downloadsEnabled()).thenReturn(true);
             queued.clear();
 
             SidecarCheckRefresher fresh = new SidecarCheckRefresher(api, budget, references, service, CLOCK,
-                queued::add, LIMIT);
+                queued::add, LIMIT, events);
             fresh.startDue();
             queued.get(0).run();
 
-            verify(budget, times(remaining > 0 ? 0 : 1)).exhaust(DAY, LIMIT, null);
+            verify(budget, times(remaining > 0 ? 0 : 1)).exhaust(DAY, CHECK_LIMIT, null);
             org.mockito.Mockito.clearInvocations(budget);
         }
     }
@@ -463,14 +524,14 @@ class SidecarCheckRefresherTest {
         DueCheck due = due(1, 10, 5011);
         when(service.due()).thenReturn(List.of(due));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5011)).thenReturn(downloaded(CUES, null, null));
         storingReferences();
 
         startAndRun();
 
         verify(budget).blockedUntil(NOW);
-        verify(budget).take(DAY, LIMIT);
+        verify(budget).take(DAY, CHECK_LIMIT);
         verifyNoMoreInteractions(budget);
     }
 
@@ -479,12 +540,12 @@ class SidecarCheckRefresherTest {
         Instant reset = Instant.parse("2024-04-01T00:00:00Z");
         when(service.due()).thenReturn(List.of(due(1, 10, 5011), due(2, 20, 5022)));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5011)).thenThrow(new OpenSubtitlesQuotaException(reset));
 
         startAndRun();
 
-        verify(budget).exhaust(DAY, LIMIT, reset);
+        verify(budget).exhaust(DAY, CHECK_LIMIT, reset);
         verify(service).due();
         verifyNoMoreInteractions(references, service);
         assertThat(messages()).containsExactly(
@@ -496,12 +557,12 @@ class SidecarCheckRefresherTest {
         Instant limit = NOW.plus(Duration.ofHours(36));
         when(service.due()).thenReturn(List.of(due(1, 10, 5011)));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5011)).thenThrow(new OpenSubtitlesQuotaException(limit.plusMillis(1)));
 
         startAndRun();
 
-        verify(budget).exhaust(DAY, LIMIT, limit);
+        verify(budget).exhaust(DAY, CHECK_LIMIT, limit);
         assertThat(SidecarCheckRefresher.MAX_BLOCK).isEqualTo(Duration.ofHours(36));
     }
 
@@ -511,16 +572,16 @@ class SidecarCheckRefresherTest {
             queued.clear();
             when(service.due()).thenReturn(List.of(due(1, 10, 5011)));
             when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
-            when(budget.take(DAY, LIMIT)).thenReturn(true);
+            when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
             org.mockito.Mockito.doThrow(new OpenSubtitlesQuotaException(reset)).when(api).download(5011);
             when(api.downloadsEnabled()).thenReturn(true);
             SidecarCheckRefresher fresh = new SidecarCheckRefresher(api, budget, references, service, CLOCK,
-                queued::add, LIMIT);
+                queued::add, LIMIT, events);
 
             fresh.startDue();
             queued.get(0).run();
 
-            verify(budget).exhaust(DAY, LIMIT, reset);
+            verify(budget).exhaust(DAY, CHECK_LIMIT, reset);
             org.mockito.Mockito.clearInvocations(budget);
         }
     }
@@ -529,19 +590,19 @@ class SidecarCheckRefresherTest {
     void aQuotaAnswerWithNoResetTimeSpendsTheDayWithNone() {
         when(service.due()).thenReturn(List.of(due(1, 10, 5011)));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5011)).thenThrow(new OpenSubtitlesQuotaException(null));
 
         startAndRun();
 
-        verify(budget).exhaust(DAY, LIMIT, null);
+        verify(budget).exhaust(DAY, CHECK_LIMIT, null);
     }
 
     @Test
     void anOutageStopsTheRunGivesTheDownloadBackAndStoresNothingNotEvenAVerdict() {
         when(service.due()).thenReturn(List.of(due(1, 10, 5011), due(2, 20, 5022)));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5011)).thenThrow(new OpenSubtitlesUnavailableException("OpenSubtitles unavailable"));
 
         startAndRun();
@@ -557,13 +618,13 @@ class SidecarCheckRefresherTest {
     void anOutageNeverTouchesTheExhaustedFlag() {
         when(service.due()).thenReturn(List.of(due(1, 10, 5011)));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5011)).thenThrow(new OpenSubtitlesUnavailableException("OpenSubtitles unavailable"));
 
         startAndRun();
 
         verify(budget).blockedUntil(NOW);
-        verify(budget).take(DAY, LIMIT);
+        verify(budget).take(DAY, CHECK_LIMIT);
         verify(budget).refund(DAY);
         verifyNoMoreInteractions(budget);
     }
@@ -606,7 +667,7 @@ class SidecarCheckRefresherTest {
         DueCheck due = due(1, 10, 5011);
         when(service.due()).thenReturn(List.of(due));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5011)).thenReturn(downloaded(List.of(), 50, null));
         storingReferences();
         ArgumentCaptor<OpenSubtitlesReference> saved = ArgumentCaptor.forClass(OpenSubtitlesReference.class);
@@ -652,7 +713,7 @@ class SidecarCheckRefresherTest {
         DueCheck due = due(1, 10, 5011);
         when(service.due()).thenReturn(List.of(due));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5011)).thenReturn(downloaded(List.of(new SubtitleCue(0, 1000, big)), 50, null));
         storingReferences();
         ArgumentCaptor<OpenSubtitlesReference> saved = ArgumentCaptor.forClass(OpenSubtitlesReference.class);
@@ -672,7 +733,7 @@ class SidecarCheckRefresherTest {
         DueCheck due = due(1, 10, 5011);
         when(service.due()).thenReturn(List.of(due));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         List<SubtitleCue> cues = List.of(new SubtitleCue(0, 1000, text));
         when(api.download(5011)).thenReturn(downloaded(cues, 50, null));
         storingReferences();
@@ -713,7 +774,7 @@ class SidecarCheckRefresherTest {
         when(service.due()).thenReturn(List.of(first, second));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
         when(references.findByFilmIdAndImdbIdAndOsFileId(2L, "tt2", 5022)).thenReturn(Optional.of(two));
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5011)).thenThrow(new IllegalArgumentException("Not a file id"));
         when(service.save(second, two, AGREES, NOW)).thenReturn(true);
 
@@ -730,7 +791,7 @@ class SidecarCheckRefresherTest {
         when(service.due()).thenReturn(List.of(due));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011))
             .thenReturn(Optional.empty(), Optional.of(theirs));
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5011)).thenReturn(downloaded(CUES, 50, null));
         when(references.saveAndFlush(any(OpenSubtitlesReference.class)))
             .thenThrow(new DataIntegrityViolationException("duplicate key"));
@@ -747,7 +808,7 @@ class SidecarCheckRefresherTest {
         when(service.due()).thenReturn(List.of(due));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011))
             .thenReturn(Optional.empty(), Optional.empty());
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5011)).thenReturn(downloaded(CUES, 50, null));
         when(references.saveAndFlush(any(OpenSubtitlesReference.class)))
             .thenThrow(new DataIntegrityViolationException("duplicate key"));
@@ -840,7 +901,7 @@ class SidecarCheckRefresherTest {
         when(references.findByFilmIdAndImdbIdAndOsFileId(due.filmId(), due.imdbId(),
             due.candidates().get(0).fileId()))
             .thenReturn(Optional.ofNullable(existing));
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(due.candidates().get(0).fileId()))
             .thenThrow(new OpenSubtitlesChargedException("OpenSubtitles file refused", permanent));
         storingReferences();
@@ -857,7 +918,7 @@ class SidecarCheckRefresherTest {
             org.mockito.Mockito.reset(service, references, api, budget);
             failureStored(due(1, 10, 5011), null, permanent);
 
-            verify(budget).take(DAY, LIMIT);
+            verify(budget).take(DAY, CHECK_LIMIT);
             verify(budget).blockedUntil(NOW);
             verifyNoMoreInteractions(budget);
         }
@@ -871,7 +932,7 @@ class SidecarCheckRefresherTest {
         when(service.due()).thenReturn(List.of(first, second));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
         when(references.findByFilmIdAndImdbIdAndOsFileId(2L, "tt2", 5022)).thenReturn(Optional.of(two));
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5011)).thenThrow(new OpenSubtitlesChargedException("OpenSubtitles file refused", true));
         storingReferences();
         when(service.save(second, two, AGREES, NOW)).thenReturn(true);
@@ -934,7 +995,7 @@ class SidecarCheckRefresherTest {
         twice.setFailedDownloads(2);
         when(service.due()).thenReturn(List.of(due));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.of(twice));
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5011)).thenReturn(downloaded(CUES, 50, null));
         storingReferences();
         when(service.save(due, twice, AGREES, NOW)).thenReturn(true);
@@ -952,7 +1013,7 @@ class SidecarCheckRefresherTest {
     void aDownloadWithNoCuesIsFinalAtOnce() {
         when(service.due()).thenReturn(List.of(due(1, 10, 5011)));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5011)).thenReturn(downloaded(List.of(), 50, null));
         storingReferences();
         ArgumentCaptor<OpenSubtitlesReference> saved = ArgumentCaptor.forClass(OpenSubtitlesReference.class);
@@ -975,7 +1036,7 @@ class SidecarCheckRefresherTest {
             kept[0] = call.getArgument(0);
             return kept[0];
         });
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5011)).thenThrow(new OpenSubtitlesChargedException("request failed", false));
         when(api.downloadsEnabled()).thenReturn(true);
 
@@ -990,7 +1051,7 @@ class SidecarCheckRefresherTest {
         }
 
         verify(api, times(3)).download(5011);
-        verify(budget, times(3)).take(DAY, LIMIT);
+        verify(budget, times(3)).take(DAY, CHECK_LIMIT);
     }
 
     @Test
@@ -1000,7 +1061,7 @@ class SidecarCheckRefresherTest {
         when(service.due()).thenReturn(List.of(due));
         // Only the lookup for the film's current IMDb id is asked, and nothing is stored under it.
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt9", 5011)).thenReturn(Optional.empty());
-        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
         when(api.download(5011)).thenReturn(downloaded(CUES, 50, null));
         storingReferences();
         ArgumentCaptor<OpenSubtitlesReference> saved = ArgumentCaptor.forClass(OpenSubtitlesReference.class);

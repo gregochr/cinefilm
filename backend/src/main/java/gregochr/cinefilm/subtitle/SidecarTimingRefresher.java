@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
@@ -34,7 +35,8 @@ import org.springframework.stereotype.Service;
  * the run stops, to be tried again, while any HLS session is encoding (checked before each film and each read), and
  * when the library lock is taken by a scan or an Admin edit. A read that fails (ffprobe missing, an error, a timeout)
  * is not stored and not tried again for {@value #BACKOFF_HOURS} hours. A request that arrives while a run is going
- * makes it go round once more. Nothing here throws to its caller.
+ * makes it go round once more. A pass that fitted something publishes {@link SidecarTimingFinished}, and a
+ * {@link SubtitleDownloadsFinished} starts a pass. Nothing here throws to its caller.
  */
 @Service
 public class SidecarTimingRefresher {
@@ -53,6 +55,7 @@ public class SidecarTimingRefresher {
     private final Clock clock;
     private final Executor executor;
     private final boolean enabled;
+    private final ApplicationEventPublisher events;
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean pending = new AtomicBoolean();
     private final AtomicBoolean deferred = new AtomicBoolean();
@@ -75,7 +78,8 @@ public class SidecarTimingRefresher {
     public SidecarTimingRefresher(SidecarTimingService service, EmbeddedCueReader reader, LibraryRoot root,
                                   SessionManager sessions, Clock clock,
                                   @Qualifier("timingCheckExecutor") Executor executor,
-                                  @Value("${cinefilm.subtitles.timing-check.enabled:true}") boolean enabled) {
+                                  @Value("${cinefilm.subtitles.timing-check.enabled:true}") boolean enabled,
+                                  ApplicationEventPublisher events) {
         this.service = service;
         this.reader = reader;
         this.root = root;
@@ -83,6 +87,7 @@ public class SidecarTimingRefresher {
         this.clock = clock;
         this.executor = executor;
         this.enabled = enabled;
+        this.events = events;
     }
 
     /** True while a run is going. */
@@ -103,6 +108,12 @@ public class SidecarTimingRefresher {
     /** Checks after a library scan (a file may have been added, moved or changed). */
     @EventListener
     public void onScanFinished(ScanFinished event) {
+        startDue();
+    }
+
+    /** Fits again after a download was added (it needs its timing fitted to be proven). */
+    @EventListener
+    public void onDownloadsFinished(SubtitleDownloadsFinished event) {
         startDue();
     }
 
@@ -185,6 +196,18 @@ public class SidecarTimingRefresher {
         }
         LOG.info("Subtitle timing checks finished: {} files read, {} fitted ({} offsets set), {} failed",
             counts[0], counts[1], counts[2], counts[3]);
+        if (counts[1] > 0) {
+            announce();
+        }
+    }
+
+    /** Says something was fitted, so a download that could not be proven by timing can be compared instead. */
+    private void announce() {
+        try {
+            events.publishEvent(new SidecarTimingFinished());
+        } catch (RuntimeException e) {
+            LOG.warn("A listener of the subtitle timing check failed: {}", e.getClass().getSimpleName());
+        }
     }
 
     /** Reads what the film's served sidecars need, then fits them. */

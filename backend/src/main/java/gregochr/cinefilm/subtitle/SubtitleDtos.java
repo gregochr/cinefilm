@@ -32,19 +32,28 @@ public final class SubtitleDtos {
      * @param version when the row last changed (epoch milliseconds, a scan that replaced the cues included): a
      *     client that holds the cues asks for them again when it changes
      * @param served true when playback serves this file for its edition (the edition's forced subtitle is made from
-     *     it): false for an unmatched, empty, missing or conflicting file, or one that a whole-edition file beats
-     * @param check the comparison with OpenSubtitles' file for the edition this file is served for, or null when the
-     *     edition does not serve this file, has not been compared yet, or what is served changed since
+     *     it): false for an unmatched, empty, missing or conflicting file, one that a whole-edition file beats, one
+     *     that is not proven and loses to another subtitle (see {@code servedReason})
+     * @param check the comparison with OpenSubtitles' file, or null when it has not been compared yet or what was
+     *     compared changed since (for an owner's file it is the edition's comparison of its files; for a download it
+     *     is the second opinion, asked for only when its timing could not be fitted)
      * @param offsetSource who set {@code offsetMs}: null when it was never set, {@code OWNER} or {@code AUTO} (the
      *     timing check set it, so the UI can say "Timing set automatically")
      * @param alignment the fit of this file's cue times to the film's own English subtitle track, or null when the
-     *     file is not served, has not been checked yet, or the file or the track changed since
+     *     file is not a candidate for its edition, has not been checked yet, or the file or the track changed since
+     * @param origin {@code FILE} (a {@code .srt} beside the film) or {@code OPENSUBTITLES} (a download; its
+     *     {@code path} is made up and it can be removed, not attached)
+     * @param release the release name of a download, or null for a file
+     * @param openSubtitlesFileId the OpenSubtitles file id of a download, or null for a file
+     * @param servedReason one short sentence on why playback chose or skipped this subtitle for its edition, for
+     *     example "Replaced by an OpenSubtitles download that agrees" (built from {@code ForcedChoice})
      */
     public record SidecarDto(Long id, String path, String presence, String state, Long filmId, String filmTitle,
                              Long editionId, String editionName, int parts, Integer part, boolean whole,
                              boolean ownerAttached, int cueCount, String parseReport, int offsetMs,
                              boolean verified, boolean endsAfterRuntime, long version, boolean served, CheckDto check,
-                             String offsetSource, AlignmentDto alignment) {
+                             String offsetSource, AlignmentDto alignment, String origin, String release,
+                             Long openSubtitlesFileId, String servedReason) {
     }
 
     /**

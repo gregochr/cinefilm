@@ -4,6 +4,7 @@ import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -39,6 +40,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 
@@ -58,6 +60,9 @@ class SidecarTimingRefresherTest {
 
     @Mock
     private SidecarTimingService service;
+
+    @Mock
+    private ApplicationEventPublisher events;
 
     @Mock
     private EmbeddedCueReader reader;
@@ -92,7 +97,7 @@ class SidecarTimingRefresherTest {
 
     @BeforeEach
     void setUp() {
-        refresher = new SidecarTimingRefresher(service, reader, root, sessions, clock, queued::add, true);
+        refresher = new SidecarTimingRefresher(service, reader, root, sessions, clock, queued::add, true, events);
         logged.start();
         refresherLog.addAppender(logged);
     }
@@ -151,6 +156,46 @@ class SidecarTimingRefresherTest {
         order.verify(service).save(job(7L, 5L), TimingFit.fit(STARTS, TRACK), NOW);
         assertThat(messages()).containsExactly(FINISHED.formatted(1, 1, 1, 0));
         assertThat(refresher.isRunning()).isFalse();
+    }
+
+    @Test
+    void aPassThatFittedSomethingAnnouncesItSoADownloadItCouldNotProveIsCompared() {
+        filmWithOneReadAndOneJob();
+        when(service.save(any(FitJob.class), any(TimingFit.Result.class), any(Instant.class)))
+            .thenReturn(SaveOutcome.SAVED);
+
+        startAndRun();
+
+        verify(events).publishEvent(new SidecarTimingFinished());
+    }
+
+    @Test
+    void aPassThatFittedNothingAnnouncesNothingSoTheChainEnds() {
+        when(service.dueFilmIds()).thenReturn(List.of());
+
+        startAndRun();
+
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    void aFailingListenerOfTheTimingCheckDoesNotTouchTheRun() {
+        filmWithOneReadAndOneJob();
+        when(service.save(any(FitJob.class), any(TimingFit.Result.class), any(Instant.class)))
+            .thenReturn(SaveOutcome.SAVED);
+        doThrow(new IllegalStateException("listener")).when(events).publishEvent(new SidecarTimingFinished());
+
+        startAndRun();
+
+        assertThat(messages()).contains("A listener of the subtitle timing check failed: IllegalStateException");
+        assertThat(refresher.isRunning()).isFalse();
+    }
+
+    @Test
+    void aDownloadThatWasAddedStartsAFitOfItsTiming() {
+        refresher.onDownloadsFinished(new SubtitleDownloadsFinished());
+
+        assertThat(queued).hasSize(1);
     }
 
     @Test
@@ -418,7 +463,7 @@ class SidecarTimingRefresherTest {
         SidecarTimingRefresher refusing = new SidecarTimingRefresher(service, reader, root, sessions, clock,
             task -> {
                 throw new RejectedExecutionException("full");
-            }, true);
+            }, true, events);
 
         assertThatThrownBy(refusing::startDue).isInstanceOf(RejectedExecutionException.class);
 
@@ -428,7 +473,7 @@ class SidecarTimingRefresherTest {
     @Test
     void whenItIsSwitchedOffNothingStartsAndStartUpSaysWhy() {
         SidecarTimingRefresher off = new SidecarTimingRefresher(service, reader, root, sessions, clock, queued::add,
-            false);
+            false, events);
 
         assertThat(off.startDue()).isFalse();
         off.startIfDeferred();

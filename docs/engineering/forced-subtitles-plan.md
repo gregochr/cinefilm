@@ -2,7 +2,9 @@
 
 Written 2026-11-11. Status (2026-11-12): **phase 1 merged (#105) and released (v0.4.0); phase 2a merged (#109),
 2b, 2c, 2d, the Admin display and phase 3a merged (#109 to #115); 2e (robust against bad reference files) in review;
-phases 3b (speech, only if still needed), 4, 5 and 6 not started.** Phases 5 and 6 were added on 2026-11-12: the owner says
+phase 4a (downloads, replacements and "trust only proven files" playback, backend only) built on top of 2e, not yet
+pushed; phases 3b (speech, only if still needed), 4b (Admin display of downloads), 4c (multi-part results), 5 and 6 not
+started.** Phases 5 and 6 were added on 2026-11-12: the owner says
 solving subtitles is what would let them stop depending on Plex.
 
 ## Decisions made while the owner was away (2026-11-12)
@@ -208,6 +210,118 @@ Judgement calls made while building 2d without the owner. Each: what was chosen,
     stale. When the ledger is full, an untried candidate that now ranks first is skipped and the tried (stored) ones
     below it are still compared, which costs no download.
 
+### Decisions made building phase 4a (2026-11-12, owner away)
+
+Each: what was chosen, why, and the alternative. Numbers continue 2e's.
+
+41. **A download is a `subtitle_sidecar` row with `origin = OPENSUBTITLES`, not a table of its own.** V19 adds `origin`
+    (`FILE` default), `opensubtitles_file_id`, `release`, `imdb_id`, `downloaded_at`. The cues live in the row exactly as for
+    an owner's file, so the served version (`ServedSubtitles`), precedence, the comparison, the timing fit and its
+    automatic offset, the owner's nudge and "Looks right", the Admin list and the foreign keys (a fit cascades from the
+    sidecar) all work on it unchanged. **Alternative: `downloaded_subtitle`** (the original plan): rejected because every
+    one of those code paths and the alignment table's key would have been written twice, and Admin would need two row
+    shapes. The costs of sharing the table: a made-up `path` (`opensubtitles:<edition id>:<file id>`, unique by
+    construction) and `media_file_id` set to the edition's part 1; **`SidecarSync` skips `OPENSUBTITLES` rows entirely**
+    (it neither reads, marks missing nor name-matches them; tests in `SidecarSyncDownloadsTest` and the Postgres
+    `ForcedDownloadIntegrationTest`), and `SidecarPrecedence.pick` ignores them, so a download can never be mistaken for an
+    owner's file.
+42. **The shared daily budget (90) has ceilings, not just an order.** `DownloadShares`: a missing subtitle may bring the
+    day's total to the whole limit, a replacement to 70% (63 of 90), the second-opinion comparisons of 2d to 50% (45 of 90),
+    each a plain `OpenSubtitlesBudget.take(day, ceiling)`, so a lower job can never starve a higher one and no new table is
+    needed. Within a download run missing editions come first, then replacements. Integer arithmetic only, rounded down.
+    No refund once OpenSubtitles has charged (unchanged from 2d: `ReferenceFetcher` is 2d's code moved so both refreshers
+    share it). **Alternatives:** run order only (the checks run first in the chain, so they would eat the day); a separate
+    budget row per job (a new table and a race between rows).
+43. **A download is timed for the whole edition and stored against part 1.** A single-file OpenSubtitles result on a split
+    edition is therefore a whole-edition file placed with `EditionTimeline`, exactly as an owner's whole-edition file.
+    **Multi-CD results stay out of scope: phase 4c** (the 2d rule that skips them is unchanged: only single-file
+    candidates are ever downloaded or compared). A download counts only for the edition its path names (`Downloads.madeFor`): if an edit
+    joins, splits or reassigns the parts it follows its part file, stops counting anywhere (Admin says "made for another
+    edition") and is never deleted automatically; the old edition is then due a new download (the dormant row still uses up
+    one of its three files only while that edition is the one named). Phase 4c should decide whether to move or remove such rows.
+44. **"Proven" and "failed".** Proven: owner-verified, or a current 2d `AGREES`, or a current 3a `ALIGNED` for every file
+    served (`SidecarTrust.assess`; the owner's word beats a failure). **Failed is narrower than "not proven": a current 2d
+    `CHECK` that nothing proves.** A 3a result that is not `ALIGNED` on its own, `TOO_FEW` and `NO_REFERENCE` leave a file
+    *unchecked*, never failed (3a cannot prove a file wrong, only fail to prove it right), so a file with no way of being
+    checked keeps playing, as the owner decided. For a split edition's per-part files the verdicts are the edition's (one
+    comparison) and every file must be aligned for the timing proof. The embedded forced text track counts as proven.
+45. **The playback order** (`ForcedChoice`, pure, a unit test for each row, tie and boundary): 1 a proven owner file; 2 a
+    proven download (the lowest id among several proven ones, a proven one before an unchecked one whatever the ids); 3 the
+    embedded forced text track; 4 an owner file that has not failed; 5 a failed owner file replaced by a download that has
+    not failed; with no such download it keeps playing, **except at 300 lines or more** (`SubtitleComparison.FULL_LINES`),
+    where it is full subtitles and plays nothing; 6 with no owner file, an unchecked download. A failed download never
+    plays. Two owner files in conflict are no file (the download steps can still apply, but nothing is downloaded because
+    of a conflict: it is the owner's to sort out). **The 300-line exception is applied now, not held for 4b's Admin control**
+    (the brief's recommendation): showing full subtitles all film long is worse than showing nothing, and the Admin list says
+    why (`servedReason`) and "Looks right" overrides it. It is logged at INFO once per download run per edition.
+    **Alternative:** wait for 4b, leaving about five films showing full subtitles meanwhile.
+46. **Checks are per subject, so replacing a file never erases its failure.** The owner's files keep the edition's one
+    `forced_subtitle_check` row, now made for the files' *own* pick (not for whatever finally plays; for an unreplaced file
+    the version is the same as before, so no existing row went stale); a download's second opinion is a row of its own in
+    the new `forced_download_check` (keyed by the download, cascading with it; shared columns in `SubtitleCheckBase`).
+    **Alternative:** one row per edition for what plays. Rejected after tracing it: a download's check would overwrite the
+    file's `CHECK`, the file would look unchecked again and win (step 4 beats step 6), and the choice would flip every run.
+    A second row per edition would have needed the old `UNIQUE (edition_id)` dropped, and an auto-named constraint cannot
+    be dropped portably between H2 and PostgreSQL in an expand-only migration.
+47. **Cheapest proof first.** A new download is fitted by 3a (it reads the film's own track, already cached, and costs
+    nothing). 3a fits every candidate (the owner's pick and every live download), not only the one that plays, so a download is
+    already proven when it is needed. The 2d second opinion (one more download of a different file) is asked for only when
+    the fit exists and did not prove it (`CHECK`, `TOO_FEW`, `NO_REFERENCE`), or when the timing check is switched off
+    (`cinefilm.subtitles.timing-check.enabled=false`); otherwise it waits for the fit. A download's own file is never in its
+    candidate list and `SidecarCheckService.save` refuses a reference with the download's own file id (a file cannot agree
+    with itself). Every downloaded or promoted file goes on 2e's ledger, so the second opinion counts it among the (at
+    most) three files an edition is ever compared with; stored references are free, so the cap only stops new downloads.
+    If neither proof is possible the download stays unchecked and plays.
+48. **What is downloaded and when.** Due (`DownloadPlan.kind`, pure): the film's need is shown, it has single-file candidates
+    from a search of its current IMDb id, and (a) **missing**: nothing plays from steps 1 to 4 and no download has not
+    failed, or (b) **replacement**: the owner's file failed and nothing has replaced it (no live download, no embedded
+    track). A live download that is not yet proven means nothing is due: the proof is on its way. At most **three OpenSubtitles
+    files are ever made into downloads per edition and IMDb id, the removed ones counted**, so a run of bad candidates cannot
+    burn the day's quota for ever. Candidates are `OpenSubtitlesRanking.rankFor(candidates, edition name)` leaving out files that are
+    blocked, already downloads, already compared with that edition (judged by 2e: full, another cut, or the promotable
+    ones below) and ones stored as unreadable or full (300 lines or more, whatever OpenSubtitles' flag says: **a full file is
+    never made a download**). A fetched file that turns out full or unreadable is stored (never fetched again) and the next
+    candidate is tried within the same cap.
+49. **Promote before downloading (replacements only).** A reference already stored for the edition's ledger costs no
+    download: the one the 2e walk kept for the owner's file first, then the others in the edition's order, provided it is a
+    single-file candidate, has fewer than 300 lines and its cut fits: `!ReferenceWalk.looksLikeOtherCut(compare(owner's cues,
+    reference))`, the walk's own test (so a file that is merely incomplete is promoted and one for another cut is not). A
+    missing edition has no cues of the owner's to judge a cut against, so nothing is promoted for it.
+50. **Adding is pinned and revalidated.** `ForcedDownloadService.add` takes the `LibraryLock`, runs in one transaction and
+    checks again: the film still has the IMDb id, the file is still one of its single-file candidates and not blocked or
+    already a download, there is room under the cap, the edition is still due for the same reason and, for a replacement,
+    the owner's file still has the version it failed at (a nudge or the owner's "Looks right" meanwhile drops the add). The
+    network call and the 2d-style download are outside the lock; a busy lock leaves the stored reference, so the next run
+    promotes it free. Nothing in the run holds the lock across a download.
+51. **Removal.** `DELETE /api/admin/subtitles/{id}` removes an `OPENSUBTITLES` row only (400 for a file beside the film),
+    blocks that file for the edition and IMDb id in `forced_download_block` (kept until the edition goes), and publishes an
+    event that starts a download run, which offers the next candidate. "Use my file" is the existing "Looks right" on the owner's
+    file (a verified file is proven and wins step 1). The stored reference is kept so the file is never fetched again.
+52. **The chain runs from events, each step only when something changed**, so it ends instead of going round forever:
+    scan or search -> checks (2d) -> `SidecarChecksFinished` (only if a result was saved) -> downloads ->
+    `SubtitleDownloadsFinished` (only if a download was added) -> timing (3a) -> `SidecarTimingFinished` (only if something was
+    fitted) -> checks again (a download's second opinion) -> ... Downloads also run after a scan, a search, at start-up,
+    after a removal and daily at 06:45 (`ForcedDownloadScheduler`).
+53. **Need evidence and `hasForcedSubtitle` come from the same function.** Rule 2 of the need (`SIDECAR`) is still an owner's
+    file only (a download exists because need was already shown, and counting it would make it circular);
+    `hasForcedSubtitle` and `neededMissing` use `ForcedChoice` through `ForcedResolver` (the player's own rules), evaluated for
+    every film with a subtitle of either kind, and an embedded forced track counts as playable there.
+54. **"Embedded forced text track" means a stored subtitle stream that is forced and English, `und` or unlabelled in a
+    present file of the edition.** The ffprobe parser stores only text codecs, so a picture track is never one. When it wins
+    no subtitle is served from here (`forcedSubtitle` is null) and the player picks the track itself.
+55. **The IMDb id changing removes the film's downloads** (`FilmRepository.deleteOpenSubtitlesDownloads`, called with the
+    existing `clearOpenSubtitles` in `LibraryIngest.applyImdbId`): the only automatic deletion of a download. The resolver
+    also ignores a download whose `imdb_id` is not the film's current one, so a race with that cleanup cannot play another
+    film's subtitle. Blocks and ledger rows keep their IMDb id and are simply not matched any more.
+56. **`ForcedSubtitleDto.version` is a stable 48-bit hash of which rows are served** (source, ids, part, offset and
+    `updated_at` of each), still a JSON number: it is the player's cache-buster, so switching between an owner's file and a
+    download, a nudge, a changed file or another stitch each change it even when timestamps are equal, and the same choice
+    keeps it. 48 bits stay exact in JavaScript. **Alternative:** the latest `updated_at` (the first version of 4a): two
+    sources with equal timestamps would share a URL.
+57. **`servedReason` is built by `ForcedChoice`**, one short sentence per subtitle of the edition (the owner's files, the
+    downloads, files that are missing, empty, unmatched, in conflict or beaten by a whole-edition file), from the same
+    decision that picks what plays.
+
 ### Judgement calls made building phase 3a (2026-11-12, owner away)
 
 Each: what was chosen, why, and the alternative.
@@ -255,7 +369,8 @@ Picture-based tracks stay unsupported (`FfprobeParser.TEXT_SUBTITLES`).
   The row hangs off the **media file** whose stem it matches, not the edition. Files move between editions when the
   owner edits, joins or Fix Matches editions (`EditionArranger`, `EditionJoin`, `LibraryIngest.merge`), and a sidecar
   then moves with its file for free. A row with no `media_file_id` is **unmatched**.
-- **`downloaded_subtitle`** (phase 4): edition-level, because a download is timed for the whole edition.
+- **`downloaded_subtitle`** (phase 4, **not built: a download is a `subtitle_sidecar` row with `origin = OPENSUBTITLES`,
+  decision 41**): edition-level, because a download is timed for the whole edition.
   `id, edition_id, opensubtitles_file_id, release_name, cues_text, offset_ms, sync_status, sync_detail,
   owner_verified_at, imdb_id (what it was fetched for), updated_at`.
 - **`film.forced_need`** (`NEEDED | NOT_NEEDED | UNSURE`, null = not yet decided) and **`forced_need_source`**
@@ -271,6 +386,11 @@ never written.
 forced subtitle is never a menu choice (it shows when Subtitles is Off), so it needs no id in that space.
 
 ### Which forced subtitle an edition plays (precedence)
+
+**Phase 4a replaced the order below with "trust only proven files" (owner decision 11, decisions 44 and 45):** a proven
+owner file, a proven download, the embedded forced text track, an owner file that has not failed, a download that replaces a
+failed file, an unchecked download. What follows is the phase 1 order, which still decides *which of the owner's files*
+(one whole-edition sidecar, or per-part sidecars stitched) an edition would play.
 
 1. Sidecars: one whole-edition sidecar (no part tag) beats per-part sidecars. Per-part sidecars are stitched onto the
    edition timeline exactly as embedded tracks are today (`EditionTimeline.partStartMs`, `VttShifter.join`); a part
@@ -706,6 +826,10 @@ next PR.** Package `gregochr.cinefilm.subtitle`; migration `V17__forced_timing_c
 
 ### Phase 4 — download what is missing
 
+**Split (2026-11-12):** 4a is the backend (downloads, replacements, proof, playback precedence, the removal endpoint, the API
+fields): built, see "Phase 4a build" below. **4b** is the Admin display (a download's row, "Needs checking", the candidate
+list, remove and "use my file" buttons, `servedReason`). **4c** is multi-part (multi-CD) results.
+
 - For each `NEEDED` edition with no forced subtitle, search OpenSubtitles (IMDb id, English, foreign parts only).
   Ranking:
   1. frame rate 23.976;
@@ -730,6 +854,38 @@ next PR.** Package `gregochr.cinefilm.subtitle`; migration `V17__forced_timing_c
   3. download if needed (phase 4);
   4. align (phase 3);
   5. wait in Admin for the owner's spot-check.
+
+#### Phase 4a build (2026-11-12)
+
+**Built. Backend only; the Admin display is 4b.** Migration `V19__forced_downloads.sql` (expand-only: five columns with
+defaults and a check on `subtitle_sidecar`, two new tables). Decisions 41 to 57 above.
+
+- **Pure:** `ForcedChoice` (the playback order, the 300-line exception, ties and every reason sentence), `SidecarTrust.assess`
+  (`PROVEN` / `UNCHECKED` / `FAILED` and what proved it), `DownloadPlan` (what is due, what to promote, what to fetch, the cap),
+  `DownloadShares` (the budget ceilings).
+- **Database side:** `ForcedResolver` gathers the owner's files, the live downloads, the checks and fits that still describe
+  them and the embedded track for some editions in a fixed number of queries and asks `ForcedChoice`; `ForcedSubtitleService`
+  (the film detail, the WebVTT route, `served`, `playableEditionIds`), `SubtitleAdminService.list` and the need list all use it.
+  `SidecarCheckService` makes a download due for its second opinion and saves it as a `ForcedDownloadCheck`;
+  `SidecarTimingService` fits downloads too; `ForcedDownloadService` decides what is due and adds a download under the library
+  lock after revalidating.
+- **Background:** `ForcedDownloadRefresher` (executor `forcedDownloadExecutor`, `ForcedDownloadScheduler` at 06:45) and
+  `ReferenceFetcher` (2d's download, store and budget code moved out of `SidecarCheckRefresher` so both share it). Off while
+  downloads are off. Logs ids and counts only, never a key, token or link.
+- **API:** `SidecarDto` gains `origin`, `release`, `openSubtitlesFileId` and `servedReason`; `forcedSubtitle.source` can be
+  `DOWNLOAD`; `DELETE /api/admin/subtitles/{id}`. `foundation-plan.md` is updated.
+- **Tests.** Unit: `ForcedChoiceTest`, `SidecarTrustTest`, `DownloadPlanTest`, `DownloadSharesTest`, `ForcedResolverUnitTest`,
+  `ForcedDownloadServiceUnitTest`, `ForcedDownloadRefresherTest` (budget priority, no refund, promotion before download,
+  the cap, every stop, the event), `ForcedDownloadSchedulerTest`, `SidecarCheckRefresherTest` and `SidecarTimingRefresherTest`
+  (event chaining), `SubtitleAdminServiceUnitTest` (removal, attach refused). H2: `ForcedResolverTest`,
+  `ForcedDownloadServiceTest`, `SidecarCheckDownloadsTest`, `SidecarSyncDownloadsTest`, `SubtitleAdminDownloadsTest`,
+  `LibraryIngestDownloadsTest`, `ForcedDownloadApiTest`. Controller: `SubtitleAdminControllerTest`. Integration
+  (Testcontainers, CI only): `ForcedDownloadIntegrationTest` (V19, sync with downloads present, removal, the DTO JSON).
+- **Doubts.** (1) The first real run has not seen a real download beyond 2d's: watch the log lines "Edition N: downloaded
+  OpenSubtitles file F for a missing|replacement subtitle" and "promoted". (2) Decision 43: a download belongs to the edition its path names, and goes dormant when an edit moves its file. (4) The
+  download run reads the whole need list (`ForcedNeedService.list`, three queries and one fetch) once per run, about 1,000
+  films: cheap, but not free. (5) The Postgres-only tests (`ForcedDownloadIntegrationTest` and the other integration tests)
+  did not run locally (no Docker). (6) The thresholds 70% and 50% of the budget are chosen, not tuned.
 
 ### Phase 5 — full English subtitles for foreign-language films
 

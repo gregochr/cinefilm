@@ -63,10 +63,12 @@ public class ForcedNeedService {
     @Transactional(readOnly = true)
     public NeedListDto list() {
         List<NeedRow> rows = films.findNeedRows();
+        // Evidence of need (rule 2) is an owner's file only: a download exists because the need was already shown.
         Set<Long> withSidecar = new HashSet<>(sidecars.findFilmIdsWithPresentSidecar());
+        Set<Long> withSubtitle = new HashSet<>(sidecars.findFilmIdsWithPresentSubtitle());
         Set<Long> withEmbedded = new HashSet<>(files.findFilmIdsWithEmbeddedForced());
-        // Only the films with sidecar evidence (a couple of dozen) are asked what playback would serve.
-        Set<Long> served = withSidecar.isEmpty() ? Set.of() : servedFilmIds(withSidecar);
+        // Only the films with a subtitle of their own (a couple of dozen) are asked what playback would serve.
+        Set<Long> served = withSubtitle.isEmpty() ? Set.of() : servedFilmIds(withSubtitle);
         List<FilmNeedDto> dtos = new ArrayList<>();
         for (NeedRow row : rows) {
             dtos.add(dto(row, withSidecar.contains(row.id()), served.contains(row.id()),
@@ -106,19 +108,21 @@ public class ForcedNeedService {
             film.getOriginalLanguage(), film.getSpokenLanguages(), film.getLanguagesFetchedAt(), choice,
             film.getImdbId(), film.getOsForcedCount(), film.getOsSearchedAt(), film.getOsSearchedImdbId());
         boolean hasSidecar = sidecars.countPresentForFilm(filmId) > 0;
-        boolean served = hasSidecar && !servedFilmIds(List.of(filmId)).isEmpty();
+        boolean served = sidecars.countPresentSubtitlesForFilm(filmId) > 0
+            && !servedFilmIds(List.of(filmId)).isEmpty();
         return dto(row, hasSidecar, served, files.countEmbeddedForcedForFilm(filmId) > 0);
     }
 
     /**
-     * The films among these with an edition that playback would serve a forced subtitle for: the same code playback
-     * uses decides ({@link ForcedSubtitleService#forEditions}), so an empty file or a conflict is not counted. Their
-     * editions and files come in one fetch and playback's own sidecar query runs once, so the cost does not grow with
-     * the number of films.
+     * The films among these with an edition that playback would show a forced subtitle for: the same code playback
+     * uses decides ({@link ForcedSubtitleService#playableEditionIds}, which is {@link ForcedChoice}), so an empty file,
+     * a conflict, a file that failed its checks with full subtitles in it and a download that failed are not counted. A
+     * film whose forced subtitle is its own embedded track counts. Their editions and files come in one fetch and
+     * playback's own queries run once, so the cost does not grow with the number of films.
      */
     private Set<Long> servedFilmIds(Collection<Long> filmIds) {
         List<Edition> fetched = editions.findWithFilesByFilmIdIn(filmIds);
-        Set<Long> servedEditions = forcedSubtitles.forEditions(fetched).keySet();
+        Set<Long> servedEditions = forcedSubtitles.playableEditionIds(fetched);
         Set<Long> served = new HashSet<>();
         for (Edition edition : fetched) {
             if (servedEditions.contains(edition.getId())) {
