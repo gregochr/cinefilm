@@ -7,3 +7,4 @@ applied. The file list can be filtered to All, Needs checking or Unchecked. "Whi
 foreign-parts-only files OpenSubtitles has for a film, and notes films OpenSubtitles has not been searched for. The
 Library scan card shows when subtitles were last searched.
 Admin keeps checking the scan status while a search or a comparison with OpenSubtitles runs, and reads the subtitle lists again when either finishes, so new verdicts appear without a reload. The status gained `subtitleChecksRunning` and `subtitleChecksLastFinishedAt`.
+While Admin is open and visible it looks at the scan status every minute even when nothing is running, so a nightly scan or the 06:00 subtitle search that starts in the background is noticed (and polled faster); it pauses in a hidden tab and reads once when the tab returns.

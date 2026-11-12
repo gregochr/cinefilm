@@ -20,6 +20,7 @@ import {
 import { useSignOut } from '../state/useSignOut.js';
 import { useToast } from '../state/useToast.js';
 import { useAttention, useGroupingReport, usePlexImport, useScan } from '../state/useAdmin.js';
+import { useDocumentVisible } from '../components/useDocumentVisible.js';
 import {
   describeLastImport,
   moreText,
@@ -526,6 +527,7 @@ function SessionPanel() {
 }
 
 export default function Admin() {
+  const visible = useDocumentVisible();
   const {
     scan,
     error,
@@ -537,7 +539,7 @@ export default function Admin() {
     ratingsNotice,
     refreshRatings,
     reload,
-  } = useScan();
+  } = useScan(visible);
   const plexImport = usePlexImport();
   // The list refreshes when a scan or a Plex import finishes: both settle matches.
   const attention = useAttention(

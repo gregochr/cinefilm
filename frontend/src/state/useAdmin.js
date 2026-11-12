@@ -6,6 +6,9 @@ import { useResource } from './useResource.js';
 /** How often the Library scan panel asks for progress while a scan runs. */
 export const SCAN_POLL_MS = 1500;
 
+/** How often the Library scan panel looks again when nothing is running, to notice a job that starts. */
+export const SCAN_IDLE_POLL_MS = 60000;
+
 /** How often the Plex import panel looks again while Plex is not reachable. */
 export const PLEX_RECHECK_MS = 30000;
 
@@ -26,9 +29,10 @@ function useAnnounceWhenFinished(finishedAt) {
 /**
  * The Library scan panel: status and counts, polled while a scan or a ratings refresh runs, plus "Scan now" and
  * "Refresh ratings". Starting either while one is already running (409) is not an error: the panel just shows it
- * running.
+ * running. It looks again every minute when nothing runs, so a job that starts in the background is noticed.
+ * `visible` (the tab is shown; the UI layer knows) pauses the polling, and a change back to true reads once.
  */
-export function useScan() {
+export function useScan(visible = true) {
   const { data, error, loading, reload } = useResource('admin-scan', (options) =>
     adminApi.scan(options),
   );
@@ -42,12 +46,28 @@ export function useScan() {
     Boolean(data?.openSubtitlesRunning) || Boolean(data?.subtitleChecksRunning);
   useAnnounceWhenFinished(data ? (data.lastScan?.finishedAt ?? null) : undefined);
 
-  // The same status carries the ratings refresh, so one poll follows whichever is running (scan, ratings, subtitle search or subtitle check).
+  const busy = running || ratingsRunning || subtitlesRunning;
+
+  // The same status carries the ratings refresh and the subtitle jobs, so one poll follows whichever is running.
+  // With none running it looks again every minute, so a job that starts in the background (the nightly scan, the
+  // 06:00 subtitle search) is noticed. Each answer arms the next look, so requests never overlap; a hidden tab
+  // does not poll.
   useEffect(() => {
-    if (!running && !ratingsRunning && !subtitlesRunning) return undefined;
-    const id = setTimeout(reload, SCAN_POLL_MS);
+    if (!visible) return undefined;
+    const id = setTimeout(reload, busy ? SCAN_POLL_MS : SCAN_IDLE_POLL_MS);
     return () => clearTimeout(id);
-  }, [running, ratingsRunning, subtitlesRunning, data, error, reload]);
+  }, [visible, busy, data, error, reload]);
+
+  // Coming back to a hidden tab reads the status once at once: it may be long out of date.
+  const wasHidden = useRef(false);
+  useEffect(() => {
+    if (!visible) {
+      wasHidden.current = true;
+    } else if (wasHidden.current) {
+      wasHidden.current = false;
+      reload();
+    }
+  }, [visible, reload]);
 
   const refreshRatings = useCallback(async () => {
     setRatingsStarting(true);
