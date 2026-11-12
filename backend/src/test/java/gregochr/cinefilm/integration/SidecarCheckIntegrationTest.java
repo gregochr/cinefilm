@@ -275,25 +275,32 @@ class SidecarCheckIntegrationTest extends IntegrationTestBase {
         assertThat(candidates.existsByEditionIdAndImdbIdAndOsFileId(editionId, "tt0936501", 5014)).isFalse();
     }
 
-    @Test
-    void theLedgerKeepsOneRowPerKeyAndGoesWithItsEdition() {
-        Film film = saved(false);
-        Long editionId = film.getEditions().get(0).getId();
+    private ForcedCheckCandidate ledgerRow(Long editionId) {
         ForcedCheckCandidate row = new ForcedCheckCandidate();
         row.setEditionId(editionId);
         row.setImdbId("tt0936501");
         row.setOsFileId(5011);
         row.setTriedAt(NOW);
-        candidates.saveAndFlush(row);
-        ForcedCheckCandidate duplicate = new ForcedCheckCandidate();
-        duplicate.setEditionId(editionId);
-        duplicate.setImdbId("tt0936501");
-        duplicate.setOsFileId(5011);
-        duplicate.setTriedAt(NOW);
+        return row;
+    }
 
+    @Test
+    void theLedgerKeepsOneRowPerEditionImdbIdAndFile() {
+        Long editionId = saved(false).getEditions().get(0).getId();
+        candidates.saveAndFlush(ledgerRow(editionId));
+        ForcedCheckCandidate duplicate = ledgerRow(editionId);
+
+        // Last in the test: on PostgreSQL the failed statement aborts the transaction.
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> candidates.saveAndFlush(duplicate))
             .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void theLedgerGoesWithItsEdition() {
+        Long editionId = saved(false).getEditions().get(0).getId();
+        candidates.saveAndFlush(ledgerRow(editionId));
         entityManager.clear();
+
         editions.deleteByIds(List.of(editionId));
         entityManager.clear();
 
