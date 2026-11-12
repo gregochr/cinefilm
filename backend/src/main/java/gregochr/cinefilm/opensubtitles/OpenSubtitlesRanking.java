@@ -5,7 +5,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Which of several subtitles is the best to compare with, in order: frame rate closest to 23.976 (the library's
+ * Which of several subtitles is the best to compare with, in order: a single file (a subtitle split over several
+ * discs is only part of the film, so it ranks below every single-file one), frame rate closest to 23.976 (the library's
  * films are all 23.976; one with no frame rate ranks last), from a trusted uploader, not hearing-impaired, most
  * downloaded, then the lowest id so the answer never depends on the order OpenSubtitles listed them in. Pure.
  */
@@ -15,7 +16,8 @@ public final class OpenSubtitlesRanking {
     static final double TARGET_FPS = 23.976;
 
     private static final Comparator<OpenSubtitlesResult> ORDER = Comparator
-        .comparingDouble(OpenSubtitlesRanking::fpsDistance)
+        .comparing(OpenSubtitlesResult::isMultiFile)
+        .thenComparingDouble(OpenSubtitlesRanking::fpsDistance)
         .thenComparing(OpenSubtitlesResult::fromTrusted, Comparator.reverseOrder())
         .thenComparing(OpenSubtitlesResult::hearingImpaired)
         .thenComparing(OpenSubtitlesResult::downloadCount, Comparator.reverseOrder())

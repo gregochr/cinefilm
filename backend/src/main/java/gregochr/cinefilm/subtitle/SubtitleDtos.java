@@ -1,5 +1,6 @@
 package gregochr.cinefilm.subtitle;
 
+import java.time.Instant;
 import java.util.List;
 
 /** The Admin API shapes for forced subtitle files. Actions take row ids, never paths. */
@@ -30,11 +31,31 @@ public final class SubtitleDtos {
      * @param endsAfterRuntime true when the last cue ends after the edition's runtime: wrong film or cut?
      * @param version when the row last changed (epoch milliseconds, a scan that replaced the cues included): a
      *     client that holds the cues asks for them again when it changes
+     * @param check the comparison with OpenSubtitles' file for the edition this file is served for, or null when the
+     *     edition does not serve this file, has not been compared yet, or what is served changed since
      */
     public record SidecarDto(Long id, String path, String presence, String state, Long filmId, String filmTitle,
                              Long editionId, String editionName, int parts, Integer part, boolean whole,
                              boolean ownerAttached, int cueCount, String parseReport, int offsetMs,
-                             boolean verified, boolean endsAfterRuntime, long version) {
+                             boolean verified, boolean endsAfterRuntime, long version, CheckDto check) {
+    }
+
+    /**
+     * What comparing the subtitle an edition serves with OpenSubtitles' file for the film found
+     * ({@code SubtitleComparison}).
+     *
+     * @param verdict {@code AGREES}, or {@code CHECK}: incomplete, for another cut or not forced-only
+     * @param reasons plain sentences: why it is {@code CHECK}, and a timing hint such as "OpenSubtitles' file is 1.2 s
+     *     later" (never applied automatically)
+     * @param bestOffsetMs the milliseconds to add to this file to line up best with OpenSubtitles' (a hint)
+     * @param matchedShare the share (0 to 1) of this file's lines that line up at that offset
+     * @param servedCount how many lines the edition serves
+     * @param referenceCount how many lines OpenSubtitles' file has
+     * @param referenceRelease the release name of OpenSubtitles' file, or null
+     * @param checkedAt when the comparison was made
+     */
+    public record CheckDto(String verdict, List<String> reasons, int bestOffsetMs, double matchedShare,
+                           int servedCount, int referenceCount, String referenceRelease, Instant checkedAt) {
     }
 
     /**

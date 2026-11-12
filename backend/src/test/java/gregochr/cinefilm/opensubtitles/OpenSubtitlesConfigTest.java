@@ -98,4 +98,20 @@ class OpenSubtitlesConfigTest {
         assertThat(ran.get().getName()).isEqualTo("opensubtitles-search");
         assertThat(ran.get().isDaemon()).isTrue();
     }
+
+    @Test
+    void subtitleFileChecksRunOnTheirOwnNamedDaemonThread() throws Exception {
+        Executor executor = config.sidecarCheckExecutor();
+        AtomicReference<Thread> ran = new AtomicReference<>();
+        CountDownLatch done = new CountDownLatch(1);
+
+        executor.execute(() -> {
+            ran.set(Thread.currentThread());
+            done.countDown();
+        });
+
+        assertThat(done.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(ran.get().getName()).isEqualTo("subtitle-check");
+        assertThat(ran.get().isDaemon()).isTrue();
+    }
 }

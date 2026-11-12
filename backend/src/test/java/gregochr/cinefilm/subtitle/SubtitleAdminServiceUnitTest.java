@@ -19,6 +19,7 @@ import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.library.LibraryLock;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.subtitle.SubtitleDtos.AttachRequest;
 import gregochr.cinefilm.subtitle.SubtitleDtos.OffsetRequest;
 import gregochr.cinefilm.subtitle.SubtitleDtos.SidecarDto;
@@ -48,6 +49,12 @@ class SubtitleAdminServiceUnitTest {
     private SidecarSync sync;
 
     @Mock
+    private ForcedSubtitleCheckRepository checks;
+
+    @Mock
+    private OpenSubtitlesReferenceRepository references;
+
+    @Mock
     private PlatformTransactionManager transactions;
 
     private final LibraryLock lock = new LibraryLock();
@@ -57,7 +64,8 @@ class SubtitleAdminServiceUnitTest {
 
     @BeforeEach
     void setUp() {
-        service = new SubtitleAdminService(sidecars, files, editions, sync, CLOCK, lock, transactions);
+        service = new SubtitleAdminService(sidecars, files, editions, sync, checks, references, CLOCK, lock,
+            transactions);
         row = new SubtitleSidecar();
         row.setId(5L);
         row.setPath("A/Other.en.forced.srt");

@@ -173,6 +173,26 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
             + "f.osSearchedAt = null where f.id = :id")
     int clearOpenSubtitles(@org.springframework.data.repository.query.Param("id") Long id);
 
+    /**
+     * A film's best OpenSubtitles result.
+     *
+     * @param id the film
+     * @param imdbId its current IMDb id
+     * @param osBest the top-ranked result as JSON ({@code OpenSubtitlesResult.toJson})
+     */
+    record OsBestRef(Long id, String imdbId, String osBest) {
+    }
+
+    /**
+     * Films that have a best OpenSubtitles result from a search of their current IMDb id (at least one result). A
+     * count or result from a search under another IMDb id does not count.
+     */
+    @org.springframework.data.jpa.repository.Query(
+        "select new gregochr.cinefilm.film.FilmRepository$OsBestRef(f.id, f.imdbId, f.osBest) from Film f "
+            + "where f.imdbId is not null and f.osSearchedImdbId = f.imdbId and f.osForcedCount > 0 "
+            + "and f.osBest is not null order by f.id")
+    List<OsBestRef> findOpenSubtitlesBest();
+
     /** When OpenSubtitles was last searched for any film, or null when never. */
     @org.springframework.data.jpa.repository.Query("select max(f.osSearchedAt) from Film f")
     java.time.Instant findLatestOpenSubtitlesSearchedAt();

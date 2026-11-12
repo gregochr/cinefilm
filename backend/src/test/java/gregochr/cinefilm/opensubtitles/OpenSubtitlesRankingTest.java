@@ -96,4 +96,24 @@ class OpenSubtitlesRankingTest {
 
         assertThat(bestOf(other, trusted)).isEqualTo(9);
     }
+
+    private static OpenSubtitlesResult split(long id, int files) {
+        return new OpenSubtitlesResult(id, id + 1000, "release " + id, 23.976, 99_999, true, false, null, null, files);
+    }
+
+    @Test
+    void aSingleFileResultBeatsAMultiFileOneWhateverElseIsBetter() {
+        OpenSubtitlesResult single = result(9, 29.97, false, true, 0);
+
+        assertThat(bestOf(split(1, 2), single, split(2, 3))).isEqualTo(9);
+        assertThat(bestOf(single, split(1, 2))).isEqualTo(9);
+    }
+
+    @Test
+    void whenOnlyMultiFileResultsExistTheBestOfThemIsStillReturnedSoTheCallerCanSkipTheFilm() {
+        OpenSubtitlesResult best = OpenSubtitlesRanking.best(List.of(split(5, 2), split(3, 2))).orElseThrow();
+
+        assertThat(best.id()).isEqualTo(3);
+        assertThat(best.isMultiFile()).isTrue();
+    }
 }

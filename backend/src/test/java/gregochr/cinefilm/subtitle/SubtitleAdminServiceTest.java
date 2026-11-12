@@ -36,7 +36,7 @@ class SubtitleAdminServiceTest extends SubtitleTestBase {
 
         assertThat(listed(row.getId())).isEqualTo(new SidecarDto(row.getId(), "Alien.en.forced.srt", "PRESENT",
             "unmatched", null, null, null, null, 0, null, false, false, 2, "No problems found", 0, false, false,
-            NOW.toEpochMilli()));
+            NOW.toEpochMilli(), null));
     }
 
     @Test
@@ -49,7 +49,7 @@ class SubtitleAdminServiceTest extends SubtitleTestBase {
 
         assertThat(dto).isEqualTo(new SidecarDto(row.getId(), "Taken.en.forced.srt", "PRESENT", "matched",
             taken.getId(), "Taken", taken.getEditions().get(0).getId(), "Original", 1, 1, false, false, 2,
-            "No problems found", -250, false, false, NOW.toEpochMilli()));
+            "No problems found", -250, false, false, NOW.toEpochMilli(), null));
     }
 
     @Test

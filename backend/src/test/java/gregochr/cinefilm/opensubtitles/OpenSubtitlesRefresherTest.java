@@ -32,6 +32,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.ApplicationEventPublisher;
 
 /** The subtitle search run: which films it asks about, what it saves and when, and that only one run is ever going. */
 @ExtendWith(MockitoExtension.class)
@@ -48,6 +49,9 @@ class OpenSubtitlesRefresherTest {
     @Mock
     private FilmRepository films;
 
+    @Mock
+    private ApplicationEventPublisher events;
+
     private final List<Runnable> queued = new ArrayList<>();
     private final Logger refresherLog = (Logger) LoggerFactory.getLogger(OpenSubtitlesRefresher.class);
     private final ListAppender<ILoggingEvent> logged = new ListAppender<>();
@@ -55,7 +59,7 @@ class OpenSubtitlesRefresherTest {
 
     @BeforeEach
     void setUp() {
-        refresher = new OpenSubtitlesRefresher(api, films, CLOCK, queued::add);
+        refresher = new OpenSubtitlesRefresher(api, films, CLOCK, queued::add, events);
         logged.start();
         refresherLog.addAppender(logged);
     }
@@ -103,7 +107,8 @@ class OpenSubtitlesRefresherTest {
         startAndRun();
 
         verify(films).saveOpenSubtitles(1L, "tt0936501", 7, "{\"id\":77,\"fileId\":1077,\"release\":\"Taken.2008\","
-            + "\"fps\":23.976,\"downloadCount\":300,\"fromTrusted\":true,\"hearingImpaired\":false}", NOW);
+            + "\"fps\":23.976,\"downloadCount\":300,\"fromTrusted\":true,\"hearingImpaired\":false,"
+            + "\"fileCount\":1}", NOW);
         verify(films).saveOpenSubtitles(2L, "tt0113277", 2, result(5).toJson(), NOW);
         assertThat(messages()).contains("Subtitle search finished: 2 saved, 0 changed meanwhile, 0 failed");
         assertThat(refresher.isRunning()).isFalse();
@@ -247,7 +252,7 @@ class OpenSubtitlesRefresherTest {
 
     /** The refresher on an executor that runs the work at once, so a trigger can arrive from inside a run. */
     private OpenSubtitlesRefresher synchronous() {
-        return new OpenSubtitlesRefresher(api, films, CLOCK, Runnable::run);
+        return new OpenSubtitlesRefresher(api, films, CLOCK, Runnable::run, events);
     }
 
     @Test
@@ -403,7 +408,7 @@ class OpenSubtitlesRefresherTest {
     void anExecutorThatRefusesTheRunDoesNotLeaveTheServiceStuckRunning() {
         OpenSubtitlesRefresher refusing = new OpenSubtitlesRefresher(api, films, CLOCK, command -> {
             throw new RejectedExecutionException("full");
-        });
+        }, events);
         when(api.enabled()).thenReturn(true);
 
         assertThatThrownBy(refusing::startDue).isInstanceOf(RejectedExecutionException.class);
@@ -422,5 +427,27 @@ class OpenSubtitlesRefresherTest {
     @Test
     void aSearchWithNoResultIsOnlyRepeatedAfterThirtyDays() {
         assertThat(OpenSubtitlesRefresher.RESEARCH_AFTER).isEqualTo(Duration.ofDays(30));
+    }
+
+    @Test
+    void whenARunEndsTheSearchFinishedEventIsPublishedEvenAfterAnOutage() {
+        when(films.findOpenSubtitlesDue(CUTOFF)).thenReturn(List.of(TAKEN));
+        when(api.searchForced("tt0936501")).thenThrow(new OpenSubtitlesUnavailableException("down"));
+
+        startAndRun();
+
+        verify(events).publishEvent(new OpenSubtitlesSearchFinished());
+    }
+
+    @Test
+    void aListenerThatFailsDoesNotBreakTheRunOrLeaveItStuck() {
+        when(films.findOpenSubtitlesDue(CUTOFF)).thenReturn(List.of());
+        org.mockito.Mockito.doThrow(new IllegalStateException("listener")).when(events)
+            .publishEvent(new OpenSubtitlesSearchFinished());
+
+        startAndRun();
+
+        assertThat(messages()).contains("A listener of the subtitle search failed: IllegalStateException");
+        assertThat(refresher.isRunning()).isFalse();
     }
 }
