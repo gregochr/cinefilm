@@ -101,7 +101,7 @@ describe('Full subtitles: the list', () => {
 
     await userEvent.click(chip(/^Unsure/));
     const amelie = within(rowOf('Amélie (2001)'));
-    expect(amelie.getByText('Audio language not labelled')).toBeVisible();
+    expect(amelie.getByText('Waiting for TMDB')).toBeVisible();
     expect(
       amelie.getByText("Audio: Theatrical Cut: not labelled; Director's Cut: French"),
     ).toBeVisible();
@@ -135,6 +135,22 @@ describe('Full subtitles: the list', () => {
     await userEvent.click(chip(/^Unsure/));
     await userEvent.click(chip(/^Needed/));
     expect(titles()).toHaveLength(100);
+  });
+});
+
+describe('Full subtitles: unlabelled audio', () => {
+  it('is Needed, with the original language assumed', async () => {
+    await open({
+      films: [
+        film(1, {
+          reason: 'ORIGINAL_AUDIO_ASSUMED',
+          editions: [{ name: 'Original', audio: null }],
+        }),
+      ],
+    });
+    const row = within(rowOf('Film 1 (1981)'));
+    expect(row.getByText('Needed', { selector: 'span' })).toBeVisible();
+    expect(row.getByText('Audio not labelled: original language assumed')).toBeVisible();
   });
 });
 

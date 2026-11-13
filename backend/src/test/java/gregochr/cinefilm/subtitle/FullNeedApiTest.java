@@ -85,14 +85,14 @@ class FullNeedApiTest extends SubtitleTestBase {
             .andExpect(jsonPath("$.films[1].need").value("NOT_NEEDED"))
             .andExpect(jsonPath("$.films[1].reason").value("ENGLISH_AUDIO"))
             .andExpect(jsonPath("$.films[1].editions[0].audio").value("English"))
-            .andExpect(jsonPath("$.films[2].need").value("UNSURE"))
-            .andExpect(jsonPath("$.films[2].reason").value("UNLABELLED_AUDIO"))
+            .andExpect(jsonPath("$.films[2].need").value("NEEDED"))
+            .andExpect(jsonPath("$.films[2].reason").value("ORIGINAL_AUDIO_ASSUMED"))
             .andExpect(jsonPath("$.films[2].editions[0].audio").value((Object) null))
             .andExpect(jsonPath("$.films[3].title").value("F Chosen"))
             .andExpect(jsonPath("$.films[3].reason").value("OWNER"))
             .andExpect(jsonPath("$.films[3].ownerChoice").value("NEEDED"))
-            .andExpect(jsonPath("$.counts.needed").value(2))
-            .andExpect(jsonPath("$.counts.unsure").value(1))
+            .andExpect(jsonPath("$.counts.needed").value(3))
+            .andExpect(jsonPath("$.counts.unsure").value(0))
             .andExpect(jsonPath("$.counts.notNeeded").value(1))
             .andExpect(jsonPath("$.counts.unknown").value(0));
     }
@@ -141,7 +141,8 @@ class FullNeedApiTest extends SubtitleTestBase {
             .andExpect(jsonPath("$.films[0].editions[0].audio").value("English"))
             .andExpect(jsonPath("$.films[1].title").value("B Gone"))
             .andExpect(jsonPath("$.films[1].editions.length()").value(0))
-            .andExpect(jsonPath("$.films[1].need").value("UNSURE"));
+            .andExpect(jsonPath("$.films[1].need").value("NEEDED"))
+            .andExpect(jsonPath("$.films[1].reason").value("ORIGINAL_AUDIO_ASSUMED"));
     }
 
     @Test

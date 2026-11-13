@@ -205,7 +205,8 @@ class FullNeedServiceTest {
         assertThat(films.get(1).need()).isEqualTo("NOT_NEEDED");
         assertThat(films.get(1).reason()).isEqualTo("ENGLISH_AUDIO");
         assertThat(films.get(2).editions()).containsExactly(new EditionAudioDto("Original", null));
-        assertThat(films.get(2).need()).isEqualTo("UNSURE");
+        assertThat(films.get(2).need()).isEqualTo("NEEDED");
+        assertThat(films.get(2).reason()).isEqualTo("ORIGINAL_AUDIO_ASSUMED");
     }
 
     @Test
@@ -224,7 +225,8 @@ class FullNeedServiceTest {
             .containsExactly("Theatrical", "Director's Cut");
         assertThat(films.get(0).need()).isEqualTo("NEEDED");
         assertThat(films.get(1).editions()).isEmpty();
-        assertThat(films.get(1).need()).isEqualTo("UNSURE");
+        assertThat(films.get(1).need()).isEqualTo("NEEDED");
+        assertThat(films.get(1).reason()).isEqualTo("ORIGINAL_AUDIO_ASSUMED");
     }
 
     @Test

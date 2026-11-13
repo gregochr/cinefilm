@@ -619,9 +619,10 @@ of `forced_need` + `forced_need_source`.
 | 3 | A file of the film has an embedded forced track in English (`eng`, `en`) or with no language (null, `und`) | `NEEDED` | `EMBEDDED_FORCED` (pictures: cannot be shown yet) |
 | 4 | (2c) OpenSubtitles has English foreign-parts-only results | `NEEDED` | `OPENSUBTITLES` |
 | 5 | TMDB not asked yet, or no TMDB match | `UNKNOWN` | `NO_LANGUAGES` |
-| 6 | `original_language` is not `en` | `UNSURE` | `FOREIGN_LANGUAGE_FILM` (needs full subtitles: out of scope) |
+| 6 | `original_language` is not `en` (changed by decision 69; was `UNSURE`) | `NOT_NEEDED` | `FOREIGN_LANGUAGE_FILM` (full subtitles cover it) |
 | 7 | Spoken languages are exactly English | `NOT_NEEDED` | `ENGLISH_ONLY` |
-| 8 | Anything else (other spoken languages, or none listed) | `UNSURE` | `OTHER_LANGUAGES` / `NO_SPOKEN_LANGUAGES` |
+| 8 | Anything else (other spoken languages, or none listed), OpenSubtitles asked for the current IMDb id with 0 forced files (decision 69) | `NOT_NEEDED` | `NO_FORCED_ONLINE` |
+| 9 | Anything else, OpenSubtitles not asked yet | `UNSURE` ("Checking online", transient) | `OTHER_LANGUAGES` / `NO_SPOKEN_LANGUAGES` |
 
 TMDB's `xx` ("no language") is ignored in the spoken list and as the original language (a film whose original language is `xx` falls through to the spoken-language rules, not rule 6). `hasForcedSubtitle` (the Admin "has a forced subtitle"
 filter, and `neededMissing`) is stricter than rule 2: at least one edition has a forced subtitle that playback would
@@ -1101,6 +1102,30 @@ links to each film's rows.
 68. **The saved choice stores the literal `"full"`, and "nothing saved" becomes null instead of `"off"`.** Without
     that, "on by default" cannot tell a film never chosen from one switched Off. Alternative: a separate
     `subtitle_chosen` flag (more state for the same fact).
+69. **Forced need settles itself: a film searched online with 0 forced files is `NOT_NEEDED` (`NO_FORCED_ONLINE`), and a
+    film not made in English is `NOT_NEEDED` (`FOREIGN_LANGUAGE_FILM`).** Both rules sit after the owner, a sidecar, an
+    embedded forced track and OpenSubtitles files, so a real forced file or track still wins. "Unsure" now only means
+    "not checked online yet" (the film has other or no spoken languages and the daily search has not run for its
+    current IMDb id). The owner's choice still overrides but is optional. Owner, 2026-11-13: "I've not seen these films
+    and I don't have time to watch them... Surely this info is available online for us to choose? ... The software
+    needs to make it happen, so when I eventually get to watch said film it's correct and reflects the director's
+    intent with subtitles." This reverses the "owner decides" design and decision 63. **Alternative given up:** leave
+    the 265 films `UNSURE` for the owner's tap. A film searched with 0 files is searched again monthly, so it flips to
+    `NEEDED` when a forced file is uploaded later.
+70. **Unlabelled audio assumes the original language, so it is `NEEDED` (`ORIGINAL_AUDIO_ASSUMED`).** Rips keep the
+    original audio, which is the director's intent. A film with no present edition or no audio is treated the same way.
+    The player's 5c default (on when nothing is chosen, full need `NEEDED` and the selected audio not labelled English)
+    already switches the subtitle on for unlabelled audio. This reverses decision 62's `UNSURE`. **Alternative given
+    up:** wait for the owner's tap. An English dub costs one download, and the owner switches it off once (Not needed).
+
+#### Automatic need (2026-11-13)
+
+Decisions 69 and 70 change the need rules after 5e: forced need settles from OpenSubtitles and the film's original
+language, full need from the original audio assumed. The Admin forced chip "Unsure" is now "Checking online" and the
+full reason `UNLABELLED_AUDIO` is `ORIGINAL_AUDIO_ASSUMED`. The 5d-1 full search and downloads now cover these films,
+since `FullNeedService.neededFilmIds()` includes them. The decision 59 rule (a film the owner marked "not needed" serves
+no downloads) still reads the owner's choice only, in `Downloads.isNotNeeded`; the due lists and the pre-add recheck read
+the need, so an automatic `NOT_NEEDED` adds no downloads but never hides an existing one or an owner's sidecar.
 
 #### Phase 5d-1 built (2026-11-13)
 

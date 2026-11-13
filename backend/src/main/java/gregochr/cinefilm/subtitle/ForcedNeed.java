@@ -7,7 +7,8 @@ import java.util.List;
 /**
  * Whether a film needs forced subtitles, worked out from what is known about it. The first rule that matches wins:
  * the owner's choice, an attached forced subtitle file, an embedded forced English track, OpenSubtitles' evidence,
- * then TMDB's languages. Pure: nothing here reads or writes anything.
+ * then TMDB's languages and what OpenSubtitles said when asked. The owner never has to decide: only a film
+ * OpenSubtitles has not been asked about yet is left {@code UNSURE}. Pure: nothing here reads or writes anything.
  */
 public final class ForcedNeed {
 
@@ -25,7 +26,7 @@ public final class ForcedNeed {
         NEEDED,
         /** The film does not need them. */
         NOT_NEEDED,
-        /** Other languages are spoken, or the film is not in English: the owner decides. */
+        /** Not checked online yet: other or no spoken languages, and OpenSubtitles has not been asked. Transient. */
         UNSURE,
         /** TMDB has not been asked, or has no film for it. */
         UNKNOWN
@@ -43,13 +44,15 @@ public final class ForcedNeed {
         OPENSUBTITLES,
         /** TMDB has not been asked, or has no film. */
         NO_LANGUAGES,
-        /** The film was not made in English: it needs full subtitles, which is out of scope. */
+        /** The film was not made in English: its full English subtitles (phase 5) carry the foreign lines. */
         FOREIGN_LANGUAGE_FILM,
+        /** OpenSubtitles was asked for the film's current IMDb id and has no forced English files for it. */
+        NO_FORCED_ONLINE,
         /** TMDB lists English as the only spoken language. */
         ENGLISH_ONLY,
-        /** TMDB lists other spoken languages as well as, or instead of, English. */
+        /** TMDB lists other spoken languages as well as, or instead of, English, and OpenSubtitles is not asked yet. */
         OTHER_LANGUAGES,
-        /** TMDB lists no spoken languages. */
+        /** TMDB lists no spoken languages, and OpenSubtitles is not asked yet. */
         NO_SPOKEN_LANGUAGES
     }
 
@@ -101,12 +104,15 @@ public final class ForcedNeed {
         }
         String original = SpokenLanguages.code(languages.originalLanguage());
         if (original != null && !ENGLISH.equals(original) && !NO_LANGUAGE.equals(original)) {
-            return new Decision(Need.UNSURE, Reason.FOREIGN_LANGUAGE_FILM);
+            return new Decision(Need.NOT_NEEDED, Reason.FOREIGN_LANGUAGE_FILM);
         }
         List<String> spoken = SpokenLanguages.codes(languages.spokenLanguages()).stream()
             .filter(code -> !NO_LANGUAGE.equals(code)).toList();
         if (spoken.equals(List.of(ENGLISH))) {
             return new Decision(Need.NOT_NEEDED, Reason.ENGLISH_ONLY);
+        }
+        if (openSubtitlesForcedCount != null) {
+            return new Decision(Need.NOT_NEEDED, Reason.NO_FORCED_ONLINE);
         }
         return new Decision(Need.UNSURE, spoken.isEmpty() ? Reason.NO_SPOKEN_LANGUAGES : Reason.OTHER_LANGUAGES);
     }

@@ -71,16 +71,16 @@ class FullNeedTest {
     }
 
     @Test
-    void ruleFourUnlabelledAudioIsUnsure() {
-        assertThat(audio((String) null)).isEqualTo(decision(Need.UNSURE, Reason.UNLABELLED_AUDIO));
-        assertThat(audio(null, null)).isEqualTo(decision(Need.UNSURE, Reason.UNLABELLED_AUDIO));
-        assertThat(audio("English", null)).isEqualTo(decision(Need.UNSURE, Reason.UNLABELLED_AUDIO));
-        assertThat(audio(" ")).isEqualTo(decision(Need.UNSURE, Reason.UNLABELLED_AUDIO));
+    void ruleFourUnlabelledAudioAssumesTheOriginalLanguageSoItIsNeeded() {
+        assertThat(audio((String) null)).isEqualTo(decision(Need.NEEDED, Reason.ORIGINAL_AUDIO_ASSUMED));
+        assertThat(audio(null, null)).isEqualTo(decision(Need.NEEDED, Reason.ORIGINAL_AUDIO_ASSUMED));
+        assertThat(audio("English", null)).isEqualTo(decision(Need.NEEDED, Reason.ORIGINAL_AUDIO_ASSUMED));
+        assertThat(audio(" ")).isEqualTo(decision(Need.NEEDED, Reason.ORIGINAL_AUDIO_ASSUMED));
     }
 
     @Test
-    void noPresentEditionIsUnsure() {
-        assertThat(audio()).isEqualTo(decision(Need.UNSURE, Reason.UNLABELLED_AUDIO));
+    void noPresentEditionIsTreatedAsUnlabelledSoItIsNeeded() {
+        assertThat(audio()).isEqualTo(decision(Need.NEEDED, Reason.ORIGINAL_AUDIO_ASSUMED));
     }
 
     @ParameterizedTest

@@ -8,7 +8,8 @@ import java.util.Locale;
 
 /**
  * Whether a film needs full English subtitles. The first rule that matches wins: the owner's choice, TMDB's languages
- * (no languages, or an English or language-less original), then the audio of the owner's copy. Pure: nothing here reads
+ * (no languages, or an English or language-less original), then the audio of the owner's copy (unlabelled audio is
+ * assumed to be the original language). Pure: nothing here reads
  * or writes anything.
  */
 public final class FullNeed {
@@ -27,7 +28,7 @@ public final class FullNeed {
         NEEDED,
         /** The film does not need them. */
         NOT_NEEDED,
-        /** The audio's language is not labelled: the owner decides. */
+        /** Not used by the rules any more (unlabelled audio is assumed original); kept for the API's shape. */
         UNSURE,
         /** TMDB has not been asked, or has no film for it. */
         UNKNOWN
@@ -45,8 +46,11 @@ public final class FullNeed {
         FOREIGN_AUDIO,
         /** Every edition's audio is labelled English (a dub, or an English co-production). */
         ENGLISH_AUDIO,
-        /** No edition's audio is labelled foreign, and not every edition's is labelled English. */
-        UNLABELLED_AUDIO
+        /**
+         * No edition's audio is labelled foreign, and not every edition's is labelled English (or there is no
+         * edition): rips keep the original audio, which is the director's intent, so the film needs subtitles.
+         */
+        ORIGINAL_AUDIO_ASSUMED
     }
 
     /**
@@ -94,7 +98,7 @@ public final class FullNeed {
         if (!editionsAudio.isEmpty() && editionsAudio.stream().allMatch(FullNeed::isEnglish)) {
             return new Decision(Need.NOT_NEEDED, Reason.ENGLISH_AUDIO);
         }
-        return new Decision(Need.UNSURE, Reason.UNLABELLED_AUDIO);
+        return new Decision(Need.NEEDED, Reason.ORIGINAL_AUDIO_ASSUMED);
     }
 
     /**
