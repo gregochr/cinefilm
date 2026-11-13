@@ -192,8 +192,111 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
    editions, a Bond, a Marvel film with mid- and post-credits scenes, a Pixar film, a letterboxed night ending, a
    starfield ending, an HDR remux, a black-and-white film, a film with credits over picture. Also the time a film
    takes. Thresholds are tuned in this plan from what is found.
-3. **Apply, source column, Admin.** `credits_marker_source` and its carrying, applying `FOUND`, the watched-rule
-   change if the owner agrees, the Admin list and overrides.
+   **Measured 2026-11-13 on v0.6.1** (below, "Phase 2: what the server showed"). The detector as built finds almost
+   nothing; the fixes are phase 2b.
+2b. **Detector fixes, still report only.** The frame-classifier changes and the motion changes measured below, and
+   re-analysis of every stored row: an `analysis_version` column on `credits_detection` (expand-only, default 1); a
+   row whose version is older than the code's `CreditsTuning.ANALYSIS_VERSION` is due again, like a changed
+   fingerprint. Unit tests use synthetic frames for each measured failure (anti-aliased white text that reaches only
+   0.6–0.8 of the text-like share, thin grey text far below the window's peak, dense columns that leave only 75% of
+   the frame dark, burned-in subtitles in the bottom band of a dark scene, a sub-pixel crawl, cards fading through
+   black, credits starting 3 minutes after an end-title sequence over picture); no frames from real films go into the
+   repository. After its release, and **before phase 3 applies anything**, the stored rows are compared with the
+   imported Plex markers (phase 2c) across the library: a `FOUND` more than 15 s before Plex's start is a defect to fix
+   first.
+2c. **One-off Plex marker import, stored only** (owner, 2026-11-13: "Yes to the one time import, but … it's not a
+   durable solution"). Plex is being decommissioned, so this runs once (an Admin action, like Import from Plex, which
+   reads the same server and token) and keeps what it found after Plex is gone. Stored per media file (Plex lists
+   each file of a split edition as a part; its offsets are edition-global, so a part's offset is the marker minus the
+   earlier parts' durations). The first credits marker at least 60% into the item is the start (Plex marks a credits
+   run followed by a mid-credits scene as a non-final marker before the final one). Nothing is applied.
+3. **Apply, source column, Admin.** `credits_marker_source` and its carrying, applying, the watched-rule change if the
+   owner agrees, the Admin list and overrides. Precedence: `OWNER`, then `PLEX`, then the detector's `FOUND` plus a
+   20 s margin (`AUTO`), then the 97% fallback. **A late overlay is better than an early one** (owner, 2026-11-13):
+   the margin applies to detected markers only.
+
+## Phase 2: what the server showed (2026-11-13)
+
+v0.6.1 analysed its first five files: four `NOT_FOUND` ("black or text on a dark screen lasts only 5 s") and one
+`UNSURE`, on films that all end with ordinary credits. The pure classes were then run in a scratch harness on frames
+pulled from the server in the detector's own format (480 px wide, grey), for 30 films, and compared with **Plex's own
+credits markers**: Plex Pass is active, and Plex has a credits marker for 864 of the 1,087 films (none for either LOTR
+extended edition). Plex's markers are the ground truth from here on.
+
+**Why credit frames were `PICTURE`:**
+
+- `TEXT_LIKE_SHARE` 0.8 sits at the top of what real credits score. White text on black at 480 px scores 0.63–0.80
+  (anti-aliased letter edges often sit just above the sharp-edge limit); film frames score at most 0.04.
+- Small or thin lettering never reaches the bright limit (65% of the window's peak). *Wicked*'s serif credits top out
+  at about 148 grey with a limit of 143, so the frame has almost no bright pixels.
+- Dense multi-column credits leave only 75% of the frame dark (*Fellowship* extended), under `TEXT_DARK_SHARE` 0.80.
+- Measuring at 960 px instead was tried and is not a fix: it helped *Dune Part Two* and made *Endgame* and
+  *Fellowship* worse.
+
+**The classifier change (measured):**
+
+- A frame whose dark share reaches `TEXT_DARK_SHARE` measures its bright and sharp limits against its own 99.9th
+  percentile luma, clamped to between half the window's peak and the peak (dark share is still measured against the
+  window's peak).
+- `TEXT_DARK_SHARE` 0.70, `TEXT_LIKE_SHARE` 0.30.
+- **Subtitles are not text on dark:** a frame whose text-row pixels lie 80% or more in the bottom 30% of the picture
+  area is not text-like. *Psycho*'s dark scenes with burned-in subtitles scored up to 0.67 before this rule and 0
+  after.
+
+With it, the coarse step finds a candidate in 23 of the 30 films, and the 7 rejections are endings the picture cannot
+read: *Return of the King* extended (dark text on a grey parchment texture), *Jaws* (credits over the sea),
+*Goldfinger* and *A Close Shave* (almost no credits), *Psycho*, and *The Batman* (grey text on a lifted, grainy
+black). Plex has markers for four of those, which the import covers.
+
+**Against Plex** (the coarse candidate, then the real `refine` on a dense decode around it):
+
+| Result | Films | Offset from Plex's first marker |
+|---|---|---|
+| `FOUND` | *Gravity*, *Oppenheimer*, *2001*, *Blade Runner*, *Mamma Mia*, *Skyfall*, *Interstellar*, *Love Actually*, *Guardians* | 0 to +23 s |
+| `FOUND`, late | *Schindler's List*, *WALL·E*, *The Proposal* | +77 to +193 s |
+| `UNSURE` "never moves", right time | *Wicked*, *Gladiator II*, *Ratatouille*, *Dune Part Two*, *Notting Hill*, *Inside Out* | −5 to +2 s |
+| `UNSURE`, other | *The Dark Knight*, *Contagion*, *Endgame*, *Civil War* | −89 to +122 s |
+
+No `FOUND` was early. The coarse step places the start well; the motion check is what refuses ordinary crawls (see
+"The motion check" below, phase 2b). *Contagion*'s candidate is 89 s early because the black before the crawl
+counted as credits-like, and its dense window (centred on the candidate) only reaches the crawl at its end.
+
+### The motion check
+
+The `UNSURE` "never moves" results have three causes, found by instrumenting `CreditsMotion` on the dense frames:
+
+1. **Crawls missed** (*Civil War*, *Gladiator II*, *Notting Hill*: plain crawls of 11–16 px a frame). Each pixel row
+   is compared by its count of bright pixels; small anti-aliased text moving by a fraction of a pixel makes the counts
+   noisy, so the best match errs 0.16–0.39 against `CRAWL_MATCH_MAX_ERROR` 0.15.
+2. **Cards fading through black** (*The Dark Knight*: one credit per card). Text is only a third of the frames
+   (`MOTION_MIN_TEXT_SHARE` 0.5), and a card change alters 0.0015–0.0048 of the pixels (`CARD_CHANGE_MIN_SHARE`
+   0.005; the noise within one card is about 0.0001).
+3. **The dense window misses the credits** (*Contagion*, *Endgame*, *Dune Part Two*, *Ratatouille*, *Inside Out*,
+   *Wicked*). The candidate is the start of an end-title sequence over picture (animation, panels, light rays, a cast
+   montage); the credits on a dark screen begin 86–200 s later, past the window's end at candidate + 90 s. The 90 s
+   before the candidate were never used (`refine` starts 5 s before the candidate).
+
+**Changes (measured on all 23 candidate films):**
+
+- `CreditsMotion` row profiles are smoothed over three rows (each count plus its neighbour above and below) before
+  matching.
+- `CRAWL_MATCH_MAX_ERROR` 0.25 (the match must still be under half the error of "not moving", so still text cannot
+  pass as a crawl); `MOTION_MIN_TEXT_SHARE` 0.3 (black frames already count towards the 0.8 non-picture share);
+  `CARD_CHANGE_MIN_SHARE` 0.001.
+- The dense pass decodes **from 10 s before the candidate to 290 s after** (600 frames at 2 a second, instead of
+  3 minutes centred on it). `DENSE_TIMEOUT` grows in proportion.
+
+Result: **every one of the 23 candidate films is `FOUND`, none early.** The earliest is *Gladiator II* at 2 s before
+Plex's marker; *Contagion* 1 s before; the rest 0 to +254 s late (*Endgame* +2 s against Plex's final marker, +254 s
+against its first, which starts the cast montage over picture). Each change was needed: smoothing alone fixes only
+*Notting Hill*, and an error limit of 0.20 alone misses *Civil War*. 0.0015 for card changes gives the same results
+but sits exactly at *The Dark Knight*'s smallest change, so 0.001 leaves margin.
+
+**Remaining risk, accepted and measured:** a story that ends in moving text on black (an epilogue crawl) before the
+credits would be marked at the epilogue. Phase 2b's run against the 864 Plex markers counts these; the 20 s margin
+and Plex's precedence limit the damage.
+
+**Time per film:** 127–221 s on the server for the five files analysed by v0.6.1.
 
 ## Open owner decisions
 
