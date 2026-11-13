@@ -8,6 +8,7 @@ import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -41,9 +42,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 /**
  * The credits detection service's decisions with every collaborator faked and no Spring context: which files are due
@@ -55,6 +59,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 class CreditsDetectionServiceUnitTest {
 
     private static final Path FILE = Path.of("/library/Taken.m4v");
+    private static final Instant LATER = NOW.plusSeconds(1);
     private static final long CREDITS_AT = 450_000;
     private static final long FILM_LENGTH = 10 * MIN;
     private static final String PRINT = "1001:" + NOW.toEpochMilli();
@@ -83,6 +88,9 @@ class CreditsDetectionServiceUnitTest {
 
     @Mock
     private PlatformTransactionManager transactions;
+
+    @Captor
+    private ArgumentCaptor<TransactionDefinition> definition;
 
     private final LibraryLock lock = new LibraryLock();
     private final Runnable checkpoint = () -> { };
@@ -270,6 +278,11 @@ class CreditsDetectionServiceUnitTest {
         when(cueStarts.findById(10L)).thenReturn(Optional.of(row));
     }
 
+    private static void assertFoundAtCreditsStart(CreditsResult result) {
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
+        assertThat(result.offsetMs()).isEqualTo(450_000L);
+    }
+
     @Test
     void aCandidateIsRefinedOnTheDenseFramesAroundItAndTheJobIsClosed() {
         jobReads(true);
@@ -278,7 +291,8 @@ class CreditsDetectionServiceUnitTest {
         CreditsResult result = service.detect(DUE, FILE, checkpoint);
 
         assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
-        assertThat(result.offsetMs()).isBetween(CREDITS_AT, CREDITS_AT + 1_000);
+        assertThat(result.offsetMs()).isEqualTo(450_000L);
+        assertThat(result.reasons()).containsExactly("Text on a dark screen moves up steadily from 0:07:30");
         verify(job).denseFrames(CREDITS_AT);
         verify(job).close();
     }
@@ -292,7 +306,7 @@ class CreditsDetectionServiceUnitTest {
         assertThat(result.verdict()).isEqualTo(CreditsVerdict.NOT_FOUND);
         assertThat(result.offsetMs()).isNull();
         assertThat(result.reasons()).containsExactly("The ending has no black screen and no text on a dark screen");
-        verify(job, never()).denseFrames(CREDITS_AT);
+        verify(job, never()).denseFrames(anyLong());
         verify(job).close();
     }
 
@@ -305,7 +319,8 @@ class CreditsDetectionServiceUnitTest {
         CreditsResult result = service.detect(DUE, FILE, checkpoint);
 
         assertThat(result.verdict()).isEqualTo(CreditsVerdict.UNSURE);
-        assertThat(result.reasons()).singleElement().asString().startsWith("Someone is still talking");
+        assertThat(result.offsetMs()).isEqualTo(450_000L);
+        assertThat(result.reasons()).containsExactly("Someone is still talking 35 s after the credits seem to start");
     }
 
     @Test
@@ -314,16 +329,16 @@ class CreditsDetectionServiceUnitTest {
         when(job.denseFrames(CREDITS_AT)).thenReturn(denseFrames());
         cueRow("1001:1", EmbeddedCueStarts.Status.USABLE, List.of(300_000L, 460_000L, 485_000L));
 
-        assertThat(service.detect(DUE, FILE, checkpoint).verdict()).isEqualTo(CreditsVerdict.FOUND);
+        assertFoundAtCreditsStart(service.detect(DUE, FILE, checkpoint));
     }
 
     @Test
     void aReadWithNoUsableTrackGivesNoCueStarts() {
         jobReads(true);
         when(job.denseFrames(CREDITS_AT)).thenReturn(denseFrames());
-        cueRow(PRINT, EmbeddedCueStarts.Status.NO_REFERENCE, List.of());
+        cueRow(PRINT, EmbeddedCueStarts.Status.NO_REFERENCE, List.of(300_000L, 460_000L, 485_000L));
 
-        assertThat(service.detect(DUE, FILE, checkpoint).verdict()).isEqualTo(CreditsVerdict.FOUND);
+        assertFoundAtCreditsStart(service.detect(DUE, FILE, checkpoint));
     }
 
     @Test
@@ -332,7 +347,7 @@ class CreditsDetectionServiceUnitTest {
         when(job.denseFrames(CREDITS_AT)).thenReturn(denseFrames());
         when(cueStarts.findById(10L)).thenReturn(Optional.empty());
 
-        assertThat(service.detect(DUE, FILE, checkpoint).verdict()).isEqualTo(CreditsVerdict.FOUND);
+        assertFoundAtCreditsStart(service.detect(DUE, FILE, checkpoint));
     }
 
     @Test
@@ -370,12 +385,26 @@ class CreditsDetectionServiceUnitTest {
 
     // ---- save ----------------------------------------------------------------------------------------------------
 
+    /** Stubs the transaction manager to hand out a status, capturing the definition the service asks for. */
+    private SimpleTransactionStatus transaction() {
+        SimpleTransactionStatus status = new SimpleTransactionStatus();
+        when(transactions.getTransaction(definition.capture())).thenReturn(status);
+        return status;
+    }
+
+    private void assertPlainWriteTransaction() {
+        assertThat(definition.getValue().getPropagationBehavior())
+            .isEqualTo(TransactionDefinition.PROPAGATION_REQUIRED);
+        assertThat(definition.getValue().isReadOnly()).isFalse();
+    }
+
     private static CreditsResult found() {
         return new CreditsResult(CreditsVerdict.FOUND, 3_723_500L, List.of("Text moves up", "Nobody is talking"));
     }
 
     @Test
     void successWritesExactlyTheRowFieldsAndReleasesTheLock() {
+        SimpleTransactionStatus status = transaction();
         MediaFile file = savedFile();
         when(files.findById(10L)).thenReturn(Optional.of(file));
         when(detections.findById(10L)).thenReturn(Optional.empty());
@@ -393,10 +422,13 @@ class CreditsDetectionServiceUnitTest {
         assertThat(row.getReasons()).isEqualTo("Text moves up\nNobody is talking");
         assertThat(row.getCheckedAt()).isEqualTo(NOW);
         assertThat(lock.holder()).isNull();
+        verify(transactions).commit(status);
+        assertPlainWriteTransaction();
     }
 
     @Test
     void anExistingRowIsUpdatedNotReplacedAndANotFoundResultClearsTheOffset() {
+        SimpleTransactionStatus status = transaction();
         MediaFile file = savedFile();
         when(files.findById(10L)).thenReturn(Optional.of(file));
         CreditsDetection existing = new CreditsDetection();
@@ -416,10 +448,13 @@ class CreditsDetectionServiceUnitTest {
         assertThat(existing.getFingerprint()).isEqualTo(PRINT);
         assertThat(existing.getReasons()).isEqualTo("None");
         assertThat(existing.getCheckedAt()).isEqualTo(NOW);
+        verify(transactions).commit(status);
+        assertPlainWriteTransaction();
     }
 
     @Test
     void reasonsAreCutAtTwoThousandCharactersAndNoShorter() {
+        SimpleTransactionStatus status = transaction();
         MediaFile file = savedFile();
         when(files.findById(10L)).thenReturn(Optional.of(file));
         when(detections.findById(10L)).thenReturn(Optional.empty());
@@ -431,9 +466,9 @@ class CreditsDetectionServiceUnitTest {
         verify(detections, times(2)).save(saved.capture());
         assertThat(saved.getAllValues().get(0).getReasons()).isEqualTo("x".repeat(2_000));
         assertThat(saved.getAllValues().get(1).getReasons()).isEqualTo("y".repeat(2_000));
+        verify(transactions, times(2)).commit(status);
+        assertPlainWriteTransaction();
     }
-
-    private static final Instant LATER = NOW.plusSeconds(1);
 
     @Test
     void aRefusedLockIsBusyAndTouchesNothingAndLeavesTheHoldersLock() {
@@ -448,16 +483,20 @@ class CreditsDetectionServiceUnitTest {
 
     @Test
     void aFileThatIsGoneIsDroppedAndTheLockIsReleased() {
+        SimpleTransactionStatus status = transaction();
         when(files.findById(10L)).thenReturn(Optional.empty());
 
         assertThat(service.save(DUE, found(), NOW)).isEqualTo(SaveOutcome.DROPPED);
 
         verifyNoInteractions(detections);
         assertThat(lock.holder()).isNull();
+        verify(transactions).commit(status);
+        assertPlainWriteTransaction();
     }
 
     @Test
     void aFileThatIsNoLongerPresentIsDroppedAndTheLockIsReleased() {
+        SimpleTransactionStatus status = transaction();
         MediaFile file = savedFile();
         file.setPresence(Presence.MISSING);
         when(files.findById(10L)).thenReturn(Optional.of(file));
@@ -466,10 +505,13 @@ class CreditsDetectionServiceUnitTest {
 
         verifyNoInteractions(detections);
         assertThat(lock.holder()).isNull();
+        verify(transactions).commit(status);
+        assertPlainWriteTransaction();
     }
 
     @Test
     void aFileWhoseFingerprintChangedIsDroppedAndTheLockIsReleased() {
+        SimpleTransactionStatus status = transaction();
         MediaFile file = savedFile();
         file.setSizeBytes(2_000L);
         when(files.findById(10L)).thenReturn(Optional.of(file));
@@ -478,10 +520,13 @@ class CreditsDetectionServiceUnitTest {
 
         verifyNoInteractions(detections);
         assertThat(lock.holder()).isNull();
+        verify(transactions).commit(status);
+        assertPlainWriteTransaction();
     }
 
     @Test
     void theLockIsReleasedWhenTheWriteThrows() {
+        SimpleTransactionStatus status = transaction();
         MediaFile file = savedFile();
         when(files.findById(10L)).thenReturn(Optional.of(file));
         when(detections.findById(10L)).thenReturn(Optional.empty());
@@ -491,20 +536,26 @@ class CreditsDetectionServiceUnitTest {
         assertThatThrownBy(() -> service.save(DUE, found(), NOW)).isSameAs(failure);
 
         assertThat(lock.holder()).isNull();
+        verify(transactions).rollback(status);
+        assertPlainWriteTransaction();
     }
 
     @Test
     void theLockIsReleasedWhenTheFileLookupThrows() {
+        SimpleTransactionStatus status = transaction();
         IllegalStateException failure = new IllegalStateException("database is down");
         when(files.findById(10L)).thenThrow(failure);
 
         assertThatThrownBy(() -> service.save(DUE, found(), NOW)).isSameAs(failure);
 
         assertThat(lock.holder()).isNull();
+        verify(transactions).rollback(status);
+        assertPlainWriteTransaction();
     }
 
     @Test
     void theLockIsHeldByCreditsWhileTheWriteRuns() {
+        SimpleTransactionStatus status = transaction();
         MediaFile file = savedFile();
         when(files.findById(10L)).thenAnswer(call -> {
             assertThat(lock.heldBy(LibraryLock.CREDITS)).isTrue();
@@ -515,5 +566,7 @@ class CreditsDetectionServiceUnitTest {
         service.save(DUE, found(), NOW);
 
         assertThat(lock.holder()).isNull();
+        verify(transactions).commit(status);
+        assertPlainWriteTransaction();
     }
 }
