@@ -50,6 +50,61 @@ describe('FilmDetail preferences', () => {
     ]);
   });
 
+  it('offers "English (full)" after Off, and picking it saves "full"', async () => {
+    const fetchMock = filmServer(1, fixtures.heat, (f) => {
+      f.editions[0].fullSubtitle = { source: 'SIDECAR', version: 1 };
+    });
+    renderApp('/films/1');
+    const subtitles = await screen.findByLabelText('Subtitles');
+    expect(
+      within(subtitles)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Off · forced when needed', 'English (full)', 'English', 'English (forced)']);
+
+    await userEvent.selectOptions(subtitles, 'English (full)');
+
+    expect(subtitles).toHaveDisplayValue('English (full)');
+    expect(putsTo(fetchMock, '/api/films/1/preferences')).toEqual([{ subtitle: 'full' }]);
+  });
+
+  it('a film with only a full subtitle file still has a Subtitles picker', async () => {
+    filmServer(1, fixtures.heat, (f) => {
+      f.editions[0].subtitleStreams = [];
+      f.editions[0].fullSubtitle = { source: 'SIDECAR', version: 1 };
+    });
+    renderApp('/films/1');
+
+    expect(await screen.findByLabelText('Subtitles')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Find subtitles in Admin' })).not.toBeInTheDocument();
+  });
+
+  it('shows the full subtitle as selected for a foreign film nobody has chosen subtitles for', async () => {
+    filmServer(1, fixtures.heat, (f) => {
+      f.fullNeed = 'NEEDED';
+      f.editions[0].fullSubtitle = { source: 'SIDECAR', version: 1 };
+      f.editions[0].audioStreams[0].language = 'French';
+      f.preferences.subtitle = null;
+    });
+    renderApp('/films/1');
+
+    expect(await screen.findByLabelText('Subtitles')).toHaveDisplayValue('English (full)');
+  });
+
+  it('shows Off for that film once Off was saved', async () => {
+    filmServer(1, fixtures.heat, (f) => {
+      f.fullNeed = 'NEEDED';
+      f.editions[0].fullSubtitle = { source: 'SIDECAR', version: 1 };
+      f.editions[0].audioStreams[0].language = 'French';
+      f.preferences.subtitle = 'off';
+    });
+    renderApp('/films/1');
+
+    expect(await screen.findByLabelText('Subtitles')).toHaveDisplayValue(
+      'Off · forced when needed',
+    );
+  });
+
   it('the Off subtitle reads plainly when no stream is forced', async () => {
     filmServer(1, fixtures.heat, (f) => {
       for (const s of f.editions[0].subtitleStreams) s.forced = false;

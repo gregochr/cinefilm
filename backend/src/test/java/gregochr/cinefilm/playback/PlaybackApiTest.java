@@ -341,9 +341,18 @@ class PlaybackApiTest extends ApiTestBase {
         mvc.perform(put("/api/films/{id}/preferences", film.getId()).content("{}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.quality").value("auto"))
-            .andExpect(jsonPath("$.subtitle").value("off"))
+            .andExpect(jsonPath("$.subtitle").value(org.hamcrest.Matchers.nullValue()))
             .andExpect(jsonPath("$.editionId").value(withMarker.getId()))
             .andExpect(jsonPath("$.audioStreamId").exists());
+    }
+
+    @Test
+    void theFullSubtitleChoiceIsSavedAsTheLiteralFull() throws Exception {
+        mvc.perform(put("/api/films/{id}/preferences", film.getId()).content("{\"subtitle\":\"full\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.subtitle").value("full"));
+        mvc.perform(get("/api/films/{id}", film.getId()))
+            .andExpect(jsonPath("$.preferences.subtitle").value("full"));
     }
 
     @Test

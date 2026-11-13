@@ -206,7 +206,7 @@ class LibraryIngestRepairsTest extends ApiTestBase {
         assertThat(after.getSubtitleStreams()).extracting(SubtitleStream::getId).contains(subtitleFour);
         FilmPreference reset = preferences.findById(filmId).orElseThrow();
         assertThat(reset.getAudioStreamId()).isNull();
-        assertThat(reset.getSubtitle()).isEqualTo("off");
+        assertThat(reset.getSubtitle()).isNull();
     }
 
     @Test

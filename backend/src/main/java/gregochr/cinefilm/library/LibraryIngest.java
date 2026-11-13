@@ -253,7 +253,7 @@ public class LibraryIngest {
                 preference.setAudioStreamId(null);
             }
             if (removed.subtitles().contains(preference.getSubtitle())) {
-                preference.setSubtitle("off");
+                preference.setSubtitle(null);
             }
         });
     }

@@ -333,7 +333,7 @@ class FilmsApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.preferences.editionId").value(heatEdition.getId()))
             .andExpect(jsonPath("$.preferences.quality").value("auto"))
             .andExpect(jsonPath("$.preferences.audioStreamId").exists())
-            .andExpect(jsonPath("$.preferences.subtitle").value("off"));
+            .andExpect(jsonPath("$.preferences.subtitle").value(org.hamcrest.Matchers.nullValue()));
     }
 
     @Test

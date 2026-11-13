@@ -48,6 +48,12 @@ export const editionsApi = {
   forcedSubtitleUrl: (editionId, version) =>
     `/api/editions/${editionId}/forced-subtitles.vtt${version ? `?v=${version}` : ''}`,
   /**
+   * The WebVTT of the edition's full English subtitle on the edition's timeline. `version` (from the film detail's
+   * `fullSubtitle`) busts the browser's cache when the file changes: the server ignores it.
+   */
+  fullSubtitleUrl: (editionId, version) =>
+    `/api/editions/${editionId}/full-subtitles.vtt${version ? `?v=${version}` : ''}`,
+  /**
    * The JPEG of the frame at `atMs` (edition time). Floored to whole seconds, as the server does, so the browser
    * cache key matches the server's cache.
    */

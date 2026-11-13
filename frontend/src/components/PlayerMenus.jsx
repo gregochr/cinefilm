@@ -89,13 +89,14 @@ export function AudioSubtitlesPanel({
   audioValue,
   subtitleStreams,
   hasForcedSubtitle = false,
+  hasFullSubtitle = false,
   subtitleValue,
   onAudio,
   onSubtitle,
 }) {
   const ref = useRef(null);
   useFocusChecked(ref);
-  const options = subtitleOptions(subtitleStreams);
+  const options = subtitleOptions(subtitleStreams, hasFullSubtitle);
   return (
     <div className="menu menu--panel" role="group" aria-label="Audio and subtitles" ref={ref}>
       <div
@@ -128,7 +129,7 @@ export function AudioSubtitlesPanel({
         onKeyDown={onMenuKeyDown}
       >
         <div className="menu__heading">Subtitles</div>
-        {subtitleStreams.length === 0 && !hasForcedSubtitle ? (
+        {subtitleStreams.length === 0 && !hasForcedSubtitle && !hasFullSubtitle ? (
           <div className="menu__empty">None for this film</div>
         ) : (
           options.map((o) => (

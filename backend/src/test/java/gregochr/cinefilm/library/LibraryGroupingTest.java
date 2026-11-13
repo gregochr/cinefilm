@@ -530,7 +530,7 @@ class LibraryGroupingTest extends ApiTestBase {
 
         FilmPreference after = preferences.findById(rocky.getId()).orElseThrow();
         assertThat(after.getAudioStreamId()).isNull();
-        assertThat(after.getSubtitle()).isEqualTo("off");
+        assertThat(after.getSubtitle()).isNull();
     }
 
     @Test
