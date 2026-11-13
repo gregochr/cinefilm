@@ -7,7 +7,8 @@
       "need": "NEEDED",
       "reason": "FOREIGN_AUDIO",
       "ownerChoice": null,
-      "editions": [{ "name": "Original", "audio": "German" }]
+      "editions": [{ "name": "Original", "audio": "German" }],
+      "fullSubtitle": { "source": "SIDECAR" }
     },
     {
       "filmId": 4,
@@ -16,7 +17,8 @@
       "need": "NOT_NEEDED",
       "reason": "ENGLISH_AUDIO",
       "ownerChoice": null,
-      "editions": [{ "name": "Original", "audio": "English" }]
+      "editions": [{ "name": "Original", "audio": "English" }],
+      "fullSubtitle": null
     },
     {
       "filmId": 5,
@@ -28,7 +30,8 @@
       "editions": [
         { "name": "Theatrical Cut", "audio": null },
         { "name": "Director's Cut", "audio": "French" }
-      ]
+      ],
+      "fullSubtitle": { "source": "DOWNLOAD" }
     },
     {
       "filmId": 6,
@@ -37,7 +40,8 @@
       "need": "NEEDED",
       "reason": "OWNER",
       "ownerChoice": "NEEDED",
-      "editions": []
+      "editions": [],
+      "fullSubtitle": null
     }
   ],
   "counts": { "needed": 2, "unsure": 1, "unknown": 0, "notNeeded": 1 }

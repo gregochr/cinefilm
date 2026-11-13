@@ -1,20 +1,21 @@
 import { useMemo, useState } from 'react';
 import { OWNER_CHOICES, PAGE_SIZE, needTitle } from '../state/forcedNeed.js';
 import {
-  DEFAULT_FULL_NEED_FILTER,
   FULL_NEED_FILTERS,
   audioNote,
   filterFullNeed,
   fullNeedCounts,
   fullNeedReason,
   fullNeedWords,
+  fullSubtitleLine,
+  initialFullNeedFilter,
 } from '../state/fullNeed.js';
 import { useFullNeed } from '../state/useFullNeed.js';
 import { Button } from './Button.jsx';
 import { SkeletonBlock } from './Skeleton.jsx';
 import { ErrorState } from './StateMessages.jsx';
 
-function FullNeedRow({ row, problem, saving, onChoose }) {
+function FullNeedRow({ row, problem, saving, onChoose, onShowFiles }) {
   const title = needTitle(row);
   const reason = fullNeedReason(row);
   const audio = audioNote(row);
@@ -26,6 +27,7 @@ function FullNeedRow({ row, problem, saving, onChoose }) {
       </div>
       {reason ? <div className="admin__item-detail">{reason}</div> : null}
       {audio ? <div className="admin__item-detail">{audio}</div> : null}
+      <div className="admin__item-detail">{fullSubtitleLine(row)}</div>
       {problem ? (
         <p className="admin__warning" role="status">
           {problem}
@@ -49,6 +51,16 @@ function FullNeedRow({ row, problem, saving, onChoose }) {
           </button>
         ))}
       </div>
+      {onShowFiles ? (
+        <div className="admin__actions">
+          <Button
+            aria-label={`Show the full subtitle files of ${title}`}
+            onClick={() => onShowFiles({ filmId: row.filmId, title })}
+          >
+            Show files
+          </Button>
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -56,14 +68,19 @@ function FullNeedRow({ row, problem, saving, onChoose }) {
 /**
  * Admin → Subtitles → "Full subtitles": the films not made in English (or chosen by the owner) with whether they need
  * full English subtitles and why, filtered by chip (Needed first), shown 100 at a time, with the owner's choice per
- * film. `refreshKey` changes when the library may have changed, and the list is read again.
+ * film, and a button that shows that film's full subtitle files in the file list (`onShowFiles({ filmId, title })`).
+ * `refreshKey` changes when the library may have changed, and the list is read again. The chip it opens on is picked
+ * once, when the first list arrives (see {@link initialFullNeedFilter}); a refresh never moves it.
  */
-export default function FullNeedSection({ refreshKey }) {
+export default function FullNeedSection({ refreshKey, onShowFiles }) {
   const need = useFullNeed(refreshKey);
   const { rows, loading, error, reload } = need;
-  const [filter, setFilter] = useState(DEFAULT_FULL_NEED_FILTER);
+  const [chosen, setChosen] = useState(null);
   const [limit, setLimit] = useState(PAGE_SIZE);
   const counts = useMemo(() => (rows ? fullNeedCounts(rows) : null), [rows]);
+  // Set while rendering, once: the first list decides the opening chip, and the owner's clicks replace it.
+  if (chosen === null && counts) setChosen(initialFullNeedFilter(counts));
+  const filter = chosen ?? initialFullNeedFilter(counts ?? {});
   const shown = useMemo(() => (rows ? filterFullNeed(rows, filter) : []), [rows, filter]);
 
   let body;
@@ -91,7 +108,7 @@ export default function FullNeedSection({ refreshKey }) {
               className="segmented__btn"
               aria-pressed={filter === f.key}
               onClick={() => {
-                setFilter(f.key);
+                setChosen(f.key);
                 setLimit(PAGE_SIZE);
               }}
             >
@@ -110,6 +127,7 @@ export default function FullNeedSection({ refreshKey }) {
                 problem={need.problems[row.filmId]}
                 saving={Boolean(need.saving[row.filmId])}
                 onChoose={need.choose}
+                onShowFiles={onShowFiles}
               />
             ))}
           </ul>

@@ -232,9 +232,15 @@ export const REMOVE_CONFIRM =
 /** What the panel says once a download is gone. */
 export const REMOVED_NOTICE = "Download removed. CineFilm won't use it for this edition again.";
 
-/** The filter chips on the file list, in order; `matches` says which files a chip lists. */
+/**
+ * The filter chips on the file list, in order; `matches` says which files a chip lists. Forced and Full split the list
+ * by kind; the chips after them count forced files only (a full file is never checked), so "Full" is where the full
+ * owner files and full downloads are listed together.
+ */
 export const FILE_FILTERS = [
   { key: 'all', label: 'All', matches: () => true },
+  { key: 'forced', label: 'Forced', matches: (item) => !isFull(item) },
+  { key: 'full', label: 'Full', matches: (item) => isFull(item) },
   {
     key: 'check',
     label: 'Needs checking',
@@ -252,10 +258,12 @@ export const FILE_FILTERS = [
   },
 ];
 
-/** The files a chip lists (all of them for an unknown key). */
-export function filterSidecars(items, key) {
+/** The files a chip lists (all of them for an unknown key), only those of one film when `filmId` is given. */
+export function filterSidecars(items, key, filmId = null) {
   const filter = FILE_FILTERS.find((f) => f.key === key) ?? FILE_FILTERS[0];
-  return items.filter(filter.matches);
+  return items.filter(
+    (item) => filter.matches(item) && (filmId === null || item.filmId === filmId),
+  );
 }
 
 /** How many files each chip lists, by chip key. */

@@ -242,7 +242,7 @@ function Item({ item, busy, problem, actions, onRemoved }) {
         )}
         {full ? <span className="admin__tag">Full</span> : null}
         {item.verified && !full ? <span className="admin__tag">Checked</span> : null}
-        {item.served && !full ? <span className="admin__tag">Playing</span> : null}
+        {item.served ? <span className="admin__tag">Playing</span> : null}
       </div>
       {served ? <p className="subs__served">{served}</p> : null}
       <div className="admin__item-detail">{placement(item)}</div>
@@ -339,8 +339,11 @@ export default function SubtitlesPanel({ version }) {
   const subtitles = useSubtitles(version);
   const { items, loading, error, reload } = subtitles;
   const [filter, setFilter] = useState('all');
+  // The film whose full files the full-need list asked to see; any chip the owner taps afterwards clears it.
+  const [film, setFilm] = useState(null);
   const [removals, setRemovals] = useState(0);
   const noticeRef = useRef(null);
+  const filmRef = useRef(null);
   const mounted = useRef(true);
   useEffect(() => {
     // Set on every setup: Strict Mode runs setup, cleanup, setup again.
@@ -352,11 +355,27 @@ export default function SubtitlesPanel({ version }) {
   useEffect(() => {
     if (removals > 0) noticeRef.current?.focus();
   }, [removals]);
+  useEffect(() => {
+    // Keyboard and screen reader users land on the line that says which files are listed.
+    if (film) filmRef.current?.focus();
+  }, [film]);
+  const showFilmFiles = (target) => {
+    setFilter('full');
+    setFilm(target);
+  };
+  const chooseFilter = (key) => {
+    setFilter(key);
+    setFilm(null);
+  };
   const onRemoved = () => {
     if (mounted.current) setRemovals((n) => n + 1);
   };
   const counts = useMemo(() => (items ? fileFilterCounts(items) : null), [items]);
-  const shown = useMemo(() => (items ? filterSidecars(items, filter) : []), [items, filter]);
+  const filmId = film ? film.filmId : null;
+  const shown = useMemo(
+    () => (items ? filterSidecars(items, filter, filmId) : []),
+    [items, filter, filmId],
+  );
   let body;
   if (loading && !items) {
     body = (
@@ -384,7 +403,7 @@ export default function SubtitlesPanel({ version }) {
               type="button"
               className="segmented__btn"
               aria-pressed={filter === f.key}
-              onClick={() => setFilter(f.key)}
+              onClick={() => chooseFilter(f.key)}
             >
               {f.label} ({counts[f.key]})
             </button>
@@ -426,7 +445,17 @@ export default function SubtitlesPanel({ version }) {
         </h2>
       </div>
       <ForcedNeedSection refreshKey={`${version}:${subtitles.changes}`} />
-      <FullNeedSection refreshKey={version} />
+      <FullNeedSection refreshKey={`${version}:${subtitles.changes}`} onShowFiles={showFilmFiles} />
+      {film ? (
+        <div className="subs__film-filter">
+          <p className="admin__text" role="status" tabIndex={-1} ref={filmRef}>
+            Showing the full subtitle files of {film.title}.
+          </p>
+          <div className="admin__actions">
+            <Button onClick={() => chooseFilter('all')}>Show all files</Button>
+          </div>
+        </div>
+      ) : null}
       {removals > 0 ? (
         <p
           key={removals}

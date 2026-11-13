@@ -1,9 +1,14 @@
 package gregochr.cinefilm.subtitle;
 
+import static java.util.Comparator.naturalOrder;
+
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
+import gregochr.cinefilm.film.Edition;
+import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.FilmDtos.FullSubtitleDto;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.FullNeedRow;
 import gregochr.cinefilm.film.FullNeedChoice;
@@ -21,12 +26,16 @@ import gregochr.cinefilm.subtitle.FullNeedDtos.EditionAudioDto;
 import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedCountsDto;
 import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedFilmDto;
 import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedListDto;
+import gregochr.cinefilm.subtitle.FullNeedDtos.FullSubtitleStateDto;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BinaryOperator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,7 +44,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * Admin's view of which films need full English subtitles, and the owner's say on it. The need is worked out when read
  * ({@link FullNeed}) from TMDB's languages and the audio of each present edition, never stored itself. The list is
- * built from two queries, never one per film.
+ * built from a fixed number of queries (the rows, their audio, their editions with files, their full subtitle rows),
+ * never one per film.
  */
 @Service
 public class FullNeedService {
@@ -45,14 +55,19 @@ public class FullNeedService {
 
     private final FilmRepository films;
     private final MediaFileRepository files;
+    private final EditionRepository editions;
+    private final FullSubtitleService fullSubtitles;
     private final LibraryLock lock;
     private final TransactionTemplate tx;
 
     /** Creates the service. */
-    public FullNeedService(FilmRepository films, MediaFileRepository files, LibraryLock lock,
+    public FullNeedService(FilmRepository films, MediaFileRepository files, EditionRepository editions,
+                           FullSubtitleService fullSubtitles, LibraryLock lock,
                            PlatformTransactionManager transactions) {
         this.films = films;
         this.files = files;
+        this.editions = editions;
+        this.fullSubtitles = fullSubtitles;
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
     }
@@ -70,9 +85,11 @@ public class FullNeedService {
         List<FullNeedRow> inScope = films.findFullNeedRows().stream().filter(FullNeedService::inScope).toList();
         Map<Long, List<EditionAudio>> audio = inScope.isEmpty() ? Map.of()
             : editionAudio(files.findAudioRows(inScope.stream().map(FullNeedRow::id).toList()));
+        Map<Long, FullSubtitleStateDto> playing = inScope.isEmpty() ? Map.of()
+            : playing(inScope.stream().map(FullNeedRow::id).toList());
         List<FullNeedFilmDto> dtos = new ArrayList<>();
         for (FullNeedRow row : inScope) {
-            dtos.add(dto(row, audio.getOrDefault(row.id(), List.of())));
+            dtos.add(dto(row, audio.getOrDefault(row.id(), List.of()), playing.get(row.id())));
         }
         return new FullNeedListDto(dtos, counts(dtos));
     }
@@ -147,7 +164,29 @@ public class FullNeedService {
         Film film = films.findByIdForUpdate(filmId).orElseThrow(() -> new NotFoundException("No such film"));
         film.setFullNeedOwner(choice);
         FullNeedRow row = row(film, choice);
-        return dto(row, editionAudio(files.findAudioRows(List.of(filmId))).getOrDefault(filmId, List.of()));
+        return dto(row, editionAudio(files.findAudioRows(List.of(filmId))).getOrDefault(filmId, List.of()),
+            playing(List.of(filmId)).get(filmId));
+    }
+
+    /**
+     * What each of these films plays as full English subtitles, by film id (a film that plays none is absent): the
+     * same code the film page uses ({@link FullSubtitleService#forEditions}) over the films' editions fetched together,
+     * so the cost does not grow with the number of films. The owner's file wins over a download on any edition.
+     */
+    private Map<Long, FullSubtitleStateDto> playing(Collection<Long> filmIds) {
+        List<Edition> fetched = editions.findWithFilesByFilmIdIn(filmIds);
+        Map<Long, FullSubtitleDto> byEdition = fullSubtitles.forEditions(fetched);
+        Map<Long, String> sources = new HashMap<>();
+        for (Edition edition : fetched) {
+            FullSubtitleDto subtitle = byEdition.get(edition.getId());
+            if (subtitle != null) {
+                // "SIDECAR" sorts after "DOWNLOAD", so the larger one is the owner's file when any edition has one.
+                sources.merge(edition.getFilm().getId(), subtitle.source(), BinaryOperator.maxBy(naturalOrder()));
+            }
+        }
+        Map<Long, FullSubtitleStateDto> states = new HashMap<>();
+        sources.forEach((id, source) -> states.put(id, new FullSubtitleStateDto(source)));
+        return states;
     }
 
     private static FullNeedRow row(Film film, FullNeedChoice choice) {
@@ -219,11 +258,11 @@ public class FullNeedService {
         return FullNeed.decide(row.owner(), languages, editions.stream().map(EditionAudio::label).toList());
     }
 
-    private static FullNeedFilmDto dto(FullNeedRow row, List<EditionAudio> editions) {
+    private static FullNeedFilmDto dto(FullNeedRow row, List<EditionAudio> editions, FullSubtitleStateDto playing) {
         Decision decision = decide(row, editions);
         return new FullNeedFilmDto(row.id(), row.title(), row.year(), decision.need().name(),
             decision.reason().name(), row.owner() == null ? null : row.owner().name(),
-            editions.stream().map(e -> new EditionAudioDto(e.name(), e.label())).toList());
+            editions.stream().map(e -> new EditionAudioDto(e.name(), e.label())).toList(), playing);
     }
 
     private static FullNeedCountsDto counts(List<FullNeedFilmDto> rows) {
