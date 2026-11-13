@@ -244,9 +244,14 @@ public class ForcedDownloadService {
             && s.getCueCount() > 0 && partIds.contains(s.getMediaFileId()));
     }
 
-    /** True when the edition already has a full download (made for it, whatever its state). */
+    /**
+     * True when the edition has a live full download (made for it, present, with lines), as the forced path's
+     * {@code hasLiveDownload}. A download that is not present does not suppress a retry; removed files stay counted
+     * by the cap through their blocks.
+     */
     private static boolean hasDownload(Edition edition, List<SubtitleSidecar> allFull) {
-        return allFull.stream().anyMatch(s -> s.isDownload() && Downloads.madeFor(edition, s));
+        return allFull.stream().anyMatch(s -> s.isDownload() && Downloads.madeFor(edition, s)
+            && s.getPresence() == Presence.PRESENT && s.getCueCount() > 0);
     }
 
     private static List<Long> partIdsOf(Edition edition) {

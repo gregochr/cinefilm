@@ -412,6 +412,32 @@ class ForcedDownloadFullTest extends ForcedDownloadTestBase {
     }
 
     @Test
+    void aFullDownloadThatIsNotPresentDoesNotSuppressARetryButAPresentOneDoes() {
+        Film film = fullFilm("Oldboy");
+        SubtitleSidecar download = fullDownload(film, 5011);
+        assertThat(service.due()).isEmpty();
+
+        download.setPresence(Presence.MISSING);
+        sidecars.saveAndFlush(download);
+
+        DueDownload due = onlyDue();
+        assertThat(due.remainingFetches()).isEqualTo(2);
+        assertThat(due.candidates()).extracting(OpenSubtitlesResult::fileId).containsExactly(5012L, 5013L, 5014L);
+    }
+
+    @Test
+    void removalsNeverMakeAnEditionDueForeverOnceTheCapIsReached() {
+        Film film = fullFilm("Oldboy");
+        block(film, 5011, SubtitleKind.FULL);
+        block(film, 5012, SubtitleKind.FULL);
+        assertThat(onlyDue().candidates()).extracting(OpenSubtitlesResult::fileId).containsExactly(5013L, 5014L);
+
+        block(film, 5013, SubtitleKind.FULL);
+
+        assertThat(service.due()).isEmpty();
+    }
+
+    @Test
     void anEditionWithNoFilmFileIsNeverDueAndAnAddForItIsDropped() {
         Film film = filmWithParts("Oldboy", 0, 60);
         film.setImdbId(IMDB);
