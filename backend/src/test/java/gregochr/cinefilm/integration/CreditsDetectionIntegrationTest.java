@@ -13,6 +13,7 @@ import gregochr.cinefilm.credits.CreditsDetectionRepository;
 import gregochr.cinefilm.credits.CreditsDetectionService;
 import gregochr.cinefilm.credits.CreditsDetectionService.DueFile;
 import gregochr.cinefilm.credits.CreditsDetectionService.SaveOutcome;
+import gregochr.cinefilm.credits.CreditsDetectionRepository.Stored;
 import gregochr.cinefilm.credits.CreditsResult;
 import gregochr.cinefilm.credits.CreditsVerdict;
 import gregochr.cinefilm.film.Edition;
@@ -84,9 +85,52 @@ class CreditsDetectionIntegrationTest extends IntegrationTestBase {
             "SELECT column_name || ':' || data_type || ':' || is_nullable FROM information_schema.columns "
                 + "WHERE table_name = 'credits_detection' ORDER BY column_name", String.class);
 
-        assertThat(columns).containsExactly("checked_at:timestamp with time zone:NO",
+        assertThat(columns).containsExactly("analysis_version:integer:NO", "checked_at:timestamp with time zone:NO",
             "fingerprint:character varying:NO", "media_file_id:bigint:NO", "offset_ms:bigint:YES",
             "reasons:character varying:NO", "verdict:character varying:NO");
+    }
+
+    @Test
+    void aRowInsertedWithoutTheVersionColumnReadsBackAsVersionOne() {
+        Film film = saved("Taken", 1);
+        jdbc.update("insert into credits_detection (media_file_id, fingerprint, verdict, reasons, checked_at) "
+            + "values (?, 'x', 'NOT_FOUND', 'r', now())", part(film, 1).getId());
+        entityManager.clear();
+
+        assertThat(detections.findById(part(film, 1).getId()).orElseThrow().getAnalysisVersion()).isEqualTo(1);
+    }
+
+    @Test
+    void findAllStoredReturnsTheFingerprintAndTheVersion() {
+        Film film = saved("Taken", 1);
+        CreditsDetection stored = row(part(film, 1), CreditsVerdict.FOUND, 5_000L);
+        stored.setAnalysisVersion(7);
+        detections.saveAndFlush(stored);
+        entityManager.clear();
+
+        assertThat(detections.findAllStored()).containsExactly(
+            new Stored(part(film, 1).getId(), "4000000001:" + NOW.toEpochMilli(), 7));
+    }
+
+    @Test
+    void aFileWhoseRowIsFromAnOlderAnalysisVersionIsDueAgainAndSavingBringsTheVersionUp() {
+        Film film = saved("Taken", 1);
+        MediaFile file = part(film, 1);
+        CreditsDetection old = row(file, CreditsVerdict.FOUND, 5_000L);
+        old.setFingerprint(file.fingerprint());
+        old.setAnalysisVersion(1);
+        detections.saveAndFlush(old);
+        entityManager.clear();
+
+        List<DueFile> due = service.dueFiles();
+        assertThat(due).extracting(DueFile::mediaFileId).containsExactly(file.getId());
+
+        service.save(due.get(0), new CreditsResult(CreditsVerdict.NOT_FOUND, null, List.of("None")), NOW);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(detections.findById(file.getId()).orElseThrow().getAnalysisVersion()).isGreaterThan(1);
+        assertThat(service.dueFiles()).isEmpty();
     }
 
     @Test

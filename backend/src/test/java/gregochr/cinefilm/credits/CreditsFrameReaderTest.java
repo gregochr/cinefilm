@@ -86,26 +86,28 @@ class CreditsFrameReaderTest {
     }
 
     @Test
-    void theDenseDecodeIsThreeMinutesCentredOnTheCandidate() {
+    void theDenseDecodeStartsTenSecondsBeforeTheCandidateAndLastsFiveMinutes() {
         assertThat(CreditsFrameReader.denseRange(100 * MIN, 120 * MIN))
-            .isEqualTo(new DenseRange(100 * MIN - 90_000, 180_000));
+            .isEqualTo(new DenseRange(100 * MIN - 10_000, 300_000));
     }
 
     @Test
     void theDenseDecodeIsClampedAtTheStartOfTheFile() {
-        assertThat(CreditsFrameReader.denseRange(30_000, 600_000)).isEqualTo(new DenseRange(0, 120_000));
-        assertThat(CreditsFrameReader.denseRange(90_000, 600_000)).isEqualTo(new DenseRange(0, 180_000));
+        assertThat(CreditsFrameReader.denseRange(5_000, 600_000)).isEqualTo(new DenseRange(0, 295_000));
+        assertThat(CreditsFrameReader.denseRange(0, 600_000)).isEqualTo(new DenseRange(0, 290_000));
+        assertThat(CreditsFrameReader.denseRange(10_000, 600_000)).isEqualTo(new DenseRange(0, 300_000));
     }
 
     @Test
     void theDenseDecodeIsClampedAtTheEndOfTheFile() {
-        assertThat(CreditsFrameReader.denseRange(590_000, 600_000)).isEqualTo(new DenseRange(500_000, 100_000));
-        assertThat(CreditsFrameReader.denseRange(510_000, 600_000)).isEqualTo(new DenseRange(420_000, 180_000));
+        assertThat(CreditsFrameReader.denseRange(590_000, 600_000)).isEqualTo(new DenseRange(580_000, 20_000));
+        assertThat(CreditsFrameReader.denseRange(310_000, 600_000)).isEqualTo(new DenseRange(300_000, 300_000));
+        assertThat(CreditsFrameReader.denseRange(400_000, 600_000)).isEqualTo(new DenseRange(390_000, 210_000));
     }
 
     @Test
     void aFileShorterThanTheDenseSpanIsDecodedWhole() {
-        assertThat(CreditsFrameReader.denseRange(30_000, 60_000)).isEqualTo(new DenseRange(0, 60_000));
+        assertThat(CreditsFrameReader.denseRange(10_000, 60_000)).isEqualTo(new DenseRange(0, 60_000));
     }
 
     @Test
@@ -137,14 +139,14 @@ class CreditsFrameReaderTest {
 
     @Test
     void theDenseCommandIsTheExactArgumentList() {
-        DenseRange range = new DenseRange(5_000_000, 180_000);
+        DenseRange range = new DenseRange(5_000_000, 300_000);
 
         List<String> command = CreditsFrameReader.denseCommand(10, "ffmpeg", FILM, range,
             Path.of("/tmp/job/d_%05d.pgm"));
 
         assertThat(command).containsExactly("nice", "-n", "10", "ffmpeg", "-nostdin", "-hide_banner", "-v", "error",
             "-protocol_whitelist", "file", "-threads", "1", "-ss", "5000.000", "-i", "/library/Film (2000).mkv",
-            "-map", "0:v:0", "-t", "180.000", "-frames:v", "360", "-an", "-sn", "-dn", "-vf",
+            "-map", "0:v:0", "-t", "300.000", "-frames:v", "600", "-an", "-sn", "-dn", "-vf",
             "scale='trunc(iw*sar/2)*2':ih,setsar=1,scale=480:-2,fps=2,format=gray", "-start_number", "0",
             "-f", "image2", "-y", "/tmp/job/d_%05d.pgm");
     }
@@ -197,24 +199,24 @@ class CreditsFrameReaderTest {
 
         assertThat(ffmpeg.commands).hasSize(1);
         assertThat(ffmpeg.timeouts).containsExactly(CreditsFrameReader.DENSE_TIMEOUT);
-        assertThat(frames).hasSize(360);
-        assertThat(frames.getFirst().offsetMs()).isEqualTo(210_000);
-        assertThat(frames.get(1).offsetMs()).isEqualTo(210_500);
-        assertThat(frames.getLast().offsetMs()).isEqualTo(389_500);
+        assertThat(frames).hasSize(600);
+        assertThat(frames.getFirst().offsetMs()).isEqualTo(290_000);
+        assertThat(frames.get(1).offsetMs()).isEqualTo(290_500);
+        assertThat(frames.getLast().offsetMs()).isEqualTo(589_500);
         // Each frame is the picture ffmpeg wrote for that index, so offset and picture stay together.
-        assertThat(frames.get(7).frame().luma(0, 0)).isEqualTo((int) (213_500 / 500 % 256));
+        assertThat(frames.get(7).frame().luma(0, 0)).isEqualTo((int) (293_500 / 500 % 256));
     }
 
     @Test
     void aClampedDenseDecodeStartsAtTheStartOfTheFile() {
         List<DenseFrame> frames;
         try (Job job = reader().open(FILM, 600_000, () -> { })) {
-            frames = job.denseFrames(20_000);
+            frames = job.denseFrames(5_000);
         }
 
-        assertThat(frames).hasSize(220);
+        assertThat(frames).hasSize(590);
         assertThat(frames.getFirst().offsetMs()).isZero();
-        assertThat(frames.getLast().offsetMs()).isEqualTo(109_500);
+        assertThat(frames.getLast().offsetMs()).isEqualTo(294_500);
     }
 
     @Test
@@ -347,7 +349,7 @@ class CreditsFrameReaderTest {
         try (Job job = reader().open(FILM, 600_000, () -> { })) {
             List<DenseFrame> frames = job.denseFrames(300_000);
 
-            assertThat(frames).extracting(DenseFrame::offsetMs).containsExactly(210_000L, 210_500L, 211_000L);
+            assertThat(frames).extracting(DenseFrame::offsetMs).containsExactly(290_000L, 290_500L, 291_000L);
         }
     }
 

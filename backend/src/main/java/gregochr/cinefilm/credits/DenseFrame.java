@@ -1,7 +1,7 @@
 package gregochr.cinefilm.credits;
 
 /**
- * One frame of the dense pass (two a second around the candidate).
+ * One frame of the dense pass (two a second from 10 seconds before the candidate).
  *
  * @param offsetMs where in the file the frame was taken
  * @param frame the picture

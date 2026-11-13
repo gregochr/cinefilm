@@ -10,8 +10,8 @@ import java.util.List;
  * <ol>
  *   <li>{@link #findCandidate} walks back from the end of the window over coarse classified samples (one every
  *       5 seconds) and finds the run of black and text on a dark screen that could be the credits.</li>
- *   <li>{@link #refine} looks at dense frames (two a second) around that candidate, confirms the text moves, places
- *       the start to the half second and checks it against the dialogue when the cue times are known.</li>
+ *   <li>{@link #refine} looks at dense frames (two a second) from just before that candidate, confirms the text moves,
+ *       places the start to the half second and checks it against the dialogue when the cue times are known.</li>
  * </ol>
  *
  * Every rule is biased to "late or nothing".
@@ -83,7 +83,7 @@ public final class CreditsFinder {
      * after a 120 second silence ignored) makes the result unsure.
      *
      * @param candidate the coarse step's candidate
-     * @param dense frames at two a second around the candidate, oldest first
+     * @param dense frames at two a second from 10 seconds before the candidate, oldest first
      * @param area the picture rectangle
      * @param peak the window's peak luma
      * @param cueStartsMs the cue start offsets (ms in the file) of the English subtitle track, or null when unknown

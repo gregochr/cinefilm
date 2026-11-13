@@ -95,6 +95,12 @@ final class CreditsTuning {
 
     // ---- Finding the start -----------------------------------------------------------------------------------
 
+    /**
+     * The version of the analysis. Raise it when a change should analyse the whole library again: a file whose stored
+     * result has a lower version is due.
+     */
+    static final int ANALYSIS_VERSION = 2;
+
     /** The spacing of the coarse samples. */
     static final long SAMPLE_MS = 5_000;
     /** Longest stretch of picture allowed inside the credits run or after it. */

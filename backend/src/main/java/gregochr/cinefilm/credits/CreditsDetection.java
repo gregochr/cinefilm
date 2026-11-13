@@ -32,6 +32,10 @@ public class CreditsDetection {
     @Column(nullable = false, length = 100)
     private String fingerprint;
 
+    /** The {@link CreditsTuning#ANALYSIS_VERSION} that produced this row; an older one is analysed again. */
+    @Column(nullable = false)
+    private int analysisVersion = 1;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private CreditsVerdict verdict;
