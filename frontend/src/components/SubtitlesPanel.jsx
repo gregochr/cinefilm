@@ -13,6 +13,7 @@ import {
   filterSidecars,
   formatOffset,
   isDownload,
+  isFull,
   originLine,
   ownerTimingLine,
   placement,
@@ -220,6 +221,7 @@ function Item({ item, busy, problem, actions, onRemoved }) {
   const download = isDownload(item);
   const name = download ? (origin.release ?? 'download') : fileName(item.path);
   const matched = item.filmId != null;
+  const full = isFull(item);
   const replaced = item.replacedByDownload === true;
   const served = servedLine(item);
   const attach = async (target) => {
@@ -238,8 +240,9 @@ function Item({ item, busy, problem, actions, onRemoved }) {
         ) : (
           <span className="admin__item-title admin__mono">{origin.title}</span>
         )}
-        {item.verified ? <span className="admin__tag">Checked</span> : null}
-        {item.served ? <span className="admin__tag">Playing</span> : null}
+        {full ? <span className="admin__tag">Full</span> : null}
+        {item.verified && !full ? <span className="admin__tag">Checked</span> : null}
+        {item.served && !full ? <span className="admin__tag">Playing</span> : null}
       </div>
       {served ? <p className="subs__served">{served}</p> : null}
       <div className="admin__item-detail">{placement(item)}</div>
@@ -313,7 +316,9 @@ function Item({ item, busy, problem, actions, onRemoved }) {
           {matched ? (
             <>
               <Timing item={item} busy={busy} actions={actions} />
-              <Check item={item} busy={busy} actions={actions} replaced={replaced} />
+              {full ? null : (
+                <Check item={item} busy={busy} actions={actions} replaced={replaced} />
+              )}
             </>
           ) : null}
           {/* A new key remounts the list, so cues for another attachment, offset or version are never shown. */}
@@ -325,7 +330,8 @@ function Item({ item, busy, problem, actions, onRemoved }) {
 }
 
 /**
- * Admin: the forced English subtitle files beside the films. They are grouped (Unmatched, Conflicts, Missing,
+ * Admin: the English subtitle files beside the films, forced (checked and played as the forced subtitle) and full
+ * (labelled "Full": offered in the Subtitles menu, with no checks). They are grouped (Unmatched, Conflicts, Missing,
  * Matched); each shows how it was read, can be attached to a film by hand, its cues read, its timing nudged and its
  * lines marked as checked. The cue text is untrusted: it is only ever rendered as text.
  */
@@ -363,8 +369,8 @@ export default function SubtitlesPanel({ version }) {
   } else if (!items || items.length === 0) {
     body = (
       <p className="admin__text">
-        No forced subtitle files found. They are named like Film.en.forced.srt and sit beside the
-        film.
+        No subtitle files found. They are named like Film.en.forced.srt (forced) or Film.en.srt
+        (full) and sit beside the film.
       </p>
     );
   } else {

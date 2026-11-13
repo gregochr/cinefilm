@@ -141,7 +141,7 @@ describe('Admin: Subtitles panel, the list', () => {
 
   it('says plainly when there are no files', async () => {
     const { panel } = await openPanel({ items: [] });
-    expect(await within(panel).findByText(/No forced subtitle files found/)).toBeInTheDocument();
+    expect(await within(panel).findByText(/No subtitle files found/)).toBeInTheDocument();
   });
 
   it('shows a loading status while the list loads', async () => {
