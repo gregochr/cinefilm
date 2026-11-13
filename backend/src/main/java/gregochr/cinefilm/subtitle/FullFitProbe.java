@@ -103,7 +103,10 @@ final class FullFitProbe {
             }
         }
         for (OpenSubtitlesResult candidate : job.others()) {
-            if (!job.stored().containsKey(candidate.fileId())) {
+            OpenSubtitlesReference known = job.stored().get(candidate.fileId());
+            // A final reference was judged above (usable and full) or is spent (permanent failure, not full); one that
+            // is not final is a charged transient failure the fetcher retries, and which throws again while it fails.
+            if (known == null || !known.isFinal()) {
                 OpenSubtitlesReference fetched = fetcher.fetch(job.filmId(), job.imdbId(), candidate, checkLimit);
                 return isFull(fetched) ? fetched : null;
             }

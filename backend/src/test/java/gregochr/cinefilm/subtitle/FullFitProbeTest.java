@@ -16,6 +16,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesApi;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesBudget;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesChargedException;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesDownload;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
@@ -291,6 +292,41 @@ class FullFitProbeTest {
             ILoggingEvent::getFormattedMessage).containsExactly(
             "Could not measure the full subtitle of edition 20: NullPointerException");
         assertThat(infoLines()).singleElement().satisfies(line -> assertThat(line).contains("edition 10"));
+    }
+
+    private static OpenSubtitlesReference failed(long fileId, int failures) {
+        OpenSubtitlesReference reference = stored(fileId, List.of());
+        reference.setFailedDownloads(failures);
+        return reference;
+    }
+
+    @Test
+    void aTransientlyFailedSecondFileIsRetriedAndTheDownloadIsNotMarkedDoneUntilItIsMeasured() {
+        OpenSubtitlesReference retryable = failed(5012, 1);
+        serving(job(7L, null, List.of(candidate(5012)), Map.of(5012L, retryable)));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5012)).thenReturn(Optional.of(retryable));
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
+        when(api.download(5012)).thenThrow(new OpenSubtitlesChargedException("timed out", false))
+            .thenReturn(downloaded(lines(300, 0)));
+        when(references.saveAndFlush(any(OpenSubtitlesReference.class))).thenAnswer(call -> call.getArgument(0));
+
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+        assertThat(infoLines()).isEmpty();
+
+        assertThat(probe.measure(CHECK_LIMIT)).isEqualTo(1);
+        assertThat(infoLines()).singleElement().satisfies(line -> assertThat(line).contains("reference file 5012"));
+    }
+
+    @Test
+    void aPermanentlyFailedSecondFileIsSkippedWithoutAnyFetch() {
+        serving(job(7L, null, List.of(candidate(5012)),
+            Map.of(5012L, failed(5012, OpenSubtitlesReference.MAX_FAILED_DOWNLOADS))));
+
+        assertThat(probe.measure(CHECK_LIMIT)).isZero();
+
+        assertThat(infoLines()).containsExactly("Full subtitle fit of edition 10 (film 1): not measured, OpenSubtitles "
+            + "has no second full file to compare with");
+        verifyNoInteractions(api, budget);
     }
 
     @Test
