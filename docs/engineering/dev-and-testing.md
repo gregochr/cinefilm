@@ -380,14 +380,14 @@ and one line for:
 Each line goes back to Sonnet before the push. Renames count as new files (`--no-renames`), so a renamed and changed
 class is checked. Fully qualified annotations (`@org.springframework.stereotype.Service`), annotations with arguments (nested
 annotations included) before `@Service` on the same line, and comments of every kind, across lines too, are
-ignored or handled (`perl` strips them, leaving `//` and `/*` inside string literals alone; it ships with macOS). Not followed: a custom annotation
+ignored or handled (`perl` strips them, leaving `//` and `/*` inside strings, text blocks and char literals alone; it ships with macOS). Not followed: a custom annotation
 that wraps `@SpringBootTest`, and an interface carrying Spring annotations that a test `implements`. Neither exists in this repo; add one to `SPRING` if it is ever made.
 
 ```bash
 bash -s "${BASE:-origin/main}" <<'EOF'
 base=$1
 [ -z "$(git status --porcelain)" ] || { echo "UNCOMMITTED CHANGES: commit first, the check reads commits only"; exit 1; }
-code() { perl -0pe 's{("(?:\\.|[^"\\\n])*"|\x27(?:\\.|[^\x27\\\n])+\x27)|/\*.*?\*/|//[^\n]*}{$1 // ""}gse' "$1"; }  # the file without comments; string and char literals kept
+code() { perl -0pe 's{("""(?s:.*?)"""|"(?:\\.|[^"\\\n])*"|\x27(?:\\.|[^\x27\\\n])+\x27)|/\*.*?\*/|//[^\n]*}{$1 // ""}gse' "$1"; }  # the file without comments; strings, text blocks and chars kept
 # chain_has FILE REGEX: true when the test class, or any test base class it extends, matches REGEX outside comments.
 chain_has() {
   local t=$1 re=$2 sup n=0
