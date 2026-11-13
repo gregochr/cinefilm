@@ -64,8 +64,8 @@ public class ForcedNeedService {
     public NeedListDto list() {
         List<NeedRow> rows = films.findNeedRows();
         // Evidence of need (rule 2) is an owner's file only: a download exists because the need was already shown.
-        Set<Long> withSidecar = new HashSet<>(sidecars.findFilmIdsWithPresentSidecar());
-        Set<Long> withSubtitle = new HashSet<>(sidecars.findFilmIdsWithPresentSubtitle());
+        Set<Long> withSidecar = new HashSet<>(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED));
+        Set<Long> withSubtitle = new HashSet<>(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED));
         Set<Long> withEmbedded = new HashSet<>(files.findFilmIdsWithEmbeddedForced());
         // Only the films with a subtitle of their own (a couple of dozen) are asked what playback would serve.
         Set<Long> served = withSubtitle.isEmpty() ? Set.of() : servedFilmIds(withSubtitle);
@@ -112,7 +112,8 @@ public class ForcedNeedService {
     public boolean isNeeded(Long filmId) {
         Film film = films.findById(filmId).orElse(null);
         return film != null && "NEEDED".equals(dto(row(film, film.getForcedNeedOwner()),
-            sidecars.countPresentForFilm(filmId) > 0, false, files.countEmbeddedForcedForFilm(filmId) > 0).need());
+            sidecars.countPresentForFilm(filmId, SubtitleKind.FORCED) > 0, false,
+            files.countEmbeddedForcedForFilm(filmId) > 0).need());
     }
 
     private static NeedRow row(Film film, ForcedNeedChoice choice) {
@@ -125,8 +126,8 @@ public class ForcedNeedService {
         Film film = films.findByIdForUpdate(filmId).orElseThrow(() -> new NotFoundException("No such film"));
         film.setForcedNeedOwner(choice);
         NeedRow row = row(film, choice);
-        boolean hasSidecar = sidecars.countPresentForFilm(filmId) > 0;
-        boolean served = sidecars.countPresentSubtitlesForFilm(filmId) > 0
+        boolean hasSidecar = sidecars.countPresentForFilm(filmId, SubtitleKind.FORCED) > 0;
+        boolean served = sidecars.countPresentSubtitlesForFilm(filmId, SubtitleKind.FORCED) > 0
             && !servedFilmIds(List.of(filmId)).isEmpty();
         return dto(row, hasSidecar, served, files.countEmbeddedForcedForFilm(filmId) > 0);
     }

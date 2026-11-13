@@ -56,12 +56,23 @@ class LibraryScannerSidecarTest {
     }
 
     @Test
-    void otherSubtitleFilesAreNotCollected() throws IOException {
+    void fullEnglishSubtitleFilesAreCollectedToo() throws IOException {
         file("Taken.en.srt", "x");
+        file("Heat.eng.sdh.srt", "x");
+        file("Alien.SDH.EN.SRT", "x");
+
+        assertThat(scanner.scan().sidecars()).extracting(FoundSidecar::path).containsExactly("Alien.SDH.EN.SRT",
+            "Heat.eng.sdh.srt", "Taken.en.srt");
+    }
+
+    @Test
+    void otherSubtitleFilesAreNotCollected() throws IOException {
         file("Taken.srt", "x");
+        file("Taken.fr.srt", "x");
         file("Taken.forced.srt", "x");
         file("Taken.en.forced.srt.bak", "x");
         file(".en.forced.srt", "x");
+        file(".en.srt", "x");
 
         assertThat(scanner.scan().sidecars()).isEmpty();
     }

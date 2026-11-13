@@ -254,11 +254,35 @@ class ForcedDownloadServiceUnitTest {
         block.setImdbId(IMDB);
         block.setOsFileId(5012);
         block.setRemovedAt(NOW);
-        when(blocks.findByEditionIdIn(List.of(40L))).thenReturn(List.of(block));
-        when(sidecars.findByMediaFileIdIn(List.of(10L))).thenReturn(List.of(download(5011)));
+        when(blocks.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FORCED)).thenReturn(List.of(block));
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED))
+            .thenReturn(List.of(download(5011)));
 
         // 5011 is a (failed) download and 5012 was removed: no candidate is left, so nothing is due.
         assertThat(service.due()).isEmpty();
+    }
+
+    @Test
+    void aFullBlockOrAFullDownloadNeverUsesUpAForcedCandidateEvenIfARepositoryReturnedThem() {
+        needed(true);
+        searched();
+        resolves(resolution(null, false, false, FAILED));
+        ForcedDownloadBlock block = new ForcedDownloadBlock();
+        block.setKind(SubtitleKind.FULL);
+        block.setEditionId(40L);
+        block.setImdbId(IMDB);
+        block.setOsFileId(5012);
+        block.setRemovedAt(NOW);
+        when(blocks.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FORCED)).thenReturn(List.of(block));
+        SubtitleSidecar fullDownload = download(5011);
+        fullDownload.setKind(SubtitleKind.FULL);
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED))
+            .thenReturn(List.of(fullDownload));
+
+        assertThat(service.due()).singleElement().satisfies(due -> {
+            assertThat(due.candidates()).extracting(OpenSubtitlesResult::fileId).containsExactly(5011L, 5012L);
+            assertThat(due.remainingFetches()).isEqualTo(3);
+        });
     }
 
     @Test
@@ -276,7 +300,7 @@ class ForcedDownloadServiceUnitTest {
         compared.setImdbId(IMDB);
         compared.setOsFileId(5011);
         compared.setTriedAt(NOW);
-        when(ledger.findByEditionIdIn(List.of(40L))).thenReturn(List.of(compared));
+        when(ledger.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FORCED)).thenReturn(List.of(compared));
 
         DueDownload due = service.due().get(0);
 
@@ -306,8 +330,8 @@ class ForcedDownloadServiceUnitTest {
         when(films.findById(1L)).thenReturn(Optional.of(film));
         when(need.isNeeded(1L)).thenReturn(true);
         when(editions.findWithFilesByFilmIdIn(List.of(1L))).thenReturn(List.of(edition));
-        when(blocks.findByEditionIdIn(List.of(40L))).thenReturn(List.of());
-        when(sidecars.findByMediaFileIdIn(List.of(10L))).thenReturn(List.of());
+        when(blocks.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FORCED)).thenReturn(List.of());
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED)).thenReturn(List.of());
         when(resolver.resolve(List.of(edition))).thenReturn(Map.of(40L, resolution(null, false, false)));
         when(sidecars.save(argThat(row -> row.isDownload()
             && row.getPath().equals("opensubtitles:40:5011")))).thenThrow(new DataIntegrityViolationException("dup"));

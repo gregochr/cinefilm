@@ -121,16 +121,17 @@ public class ForcedResolver {
     public Map<Long, Resolution> resolve(Collection<Edition> editions) {
         List<Edition> list = List.copyOf(editions);
         List<Long> allIds = list.stream().flatMap(e -> partIds(e).stream()).toList();
-        List<SubtitleSidecar> found = allIds.isEmpty() ? List.of() : sidecars.findByMediaFileIdIn(allIds);
+        List<SubtitleSidecar> found = allIds.isEmpty() ? List.of()
+            : sidecars.findByMediaFileIdInAndKind(allIds, SubtitleKind.FORCED);
         Map<Long, Pick> filePicks = new HashMap<>();
         Map<Long, List<SubtitleSidecar>> downloadsBy = new HashMap<>();
         Map<Long, Edition> editionBySidecarId = new HashMap<>();
         List<SubtitleSidecar> toAlign = new ArrayList<>();
         for (Edition edition : list) {
             List<Long> partIds = partIds(edition);
-            Pick pick = SidecarPrecedence.pick(partIds, found);
+            Pick pick = SidecarPrecedence.pick(partIds, found, SubtitleKind.FORCED);
             filePicks.put(edition.getId(), pick);
-            List<SubtitleSidecar> downloads = Downloads.of(edition, partIds, found);
+            List<SubtitleSidecar> downloads = Downloads.of(edition, partIds, found, SubtitleKind.FORCED);
             downloadsBy.put(edition.getId(), downloads);
             for (SubtitleSidecar s : pick.slots().stream().map(Slot::sidecar).toList()) {
                 editionBySidecarId.put(s.getId(), edition);
@@ -252,7 +253,7 @@ public class ForcedResolver {
         filePick.slots().forEach(s -> slotIds.add(s.sidecar().getId()));
         for (SubtitleSidecar s : found) {
             // `found` holds the subtitles of every edition resolved together: only this edition's get a reason here.
-            if (!partIds.contains(s.getMediaFileId())) {
+            if (s.getKind() != SubtitleKind.FORCED || !partIds.contains(s.getMediaFileId())) {
                 continue;
             }
             if (s.isDownload()) {

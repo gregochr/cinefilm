@@ -21,6 +21,7 @@ import gregochr.cinefilm.subtitle.ForcedSubtitleCheck;
 import gregochr.cinefilm.subtitle.ForcedSubtitleCheckRepository;
 import gregochr.cinefilm.subtitle.ReferenceWalk;
 import gregochr.cinefilm.subtitle.SidecarCheckService;
+import gregochr.cinefilm.subtitle.SubtitleKind;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -265,14 +266,18 @@ class SidecarCheckIntegrationTest extends IntegrationTestBase {
         entityManager.flush();
         entityManager.clear();
 
-        List<ForcedCheckCandidate> rows = candidates.findByEditionIdIn(List.of(editionId));
+        List<ForcedCheckCandidate> rows = candidates.findByEditionIdInAndKind(List.of(editionId), SubtitleKind.FORCED);
         assertThat(rows).hasSize(4);
         List<ForcedCheckCandidate> forFilm = rows.stream().filter(r -> r.getImdbId().equals("tt0936501")).toList();
         assertThat(forFilm).extracting(ForcedCheckCandidate::getOsFileId).containsExactlyInAnyOrder(5011L, 5012L,
             5013L);
         assertThat(forFilm).hasSize(ReferenceWalk.MAX_CANDIDATES);
-        assertThat(candidates.existsByEditionIdAndImdbIdAndOsFileId(editionId, "tt0936501", 5011)).isTrue();
-        assertThat(candidates.existsByEditionIdAndImdbIdAndOsFileId(editionId, "tt0936501", 5014)).isFalse();
+        assertThat(candidates.existsByEditionIdAndImdbIdAndOsFileIdAndKind(
+                editionId, "tt0936501", 5011, SubtitleKind.FORCED))
+            .isTrue();
+        assertThat(candidates.existsByEditionIdAndImdbIdAndOsFileIdAndKind(
+                editionId, "tt0936501", 5014, SubtitleKind.FORCED))
+            .isFalse();
     }
 
     private ForcedCheckCandidate ledgerRow(Long editionId) {
@@ -304,6 +309,6 @@ class SidecarCheckIntegrationTest extends IntegrationTestBase {
         editions.deleteByIds(List.of(editionId));
         entityManager.clear();
 
-        assertThat(candidates.findByEditionIdIn(List.of(editionId))).isEmpty();
+        assertThat(candidates.findByEditionIdInAndKind(List.of(editionId), SubtitleKind.FORCED)).isEmpty();
     }
 }

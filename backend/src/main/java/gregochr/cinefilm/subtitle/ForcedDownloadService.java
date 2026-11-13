@@ -121,9 +121,10 @@ public class ForcedDownloadService {
         Map<Long, Resolution> resolved = resolver.resolve(fetched);
         List<Long> editionIds = fetched.stream().map(Edition::getId).toList();
         List<Long> partIds = fetched.stream().flatMap(e -> e.originalParts().stream()).map(MediaFile::getId).toList();
-        List<ForcedDownloadBlock> allBlocks = blocks.findByEditionIdIn(editionIds);
-        List<ForcedCheckCandidate> allLedger = ledger.findByEditionIdIn(editionIds);
-        List<SubtitleSidecar> allDownloads = sidecars.findByMediaFileIdIn(partIds).stream()
+        List<ForcedDownloadBlock> allBlocks = blocks.findByEditionIdInAndKind(editionIds, SubtitleKind.FORCED);
+        List<ForcedCheckCandidate> allLedger = ledger.findByEditionIdInAndKind(editionIds, SubtitleKind.FORCED);
+        List<SubtitleSidecar> allDownloads = sidecars.findByMediaFileIdInAndKind(partIds, SubtitleKind.FORCED)
+            .stream()
             .filter(SubtitleSidecar::isDownload).toList();
         Map<Long, Map<String, Map<Long, OpenSubtitlesReference>>> storedByFilm = new HashMap<>();
         references.findByFilmIdIn(neededFilmIds).forEach(r -> storedByFilm
@@ -201,9 +202,11 @@ public class ForcedDownloadService {
     private static Set<Long> skippedFileIds(Edition edition, String imdbId, List<ForcedDownloadBlock> allBlocks,
                                             List<SubtitleSidecar> allDownloads) {
         Set<Long> skipped = new HashSet<>();
-        allBlocks.stream().filter(b -> b.getEditionId().equals(edition.getId()) && b.getImdbId().equals(imdbId))
+        allBlocks.stream().filter(b -> b.getKind() == SubtitleKind.FORCED && b.getEditionId().equals(edition.getId())
+            && b.getImdbId().equals(imdbId))
             .forEach(b -> skipped.add(b.getOsFileId()));
-        allDownloads.stream().filter(d -> Downloads.madeFor(edition, d) && imdbId.equals(d.getImdbId()))
+        allDownloads.stream().filter(d -> d.getKind() == SubtitleKind.FORCED && Downloads.madeFor(edition, d)
+            && imdbId.equals(d.getImdbId()))
             .forEach(d -> skipped.add(d.getOpenSubtitlesFileId()));
         return skipped;
     }
@@ -251,9 +254,11 @@ public class ForcedDownloadService {
         if (!candidate || edition == null) {
             return AddOutcome.DROPPED;
         }
-        List<ForcedDownloadBlock> editionBlocks = blocks.findByEditionIdIn(List.of(edition.getId()));
+        List<ForcedDownloadBlock> editionBlocks = blocks.findByEditionIdInAndKind(List.of(edition.getId()),
+            SubtitleKind.FORCED);
         List<SubtitleSidecar> downloads = sidecars
-            .findByMediaFileIdIn(edition.originalParts().stream().map(MediaFile::getId).toList()).stream()
+            .findByMediaFileIdInAndKind(edition.originalParts().stream().map(MediaFile::getId).toList(),
+                SubtitleKind.FORCED).stream()
             .filter(SubtitleSidecar::isDownload).toList();
         Set<Long> skipped = skippedFileIds(edition, due.imdbId(), editionBlocks, downloads);
         if (skipped.contains(reference.getOsFileId()) || DownloadPlan.remaining(skipped) == 0) {
@@ -266,10 +271,12 @@ public class ForcedDownloadService {
             return AddOutcome.DROPPED;
         }
         sidecars.save(download(edition, reference, now));
-        if (!ledger.existsByEditionIdAndImdbIdAndOsFileId(edition.getId(), due.imdbId(), reference.getOsFileId())) {
+        if (!ledger.existsByEditionIdAndImdbIdAndOsFileIdAndKind(edition.getId(), due.imdbId(),
+            reference.getOsFileId(), SubtitleKind.FORCED)) {
             ForcedCheckCandidate row = new ForcedCheckCandidate();
             row.setEditionId(edition.getId());
             row.setImdbId(due.imdbId());
+            row.setKind(SubtitleKind.FORCED);
             row.setOsFileId(reference.getOsFileId());
             row.setTriedAt(now);
             ledger.save(row);
@@ -280,6 +287,7 @@ public class ForcedDownloadService {
     /** The download row: the reference's cues, stored against part 1 as a whole-edition file. */
     private static SubtitleSidecar download(Edition edition, OpenSubtitlesReference reference, Instant now) {
         SubtitleSidecar row = new SubtitleSidecar();
+        row.setKind(SubtitleKind.FORCED);
         row.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
         row.setPath("opensubtitles:" + edition.getId() + ":" + reference.getOsFileId());
         row.setCuesText(reference.getCuesText());

@@ -106,6 +106,7 @@ class RouteSecurityDriftTest {
             "PUT /api/playback-health/{playbackId}", "GET /api/admin/playback-health",
             "GET /api/admin/settings", "PUT /api/admin/settings",
             "GET /api/admin/playback-health/{playbackId}", "GET /api/editions/{id}/forced-subtitles.vtt",
+            "GET /api/editions/{id}/full-subtitles.vtt",
             "GET /api/admin/subtitles", "GET /api/admin/subtitles/{id}/cues",
             "POST /api/admin/subtitles/{id}/attach", "POST /api/admin/subtitles/{id}/detach",
             "PUT /api/admin/subtitles/{id}/offset", "POST /api/admin/subtitles/{id}/verify",

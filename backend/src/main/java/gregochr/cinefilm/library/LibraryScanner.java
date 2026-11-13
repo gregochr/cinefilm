@@ -52,8 +52,8 @@ public class LibraryScanner {
     }
 
     /**
-     * A forced English subtitle file found beside the films ({@code <stem>.en.forced.srt} or
-     * {@code <stem>.forced.en.srt}).
+     * An English subtitle file found beside the films, forced or full (see {@code SidecarNames}); the kind is read
+     * from the name again where the file is stored.
      *
      * @param path path relative to the library root, with forward slashes
      * @param sizeBytes file size
@@ -69,7 +69,7 @@ public class LibraryScanner {
      * @param rejected candidate files refused because they resolve outside the library root
      * @param unreadable folders (or files) under the root that could not be read, relative to it; what is below
      *     them is unknown, not gone
-     * @param sidecars every forced English subtitle file found
+     * @param sidecars every English subtitle file found, forced or full
      */
     public record Found(List<FoundFile> files, int rejected, List<String> unreadable,
                         List<FoundSidecar> sidecars) {
@@ -121,7 +121,7 @@ public class LibraryScanner {
                     if (name.startsWith(".")) {
                         return FileVisitResult.CONTINUE;
                     }
-                    if (SidecarNames.matches(name)) {
+                    if (SidecarNames.classify(name).isPresent()) {
                         String relative = root.relativize(file);
                         Optional<Path> real = root.resolveFile(relative);
                         if (real.isEmpty()) {

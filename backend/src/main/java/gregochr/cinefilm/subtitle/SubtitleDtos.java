@@ -49,6 +49,9 @@ public final class SubtitleDtos {
      *     example "Replaced by an OpenSubtitles download that agrees" (built from {@code ForcedChoice})
      * @param replacedByDownload true when playback serves a download in place of this owner file because the file
      *     failed its checks (decided by {@code ForcedChoice}); the owner can then answer "Looks right"
+     * @param kind {@code FORCED} or {@code FULL} (a full English subtitle beside the film, offered in the Subtitles
+     *     menu: it never plays as forced and has no checks, so {@code check}, {@code alignment} and
+     *     {@code replacedByDownload} are empty for it)
      */
     public record SidecarDto(Long id, String path, String presence, String state, Long filmId, String filmTitle,
                              Long editionId, String editionName, int parts, Integer part, boolean whole,
@@ -56,7 +59,7 @@ public final class SubtitleDtos {
                              boolean verified, boolean endsAfterRuntime, long version, boolean served, CheckDto check,
                              String offsetSource, AlignmentDto alignment, String origin, String release,
                              Long openSubtitlesFileId, String servedReason,
-                             boolean replacedByDownload) {
+                             boolean replacedByDownload, String kind) {
     }
 
     /**

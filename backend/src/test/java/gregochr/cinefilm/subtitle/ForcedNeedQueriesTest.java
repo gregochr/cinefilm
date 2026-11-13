@@ -50,9 +50,9 @@ class ForcedNeedQueriesTest extends SubtitleTestBase {
         Film heat = filmWithParts("Heat", 1, 90);
         sidecar("Taken.en.forced.srt", fileId(taken, 1), false);
 
-        assertThat(sidecars.findFilmIdsWithPresentSidecar()).containsExactly(taken.getId());
-        assertThat(sidecars.countPresentForFilm(taken.getId())).isEqualTo(1);
-        assertThat(sidecars.countPresentForFilm(heat.getId())).isZero();
+        assertThat(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED)).containsExactly(taken.getId());
+        assertThat(sidecars.countPresentForFilm(taken.getId(), SubtitleKind.FORCED)).isEqualTo(1);
+        assertThat(sidecars.countPresentForFilm(heat.getId(), SubtitleKind.FORCED)).isZero();
     }
 
     @Test
@@ -63,9 +63,9 @@ class ForcedNeedQueriesTest extends SubtitleTestBase {
         sidecar("Unmatched.en.forced.srt", null, false);
         sidecar("Heat.en.forced.srt", fileId(heat, 1), false);
 
-        assertThat(sidecars.findFilmIdsWithPresentSidecar()).containsExactly(heat.getId());
-        assertThat(sidecars.countPresentForFilm(taken.getId())).isZero();
-        assertThat(sidecars.countPresentForFilm(heat.getId())).isEqualTo(1);
+        assertThat(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED)).containsExactly(heat.getId());
+        assertThat(sidecars.countPresentForFilm(taken.getId(), SubtitleKind.FORCED)).isZero();
+        assertThat(sidecars.countPresentForFilm(heat.getId(), SubtitleKind.FORCED)).isEqualTo(1);
     }
 
     @Test
@@ -75,9 +75,9 @@ class ForcedNeedQueriesTest extends SubtitleTestBase {
         sidecar("Empty.en.forced.srt", fileId(empty, 1), false).setCueCount(0);
         sidecar("Cued.en.forced.srt", fileId(cued, 1), false);
 
-        assertThat(sidecars.findFilmIdsWithPresentSidecar()).containsExactly(cued.getId());
-        assertThat(sidecars.countPresentForFilm(empty.getId())).isZero();
-        assertThat(sidecars.countPresentForFilm(cued.getId())).isEqualTo(1);
+        assertThat(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED)).containsExactly(cued.getId());
+        assertThat(sidecars.countPresentForFilm(empty.getId(), SubtitleKind.FORCED)).isZero();
+        assertThat(sidecars.countPresentForFilm(cued.getId(), SubtitleKind.FORCED)).isEqualTo(1);
     }
 
     @Test
@@ -86,8 +86,8 @@ class ForcedNeedQueriesTest extends SubtitleTestBase {
         sidecar("Towers - pt1.en.forced.srt", fileId(split, 1), false);
         sidecar("Towers - pt2.en.forced.srt", fileId(split, 2), false);
 
-        assertThat(sidecars.findFilmIdsWithPresentSidecar()).containsExactly(split.getId());
-        assertThat(sidecars.countPresentForFilm(split.getId())).isEqualTo(2);
+        assertThat(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED)).containsExactly(split.getId());
+        assertThat(sidecars.countPresentForFilm(split.getId(), SubtitleKind.FORCED)).isEqualTo(2);
     }
 
     @Test
@@ -190,8 +190,8 @@ class ForcedNeedQueriesTest extends SubtitleTestBase {
         assertThat(mediaFiles.findFilmIdsWithEmbeddedForced()).containsExactly(here.getId());
         assertThat(mediaFiles.countEmbeddedForcedForFilm(gone.getId())).isZero();
         assertThat(mediaFiles.countEmbeddedForcedForFilm(here.getId())).isEqualTo(1);
-        assertThat(sidecars.findFilmIdsWithPresentSidecar()).isEmpty();
-        assertThat(sidecars.countPresentForFilm(gone.getId())).isZero();
+        assertThat(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED)).isEmpty();
+        assertThat(sidecars.countPresentForFilm(gone.getId(), SubtitleKind.FORCED)).isZero();
     }
 
     @Test
@@ -204,8 +204,8 @@ class ForcedNeedQueriesTest extends SubtitleTestBase {
         mediaFiles.saveAndFlush(first);
 
         assertThat(mediaFiles.findFilmIdsWithEmbeddedForced()).isEmpty();
-        assertThat(sidecars.findFilmIdsWithPresentSidecar()).containsExactly(split.getId());
-        assertThat(sidecars.countPresentForFilm(split.getId())).isEqualTo(1);
+        assertThat(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED)).containsExactly(split.getId());
+        assertThat(sidecars.countPresentForFilm(split.getId(), SubtitleKind.FORCED)).isEqualTo(1);
     }
 
     @Test

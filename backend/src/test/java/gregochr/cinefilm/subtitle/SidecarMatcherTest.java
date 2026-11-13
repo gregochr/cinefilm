@@ -35,34 +35,34 @@ class SidecarMatcherTest {
 
     @Test
     void aSidecarNamedExactlyLikeTheFilmMatchesThatFile() {
-        assertThat(match("Taken.en.forced.srt")).contains(new Match(1L));
-        assertThat(match("Heat.forced.en.srt")).contains(new Match(2L));
-        assertThat(match("Rocky IV.en.forced.srt")).contains(new Match(9L));
+        assertThat(match("Taken.en.forced.srt")).contains(new Match(1L, SubtitleKind.FORCED));
+        assertThat(match("Heat.forced.en.srt")).contains(new Match(2L, SubtitleKind.FORCED));
+        assertThat(match("Rocky IV.en.forced.srt")).contains(new Match(9L, SubtitleKind.FORCED));
     }
 
     @Test
     void theExtensionOfTheFilmCanBeAnyVideoExtension() {
-        assertThat(match("Taken (2008)/Taken 2.en.forced.srt")).contains(new Match(10L));
-        assertThat(match("Heat (1995)/Heat.en.forced.srt")).contains(new Match(11L));
+        assertThat(match("Taken (2008)/Taken 2.en.forced.srt")).contains(new Match(10L, SubtitleKind.FORCED));
+        assertThat(match("Heat (1995)/Heat.en.forced.srt")).contains(new Match(11L, SubtitleKind.FORCED));
     }
 
     @Test
     void theNameIsComparedIgnoringCase() {
-        assertThat(match("No Time to Die.en.forced.srt")).contains(new Match(3L));
-        assertThat(match("NO TIME TO DIE.EN.FORCED.SRT")).contains(new Match(3L));
+        assertThat(match("No Time to Die.en.forced.srt")).contains(new Match(3L, SubtitleKind.FORCED));
+        assertThat(match("NO TIME TO DIE.EN.FORCED.SRT")).contains(new Match(3L, SubtitleKind.FORCED));
     }
 
     @Test
     void aPartTaggedSidecarMatchesThatPartsFileAndNeverAnotherPart() {
-        assertThat(match("Kill Bill/Kill Bill - pt1.en.forced.srt")).contains(new Match(7L));
-        assertThat(match("Kill Bill/Kill Bill - pt2.en.forced.srt")).contains(new Match(8L));
+        assertThat(match("Kill Bill/Kill Bill - pt1.en.forced.srt")).contains(new Match(7L, SubtitleKind.FORCED));
+        assertThat(match("Kill Bill/Kill Bill - pt2.en.forced.srt")).contains(new Match(8L, SubtitleKind.FORCED));
         assertThat(match("Kill Bill/Kill Bill - pt3.en.forced.srt")).isEmpty();
     }
 
     @Test
     void theEditionTagMustBeInTheSidecarsNameToo() {
-        assertThat(match(THEATRICAL + ".en.forced.srt")).contains(new Match(4L));
-        assertThat(match(EXTENDED + " - pt1.en.forced.srt")).contains(new Match(5L));
+        assertThat(match(THEATRICAL + ".en.forced.srt")).contains(new Match(4L, SubtitleKind.FORCED));
+        assertThat(match(EXTENDED + " - pt1.en.forced.srt")).contains(new Match(5L, SubtitleKind.FORCED));
     }
 
     @Test
@@ -107,5 +107,29 @@ class SidecarMatcherTest {
 
         assertThat(matcher.match("Heat.en.forced.srt")).isEmpty();
         assertThat(cases.match("heat.en.forced.srt")).isEmpty();
+    }
+
+    @Test
+    void aFullEnglishSubtitleMatchesTheSameFileByNameAndSaysItIsFull() {
+        assertThat(match("Taken.en.srt")).contains(new Match(1L, SubtitleKind.FULL));
+        assertThat(match("Heat.eng.sdh.srt")).contains(new Match(2L, SubtitleKind.FULL));
+        assertThat(match("Kill Bill/Kill Bill - pt1.sdh.en.srt")).contains(new Match(7L, SubtitleKind.FULL));
+        assertThat(match("Heat (1995)/Heat.EN.SRT")).contains(new Match(11L, SubtitleKind.FULL));
+    }
+
+    @Test
+    void aFullSubtitleIsMatchedExactlyAsStrictlyAsAForcedOne() {
+        assertThat(match("Taken 2.en.srt")).isEmpty();
+        assertThat(match("Other/Taken.en.srt")).isEmpty();
+        assertThat(match("Kill Bill/Kill Bill.en.srt")).isEmpty();
+        assertThat(match("Taken.fr.srt")).isEmpty();
+        assertThat(match("Taken.srt")).isEmpty();
+    }
+
+    @Test
+    void aFilmNameWithDotsMatchesItsFullSubtitle() {
+        SidecarMatcher matcher = new SidecarMatcher(List.of(new FileRef(1L, "Mr. Smith.m4v")));
+
+        assertThat(matcher.match("Mr. Smith.en.srt")).contains(new Match(1L, SubtitleKind.FULL));
     }
 }

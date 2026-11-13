@@ -26,10 +26,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Keeps the {@code subtitle_sidecar} table in step with the forced subtitle files a scan found. Every scan, for every
- * file: a new or changed file is read and parsed (an unchanged one is not read again), a file that is not found is
- * marked missing (never deleted, so a brief outage of the media share cannot lose the owner's work, and not at all
- * under a folder the walk could not read), and a file that comes back is present again. Then every file the owner has
+ * Keeps the {@code subtitle_sidecar} table in step with the English subtitle files (forced and full) a scan found.
+ * Every scan, for every file: a new or changed file is read and parsed (an unchanged one is not read again), a file
+ * that is not found is marked missing (never deleted, so a brief outage of the media share cannot lose the owner's
+ * work, and not at all under a folder the walk could not read), and a file that comes back is present again. Then
+ * every file the owner has
  * not attached by hand is matched to a film file by name, whether or not that film changed. The media mount is only
  * read, and only through {@link LibraryRoot}. Rows that are downloads from OpenSubtitles are left entirely alone.
  */
@@ -62,7 +63,7 @@ public class SidecarSync {
         Instant now = clock.instant();
         Map<String, SubtitleSidecar> existing = new HashMap<>();
         // Downloads from OpenSubtitles have made-up paths and no file on disk: the scan never reads, marks missing or
-        // matches them.
+        // matches them. Both kinds stay in view on purpose: the scan tracks every file on disk, forced or full.
         sidecars.findAll().stream().filter(s -> !s.isDownload()).forEach(s -> existing.put(s.getPath(), s));
         Set<String> seen = new HashSet<>();
         for (FoundSidecar file : found.sidecars()) {
@@ -78,6 +79,7 @@ public class SidecarSync {
         }
         sidecars.flush();
         SidecarMatcher matcher = matcher();
+        // All kinds again: matching a file to a film file by name does not depend on what the file holds.
         for (SubtitleSidecar row : sidecars.findAll()) {
             if (!row.isDownload() && !row.isOwnerAttached()) {
                 apply(row, matcher.match(row.getPath()).orElse(null), now);
@@ -128,7 +130,13 @@ public class SidecarSync {
             }
             return;
         }
+        Optional<SidecarNames.Named> named = SidecarNames.classify(file.path());
+        if (named.isEmpty()) {
+            return;
+        }
         SubtitleSidecar target = row == null ? new SubtitleSidecar() : row;
+        // The kind comes from the name; a name that changes kind is a different path, so this only ever sets it.
+        target.setKind(named.get().kind());
         String before = target.getCuesText();
         SrtParser.Parsed parsed = SrtParser.parse(bytes.get());
         target.setPath(file.path());

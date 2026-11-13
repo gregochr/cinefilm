@@ -106,6 +106,40 @@ class SidecarSyncUnitTest {
     }
 
     @Test
+    void aForcedNameIsStoredAsForcedAndAFullNameAsFull() throws IOException {
+        stubRepositories();
+        sync.sync(found(write("Taken.en.forced.srt", CUES, T1), write("Taken.en.srt", CUES, T1),
+            write("Taken.forced.eng.srt", CUES, T1), write("Taken.sdh.eng.srt", CUES, T1)));
+
+        assertThat(rows).extracting(SubtitleSidecar::getPath, SubtitleSidecar::getKind,
+            SubtitleSidecar::getMediaFileId).containsExactly(
+            tuple("Taken.en.forced.srt", SubtitleKind.FORCED, 1L), tuple("Taken.en.srt", SubtitleKind.FULL, 1L),
+            tuple("Taken.forced.eng.srt", SubtitleKind.FORCED, 1L),
+            tuple("Taken.sdh.eng.srt", SubtitleKind.FULL, 1L));
+    }
+
+    @Test
+    void aFullFileAlreadyOnRecordIsTrackedAndMarkedMissingLikeAForcedOne() throws IOException {
+        stubRepositories();
+        sync.sync(found(write("Taken.en.srt", CUES, T1)));
+        sync.sync(found());
+
+        assertThat(rows).singleElement().satisfies(row -> {
+            assertThat(row.getKind()).isEqualTo(SubtitleKind.FULL);
+            assertThat(row.getPresence()).isEqualTo(Presence.MISSING);
+        });
+    }
+
+    @Test
+    void aFileWhoseNameIsNotAnEnglishSubtitleNameIsIgnored() throws IOException {
+        when(sidecars.findAll()).thenAnswer(call -> List.copyOf(rows));
+        when(files.findKnownOriginals()).thenReturn(List.of());
+        sync.sync(found(write("Taken.fr.srt", CUES, T1)));
+
+        assertThat(rows).isEmpty();
+    }
+
+    @Test
     void aNameThatIsNotExactlyAFilmsIsLeftUnmatched() throws IOException {
         stubRepositories();
         sync.sync(found(write("Taken - pt1.en.forced.srt", CUES, T1)));

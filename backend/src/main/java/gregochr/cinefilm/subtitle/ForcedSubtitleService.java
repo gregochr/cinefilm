@@ -3,7 +3,6 @@ package gregochr.cinefilm.subtitle;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
-import gregochr.cinefilm.film.EditionTimeline;
 import gregochr.cinefilm.film.FilmDtos.ForcedSubtitleDto;
 import gregochr.cinefilm.subtitle.ForcedChoice.Source;
 import gregochr.cinefilm.web.JsonEtag;
@@ -11,9 +10,7 @@ import gregochr.cinefilm.subtitle.ForcedResolver.Resolution;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Pick;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Slot;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -137,27 +134,6 @@ public class ForcedSubtitleService {
         if (slots.isEmpty()) {
             throw new NotFoundException("No forced subtitles");
         }
-        List<String> texts = new ArrayList<>();
-        EditionTimeline timeline = null;
-        for (Slot slot : slots) {
-            long start = 0;
-            if (slot.partIndex() > 0) {
-                timeline = timeline == null ? timeline(edition) : timeline;
-                start = timeline.partStartMs(slot.partIndex());
-            }
-            // The part's start and the owner's offset move the cues together, so a cue shifted earlier than its
-            // part's start is not clipped at the part's own 0 but lands on the edition timeline.
-            texts.add(VttWriter.write(SrtParser.cues(slot.sidecar().getCuesText()),
-                start + slot.sidecar().getOffsetMs()));
-        }
-        return texts.size() == 1 ? texts.get(0) : VttShifter.join(texts, Collections.nCopies(texts.size(), 0L));
-    }
-
-    private static EditionTimeline timeline(Edition edition) {
-        try {
-            return EditionTimeline.of(edition);
-        } catch (IllegalArgumentException e) {
-            throw new NotFoundException("Forced subtitles are not available");
-        }
+        return ServedSubtitles.vtt(edition, resolution.chosen(), "Forced subtitles are not available");
     }
 }

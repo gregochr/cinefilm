@@ -311,7 +311,7 @@ class SidecarSyncTest extends SubtitleTestBase {
 
         sync.sync(new Found(List.of(), 0, List.of("Locked"), List.of()));
 
-        assertThat(sidecars.findAllByOrderByPathAscIdAsc())
+        assertThat(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FORCED))
             .extracting(SubtitleSidecar::getPath, SubtitleSidecar::getPresence)
             .containsExactly(tuple("Locked/Heat.en.forced.srt", Presence.PRESENT),
                 tuple("Open/Alien.en.forced.srt", Presence.MISSING));
@@ -419,7 +419,7 @@ class SidecarSyncTest extends SubtitleTestBase {
         sync.sync(found(listed("Towers.en.forced.srt", content, T1),
             listed("Towers - pt2.en.forced.srt", content, T1)));
 
-        assertThat(sidecars.findAllByOrderByPathAscIdAsc())
+        assertThat(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FORCED))
             .extracting(SubtitleSidecar::getPath, SubtitleSidecar::getMediaFileId, SubtitleSidecar::isWholeEdition)
             .containsExactly(tuple("Towers - pt2.en.forced.srt", fileId(towers, 2), false),
                 tuple("Towers.en.forced.srt", null, false));

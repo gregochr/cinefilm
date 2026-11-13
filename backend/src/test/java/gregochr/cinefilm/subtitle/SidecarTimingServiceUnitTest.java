@@ -91,7 +91,7 @@ class SidecarTimingServiceUnitTest {
 
     private void served() {
         when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
-        when(sidecars.findByMediaFileIdIn(List.of(10L))).thenReturn(List.of(sidecar));
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED)).thenReturn(List.of(sidecar));
     }
 
     private EmbeddedCueStarts read(List<Long> starts) {
@@ -126,7 +126,7 @@ class SidecarTimingServiceUnitTest {
 
     @Test
     void aFilmWhoseServedFileHasNoReadIsDueAndNeedsIt() {
-        when(sidecars.findFilmIdsWithPresentSubtitle()).thenReturn(List.of(1L));
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L));
         served();
         when(cache.findAllById(Set.of(10L))).thenReturn(List.of());
         when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of());
@@ -138,7 +138,7 @@ class SidecarTimingServiceUnitTest {
 
     @Test
     void aFilmWithACurrentFitIsNotDue() {
-        when(sidecars.findFilmIdsWithPresentSubtitle()).thenReturn(List.of(1L));
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L));
         served();
         when(cache.findAllById(Set.of(10L))).thenReturn(List.of(read(STARTS)));
         ForcedSubtitleAlignment fit = new ForcedSubtitleAlignment();
@@ -152,7 +152,7 @@ class SidecarTimingServiceUnitTest {
 
     @Test
     void aFilmWithNoServedFileHasNothingDueOrToRead() {
-        when(sidecars.findFilmIdsWithPresentSubtitle()).thenReturn(List.of());
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of());
 
         assertThat(service.dueFilmIds()).isEmpty();
         assertThat(service.readsFor(1L)).isEmpty();
@@ -250,7 +250,7 @@ class SidecarTimingServiceUnitTest {
     @Test
     void aFitForAFileThatIsNoLongerServedIsDropped() {
         when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
-        when(sidecars.findByMediaFileIdIn(List.of(10L))).thenReturn(List.of());
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED)).thenReturn(List.of());
 
         assertThat(service.save(job(), aligned(900), LATER)).isEqualTo(SaveOutcome.DROPPED);
     }

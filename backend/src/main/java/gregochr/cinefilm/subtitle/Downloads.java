@@ -42,16 +42,19 @@ final class Downloads {
      *
      * @param edition the edition (its film loaded)
      * @param partIds the ids of its part files
-     * @param found sidecars of any kind attached to some film files (others are ignored)
+     * @param found sidecars attached to some film files (others are ignored)
+     * @param kind the kind of download to count: a forced edition never counts a full download
      * @return the edition's live downloads
      */
-    static List<SubtitleSidecar> of(Edition edition, List<Long> partIds, Collection<SubtitleSidecar> found) {
+    static List<SubtitleSidecar> of(Edition edition, List<Long> partIds, Collection<SubtitleSidecar> found,
+                                    SubtitleKind kind) {
         String imdbId = edition.getFilm().getImdbId();
         if (isNotNeeded(edition)) {
             return List.of();
         }
         return found.stream()
-            .filter(s -> s.isDownload() && s.getPresence() == Presence.PRESENT && s.getCueCount() > 0
+            .filter(s -> s.isDownload() && s.getKind() == kind && s.getPresence() == Presence.PRESENT
+                && s.getCueCount() > 0
                 && partIds.contains(s.getMediaFileId()) && madeFor(edition, s) && imdbId != null
                 && imdbId.equals(s.getImdbId()))
             .sorted(Comparator.comparing(SubtitleSidecar::getId)).toList();

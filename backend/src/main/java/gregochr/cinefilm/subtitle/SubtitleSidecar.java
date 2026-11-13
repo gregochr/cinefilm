@@ -105,6 +105,14 @@ public class SubtitleSidecar {
     @Column(nullable = false, length = 20)
     private Origin origin = Origin.FILE;
 
+    /**
+     * Forced-only or full English. It starts as {@code FORCED}, as {@link #origin} starts as {@code FILE}: Hibernate
+     * writes every column, so the database default does not cover an insert made in Java.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private SubtitleKind kind = SubtitleKind.FORCED;
+
     /** The OpenSubtitles file id a download was made from; null for a file beside the film. */
     @Column(name = "opensubtitles_file_id")
     private Long openSubtitlesFileId;

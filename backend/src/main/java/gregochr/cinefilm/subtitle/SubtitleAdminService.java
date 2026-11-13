@@ -8,9 +8,11 @@ import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.EditionTimeline;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
+import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.subtitle.ForcedResolver.DownloadState;
 import gregochr.cinefilm.subtitle.ForcedResolver.Resolution;
+import gregochr.cinefilm.subtitle.SidecarPrecedence.Pick;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Slot;
 import gregochr.cinefilm.subtitle.SubtitleDtos.AlignmentDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.AttachRequest;
@@ -22,6 +24,7 @@ import gregochr.cinefilm.subtitle.SubtitleDtos.SidecarDto;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -81,10 +84,22 @@ public class SubtitleAdminService {
         this.events = events;
     }
 
-    /** Every forced subtitle file with where it belongs and how it reads. */
+    /**
+     * Every subtitle file with where it belongs and how it reads: the forced ones (with their checks and what
+     * playback does with them) and the full English ones (with only whether the Subtitles menu offers them). In path
+     * order. The two kinds are built apart, so a full file is never part of what the forced logic works out.
+     */
     @Transactional(readOnly = true)
     public List<SidecarDto> list() {
-        return build(sidecars.findAllByOrderByPathAscIdAsc());
+        List<SidecarDto> forced = build(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FORCED));
+        List<SubtitleSidecar> fullRows = sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FULL);
+        if (fullRows.isEmpty()) {
+            return forced;
+        }
+        List<SidecarDto> all = new ArrayList<>(forced);
+        all.addAll(buildFull(fullRows));
+        all.sort(Comparator.comparing(SidecarDto::path).thenComparing(SidecarDto::id));
+        return all;
     }
 
     /**
@@ -207,7 +222,7 @@ public class SubtitleAdminService {
     }
 
     private SidecarDto verifyLocked(Long id) {
-        SubtitleSidecar sidecar = find(id);
+        SubtitleSidecar sidecar = findForced(id);
         MediaFile file = file(sidecar);
         if (file == null) {
             throw new BadRequestException("Attach the subtitle to a film first");
@@ -231,7 +246,7 @@ public class SubtitleAdminService {
     }
 
     private SidecarDto unverifyLocked(Long id) {
-        SubtitleSidecar sidecar = find(id);
+        SubtitleSidecar sidecar = findForced(id);
         sidecar.clearVerification();
         sidecar.setUpdatedAt(clock.instant());
         return one(id);
@@ -266,9 +281,10 @@ public class SubtitleAdminService {
         // The edition it was made for, which is not where its file is now if an edit moved the file.
         Long editionId = Downloads.madeForEditionId(sidecar);
         // An edit may have deleted that edition: there is nothing left to block for then (and the key would not hold).
-        if (editions.existsById(editionId) && !blocks.existsByEditionIdAndImdbIdAndOsFileId(editionId,
-            sidecar.getImdbId(), sidecar.getOpenSubtitlesFileId())) {
+        if (editions.existsById(editionId) && !blocks.existsByEditionIdAndImdbIdAndOsFileIdAndKind(editionId,
+            sidecar.getImdbId(), sidecar.getOpenSubtitlesFileId(), sidecar.getKind())) {
             ForcedDownloadBlock block = new ForcedDownloadBlock();
+            block.setKind(sidecar.getKind());
             block.setEditionId(editionId);
             block.setImdbId(sidecar.getImdbId());
             block.setOsFileId(sidecar.getOpenSubtitlesFileId());
@@ -306,6 +322,18 @@ public class SubtitleAdminService {
 
     private SubtitleSidecar find(Long id) {
         return sidecars.findById(id).orElseThrow(() -> new NotFoundException("No such subtitle"));
+    }
+
+    /**
+     * A forced subtitle: "Looks right" is the owner's word on forced lines and their timing, and it only means
+     * something to the forced logic, so a full file has none.
+     */
+    private SubtitleSidecar findForced(Long id) {
+        SubtitleSidecar sidecar = find(id);
+        if (sidecar.getKind() != SubtitleKind.FORCED) {
+            throw new BadRequestException("Only a forced subtitle can be checked");
+        }
+        return sidecar;
     }
 
     /** A subtitle beside the film: a download has no file to attach or give back to matching. */
@@ -379,6 +407,67 @@ public class SubtitleAdminService {
         return dtos;
     }
 
+    /**
+     * The full English files as listed: where each belongs, and whether the Subtitles menu offers it
+     * ({@link SidecarPrecedence}'s pick over the full files only). They have no comparison, no timing fit and no
+     * download to replace them, and nothing here reads the forced resolver.
+     */
+    private List<SidecarDto> buildFull(List<SubtitleSidecar> all) {
+        Set<Long> fileIds = all.stream().map(SubtitleSidecar::getMediaFileId).filter(i -> i != null)
+            .collect(Collectors.toSet());
+        Map<Long, MediaFile> fileById = new HashMap<>();
+        files.findAllById(fileIds).forEach(f -> fileById.put(f.getId(), f));
+        Map<Long, Edition> editionById = new HashMap<>();
+        Map<Long, List<SubtitleSidecar>> rowsByEdition = new HashMap<>();
+        for (SubtitleSidecar sidecar : all) {
+            MediaFile file = fileById.get(sidecar.getMediaFileId());
+            if (file != null) {
+                editionById.put(file.getEdition().getId(), file.getEdition());
+                rowsByEdition.computeIfAbsent(file.getEdition().getId(), k -> new ArrayList<>()).add(sidecar);
+            }
+        }
+        Set<Long> served = new HashSet<>();
+        Set<Long> conflicting = new HashSet<>();
+        Set<Long> noTimeline = new HashSet<>();
+        for (Edition edition : editionById.values()) {
+            Pick pick = SidecarPrecedence.pick(partIds(edition), rowsByEdition.get(edition.getId()),
+                SubtitleKind.FULL);
+            conflicting.addAll(pick.conflicting());
+            // A file on an edition whose later part's start is unknown cannot be placed on its timeline: not offered.
+            Set<Long> picked = (ServedSubtitles.version(edition, pick) != null ? served : noTimeline);
+            pick.slots().forEach(slot -> picked.add(slot.sidecar().getId()));
+        }
+        List<SidecarDto> dtos = new ArrayList<>();
+        for (SubtitleSidecar sidecar : all) {
+            MediaFile file = fileById.get(sidecar.getMediaFileId());
+            Long id = sidecar.getId();
+            String reason = fullReason(sidecar, conflicting.contains(id), served.contains(id),
+                noTimeline.contains(id));
+            dtos.add(dto(sidecar, file, conflicting.contains(id), served.contains(id), null, null, reason, false));
+        }
+        return dtos;
+    }
+
+    private static String fullReason(SubtitleSidecar s, boolean conflict, boolean isServed, boolean noTimeline) {
+        if (isServed) {
+            return "Offered in the Subtitles menu as English (full)";
+        }
+        if (s.getMediaFileId() == null) {
+            return "Not used: it is not attached to a film";
+        }
+        if (s.getPresence() != Presence.PRESENT) {
+            return "Not used: the file is missing";
+        }
+        if (s.getCueCount() == 0) {
+            return "Not used: it has no lines";
+        }
+        if (noTimeline) {
+            return "Not used: the lengths of the film's parts are not known yet";
+        }
+        return conflict ? "Not used: two full subtitle files compete for the same place"
+            : "Not used: another full subtitle file takes its place";
+    }
+
     private static SidecarDto dto(SubtitleSidecar s, MediaFile file, boolean conflict, boolean isServed,
                                    CheckDto check, AlignmentDto alignment, String reason, boolean replaced) {
         String source = s.getOffsetSource() == null ? null : s.getOffsetSource().name();
@@ -386,7 +475,8 @@ public class SubtitleAdminService {
             return new SidecarDto(s.getId(), s.getPath(), s.getPresence().name(), "unmatched", null, null, null, null,
                 0, null, false, s.isOwnerAttached(), s.getCueCount(), s.getParseReport(), s.getOffsetMs(), false,
                 false, s.getUpdatedAt().toEpochMilli(), false, null, source, null, s.getOrigin().name(),
-                s.getRelease(), s.getOpenSubtitlesFileId(), "Not used: it is not attached to a film", false);
+                s.getRelease(), s.getOpenSubtitlesFileId(), "Not used: it is not attached to a film", false,
+                s.getKind().name());
         }
         Edition edition = file.getEdition();
         List<Long> partIds = partIds(edition);
@@ -398,7 +488,7 @@ public class SubtitleAdminService {
             partIds.size(), s.isWholeEdition() ? null : file.getPartNumber(), s.isWholeEdition(),
             s.isOwnerAttached(), s.getCueCount(), s.getParseReport(), s.getOffsetMs(), s.isVerifiedFor(partIds),
             endsAfter, s.getUpdatedAt().toEpochMilli(), isServed, check, source, alignment, s.getOrigin().name(),
-            s.getRelease(), s.getOpenSubtitlesFileId(), reason, replaced);
+            s.getRelease(), s.getOpenSubtitlesFileId(), reason, replaced, s.getKind().name());
     }
 
     private static List<Long> partIds(Edition edition) {

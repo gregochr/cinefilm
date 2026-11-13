@@ -118,7 +118,7 @@ public class SidecarTimingService {
      */
     @Transactional(readOnly = true)
     public List<Long> dueFilmIds() {
-        List<Served> served = served(new HashSet<>(sidecars.findFilmIdsWithPresentSubtitle()));
+        List<Served> served = served(new HashSet<>(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)));
         Map<Long, EmbeddedCueStarts> reads = reads(served);
         Map<Long, ForcedSubtitleAlignment> fits = fits(served);
         Map<Long, boolean[]> due = new LinkedHashMap<>();
@@ -392,17 +392,17 @@ public class SidecarTimingService {
         if (allIds.isEmpty()) {
             return List.of();
         }
-        List<SubtitleSidecar> candidates = sidecars.findByMediaFileIdIn(allIds);
+        List<SubtitleSidecar> candidates = sidecars.findByMediaFileIdInAndKind(allIds, SubtitleKind.FORCED);
         List<Served> served = new ArrayList<>();
         for (Edition edition : found) {
             List<Long> partIds = partIds(edition);
-            Pick pick = SidecarPrecedence.pick(partIds, candidates);
+            Pick pick = SidecarPrecedence.pick(partIds, candidates, SubtitleKind.FORCED);
             for (Slot slot : pick.slots()) {
                 served.add(new Served(edition, slot.sidecar(), partIds));
             }
             // A download is fitted whether or not it plays now: its proof is what lets it win (the owner's file may
             // be the one playing until then), and the fit is read from the film's own track, which costs nothing more.
-            for (SubtitleSidecar download : Downloads.of(edition, partIds, candidates)) {
+            for (SubtitleSidecar download : Downloads.of(edition, partIds, candidates, SubtitleKind.FORCED)) {
                 served.add(new Served(edition, download, partIds));
             }
         }

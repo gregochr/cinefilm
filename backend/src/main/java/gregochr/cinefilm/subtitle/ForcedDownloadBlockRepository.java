@@ -4,12 +4,13 @@ import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-/** Persistence for {@link ForcedDownloadBlock}. */
+/** Persistence for {@link ForcedDownloadBlock}: blocks are per {@link SubtitleKind}. */
 public interface ForcedDownloadBlockRepository extends JpaRepository<ForcedDownloadBlock, Long> {
 
-    /** The files removed from some editions. */
-    List<ForcedDownloadBlock> findByEditionIdIn(Collection<Long> editionIds);
+    /** The files of one kind removed from some editions. */
+    List<ForcedDownloadBlock> findByEditionIdInAndKind(Collection<Long> editionIds, SubtitleKind kind);
 
-    /** True when the owner removed this file from the edition for this IMDb id. */
-    boolean existsByEditionIdAndImdbIdAndOsFileId(Long editionId, String imdbId, long osFileId);
+    /** True when the owner removed this file from the edition for this IMDb id, as this kind. */
+    boolean existsByEditionIdAndImdbIdAndOsFileIdAndKind(Long editionId, String imdbId, long osFileId,
+                                                         SubtitleKind kind);
 }

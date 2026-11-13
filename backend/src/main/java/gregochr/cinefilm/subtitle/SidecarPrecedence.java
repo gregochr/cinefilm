@@ -35,12 +35,15 @@ final class SidecarPrecedence {
      * Picks what an edition plays.
      *
      * @param partIds the ids of the edition's part files in play order
-     * @param sidecars the files attached to the edition's parts (others, and downloads, are ignored)
+     * @param sidecars the files attached to the edition's parts (others, downloads and files of another kind are
+     *     ignored)
+     * @param kind the kind of file to pick from: forced and full files never compete with each other
      * @return the files to play and the ones in conflict
      */
-    static Pick pick(List<Long> partIds, List<SubtitleSidecar> sidecars) {
+    static Pick pick(List<Long> partIds, List<SubtitleSidecar> sidecars, SubtitleKind kind) {
         List<SubtitleSidecar> playable = sidecars.stream()
-            .filter(s -> !s.isDownload() && s.getMediaFileId() != null && partIds.contains(s.getMediaFileId())
+            .filter(s -> s.getKind() == kind && !s.isDownload() && s.getMediaFileId() != null
+                && partIds.contains(s.getMediaFileId())
                 && s.getPresence() == Presence.PRESENT
                 && s.getCueCount() > 0)
             .toList();

@@ -109,7 +109,7 @@ class ForcedResolverUnitTest {
     @Test
     void anOwnerFileAloneIsUncheckedAndPlaysWithItsReason() {
         SubtitleSidecar owner = row(5, false);
-        when(sidecars.findByMediaFileIdIn(List.of(10L))).thenReturn(List.of(owner));
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED)).thenReturn(List.of(owner));
 
         Resolution resolution = resolve();
 
@@ -122,11 +122,29 @@ class ForcedResolverUnitTest {
     }
 
     @Test
+    void theResolverAsksForForcedRowsOnlyAndIgnoresAFullFileOrDownloadEvenIfOneIsReturned() {
+        SubtitleSidecar owner = row(5, false);
+        SubtitleSidecar fullFile = row(6, false);
+        fullFile.setKind(SubtitleKind.FULL);
+        SubtitleSidecar fullDownload = row(7, true);
+        fullDownload.setKind(SubtitleKind.FULL);
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED))
+            .thenReturn(List.of(owner, fullFile, fullDownload));
+
+        Resolution resolution = resolve();
+
+        assertThat(resolution.chosen().slots()).extracting(s -> s.sidecar().getId()).containsExactly(5L);
+        assertThat(resolution.fileConflict()).isFalse();
+        assertThat(resolution.downloads()).isEmpty();
+        assertThat(resolution.reasons()).containsOnlyKeys(5L);
+    }
+
+    @Test
     void aDownloadForTheFilmsCurrentImdbIdCountsAndOneForAnotherOrWithNoFilmIdDoesNot() {
         SubtitleSidecar live = row(6, true);
         SubtitleSidecar old = row(7, true);
         old.setImdbId("tt0000009");
-        when(sidecars.findByMediaFileIdIn(List.of(10L))).thenReturn(List.of(old, live));
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED)).thenReturn(List.of(old, live));
 
         Resolution resolution = resolve();
 
@@ -148,7 +166,8 @@ class ForcedResolverUnitTest {
         SubtitleSidecar whole = row(8, false);
         whole.setWholeEdition(true);
         SubtitleSidecar perPart = row(9, false);
-        when(sidecars.findByMediaFileIdIn(List.of(10L))).thenReturn(List.of(missing, empty, whole, perPart));
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED))
+            .thenReturn(List.of(missing, empty, whole, perPart));
 
         Resolution resolution = resolve();
 
@@ -164,7 +183,7 @@ class ForcedResolverUnitTest {
         first.setWholeEdition(true);
         SubtitleSidecar second = row(6, false);
         second.setWholeEdition(true);
-        when(sidecars.findByMediaFileIdIn(List.of(10L))).thenReturn(List.of(first, second));
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED)).thenReturn(List.of(first, second));
 
         Resolution resolution = resolve();
 

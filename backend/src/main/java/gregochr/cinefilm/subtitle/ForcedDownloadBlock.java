@@ -2,6 +2,8 @@ package gregochr.cinefilm.subtitle;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -37,4 +39,9 @@ public class ForcedDownloadBlock {
 
     @Column(nullable = false)
     private Instant removedAt;
+
+    /** Which kind of subtitle the file was removed as; {@code FORCED} unless a caller says otherwise. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private SubtitleKind kind = SubtitleKind.FORCED;
 }

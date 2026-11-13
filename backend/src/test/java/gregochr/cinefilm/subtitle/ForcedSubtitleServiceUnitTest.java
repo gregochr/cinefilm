@@ -85,7 +85,8 @@ class ForcedSubtitleServiceUnitTest {
     @Test
     void aWholeEditionFileIsWrittenOnTheEditionTimelineWithItsOffset() {
         when(editions.findById(40L)).thenReturn(Optional.of(edition));
-        when(sidecars.findByMediaFileIdIn(List.of(10L, 20L))).thenReturn(List.of(sidecar(1, 10L, true, 500)));
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L, 20L), SubtitleKind.FORCED))
+            .thenReturn(List.of(sidecar(1, 10L, true, 500)));
 
         assertThat(service.vtt(40L)).isEqualTo("WEBVTT\n\n00:00:10.500 --> 00:00:12.500\nHello\n");
     }
@@ -93,7 +94,7 @@ class ForcedSubtitleServiceUnitTest {
     @Test
     void perPartFilesAreMovedByTheirPartsStartAndJoined() {
         when(editions.findById(40L)).thenReturn(Optional.of(edition));
-        when(sidecars.findByMediaFileIdIn(List.of(10L, 20L)))
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L, 20L), SubtitleKind.FORCED))
             .thenReturn(List.of(sidecar(1, 10L, false, 0), sidecar(2, 20L, false, -3000)));
 
         assertThat(service.vtt(40L)).isEqualTo("WEBVTT\n\n00:00:10.000 --> 00:00:12.000\nHello\n\n"
@@ -103,7 +104,7 @@ class ForcedSubtitleServiceUnitTest {
     @Test
     void nothingAttachedOrNoFilesIsNotFound() {
         when(editions.findById(40L)).thenReturn(Optional.of(edition));
-        when(sidecars.findByMediaFileIdIn(List.of(10L, 20L))).thenReturn(List.of());
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L, 20L), SubtitleKind.FORCED)).thenReturn(List.of());
 
         assertThatThrownBy(() -> service.vtt(40L)).isInstanceOf(NotFoundException.class)
             .hasMessage("No forced subtitles");
@@ -125,7 +126,8 @@ class ForcedSubtitleServiceUnitTest {
     void aLaterPartWithNoTimelineIsNotAvailable() {
         first.setDurationMs(null);
         when(editions.findById(40L)).thenReturn(Optional.of(edition));
-        when(sidecars.findByMediaFileIdIn(List.of(10L, 20L))).thenReturn(List.of(sidecar(2, 20L, false, 0)));
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L, 20L), SubtitleKind.FORCED))
+            .thenReturn(List.of(sidecar(2, 20L, false, 0)));
 
         assertThatThrownBy(() -> service.vtt(40L)).isInstanceOf(NotFoundException.class)
             .hasMessage("Forced subtitles are not available");
@@ -137,7 +139,7 @@ class ForcedSubtitleServiceUnitTest {
         SubtitleSidecar b = sidecar(2, 20L, false, 0);
         a.setOwnerVerifiedAt(NOW);
         a.setVerifiedParts("10,20");
-        when(sidecars.findByMediaFileIdIn(List.of(10L, 20L))).thenReturn(List.of(a, b));
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L, 20L), SubtitleKind.FORCED)).thenReturn(List.of(a, b));
 
         Map<Long, ForcedSubtitleDto> unverified = service.forEditions(List.of(edition));
 
@@ -152,7 +154,7 @@ class ForcedSubtitleServiceUnitTest {
     @Test
     void editionsWithNothingToPlayOrNoFilesAreAbsent() {
         Edition empty = edition(film(2L, "Empty", 2000, NOW), 41L, "Original", MIN, null);
-        when(sidecars.findByMediaFileIdIn(List.of(10L, 20L))).thenReturn(List.of());
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L, 20L), SubtitleKind.FORCED)).thenReturn(List.of());
 
         assertThat(service.forEditions(List.of(edition, empty))).isEmpty();
         assertThat(service.forEditions(List.of(empty))).isEmpty();

@@ -67,4 +67,11 @@ abstract class SubtitleTestBase extends ApiTestBase {
         sidecar.setUpdatedAt(NOW);
         return sidecars.save(sidecar);
     }
+
+    /** A present full English sidecar with {@link #CUES} attached to a film file (null for none). */
+    protected SubtitleSidecar fullSidecar(String path, Long fileId, boolean whole) {
+        SubtitleSidecar sidecar = sidecar(path, fileId, whole);
+        sidecar.setKind(SubtitleKind.FULL);
+        return sidecars.save(sidecar);
+    }
 }

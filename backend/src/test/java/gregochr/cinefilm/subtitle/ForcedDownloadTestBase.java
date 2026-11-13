@@ -118,7 +118,8 @@ abstract class ForcedDownloadTestBase extends SubtitleTestBase {
     /** The served version of the owner's files as playback would pick them for the film's edition. */
     protected String fileVersion(Film film) {
         List<Long> partIds = partIds(film);
-        Pick pick = SidecarPrecedence.pick(partIds, sidecars.findByMediaFileIdIn(partIds));
+        Pick pick = SidecarPrecedence.pick(partIds,
+            sidecars.findByMediaFileIdInAndKind(partIds, SubtitleKind.FORCED), SubtitleKind.FORCED);
         return ServedSubtitles.version(edition(film), pick);
     }
 
