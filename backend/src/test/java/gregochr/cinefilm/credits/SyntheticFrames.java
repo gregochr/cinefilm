@@ -274,6 +274,47 @@ final class SyntheticFrames {
         return new Canvas(W, H, 0).line(44, 3, TEXT, 40 + name, 3, 0).frame();
     }
 
+    /**
+     * A card with two fixed lines of three blocks (72 bright pixels) and a third line whose last block sits
+     * {@code name} blocks of 5 pixels further right: consecutive cards change 24 of the 108 bright pixels.
+     */
+    static GreyFrame creditCardWithAFixedBody(int name) {
+        return new Canvas(W, H, 0).line(20, 3, TEXT).line(30, 3, TEXT)
+            .rect(40, 50, 3, 4, TEXT).rect(45, 50, 3, 4, TEXT).rect(50 + 5 * name, 50, 3, 4, TEXT).frame();
+    }
+
+    /**
+     * Floors of lights on black, three windows to a floor: floor F (6x4 each, 72 pixels, always lit), floor G (6x5
+     * each, 90 pixels) and floor g (5x1 each, 15 pixels).
+     */
+    static GreyFrame floors(boolean g90, boolean g15) {
+        Canvas canvas = new Canvas(W, H, 0);
+        for (int x : new int[] {40, 70, 100}) {
+            canvas.rect(x, 10, 6, 4, TEXT);
+            if (g90) {
+                canvas.rect(x, 30, 6, 5, TEXT);
+            }
+            if (g15) {
+                canvas.rect(x, 50, 5, 1, TEXT);
+            }
+        }
+        return canvas.frame();
+    }
+
+    /**
+     * A card of 36 pixels at luma 85 (0.36 of a peak of 235: a text pixel for the frame, but not a bright pixel for
+     * the card check), with {@code light} three 4x1 lights (12 pixels at 212) that can be on or off.
+     */
+    static GreyFrame dimTextWithLights(boolean light) {
+        Canvas canvas = new Canvas(W, H, 0).line(20, 3, 85);
+        if (light) {
+            for (int x : new int[] {40, 70, 100}) {
+                canvas.rect(x, 50, 4, 1, 212);
+            }
+        }
+        return canvas.frame();
+    }
+
     /** The original letterboxed night scene with a fourth window (6x6, 36 pixels) lit or dark. */
     static GreyFrame nightWithFourthWindow(boolean lit) {
         Canvas canvas = new Canvas(W, H, 0)

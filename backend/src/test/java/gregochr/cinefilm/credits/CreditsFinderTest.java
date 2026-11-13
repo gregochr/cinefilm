@@ -455,6 +455,23 @@ class CreditsFinderTest {
     }
 
     @Test
+    void aSingleFlickerOfFloorsOfLightsWhoseMiddlePairsAreSmallIsUnsureNotFound() {
+        // One flicker (F -> F+G -> F+G+g -> F+g -> F) every 35 s would be two card changes in one 30 s window if the
+        // small middle pairs split the run; as one event it is not cards.
+        DenseBuilder builder = filmThen();
+        for (int flicker = 0; flicker < 4; flicker++) {
+            builder.add(SyntheticFrames.floors(false, false), 60).add(SyntheticFrames.floors(true, false), 1)
+                .add(SyntheticFrames.floors(true, true), 1).add(SyntheticFrames.floors(false, true), 1)
+                .add(SyntheticFrames.floors(false, false), 10);
+        }
+
+        CreditsResult result = refine(builder);
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.UNSURE);
+        assertThat(result.reasons()).containsExactly("Text on a dark screen, but it never moves");
+    }
+
+    @Test
     void aSlowTiltOverLitWindowsIsUnsureNotFound() {
         DenseBuilder builder = filmThen();
         for (int i = 0; i < 200; i++) {

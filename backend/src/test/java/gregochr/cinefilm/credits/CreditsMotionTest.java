@@ -218,18 +218,19 @@ class CreditsMotionTest {
     }
 
     @Test
-    void aCardChangeMustReplaceAtLeastHalfOfTheLargerFramesBrightPixels() {
-        // 108 pixels of text; a rectangle of 108 more is exactly half of the 216 bright pixels, 107 is just under.
-        assertThat(detect(cardWithABlinkingRectangle(108))).isEqualTo(Kind.CARDS);
-        assertThat(detect(cardWithABlinkingRectangle(107))).isEqualTo(Kind.NONE);
+    void aCardChangeMustReplaceMoreThanHalfOfTheLargerFramesBrightPixels() {
+        // 108 pixels of text; a rectangle of 108 more is exactly half of the 216 bright pixels, which is not enough
+        // (one floor of windows toggling beside a fixed floor); 109 is just over.
+        assertThat(detect(cardWithABlinkingRectangle(108))).isEqualTo(Kind.NONE);
+        assertThat(detect(cardWithABlinkingRectangle(109))).isEqualTo(Kind.CARDS);
     }
 
     private static final ActiveArea NIGHT = new ActiveArea(0, 11, 160, 68);
 
     @Test
     void aWindowSwitchingOnAndOffInANightSceneIsNotCards() {
-        // A fourth window (36 pixels, 0.0033 of the picture) every 20 frames: above the absolute minimum, but only a
-        // quarter of the bright pixels, so not a card change.
+        // A fourth window (36 pixels, 0.0033 of the picture) every 20 frames: above the absolute minimum, but about
+        // 1.3% of the bright pixels (the lit street counts as bright too), so not a card change.
         List<GreyFrame> frames = new ArrayList<>();
         for (int i = 0; i < 200; i++) {
             frames.add(SyntheticFrames.nightWithFourthWindow(i / 20 % 2 == 1));
@@ -286,6 +287,55 @@ class CreditsMotionTest {
         }
 
         assertThat(CreditsMotion.analyse(frames, WHOLE, PEAK)).isEqualTo(new CreditsMotion.Motion(Kind.CRAWL, 0));
+    }
+
+    @Test
+    void aSingleFlickerWhoseMiddlePairsAreSmallIsOneEventNotTwoCardChanges() {
+        // F (72 px of lights) -> F+G (90 more) -> F+G+g (15 more) -> F+g -> F: four consecutive changed pairs, two of
+        // which pass the half-of-the-text guard (90 of 162 and 90 of 177) and two (15 px) do not. One event.
+        DenseBuilder builder = new DenseBuilder().add(SyntheticFrames.floors(false, false), 30)
+            .add(SyntheticFrames.floors(true, false), 1).add(SyntheticFrames.floors(true, true), 1)
+            .add(SyntheticFrames.floors(false, true), 1).add(SyntheticFrames.floors(false, false), 30);
+
+        assertThat(detect(builder.frames())).isEqualTo(Kind.NONE);
+    }
+
+    @Test
+    void twoSeparateFlickersAreTwoEventsAndSoCards() {
+        DenseBuilder builder = new DenseBuilder().add(SyntheticFrames.floors(false, false), 30)
+            .add(SyntheticFrames.floors(true, false), 1).add(SyntheticFrames.floors(true, true), 1)
+            .add(SyntheticFrames.floors(false, true), 1).add(SyntheticFrames.floors(false, false), 30)
+            .add(SyntheticFrames.floors(true, false), 1).add(SyntheticFrames.floors(false, false), 30);
+
+        assertThat(detect(builder.frames())).isEqualTo(Kind.CARDS);
+    }
+
+    @Test
+    void aChangeUnderTheMinimumShareIsNotACardChangeEvenWhenItIsMostOfTheLightsThatChanged() {
+        // 12 pixels of lights toggle (0.00083 of the frame, under 0.001): the guard would pass (12 > half of the 12
+        // bright pixels counted), so only the absolute minimum rejects it.
+        DenseBuilder builder = new DenseBuilder();
+        for (int i = 0; i < 4; i++) {
+            builder.add(SyntheticFrames.dimTextWithLights(false), 8).add(SyntheticFrames.dimTextWithLights(true), 8);
+        }
+
+        assertThat(FrameFeatures.measure(SyntheticFrames.dimTextWithLights(false), WHOLE, PEAK).frameClass())
+            .isEqualTo(FrameClass.TEXT_ON_DARK);
+        assertThat(FrameFeatures.measure(SyntheticFrames.dimTextWithLights(true), WHOLE, PEAK).frameClass())
+            .isEqualTo(FrameClass.TEXT_ON_DARK);
+        assertThat(detect(builder.frames())).isEqualTo(Kind.NONE);
+    }
+
+    @Test
+    void aRealCardThatDiffersOnlyInOneNameIsNotCardsALateOrNothingResult() {
+        // Two fixed lines and a name that changes: 24 of 108 bright pixels. The guard refuses it, which costs a
+        // missed card sequence (late or nothing) and is never an early marker.
+        DenseBuilder builder = new DenseBuilder();
+        for (int name = 0; name < 5; name++) {
+            builder.add(SyntheticFrames.creditCardWithAFixedBody(name), 8).add(SyntheticFrames.black(), 16);
+        }
+
+        assertThat(detect(builder.frames())).isEqualTo(Kind.NONE);
     }
 
     @Test
