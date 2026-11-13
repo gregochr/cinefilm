@@ -131,15 +131,109 @@ class FullSubtitleServiceUnitTest {
             .hasMessage("No full subtitles");
     }
 
+    /** A full download made for edition 40 from OpenSubtitles file 777, for the film's IMDb id tt1. */
+    private static SubtitleSidecar fullDownload(long id) {
+        SubtitleSidecar row = full(id, 10L, true, 0);
+        row.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
+        row.setPath("opensubtitles:40:777");
+        row.setOpenSubtitlesFileId(777L);
+        row.setImdbId("tt1");
+        row.setCuesText(CUES.replace("Hello", "Downloaded"));
+        return row;
+    }
+
     @Test
-    void aDownloadIsNeverServedAsFullYet() {
+    void anUncheckedFullDownloadIsServedWithSourceDownloadAndItsOwnVersion() {
+        edition.getFilm().setImdbId("tt1");
         when(editions.findById(40L)).thenReturn(Optional.of(edition));
-        SubtitleSidecar download = full(1, 10L, true, 0);
-        download.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
+        stubFound(fullDownload(5));
+
+        FullSubtitleDto dto = service.forEditions(List.of(edition)).get(40L);
+
+        assertThat(dto.source()).isEqualTo("DOWNLOAD");
+        assertThat(dto.version()).isEqualTo(ForcedSubtitleService.version("DOWNLOAD",
+            Downloads.pick(fullDownload(5))));
+        assertThat(service.vtt(40L)).isEqualTo("WEBVTT\n\n00:00:10.000 --> 00:00:12.000\nDownloaded\n");
+    }
+
+    @Test
+    void aDownloadsOffsetIsAppliedLikeAnyOthers() {
+        edition.getFilm().setImdbId("tt1");
+        when(editions.findById(40L)).thenReturn(Optional.of(edition));
+        SubtitleSidecar download = fullDownload(5);
+        download.setOffsetMs(1_500);
         stubFound(download);
 
+        assertThat(service.vtt(40L)).isEqualTo("WEBVTT\n\n00:00:11.500 --> 00:00:13.500\nDownloaded\n");
+    }
+
+    @Test
+    void anOwnersFullFileBeatsADownloadWhateverTheIds() {
+        edition.getFilm().setImdbId("tt1");
+        when(editions.findById(40L)).thenReturn(Optional.of(edition));
+        stubFound(fullDownload(1), full(9, 10L, true, 0));
+
+        FullSubtitleDto dto = service.forEditions(List.of(edition)).get(40L);
+
+        assertThat(dto.source()).isEqualTo("SIDECAR");
+        assertThat(service.vtt(40L)).isEqualTo("WEBVTT\n\n00:00:10.000 --> 00:00:12.000\nHello\n");
+    }
+
+    @Test
+    void anOwnersFileForOnePartAlsoBeatsAWholeEditionDownload() {
+        edition.getFilm().setImdbId("tt1");
+        stubFound(fullDownload(1), full(9, 20L, false, 0));
+
+        assertThat(service.forEditions(List.of(edition)).get(40L).source()).isEqualTo("SIDECAR");
+    }
+
+    @Test
+    void aConflictBetweenTheOwnersFilesLeavesNothingPlayingAndTheDownloadDoesNotFillIn() {
+        edition.getFilm().setImdbId("tt1");
+        when(editions.findById(40L)).thenReturn(Optional.of(edition));
+        stubFound(fullDownload(1), full(8, 10L, false, 0), full(9, 10L, false, 0));
+
+        assertThat(service.forEditions(List.of(edition))).isEmpty();
         assertThatThrownBy(() -> service.vtt(40L)).isInstanceOf(NotFoundException.class)
             .hasMessage("No full subtitles");
+    }
+
+    @Test
+    void aDownloadThatDoesNotCountIsNotServed() {
+        edition.getFilm().setImdbId("tt1");
+        SubtitleSidecar otherFilm = fullDownload(1);
+        otherFilm.setImdbId("tt2");
+        SubtitleSidecar otherEdition = fullDownload(2);
+        otherEdition.setPath("opensubtitles:41:777");
+        SubtitleSidecar missing = fullDownload(3);
+        missing.setPresence(gregochr.cinefilm.film.Presence.MISSING);
+        SubtitleSidecar empty = fullDownload(4);
+        empty.setCueCount(0);
+
+        for (SubtitleSidecar row : List.of(otherFilm, otherEdition, missing, empty)) {
+            stubFound(row);
+            assertThat(service.forEditions(List.of(edition))).isEmpty();
+        }
+    }
+
+    @Test
+    void aFilmTheOwnerMarkedNotNeededForFullSubtitlesServesNoDownloadButItsFilesStillPlay() {
+        edition.getFilm().setImdbId("tt1");
+        edition.getFilm().setFullNeedOwner(gregochr.cinefilm.film.FullNeedChoice.NOT_NEEDED);
+        stubFound(fullDownload(1));
+        assertThat(service.forEditions(List.of(edition))).isEmpty();
+
+        stubFound(fullDownload(1), full(9, 10L, true, 0));
+        assertThat(service.forEditions(List.of(edition)).get(40L).source()).isEqualTo("SIDECAR");
+    }
+
+    @Test
+    void aForcedNotNeededChoiceDoesNotHideAFullDownload() {
+        edition.getFilm().setImdbId("tt1");
+        edition.getFilm().setForcedNeedOwner(gregochr.cinefilm.film.ForcedNeedChoice.NOT_NEEDED);
+        stubFound(fullDownload(1));
+
+        assertThat(service.forEditions(List.of(edition)).get(40L).source()).isEqualTo("DOWNLOAD");
     }
 
     @Test

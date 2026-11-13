@@ -408,9 +408,9 @@ public class SubtitleAdminService {
     }
 
     /**
-     * The full English files as listed: where each belongs, and whether the film page offers it
-     * ({@link SidecarPrecedence}'s pick over the full files only). They have no comparison, no timing fit and no
-     * download to replace them, and nothing here reads the forced resolver.
+     * The full English files as listed (the owner's and downloaded ones): where each belongs, and whether the film
+     * page offers it ({@link FullChoice}'s pick over the full files only: the owner's file wins over a download). They
+     * have no comparison, no timing fit and no download to replace them, and nothing here reads the forced resolver.
      */
     private List<SidecarDto> buildFull(List<SubtitleSidecar> all) {
         Set<Long> fileIds = all.stream().map(SubtitleSidecar::getMediaFileId).filter(i -> i != null)
@@ -430,8 +430,7 @@ public class SubtitleAdminService {
         Set<Long> conflicting = new HashSet<>();
         Set<Long> noTimeline = new HashSet<>();
         for (Edition edition : editionById.values()) {
-            Pick pick = SidecarPrecedence.pick(partIds(edition), rowsByEdition.get(edition.getId()),
-                SubtitleKind.FULL);
+            Pick pick = FullChoice.of(edition, rowsByEdition.get(edition.getId())).pick();
             conflicting.addAll(pick.conflicting());
             // A file on an edition whose later part's start is unknown cannot be placed on its timeline: not offered.
             Set<Long> picked = (ServedSubtitles.version(edition, pick) != null ? served : noTimeline);

@@ -4,9 +4,11 @@ import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.ImdbRef;
 import gregochr.cinefilm.library.ScanFinished;
 import gregochr.cinefilm.plex.PlexImportFinished;
+import gregochr.cinefilm.subtitle.FullNeedService;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
@@ -29,6 +31,12 @@ import org.springframework.stereotype.Service;
  * stops the run without stamping anything, so the films are searched again; it is never recorded as "no results".
  * When a pass ends an {@link OpenSubtitlesSearchFinished} event is published (the check of the owner's subtitle files
  * listens). Nothing here throws to its caller.
+ *
+ * <p>The same run also searches for <em>full</em> English subtitles ({@link OpenSubtitlesApi#searchFull}), but only for
+ * films whose full-subtitle need is {@code NEEDED} ({@link FullNeedService}), on the same rules: due when never
+ * searched, searched under another IMDb id, or searched with no result more than 30 days ago. The result is saved with
+ * one statement that only matches while the film still has the IMDb id it was searched for. An outage stops the whole
+ * run. Searches are not charged; only downloads are.
  */
 @Service
 public class OpenSubtitlesRefresher {
@@ -40,6 +48,7 @@ public class OpenSubtitlesRefresher {
 
     private final OpenSubtitlesApi api;
     private final FilmRepository films;
+    private final FullNeedService fullNeed;
     private final Clock clock;
     private final Executor executor;
     private final ApplicationEventPublisher events;
@@ -47,11 +56,12 @@ public class OpenSubtitlesRefresher {
     private final AtomicBoolean pending = new AtomicBoolean();
 
     /** Creates the service; the executor is {@code openSubtitlesExecutor}. */
-    public OpenSubtitlesRefresher(OpenSubtitlesApi api, FilmRepository films, Clock clock,
+    public OpenSubtitlesRefresher(OpenSubtitlesApi api, FilmRepository films, FullNeedService fullNeed, Clock clock,
                                   @Qualifier("openSubtitlesExecutor") Executor executor,
                                   ApplicationEventPublisher events) {
         this.api = api;
         this.films = films;
+        this.fullNeed = fullNeed;
         this.clock = clock;
         this.executor = executor;
         this.events = events;
@@ -137,6 +147,7 @@ public class OpenSubtitlesRefresher {
         int skipped = 0;
         int failed = 0;
         try {
+            boolean outage = false;
             List<ImdbRef> due = films.findOpenSubtitlesDue(clock.instant().minus(RESEARCH_AFTER));
             for (ImdbRef ref : due) {
                 try {
@@ -147,6 +158,7 @@ public class OpenSubtitlesRefresher {
                     }
                 } catch (OpenSubtitlesUnavailableException e) {
                     LOG.warn("Subtitle search stopped: {}", e.getMessage());
+                    outage = true;
                     break;
                 } catch (RuntimeException e) {
                     failed++;
@@ -154,10 +166,54 @@ public class OpenSubtitlesRefresher {
                 }
             }
             LOG.info("Subtitle search finished: {} saved, {} changed meanwhile, {} failed", saved, skipped, failed);
+            if (!outage) {
+                int[] full = runFull();
+                if (full[0] + full[1] > 0) {
+                    LOG.info("Full subtitle search finished: {} saved, {} failed", full[0], full[1]);
+                }
+            }
         } catch (RuntimeException e) {
             LOG.error("Subtitle search failed", e);
         }
         announce();
+    }
+
+    /**
+     * One pass over the films that need full subtitles and are due a search.
+     *
+     * @return how many were saved and how many failed
+     */
+    private int[] runFull() {
+        int saved = 0;
+        int failed = 0;
+        try {
+            Set<Long> needed = fullNeed.neededFilmIds();
+            if (needed.isEmpty()) {
+                return new int[] {0, 0};
+            }
+            for (ImdbRef ref : films.findOpenSubtitlesFullDue(clock.instant().minus(RESEARCH_AFTER))) {
+                if (!needed.contains(ref.id())) {
+                    continue;
+                }
+                try {
+                    OpenSubtitlesSearch found = api.searchFull(ref.imdbId());
+                    String candidates = OpenSubtitlesResult.listToJson(found.candidates());
+                    if (films.saveOpenSubtitlesFull(ref.id(), ref.imdbId(), candidates, clock.instant()) > 0) {
+                        saved++;
+                    }
+                } catch (OpenSubtitlesUnavailableException e) {
+                    LOG.warn("Full subtitle search stopped: {}", e.getMessage());
+                    break;
+                } catch (RuntimeException e) {
+                    failed++;
+                    LOG.warn("Could not search full subtitles for film {}: {}", ref.id(),
+                        e.getClass().getSimpleName());
+                }
+            }
+        } catch (RuntimeException e) {
+            LOG.error("Full subtitle search failed", e);
+        }
+        return new int[] {saved, failed};
     }
 
     /** Says the pass has ended, so the best results can be used; a listener's failure does not touch the run. */

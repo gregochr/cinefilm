@@ -16,15 +16,17 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * The full English subtitle an edition has, found and served (the player menu is phase 5c): the owner's
  * {@code X.en.srt} files beside the
- * film (kind {@link SubtitleKind#FULL}), picked with {@link SidecarPrecedence}'s rules and served as one WebVTT file on
- * the edition's timeline like the forced subtitle ({@link ServedSubtitles#vtt}). There is no choice to make between
- * sources yet: only the owner's files serve (downloads of full subtitles come in a later phase), and nothing here ever
- * reads a forced row. Built on each request; nothing from a request becomes a path.
+ * film (kind {@link SubtitleKind#FULL}), picked with {@link SidecarPrecedence}'s rules, else a full download from
+ * OpenSubtitles (source {@code DOWNLOAD}, played unchecked: decision 66), as {@link FullChoice} says (the owner's file
+ * always wins). It is served as one WebVTT file on the edition's timeline like the forced subtitle
+ * ({@link ServedSubtitles#vtt}). Nothing here ever reads a forced row. Built on each request; nothing from a request
+ * becomes a path.
  */
 @Service
 public class FullSubtitleService {
 
     private static final String SIDECAR = "SIDECAR";
+    private static final String DOWNLOAD = "DOWNLOAD";
 
     private final EditionRepository editions;
     private final SubtitleSidecarRepository sidecars;
@@ -44,12 +46,14 @@ public class FullSubtitleService {
     @Transactional(readOnly = true)
     public Map<Long, FullSubtitleDto> forEditions(Collection<Edition> forEditions) {
         Map<Long, FullSubtitleDto> byEdition = new HashMap<>();
-        Map<Long, Pick> picks = picks(forEditions);
+        Map<Long, FullChoice> choices = choices(forEditions);
         for (Edition edition : forEditions) {
-            Pick pick = picks.get(edition.getId());
+            FullChoice choice = choices.get(edition.getId());
+            Pick pick = choice.pick();
             if (!pick.slots().isEmpty() && ServedSubtitles.version(edition, pick) != null) {
-                long version = ForcedSubtitleService.version(SIDECAR, pick);
-                byEdition.put(edition.getId(), new FullSubtitleDto(SIDECAR, version));
+                String source = choice.download() ? DOWNLOAD : SIDECAR;
+                long version = ForcedSubtitleService.version(source, pick);
+                byEdition.put(edition.getId(), new FullSubtitleDto(source, version));
             }
         }
         return byEdition;
@@ -65,23 +69,23 @@ public class FullSubtitleService {
     @Transactional(readOnly = true)
     public String vtt(Long editionId) {
         Edition edition = editions.findById(editionId).orElseThrow(() -> new NotFoundException("No such edition"));
-        Pick pick = picks(List.of(edition)).get(edition.getId());
+        Pick pick = choices(List.of(edition)).get(edition.getId()).pick();
         if (pick.slots().isEmpty()) {
             throw new NotFoundException("No full subtitles");
         }
         return ServedSubtitles.vtt(edition, pick, "Full subtitles are not available");
     }
 
-    /** What {@link SidecarPrecedence} picks from the full files of each edition, in one query for all of them. */
-    private Map<Long, Pick> picks(Collection<Edition> forEditions) {
+    /** What each edition plays ({@link FullChoice}), from the full rows of all of them in one query. */
+    private Map<Long, FullChoice> choices(Collection<Edition> forEditions) {
         List<Long> allIds = forEditions.stream().flatMap(e -> partIds(e).stream()).toList();
         List<SubtitleSidecar> found = allIds.isEmpty() ? List.of()
             : sidecars.findByMediaFileIdInAndKind(allIds, SubtitleKind.FULL);
-        Map<Long, Pick> picks = new HashMap<>();
+        Map<Long, FullChoice> choices = new HashMap<>();
         for (Edition edition : forEditions) {
-            picks.put(edition.getId(),SidecarPrecedence.pick(partIds(edition), found, SubtitleKind.FULL));
+            choices.put(edition.getId(), FullChoice.of(edition, found));
         }
-        return picks;
+        return choices;
     }
 
     private static List<Long> partIds(Edition edition) {

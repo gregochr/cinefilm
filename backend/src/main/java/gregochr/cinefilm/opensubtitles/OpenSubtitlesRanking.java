@@ -25,6 +25,18 @@ public final class OpenSubtitlesRanking {
         .thenComparing(OpenSubtitlesResult::downloadCount, Comparator.reverseOrder())
         .thenComparingLong(OpenSubtitlesResult::id);
 
+    /**
+     * The order for full English subtitles: as {@link #ORDER}, but a hearing-impaired file ranks below every other
+     * single-file one (it is used only when nothing else exists), whatever its frame rate or downloads.
+     */
+    private static final Comparator<OpenSubtitlesResult> FULL_ORDER = Comparator
+        .comparing(OpenSubtitlesResult::isMultiFile)
+        .thenComparing(OpenSubtitlesResult::hearingImpaired)
+        .thenComparingDouble(OpenSubtitlesRanking::fpsDistance)
+        .thenComparing(OpenSubtitlesResult::fromTrusted, Comparator.reverseOrder())
+        .thenComparing(OpenSubtitlesResult::downloadCount, Comparator.reverseOrder())
+        .thenComparingLong(OpenSubtitlesResult::id);
+
     /** The most of the film's ranked single-file results stored as candidates before the per-tag extras. */
     static final int TOP_CANDIDATES = 3;
     /** The most candidates stored in all (the top ones plus the best result of each cut tag). */
@@ -83,7 +95,39 @@ public final class OpenSubtitlesRanking {
      * @return the candidates, best first (empty when no result is a single file)
      */
     public static List<OpenSubtitlesResult> candidates(List<OpenSubtitlesResult> results) {
-        List<OpenSubtitlesResult> ranked = rank(results).stream().filter(OpenSubtitlesResult::isSingleFile).toList();
+        return candidates(results, ORDER);
+    }
+
+    /**
+     * The full English results a download may use: as {@link #candidates}, over {@link #FULL_ORDER} (hearing-impaired
+     * files last).
+     *
+     * @param results the results, in any order
+     * @return the candidates, best first (empty when no result is a single file)
+     */
+    public static List<OpenSubtitlesResult> fullCandidates(List<OpenSubtitlesResult> results) {
+        return candidates(results, FULL_ORDER);
+    }
+
+    /**
+     * The full English results re-ordered for one edition: first by how well each fits the edition's cut tags, then by
+     * the full order, so among equally fitting files a hearing-impaired one comes last.
+     *
+     * @param results the results, in any order
+     * @param editionName the edition's name; null reads as no tags
+     * @return a new list, best first
+     */
+    public static List<OpenSubtitlesResult> rankForFull(List<OpenSubtitlesResult> results, String editionName) {
+        Set<CutTag> wanted = CutTag.in(editionName);
+        Comparator<OpenSubtitlesResult> byFit = Comparator
+            .comparingInt((OpenSubtitlesResult r) -> CutTag.affinity(wanted, r.cutTags())).reversed();
+        return results.stream().sorted(byFit.thenComparing(FULL_ORDER)).toList();
+    }
+
+    private static List<OpenSubtitlesResult> candidates(List<OpenSubtitlesResult> results,
+                                                        Comparator<OpenSubtitlesResult> order) {
+        List<OpenSubtitlesResult> ranked = results.stream().sorted(order)
+            .filter(OpenSubtitlesResult::isSingleFile).toList();
         Set<OpenSubtitlesResult> chosen = new LinkedHashSet<>(
             ranked.subList(0, Math.min(TOP_CANDIDATES, ranked.size())));
         for (CutTag tag : CutTag.values()) {

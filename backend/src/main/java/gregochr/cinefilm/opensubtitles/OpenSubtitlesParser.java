@@ -8,7 +8,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Turns a subtitle search reply into what CineFilm keeps. The reply is untrusted: every field may be missing or the
- * wrong type, and text is cut and cleaned. A result is dropped when it is not "foreign parts only", is a machine or AI
+ * wrong type, and text is cut and cleaned. A result is dropped when it is not "foreign parts only" (for the full
+ * subtitles search, when it is), is a machine or AI
  * translation, belongs to another film (its {@code feature_details.imdb_id} is not the one asked for), or has no usable
  * id or file id. Pure: no Spring, no I/O.
  */
@@ -31,6 +32,24 @@ public final class OpenSubtitlesParser {
      *     that cannot be read is never "no results"
      */
     public static OpenSubtitlesSearch parse(String json, long imdbNumber) {
+        return parse(json, imdbNumber, false);
+    }
+
+    /**
+     * Reads a reply to a search for full English subtitles: the same rules, except that a result is kept only when it
+     * is not foreign-parts-only (those are the forced subtitles' search), hearing-impaired files are kept and marked
+     * ({@link OpenSubtitlesResult#hearingImpaired}), and the candidates are ranked with hearing-impaired files last.
+     *
+     * @param json the body of {@code GET /api/v1/subtitles}
+     * @param imdbNumber the IMDb id that was asked for, as a number (without {@code tt} or leading zeros)
+     * @return how many results remain, the best of them and the candidates a download may use
+     * @throws OpenSubtitlesUnavailableException when the body is not JSON or has no {@code data} list
+     */
+    public static OpenSubtitlesSearch parseFull(String json, long imdbNumber) {
+        return parse(json, imdbNumber, true);
+    }
+
+    private static OpenSubtitlesSearch parse(String json, long imdbNumber, boolean full) {
         JsonNode root;
         try {
             root = JSON.readTree(json);
@@ -42,18 +61,22 @@ public final class OpenSubtitlesParser {
         }
         List<OpenSubtitlesResult> kept = new ArrayList<>();
         for (JsonNode item : root.path("data")) {
-            OpenSubtitlesResult result = result(item, imdbNumber);
+            OpenSubtitlesResult result = result(item, imdbNumber, full);
             if (result != null) {
                 kept.add(result);
             }
+        }
+        if (full) {
+            List<OpenSubtitlesResult> candidates = OpenSubtitlesRanking.fullCandidates(kept);
+            return new OpenSubtitlesSearch(kept.size(), candidates.isEmpty() ? null : candidates.get(0), candidates);
         }
         return new OpenSubtitlesSearch(kept.size(), OpenSubtitlesRanking.best(kept).orElse(null),
             OpenSubtitlesRanking.candidates(kept));
     }
 
-    private static OpenSubtitlesResult result(JsonNode item, long imdbNumber) {
+    private static OpenSubtitlesResult result(JsonNode item, long imdbNumber, boolean full) {
         JsonNode attributes = item.path("attributes");
-        if (!flag(attributes, "foreign_parts_only") || flag(attributes, "ai_translated")
+        if (!foreignPartsFlagFits(attributes.path("foreign_parts_only"), full) || flag(attributes, "ai_translated")
             || flag(attributes, "machine_translated")) {
             return null;
         }
@@ -71,6 +94,14 @@ public final class OpenSubtitlesParser {
             text(attributes, "upload_date", SHORT_TEXT_MAX),
             text(attributes.path("uploader"), "rank", SHORT_TEXT_MAX), fileCount(attributes),
             text(attributes.path("files").path(0), "file_name", RELEASE_MAX));
+    }
+
+    /**
+     * True when the {@code foreign_parts_only} flag is the one the search wants: a real {@code true} for the forced
+     * search, a real {@code false} for the full one. A missing or non-boolean flag fits neither.
+     */
+    private static boolean foreignPartsFlagFits(JsonNode flag, boolean full) {
+        return flag.isBoolean() && flag.asBoolean() != full;
     }
 
     /** The larger of {@code nb_cd} and how many files are listed, at least 1 and at most 1,000. */

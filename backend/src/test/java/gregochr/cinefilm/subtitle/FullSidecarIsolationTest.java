@@ -10,6 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.ForcedNeedChoice;
+import gregochr.cinefilm.film.FullNeedChoice;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.subtitle.DownloadPlan.Kind;
 import gregochr.cinefilm.subtitle.ForcedNeedDtos.FilmNeedDto;
@@ -276,5 +278,80 @@ class FullSidecarIsolationTest extends ForcedDownloadTestBase {
         assertThat(fullRow.check()).isNull();
         assertThat(fullRow.alignment()).isNull();
         assertThat(fullRow.replacedByDownload()).isFalse();
+    }
+
+    /** Gives a searched film the full-subtitle need and a full search that found three candidates. */
+    private Film withFullSearch(Film film) {
+        film.setFullNeedOwner(FullNeedChoice.NEEDED);
+        film.setOsFullSearchedImdbId(IMDB);
+        film.setOsFullSearchedAt(NOW);
+        film.setOsFullCandidates(OpenSubtitlesResult.listToJson(List.of(result(8011, "Full.BluRay"),
+            result(8012, "Full.WEB"), result(8013, "Full.DVD"))));
+        return films.saveAndFlush(film);
+    }
+
+    private List<DueDownload> dueOf(Kind kind) {
+        return downloadRun.due().stream().filter(d -> d.kind() == kind).toList();
+    }
+
+    @Test
+    void forcedFilesDownloadsAndBlocksNeverSatisfyOrUseUpTheFullDue() {
+        Film film = withFullSearch(neededFilmWithForcedFile("Taken"));
+        List<DueDownload> before = dueOf(Kind.FULL);
+        assertThat(before).singleElement().satisfies(due -> {
+            assertThat(due.remainingFetches()).isEqualTo(3);
+            assertThat(due.candidates()).extracting(c -> c.fileId()).containsExactly(8011L, 8012L, 8013L);
+        });
+
+        // A forced download and forced blocks and ledger rows on the same edition, with the very same file ids.
+        download(film, 8011);
+        for (long fileId : new long[] {8011, 8012, 8013}) {
+            ForcedDownloadBlock block = new ForcedDownloadBlock();
+            block.setKind(SubtitleKind.FORCED);
+            block.setEditionId(edition(film).getId());
+            block.setImdbId(IMDB);
+            block.setOsFileId(fileId);
+            block.setRemovedAt(NOW);
+            blocks.saveAndFlush(block);
+            ForcedCheckCandidate tried = new ForcedCheckCandidate();
+            tried.setKind(SubtitleKind.FORCED);
+            tried.setEditionId(edition(film).getId());
+            tried.setImdbId(IMDB);
+            tried.setOsFileId(fileId);
+            tried.setTriedAt(NOW);
+            candidates.saveAndFlush(tried);
+        }
+
+        assertThat(dueOf(Kind.FULL)).isEqualTo(before);
+    }
+
+    @Test
+    void aFullDownloadSatisfiesTheFullDueButNeverTheForcedOneOrItsCap() {
+        Film film = withFullSearch(searchedFilm("Taken", 1, result(5011, "Taken.BluRay"),
+            result(5012, "Taken.WEB"), result(5013, "Taken.DVD")));
+        film.setForcedNeedOwner(ForcedNeedChoice.NEEDED);
+        films.saveAndFlush(film);
+        assertThat(downloadRun.due()).extracting(DueDownload::kind).containsExactly(Kind.FULL, Kind.MISSING);
+
+        fullDownload(film, 8011);
+
+        List<DueDownload> due = downloadRun.due();
+        assertThat(due).singleElement().satisfies(item -> {
+            assertThat(item.kind()).isEqualTo(Kind.MISSING);
+            assertThat(item.remainingFetches()).isEqualTo(3);
+            assertThat(item.candidates()).extracting(c -> c.fileId()).containsExactly(5011L, 5012L, 5013L);
+        });
+    }
+
+    @Test
+    void aFullDownloadIsNeverCheckedOrTimedByTheForcedRuns() {
+        Film film = withFullSearch(searchedFilm("Taken", 1, result(5011, "Taken.BluRay"),
+            result(5012, "Taken.WEB")));
+        fullDownload(film, 8011);
+        withFingerprints(film);
+
+        assertThat(checkRun.due()).isEmpty();
+        assertThat(timing.dueFilmIds()).isEmpty();
+        assertThat(resolve(film).downloads()).isEmpty();
     }
 }

@@ -74,6 +74,9 @@ class SidecarCheckWalkTest {
     @Mock
     private SidecarCheckService service;
 
+    @Mock
+    private FullFitService fullFit;
+
     private final List<Runnable> queued = new ArrayList<>();
     private final Logger refresherLog = (Logger) LoggerFactory.getLogger(SidecarCheckRefresher.class);
     private final ListAppender<ILoggingEvent> logged = new ListAppender<>();
@@ -82,7 +85,8 @@ class SidecarCheckWalkTest {
 
     @BeforeEach
     void setUp() {
-        refresher = new SidecarCheckRefresher(api, budget, references, service, CLOCK, queued::add, limits, events);
+        refresher = new SidecarCheckRefresher(api, budget, references, service, fullFit, CLOCK, queued::add, limits,
+            events);
         logged.start();
         refresherLog.addAppender(logged);
     }

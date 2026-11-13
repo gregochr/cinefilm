@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.film.FilmRepository;
+import gregochr.cinefilm.subtitle.FullNeedService;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -17,8 +18,8 @@ class OpenSubtitlesSchedulerTest {
 
     private final OpenSubtitlesApi api = mock(OpenSubtitlesApi.class);
     private final List<Runnable> queued = new ArrayList<>();
-    private final OpenSubtitlesRefresher refresher = new OpenSubtitlesRefresher(api, mock(FilmRepository.class), CLOCK,
-        queued::add, mock(ApplicationEventPublisher.class));
+    private final OpenSubtitlesRefresher refresher = new OpenSubtitlesRefresher(api, mock(FilmRepository.class),
+        mock(FullNeedService.class), CLOCK, queued::add, mock(ApplicationEventPublisher.class));
 
     @Test
     void theDailyRunStartsASearchOfTheDueFilms() {
