@@ -266,20 +266,27 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
    - `CARD_CHANGE_MIN_SHARE` 0.001 and `CARD_STILL_MAX_SHARE` **0.0005** (noise within one card is about 0.0001), so
      no pair counts as both still and changed. Measured: all 23 verdicts and times are identical with the still limit
      at 0.001 and at 0.0005.
-   - **Card guard (added in review, 2026-11-13):** a pair is a card change only when its changed pixels are also at
-     least `CARD_CHANGE_TEXT_SHARE` (0.5) of the larger frame's bright pixels (both counted against
-     `CARD_CHANGE_DIFF_FRACTION` of the window's peak). A real card swap or a fade through black changes most of the
-     text; a lit window switching or a figure stepping across a lit night scene changes a small part. Without it, the
-     phase 1 night scene (74% dark, now `TEXT_ON_DARK` under `TEXT_DARK_SHARE` 0.70) with one window switching every
-     10 s was `FOUND` at the candidate. The guard only makes cards harder to accept, so it can only move a marker
-     later. It was not measured on the 23 films (the harness is gone); the gate below measures it.
+   - **Card guard (added in review, 2026-11-13):** a pair is a card change only when its changed pixels are also
+     more than `CARD_CHANGE_TEXT_SHARE` (0.5) of the larger frame's bright pixels (both counted against
+     `CARD_CHANGE_DIFF_FRACTION` of the window's peak). Consecutive changed pairs merge into one change by the plain
+     `CARD_CHANGE_MIN_SHARE` test, and a merged run counts if any pair in it passes the guard (so the guard can never
+     split one change into two). Without it, the phase 1 night scene (74% dark, now `TEXT_ON_DARK` under
+     `TEXT_DARK_SHARE` 0.70) with one small window switching every 10 s was `FOUND` at the candidate. Cost: a card
+     that changes only a name beside fixed lines is no longer a card (late or nothing). Not measured on the 23 films
+     (the harness is gone).
+   - **The card rule's known limit (review, 2026-11-13):** lit windows, fairy lights, a TV cutting in a dark room or
+     stop-start headlights can look like changing cards of text to this classifier, and synthetic scenes of them
+     still give `FOUND` early, some only under the 0.70 / 0.30 thresholds above, some on phase 1 as well. No
+     pixel-share rule separates them from real cards in general, so they are not chased in synthetic tests. The
+     gate below measures them on the library, split by kind (the stored reasons start "Text on a dark screen moves
+     up steadily" for a crawl and "Cards of text on a dark screen change" for cards).
    - Unit tests with synthetic frames for each measured failure: anti-aliased white text scoring only 0.6–0.8 of the
      text-like share; thin grey text far below the window's peak; dense columns leaving only 75% of the frame dark;
      burned-in subtitles in the bottom band of a dark scene (not text-like); a crawl entering from the bottom (late,
      not lost); a sub-pixel crawl; cards fading through black; credits starting 3 minutes after an end-title sequence
      over picture. Every phase 1 negative still ends without a `FOUND`; three are weaker, as built (2026-11-13):
-     - the letterboxed night scene's frames are now `TEXT_ON_DARK`; only the motion check (still lights, and the card
-       guard for lights or a figure that change) keeps it `UNSURE`;
+     - the letterboxed night scene's frames are now `TEXT_ON_DARK`; only the motion check keeps it `UNSURE` (still
+       lights; the card guard for a small window or a figure that changes; see the card rule's known limit);
      - a text block against the left edge with a central share of 0.375 is now text (the negative uses 0.17);
      - with the match error at 0.25, a crawl of irregular line widths at 16 px a frame (over the 15 px limit) can alias
        onto a neighbouring line and read as a crawl. That is real moving text, so it is late or right, never early.
@@ -292,11 +299,14 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
      the about 220 it could not, which are likely the harder endings. So the gate also checks, by stills as in phase
      2, a sample of **20 `FOUND` rows on files with no `plex_credits_marker` row whose fingerprint matches** (or all
      of them if fewer), judging the raw `offset_ms`, not the offset plus 20 s: any marker before the credits start
-     blocks phase 3's `AUTO` step. The results go into this plan.
+     blocks phase 3's `AUTO` step. Both checks report crawl and card results apart: **if any early row or early
+     still is a card result, `AUTO` uses crawl results only** (cards stay report-only). The results go into this
+     plan.
 3. **Apply, source column, Admin.** `credits_marker_source` and its carrying, applying (the watched rule is unchanged:
    watched at the marker, decided 2026-11-13), the Admin list and overrides. Precedence per edition: `OWNER`; then
    `PLEX` (the last part's `plex_credits_marker` row, fingerprint still matching); then the detector's `FOUND` plus a
-   **20 s margin** (`AUTO`), applied only after the gate above; then the 97% fallback. Every marker goes through the
+   **20 s margin** (`AUTO`), applied only after the gate above and only for the kinds it cleared (crawls, and cards
+   only if they had no early row); then the 97% fallback. Every marker goes through the
    edition guard. **A late overlay is better than an early one** (owner, 2026-11-13).
 
 ## Phase 2: what the server showed (2026-11-13)
