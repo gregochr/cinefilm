@@ -266,13 +266,25 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
    - `CARD_CHANGE_MIN_SHARE` 0.001 and `CARD_STILL_MAX_SHARE` **0.0005** (noise within one card is about 0.0001), so
      no pair counts as both still and changed. Measured: all 23 verdicts and times are identical with the still limit
      at 0.001 and at 0.0005.
+   - **Card guard (added in review, 2026-11-13):** a pair is a card change only when its changed pixels are also at
+     least `CARD_CHANGE_TEXT_SHARE` (0.5) of the larger frame's bright pixels (both counted against
+     `CARD_CHANGE_DIFF_FRACTION` of the window's peak). A real card swap or a fade through black changes most of the
+     text; a lit window switching or a figure stepping across a lit night scene changes a small part. Without it, the
+     phase 1 night scene (74% dark, now `TEXT_ON_DARK` under `TEXT_DARK_SHARE` 0.70) with one window switching every
+     10 s was `FOUND` at the candidate. The guard only makes cards harder to accept, so it can only move a marker
+     later. It was not measured on the 23 films (the harness is gone); the gate below measures it.
    - Unit tests with synthetic frames for each measured failure: anti-aliased white text scoring only 0.6–0.8 of the
      text-like share; thin grey text far below the window's peak; dense columns leaving only 75% of the frame dark;
      burned-in subtitles in the bottom band of a dark scene (not text-like); a crawl entering from the bottom (late,
      not lost); a sub-pixel crawl; cards fading through black; credits starting 3 minutes after an end-title sequence
-     over picture. **Every phase 1 negative fixture keeps passing unchanged** (letterboxed night scene with lights,
-     starfield, epilogue card, colour title sequence), and two negatives are added: a slow tilt over lit windows, and
-     a still dark scene in which a small figure moves. No frames from real films go into the repository.
+     over picture. Every phase 1 negative still ends without a `FOUND`; three are weaker, as built (2026-11-13):
+     - the letterboxed night scene's frames are now `TEXT_ON_DARK`; only the motion check (still lights, and the card
+       guard for lights or a figure that change) keeps it `UNSURE`;
+     - a text block against the left edge with a central share of 0.375 is now text (the negative uses 0.17);
+     - with the match error at 0.25, a crawl of irregular line widths at 16 px a frame (over the 15 px limit) can alias
+       onto a neighbouring line and read as a crawl. That is real moving text, so it is late or right, never early.
+     Negatives added: a slow tilt over lit windows, a figure that moves or steps across a lit night scene, and a
+     window that switches on and off. No frames from real films go into the repository.
    - **The gate before phase 3** (after 2b's release and 2c's import, once the backfill has run): a read-only query
      joining `credits_detection` (`FOUND`, the current `ANALYSIS_VERSION`) to `plex_credits_marker` on the same file
      and fingerprint must return **zero rows** with `offset_ms < start_ms − 15000`. Any such row is a defect fixed in
