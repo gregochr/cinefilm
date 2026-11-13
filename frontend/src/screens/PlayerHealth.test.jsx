@@ -212,6 +212,25 @@ describe('what is counted', () => {
     expect(lastReport(fetchMock).minutes).toEqual([[0, 0, 1, 1000, 0, 8, 3]]);
   });
 
+  it('counts a 0.3 s hole in the buffer as continuous in the seconds buffered ahead', async () => {
+    const { video, hls, fetchMock } = await open();
+    await landResume(video);
+    await firstFrame(video, 10000);
+    const ranges = [
+      [0, 3865],
+      [3865.3, 3870],
+    ];
+    Object.defineProperty(video, 'buffered', {
+      configurable: true,
+      value: { length: 2, start: (i) => ranges[i][0], end: (i) => ranges[i][1] },
+    });
+    await inAct(() => hls().fetchLevel(P720));
+    clock = 11000;
+    await moveTo(video, 3862);
+    await leave();
+    expect(lastReport(fetchMock).minutes).toEqual([[0, 0, 1, 1000, 0, 8, 3]]);
+  });
+
   it('records the speed of each segment, and not the probe’s', async () => {
     measureThroughput.mockResolvedValue(3000);
     const { video, hls, fetchMock } = await open();

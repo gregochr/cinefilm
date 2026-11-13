@@ -2,11 +2,13 @@
 // the resilience rules from the transcoding plan: retries instead of failures, "Reconnecting…" with one
 // restart 5 s after each fatal network error (at once when the browser comes back online), a new session when the old one has expired, and Auto stepping up one level only after ~60 s. The step gate follows the level hls.js
 // starts to FETCH (LEVEL_SWITCHING), so a step down caps Auto at once; LEVEL_SWITCHED, the level on screen,
-// only reports what is playing. While the buffer is deep (floorHold.js) Auto may not go below 360p on a ladder
-// with a 240p bottom rung: `minAutoBitrate` is raised to the 360p level, so the buffer is spent first.
+// only reports what is playing. The cap rises only while hls.js is fetching at the cap, and a fragment that
+// times out or gets no answer pulls it down to the level being fetched. While the buffer is deep (floorHold.js)
+// Auto may not go below 360p on a ladder with a 240p bottom rung: `minAutoBitrate` is raised to the 360p level,
+// but only once hls.js is fetching at 360p or above and not after fragment trouble (a floor, not a pull).
+import { bankedAhead } from './buffered.js';
 import { createFloorHold } from './floorHold.js';
 import { rungForLevel } from './ladder.js';
-import { bufferAhead } from './nativeEngine.js';
 import { createNoProgressLoader } from './noProgressLoader.js';
 import { createStepGate } from './stepGate.js';
 import { fragmentKbps } from './throughput.js';
@@ -77,7 +79,9 @@ export function hlsConfig(startSeconds) {
  * Starts `session` on `video`. `handlers`: onLevel(rung, { initial }), onThroughput(kbps),
  * onReconnecting(boolean), onSessionLost(), onFatal(), and the optional onNetworkError({ timeout }) and
  * onFetching(rung) (the rung hls.js has started to fetch, ahead of the one being played). In Auto, on a ladder
- * with a 240p bottom and a 360p level, a deep buffer holds Auto at 360p or above. Returns { destroy }.
+ * with a 240p bottom and a 360p level, a deep buffer holds Auto at 360p or above while it is fetching there
+ * and has had no fragment trouble; the cap never climbs above the level being fetched by more than one.
+ * Returns { destroy }.
  */
 export function startHlsJs({
   Hls,
@@ -106,13 +110,22 @@ export function startHlsJs({
   const hold = createFloorHold();
   let holdLevel = null; // the 360p level of a ladder with a 240p bottom (the only kind that is held)
   let floorSet = 0;
+  let fetched = null; // the level hls.js is fetching (LEVEL_SWITCHING), null until the first
+  let troubled = false; // a fragment timed out or got no answer, and none has loaded since
 
-  // Raises hls.js's minimum bitrate to the 360p level while the buffer is deep and the cap allows 360p.
+  // Raises hls.js's minimum bitrate to the 360p level while the buffer is deep, the cap allows 360p, hls.js is
+  // already fetching at 360p or above and no fragment is in trouble.
   const reevaluateHold = () => {
     if (holdLevel === null) return;
-    const armed = hold.update(bufferAhead(video));
-    const floor =
-      armed && applied !== null && applied >= holdLevel ? hls.levels[holdLevel].bitrate : 0;
+    const armed = hold.update(bankedAhead(video));
+    const engaged =
+      armed &&
+      !troubled &&
+      applied !== null &&
+      applied >= holdLevel &&
+      fetched !== null &&
+      fetched >= holdLevel;
+    const floor = engaged ? (hls.levels[holdLevel]?.bitrate ?? 0) : 0;
     if (floor === floorSet) return;
     floorSet = floor;
     hls.config.minAutoBitrate = floor;
@@ -189,17 +202,21 @@ export function startHlsJs({
 
   // The level hls.js now fetches: the gate follows it, so a step down lowers the cap at once.
   hls.on(Events.LEVEL_SWITCHING, (_event, data) => {
+    fetched = data.level;
     const rung = rungForLevel(session.renditions, hls.levels[data.level]);
     if (!rung) return;
     handlers.onFetching?.(rung);
     if (auto) cap(gate.switched(data.level));
+    reevaluateHold();
   });
 
   hls.on(Events.FRAG_LOADED, (_event, data) => {
     stopReconnecting();
+    troubled = false;
     const kbps = fragmentKbps(data.frag?.stats);
     if (kbps) handlers.onThroughput(kbps);
-    if (auto) cap(gate.tick(top));
+    // The cap rises only while hls.js is fetching at it, so it is never more than a level above the fetch.
+    if (auto && (fetched === null || fetched >= applied)) cap(gate.tick(top));
     reevaluateHold();
   });
 
@@ -211,7 +228,16 @@ export function startHlsJs({
       if (details.endsWith('LoadTimeOut')) handlers.onNetworkError?.({ timeout: true });
       else if (details.endsWith('LoadError')) handlers.onNetworkError?.({ timeout: false });
     }
-    if (data.details === ErrorDetails.FRAG_LOAD_TIMEOUT) gate.trouble();
+    // Fragment trouble: a timeout, or an error with no HTTP answer (a 503 while the encoder catches up is not).
+    if (
+      data.details === ErrorDetails.FRAG_LOAD_TIMEOUT ||
+      (data.details === ErrorDetails.FRAG_LOAD_ERROR && !data.response?.code)
+    ) {
+      gate.trouble();
+      if (auto && fetched !== null) cap(gate.switched(fetched));
+      troubled = true;
+      reevaluateHold();
+    }
     if (data.response?.code === 404) {
       // The session expired (or was replaced): the caller makes a new one at the current position.
       if (!lost) {

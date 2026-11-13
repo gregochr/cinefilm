@@ -100,12 +100,19 @@ during which it goes on raising the cap, and after which it holds a recovered li
   first and says which). Toasts, the indicator and the record's played rung stay on `LEVEL_SWITCHED`: they describe
   what is on screen.
 - A new handler tells the caller the rung being fetched, for the record.
+- **Added with D, from the second review:** the cap rises only while hls.js is fetching *at* the cap, so it is never
+  more than one level above what is fetched; and a segment that times out, or gets no HTTP answer, brings the cap
+  down to the level being fetched. Without these a bad stretch behind a deep buffer has no trouble to report, the cap
+  climbs to the top while hls.js sits at the bottom, a recovered link jumps several levels at once, and after a
+  failed segment hls.js, which tries "the next level down, wrapping round to the highest", fetches the highest level
+  under the cap.
 
 **The record.** Whether the bank fills, how deep it is before a spell, and what the player was fetching at the time
 must show in the next journey's record.
 
 - `health.beat(positionMs, aheadS)`: the player passes the seconds buffered ahead of the playhead
-  (`bufferAhead(video)`). The figure is taken on every call that carries a number, before the "position has not
+  (`bankedAhead(video)` since D: it counts a hole of up to half a second between buffered ranges as continuous, as
+  hls.js plays across one). The figure is taken on every call that carries a number, before the "position has not
   moved" return, and a minute keeps its last one, in whole seconds.
 - `health.fetching(rungId)`: the rung hls.js is fetching. The iPhone's player and direct play never call it.
 - `minutes` rows gain two figures: `[minute, median kbit/s, rung played, ms moved, ms stalled, seconds ahead, rung
@@ -156,15 +163,22 @@ every spell, with eight minutes in hand that could have paid for 360p. D spends 
   **240 s**.
 - It applies in Auto only, and only to a ladder whose lowest level is `240p` with a level named `360p` above it. So
   a small film whose only other level is its copied original is never held (an original's bitrate is whatever the
-  file has); one whose top is a 360p transcode at its own height is, at the same 600 kbit/s as any 360p. While
-  armed, and while the step gate's cap is at or above 360p, the engine sets hls.js's `config.minAutoBitrate` to the
-  360p level's bitrate; otherwise it is 0.
-- Re-evaluated on `timeupdate`, `waiting` and `seeking`, when a segment has loaded, and whenever the cap changes:
-  not only on a loaded segment, which never comes in a dead zone.
+  file has); one whose top is a 360p transcode at its own height is, at the same 600 kbit/s as any 360p.
+- The engine sets hls.js's `config.minAutoBitrate` to the 360p level's bitrate only while **all** of these hold, and
+  to 0 otherwise: the hold is armed; the step gate's cap is at or above 360p; hls.js is already fetching at 360p or
+  above; and no segment has timed out or gone unanswered since the last one loaded.
+- Re-evaluated on `timeupdate`, `waiting` and `seeking`, when hls.js starts to fetch another level, when a segment
+  has loaded or failed, and whenever the cap changes: not only on a loaded segment, which never comes in a dead zone.
 - What hls.js then does (confirmed in the source): the minimum is read on every choice; no automatic path picks
-  below it, including the rule that abandons a slow segment and the switch after a failed one. It is a floor, not a
-  pull: a player already at 240p when the hold arms stays there until the link can carry 360p.
-- The step gate is unchanged.
+  below it, including the rule that abandons a slow segment and the switch after a failed one.
+- **A floor, not a pull.** hls.js does pull: once the buffer is full, a player on 240p with the minimum raised is
+  forced up to 360p whatever the link carries (the level setter clamps its own choice up to the minimum and keeps
+  it). So the minimum is raised only once hls.js has gone to 360p by itself.
+- **Trouble takes it off.** With the minimum at 360p hls.js cannot fall to 240p after a failed segment, and with the
+  cap at 360p too it has no level to try and reports a fatal error over minutes of buffered film. The first timeout
+  drops the minimum, long before hls.js's retries run out, and it stays off until a segment loads again.
+- The buffer is measured across small holes (`buffered.js`): a `waiting` fires exactly at a hole, and reading the
+  buffer as empty there would release the hold for the rest of the spell.
 - Whether 420 and 240 are right is judged from the next journey's record: the bank and the fetched rung in each
   minute.
 
@@ -196,8 +210,10 @@ every spell, with eight minutes in hand that could have paid for 360p. D spends 
   and eight figures and a seventh above 6; the controller storing and returning a seven-figure row.
 - **C:** the three `hlsConfig` values.
 - **D:** the module at 419/420 and 240/239 s; the engine: sets and clears `minAutoBitrate`, clears it when the cap
-  falls under 360p and when the buffer drains with no segment loading, nothing for a pinned quality or a two-rung
-  ladder.
+  falls under 360p and when the buffer drains with no segment loading, leaves it at 0 while 240p is being fetched,
+  drops it on a timeout until a segment loads, nothing for a pinned quality, a ladder without both levels or a
+  level hls.js has removed; the gate: no rise while hls.js fetches below the cap, the cap down to the fetched level
+  on a timeout or an unanswered segment and unchanged on a 503; `buffered.js` at a hole of 0.5 and 0.51 s.
 - Every PR: the gates in `CLAUDE.md`, one local Codex run on the whole branch before the first push
   (`dev-and-testing.md`), CI, Codex on the head commit. One mutation run per PR at the end, on the changed files.
 - **By hand, the owner, after a release** (`dev-and-testing.md`, "Poor-network check"): 240p pinned looks
@@ -218,9 +234,17 @@ every spell, with eight minutes in hand that could have paid for 360p. D spends 
 - **C** (#125): the three numbers are named constants, and a test writes hls.js's formula out to pin the depth on
   each level. What a full buffer does was read again in the source: the back buffer is evicted first, then
   `maxMaxBufferLength` is lowered for that playback; what is ahead is flushed only when the playhead is not buffered.
-- **D**: the hold is to a level *named* 360p, so a small film whose top is a 360p transcode at its own height is
-  held too (the same 600 kbit/s), and one whose only other level is its original is not. hls.js compares the
+- **D** (#126): the hold is to a level *named* 360p, so a small film whose top is a 360p transcode at its own height
+  is held too (the same 600 kbit/s), and one whose only other level is its original is not. hls.js compares the
   minimum with a level's `maxBitrate`, which is its declared bitrate unless a measured one is higher.
+- **A second adversarial review, of B to D against the hls.js source, after Codex had passed all three clean.**
+  Nothing had been run in a real browser, and the stand-in hls.js models no automatic choice, no error handling and
+  no forced level. It found four things, all fixed in #126: the cap climbing during a quiet bad stretch (and hls.js
+  then switching *up* after a failed segment), the hold surviving a timeout, the hold pulling a 240p player up to
+  360p, and a hole in `video.buffered` reading as an empty buffer. Sections B and D above describe the fixes. Noted
+  and left: hls.js starts one level under a start rung above 5 Mbit/s (its starting estimate is capped; the review
+  doc already has it); a level hls.js removes leaves the gate's top index stale, which is harmless; a browser that
+  keeps hitting its buffer limit lowers hls.js's ceiling under 420 s, after which the hold never arms.
 
 ## What nobody has verified
 

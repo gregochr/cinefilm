@@ -364,6 +364,7 @@ describe('a segment that timed out', () => {
       fatal: false,
       type: 'networkError',
       details: FakeHls.ErrorDetails.FRAG_LOAD_ERROR,
+      response: { code: 503 },
     });
     advance(1);
     hls.fragLoaded(stats);
@@ -744,25 +745,90 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
   // A <video> with `ahead` seconds buffered from a playhead at 0, which the test moves.
   function holdStart(over = {}) {
     const video = over.video ?? document.createElement('video');
-    const state = { ahead: 0 };
+    const state = { ahead: 0, ranges: null };
     Object.defineProperty(video, 'buffered', {
-      get: () => ({
-        length: state.ahead > 0 ? 1 : 0,
-        start: () => 0,
-        end: () => state.ahead,
-      }),
+      get: () => {
+        const ranges = state.ranges ?? (state.ahead > 0 ? [[0, state.ahead]] : []);
+        return { length: ranges.length, start: (i) => ranges[i][0], end: (i) => ranges[i][1] };
+      },
     });
     const started = start({
       session: { masterUrl: session.masterUrl, renditions: holdRenditions },
       ...over,
       video,
     });
-    return { ...started, video, setAhead: (s) => (state.ahead = s) };
+    return {
+      ...started,
+      video,
+      setAhead: (s) => (state.ahead = s),
+      setRanges: (r) => (state.ranges = r),
+    };
   }
+
+  const timeout = { fatal: false, type: 'networkError', details: 'fragLoadTimeOut' };
+
+  it('stays at 0 while level 0 is fetched, and engages once level 1 is fetched', () => {
+    const { hls, video, setAhead, advance } = holdStart();
+    hls.manifest(ladder, 2);
+    hls.fetchLevel(0);
+    setAhead(480);
+    advance(HEALTHY_MS * 2);
+    hls.fragLoaded(stats); // the cap rises to 1 while 240p is fetched
+    hls.fragLoaded(stats);
+    expect(hls.autoLevelCapping).toBe(1);
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(hls.config.minAutoBitrate).toBe(0);
+    hls.fetchLevel(1);
+    expect(hls.config.minAutoBitrate).toBe(600000);
+  });
+
+  it('takes the floor off at once on a fragment timeout and sets it again after the next fragment', () => {
+    const { hls, video, setAhead } = holdStart();
+    hls.manifest(ladder, 3);
+    hls.fetchLevel(3);
+    setAhead(480);
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(hls.config.minAutoBitrate).toBe(600000);
+    hls.error(timeout);
+    expect(hls.config.minAutoBitrate).toBe(0);
+    video.dispatchEvent(new Event('timeupdate'));
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(hls.config.minAutoBitrate).toBe(0);
+    hls.fragLoaded(stats);
+    expect(hls.config.minAutoBitrate).toBe(600000);
+  });
+
+  it('gives 0 and does not throw when the level at the hold index has gone', () => {
+    const { hls, video, setAhead } = holdStart();
+    hls.manifest(ladder, 3);
+    hls.fetchLevel(3);
+    hls.levels = [l240];
+    setAhead(480);
+    expect(() => video.dispatchEvent(new Event('timeupdate'))).not.toThrow();
+    expect(hls.config.minAutoBitrate).toBe(0);
+  });
+
+  it('is not released by a 0.3 s hole in the buffer, nor by a waiting at that hole', () => {
+    const { hls, video, setAhead, setRanges } = holdStart();
+    hls.manifest(ladder, 3);
+    hls.fetchLevel(3);
+    setAhead(500);
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(hls.config.minAutoBitrate).toBe(600000);
+    setRanges([
+      [0, 10],
+      [10.3, 500],
+    ]);
+    video.currentTime = 10;
+    video.dispatchEvent(new Event('timeupdate'));
+    video.dispatchEvent(new Event('waiting'));
+    expect(hls.config.minAutoBitrate).toBe(600000);
+  });
 
   it('raises the minimum to the 360p level at 420 s ahead, on timeupdate', () => {
     const { hls, video, setAhead } = holdStart();
     hls.manifest(ladder, 3);
+    hls.fetchLevel(3);
     expect(hls.config.minAutoBitrate).toBe(0);
     setAhead(419);
     video.dispatchEvent(new Event('timeupdate'));
@@ -775,6 +841,7 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
   it('keeps it down to 240 s ahead and drops it at 239 s, from timeupdate alone', () => {
     const { hls, video, setAhead } = holdStart();
     hls.manifest(ladder, 3);
+    hls.fetchLevel(3);
     setAhead(420);
     video.dispatchEvent(new Event('timeupdate'));
     setAhead(240);
@@ -788,6 +855,7 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
   it.each(['waiting', 'seeking'])('re-evaluates on %s', (type) => {
     const { hls, video, setAhead } = holdStart();
     hls.manifest(ladder, 3);
+    hls.fetchLevel(3);
     setAhead(500);
     video.dispatchEvent(new Event(type));
     expect(hls.config.minAutoBitrate).toBe(600000);
@@ -799,6 +867,7 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
   it('re-evaluates when a fragment has loaded', () => {
     const { hls, setAhead } = holdStart();
     hls.manifest(ladder, 3);
+    hls.fetchLevel(3);
     setAhead(500);
     hls.fragLoaded(stats);
     expect(hls.config.minAutoBitrate).toBe(600000);
@@ -810,6 +879,7 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
   it('drops the minimum at once when the cap falls to 240p, and sets it again at 360p', () => {
     const { hls, video, setAhead, advance } = holdStart();
     hls.manifest(ladder, 1);
+    hls.fetchLevel(1);
     setAhead(480);
     video.dispatchEvent(new Event('timeupdate'));
     expect(hls.config.minAutoBitrate).toBe(600000);
@@ -819,12 +889,15 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
     advance(HEALTHY_MS);
     hls.fragLoaded(stats);
     expect(hls.autoLevelCapping).toBe(1);
+    expect(hls.config.minAutoBitrate).toBe(0); // still fetching 240p: a floor, not a pull
+    hls.fetchLevel(1);
     expect(hls.config.minAutoBitrate).toBe(600000);
   });
 
   it('does not write the minimum when the value has not changed', () => {
     const { hls, video, setAhead } = holdStart();
     hls.manifest(ladder, 3);
+    hls.fetchLevel(3);
     let writes = 0;
     let value = hls.config.minAutoBitrate;
     Object.defineProperty(hls.config, 'minAutoBitrate', {
@@ -844,6 +917,7 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
   it('never writes the minimum for a pinned quality', () => {
     const { hls, video, setAhead } = holdStart({ auto: false });
     hls.manifest(ladder, 3);
+    hls.fetchLevel(3);
     setAhead(500);
     video.dispatchEvent(new Event('timeupdate'));
     hls.fragLoaded(stats);
@@ -876,6 +950,7 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
     const removed = vi.spyOn(video, 'removeEventListener');
     const { engine, hls, setAhead } = holdStart({ video });
     hls.manifest(ladder, 3);
+    hls.fetchLevel(3);
     engine.destroy();
     setAhead(500);
     video.dispatchEvent(new Event('timeupdate'));
@@ -884,5 +959,62 @@ describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
     expect(removed.mock.calls.map(([type, fn]) => [type, fn])).toEqual(
       expect.arrayContaining(addedPairs),
     );
+  });
+});
+
+describe('the step gate follows what hls.js fetches', () => {
+  it('raises the cap only while hls.js is fetching at it', () => {
+    const { hls, advance } = start();
+    hls.manifest(levels, 3);
+    hls.fetchLevel(1);
+    expect(hls.autoLevelCapping).toBe(1);
+    advance(HEALTHY_MS);
+    hls.fragLoaded(stats);
+    expect(hls.autoLevelCapping).toBe(2);
+    advance(HEALTHY_MS);
+    hls.fragLoaded(stats);
+    expect(hls.autoLevelCapping).toBe(2); // level 1 is still being fetched
+    hls.fetchLevel(2);
+    hls.fragLoaded(stats);
+    expect(hls.autoLevelCapping).toBe(3);
+  });
+
+  describe('fragment trouble', () => {
+    const trouble = (hls, over) =>
+      hls.error({ fatal: false, type: 'networkError', details: 'fragLoadTimeOut', ...over });
+
+    it.each([
+      ['a timeout', { details: 'fragLoadTimeOut' }],
+      ['an error with no HTTP answer', { details: 'fragLoadError' }],
+      ['an error with a zero code', { details: 'fragLoadError', response: { code: 0 } }],
+    ])('brings a cap above the fetched level down to it on %s', (_name, over) => {
+      const { hls, advance } = start();
+      hls.manifest(levels, 1);
+      hls.fetchLevel(1);
+      advance(HEALTHY_MS);
+      hls.fragLoaded(stats);
+      expect(hls.autoLevelCapping).toBe(2);
+      trouble(hls, over);
+      expect(hls.autoLevelCapping).toBe(1);
+    });
+
+    it('does not count a 503 as trouble', () => {
+      const { hls, advance } = start();
+      hls.manifest(levels, 1);
+      hls.fetchLevel(1);
+      advance(HEALTHY_MS);
+      hls.fragLoaded(stats);
+      expect(hls.autoLevelCapping).toBe(2);
+      trouble(hls, { details: 'fragLoadError', response: { code: 503 } });
+      expect(hls.autoLevelCapping).toBe(2);
+    });
+
+    it('leaves a pinned quality alone', () => {
+      const { hls } = start({ auto: false });
+      hls.manifest(levels, 3);
+      hls.fetchLevel(1);
+      trouble(hls, {});
+      expect(hls.autoLevelCapping).toBe(-1);
+    });
   });
 });
