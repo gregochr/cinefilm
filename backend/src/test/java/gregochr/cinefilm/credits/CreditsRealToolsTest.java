@@ -135,9 +135,9 @@ class CreditsRealToolsTest {
             assertThat(dense).hasSizeBetween(252, 254);
             assertThat(dense.getFirst().offsetMs()).isEqualTo(353_000);
             assertThat(dense.get(1).offsetMs()).isEqualTo(353_500);
-            // The crawl starts at 360 s, which is index 14. Index 13 is 359.5 s, still plain colour; index 100 is
-            // 403 s, inside the crawl.
-            assertThat(dense.get(13).frame().luma(0, 0)).isBetween(90, 160);
+            // The crawl starts at 360 s, which is index 14. Index 6 is 356 s, well clear of that boundary, so plain
+            // colour even if a seek or the fps filter slips a frame; index 100 is 403 s, inside the crawl.
+            assertThat(dense.get(6).frame().luma(0, 0)).isBetween(90, 160);
             boolean white = false;
             GreyFrame crawl = dense.get(100).frame();
             for (int y = 0; y < crawl.height() && !white; y++) {
