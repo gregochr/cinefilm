@@ -30,10 +30,10 @@ const editionB = {
 const editions = [editionA, editionB];
 
 describe('resolveSubtitleChoice', () => {
-  it('keeps Off, and treats nothing saved as Off', () => {
+  it('keeps Off, and keeps nothing saved as null ("never chosen")', () => {
     expect(resolveSubtitleChoice(editions, editionB, SUBTITLE_OFF)).toBe(SUBTITLE_OFF);
-    expect(resolveSubtitleChoice(editions, editionB, undefined)).toBe(SUBTITLE_OFF);
-    expect(resolveSubtitleChoice(editions, editionB, null)).toBe(SUBTITLE_OFF);
+    expect(resolveSubtitleChoice(editions, editionB, undefined)).toBeNull();
+    expect(resolveSubtitleChoice(editions, editionB, null)).toBeNull();
   });
 
   it("keeps a saved stream that belongs to the selected edition, whether it is a number or a picker's string", () => {

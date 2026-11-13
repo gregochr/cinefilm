@@ -33,14 +33,18 @@ public class PreferencesService {
         this.preferences = preferences;
     }
 
-    /** Resolves the stored choices, falling back to sensible defaults. Call inside a transaction. */
+    /**
+     * Resolves the stored choices, falling back to sensible defaults. The subtitle has none: null means the viewer
+     * has never chosen (decision 68), which the player reads as Off unless the film needs full subtitles. Call inside
+     * a transaction.
+     */
     public Preferences resolve(Film film) {
         FilmPreference stored = preferences.findById(film.getId()).orElse(new FilmPreference(film.getId()));
         Edition edition = firstValid(film, stored.getLastEditionId(), stored.getDefaultEditionId());
         Long audio = stored.getAudioStreamId() != null ? stored.getAudioStreamId() : defaultAudio(edition);
         return new Preferences(edition == null ? null : edition.getId(),
             stored.getQuality() == null ? "auto" : stored.getQuality(), audio,
-            stored.getSubtitle() == null ? "off" : stored.getSubtitle());
+            stored.getSubtitle());
     }
 
     /** Applies the provided fields (null means unchanged) and returns the stored preferences. */

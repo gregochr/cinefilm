@@ -42,8 +42,9 @@ import { useStream } from '../player/useStream.js';
 import { formatClock, formatRemaining } from '../player/time.js';
 import {
   FORCED_KEY,
-  SUBTITLE_OFF,
+  FULL_KEY,
   activeSubtitleKey,
+  effectiveSubtitleChoice,
   hasSubtitleTracks,
   nextSubtitle,
   qualityName,
@@ -152,13 +153,20 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
     const chosen = preferred || fallback;
     return chosen ? streamKey(chosen) : null;
   });
-  const [subtitle, setSubtitle] = useState(() =>
+  // What the viewer chose, or null when nothing was ever chosen (decision 68): `subtitle` below is the choice in
+  // effect, which turns the full subtitle on by itself for a film whose audio is not English.
+  const [chosenSubtitle, setChosenSubtitle] = useState(() =>
     resolveSubtitleChoice(film.editions, edition, prefs.subtitle),
   );
 
-  const audioStreamId = edition.audioStreams.find(
-    (s) => String(streamKey(s)) === String(audio),
-  )?.id;
+  const selectedAudio = edition.audioStreams.find((s) => String(streamKey(s)) === String(audio));
+  const audioStreamId = selectedAudio?.id;
+  const subtitle = effectiveSubtitleChoice({
+    choice: chosenSubtitle,
+    fullNeed: film.fullNeed,
+    fullSubtitle: edition.fullSubtitle,
+    audioLanguage: selectedAudio?.language,
+  });
   // Resuming (a start position above 0) also gets a still of the resume frame behind PREPARING.
   const [still, dispatchStill] = useReducer(stillReducer, initialSeekMs, initialStill);
   const health = useHealthReport({ editionId: edition.id, quality, openedAt });
@@ -238,11 +246,16 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
   // Show the chosen subtitle track, or the forced one when Subtitles is Off. Tracks that are not showing stay
   // disabled, so the browser only fetches (and the server only extracts) a track when it is wanted.
   const applySubtitleModes = useCallback(() => {
-    const showing = activeSubtitleKey(edition.subtitleStreams, subtitle, edition.forcedSubtitle);
+    const showing = activeSubtitleKey(
+      edition.subtitleStreams,
+      subtitle,
+      edition.forcedSubtitle,
+      edition.fullSubtitle,
+    );
     trackRefs.current.forEach((element, key) => {
       if (element.track) element.track.mode = key === showing ? 'showing' : 'disabled';
     });
-  }, [edition.subtitleStreams, edition.forcedSubtitle, subtitle]);
+  }, [edition.subtitleStreams, edition.forcedSubtitle, edition.fullSubtitle, subtitle]);
   useEffect(applySubtitleModes, [applySubtitleModes]);
 
   useEffect(() => {
@@ -320,14 +333,14 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
 
   const chooseSubtitle = useCallback(
     (value) => {
-      setSubtitle(value);
-      const label = subtitleOptions(edition.subtitleStreams).find(
+      setChosenSubtitle(value);
+      const label = subtitleOptions(edition.subtitleStreams, edition.fullSubtitle).find(
         (o) => String(o.value) === String(value),
       )?.label;
       setToast(`Subtitles: ${label ?? 'Off'}`);
       playback.savePreferences({ subtitle: value });
     },
-    [edition.subtitleStreams, playback],
+    [edition.subtitleStreams, edition.fullSubtitle, playback],
   );
 
   const chooseAudio = (key) => {
@@ -387,7 +400,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
         toggleFullscreen(containerRef.current, videoRef.current);
         break;
       case 'cycleCaptions':
-        chooseSubtitle(nextSubtitle(edition.subtitleStreams, subtitle));
+        chooseSubtitle(nextSubtitle(edition.subtitleStreams, subtitle, edition.fullSubtitle));
         break;
       case 'openAudio':
         setMenu('audio');
@@ -569,6 +582,20 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
             src={editionsApi.forcedSubtitleUrl(edition.id, edition.forcedSubtitle.version)}
           />
         ) : null}
+        {edition.fullSubtitle ? (
+          <track
+            key={FULL_KEY}
+            ref={(element) => {
+              if (element) trackRefs.current.set(FULL_KEY, element);
+              else trackRefs.current.delete(FULL_KEY);
+            }}
+            kind="subtitles"
+            srcLang="en"
+            data-testid="full-subtitle-track"
+            label="English (full)"
+            src={editionsApi.fullSubtitleUrl(edition.id, edition.fullSubtitle.version)}
+          />
+        ) : null}
       </video>
       {stillRendered(still) ? (
         <img
@@ -650,6 +677,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
               audioValue={audio}
               subtitleStreams={edition.subtitleStreams}
               hasForcedSubtitle={Boolean(edition.forcedSubtitle)}
+              hasFullSubtitle={Boolean(edition.fullSubtitle)}
               subtitleValue={subtitle}
               onAudio={chooseAudio}
               onSubtitle={chooseSubtitle}
@@ -721,11 +749,11 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
             >
               <CaptionsIcon size={20} />
               <span>
-                {subtitle === SUBTITLE_OFF || !hasSubtitles
-                  ? 'Off'
-                  : subtitleOptions(edition.subtitleStreams).find(
-                      (o) => String(o.value) === String(subtitle),
-                    )?.label}
+                {(hasSubtitles &&
+                  subtitleOptions(edition.subtitleStreams, edition.fullSubtitle).find(
+                    (o) => String(o.value) === String(subtitle),
+                  )?.label) ||
+                  'Off'}
               </span>
             </Button>
             <Button

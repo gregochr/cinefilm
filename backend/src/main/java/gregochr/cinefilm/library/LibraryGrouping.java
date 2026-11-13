@@ -289,7 +289,7 @@ public class LibraryGrouping {
             preference.setAudioStreamId(null);
         }
         if (subtitles.contains(preference.getSubtitle())) {
-            preference.setSubtitle("off");
+            preference.setSubtitle(null);
         }
         preferences.save(preference);
     }

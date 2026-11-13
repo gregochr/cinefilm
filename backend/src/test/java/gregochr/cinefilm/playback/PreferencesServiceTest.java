@@ -73,10 +73,28 @@ class PreferencesServiceTest {
     // resolve
 
     @Test
-    void withNothingStoredTheFirstEditionAutoQualityDefaultAudioAndNoSubtitlesApply() {
+    void withNothingStoredTheFirstEditionAutoQualityDefaultAudioAndNoSubtitleChoiceApply() {
         Preferences resolved = service.resolve(film);
 
-        assertThat(resolved).isEqualTo(new Preferences(FINAL_CUT, "auto", MAIN_AUDIO_ID, "off"));
+        assertThat(resolved).isEqualTo(new Preferences(FINAL_CUT, "auto", MAIN_AUDIO_ID, null));
+    }
+
+    @Test
+    void aSavedOffStaysOffSoNeverChosenAndSwitchedOffCanBeToldApart() {
+        FilmPreference choices = new FilmPreference(FILM_ID);
+        choices.setSubtitle("off");
+        storedChoices(choices);
+
+        assertThat(service.resolve(film).subtitle()).isEqualTo("off");
+    }
+
+    @Test
+    void aSavedFullChoiceIsReturnedAsTheLiteralFull() {
+        FilmPreference choices = new FilmPreference(FILM_ID);
+        choices.setSubtitle("full");
+        storedChoices(choices);
+
+        assertThat(service.resolve(film).subtitle()).isEqualTo("full");
     }
 
     @Test
@@ -125,7 +143,7 @@ class PreferencesServiceTest {
         Film empty = film(6L, "Empty", 2000, NOW);
         when(stored.findById(6L)).thenReturn(Optional.empty());
 
-        assertThat(service.resolve(empty)).isEqualTo(new Preferences(null, "auto", null, "off"));
+        assertThat(service.resolve(empty)).isEqualTo(new Preferences(null, "auto", null, null));
     }
 
     @Test

@@ -14,8 +14,10 @@ import Toast from '../components/Toast.jsx';
 import { ErrorState } from '../components/StateMessages.jsx';
 import { formatLeft, formatResume, formatRuntime, fraction } from '../player/time.js';
 import {
+  FULL_KEY,
   SUBTITLE_OFF,
   audioText,
+  effectiveSubtitleChoice,
   qualityName,
   resolveAudioChoice,
   resolveSubtitleChoice,
@@ -98,11 +100,18 @@ export default function FilmDetail() {
     const fallback = edition.audioStreams.find((s) => s.isDefault) || edition.audioStreams[0];
     return fallback ? String(streamKey(fallback)) : '';
   })();
-  const subtitleChoices = subtitleOptions(edition.subtitleStreams);
+  const subtitleChoices = subtitleOptions(edition.subtitleStreams, edition.fullSubtitle);
   const hasForced =
     edition.subtitleStreams.some((s) => s.forced) || Boolean(edition.forcedSubtitle);
+  // What the player will use: a choice made here or saved, else (never chosen) the full-subtitle default.
   const subtitleValue = String(
-    subtitle ?? resolveSubtitleChoice(film.editions, edition, prefs.subtitle),
+    effectiveSubtitleChoice({
+      choice: subtitle ?? resolveSubtitleChoice(film.editions, edition, prefs.subtitle),
+      fullNeed: film.fullNeed,
+      fullSubtitle: edition.fullSubtitle,
+      audioLanguage: edition.audioStreams.find((s) => String(streamKey(s)) === audioValue)
+        ?.language,
+    }),
   );
 
   const pickEdition = (editionId) => {
@@ -225,7 +234,9 @@ export default function FilmDetail() {
                 }))}
                 onChange={(v) => {
                   setSubtitle(v);
-                  actions.savePreferences({ subtitle: v === SUBTITLE_OFF ? v : Number(v) });
+                  actions.savePreferences({
+                    subtitle: v === SUBTITLE_OFF || v === FULL_KEY ? v : Number(v),
+                  });
                 }}
               />
             )}
