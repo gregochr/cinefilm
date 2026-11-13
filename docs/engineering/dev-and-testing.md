@@ -303,6 +303,10 @@ Once per change to the ladder or the buffer (`train-link-plan.md`):
     reaches about eight minutes ahead of the playhead and stays there, and the console shows no hls.js warning
     about reducing the buffer length. Afterwards Admin, Playback health, Full record: the sixth figure of the
     minute rows climbs to about 480. Then switch to "Train, bad": the film plays on from the buffer for minutes.
+16. On Auto with no throttling, wait until about eight minutes are buffered, then switch to "Train, bad". Auto
+    steps down to 360p and stays there, not 240p, while the buffered bar shrinks; once under four minutes are
+    buffered it goes to 240p. In the Full record the seventh figure of the minute rows (the rung being fetched) is 5
+    (360p) while the sixth is above 240, and 6 (240p) after.
 
 - DevTools throttles the page's own requests (the hls.js segments included) and only while DevTools is open. It
   does not reach Safari: use Network Link Conditioner there (macOS: Additional Tools for Xcode; iPhone: Settings,

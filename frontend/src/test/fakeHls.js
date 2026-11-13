@@ -45,7 +45,7 @@ export class FakeHls {
   }
 
   constructor(config) {
-    this.config = config;
+    this.config = { minAutoBitrate: 0, ...config };
     this.handlers = {};
     this.levels = [];
     this.autoLevelCapping = -1;
