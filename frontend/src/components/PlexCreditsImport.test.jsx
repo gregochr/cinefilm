@@ -897,8 +897,7 @@ describe('usePlexCreditsImport', () => {
     renderHook(() => usePlexCreditsImport(), { wrapper: StrictMode });
     await settle();
 
-    expect(atCall).toContain(true);
-    expect(atCall.filter((aborted) => !aborted)).toHaveLength(1);
+    expect(atCall).toEqual([true, false]);
   });
 
   it('ends a hung read with an error after the timeout, then polls again', async () => {
