@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeHls } from '../test/fakeHls.js';
-import { RECONNECT_MS, hlsConfig, retryNoAnswer, startHlsJs } from './hlsjsEngine.js';
+import {
+  BUFFER_BUDGET_BYTES,
+  MAX_BUFFER_AHEAD_S,
+  MIN_BUFFER_AHEAD_S,
+  RECONNECT_MS,
+  hlsConfig,
+  retryNoAnswer,
+  startHlsJs,
+} from './hlsjsEngine.js';
 import { HEALTHY_MS } from './stepGate.js';
 
 beforeEach(() => {
@@ -51,13 +59,34 @@ function start(over = {}) {
 }
 
 describe('hls.js settings', () => {
-  it('buffers 120 s ahead within ~250 MB and keeps 30 s behind', () => {
+  it('buffers 120 to 480 s ahead within 100 MB and keeps 30 s behind', () => {
     const config = hlsConfig(0);
-    expect(config.maxBufferLength).toBe(120);
-    expect(config.maxMaxBufferLength).toBe(120);
-    expect(config.maxBufferSize).toBe(250_000_000);
+    expect(MIN_BUFFER_AHEAD_S).toBe(120);
+    expect(MAX_BUFFER_AHEAD_S).toBe(480);
+    expect(BUFFER_BUDGET_BYTES).toBe(100_000_000);
+    expect(config.maxBufferLength).toBe(MIN_BUFFER_AHEAD_S);
+    expect(config.maxMaxBufferLength).toBe(MAX_BUFFER_AHEAD_S);
+    expect(config.maxBufferSize).toBe(BUFFER_BUDGET_BYTES);
     expect(config.backBufferLength).toBe(30);
     expect(config.preferManagedMediaSource).toBe(false);
+  });
+
+  it('keeps about 8 min ahead on the low levels, less on heavy ones, never under 120 s', () => {
+    const { maxBufferLength, maxMaxBufferLength, maxBufferSize } = hlsConfig(0);
+    // hls.js's own rule (getMaxBufferLength), written out here so a change to any number shows its effect.
+    const depth = (bitsPerSecond) =>
+      Math.floor(
+        Math.min(
+          Math.max((8 * maxBufferSize) / bitsPerSecond, maxBufferLength),
+          maxMaxBufferLength,
+        ),
+      );
+    expect(depth(364_000)).toBe(480);
+    expect(depth(816_000)).toBe(480);
+    expect(depth(1_328_000)).toBe(480);
+    expect(depth(3_128_000)).toBe(255);
+    expect(depth(6_128_000)).toBe(130);
+    expect(depth(22_628_000)).toBe(120);
   });
 
   it('retries fragments, playlists and the manifest with backoff on errors and timeouts', () => {

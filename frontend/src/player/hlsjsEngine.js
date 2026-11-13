@@ -38,12 +38,25 @@ const policy = (ttfbMs, loadMs, maxRetries) => ({
   },
 });
 
-/** hls.js settings: a deep forward buffer (120 s of the copy rung fits in ~250 MB), a short back buffer. */
+// The least film kept ahead on any level, in seconds (hls.js's `maxBufferLength`).
+export const MIN_BUFFER_AHEAD_S = 120;
+// The most film kept ahead on any level, in seconds (hls.js's `maxMaxBufferLength`).
+export const MAX_BUFFER_AHEAD_S = 480;
+// The byte budget between the two, in bytes (hls.js's `maxBufferSize`).
+export const BUFFER_BUDGET_BYTES = 100 * 1000 * 1000;
+
+/**
+ * hls.js settings. The forward buffer is as deep as the byte budget allows at the level's peak bitrate, never
+ * under MIN_BUFFER_AHEAD_S and never over MAX_BUFFER_AHEAD_S: eight minutes on the levels whose eight minutes
+ * fit in 100 MB (240p, 360p, 480p), about 256 s at 720p, about 130 s at a 1080p transcode, and 120 s (the
+ * original) on heavy originals. A deep buffer on the low levels banks film while the link is good. If the
+ * browser's buffer fills, hls.js lowers its own ceiling and carries on.
+ */
 export function hlsConfig(startSeconds) {
   return {
-    maxBufferLength: 120,
-    maxMaxBufferLength: 120,
-    maxBufferSize: 250 * 1000 * 1000,
+    maxBufferLength: MIN_BUFFER_AHEAD_S,
+    maxMaxBufferLength: MAX_BUFFER_AHEAD_S,
+    maxBufferSize: BUFFER_BUDGET_BYTES,
     backBufferLength: 30,
     // Standard MediaSource only: iOS (ManagedMediaSource) plays natively instead.
     preferManagedMediaSource: false,

@@ -93,8 +93,9 @@ read of the file. Direct play of the file remains only as a fallback.
   404: Safari treats it as fatal); hls.js's fragment policy matches. Waits run on virtual threads
   (`spring.threads.virtual.enabled=true`).
 - **Look-ahead** ≤ ~3 minutes past the furthest requested segment (then the encoder is killed and later restarted —
-  Java can't SIGSTOP); segments more than ~2 minutes **behind** the playhead are deleted (the copy rung at 15 Mbps is
-  ~110 MB a minute).
+  Java can't SIGSTOP); segments more than ~2 minutes **behind** the furthest requested segment are deleted (the copy
+  rung at 15 Mbps is ~110 MB a minute). With the player banking up to eight minutes that point is ahead of the
+  playhead: a player that has lost its buffer asks again and the encoder restarts there (`train-link-plan.md`).
 - **Processes**: a long-running `EncoderProcess` abstraction (start, `-progress pipe:1`, stop, exit), separate from the
   synchronous `ProcessCommandRunner`; `-nostdin`, `-protocol_whitelist file`, bounded `-threads`, `nice`; destroyed
   on session end and JVM shutdown; compose `init: true`.
@@ -172,8 +173,12 @@ read of the file. Direct play of the file remains only as a fallback.
   the copy rung when the file has one, and otherwise **direct-plays the file** (`GET /api/editions/{id}/stream`), so
   `original` is always available and always means the untouched source video. A pinned quality the film doesn't
   have (e.g. a remembered `720p` on a 480-line film) falls back to Auto.
-- **hls.js settings**: `maxBufferLength` 120 s and `maxBufferSize` raised so 120 s of the copy rung fits (~250 MB;
-  drops to whatever fits on lower rungs), back buffer 30 s; `fragLoadPolicy`/`playlistLoadPolicy`/
+- **hls.js settings**: `maxBufferLength` 120 s, `maxMaxBufferLength` 480 s and `maxBufferSize` 100 MB, so the
+  forward buffer follows bytes at the rung's peak bitrate: eight minutes at 480p and below, about 256 s at 720p,
+  130 s at a 1080p transcode, and 120 s on an original of 4.4 Mbit/s or more (deeper on a lighter one). A good
+  stretch of a poor link banks the next bad one (`train-link-plan.md`; until then it was 120 s on every rung). If
+  the browser's buffer fills, hls.js lowers its own ceiling and carries on. Back buffer 30 s;
+  `fragLoadPolicy`/`playlistLoadPolicy`/
   `manifestLoadPolicy` retries with backoff (a request that got no HTTP answer is retried like a 5xx); a segment may
   take 120 s, and one that has received nothing for 12 s times out into hls.js's own retries; on a fatal network
   error show "Reconnecting…" (polite status) and restart hls.js once, 5 s later (at once if the browser comes back
