@@ -3,6 +3,7 @@ import {
   FORCED_KEY,
   FULL_KEY,
   SUBTITLE_OFF,
+  TEXT_SUBTITLE_FORMATS,
   activeSubtitleKey,
   effectiveSubtitleChoice,
   hasSubtitleTracks,
@@ -99,6 +100,36 @@ describe('resolveSubtitleChoice with "full" and "never chosen"', () => {
 
   it('maps a saved "full" to the English text stream on an edition without one', () => {
     expect(resolveSubtitleChoice(editions, noFull, FULL_KEY)).toBe(10);
+  });
+
+  it('skips a bitmap-format English stream listed before a text one', () => {
+    const bitmap = { id: 20, language: 'English', forced: false, format: 'dvd_subtitle' };
+    const text = { id: 21, language: 'English', forced: false, format: 'subrip' };
+    const edition = { id: 5, subtitleStreams: [bitmap, text], fullSubtitle: null };
+    expect(resolveSubtitleChoice([edition], edition, FULL_KEY)).toBe(21);
+  });
+
+  it('falls back to Off when the only English stream is a bitmap', () => {
+    const bitmap = { id: 20, language: 'English', forced: false, format: 'hdmv_pgs_subtitle' };
+    const edition = { id: 5, subtitleStreams: [bitmap], fullSubtitle: null };
+    expect(resolveSubtitleChoice([edition], edition, FULL_KEY)).toBe(SUBTITLE_OFF);
+  });
+
+  it('accepts an English stream with a missing format, and any listed text format', () => {
+    const edition = {
+      id: 5,
+      subtitleStreams: [{ id: 22, language: 'English' }],
+      fullSubtitle: null,
+    };
+    expect(resolveSubtitleChoice([edition], edition, FULL_KEY)).toBe(22);
+    for (const format of TEXT_SUBTITLE_FORMATS) {
+      const e = {
+        id: 6,
+        subtitleStreams: [{ id: 23, language: 'English', format }],
+        fullSubtitle: null,
+      };
+      expect(resolveSubtitleChoice([e], e, FULL_KEY)).toBe(23);
+    }
   });
 
   it('maps a saved "full" to Off when there is no full file and no English text stream', () => {

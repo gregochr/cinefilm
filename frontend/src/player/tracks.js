@@ -72,7 +72,24 @@ export function resolveAudioChoice(editions, edition, saved) {
   return match ? streamKey(match) : null;
 }
 
-const isEnglishText = (stream) => /^english$/i.test(stream.language ?? '') && !stream.forced;
+/** Subtitle formats the player can show as text; mirrors the backend's text codecs (`FfprobeParser.TEXT_SUBTITLES`). */
+export const TEXT_SUBTITLE_FORMATS = [
+  'mov_text',
+  'tx3g',
+  'subrip',
+  'srt',
+  'ass',
+  'ssa',
+  'webvtt',
+  'text',
+];
+
+// A missing format is accepted: every stored stream is text.
+const isTextFormat = (stream) =>
+  !stream.format || TEXT_SUBTITLE_FORMATS.includes(String(stream.format).toLowerCase());
+
+const isEnglishText = (stream) =>
+  /^english$/i.test(stream.language ?? '') && !stream.forced && isTextFormat(stream);
 
 /**
  * The saved subtitle choice ("off", "full" or a stream id) for the selected edition. Nothing saved stays null
