@@ -251,6 +251,70 @@ class FrameFeaturesTest {
     }
 
     @Test
+    void theTextLimitAppliesFromADarkShareOfSeventyPercentNotEighty() {
+        // Dark share 0.75: text at 145 (peak 235) is only bright against the frame's own limit.
+        Canvas canvas = new Canvas(160, 90, 0);
+        for (int top = 8; top < 88; top += 10) {
+            canvas.line(top, 15, 145, 40, 3, 60);
+        }
+
+        FrameFeatures features = FrameFeatures.measure(canvas.frame(), WHOLE, 235);
+
+        assertThat(features.darkShare()).isEqualTo(0.75, offset(1e-12));
+        assertThat(features.brightShare()).isEqualTo(1440 / SyntheticFrames.PIXELS, offset(1e-12));
+        assertThat(features.frameClass()).isEqualTo(FrameClass.TEXT_ON_DARK);
+    }
+
+    @Test
+    void theSharpEdgeLimitIsRelativeToTheTextLimitNotTheWindowsPeak() {
+        // Text at 145 with an 85-grey halo: half the text limit is 72.5, half the peak 117.5. The halo is above the
+        // first, so the edges are not sharp; against the peak they would be.
+        GreyFrame frame = new Canvas(160, 90, 0).line(10, 12, 145, 40, 3, 85).line(30, 12, 145, 40, 3, 85)
+            .line(50, 12, 145, 40, 3, 85).line(70, 12, 145, 40, 3, 85).frame();
+
+        assertThat(FrameFeatures.measure(frame, WHOLE, 235).brightShare()).isGreaterThan(0.0);
+        assertThat(classify(frame, WHOLE, 235)).isEqualTo(FrameClass.PICTURE);
+    }
+
+    @Test
+    void theTextLimitIsTheNinetyNinePointNinthPercentileSoAFewSpecksDoNotRaiseIt() {
+        // 576 text pixels at 145 and 5 specks at 235 (0.035% of the frame): p99.9 is 145, p99.99 would be 235.
+        GreyFrame frame = new Canvas(160, 90, 0).line(10, 12, 145).line(30, 12, 145).line(50, 12, 145)
+            .line(70, 12, 145).rect(10, 2, 1, 1, 235).rect(80, 20, 1, 1, 235).rect(20, 40, 1, 1, 235)
+            .rect(140, 60, 1, 1, 235).rect(100, 85, 1, 1, 235).frame();
+
+        assertThat(classify(frame, WHOLE, 235)).isEqualTo(FrameClass.TEXT_ON_DARK);
+    }
+
+    @Test
+    void theBottomBandIncludesItsFirstRow() {
+        // Active height 80 from row 5: the band starts at row 61. Four one-row lines at rows 61 to 64 (144 pixels) and
+        // one at row 30 (36): exactly 80% in the band. Starting the band one row later would leave 108 of 144.
+        ActiveArea area = new ActiveArea(0, 5, 160, 80);
+        Canvas canvas = new Canvas(160, 90, 0);
+        for (int y : new int[] {30, 61, 62, 63, 64}) {
+            for (int block = 0; block < 12; block++) {
+                canvas.rect(40 + 5 * block, y, 3, 1, 235);
+            }
+        }
+
+        assertThat(FrameFeatures.measure(canvas.frame(), area, 235).textLike()).isFalse();
+    }
+
+    @Test
+    void halfAnOddPeakIsRoundedDownSoAHaloAtTheRoundedUpHalfIsNotSharp() {
+        // Peak 235: the lowest text limit is 117 (integer division), its sharp limit 58.5. A halo of 59 is not sharp;
+        // rounding 117.5 up to 118 would make 59 sharp. A halo of 58 is.
+        GreyFrame blocked = new Canvas(160, 90, 0).line(10, 12, 80, 40, 3, 59).line(30, 12, 80, 40, 3, 59)
+            .line(50, 12, 80, 40, 3, 59).frame();
+        GreyFrame sharp = new Canvas(160, 90, 0).line(10, 12, 80, 40, 3, 58).line(30, 12, 80, 40, 3, 58)
+            .line(50, 12, 80, 40, 3, 58).frame();
+
+        assertThat(classify(blocked, WHOLE, 235)).isEqualTo(FrameClass.PICTURE);
+        assertThat(classify(sharp, WHOLE, 235)).isEqualTo(FrameClass.TEXT_ON_DARK);
+    }
+
+    @Test
     void letterboxBarsDoNotPushANightSceneWithAWiderLitStreetIntoTextOnDark() {
         List<GreyFrame> samples = List.of(SyntheticFrames.letterboxedNightWithAWiderStreet(20),
             SyntheticFrames.letterboxedNightWithAWiderStreet(30));

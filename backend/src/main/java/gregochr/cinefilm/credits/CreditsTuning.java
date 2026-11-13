@@ -82,6 +82,12 @@ final class CreditsTuning {
     static final double CARD_CHANGE_MIN_SHARE = 0.001;
     /** A pair of frames is still when at most this share of the pixels changed. */
     static final double CARD_STILL_MAX_SHARE = 0.0005;
+    /**
+     * ...and its changed pixels must be at least this share of the larger of the two frames' bright pixels (above
+     * {@link #CARD_CHANGE_DIFF_FRACTION} of the peak): a card change replaces or fades most of the text, one lit
+     * window or a figure stepping in a lit scene changes a fraction of it.
+     */
+    static final double CARD_CHANGE_TEXT_SHARE = 0.5;
     /** Cards need at least this many abrupt changes. */
     static final int CARD_MIN_CHANGES = 2;
     /** At least this share of the pairs must be still for cards. */

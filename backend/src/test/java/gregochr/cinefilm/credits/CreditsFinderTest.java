@@ -392,7 +392,7 @@ class CreditsFinderTest {
         CreditsResult result = refine(builder);
 
         assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
-        assertThat(result.offsetMs()).isGreaterThanOrEqualTo(START);
+        assertThat(result.offsetMs()).isEqualTo(START + 6_500);
     }
 
     @Test
@@ -405,7 +405,7 @@ class CreditsFinderTest {
     }
 
     @Test
-    void creditsThreeMinutesAfterTheTitleSequenceAreUnsureWhenTheDenseWindowEndsFirst() {
+    void aTitleSequenceOverPictureThatFillsTheWholeDenseWindowIsUnsure() {
         CreditsResult result = refine(filmThen().add(SyntheticFrames.title(), 100));
 
         assertThat(result.verdict()).isEqualTo(CreditsVerdict.UNSURE);
@@ -421,8 +421,37 @@ class CreditsFinderTest {
         CreditsResult result = refine(builder);
 
         assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
-        assertThat(result.reasons()).hasSize(1);
-        assertThat(result.reasons().getFirst()).startsWith("Cards of text on a dark screen change from");
+        // The first change lands on card 1 (frame 64, START + 12 s); its 8 s of black before it count as the fade.
+        assertThat(result.offsetMs()).isEqualTo(START + 4_000);
+        assertThat(result.reasons()).containsExactly("Cards of text on a dark screen change from 1:00:04");
+    }
+
+    @Test
+    void aWindowSwitchingOnAndOffInTheOriginalNightSceneIsUnsureNotFound() {
+        ActiveArea area = new ActiveArea(0, 11, 160, 68);
+        DenseBuilder builder = new DenseBuilder();
+        for (int i = 0; i < 200; i++) {
+            builder.add(SyntheticFrames.nightWithFourthWindow(i / 20 % 2 == 1), 1);
+        }
+
+        CreditsResult result = CreditsFinder.refine(CANDIDATE, builder.build(START - 20_000), area, 230, null);
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.UNSURE);
+        assertThat(result.reasons()).containsExactly("Text on a dark screen, but it never moves");
+    }
+
+    @Test
+    void aFigureSteppingInTheOriginalNightSceneIsUnsureNotFound() {
+        ActiveArea area = new ActiveArea(0, 11, 160, 68);
+        DenseBuilder builder = new DenseBuilder();
+        for (int i = 0; i < 200; i++) {
+            builder.add(SyntheticFrames.nightWithFigure(10 + 6 * (i / 20)), 1);
+        }
+
+        CreditsResult result = CreditsFinder.refine(CANDIDATE, builder.build(START - 20_000), area, 230, null);
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.UNSURE);
+        assertThat(result.reasons()).containsExactly("Text on a dark screen, but it never moves");
     }
 
     @Test

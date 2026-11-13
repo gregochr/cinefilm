@@ -169,7 +169,7 @@ class CreditsMotionTest {
         // The first frames show only subtitle-like text in the bottom band, so they are not text and the crawl is
         // found later, not lost.
         assertThat(motion.kind()).isEqualTo(Kind.CRAWL);
-        assertThat(motion.startIndex()).isGreaterThan(0);
+        assertThat(motion.startIndex()).isEqualTo(13);
         assertThat(FrameFeatures.measure(frames.getFirst(), WHOLE, PEAK).frameClass())
             .isNotEqualTo(FrameClass.TEXT_ON_DARK);
         assertThat(FrameFeatures.measure(frames.get(motion.startIndex()), WHOLE, PEAK).frameClass())
@@ -197,11 +197,17 @@ class CreditsMotionTest {
         assertThat(detect(builder.frames())).isEqualTo(Kind.CARDS);
     }
 
-    /** A card with a {@code w} x {@code h} rectangle that is there for 8 frames and gone for 8, four times. */
-    private static List<GreyFrame> cardWithAFlickeringRectangle(int w, int h) {
+    /**
+     * Three lines of text (108 bright pixels) with a rectangle of {@code extra} pixels (9 wide, 11 or 12 rows, the
+     * last row shorter) beside them that is there for 8 frames and gone for 8, four times.
+     */
+    private static List<GreyFrame> cardWithABlinkingRectangle(int extra) {
         SyntheticFrames.Canvas with = new SyntheticFrames.Canvas(160, 90, 0).line(20, 3, SyntheticFrames.TEXT)
-            .line(30, 3, SyntheticFrames.TEXT).line(50, 3, SyntheticFrames.TEXT)
-            .rect(60, 50, w, h, SyntheticFrames.TEXT);
+            .line(30, 3, SyntheticFrames.TEXT).line(50, 3, SyntheticFrames.TEXT);
+        with.rect(100, 60, 9, extra / 9, SyntheticFrames.TEXT);
+        if (extra % 9 > 0) {
+            with.rect(100, 60 + extra / 9, extra % 9, 1, SyntheticFrames.TEXT);
+        }
         GreyFrame without = new SyntheticFrames.Canvas(160, 90, 0).line(20, 3, SyntheticFrames.TEXT)
             .line(30, 3, SyntheticFrames.TEXT).line(50, 3, SyntheticFrames.TEXT).frame();
         DenseBuilder builder = new DenseBuilder();
@@ -212,10 +218,74 @@ class CreditsMotionTest {
     }
 
     @Test
-    void aCardChangeNeedsAtLeastAThousandthOfThePixelsToChange() {
-        // 14 pixels is 0.00097 of the 14,400; 15 is 0.00104.
-        assertThat(detect(cardWithAFlickeringRectangle(7, 2))).isEqualTo(Kind.NONE);
-        assertThat(detect(cardWithAFlickeringRectangle(5, 3))).isEqualTo(Kind.CARDS);
+    void aCardChangeMustReplaceAtLeastHalfOfTheLargerFramesBrightPixels() {
+        // 108 pixels of text; a rectangle of 108 more is exactly half of the 216 bright pixels, 107 is just under.
+        assertThat(detect(cardWithABlinkingRectangle(108))).isEqualTo(Kind.CARDS);
+        assertThat(detect(cardWithABlinkingRectangle(107))).isEqualTo(Kind.NONE);
+    }
+
+    private static final ActiveArea NIGHT = new ActiveArea(0, 11, 160, 68);
+
+    @Test
+    void aWindowSwitchingOnAndOffInANightSceneIsNotCards() {
+        // A fourth window (36 pixels, 0.0033 of the picture) every 20 frames: above the absolute minimum, but only a
+        // quarter of the bright pixels, so not a card change.
+        List<GreyFrame> frames = new ArrayList<>();
+        for (int i = 0; i < 200; i++) {
+            frames.add(SyntheticFrames.nightWithFourthWindow(i / 20 % 2 == 1));
+        }
+
+        assertThat(FrameFeatures.measure(frames.getFirst(), NIGHT, 230).frameClass())
+            .isEqualTo(FrameClass.TEXT_ON_DARK);
+        assertThat(CreditsMotion.analyse(frames, NIGHT, 230)).isEqualTo(new CreditsMotion.Motion(Kind.NONE, -1));
+    }
+
+    @Test
+    void aFigureSteppingSixPixelsEveryTwentyFramesInALitWindowSceneIsNotCards() {
+        List<GreyFrame> frames = new ArrayList<>();
+        for (int i = 0; i < 200; i++) {
+            frames.add(SyntheticFrames.nightWithFigure(10 + 6 * (i / 20)));
+        }
+
+        assertThat(CreditsMotion.analyse(frames, NIGHT, 230)).isEqualTo(new CreditsMotion.Motion(Kind.NONE, -1));
+    }
+
+    @Test
+    void framesWithSmallChangesInsideACardAreNotStillAndSoNotCards() {
+        // Four cards of 12 frames; inside each, every other frame has a 10-pixel flicker (0.0007 of the frame): over
+        // the 0.0005 still limit, under the 0.001 a change needs. No pair is still, so these are not cards.
+        DenseBuilder builder = new DenseBuilder();
+        for (int c = 0; c < 4; c++) {
+            for (int i = 0; i < 6; i++) {
+                builder.add(SyntheticFrames.card(c), 1)
+                    .add(SyntheticFrames.withRect(SyntheticFrames.card(c), 150, 85, 5, 2, SyntheticFrames.TEXT), 1);
+            }
+        }
+
+        assertThat(detect(builder.frames())).isEqualTo(Kind.NONE);
+    }
+
+    @Test
+    void theRowProfilesCountOnlyPixelsAboveTheWindowsPeakLimitSoStaticGreyDoesNotBreakACrawl() {
+        List<GreyFrame> frames = new ArrayList<>();
+        for (int i = 0; i < 60; i++) {
+            frames.add(SyntheticFrames.crawlWithGreyStripes(i, 3));
+        }
+
+        assertThat(detect(frames)).isEqualTo(Kind.CRAWL);
+    }
+
+    @Test
+    void aLineLeavingAtTheTopEdgeIsACrawlBecauseTheFirstRowOfTheProfileHasItsNeighbourBelow() {
+        // One line (12 blocks, 4 rows) starting at row 3 and rising a pixel a frame: after 3 frames it is cut by the
+        // top edge. The smoothed profile's first row is its own count plus the row below; without that the match
+        // error rises over 0.25.
+        List<GreyFrame> frames = new ArrayList<>();
+        for (int i = 0; i < 8; i++) {
+            frames.add(new SyntheticFrames.Canvas(160, 90, 0).line(3 - i, 12, SyntheticFrames.TEXT).frame());
+        }
+
+        assertThat(CreditsMotion.analyse(frames, WHOLE, PEAK)).isEqualTo(new CreditsMotion.Motion(Kind.CRAWL, 0));
     }
 
     @Test

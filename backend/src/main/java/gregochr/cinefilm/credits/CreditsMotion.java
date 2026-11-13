@@ -183,7 +183,9 @@ public final class CreditsMotion {
     /**
      * The index of the frame where the first card change lands, or -1 when it is not cards. A change counts only
      * between two text frames, with at most black cuts between them: going into or out of picture never does. Changes
-     * on consecutive frames are one event (a fade or a crawl), not several cards.
+     * on consecutive frames are one event (a fade or a crawl), not several cards. A pair only changes when at least
+     * {@code CARD_CHANGE_MIN_SHARE} of the picture changed and those pixels are at least half of the larger frame's
+     * bright pixels (above the same limit): a window switching or a figure stepping changes a fraction of the text.
      */
     private static int cardsStart(List<GreyFrame> frames, List<FrameClass> classes, ActiveArea area, int peak) {
         double limit = CreditsTuning.CARD_CHANGE_DIFF_FRACTION * peak;
@@ -206,8 +208,11 @@ public final class CreditsMotion {
                 lastChanged = false;
             } else if (frameClass == FrameClass.TEXT_ON_DARK) {
                 if (previousText >= 0) {
-                    boolean changed = changedPixels(frames.get(previousText), frames.get(i), area, limit) / pixels
-                        >= CreditsTuning.CARD_CHANGE_MIN_SHARE;
+                    long changedCount = changedPixels(frames.get(previousText), frames.get(i), area, limit);
+                    long brightest = Math.max(brightPixels(frames.get(previousText), area, limit),
+                        brightPixels(frames.get(i), area, limit));
+                    boolean changed = changedCount / pixels >= CreditsTuning.CARD_CHANGE_MIN_SHARE
+                        && changedCount >= CreditsTuning.CARD_CHANGE_TEXT_SHARE * brightest;
                     if (changed && !lastChanged) {
                         changes++;
                         if (firstChange < 0) {
@@ -222,6 +227,19 @@ public final class CreditsMotion {
         boolean cards = changes >= CreditsTuning.CARD_MIN_CHANGES
             && still >= (frames.size() - 1) * CreditsTuning.CARD_MIN_STILL_SHARE;
         return cards ? firstChange : -1;
+    }
+
+    /** Pixels above the limit: the text a card change has to replace. */
+    private static long brightPixels(GreyFrame frame, ActiveArea area, double limit) {
+        long count = 0;
+        for (int y = area.top(); y < area.top() + area.height(); y++) {
+            for (int x = area.left(); x < area.left() + area.width(); x++) {
+                if (frame.luma(x, y) > limit) {
+                    count++;
+                }
+            }
+        }
+        return count;
     }
 
     private static long changedPixels(GreyFrame a, GreyFrame b, ActiveArea area, double limit) {

@@ -266,11 +266,67 @@ final class SyntheticFrames {
         return canvas.frame();
     }
 
-    /** A card with two fixed lines and one that shows {@code name} blocks, each a different arrangement. */
+    /**
+     * A card with one line of three blocks (36 bright pixels, 0.0025 of the frame) that sits {@code name} pixels
+     * further right on each card: consecutive cards change 24 pixels (0.0017), two thirds of the text.
+     */
     static GreyFrame creditCard(int name) {
-        Canvas canvas = new Canvas(W, H, 0).line(20, 3, TEXT).line(30, 3, TEXT);
-        // The third line keeps blocks at 40 and 45 and puts the last one at 50 + 5 * name: 24 pixels change.
-        canvas.rect(40, 50, 3, 4, TEXT).rect(45, 50, 3, 4, TEXT).rect(50 + 5 * name, 50, 3, 4, TEXT);
+        return new Canvas(W, H, 0).line(44, 3, TEXT, 40 + name, 3, 0).frame();
+    }
+
+    /** The original letterboxed night scene with a fourth window (6x6, 36 pixels) lit or dark. */
+    static GreyFrame nightWithFourthWindow(boolean lit) {
+        Canvas canvas = new Canvas(W, H, 0)
+            .rect(0, 11, W, 51, 30)
+            .rect(0, 62, W, 17, 100)
+            .rect(50, 20, 6, 6, 230)
+            .rect(70, 20, 6, 6, 230)
+            .rect(90, 20, 6, 6, 230);
+        if (lit) {
+            canvas.rect(110, 20, 6, 6, 230);
+        }
+        return canvas.frame();
+    }
+
+    /** The original night scene with a figure of four thin strips (luma 200) {@code x} pixels from the left. */
+    static GreyFrame nightWithFigure(int x) {
+        Canvas canvas = new Canvas(W, H, 0)
+            .rect(0, 11, W, 51, 30)
+            .rect(0, 62, W, 17, 100)
+            .rect(50, 20, 6, 6, 230)
+            .rect(70, 20, 6, 6, 230)
+            .rect(90, 20, 6, 6, 230);
+        for (int strip = 0; strip < 4; strip++) {
+            canvas.rect(x + 5 * strip, 40, 3, 10, 200);
+        }
+        return canvas.frame();
+    }
+
+    /** A copy of the frame with a rectangle drawn on it. */
+    static GreyFrame withRect(GreyFrame frame, int x, int y, int rectWidth, int rectHeight, int luma) {
+        Canvas canvas = new Canvas(frame.width(), frame.height(), 0);
+        for (int yy = 0; yy < frame.height(); yy++) {
+            for (int xx = 0; xx < frame.width(); xx++) {
+                canvas.rect(xx, yy, 1, 1, frame.luma(xx, yy));
+            }
+        }
+        return canvas.rect(x, y, rectWidth, rectHeight, luma).frame();
+    }
+
+    /** A crawl with a static grey (luma 100) pattern of alternate rows beside it, which a profile must ignore. */
+    static GreyFrame crawlWithGreyStripes(int index, int shift) {
+        Canvas canvas = new Canvas(W, H, 0);
+        for (int y = 0; y < H; y += 2) {
+            canvas.rect(5, y, 20, 1, 100);
+        }
+        GreyFrame crawl = crawl(index, shift);
+        for (int y = 0; y < H; y++) {
+            for (int x = 40; x < W; x++) {
+                if (crawl.luma(x, y) > 0) {
+                    canvas.rect(x, y, 1, 1, crawl.luma(x, y));
+                }
+            }
+        }
         return canvas.frame();
     }
 
