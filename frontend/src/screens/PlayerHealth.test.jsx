@@ -194,7 +194,22 @@ describe('what is counted', () => {
       stepsDown: 1,
       stepsUp: 0,
     });
-    expect(lastReport(fetchMock).minutes).toEqual([[0, 0, 3, 3000, 0]]);
+    expect(lastReport(fetchMock).minutes).toEqual([[0, 0, 3, 3000, 0, 0, 0]]);
+  });
+
+  it('records the seconds buffered ahead and the rung being fetched, per minute', async () => {
+    const { video, hls, fetchMock } = await open();
+    await landResume(video);
+    await firstFrame(video, 10000);
+    Object.defineProperty(video, 'buffered', {
+      configurable: true,
+      value: { length: 1, start: () => 0, end: () => 3870 },
+    });
+    await inAct(() => hls().fetchLevel(P720));
+    clock = 11000;
+    await moveTo(video, 3862);
+    await leave();
+    expect(lastReport(fetchMock).minutes).toEqual([[0, 0, 1, 1000, 0, 8, 3]]);
   });
 
   it('records the speed of each segment, and not the probe’s', async () => {
@@ -522,7 +537,7 @@ describe('falling back to direct play', () => {
       engine: 'direct',
       rungMs: { original: 1000 },
     });
-    expect(lastReport(fetchMock).minutes).toEqual([[0, 0, 1, 1000, 0]]);
+    expect(lastReport(fetchMock).minutes).toEqual([[0, 0, 1, 1000, 0, 0, 0]]);
   });
 
   it('is recorded when no HLS engine could start', async () => {
@@ -531,6 +546,24 @@ describe('falling back to direct play', () => {
     await landResume(video);
     await firstFrame(video, 5000);
     expect(lastReport(fetchMock)).toMatchObject({ fellBack: true, engine: 'direct' });
+  });
+
+  it('stops naming a fetched rung once the stream is abandoned', async () => {
+    const { video, hls, fetchMock } = await open();
+    await landResume(video);
+    await firstFrame(video, 5000);
+    await inAct(() => hls().fetchLevel(P720));
+    await inAct(() => hls().error({ fatal: true, type: 'otherError' }));
+    await vi.waitFor(() => expect(video).toHaveAttribute('src', DIRECT));
+    clock = 70000;
+    await inAct(() => fireEvent.playing(video));
+    clock = 71000;
+    await moveTo(video, 3862);
+    await leave();
+    const report = lastReport(fetchMock);
+    expect(report.engine).toBe('direct');
+    expect(report.minutes.at(-1)[0]).toBe(1);
+    expect(report.minutes.at(-1)[6]).toBe(0);
   });
 
   it('is recorded when the stream is abandoned after a fatal error', async () => {

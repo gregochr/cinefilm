@@ -25,15 +25,17 @@ const levels = [
 const session = { masterUrl: '/api/sessions/abc/master.m3u8', renditions };
 const stats = { loaded: 125_000, loading: { start: 0, first: 0, end: 100 } }; // 10,000 kbit/s
 
+const baseHandlers = () => ({
+  onLevel: vi.fn(),
+  onThroughput: vi.fn(),
+  onReconnecting: vi.fn(),
+  onSessionLost: vi.fn(),
+  onFatal: vi.fn(),
+});
+
 function start(over = {}) {
   const video = document.createElement('video');
-  const handlers = {
-    onLevel: vi.fn(),
-    onThroughput: vi.fn(),
-    onReconnecting: vi.fn(),
-    onSessionLost: vi.fn(),
-    onFatal: vi.fn(),
-  };
+  const handlers = over.handlers ?? baseHandlers();
   let t = 0;
   const engine = startHlsJs({
     Hls: FakeHls,
@@ -152,9 +154,33 @@ describe('Auto step-up gating', () => {
   it('follows a step down at once', () => {
     const { hls } = start();
     hls.manifest(levels, 3);
-    hls.switchTo(3);
-    hls.switchTo(1);
+    hls.fetchLevel(3);
+    hls.fetchLevel(1);
     expect(hls.autoLevelCapping).toBe(1);
+  });
+
+  it('follows the level being fetched, not the one played: the played step restarts nothing', () => {
+    const { hls, advance } = start();
+    hls.manifest(levels, 3);
+    advance(10000);
+    hls.fetchLevel(1);
+    expect(hls.autoLevelCapping).toBe(1);
+    advance(HEALTHY_MS - 10000 - 1);
+    hls.switchTo(1); // the playhead reaches it much later: this must not restart the clock
+    hls.fragLoaded(stats);
+    expect(hls.autoLevelCapping).toBe(1);
+    advance(10000);
+    // 60 s after the fetched step down (at 10 s), not after the played one
+    advance(1);
+    hls.fragLoaded(stats);
+    expect(hls.autoLevelCapping).toBe(2);
+  });
+
+  it('a played level change leaves the cap alone', () => {
+    const { hls } = start();
+    hls.manifest(levels, 3);
+    hls.switchTo(1);
+    expect(hls.autoLevelCapping).toBe(3);
   });
 
   it('a stall (waiting) restarts the healthy minute', () => {
@@ -189,6 +215,40 @@ describe('level changes', () => {
       ['original', { initial: true }],
       ['720p', { initial: false }],
     ]);
+  });
+
+  it('tells onFetching the rung of each level hls.js starts to fetch', () => {
+    const onFetching = vi.fn();
+    const { hls, handlers } = start({ handlers: { ...baseHandlers(), onFetching } });
+    hls.manifest(levels, 3);
+    hls.fetchLevel(2);
+    hls.fetchLevel(0);
+    expect(onFetching.mock.calls).toEqual([['720p'], ['360p']]);
+    expect(handlers.onLevel).not.toHaveBeenCalled();
+  });
+
+  it('tells onFetching of a fetched level in a pinned quality, and never touches the cap', () => {
+    const onFetching = vi.fn();
+    const { hls } = start({ auto: false, handlers: { ...baseHandlers(), onFetching } });
+    hls.manifest(levels, 3);
+    hls.fetchLevel(1);
+    expect(onFetching).toHaveBeenCalledWith('480p');
+    expect(hls.autoLevelCapping).toBe(-1);
+  });
+
+  it('calls nothing for a fetched level it cannot name', () => {
+    const onFetching = vi.fn();
+    const { hls } = start({ handlers: { ...baseHandlers(), onFetching } });
+    hls.manifest([{ height: 999, bitrate: 1 }], 0);
+    hls.fetchLevel(0);
+    expect(onFetching).not.toHaveBeenCalled();
+    expect(hls.autoLevelCapping).toBe(0);
+  });
+
+  it('does not need an onFetching handler', () => {
+    const { hls } = start();
+    hls.manifest(levels, 3);
+    expect(() => hls.fetchLevel(1)).not.toThrow();
   });
 
   it('ignores a level it cannot name', () => {

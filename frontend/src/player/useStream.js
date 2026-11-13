@@ -19,6 +19,7 @@ import {
 const noop = () => {};
 const NO_HEALTH = {
   rung: noop,
+  fetching: noop,
   throughput: noop,
   reconnecting: noop,
   recovered: noop,
@@ -282,6 +283,9 @@ export function useStream({
               initial || quality !== AUTO ? null : levelToast(created.renditions, previous, next);
             if (text) latest.current.onToast(text);
             latest.current.health.rung(next, heightOf(created.renditions, next));
+          },
+          onFetching(next) {
+            latest.current.health.fetching(next);
           },
           onThroughput(kbps) {
             addMeasured(kbps);

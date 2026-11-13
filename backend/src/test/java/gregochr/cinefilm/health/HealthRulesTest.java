@@ -353,7 +353,7 @@ class HealthRulesTest {
     }
 
     @Test
-    void aMinuteOfFourNumbersIsRefusedFiveArePassedAndSixAreRefused() {
+    void aMinuteOfFourSixOrEightNumbersIsRefusedFiveAndSevenArePassed() {
         ObjectNode four = example();
         ((ArrayNode) minutes(four).get(0)).remove(4);
         assertRefused(four);
@@ -364,6 +364,14 @@ class HealthRulesTest {
         ObjectNode six = example();
         ((ArrayNode) minutes(six).get(0)).add(0);
         assertRefused(six);
+
+        ObjectNode seven = example();
+        ((ArrayNode) minutes(seven).get(0)).add(0).add(0);
+        assertValid(seven);
+
+        ObjectNode eight = example();
+        ((ArrayNode) minutes(eight).get(0)).add(0).add(0).add(0);
+        assertRefused(eight);
     }
 
     @Test
@@ -402,6 +410,51 @@ class HealthRulesTest {
         ObjectNode below = example();
         ((ArrayNode) minutes(below).get(0)).set(2, below.numberNode(-1));
         assertRefused(below);
+    }
+
+    @Test
+    void aFetchedRungCodeOfSixPassesAndSevenIsRefused() {
+        ObjectNode six = example();
+        ((ArrayNode) minutes(six).get(3)).set(6, six.numberNode(6));
+        assertValid(six);
+
+        ObjectNode zero = example();
+        ((ArrayNode) minutes(zero).get(3)).set(6, zero.numberNode(0));
+        assertValid(zero);
+
+        ObjectNode seven = example();
+        ((ArrayNode) minutes(seven).get(3)).set(6, seven.numberNode(7));
+        assertRefused(seven);
+    }
+
+    @Test
+    void aSixthFigureOfTheMaximumPassesAndAboveItOrBelowZeroIsRefused() {
+        ObjectNode top = example();
+        ((ArrayNode) minutes(top).get(3)).set(5, top.numberNode(MAX));
+        assertValid(top);
+
+        ObjectNode over = example();
+        ((ArrayNode) minutes(over).get(3)).set(5, over.numberNode(MAX + 1));
+        assertRefused(over);
+
+        ObjectNode below = example();
+        ((ArrayNode) minutes(below).get(3)).set(5, below.numberNode(-1));
+        assertRefused(below);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1, 2, 3, 4, 5, 6})
+    void aNullInsideASevenNumberMinuteIsRefusedAtEveryPosition(int position) {
+        ObjectNode node = example();
+        ((ArrayNode) minutes(node).get(3)).set(position, node.nullNode());
+        assertRefused(node);
+    }
+
+    @Test
+    void aSeventhFigureBelowZeroIsRefused() {
+        ObjectNode node = example();
+        ((ArrayNode) minutes(node).get(3)).set(6, node.numberNode(-1));
+        assertRefused(node);
     }
 
     @ParameterizedTest

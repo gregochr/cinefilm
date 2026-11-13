@@ -6,6 +6,7 @@ export class FakeHls {
   static supported = true;
   static Events = {
     MANIFEST_PARSED: 'hlsManifestParsed',
+    LEVEL_SWITCHING: 'hlsLevelSwitching',
     LEVEL_SWITCHED: 'hlsLevelSwitched',
     FRAG_LOADED: 'hlsFragLoaded',
     ERROR: 'hlsError',
@@ -71,6 +72,12 @@ export class FakeHls {
     this.emit(FakeHls.Events.MANIFEST_PARSED, { levels, firstLevel });
   }
 
+  /** hls.js starts to fetch `level` (automatic choice or not). */
+  fetchLevel(level) {
+    this.emit(FakeHls.Events.LEVEL_SWITCHING, { level });
+  }
+
+  /** The playhead reaches `level`. */
   switchTo(level) {
     this.emit(FakeHls.Events.LEVEL_SWITCHED, { level });
   }

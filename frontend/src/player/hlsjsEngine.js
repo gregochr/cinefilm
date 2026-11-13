@@ -1,6 +1,8 @@
 // Adaptive playback through hls.js (Chrome, Firefox). hls.js owns the buffer and the level choice; this adds
 // the resilience rules from the transcoding plan: retries instead of failures, "Reconnecting…" with one
-// restart 5 s after each fatal network error (at once when the browser comes back online), a new session when the old one has expired, and Auto stepping up one level only after ~60 s.
+// restart 5 s after each fatal network error (at once when the browser comes back online), a new session when the old one has expired, and Auto stepping up one level only after ~60 s. The step gate follows the level hls.js
+// starts to FETCH (LEVEL_SWITCHING), so a step down caps Auto at once; LEVEL_SWITCHED, the level on screen,
+// only reports what is playing.
 import { rungForLevel } from './ladder.js';
 import { createNoProgressLoader } from './noProgressLoader.js';
 import { createStepGate } from './stepGate.js';
@@ -57,7 +59,8 @@ export function hlsConfig(startSeconds) {
 
 /**
  * Starts `session` on `video`. `handlers`: onLevel(rung, { initial }), onThroughput(kbps),
- * onReconnecting(boolean), onSessionLost(), onFatal(), and the optional onNetworkError({ timeout }). Returns { destroy }.
+ * onReconnecting(boolean), onSessionLost(), onFatal(), and the optional onNetworkError({ timeout }) and
+ * onFetching(rung) (the rung hls.js has started to fetch, ahead of the one being played). Returns { destroy }.
  */
 export function startHlsJs({
   Hls,
@@ -141,6 +144,13 @@ export function startHlsJs({
     if (!rung) return;
     handlers.onLevel(rung, { initial });
     initial = false;
+  });
+
+  // The level hls.js now fetches: the gate follows it, so a step down lowers the cap at once.
+  hls.on(Events.LEVEL_SWITCHING, (_event, data) => {
+    const rung = rungForLevel(session.renditions, hls.levels[data.level]);
+    if (!rung) return;
+    handlers.onFetching?.(rung);
     if (auto) cap(gate.switched(data.level));
   });
 
