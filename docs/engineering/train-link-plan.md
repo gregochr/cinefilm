@@ -206,6 +206,22 @@ every spell, with eight minutes in hand that could have paid for 360p. D spends 
   start on "Train, bad" (300 kbit/s) some stalling is expected: the floor needs about 340.
 - **The real proof is the next train journey's record.**
 
+## What building changed (2026-11-13)
+
+- **A** (#123): a source of 241 lines that cannot be copied is encoded at 240, so it keeps the single 400 kbit/s
+  rung like a 240-line one. CI's real-ffmpeg test now encodes the floor in software and checks every 240p segment.
+- **B** (#124): hls.js raises `LEVEL_SWITCHING` for its own choices as well as manual ones (read in
+  `level-controller.ts`), so the gate uses that event and not each loaded segment's level. Codex found that the
+  fetched rung outlived a fall back to direct play: the counter now forgets it when the engine becomes anything
+  other than hls.js (and keeps it when hls.js is reported, which happens after hls.js may have named its first
+  level). `foundation-plan.md` describes both row lengths.
+- **C** (#125): the three numbers are named constants, and a test writes hls.js's formula out to pin the depth on
+  each level. What a full buffer does was read again in the source: the back buffer is evicted first, then
+  `maxMaxBufferLength` is lowered for that playback; what is ahead is flushed only when the playhead is not buffered.
+- **D**: the hold is to a level *named* 360p, so a small film whose top is a 360p transcode at its own height is
+  held too (the same 600 kbit/s), and one whose only other level is its original is not. hls.js compares the
+  minimum with a level's `maxBitrate`, which is its declared bitrate unless a measured one is higher.
+
 ## What nobody has verified
 
 The encoder at 240p (picture, speed, real bitrate, AAC at 64 kbit/s); the browsers' buffer limits and whether WebKit
