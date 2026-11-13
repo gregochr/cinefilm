@@ -170,15 +170,15 @@ export function usePlexImport() {
 }
 
 /**
- * The "Import credits from Plex" block: status, polled while an import runs (each answer arms the next look, so
- * requests never overlap), plus the start. Starting while one already runs (409) is not an error: the notice says so
- * and the block shows the running import. A second click while a start is in flight is ignored.
+ * The "Import credits from Plex" block: status, polled while an import runs, plus the start. Starting while one already
+ * runs (409) is not an error: the notice says so and the block shows the running import. A second click while a start
+ * is in flight is ignored.
  *
- * The start's 202 carries the new status: it is shown at once and kept until a status read answers, so a failing read
- * right after the start still shows the import running, and polling goes on (after a failed read too) while the
- * status shown is running. The poll is the quiet `refresh`, armed only after each answer (a success or a failure), so
- * an error stays on screen until a read answers and no request is ever aborted by the next. `announcement` is the sentence to put in a live region when a run finishes while the
- * block is open (never for the first status loaded).
+ * The start's 202 carries the new status: it is shown until the first status read answers after it (the read the
+ * start issues itself), so a failing read right after the start still shows the import running. The poll is the quiet
+ * `refresh`, which keeps an error on screen until a read answers, and it is armed only while no read is in flight, so
+ * a slow read is never aborted by the next. `announcement` is the sentence to put in a live region when a run finishes
+ * while the block is open (never for the first status loaded); it is emptied while a run is going.
  */
 export function usePlexCreditsImport() {
   const { data, error, loading, reload, refresh } = useResource('admin-plex-credits', (options) =>
@@ -190,19 +190,12 @@ export function usePlexCreditsImport() {
   const [announcement, setAnnouncement] = useState('');
   const startedRef = useRef(false);
   const seenFinished = useRef(undefined);
-  const credits = started ?? data;
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  const readInFlight = useRef(false);
+  const credits = started && started.base === data ? started.status : data;
   const running = Boolean(credits?.running);
   useAnnounceWhenFinished(data ? (data.lastImport?.finishedAt ?? null) : undefined);
-
-  // The start's answer gives way to a status read that shows the new run: running, or a last import other than the
-  // one the start saw. A read issued before the start that answers after it shows neither, so it changes nothing.
-  useEffect(() => {
-    if (!started || !data) return;
-    const sawNewRun =
-      data.running ||
-      (data.lastImport?.startedAt ?? null) !== (started.lastImport?.startedAt ?? null);
-    if (sawNewRun) setStarted(null);
-  }, [data, started]);
 
   const last = credits?.lastImport;
   useEffect(() => {
@@ -219,11 +212,23 @@ export function usePlexCreditsImport() {
     seenFinished.current = finishedAt;
   }, [credits, last]);
 
+  // A read has answered: data or error changed, and it is not the loading state of a reload just issued.
   useEffect(() => {
-    if (!running) return undefined;
+    if (!loading) readInFlight.current = false;
+  }, [data, error, loading]);
+
+  useEffect(() => {
+    if (!running || readInFlight.current) return undefined;
     const id = setTimeout(refresh, SCAN_POLL_MS);
     return () => clearTimeout(id);
-  }, [running, data, error, refresh]);
+  }, [running, data, error, loading, refresh]);
+
+  // Without a status on screen "Check again" shows the loading state; with one it looks quietly, so the button the
+  // user just pressed stays where it is.
+  const checkAgain = useCallback(() => {
+    readInFlight.current = true;
+    (dataRef.current ? refresh : reload)();
+  }, [refresh, reload]);
 
   const startImport = useCallback(async () => {
     if (startedRef.current) return;
@@ -231,8 +236,8 @@ export function usePlexCreditsImport() {
     setStarting(true);
     setNotice(null);
     try {
-      setStarted((await adminApi.startPlexCreditsImport()) ?? null);
-      setAnnouncement('');
+      const status = await adminApi.startPlexCreditsImport();
+      if (status) setStarted({ status, base: dataRef.current });
     } catch (failure) {
       setNotice(
         failure instanceof ApiError && failure.status === 409
@@ -242,9 +247,19 @@ export function usePlexCreditsImport() {
     } finally {
       startedRef.current = false;
       setStarting(false);
+      readInFlight.current = true;
       refresh();
     }
   }, [refresh]);
 
-  return { credits, error, loading, starting, notice, announcement, startImport, reload };
+  return {
+    credits,
+    error,
+    loading,
+    starting,
+    notice,
+    announcement,
+    startImport,
+    reload: checkAgain,
+  };
 }

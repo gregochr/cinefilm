@@ -214,6 +214,35 @@ describe('PlexCreditsImport', () => {
     expect(within(group).getByRole('list', { name: 'Credits import report' })).toBeInTheDocument();
   });
 
+  it('keeps Check again where it is, and focused, while a refresh looks again', async () => {
+    let reads = 0;
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    installFetch(async (m, url) => {
+      if (url !== '/api/admin/plex/credits') return null;
+      reads += 1;
+      if (reads === 1) return respond(fixtures.adminPlexCredits);
+      if (reads === 2) return respond(null, 500);
+      await gate;
+      return respond(fixtures.adminPlexCredits);
+    });
+    render(<PlexCreditsImport reachable />);
+    const group = await block();
+    await within(group).findByRole('list', { name: 'Credits import report' });
+    await userEvent.click(within(group).getByRole('button', { name: 'Import credits from Plex' }));
+    const again = await within(group).findByRole('button', { name: 'Check again' });
+
+    await userEvent.click(again);
+
+    expect(reads).toBe(3);
+    expect(within(group).getByRole('button', { name: 'Check again' })).toBe(again);
+    expect(again).toHaveFocus();
+    release();
+    await waitFor(() => expect(within(group).queryByRole('alert')).toBeNull());
+  });
+
   it('shows the import running from the start’s answer even when the next status read fails', async () => {
     let started = false;
     installFetch((method, url) => {
@@ -444,7 +473,32 @@ describe('usePlexCreditsImport', () => {
     expect(result.current.credits.progress.processed).toBe(9);
   });
 
-  it('keeps the start’s running status when a read issued before the start answers after it', async () => {
+  it('stops showing the start’s status once a read answers, even one that looks like the start', async () => {
+    let started = false;
+    let reads = 0;
+    installFetch((method, url) => {
+      if (url === '/api/admin/plex/credits/import') {
+        started = true;
+        return respond(running(0, 0), 202);
+      }
+      if (url !== '/api/admin/plex/credits') return null;
+      if (started) reads += 1;
+      // The server restarted mid-run: it is idle again with nothing recorded, like the start's own answer.
+      return respond(IDLE);
+    });
+    vi.useFakeTimers();
+    const { result } = renderHook(() => usePlexCreditsImport());
+    await settle();
+    await act(() => result.current.startImport());
+    await settle();
+
+    expect(reads).toBe(1);
+    expect(result.current.credits.running).toBe(false);
+    await settle(SCAN_POLL_MS * 3);
+    expect(reads).toBe(1);
+  });
+
+  it('does not let the next poll abort a read that is still in flight', async () => {
     let release;
     const gate = new Promise((resolve) => {
       release = resolve;
@@ -456,25 +510,23 @@ describe('usePlexCreditsImport', () => {
       reads += 1;
       if (reads === 2) {
         await gate;
-        return respond(IDLE);
+        return respond(running(7));
       }
-      return reads === 1 ? respond(IDLE) : respond(null, 500);
+      return respond(IDLE);
     });
     vi.useFakeTimers();
     const { result } = renderHook(() => usePlexCreditsImport());
     await settle();
-    act(() => result.current.reload());
-    await settle();
-    expect(reads).toBe(2);
-
     await act(() => result.current.startImport());
+
+    await settle(SCAN_POLL_MS * 3);
+    expect(reads).toBe(2);
     release();
     await settle();
 
-    expect(result.current.credits.running).toBe(true);
+    expect(result.current.credits.progress.processed).toBe(7);
     await settle(SCAN_POLL_MS);
-    expect(reads).toBe(4);
-    expect(result.current.credits.running).toBe(true);
+    expect(reads).toBe(3);
   });
 
   it('announces every finish, even one with the same words, and clears it while the next run goes', async () => {
