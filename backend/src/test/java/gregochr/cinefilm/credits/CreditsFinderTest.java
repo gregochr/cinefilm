@@ -383,9 +383,118 @@ class CreditsFinderTest {
     }
 
     @Test
-    void aLetterboxedFrameIsJudgedInsideItsActiveArea() {
+    void aCrawlEnteringFromTheBottomIsFoundLateNotLost() {
+        DenseBuilder builder = filmThen();
+        for (int i = 0; i < 200; i++) {
+            builder.add(SyntheticFrames.crawlFromBottom(i, 3), 1);
+        }
+
+        CreditsResult result = refine(builder);
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
+        assertThat(result.offsetMs()).isEqualTo(START + 6_500);
+    }
+
+    @Test
+    void creditsStartingThreeMinutesAfterAnEndTitleSequenceOverPictureAreFoundWhenTheDenseWindowReachesThem() {
+        // 3 minutes of colour title sequence (the candidate is its start), then the crawl.
+        CreditsResult result = refine(filmThen().add(SyntheticFrames.title(), 360).crawl(200, 3));
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
+        assertThat(result.offsetMs()).isEqualTo(START + 180_000);
+    }
+
+    @Test
+    void aTitleSequenceOverPictureThatFillsTheWholeDenseWindowIsUnsure() {
+        CreditsResult result = refine(filmThen().add(SyntheticFrames.title(), 100));
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.UNSURE);
+    }
+
+    @Test
+    void cardsFadingThroughBlackAreFoundAtTheFirstChange() {
+        DenseBuilder builder = filmThen();
+        for (int name = 0; name < 5; name++) {
+            builder.add(SyntheticFrames.creditCard(name), 8).add(SyntheticFrames.black(), 16);
+        }
+
+        CreditsResult result = refine(builder);
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
+        // The first change lands on card 1 (frame 64, START + 12 s); its 8 s of black before it count as the fade.
+        assertThat(result.offsetMs()).isEqualTo(START + 4_000);
+        assertThat(result.reasons()).containsExactly("Cards of text on a dark screen change from 1:00:04");
+    }
+
+    @Test
+    void aWindowSwitchingOnAndOffInTheOriginalNightSceneIsUnsureNotFound() {
         ActiveArea area = new ActiveArea(0, 11, 160, 68);
-        List<DenseFrame> night = new DenseBuilder().add(SyntheticFrames.letterboxedNight(20), 200)
+        DenseBuilder builder = new DenseBuilder();
+        for (int i = 0; i < 200; i++) {
+            builder.add(SyntheticFrames.nightWithFourthWindow(i / 20 % 2 == 1), 1);
+        }
+
+        CreditsResult result = CreditsFinder.refine(CANDIDATE, builder.build(START - 20_000), area, 230, null);
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.UNSURE);
+        assertThat(result.reasons()).containsExactly("Text on a dark screen, but it never moves");
+    }
+
+    @Test
+    void aFigureSteppingInTheOriginalNightSceneIsUnsureNotFound() {
+        ActiveArea area = new ActiveArea(0, 11, 160, 68);
+        DenseBuilder builder = new DenseBuilder();
+        for (int i = 0; i < 200; i++) {
+            builder.add(SyntheticFrames.nightWithFigure(10 + 6 * (i / 20)), 1);
+        }
+
+        CreditsResult result = CreditsFinder.refine(CANDIDATE, builder.build(START - 20_000), area, 230, null);
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.UNSURE);
+        assertThat(result.reasons()).containsExactly("Text on a dark screen, but it never moves");
+    }
+
+    @Test
+    void aSingleFlickerOfFloorsOfLightsWhoseMiddlePairsAreSmallIsUnsureNotFound() {
+        // One flicker (F -> F+G -> F+G+g -> F+g -> F) every 36.5 s (73 frames) would be two card changes in one
+        // 30 s window if the small middle pairs split the run; as one event it is not cards.
+        DenseBuilder builder = filmThen();
+        for (int flicker = 0; flicker < 4; flicker++) {
+            builder.add(SyntheticFrames.floors(false, false), 60).add(SyntheticFrames.floors(true, false), 1)
+                .add(SyntheticFrames.floors(true, true), 1).add(SyntheticFrames.floors(false, true), 1)
+                .add(SyntheticFrames.floors(false, false), 10);
+        }
+
+        CreditsResult result = refine(builder);
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.UNSURE);
+        assertThat(result.reasons()).containsExactly("Text on a dark screen, but it never moves");
+    }
+
+    @Test
+    void aSlowTiltOverLitWindowsIsUnsureNotFound() {
+        DenseBuilder builder = filmThen();
+        for (int i = 0; i < 200; i++) {
+            builder.add(SyntheticFrames.tiltedWindows(i), 1);
+        }
+
+        assertThat(refine(builder).verdict()).isEqualTo(CreditsVerdict.UNSURE);
+    }
+
+    @Test
+    void aDarkSceneWithASmallFigureMovingIsUnsureNotFound() {
+        DenseBuilder builder = filmThen();
+        for (int i = 0; i < 200; i++) {
+            builder.add(SyntheticFrames.figure(40 + 2 * i % 60), 1);
+        }
+
+        assertThat(refine(builder).verdict()).isEqualTo(CreditsVerdict.UNSURE);
+    }
+
+    @Test
+    void aLetterboxedFrameWithAWiderLitStreetIsJudgedInsideItsActiveArea() {
+        ActiveArea area = new ActiveArea(0, 11, 160, 68);
+        List<DenseFrame> night = new DenseBuilder().add(SyntheticFrames.letterboxedNightWithAWiderStreet(20), 200)
             .build(START - 20_000);
 
         CreditsResult result = CreditsFinder.refine(CANDIDATE, night, area, 230, null);
@@ -393,6 +502,19 @@ class CreditsFinderTest {
         assertThat(result.verdict()).isEqualTo(CreditsVerdict.UNSURE);
         assertThat(result.reasons())
             .containsExactly("Looking closely at the start of the credits found no text on a dark screen");
+    }
+
+    @Test
+    void theOriginalLetterboxedNightSceneReadsAsTextButItsStillLightsNeverMakeAFoundResult() {
+        // 74% dark inside its active area, so under 0.70 it is TEXT_ON_DARK: only the motion check rejects it.
+        ActiveArea area = new ActiveArea(0, 11, 160, 68);
+        List<DenseFrame> night = new DenseBuilder().add(SyntheticFrames.letterboxedNight(20), 200)
+            .build(START - 20_000);
+
+        CreditsResult result = CreditsFinder.refine(CANDIDATE, night, area, 230, null);
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.UNSURE);
+        assertThat(result.reasons()).containsExactly("Text on a dark screen, but it never moves");
     }
 
     // ---- Subtitles -----------------------------------------------------------------------------------------

@@ -297,23 +297,46 @@ class CreditsDetectionServiceTest {
     }
 
     /** Frames of a 2.39:1 night scene in a 16:9 frame, as the active area and the whole window see them. */
-    private void jobReadsALetterboxedNightEnding() {
+    private void jobReadsALetterboxedNightEnding(boolean widerStreet) {
         when(reader.open(FILE, FILM_LENGTH, checkpoint)).thenReturn(job);
         List<GreyFrame> active = new ArrayList<>();
         for (int row : new int[] {20, 30, 40, 25, 35}) {
-            active.add(SyntheticFrames.letterboxedNight(row));
+            active.add(night(widerStreet, row));
         }
         when(job.activeAreaFrames()).thenReturn(active);
         List<TimedFrame> coarse = new ArrayList<>();
         for (long at = 360_000; at < FILM_LENGTH; at += 5_000) {
-            coarse.add(new TimedFrame(at, SyntheticFrames.letterboxedNight(20)));
+            coarse.add(new TimedFrame(at, night(widerStreet, 20)));
         }
         when(job.coarseFrames()).thenReturn(coarse);
     }
 
+    private static GreyFrame night(boolean widerStreet, int windowRow) {
+        return widerStreet ? SyntheticFrames.letterboxedNightWithAWiderStreet(windowRow)
+            : SyntheticFrames.letterboxedNight(windowRow);
+    }
+
+    @Test
+    void theOriginalLetterboxedNightEndingReadsAsTextButItsStillLightsAreUnsureNeverFound() {
+        // 74% dark inside the picture: under TEXT_DARK_SHARE 0.70 the windows read as text, so there is a candidate
+        // and a dense look, and only the motion check (still lights never move) stops it being FOUND.
+        jobReadsALetterboxedNightEnding(false);
+        List<DenseFrame> still = new ArrayList<>();
+        for (long at = 350_000; at < 650_000; at += 500) {
+            still.add(new DenseFrame(at, SyntheticFrames.letterboxedNight(20)));
+        }
+        when(job.denseFrames(anyLong())).thenReturn(still);
+
+        CreditsResult result = service.detect(DUE, FILE, checkpoint);
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.UNSURE);
+        assertThat(result.reasons()).containsExactly("Text on a dark screen, but it never moves");
+        verify(job).close();
+    }
+
     @Test
     void theBarsOfALetterboxedFilmAreNotCountedSoADarkLitNightEndingIsNotTakenForCredits() {
-        jobReadsALetterboxedNightEnding();
+        jobReadsALetterboxedNightEnding(true);
 
         CreditsResult result = service.detect(DUE, FILE, checkpoint);
 

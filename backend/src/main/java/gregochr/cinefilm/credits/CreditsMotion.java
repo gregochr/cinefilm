@@ -89,7 +89,7 @@ public final class CreditsMotion {
             && text >= classes.size() * CreditsTuning.MOTION_MIN_TEXT_SHARE;
     }
 
-    /** Bright pixels per row inside the area. */
+    /** Bright pixels per row inside the area (against the window's peak), smoothed over three rows. */
     private static int[] rowProfile(GreyFrame frame, ActiveArea area, int peak) {
         double brightLimit = CreditsTuning.BRIGHT_FRACTION * peak;
         int[] profile = new int[area.height()];
@@ -102,7 +102,17 @@ public final class CreditsMotion {
             }
             profile[row] = count;
         }
-        return profile;
+        return smooth(profile);
+    }
+
+    /** Each count plus its neighbours above and below, so text moving by a fraction of a pixel still matches. */
+    private static int[] smooth(int[] profile) {
+        int[] smoothed = new int[profile.length];
+        for (int row = 0; row < profile.length; row++) {
+            smoothed[row] = profile[row] + (row > 0 ? profile[row - 1] : 0)
+                + (row + 1 < profile.length ? profile[row + 1] : 0);
+        }
+        return smoothed;
     }
 
     /** The index of the first frame of the first steadily moving pair, or -1 when it is not a crawl. */
@@ -173,7 +183,10 @@ public final class CreditsMotion {
     /**
      * The index of the frame where the first card change lands, or -1 when it is not cards. A change counts only
      * between two text frames, with at most black cuts between them: going into or out of picture never does. Changes
-     * on consecutive frames are one event (a fade or a crawl), not several cards.
+     * on consecutive frames are one event (a fade or a crawl), not several cards. A pair changes when at least
+     * {@code CARD_CHANGE_MIN_SHARE} of the picture changed; the run of consecutive changed pairs counts as a card
+     * change only when one of its pairs changed more than half of the larger frame's bright pixels (above the same
+     * limit): a window switching or a figure stepping changes a fraction of the text.
      */
     private static int cardsStart(List<GreyFrame> frames, List<FrameClass> classes, ActiveArea area, int peak) {
         double limit = CreditsTuning.CARD_CHANGE_DIFF_FRACTION * peak;
@@ -189,20 +202,34 @@ public final class CreditsMotion {
         int firstChange = -1;
         int previousText = -1;
         boolean lastChanged = false;
+        boolean runCounted = false;
         for (int i = 0; i < frames.size(); i++) {
             FrameClass frameClass = classes.get(i);
             if (frameClass == FrameClass.PICTURE) {
                 previousText = -1;
                 lastChanged = false;
+                runCounted = false;
             } else if (frameClass == FrameClass.TEXT_ON_DARK) {
                 if (previousText >= 0) {
-                    boolean changed = changedPixels(frames.get(previousText), frames.get(i), area, limit) / pixels
-                        >= CreditsTuning.CARD_CHANGE_MIN_SHARE;
-                    if (changed && !lastChanged) {
-                        changes++;
-                        if (firstChange < 0) {
-                            firstChange = i;
+                    long changedCount = changedPixels(frames.get(previousText), frames.get(i), area, limit);
+                    boolean changed = changedCount / pixels >= CreditsTuning.CARD_CHANGE_MIN_SHARE;
+                    if (changed) {
+                        if (!lastChanged) {
+                            runCounted = false;
                         }
+                        // A run of consecutive changes is one event, however small some of its pairs are; it counts
+                        // as a card change when any pair in it replaces more than half of the text.
+                        if (!runCounted && changedCount > CreditsTuning.CARD_CHANGE_TEXT_SHARE
+                            * Math.max(brightPixels(frames.get(previousText), area, limit),
+                            brightPixels(frames.get(i), area, limit))) {
+                            changes++;
+                            runCounted = true;
+                            if (firstChange < 0) {
+                                firstChange = i;
+                            }
+                        }
+                    } else {
+                        runCounted = false;
                     }
                     lastChanged = changed;
                 }
@@ -212,6 +239,19 @@ public final class CreditsMotion {
         boolean cards = changes >= CreditsTuning.CARD_MIN_CHANGES
             && still >= (frames.size() - 1) * CreditsTuning.CARD_MIN_STILL_SHARE;
         return cards ? firstChange : -1;
+    }
+
+    /** Pixels above the limit: the text a card change has to replace. */
+    private static long brightPixels(GreyFrame frame, ActiveArea area, double limit) {
+        long count = 0;
+        for (int y = area.top(); y < area.top() + area.height(); y++) {
+            for (int x = area.left(); x < area.left() + area.width(); x++) {
+                if (frame.luma(x, y) > limit) {
+                    count++;
+                }
+            }
+        }
+        return count;
     }
 
     private static long changedPixels(GreyFrame a, GreyFrame b, ActiveArea area, double limit) {

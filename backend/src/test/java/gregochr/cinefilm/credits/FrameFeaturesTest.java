@@ -96,23 +96,249 @@ class FrameFeaturesTest {
     }
 
     @Test
-    void theSameDimTextAgainstAnSdrPeakIsNotText() {
+    void thinGreyTextFarBelowTheWindowsPeakIsTextOnDarkAgainstItsOwnLimit() {
+        // Text at 145 in a window whose peak is 235: its own 99.9th percentile (145) sets the limit, and 145 is
+        // above half the peak (117), so the clamp leaves it alone.
         GreyFrame frame = SyntheticFrames.lines(8, 145, 12, 10, 30, 50, 70);
+
+        FrameFeatures features = FrameFeatures.measure(frame, WHOLE, 235);
+
+        assertThat(features.brightShare()).isEqualTo(576 / SyntheticFrames.PIXELS, offset(1e-12));
+        assertThat(classify(frame, WHOLE, 235)).isEqualTo(FrameClass.TEXT_ON_DARK);
+    }
+
+    @Test
+    void textBelowHalfTheWindowsPeakIsStillNotText() {
+        // 70 is under 65% of the lowest text limit (peak / 2 = 117), which is 76.
+        GreyFrame frame = SyntheticFrames.lines(8, 70, 12, 10, 30, 50, 70);
 
         assertThat(FrameFeatures.measure(frame, WHOLE, 235).brightShare()).isEqualTo(0.0);
         assertThat(classify(frame, WHOLE, 235)).isEqualTo(FrameClass.PICTURE);
     }
 
     @Test
-    void letterboxBarsDoNotPushANightSceneIntoTextOnDark() {
+    void theTextLimitNeverDropsBelowHalfThePeak() {
+        // Peak 235: the lowest limit is 117 and its bright limit 76.05, so 77 is bright and 76 is not. Without the
+        // clamp the frame's own limit (76 or 77) would make both bright.
+        assertThat(FrameFeatures.measure(SyntheticFrames.lines(0, 77, 12, 10, 30, 50, 70), WHOLE, 235).brightShare())
+            .isEqualTo(576 / SyntheticFrames.PIXELS, offset(1e-12));
+        assertThat(FrameFeatures.measure(SyntheticFrames.lines(0, 76, 12, 10, 30, 50, 70), WHOLE, 235).brightShare())
+            .isEqualTo(0.0);
+        // An odd peak halves by integer division: 235 / 2 is 117, not 117.5.
+        assertThat(FrameFeatures.measure(SyntheticFrames.lines(0, 117, 12, 10, 30, 50, 70), WHOLE, 235).frameClass())
+            .isEqualTo(FrameClass.TEXT_ON_DARK);
+    }
+
+    @Test
+    void theTextLimitNeverRisesAboveTheWindowsPeak() {
+        // Window peak 200, text at 235 and fainter lines at 140. Clamped to 200 the bright limit is 130, so both
+        // kinds of line are bright; unclamped (235) it would be 152.75 and the faint lines would not be.
+        GreyFrame frame = new Canvas(160, 90, 0).line(10, 12, 235).line(30, 12, 235).line(50, 12, 140)
+            .line(70, 12, 140).frame();
+
+        assertThat(FrameFeatures.measure(frame, WHOLE, 200).brightShare())
+            .isEqualTo(576 / SyntheticFrames.PIXELS, offset(1e-12));
+    }
+
+    @Test
+    void aTextLimitAtExactlyThePeakIsTheSameAsTheWindowsPeak() {
+        GreyFrame frame = SyntheticFrames.lines(0, 235, 12, 10, 30, 50, 70);
+
+        assertThat(FrameFeatures.measure(frame, WHOLE, 235).brightShare())
+            .isEqualTo(576 / SyntheticFrames.PIXELS, offset(1e-12));
+    }
+
+    @Test
+    void aFrameUnderTheTextDarkShareKeepsTheWindowsPeakAsItsLimit() {
+        // A grey band takes the dark share under 70%, so the frame measures against the window's peak (235), and
+        // text at 145 (under its bright limit of 152.75) is not bright.
+        Canvas canvas = new Canvas(160, 90, 0).rect(0, 0, 160, 30, 100);
+        for (int top = 40; top < 80; top += 10) {
+            canvas.line(top, 12, 145);
+        }
+        GreyFrame frame = canvas.frame();
+
+        assertThat(FrameFeatures.measure(frame, WHOLE, 235).darkShare()).isLessThan(0.70);
+        assertThat(FrameFeatures.measure(frame, WHOLE, 235).brightShare()).isEqualTo(0.0);
+    }
+
+    @Test
+    void whiteTextWhoseEdgesAreAntiAliasedScoringUnderThePhaseOneShareIsTextOnDark() {
+        // Four lines of text (576 bright pixels) plus two thick bright blobs (300): 66% of the bright pixels are
+        // text, which the phase 1 share of 0.8 refused and 0.3 accepts.
+        Canvas canvas = new Canvas(160, 90, 0).rect(10, 10, 15, 10, 235).rect(130, 10, 15, 10, 235);
+        for (int top = 30; top < 70; top += 10) {
+            canvas.line(top, 12, 235);
+        }
+
+        FrameFeatures features = FrameFeatures.measure(canvas.frame(), WHOLE, 235);
+
+        assertThat(features.textLike()).isTrue();
+        assertThat(features.brightShare()).isEqualTo(876 / SyntheticFrames.PIXELS, offset(1e-12));
+        assertThat(features.frameClass()).isEqualTo(FrameClass.TEXT_ON_DARK);
+    }
+
+    @Test
+    void aTextLikeShareOfExactlyThirtyPercentIsTextLikeAndJustUnderIsNot() {
+        // Five lines of 12 blocks (720 text pixels), between two thick blobs (840 pixels each) that are the rest of
+        // the bright pixels: 720 / 2400 is 0.30 exactly; one more blob column drops it under.
+        Canvas exactly = new Canvas(160, 90, 0).rect(5, 5, 14, 60, 235).rect(140, 5, 14, 60, 235);
+        Canvas under = new Canvas(160, 90, 0).rect(5, 5, 14, 60, 235).rect(140, 5, 15, 60, 235);
+        for (int top = 5; top < 55; top += 10) {
+            exactly.line(top, 12, 235, 40, 3, 0);
+            under.line(top, 12, 235, 40, 3, 0);
+        }
+
+        assertThat(FrameFeatures.measure(exactly.frame(), WHOLE, 235).textLike()).isTrue();
+        assertThat(FrameFeatures.measure(under.frame(), WHOLE, 235).textLike()).isFalse();
+    }
+
+    @Test
+    void denseColumnsThatLeaveOnly75PercentOfTheFrameDarkAreTextOnDark() {
+        // Eight lines of fifteen 3-pixel blocks, each in a 100-grey halo: 3,600 pixels are not dark.
+        Canvas canvas = new Canvas(160, 90, 0);
+        for (int top = 8; top < 88; top += 10) {
+            canvas.line(top, 15, 235, 40, 3, 100);
+        }
+
+        FrameFeatures features = FrameFeatures.measure(canvas.frame(), WHOLE, 235);
+
+        assertThat(features.darkShare()).isEqualTo(0.75, offset(1e-12));
+        assertThat(features.textLike()).isTrue();
+        assertThat(features.frameClass()).isEqualTo(FrameClass.TEXT_ON_DARK);
+    }
+
+    @Test
+    void burnedInSubtitlesInTheBottomBandOfADarkSceneAreNotTextLike() {
+        // Two lines of subtitles at rows 70 to 73 and 78 to 81 of a dark (luma 10) scene.
+        GreyFrame frame = new Canvas(160, 90, 10).line(70, 14, 235).line(78, 12, 235).frame();
+
+        FrameFeatures features = FrameFeatures.measure(frame, WHOLE, 235);
+
+        assertThat(features.brightShare()).isGreaterThan(0.0);
+        assertThat(features.textLike()).isFalse();
+        assertThat(features.frameClass()).isNotEqualTo(FrameClass.TEXT_ON_DARK);
+    }
+
+    /** Four lines of 12 blocks in the bottom band (rows 63 and below) and one in the rest, of {@code blocks}. */
+    private static GreyFrame subtitlesWithOneLineAbove(int blocks) {
+        return new Canvas(160, 90, 0).line(64, 12, 235).line(70, 12, 235).line(76, 12, 235).line(82, 12, 235)
+            .line(20, blocks, 235).frame();
+    }
+
+    @Test
+    void textThatIsExactlyEightyPercentInTheBottomBandIsNotTextLike() {
+        // 576 of 720 text pixels are in the band.
+        assertThat(FrameFeatures.measure(subtitlesWithOneLineAbove(12), WHOLE, 235).textLike()).isFalse();
+    }
+
+    @Test
+    void textThatIsJustUnderEightyPercentInTheBottomBandIsTextLike() {
+        // 576 of 732 text pixels (78.7%).
+        assertThat(FrameFeatures.measure(subtitlesWithOneLineAbove(13), WHOLE, 235).textLike()).isTrue();
+    }
+
+    @Test
+    void theBottomBandStartsAtSeventyPercentOfTheActiveHeight() {
+        // Active area of 80 rows from row 5: the band starts at row 5 + 56 = 61. Lines at rows 61 and below are in
+        // it; a line at rows 56 to 59 is not.
+        ActiveArea area = new ActiveArea(0, 5, 160, 80);
+        GreyFrame inside = new Canvas(160, 90, 0).line(61, 12, 235).line(66, 12, 235).line(71, 12, 235).frame();
+        GreyFrame outside = new Canvas(160, 90, 0).line(56, 12, 235).line(66, 12, 235).line(71, 12, 235).frame();
+
+        assertThat(FrameFeatures.measure(inside, area, 235).textLike()).isFalse();
+        assertThat(FrameFeatures.measure(outside, area, 235).textLike()).isTrue();
+    }
+
+    @Test
+    void theTextLimitAppliesFromADarkShareOfSeventyPercentNotEighty() {
+        // Dark share 0.75: text at 145 (peak 235) is only bright against the frame's own limit.
+        Canvas canvas = new Canvas(160, 90, 0);
+        for (int top = 8; top < 88; top += 10) {
+            canvas.line(top, 15, 145, 40, 3, 60);
+        }
+
+        FrameFeatures features = FrameFeatures.measure(canvas.frame(), WHOLE, 235);
+
+        assertThat(features.darkShare()).isEqualTo(0.75, offset(1e-12));
+        assertThat(features.brightShare()).isEqualTo(1440 / SyntheticFrames.PIXELS, offset(1e-12));
+        assertThat(features.frameClass()).isEqualTo(FrameClass.TEXT_ON_DARK);
+    }
+
+    @Test
+    void theSharpEdgeLimitIsRelativeToTheTextLimitNotTheWindowsPeak() {
+        // Text at 145 with an 85-grey halo: half the text limit is 72.5, half the peak 117.5. The halo is above the
+        // first, so the edges are not sharp; against the peak they would be.
+        GreyFrame frame = new Canvas(160, 90, 0).line(10, 12, 145, 40, 3, 85).line(30, 12, 145, 40, 3, 85)
+            .line(50, 12, 145, 40, 3, 85).line(70, 12, 145, 40, 3, 85).frame();
+
+        assertThat(FrameFeatures.measure(frame, WHOLE, 235).brightShare()).isGreaterThan(0.0);
+        assertThat(classify(frame, WHOLE, 235)).isEqualTo(FrameClass.PICTURE);
+    }
+
+    @Test
+    void theTextLimitIsTheNinetyNinePointNinthPercentileSoAFewSpecksDoNotRaiseIt() {
+        // 576 text pixels at 145 and 5 specks at 235 (0.035% of the frame): p99.9 is 145, p99.99 would be 235.
+        GreyFrame frame = new Canvas(160, 90, 0).line(10, 12, 145).line(30, 12, 145).line(50, 12, 145)
+            .line(70, 12, 145).rect(10, 2, 1, 1, 235).rect(80, 20, 1, 1, 235).rect(20, 40, 1, 1, 235)
+            .rect(140, 60, 1, 1, 235).rect(100, 85, 1, 1, 235).frame();
+
+        assertThat(classify(frame, WHOLE, 235)).isEqualTo(FrameClass.TEXT_ON_DARK);
+    }
+
+    @Test
+    void theBottomBandIncludesItsFirstRow() {
+        // Active height 80 from row 5: the band starts at row 61. Four one-row lines at rows 61 to 64 (144 pixels) and
+        // one at row 30 (36): exactly 80% in the band. Starting the band one row later would leave 108 of 144.
+        ActiveArea area = new ActiveArea(0, 5, 160, 80);
+        Canvas canvas = new Canvas(160, 90, 0);
+        for (int y : new int[] {30, 61, 62, 63, 64}) {
+            for (int block = 0; block < 12; block++) {
+                canvas.rect(40 + 5 * block, y, 3, 1, 235);
+            }
+        }
+
+        assertThat(FrameFeatures.measure(canvas.frame(), area, 235).textLike()).isFalse();
+    }
+
+    @Test
+    void halfAnOddPeakIsRoundedDownSoAHaloAtTheRoundedUpHalfIsNotSharp() {
+        // Peak 235: the lowest text limit is 117 (integer division), its sharp limit 58.5. A halo of 59 is not sharp;
+        // rounding 117.5 up to 118 would make 59 sharp. A halo of 58 is.
+        GreyFrame blocked = new Canvas(160, 90, 0).line(10, 12, 80, 40, 3, 59).line(30, 12, 80, 40, 3, 59)
+            .line(50, 12, 80, 40, 3, 59).frame();
+        GreyFrame sharp = new Canvas(160, 90, 0).line(10, 12, 80, 40, 3, 58).line(30, 12, 80, 40, 3, 58)
+            .line(50, 12, 80, 40, 3, 58).frame();
+
+        assertThat(classify(blocked, WHOLE, 235)).isEqualTo(FrameClass.PICTURE);
+        assertThat(classify(sharp, WHOLE, 235)).isEqualTo(FrameClass.TEXT_ON_DARK);
+    }
+
+    @Test
+    void letterboxBarsDoNotPushANightSceneWithAWiderLitStreetIntoTextOnDark() {
+        List<GreyFrame> samples = List.of(SyntheticFrames.letterboxedNightWithAWiderStreet(20),
+            SyntheticFrames.letterboxedNightWithAWiderStreet(30));
+        ActiveArea area = ActiveArea.of(samples);
+        GreyFrame night = SyntheticFrames.letterboxedNightWithAWiderStreet(20);
+
+        assertThat(area).isEqualTo(new ActiveArea(0, 11, 160, 68));
+        assertThat(FrameFeatures.measure(night, area, 230).darkShare()).isEqualTo(6772 / 10880.0, offset(1e-12));
+        assertThat(classify(night, area, 230)).isEqualTo(FrameClass.PICTURE);
+        // Without the active area the bars count as dark and the windows look like text: the failure being avoided.
+        assertThat(classify(night, WHOLE, 230)).isEqualTo(FrameClass.TEXT_ON_DARK);
+    }
+
+    @Test
+    void theOriginalLetterboxedNightSceneIs74PercentDarkAndNowReadsAsTextOnDarkInsideItsActiveArea() {
+        // Known consequence of TEXT_DARK_SHARE 0.70 (it was 0.80, which kept this scene PICTURE): three bright
+        // windows on a dark sky look like three runs of text. Only motion (CreditsFinderTest) keeps it from FOUND.
         List<GreyFrame> samples = List.of(SyntheticFrames.letterboxedNight(20), SyntheticFrames.letterboxedNight(30));
         ActiveArea area = ActiveArea.of(samples);
         GreyFrame night = SyntheticFrames.letterboxedNight(20);
 
         assertThat(area).isEqualTo(new ActiveArea(0, 11, 160, 68));
         assertThat(FrameFeatures.measure(night, area, 230).darkShare()).isEqualTo(8052 / 10880.0, offset(1e-12));
-        assertThat(classify(night, area, 230)).isEqualTo(FrameClass.PICTURE);
-        // Without the active area the bars count as dark and the windows look like text: the failure being avoided.
+        assertThat(classify(night, area, 230)).isEqualTo(FrameClass.TEXT_ON_DARK);
         assertThat(classify(night, WHOLE, 230)).isEqualTo(FrameClass.TEXT_ON_DARK);
     }
 
@@ -125,7 +351,9 @@ class FrameFeaturesTest {
     }
 
     @Test
-    void textAgainstTheLeftEdgeIsNotCentral() {
+    void eightBlocksFromTheLeftEdgeNowScoreAboveTheTextLikeShareAndAreTextOnDark() {
+        // The phase 1 fixture: one block in three of the first eight is central (9 of 24 bright pixels a row, 0.375),
+        // which 0.8 refused and 0.3 accepts. Known consequence; a still frame like this never moves.
         Canvas canvas = new Canvas(160, 90, 0);
         for (int top = 5; top < 70; top += 15) {
             canvas.line(top, 8, 235, 0, 3, 0);
@@ -134,6 +362,21 @@ class FrameFeaturesTest {
         FrameFeatures features = FrameFeatures.measure(canvas.frame(), WHOLE, 235);
 
         assertThat(features.brightShare()).isEqualTo(480 / SyntheticFrames.PIXELS, offset(1e-12));
+        assertThat(features.textLike()).isTrue();
+        assertThat(features.frameClass()).isEqualTo(FrameClass.TEXT_ON_DARK);
+    }
+
+    @Test
+    void textAgainstTheLeftEdgeIsNotCentral() {
+        Canvas canvas = new Canvas(160, 90, 0);
+        for (int top = 5; top < 70; top += 15) {
+            canvas.line(top, 6, 235, 0, 3, 0);
+        }
+
+        FrameFeatures features = FrameFeatures.measure(canvas.frame(), WHOLE, 235);
+
+        // Six blocks reach x = 28, so only one lies in the central band (from 24): 3 of 18 bright pixels a row.
+        assertThat(features.brightShare()).isEqualTo(360 / SyntheticFrames.PIXELS, offset(1e-12));
         assertThat(features.textLike()).isFalse();
         assertThat(features.frameClass()).isEqualTo(FrameClass.PICTURE);
     }
@@ -224,9 +467,9 @@ class FrameFeaturesTest {
     }
 
     @Test
-    void textOnDarkStartsAtADarkShareOf080() {
-        assertThat(new FrameFeatures(0.80, 0.05, true).frameClass()).isEqualTo(FrameClass.TEXT_ON_DARK);
-        assertThat(new FrameFeatures(0.7999, 0.05, true).frameClass()).isEqualTo(FrameClass.PICTURE);
+    void textOnDarkStartsAtADarkShareOf070() {
+        assertThat(new FrameFeatures(0.70, 0.05, true).frameClass()).isEqualTo(FrameClass.TEXT_ON_DARK);
+        assertThat(new FrameFeatures(0.6999, 0.05, true).frameClass()).isEqualTo(FrameClass.PICTURE);
     }
 
     @Test
