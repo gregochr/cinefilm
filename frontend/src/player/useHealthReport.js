@@ -23,6 +23,7 @@ const INPUTS = [
   'sourceChanged',
   'beat',
   'rung',
+  'fetching',
   'quality',
   'engine',
   'environment',

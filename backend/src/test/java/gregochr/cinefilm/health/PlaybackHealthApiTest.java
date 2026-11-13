@@ -116,7 +116,11 @@ class PlaybackHealthApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.report.minutes.length()").value(4))
             .andExpect(jsonPath("$.report.minutes[0][1]").value(900))
             .andExpect(jsonPath("$.report.minutes[1][4]").value(9400))
-            .andExpect(jsonPath("$.report.minutes[3][3]").value(11400));
+            .andExpect(jsonPath("$.report.minutes[3][3]").value(11400))
+            .andExpect(jsonPath("$.report.minutes[0].length()").value(5))
+            .andExpect(jsonPath("$.report.minutes[3].length()").value(7))
+            .andExpect(jsonPath("$.report.minutes[3][5]").value(42))
+            .andExpect(jsonPath("$.report.minutes[3][6]").value(4));
     }
 
     @Test

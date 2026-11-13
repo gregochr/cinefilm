@@ -267,10 +267,14 @@ Made on 2026-11-10:
 - **No location.** A laptop has no GPS and an address lookup's place guess was 40 miles out. What is needed about
   blackspots is how long they last and how often they come, which the per-minute record gives; where they are is not.
 
-Still open:
+Made on 2026-11-12, from the first train viewing in the record (`train-link-plan.md`); these were open decisions 1
+and 2:
 
-1. Lower the floor to 240p at about 300 kbit/s for every film? (The plan made 360p the floor.)
-2. Bank up to about 8 minutes on slow rungs, and on a recovered link keep what is banked or re-fetch it?
+- **A 240p floor for every film: yes** (item 5).
+- **Bank about eight minutes on the slow rungs and keep what is banked when the link recovers: yes** (item 6).
+
+Still open (numbered as before):
+
 3. Keep the 1.5 s probe for the first play of a browser session (recommended), or drop it and start low?
 4. Try BBR on dockermacmini?
 5. Bring Download for offline forward?
@@ -285,8 +289,12 @@ Each is one PR built by Sonnet under the usual gates, with a `changelog.d/` entr
    Frontend apart from the compression property and its test. It does not depend on the measurements. Plan:
    `poor-link-plan.md`.
 3. **A strategy per environment:** items 5 and 6, set from what the record shows: on a train start low, bank
-   deep and step up only with a reserve; at home start at the top. Needs open decisions 1 and 2 and a speed check on
-   the host. (Item 7 was pulled forward on its own: `long-pause-plan.md`.)
+   deep and step up only with a reserve; at home start at the top. (Item 7 was pulled forward on its own:
+   `long-pause-plan.md`.) **Planned 2026-11-12 as `train-link-plan.md` and merged 2026-11-13** as four pull requests
+   (#123 to #126): the floor, the player following what it fetches (with the bank in the record), the deeper buffer,
+   and the floor held back while the buffer is deep. They are driven by the link, not by the train tag, and do
+   nothing at home; rules that read the tag, and the step-up reserve, wait for a journey recorded with these in
+   place.
 4. **Browse:** items 9 and 10, the hls.js preload and the light build.
 
 Beyond these, only if the record asks for it: early warning (does latency climb before a dropout?) and knowledge of

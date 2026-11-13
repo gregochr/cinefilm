@@ -246,7 +246,7 @@ class FilmServiceTest {
             CutList.fromKeyframes(List.of(), 100 * MIN), null)));
 
         assertThat(service.detail(1L).editions().get(0).qualities()).extracting(FilmDtos.QualityDto::id)
-            .containsExactly("auto", "original", "1080p", "720p", "480p", "360p");
+            .containsExactly("auto", "original", "1080p", "720p", "480p", "360p", "240p");
     }
 
     @Test
@@ -288,7 +288,7 @@ class FilmServiceTest {
         when(indexes.cachedFor(original, false)).thenReturn(Optional.empty());
 
         assertThat(service.detail(1L).editions().get(0).qualities()).extracting(FilmDtos.QualityDto::id)
-            .containsExactly("auto", "original", "720p", "480p", "360p");
+            .containsExactly("auto", "original", "720p", "480p", "360p", "240p");
     }
 
     @Test

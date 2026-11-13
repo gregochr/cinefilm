@@ -5,8 +5,8 @@ and the `online` retry from its "Small" list. One pull request, built by Sonnet 
 playback-health record, `playback-health-plan.md`) is in: PR #88 and #91. This phase does not depend on its
 measurements; it fixes places where the player treats a poor link worse than it should.
 
-**Not in scope:** items 5 and 6 (the 240p floor, a deeper buffer) are phase 3 and wait for the owner's open decisions
-1 and 2; item 7 (sessions that survive a pause) shipped separately in #95. Open decision 3 (keep the 1.5 s probe for the first play of a browser
+**Not in scope:** items 5 and 6 (the 240p floor, a deeper buffer) are phase 3 and waited for the owner's open
+decisions 1 and 2 (made 2026-11-12: `train-link-plan.md`); item 7 (sessions that survive a pause) shipped separately in #95. Open decision 3 (keep the 1.5 s probe for the first play of a browser
 session) is answered the recommended way by item 8: the probe stays, but only when there is nothing to reuse.
 
 ## What the code does today (re-read after #91)

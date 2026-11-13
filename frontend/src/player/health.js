@@ -79,9 +79,10 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
   let timeouts = 0;
   let samples = [];
   const rungMs = new Map();
-  const minutes = new Map(); // minute -> { moved, stalled, samples, rung }
+  const minutes = new Map(); // minute -> { moved, stalled, samples, rung, ahead, fetched }
   let rungId = null;
   let rungHeight = null;
+  let fetchingId = null; // the rung hls.js is fetching, which runs ahead of the one on screen
 
   const changed = () => {
     changes += 1;
@@ -92,7 +93,7 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
     let entry = minutes.get(n);
     if (!entry) {
       if (minutes.size >= MAX_MINUTES) return null;
-      entry = { moved: 0, stalled: 0, samples: [], rung: 0 };
+      entry = { moved: 0, stalled: 0, samples: [], rung: 0, ahead: 0, fetched: 0 };
       minutes.set(n, entry);
     }
     return entry;
@@ -110,6 +111,7 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
       if (entry) {
         entry[field] += ms;
         entry.rung = RUNG_CODES[rungId] ?? 0;
+        entry.fetched = RUNG_CODES[fetchingId] ?? 0;
       }
     }
   };
@@ -177,6 +179,8 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
         m.rung,
         whole(m.moved),
         whole(m.stalled),
+        whole(m.ahead),
+        m.fetched,
       ]);
 
   const build = (t) => {
@@ -314,8 +318,12 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
         changed();
       }
     },
-    beat(positionMs) {
+    beat(positionMs, aheadS) {
       const t = advance();
+      if (Number.isFinite(aheadS) && aheadS >= 0) {
+        const entry = minuteEntry(minuteOf(t));
+        if (entry) entry.ahead = aheadS;
+      }
       if (!Number.isFinite(positionMs) || positionMs === lastPosition) return;
       lastPosition = positionMs;
       lastBeatAt = t;
@@ -325,6 +333,11 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
       heightDirection(id, height);
       rungId = id;
       rungHeight = Number.isFinite(height) ? height : null;
+    },
+    // The rung hls.js has started to fetch. Not a change of the report by itself: minutes carry it.
+    fetching(id) {
+      advance();
+      fetchingId = id;
     },
     quality(id) {
       advance();
@@ -338,6 +351,8 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
       advance();
       if (engineKind === kind) return;
       engineKind = kind;
+      // Only hls.js fetches a rung. Not cleared for 'hlsjs': it is reported after hls.js may have named its first.
+      if (kind !== 'hlsjs') fetchingId = null;
       changed();
     },
     environment(value = {}) {
@@ -384,7 +399,10 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
       if (!Number.isFinite(kbps) || kbps <= 0) return;
       samples = [...samples, kbps].slice(-MAX_SAMPLES);
       const entry = minuteEntry(minuteOf(t));
-      if (entry) entry.samples = [...entry.samples, kbps].slice(-MAX_SAMPLES);
+      if (entry) {
+        entry.samples = [...entry.samples, kbps].slice(-MAX_SAMPLES);
+        entry.fetched = RUNG_CODES[fetchingId] ?? 0;
+      }
       changed();
     },
     started: () => first,

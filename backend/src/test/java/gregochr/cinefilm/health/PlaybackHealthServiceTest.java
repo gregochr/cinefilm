@@ -371,6 +371,8 @@ class PlaybackHealthServiceTest {
         assertThat(row.report()).isEqualTo(example());
         JsonNode minutes = row.report().get("minutes");
         assertThat(minutes.size()).isEqualTo(4);
+        assertThat(minutes.get(3).size()).isEqualTo(7);
+        assertThat(minutes.get(3).get(6).asLong()).isEqualTo(4);
     }
 
     @ParameterizedTest

@@ -45,7 +45,8 @@ public final class HealthSamples {
           "kbpsHigh": 2400,
           "kbpsSamples": 41,
           "rungMs": { "480p": 58000, "360p": 113000 },
-          "minutes": [[0, 900, 4, 58000, 0], [1, 0, 5, 41600, 9400], [2, 760, 5, 60000, 0], [3, 800, 5, 11400, 0]],
+          "minutes": [[0, 900, 4, 58000, 0], [1, 0, 5, 41600, 9400], [2, 760, 5, 60000, 0],
+                      [3, 800, 5, 11400, 0, 42, 4]],
           "client": { "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", "screen": "1512x982", "cores": 8 }
         }
         """;

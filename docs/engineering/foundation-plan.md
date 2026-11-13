@@ -134,7 +134,7 @@ The browse GETs (`/api/home`, `/api/films`, `/api/films/{id}`, `/api/people/{id}
 is not in `GET /api/collections`, has no `FilmCard.collectionId` and is `null` as `FilmDetail.collection`. `GET
 /api/collections/{id}` still answers for it, so an old link keeps working.
 
-**FilmDetail:** FilmCard fields plus `{ overview, genres, collection: {id,name}|null, directors: Person[], cast: [{ person, character }], editions: [{ id, name, year, runtimeMs, note, creditsMarkerMs (nullable), positionMs, watched, file: { id, videoCodec, width, height, audioSummary, addedAt }, audioStreams, subtitleStreams, qualities: [{ id: "auto"\|"original"\|"1080p"\|"720p"\|"480p", bitrate, premade, available }], parts, forcedSubtitle: { source: "SIDECAR"\|"DOWNLOAD", ownerVerified, version } \| null }], preferences: { editionId, quality, audioStreamId, subtitle } }`
+**FilmDetail:** FilmCard fields plus `{ overview, genres, collection: {id,name}|null, directors: Person[], cast: [{ person, character }], editions: [{ id, name, year, runtimeMs, note, creditsMarkerMs (nullable), positionMs, watched, file: { id, videoCodec, width, height, audioSummary, addedAt }, audioStreams, subtitleStreams, qualities: [{ id: "auto"\|"original"\|"1080p"\|"720p"\|"480p"\|"360p"\|"240p", bitrate, premade, available }], parts, forcedSubtitle: { source: "SIDECAR"\|"DOWNLOAD", ownerVerified, version } \| null }], preferences: { editionId, quality, audioStreamId, subtitle } }`
 
 In phase 1 `qualities` lists only `auto` and `original` as available; lower qualities appear with
 `available: false` until phase 3.
@@ -209,7 +209,7 @@ The "Dim the lights" switch is stored in the play request (`?dim=0`) and has no 
   "Group as editions", Admin: Library scan panel, Films needing attention, Fix match (TMDB search with runtime).
 - **Phase 3 — transcoding and network resilience (owner's top priority, 2026-11-09).** Plan:
   `docs/engineering/transcoding-plan.md` — one HLS stream per playback whose top rung is the original (video copied)
-  and whose lower rungs (1080p/720p/480p/360p) are transcoded live with VAAPI on dockermacmini, ABR in hls.js and
+  and whose lower rungs (1080p/720p/480p/360p/240p) are transcoded live with VAAPI on dockermacmini, ABR in hls.js and
   Safari, the same policy at home and away. Server-side pre-made "travel copies" (decision 15) are replaced by a later
   "Download for offline"; the separate worker and workhorse failover wait until dockermacmini proves too slow.
   The frontend loads the light build (`hls.js/light`, about 65 KB smaller gzipped, parsed on every first play): it
@@ -416,8 +416,14 @@ being prepared" }` with `Retry-After: 1` while a later part's keyframe index is 
 All behind the session cookie; the `PUT` needs `X-CineFilm`. The report's fields, their meaning and the rules they
 must meet are in the plan ("The record" and "API").
 
+The report's `minutes` is a list of rows, one per minute, each a list of numbers. A row has **seven** figures:
+`[minute, median kbit/s, rung played, ms moved, ms stalled, seconds buffered ahead, rung being fetched]` (rung codes
+0 to 6). A row of **five** figures, without the last two, is still accepted from a tab running a player older than
+`train-link-plan.md`, and is what records stored before it hold; any other length is refused. The full-record
+`GET` returns the rows as they were stored, so a client must read both lengths.
+
 | Route | Contract |
 |---|---|
 | `PUT /api/playback-health/{playbackId}` body: the health report | 204. `playbackId` is a lower-case UUID made by the browser, one per viewing. A new id creates the record (404 `No such edition`); a known id replaces the report when `seq` is higher, otherwise it is left alone (still 204). 400 `Invalid health report` for an id that is not a UUID, a body over 20,000 characters or not JSON (this route reads the body as text, so it does not answer `Invalid request`), a report outside the rules, or a known id with another `editionId` |
 | `GET /api/admin/playback-health` | `{ playbacks: [{ playbackId, filmId, filmTitle, editionId, startedAt, updatedAt, report }] }`: the 20 with the newest `updatedAt`, newest first; `report` is the stored report without its `minutes` |
-| `GET /api/admin/playback-health/{playbackId}` | one such row with the whole report; 404 `No such playback` |
+| `GET /api/admin/playback-health/{playbackId}` | one such row with the whole report, `minutes` included (rows of seven figures, or five in an older record); 404 `No such playback` |

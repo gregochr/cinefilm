@@ -59,17 +59,19 @@ read of the file. Direct play of the file remains only as a fallback.
 | top (no copy rung) | `h264_vaapi` at the **source height** (capped 1080), named by height: above 720 ⇒ `1080p` 5 Mbps, above 480 ⇒ `720p` 2.5 Mbps, above 360 ⇒ `480p` 1 Mbps, above 240 ⇒ `360p` 0.6 Mbps, else `240p` 0.4 Mbps | only when the file has no copy rung; the rungs below follow the same rule as with a copy rung |
 | `720p` | 2.5 Mbps | source above 720 lines |
 | `480p` | 1 Mbps | source above 480 lines |
-| `360p` | 0.6 Mbps | source above 360 lines (owner: yes; the floor for the worst links) |
+| `360p` | 0.6 Mbps | source above 360 lines |
+| `240p` | 0.25 Mbps | source above 240 lines: the floor of every ladder, for a train's bad spells (owner, 2026-11-12; `train-link-plan.md`). Until then 240p was 0.4 Mbps and only for sources of 360 lines or fewer |
 
 - **Every rung is strictly shorter than the one above it** (a transcoded rung exists only below the source height;
-  a source of 360 lines or fewer has its top rung only, plus a 240p 0.4 Mbps rung if it is above 240). So heights
+  a source of 240 lines or fewer has its top rung only). So heights
   are unique per film and the player can always tell the active rung from `videoHeight`.
 
-- Audio on every rung: the chosen audio stream as **AAC stereo 128 kbps** (96 kbps on 360p); Chrome never meets AC-3.
+- Audio on every rung: the chosen audio stream as **AAC stereo 128 kbps** (96 kbps on 360p and on a small film's
+  single 240p rung, 64 kbps on the 240p floor); Chrome never meets AC-3.
 - `BANDWIDTH` in the master playlist is the rung's **peak** per-segment bitrate (from the index and file sizes for
   the copy rung; the target × 1.2 for transcoded rungs), so ABR never picks a rung the link can't carry.
 - Quality ids: `auto | original | 1080p | 720p | 480p | 360p | 240p`; `PreferencesService` and `FilmMapper` accept
-  `360p` and `240p` (240p only exists for sources of 360 lines or fewer, common among the older SD rips).
+  `360p` and `240p` (every film above 240 lines has both).
 
 ## The encoder: one ffmpeg per session, all rungs
 
@@ -91,12 +93,14 @@ read of the file. Direct play of the file remains only as a fallback.
   404: Safari treats it as fatal); hls.js's fragment policy matches. Waits run on virtual threads
   (`spring.threads.virtual.enabled=true`).
 - **Look-ahead** ≤ ~3 minutes past the furthest requested segment (then the encoder is killed and later restarted —
-  Java can't SIGSTOP); segments more than ~2 minutes **behind** the playhead are deleted (the copy rung at 15 Mbps is
-  ~110 MB a minute).
+  Java can't SIGSTOP); segments more than ~2 minutes **behind** the furthest requested segment are deleted (the copy
+  rung at 15 Mbps is ~110 MB a minute). With the player banking up to eight minutes that point is ahead of the
+  playhead: a player that has lost its buffer asks again and the encoder restarts there (`train-link-plan.md`).
 - **Processes**: a long-running `EncoderProcess` abstraction (start, `-progress pipe:1`, stop, exit), separate from the
   synchronous `ProcessCommandRunner`; `-nostdin`, `-protocol_whitelist file`, bounded `-threads`, `nice`; destroyed
   on session end and JVM shutdown; compose `init: true`.
-- **Software fallback**: VAAPI unavailable ⇒ `libx264 -preset veryfast`, transcoded rungs trimmed to 480p and 360p,
+- **Software fallback**: VAAPI unavailable ⇒ `libx264 -preset veryfast`, transcoded rungs trimmed to 480p, 360p and
+  240p,
   the copy rung unchanged; logged once and shown in Admin. ffmpeg unusable ⇒ the handover's **"worker offline"**
   state: Auto and lower qualities disabled with its footer copy; the original plays by direct play.
 - **In the CineFilm container** behind a `Transcoder` interface rather than the foundation plan's separate worker:
@@ -157,7 +161,15 @@ read of the file. Direct play of the file remains only as a fallback.
   (this film's segments, or another film's in the same browser session) is reused instead of probing; a probe that
   measures nothing, and a split film with no recent speed, start on the lowest rung (`poor-link-plan.md`). Then let
   ABR run: hls.js steps
-  down at once and up one level after ~60 s healthy (decision 3, via `autoLevelCapping`/`nextAutoLevel`); iPhone's
+  down at once and up one level after ~60 s healthy (decision 3, via `autoLevelCapping`/`nextAutoLevel`). The cap
+  follows the level hls.js starts to *fetch* (`LEVEL_SWITCHING`), not the level that reaches the screen
+  (`LEVEL_SWITCHED`), which comes later by as much as is buffered (`train-link-plan.md`). The cap rises only while
+  hls.js is fetching at the cap, so it is never more than one level above what is fetched; the healthy minute starts
+  again when hls.js reaches the cap from below; and a segment that times out or gets no HTTP answer brings the cap
+  down to the level being fetched. On a ladder with a 240p floor and a 360p
+  level, the buffer is spent before the floor: once 420 s are buffered Auto does not go below 360p until fewer than
+  240 s are left (`floorHold.js` raises hls.js's `minAutoBitrate`), provided hls.js is already fetching at 360p or
+  above and no segment has failed since the last one loaded. iPhone's
   native HLS adapts on its own (it can't be gated) and the player reads changes from `resize`/`videoHeight`, which
   identifies the rung because heights are unique per film (Rungs: a transcoded rung exists only *strictly below*
   the source height, so `original` and e.g. `480p` never share a height; a test asserts uniqueness for every
@@ -167,8 +179,12 @@ read of the file. Direct play of the file remains only as a fallback.
   the copy rung when the file has one, and otherwise **direct-plays the file** (`GET /api/editions/{id}/stream`), so
   `original` is always available and always means the untouched source video. A pinned quality the film doesn't
   have (e.g. a remembered `720p` on a 480-line film) falls back to Auto.
-- **hls.js settings**: `maxBufferLength` 120 s and `maxBufferSize` raised so 120 s of the copy rung fits (~250 MB;
-  drops to whatever fits on lower rungs), back buffer 30 s; `fragLoadPolicy`/`playlistLoadPolicy`/
+- **hls.js settings**: `maxBufferLength` 120 s, `maxMaxBufferLength` 480 s and `maxBufferSize` 100 MB, so the
+  forward buffer follows bytes at the rung's peak bitrate: eight minutes at 480p and below, about 256 s at 720p,
+  130 s at a 1080p transcode, and 120 s on an original of 4.4 Mbit/s or more (deeper on a lighter one). A good
+  stretch of a poor link banks the next bad one (`train-link-plan.md`; until then it was 120 s on every rung). If
+  the browser's buffer fills, hls.js lowers its own ceiling and carries on. Back buffer 30 s;
+  `fragLoadPolicy`/`playlistLoadPolicy`/
   `manifestLoadPolicy` retries with backoff (a request that got no HTTP answer is retried like a 5xx); a segment may
   take 120 s, and one that has received nothing for 12 s times out into hls.js's own retries; on a fatal network
   error show "Reconnecting…" (polite status) and restart hls.js once, 5 s later (at once if the browser comes back

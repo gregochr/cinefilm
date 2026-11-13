@@ -25,7 +25,11 @@ public final class HealthRules {
     /** Most entries {@code minutes} may hold (six hours). */
     static final int MAX_MINUTES = 360;
 
+    /** A {@code minutes} row: minute, median kbit/s, rung played, ms moved, ms stalled. */
     private static final int MINUTE_FIELDS = 5;
+    /** The same with the seconds of film buffered ahead and the rung being fetched added. */
+    private static final int MINUTE_FIELDS_WITH_BUFFER = 7;
+    private static final int FETCHED_RUNG_CODE_INDEX = 6;
     private static final int RUNG_CODE_INDEX = 2;
     private static final long MAX_RUNG_CODE = 6;
     private static final int MAX_OPERATOR = 100;
@@ -110,7 +114,8 @@ public final class HealthRules {
     }
 
     private static boolean minute(List<Long> minute) {
-        if (minute == null || minute.size() != MINUTE_FIELDS) {
+        if (minute == null || (minute.size() != MINUTE_FIELDS
+            && minute.size() != MINUTE_FIELDS_WITH_BUFFER)) {
             return false;
         }
         for (Long value : minute) {
@@ -118,7 +123,11 @@ public final class HealthRules {
                 return false;
             }
         }
-        return minute.get(RUNG_CODE_INDEX) <= MAX_RUNG_CODE;
+        if (minute.get(RUNG_CODE_INDEX) > MAX_RUNG_CODE) {
+            return false;
+        }
+        return minute.size() != MINUTE_FIELDS_WITH_BUFFER
+            || minute.get(FETCHED_RUNG_CODE_INDEX) <= MAX_RUNG_CODE;
     }
 
     private static boolean client(ClientInfo client) {

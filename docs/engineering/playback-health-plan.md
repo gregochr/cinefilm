@@ -87,7 +87,8 @@ One record per viewing: one mount of the player on one edition. The browser make
   "kbpsHigh": 2400,
   "kbpsSamples": 41,
   "rungMs": { "480p": 58000, "360p": 113000 },
-  "minutes": [[0, 900, 4, 58000, 0], [1, 0, 5, 41600, 9400], [2, 760, 5, 60000, 0], [3, 800, 5, 11400, 0]],
+  "minutes": [[0, 900, 4, 58000, 0, 96, 4], [1, 0, 5, 41600, 9400, 3, 5], [2, 760, 5, 60000, 0, 31, 5],
+              [3, 800, 5, 11400, 0, 42, 4]],
   "client": { "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", "screen": "1512x982", "cores": 8 }
 }
 ```
@@ -113,7 +114,7 @@ One record per viewing: one mount of the player on one edition. The browser make
 | `netErrors`, `timeouts` | the player's own requests that got no HTTP answer at all: hls.js's loads that failed or ran out of time (details ending `LoadError` or `LoadTimeOut`, one per error event) and session requests (`poor-link-plan.md`). `timeouts` when the request ran out of time (details ending `LoadTimeOut`, a segment that received nothing for 12 s included, or a session request given up because the server could not be reached), `netErrors` otherwise. Neither: an error with an HTTP status (an expired session's 404, the encoder's 503), a load aborted on purpose (`aborted`), a playlist that arrived but could not be read (a hotel's sign-in page answering 200), the player's code failing to load, and the probe |
 | `kbpsLow`, `kbpsMedian`, `kbpsHigh`, `kbpsSamples` | 10th, 50th and 90th percentile (nearest rank) of the segment download speeds and how many there were; null, null, null and 0 with no samples (always so on iPhone) |
 | `rungMs` | time the picture was moving on each rung, by rung id |
-| `minutes` | one entry per minute in which something happened, at most 360, in order: `[minute number since the player opened, median kbit/s of that minute's samples (0 for none), the rung, ms the picture moved, ms stalled]`. The rung is the one being played when time was last counted in that minute (moving or stalled), as a code: 0 none (nothing moved or stalled in it, or no rung known yet), 1 `original`, 2 `1080p`, 3 `720p`, 4 `480p`, 5 `360p`, 6 `240p`. The current, unfinished minute is included |
+| `minutes` | one entry per minute in which something happened, at most 360, in order: `[minute number since the player opened, median kbit/s of that minute's samples (0 for none), the rung played, ms the picture moved, ms stalled, seconds buffered ahead, the rung being fetched]`. The rung played is the one on screen when time was last counted in that minute (moving or stalled), as a code: 0 none (nothing moved or stalled in it, or no rung known yet), 1 `original`, 2 `1080p`, 3 `720p`, 4 `480p`, 5 `360p`, 6 `240p`. Seconds buffered ahead (since `train-link-plan.md`) is the film buffered beyond the playhead at the minute's last heartbeat, in whole seconds (a hole of up to half a second between buffered ranges counts as continuous, as the player plays across one), and 0 for a minute without one: the film did not move in it, so read it beside the moved and stalled figures. The rung being fetched uses the same codes: the one hls.js was loading when time was last counted or a speed was last sampled in that minute, which runs ahead of the rung played by as much as is buffered; 0 on the iPhone and in direct play, which do not say. Records made before these two figures have rows of five. The current, unfinished minute is included |
 | `client` | the browser's own description: user agent, screen size, logical cores (null where the browser has none) |
 
 The per-minute track is what later steps need: a minute with the picture moving and no speed sample is a gap the
@@ -258,7 +259,8 @@ All behind the session cookie; the `PUT` needs `X-CineFilm`.
 2,000,000,000; `environment` one of the four; `engine` one of the three or null; `quality` one of
 `Ladder.QUALITY_IDS`; `operator` at most 100 characters; `client.userAgent` at most 300; `client.screen` matching
 `^\d{1,5}x\d{1,5}$`; `rungMs` keys only rung ids (`Ladder.QUALITY_IDS` without `auto`) with non-null values;
-`minutes` at most 360 entries of exactly five non-null numbers, the rung code from 0 to 6; nullable only `operator`,
+`minutes` at most 360 entries of exactly five or exactly seven non-null numbers (five from a tab still running a
+player older than `train-link-plan.md`), each rung code from 0 to 6; nullable only `operator`,
 `latencyMs`, `engine`, `startupMs`, the three `kbps` figures and `client.cores`; and the stored serialisation at
 most 16,000 characters. Unknown fields are ignored. A field added in a later release is nullable on the server.
 
@@ -394,8 +396,8 @@ After the Transcoding card. Loaded once when Admin opens (no polling).
 - **Backend** (`test-standards.md`): `HealthRulesTest` (the example passes; then one rule at a time at its
   boundary: every required field null, every nullable field null, each number at -1, 0, 2,000,000,000 and
   2,000,000,001, each enum-like field outside its list, 100 and 101, 300 and 301 characters, the screen pattern,
-  `rungMs` keys and a null value, 360 and 361 minutes, four, five and six numbers, a null inside a minute, the rung
-  code at 6 and 7); `PlaybackHealthServiceTest` on `TestData.CLOCK`; the controller slice (401, missing header,
+  `rungMs` keys and a null value, 360 and 361 minutes, four, five, six, seven and eight numbers, a null inside a
+  minute, each rung code at 6 and 7); `PlaybackHealthServiceTest` on `TestData.CLOCK`; the controller slice (401, missing header,
   exact error bodies, 20,000 and 20,001 characters, the race both ways); `PlaybackHealthApiTest` on H2 end to end
   with the report above, including `seq` higher, equal and lower through the real update, the 2,000 cap at its edge
   and the list without `minutes`; `PlaybackHealthIntegrationTest` on PostgreSQL (CI): the migration, a

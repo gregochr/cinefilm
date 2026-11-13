@@ -28,6 +28,7 @@ import {
 } from '../components/PlayerOverlays.jsx';
 import Scrubber from '../components/Scrubber.jsx';
 import { ErrorState } from '../components/StateMessages.jsx';
+import { bankedAhead } from '../player/buffered.js';
 import { useAutoHide } from '../player/autohide.js';
 import { toggleFullscreen } from '../player/fullscreen.js';
 import { QUESTION, questionText } from '../player/environment.js';
@@ -458,7 +459,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
     positionRef.current = video.currentTime * 1000;
     setPositionMs(positionRef.current);
     setBufferedMs(bufferedEnd(video));
-    health.beat(video.currentTime * 1000);
+    health.beat(video.currentTime * 1000, bankedAhead(video));
   };
 
   // Leave for the detail page only after the final progress report has landed (or the cap passes), so the

@@ -14,6 +14,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -55,7 +56,7 @@ public class ForcedDownloadRefresher {
     private boolean running;
     private boolean pending;
     private volatile Instant lastFinishedAt;
-    private volatile boolean deferred;
+    private final AtomicBoolean deferred = new AtomicBoolean();
 
     /** Creates the service; the executor is {@code forcedDownloadExecutor}. */
     public ForcedDownloadRefresher(OpenSubtitlesApi api, OpenSubtitlesBudget budget,
@@ -162,7 +163,7 @@ public class ForcedDownloadRefresher {
      * lock (the file is stored, so the retry costs nothing): the hourly nudge, so it is not left for the next day.
      */
     public void startIfDeferred() {
-        if (deferred) {
+        if (deferred.get()) {
             startDue();
         }
     }
@@ -181,7 +182,7 @@ public class ForcedDownloadRefresher {
 
     /** One pass over the due editions. */
     void run() {
-        deferred = false;
+        deferred.set(false);
         int added = 0;
         int nothing = 0;
         int failed = 0;
@@ -239,7 +240,9 @@ public class ForcedDownloadRefresher {
             AddOutcome outcome = service.add(due, due.promotion(), clock.instant());
             LOG.info("Edition {}: promoted OpenSubtitles file {} already downloaded, {}", due.editionId(),
                 due.promotion().getOsFileId(), outcome);
-            deferred |= outcome == AddOutcome.BUSY;
+            if (outcome == AddOutcome.BUSY) {
+                deferred.set(true);
+            }
             return outcome == AddOutcome.ADDED;
         }
         int limit = due.kind() == Kind.MISSING ? DownloadShares.forMissing(dailyLimit)
@@ -261,7 +264,9 @@ public class ForcedDownloadRefresher {
             AddOutcome outcome = service.add(due, reference, clock.instant());
             LOG.info("Edition {}: downloaded OpenSubtitles file {} for a {} subtitle, {}", due.editionId(),
                 candidate.fileId(), due.kind().name().toLowerCase(Locale.ROOT), outcome);
-            deferred |= outcome == AddOutcome.BUSY;
+            if (outcome == AddOutcome.BUSY) {
+                deferred.set(true);
+            }
             return outcome == AddOutcome.ADDED;
         }
         return false;

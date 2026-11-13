@@ -77,3 +77,23 @@ describe('Auto step-up gating (decision 3)', () => {
     expect(gate.tick(3)).toBe(0);
   });
 });
+
+describe('arrived()', () => {
+  it('restarts the healthy clock and leaves the cap as it was', () => {
+    const { gate, advance } = gateAt(1);
+    advance(HEALTHY_MS * 5);
+    gate.arrived();
+    advance(HEALTHY_MS - 1);
+    expect(gate.tick(3)).toBe(1);
+    advance(1);
+    expect(gate.tick(3)).toBe(2);
+  });
+
+  it('does nothing harmful before start', () => {
+    const { gate, advance } = gateAt();
+    gate.arrived();
+    advance(HEALTHY_MS);
+    expect(gate.tick(3)).toBe(null);
+    expect(gate.start(1)).toBe(1);
+  });
+});

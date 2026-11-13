@@ -76,16 +76,21 @@ describe('resume: boundaries', () => {
 
   it('uses the credits marker only when it is a positive number', () => {
     expect(endThresholdMs(10_000, 8_000)).toBe(8_000);
-    expect(endThresholdMs(10_000, 0)).toBe(9_200);
-    expect(endThresholdMs(10_000, null)).toBe(9_200);
-    expect(endThresholdMs(10_000, undefined)).toBe(9_200);
-    expect(endThresholdMs(10_000, NaN)).toBe(9_200);
+    expect(endThresholdMs(10_000, 0)).toBe(9_700);
+    expect(endThresholdMs(10_000, null)).toBe(9_700);
+    expect(endThresholdMs(10_000, undefined)).toBe(9_700);
+    expect(endThresholdMs(10_000, NaN)).toBe(9_700);
+  });
+
+  it('does not reach the end between 92% and 96% of the runtime without a marker', () => {
+    expect(hasReachedEnd(9_200, 10_000, null)).toBe(false);
+    expect(hasReachedEnd(9_600, 10_000, null)).toBe(false);
   });
 
   it('reaches the end exactly at the threshold, not a millisecond before', () => {
-    expect(hasReachedEnd(9_199, 10_000)).toBe(false);
-    expect(hasReachedEnd(9_200, 10_000)).toBe(true);
-    expect(hasReachedEnd(9_201, 10_000)).toBe(true);
+    expect(hasReachedEnd(9_699, 10_000)).toBe(false);
+    expect(hasReachedEnd(9_700, 10_000)).toBe(true);
+    expect(hasReachedEnd(9_701, 10_000)).toBe(true);
     expect(hasReachedEnd(7_999, 10_000, 8_000)).toBe(false);
     expect(hasReachedEnd(8_000, 10_000, 8_000)).toBe(true);
   });

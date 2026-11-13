@@ -161,7 +161,9 @@ Custom controls over HTML5 `<video>`.
   once per network, and not a cue.
 
 **Quality menu**
-- Options: Auto (default), Original, 1080p, 720p, 480p.
+- Options: Auto (default), Original, 1080p, 720p, 480p. Below them, 360p and 240p for the worst links: every film
+  above 240 lines lists both (owner, 2026-11-12; `docs/engineering/train-link-plan.md`). A film lists only the
+  qualities below its own height.
 - Each row shows its bitrate in mono. Auto shows what it's currently using ("now Original").
 - The current choice gets an amber tick.
 - **Worker offline:** Auto and any lower quality that **isn't pre-made** are disabled. A footer reads "Lower qualities unavailable right now — the transcode worker is offline. Pre-made versions still play." (`13`).
@@ -184,7 +186,8 @@ When resuming, the frame at the resume point is shown behind the startup indicat
 **Auto step-down:** a toast at the top centre reads "Switching to 720p for smoother playback". It shows for about 4 s, is non-blocking, and plays no sound. On a phone held upright the top bar fills the width (the title, then the indicator), so a toast sits just under it.
 
 **End of film**
-- Appears when playback reaches the credits marker (decision 1).
+- Appears when playback reaches the credits marker, or **97%** of runtime if there's no marker (owner, 2026-11-12:
+  92% interrupted climaxes). Watched still follows decision 1.
 - Shows "The end", the title, and the year · director.
 - Primary: **Mark as watched**, focused by default.
 - Secondary: **Back to library**.
@@ -208,7 +211,7 @@ When resuming, the frame at the resume point is shown behind the startup indicat
 
 1. **Watched:** a film is marked watched automatically when playback reaches the **end-credits marker**, or **92%** of runtime if there's no marker. **Resume rewinds 10 s** from the saved position; the button label still shows the saved position.
 2. **Quality and subtitles:** both the detail page and the player have them. The last choice is **remembered per film**, and the detail page pre-selects it.
-3. **Auto step-up:** after a step-down, Auto may step back **up one level at a time** after about **60 s** of healthy throughput. Each change shows a quiet toast; the step-down copy is above, and step-up uses the same pattern, e.g. "Back to 1080p".
+3. **Auto step-up:** after a step-down, Auto may step back **up one level at a time** after about **60 s** of healthy throughput. Each change shows a quiet toast; the step-down copy is above, and step-up uses the same pattern, e.g. "Back to 1080p". (Since `docs/engineering/train-link-plan.md`, owner 2026-11-12: Auto has a 240p floor, and once seven minutes of film are buffered it holds 360p and does not step down to 240p until fewer than four are left. The toasts and their copy are unchanged.)
 4. **Weekly Home row:** one theme (a decade, genre or director drawn from the library) is chosen **each Monday**. It never changes while the page is open.
 5. **Search:** **live as you type** across title, actor and director. The header dropdown is undebounced and client-side (no request per keystroke); the Library page keeps its debounced server search. The header dropdown's design and rules are in `docs/design/search/`. Names everywhere link to a **Person page** listing only owned films.
 6. **Forced subtitles:** when Subtitles is **Off** and the film has an English (forced) track, the forced track plays automatically. Choosing full English replaces it. The UI shows "Off · forced when needed".

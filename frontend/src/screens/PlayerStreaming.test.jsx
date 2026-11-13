@@ -23,14 +23,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// hls.js lists levels lowest bitrate first: the session fixture is original 1080p, 720p, 480p, 360p.
+// hls.js lists levels lowest bitrate first: the session fixture is original 1080p, 720p, 480p, 360p, 240p.
 const LEVELS = [
+  { height: 240, bitrate: 250000 },
   { height: 360, bitrate: 600000 },
   { height: 480, bitrate: 1000000 },
   { height: 720, bitrate: 2500000 },
   { height: 1080, bitrate: 24000000 },
 ];
-const [P360, P480, P720, ORIGINAL] = [0, 1, 2, 3];
+const [, P360, P480, P720, ORIGINAL] = [0, 1, 2, 3, 4];
 const DIRECT = '/api/editions/11/stream';
 
 // Heat with every rung available (the worker is up), or Auto and the rungs off (it is down).
@@ -159,7 +160,10 @@ describe('starting a session', () => {
   });
 
   it('a remembered quality the edition does not offer starts on Auto', async () => {
-    const { log } = await open({ film: heat({ quality: '240p' }) });
+    // a small film has no 240p rung to remember
+    const film = heat({ quality: '240p' });
+    film.editions[0].qualities = film.editions[0].qualities.filter((q) => q.id !== '240p');
+    const { log } = await open({ film });
     expect(log.posted[0].quality).toBe('auto');
     expect(screen.getByRole('button', { name: 'Quality' })).toHaveTextContent('Auto');
   });
