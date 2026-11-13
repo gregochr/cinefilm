@@ -86,7 +86,8 @@ public class CreditsDetectionService {
 
     /**
      * The files to analyse: the last original part of every edition that is present and playable, has a fingerprint
-     * and a duration, and either has no stored result or has one for a different fingerprint. Part 1 of a split
+     * and a duration, and either has no stored result, or has one for a different fingerprint, or has one made by an
+     * older {@link CreditsTuning#ANALYSIS_VERSION}. Part 1 of a split
      * edition is never due. Editions in progress (a position past 0, not removed from Continue watching) come first,
      * then the most recently added files. Three queries in all, however many films there are.
      *
@@ -94,9 +95,9 @@ public class CreditsDetectionService {
      */
     @Transactional(readOnly = true)
     public List<DueFile> dueFiles() {
-        Map<Long, String> done = new HashMap<>();
+        Map<Long, Stored> done = new HashMap<>();
         for (Stored stored : detections.findAllStored()) {
-            done.put(stored.mediaFileId(), stored.fingerprint());
+            done.put(stored.mediaFileId(), stored);
         }
         Set<Long> inProgress = new HashSet<>(states.findInProgressEditionIds());
         record Candidate(DueFile due, boolean inProgress, Instant addedAt) {
@@ -109,7 +110,9 @@ public class CreditsDetectionService {
                 continue;
             }
             String fingerprint = last.fingerprint();
-            if (fingerprint.equals(done.get(last.getId()))) {
+            Stored current = done.get(last.getId());
+            if (current != null && fingerprint.equals(current.fingerprint())
+                && current.analysisVersion() >= CreditsTuning.ANALYSIS_VERSION) {
                 continue;
             }
             due.add(new Candidate(new DueFile(last.getId(), last.getPath(), fingerprint, last.timelineDurationMs(),
@@ -131,8 +134,8 @@ public class CreditsDetectionService {
 
     /**
      * Analyses one file: five frames for the picture area, one every 5 seconds across the window to find a candidate,
-     * and, when there is one, a dense decode around it to place the start. The cue starts of the film's full English
-     * track are used when the file has a current cached read of them; no subtitle track is ever read here.
+     * and, when there is one, a dense decode from just before it to place the start. The cue starts of the film's full
+     * English track are used when the file has a current cached read of them; no subtitle track is ever read here.
      *
      * @param due the file
      * @param file the file on disk (an absolute path under the library root)
@@ -199,6 +202,7 @@ public class CreditsDetectionService {
         CreditsDetection row = detections.findById(file.getId()).orElseGet(CreditsDetection::new);
         row.setMediaFileId(file.getId());
         row.setFingerprint(due.fingerprint());
+        row.setAnalysisVersion(CreditsTuning.ANALYSIS_VERSION);
         row.setVerdict(result.verdict());
         row.setOffsetMs(result.offsetMs());
         String reasons = String.join("\n", result.reasons());

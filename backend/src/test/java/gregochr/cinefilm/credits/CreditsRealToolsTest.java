@@ -131,13 +131,15 @@ class CreditsRealToolsTest {
             });
             // Plain colour has a mid luma, not black or white.
             assertThat(active.getFirst().luma(10, 10)).isBetween(90, 160);
-            assertThat(dense).hasSizeBetween(358, 360);
-            assertThat(dense.getFirst().offsetMs()).isEqualTo(273_000);
-            assertThat(dense.get(1).offsetMs()).isEqualTo(273_500);
-            // Index 100 is 323 s, before the credits: plain colour. Index 200 is 373 s, inside the crawl.
-            assertThat(dense.get(100).frame().luma(0, 0)).isBetween(90, 160);
+            // The range is 10 s before the candidate (353 s) to the end of the 480 s clip: 127 s, 254 frames.
+            assertThat(dense).hasSizeBetween(252, 254);
+            assertThat(dense.getFirst().offsetMs()).isEqualTo(353_000);
+            assertThat(dense.get(1).offsetMs()).isEqualTo(353_500);
+            // The crawl starts at 360 s, which is index 14. Index 6 is 356 s, well clear of that boundary, so plain
+            // colour even if a seek or the fps filter slips a frame; index 100 is 403 s, inside the crawl.
+            assertThat(dense.get(6).frame().luma(0, 0)).isBetween(90, 160);
             boolean white = false;
-            GreyFrame crawl = dense.get(200).frame();
+            GreyFrame crawl = dense.get(100).frame();
             for (int y = 0; y < crawl.height() && !white; y++) {
                 for (int x = 0; x < crawl.width() && !white; x++) {
                     white = crawl.luma(x, y) > 200;

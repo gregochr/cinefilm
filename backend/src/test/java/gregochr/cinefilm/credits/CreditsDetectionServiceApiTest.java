@@ -127,14 +127,15 @@ class CreditsDetectionServiceApiTest extends ApiTestBase {
         return service.dueFiles().stream().map(DueFile::mediaFileId).toList();
     }
 
-    private void stored(MediaFile file, String fingerprint) {
+    private CreditsDetection stored(MediaFile file, String fingerprint) {
         CreditsDetection row = new CreditsDetection();
         row.setMediaFileId(file.getId());
         row.setFingerprint(fingerprint);
         row.setVerdict(CreditsVerdict.NOT_FOUND);
         row.setReasons("No credits");
         row.setCheckedAt(NOW);
-        detections.saveAndFlush(row);
+        row.setAnalysisVersion(CreditsTuning.ANALYSIS_VERSION);
+        return detections.saveAndFlush(row);
     }
 
     private static DueFile due(MediaFile file) {
@@ -171,6 +172,16 @@ class CreditsDetectionServiceApiTest extends ApiTestBase {
         stored(part(film, 1), part(film, 1).fingerprint());
 
         assertThat(dueIds()).isEmpty();
+    }
+
+    @Test
+    void aFileWhoseStoredResultIsFromAnOlderAnalysisVersionIsDueAgain() {
+        Film film = filmOf("Taken");
+        CreditsDetection row = stored(part(film, 1), part(film, 1).fingerprint());
+        row.setAnalysisVersion(CreditsTuning.ANALYSIS_VERSION - 1);
+        detections.saveAndFlush(row);
+
+        assertThat(dueIds()).containsExactly(part(film, 1).getId());
     }
 
     @Test

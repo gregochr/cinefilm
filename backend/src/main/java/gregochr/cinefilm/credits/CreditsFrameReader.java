@@ -27,7 +27,7 @@ import org.springframework.stereotype.Component;
  * <p>Three kinds of read, all single-frame input seeks except the last (a seek reads about one group of pictures, so
  * the window costs a little over SMB instead of a sequential decode of the whole ending): five frames for the active
  * area, one frame every {@link CreditsTuning#SAMPLE_MS} across the window (the coarse pass), and one sequential decode
- * at two frames a second around the candidate (the dense pass).
+ * at two frames a second from just before the candidate for five minutes (the dense pass).
  */
 @Component
 public class CreditsFrameReader {
@@ -36,8 +36,8 @@ public class CreditsFrameReader {
 
     /** How long one single-frame seek may run: seconds normally, over a slow share a good deal more. */
     static final Duration SEEK_TIMEOUT = Duration.ofSeconds(90);
-    /** How long the dense decode (360 frames from a seek) may run. */
-    static final Duration DENSE_TIMEOUT = Duration.ofMinutes(5);
+    /** How long the dense decode (600 frames from a seek) may run. */
+    static final Duration DENSE_TIMEOUT = Duration.ofMinutes(9);
     /** The width every frame is scaled to. */
     static final int OUTPUT_WIDTH = 480;
     /** How many frames the active area is measured on. */
@@ -46,8 +46,10 @@ public class CreditsFrameReader {
     static final long WINDOW_MAX_MS = 35 * 60_000L;
     /** ...and at most this percent of the file. */
     static final int WINDOW_PERCENT = 40;
-    /** The dense pass covers this long, centred on the candidate. */
-    static final long DENSE_SPAN_MS = 180_000;
+    /** The dense pass starts this long before the candidate. */
+    static final long DENSE_LEAD_MS = 10_000;
+    /** The dense pass covers this long, from {@link #DENSE_LEAD_MS} before the candidate. */
+    static final long DENSE_SPAN_MS = 300_000;
     /** The dense pass takes this many frames a second. */
     static final int DENSE_FPS = 2;
     /** One dense frame lasts this long. */
@@ -129,10 +131,10 @@ public class CreditsFrameReader {
         return offsets;
     }
 
-    /** The dense pass: 3 minutes centred on the candidate, clamped to the file at both ends. */
+    /** The dense pass: 5 minutes from 10 seconds before the candidate, clamped to the file at both ends. */
     static DenseRange denseRange(long candidateMs, long durationMs) {
-        long start = Math.max(0, candidateMs - DENSE_SPAN_MS / 2);
-        long end = Math.min(durationMs, candidateMs + DENSE_SPAN_MS / 2);
+        long start = Math.max(0, candidateMs - DENSE_LEAD_MS);
+        long end = Math.min(durationMs, candidateMs - DENSE_LEAD_MS + DENSE_SPAN_MS);
         return new DenseRange(start, Math.max(0, end - start));
     }
 
@@ -264,8 +266,8 @@ public class CreditsFrameReader {
         }
 
         /**
-         * Two frames a second for 3 minutes centred on the candidate, clamped to the file. A frame's offset is the
-         * seek time plus its index times 500 ms, never a count of decoded frames.
+         * Two frames a second for 5 minutes from 10 seconds before the candidate, clamped to the file. A frame's
+         * offset is the seek time plus its index times 500 ms, never a count of decoded frames.
          */
         public List<DenseFrame> denseFrames(long candidateMs) {
             DenseRange range = denseRange(candidateMs, durationMs);

@@ -157,18 +157,40 @@ class CreditsDetectionServiceTest {
         Edition done = editionOf(1L, "Done", 1, NOW);
         Edition changed = editionOf(2L, "Changed", 1, NOW.minusSeconds(1));
         when(detections.findAllStored()).thenReturn(List.of(
-            new Stored(part(done, 1).getId(), part(done, 1).fingerprint()),
-            new Stored(part(changed, 1).getId(), "1001:1")));
+            new Stored(part(done, 1).getId(), part(done, 1).fingerprint(), CreditsTuning.ANALYSIS_VERSION),
+            new Stored(part(changed, 1).getId(), "1001:1", CreditsTuning.ANALYSIS_VERSION)));
         library(done, changed);
 
         assertThat(dueIds()).containsExactly(part(changed, 1).getId());
     }
 
     @Test
+    void aStoredResultFromAnOlderAnalysisVersionIsDueAgainEvenWithTheSameFingerprint() {
+        Edition old = editionOf(1L, "Old", 1, NOW);
+        Edition current = editionOf(2L, "Current", 1, NOW.minusSeconds(1));
+        when(detections.findAllStored()).thenReturn(List.of(
+            new Stored(part(old, 1).getId(), part(old, 1).fingerprint(), CreditsTuning.ANALYSIS_VERSION - 1),
+            new Stored(part(current, 1).getId(), part(current, 1).fingerprint(), CreditsTuning.ANALYSIS_VERSION)));
+        library(old, current);
+
+        assertThat(dueIds()).containsExactly(part(old, 1).getId());
+    }
+
+    @Test
+    void aStoredResultFromANewerAnalysisVersionIsNotDue() {
+        Edition newer = editionOf(1L, "Newer", 1, NOW);
+        when(detections.findAllStored()).thenReturn(List.of(
+            new Stored(part(newer, 1).getId(), part(newer, 1).fingerprint(), CreditsTuning.ANALYSIS_VERSION + 1)));
+        library(newer);
+
+        assertThat(dueIds()).isEmpty();
+    }
+
+    @Test
     void aStoredResultOfAnEarlierPartDoesNotCountForTheLastPart() {
         Edition split = editionOf(2L, "The Long Film", 2, NOW);
         when(detections.findAllStored()).thenReturn(List.of(
-            new Stored(part(split, 1).getId(), part(split, 1).fingerprint())));
+            new Stored(part(split, 1).getId(), part(split, 1).fingerprint(), CreditsTuning.ANALYSIS_VERSION)));
         library(split);
 
         assertThat(dueIds()).containsExactly(part(split, 2).getId());
@@ -468,6 +490,7 @@ class CreditsDetectionServiceTest {
         assertThat(row.getVerdict()).isEqualTo(CreditsVerdict.FOUND);
         assertThat(row.getOffsetMs()).isEqualTo(3_723_500L);
         assertThat(row.getReasons()).isEqualTo("Text moves up\nNobody is talking");
+        assertThat(row.getAnalysisVersion()).isEqualTo(CreditsTuning.ANALYSIS_VERSION);
         assertThat(row.getCheckedAt()).isEqualTo(NOW);
         assertThat(lock.holder()).isNull();
         verify(transactions).commit(status);
@@ -481,6 +504,7 @@ class CreditsDetectionServiceTest {
         CreditsDetection existing = new CreditsDetection();
         existing.setMediaFileId(10L);
         existing.setFingerprint("old");
+        existing.setAnalysisVersion(1);
         existing.setVerdict(CreditsVerdict.FOUND);
         existing.setOffsetMs(99L);
         existing.setReasons("old");
@@ -494,6 +518,7 @@ class CreditsDetectionServiceTest {
         assertThat(existing.getOffsetMs()).isNull();
         assertThat(existing.getFingerprint()).isEqualTo(PRINT);
         assertThat(existing.getReasons()).isEqualTo("None");
+        assertThat(existing.getAnalysisVersion()).isEqualTo(CreditsTuning.ANALYSIS_VERSION);
         assertThat(existing.getCheckedAt()).isEqualTo(NOW);
         verify(transactions).commit(status);
     }
