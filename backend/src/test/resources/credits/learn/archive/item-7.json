@@ -1,0 +1,41 @@
+{
+ "MediaContainer": {
+  "size": 1,
+  "Metadata": [
+   {
+    "ratingKey": "7",
+    "type": "movie",
+    "duration": 6000000,
+    "Media": [
+     {
+      "duration": 6002000,
+      "Part": [
+       {
+        "file": "/Volumes/Test Media/Movies/Eta.m4v",
+        "size": 1
+       }
+      ]
+     },
+     {
+      "duration": 6001000,
+      "Part": [
+       {
+        "file": "/Volumes/Test Media/Movies/Eta Two.mkv",
+        "size": 1
+       }
+      ]
+     }
+    ],
+    "Marker": [
+     {
+      "id": 1,
+      "type": "credits",
+      "startTimeOffset": 4800000,
+      "endTimeOffset": 5400000,
+      "final": false
+     }
+    ]
+   }
+  ]
+ }
+}

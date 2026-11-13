@@ -1,0 +1,53 @@
+{
+ "MediaContainer": {
+  "size": 1,
+  "Metadata": [
+   {
+    "ratingKey": "4",
+    "type": "movie",
+    "duration": 6000000,
+    "Media": [
+     {
+      "duration": 6000000,
+      "Part": [
+       {
+        "file": "/Volumes/Test Media/Movies/Delta.m4v",
+        "size": 1
+       }
+      ]
+     }
+    ],
+    "Marker": [
+     {
+      "id": 1,
+      "type": "credits",
+      "startTimeOffset": 4800000,
+      "endTimeOffset": 5000000,
+      "final": false
+     },
+     {
+      "id": 1,
+      "type": "credits",
+      "startTimeOffset": 4900000,
+      "endTimeOffset": 4950000,
+      "final": false
+     },
+     {
+      "id": 1,
+      "type": "credits",
+      "startTimeOffset": 4990000,
+      "endTimeOffset": 5200000,
+      "final": false
+     },
+     {
+      "id": 1,
+      "type": "credits",
+      "startTimeOffset": 5200000,
+      "endTimeOffset": 5300000,
+      "final": false
+     }
+    ]
+   }
+  ]
+ }
+}

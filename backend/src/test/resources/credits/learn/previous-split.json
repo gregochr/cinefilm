@@ -1,0 +1,35 @@
+{
+ "date": "2026-11-01",
+ "films": [
+  {
+   "film_id": 1,
+   "unit_key": "tmdb:1001",
+   "side": "test",
+   "fold": null
+  },
+  {
+   "film_id": 4,
+   "unit_key": "tmdb:1004",
+   "side": "dev",
+   "fold": 4
+  },
+  {
+   "film_id": 7,
+   "unit_key": "tmdb:1007",
+   "side": "test",
+   "fold": null
+  },
+  {
+   "film_id": 99,
+   "unit_key": "ctmdb:500",
+   "side": "test",
+   "fold": null
+  }
+ ],
+ "looks": [
+  {
+   "look": "L5",
+   "date": "2026-11-02"
+  }
+ ]
+}

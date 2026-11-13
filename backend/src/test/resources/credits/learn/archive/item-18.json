@@ -1,0 +1,32 @@
+{
+ "MediaContainer": {
+  "size": 1,
+  "Metadata": [
+   {
+    "ratingKey": "18",
+    "type": "movie",
+    "duration": 6000000,
+    "Media": [
+     {
+      "duration": 6000000,
+      "Part": [
+       {
+        "file": "/Volumes/Test Media/Movies/Rho.m4v",
+        "size": 1
+       }
+      ]
+     }
+    ],
+    "Marker": [
+     {
+      "id": 1,
+      "type": "credits",
+      "startTimeOffset": 5900000,
+      "endTimeOffset": 6500000,
+      "final": false
+     }
+    ]
+   }
+  ]
+ }
+}
