@@ -327,6 +327,36 @@ class CreditsMotionTest {
     }
 
     @Test
+    void aMergedRunStartsAtItsFirstGuardPassingPairAndCountsEvenWhenItsFirstPairFailsTheGuard() {
+        // Frame 30 adds 15 px (F+g: a changed pair that fails the guard), frame 31 adds 90 (passes), frame 32 is F
+        // again (passes). The run starts at 30 but its change lands at 31. A second plain flicker makes two events.
+        DenseBuilder builder = new DenseBuilder().add(SyntheticFrames.floors(false, false), 30)
+            .add(SyntheticFrames.floors(false, true), 1).add(SyntheticFrames.floors(true, true), 1)
+            .add(SyntheticFrames.floors(false, false), 30).add(SyntheticFrames.floors(true, false), 1)
+            .add(SyntheticFrames.floors(false, false), 30);
+
+        assertThat(CreditsMotion.analyse(builder.frames(), WHOLE, PEAK))
+            .isEqualTo(new CreditsMotion.Motion(Kind.CARDS, 31));
+    }
+
+    /** Lights of {@code pixels} pixels toggling every 8 frames beside dim text, four times each way. */
+    private static List<GreyFrame> dimLightsToggling(int pixels) {
+        DenseBuilder builder = new DenseBuilder();
+        for (int i = 0; i < 4; i++) {
+            builder.add(SyntheticFrames.dimTextWithDimLights(0), 8)
+                .add(SyntheticFrames.dimTextWithDimLights(pixels), 8);
+        }
+        return builder.frames();
+    }
+
+    @Test
+    void aChangeNeedsAThousandthOfThePixelsFourteenIsUnderAndFifteenIsOverWithTheGuardPassingBoth() {
+        // 14 px is 0.00097 of the 14,400, 15 px is 0.00104; every changed pixel is a bright one, so the guard passes.
+        assertThat(detect(dimLightsToggling(14))).isEqualTo(Kind.NONE);
+        assertThat(detect(dimLightsToggling(15))).isEqualTo(Kind.CARDS);
+    }
+
+    @Test
     void aRealCardThatDiffersOnlyInOneNameIsNotCardsALateOrNothingResult() {
         // Two fixed lines and a name that changes: 24 of 108 bright pixels. The guard refuses it, which costs a
         // missed card sequence (late or nothing) and is never an early marker.

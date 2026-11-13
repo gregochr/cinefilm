@@ -315,6 +315,21 @@ final class SyntheticFrames {
         return canvas.frame();
     }
 
+    /**
+     * A card of 36 pixels at luma 85 with {@code pixels} pixels of dim lights (luma 100, a changed pixel and a bright
+     * one for the card check) on one row, in three runs; 0 means no lights.
+     */
+    static GreyFrame dimTextWithDimLights(int pixels) {
+        Canvas canvas = new Canvas(W, H, 0).line(20, 3, 85);
+        if (pixels > 0) {
+            int[] xs = {40, 70, 100};
+            for (int i = 0; i < 3; i++) {
+                canvas.rect(xs[i], 50, pixels / 3 + (i < pixels % 3 ? 1 : 0), 1, 100);
+            }
+        }
+        return canvas.frame();
+    }
+
     /** The original letterboxed night scene with a fourth window (6x6, 36 pixels) lit or dark. */
     static GreyFrame nightWithFourthWindow(boolean lit) {
         Canvas canvas = new Canvas(W, H, 0)

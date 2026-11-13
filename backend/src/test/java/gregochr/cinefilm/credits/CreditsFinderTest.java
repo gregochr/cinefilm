@@ -456,8 +456,8 @@ class CreditsFinderTest {
 
     @Test
     void aSingleFlickerOfFloorsOfLightsWhoseMiddlePairsAreSmallIsUnsureNotFound() {
-        // One flicker (F -> F+G -> F+G+g -> F+g -> F) every 35 s would be two card changes in one 30 s window if the
-        // small middle pairs split the run; as one event it is not cards.
+        // One flicker (F -> F+G -> F+G+g -> F+g -> F) every 36.5 s (73 frames) would be two card changes in one
+        // 30 s window if the small middle pairs split the run; as one event it is not cards.
         DenseBuilder builder = filmThen();
         for (int flicker = 0; flicker < 4; flicker++) {
             builder.add(SyntheticFrames.floors(false, false), 60).add(SyntheticFrames.floors(true, false), 1)
