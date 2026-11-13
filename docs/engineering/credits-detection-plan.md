@@ -247,10 +247,11 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
      **plus `max(0, the matched Media's Plex duration − the shortest of the item's and every Media's Plex
      durations)`**: Plex does not say which copy it measured, so assuming the shortest can only move the marker
      later, and both sides of the subtraction come from Plex. The edition guard is checked again on that shifted
-     `start_ms` against the CineFilm file's duration: a copy that fails it, or whose duration is unknown, is skipped
-     and counted in the report; the item's other copies are still stored. Running it again replaces rows; it never
-     deletes a row for a film Plex no longer lists. The report says imported, skipped (with the reason) and unmatched
-     counts.
+     `start_ms` against the CineFilm file's duration: a copy that fails it, whose CineFilm duration is unknown, or
+     whose CineFilm duration differs from its matched Media's Plex duration by more than 2 s (the file changed after
+     Plex measured it), is skipped and counted in the report; an item or Media with no Plex duration is skipped too,
+     with its own reason; the item's other copies are still stored. Running it again replaces rows; it never deletes
+     a row for a film Plex no longer lists. The report says imported, skipped (with the reason) and unmatched counts.
    - Nothing is applied.
 2b. **Detector fixes, still report only.** The classifier rules in "Per-frame features" and the motion changes in
    "The motion check":
