@@ -57,38 +57,36 @@ public final class CreditsMotion {
      * @return the kind of movement and the index where it begins
      */
     public static Motion analyse(List<GreyFrame> frames, ActiveArea area, int peak) {
-        if (frames.size() < CreditsTuning.MOTION_MIN_FRAMES || !mostlyText(frames, area, peak)) {
+        if (frames.size() < CreditsTuning.MOTION_MIN_FRAMES) {
+            return NO_MOTION;
+        }
+        List<FrameClass> classes = new ArrayList<>(frames.size());
+        for (GreyFrame frame : frames) {
+            classes.add(FrameFeatures.measure(frame, area, peak).frameClass());
+        }
+        if (!mostlyText(classes)) {
             return NO_MOTION;
         }
         List<int[]> profiles = new ArrayList<>(frames.size());
         for (GreyFrame frame : frames) {
             profiles.add(rowProfile(frame, area, peak));
         }
-        int crawlStart = crawlStart(profiles, area.height());
+        int crawlStart = crawlStart(profiles, classes, area.height());
         if (crawlStart >= 0) {
             return new Motion(Kind.CRAWL, crawlStart);
         }
-        int cardsStart = cardsStart(frames, area, peak);
+        int cardsStart = cardsStart(frames, classes, area, peak);
         if (cardsStart >= 0) {
             return new Motion(Kind.CARDS, cardsStart);
         }
         return NO_MOTION;
     }
 
-    private static boolean mostlyText(List<GreyFrame> frames, ActiveArea area, int peak) {
-        int text = 0;
-        int nonPicture = 0;
-        for (GreyFrame frame : frames) {
-            FrameClass frameClass = FrameFeatures.measure(frame, area, peak).frameClass();
-            if (frameClass != FrameClass.PICTURE) {
-                nonPicture++;
-            }
-            if (frameClass == FrameClass.TEXT_ON_DARK) {
-                text++;
-            }
-        }
-        return nonPicture >= frames.size() * CreditsTuning.MOTION_MIN_NON_PICTURE_SHARE
-            && text >= frames.size() * CreditsTuning.MOTION_MIN_TEXT_SHARE;
+    private static boolean mostlyText(List<FrameClass> classes) {
+        long text = classes.stream().filter(c -> c == FrameClass.TEXT_ON_DARK).count();
+        long nonPicture = classes.stream().filter(c -> c != FrameClass.PICTURE).count();
+        return nonPicture >= classes.size() * CreditsTuning.MOTION_MIN_NON_PICTURE_SHARE
+            && text >= classes.size() * CreditsTuning.MOTION_MIN_TEXT_SHARE;
     }
 
     /** Bright pixels per row inside the area. */
@@ -108,7 +106,7 @@ public final class CreditsMotion {
     }
 
     /** The index of the first frame of the first steadily moving pair, or -1 when it is not a crawl. */
-    private static int crawlStart(List<int[]> profiles, int height) {
+    private static int crawlStart(List<int[]> profiles, List<FrameClass> classes, int height) {
         int maxShift = Math.max(1, (int) (height * CreditsTuning.CRAWL_MAX_SHIFT_SHARE));
         int informative = 0;
         List<Integer> shifts = new ArrayList<>();
@@ -121,7 +119,8 @@ public final class CreditsMotion {
             }
             informative++;
             int shift = matchingShift(before, after, maxShift);
-            if (shift > 0) {
+            boolean text = classes.get(i - 1) == FrameClass.TEXT_ON_DARK && classes.get(i) == FrameClass.TEXT_ON_DARK;
+            if (shift > 0 && text) {
                 shifts.add(shift);
                 pairStarts.add(i - 1);
             }
@@ -171,34 +170,47 @@ public final class CreditsMotion {
         return total == 0 ? 1.0 : (double) difference / total;
     }
 
-    /** The index of the frame where the first card change lands, or -1 when it is not cards. */
-    private static int cardsStart(List<GreyFrame> frames, ActiveArea area, int peak) {
+    /**
+     * The index of the frame where the first card change lands, or -1 when it is not cards. A change counts only
+     * between two text frames, with at most black cuts between them: going into or out of picture never does. Changes
+     * on consecutive frames are one event (a fade or a crawl), not several cards.
+     */
+    private static int cardsStart(List<GreyFrame> frames, List<FrameClass> classes, ActiveArea area, int peak) {
         double limit = CreditsTuning.CARD_CHANGE_DIFF_FRACTION * peak;
         double pixels = (double) area.width() * area.height();
-        int pairs = frames.size() - 1;
         int still = 0;
-        int changes = 0;
-        boolean inChange = false;
-        int firstChange = -1;
         for (int i = 1; i < frames.size(); i++) {
-            double changed = changedPixels(frames.get(i - 1), frames.get(i), area, limit) / pixels;
-            if (changed >= CreditsTuning.CARD_CHANGE_MIN_SHARE) {
-                if (!inChange) {
-                    changes++;
-                }
-                if (firstChange < 0) {
-                    firstChange = i;
-                }
-                inChange = true;
-            } else {
-                inChange = false;
-            }
-            if (changed <= CreditsTuning.CARD_STILL_MAX_SHARE) {
+            if (changedPixels(frames.get(i - 1), frames.get(i), area, limit) / pixels
+                <= CreditsTuning.CARD_STILL_MAX_SHARE) {
                 still++;
             }
         }
+        int changes = 0;
+        int firstChange = -1;
+        int previousText = -1;
+        boolean lastChanged = false;
+        for (int i = 0; i < frames.size(); i++) {
+            FrameClass frameClass = classes.get(i);
+            if (frameClass == FrameClass.PICTURE) {
+                previousText = -1;
+                lastChanged = false;
+            } else if (frameClass == FrameClass.TEXT_ON_DARK) {
+                if (previousText >= 0) {
+                    boolean changed = changedPixels(frames.get(previousText), frames.get(i), area, limit) / pixels
+                        >= CreditsTuning.CARD_CHANGE_MIN_SHARE;
+                    if (changed && !lastChanged) {
+                        changes++;
+                        if (firstChange < 0) {
+                            firstChange = i;
+                        }
+                    }
+                    lastChanged = changed;
+                }
+                previousText = i;
+            }
+        }
         boolean cards = changes >= CreditsTuning.CARD_MIN_CHANGES
-            && still >= pairs * CreditsTuning.CARD_MIN_STILL_SHARE;
+            && still >= (frames.size() - 1) * CreditsTuning.CARD_MIN_STILL_SHARE;
         return cards ? firstChange : -1;
     }
 

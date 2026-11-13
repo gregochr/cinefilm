@@ -271,6 +271,38 @@ class CreditsFinderTest {
     }
 
     @Test
+    void aStaticCardThenAShortPictureThenACrawlStartsAtTheCrawl() {
+        // 20 s of card, 2 s of picture, then the crawl: going into and out of the picture is not a card change.
+        CreditsResult result = refine(filmThen().add(SyntheticFrames.card(0), 40).add(SyntheticFrames.picture(), 4)
+            .crawl(200, 3));
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
+        assertThat(result.offsetMs()).isEqualTo(START + 22_000);
+        assertThat(result.reasons()).containsExactly("Text on a dark screen moves up steadily from 1:00:22");
+    }
+
+    @Test
+    void cardsSeparatedByPictureAreNotCards() {
+        CreditsResult result = refine(filmThen().add(SyntheticFrames.card(0), 12).add(SyntheticFrames.picture(), 2)
+            .add(SyntheticFrames.card(1), 12).add(SyntheticFrames.picture(), 2).add(SyntheticFrames.card(2), 12));
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.UNSURE);
+        assertThat(result.reasons()).containsExactly("Text on a dark screen, but it never moves");
+    }
+
+    @Test
+    void cardsWithShortBlackCutsAreStillCardsAndTheFadeIsCounted() {
+        CreditsResult result = refine(filmThen().add(SyntheticFrames.card(0), 12).add(SyntheticFrames.black(), 2)
+            .add(SyntheticFrames.card(1), 12).add(SyntheticFrames.black(), 2).add(SyntheticFrames.card(2), 12)
+            .add(SyntheticFrames.black(), 2).add(SyntheticFrames.card(3), 12));
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
+        // The first change lands on card 1 at START + 7 s; the 1 s cut just before it is counted.
+        assertThat(result.offsetMs()).isEqualTo(START + 6_000);
+        assertThat(result.reasons()).containsExactly("Cards of text on a dark screen change from 1:00:06");
+    }
+
+    @Test
     void twelveSecondsOfBlackBeforeTheCrawlIsNotCounted() {
         CreditsResult result = refine(filmThen().add(SyntheticFrames.black(), 24).crawl(200, 3));
 

@@ -122,6 +122,26 @@ class CreditsMotionTest {
     }
 
     @Test
+    void changesIntoAndOutOfPictureAreNotCardChanges() {
+        List<GreyFrame> frames = new DenseBuilder().add(SyntheticFrames.card(0), 12)
+            .add(SyntheticFrames.picture(), 2).add(SyntheticFrames.card(1), 12).add(SyntheticFrames.picture(), 2)
+            .add(SyntheticFrames.card(2), 12).frames();
+
+        assertThat(detect(frames)).isEqualTo(Kind.NONE);
+    }
+
+    @Test
+    void cardChangesAcrossBlackCutsAreCardsStartingAtTheFirstChange() {
+        DenseBuilder builder = new DenseBuilder().add(SyntheticFrames.card(0), 12).add(SyntheticFrames.black(), 2)
+            .add(SyntheticFrames.card(1), 12).add(SyntheticFrames.black(), 2).add(SyntheticFrames.card(2), 12);
+
+        CreditsMotion.Motion motion = CreditsMotion.analyse(builder.frames(), WHOLE, PEAK);
+
+        assertThat(motion.kind()).isEqualTo(Kind.CARDS);
+        assertThat(motion.startIndex()).isEqualTo(14);
+    }
+
+    @Test
     void noFramesIsNeither() {
         assertThat(detect(List.of())).isEqualTo(Kind.NONE);
     }
