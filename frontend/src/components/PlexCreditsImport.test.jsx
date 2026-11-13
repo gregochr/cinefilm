@@ -168,10 +168,12 @@ describe('PlexCreditsImport', () => {
 
   it('shows an import that is already running when it opens, with a neutral line before the total is known', async () => {
     installFetch(statusRoute(running(0, 0)));
+    vi.useFakeTimers();
     render(<PlexCreditsImport reachable />);
-    const group = await block();
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    const group = screen.getByRole('group', { name: 'Credits from Plex' });
 
-    expect(await within(group).findByText('Reading Plex…')).toBeInTheDocument();
+    expect(within(group).getByText('Reading Plex…')).toBeInTheDocument();
     expect(within(group).getByRole('button', { name: 'Importing credits…' })).toBeDisabled();
   });
 
@@ -281,6 +283,7 @@ describe('PlexCreditsImport', () => {
     expect(screen.queryByText(/^Credits import (finished|stopped)/)).toBeNull();
 
     await act(() => vi.advanceTimersByTimeAsync(SCAN_POLL_MS));
+    await act(() => vi.advanceTimersByTimeAsync(0));
 
     const sentence = screen.getByText('Credits import finished: 860 imported.');
     expect(sentence.closest('[role="status"]')).not.toBeNull();
@@ -529,6 +532,144 @@ describe('usePlexCreditsImport', () => {
     expect(reads).toBe(3);
   });
 
+  it('does not let a pending poll timer abort the read Check again just issued', async () => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    let reads = 0;
+    installFetch(async (method, url) => {
+      if (url !== '/api/admin/plex/credits') return null;
+      reads += 1;
+      if (reads === 1) return respond(running(1));
+      if (reads === 2) return respond(null, 500);
+      await gate;
+      return respond(running(8));
+    });
+    vi.useFakeTimers();
+    const { result } = renderHook(() => usePlexCreditsImport());
+    await settle();
+    await settle(SCAN_POLL_MS);
+    expect(reads).toBe(2);
+    expect(result.current.error).not.toBeNull();
+
+    await settle(SCAN_POLL_MS / 2);
+    act(() => result.current.reload());
+    await settle(SCAN_POLL_MS * 2);
+    expect(reads).toBe(3);
+    release();
+    await settle();
+
+    expect(result.current.credits.progress.processed).toBe(8);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('keeps the start’s status when a read called before the start answers in the same render', async () => {
+    let releaseOld;
+    const oldGate = new Promise((resolve) => {
+      releaseOld = resolve;
+    });
+    let releaseNew;
+    const newGate = new Promise((resolve) => {
+      releaseNew = resolve;
+    });
+    let reads = 0;
+    installFetch(async (method, url) => {
+      if (url === '/api/admin/plex/credits/import') return respond(running(0, 0), 202);
+      if (url !== '/api/admin/plex/credits') return null;
+      reads += 1;
+      if (reads === 2) {
+        await oldGate;
+        return respond(IDLE);
+      }
+      if (reads === 3) {
+        await newGate;
+        return respond(IDLE);
+      }
+      return respond(IDLE);
+    });
+    vi.useFakeTimers();
+    const { result } = renderHook(() => usePlexCreditsImport());
+    await settle();
+    act(() => result.current.reload());
+    await settle();
+    expect(reads).toBe(2);
+
+    releaseOld();
+    await act(() => result.current.startImport());
+    await settle();
+
+    expect(reads).toBe(3);
+    expect(result.current.credits.running).toBe(true);
+    releaseNew();
+    await settle();
+    expect(result.current.credits.running).toBe(false);
+  });
+
+  it('does not arm the poll while a non-quiet read is loading', async () => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    let reads = 0;
+    installFetch(async (method, url) => {
+      if (url !== '/api/admin/plex/credits') return null;
+      reads += 1;
+      if (reads === 2) {
+        await gate;
+      }
+      return respond(running(reads));
+    });
+    vi.useFakeTimers();
+    const { result } = renderHook(() => usePlexCreditsImport());
+    await settle();
+    // The sign-in tick and "Check again" without a status are non-quiet reads: `loading` is true while they run.
+    act(() => window.dispatchEvent(new CustomEvent('cinefilm:signed-in')));
+    await settle();
+    expect(result.current.loading).toBe(true);
+
+    await settle(SCAN_POLL_MS * 3);
+    expect(reads).toBe(2);
+    release();
+    await settle();
+    await settle(SCAN_POLL_MS);
+
+    expect(reads).toBe(3);
+  });
+
+  it('announces a repeat finish with the same words when the start answers already finished', async () => {
+    const finished = (finishedAt) => ({
+      running: false,
+      progress: null,
+      lastImport: { ...fixtures.adminPlexCredits.lastImport, finishedAt },
+    });
+    const script = [
+      finished('2026-11-13T10:10:00Z'),
+      finished('2026-11-13T11:10:00Z'),
+      finished('2026-11-13T12:10:00Z'),
+    ];
+    let posts = 0;
+    installFetch((method, url) => {
+      if (url === '/api/admin/plex/credits/import') return respond(script[++posts], 202);
+      if (url !== '/api/admin/plex/credits') return null;
+      return respond(script[posts]);
+    });
+    vi.useFakeTimers();
+    const { result } = renderHook(() => usePlexCreditsImport());
+    await settle();
+    const sentence = 'Credits import finished: 860 imported.';
+
+    await act(() => result.current.startImport());
+    expect(result.current.announcement).toBe('');
+    await settle();
+    expect(result.current.announcement).toBe(sentence);
+
+    await act(() => result.current.startImport());
+    expect(result.current.announcement).toBe('');
+    await settle();
+    expect(result.current.announcement).toBe(sentence);
+  });
+
   it('announces every finish, even one with the same words, and clears it while the next run goes', async () => {
     const finished = (startedAt, finishedAt) => ({
       running: false,
@@ -563,12 +704,14 @@ describe('usePlexCreditsImport', () => {
     expect(result.current.credits.running).toBe(true);
     expect(result.current.announcement).toBe('');
     await settle(SCAN_POLL_MS);
+    await settle();
     expect(result.current.announcement).toBe(sentence);
 
     await act(() => result.current.startImport());
     await settle();
     expect(result.current.announcement).toBe('');
     await settle(SCAN_POLL_MS);
+    await settle();
     expect(result.current.announcement).toBe(sentence);
   });
 
