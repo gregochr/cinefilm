@@ -29,8 +29,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * V20 on PostgreSQL: the table's columns and types, its verdict check, its cascade with the media file, and a save and
- * the due-file queries through the real service.
+ * V20 and V25 on PostgreSQL: the table's columns and types (V25's {@code analysis_version}, which defaults to 1),
+ * its verdict check, its cascade with the media file, and a save and the due-file queries through the real service.
  */
 @Transactional
 class CreditsDetectionIntegrationTest extends IntegrationTestBase {
@@ -129,7 +129,8 @@ class CreditsDetectionIntegrationTest extends IntegrationTestBase {
         entityManager.flush();
         entityManager.clear();
 
-        assertThat(detections.findById(file.getId()).orElseThrow().getAnalysisVersion()).isGreaterThan(1);
+        // CreditsTuning.ANALYSIS_VERSION is package-private, hence the literal; raise it here with that constant.
+        assertThat(detections.findById(file.getId()).orElseThrow().getAnalysisVersion()).isEqualTo(2);
         assertThat(service.dueFiles()).isEmpty();
     }
 
