@@ -239,9 +239,9 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
        parts is a split edition, and Plex has no markers for any of the three it has, so they are skipped);
      - **every** Media's Plex duration is within 2 s of the item's Plex duration (Plex keeps one marker per item, and
        the two copies can differ by up to 14 minutes; 863 of the 864 pass, *Mockingjay Part 2* does not);
-     - its first credits marker (type `credits`; final or not, since a non-final one is a credits run followed by a
-       mid-credits scene) is at least 60% into the item and at least 60 s before its end (the edition guard; all 864
-       pass today).
+     - its earliest credits marker (type `credits`, the lowest `startTimeOffset`, whatever the list order; final or
+       not, since a non-final one is a credits run followed by a mid-credits scene) is at least 60% into the item and
+       at least 60 s before its end (the edition guard; all 864 pass today).
    - Stored in `plex_credits_marker` (V23), **one row per matched CineFilm media file** (each copy the item's paths
      pair with), with that file's current fingerprint, so nothing needs Plex afterwards. `start_ms` is Plex's marker
      **plus `max(0, the matched Media's Plex duration − the shortest of the item's and every Media's Plex
