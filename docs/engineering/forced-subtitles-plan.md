@@ -944,10 +944,163 @@ Forced subtitles cover English-language films with some foreign dialogue. A film
   Phase 2d's comparison against a second OpenSubtitles file catches the wrong cut.
 - **Play:** a normal choice in the player's Subtitles menu ("English"), on by default for these films, never shown
   when Subtitles is Off. The forced track still plays when it is Off. The saved subtitle preference keeps working.
-- **Model:** phase 4's `downloaded_subtitle` and phase 1's `subtitle_sidecar` gain a `kind` (`FORCED | FULL`) rather
-  than new tables.
+- **Model:** `subtitle_sidecar` (which also holds downloads, `origin = OPENSUBTITLES`) gains a `kind`
+  (`FORCED | FULL`) rather than a new table.
 - **To decide at the start of the phase:** whether full subtitles are also wanted for English-language films (for
   hard-to-hear dialogue). Out of scope unless the owner asks.
+
+#### Phase 5 build (planned 2026-11-13, owner said "phase 5 pls"; revised after an adversarial review)
+
+Five small PRs, each its own branch from the updated `main`. 5a decides, 5b finds files on disk, 5c plays them, 5d
+downloads, 5e finishes Admin. Migrations take the **next free number at build time**: V20 is credits detection
+(#129). Renumber again if another PR lands one first.
+
+**5a: decide which films need full subtitles.**
+- A pure `FullNeed.decide(owner, languages, editionsAudio)`, separate from `ForcedNeed`. The first rule that
+  matches wins:
+  1. The owner's choice: `film.full_need_owner` (`NEEDED | NOT_NEEDED`, null means automatic), named like
+     `forced_need_owner` (V14).
+  2. TMDB has not been asked → `UNKNOWN`.
+  3. TMDB's original language is English, `xx` or none → `NOT_NEEDED` (`ENGLISH_FILM`).
+  4. Otherwise the audio of the owner's copy decides. Its audio is part 1's default audio track for each present
+     edition, or its first track if none is default.
+- **Audio labels.** `FfprobeParser` stores English names, turns `und`/`zxx`/`mis`/`mul` into null, and keeps unknown
+  codes as they came. A new `isEnglish` accepts `english`, `eng` and `en` (any case). Null is **unlabelled**. Do not
+  reuse `isEnglishOrUnlabelled`. Then:
+  - any edition's audio is labelled with a non-English language → `NEEDED` (`FOREIGN_AUDIO`);
+  - every edition's audio is labelled English → `NOT_NEEDED` (`ENGLISH_AUDIO`: a dub, or an English co-production
+    such as *Léon*);
+  - otherwise → `UNSURE` (`UNLABELLED_AUDIO`), and the owner taps.
+- **Rule 6 of `ForcedNeed` is not changed** (decision 63).
+- **API** mirrors the forced-need routes and DTOs (`ForcedNeedController`, `ForcedNeedDtos`):
+  - `GET /api/admin/subtitles/full-need`: films with a non-English original language, or an owner choice. Each with
+    the need, the reason, its editions' audio labels and the owner's choice.
+  - `PUT /api/admin/films/{id}/full-need`: `{ "choice": "NEEDED" | "NOT_NEEDED" | null }`.
+  - `FilmDetail` gains `fullNeed` (the need value), so the player can use it in 5c.
+  - `foundation-plan.md` and the HTTP contract tests are updated.
+- **Admin:** a "Full subtitles" section beside the forced-need list, with chips Needed, Unsure and Not needed, and the
+  same three-way tap. No playback change.
+
+**5b: full English `.srt` files beside the film.**
+- **Model:** `subtitle_sidecar.kind` (`FORCED | FULL`, not null, default `FORCED`). The **Java field also starts as
+  `Kind.FORCED`**, as `origin` does: Hibernate writes every column, so the database default alone does not cover
+  inserts such as `ForcedDownloadService.download()`.
+- **Names: classify by the trailing dot-tokens before `.srt`, case ignored.**
+  - Any `forced` token among them → `FORCED`. That covers `.en.forced.srt` and `.forced.en.srt`, and both forced
+    suffixes are checked before anything else.
+  - Otherwise `en` or `eng`, optionally followed or preceded by one of `sdh`, `hi` or `cc` → `FULL`. Examples:
+    `X.en.srt`, `X.eng.srt`, `X.en.sdh.srt`, `X.sdh.en.srt`.
+  - Anything else is not a sidecar.
+  - The stem is what is left, so `X.forced.en.srt` keeps the stem `X`.
+  - The kind flows through the scanner gate (`LibraryScanner`), `SidecarMatcher.match` and the `SidecarSync` insert.
+- **The regression guard comes first.** `SubtitleSidecarRepository` methods take an explicit `Kind` parameter, so
+  the compiler finds every caller, and each caller passes `FORCED` until a later step says otherwise. This covers:
+  - `findByMediaFileIdIn`, `findAllByOrderByPathAscIdAsc`, and the four film-id and count queries (need evidence
+    `SIDECAR`);
+  - `SidecarPrecedence`, `ForcedResolver`, the checks, timing and downloads;
+  - **`Downloads.madeFor` / `skippedFileIds`** (`ForcedDownloadService`), so full downloads never use up forced
+    slots;
+  - `ForcedDownloadBlock` and the `ForcedCheckCandidate` ledger, which gain a `kind` (default FORCED) and are read
+    per kind;
+  - `SubtitleAdminService`'s list, its conflict calculation in `build()`, and the by-id actions (offset, verify,
+    attach, remove), which must check the row's kind;
+  - `FilmRepository.deleteOpenSubtitlesDownloads`, which deletes downloads of both kinds on an IMDb change. That is
+    intended: both were fetched for the old id.
+
+  `SidecarSync`'s two `findAll()` calls **stay all-kinds**: they track files on disk. A test inserts a `FULL` row beside
+  a film with a forced file, runs each forced path, and shows the row is ignored. A full file must never play as
+  forced, never count as forced evidence, and never be compared, timed, counted against a download cap or listed as
+  forced.
+- **API:** `FilmDetail.editions[].fullSubtitle`: `{ source, version } | null`.
+  - It is served by `GET /api/editions/{id}/full-subtitles.vtt?v=`, with the forced route's rules: per-part files are
+    stitched on the edition timeline, the offset is applied, and the text is escaped.
+  - A whole-edition file beats per-part files. Two files for one slot is a conflict, and neither plays.
+- **Admin, minimum:** FULL owner files are listed with a "Full" label and can be attached, offset and removed like
+  forced ones, so an unmatched file is never stuck until 5e.
+
+**5c: play full subtitles.**
+- **The menu:** the edition's `fullSubtitle` is a Subtitles menu choice labelled **"English (full)"**, so it is not
+  confused with an embedded stream's "English". Its key and saved value are the literal `"full"`, like `"off"`, and
+  no schema change is needed because `subtitle` is free text. Choosing it hides the forced track.
+- **Every place that knows subtitle choices learns `"full"`:**
+  - in `tracks.js`, `subtitleOptions`, `nextSubtitle` (the C key, which cycles Off → English (full) → … ),
+    `activeSubtitleKey` and `resolveSubtitleChoice`;
+  - in the player, the toast label lookup and `hasSubtitleTracks`;
+  - `AudioSubtitlesPanel` and the film page's picker.
+- **"Never chosen" becomes visible.**
+  - `PreferencesService.resolve` returns null instead of `"off"` when nothing is saved.
+  - The scan cleanups that write `"off"` (`LibraryGrouping`, `LibraryIngest`) write null instead, as
+    `EditionArranger` already does.
+  - The frontend treats null as Off, except as below.
+  - `foundation-plan.md` and the contract tests are updated.
+- **On by default** when the film's `fullNeed` is `NEEDED`, nothing is saved, and the selected audio track is not
+  labelled English. A saved choice, Off included, is kept.
+- **Delivery** is the same out-of-band `<track>` as the forced subtitle. The iPhone native-fullscreen gap recorded in
+  phase 1 applies to both, and is not widened.
+
+**5d: download full subtitles.**
+- **Search:** `OpenSubtitlesApi.searchFull(imdbId)`.
+  - It asks for English with `foreign_parts_only=exclude` and `hearing_impaired=include`, in alphabetical parameter
+    order (`OpenSubtitlesClient`).
+  - Ranking demotes hearing-impaired files, so they are used only when nothing else exists.
+  - The parser gets a full-files filter, because `OpenSubtitlesParser.result` drops every result that is not
+    foreign-parts-only.
+  - Results are stored per film in `film.os_full_candidates`, with `os_full_searched_imdb_id` and
+    `os_full_searched_at`, mirroring V15. `FilmRepository.clearOpenSubtitles` clears them too.
+  - It searches only films whose full need is `NEEDED`.
+- **Due:** a third `DownloadPlan.Kind`, `FULL`, from a second due source (full need plus full candidates). An edition
+  is due when it has no present FULL owner file and no FULL download, and has not reached the per-kind cap.
+  - `DownloadPlan.promotable` gets a per-kind rule. For FULL, 300 or more lines is expected, and fewer than 300 is
+    rejected as "not full".
+- **Budget order:**
+  1. promotions (free);
+  2. **FULL**, up to the whole limit, since the film cannot be watched without them;
+  3. forced replacements, up to 70% (a ceiling `Stop` skips to missing, #131);
+  4. forced missing, up to the whole limit.
+
+  A ceiling stop on FULL ends the run, as on missing.
+- **Proof:** a second, different full OpenSubtitles file, run by `SidecarCheckRefresher`. That job extends to FULL
+  downloads, runs at 06:30, and also starts on `SubtitleDownloadsFinished`. Proofs count as comparisons, at 30%, so on
+  a busy day they wait for the next run, and the downloads play unchecked meanwhile (decision 66).
+  - **Fit both ways.** `TimingFit` assumes the served cues are a subset of the reference, which two translations
+    need not be. So the fit runs in both directions, and both must be `ALIGNED` at the same offset within ±1 s.
+  - **Measure first.** The first step of 5d logs both fits for every NEEDED film without acting on them, and the
+    thresholds are fixed from that (about 10 films). A 25 fps file drifts against a 23.976 fps one and fails by
+    design.
+  - **Cut check, against the owner's copy.** This is the only link to the rip itself: two OpenSubtitles files
+    agreeing proves they match each other, not this copy. The last cue must fall at or before the runtime. When credits
+    detection found the credits (`credits_detection`, V20), it must fall within about 2 minutes before the credits
+    start. Otherwise it must fall in the last 15 minutes before the runtime.
+  - Disagreement tries the next candidate as the second opinion, at most 3 per edition, using the FULL ledger.
+- **Timing nudge:** the owner can set an offset on a full file in Admin, as for forced.
+
+**5e: Admin.** Full downloads appear in the Subtitles panel with the same rows as forced ones: origin, Playing, the
+check and both fits, Remove, and "Use my file". A kind chip (Forced, Full) filters them, and the full-need list from 5a
+links to each film's rows.
+
+**Decisions for phase 5 (to review with the owner):**
+61. **Full need is decided by the owner's copy's audio, not by TMDB alone.** Alternative: TMDB only. That would
+    wrongly flag *Léon*, the Leone westerns and the dubbed animations.
+62. **Unlabelled audio is `UNSURE`. Any edition with foreign-labelled audio is `NEEDED`.** An English dub in one
+    edition does not cancel the original in another, and 5c turns subtitles on only when the selected audio is not
+    English. Alternative: guess `NEEDED` for unlabelled audio (that downloads for English dubs).
+63. **Rule 6 of forced need is left alone.** Full subtitles include the foreign film's forced lines. Alternative:
+    mark foreign films `NOT_NEEDED` for forced. That would hide a real forced file the owner may have.
+64. **One table with a `kind` column.** Repository methods take the kind explicitly, blocks and ledger are per kind,
+    and a test proves a `FULL` row is invisible to the forced paths. Alternative: a separate `full_subtitle` table.
+    That is safer by construction, but duplicates the check, timing, download and Admin code.
+65. **A full download is proven by a second OpenSubtitles full file fitted both ways, plus a cut check against the
+    owner's copy (runtime and credits).** The two files agreeing does not prove they match this rip. The cut check is
+    the only link to it, so it carries that weight. Speech alignment (alass) stays the last resort and is not built.
+    Alternative: build speech alignment now (heavy CPU and a new tool, for about 10 films).
+66. **New rule (not decision 2): unchecked full downloads play.** A foreign film is unwatchable without them. For
+    forced subtitles only proven files play. Alternative: wait for proof, leaving the film unwatchable for up to two
+    days.
+67. **Full subtitles for English-language films are out of scope.** `.en.srt` files beside English films are matched
+    and offered in the menu, but never on by default and never downloaded.
+68. **The saved choice stores the literal `"full"`, and "nothing saved" becomes null instead of `"off"`.** Without
+    that, "on by default" cannot tell a film never chosen from one switched Off. Alternative: a separate
+    `subtitle_chosen` flag (more state for the same fact).
 
 ### Phase 6 — subtitles stored as pictures inside the file
 
