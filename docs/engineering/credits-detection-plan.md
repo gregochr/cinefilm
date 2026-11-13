@@ -224,32 +224,33 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
    V24). Owner, 2026-11-13: "Yes to the one time import, but … it's not a durable solution". Plex Pass is active and
    Plex holds a credits marker for 864 of its 1,087 films.
    - An Admin action of its own, "Import credits from Plex", beside Import from Plex, reusing its `PlexClient`
-     configuration (`PLEX_URL`, `PLEX_TOKEN`) and its file matching (`PlexPairing` / `PlexRules.relativePath`, with its
-     claimed-set and title guards). **GET requests only**: no write to Plex, no watched-state merge.
+     configuration (`PLEX_URL`, `PLEX_TOKEN`) and its file matching (`PlexPairing` / `PlexRules.relativePath`, with
+     its claimed-set and title guards). **GET requests only**: no write to Plex, no watched-state merge.
    - Plex's list call carries no markers, and `PlexModels.PlexFilm`/`PlexMedia` keep only part paths. A new `PlexApi`
      method fetches `GET /library/metadata/{ratingKey}?includeMarkers=1` for each matched item (about 1,100 requests,
      one at a time) into a new record holding the item's `duration` (ms), each Media's `duration` **together with its
      `Part[].file` paths**, and its markers (`Marker[]` with `type == "credits"`, `startTimeOffset` in ms, `final`).
      Each CineFilm copy is matched to its Media by comparing paths through `PlexRules.relativePath`, as `PlexPairing`
      does, never by position; a copy that matches no Media in the metadata response (Plex rescanned between the two
-     calls) is skipped and counted as unmatched. The claimed set is built the way
-     `PlexImportService` builds it, walking every film in list order.
+     calls) is skipped and counted as unmatched; the item's other matched copies are still stored. The claimed set is
+     built the way `PlexImportService` builds it, walking every film in list order.
    - A marker is stored only when all of these hold, else the item is skipped and counted in the report:
      - the item has one file per copy (Plex lists each film twice, a `.m4v` and an `.mp4` copy; an item with `ptN`
        parts is a split edition, and Plex has no markers for any of the three it has, so they are skipped);
-     - **every** copy's duration is within 2 s of the item's duration (Plex keeps one marker per item, and the two
-       copies can differ by up to 14 minutes; 863 of the 864 pass, *Mockingjay Part 2* does not);
+     - **every** Media's Plex duration is within 2 s of the item's Plex duration (Plex keeps one marker per item, and
+       the two copies can differ by up to 14 minutes; 863 of the 864 pass, *Mockingjay Part 2* does not);
      - its first credits marker (type `credits`; final or not, since a non-final one is a credits run followed by a
        mid-credits scene) is at least 60% into the item and at least 60 s before its end (the edition guard; all 864
        pass today).
    - Stored in `plex_credits_marker` (V23), **one row per matched CineFilm media file** (each copy the item's paths
      pair with), with that file's current fingerprint, so nothing needs Plex afterwards. `start_ms` is Plex's marker
-     **plus `max(0, the CineFilm file's duration − the shortest of the item's and every Media's durations)`**: Plex
-     does not say which copy it measured, so assuming the shortest can only move the marker later. The edition guard
-     is checked again on that shifted `start_ms` against the CineFilm file's duration: a copy that
-     fails it, or whose duration is unknown, is skipped and counted in the report; the item's other copies are still
-     stored. Running it again replaces rows; it never deletes a row for a film
-     Plex no longer lists. The report says imported, skipped (with the reason) and unmatched counts.
+     **plus `max(0, the matched Media's Plex duration − the shortest of the item's and every Media's Plex
+     durations)`**: Plex does not say which copy it measured, so assuming the shortest can only move the marker
+     later, and both sides of the subtraction come from Plex. The edition guard is checked again on that shifted
+     `start_ms` against the CineFilm file's duration: a copy that fails it, or whose duration is unknown, is skipped
+     and counted in the report; the item's other copies are still stored. Running it again replaces rows; it never
+     deletes a row for a film Plex no longer lists. The report says imported, skipped (with the reason) and unmatched
+     counts.
    - Nothing is applied.
 2b. **Detector fixes, still report only.** The classifier rules in "Per-frame features" and the motion changes in
    "The motion check":
