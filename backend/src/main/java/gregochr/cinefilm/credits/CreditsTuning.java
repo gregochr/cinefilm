@@ -93,6 +93,8 @@ final class CreditsTuning {
     static final long MIN_TEXT_MS = 30_000;
     /** Motion must show within this long of the first text. */
     static final long MOTION_WINDOW_MS = 30_000;
+    /** Windows to look for motion in start this many dense frames (5 s) apart, from the first text. */
+    static final int MOTION_WINDOW_STEP_FRAMES = 10;
     /** At most this much black before the first text counts as the start. */
     static final long MAX_LEADING_BLACK_MS = 10_000;
     /** Dialogue this long after the found start contradicts it. */

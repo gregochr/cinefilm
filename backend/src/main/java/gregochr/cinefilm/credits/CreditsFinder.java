@@ -76,8 +76,9 @@ public final class CreditsFinder {
     }
 
     /**
-     * Step 2: confirms the candidate and places the start. The first 30 seconds from the first text on dark must
-     * show a crawl or cards; at most 10 seconds of black before that text count as the start (the fade out). Then,
+     * Step 2: confirms the candidate and places the start. A crawl or cards must begin within the dense frames
+     * (30 second windows tried every 5 seconds from the first text on dark); the start is where that movement begins,
+     * never an earlier still card. At most 10 seconds of black right before it count as the start (the fade). Then,
      * when the film's English cue starts are known, dialogue continuing more than 30 seconds past the start (cues
      * after a 120 second silence ignored) makes the result unsure.
      *
@@ -106,30 +107,40 @@ public final class CreditsFinder {
             return CreditsResult.unsure(candidate.startMs(),
                 "Looking closely at the start of the credits found no text on a dark screen");
         }
-        long textMs = frames.get(textAt).offsetMs();
-        List<GreyFrame> window = new ArrayList<>();
-        for (int i = textAt; i < frames.size() && frames.get(i).offsetMs() < textMs + CreditsTuning.MOTION_WINDOW_MS;
-             i++) {
-            window.add(frames.get(i).frame());
+        CreditsMotion.Motion motion = null;
+        int motionAt = -1;
+        for (int windowStart = textAt; windowStart < frames.size() && motion == null;
+             windowStart += CreditsTuning.MOTION_WINDOW_STEP_FRAMES) {
+            long windowMs = frames.get(windowStart).offsetMs();
+            List<GreyFrame> window = new ArrayList<>();
+            for (int i = windowStart; i < frames.size()
+                && frames.get(i).offsetMs() < windowMs + CreditsTuning.MOTION_WINDOW_MS; i++) {
+                window.add(frames.get(i).frame());
+            }
+            CreditsMotion.Motion seen = CreditsMotion.analyse(window, area, peak);
+            if (seen.kind() != CreditsMotion.Kind.NONE) {
+                motion = seen;
+                motionAt = windowStart + seen.startIndex();
+            }
         }
-        CreditsMotion.Kind motion = CreditsMotion.detect(window, area, peak);
-        if (motion == CreditsMotion.Kind.NONE) {
+        if (motion == null) {
             return CreditsResult.unsure(candidate.startMs(), "Text on a dark screen, but it never moves");
         }
 
-        int black = textAt;
+        long motionMs = frames.get(motionAt).offsetMs();
+        int black = motionAt;
         while (black - 1 >= from && classes.get(black - 1) == FrameClass.BLACK) {
             black--;
         }
-        long startMs = textMs - frames.get(black).offsetMs() <= CreditsTuning.MAX_LEADING_BLACK_MS
-            ? frames.get(black).offsetMs() : textMs;
+        long startMs = motionMs - frames.get(black).offsetMs() <= CreditsTuning.MAX_LEADING_BLACK_MS
+            ? frames.get(black).offsetMs() : motionMs;
 
         long lastDialogue = lastDialogueMs(startMs, cueStartsMs);
         if (lastDialogue - startMs > CreditsTuning.MAX_DIALOGUE_AFTER_START_MS) {
             return CreditsResult.unsure(startMs, "Someone is still talking " + duration(lastDialogue - startMs)
                 + " after the credits seem to start");
         }
-        String what = motion == CreditsMotion.Kind.CRAWL
+        String what = motion.kind() == CreditsMotion.Kind.CRAWL
             ? "Text on a dark screen moves up steadily from " + clock(startMs)
             : "Cards of text on a dark screen change from " + clock(startMs);
         return CreditsResult.found(startMs, what);

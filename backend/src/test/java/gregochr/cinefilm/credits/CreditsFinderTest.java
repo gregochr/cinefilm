@@ -186,8 +186,8 @@ class CreditsFinderTest {
         CreditsResult result = refine(filmThen().cards(5, 12).add(SyntheticFrames.black(), 40));
 
         assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
-        assertThat(result.offsetMs()).isEqualTo(START);
-        assertThat(result.reasons()).containsExactly("Cards of text on a dark screen change from 1:00:00");
+        assertThat(result.offsetMs()).isEqualTo(START + 6_000);
+        assertThat(result.reasons()).containsExactly("Cards of text on a dark screen change from 1:00:06");
     }
 
     @Test
@@ -230,8 +230,8 @@ class CreditsFinderTest {
             .add(SyntheticFrames.black(), 40));
 
         assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
-        assertThat(result.offsetMs()).isEqualTo(START);
-        assertThat(result.reasons()).containsExactly("Cards of text on a dark screen change from 1:00:00");
+        assertThat(result.offsetMs()).isEqualTo(START + 6_000);
+        assertThat(result.reasons()).containsExactly("Cards of text on a dark screen change from 1:00:06");
     }
 
     @Test
@@ -240,6 +240,42 @@ class CreditsFinderTest {
         assertThat(card).isEqualTo(FrameClass.TEXT_ON_DARK);
 
         assertNotFound("P50 T8", "Black or text on a dark screen lasts only 40 s, and credits last at least a minute");
+    }
+
+    @Test
+    void aStaticEpilogueCardThenShortBlackThenACrawlStartsAtTheBlack() {
+        // 8 s of card, 4 s of black, then the crawl: the marker is the start of the black, after the card.
+        CreditsResult result = refine(filmThen().add(SyntheticFrames.card(0), 16).add(SyntheticFrames.black(), 8)
+            .crawl(200, 3));
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
+        assertThat(result.offsetMs()).isEqualTo(START + 8_000);
+    }
+
+    @Test
+    void aStaticCardRightBeforeACrawlStartsAtTheFirstMovingPair() {
+        CreditsResult result = refine(filmThen().add(SyntheticFrames.card(0), 16).crawl(200, 3));
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
+        assertThat(result.offsetMs()).isEqualTo(START + 8_000);
+    }
+
+    @Test
+    void aStaticCardBeforeCardsThatChangeStartsAtTheFirstChange() {
+        CreditsResult result = refine(filmThen().add(SyntheticFrames.card(0), 16).add(SyntheticFrames.card(1), 12)
+            .add(SyntheticFrames.card(2), 12).add(SyntheticFrames.card(3), 12).add(SyntheticFrames.card(4), 12));
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
+        assertThat(result.offsetMs()).isEqualTo(START + 8_000);
+        assertThat(result.reasons()).containsExactly("Cards of text on a dark screen change from 1:00:08");
+    }
+
+    @Test
+    void twelveSecondsOfBlackBeforeTheCrawlIsNotCounted() {
+        CreditsResult result = refine(filmThen().add(SyntheticFrames.black(), 24).crawl(200, 3));
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
+        assertThat(result.offsetMs()).isEqualTo(START + 12_000);
     }
 
     @Test
