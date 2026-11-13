@@ -41,6 +41,19 @@ class CreditsMotionTest {
     }
 
     @Test
+    void aCrawlOneStepOverTheLimitWithPhaseOneLineWidthsNowAliasesOntoAnotherLineAndIsACrawl() {
+        // Known consequence of CRAWL_MATCH_MAX_ERROR 0.25: at 16 px a frame lines 12 px apart can match the line
+        // below (shift 4) when neighbouring widths are close. The alternating-width crawl used above is refused.
+        List<GreyFrame> frames = new ArrayList<>();
+        for (int i = 0; i < 60; i++) {
+            frames.add(SyntheticFrames.crawlWithIrregularWidths(i, 16));
+        }
+
+        assertThat(detect(frames)).isEqualTo(Kind.CRAWL);
+        assertThat(detect(new DenseBuilder().crawl(60, 16).frames())).isEqualTo(Kind.NONE);
+    }
+
+    @Test
     void anUnsteadyCrawlIsNotACrawl() {
         assertThat(detect(SyntheticFrames.unsteadyCrawl(60, 2, 8))).isEqualTo(Kind.NONE);
     }

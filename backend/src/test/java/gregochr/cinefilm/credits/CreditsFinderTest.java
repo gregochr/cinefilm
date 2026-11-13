@@ -446,9 +446,9 @@ class CreditsFinderTest {
     }
 
     @Test
-    void aLetterboxedFrameIsJudgedInsideItsActiveArea() {
+    void aLetterboxedFrameWithAWiderLitStreetIsJudgedInsideItsActiveArea() {
         ActiveArea area = new ActiveArea(0, 11, 160, 68);
-        List<DenseFrame> night = new DenseBuilder().add(SyntheticFrames.letterboxedNight(20), 200)
+        List<DenseFrame> night = new DenseBuilder().add(SyntheticFrames.letterboxedNightWithAWiderStreet(20), 200)
             .build(START - 20_000);
 
         CreditsResult result = CreditsFinder.refine(CANDIDATE, night, area, 230, null);
@@ -456,6 +456,19 @@ class CreditsFinderTest {
         assertThat(result.verdict()).isEqualTo(CreditsVerdict.UNSURE);
         assertThat(result.reasons())
             .containsExactly("Looking closely at the start of the credits found no text on a dark screen");
+    }
+
+    @Test
+    void theOriginalLetterboxedNightSceneReadsAsTextButItsStillLightsNeverMakeAFoundResult() {
+        // 74% dark inside its active area, so under 0.70 it is TEXT_ON_DARK: only the motion check rejects it.
+        ActiveArea area = new ActiveArea(0, 11, 160, 68);
+        List<DenseFrame> night = new DenseBuilder().add(SyntheticFrames.letterboxedNight(20), 200)
+            .build(START - 20_000);
+
+        CreditsResult result = CreditsFinder.refine(CANDIDATE, night, area, 230, null);
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.UNSURE);
+        assertThat(result.reasons()).containsExactly("Text on a dark screen, but it never moves");
     }
 
     // ---- Subtitles -----------------------------------------------------------------------------------------

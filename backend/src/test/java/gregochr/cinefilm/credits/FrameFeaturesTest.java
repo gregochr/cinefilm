@@ -251,10 +251,11 @@ class FrameFeaturesTest {
     }
 
     @Test
-    void letterboxBarsDoNotPushANightSceneIntoTextOnDark() {
-        List<GreyFrame> samples = List.of(SyntheticFrames.letterboxedNight(20), SyntheticFrames.letterboxedNight(30));
+    void letterboxBarsDoNotPushANightSceneWithAWiderLitStreetIntoTextOnDark() {
+        List<GreyFrame> samples = List.of(SyntheticFrames.letterboxedNightWithAWiderStreet(20),
+            SyntheticFrames.letterboxedNightWithAWiderStreet(30));
         ActiveArea area = ActiveArea.of(samples);
-        GreyFrame night = SyntheticFrames.letterboxedNight(20);
+        GreyFrame night = SyntheticFrames.letterboxedNightWithAWiderStreet(20);
 
         assertThat(area).isEqualTo(new ActiveArea(0, 11, 160, 68));
         assertThat(FrameFeatures.measure(night, area, 230).darkShare()).isEqualTo(6772 / 10880.0, offset(1e-12));
@@ -264,11 +265,41 @@ class FrameFeaturesTest {
     }
 
     @Test
+    void theOriginalLetterboxedNightSceneIs74PercentDarkAndNowReadsAsTextOnDarkInsideItsActiveArea() {
+        // Known consequence of TEXT_DARK_SHARE 0.70 (it was 0.80, which kept this scene PICTURE): three bright
+        // windows on a dark sky look like three runs of text. Only motion (CreditsFinderTest) keeps it from FOUND.
+        List<GreyFrame> samples = List.of(SyntheticFrames.letterboxedNight(20), SyntheticFrames.letterboxedNight(30));
+        ActiveArea area = ActiveArea.of(samples);
+        GreyFrame night = SyntheticFrames.letterboxedNight(20);
+
+        assertThat(area).isEqualTo(new ActiveArea(0, 11, 160, 68));
+        assertThat(FrameFeatures.measure(night, area, 230).darkShare()).isEqualTo(8052 / 10880.0, offset(1e-12));
+        assertThat(classify(night, area, 230)).isEqualTo(FrameClass.TEXT_ON_DARK);
+        assertThat(classify(night, WHOLE, 230)).isEqualTo(FrameClass.TEXT_ON_DARK);
+    }
+
+    @Test
     void aStarfieldIsBlackAndNeverTextLike() {
         FrameFeatures features = FrameFeatures.measure(SyntheticFrames.starfield(), WHOLE, 230);
 
         assertThat(features.textLike()).isFalse();
         assertThat(features.frameClass()).isEqualTo(FrameClass.BLACK);
+    }
+
+    @Test
+    void eightBlocksFromTheLeftEdgeNowScoreAboveTheTextLikeShareAndAreTextOnDark() {
+        // The phase 1 fixture: one block in three of the first eight is central (9 of 24 bright pixels a row, 0.375),
+        // which 0.8 refused and 0.3 accepts. Known consequence; a still frame like this never moves.
+        Canvas canvas = new Canvas(160, 90, 0);
+        for (int top = 5; top < 70; top += 15) {
+            canvas.line(top, 8, 235, 0, 3, 0);
+        }
+
+        FrameFeatures features = FrameFeatures.measure(canvas.frame(), WHOLE, 235);
+
+        assertThat(features.brightShare()).isEqualTo(480 / SyntheticFrames.PIXELS, offset(1e-12));
+        assertThat(features.textLike()).isTrue();
+        assertThat(features.frameClass()).isEqualTo(FrameClass.TEXT_ON_DARK);
     }
 
     @Test

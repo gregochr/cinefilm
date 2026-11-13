@@ -138,6 +138,21 @@ final class SyntheticFrames {
         return canvas.frame();
     }
 
+    /** The phase 1 crawl: as {@link #crawl}, but line widths of 6 to 15 blocks that repeat every ten lines. */
+    static GreyFrame crawlWithIrregularWidths(int index, int shift) {
+        Canvas canvas = new Canvas(W, H, 0);
+        for (int k = 0; k < 400; k++) {
+            int top = 12 * k + 8 - index * shift;
+            if (top >= H) {
+                break;
+            }
+            if (top + 4 > 0) {
+                canvas.line(top, 6 + k * 7 % 10, TEXT);
+            }
+        }
+        return canvas.frame();
+    }
+
     /** A crawl whose speed alternates between two values, so it is not steady. */
     static List<GreyFrame> unsteadyCrawl(int frames, int slow, int fast) {
         List<GreyFrame> out = new ArrayList<>();
@@ -161,10 +176,24 @@ final class SyntheticFrames {
 
     /**
      * A 2.39:1 night scene in a 16:9 frame: black bars on rows 0 to 10 and 79 to 89, a dark sky (luma 30) over rows
-     * 11 to 53, a lit street (luma 100) over rows 54 to 78 and three bright windows. About 62% of the picture is
-     * dark, yet with the bars counted the frame is over 70% dark.
+     * 11 to 61, a lit street (luma 100) over rows 62 to 78 and three bright windows. Three quarters of the picture is
+     * dark (74% inside the active area), yet with the bars counted the frame is over 80% dark.
      */
     static GreyFrame letterboxedNight(int windowRow) {
+        return new Canvas(W, H, 0)
+            .rect(0, 11, W, 51, 30)
+            .rect(0, 62, W, 17, 100)
+            .rect(50, windowRow, 6, 6, 230)
+            .rect(70, windowRow, 6, 6, 230)
+            .rect(90, windowRow, 6, 6, 230)
+            .frame();
+    }
+
+    /**
+     * The same night scene with the lit street (luma 100) from row 54, so only 62% of the active area is dark: under
+     * the 0.70 dark share that text on dark needs.
+     */
+    static GreyFrame letterboxedNightWithAWiderStreet(int windowRow) {
         return new Canvas(W, H, 0)
             .rect(0, 11, W, 43, 30)
             .rect(0, 54, W, 25, 100)
