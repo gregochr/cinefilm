@@ -2,8 +2,11 @@
 // the resilience rules from the transcoding plan: retries instead of failures, "Reconnecting…" with one
 // restart 5 s after each fatal network error (at once when the browser comes back online), a new session when the old one has expired, and Auto stepping up one level only after ~60 s. The step gate follows the level hls.js
 // starts to FETCH (LEVEL_SWITCHING), so a step down caps Auto at once; LEVEL_SWITCHED, the level on screen,
-// only reports what is playing.
+// only reports what is playing. While the buffer is deep (floorHold.js) Auto may not go below 360p on a ladder
+// with a 240p bottom rung: `minAutoBitrate` is raised to the 360p level, so the buffer is spent first.
+import { createFloorHold } from './floorHold.js';
 import { rungForLevel } from './ladder.js';
+import { bufferAhead } from './nativeEngine.js';
 import { createNoProgressLoader } from './noProgressLoader.js';
 import { createStepGate } from './stepGate.js';
 import { fragmentKbps } from './throughput.js';
@@ -73,7 +76,8 @@ export function hlsConfig(startSeconds) {
 /**
  * Starts `session` on `video`. `handlers`: onLevel(rung, { initial }), onThroughput(kbps),
  * onReconnecting(boolean), onSessionLost(), onFatal(), and the optional onNetworkError({ timeout }) and
- * onFetching(rung) (the rung hls.js has started to fetch, ahead of the one being played). Returns { destroy }.
+ * onFetching(rung) (the rung hls.js has started to fetch, ahead of the one being played). In Auto, on a ladder
+ * with a 240p bottom and a 360p level, a deep buffer holds Auto at 360p or above. Returns { destroy }.
  */
 export function startHlsJs({
   Hls,
@@ -99,11 +103,26 @@ export function startHlsJs({
   let lost = false;
   let reconnecting = false;
   let timer = null; // the one pending restart, if any
+  const hold = createFloorHold();
+  let holdLevel = null; // the 360p level of a ladder with a 240p bottom (the only kind that is held)
+  let floorSet = 0;
+
+  // Raises hls.js's minimum bitrate to the 360p level while the buffer is deep and the cap allows 360p.
+  const reevaluateHold = () => {
+    if (holdLevel === null) return;
+    const armed = hold.update(bufferAhead(video));
+    const floor =
+      armed && applied !== null && applied >= holdLevel ? hls.levels[holdLevel].bitrate : 0;
+    if (floor === floorSet) return;
+    floorSet = floor;
+    hls.config.minAutoBitrate = floor;
+  };
 
   const cap = (level) => {
     if (level === applied) return;
     applied = level;
     hls.autoLevelCapping = level;
+    reevaluateHold();
   };
 
   const stopReconnecting = () => {
@@ -144,11 +163,20 @@ export function startHlsJs({
   };
   window.addEventListener('online', onOnline);
 
-  const onWaiting = () => gate.trouble();
+  const onWaiting = () => {
+    gate.trouble();
+    reevaluateHold();
+  };
   video.addEventListener('waiting', onWaiting);
+  video.addEventListener('timeupdate', reevaluateHold);
+  video.addEventListener('seeking', reevaluateHold);
 
   hls.on(Events.MANIFEST_PARSED, (_event, data) => {
     top = data.levels.length - 1;
+    const index = data.levels.findIndex((l) => rungForLevel(session.renditions, l) === '360p');
+    const qualifies =
+      auto && index > 0 && rungForLevel(session.renditions, data.levels[0]) === '240p';
+    holdLevel = qualifies ? index : null;
     if (auto) cap(gate.start(data.firstLevel));
   });
 
@@ -172,6 +200,7 @@ export function startHlsJs({
     const kbps = fragmentKbps(data.frag?.stats);
     if (kbps) handlers.onThroughput(kbps);
     if (auto) cap(gate.tick(top));
+    reevaluateHold();
   });
 
   hls.on(Events.ERROR, (_event, data) => {
@@ -206,6 +235,8 @@ export function startHlsJs({
       timer = null;
       window.removeEventListener('online', onOnline);
       video.removeEventListener('waiting', onWaiting);
+      video.removeEventListener('timeupdate', reevaluateHold);
+      video.removeEventListener('seeking', reevaluateHold);
       hls.destroy();
     },
   };

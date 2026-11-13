@@ -163,7 +163,9 @@ read of the file. Direct play of the file remains only as a fallback.
   ABR run: hls.js steps
   down at once and up one level after ~60 s healthy (decision 3, via `autoLevelCapping`/`nextAutoLevel`). The cap
   follows the level hls.js starts to *fetch* (`LEVEL_SWITCHING`), not the level that reaches the screen
-  (`LEVEL_SWITCHED`), which comes later by as much as is buffered (`train-link-plan.md`). iPhone's
+  (`LEVEL_SWITCHED`), which comes later by as much as is buffered (`train-link-plan.md`). On a ladder with a 240p
+  floor and a 360p level, the buffer is spent before the floor: once 420 s are buffered Auto does not go below
+  360p until fewer than 240 s are left (`floorHold.js` raises hls.js's `minAutoBitrate`). iPhone's
   native HLS adapts on its own (it can't be gated) and the player reads changes from `resize`/`videoHeight`, which
   identifies the rung because heights are unique per film (Rungs: a transcoded rung exists only *strictly below*
   the source height, so `original` and e.g. `480p` never share a height; a test asserts uniqueness for every

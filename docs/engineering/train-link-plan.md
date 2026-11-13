@@ -154,9 +154,11 @@ every spell, with eight minutes in hand that could have paid for 360p. D spends 
 
 - A pure module beside `stepGate.js`: armed when the buffer ahead reaches **420 s**, released when it falls under
   **240 s**.
-- It applies in Auto only, and only to a ladder whose lowest level is `240p` with a `360p` level above it (so never
-  to a two-rung film, where the level above the floor is the top). While armed, and while the step gate's cap is at
-  or above 360p, the engine sets hls.js's `config.minAutoBitrate` to the 360p level's bitrate; otherwise it is 0.
+- It applies in Auto only, and only to a ladder whose lowest level is `240p` with a level named `360p` above it. So
+  a small film whose only other level is its copied original is never held (an original's bitrate is whatever the
+  file has); one whose top is a 360p transcode at its own height is, at the same 600 kbit/s as any 360p. While
+  armed, and while the step gate's cap is at or above 360p, the engine sets hls.js's `config.minAutoBitrate` to the
+  360p level's bitrate; otherwise it is 0.
 - Re-evaluated on `timeupdate`, `waiting` and `seeking`, when a segment has loaded, and whenever the cap changes:
   not only on a loaded segment, which never comes in a dead zone.
 - What hls.js then does (confirmed in the source): the minimum is read on every choice; no automatic path picks

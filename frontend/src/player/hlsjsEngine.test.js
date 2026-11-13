@@ -726,3 +726,163 @@ describe('network errors for the health record', () => {
     expect(handlers.onReconnecting).toHaveBeenCalledWith(true);
   });
 });
+
+describe('the floor hold: a deep buffer keeps Auto at 360p or above', () => {
+  const holdRenditions = [
+    { id: 'original', height: 820, bitrate: 15000000, copy: true },
+    { id: '720p', height: 720, bitrate: 2500000, copy: false },
+    { id: '480p', height: 480, bitrate: 1000000, copy: false },
+    { id: '360p', height: 360, bitrate: 600000, copy: false },
+    { id: '240p', height: 240, bitrate: 350000, copy: false },
+  ];
+  const l240 = { height: 240, bitrate: 350000 };
+  const l360 = { height: 360, bitrate: 600000 };
+  const l480 = { height: 480, bitrate: 1000000 };
+  const l720 = { height: 720, bitrate: 2500000 };
+  const ladder = [l240, l360, l480, l720];
+
+  // A <video> with `ahead` seconds buffered from a playhead at 0, which the test moves.
+  function holdStart(over = {}) {
+    const video = over.video ?? document.createElement('video');
+    const state = { ahead: 0 };
+    Object.defineProperty(video, 'buffered', {
+      get: () => ({
+        length: state.ahead > 0 ? 1 : 0,
+        start: () => 0,
+        end: () => state.ahead,
+      }),
+    });
+    const started = start({
+      session: { masterUrl: session.masterUrl, renditions: holdRenditions },
+      ...over,
+      video,
+    });
+    return { ...started, video, setAhead: (s) => (state.ahead = s) };
+  }
+
+  it('raises the minimum to the 360p level at 420 s ahead, on timeupdate', () => {
+    const { hls, video, setAhead } = holdStart();
+    hls.manifest(ladder, 3);
+    expect(hls.config.minAutoBitrate).toBe(0);
+    setAhead(419);
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(hls.config.minAutoBitrate).toBe(0);
+    setAhead(420);
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(hls.config.minAutoBitrate).toBe(600000);
+  });
+
+  it('keeps it down to 240 s ahead and drops it at 239 s, from timeupdate alone', () => {
+    const { hls, video, setAhead } = holdStart();
+    hls.manifest(ladder, 3);
+    setAhead(420);
+    video.dispatchEvent(new Event('timeupdate'));
+    setAhead(240);
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(hls.config.minAutoBitrate).toBe(600000);
+    setAhead(239);
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(hls.config.minAutoBitrate).toBe(0);
+  });
+
+  it.each(['waiting', 'seeking'])('re-evaluates on %s', (type) => {
+    const { hls, video, setAhead } = holdStart();
+    hls.manifest(ladder, 3);
+    setAhead(500);
+    video.dispatchEvent(new Event(type));
+    expect(hls.config.minAutoBitrate).toBe(600000);
+    setAhead(100);
+    video.dispatchEvent(new Event(type));
+    expect(hls.config.minAutoBitrate).toBe(0);
+  });
+
+  it('re-evaluates when a fragment has loaded', () => {
+    const { hls, setAhead } = holdStart();
+    hls.manifest(ladder, 3);
+    setAhead(500);
+    hls.fragLoaded(stats);
+    expect(hls.config.minAutoBitrate).toBe(600000);
+    setAhead(100);
+    hls.fragLoaded(stats);
+    expect(hls.config.minAutoBitrate).toBe(0);
+  });
+
+  it('drops the minimum at once when the cap falls to 240p, and sets it again at 360p', () => {
+    const { hls, video, setAhead, advance } = holdStart();
+    hls.manifest(ladder, 1);
+    setAhead(480);
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(hls.config.minAutoBitrate).toBe(600000);
+    hls.fetchLevel(0);
+    expect(hls.autoLevelCapping).toBe(0);
+    expect(hls.config.minAutoBitrate).toBe(0);
+    advance(HEALTHY_MS);
+    hls.fragLoaded(stats);
+    expect(hls.autoLevelCapping).toBe(1);
+    expect(hls.config.minAutoBitrate).toBe(600000);
+  });
+
+  it('does not write the minimum when the value has not changed', () => {
+    const { hls, video, setAhead } = holdStart();
+    hls.manifest(ladder, 3);
+    let writes = 0;
+    let value = hls.config.minAutoBitrate;
+    Object.defineProperty(hls.config, 'minAutoBitrate', {
+      get: () => value,
+      set: (v) => {
+        writes += 1;
+        value = v;
+      },
+    });
+    setAhead(500);
+    video.dispatchEvent(new Event('timeupdate'));
+    video.dispatchEvent(new Event('timeupdate'));
+    hls.fragLoaded(stats);
+    expect(writes).toBe(1);
+  });
+
+  it('never writes the minimum for a pinned quality', () => {
+    const { hls, video, setAhead } = holdStart({ auto: false });
+    hls.manifest(ladder, 3);
+    setAhead(500);
+    video.dispatchEvent(new Event('timeupdate'));
+    hls.fragLoaded(stats);
+    expect(hls.config.minAutoBitrate).toBe(0);
+  });
+
+  it.each([
+    ['a two-level ladder (240p and the original)', [l240, { height: 820, bitrate: 15000000 }]],
+    ['a ladder with no 240p level', [l360, l480, l720]],
+    ['a ladder with 240p but no 360p', [l240, l480, l720]],
+  ])('never writes the minimum for %s', (_name, levelList) => {
+    const { hls, video, setAhead } = holdStart();
+    hls.manifest(levelList, levelList.length - 1);
+    setAhead(500);
+    video.dispatchEvent(new Event('timeupdate'));
+    hls.fragLoaded(stats);
+    expect(hls.config.minAutoBitrate).toBe(0);
+  });
+
+  it('does nothing before the manifest has been parsed', () => {
+    const { hls, video, setAhead } = holdStart();
+    setAhead(500);
+    expect(() => video.dispatchEvent(new Event('timeupdate'))).not.toThrow();
+    expect(hls.config.minAutoBitrate).toBe(0);
+  });
+
+  it('stops after destroy and leaves no engine listener on the video', () => {
+    const video = document.createElement('video');
+    const added = vi.spyOn(video, 'addEventListener');
+    const removed = vi.spyOn(video, 'removeEventListener');
+    const { engine, hls, setAhead } = holdStart({ video });
+    hls.manifest(ladder, 3);
+    engine.destroy();
+    setAhead(500);
+    video.dispatchEvent(new Event('timeupdate'));
+    expect(hls.config.minAutoBitrate).toBe(0);
+    const addedPairs = added.mock.calls.map(([type, fn]) => [type, fn]);
+    expect(removed.mock.calls.map(([type, fn]) => [type, fn])).toEqual(
+      expect.arrayContaining(addedPairs),
+    );
+  });
+});
