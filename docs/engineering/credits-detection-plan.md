@@ -283,9 +283,9 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
      blocks phase 3's `AUTO` step. The results go into this plan.
 3. **Apply, source column, Admin.** `credits_marker_source` and its carrying, applying (the watched rule is unchanged:
    watched at the marker, decided 2026-11-13), the Admin list and overrides. Precedence per edition: `OWNER`; then
-   `PLEX` (the last part's `plex_credits_marker` row, fingerprint still matching); then the detector's `FOUND` plus a **20 s margin** (`AUTO`),
-   applied only after the gate above; then the 97% fallback. Every marker goes through the edition guard. **A late
-   overlay is better than an early one** (owner, 2026-11-13).
+   `PLEX` (the last part's `plex_credits_marker` row, fingerprint still matching); then the detector's `FOUND` plus a
+   **20 s margin** (`AUTO`), applied only after the gate above; then the 97% fallback. Every marker goes through the
+   edition guard. **A late overlay is better than an early one** (owner, 2026-11-13).
 
 ## Phase 2: what the server showed (2026-11-13)
 
