@@ -89,6 +89,20 @@ public final class FilmMapper {
      */
     public static FilmDetail detail(FilmView view, Preferences preferences, boolean inCollection, EncoderMode mode,
                                     Function<MediaFile, CutList> cuts, Function<Edition, ForcedSubtitleDto> forced) {
+        return detail(view, preferences, inCollection, mode, cuts, forced, null);
+    }
+
+    /**
+     * The full detail page with the stored cut lists, the forced subtitles and the full-subtitles need in play.
+     *
+     * @param cuts the film file's stored cut list, or null when it is not indexed yet
+     * @param forced the forced subtitle an edition plays, or null when it has none
+     * @param fullNeed whether the film needs full English subtitles ({@code NEEDED}, {@code NOT_NEEDED},
+     *     {@code UNSURE} or {@code UNKNOWN}), or null when not worked out
+     */
+    public static FilmDetail detail(FilmView view, Preferences preferences, boolean inCollection, EncoderMode mode,
+                                    Function<MediaFile, CutList> cuts, Function<Edition, ForcedSubtitleDto> forced,
+                                    String fullNeed) {
         Film film = view.film();
         FilmCard card = card(view, 0);
         CollectionRef collection = film.getCollection() == null || !inCollection ? null
@@ -100,7 +114,7 @@ public final class FilmMapper {
             view.cast().stream().map(c -> new CastEntry(personRef(c.getPerson()), c.getCharacter())).toList(),
             film.getEditions().stream().filter(e -> !e.hiddenFromBrowse())
                 .map(e -> edition(e, view.state(e), mode, cuts, forced.apply(e))).toList(), preferences,
-            ratings(film));
+            ratings(film), fullNeed);
     }
 
     /** The ratings block: a source with no score is null; the IMDb url comes from the IMDb id. */

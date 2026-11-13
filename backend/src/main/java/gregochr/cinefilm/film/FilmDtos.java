@@ -134,12 +134,17 @@ public final class FilmDtos {
     public record Ratings(ImdbRating imdb, RottenTomatoesRating rottenTomatoes) {
     }
 
-    /** The film detail page. */
+    /**
+     * The film detail page.
+     *
+     * <p>{@code fullNeed} is whether the film needs full English subtitles: {@code NEEDED}, {@code NOT_NEEDED},
+     * {@code UNSURE} or {@code UNKNOWN}; null when the mapper was not given it.
+     */
     public record FilmDetail(Long id, String title, Integer year, String posterPath, String backdropPath,
                              boolean watched, Progress progress, String director, String overview,
                              List<String> genres, CollectionRef collection, List<PersonRef> directors,
                              List<CastEntry> cast, List<EditionDto> editions, Preferences preferences,
-                             Ratings ratings) {
+                             Ratings ratings, String fullNeed) {
     }
 
     /** The values the library filters can offer. */

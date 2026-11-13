@@ -10,6 +10,7 @@ import gregochr.cinefilm.film.FilmDtos.LibraryCard;
 import gregochr.cinefilm.playback.PreferencesService;
 import gregochr.cinefilm.settings.ServerSettingsService;
 import gregochr.cinefilm.subtitle.ForcedSubtitleService;
+import gregochr.cinefilm.subtitle.FullNeedService;
 import gregochr.cinefilm.transcode.KeyframeIndexService;
 import gregochr.cinefilm.transcode.Transcoder;
 import java.util.List;
@@ -32,16 +33,18 @@ public class FilmService {
     private final KeyframeIndexService indexes;
     private final ServerSettingsService settings;
     private final ForcedSubtitleService forcedSubtitles;
+    private final FullNeedService fullNeed;
 
     /**
      * Creates the service over the loader, the repository, the preferences service, the transcoder, the indexes and
-     * the server settings and the forced subtitles.
+     * the server settings, the forced subtitles and the full-subtitles need.
      */
     public FilmService(LibraryLoader loader, FilmRepository films, PreferencesService preferences,
                        Transcoder transcoder, KeyframeIndexService indexes, ServerSettingsService settings,
-                       ForcedSubtitleService forcedSubtitles) {
+                       ForcedSubtitleService forcedSubtitles, FullNeedService fullNeed) {
         this.settings = settings;
         this.forcedSubtitles = forcedSubtitles;
+        this.fullNeed = fullNeed;
         this.loader = loader;
         this.films = films;
         this.preferences = preferences;
@@ -72,7 +75,8 @@ public class FilmService {
         Map<Long, FilmDtos.ForcedSubtitleDto> forced = forcedSubtitles.forEditions(film.getEditions());
         return FilmMapper.detail(view, preferences.resolve(film), inCollection,
             transcoder.mode(), file -> indexes.cachedFor(file, file.getEdition().partCount() > 1)
-                .map(KeyframeIndexService.Index::cuts).orElse(null), edition -> forced.get(edition.getId()));
+                .map(KeyframeIndexService.Index::cuts).orElse(null), edition -> forced.get(edition.getId()),
+            fullNeed.needOf(film));
     }
 
     /** The ids of the collections with at least {@link CollectionService#MIN_OWNED} films in the library. */

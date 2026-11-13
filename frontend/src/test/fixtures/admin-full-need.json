@@ -1,0 +1,44 @@
+{
+  "films": [
+    {
+      "filmId": 3,
+      "title": "Das Boot",
+      "year": 1981,
+      "need": "NEEDED",
+      "reason": "FOREIGN_AUDIO",
+      "ownerChoice": null,
+      "editions": [{ "name": "Original", "audio": "German" }]
+    },
+    {
+      "filmId": 4,
+      "title": "Léon",
+      "year": 1994,
+      "need": "NOT_NEEDED",
+      "reason": "ENGLISH_AUDIO",
+      "ownerChoice": null,
+      "editions": [{ "name": "Original", "audio": "English" }]
+    },
+    {
+      "filmId": 5,
+      "title": "Amélie",
+      "year": 2001,
+      "need": "UNSURE",
+      "reason": "UNLABELLED_AUDIO",
+      "ownerChoice": null,
+      "editions": [
+        { "name": "Theatrical Cut", "audio": null },
+        { "name": "Director's Cut", "audio": "French" }
+      ]
+    },
+    {
+      "filmId": 6,
+      "title": "Rashomon",
+      "year": 1950,
+      "need": "NEEDED",
+      "reason": "OWNER",
+      "ownerChoice": "NEEDED",
+      "editions": []
+    }
+  ],
+  "counts": { "needed": 2, "unsure": 1, "unknown": 0, "notNeeded": 1 }
+}

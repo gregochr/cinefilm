@@ -28,6 +28,7 @@ import AttachPicker from './AttachPicker.jsx';
 import { Button } from './Button.jsx';
 import { SkeletonBlock } from './Skeleton.jsx';
 import ForcedNeedSection from './ForcedNeedSection.jsx';
+import FullNeedSection from './FullNeedSection.jsx';
 import { ErrorState } from './StateMessages.jsx';
 
 /** The cues of one file with "Play from here" (the player opens 3 s before the cue). Cue text is rendered as text. */
@@ -419,6 +420,7 @@ export default function SubtitlesPanel({ version }) {
         </h2>
       </div>
       <ForcedNeedSection refreshKey={`${version}:${subtitles.changes}`} />
+      <FullNeedSection refreshKey={version} />
       {removals > 0 ? (
         <p
           key={removals}

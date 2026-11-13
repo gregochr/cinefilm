@@ -21,6 +21,7 @@ import gregochr.cinefilm.film.FilmDtos.Preferences;
 import gregochr.cinefilm.playback.PreferencesService;
 import gregochr.cinefilm.settings.ServerSettingsService;
 import gregochr.cinefilm.subtitle.ForcedSubtitleService;
+import gregochr.cinefilm.subtitle.FullNeedService;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,11 +58,15 @@ class FilmServiceTest {
     @Mock
     private ForcedSubtitleService forcedSubtitles;
 
+    @Mock
+    private FullNeedService fullNeed;
+
     private FilmService service;
 
     @BeforeEach
     void setUp() {
-        service = new FilmService(loader, films, preferences, transcoder, indexes, settings, forcedSubtitles);
+        service = new FilmService(loader, films, preferences, transcoder, indexes, settings, forcedSubtitles,
+            fullNeed);
     }
 
     private static Film owned(long id, String title, int year, String... genres) {
@@ -93,6 +98,16 @@ class FilmServiceTest {
         assertThat(list.films()).extracting(FilmDtos.LibraryCard::title).containsExactly("Alien", "Aliens");
         assertThat(list.facets().genres()).containsExactly("Crime", "Drama", "Horror", "sci-fi", "Thriller");
         assertThat(list.facets().decades()).containsExactly(1960, 1970, 1990);
+    }
+
+    @Test
+    void detailCarriesTheFullSubtitlesNeed() {
+        Film film = owned(1L, "Amelie", 2001);
+        when(films.findById(1L)).thenReturn(Optional.of(film));
+        when(loader.views(List.of(film))).thenReturn(List.of(view(film)));
+        when(fullNeed.needOf(film)).thenReturn("NEEDED");
+
+        assertThat(service.detail(1L).fullNeed()).isEqualTo("NEEDED");
     }
 
     @Test

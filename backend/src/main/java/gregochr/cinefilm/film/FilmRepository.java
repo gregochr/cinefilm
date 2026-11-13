@@ -227,6 +227,29 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
             + "order by f.sortTitle, f.id")
     List<NeedRow> findNeedRows();
 
+    /**
+     * What the full-subtitles need is worked out from, per film.
+     *
+     * @param id the film
+     * @param title its title
+     * @param year its year, or null
+     * @param tmdbId its TMDB id, or null
+     * @param originalLanguage TMDB's original language, or null
+     * @param spokenLanguages TMDB's spoken languages as stored, or null
+     * @param languagesFetchedAt when TMDB was last asked, or null
+     * @param owner the owner's choice, or null
+     */
+    record FullNeedRow(Long id, String title, Integer year, Long tmdbId, String originalLanguage,
+                       String spokenLanguages, java.time.Instant languagesFetchedAt, FullNeedChoice owner) {
+    }
+
+    /** Every film with the columns the full-subtitles need is worked out from, by sort title. */
+    @org.springframework.data.jpa.repository.Query(
+        "select new gregochr.cinefilm.film.FilmRepository$FullNeedRow(f.id, f.title, f.year, f.tmdbId, "
+            + "f.originalLanguage, f.spokenLanguages, f.languagesFetchedAt, f.fullNeedOwner) from Film f "
+            + "order by f.sortTitle, f.id")
+    List<FullNeedRow> findFullNeedRows();
+
     /** When ratings were last fetched for any film, or null when never. */
     @org.springframework.data.jpa.repository.Query("select max(f.ratingsFetchedAt) from Film f")
     java.time.Instant findLatestRatingsFetchedAt();
