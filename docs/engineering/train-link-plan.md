@@ -101,7 +101,9 @@ during which it goes on raising the cap, and after which it holds a recovered li
   what is on screen.
 - A new handler tells the caller the rung being fetched, for the record.
 - **Added with D, from the second review:** the cap rises only while hls.js is fetching *at* the cap, so it is never
-  more than one level above what is fetched; and a segment that times out, or gets no HTTP answer, brings the cap
+  more than one level above what is fetched; the healthy minute starts again when hls.js reaches the cap from below
+  (or a cap that had waited for it would rise again at the next segment); and a segment that times out, or gets no
+  HTTP answer, brings the cap
   down to the level being fetched. Without these a bad stretch behind a deep buffer has no trouble to report, the cap
   climbs to the top while hls.js sits at the bottom, a recovered link jumps several levels at once, and after a
   failed segment hls.js, which tries "the next level down, wrapping round to the highest", fetches the highest level

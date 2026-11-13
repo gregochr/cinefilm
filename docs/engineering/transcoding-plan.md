@@ -164,8 +164,9 @@ read of the file. Direct play of the file remains only as a fallback.
   down at once and up one level after ~60 s healthy (decision 3, via `autoLevelCapping`/`nextAutoLevel`). The cap
   follows the level hls.js starts to *fetch* (`LEVEL_SWITCHING`), not the level that reaches the screen
   (`LEVEL_SWITCHED`), which comes later by as much as is buffered (`train-link-plan.md`). The cap rises only while
-  hls.js is fetching at the cap, so it is never more than one level above what is fetched, and a segment that times
-  out or gets no HTTP answer brings it down to the level being fetched. On a ladder with a 240p floor and a 360p
+  hls.js is fetching at the cap, so it is never more than one level above what is fetched; the healthy minute starts
+  again when hls.js reaches the cap from below; and a segment that times out or gets no HTTP answer brings the cap
+  down to the level being fetched. On a ladder with a 240p floor and a 360p
   level, the buffer is spent before the floor: once 420 s are buffered Auto does not go below 360p until fewer than
   240 s are left (`floorHold.js` raises hls.js's `minAutoBitrate`), provided hls.js is already fetching at 360p or
   above and no segment has failed since the last one loaded. iPhone's

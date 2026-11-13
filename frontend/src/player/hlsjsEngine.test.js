@@ -975,8 +975,55 @@ describe('the step gate follows what hls.js fetches', () => {
     hls.fragLoaded(stats);
     expect(hls.autoLevelCapping).toBe(2); // level 1 is still being fetched
     hls.fetchLevel(2);
+    advance(HEALTHY_MS); // the healthy minute runs from when hls.js reached level 2
     hls.fragLoaded(stats);
     expect(hls.autoLevelCapping).toBe(3);
+  });
+
+  it('starts the healthy minute when hls.js reaches the cap, not when the cap rose', () => {
+    const { hls, advance } = start();
+    hls.manifest(levels, 3);
+    hls.fetchLevel(1);
+    advance(HEALTHY_MS);
+    hls.fragLoaded(stats);
+    expect(hls.autoLevelCapping).toBe(2); // level 1 is still fetched
+    advance(HEALTHY_MS * 5);
+    hls.fetchLevel(2); // hls.js reaches the cap
+    advance(4000);
+    hls.fragLoaded(stats);
+    expect(hls.autoLevelCapping).toBe(2);
+    advance(HEALTHY_MS - 4000);
+    hls.fragLoaded(stats);
+    expect(hls.autoLevelCapping).toBe(3);
+  });
+
+  it('does not restart the clock when the fetched level was already at the cap', () => {
+    const { hls, advance } = start();
+    hls.manifest(levels, 2);
+    hls.fetchLevel(2);
+    advance(HEALTHY_MS - 1000);
+    hls.fetchLevel(2);
+    advance(1000);
+    hls.fragLoaded(stats);
+    expect(hls.autoLevelCapping).toBe(3);
+  });
+
+  it('does not restart the clock on a first fetch or a step down', () => {
+    const { hls, advance } = start();
+    hls.manifest(levels, 2);
+    advance(HEALTHY_MS - 1000);
+    hls.fetchLevel(2); // first fetch, previous level unknown
+    advance(1000);
+    hls.fragLoaded(stats);
+    expect(hls.autoLevelCapping).toBe(3);
+  });
+
+  it('leaves a pinned quality alone', () => {
+    const { hls } = start({ auto: false });
+    hls.manifest(levels, 2);
+    hls.fetchLevel(1);
+    hls.fetchLevel(2);
+    expect(hls.autoLevelCapping).toBe(-1);
   });
 
   describe('fragment trouble', () => {

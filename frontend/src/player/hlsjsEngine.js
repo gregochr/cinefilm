@@ -202,10 +202,13 @@ export function startHlsJs({
 
   // The level hls.js now fetches: the gate follows it, so a step down lowers the cap at once.
   hls.on(Events.LEVEL_SWITCHING, (_event, data) => {
+    // hls.js has come up from a lower level to the cap: the healthy minute starts now.
+    const arrived = auto && fetched !== null && fetched < data.level && data.level === applied;
     fetched = data.level;
     const rung = rungForLevel(session.renditions, hls.levels[data.level]);
     if (!rung) return;
     handlers.onFetching?.(rung);
+    if (arrived) gate.arrived();
     if (auto) cap(gate.switched(data.level));
     reevaluateHold();
   });
