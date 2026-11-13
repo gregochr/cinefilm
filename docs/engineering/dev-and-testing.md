@@ -345,8 +345,11 @@ Codex's review quota is small and shared by local and PR runs; it ran out twice 
   commented only **after CI is green** on that push, so a CI failure never costs a review.
 - **Docs-only PRs** (only `docs/`, `*.md`, `changelog.d/`): the opening review counts. Fix pushes rely on step 3 and
   don't ask Codex again.
-- **No branch update for docs-only moves of `main`** (`CLAUDE.md` step 6): an update makes a new head, which needs a
-  new Codex review.
+- **No branch update for docs-only moves of `main`** (`CLAUDE.md` step 6): when every commit added to `main` touches
+  only `docs/`, `*.md` or `changelog.d/` and none of the PR's files. An update makes a new head, which needs a new
+  Codex review.
+- **When Codex can't review** (quota out, or the review fails): don't merge on CI alone. Ask the owner, who can reset
+  the quota or decide.
 - **No routine local `codex review`.** It spends the same quota. Use it only when the owner asks for it.
 
 History: until 2026-11-12, local Codex ran before every push (two clean runs in a row, then one). It caught real
@@ -359,31 +362,34 @@ Step 2 above, in Sonnet's worktree, from the repo root. Paste it as it is, in an
 (`BASE=<commit>` in front checks against something other than `origin/main`). It prints nothing when all is well,
 and one line for:
 
-- **a new or changed `@Service` or `@Component`** (annotation at the start of a line) **when every one of its own
+- **a new or changed `@Service` or `@Component`** (on a line of its own or after other annotations; comments are
+  ignored everywhere) **when every one of its own
   test classes boots Spring**, or it has none. Its own tests are `<Class>Test`, `<Class>UnitTest` and
   `<Class><Suffix>Test` when `<Class><Suffix>` is not itself a main class, outside `integration/`. Booting Spring
   means `@SpringBootTest`, `@WebMvcTest`, `@DataJpaTest`, `@SpringJUnitConfig`, `@ContextConfiguration` or
   `SpringExtension` on the test or on any test base class it extends, however deep (`ApiTestBase`,
   `SubtitleTestBase`).
 - **a new or changed `@RestController` or `@Controller` with no own test that uses MockMvc** (`@WebMvcTest`,
-  `@AutoConfigureMockMvc` or a `MockMvc` field, on the test or a base class). When the MockMvc test lives in another
+  `@AutoConfigureMockMvc`, or a `MockMvc` or `MockMvcTester` field, on the test or a base class). When the MockMvc test lives in another
   class (`SessionController` is covered by `AuthApiTest`), say which.
 - **a new frontend module with no `.test.js` or `.test.jsx` beside it.** When it is tested through another file,
   say which.
 
 Each line goes back to Sonnet before the push. Renames count as new files (`--no-renames`), so a renamed and changed
-class is checked. Not followed: a custom annotation that wraps `@SpringBootTest`. None exists in this repo; add it to
-`SPRING` if one is made.
+class is checked. Not followed: a custom annotation that wraps `@SpringBootTest`, and an interface carrying Spring
+annotations that a test `implements`. Neither exists in this repo; add one to `SPRING` if it is ever made.
 
 ```bash
 bash -s "${BASE:-origin/main}" <<'EOF'
 base=$1
-# chain_has FILE REGEX: true when the test file, or any test base class it extends, matches REGEX.
+code() { sed -E -e 's://.*$::' -e '/^[[:space:]]*(\/\*|\*)/d' "$1"; }  # the file without comment lines
+# chain_has FILE REGEX: true when the test class, or any test base class it extends, matches REGEX outside comments.
 chain_has() {
   local t=$1 re=$2 sup n=0
   while [ -n "$t" ] && [ "$n" -lt 8 ]; do
-    grep -qE "$re" "$t" && return 0
-    sup=$(tr '\n' ' ' < "$t" | grep -oE 'class [A-Za-z0-9_]+[[:space:]]*(<[^{]*>)?[[:space:]]+extends[[:space:]]+[A-Za-z0-9_]+' \
+    code "$t" | grep -qE "$re" && return 0
+    sup=$(code "$t" | tr '\n' ' ' \
+      | grep -oE "class $(basename "$t" .java)[[:space:]]*(<[^{]*>)?[[:space:]]+extends[[:space:]]+[A-Za-z0-9_]+" \
       | head -1 | awk '{print $NF}')
     [ -n "$sup" ] || return 1
     t=$(git ls-files "backend/src/test/java/*/$sup.java" | head -1); n=$((n + 1))
@@ -391,7 +397,8 @@ chain_has() {
   return 1
 }
 SPRING='@(SpringBootTest|WebMvcTest|DataJpaTest|SpringJUnitConfig|ContextConfiguration)\b|SpringExtension'
-MOCKMVC='@WebMvcTest\b|@AutoConfigureMockMvc\b|MockMvc[[:space:]]+[a-zA-Z_]+[[:space:]]*[;=]'
+MOCKMVC='@WebMvcTest\b|@AutoConfigureMockMvc\b|MockMvc(Tester)?[[:space:]]+[a-zA-Z_]+[[:space:]]*[;=]'
+ANNOTATED='^[[:space:]]*(@[^[:space:]]+[[:space:]]+)*@'  # other annotations may come first on the line
 # own_tests CLASS: <Class>Test, <Class>UnitTest, or <Class><Suffix>Test when <Class><Suffix> is not itself a main class.
 own_tests() {
   git ls-files 'backend/src/test/java/*.java' | grep -v '/integration/' | grep -E "/$1[A-Za-z0-9]*Test\.java$" \
@@ -406,11 +413,11 @@ git diff --no-renames --name-only --diff-filter=AM "$base"...HEAD -- 'backend/sr
   [ -f "$f" ] || continue
   cls=$(basename "$f" .java)
   tests=$(own_tests "$cls")
-  if grep -qE '^[[:space:]]*@(RestController|Controller)\b' "$f"; then
+  if code "$f" | grep -qE "${ANNOTATED}(RestController|Controller)\b"; then
     ok=no
     while read -r t; do [ -n "$t" ] && chain_has "$t" "$MOCKMVC" && ok=yes; done <<< "$tests"
     [ "$ok" = yes ] || echo "NO MOCKMVC TEST: $f (own tests: $(echo $tests))"
-  elif grep -qE '^[[:space:]]*@(Service|Component)\b' "$f"; then
+  elif code "$f" | grep -qE "${ANNOTATED}(Service|Component)\b"; then
     ok=no
     while read -r t; do [ -n "$t" ] && ! chain_has "$t" "$SPRING" && ok=yes; done <<< "$tests"
     [ "$ok" = yes ] || echo "NO UNIT TEST: $f (own tests: $(echo $tests))"
@@ -434,11 +441,13 @@ EOF
   - `@Service("named")` with no test;
   - a `@Component` with no test;
   - a renamed and changed service;
-  - a controller whose test only mentions MockMvc in a comment, and one with no test;
+  - `@Slf4j @Service` on one line with no test;
+  - a controller whose test only mentions MockMvc in a comment or a commented-out field, and one with no test;
   - an untested frontend module, and a renamed one.
 
   Passed: a plain `S1Test`; `S6Test` on `ApiTestBase` beside a plain `S6UnitTest`; a plain `S8EdgeTest`; a record
-  whose Javadoc says `@Service`; a `@WebMvcTest` controller test; a controller test on `ApiTestBase` with
+  whose Javadoc says `@Service`; a plain test whose Javadoc says `@SpringBootTest`; a plain test with a nested
+  `static class Helper extends ApiTestBase`; a controller test with a `MockMvcTester` field; a `@WebMvcTest` controller test; a controller test on `ApiTestBase` with
   `@AutoConfigureMockMvc`; modules with `.test.js` or `.test.jsx`.
 - **Real history:**
   - #129 as first pushed: only `CreditsDetectionService`, the gap the PR's Codex found.
@@ -448,7 +457,8 @@ EOF
 
 History: the first two versions missed inherited test bases, broke on frontend modules with one test extension
 (both found by the PR's Codex on #130), and silently passed everything when pasted into zsh, missed renames, counted
-other classes' tests and matched MockMvc in comments (all found by the Claude reviewer).
+other classes' tests, matched MockMvc in comments, missed `@Slf4j @Service` and `MockMvcTester`, and read a nested
+class's `extends` (all found by the Claude reviewer).
 
 ### Self-check in every Sonnet brief
 

@@ -220,7 +220,7 @@ every spell, with eight minutes in hand that could have paid for 360p. D spends 
   level hls.js has removed; the gate: no rise while hls.js fetches below the cap, the cap down to the fetched level
   on a timeout or an unanswered segment and unchanged on a 503; `buffered.js` at a hole of 0.5 and 0.51 s.
 - Every PR: the gates in `CLAUDE.md`, one local Codex run on the whole branch before the first push
-  (`dev-and-testing.md`), CI, Codex on the head commit. One mutation run per PR at the end, on the changed files.
+  (`dev-and-testing.md`), CI, Codex on the head commit. (Superseded 2026-11-13: Codex now reviews only the PR; see `dev-and-testing.md`, "Review before every push".) One mutation run per PR at the end, on the changed files.
 - **By hand, the owner, after a release** (`dev-and-testing.md`, "Poor-network check"): 240p pinned looks
   acceptable; unthrottled at 360p pinned the scrubber shows about eight minutes buffered after a few minutes; then
   on "Train, bad" Auto stays above 240p until under four minutes are buffered, and plays on at 240p. From a cold

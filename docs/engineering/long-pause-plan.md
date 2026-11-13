@@ -346,7 +346,7 @@ test does not run on the Mac.
 - No frontend file changes, so the frontend gate is CI's; nothing here touches the integration package or a
   migration. CI is the only proof of the real-tools test (ffmpeg) and of diff coverage.
 - `codex review --uncommitted` in Sonnet's worktree before the commit, until a run finds nothing new
-  (`dev-and-testing.md`, "Local Codex review before the PR").
+  (`dev-and-testing.md`, "Local Codex review before the PR"). (Superseded 2026-11-13: Codex now reviews only the PR; see `dev-and-testing.md`, "Review before every push".)
 - `changelog.d/20261111-sessions-survive-pause.md` (`### Fixed`).
 
 ## Documents changed in the same pull request
