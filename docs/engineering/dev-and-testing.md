@@ -318,29 +318,162 @@ Once per change to the ladder or the buffer (`train-link-plan.md`):
   48 ms and the operator "Example Rail Wi-Fi", so the card shows on any film until it is answered; **Forget** in
   Admin brings it back.
 
-## Local Codex review before the PR
+## Review before every push (Codex runs only on the PR)
 
-Every PR costs a 10–15 minute CI run on dockermacmini, and every Codex finding on the PR costs another. Most of
-those findings can be had locally first: the same reviewer, reading the same `AGENTS.md`, on the laptop.
+Codex's review quota is small and shared by local and PR runs; it ran out twice on 2026-11-12/13. So Codex reviews
+**only the PR**, and everything that can be found before a push is found by cheaper means first (owner,
+2026-11-13). Before **every** push, the first and each fix round, in this order:
 
-- **When:** before **every** push, not only the first. That means before opening the PR, and again before each push
-  of fixes for a PR or Codex finding. Run it after Sonnet's gates are green and after the planner's own read of the
-  diff. It applies to any code change, UI or not. Skipping it on fix rounds cost PR #105 four Codex rounds (owner,
-  2026-11-11).
-- **What (lean rounds, owner 2026-11-12, to save Codex quota):** before the **first** push, the whole branch
-  (`codex review --base origin/main`). Before a **fix** push, only the fix (`codex review --base <the head already
-  pushed>`); the PR's own Codex review still reads the whole branch before merge. Large PRs burn quota fast (each
-  re-read of a 7,000-line PR turns up a new edge case), so split work into PRs of a few thousand lines at most.
-- **How:** the planner runs it in Sonnet's worktree, from the repo root (Codex reads `AGENTS.md` there by itself):
-  `codex review --uncommitted` for work not yet committed, or `codex review --base origin/main` once it is. Run it
-  in the background with its output sent to a scratch file; it takes about two minutes. The log is long (every
-  command Codex ran); its verdict and findings are the last block, after the final `codex` line. The CLI is
-  signed in on the owner's laptop (`codex login status`).
-- **Then:** send each finding to Sonnet, or reject it with a reason, as for a PR finding. Sonnet fixes, re-runs the
-  gates, and Codex runs once more on that fix only. **One clean run** is enough to push (it was two in a row until
-  2026-11-12; the owner chose lean rounds when the quota kept running out).
-- **Still request the PR review.** The PR's Codex run is the merge gate (`CLAUDE.md` step 6); the local run only
-  makes it likely to be clean the first time.
+1. **The gates pass** (`CLAUDE.md`), run by Sonnet until green, and **Sonnet has committed**: the check and the
+   reviewer read commits, so uncommitted work would look clean (the check refuses to run on it).
+2. **The planner's test-class check prints nothing** (below).
+3. **A fresh read-only Claude reviewer finds nothing.** The planner starts a new subagent (Agent tool, Opus or
+   Fable, never the session that wrote the code) whose brief holds:
+   - the worktree path and the diff to read (`git diff origin/main...HEAD` before the first push; `git diff <the head
+     already pushed>..HEAD` for a fix round, or `git diff <the commit last reviewed>..HEAD` for a fix round before the
+     first push);
+   - `AGENTS.md`, `docs/engineering/test-standards.md` and the plan section the change implements, to be read in full;
+   - the task "find what Codex would flag": rule breaches, tests that would still pass if the code were wrong,
+     races, early or wrong results, missing unit tests;
+   - read-only: no edits, checkouts or stashes; mutation probes on a copy only;
+   - findings ranked, each with file:line and the fix, or "No findings".
+
+   It never gets the planner's conclusions or Sonnet's report, only the code and the rules. Its findings go to Sonnet
+   in one round. The reviewer runs again on that fix only, until it reports nothing.
+
+**Then:** push. Codex reviews the PR when it opens. After that:
+
+- **All of one Codex review's findings go into one fix push** (through steps 1–3 again), and `@codex review` is
+  commented only **after CI is green** on that push, so a CI failure never costs a review.
+- **Docs-only PRs** (only `docs/`, `*.md`, `changelog.d/`): the opening review counts. Fix pushes rely on step 3 and
+  don't ask Codex again.
+- **No branch update for docs-only moves of `main`** (`CLAUDE.md` step 6): when every commit added to `main` touches
+  only `docs/`, `*.md` or `changelog.d/` and none of the PR's files. An update makes a new head, which needs a new
+  Codex review.
+- **When Codex can't review** (quota out, a failed review, or a review not posted within an hour of CI going green,
+  including a docs-only PR's opening review): don't merge on CI alone. Ask the owner, who can reset the quota or decide.
+- **No routine local `codex review`.** It spends the same quota. Use it only when the owner asks for it.
+
+History: until 2026-11-12, local Codex ran before every push (two clean runs in a row, then one). It caught real
+issues (#128) but used up the quota. On #129 it also passed a service with no unit test that the PR's Codex then
+flagged: local Codex is not an `AGENTS.md` audit, which is why steps 2 and 3 exist.
+
+### Planner's test-class check (every diff review)
+
+Step 2 above, in Sonnet's worktree, from the repo root, after Sonnet has committed. Paste it as it is, in any shell: it runs itself in bash
+(`BASE=<commit>` in front checks against something other than `origin/main`). It prints nothing when all is well,
+and one line for:
+
+- **a new or changed `@Service` or `@Component`** (on a line of its own or after other annotations; comments are
+  ignored everywhere) **when every one of its own
+  test classes boots Spring**, or it has none. Its own tests are `<Class>Test`, `<Class>UnitTest` and
+  `<Class><Suffix>Test` when `<Class><Suffix>` is not itself a main class, outside `integration/`. Booting Spring
+  means `@SpringBootTest`, `@WebMvcTest`, `@DataJpaTest`, `@SpringJUnitConfig`, `@ContextConfiguration` or
+  `SpringExtension` on the test or on any test base class it extends, however deep (`ApiTestBase`,
+  `SubtitleTestBase`).
+- **a new or changed `@RestController` or `@Controller` with no own test that uses MockMvc** (`@WebMvcTest`,
+  `@AutoConfigureMockMvc`, a `MockMvc` or `MockMvcTester` field, or `MockMvcBuilders`, on the test or a base class). When the MockMvc test lives in another
+  class (`SessionController` is covered by `AuthApiTest`), say which.
+- **a new frontend module with no `.test.js` or `.test.jsx` beside it.** When it is tested through another file,
+  say which.
+
+Each line goes back to Sonnet before the push. Renames count as new files (`--no-renames`), so a renamed and changed
+class is checked. Fully qualified annotations (`@org.springframework.stereotype.Service`), annotations with arguments (nested
+annotations included) before `@Service` on the same line, and comments of every kind, across lines too, are
+ignored or handled (`perl` strips them, leaving `//` and `/*` inside strings, text blocks and char literals alone; it ships with macOS). Not followed: a custom annotation
+that wraps `@SpringBootTest`, and an interface carrying Spring annotations that a test `implements`. Neither exists in this repo; add one to `SPRING` if it is ever made.
+
+```bash
+bash -s "${BASE:-origin/main}" <<'EOF'
+base=$1
+[ -z "$(git status --porcelain)" ] || { echo "UNCOMMITTED CHANGES: commit first, the check reads commits only"; exit 1; }
+code() { perl -0pe 's{("""(?s:(?:\\.|[^\\])*?)"""|"(?:\\.|[^"\\\n])*"|\x27(?:\\.|[^\x27\\\n])+\x27)|/\*.*?\*/|//[^\n]*}{$1 // ""}gse' "$1"; }  # the file without comments; strings, text blocks and chars kept
+# chain_has FILE REGEX: true when the test class, or any test base class it extends, matches REGEX outside comments.
+chain_has() {
+  local t=$1 re=$2 sup n=0
+  while [ -n "$t" ] && [ "$n" -lt 8 ]; do
+    code "$t" | grep -qE "$re" && return 0
+    sup=$(code "$t" | tr '\n' ' ' \
+      | grep -oE "class $(basename "$t" .java)[[:space:]]*(<[^{]*>)?[[:space:]]+extends[[:space:]]+[A-Za-z0-9_]+" \
+      | head -1 | awk '{print $NF}')
+    [ -n "$sup" ] || return 1
+    t=$(git ls-files "backend/src/test/java/*/$sup.java" | head -1); n=$((n + 1))
+  done
+  return 1
+}
+SPRING='@([a-z0-9_]+\.)*(SpringBootTest|WebMvcTest|DataJpaTest|SpringJUnitConfig|ContextConfiguration)\b|SpringExtension'
+MOCKMVC='@([a-z0-9_]+\.)*(WebMvcTest|AutoConfigureMockMvc)\b|MockMvc(Tester)?[[:space:]]+[a-zA-Z_]+[[:space:]]*[;=]|MockMvcBuilders\.'
+ANNOTATED='^[[:space:]]*(@[A-Za-z0-9_.]+(\(([^()]|\([^()]*\))*\))?[[:space:]]+)*@([a-z0-9_]+\.)*'  # other annotations may come first on the line
+# own_tests CLASS: <Class>Test, <Class>UnitTest, or <Class><Suffix>Test when <Class><Suffix> is not itself a main class.
+own_tests() {
+  git ls-files 'backend/src/test/java/*.java' | grep -v '/integration/' | grep -E "/$1[A-Za-z0-9]*Test\.java$" \
+    | while read -r t; do
+        stem=$(basename "$t" .java); stem=${stem%Test}
+        if [ "$stem" = "$1" ] || [ "$stem" = "$1Unit" ] || [ -z "$(git ls-files "backend/src/main/java/*/$stem.java")" ]; then
+          echo "$t"
+        fi
+      done
+}
+git diff --no-renames --name-only --diff-filter=AM "$base"...HEAD -- 'backend/src/main/java/*.java' | while read -r f; do
+  [ -f "$f" ] || continue
+  cls=$(basename "$f" .java)
+  tests=$(own_tests "$cls")
+  if code "$f" | grep -qE "${ANNOTATED}(RestController|Controller)\b"; then
+    ok=no
+    while read -r t; do [ -n "$t" ] && chain_has "$t" "$MOCKMVC" && ok=yes; done <<< "$tests"
+    [ "$ok" = yes ] || echo "NO MOCKMVC TEST: $f (own tests: $(echo $tests))"
+  elif code "$f" | grep -qE "${ANNOTATED}(Service|Component)\b"; then
+    ok=no
+    while read -r t; do [ -n "$t" ] && ! chain_has "$t" "$SPRING" && ok=yes; done <<< "$tests"
+    [ "$ok" = yes ] || echo "NO UNIT TEST: $f (own tests: $(echo $tests))"
+  fi
+done
+git diff --no-renames --name-only --diff-filter=A "$base"...HEAD -- 'frontend/src/*.js' 'frontend/src/*.jsx' \
+  | grep -vE '\.test\.jsx?$|/test/|main\.jsx$' | while read -r f; do
+  stem=${f%.*}
+  [ -f "$stem.test.js" ] || [ -f "$stem.test.jsx" ] || echo "NO TEST FILE (say which test covers it, or add one): $f"
+done
+EOF
+```
+
+**Proven (2026-11-13)**, in bash, in a script run by zsh, and pasted into zsh:
+
+- **A fixture repo** with one case per known trap gave exactly the expected lines and nothing on stderr. Flagged:
+  - a test extending `ApiTestBase`, directly or through a base in another package, or through a generic base;
+  - `SpringExtension`;
+  - `extends` on the next line;
+  - `S7Test` booting Spring beside a plain `S7BarTest` that belongs to main class `S7Bar`;
+  - `@Service("named")` with no test;
+  - a `@Component` with no test;
+  - a renamed and changed service;
+  - `@Slf4j @Service` and `@Transactional(readOnly = true) @Service` on one line, and a fully qualified
+    `@org.springframework.stereotype.Service`, with no test;
+  - a test with a fully qualified `@SpringBootTest`, `/* boots */ @SpringBootTest`, or
+    `@SpringBootTest(properties = …)` with a `@Nested` class;
+  - `@Retryable(backoff = @Backoff(delay = 100)) @Service` with no test;
+  - a controller whose test only mentions MockMvc in a comment or in a commented-out field (one-line or block),
+    and one with no test;
+  - an untested frontend module, and a renamed one.
+
+  Passed: a plain `S1Test`; `S6Test` on `ApiTestBase` beside a plain `S6UnitTest`; a plain `S8EdgeTest`; a record
+  whose Javadoc says `@Service`; a plain test whose Javadoc says `@SpringBootTest`; a plain test with a nested
+  `static class Helper extends ApiTestBase`; a controller test with a `MockMvcTester` field or `MockMvcBuilders.standaloneSetup`; `@Service` inside a block
+  comment above a record; a plain test with `@SpringBootTest` inside a block comment; a `@WebMvcTest` controller test; a controller test on `ApiTestBase` with
+  `@AutoConfigureMockMvc`; controller tests whose MockMvc field follows `"/api/**"`, `// guards /api/* paths` or
+  `"*/*"`; modules with `.test.js` or `.test.jsx`. Also flagged: a service whose only test has
+  `@TestPropertySource(properties = "tmdb.url=http://localhost:0") class … extends ApiTestBase` on one line.
+- **Real history:**
+  - #129 as first pushed: only `CreditsDetectionService`, the gap the PR's Codex found.
+  - #129 with its unit test: nothing.
+  - Commit `0d32250`: `SidecarCheckService` (its test inherits Spring through `SubtitleTestBase`) and the older
+    `LibraryIngest`.
+
+History: the first two versions missed inherited test bases, broke on frontend modules with one test extension
+(both found by the PR's Codex on #130), and silently passed everything when pasted into zsh, missed renames, counted
+other classes' tests, matched MockMvc in comments, missed `@Slf4j @Service` and `MockMvcTester`, read a nested
+class's `extends`, missed fully qualified and argument-carrying annotations, read code inside block comments, and reported clean on
+uncommitted work
+(all found by the Claude reviewer). Its fixture repo and expected output are rebuilt from the cases listed above.
 
 ### Self-check in every Sonnet brief
 
@@ -351,7 +484,12 @@ before reporting done:
   class-name queries; `userEvent`, not `fireEvent.click`; keys go to the focused element; no `Thread.sleep`; no
   `any()` in `verify()`; no `verify(..., never())` on repositories. Lint enforces the ones it can.
 - **`AGENTS.md` items:** a changed request or response shape updates `foundation-plan.md` and the HTTP contract
-  tests; every new script has tests; every new interactive element has a 44px target.
+  tests; every new script has tests; every new interactive element has a 44px target; **every new or changed
+  service or component has its own unit test class with mocked collaborators** (`<Class>Test` or
+  `<Class>UnitTest`), beside any full-application test. A test that boots Spring, itself or through a base class
+  such as `ApiTestBase` or `SubtitleTestBase`, is not a unit test and never stands in for one. **Every controller
+  has a MockMvc test** with the 401 and missing-CSRF-header cases (`AGENTS.md` rule 5; missed in #129, owner
+  2026-11-13).
 - **Async state:** for each request the diff starts, what happens on a second click, an undo, or a newer request
   while the first is in flight, and on cancel? Most of the logic findings (#39, #42) were races of this kind.
 

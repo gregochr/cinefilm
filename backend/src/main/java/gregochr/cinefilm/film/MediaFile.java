@@ -104,4 +104,19 @@ public class MediaFile {
     public Long timelineDurationMs() {
         return videoDurationMs != null && videoDurationMs > 0 ? videoDurationMs : durationMs;
     }
+
+    /**
+     * The file's change marker: its size and modification time as last scanned (what a rescan uses to tell a file
+     * changed). A result worked out from the file's content (a cached read of its subtitles, a credits detection) is
+     * valid while this is the same.
+     *
+     * @return {@code size:modifiedAtMillis}, or null when either is unknown (the file cannot be told apart from a
+     *     changed one, so it is not read)
+     */
+    public String fingerprint() {
+        if (sizeBytes == null || modifiedAt == null) {
+            return null;
+        }
+        return sizeBytes + ":" + modifiedAt.toEpochMilli();
+    }
 }

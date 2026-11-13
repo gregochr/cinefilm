@@ -18,6 +18,13 @@ public interface EditionRepository extends JpaRepository<Edition, Long> {
     List<Edition> findWithFilesByFilmIdIn(Collection<Long> filmIds);
 
     /**
+     * Every edition with its files and its film loaded in one statement, for a pass over the whole library that must
+     * not issue a query per edition (credits detection: about 1,100 films).
+     */
+    @Query("select distinct e from Edition e join fetch e.mediaFiles join fetch e.film")
+    List<Edition> findAllWithFiles();
+
+    /**
      * Moves every edition of one film to another, keeping each edition's id (and so its watch history). The
      * persistence context is cleared afterwards: reload entities before using them.
      */

@@ -105,6 +105,7 @@ public class ScanService {
                 : lock.heldBy(LibraryLock.IMPORT) ? new ScanAlreadyRunningException("A Plex import is running")
                 : lock.heldBy(LibraryLock.EDIT) ? new ScanAlreadyRunningException("Editions are being edited")
                 : lock.heldBy(LibraryLock.SUBTITLE) ? new ScanAlreadyRunningException("A subtitle is being changed")
+                : lock.heldBy(LibraryLock.CREDITS) ? new ScanAlreadyRunningException("Credits are being saved")
                 : new ScanAlreadyRunningException("A match is being fixed");
         }
         progress.set(new Progress(0, 0, null));

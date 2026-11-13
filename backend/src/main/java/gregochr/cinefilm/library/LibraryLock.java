@@ -25,6 +25,9 @@ public class LibraryLock {
     /** Holder name of an Admin change to a forced subtitle file. */
     public static final String SUBTITLE = "subtitle";
 
+    /** Holder name of the credits detection saving a result. */
+    public static final String CREDITS = "credits";
+
     private final AtomicReference<String> holder = new AtomicReference<>();
 
     /**

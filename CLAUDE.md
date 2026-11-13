@@ -30,22 +30,31 @@ files or workflows itself. Docs (this file, `docs/`, `AGENTS.md`) may be written
    `docs/engineering/`.
 2. **Delegate the build to a Sonnet subagent** (Agent tool, `model: "sonnet"`, its own worktree). The brief carries
    the plan, the files, the tests to write, the gates below and the `changelog.d/` entry. Sonnet runs the gates
-   until green; the planner reviews the diff read-only and sends fixes back to Sonnet.
-   **Run Codex locally once before every push** (owner, 2026-11-12: lean rounds, to save Codex quota). Before the
-   first push: once on the whole branch (`codex review --base origin/main`, or `--uncommitted` before the first
-   commit). Before a fix push: once on the fix only (`--base <the head already pushed>`). Send findings to Sonnet
-   and re-run only if it found something. Keep PRs small: aim for half of 4a's size (`dev-and-testing.md`).
-3. **Commit** on a feature branch (conventional commit, changelog entry).
+   until green and commits; the planner reviews the diff read-only and sends fixes back to Sonnet.
+   **Before every push, in this order** (owner, 2026-11-13, to save Codex quota; details in `dev-and-testing.md`):
+   the gates pass; the planner's test-class check prints nothing; then a **fresh read-only Claude reviewer**
+   (Agent tool, Opus or Fable) given `AGENTS.md`, `test-standards.md`, the plan and the diff, never the planner's
+   conclusions, finds what Codex would flag. Repeat until it reports no findings: the whole branch before the first
+   push, then only the fix. **Codex runs only on the PR**: no routine local `codex review` (it draws on the same
+   quota). Keep PRs small: aim for half of 4a's size.
+3. **Sonnet's commits are on a feature branch** (conventional commit, changelog entry).
 4. **Push and open a ready PR** (not a draft) against `main`.
 5. **Wait for CI and Codex, fix what they find** through Sonnet, push again. Codex reviews a PR when it opens and
-   on an `@codex review` comment, not on later pushes: after a fix push, comment `@codex review`. 👀 means running
-   (never merge on it), 👍 is a clean review, comments are findings. Until Codex is enabled on this repo, CI alone
-   gates.
-6. **Merge (squash) when CI is green and Codex has given 👍 on the exact head commit**, re-reading both just
-   before: `gh pr merge --squash --match-head-commit <sha>`. If `main` has moved since the PR's CI ran (another PR
-   merged meanwhile), update the branch and let CI run again first: a new gate can pass on a PR and still break code
-   that landed beside it. **The owner does not review PRs** (owner, 2026-11-08): the planner merges each phase
-   itself once these gates pass, without asking.
+   on an `@codex review` comment, not on later pushes. **All of one review's findings go into one fix push**, and
+   `@codex review` is commented only **after CI is green** on that push, so a CI failure never wastes a review.
+   👀 means running (never merge on it), 👍 or a "Didn't find any major issues… Reviewed commit <sha>" comment is a
+   clean review, inline comments are findings. **Docs-only PRs** (only `docs/`, `*.md`, `changelog.d/`): Codex's
+   automatic review on opening counts; fix pushes rely on the Claude reviewer and don't ask Codex again.
+6. **Merge (squash) when CI is green and Codex's review of the exact head commit is clean** (step 5), re-reading both
+   just before: `gh pr merge --squash --match-head-commit <sha>`. A docs-only PR instead needs green CI, every
+   finding of its opening Codex review fixed, and the Claude reviewer clean on the head. If Codex can't review (quota
+   out, a failed review, or a review not posted within an hour of CI going green, a docs-only PR's opening review
+   included), don't merge on CI alone: ask the owner. If `main` has moved since the PR's CI ran (another PR merged
+   meanwhile), update the branch and let CI run again first: a new gate can pass on a PR and still break code that
+   landed beside it. **Don't update for docs-only moves**: when every commit added to `main` since then touches only
+   `docs/`, `*.md` or `changelog.d/` and none of the PR's files, merge as it is (an update makes a new head that
+   needs a new Codex review; it cost #129 a round). **The owner does not review PRs** (owner, 2026-11-08): the
+   planner merges each phase itself once these gates pass, without asking.
 7. Multi-phase plans repeat 2–6 per phase, each branched from the updated `main`.
 
 Never done by a session: creating or deleting tags, pushing to `main`, force-pushing a shared branch.

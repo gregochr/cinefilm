@@ -442,7 +442,8 @@ decide, not part of this phase.
 review --uncommitted` until a run finds nothing new; conventional commit with a `changelog.d/` entry; ready PR;
 CI green and Codex 👍 on the exact head; squash-merge with `--match-head-commit`. Mutation tools once per PR at the
 end, changed files only, never beside a gate. UI checks in the browser: Library, Home and Film detail at 1440 and 390
-with stored artwork (the dev seed has none: say so if it cannot be seen).
+with stored artwork (the dev seed has none: say so if it cannot be seen). (Process superseded 2026-11-13: Codex now reviews only the
+PR; see `dev-and-testing.md`, "Review before every push".)
 
 ## Left alone
 
