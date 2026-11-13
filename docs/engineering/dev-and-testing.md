@@ -330,7 +330,8 @@ Codex's review quota is small and shared by local and PR runs; it ran out twice 
 3. **A fresh read-only Claude reviewer finds nothing.** The planner starts a new subagent (Agent tool, Opus or
    Fable, never the session that wrote the code) whose brief holds:
    - the worktree path and the diff to read (`git diff origin/main...HEAD` before the first push; `git diff <the head
-     already pushed>..HEAD` for a fix round);
+     already pushed>..HEAD` for a fix round, or `git diff <the commit last reviewed>..HEAD` for a fix round before the
+     first push);
    - `AGENTS.md`, `docs/engineering/test-standards.md` and the plan section the change implements, to be read in full;
    - the task "find what Codex would flag": rule breaches, tests that would still pass if the code were wrong,
      races, early or wrong results, missing unit tests;
@@ -379,14 +380,14 @@ and one line for:
 Each line goes back to Sonnet before the push. Renames count as new files (`--no-renames`), so a renamed and changed
 class is checked. Fully qualified annotations (`@org.springframework.stereotype.Service`), annotations with arguments (nested
 annotations included) before `@Service` on the same line, and comments of every kind, across lines too, are
-ignored or handled (`perl` strips them; it ships with macOS). Not followed: a custom annotation
+ignored or handled (`perl` strips them, leaving `//` and `/*` inside string literals alone; it ships with macOS). Not followed: a custom annotation
 that wraps `@SpringBootTest`, and an interface carrying Spring annotations that a test `implements`. Neither exists in this repo; add one to `SPRING` if it is ever made.
 
 ```bash
 bash -s "${BASE:-origin/main}" <<'EOF'
 base=$1
 [ -z "$(git status --porcelain)" ] || { echo "UNCOMMITTED CHANGES: commit first, the check reads commits only"; exit 1; }
-code() { perl -0pe 's{/\*.*?\*/}{}gs; s{//[^\n]*}{}g' "$1"; }  # the file without comments (block, Javadoc, line)
+code() { perl -0pe 's{("(?:\\.|[^"\\\n])*"|\x27(?:\\.|[^\x27\\\n])+\x27)|/\*.*?\*/|//[^\n]*}{$1 // ""}gse' "$1"; }  # the file without comments; string and char literals kept
 # chain_has FILE REGEX: true when the test class, or any test base class it extends, matches REGEX outside comments.
 chain_has() {
   local t=$1 re=$2 sup n=0
@@ -458,7 +459,9 @@ EOF
   whose Javadoc says `@Service`; a plain test whose Javadoc says `@SpringBootTest`; a plain test with a nested
   `static class Helper extends ApiTestBase`; a controller test with a `MockMvcTester` field or `MockMvcBuilders.standaloneSetup`; `@Service` inside a block
   comment above a record; a plain test with `@SpringBootTest` inside a block comment; a `@WebMvcTest` controller test; a controller test on `ApiTestBase` with
-  `@AutoConfigureMockMvc`; modules with `.test.js` or `.test.jsx`.
+  `@AutoConfigureMockMvc`; controller tests whose MockMvc field follows `"/api/**"`, `// guards /api/* paths` or
+  `"*/*"`; modules with `.test.js` or `.test.jsx`. Also flagged: a service whose only test has
+  `@TestPropertySource(properties = "tmdb.url=http://localhost:0") class … extends ApiTestBase` on one line.
 - **Real history:**
   - #129 as first pushed: only `CreditsDetectionService`, the gap the PR's Codex found.
   - #129 with its unit test: nothing.
