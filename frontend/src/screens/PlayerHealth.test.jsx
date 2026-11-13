@@ -548,6 +548,24 @@ describe('falling back to direct play', () => {
     expect(lastReport(fetchMock)).toMatchObject({ fellBack: true, engine: 'direct' });
   });
 
+  it('stops naming a fetched rung once the stream is abandoned', async () => {
+    const { video, hls, fetchMock } = await open();
+    await landResume(video);
+    await firstFrame(video, 5000);
+    await inAct(() => hls().fetchLevel(P720));
+    await inAct(() => hls().error({ fatal: true, type: 'otherError' }));
+    await vi.waitFor(() => expect(video).toHaveAttribute('src', DIRECT));
+    clock = 70000;
+    await inAct(() => fireEvent.playing(video));
+    clock = 71000;
+    await moveTo(video, 3862);
+    await leave();
+    const report = lastReport(fetchMock);
+    expect(report.engine).toBe('direct');
+    expect(report.minutes.at(-1)[0]).toBe(1);
+    expect(report.minutes.at(-1)[6]).toBe(0);
+  });
+
   it('is recorded when the stream is abandoned after a fatal error', async () => {
     const { video, hls, fetchMock } = await open();
     await landResume(video);

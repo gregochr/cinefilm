@@ -1371,6 +1371,32 @@ describe('buffered ahead and the rung being fetched', () => {
     ]);
   });
 
+  it.each(['direct', 'native'])('is forgotten once the engine is %s', (kind) => {
+    const m = make();
+    m.h.rung('720p', 720);
+    m.h.fetching('480p');
+    m.h.playing();
+    m.playFor(2000);
+    m.h.paused(); // closes the minute's credit before the switch
+    m.h.engine(kind);
+    m.at(61000);
+    m.h.playing();
+    m.h.throughput(100);
+    m.playFor(2000);
+    const rows = m.report().minutes;
+    expect(rows[0][6]).toBe(4);
+    expect(rows[1][6]).toBe(0);
+  });
+
+  it('is kept when the engine is hlsjs', () => {
+    const m = make();
+    m.h.fetching('480p');
+    m.h.engine('hlsjs');
+    m.h.playing();
+    m.playFor(2000);
+    expect(m.report().minutes[0][6]).toBe(4);
+  });
+
   it('is not a change of the report by itself', () => {
     const m = make();
     const before = m.h.version();

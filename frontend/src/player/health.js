@@ -351,6 +351,8 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
       advance();
       if (engineKind === kind) return;
       engineKind = kind;
+      // Only hls.js fetches a rung. Not cleared for 'hlsjs': it is reported after hls.js may have named its first.
+      if (kind !== 'hlsjs') fetchingId = null;
       changed();
     },
     environment(value = {}) {

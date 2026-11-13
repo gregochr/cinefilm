@@ -416,8 +416,14 @@ being prepared" }` with `Retry-After: 1` while a later part's keyframe index is 
 All behind the session cookie; the `PUT` needs `X-CineFilm`. The report's fields, their meaning and the rules they
 must meet are in the plan ("The record" and "API").
 
+The report's `minutes` is a list of rows, one per minute, each a list of numbers. A row has **seven** figures:
+`[minute, median kbit/s, rung played, ms moved, ms stalled, seconds buffered ahead, rung being fetched]` (rung codes
+0 to 6). A row of **five** figures, without the last two, is still accepted from a tab running a player older than
+`train-link-plan.md`, and is what records stored before it hold; any other length is refused. The full-record
+`GET` returns the rows as they were stored, so a client must read both lengths.
+
 | Route | Contract |
 |---|---|
 | `PUT /api/playback-health/{playbackId}` body: the health report | 204. `playbackId` is a lower-case UUID made by the browser, one per viewing. A new id creates the record (404 `No such edition`); a known id replaces the report when `seq` is higher, otherwise it is left alone (still 204). 400 `Invalid health report` for an id that is not a UUID, a body over 20,000 characters or not JSON (this route reads the body as text, so it does not answer `Invalid request`), a report outside the rules, or a known id with another `editionId` |
 | `GET /api/admin/playback-health` | `{ playbacks: [{ playbackId, filmId, filmTitle, editionId, startedAt, updatedAt, report }] }`: the 20 with the newest `updatedAt`, newest first; `report` is the stored report without its `minutes` |
-| `GET /api/admin/playback-health/{playbackId}` | one such row with the whole report; 404 `No such playback` |
+| `GET /api/admin/playback-health/{playbackId}` | one such row with the whole report, `minutes` included (rows of seven figures, or five in an older record); 404 `No such playback` |
