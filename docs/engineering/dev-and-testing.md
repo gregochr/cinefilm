@@ -347,34 +347,60 @@ those findings can be had locally first: the same reviewer, reading the same `AG
 
 ### Planner's test-class check (every diff review)
 
-Before local Codex, in Sonnet's worktree, from the repo root. It prints nothing when every new or changed
-`@Service`, `@Component`, `@RestController` or `@Controller` has a unit test class (one that neither extends
-`ApiTestBase` nor uses `@SpringBootTest`, `@WebMvcTest` or `@DataJpaTest`, and is outside `integration/`), and
-every new frontend module has a `.test.js(x)` beside it. Each line it prints goes back to Sonnet before the push.
-A frontend line may be a false alarm when the module is tested through another file; say which test covers it.
+Before local Codex, in Sonnet's worktree, from the repo root. It prints a line for:
+
+- each new or changed `@Service` or `@Component` with no unit test class: none of its `<Class>*Test` files outside
+  `integration/` can boot Spring, directly or through any test base class it extends (`ApiTestBase` and the bases
+  built on it, such as `SubtitleTestBase`, count as booting Spring);
+- each new or changed `@RestController` or `@Controller` with no MockMvc test (`AGENTS.md` rule 5);
+- each new frontend module with no `.test.js` or `.test.jsx` beside it. This can be a false alarm when the module is
+  tested through another file; say which test covers it.
+
+Each line goes back to Sonnet before the push. It prints nothing when all is well.
 
 ```bash
 base=origin/main
+boots_spring() {  # true when the test, or any test class it extends, boots Spring
+  local t=$1 sup n=0
+  while [ -n "$t" ] && [ "$n" -lt 8 ]; do
+    grep -qE '@(SpringBootTest|WebMvcTest|DataJpaTest|SpringJUnitConfig|ContextConfiguration)\b' "$t" && return 0
+    sup=$(grep -oE 'class [A-Za-z0-9_]+(<[^>]*>)? extends [A-Za-z0-9_]+' "$t" | head -1 | awk '{print $NF}')
+    [ -n "$sup" ] || return 1
+    t=$(git ls-files "backend/src/test/java/*/$sup.java" | head -1); n=$((n + 1))
+  done
+  return 1
+}
 git diff --name-only --diff-filter=AM "$base"...HEAD -- 'backend/src/main/java/*.java' | while read -r f; do
   [ -f "$f" ] || continue
   cls=$(basename "$f" .java)
-  grep -qE '@(Service|Component|RestController|Controller)\b' "$f" || continue
   tests=$(git ls-files 'backend/src/test/java/*.java' | grep -E "/${cls}[A-Za-z]*Test\.java$" | grep -v '/integration/')
-  unit=""
-  for t in $tests; do
-    grep -qE 'extends ApiTestBase|@SpringBootTest|@WebMvcTest|@DataJpaTest' "$t" || unit="$unit $t"
-  done
-  [ -n "$unit" ] || echo "NO UNIT TEST: $f (tests found: $(echo $tests | tr '\n' ' '))"
+  found=$(echo $tests | tr '\n' ' ')
+  if grep -qE '@(RestController|Controller)\b' "$f"; then
+    [ -n "$tests" ] && grep -lq 'MockMvc' $tests || echo "NO MOCKMVC TEST: $f (tests found: $found)"
+  elif grep -qE '@(Service|Component)\b' "$f"; then
+    unit=""
+    for t in $tests; do boots_spring "$t" || unit="$unit $t"; done
+    [ -n "$unit" ] || echo "NO UNIT TEST: $f (tests found: $found)"
+  fi
 done
 git diff --name-only --diff-filter=A "$base"...HEAD -- 'frontend/src/*.js' 'frontend/src/*.jsx' \
   | grep -vE '\.test\.jsx?$|/test/|main\.jsx$' | while read -r f; do
   stem=${f%.*}
-  ls "$stem".test.js "$stem".test.jsx >/dev/null 2>&1 || echo "NO TEST FILE (check it is covered elsewhere): $f"
+  [ -f "$stem.test.js" ] || [ -f "$stem.test.jsx" ] || echo "NO TEST FILE (check it is covered elsewhere): $f"
 done
 ```
 
-Proven on #129 as first pushed: it printed only `NO UNIT TEST: .../credits/CreditsDetectionService.java`, the gap
-Codex found on the PR, and passed the branch's other new services, which have unit tests.
+Proven (2026-11-13) on:
+
+- #129 as first pushed: it printed only `CreditsDetectionService`, the gap Codex found on the PR, and it passes
+  #129 once its unit test was added.
+- Commit `0d32250`: it caught `SidecarCheckService`, whose only test inherits Spring through `SubtitleTestBase`. It
+  also caught the older `LibraryIngest`, whose nine test classes all boot Spring. It did not flag
+  `SubtitleAdminController`, which has its `@WebMvcTest`.
+- `frontend/src/state/search.js`, which has only `search.test.js`: not flagged.
+
+The first version of this check missed inherited test bases and wrongly flagged every tested frontend module; Codex
+found both on #130.
 
 ### Self-check in every Sonnet brief
 
@@ -386,9 +412,11 @@ before reporting done:
   `any()` in `verify()`; no `verify(..., never())` on repositories. Lint enforces the ones it can.
 - **`AGENTS.md` items:** a changed request or response shape updates `foundation-plan.md` and the HTTP contract
   tests; every new script has tests; every new interactive element has a 44px target; **every new or changed
-  service, component or controller has its own unit test class with mocked collaborators** (`<Class>Test` or
-  `<Class>UnitTest`), beside any full-application test. A test that extends `ApiTestBase` or boots Spring is not a
-  unit test and never stands in for one (`AGENTS.md` rule 5; missed in #129, owner 2026-11-13).
+  service or component has its own unit test class with mocked collaborators** (`<Class>Test` or
+  `<Class>UnitTest`), beside any full-application test. A test that boots Spring, itself or through a base class
+  such as `ApiTestBase` or `SubtitleTestBase`, is not a unit test and never stands in for one. **Every controller
+  has a MockMvc test** with the 401 and missing-CSRF-header cases (`AGENTS.md` rule 5; missed in #129, owner
+  2026-11-13).
 - **Async state:** for each request the diff starts, what happens on a second click, an undo, or a newer request
   while the first is in flight, and on cancel? Most of the logic findings (#39, #42) were races of this kind.
 
