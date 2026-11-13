@@ -172,7 +172,7 @@ function setForcedNeed(filmId, body) {
 const fullChoices = new Map();
 
 /** What the automatic rule says for a fixture film that is loaded with an owner choice (it is `OWNER` as loaded). */
-const FULL_AUTOMATIC = { 6: { need: 'UNSURE', reason: 'UNLABELLED_AUDIO' } };
+const FULL_AUTOMATIC = { 6: { need: 'NEEDED', reason: 'ORIGINAL_AUDIO_ASSUMED' } };
 
 function fullRow(loaded) {
   if (!fullChoices.has(loaded.filmId)) return loaded;

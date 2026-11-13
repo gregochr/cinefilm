@@ -220,7 +220,7 @@ class ForcedNeedServiceTest {
 
         assertThat(rows).extracting(FilmNeedDto::reason).containsExactly("ENGLISH_ONLY", "NO_SPOKEN_LANGUAGES",
             "NO_SPOKEN_LANGUAGES", "FOREIGN_LANGUAGE_FILM");
-        assertThat(rows).extracting(FilmNeedDto::need).containsExactly("NOT_NEEDED", "UNSURE", "UNSURE", "UNSURE");
+        assertThat(rows).extracting(FilmNeedDto::need).containsExactly("NOT_NEEDED", "UNSURE", "UNSURE", "NOT_NEEDED");
     }
 
     @Test
@@ -242,7 +242,7 @@ class ForcedNeedServiceTest {
 
         CountsDto counts = service.list().counts();
 
-        assertThat(counts).isEqualTo(new CountsDto(3, 2, 2, 2, 2));
+        assertThat(counts).isEqualTo(new CountsDto(3, 2, 1, 2, 3));
     }
 
     @Test
@@ -352,6 +352,39 @@ class ForcedNeedServiceTest {
     }
 
     @Test
+    void anAutomaticNotNeededForAForeignFilmDoesNotHideAnOwnersSidecarOrTheDownloadRecheck() {
+        Film foreign = stored(13L, "fr", "fr", null);
+        Film foreignWithFile = stored(14L, "fr", "fr", null);
+        when(films.findById(13L)).thenReturn(Optional.of(foreign));
+        when(films.findById(14L)).thenReturn(Optional.of(foreignWithFile));
+        when(sidecars.countPresentForFilm(13L, SubtitleKind.FORCED)).thenReturn(0L);
+        when(sidecars.countPresentForFilm(14L, SubtitleKind.FORCED)).thenReturn(1L);
+
+        assertThat(service.isNeeded(13L)).isFalse();
+        assertThat(service.isNeeded(14L)).isTrue();
+    }
+
+    @Test
+    void aForeignFilmWithAnOwnersSidecarStaysNeededAndServedInTheList() {
+        Film served = withEdition(stored(1L, "fr", "fr", null));
+        when(films.findNeedRows()).thenReturn(List.of(row(1, "Amelie", 10L, "fr", "fr", ASKED, null),
+            row(2, "Oldboy", 20L, "ko", "ko", ASKED, null)));
+        when(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED)).thenReturn(List.of(1L));
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L));
+        when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of());
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(served.getEditions());
+        playbackServes(served, true);
+
+        List<FilmNeedDto> rows = service.list().films();
+
+        assertThat(rows.get(0).need()).isEqualTo("NEEDED");
+        assertThat(rows.get(0).reason()).isEqualTo("SIDECAR");
+        assertThat(rows.get(0).hasForcedSubtitle()).isTrue();
+        assertThat(rows.get(1).need()).isEqualTo("NOT_NEEDED");
+        assertThat(rows.get(1).reason()).isEqualTo("FOREIGN_LANGUAGE_FILM");
+    }
+
+    @Test
     void anEmptyLibraryHasEmptyCounts() {
         when(films.findNeedRows()).thenReturn(List.of());
         when(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED)).thenReturn(List.of());
@@ -367,6 +400,27 @@ class ForcedNeedServiceTest {
     /** An English-only film (rule 7 says NOT_NEEDED) with an OpenSubtitles search of {@code searchedFor}. */
     private static NeedRow searched(String imdbId, Integer count, String searchedFor) {
         return new NeedRow(1L, "Taken", 2008, 8681L, "en", "en", ASKED, null, imdbId, count, NOW, searchedFor);
+    }
+
+    private static NeedRow otherLanguages(String imdbId, Integer count, String searchedFor) {
+        return new NeedRow(1L, "Taken", 2008, 8681L, "en", "en,fr", ASKED, null, imdbId, count, NOW, searchedFor);
+    }
+
+    @Test
+    void aFilmWithOtherLanguagesSearchedWithNoForcedFilesOnlineIsNotNeededAndItsCountSaysSo() {
+        FilmNeedDto dto = listed(otherLanguages("tt0936501", 0, "tt0936501"));
+
+        assertThat(dto.need()).isEqualTo("NOT_NEEDED");
+        assertThat(dto.reason()).isEqualTo("NO_FORCED_ONLINE");
+        assertThat(service.list().counts()).isEqualTo(new CountsDto(0, 0, 0, 0, 1));
+    }
+
+    @Test
+    void aFilmWithOtherLanguagesNotSearchedYetOrSearchedUnderAnotherIdIsUnsure() {
+        assertThat(listed(otherLanguages("tt0936501", null, null)).need()).isEqualTo("UNSURE");
+        FilmNeedDto stale = listed(otherLanguages("tt0936501", 0, "tt0000001"));
+        assertThat(stale.need()).isEqualTo("UNSURE");
+        assertThat(stale.reason()).isEqualTo("OTHER_LANGUAGES");
     }
 
     private FilmNeedDto listed(NeedRow row) {

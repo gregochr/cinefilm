@@ -53,7 +53,7 @@ export function fullNeedWords(need) {
 const REASON_WORDS = {
   FOREIGN_AUDIO: 'Audio is in another language',
   ENGLISH_AUDIO: 'Audio is English',
-  UNLABELLED_AUDIO: 'Audio language not labelled',
+  ORIGINAL_AUDIO_ASSUMED: 'Audio not labelled: original language assumed',
   ENGLISH_FILM: 'English-language film',
   OWNER: 'Set by you',
   NO_LANGUAGES: 'Waiting for TMDB',

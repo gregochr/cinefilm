@@ -70,13 +70,19 @@ describe('Which films need them: the list', () => {
       within(screen.getByRole('group', { name: 'Show films' }))
         .getAllByRole('button')
         .map((b) => b.textContent),
-    ).toEqual(['Needed, none yet (2)', 'Unsure (1)', 'Unknown (1)', 'Not needed (2)', 'All (7)']);
+    ).toEqual([
+      'Needed, none yet (2)',
+      'Checking online (1)',
+      'Unknown (1)',
+      'Not needed (2)',
+      'All (7)',
+    ]);
   });
 
   it('switches filters and marks the chosen chip pressed', async () => {
     await open();
-    await userEvent.click(chip(/^Unsure/));
-    expect(chip(/^Unsure/)).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(chip(/^Checking online/));
+    expect(chip(/^Checking online/)).toHaveAttribute('aria-pressed', 'true');
     expect(chip(/^Needed, none yet/)).toHaveAttribute('aria-pressed', 'false');
     expect(titles()).toEqual(['Alien (1979)']);
     await userEvent.click(chip(/^Not needed/));

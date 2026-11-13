@@ -380,7 +380,7 @@ describe('fixture server: Admin settings', () => {
   it('serves the full-subtitles list, and a PUT applies the owner’s choice and Automatic restores the rule', async () => {
     const before = await call('GET', '/api/admin/subtitles/full-need');
     expect(titles(before)).toEqual(['Das Boot', 'Léon', 'Amélie', 'Rashomon']);
-    expect(before.counts).toEqual({ needed: 2, unsure: 1, unknown: 0, notNeeded: 1 });
+    expect(before.counts).toEqual({ needed: 2, unsure: 0, unknown: 1, notNeeded: 1 });
 
     const chosen = await call('PUT', '/api/admin/films/3/full-need', { choice: 'NOT_NEEDED' });
     expect(chosen).toMatchObject({
@@ -396,8 +396,8 @@ describe('fixture server: Admin settings', () => {
     expect(automatic).toEqual(before.films.find((f) => f.filmId === 3));
     // A film loaded with an owner's choice goes back to what the rule says for it.
     expect(await call('PUT', '/api/admin/films/6/full-need', {})).toMatchObject({
-      need: 'UNSURE',
-      reason: 'UNLABELLED_AUDIO',
+      need: 'NEEDED',
+      reason: 'ORIGINAL_AUDIO_ASSUMED',
       ownerChoice: null,
     });
   });

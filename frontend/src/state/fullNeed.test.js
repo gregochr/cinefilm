@@ -69,7 +69,7 @@ describe('wording', () => {
     const words = (reason) => fullNeedReason({ reason });
     expect(words('FOREIGN_AUDIO')).toBe('Audio is in another language');
     expect(words('ENGLISH_AUDIO')).toBe('Audio is English');
-    expect(words('UNLABELLED_AUDIO')).toBe('Audio language not labelled');
+    expect(words('ORIGINAL_AUDIO_ASSUMED')).toBe('Audio not labelled: original language assumed');
     expect(words('ENGLISH_FILM')).toBe('English-language film');
     expect(words('OWNER')).toBe('Set by you');
     expect(words('NO_LANGUAGES')).toBe('Waiting for TMDB');

@@ -24,8 +24,8 @@
       "filmId": 5,
       "title": "Amélie",
       "year": 2001,
-      "need": "UNSURE",
-      "reason": "UNLABELLED_AUDIO",
+      "need": "UNKNOWN",
+      "reason": "NO_LANGUAGES",
       "ownerChoice": null,
       "editions": [
         { "name": "Theatrical Cut", "audio": null },
@@ -44,5 +44,5 @@
       "fullSubtitle": null
     }
   ],
-  "counts": { "needed": 2, "unsure": 1, "unknown": 0, "notNeeded": 1 }
+  "counts": { "needed": 2, "unsure": 0, "unknown": 1, "notNeeded": 1 }
 }
