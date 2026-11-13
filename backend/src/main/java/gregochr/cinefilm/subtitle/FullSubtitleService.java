@@ -14,7 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The full English subtitle an edition offers in its Subtitles menu: the owner's {@code X.en.srt} files beside the
+ * The full English subtitle an edition has, found and served (the player menu is phase 5c): the owner's
+ * {@code X.en.srt} files beside the
  * film (kind {@link SubtitleKind#FULL}), picked with {@link SidecarPrecedence}'s rules and served as one WebVTT file on
  * the edition's timeline like the forced subtitle ({@link ServedSubtitles#vtt}). There is no choice to make between
  * sources yet: only the owner's files serve (downloads of full subtitles come in a later phase), and nothing here ever

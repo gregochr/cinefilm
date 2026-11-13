@@ -87,7 +87,7 @@ public final class FilmDtos {
     }
 
     /**
-     * The full English subtitle an edition offers in its Subtitles menu, served by
+     * The full English subtitle an edition has, found and served (the player menu comes in phase 5c), served by
      * {@code GET /api/editions/{id}/full-subtitles.vtt}.
      *
      * @param source where it comes from; {@code SIDECAR} (an {@code X.en.srt} file beside the film) is the only one

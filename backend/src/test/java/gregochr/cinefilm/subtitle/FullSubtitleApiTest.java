@@ -125,7 +125,7 @@ class FullSubtitleApiTest extends SubtitleTestBase {
             .andExpect(jsonPath("$.state").value("matched"))
             .andExpect(jsonPath("$.whole").value(true))
             .andExpect(jsonPath("$.served").value(true))
-            .andExpect(jsonPath("$.servedReason").value("Offered in the Subtitles menu as English (full)"));
+            .andExpect(jsonPath("$.servedReason").value("Ready to play as English (full)"));
         mvc.perform(put("/api/admin/subtitles/{id}/offset", row.getId()).content("{\"offsetMs\":-500}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.offsetMs").value(-500));

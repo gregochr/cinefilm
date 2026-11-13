@@ -331,7 +331,7 @@ function Item({ item, busy, problem, actions, onRemoved }) {
 
 /**
  * Admin: the English subtitle files beside the films, forced (checked and played as the forced subtitle) and full
- * (labelled "Full": offered in the Subtitles menu, with no checks). They are grouped (Unmatched, Conflicts, Missing,
+ * (labelled "Full": found and served, with no checks). They are grouped (Unmatched, Conflicts, Missing,
  * Matched); each shows how it was read, can be attached to a film by hand, its cues read, its timing nudged and its
  * lines marked as checked. The cue text is untrusted: it is only ever rendered as text.
  */

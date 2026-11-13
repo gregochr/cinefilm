@@ -384,7 +384,7 @@ class SubtitleAdminServiceUnitTest {
         SidecarDto matched = listed.get(0);
         assertThat(matched.state()).isEqualTo("matched");
         assertThat(matched.served()).isTrue();
-        assertThat(matched.servedReason()).isEqualTo("Offered in the Subtitles menu as English (full)");
+        assertThat(matched.servedReason()).isEqualTo("Ready to play as English (full)");
         assertThat(matched.check()).isNull();
         assertThat(matched.alignment()).isNull();
         assertThat(matched.replacedByDownload()).isFalse();

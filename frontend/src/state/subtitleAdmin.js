@@ -143,7 +143,7 @@ export function isServed(item) {
  * for AGREES) or the quiet explanation (unchecked); `reference` is the muted "Compared with ... · checked ..." line.
  */
 export function checkSummary(item) {
-  // A full file is offered in the Subtitles menu, never compared with OpenSubtitles' forced files.
+  // A full file is only found and served for now, never compared with OpenSubtitles' forced files.
   if (isFull(item)) return null;
   const check = item.check;
   if (!check) {

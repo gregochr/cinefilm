@@ -86,7 +86,7 @@ public class SubtitleAdminService {
 
     /**
      * Every subtitle file with where it belongs and how it reads: the forced ones (with their checks and what
-     * playback does with them) and the full English ones (with only whether the Subtitles menu offers them). In path
+     * playback does with them) and the full English ones (with only whether the film page offers them). In path
      * order. The two kinds are built apart, so a full file is never part of what the forced logic works out.
      */
     @Transactional(readOnly = true)
@@ -408,7 +408,7 @@ public class SubtitleAdminService {
     }
 
     /**
-     * The full English files as listed: where each belongs, and whether the Subtitles menu offers it
+     * The full English files as listed: where each belongs, and whether the film page offers it
      * ({@link SidecarPrecedence}'s pick over the full files only). They have no comparison, no timing fit and no
      * download to replace them, and nothing here reads the forced resolver.
      */
@@ -450,7 +450,7 @@ public class SubtitleAdminService {
 
     private static String fullReason(SubtitleSidecar s, boolean conflict, boolean isServed, boolean noTimeline) {
         if (isServed) {
-            return "Offered in the Subtitles menu as English (full)";
+            return "Ready to play as English (full)";
         }
         if (s.getMediaFileId() == null) {
             return "Not used: it is not attached to a film";

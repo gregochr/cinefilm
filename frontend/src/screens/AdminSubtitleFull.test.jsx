@@ -16,7 +16,7 @@ const full = (over = {}) =>
     kind: 'FULL',
     check: null,
     alignment: null,
-    servedReason: 'Offered in the Subtitles menu as English (full)',
+    servedReason: 'Ready to play as English (full)',
     ...over,
   });
 
@@ -52,9 +52,7 @@ describe('Admin: Subtitles panel, full subtitle files', () => {
 
     const item = (await within(panel).findByText('Heat (1995)/Heat.en.srt')).closest('li');
     expect(within(item).getByText('Full')).toBeInTheDocument();
-    expect(
-      within(item).getByText('Offered in the Subtitles menu as English (full)'),
-    ).toBeInTheDocument();
+    expect(within(item).getByText('Ready to play as English (full)')).toBeInTheDocument();
     expect(within(item).queryByText('Playing')).not.toBeInTheDocument();
     expect(within(item).queryByText('Unchecked')).not.toBeInTheDocument();
     expect(within(item).queryByText('Checked')).not.toBeInTheDocument();
