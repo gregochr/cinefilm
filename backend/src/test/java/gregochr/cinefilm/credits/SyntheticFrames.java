@@ -246,7 +246,8 @@ final class SyntheticFrames {
         double shift = index * 0.25;
         for (int rowTop : new int[] {20, 40, 60}) {
             double top = rowTop - shift;
-            for (int row = (int) Math.floor(top); row < top + 6; row++) {
+            int last = (int) Math.ceil(top + 6);
+            for (int row = (int) Math.floor(top); row < last; row++) {
                 double coverage = Math.min(row + 1, top + 6) - Math.max(row, top);
                 int luma = 12 + (int) Math.round((TEXT - 12) * Math.max(0, Math.min(1, coverage)));
                 for (int column = 0; column < 4; column++) {
