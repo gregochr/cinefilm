@@ -116,10 +116,10 @@ public class PlexCreditsImportService {
             throw new NotFoundException("Plex is not configured");
         }
         if (lock.heldBy(LibraryLock.IMPORT)) {
-            throw new ConflictException("Import credits after the Plex import finishes");
+            throw new ConflictException("Import credits after the Plex import finishes.");
         }
         if (!running.compareAndSet(false, true)) {
-            throw new ConflictException("A credits import is already running");
+            throw new ConflictException("A credits import is already running.");
         }
         try {
             progress.set(new PlexCreditsProgress(0, 0));

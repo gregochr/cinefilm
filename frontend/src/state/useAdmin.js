@@ -199,7 +199,7 @@ export function usePlexCreditsImport() {
     } catch (failure) {
       setNotice(
         failure instanceof ApiError && failure.status === 409
-          ? (failure.body?.error ?? 'A credits import is already running.')
+          ? failure.body?.error || 'A credits import is already running.'
           : 'Could not start the credits import.',
       );
     } finally {

@@ -154,7 +154,7 @@ class PlexCreditsImportServiceTest {
         assertThat(slow.isRunning()).isTrue();
         assertThat(slow.status()).isEqualTo(new PlexCreditsStatus(true, new PlexCreditsProgress(0, 0), null));
         assertThatThrownBy(slow::start).isInstanceOf(ConflictException.class)
-            .hasMessage("A credits import is already running");
+            .hasMessage("A credits import is already running.");
         assertThat(slow.isRunning()).isTrue();
         assertThat(queued.get()).isNotNull();
     }
@@ -164,7 +164,7 @@ class PlexCreditsImportServiceTest {
         lock.tryAcquire(LibraryLock.IMPORT);
 
         assertThatThrownBy(service::start).isInstanceOf(ConflictException.class)
-            .hasMessage("Import credits after the Plex import finishes");
+            .hasMessage("Import credits after the Plex import finishes.");
 
         assertThat(service.isRunning()).isFalse();
         assertThat(lock.heldBy(LibraryLock.IMPORT)).isTrue();

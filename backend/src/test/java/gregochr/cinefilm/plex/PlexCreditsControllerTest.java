@@ -87,20 +87,20 @@ class PlexCreditsControllerTest {
 
     @Test
     void postWhileOneRunsIs409() throws Exception {
-        doThrow(new ConflictException("A credits import is already running")).when(imports).start();
+        doThrow(new ConflictException("A credits import is already running.")).when(imports).start();
 
         mvc.perform(post("/api/admin/plex/credits/import").with(user("owner")).header("X-CineFilm", "1"))
             .andExpect(status().isConflict())
-            .andExpect(jsonPath("$.error").value("A credits import is already running"));
+            .andExpect(jsonPath("$.error").value("A credits import is already running."));
     }
 
     @Test
     void postWhileThePlexImportRunsIs409WithItsOwnReason() throws Exception {
-        doThrow(new ConflictException("Import credits after the Plex import finishes")).when(imports).start();
+        doThrow(new ConflictException("Import credits after the Plex import finishes.")).when(imports).start();
 
         mvc.perform(post("/api/admin/plex/credits/import").with(user("owner")).header("X-CineFilm", "1"))
             .andExpect(status().isConflict())
-            .andExpect(jsonPath("$.error").value("Import credits after the Plex import finishes"));
+            .andExpect(jsonPath("$.error").value("Import credits after the Plex import finishes."));
     }
 
     @Test

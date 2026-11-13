@@ -74,7 +74,8 @@ public final class PlexModels {
      * @param parts the file paths of its Parts that have one, in play order
      * @param partCount how many Part entries Plex lists for it, with or without a file (more than one is a split)
      */
-    public record PlexMediaTiming(Long durationMs, List<String> parts, int partCount) {    }
+    public record PlexMediaTiming(Long durationMs, List<String> parts, int partCount) {
+    }
 
     /**
      * One marker of an item.
