@@ -224,6 +224,25 @@ class CreditsFinderTest {
     }
 
     @Test
+    void sparseTwoLineCardsThatChangeTwiceAreFound() {
+        CreditsResult result = refine(filmThen().add(SyntheticFrames.sparseCard(0), 12)
+            .add(SyntheticFrames.sparseCard(1), 12).add(SyntheticFrames.sparseCard(2), 12)
+            .add(SyntheticFrames.black(), 40));
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
+        assertThat(result.offsetMs()).isEqualTo(START);
+        assertThat(result.reasons()).containsExactly("Cards of text on a dark screen change from 1:00:00");
+    }
+
+    @Test
+    void aSingleOneLineTheEndCardUnderSixtySecondsIsStillNotFound() {
+        FrameClass card = FrameFeatures.measure(SyntheticFrames.oneLineCard(), WHOLE, PEAK).frameClass();
+        assertThat(card).isEqualTo(FrameClass.TEXT_ON_DARK);
+
+        assertNotFound("P50 T8", "Black or text on a dark screen lasts only 40 s, and credits last at least a minute");
+    }
+
+    @Test
     void aShortFadeIsCountedFromWhereTheBlackBegins() {
         CreditsResult result = refine(filmThen().add(SyntheticFrames.black(), 6).crawl(200, 3));
 

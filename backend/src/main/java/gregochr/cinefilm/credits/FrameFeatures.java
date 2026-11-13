@@ -68,20 +68,21 @@ public record FrameFeatures(double darkShare, double brightShare, boolean textLi
     }
 
     /**
-     * Classifies the frame: black from a dark share of 0.98; text on dark from a dark share of 0.80 with a bright
-     * share of 0.002 to 0.20 that is text-like; otherwise picture.
+     * Classifies the frame. Text on dark is tested first (dark share 0.80 or more, bright share 0.002 to 0.20,
+     * text-like) so a sparse card, a name or two on black, is text and not black. Then black (dark share 0.98 or
+     * more); otherwise picture.
      *
      * @return the class
      */
     public FrameClass frameClass() {
-        if (darkShare >= CreditsTuning.BLACK_DARK_SHARE) {
-            return FrameClass.BLACK;
-        }
         if (darkShare >= CreditsTuning.TEXT_DARK_SHARE
             && brightShare >= CreditsTuning.TEXT_BRIGHT_MIN
             && brightShare <= CreditsTuning.TEXT_BRIGHT_MAX
             && textLike) {
             return FrameClass.TEXT_ON_DARK;
+        }
+        if (darkShare >= CreditsTuning.BLACK_DARK_SHARE) {
+            return FrameClass.BLACK;
         }
         return FrameClass.PICTURE;
     }

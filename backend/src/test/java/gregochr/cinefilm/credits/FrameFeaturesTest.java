@@ -44,6 +44,26 @@ class FrameFeaturesTest {
     }
 
     @Test
+    void aSparseOneLineCardIsTextOnDarkNotBlack() {
+        FrameFeatures features = FrameFeatures.measure(SyntheticFrames.oneLineCard(), WHOLE, 235);
+
+        assertThat(features.brightShare()).isEqualTo(96 / SyntheticFrames.PIXELS, offset(1e-12));
+        assertThat(features.darkShare()).isGreaterThan(0.98);
+        assertThat(features.frameClass()).isEqualTo(FrameClass.TEXT_ON_DARK);
+    }
+
+    @Test
+    void aFewSpecksOnBlackStayBlack() {
+        GreyFrame specks = new Canvas(160, 90, 0).rect(30, 20, 1, 1, 255).rect(100, 60, 2, 1, 255)
+            .rect(70, 40, 1, 1, 200).frame();
+
+        FrameFeatures features = FrameFeatures.measure(specks, WHOLE, 235);
+
+        assertThat(features.textLike()).isFalse();
+        assertThat(features.frameClass()).isEqualTo(FrameClass.BLACK);
+    }
+
+    @Test
     void aMidTonePictureIsPicture() {
         FrameFeatures features = FrameFeatures.measure(SyntheticFrames.picture(), WHOLE, 235);
 
@@ -198,6 +218,9 @@ class FrameFeaturesTest {
         assertThat(new FrameFeatures(0.98, 0.0, false).frameClass()).isEqualTo(FrameClass.BLACK);
         assertThat(new FrameFeatures(0.9799, 0.0, false).frameClass()).isEqualTo(FrameClass.PICTURE);
         assertThat(new FrameFeatures(0.9799, 0.01, true).frameClass()).isEqualTo(FrameClass.TEXT_ON_DARK);
+        assertThat(new FrameFeatures(0.99, 0.01, true).frameClass()).isEqualTo(FrameClass.TEXT_ON_DARK);
+        assertThat(new FrameFeatures(0.999, 0.0001, true).frameClass()).isEqualTo(FrameClass.BLACK);
+        assertThat(new FrameFeatures(0.99, 0.01, false).frameClass()).isEqualTo(FrameClass.BLACK);
     }
 
     @Test

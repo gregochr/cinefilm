@@ -102,6 +102,19 @@ final class SyntheticFrames {
             .frame();
     }
 
+    /** A sparse card: two short lines (about 1.3% bright); each variant 0 to 2 puts them in other places. */
+    static GreyFrame sparseCard(int variant) {
+        return new Canvas(W, H, 0)
+            .line(20 + 10 * variant, 8, TEXT)
+            .line(60 - 8 * variant, 8, TEXT)
+            .frame();
+    }
+
+    /** A card with a single short name: 8 blocks, 96 bright pixels (about 0.67%). */
+    static GreyFrame oneLineCard() {
+        return new Canvas(W, H, 0).line(44, 8, TEXT).frame();
+    }
+
     /** One frame of a crawl: lines rise {@code shift} pixels a frame; every line has its own width. */
     static GreyFrame crawl(int index, int shift) {
         Canvas canvas = new Canvas(W, H, 0);
