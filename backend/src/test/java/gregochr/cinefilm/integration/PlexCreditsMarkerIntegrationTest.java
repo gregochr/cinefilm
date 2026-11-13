@@ -22,7 +22,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
-/** V23 on PostgreSQL: the table's columns and types, a row's round trip, replacing a row, and the cascade. */
+/** V24 on PostgreSQL: the table's columns and types, a row's round trip, replacing a row, and the cascade. */
 @Transactional
 class PlexCreditsMarkerIntegrationTest extends IntegrationTestBase {
 
