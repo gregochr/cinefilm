@@ -169,6 +169,25 @@ export function usePlexImport() {
   return { plex: data, error, loading, starting, notice, startImport, reload };
 }
 
+/** A status read that has not answered by now ends as an error, so a dead connection cannot freeze the block. */
+export const CREDITS_READ_TIMEOUT_MS = 10000;
+
+/** One status read, ended with an error after `CREDITS_READ_TIMEOUT_MS`; `outer` (the resource's signal) aborts it. */
+function readCreditsStatus(outer) {
+  return new Promise((resolve, reject) => {
+    const controller = new AbortController();
+    outer.addEventListener('abort', () => controller.abort());
+    const timeout = setTimeout(() => {
+      controller.abort();
+      reject(new Error('The credits import status did not answer in time'));
+    }, CREDITS_READ_TIMEOUT_MS);
+    adminApi
+      .plexCredits({ signal: controller.signal })
+      .then(resolve, reject)
+      .finally(() => clearTimeout(timeout));
+  });
+}
+
 /**
  * The "Import credits from Plex" block: status, polled while an import runs, plus the start. Starting while one already
  * runs (409) is not an error: the notice says so and the block shows the running import. A second click while a start
@@ -182,6 +201,10 @@ export function usePlexImport() {
  * a status is running and no read is in flight (a read is in flight from the moment any is issued until it answers,
  * and while `loading`), and is cleared whenever a read is issued, so a read is never aborted by the next.
  *
+ * A read that hangs (no timeout in the client) is ended with an error after `CREDITS_READ_TIMEOUT_MS`, which clears
+ * its in-flight mark, shows the refresh error with "Check again", and lets the poll go on. `checking` is true from
+ * "Check again" until a read answers (or fails).
+ *
  * `announcement` is the sentence to put in a live region when a run finishes while the block is open (never for the
  * first status loaded). It is emptied first and written on the next tick, so a repeat of the same words is heard
  * again, and it is emptied while a run is going.
@@ -191,8 +214,7 @@ export function usePlexCreditsImport() {
   const { data, error, loading, refresh } = useResource('admin-plex-credits', (options) => {
     calls.current += 1;
     const read = calls.current;
-    return adminApi
-      .plexCredits(options)
+    return readCreditsStatus(options.signal)
       .then((status) => ({ ...status, read }))
       .finally(() => {
         // Only the latest call's own settling (an answer, a failure or its abort) ends the in-flight mark.
@@ -203,6 +225,7 @@ export function usePlexCreditsImport() {
   const [notice, setNotice] = useState(null);
   const [started, setStarted] = useState(null);
   const [announcement, setAnnouncement] = useState('');
+  const [checking, setChecking] = useState(false);
   const startedRef = useRef(false);
   const seenFinished = useRef(undefined);
   const timer = useRef(null);
@@ -241,7 +264,13 @@ export function usePlexCreditsImport() {
   }, [running, data, error, loading, look, refresh]);
 
   // "Check again" looks quietly, so the button the user just pressed (and its alert) stay where they are.
-  const checkAgain = useCallback(() => look(refresh), [look, refresh]);
+  const checkAgain = useCallback(() => {
+    setChecking(true);
+    look(refresh);
+  }, [look, refresh]);
+  useEffect(() => {
+    setChecking(false);
+  }, [data, error]);
 
   const startImport = useCallback(async () => {
     if (startedRef.current) return;
@@ -271,6 +300,7 @@ export function usePlexCreditsImport() {
     starting,
     notice,
     announcement,
+    checking,
     startImport,
     reload: checkAgain,
   };

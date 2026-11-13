@@ -17,7 +17,7 @@ import { usePlexCreditsImport } from '../state/useAdmin.js';
  */
 export default function PlexCreditsImport({ reachable }) {
   const titleId = useId();
-  const { credits, error, loading, starting, notice, announcement, startImport, reload } =
+  const { credits, error, loading, starting, notice, announcement, checking, startImport, reload } =
     usePlexCreditsImport();
   const running = Boolean(credits?.running);
   return (
@@ -41,8 +41,8 @@ export default function PlexCreditsImport({ reachable }) {
               ? 'Couldn\u2019t refresh the credits import status.'
               : 'Couldn\u2019t load the credits import status.'}
           </span>
-          <Button variant="secondary" onClick={reload}>
-            Check again
+          <Button variant="secondary" aria-busy={checking} onClick={reload}>
+            {checking ? 'Checking\u2026' : 'Check again'}
           </Button>
         </div>
       ) : null}

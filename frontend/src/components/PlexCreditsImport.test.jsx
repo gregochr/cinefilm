@@ -2,7 +2,7 @@ import { act, render, renderHook, screen, waitFor, within } from '@testing-libra
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LIBRARY_CHANGED_EVENT } from '../api/client.js';
-import { SCAN_POLL_MS, usePlexCreditsImport } from '../state/useAdmin.js';
+import { CREDITS_READ_TIMEOUT_MS, SCAN_POLL_MS, usePlexCreditsImport } from '../state/useAdmin.js';
 import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
 import PlexCreditsImport from './PlexCreditsImport.jsx';
 
@@ -236,7 +236,8 @@ describe('PlexCreditsImport', () => {
     await userEvent.click(again);
 
     expect(reads).toBe(2);
-    expect(within(group).getByRole('button', { name: 'Check again' })).toBe(again);
+    expect(within(group).getByRole('button', { name: 'Checking\u2026' })).toBe(again);
+    expect(again).toHaveAttribute('aria-busy', 'true');
     expect(again).toHaveFocus();
     release();
     expect(await within(group).findByText('Not run yet')).toBeInTheDocument();
@@ -265,7 +266,7 @@ describe('PlexCreditsImport', () => {
     await userEvent.click(again);
 
     expect(reads).toBe(3);
-    expect(within(group).getByRole('button', { name: 'Check again' })).toBe(again);
+    expect(within(group).getByRole('button', { name: 'Checking\u2026' })).toBe(again);
     expect(again).toHaveFocus();
     release();
     await waitFor(() => expect(within(group).queryByRole('alert')).toBeNull());
@@ -783,6 +784,33 @@ describe('usePlexCreditsImport', () => {
     await settle(SCAN_POLL_MS);
     await settle();
     expect(result.current.announcement).toBe(sentence);
+  });
+
+  it('ends a hung read with an error after the timeout, then polls again', async () => {
+    let reads = 0;
+    installFetch((method, url) => {
+      if (url !== '/api/admin/plex/credits') return null;
+      reads += 1;
+      if (reads === 2) return new Promise(() => {});
+      return respond(running(reads));
+    });
+    vi.useFakeTimers();
+    const { result } = renderHook(() => usePlexCreditsImport());
+    await settle();
+    await settle(SCAN_POLL_MS);
+    expect(reads).toBe(2);
+    expect(result.current.error).toBeNull();
+
+    await settle(CREDITS_READ_TIMEOUT_MS - 1);
+    expect(result.current.error).toBeNull();
+    await settle(1);
+    expect(result.current.error).not.toBeNull();
+    expect(result.current.credits.running).toBe(true);
+
+    await settle(SCAN_POLL_MS);
+    expect(reads).toBe(3);
+    expect(result.current.error).toBeNull();
+    expect(result.current.credits.progress.processed).toBe(3);
   });
 
   it('leaves no timer behind when it unmounts while an import runs', async () => {
