@@ -133,6 +133,11 @@ public class Film {
     @Column(length = 16)
     private ForcedNeedChoice forcedNeedOwner;
 
+    /** The owner's choice on full English subtitles; null = decided automatically. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 16)
+    private FullNeedChoice fullNeedOwner;
+
     /** How many English foreign-parts-only subtitles OpenSubtitles had at the last search; null = never searched. */
     private Integer osForcedCount;
 

@@ -16,6 +16,7 @@ import adminTranscoding from '../test/fixtures/admin-transcoding.json';
 import adminPlaybackHealth from '../test/fixtures/admin-playback-health.json';
 import adminSubtitles from '../test/fixtures/admin-subtitles.json';
 import adminForcedNeed from '../test/fixtures/admin-forced-need.json';
+import adminFullNeed from '../test/fixtures/admin-full-need.json';
 import collection from '../test/fixtures/collection.json';
 import collections from '../test/fixtures/collections.json';
 import session from '../test/fixtures/session.json';
@@ -167,6 +168,43 @@ function setForcedNeed(filmId, body) {
   return forcedRow(automatic);
 }
 
+/** The owner's choice per film on full subtitles, kept in memory; a film without one has the fixture's own row. */
+const fullChoices = new Map();
+
+/** What the automatic rule says for a fixture film that is loaded with an owner choice (it is `OWNER` as loaded). */
+const FULL_AUTOMATIC = { 6: { need: 'UNSURE', reason: 'UNLABELLED_AUDIO' } };
+
+function fullRow(loaded) {
+  if (!fullChoices.has(loaded.filmId)) return loaded;
+  const choice = fullChoices.get(loaded.filmId);
+  if (choice) return { ...loaded, need: choice, reason: 'OWNER', ownerChoice: choice };
+  return { ...loaded, ...FULL_AUTOMATIC[loaded.filmId], ownerChoice: null };
+}
+
+function fullNeedList() {
+  const rows = adminFullNeed.films.map(fullRow);
+  const count = (need) => rows.filter((r) => r.need === need).length;
+  return {
+    films: rows,
+    counts: {
+      needed: count('NEEDED'),
+      unsure: count('UNSURE'),
+      unknown: count('UNKNOWN'),
+      notNeeded: count('NOT_NEEDED'),
+    },
+  };
+}
+
+function setFullNeed(filmId, body) {
+  const loaded = adminFullNeed.films.find((f) => f.filmId === filmId);
+  if (!loaded) throw new ApiError(404, 'No such film');
+  const choice = body?.choice ?? null;
+  if (choice !== null && !CHOICES.has(choice))
+    throw new ApiError(400, 'The choice must be NEEDED, NOT_NEEDED or null');
+  fullChoices.set(filmId, choice);
+  return fullRow(loaded);
+}
+
 export async function handle(method, path, body) {
   await delay(80);
   const url = new URL(path, 'http://fixtures.local');
@@ -194,6 +232,9 @@ export async function handle(method, path, body) {
   if (route === '/api/admin/forced-subtitles/films') return forcedNeedList();
   match = route.match(/^\/api\/admin\/films\/(\d+)\/forced-need$/);
   if (match && method === 'PUT') return setForcedNeed(Number(match[1]), body);
+  if (route === '/api/admin/subtitles/full-need') return fullNeedList();
+  match = route.match(/^\/api\/admin\/films\/(\d+)\/full-need$/);
+  if (match && method === 'PUT') return setFullNeed(Number(match[1]), body);
   if (route === '/api/admin/playback-health') return adminPlaybackHealth;
   if (route === '/api/admin/transcoding') return adminTranscoding;
   if (/^\/api\/admin\/transcoding\/sessions\//.test(route)) return null;

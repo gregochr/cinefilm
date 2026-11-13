@@ -46,7 +46,8 @@ class FilmControllerTest {
 
     private void heat() {
         when(service.detail(7L)).thenReturn(new FilmDetail(7L, "Heat", 1995, null, null, false, null, null, null,
-            List.of(), null, List.of(), List.of(), List.of(), null, new Ratings(null, null)));
+            List.of(), null, List.of(), List.of(), List.of(), null, new Ratings(null, null),
+            "UNSURE"));
     }
 
     @Test

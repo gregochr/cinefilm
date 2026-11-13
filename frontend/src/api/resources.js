@@ -129,6 +129,17 @@ export const adminApi = {
    */
   setForcedNeed: (filmId, choice, options) =>
     put(`/api/admin/films/${filmId}/forced-need`, { choice }, options),
+  /**
+   * The films that may need full English subtitles (not made in English, or chosen by the owner), each with its need,
+   * the reason and its editions' audio: `{ films: [...], counts: {...} }`.
+   */
+  fullNeed: (options) => get('/api/admin/subtitles/full-need', options),
+  /**
+   * Records the owner's choice on full subtitles for a film (`'NEEDED'`, `'NOT_NEEDED'`, or null for the automatic
+   * rule) and returns that film's row. A 409 means a scan is running; a 404 an unknown film.
+   */
+  setFullNeed: (filmId, choice, options) =>
+    put(`/api/admin/films/${filmId}/full-need`, { choice }, options),
 };
 
 /** Server settings (Admin). `update` takes the minimum watch time in whole minutes, 0 to 30. */

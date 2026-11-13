@@ -306,6 +306,20 @@ describe('Forced subtitle resources', () => {
     expect(last().body).toEqual({ choice: null });
   });
 
+  it('lists which films need full subtitles and records the owner’s choice for one', async () => {
+    const last = stubFetch();
+    await adminApi.fullNeed();
+    expect(last()).toMatchObject({ path: '/api/admin/subtitles/full-need', method: 'GET' });
+    await adminApi.setFullNeed(7, 'NOT_NEEDED');
+    expect(last()).toMatchObject({
+      path: '/api/admin/films/7/full-need',
+      method: 'PUT',
+      body: { choice: 'NOT_NEEDED' },
+    });
+    await adminApi.setFullNeed(7, null);
+    expect(last().body).toEqual({ choice: null });
+  });
+
   it('lists the files and reads one file’s cues', async () => {
     const last = stubFetch();
     await adminApi.subtitles();

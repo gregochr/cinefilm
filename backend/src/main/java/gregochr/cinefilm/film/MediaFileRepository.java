@@ -101,6 +101,33 @@ public interface MediaFileRepository extends JpaRepository<MediaFile, Long> {
         + "and (s.language is null or lower(s.language) in ('english', 'eng', 'en', 'und'))")
     long countEmbeddedForcedForFilm(Long filmId);
 
+    /**
+     * One audio track of an original file (or the file alone, with null track fields, when it has none).
+     *
+     * @param filmId the film
+     * @param editionId the edition
+     * @param editionName the edition's name
+     * @param fileId the file
+     * @param partNumber which part of its edition the file is
+     * @param presence whether the last scan found the file
+     * @param language the track's stored language, or null
+     * @param isDefault whether the track is the file's default, or null when there is no track
+     */
+    record AudioRow(Long filmId, Long editionId, String editionName, Long fileId, int partNumber, Presence presence,
+                    String language, Boolean isDefault) {
+    }
+
+    /**
+     * Every original file of the given films with its audio tracks, in one query: by edition, part, then track. The
+     * caller picks each edition's part 1 and its default track.
+     */
+    @Query("select new gregochr.cinefilm.film.MediaFileRepository$AudioRow(e.film.id, e.id, e.name, m.id, "
+        + "m.partNumber, m.presence, a.language, a.isDefault) from MediaFile m join m.edition e "
+        + "left join AudioStream a on a.mediaFile = m "
+        + "where m.kind = gregochr.cinefilm.film.MediaKind.ORIGINAL and e.film.id in :filmIds "
+        + "order by e.id, m.partNumber, m.id, a.index, a.id")
+    List<AudioRow> findAudioRows(Collection<Long> filmIds);
+
     /** How many original files are present with the given playability. */
     @Query("select count(m) from MediaFile m where m.kind = gregochr.cinefilm.film.MediaKind.ORIGINAL "
         + "and m.presence = gregochr.cinefilm.film.Presence.PRESENT and m.playability = :playability")

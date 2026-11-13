@@ -84,6 +84,7 @@ describe('Admin: Subtitles panel, the list', () => {
         .map((h) => h.textContent),
     ).toEqual([
       'Which films need them',
+      'Full subtitles',
       'Unmatched (1)',
       'Conflicts (2)',
       'Missing (1)',
