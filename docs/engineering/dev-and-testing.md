@@ -341,6 +341,40 @@ those findings can be had locally first: the same reviewer, reading the same `AG
   2026-11-12; the owner chose lean rounds when the quota kept running out).
 - **Still request the PR review.** The PR's Codex run is the merge gate (`CLAUDE.md` step 6); the local run only
   makes it likely to be clean the first time.
+- **Local Codex is not an `AGENTS.md` audit.** It reports correctness issues well but has passed branches that
+  break the repo's rules (#129: a service with only a full-application test was "clean" twice locally, then flagged
+  on the PR). The planner's test-class check below covers that gap mechanically.
+
+### Planner's test-class check (every diff review)
+
+Before local Codex, in Sonnet's worktree, from the repo root. It prints nothing when every new or changed
+`@Service`, `@Component`, `@RestController` or `@Controller` has a unit test class (one that neither extends
+`ApiTestBase` nor uses `@SpringBootTest`, `@WebMvcTest` or `@DataJpaTest`, and is outside `integration/`), and
+every new frontend module has a `.test.js(x)` beside it. Each line it prints goes back to Sonnet before the push.
+A frontend line may be a false alarm when the module is tested through another file; say which test covers it.
+
+```bash
+base=origin/main
+git diff --name-only --diff-filter=AM "$base"...HEAD -- 'backend/src/main/java/*.java' | while read -r f; do
+  [ -f "$f" ] || continue
+  cls=$(basename "$f" .java)
+  grep -qE '@(Service|Component|RestController|Controller)\b' "$f" || continue
+  tests=$(git ls-files 'backend/src/test/java/*.java' | grep -E "/${cls}[A-Za-z]*Test\.java$" | grep -v '/integration/')
+  unit=""
+  for t in $tests; do
+    grep -qE 'extends ApiTestBase|@SpringBootTest|@WebMvcTest|@DataJpaTest' "$t" || unit="$unit $t"
+  done
+  [ -n "$unit" ] || echo "NO UNIT TEST: $f (tests found: $(echo $tests | tr '\n' ' '))"
+done
+git diff --name-only --diff-filter=A "$base"...HEAD -- 'frontend/src/*.js' 'frontend/src/*.jsx' \
+  | grep -vE '\.test\.jsx?$|/test/|main\.jsx$' | while read -r f; do
+  stem=${f%.*}
+  ls "$stem".test.js "$stem".test.jsx >/dev/null 2>&1 || echo "NO TEST FILE (check it is covered elsewhere): $f"
+done
+```
+
+Proven on #129 as first pushed: it printed only `NO UNIT TEST: .../credits/CreditsDetectionService.java`, the gap
+Codex found on the PR, and passed the branch's other new services, which have unit tests.
 
 ### Self-check in every Sonnet brief
 
@@ -351,7 +385,10 @@ before reporting done:
   class-name queries; `userEvent`, not `fireEvent.click`; keys go to the focused element; no `Thread.sleep`; no
   `any()` in `verify()`; no `verify(..., never())` on repositories. Lint enforces the ones it can.
 - **`AGENTS.md` items:** a changed request or response shape updates `foundation-plan.md` and the HTTP contract
-  tests; every new script has tests; every new interactive element has a 44px target.
+  tests; every new script has tests; every new interactive element has a 44px target; **every new or changed
+  service, component or controller has its own unit test class with mocked collaborators** (`<Class>Test` or
+  `<Class>UnitTest`), beside any full-application test. A test that extends `ApiTestBase` or boots Spring is not a
+  unit test and never stands in for one (`AGENTS.md` rule 5; missed in #129, owner 2026-11-13).
 - **Async state:** for each request the diff starts, what happens on a second click, an undo, or a newer request
   while the first is in flight, and on cancel? Most of the logic findings (#39, #42) were races of this kind.
 
