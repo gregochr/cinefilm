@@ -429,8 +429,16 @@ public class SubtitleAdminService {
         Set<Long> served = new HashSet<>();
         Set<Long> conflicting = new HashSet<>();
         Set<Long> noTimeline = new HashSet<>();
+        Set<Long> ownerEditions = new HashSet<>();
+        Set<Long> ownerConflicts = new HashSet<>();
         for (Edition edition : editionById.values()) {
-            Pick pick = FullChoice.of(edition, rowsByEdition.get(edition.getId())).pick();
+            FullChoice choice = FullChoice.of(edition, rowsByEdition.get(edition.getId()));
+            Pick pick = choice.pick();
+            if (!choice.download() && !pick.slots().isEmpty()) {
+                ownerEditions.add(edition.getId());
+            } else if (!choice.download() && !pick.conflicting().isEmpty()) {
+                ownerConflicts.add(edition.getId());
+            }
             conflicting.addAll(pick.conflicting());
             // A file on an edition whose later part's start is unknown cannot be placed on its timeline: not offered.
             Set<Long> picked = (ServedSubtitles.version(edition, pick) != null ? served : noTimeline);
@@ -440,16 +448,32 @@ public class SubtitleAdminService {
         for (SubtitleSidecar sidecar : all) {
             MediaFile file = fileById.get(sidecar.getMediaFileId());
             Long id = sidecar.getId();
+            String beaten = file == null || !sidecar.isDownload() ? null : downloadNotUsed(file.getEdition(),
+                ownerEditions, ownerConflicts);
             String reason = fullReason(sidecar, conflicting.contains(id), served.contains(id),
-                noTimeline.contains(id));
+                noTimeline.contains(id), beaten);
             dtos.add(dto(sidecar, file, conflicting.contains(id), served.contains(id), null, null, reason, false));
         }
         return dtos;
     }
 
-    private static String fullReason(SubtitleSidecar s, boolean conflict, boolean isServed, boolean noTimeline) {
+    /** Why a full download is not used when something other than another download is the cause, else null. */
+    private static String downloadNotUsed(Edition edition, Set<Long> ownerEditions,
+                                          Set<Long> ownerConflicts) {
+        if (Downloads.isNotNeeded(edition, SubtitleKind.FULL)) {
+            return "Not used: this film is marked as needing no full subtitles";
+        }
+        if (ownerConflicts.contains(edition.getId())) {
+            return "Not used: your own full files compete for the same place, so none plays";
+        }
+        return ownerEditions.contains(edition.getId()) ? "Not used: your own full file plays instead" : null;
+    }
+
+    private static String fullReason(SubtitleSidecar s, boolean conflict, boolean isServed, boolean noTimeline,
+                                     String downloadNotUsed) {
         if (isServed) {
-            return "Ready to play as English (full)";
+            // A full download has no check yet (5d-2), and plays anyway (decision 66).
+            return s.isDownload() ? "Playing as English (full); not checked yet" : "Ready to play as English (full)";
         }
         if (s.getMediaFileId() == null) {
             return "Not used: it is not attached to a film";
@@ -462,6 +486,9 @@ public class SubtitleAdminService {
         }
         if (noTimeline) {
             return "Not used: the lengths of the film's parts are not known yet";
+        }
+        if (downloadNotUsed != null) {
+            return downloadNotUsed;
         }
         return conflict ? "Not used: two full subtitle files compete for the same place"
             : "Not used: another full subtitle file takes its place";

@@ -1147,6 +1147,26 @@ Decisions not settled by the spec, taken in 5d-1: a per-edition cut still ranks 
 film-level order and the stored candidates demote hearing-impaired files first); a conflict between the owner's files is
 not filled in by a download; a FULL download never starts the forced path's timing fit or per-download comparison.
 
+#### Phase 5e built (2026-11-13)
+
+Admin finishes for full files, with no proof (5d-2 decides that):
+
+- **Rows.** A full download has the forced download's row parts: origin, Playing (when `FullChoice` serves it), the server's
+  sentence (unchecked and playing: "Playing as English (full); not checked yet"; beaten by the owner's file: "Not used:
+  your own full file plays instead"; its film marked "not needed": "Not used: this film is marked as needing no full
+  subtitles"; the owner's own full files in conflict: "Not used: your own full files compete for the same place, so none
+  plays"), Remove with the existing confirm (blocks the file as FULL; the next run offers another candidate) and the
+  timing nudge. There is still no "Looks right" and no "Use my file" for full files: `FullChoice` always lets a usable
+  owner's full file (or a conflict between them) beat a download, so a download plays only when no owner's full file can,
+  and there is never a "my file looks right, use it" case to offer.
+- **Chips.** `Forced` and `Full` join the file list's chips (All, Forced, Full, Needs checking, Unchecked, Downloads). The
+  last three still count forced files only. Full lists the owner's full files and full downloads together.
+- **Full-need list.** `FullNeedFilmDto.fullSubtitle` is `{ source: "SIDECAR" | "DOWNLOAD" } | null`, what the film plays on
+  some edition (`FullSubtitleService.forEditions` over one fetch of the films' editions: no per-film query). Each row
+  shows it in a line and has "Show files", which selects Full and filters the file list to that film.
+- **Opening chip.** The list opens on Needed, or Unsure when nothing is needed, or Not needed when nothing is unsure
+  either. Chosen once from the first list; a refresh never moves it.
+
 ### Phase 6 — subtitles stored as pictures inside the file
 
 About 60 rips carry their subtitle tracks as pictures (`dvd_subtitle`, DVD-style bitmaps), not text: about 25 full

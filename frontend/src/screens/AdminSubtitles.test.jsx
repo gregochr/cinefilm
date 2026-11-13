@@ -1030,7 +1030,14 @@ describe('Admin: Subtitles panel, the OpenSubtitles check', () => {
       within(within(panel).getByRole('group', { name: 'Show subtitle files' }))
         .getAllByRole('button')
         .map((b) => b.textContent),
-    ).toEqual(['All (4)', 'Needs checking (1)', 'Unchecked (1)', 'Downloads (0)']);
+    ).toEqual([
+      'All (4)',
+      'Forced (4)',
+      'Full (0)',
+      'Needs checking (1)',
+      'Unchecked (1)',
+      'Downloads (0)',
+    ]);
     expect(chip(panel, /^All/)).toHaveAttribute('aria-pressed', 'true');
 
     await userEvent.click(chip(panel, /^Needs checking/));

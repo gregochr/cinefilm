@@ -4,6 +4,8 @@ import {
   FULL_NEED_FILTERS,
   audioNote,
   filterFullNeed,
+  fullSubtitleLine,
+  initialFullNeedFilter,
   fullNeedCounts,
   fullNeedReason,
   fullNeedWords,
@@ -27,6 +29,30 @@ describe('filters', () => {
 
   it('count each chip from the rows', () => {
     expect(fullNeedCounts(ROWS)).toEqual({ needed: 1, unsure: 2, 'not-needed': 2 });
+  });
+});
+
+describe('the opening chip', () => {
+  it('is Needed when any film is needed, else Unsure, else Not needed', () => {
+    expect(initialFullNeedFilter({ needed: 2, unsure: 1, 'not-needed': 1 })).toBe('needed');
+    expect(initialFullNeedFilter({ needed: 0, unsure: 1, 'not-needed': 1 })).toBe('unsure');
+    expect(initialFullNeedFilter({ needed: 0, unsure: 0, 'not-needed': 3 })).toBe('not-needed');
+  });
+
+  it('stays on Needed when there are no films at all', () => {
+    expect(initialFullNeedFilter({ needed: 0, unsure: 0, 'not-needed': 0 })).toBe('needed');
+    expect(initialFullNeedFilter({})).toBe('needed');
+  });
+});
+
+describe('a film’s full subtitle line', () => {
+  it('says whose file plays, a download that is not checked yet, or none', () => {
+    expect(fullSubtitleLine({ fullSubtitle: { source: 'SIDECAR' } })).toBe('Playing: your file');
+    expect(fullSubtitleLine({ fullSubtitle: { source: 'DOWNLOAD' } })).toBe(
+      'Playing: download (not checked yet)',
+    );
+    expect(fullSubtitleLine({ fullSubtitle: null })).toBe('None yet');
+    expect(fullSubtitleLine({})).toBe('None yet');
   });
 });
 

@@ -16,6 +16,17 @@ export const FULL_NEED_FILTERS = [
 /** The chip shown first. */
 export const DEFAULT_FULL_NEED_FILTER = 'needed';
 
+/**
+ * The chip a list opens on, picked once from its counts: Needed, but when nothing is needed the first chip with films
+ * (Unsure, then Not needed), so it never opens on "No films here" with films a tap away. Not recomputed on a refresh.
+ */
+export function initialFullNeedFilter(counts) {
+  if (counts.needed > 0) return DEFAULT_FULL_NEED_FILTER;
+  if (counts.unsure > 0) return 'unsure';
+  if (counts['not-needed'] > 0) return 'not-needed';
+  return DEFAULT_FULL_NEED_FILTER;
+}
+
 /** The rows a filter lists (none for an unknown key). */
 export function filterFullNeed(rows, key) {
   const filter = FULL_NEED_FILTERS.find((f) => f.key === key);
@@ -51,6 +62,17 @@ const REASON_WORDS = {
 /** The reason for a film's need in plain words; empty for a reason this screen does not know. */
 export function fullNeedReason(row) {
   return REASON_WORDS[row.reason] ?? '';
+}
+
+/**
+ * Where a film's full English subtitles come from, in one line: the owner's file, a download that plays unchecked, or
+ * none yet. The server says which plays (`fullSubtitle.source`); nothing is derived here.
+ */
+export function fullSubtitleLine(row) {
+  const source = row.fullSubtitle?.source;
+  if (source === 'SIDECAR') return 'Playing: your file';
+  if (source === 'DOWNLOAD') return 'Playing: download (not checked yet)';
+  return 'None yet';
 }
 
 /** The language label of one edition's audio as shown: "French", or "not labelled" when the file says nothing. */
