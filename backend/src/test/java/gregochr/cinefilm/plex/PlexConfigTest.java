@@ -42,4 +42,20 @@ class PlexConfigTest {
         assertThat(ran.get().getName()).isEqualTo("plex-import");
         assertThat(ran.get().isDaemon()).isTrue();
     }
+
+    @Test
+    void creditsImportsRunOnTheirOwnNamedDaemonThread() throws Exception {
+        Executor executor = new PlexConfig().plexCreditsExecutor();
+        AtomicReference<Thread> ran = new AtomicReference<>();
+        CountDownLatch done = new CountDownLatch(1);
+
+        executor.execute(() -> {
+            ran.set(Thread.currentThread());
+            done.countDown();
+        });
+
+        assertThat(done.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(ran.get().getName()).isEqualTo("plex-credits-import");
+        assertThat(ran.get().isDaemon()).isTrue();
+    }
 }

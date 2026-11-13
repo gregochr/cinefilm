@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gregochr.cinefilm.library.ScanService;
+import gregochr.cinefilm.plex.PlexCreditsImportService;
 import gregochr.cinefilm.plex.PlexImportService;
 import java.util.List;
 import java.util.Set;
@@ -43,6 +44,10 @@ class RouteSecurityDriftTest {
     /** The signed-in sweep calls POST /api/admin/plex/import: a real import must not start from a security test. */
     @MockitoBean
     private PlexImportService plexImports;
+
+    /** The signed-in sweep calls POST /api/admin/plex/credits/import: no real import from a security test. */
+    @MockitoBean
+    private PlexCreditsImportService plexCreditsImports;
 
     /** Routes that may be called signed out: sign in, check status, sign out. */
     private static final Set<String> SESSION_ROUTES = Set.of(
@@ -96,7 +101,7 @@ class RouteSecurityDriftTest {
             "DELETE /api/session", "GET /api/admin/scan", "POST /api/admin/scan", "GET /api/admin/attention",
             "GET /api/media-files/{id}/subtitles/{streamIndex}.vtt",
             "GET /api/editions/{id}/subtitles/{streamIndex}.vtt", "GET /api/art/{name}", "GET /api/admin/plex",
-            "POST /api/admin/plex/import",
+            "POST /api/admin/plex/import", "GET /api/admin/plex/credits", "POST /api/admin/plex/credits/import",
             "POST /api/editions/{id}/sessions", "GET /api/sessions/{id}/master.m3u8",
             "GET /api/sessions/{id}/{rung}/index.m3u8", "GET /api/sessions/{id}/{rung}/{file}",
             "DELETE /api/sessions/{id}", "GET /api/admin/transcoding",

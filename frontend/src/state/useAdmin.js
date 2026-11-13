@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, announceLibraryChanged } from '../api/client.js';
 import { adminApi } from '../api/resources.js';
+import { creditsFinishedText } from './plexCreditsFormat.js';
 import { useResource } from './useResource.js';
 
 /** How often the Library scan panel asks for progress while a scan runs. */
@@ -166,4 +167,142 @@ export function usePlexImport() {
   }, [reload]);
 
   return { plex: data, error, loading, starting, notice, startImport, reload };
+}
+
+/** A status read that has not answered by now ends as an error, so a dead connection cannot freeze the block. */
+export const CREDITS_READ_TIMEOUT_MS = 10000;
+
+/** One status read, ended with an error after `CREDITS_READ_TIMEOUT_MS`; `outer` (the resource's signal) aborts it. */
+function readCreditsStatus(outer) {
+  return new Promise((resolve, reject) => {
+    const controller = new AbortController();
+    if (outer.aborted) controller.abort();
+    else outer.addEventListener('abort', () => controller.abort(), { once: true });
+    const timeout = setTimeout(() => {
+      controller.abort();
+      reject(new Error('The credits import status did not answer in time'));
+    }, CREDITS_READ_TIMEOUT_MS);
+    adminApi
+      .plexCredits({ signal: controller.signal })
+      .then(resolve, reject)
+      .finally(() => clearTimeout(timeout));
+  });
+}
+
+/**
+ * The "Import credits from Plex" block: status, polled while an import runs, plus the start. Starting while one already
+ * runs (409) is not an error: the notice says so and the block shows the running import. A second click while a start
+ * is in flight is ignored.
+ *
+ * Every status read is stamped with its call number. The start's 202 carries the new status and is shown until the
+ * answer to a read called after the start arrives (the one the start issues itself), so a failing read right after the
+ * start still shows the import running, and a read called before the start can never replace it.
+ *
+ * The poll is the quiet `refresh`, which keeps an error on screen until a read answers. Its timer is armed only when
+ * a status is running and no read is in flight (a read is in flight from the moment any is issued until it answers,
+ * and while `loading`), and is cleared whenever a read is issued, so a read is never aborted by the next.
+ *
+ * A read that hangs (no timeout in the client) is ended with an error after `CREDITS_READ_TIMEOUT_MS`, which clears
+ * its in-flight mark, shows the refresh error with "Check again", and lets the poll go on. `checking` is true from
+ * "Check again" until a read answers (or fails).
+ *
+ * `announcement` is the sentence to put in a live region when a run finishes while the block is open (never for the
+ * first status loaded). It is emptied first and written on the next tick, so a repeat of the same words is heard
+ * again, and it is emptied while a run is going.
+ */
+export function usePlexCreditsImport() {
+  const calls = useRef(0);
+  const { data, error, loading, refresh } = useResource('admin-plex-credits', (options) => {
+    calls.current += 1;
+    const read = calls.current;
+    return readCreditsStatus(options.signal)
+      .then((status) => ({ ...status, read }))
+      .finally(() => {
+        // A read's settling (an answer, a failure, its timeout or its abort) ends the in-flight mark.
+        readInFlight.current = false;
+      });
+  });
+  const [starting, setStarting] = useState(false);
+  const [notice, setNotice] = useState(null);
+  const [started, setStarted] = useState(null);
+  const [announcement, setAnnouncement] = useState('');
+  const [checking, setChecking] = useState(false);
+  const startedRef = useRef(false);
+  const seenFinished = useRef(undefined);
+  const timer = useRef(null);
+  const readInFlight = useRef(false);
+  const credits = started && !(data && data.read > started.afterRead) ? started.status : data;
+  const lastImport = useRef(null);
+  lastImport.current = credits?.lastImport;
+  const running = Boolean(credits?.running);
+  const finishedAt = credits ? (credits.lastImport?.finishedAt ?? null) : undefined;
+  useAnnounceWhenFinished(data ? (data.lastImport?.finishedAt ?? null) : undefined);
+
+  useEffect(() => {
+    if (finishedAt === undefined) return undefined;
+    const before = seenFinished.current;
+    seenFinished.current = finishedAt;
+    if (before === undefined || finishedAt === null || before === finishedAt) return undefined;
+    setAnnouncement('');
+    const id = setTimeout(() => setAnnouncement(creditsFinishedText(lastImport.current)), 0);
+    return () => clearTimeout(id);
+  }, [finishedAt]);
+
+  useEffect(() => {
+    if (running) setAnnouncement('');
+  }, [running]);
+
+  const look = useCallback((read) => {
+    clearTimeout(timer.current);
+    readInFlight.current = true;
+    read();
+  }, []);
+
+  useEffect(() => {
+    if (!running || loading || readInFlight.current) return undefined;
+    timer.current = setTimeout(() => look(refresh), SCAN_POLL_MS);
+    return () => clearTimeout(timer.current);
+  }, [running, data, error, loading, look, refresh]);
+
+  // "Check again" looks quietly, so the button the user just pressed (and its alert) stay where they are.
+  const checkAgain = useCallback(() => {
+    setChecking(true);
+    look(refresh);
+  }, [look, refresh]);
+  useEffect(() => {
+    setChecking(false);
+  }, [data, error]);
+
+  const startImport = useCallback(async () => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    setStarting(true);
+    setNotice(null);
+    try {
+      const status = await adminApi.startPlexCreditsImport();
+      if (status) setStarted({ status, afterRead: calls.current });
+    } catch (failure) {
+      setNotice(
+        failure instanceof ApiError && failure.status === 409
+          ? failure.body?.error || 'A credits import is already running.'
+          : 'Could not start the credits import.',
+      );
+    } finally {
+      startedRef.current = false;
+      setStarting(false);
+      look(refresh);
+    }
+  }, [look, refresh]);
+
+  return {
+    credits,
+    error,
+    loading,
+    starting,
+    notice,
+    announcement,
+    checking,
+    startImport,
+    reload: checkAgain,
+  };
 }

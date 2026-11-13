@@ -12,6 +12,9 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import gregochr.cinefilm.plex.PlexModels.PlexFilm;
 import gregochr.cinefilm.plex.PlexModels.PlexImage;
+import gregochr.cinefilm.plex.PlexModels.PlexItemMarkers;
+import gregochr.cinefilm.plex.PlexModels.PlexMarker;
+import gregochr.cinefilm.plex.PlexModels.PlexMediaTiming;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
@@ -470,5 +473,71 @@ class PlexClientTest {
         assertThat(film.titleSort()).isNull();
         assertThat(film.tmdbId()).isNull();
         assertThat(film.media()).isEmpty();
+    }
+
+    private static final String ITEM = "{\"MediaContainer\":{\"Metadata\":[{\"ratingKey\":\"88\",\"title\":\"Heat\","
+        + "\"duration\":10200000,\"Media\":[{\"duration\":10200000,\"Part\":[{\"file\":\"/m/Heat.m4v\"}]},"
+        + "{\"duration\":10260000,\"Part\":[{\"file\":\"/m/Heat.mp4\"},{\"size\":1}]},{\"Part\":[{\"size\":1}]}],"
+        + "\"Marker\":[{\"id\":1,\"type\":\"credits\",\"startTimeOffset\":9900000,\"endTimeOffset\":10200000,"
+        + "\"final\":true},{\"type\":\"credits\",\"startTimeOffset\":9600000,\"final\":false},"
+        + "{\"type\":\"intro\",\"startTimeOffset\":5000},{\"type\":\"credits\"},{\"startTimeOffset\":1}]}]}}";
+
+    @Test
+    void anItemsDurationsPathsAndMarkersAreReadWithAGetAndTheTokenInTheHeaderOnly() {
+        server.expect(once(), requestTo(BASE + "/library/metadata/88?includeMarkers=1"))
+            .andExpect(method(HttpMethod.GET)).andExpect(header("X-Plex-Token", TOKEN))
+            .andExpect(header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE))
+            .andRespond(request -> {
+                assertThat(request.getURI().toString()).doesNotContain(TOKEN);
+                return withSuccess(ITEM, MediaType.APPLICATION_JSON).createResponse(request);
+            });
+
+        PlexItemMarkers item = client.itemMarkers("88");
+
+        assertThat(item).isEqualTo(new PlexItemMarkers(10_200_000L, List.of(
+            new PlexMediaTiming(10_200_000L, List.of("/m/Heat.m4v"), 1),
+            new PlexMediaTiming(10_260_000L, List.of("/m/Heat.mp4"), 2),
+            new PlexMediaTiming(null, List.of(), 1)),
+            List.of(new PlexMarker("credits", 9_900_000L, true), new PlexMarker("credits", 9_600_000L, false),
+                new PlexMarker("intro", 5_000L, false))));
+        server.verify();
+    }
+
+    @Test
+    void anItemWithNoDurationsOrMarkersGetsNullsAndEmptyLists() {
+        server.expect(once(), requestTo(BASE + "/library/metadata/5?includeMarkers=1"))
+            .andRespond(withSuccess("{\"MediaContainer\":{\"Metadata\":[{\"duration\":\"x\"}]}}",
+                MediaType.APPLICATION_JSON));
+
+        assertThat(client.itemMarkers("5")).isEqualTo(new PlexItemMarkers(null, List.of(), List.of()));
+    }
+
+    @Test
+    void anAnswerWithNoItemIsAnErrorNamingTheCall() {
+        server.expect(once(), requestTo(BASE + "/library/metadata/5?includeMarkers=1"))
+            .andRespond(withSuccess("{\"MediaContainer\":{}}", MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.itemMarkers("5")).isInstanceOf(PlexException.class)
+            .hasMessageContaining("plex item markers").hasMessageNotContaining(TOKEN);
+    }
+
+    @Test
+    void aRatingKeyThatIsNotDigitsIsRefusedWithoutAnyRequest() {
+        assertThatThrownBy(() -> client.itemMarkers("../sections")).isInstanceOf(PlexException.class);
+        assertThatThrownBy(() -> client.itemMarkers("12?x=1")).isInstanceOf(PlexException.class);
+        assertThatThrownBy(() -> client.itemMarkers("")).isInstanceOf(PlexException.class);
+        assertThatThrownBy(() -> client.itemMarkers(null)).isInstanceOf(PlexException.class);
+        server.verify();
+    }
+
+    @Test
+    void aMissingItemAnswersNotFoundAndIsNotRetried() {
+        server.expect(once(), requestTo(BASE + "/library/metadata/9?includeMarkers=1"))
+            .andRespond(withStatus(HttpStatus.NOT_FOUND));
+
+        assertThatThrownBy(() -> client.itemMarkers("9")).isInstanceOf(PlexException.class)
+            .hasMessageContaining("status 404");
+        assertThat(sleeps).isEmpty();
+        server.verify();
     }
 }

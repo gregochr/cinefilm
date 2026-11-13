@@ -30,6 +30,19 @@ public final class EditionGuard {
     }
 
     /**
+     * The same limits for a marker that did not come from the analysis (Plex's): at least 60% into the film and at
+     * least 60 seconds before its end.
+     *
+     * @param markerMs the marker, in milliseconds from the start
+     * @param totalMs the film's length in milliseconds (positive)
+     * @return true when the marker is inside both limits
+     */
+    public static boolean plausible(long markerMs, long totalMs) {
+        return markerMs * 100 >= totalMs * CreditsTuning.MIN_EDITION_PERCENT
+            && totalMs - markerMs >= CreditsTuning.MIN_BEFORE_END_MS;
+    }
+
+    /**
      * Converts and guards a result.
      *
      * @param result what the analysis found in the last part's file

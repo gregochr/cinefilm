@@ -129,14 +129,14 @@ track just for this (that demuxes the whole file), and **no threshold relies on 
 Sanity guard on `FOUND`: the edition-time marker must be at least 60% into the edition and at least 60 s before its
 end, else `UNSURE`. The same guard applies to an imported Plex marker (phase 2c): one that fails it is not stored.
 
-## Storage (built as `V20__credits_detection.sql`; phase 2c adds V23 and phase 2b V24, all expand-only)
+## Storage (built as `V20__credits_detection.sql`; phase 2c adds V24 and phase 2b V25, all expand-only)
 
 - Table `credits_detection`, one row per **media file**: `media_file_id` (PK, FK cascade), `fingerprint` (size and
   modification time, as V17), `verdict` (CHECK in `FOUND`, `UNSURE`, `NOT_FOUND`), `offset_ms` (inside the file,
   nullable), `reasons` (plain sentences), `checked_at`.
-- `credits_detection.analysis_version INT NOT NULL DEFAULT 1` (phase 2b, V24): the version of the analysis that wrote
+- `credits_detection.analysis_version INT NOT NULL DEFAULT 1` (phase 2b, V25): the version of the analysis that wrote
   the row.
-- Table `plex_credits_marker` (phase 2c, V23), one row per media file: `media_file_id` (PK, FK cascade),
+- Table `plex_credits_marker` (phase 2c, V24), one row per media file: `media_file_id` (PK, FK cascade),
   `fingerprint` (as above, taken at import), `start_ms` (inside the file), `imported_at`. A row whose fingerprint no
   longer matches the file is ignored (the file changed after Plex measured it).
 - `edition.credits_marker_source VARCHAR(10)` nullable: null (never set), `AUTO`, `PLEX`, `OWNER`.
@@ -169,9 +169,10 @@ end, else `UNSURE`. The same guard applies to an imported Plex marker (phase 2c)
 
 Today the marker is also the watched threshold. A late marker (after a title sequence) would stop a film counting as
 watched when the owner stops during those titles, keep it in Continue watching, and change what a Plex re-import
-counts as watched. Proposed: **watched at `min(marker, 92%)`** in `WatchedRule` and in `resume.js`'s watched check;
-the overlay keeps using the marker alone. Existing in-progress states are not re-evaluated when a marker lands. This
-touches handover decision 1, so it is an owner decision (below).
+counts as watched. **Decided (owner, 2026-11-13): "films end at credits time".** The marker stays the watched
+threshold, as today; `min(marker, 92%)` was considered and rejected. A film stopped in the last seconds before a
+detected marker (which carries the 20 s margin) stays in Continue watching; that is accepted. Existing in-progress
+states are not re-evaluated when a marker lands.
 
 ## Admin (phase 3)
 
@@ -220,8 +221,8 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
    takes. Thresholds are tuned in this plan from what is found.
    **Measured 2026-11-13 on v0.6.1** (below, "Phase 2: what the server showed"). The detector as built finds almost
    nothing; the fixes are phase 2b.
-2c. **One-off Plex marker import, stored only.** Built and merged before 2b, because Plex is going (V23, then 2b's
-   V24). Owner, 2026-11-13: "Yes to the one time import, but … it's not a durable solution". Plex Pass is active and
+2c. **One-off Plex marker import, stored only.** Built and merged before 2b, because Plex is going (V24, then 2b's
+   V25). Owner, 2026-11-13: "Yes to the one time import, but … it's not a durable solution". Plex Pass is active and
    Plex holds a credits marker for 864 of its 1,087 films.
    - An Admin action of its own, "Import credits from Plex", beside Import from Plex, reusing its `PlexClient`
      configuration (`PLEX_URL`, `PLEX_TOKEN`) and its file matching (`PlexPairing` / `PlexRules.relativePath`, with
@@ -242,7 +243,7 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
      - its earliest credits marker (type `credits`, the lowest `startTimeOffset`, whatever the list order; final or
        not, since a non-final one is a credits run followed by a mid-credits scene) is at least 60% into the item and
        at least 60 s before its end (the edition guard; all 864 pass today).
-   - Stored in `plex_credits_marker` (V23), **one row per matched CineFilm media file** (each copy the item's paths
+   - Stored in `plex_credits_marker` (V24), **one row per matched CineFilm media file** (each copy the item's paths
      pair with), with that file's current fingerprint, so nothing needs Plex afterwards. `start_ms` is Plex's marker
      **plus `max(0, the matched Media's Plex duration − the shortest of the item's and every Media's Plex
      durations)`**: Plex does not say which copy it measured, so assuming the shortest can only move the marker
@@ -255,7 +256,7 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
    - Nothing is applied.
 2b. **Detector fixes, still report only.** The classifier rules in "Per-frame features" and the motion changes in
    "The motion check":
-   - `CreditsTuning.ANALYSIS_VERSION = 2`; every write stores it in `credits_detection.analysis_version` (V24, default
+   - `CreditsTuning.ANALYSIS_VERSION = 2`; every write stores it in `credits_detection.analysis_version` (V25, default
      1 for existing rows). A file is due when it has no row, its fingerprint changed, or its row's version is below
      `ANALYSIS_VERSION`. The whole library is analysed again: about 1,090 files at 2–4 minutes each, so 2–3 days of
      background time, paused while anything plays.
@@ -280,11 +281,11 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
      2, a sample of **20 `FOUND` rows on files with no `plex_credits_marker` row whose fingerprint matches** (or all
      of them if fewer), judging the raw `offset_ms`, not the offset plus 20 s: any marker before the credits start
      blocks phase 3's `AUTO` step. The results go into this plan.
-3. **Apply, source column, Admin.** `credits_marker_source` and its carrying, applying, the watched-rule change if the
-   owner agrees, the Admin list and overrides. Precedence per edition: `OWNER`; then `PLEX` (the last part's
-   `plex_credits_marker` row, fingerprint still matching); then the detector's `FOUND` plus a **20 s margin** (`AUTO`),
-   applied only after the gate above; then the 97% fallback. Every marker goes through the edition guard. **A late
-   overlay is better than an early one** (owner, 2026-11-13).
+3. **Apply, source column, Admin.** `credits_marker_source` and its carrying, applying (the watched rule is unchanged:
+   watched at the marker, decided 2026-11-13), the Admin list and overrides. Precedence per edition: `OWNER`; then
+   `PLEX` (the last part's `plex_credits_marker` row, fingerprint still matching); then the detector's `FOUND` plus a
+   **20 s margin** (`AUTO`), applied only after the gate above; then the 97% fallback. Every marker goes through the
+   edition guard. **A late overlay is better than an early one** (owner, 2026-11-13).
 
 ## Phase 2: what the server showed (2026-11-13)
 
@@ -404,4 +405,5 @@ and Plex's precedence limit the damage.
 
 1. **Stopgap — decided (owner, 2026-11-12): 97%.** With no marker the overlay appears at 97% of the runtime; watched
    stays at 92% (backend `WatchedRule`, decision 1). Shipped as its own small PR before phase 1.
-2. **Watched rule (open):** `min(marker, 92%)` as above, or keep "watched at the marker".
+2. **Watched rule — decided (owner, 2026-11-13): watched at the marker** ("films end at credits time"), not
+   `min(marker, 92%)`.

@@ -94,6 +94,18 @@ class LibraryLockTest {
     }
 
     @Test
+    void aScanCannotStartWhilePlexCreditsAreBeingSavedAndSaysSo() {
+        lock.tryAcquire(LibraryLock.PLEX_CREDITS);
+        ScanService scans = scans();
+
+        assertThatThrownBy(() -> scans.start("admin")).isInstanceOf(ScanAlreadyRunningException.class)
+            .hasMessage("Credits from Plex are being saved");
+
+        assertThat(queued).isEmpty();
+        assertThat(lock.heldBy(LibraryLock.PLEX_CREDITS)).isTrue();
+    }
+
+    @Test
     void aScanCannotStartWhileAMatchIsBeingFixedAndSaysSo() {
         lock.tryAcquire(LibraryLock.MATCH);
         ScanService scans = scans();

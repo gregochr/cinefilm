@@ -56,4 +56,35 @@ public final class PlexModels {
      */
     public record PlexImage(byte[] bytes, String contentType) {
     }
+
+    /**
+     * One item's timings and markers, from {@code /library/metadata/{ratingKey}?includeMarkers=1}.
+     *
+     * @param durationMs the item's duration in milliseconds, or null when Plex gave none
+     * @param media its versions in the order Plex lists them
+     * @param markers its markers of every type, in the order Plex lists them
+     */
+    public record PlexItemMarkers(Long durationMs, List<PlexMediaTiming> media, List<PlexMarker> markers) {
+    }
+
+    /**
+     * One version of an item, with the length Plex measured for it.
+     *
+     * @param durationMs the version's duration in milliseconds, or null when Plex gave none
+     * @param parts the file paths of its Parts that have one, in play order
+     * @param partCount how many Part entries Plex lists for it, with or without a file (more than one is a split)
+     */
+    public record PlexMediaTiming(Long durationMs, List<String> parts, int partCount) {
+    }
+
+    /**
+     * One marker of an item.
+     *
+     * @param type Plex's marker type ({@code credits}, {@code intro}, ...)
+     * @param startMs where it starts, in milliseconds
+     * @param finalMarker Plex's {@code final} flag: true for the last credits run, false for credits followed by a
+     *     mid-credits scene
+     */
+    public record PlexMarker(String type, long startMs, boolean finalMarker) {
+    }
 }

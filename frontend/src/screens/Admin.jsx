@@ -4,6 +4,7 @@ import { Button } from '../components/Button.jsx';
 import { SkeletonBlock } from '../components/Skeleton.jsx';
 import EditEditions from '../components/EditEditions.jsx';
 import FixMatchPanel from '../components/FixMatchPanel.jsx';
+import PlexCreditsImport from '../components/PlexCreditsImport.jsx';
 import PlaybackHealthPanel from '../components/PlaybackHealthPanel.jsx';
 import SubtitlesPanel from '../components/SubtitlesPanel.jsx';
 import Toast from '../components/Toast.jsx';
@@ -277,6 +278,7 @@ function PlexPanel({ plex, starting, notice, onImport, onRecheck }) {
           </span>
         ) : null}
       </div>
+      <PlexCreditsImport reachable={plex.reachable} />
     </section>
   );
 }

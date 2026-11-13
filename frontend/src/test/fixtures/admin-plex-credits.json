@@ -1,0 +1,23 @@
+{
+  "running": false,
+  "progress": null,
+  "lastImport": {
+    "startedAt": "2026-11-13T14:00:00Z",
+    "finishedAt": "2026-11-13T14:20:00Z",
+    "error": null,
+    "report": {
+      "plexFilms": 1087,
+      "matchedFilms": 1030,
+      "imported": 860,
+      "unmatched": 2,
+      "skipped": [
+        { "reason": "MULTI_PART", "description": "Films split into parts", "count": 3 },
+        {
+          "reason": "DURATION_MISMATCH",
+          "description": "Films whose versions differ in length",
+          "count": 1
+        }
+      ]
+    }
+  }
+}
