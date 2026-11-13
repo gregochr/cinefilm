@@ -270,7 +270,8 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
      more than `CARD_CHANGE_TEXT_SHARE` (0.5) of the larger frame's bright pixels (both counted against
      `CARD_CHANGE_DIFF_FRACTION` of the window's peak). Consecutive changed pairs merge into one change by the plain
      `CARD_CHANGE_MIN_SHARE` test, and a merged run counts if any pair in it passes the guard (so the guard can never
-     split one change into two). Without it, the phase 1 night scene (74% dark, now `TEXT_ON_DARK` under
+     split one change into two); the run's first guard-passing pair is where that change is placed (later, never
+     earlier). Without it, the phase 1 night scene (74% dark, now `TEXT_ON_DARK` under
      `TEXT_DARK_SHARE` 0.70) with one small window switching every 10 s was `FOUND` at the candidate. Cost: a card
      that changes only a name beside fixed lines is no longer a card (late or nothing). Not measured on the 23 films
      (the harness is gone).
