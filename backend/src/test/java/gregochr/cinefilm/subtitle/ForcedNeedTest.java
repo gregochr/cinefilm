@@ -66,12 +66,54 @@ class ForcedNeedTest {
     }
 
     @Test
-    void ruleSixAFilmNotMadeInEnglishIsUnsureWhatItsSpokenLanguagesAre() {
-        assertThat(byLanguages(FRENCH_FILM)).isEqualTo(decision(Need.UNSURE, Reason.FOREIGN_LANGUAGE_FILM));
+    void ruleSixAFilmNotMadeInEnglishIsNotNeededWhateverItsSpokenLanguagesAre() {
+        assertThat(byLanguages(FRENCH_FILM)).isEqualTo(decision(Need.NOT_NEEDED, Reason.FOREIGN_LANGUAGE_FILM));
         assertThat(byLanguages(new Languages("ja", List.of("en")))).isEqualTo(
-            decision(Need.UNSURE, Reason.FOREIGN_LANGUAGE_FILM));
+            decision(Need.NOT_NEEDED, Reason.FOREIGN_LANGUAGE_FILM));
         assertThat(byLanguages(new Languages("ja", List.of()))).isEqualTo(
-            decision(Need.UNSURE, Reason.FOREIGN_LANGUAGE_FILM));
+            decision(Need.NOT_NEEDED, Reason.FOREIGN_LANGUAGE_FILM));
+    }
+
+    @Test
+    void aForeignFilmIsNotNeededWhetherOrNotOpenSubtitlesWasAskedAndFoundNothing() {
+        assertThat(of(null, false, false, 0, FRENCH_FILM))
+            .isEqualTo(decision(Need.NOT_NEEDED, Reason.FOREIGN_LANGUAGE_FILM));
+        assertThat(of(null, false, false, null, FRENCH_FILM))
+            .isEqualTo(decision(Need.NOT_NEEDED, Reason.FOREIGN_LANGUAGE_FILM));
+    }
+
+    @Test
+    void ruleSixAForeignFilmWithForcedFilesOnlineSidecarOrEmbeddedTrackStillNeedsThem() {
+        assertThat(of(null, false, false, 2, FRENCH_FILM)).isEqualTo(decision(Need.NEEDED, Reason.OPENSUBTITLES));
+        assertThat(of(null, true, false, 0, FRENCH_FILM)).isEqualTo(decision(Need.NEEDED, Reason.SIDECAR));
+        assertThat(of(null, false, true, 0, FRENCH_FILM)).isEqualTo(decision(Need.NEEDED, Reason.EMBEDDED_FORCED));
+        assertThat(of(ForcedNeedChoice.NEEDED, false, false, 0, FRENCH_FILM))
+            .isEqualTo(decision(Need.NEEDED, Reason.OWNER));
+    }
+
+    @Test
+    void ruleSevenASearchWithNoForcedFilesOnlineMeansNotNeededWhereItWouldBeUnsure() {
+        assertThat(of(null, false, false, 0, new Languages("en", List.of("en", "fr"))))
+            .isEqualTo(decision(Need.NOT_NEEDED, Reason.NO_FORCED_ONLINE));
+        assertThat(of(null, false, false, 0, new Languages("en", List.of())))
+            .isEqualTo(decision(Need.NOT_NEEDED, Reason.NO_FORCED_ONLINE));
+        assertThat(of(null, false, false, 0, new Languages(null, List.of("fr"))))
+            .isEqualTo(decision(Need.NOT_NEEDED, Reason.NO_FORCED_ONLINE));
+    }
+
+    @Test
+    void ruleSevenNotAskedYetStaysUnsureWithTheExistingReasons() {
+        assertThat(of(null, false, false, null, new Languages("en", List.of("en", "fr"))))
+            .isEqualTo(decision(Need.UNSURE, Reason.OTHER_LANGUAGES));
+        assertThat(of(null, false, false, null, new Languages("en", List.of())))
+            .isEqualTo(decision(Need.UNSURE, Reason.NO_SPOKEN_LANGUAGES));
+    }
+
+    @Test
+    void englishOnlyKeepsItsReasonWhetherOrNotOpenSubtitlesWasAsked() {
+        assertThat(of(null, false, false, 0, ENGLISH_ONLY)).isEqualTo(decision(Need.NOT_NEEDED, Reason.ENGLISH_ONLY));
+        assertThat(of(null, false, false, null, ENGLISH_ONLY))
+            .isEqualTo(decision(Need.NOT_NEEDED, Reason.ENGLISH_ONLY));
     }
 
     @Test
@@ -120,7 +162,7 @@ class ForcedNeedTest {
         assertThat(byLanguages(new Languages("EN", List.of("EN", "en")))).isEqualTo(
             decision(Need.NOT_NEEDED, Reason.ENGLISH_ONLY));
         assertThat(byLanguages(new Languages("Fr", List.of("en")))).isEqualTo(
-            decision(Need.UNSURE, Reason.FOREIGN_LANGUAGE_FILM));
+            decision(Need.NOT_NEEDED, Reason.FOREIGN_LANGUAGE_FILM));
     }
 
     @Test
@@ -157,5 +199,14 @@ class ForcedNeedTest {
         // no languages over nothing else; foreign over English-only
         assertThat(of(null, false, false, null, new Languages("fr", List.of("en"))).reason())
             .isEqualTo(Reason.FOREIGN_LANGUAGE_FILM);
+        // the new not-needed rules lose to the owner, a sidecar, an embedded track and OpenSubtitles' files
+        assertThat(of(ForcedNeedChoice.NEEDED, false, false, 0, foreign).reason()).isEqualTo(Reason.OWNER);
+        assertThat(of(ForcedNeedChoice.NEEDED, false, false, 0, new Languages("en", List.of("fr"))).reason())
+            .isEqualTo(Reason.OWNER);
+        assertThat(of(null, true, false, 0, new Languages("en", List.of("fr"))).reason()).isEqualTo(Reason.SIDECAR);
+        assertThat(of(null, false, true, 0, new Languages("en", List.of("fr"))).reason())
+            .isEqualTo(Reason.EMBEDDED_FORCED);
+        assertThat(of(null, false, false, 1, new Languages("en", List.of("fr"))).reason())
+            .isEqualTo(Reason.OPENSUBTITLES);
     }
 }

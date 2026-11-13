@@ -55,6 +55,7 @@ class ForcedNeedApiTest extends SubtitleTestBase {
             .andExpect(jsonPath("$.films[2].need").value("UNSURE"))
             .andExpect(jsonPath("$.films[2].reason").value("OTHER_LANGUAGES"))
             .andExpect(jsonPath("$.films[2].spokenLanguages[1]").value("fr"))
+            .andExpect(jsonPath("$.films[3].need").value("NOT_NEEDED"))
             .andExpect(jsonPath("$.films[3].reason").value("FOREIGN_LANGUAGE_FILM"))
             .andExpect(jsonPath("$.films[4].need").value("UNKNOWN"))
             .andExpect(jsonPath("$.films[4].reason").value("NO_LANGUAGES"))
@@ -63,9 +64,9 @@ class ForcedNeedApiTest extends SubtitleTestBase {
             .andExpect(jsonPath("$.films[5].ownerChoice").value("NEEDED"))
             .andExpect(jsonPath("$.counts.needed").value(2))
             .andExpect(jsonPath("$.counts.neededMissing").value(1))
-            .andExpect(jsonPath("$.counts.unsure").value(2))
+            .andExpect(jsonPath("$.counts.unsure").value(1))
             .andExpect(jsonPath("$.counts.unknown").value(1))
-            .andExpect(jsonPath("$.counts.notNeeded").value(1));
+            .andExpect(jsonPath("$.counts.notNeeded").value(2));
     }
 
     @Test

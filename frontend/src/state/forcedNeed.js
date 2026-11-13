@@ -11,7 +11,7 @@ const isNeededMissing = (row) => row.need === 'NEEDED' && !row.hasForcedSubtitle
 /** The filter chips, in the order they are shown; `matches` says which rows a chip lists. */
 export const NEED_FILTERS = [
   { key: 'needed-missing', label: 'Needed, none yet', matches: isNeededMissing },
-  { key: 'unsure', label: 'Unsure', matches: (row) => row.need === 'UNSURE' },
+  { key: 'unsure', label: 'Checking online', matches: (row) => row.need === 'UNSURE' },
   { key: 'unknown', label: 'Unknown', matches: (row) => row.need === 'UNKNOWN' },
   { key: 'not-needed', label: 'Not needed', matches: (row) => row.need === 'NOT_NEEDED' },
   { key: 'all', label: 'All', matches: () => true },
@@ -39,11 +39,11 @@ export function applyRow(rows, row) {
 const NEED_WORDS = {
   NEEDED: 'Needed',
   NOT_NEEDED: 'Not needed',
-  UNSURE: 'Unsure',
+  UNSURE: 'Checking online',
   UNKNOWN: 'Unknown',
 };
 
-/** "Needed", "Not needed", "Unsure", "Unknown". */
+/** "Needed", "Not needed", "Checking online" (not searched online yet), "Unknown". */
 export function needWords(need) {
   return NEED_WORDS[need] ?? 'Unknown';
 }
@@ -99,7 +99,9 @@ export function reasonText(row) {
     case 'EMBEDDED_FORCED':
       return "Forced track inside the file (pictures: can't be shown yet)";
     case 'FOREIGN_LANGUAGE_FILM':
-      return 'Not in English originally: needs full subtitles';
+      return 'Not in English: full subtitles cover it';
+    case 'NO_FORCED_ONLINE':
+      return 'No forced subtitles exist online';
     case 'ENGLISH_ONLY':
       return 'English only (TMDB)';
     case 'OTHER_LANGUAGES':

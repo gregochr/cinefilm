@@ -45,10 +45,10 @@ const ROWS = [
 ];
 
 describe('filters', () => {
-  it('start on Needed, none yet, then Unsure, Unknown, Not needed and All', () => {
+  it('start on Needed, none yet, then Checking online, Unknown, Not needed and All', () => {
     expect(NEED_FILTERS.map((f) => f.label)).toEqual([
       'Needed, none yet',
-      'Unsure',
+      'Checking online',
       'Unknown',
       'Not needed',
       'All',
@@ -105,7 +105,7 @@ describe('wording', () => {
     expect(['NEEDED', 'NOT_NEEDED', 'UNSURE', 'UNKNOWN', 'SURPRISE'].map(needWords)).toEqual([
       'Needed',
       'Not needed',
-      'Unsure',
+      'Checking online',
       'Unknown',
       'Unknown',
     ]);
@@ -133,7 +133,8 @@ describe('wording', () => {
   it.each([
     ['SIDECAR', 'Forced subtitle file attached'],
     ['EMBEDDED_FORCED', "Forced track inside the file (pictures: can't be shown yet)"],
-    ['FOREIGN_LANGUAGE_FILM', 'Not in English originally: needs full subtitles'],
+    ['FOREIGN_LANGUAGE_FILM', 'Not in English: full subtitles cover it'],
+    ['NO_FORCED_ONLINE', 'No forced subtitles exist online'],
     ['ENGLISH_ONLY', 'English only (TMDB)'],
     ['OTHER_LANGUAGES', 'Also spoken: French, Russian (TMDB)'],
     ['NO_SPOKEN_LANGUAGES', 'TMDB lists no spoken languages'],
