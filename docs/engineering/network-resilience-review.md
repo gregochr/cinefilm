@@ -290,10 +290,11 @@ Each is one PR built by Sonnet under the usual gates, with a `changelog.d/` entr
    `poor-link-plan.md`.
 3. **A strategy per environment:** items 5 and 6, set from what the record shows: on a train start low, bank
    deep and step up only with a reserve; at home start at the top. (Item 7 was pulled forward on its own:
-   `long-pause-plan.md`.) **Planned 2026-11-12 as `train-link-plan.md`**, four pull requests: the floor, the player
-   following what it fetches (with the bank in the record), the deeper buffer, and the floor held back while the
-   buffer is deep. They are driven by the link, not by the train tag, and do nothing at home; rules that read the
-   tag, and the step-up reserve, wait for a journey recorded with these in place.
+   `long-pause-plan.md`.) **Planned 2026-11-12 as `train-link-plan.md` and merged 2026-11-13** as four pull requests
+   (#123 to #126): the floor, the player following what it fetches (with the bank in the record), the deeper buffer,
+   and the floor held back while the buffer is deep. They are driven by the link, not by the train tag, and do
+   nothing at home; rules that read the tag, and the step-up reserve, wait for a journey recorded with these in
+   place.
 4. **Browse:** items 9 and 10, the hls.js preload and the light build.
 
 Beyond these, only if the record asks for it: early warning (does latency climb before a dropout?) and knowledge of
