@@ -30,14 +30,20 @@ final class CreditsTuning {
     /** The central band is the width minus this share at each side (the central 70%). */
     static final double CENTRAL_MARGIN_FRACTION = 0.15;
     /** At least this share of the bright pixels must be central text for the frame to be text-like. */
-    static final double TEXT_LIKE_SHARE = 0.8;
+    static final double TEXT_LIKE_SHARE = 0.3;
+    /** A dark frame measures its text against its own luma at this percentile (see {@link #TEXT_DARK_SHARE}). */
+    static final double TEXT_LIMIT_PERCENTILE = 0.999;
+    /** The bottom band, where burned-in subtitles sit, starts this share of the way down the active height. */
+    static final double SUBTITLE_BAND_START = 0.7;
+    /** A frame is not text-like when at least this share of its text pixels lie in the bottom band. */
+    static final double SUBTITLE_MIN_SHARE = 0.8;
 
     // ---- Frame classes ---------------------------------------------------------------------------------------
 
     /** A frame is {@code BLACK} from this dark share. */
     static final double BLACK_DARK_SHARE = 0.98;
-    /** A frame is {@code TEXT_ON_DARK} from this dark share... */
-    static final double TEXT_DARK_SHARE = 0.80;
+    /** A frame is {@code TEXT_ON_DARK} from this dark share, and measures text against its own peak from it... */
+    static final double TEXT_DARK_SHARE = 0.70;
     /** ...with a bright share of at least this... */
     static final double TEXT_BRIGHT_MIN = 0.002;
     /** ...and at most this. */
@@ -59,11 +65,11 @@ final class CreditsTuning {
     /** At least this share of the frames must not be picture. */
     static final double MOTION_MIN_NON_PICTURE_SHARE = 0.8;
     /** At least this share of the frames must be text on dark. */
-    static final double MOTION_MIN_TEXT_SHARE = 0.5;
+    static final double MOTION_MIN_TEXT_SHARE = 0.3;
     /** The largest crawl step per frame, as a share of the active height. */
     static final double CRAWL_MAX_SHIFT_SHARE = 1.0 / 6;
     /** A shifted row profile matches when its relative error is at most this. */
-    static final double CRAWL_MATCH_MAX_ERROR = 0.15;
+    static final double CRAWL_MATCH_MAX_ERROR = 0.25;
     /** ...and its error is at most this share of the unshifted error. */
     static final double CRAWL_BETTER_THAN_STILL = 0.5;
     /** At least this share of the pairs showing any text must move for a crawl. */
@@ -73,9 +79,9 @@ final class CreditsTuning {
     /** A pixel changed when it differs by more than this share of the peak. */
     static final double CARD_CHANGE_DIFF_FRACTION = 0.4;
     /** A pair of frames changed abruptly when at least this share of the pixels changed. */
-    static final double CARD_CHANGE_MIN_SHARE = 0.005;
+    static final double CARD_CHANGE_MIN_SHARE = 0.001;
     /** A pair of frames is still when at most this share of the pixels changed. */
-    static final double CARD_STILL_MAX_SHARE = 0.001;
+    static final double CARD_STILL_MAX_SHARE = 0.0005;
     /** Cards need at least this many abrupt changes. */
     static final int CARD_MIN_CHANGES = 2;
     /** At least this share of the pairs must be still for cards. */

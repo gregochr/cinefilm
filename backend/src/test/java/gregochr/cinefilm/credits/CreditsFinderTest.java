@@ -383,6 +383,69 @@ class CreditsFinderTest {
     }
 
     @Test
+    void aCrawlEnteringFromTheBottomIsFoundLateNotLost() {
+        DenseBuilder builder = filmThen();
+        for (int i = 0; i < 200; i++) {
+            builder.add(SyntheticFrames.crawlFromBottom(i, 3), 1);
+        }
+
+        CreditsResult result = refine(builder);
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
+        assertThat(result.offsetMs()).isGreaterThanOrEqualTo(START);
+    }
+
+    @Test
+    void creditsStartingThreeMinutesAfterAnEndTitleSequenceOverPictureAreFoundWhenTheDenseWindowReachesThem() {
+        // 3 minutes of colour title sequence (the candidate is its start), then the crawl.
+        CreditsResult result = refine(filmThen().add(SyntheticFrames.title(), 360).crawl(200, 3));
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
+        assertThat(result.offsetMs()).isEqualTo(START + 180_000);
+    }
+
+    @Test
+    void creditsThreeMinutesAfterTheTitleSequenceAreUnsureWhenTheDenseWindowEndsFirst() {
+        CreditsResult result = refine(filmThen().add(SyntheticFrames.title(), 100));
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.UNSURE);
+    }
+
+    @Test
+    void cardsFadingThroughBlackAreFoundAtTheFirstChange() {
+        DenseBuilder builder = filmThen();
+        for (int name = 0; name < 5; name++) {
+            builder.add(SyntheticFrames.creditCard(name), 8).add(SyntheticFrames.black(), 16);
+        }
+
+        CreditsResult result = refine(builder);
+
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
+        assertThat(result.reasons()).hasSize(1);
+        assertThat(result.reasons().getFirst()).startsWith("Cards of text on a dark screen change from");
+    }
+
+    @Test
+    void aSlowTiltOverLitWindowsIsUnsureNotFound() {
+        DenseBuilder builder = filmThen();
+        for (int i = 0; i < 200; i++) {
+            builder.add(SyntheticFrames.tiltedWindows(i), 1);
+        }
+
+        assertThat(refine(builder).verdict()).isEqualTo(CreditsVerdict.UNSURE);
+    }
+
+    @Test
+    void aDarkSceneWithASmallFigureMovingIsUnsureNotFound() {
+        DenseBuilder builder = filmThen();
+        for (int i = 0; i < 200; i++) {
+            builder.add(SyntheticFrames.figure(40 + 2 * i % 60), 1);
+        }
+
+        assertThat(refine(builder).verdict()).isEqualTo(CreditsVerdict.UNSURE);
+    }
+
+    @Test
     void aLetterboxedFrameIsJudgedInsideItsActiveArea() {
         ActiveArea area = new ActiveArea(0, 11, 160, 68);
         List<DenseFrame> night = new DenseBuilder().add(SyntheticFrames.letterboxedNight(20), 200)

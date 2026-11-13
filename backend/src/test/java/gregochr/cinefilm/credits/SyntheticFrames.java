@@ -115,6 +115,14 @@ final class SyntheticFrames {
         return new Canvas(W, H, 0).line(44, 8, TEXT).frame();
     }
 
+    /**
+     * The width of crawl line {@code k}, in blocks: wide and narrow lines alternate, so no shift smaller than two
+     * line spacings lines a line up with another of the same width (a shift that is not the real one never matches).
+     */
+    private static int blocksOfLine(int k) {
+        return k % 2 == 0 ? 5 : 18;
+    }
+
     /** One frame of a crawl: lines rise {@code shift} pixels a frame; every line has its own width. */
     static GreyFrame crawl(int index, int shift) {
         Canvas canvas = new Canvas(W, H, 0);
@@ -124,7 +132,7 @@ final class SyntheticFrames {
                 break;
             }
             if (top + 4 > 0) {
-                canvas.line(top, 6 + k * 7 % 10, TEXT);
+                canvas.line(top, blocksOfLine(k), TEXT);
             }
         }
         return canvas.frame();
@@ -153,17 +161,88 @@ final class SyntheticFrames {
 
     /**
      * A 2.39:1 night scene in a 16:9 frame: black bars on rows 0 to 10 and 79 to 89, a dark sky (luma 30) over rows
-     * 11 to 61, a lit street (luma 100) over rows 62 to 78 and three bright windows. Three quarters of the picture is
-     * dark, yet with the bars counted the frame is over 80% dark.
+     * 11 to 53, a lit street (luma 100) over rows 54 to 78 and three bright windows. About 62% of the picture is
+     * dark, yet with the bars counted the frame is over 70% dark.
      */
     static GreyFrame letterboxedNight(int windowRow) {
         return new Canvas(W, H, 0)
-            .rect(0, 11, W, 51, 30)
-            .rect(0, 62, W, 17, 100)
+            .rect(0, 11, W, 43, 30)
+            .rect(0, 54, W, 25, 100)
             .rect(50, windowRow, 6, 6, 230)
             .rect(70, windowRow, 6, 6, 230)
             .rect(90, windowRow, 6, 6, 230)
             .frame();
+    }
+
+    /** One frame of a crawl that enters from the bottom: the first line is only just in view at index 0. */
+    static GreyFrame crawlFromBottom(int index, int shift) {
+        Canvas canvas = new Canvas(W, H, 0);
+        for (int k = 0; k < 400; k++) {
+            int top = H - 4 + 12 * k - index * shift;
+            if (top >= H) {
+                break;
+            }
+            if (top + 4 > 0) {
+                canvas.line(top, blocksOfLine(k), TEXT);
+            }
+        }
+        return canvas.frame();
+    }
+
+    /**
+     * One frame of a crawl whose small, anti-aliased text is noisy: each text pixel is bright with probability
+     * {@code 1 - dim} and otherwise only dim (90), as letter edges are when the text sits between two pixel rows. The
+     * noise is seeded by the frame index, so a frame is always the same.
+     */
+    static GreyFrame noisyCrawl(int index, int shift, double dim) {
+        GreyFrame clean = crawl(index, shift);
+        Random random = new Random(index * 31L + 7);
+        Canvas canvas = new Canvas(W, H, 0);
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                if (clean.luma(x, y) > 0) {
+                    canvas.rect(x, y, 1, 1, random.nextDouble() < dim ? 90 : TEXT);
+                }
+            }
+        }
+        return canvas.frame();
+    }
+
+    /**
+     * Three rows of four lit windows seen at night, tilting up a quarter of a pixel a frame; edges are anti-aliased,
+     * so the picture drifts without any pixel jumping.
+     */
+    static GreyFrame tiltedWindows(int index) {
+        Canvas canvas = new Canvas(W, H, 12);
+        double shift = index * 0.25;
+        for (int rowTop : new int[] {20, 40, 60}) {
+            double top = rowTop - shift;
+            for (int row = (int) Math.floor(top); row < top + 6; row++) {
+                double coverage = Math.min(row + 1, top + 6) - Math.max(row, top);
+                int luma = 12 + (int) Math.round((TEXT - 12) * Math.max(0, Math.min(1, coverage)));
+                for (int column = 0; column < 4; column++) {
+                    canvas.rect(40 + 20 * column, row, 5, 1, luma);
+                }
+            }
+        }
+        return canvas.frame();
+    }
+
+    /** A still dark room with a small figure made of four thin bright strips, {@code x} pixels from the left. */
+    static GreyFrame figure(int x) {
+        Canvas canvas = new Canvas(W, H, 8);
+        for (int strip = 0; strip < 4; strip++) {
+            canvas.rect(x + 5 * strip, 40, 3, 10, 200);
+        }
+        return canvas.frame();
+    }
+
+    /** A card with two fixed lines and one that shows {@code name} blocks, each a different arrangement. */
+    static GreyFrame creditCard(int name) {
+        Canvas canvas = new Canvas(W, H, 0).line(20, 3, TEXT).line(30, 3, TEXT);
+        // The third line keeps blocks at 40 and 45 and puts the last one at 50 + 5 * name: 24 pixels change.
+        canvas.rect(40, 50, 3, 4, TEXT).rect(45, 50, 3, 4, TEXT).rect(50 + 5 * name, 50, 3, 4, TEXT);
+        return canvas.frame();
     }
 
     /** Builds a list of dense frames, two a second. */

@@ -89,7 +89,7 @@ public final class CreditsMotion {
             && text >= classes.size() * CreditsTuning.MOTION_MIN_TEXT_SHARE;
     }
 
-    /** Bright pixels per row inside the area. */
+    /** Bright pixels per row inside the area (against the window's peak), smoothed over three rows. */
     private static int[] rowProfile(GreyFrame frame, ActiveArea area, int peak) {
         double brightLimit = CreditsTuning.BRIGHT_FRACTION * peak;
         int[] profile = new int[area.height()];
@@ -102,7 +102,17 @@ public final class CreditsMotion {
             }
             profile[row] = count;
         }
-        return profile;
+        return smooth(profile);
+    }
+
+    /** Each count plus its neighbours above and below, so text moving by a fraction of a pixel still matches. */
+    private static int[] smooth(int[] profile) {
+        int[] smoothed = new int[profile.length];
+        for (int row = 0; row < profile.length; row++) {
+            smoothed[row] = profile[row] + (row > 0 ? profile[row - 1] : 0)
+                + (row + 1 < profile.length ? profile[row + 1] : 0);
+        }
+        return smoothed;
     }
 
     /** The index of the first frame of the first steadily moving pair, or -1 when it is not a crawl. */
