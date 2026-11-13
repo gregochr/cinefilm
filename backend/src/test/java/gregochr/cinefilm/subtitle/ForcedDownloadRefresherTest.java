@@ -56,8 +56,8 @@ class ForcedDownloadRefresherTest {
 
     /** The UTC day of {@code NOW} (in London it is already 1 April). */
     private static final LocalDate DAY = LocalDate.of(2024, 3, 31);
-    private static final int LIMIT = 90;
-    private static final int REPLACEMENT_LIMIT = 63;
+    private static final int LIMIT = 20;
+    private static final int REPLACEMENT_LIMIT = 14;
     private static final String NOTHING_DONE = "Subtitle downloads finished: 0 added, 0 with nothing added, 0 failed";
     private static final List<SubtitleCue> CUES = List.of(new SubtitleCue(10_000, 11_000, "a"),
         new SubtitleCue(20_000, 21_000, "b"));
@@ -80,11 +80,12 @@ class ForcedDownloadRefresherTest {
     private final List<Runnable> queued = new ArrayList<>();
     private final Logger refresherLog = (Logger) LoggerFactory.getLogger(ForcedDownloadRefresher.class);
     private final ListAppender<ILoggingEvent> logged = new ListAppender<>();
+    private final FakeDailyLimit limits = new FakeDailyLimit(LIMIT);
     private ForcedDownloadRefresher refresher;
 
     @BeforeEach
     void setUp() {
-        refresher = new ForcedDownloadRefresher(api, budget, references, service, CLOCK, queued::add, LIMIT, events);
+        refresher = new ForcedDownloadRefresher(api, budget, references, service, CLOCK, queued::add, limits, events);
         logged.start();
         refresherLog.addAppender(logged);
     }
@@ -260,7 +261,7 @@ class ForcedDownloadRefresherTest {
         ForcedDownloadRefresher refusing = new ForcedDownloadRefresher(api, budget, references, service, CLOCK,
             command -> {
                 throw new RejectedExecutionException("full");
-            }, LIMIT, events);
+            }, limits, events);
         when(api.downloadsEnabled()).thenReturn(true);
 
         org.assertj.core.api.Assertions.assertThatThrownBy(refusing::startDue)
@@ -446,6 +447,91 @@ class ForcedDownloadRefresherTest {
         var order = org.mockito.Mockito.inOrder(api);
         order.verify(api).download(5022);
         order.verify(api).download(5011);
+    }
+
+    private static OpenSubtitlesDownload downloadedWithRemaining(Integer remaining) {
+        return new OpenSubtitlesDownload(new SrtParser.Parsed(CUES,
+            new SrtParser.Report("UTF-8", 0, 0, 0, false, false, false, CUES.size())), remaining, null);
+    }
+
+    private void runOneMissingDownloadAnswering(OpenSubtitlesDownload answer) {
+        DueDownload due = due(Kind.MISSING, 1, 10, 5011);
+        when(service.due()).thenReturn(List.of(due));
+        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        when(api.download(5011)).thenReturn(answer);
+        storingReferences();
+        when(service.add(eq(due), any(OpenSubtitlesReference.class), eq(NOW))).thenReturn(AddOutcome.ADDED);
+        startAndRun();
+    }
+
+    @Test
+    void fewerDownloadsLeftThanWeCountedRaisesTheDaysCountToTheDaysLimitLessWhatIsLeft() {
+        runOneMissingDownloadAnswering(downloadedWithRemaining(12));
+
+        verify(budget).raiseUsed(DAY, 8);
+        verify(budget, never()).exhaust(any(), anyInt(), any());
+    }
+
+    @Test
+    void theCountIsSyncedAgainstTheDaysFullLimitNotTheCallersCeiling() {
+        DueDownload due = due(Kind.REPLACEMENT, 1, 10, 5011);
+        when(service.due()).thenReturn(List.of(due));
+        when(budget.take(DAY, REPLACEMENT_LIMIT)).thenReturn(true);
+        when(api.download(5011)).thenReturn(downloadedWithRemaining(19));
+        storingReferences();
+        when(service.add(eq(due), any(OpenSubtitlesReference.class), eq(NOW))).thenReturn(AddOutcome.ADDED);
+
+        startAndRun();
+
+        verify(budget).raiseUsed(DAY, 1);
+    }
+
+    @Test
+    void allTheDaysDownloadsLeftRaisesNothing() {
+        runOneMissingDownloadAnswering(downloadedWithRemaining(LIMIT));
+
+        verify(budget, never()).raiseUsed(any(), anyInt());
+    }
+
+    @Test
+    void moreDownloadsLeftThanTheLimitRaisesNothing() {
+        runOneMissingDownloadAnswering(downloadedWithRemaining(LIMIT + 30));
+
+        verify(budget, never()).raiseUsed(any(), anyInt());
+    }
+
+    @Test
+    void anAnswerThatDoesNotSayHowManyAreLeftRaisesNothing() {
+        runOneMissingDownloadAnswering(downloadedWithRemaining(null));
+
+        verify(budget, never()).raiseUsed(any(), anyInt());
+        verify(budget, never()).exhaust(any(), anyInt(), any());
+    }
+
+    @Test
+    void noDownloadsLeftSpendsTheWholeDayAndStillSpendsTheRestOfTheCallersShare() {
+        runOneMissingDownloadAnswering(downloadedWithRemaining(0));
+
+        verify(budget).raiseUsed(DAY, LIMIT);
+        verify(budget).exhaust(DAY, LIMIT, null);
+    }
+
+    @Test
+    void theDaysLimitIsReadAtTheStartOfEveryRun() {
+        when(service.due()).thenReturn(List.of(due(Kind.REPLACEMENT, 1, 10, 5011)));
+        when(budget.take(DAY, 14)).thenReturn(false);
+        when(budget.take(DAY, 700)).thenReturn(false);
+
+        when(api.downloadsEnabled()).thenReturn(true);
+        limits.set(20);
+        refresher.startDue();
+        queued.remove(0).run();
+        limits.set(1000);
+        refresher.startDue();
+        queued.remove(0).run();
+
+        verify(budget).take(DAY, 14);
+        verify(budget).take(DAY, 700);
     }
 
     @Test

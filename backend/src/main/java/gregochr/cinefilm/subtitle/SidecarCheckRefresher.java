@@ -23,7 +23,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
@@ -62,7 +61,9 @@ public class SidecarCheckRefresher {
     private final SidecarCheckService service;
     private final Clock clock;
     private final Executor executor;
-    private final int checkLimit;
+    private final DailyDownloadLimit limits;
+    /** The ceiling for comparisons, set at the start of each run from the day's limit; one run at a time. */
+    private volatile int checkLimit;
     private final ApplicationEventPublisher events;
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean pending = new AtomicBoolean();
@@ -72,17 +73,17 @@ public class SidecarCheckRefresher {
     public SidecarCheckRefresher(OpenSubtitlesApi api, OpenSubtitlesBudget budget,
                                  OpenSubtitlesReferenceRepository references, SidecarCheckService service, Clock clock,
                                  @Qualifier("sidecarCheckExecutor") Executor executor,
-                                 @Value("${cinefilm.opensubtitles.daily-download-limit:90}") int dailyLimit,
+                                 DailyDownloadLimit limits,
                                  ApplicationEventPublisher events) {
         this.api = api;
         this.budget = budget;
-        this.fetcher = new ReferenceFetcher(api, budget, references, clock);
+        this.fetcher = new ReferenceFetcher(api, budget, references, clock, limits);
         this.service = service;
         this.clock = clock;
         this.executor = executor;
         // The comparisons may bring the day's total only to their share, so downloads of missing and replacement
         // subtitles are never starved (DownloadShares).
-        this.checkLimit = DownloadShares.forChecks(dailyLimit);
+        this.limits = limits;
         this.events = events;
     }
 
@@ -192,6 +193,8 @@ public class SidecarCheckRefresher {
                 LOG.info("Subtitle file checks wait: OpenSubtitles' download limit is reached until {}", blockedUntil);
                 return;
             }
+            // The comparisons may bring the day's total only to their share; the limit follows the account.
+            checkLimit = DownloadShares.forChecks(limits.today());
             for (DueCheck due : service.due()) {
                 try {
                     if (due.candidates().isEmpty()) {

@@ -260,16 +260,36 @@ class ForcedDownloadServiceTest extends ForcedDownloadTestBase {
     }
 
     @Test
-    void missingOnesComeBeforeReplacementsWhateverTheFilmOrder() {
-        Film replacement = film("Alpha");
-        sidecar("Alpha.en.forced.srt", fileId(replacement, 1), false);
+    void replacementsComeBeforeMissingOnesWhateverTheFilmOrder() {
+        Film missing = film("Alpha");
+        Film replacement = film("Zulu");
+        sidecar("Zulu.en.forced.srt", fileId(replacement, 1), false);
         fileCheck(replacement, "CHECK", reference(replacement, 5011));
-        Film missing = film("Zulu");
 
         List<DueDownload> due = service.due();
 
-        assertThat(due).extracting(DueDownload::kind).containsExactly(Kind.MISSING, Kind.REPLACEMENT);
-        assertThat(due).extracting(DueDownload::filmId).containsExactly(missing.getId(), replacement.getId());
+        assertThat(due).extracting(DueDownload::kind).containsExactly(Kind.REPLACEMENT, Kind.MISSING);
+        assertThat(due).extracting(DueDownload::filmId).containsExactly(replacement.getId(), missing.getId());
+    }
+
+    @Test
+    void freePromotionsComeFirstThenReplacementsThenMissingEachByFilm() {
+        Film missingA = film("Alpha");
+        Film replacement = film("Mike");
+        sidecar("Mike.en.forced.srt", fileId(replacement, 1), false);
+        fileCheck(replacement, "CHECK", reference(replacement, 5011));
+        Film promoted = film("Zulu");
+        sidecar("Zulu.en.forced.srt", fileId(promoted, 1), false);
+        fileCheck(promoted, "CHECK", reference(promoted, 5011));
+        ledger(promoted, 5011);
+        Film missingB = film("Bravo");
+
+        List<DueDownload> due = service.due();
+
+        assertThat(due).extracting(DueDownload::filmId).containsExactly(promoted.getId(), replacement.getId(),
+            missingA.getId(), missingB.getId());
+        assertThat(due.get(0).promotion()).isNotNull();
+        assertThat(due.get(1).promotion()).isNull();
     }
 
     // --- adding ---

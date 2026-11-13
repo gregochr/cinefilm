@@ -380,8 +380,8 @@ Plan: `library-scan-plan.md`. What the API and the model now carry:
 - **Downloaded forced subtitles** (phase 4a, `forced-subtitles-plan.md` "Phase 4a build"): a background run
   (`ForcedDownloadRefresher`, after a scan, the OpenSubtitles search and the checks, after a removal, and daily 06:45)
   downloads a subtitle for each edition whose film needs one and where nothing plays, or where the owner's file failed
-  every check, within the shared daily budget (`cinefilm.opensubtitles.daily-download-limit`: missing first, replacements
-  up to 70%, comparisons up to 50%). Each download is proven by its timing fit against the film's own English track, else
+  every check, within the shared daily budget (`cinefilm.opensubtitles.daily-download-limit`: the account's allowance, capped by it:
+  replacements first, up to 70%, then missing, comparisons up to 30%). Each download is proven by its timing fit against the film's own English track, else
   by a second opinion from a different OpenSubtitles file. Only the film's IMDb id changing removes a download
   automatically; otherwise `DELETE /api/admin/subtitles/{id}`.
 - **Scheduling.** At start-up when the library has no films, nightly 04:30 `cinefilm.time-zone`, and from Admin. One

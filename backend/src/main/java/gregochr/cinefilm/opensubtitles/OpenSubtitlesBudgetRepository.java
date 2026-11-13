@@ -34,6 +34,16 @@ public interface OpenSubtitlesBudgetRepository extends JpaRepository<OpenSubtitl
         + "else b.blockedUntil end where b.budgetDay = :day")
     int spendAll(@Param("day") LocalDate day, @Param("limit") int limit, @Param("until") Instant until);
 
+    /**
+     * Raises {@code used} to a count OpenSubtitles reports (the account may be shared with other tools); never lowers
+     * it. Returns the rows changed.
+     */
+    @Transactional
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update OpenSubtitlesBudgetDay b set b.used = case when b.used < :used then :used else b.used end "
+        + "where b.budgetDay = :day")
+    int raiseUsed(@Param("day") LocalDate day, @Param("used") int used);
+
     /** The latest instant any day is blocked until, or null when none is blocked. */
     @Query("select max(b.blockedUntil) from OpenSubtitlesBudgetDay b")
     Instant findLatestBlockedUntil();

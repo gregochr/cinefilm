@@ -1,25 +1,26 @@
 package gregochr.cinefilm.subtitle;
 
 /**
- * How the day's OpenSubtitles download budget is shared (decision 42). One budget serves three jobs, in priority
- * order: downloads of missing subtitles, downloads of replacements for owner files that failed every check, and the
- * comparisons of the owner's files and of downloads with a second OpenSubtitles file. The jobs run in that order when
- * they run together (missing before replacements), and each has a ceiling on the day's total used, so a lower job can
- * never starve a higher one:
+ * How the day's OpenSubtitles download budget is shared (decision 42). The limit is the account's own allowance
+ * ({@link DailyDownloadLimit}). One budget serves three jobs: downloads of replacements for owner files that failed
+ * every check (the film shows nothing now, so they run first), downloads of missing subtitles, and the comparisons of
+ * the owner's files and of downloads with a second OpenSubtitles file. In a download run, promotions (free) come first,
+ * then replacements, then missing ones, and each job has a ceiling on the day's total used, so a lower job can never
+ * starve a higher one:
  * <ul>
  *   <li>missing: the whole limit;</li>
  *   <li>replacements: up to 70% of the limit, so 30% is always left for missing ones;</li>
- *   <li>comparisons: up to 50% of the limit, so half is always left for downloads.</li>
+ *   <li>comparisons: up to 30% of the limit, so 70% is always left for downloads that change what plays.</li>
  * </ul>
  * The budget itself ({@code OpenSubtitlesBudget.take}) enforces the ceilings in one conditional statement; no refund is
- * given once OpenSubtitles has charged. All in exact integer arithmetic (a limit of 90 gives 63 and 45). Pure.
+ * given once OpenSubtitles has charged. All in exact integer arithmetic (a limit of 20 gives 14 and 6). Pure.
  */
 public final class DownloadShares {
 
     /** The share of the limit the replacements may bring the day's total to, in percent. */
     static final int REPLACEMENT_PERCENT = 70;
     /** The share of the limit the comparisons may bring the day's total to, in percent. */
-    static final int CHECK_PERCENT = 50;
+    static final int CHECK_PERCENT = 30;
 
     private DownloadShares() {
     }

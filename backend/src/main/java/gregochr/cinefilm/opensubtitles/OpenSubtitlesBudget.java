@@ -57,6 +57,18 @@ public class OpenSubtitlesBudget {
     }
 
     /**
+     * Raises the day's count to what OpenSubtitles says the account has used (the account may be shared with other
+     * tools). Never lowers it.
+     *
+     * @param day the UTC day
+     * @param used downloads OpenSubtitles says are used today
+     */
+    public void raiseUsed(LocalDate day, int used) {
+        ensure(day);
+        days.raiseUsed(day, used);
+    }
+
+    /**
      * When downloads are blocked until, if that is still ahead.
      *
      * @param now the current instant

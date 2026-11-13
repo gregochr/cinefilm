@@ -91,7 +91,9 @@ public class ForcedDownloadService {
     }
 
     /**
-     * The editions to download for, missing ones first and then replacements, each by film and edition. A film is
+     * The editions to download for: those with a promotion first (it costs nothing, whatever the kind), then
+     * replacements (the owner's file failed every check, so the film shows nothing now), then missing ones, each group
+     * by film and edition. A film is
      * considered when its need is shown ({@code NEEDED}) and it has single-file results from a search of its current
      * IMDb id (the candidates stored). Per edition see {@link DownloadPlan#kind}; an edition that already has
      * {@value DownloadPlan#MAX_DOWNLOADS} downloads (removed ones included) is left alone, and so is one with nothing
@@ -140,8 +142,10 @@ public class ForcedDownloadService {
                 due.add(item);
             }
         }
-        due.sort(Comparator.comparing(DueDownload::kind).thenComparing(DueDownload::filmId)
-            .thenComparing(DueDownload::editionId));
+        // Free promotions first, then replacements (the owner's file failed, so nothing is shown now), then missing.
+        due.sort(Comparator.comparing((DueDownload d) -> d.promotion() == null)
+            .thenComparing(d -> d.kind() == Kind.MISSING)
+            .thenComparing(DueDownload::filmId).thenComparing(DueDownload::editionId));
         return due;
     }
 

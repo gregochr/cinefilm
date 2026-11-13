@@ -17,7 +17,8 @@ Judgement calls made while building 2d without the owner. Each: what was chosen,
    download. **First real run: watch the log** and fix any difference (header names, `base_url`, the link host) in a small
    follow-up.
 2. **Daily download limit 90 of the 100.** Why: leaves 10 of the dev-mode 100 for the owner's own use.
-   Alternative: 100. Setting: `cinefilm.opensubtitles.daily-download-limit`.
+   Alternative: 100. Setting: `cinefilm.opensubtitles.daily-download-limit`. **Superseded 2026-11-13 by decision 42:**
+   the limit is the account's allowance from the login reply and the setting only caps it (default 1000).
 3. **Thresholds 70% / 0.5x / 2x and a +-2 s match window**, from the plan's own wording. Alternatives: stricter or looser
    share; a 1 s window (more false `CHECK` on a loose file).
 4. **Checks run per edition on the served (stitched) subtitle**, not per file: a split edition's per-part files are
@@ -225,13 +226,22 @@ Each: what was chosen, why, and the alternative. Numbers continue 2e's.
     (it neither reads, marks missing nor name-matches them; tests in `SidecarSyncDownloadsTest` and the Postgres
     `ForcedDownloadIntegrationTest`), and `SidecarPrecedence.pick` ignores them, so a download can never be mistaken for an
     owner's file.
-42. **The shared daily budget (90) has ceilings, not just an order.** `DownloadShares`: a missing subtitle may bring the
-    day's total to the whole limit, a replacement to 70% (63 of 90), the second-opinion comparisons of 2d to 50% (45 of 90),
-    each a plain `OpenSubtitlesBudget.take(day, ceiling)`, so a lower job can never starve a higher one and no new table is
-    needed. Within a download run missing editions come first, then replacements. Integer arithmetic only, rounded down.
-    No refund once OpenSubtitles has charged (unchanged from 2d: `ReferenceFetcher` is 2d's code moved so both refreshers
-    share it). **Alternatives:** run order only (the checks run first in the chain, so they would eat the day); a separate
-    budget row per job (a new table and a race between rows).
+42. **The shared daily budget has ceilings, not just an order; its size is the account's allowance** (amended
+    2026-11-13). `DownloadShares`: a missing subtitle may bring the day's total to the whole limit, a replacement to 70%,
+    the second-opinion comparisons of 2d to 30% (a limit of 20 gives 20, 14 and 6), each a plain
+    `OpenSubtitlesBudget.take(day, ceiling)`, so a lower job can never starve a higher one and no new table is needed.
+    The limit (`DailyDownloadLimit`, asked at the start of each run) is the account's `allowed_downloads` from the
+    `/login` reply, capped by `cinefilm.opensubtitles.daily-download-limit` (now default 1000, only an owner cap); 20, a
+    free account's, until the allowance is known. After each download `ReferenceFetcher` raises the day's `used` to
+    `limit - remaining` when OpenSubtitles says fewer are left than we counted (the account may be shared), never
+    lowering it. Within a download run, promotions (free) come first, then replacements (an owner's file failed every
+    check, so the film shows nothing now), then missing editions. Integer arithmetic only, rounded down. No refund once
+    OpenSubtitles has charged (unchanged from 2d: `ReferenceFetcher` is 2d's code moved so both refreshers share it).
+    **Why amended:** the v0.6.0 log. The budget was 90 on an account that allows 20, so the shares never bit, the
+    comparisons ran first and spent 8 of the 20, and OpenSubtitles' own limit stopped the downloads after about 26.
+    Films whose file was just dropped (Amsterdam, Olympus Has Fallen) waited behind every missing film.
+    **Alternatives:** run order only (the checks run first in the chain, so they would eat the day); a separate budget
+    row per job (a new table and a race between rows).
 43. **A download is timed for the whole edition and stored against part 1.** A single-file OpenSubtitles result on a split
     edition is therefore a whole-edition file placed with `EditionTimeline`, exactly as an owner's whole-edition file.
     **Multi-CD results stay out of scope: phase 4c** (the 2d rule that skips them is unchanged: only single-file
@@ -710,7 +720,7 @@ Built from the documented API: the live login/download test was denied (see "Dec
   no key or token sent to it. 406, or a reply with no link whose message says limit or quota, is `OpenSubtitlesQuotaException`
   (with `reset_time_utc`); everything else unexpected is an outage. `base_url` is used only when it is a host below
   `.opensubtitles.com`. Settings: `cinefilm.opensubtitles.username` / `.password` (blank = downloads off, search still on),
-  `.daily-download-limit=90`.
+  `.daily-download-limit=1000` (only a cap: the day's limit is the account's allowance from the login reply).
 - **Budget** (`opensubtitles_budget`, a table of its own rather than generalising `RatingsBudget`, because it also keeps
   `blocked_until`): `take` / `refund` / `exhaust` per UTC day, one conditional statement each.
 - **Tables** (`V16`): `opensubtitles_reference` (unique per film and file id, cues as normalised SRT, `cue_count` 0 =
