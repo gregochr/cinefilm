@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { act, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -784,6 +785,120 @@ describe('usePlexCreditsImport', () => {
     await settle(SCAN_POLL_MS);
     await settle();
     expect(result.current.announcement).toBe(sentence);
+  });
+
+  it('stops saying it is checking when the read it started fails again', async () => {
+    installFetch((m, url) => (url === '/api/admin/plex/credits' ? respond(null, 500) : null));
+    vi.useFakeTimers();
+    const { result } = renderHook(() => usePlexCreditsImport());
+    await settle();
+    const first = result.current.error;
+    expect(first).not.toBeNull();
+
+    act(() => result.current.reload());
+    expect(result.current.checking).toBe(true);
+    await settle();
+
+    expect(result.current.error).not.toBe(first);
+    expect(result.current.checking).toBe(false);
+  });
+
+  it('stops saying it is checking when the read it started times out', async () => {
+    let reads = 0;
+    installFetch((m, url) => {
+      if (url !== '/api/admin/plex/credits') return null;
+      reads += 1;
+      return reads === 1 ? respond(null, 500) : new Promise(() => {});
+    });
+    vi.useFakeTimers();
+    const { result } = renderHook(() => usePlexCreditsImport());
+    await settle();
+    act(() => result.current.reload());
+    await settle(CREDITS_READ_TIMEOUT_MS - 1);
+    expect(result.current.checking).toBe(true);
+
+    await settle(1);
+
+    expect(result.current.checking).toBe(false);
+  });
+
+  it('shows Check again, not busy, once the read it started has failed again', async () => {
+    let reads = 0;
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    installFetch(async (m, url) => {
+      if (url !== '/api/admin/plex/credits') return null;
+      reads += 1;
+      if (reads === 2) await gate;
+      return respond(null, 500);
+    });
+    render(<PlexCreditsImport reachable />);
+    const group = await block();
+    await userEvent.click(await within(group).findByRole('button', { name: 'Check again' }));
+    expect(within(group).getByRole('button', { name: 'Checking\u2026' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+
+    release();
+
+    const again = await within(group).findByRole('button', { name: 'Check again' });
+    expect(again).toHaveAttribute('aria-busy', 'false');
+  });
+
+  it('aborts the underlying request when the read times out', async () => {
+    const signals = [];
+    installFetch((m, url, init) => {
+      if (url !== '/api/admin/plex/credits') return null;
+      signals.push(init.signal);
+      return new Promise(() => {});
+    });
+    vi.useFakeTimers();
+    renderHook(() => usePlexCreditsImport());
+    await settle();
+    expect(signals[0].aborted).toBe(false);
+
+    await settle(CREDITS_READ_TIMEOUT_MS);
+
+    expect(signals[0].aborted).toBe(true);
+  });
+
+  it('aborts the underlying request of a read that Check again replaces', async () => {
+    const signals = [];
+    installFetch((m, url, init) => {
+      if (url !== '/api/admin/plex/credits') return null;
+      signals.push(init.signal);
+      return new Promise(() => {});
+    });
+    vi.useFakeTimers();
+    const { result } = renderHook(() => usePlexCreditsImport());
+    await settle();
+    expect(signals).toHaveLength(1);
+    expect(signals[0].aborted).toBe(false);
+
+    act(() => result.current.reload());
+    await settle();
+
+    expect(signals).toHaveLength(2);
+    expect(signals[0].aborted).toBe(true);
+    expect(signals[1].aborted).toBe(false);
+  });
+
+  it('sends no live request for a read whose resource signal is already aborted (StrictMode)', async () => {
+    const atCall = [];
+    installFetch((m, url, init) => {
+      if (url !== '/api/admin/plex/credits') return null;
+      atCall.push(init.signal.aborted);
+      return respond(IDLE);
+    });
+    vi.useFakeTimers();
+    renderHook(() => usePlexCreditsImport(), { wrapper: StrictMode });
+    await settle();
+
+    expect(atCall).toContain(true);
+    expect(atCall.filter((aborted) => !aborted)).toHaveLength(1);
   });
 
   it('ends a hung read with an error after the timeout, then polls again', async () => {

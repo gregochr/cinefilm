@@ -176,7 +176,8 @@ export const CREDITS_READ_TIMEOUT_MS = 10000;
 function readCreditsStatus(outer) {
   return new Promise((resolve, reject) => {
     const controller = new AbortController();
-    outer.addEventListener('abort', () => controller.abort());
+    if (outer.aborted) controller.abort();
+    else outer.addEventListener('abort', () => controller.abort(), { once: true });
     const timeout = setTimeout(() => {
       controller.abort();
       reject(new Error('The credits import status did not answer in time'));
