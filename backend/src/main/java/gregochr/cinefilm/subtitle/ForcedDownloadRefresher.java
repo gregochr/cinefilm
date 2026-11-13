@@ -24,7 +24,8 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 /**
- * Downloads forced subtitles from OpenSubtitles for the editions that need one ({@link ForcedDownloadService#due}), in
+ * Downloads subtitles from OpenSubtitles for the editions that need one: forced ones, and full English ones for films
+ * made in another language ({@link ForcedDownloadService#due}), in
  * the background and one run at a time: at start-up, after a scan, after the OpenSubtitles search and the checks of the
  * owner's files end (a failed file is what makes a replacement due), after the owner removes a download, and daily. It
  * is off while downloads are off (no username and password).
@@ -32,8 +33,10 @@ import org.springframework.stereotype.Service;
  * <p>Per edition, a stored reference that fits is promoted first (it costs no download); otherwise the best candidate
  * for the edition's cut is fetched through {@link ReferenceFetcher} (stored at once, never fetched twice) and made the
  * edition's download unless it is full subtitles or unreadable, then the next. The day's budget is shared with the
- * comparisons of {@link DownloadShares}: promotions first (free), then replacements up to their ceiling (the owner's
- * file failed, so the film shows nothing now), then missing subtitles up to the whole limit. The day's limit is read
+ * comparisons of {@link DownloadShares}: promotions first (free), then <strong>full</strong> English subtitles up to
+ * the whole limit (the film cannot be watched without them; a ceiling stop on them ends the run, as on missing
+ * ones), then forced replacements up to their ceiling (the owner's file failed, so the film shows nothing now; a
+ * ceiling stop skips to missing), then missing forced subtitles up to the whole limit. The day's limit is read
  * from {@link DailyDownloadLimit} at the start of each run. A spent budget or an OpenSubtitles limit ends the run; an
  * outage ends it with nothing added; a failure on one edition is counted and the run goes on. A download that was
  * added is then proven by its timing fit, or a
@@ -259,8 +262,10 @@ public class ForcedDownloadRefresher {
             }
             return outcome == AddOutcome.ADDED;
         }
-        int limit = due.kind() == Kind.MISSING ? DownloadShares.forMissing(dailyLimit)
-            : DownloadShares.forReplacements(dailyLimit);
+        // Full subtitles and missing forced ones may use the whole limit; replacements stop at their share.
+        int limit = due.kind() == Kind.REPLACEMENT ? DownloadShares.forReplacements(dailyLimit)
+            : DownloadShares.forMissing(dailyLimit);
+        SubtitleKind kind = due.kind() == Kind.FULL ? SubtitleKind.FULL : SubtitleKind.FORCED;
         if (due.remainingFetches() <= 0) {
             LOG.info("Edition {}: no more OpenSubtitles files are tried (at most {} are ever made into downloads)",
                 due.editionId(), DownloadPlan.MAX_DOWNLOADS);
@@ -270,9 +275,10 @@ public class ForcedDownloadRefresher {
         // again) and the next one is tried at once, bounded by the candidate list and the day's quota.
         for (OpenSubtitlesResult candidate : due.candidates()) {
             OpenSubtitlesReference reference = fetcher.fetch(due.filmId(), due.imdbId(), candidate, limit);
-            if (!DownloadPlan.promotable(reference)) {
+            if (!DownloadPlan.promotable(reference, kind)) {
                 LOG.info("Edition {}: OpenSubtitles file {} skipped, {}", due.editionId(), candidate.fileId(),
-                    reference.isUsable() ? "it is full subtitles" : "it could not be read");
+                    !reference.isUsable() ? "it could not be read"
+                        : kind == SubtitleKind.FULL ? "it is not full subtitles" : "it is full subtitles");
                 continue;
             }
             AddOutcome outcome = service.add(due, reference, clock.instant());

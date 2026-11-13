@@ -169,6 +169,56 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
                           @org.springframework.data.repository.query.Param("at") java.time.Instant at);
 
     /**
+     * Films with an IMDb id whose search for full English subtitles is due: never searched, searched under another
+     * IMDb id, or searched with no result before the cutoff (subtitles get uploaded later). Never searched first, then
+     * the oldest. The caller keeps only the films whose full need is {@code NEEDED}.
+     */
+    @org.springframework.data.jpa.repository.Query(
+        "select new gregochr.cinefilm.film.FilmRepository$ImdbRef(f.id, f.imdbId) from Film f "
+            + "where f.imdbId is not null and (f.osFullSearchedAt is null or f.osFullSearchedImdbId is null "
+            + "or f.osFullSearchedImdbId <> f.imdbId or f.osFullCandidates is null "
+            + "or (f.osFullCandidates = '[]' and f.osFullSearchedAt < :cutoff)) "
+            + "order by f.osFullSearchedAt asc nulls first, f.id asc")
+    List<ImdbRef> findOpenSubtitlesFullDue(
+        @org.springframework.data.repository.query.Param("cutoff") java.time.Instant cutoff);
+
+    /**
+     * Stores the full English results and stamps the film, in one statement that only matches while the film still
+     * has the IMDb id it was searched for.
+     *
+     * @return the rows changed: 1, or 0 when the film has gone or now has another IMDb id
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query(
+        "update Film f set f.osFullCandidates = :candidates, f.osFullSearchedImdbId = :imdbId, "
+            + "f.osFullSearchedAt = :at where f.id = :id and f.imdbId = :imdbId")
+    int saveOpenSubtitlesFull(@org.springframework.data.repository.query.Param("id") Long id,
+                              @org.springframework.data.repository.query.Param("imdbId") String imdbId,
+                              @org.springframework.data.repository.query.Param("candidates") String candidates,
+                              @org.springframework.data.repository.query.Param("at") java.time.Instant at);
+
+    /**
+     * A film's full English OpenSubtitles candidates.
+     *
+     * @param id the film
+     * @param imdbId its current IMDb id
+     * @param osFullCandidates the candidates as a JSON array ({@code OpenSubtitlesResult.listToJson})
+     */
+    record OsFullRef(Long id, String imdbId, String osFullCandidates) {
+    }
+
+    /**
+     * Films with full English candidates from a search of their current IMDb id (the array may be empty). A result
+     * from a search under another IMDb id does not count.
+     */
+    @org.springframework.data.jpa.repository.Query(
+        "select new gregochr.cinefilm.film.FilmRepository$OsFullRef(f.id, f.imdbId, f.osFullCandidates) "
+            + "from Film f where f.imdbId is not null and f.osFullSearchedImdbId = f.imdbId "
+            + "and f.osFullCandidates is not null and f.osFullCandidates <> '[]' order by f.id")
+    List<OsFullRef> findOpenSubtitlesFull();
+
+    /**
      * Forgets what OpenSubtitles said about a film, straight on the row. A change of IMDb id uses it in its own
      * transaction after the id change has been flushed (the flush is automatic): the entity (with
      * {@code @DynamicUpdate}) skips a column it loaded as null and sets to null, so a search that committed the old
@@ -178,7 +228,8 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
     @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
     @org.springframework.data.jpa.repository.Query(
         "update Film f set f.osForcedCount = null, f.osBest = null, f.osCandidates = null, "
-            + "f.osSearchedImdbId = null, f.osSearchedAt = null where f.id = :id")
+            + "f.osSearchedImdbId = null, f.osSearchedAt = null, f.osFullCandidates = null, "
+            + "f.osFullSearchedImdbId = null, f.osFullSearchedAt = null where f.id = :id")
     int clearOpenSubtitles(@org.springframework.data.repository.query.Param("id") Long id);
 
     /**

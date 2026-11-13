@@ -6,9 +6,9 @@ import gregochr.cinefilm.subtitle.DownloadPlan.Kind;
 import java.util.List;
 
 /**
- * An edition that is due a downloaded forced subtitle.
+ * An edition that is due a downloaded subtitle: a forced one, or (kind {@link Kind#FULL}) a full English one.
  *
- * @param kind {@link Kind#MISSING} or {@link Kind#REPLACEMENT}
+ * @param kind {@link Kind#FULL}, {@link Kind#MISSING} or {@link Kind#REPLACEMENT}
  * @param filmId the film
  * @param editionId the edition
  * @param imdbId the film's IMDb id the candidates were searched for

@@ -1102,6 +1102,51 @@ links to each film's rows.
     that, "on by default" cannot tell a film never chosen from one switched Off. Alternative: a separate
     `subtitle_chosen` flag (more state for the same fact).
 
+#### Phase 5d-1 built (2026-11-13)
+
+5d is split in two. **5d-1** finds, downloads and plays full English subtitles and measures them; **5d-2** acts on the
+proof. Built in 5d-1:
+
+- **Search.** `OpenSubtitlesApi.searchFull(imdbId)` asks for `languages=en`, `foreign_parts_only=exclude` and
+  `hearing_impaired=include` (alphabetical, as the forced search). `OpenSubtitlesParser.parseFull` keeps only results
+  whose flag is a real `false` (a missing or non-boolean flag fits neither search), keeps hearing-impaired files and marks
+  them, and keeps the single-file rule. `OpenSubtitlesRanking.fullCandidates` ranks with hearing-impaired files below
+  every other (cut tags and the top 3 plus the best of each tag, at most 8, are unchanged). Results are stored in
+  `film.os_full_candidates`, `os_full_searched_imdb_id` and `os_full_searched_at` (**V23**); `Film.setImdbId` and
+  `clearOpenSubtitles` clear them. `OpenSubtitlesRefresher` runs a second pass in the same job (06:00, after scans and
+  imports, same pacing) over films whose full need is `NEEDED` only, due on the forced search's rules (never searched,
+  another IMDb id, or `[]` older than 30 days). A forced-search outage skips the full pass.
+- **Due and download.** `DownloadPlan.Kind.FULL` from a second source in `ForcedDownloadService.due()`: need `NEEDED`,
+  full candidates from a search of the current IMDb id, no present owner's FULL file attached to the edition, no FULL
+  download made for it, and room under `MAX_DOWNLOADS` counted from FULL blocks and downloads only (forced ones never
+  count, and FULL ones never count for forced). Blocks and the ledger are read with `SubtitleKind.FULL`; `add()` re-reads
+  the full need under the library lock (decision 59), and the FULL candidates, blocks, owner's file and downloads.
+  `DownloadPlan.promotable(reference, kind)`: forced needs fewer than 300 lines, full needs 300 or more; a stored file of
+  the wrong size for the kind is spent and never fetched again for it. Order: promotions, FULL, replacements, missing.
+  FULL uses the missing ceiling (the whole limit); a ceiling stop on it ends the run.
+- **Play.** `FullChoice`: an owner's FULL file (or a conflict between the owner's files) beats a FULL download; otherwise
+  the live download plays unchecked (decision 66), `fullSubtitle.source = "DOWNLOAD"`. The owner's "not needed" for full
+  subtitles hides a download (the forced choice does not). Admin lists it as FULL from OPENSUBTITLES, "Ready to play as
+  English (full)"; Remove blocks the file with kind FULL and the existing `SubtitleDownloadRemoved` event looks for the
+  next candidate.
+- **The measurement.** `SidecarCheckRefresher` calls `FullFitProbe` after its checks (and so also starts on
+  `SubtitleDownloadsFinished`). For each live FULL download not yet measured by this process it takes a second FULL
+  reference (a stored one, else the first other candidate for the edition's cut, fetched through `ReferenceFetcher` with
+  the comparison ceiling `DownloadShares.forChecks`; at most one fetch per download per process), fits `TimingFit` both
+  ways and writes one INFO line: both verdicts, offsets and matched shares, each file's cue count and last-cue time, the
+  edition runtime, and `credits_detection`'s credits start when FOUND. **Nothing is stored and nothing acts on it**; the
+  second reference the fetcher keeps is a normal stored reference. A download with no second file is noted once per
+  process.
+
+**5d-2 (next)** reads those lines for the first ten or so films, fixes the thresholds (both fits ALIGNED within ±1 s,
+the cut check against runtime and credits), then builds the acting part: promotion to proven, and a rejection that tries
+the next candidate (at most 3 per edition, the FULL ledger). Until then an unchecked download plays and a bad one stays
+until the owner removes it.
+
+Decisions not settled by the spec, taken in 5d-1: a per-edition cut still ranks before hearing-impaired demotion (the
+film-level order and the stored candidates demote hearing-impaired files first); a conflict between the owner's files is
+not filled in by a download; a FULL download never starts the forced path's timing fit or per-download comparison.
+
 ### Phase 6 — subtitles stored as pictures inside the file
 
 About 60 rips carry their subtitle tracks as pictures (`dvd_subtitle`, DVD-style bitmaps), not text: about 25 full

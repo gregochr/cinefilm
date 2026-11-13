@@ -133,4 +133,40 @@ class FilmOpenSubtitlesIntegrationTest extends IntegrationTestBase {
         assertThat(reloaded.getOsSearchedImdbId()).isNull();
         assertThat(reloaded.getOsBest()).isNull();
     }
+
+    @Test
+    void theThreeFullColumnsRoundTripAndTheFullDueSaveAndResetRunOnPostgres() {
+        Film film = saved("Full Round Trip", "tt0000021");
+        Film searched = saved("Full Searched", "tt0000022");
+        Film empty = saved("Full Empty", "tt0000023");
+        Film other = saved("Full Other", "tt0000024");
+        assertThat(films.findOpenSubtitlesFullDue(CUTOFF)).extracting(ImdbRef::id)
+            .containsExactlyInAnyOrder(film.getId(), searched.getId(), empty.getId(), other.getId());
+
+        // The column is TEXT: a long candidates array round-trips.
+        String long5000 = "x".repeat(5000);
+        assertThat(films.saveOpenSubtitlesFull(film.getId(), "tt0000021", long5000, NOW)).isEqualTo(1);
+        assertThat(films.saveOpenSubtitlesFull(searched.getId(), "tt0000022", "[{\"id\":1,\"fileId\":2}]", NOW))
+            .isEqualTo(1);
+        assertThat(films.saveOpenSubtitlesFull(empty.getId(), "tt0000023", "[]", CUTOFF.minusMillis(1)))
+            .isEqualTo(1);
+        assertThat(films.saveOpenSubtitlesFull(other.getId(), "tt0000099", "[]", NOW)).isZero();
+        entityManager.clear();
+
+        Film loaded = films.findById(film.getId()).orElseThrow();
+        assertThat(loaded.getOsFullCandidates()).hasSize(5000);
+        assertThat(loaded.getOsFullSearchedImdbId()).isEqualTo("tt0000021");
+        assertThat(loaded.getOsFullSearchedAt()).isEqualTo(NOW);
+        assertThat(films.findOpenSubtitlesFullDue(CUTOFF)).extracting(ImdbRef::id)
+            .containsExactlyInAnyOrder(empty.getId(), other.getId());
+        assertThat(films.findOpenSubtitlesFull()).extracting(FilmRepository.OsFullRef::id)
+            .containsExactlyInAnyOrder(film.getId(), searched.getId());
+
+        assertThat(films.clearOpenSubtitles(film.getId())).isEqualTo(1);
+        entityManager.clear();
+        Film cleared = films.findById(film.getId()).orElseThrow();
+        assertThat(cleared.getOsFullCandidates()).isNull();
+        assertThat(cleared.getOsFullSearchedImdbId()).isNull();
+        assertThat(cleared.getOsFullSearchedAt()).isNull();
+    }
 }
