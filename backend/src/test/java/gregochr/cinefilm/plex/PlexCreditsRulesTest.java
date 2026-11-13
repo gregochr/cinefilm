@@ -21,7 +21,8 @@ class PlexCreditsRulesTest {
     private static final long MARKER = 6_600_000L;
 
     private static PlexMediaTiming media(Long durationMs, String... names) {
-        return new PlexMediaTiming(durationMs, java.util.Arrays.stream(names).map(n -> PREFIX + n).toList());
+        List<String> paths = java.util.Arrays.stream(names).map(n -> PREFIX + n).toList();
+        return new PlexMediaTiming(durationMs, paths, paths.size());
     }
 
     private static PlexMarker credits(long startMs) {
@@ -211,7 +212,7 @@ class PlexCreditsRulesTest {
 
     @Test
     void aVersionOutsideThePrefixMatchesNoCopy() {
-        PlexItemMarkers elsewhere = item(HOUR2, List.of(new PlexMediaTiming(HOUR2, List.of("/other/a.m4v"))),
+        PlexItemMarkers elsewhere = item(HOUR2, List.of(new PlexMediaTiming(HOUR2, List.of("/other/a.m4v"), 1)),
             credits(MARKER));
 
         Decision decision = decide(elsewhere, copy(1, "a.m4v", HOUR2));

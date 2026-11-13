@@ -495,7 +495,7 @@ class PlexClientTest {
         PlexItemMarkers item = client.itemMarkers("88");
 
         assertThat(item).isEqualTo(new PlexItemMarkers(10_200_000L, List.of(
-            new PlexMediaTiming(10_200_000L, List.of("/m/Heat.m4v")),
+            new PlexMediaTiming(10_200_000L, List.of("/m/Heat.m4v"), 1),
             new PlexMediaTiming(10_260_000L, List.of("/m/Heat.mp4"), 2),
             new PlexMediaTiming(null, List.of(), 1)),
             List.of(new PlexMarker("credits", 9_900_000L, true), new PlexMarker("credits", 9_600_000L, false),

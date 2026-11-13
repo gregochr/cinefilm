@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -251,7 +252,7 @@ public class PlexCreditsImportService {
             if (lock.tryAcquire(LibraryLock.PLEX_CREDITS)) {
                 return;
             }
-            holder = java.util.Objects.requireNonNullElse(lock.holder(), holder);
+            holder = Objects.requireNonNullElse(lock.holder(), holder);
             try {
                 sleeper.sleep(LOCK_WAIT);
             } catch (InterruptedException e) {
@@ -259,8 +260,9 @@ public class PlexCreditsImportService {
                 throw new PlexException("Interrupted while waiting for the library lock; nothing was stored", e);
             }
         }
-        throw new PlexException("The library stayed locked by \"" + holder + "\" for 10 minutes; nothing was "
-            + "stored, run the import again", null);
+        throw new PlexException("The library stayed locked by \"" + holder + "\" for "
+            + LOCK_WAIT.multipliedBy(LOCK_ATTEMPTS).toMinutes() + " minutes; nothing was stored, "
+            + "run the import again", null);
     }
 
     private int writeLocked(List<Row> rows, Instant importTime, Map<PlexCreditsSkip, Integer> skipped) {

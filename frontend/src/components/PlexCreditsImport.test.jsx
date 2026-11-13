@@ -175,10 +175,10 @@ describe('PlexCreditsImport', () => {
     expect(within(group).getByRole('button', { name: 'Importing credits…' })).toBeDisabled();
   });
 
-  it('says so when one is already running (409) and shows no error', async () => {
+  it('falls back to its own words when a 409 carries no reason', async () => {
     installFetch((method, url) =>
       url === '/api/admin/plex/credits/import'
-        ? respond({ error: 'A credits import is already running' }, 409)
+        ? respond(null, 409)
         : statusRoute(IDLE)(method, url),
     );
     render(<PlexCreditsImport reachable />);
@@ -189,6 +189,25 @@ describe('PlexCreditsImport', () => {
     expect(
       await within(group).findByText('A credits import is already running.'),
     ).toBeInTheDocument();
+  });
+
+  it('shows the server’s own reason when the Plex import is running (409)', async () => {
+    installFetch((method, url) =>
+      url === '/api/admin/plex/credits/import'
+        ? respond({ error: 'Import credits after the Plex import finishes' }, 409)
+        : statusRoute(IDLE)(method, url),
+    );
+    render(<PlexCreditsImport reachable />);
+    const group = await block();
+    const button = within(group).getByRole('button', { name: 'Import credits from Plex' });
+    await waitFor(() => expect(button).toBeEnabled());
+
+    await userEvent.click(button);
+
+    expect(
+      await within(group).findByText('Import credits after the Plex import finishes'),
+    ).toBeInTheDocument();
+    expect(within(group).queryByText('A credits import is already running.')).toBeNull();
   });
 
   it('says when the import could not be started', async () => {

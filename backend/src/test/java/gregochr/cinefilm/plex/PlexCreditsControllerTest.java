@@ -95,6 +95,15 @@ class PlexCreditsControllerTest {
     }
 
     @Test
+    void postWhileThePlexImportRunsIs409WithItsOwnReason() throws Exception {
+        doThrow(new ConflictException("Import credits after the Plex import finishes")).when(imports).start();
+
+        mvc.perform(post("/api/admin/plex/credits/import").with(user("owner")).header("X-CineFilm", "1"))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.error").value("Import credits after the Plex import finishes"));
+    }
+
+    @Test
     void postWithPlexNotConfiguredIs404() throws Exception {
         doThrow(new NotFoundException("Plex is not configured")).when(imports).start();
 

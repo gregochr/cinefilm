@@ -116,7 +116,7 @@ class PlexCreditsImportServiceTest {
     }
 
     private static PlexMediaTiming timing(String path, long durationMs) {
-        return new PlexMediaTiming(durationMs, List.of(PREFIX + path));
+        return new PlexMediaTiming(durationMs, List.of(PREFIX + path), 1);
     }
 
     private PlexCreditsReport report() {
@@ -169,7 +169,7 @@ class PlexCreditsImportServiceTest {
         assertThat(service.isRunning()).isFalse();
         assertThat(lock.heldBy(LibraryLock.IMPORT)).isTrue();
         verifyNoInteractions(markers);
-        verify(plex, never()).itemMarkers("11");
+        verify(plex, never()).movieSections();
     }
 
     @Test
@@ -232,7 +232,7 @@ class PlexCreditsImportServiceTest {
         // Plex lists the longer mp4 first: copies pair by path, never by position.
         when(plex.itemMarkers("11")).thenReturn(item(timing("Heat.mp4", HOUR2 + 1_500), timing("Heat.m4v", HOUR2)));
         when(plex.itemMarkers("12")).thenReturn(new PlexItemMarkers(HOUR2,
-            List.of(new PlexMediaTiming(HOUR2, List.of(PREFIX + "Split - pt1.m4v", PREFIX + "Split - pt2.m4v"))),
+            List.of(new PlexMediaTiming(HOUR2, List.of(PREFIX + "Split - pt1.m4v", PREFIX + "Split - pt2.m4v"), 2)),
             List.of(new PlexMarker("credits", MARKER, true))));
         when(plex.itemMarkers("13")).thenReturn(new PlexItemMarkers(HOUR2, List.of(timing("Quiet.m4v", HOUR2)),
             List.of()));
@@ -293,7 +293,7 @@ class PlexCreditsImportServiceTest {
     }
 
     @Test
-    void runningAgainReplacesTheRowsAndOnlyWritesWhatPlexListsNeverDeletingTheRest() {
+    void runningAgainReplacesTheRowAndWritesOnlyWhatPlexLists() {
         PlexCreditsMarker old = new PlexCreditsMarker();
         old.setMediaFileId(1L);
         old.setFingerprint("old");
