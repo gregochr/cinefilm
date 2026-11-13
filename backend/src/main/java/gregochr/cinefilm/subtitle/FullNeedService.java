@@ -22,9 +22,11 @@ import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedCountsDto;
 import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedFilmDto;
 import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedListDto;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -111,6 +113,34 @@ public class FullNeedService {
         FullNeedRow row = row(film, film.getFullNeedOwner());
         return decide(row, inScope(row) ? editionAudio(files.findAudioRows(List.of(film.getId())))
             .getOrDefault(film.getId(), List.of()) : List.of()).need().name();
+    }
+
+    /**
+     * The ids of the films whose full-subtitle need is {@code NEEDED} (the films in {@link #list}'s scope: the rest
+     * are never needed).
+     */
+    @Transactional(readOnly = true)
+    public Set<Long> neededFilmIds() {
+        Set<Long> ids = new HashSet<>();
+        for (FullNeedFilmDto film : list().films()) {
+            if (Need.NEEDED.name().equals(film.need())) {
+                ids.add(film.filmId());
+            }
+        }
+        return ids;
+    }
+
+    /**
+     * Whether a film's full-subtitle need is {@code NEEDED} right now (read under the library lock before a download is
+     * added, so an owner's "not needed" that landed meanwhile is seen).
+     *
+     * @param filmId the film
+     * @return true when needed; false for any other need and for a film that is gone
+     */
+    @Transactional(readOnly = true)
+    public boolean isNeeded(Long filmId) {
+        Film film = films.findById(filmId).orElse(null);
+        return film != null && Need.NEEDED.name().equals(needOf(film));
     }
 
     private FullNeedFilmDto chooseLocked(Long filmId, FullNeedChoice choice) {

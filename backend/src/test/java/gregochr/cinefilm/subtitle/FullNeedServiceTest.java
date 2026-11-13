@@ -308,4 +308,35 @@ class FullNeedServiceTest {
         assertThat(service.needOf(unasked)).isEqualTo("UNKNOWN");
         verifyNoInteractions(files);
     }
+
+    @Test
+    void theNeededFilmIdsAreOnlyThoseWhoseNeedIsNeeded() {
+        when(films.findFullNeedRows()).thenReturn(List.of(
+            row(1, "Amelie", "fr", null),
+            row(2, "Heat", "en", null),
+            row(3, "Taken", "en", FullNeedChoice.NOT_NEEDED),
+            row(4, "Oldboy", "ko", null),
+            row(5, "Dubbed", "fr", null)));
+        when(files.findAudioRows(List.of(1L, 3L, 4L, 5L))).thenReturn(List.of(
+            track(1, 10, "Original", 100, 1, Presence.PRESENT, "French", true),
+            track(4, 40, "Original", 400, 1, Presence.PRESENT, "Korean", true),
+            track(5, 50, "Original", 500, 1, Presence.PRESENT, "English", true)));
+
+        assertThat(service.neededFilmIds()).containsExactlyInAnyOrder(1L, 4L);
+    }
+
+    @Test
+    void aFilmIsNeededWhenItsNeedIsNeededAndNeverWhenItIsNotOrHasGone() {
+        Film amelie = stored(7L, "fr", null);
+        Film heat = stored(8L, "en", null);
+        when(films.findById(7L)).thenReturn(Optional.of(amelie));
+        when(films.findById(8L)).thenReturn(Optional.of(heat));
+        when(films.findById(9L)).thenReturn(Optional.empty());
+        when(files.findAudioRows(List.of(7L))).thenReturn(List.of(
+            track(7, 70, "Original", 700, 1, Presence.PRESENT, "French", true)));
+
+        assertThat(service.isNeeded(7L)).isTrue();
+        assertThat(service.isNeeded(8L)).isFalse();
+        assertThat(service.isNeeded(9L)).isFalse();
+    }
 }

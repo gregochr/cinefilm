@@ -146,6 +146,15 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
 
     @Override
     public OpenSubtitlesSearch searchForced(String imdbId) {
+        return search(imdbId, false);
+    }
+
+    @Override
+    public OpenSubtitlesSearch searchFull(String imdbId) {
+        return search(imdbId, true);
+    }
+
+    private OpenSubtitlesSearch search(String imdbId, boolean full) {
         if (imdbId == null || !IMDB_ID.matcher(imdbId).matches()) {
             throw new IllegalArgumentException("Not an IMDb id");
         }
@@ -156,13 +165,14 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
         if (!enabled()) {
             throw new OpenSubtitlesUnavailableException("No OpenSubtitles API key is configured");
         }
-        Answer<String> answer = retrying(() -> searchOnce(number));
+        Answer<String> answer = retrying(() -> searchOnce(number, full));
         if (answer.status() / 100 == 2) {
             if (answer.body() == null) {
                 throw new OpenSubtitlesUnavailableException(
                     "OpenSubtitles answered more than " + maxBodyBytes + " bytes");
             }
-            return OpenSubtitlesParser.parse(answer.body(), number);
+            return full ? OpenSubtitlesParser.parseFull(answer.body(), number)
+                : OpenSubtitlesParser.parse(answer.body(), number);
         }
         if (answer.status() == UNAUTHORIZED || answer.status() == FORBIDDEN) {
             throw new OpenSubtitlesUnavailableException("OpenSubtitles rejected the API key");
@@ -471,13 +481,18 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
         }
     }
 
-    private Answer<String> searchOnce(long imdbNumber) throws InterruptedException {
+    private Answer<String> searchOnce(long imdbNumber, boolean full) throws InterruptedException {
         pacer.await();
         // Parameters in alphabetical order, as the API wants (it redirects otherwise); the id has no "tt" and no
-        // leading zeros.
+        // leading zeros. The full search leaves foreign-parts-only files out and keeps hearing-impaired ones.
         return client.get()
-            .uri(b -> b.path("/api/v1/subtitles").queryParam("foreign_parts_only", "only")
-                .queryParam("imdb_id", imdbNumber).queryParam("languages", "en").build())
+            .uri(b -> {
+                b.path("/api/v1/subtitles").queryParam("foreign_parts_only", full ? "exclude" : "only");
+                if (full) {
+                    b.queryParam("hearing_impaired", "include");
+                }
+                return b.queryParam("imdb_id", imdbNumber).queryParam("languages", "en").build();
+            })
             .header("Api-Key", key).header(HttpHeaders.USER_AGENT, userAgent)
             .accept(MediaType.APPLICATION_JSON)
             .exchange((request, response) -> text(response.getStatusCode().value(),

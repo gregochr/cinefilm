@@ -5,9 +5,11 @@ package gregochr.cinefilm.subtitle;
  * ({@link DailyDownloadLimit}). One budget serves three jobs: downloads of replacements for owner files that failed
  * every check (the film shows nothing now, so they run first), downloads of missing subtitles, and the comparisons of
  * the owner's files and of downloads with a second OpenSubtitles file. In a download run, promotions (free) come first,
- * then replacements, then missing ones, and each job has a ceiling on the day's total used, so a lower job can never
+ * then full English subtitles (the film cannot be watched without them), then replacements, then missing ones, and each
+ * job has a ceiling on the day's total used, so a lower job can never
  * starve a higher one:
  * <ul>
+ *   <li>full English subtitles: the whole limit (the missing ceiling), and a stop on it ends the run;</li>
  *   <li>missing: the whole limit;</li>
  *   <li>replacements: up to 70% of the limit, so 30% is always left for missing ones;</li>
  *   <li>comparisons: up to 30% of the limit, so 70% is always left for downloads that change what plays.</li>
@@ -26,7 +28,7 @@ public final class DownloadShares {
     }
 
     /**
-     * The ceiling for downloading a missing subtitle.
+     * The ceiling for downloading a missing forced subtitle, and for a full English one.
      *
      * @param limit the day's limit
      * @return the limit itself

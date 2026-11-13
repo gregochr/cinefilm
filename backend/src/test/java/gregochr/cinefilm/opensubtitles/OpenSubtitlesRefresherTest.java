@@ -32,6 +32,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import gregochr.cinefilm.subtitle.FullNeedService;
 import org.springframework.context.ApplicationEventPublisher;
 
 /** The subtitle search run: which films it asks about, what it saves and when, and that only one run is ever going. */
@@ -50,6 +51,9 @@ class OpenSubtitlesRefresherTest {
     private FilmRepository films;
 
     @Mock
+    private FullNeedService fullNeed;
+
+    @Mock
     private ApplicationEventPublisher events;
 
     private final List<Runnable> queued = new ArrayList<>();
@@ -59,7 +63,7 @@ class OpenSubtitlesRefresherTest {
 
     @BeforeEach
     void setUp() {
-        refresher = new OpenSubtitlesRefresher(api, films, CLOCK, queued::add, events);
+        refresher = new OpenSubtitlesRefresher(api, films, fullNeed, CLOCK, queued::add, events);
         logged.start();
         refresherLog.addAppender(logged);
     }
@@ -252,7 +256,7 @@ class OpenSubtitlesRefresherTest {
 
     /** The refresher on an executor that runs the work at once, so a trigger can arrive from inside a run. */
     private OpenSubtitlesRefresher synchronous() {
-        return new OpenSubtitlesRefresher(api, films, CLOCK, Runnable::run, events);
+        return new OpenSubtitlesRefresher(api, films, fullNeed, CLOCK, Runnable::run, events);
     }
 
     @Test
@@ -406,7 +410,7 @@ class OpenSubtitlesRefresherTest {
 
     @Test
     void anExecutorThatRefusesTheRunDoesNotLeaveTheServiceStuckRunning() {
-        OpenSubtitlesRefresher refusing = new OpenSubtitlesRefresher(api, films, CLOCK, command -> {
+        OpenSubtitlesRefresher refusing = new OpenSubtitlesRefresher(api, films, fullNeed, CLOCK, command -> {
             throw new RejectedExecutionException("full");
         }, events);
         when(api.enabled()).thenReturn(true);

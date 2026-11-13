@@ -2,6 +2,7 @@ package gregochr.cinefilm.subtitle;
 
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.ForcedNeedChoice;
+import gregochr.cinefilm.film.FullNeedChoice;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Pick;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Slot;
@@ -49,7 +50,7 @@ final class Downloads {
     static List<SubtitleSidecar> of(Edition edition, List<Long> partIds, Collection<SubtitleSidecar> found,
                                     SubtitleKind kind) {
         String imdbId = edition.getFilm().getImdbId();
-        if (isNotNeeded(edition)) {
+        if (isNotNeeded(edition, kind)) {
             return List.of();
         }
         return found.stream()
@@ -62,7 +63,14 @@ final class Downloads {
 
     /** True when the owner marked the edition's film as not needing forced subtitles. */
     static boolean isNotNeeded(Edition edition) {
-        return edition.getFilm().getForcedNeedOwner() == ForcedNeedChoice.NOT_NEEDED;
+        return isNotNeeded(edition, SubtitleKind.FORCED);
+    }
+
+    /** True when the owner marked the edition's film as not needing subtitles of this kind (forced or full). */
+    static boolean isNotNeeded(Edition edition, SubtitleKind kind) {
+        return kind == SubtitleKind.FULL
+            ? edition.getFilm().getFullNeedOwner() == FullNeedChoice.NOT_NEEDED
+            : edition.getFilm().getForcedNeedOwner() == ForcedNeedChoice.NOT_NEEDED;
     }
 
     /** A download as the one file an edition would play (timed from the start of the edition). */

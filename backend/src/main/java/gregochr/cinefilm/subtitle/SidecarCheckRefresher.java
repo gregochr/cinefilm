@@ -42,6 +42,11 @@ import org.springframework.stereotype.Service;
  * run until the budget comes back; an outage ends it with nothing stored (never a verdict); a failure on one edition
  * is counted and the run goes on. A request that arrives while a run is going makes it go round once more. Nothing
  * here throws to its caller.
+ *
+ * <p>The same run also measures the <em>full</em> downloads ({@link FullFitProbe}, phase 5d-1): one log line per
+ * download with its fit against a second OpenSubtitles full file, both ways. It stores nothing and acts on nothing, and
+ * its fetches go through the same {@link ReferenceFetcher} lock and the comparison ceiling. A download that was added
+ * starts the run through {@link SubtitleDownloadsFinished}.
  */
 @Service
 public class SidecarCheckRefresher {
@@ -59,6 +64,7 @@ public class SidecarCheckRefresher {
     private final OpenSubtitlesBudget budget;
     private final ReferenceFetcher fetcher;
     private final SidecarCheckService service;
+    private final FullFitProbe probe;
     private final Clock clock;
     private final Executor executor;
     private final DailyDownloadLimit limits;
@@ -71,7 +77,8 @@ public class SidecarCheckRefresher {
 
     /** Creates the service; the executor is {@code sidecarCheckExecutor}. */
     public SidecarCheckRefresher(OpenSubtitlesApi api, OpenSubtitlesBudget budget,
-                                 OpenSubtitlesReferenceRepository references, SidecarCheckService service, Clock clock,
+                                 OpenSubtitlesReferenceRepository references, SidecarCheckService service,
+                                 FullFitService fullFit, Clock clock,
                                  @Qualifier("sidecarCheckExecutor") Executor executor,
                                  DailyDownloadLimit limits,
                                  ApplicationEventPublisher events) {
@@ -79,6 +86,7 @@ public class SidecarCheckRefresher {
         this.budget = budget;
         this.fetcher = new ReferenceFetcher(api, budget, references, clock, limits);
         this.service = service;
+        this.probe = new FullFitProbe(fetcher, fullFit);
         this.clock = clock;
         this.executor = executor;
         // The comparisons may bring the day's total only to their share, so downloads of missing and replacement
@@ -223,6 +231,7 @@ public class SidecarCheckRefresher {
                         e.getClass().getSimpleName());
                 }
             }
+            measureFullDownloads();
             LOG.info("Subtitle file checks finished: {} saved, {} changed meanwhile, {} unusable references, "
                 + "{} failed", saved, dropped, unusable, failed);
             if (saved > 0) {
@@ -230,6 +239,18 @@ public class SidecarCheckRefresher {
             }
         } catch (RuntimeException e) {
             LOG.error("Subtitle file checks failed", e);
+        }
+    }
+
+    /**
+     * The measurement of the full downloads (phase 5d-1): one log line each, nothing stored. It uses the same fetcher
+     * and the same ceiling as the checks, so it cannot take the budget from downloads.
+     */
+    private void measureFullDownloads() {
+        try {
+            probe.measure(checkLimit);
+        } catch (RuntimeException e) {
+            LOG.warn("Full subtitle measurement failed: {}", e.getClass().getSimpleName());
         }
     }
 

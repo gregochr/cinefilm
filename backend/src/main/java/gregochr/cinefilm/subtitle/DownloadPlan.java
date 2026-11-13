@@ -23,6 +23,10 @@ import java.util.Set;
  *   <li>{@link Kind#REPLACEMENT}: the owner's file failed every check and nothing has replaced it yet (no download
  *       that has not failed, no embedded track).</li>
  * </ul>
+ * A third kind, {@link Kind#FULL}, is due for a film that needs <em>full</em> English subtitles ({@code FullNeed}) and
+ * has full candidates from OpenSubtitles, when the edition has no owner's full file, no full download and room under
+ * the cap; it does not look at the forced subtitles at all, and forced and full downloads never count against each
+ * other's cap.
  * Two files in conflict are the owner's to sort out: nothing is downloaded for that edition. At most
  * {@value #MAX_DOWNLOADS} files are ever made into downloads (or promoted) per edition and IMDb id, counting the ones
  * the owner removed.
@@ -37,6 +41,8 @@ public final class DownloadPlan {
 
     /** Why an edition is due. */
     public enum Kind {
+        /** The film needs full English subtitles and the edition has none: the top priority (it cannot be watched). */
+        FULL,
         /** No subtitle plays at all: the highest priority for the day's budget. */
         MISSING,
         /** The owner's file failed every check: a lower priority than a missing one. */
@@ -65,12 +71,37 @@ public final class DownloadPlan {
     }
 
     /**
-     * Whether a reference is good enough to become a download: it has lines, and fewer than
+     * Whether an edition is due a full subtitle: the owner has no full file for it (present, with lines), it has no
+     * full download (a removed one is blocked, not counted here), and the film's need is shown (the caller checked).
+     *
+     * @param ownerFullFile true when a present owner's full file with lines is attached to the edition
+     * @param hasFullDownload true when the edition already has a full download
+     * @return true when a full download is due
+     */
+    static boolean fullDue(boolean ownerFullFile, boolean hasFullDownload) {
+        return !ownerFullFile && !hasFullDownload;
+    }
+
+    /**
+     * Whether a reference is good enough to become a forced download: it has lines, and fewer than
      * {@value SubtitleComparison#FULL_LINES} (a file of that many is full subtitles, whatever OpenSubtitles' flag
      * says).
      */
     static boolean promotable(OpenSubtitlesReference reference) {
-        return reference.isUsable() && reference.getCueCount() < SubtitleComparison.FULL_LINES;
+        return promotable(reference, SubtitleKind.FORCED);
+    }
+
+    /**
+     * Whether a reference is good enough to become a download of a kind: it has lines, and for forced fewer than
+     * {@value SubtitleComparison#FULL_LINES} (more is full subtitles), for full at least that many (fewer is not full
+     * subtitles).
+     */
+    static boolean promotable(OpenSubtitlesReference reference, SubtitleKind kind) {
+        if (!reference.isUsable()) {
+            return false;
+        }
+        boolean full = reference.getCueCount() >= SubtitleComparison.FULL_LINES;
+        return kind == SubtitleKind.FULL ? full : !full;
     }
 
     /**
@@ -130,10 +161,19 @@ public final class DownloadPlan {
      */
     static List<OpenSubtitlesResult> toFetch(List<OpenSubtitlesResult> ranked, Set<Long> skipped, Set<Long> ledger,
                                              Map<Long, OpenSubtitlesReference> stored) {
+        return toFetch(ranked, skipped, ledger, stored, SubtitleKind.FORCED);
+    }
+
+    /**
+     * As {@link #toFetch(List, Set, Set, Map)} for a kind: a stored reference that is not usable as a download of that
+     * kind (for full, one with fewer than {@value SubtitleComparison#FULL_LINES} lines) is spent.
+     */
+    static List<OpenSubtitlesResult> toFetch(List<OpenSubtitlesResult> ranked, Set<Long> skipped, Set<Long> ledger,
+                                             Map<Long, OpenSubtitlesReference> stored, SubtitleKind kind) {
         List<OpenSubtitlesResult> out = new ArrayList<>();
         for (OpenSubtitlesResult candidate : ranked) {
             OpenSubtitlesReference reference = stored.get(candidate.fileId());
-            boolean spent = reference != null && reference.isFinal() && !promotable(reference);
+            boolean spent = reference != null && reference.isFinal() && !promotable(reference, kind);
             if (!skipped.contains(candidate.fileId()) && !ledger.contains(candidate.fileId()) && !spent) {
                 out.add(candidate);
             }

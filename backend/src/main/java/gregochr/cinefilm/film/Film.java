@@ -160,6 +160,20 @@ public class Film {
     private String osCandidates;
 
     /**
+     * JSON array of the single-file full English OpenSubtitles results a download may use, in ranked order (hearing-
+     * impaired files last); {@code []} = none usable; null = never searched for full subtitles.
+     */
+    @Column(columnDefinition = "TEXT")
+    private String osFullCandidates;
+
+    /** The IMDb id the full-subtitle search was for: its result counts only while it equals {@link #imdbId}. */
+    @Column(length = 16)
+    private String osFullSearchedImdbId;
+
+    /** When OpenSubtitles was last searched for this film's full subtitles; null = never. */
+    private Instant osFullSearchedAt;
+
+    /**
      * Sets the IMDb id. A different id means a different film, so what OpenSubtitles said about the old one is
      * forgotten in the entity (the explicit row write is {@link FilmRepository#clearOpenSubtitles}).
      */
@@ -170,6 +184,9 @@ public class Film {
             osSearchedImdbId = null;
             osBest = null;
             osCandidates = null;
+            osFullCandidates = null;
+            osFullSearchedImdbId = null;
+            osFullSearchedAt = null;
         }
         this.imdbId = newImdbId;
     }

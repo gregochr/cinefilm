@@ -5,6 +5,7 @@ import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.OsBestRef;
+import gregochr.cinefilm.film.FilmRepository.OsFullRef;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.library.LibraryLock;
@@ -45,6 +46,11 @@ import org.springframework.transaction.support.TransactionTemplate;
  * the same rows) after revalidating everything it was decided on: the film's IMDb id, that the file is still one of its
  * candidates and not blocked, the edition's state (still due for the same reason, the owner's file unchanged), and that
  * the cap has room. Nothing here deletes a download.
+ *
+ * <p>A <em>full</em> English subtitle ({@link Kind#FULL}) is downloaded the same way, from its own due source: films
+ * whose full need ({@link FullNeedService}) is {@code NEEDED} and that have full candidates
+ * ({@code film.os_full_candidates}). Its blocks, ledger and downloads are read with {@link SubtitleKind#FULL}, so the
+ * two kinds never count against each other's cap.
  */
 @Service
 public class ForcedDownloadService {
@@ -66,6 +72,7 @@ public class ForcedDownloadService {
     private final SubtitleSidecarRepository sidecars;
     private final ForcedResolver resolver;
     private final ForcedNeedService need;
+    private final FullNeedService fullNeed;
     private final OpenSubtitlesReferenceRepository references;
     private final ForcedDownloadBlockRepository blocks;
     private final ForcedCheckCandidateRepository ledger;
@@ -74,7 +81,7 @@ public class ForcedDownloadService {
 
     /** Creates the service. */
     public ForcedDownloadService(FilmRepository films, EditionRepository editions, SubtitleSidecarRepository sidecars,
-                                 ForcedResolver resolver, ForcedNeedService need,
+                                 ForcedResolver resolver, ForcedNeedService need, FullNeedService fullNeed,
                                  OpenSubtitlesReferenceRepository references, ForcedDownloadBlockRepository blocks,
                                  ForcedCheckCandidateRepository ledger, LibraryLock lock,
                                  PlatformTransactionManager transactions) {
@@ -83,6 +90,7 @@ public class ForcedDownloadService {
         this.sidecars = sidecars;
         this.resolver = resolver;
         this.need = need;
+        this.fullNeed = fullNeed;
         this.references = references;
         this.blocks = blocks;
         this.ledger = ledger;
@@ -91,18 +99,40 @@ public class ForcedDownloadService {
     }
 
     /**
-     * The editions to download for: those with a promotion first (it costs nothing, whatever the kind), then
-     * replacements (the owner's file failed every check, so the film shows nothing now), then missing ones, each group
-     * by film and edition. A film is
-     * considered when its need is shown ({@code NEEDED}) and it has single-file results from a search of its current
-     * IMDb id (the candidates stored). Per edition see {@link DownloadPlan#kind}; an edition that already has
-     * {@value DownloadPlan#MAX_DOWNLOADS} downloads (removed ones included) is left alone, and so is one with nothing
-     * left to try.
+     * The editions to download for, in the order to work on them: promotions first (they cost nothing, whatever the
+     * kind), then <strong>full</strong> English subtitles (the film cannot be watched without them), then forced
+     * replacements (the owner's file failed every check, so the film shows nothing now), then forced missing ones, each
+     * group by film and edition. A forced edition is considered when its need is shown ({@code NEEDED}) and its film
+     * has single-file results from a search of its current IMDb id (the candidates stored); per edition see
+     * {@link DownloadPlan#kind}. A full edition is considered when its film's full need is {@code NEEDED} and it has
+     * full candidates from a search of its current IMDb id; it is due when it has no present owner's full file and no
+     * full download ({@link DownloadPlan#fullDue}). An edition that already has {@value DownloadPlan#MAX_DOWNLOADS}
+     * downloads of the kind (removed ones included) is left alone, and so is one with nothing left to try.
      *
      * @return the due editions in the order to work on them
      */
     @Transactional(readOnly = true)
     public List<DueDownload> due() {
+        List<DueDownload> due = new ArrayList<>(forcedDue());
+        due.addAll(fullDue());
+        // Free promotions first, then full subtitles, then replacements (the owner's file failed, so nothing is shown
+        // now), then missing: the order of Kind.
+        due.sort(Comparator.comparing((DueDownload d) -> d.promotion() == null)
+            .thenComparing(ForcedDownloadService::rank)
+            .thenComparing(DueDownload::filmId).thenComparing(DueDownload::editionId));
+        return due;
+    }
+
+    /** Full subtitles first, then replacements, then missing ones. */
+    private static int rank(DueDownload due) {
+        return switch (due.kind()) {
+            case FULL -> 0;
+            case REPLACEMENT -> 1;
+            case MISSING -> 2;
+        };
+    }
+
+    private List<DueDownload> forcedDue() {
         Set<Long> neededFilmIds = new HashSet<>();
         for (FilmNeedDto film : need.list().films()) {
             if ("NEEDED".equals(film.need())) {
@@ -126,10 +156,7 @@ public class ForcedDownloadService {
         List<SubtitleSidecar> allDownloads = sidecars.findByMediaFileIdInAndKind(partIds, SubtitleKind.FORCED)
             .stream()
             .filter(SubtitleSidecar::isDownload).toList();
-        Map<Long, Map<String, Map<Long, OpenSubtitlesReference>>> storedByFilm = new HashMap<>();
-        references.findByFilmIdIn(neededFilmIds).forEach(r -> storedByFilm
-            .computeIfAbsent(r.getFilmId(), k -> new HashMap<>())
-            .computeIfAbsent(r.getImdbId(), k -> new HashMap<>()).put(r.getOsFileId(), r));
+        Map<Long, Map<String, Map<Long, OpenSubtitlesReference>>> storedByFilm = storedByFilm(neededFilmIds);
         List<DueDownload> due = new ArrayList<>();
         for (Edition edition : fetched) {
             Resolution resolution = resolved.get(edition.getId());
@@ -143,11 +170,92 @@ public class ForcedDownloadService {
                 due.add(item);
             }
         }
-        // Free promotions first, then replacements (the owner's file failed, so nothing is shown now), then missing.
-        due.sort(Comparator.comparing((DueDownload d) -> d.promotion() == null)
-            .thenComparing(d -> d.kind() == Kind.MISSING)
-            .thenComparing(DueDownload::filmId).thenComparing(DueDownload::editionId));
         return due;
+    }
+
+    private Map<Long, Map<String, Map<Long, OpenSubtitlesReference>>> storedByFilm(Set<Long> filmIds) {
+        Map<Long, Map<String, Map<Long, OpenSubtitlesReference>>> storedByFilm = new HashMap<>();
+        references.findByFilmIdIn(filmIds).forEach(r -> storedByFilm
+            .computeIfAbsent(r.getFilmId(), k -> new HashMap<>())
+            .computeIfAbsent(r.getImdbId(), k -> new HashMap<>()).put(r.getOsFileId(), r));
+        return storedByFilm;
+    }
+
+    /** The editions due a full English subtitle: the film's need is {@code NEEDED} and it has full candidates. */
+    private List<DueDownload> fullDue() {
+        Set<Long> neededFilmIds = fullNeed.neededFilmIds();
+        Map<Long, OsFullRef> candidates = new HashMap<>();
+        for (OsFullRef ref : films.findOpenSubtitlesFull()) {
+            candidates.put(ref.id(), ref);
+        }
+        neededFilmIds.retainAll(candidates.keySet());
+        if (neededFilmIds.isEmpty()) {
+            return List.of();
+        }
+        List<Edition> fetched = editions.findWithFilesByFilmIdIn(neededFilmIds);
+        List<Long> editionIds = fetched.stream().map(Edition::getId).toList();
+        List<Long> partIds = fetched.stream().flatMap(e -> e.originalParts().stream()).map(MediaFile::getId).toList();
+        List<ForcedDownloadBlock> allBlocks = blocks.findByEditionIdInAndKind(editionIds, SubtitleKind.FULL);
+        List<ForcedCheckCandidate> allLedger = ledger.findByEditionIdInAndKind(editionIds, SubtitleKind.FULL);
+        List<SubtitleSidecar> allFull = sidecars.findByMediaFileIdInAndKind(partIds, SubtitleKind.FULL);
+        Map<Long, Map<String, Map<Long, OpenSubtitlesReference>>> storedByFilm = storedByFilm(neededFilmIds);
+        List<DueDownload> due = new ArrayList<>();
+        for (Edition edition : fetched) {
+            OsFullRef ref = candidates.get(edition.getFilm().getId());
+            DueDownload item = fullDueFor(edition, ref, allBlocks, allLedger, allFull,
+                storedByFilm.getOrDefault(ref.id(), Map.of()).getOrDefault(ref.imdbId(), Map.of()));
+            if (item != null) {
+                due.add(item);
+            }
+        }
+        return due;
+    }
+
+    private DueDownload fullDueFor(Edition edition, OsFullRef ref, List<ForcedDownloadBlock> allBlocks,
+                                   List<ForcedCheckCandidate> allLedger, List<SubtitleSidecar> allFull,
+                                   Map<Long, OpenSubtitlesReference> stored) {
+        if (!DownloadPlan.fullDue(hasOwnerFile(edition, allFull), hasDownload(edition, allFull))) {
+            return null;
+        }
+        List<OpenSubtitlesResult> ranked = OpenSubtitlesRanking.rankForFull(
+            OpenSubtitlesResult.listFromJson(ref.osFullCandidates()).stream()
+                .filter(OpenSubtitlesResult::isSingleFile).toList(), edition.getName());
+        Set<Long> skipped = skippedFileIds(edition, ref.imdbId(), SubtitleKind.FULL, allBlocks,
+            allFull.stream().filter(SubtitleSidecar::isDownload).toList());
+        int remaining = DownloadPlan.remaining(skipped);
+        if (ranked.isEmpty() || remaining == 0) {
+            return null;
+        }
+        Set<Long> compared = new HashSet<>();
+        allLedger.stream().filter(l -> l.getEditionId().equals(edition.getId()) && l.getImdbId().equals(ref.imdbId()))
+            .forEach(l -> compared.add(l.getOsFileId()));
+        List<OpenSubtitlesResult> toFetch = DownloadPlan.toFetch(ranked, skipped, compared, stored, SubtitleKind.FULL);
+        if (toFetch.isEmpty()) {
+            return null;
+        }
+        return new DueDownload(Kind.FULL, ref.id(), edition.getId(), ref.imdbId(), edition.getName(), null, toFetch,
+            remaining, null);
+    }
+
+    /** True when a present owner's full file with lines is attached to one of the edition's parts. */
+    private static boolean hasOwnerFile(Edition edition, List<SubtitleSidecar> allFull) {
+        List<Long> partIds = partIdsOf(edition);
+        return allFull.stream().anyMatch(s -> !s.isDownload() && s.getPresence() == Presence.PRESENT
+            && s.getCueCount() > 0 && partIds.contains(s.getMediaFileId()));
+    }
+
+    /**
+     * True when the edition has a live full download (made for it, present, with lines), as the forced path's
+     * {@code hasLiveDownload}. A download that is not present does not suppress a retry; removed files stay counted
+     * by the cap through their blocks.
+     */
+    private static boolean hasDownload(Edition edition, List<SubtitleSidecar> allFull) {
+        return allFull.stream().anyMatch(s -> s.isDownload() && Downloads.madeFor(edition, s)
+            && s.getPresence() == Presence.PRESENT && s.getCueCount() > 0);
+    }
+
+    private static List<Long> partIdsOf(Edition edition) {
+        return edition.originalParts().stream().map(MediaFile::getId).toList();
     }
 
     private DueDownload dueFor(Edition edition, Resolution resolution, OsBestRef ref,
@@ -165,7 +273,7 @@ public class ForcedDownloadService {
         List<OpenSubtitlesResult> ranked = OpenSubtitlesRanking.rankFor(
             OpenSubtitlesResult.listFromJson(ref.osCandidates()).stream().filter(OpenSubtitlesResult::isSingleFile)
                 .toList(), edition.getName());
-        Set<Long> skipped = skippedFileIds(edition, ref.imdbId(), allBlocks, allDownloads);
+        Set<Long> skipped = skippedFileIds(edition, ref.imdbId(), SubtitleKind.FORCED, allBlocks, allDownloads);
         int remaining = DownloadPlan.remaining(skipped);
         if (ranked.isEmpty() || remaining == 0) {
             return null;
@@ -198,14 +306,17 @@ public class ForcedDownloadService {
             resolution.embedded());
     }
 
-    /** The OpenSubtitles file ids already used up for an edition and IMDb id: its downloads and the ones removed. */
-    private static Set<Long> skippedFileIds(Edition edition, String imdbId, List<ForcedDownloadBlock> allBlocks,
-                                            List<SubtitleSidecar> allDownloads) {
+    /**
+     * The OpenSubtitles file ids already used up for an edition, IMDb id and kind: its downloads and the ones removed.
+     * A download or block of the other kind never counts.
+     */
+    private static Set<Long> skippedFileIds(Edition edition, String imdbId, SubtitleKind kind,
+                                            List<ForcedDownloadBlock> allBlocks, List<SubtitleSidecar> allDownloads) {
         Set<Long> skipped = new HashSet<>();
-        allBlocks.stream().filter(b -> b.getKind() == SubtitleKind.FORCED && b.getEditionId().equals(edition.getId())
+        allBlocks.stream().filter(b -> b.getKind() == kind && b.getEditionId().equals(edition.getId())
             && b.getImdbId().equals(imdbId))
             .forEach(b -> skipped.add(b.getOsFileId()));
-        allDownloads.stream().filter(d -> d.getKind() == SubtitleKind.FORCED && Downloads.madeFor(edition, d)
+        allDownloads.stream().filter(d -> d.getKind() == kind && Downloads.madeFor(edition, d)
             && imdbId.equals(d.getImdbId()))
             .forEach(d -> skipped.add(d.getOpenSubtitlesFileId()));
         return skipped;
@@ -219,7 +330,8 @@ public class ForcedDownloadService {
      * so the second-opinion comparison of the download counts it.
      *
      * @param due the edition and why
-     * @param reference the stored reference to use (usable, under {@value SubtitleComparison#FULL_LINES} lines)
+     * @param reference the stored reference to use (usable; under {@value SubtitleComparison#FULL_LINES} lines for
+     *     a forced download, at least that many for a full one)
      * @param now the time to stamp
      * @return what happened
      */
@@ -238,45 +350,46 @@ public class ForcedDownloadService {
     }
 
     private AddOutcome addLocked(DueDownload due, OpenSubtitlesReference reference, Instant now) {
+        boolean full = due.kind() == Kind.FULL;
+        SubtitleKind kind = full ? SubtitleKind.FULL : SubtitleKind.FORCED;
         Film film = films.findById(due.filmId()).orElse(null);
         if (film == null || !due.imdbId().equals(film.getImdbId()) || !due.imdbId().equals(reference.getImdbId())
-            || !DownloadPlan.promotable(reference) || film.getOsCandidates() == null) {
+            || !DownloadPlan.promotable(reference, kind)) {
+            return AddOutcome.DROPPED;
+        }
+        String candidatesJson = full ? film.getOsFullCandidates() : film.getOsCandidates();
+        if (candidatesJson == null || full && !due.imdbId().equals(film.getOsFullSearchedImdbId())) {
             return AddOutcome.DROPPED;
         }
         // The owner may have said "not needed" since the run decided: that choice takes the same lock, so it shows.
-        if (!need.isNeeded(due.filmId())) {
+        if (!(full ? fullNeed.isNeeded(due.filmId()) : need.isNeeded(due.filmId()))) {
             return AddOutcome.DROPPED;
         }
-        boolean candidate = OpenSubtitlesResult.listFromJson(film.getOsCandidates()).stream()
+        boolean candidate = OpenSubtitlesResult.listFromJson(candidatesJson).stream()
             .anyMatch(c -> c.isSingleFile() && c.fileId() == reference.getOsFileId());
         Edition edition = editions.findWithFilesByFilmIdIn(List.of(due.filmId())).stream()
             .filter(e -> e.getId().equals(due.editionId())).findFirst().orElse(null);
         if (!candidate || edition == null) {
             return AddOutcome.DROPPED;
         }
-        List<ForcedDownloadBlock> editionBlocks = blocks.findByEditionIdInAndKind(List.of(edition.getId()),
-            SubtitleKind.FORCED);
-        List<SubtitleSidecar> downloads = sidecars
-            .findByMediaFileIdInAndKind(edition.originalParts().stream().map(MediaFile::getId).toList(),
-                SubtitleKind.FORCED).stream()
-            .filter(SubtitleSidecar::isDownload).toList();
-        Set<Long> skipped = skippedFileIds(edition, due.imdbId(), editionBlocks, downloads);
+        List<ForcedDownloadBlock> editionBlocks = blocks.findByEditionIdInAndKind(List.of(edition.getId()), kind);
+        List<SubtitleSidecar> ofKind = sidecars
+            .findByMediaFileIdInAndKind(edition.originalParts().stream().map(MediaFile::getId).toList(), kind);
+        List<SubtitleSidecar> downloads = ofKind.stream().filter(SubtitleSidecar::isDownload).toList();
+        Set<Long> skipped = skippedFileIds(edition, due.imdbId(), kind, editionBlocks, downloads);
         if (skipped.contains(reference.getOsFileId()) || DownloadPlan.remaining(skipped) == 0) {
             return AddOutcome.DROPPED;
         }
-        Resolution resolution = resolver.resolve(List.of(edition)).get(edition.getId());
-        Optional<Kind> kind = kind(resolution);
-        if (kind.isEmpty() || kind.get() != due.kind()
-            || due.kind() == Kind.REPLACEMENT && !Objects.equals(due.fileVersion(), resolution.fileVersion())) {
+        if (full ? !stillDueFull(edition, ofKind) : !stillDueForced(edition, due)) {
             return AddOutcome.DROPPED;
         }
-        sidecars.save(download(edition, reference, now));
+        sidecars.save(download(edition, reference, now, kind));
         if (!ledger.existsByEditionIdAndImdbIdAndOsFileIdAndKind(edition.getId(), due.imdbId(),
-            reference.getOsFileId(), SubtitleKind.FORCED)) {
+            reference.getOsFileId(), kind)) {
             ForcedCheckCandidate row = new ForcedCheckCandidate();
             row.setEditionId(edition.getId());
             row.setImdbId(due.imdbId());
-            row.setKind(SubtitleKind.FORCED);
+            row.setKind(kind);
             row.setOsFileId(reference.getOsFileId());
             row.setTriedAt(now);
             ledger.save(row);
@@ -284,10 +397,24 @@ public class ForcedDownloadService {
         return AddOutcome.ADDED;
     }
 
+    /** A full download is still due: no owner's full file and no full download appeared meanwhile. */
+    private static boolean stillDueFull(Edition edition, List<SubtitleSidecar> fullRows) {
+        return DownloadPlan.fullDue(hasOwnerFile(edition, fullRows), hasDownload(edition, fullRows));
+    }
+
+    /** A forced download is still due for the same reason with the owner's file unchanged. */
+    private boolean stillDueForced(Edition edition, DueDownload due) {
+        Resolution resolution = resolver.resolve(List.of(edition)).get(edition.getId());
+        Optional<Kind> kind = kind(resolution);
+        return kind.isPresent() && kind.get() == due.kind()
+            && !(due.kind() == Kind.REPLACEMENT && !Objects.equals(due.fileVersion(), resolution.fileVersion()));
+    }
+
     /** The download row: the reference's cues, stored against part 1 as a whole-edition file. */
-    private static SubtitleSidecar download(Edition edition, OpenSubtitlesReference reference, Instant now) {
+    private static SubtitleSidecar download(Edition edition, OpenSubtitlesReference reference, Instant now,
+                                            SubtitleKind kind) {
         SubtitleSidecar row = new SubtitleSidecar();
-        row.setKind(SubtitleKind.FORCED);
+        row.setKind(kind);
         row.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
         row.setPath("opensubtitles:" + edition.getId() + ":" + reference.getOsFileId());
         row.setCuesText(reference.getCuesText());

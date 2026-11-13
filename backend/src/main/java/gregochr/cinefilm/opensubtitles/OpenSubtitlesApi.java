@@ -25,6 +25,17 @@ public interface OpenSubtitlesApi {
     OpenSubtitlesSearch searchForced(String imdbId);
 
     /**
+     * Searches for full English subtitles of a film: foreign-parts-only files excluded, hearing-impaired files
+     * included (and ranked last). The same reply handling as {@link #searchForced}; a search is not charged.
+     *
+     * @param imdbId the IMDb id, for example {@code tt0936501}
+     * @return how many usable results there are, the best of them and the candidates a download may use
+     * @throws IllegalArgumentException when the id is not {@code tt} and 1 to 10 digits
+     * @throws OpenSubtitlesUnavailableException when OpenSubtitles cannot answer or no key is configured
+     */
+    OpenSubtitlesSearch searchFull(String imdbId);
+
+    /**
      * Downloads one subtitle file (a search result's {@code fileId}). Logs in first when there is no session, and
      * once more after a 401. The link OpenSubtitles answers with is fetched only when it is {@code https} on a
      * {@code *.opensubtitles.com} host, without following redirects, and at most 2 MB of it is read.

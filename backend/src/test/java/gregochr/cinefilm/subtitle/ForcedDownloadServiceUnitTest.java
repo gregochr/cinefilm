@@ -74,6 +74,9 @@ class ForcedDownloadServiceUnitTest {
     private ForcedNeedService need;
 
     @Mock
+    private FullNeedService fullNeed;
+
+    @Mock
     private OpenSubtitlesReferenceRepository references;
 
     @Mock
@@ -92,8 +95,8 @@ class ForcedDownloadServiceUnitTest {
 
     @BeforeEach
     void setUp() {
-        service = new ForcedDownloadService(films, editions, sidecars, resolver, need, references, blocks, ledger,
-            lock, transactions);
+        service = new ForcedDownloadService(films, editions, sidecars, resolver, need, fullNeed, references, blocks,
+            ledger, lock, transactions);
         film = film(1L, "Taken", 2008, NOW);
         film.setImdbId(IMDB);
         film.setOsCandidates(OpenSubtitlesResult.listToJson(List.of(candidate(5011), candidate(5012))));
