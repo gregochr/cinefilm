@@ -228,8 +228,9 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
      claimed-set and title guards). **GET requests only**: no write to Plex, no watched-state merge.
    - Plex's list call carries no markers, and `PlexModels.PlexFilm`/`PlexMedia` keep only part paths. A new `PlexApi`
      method fetches `GET /library/metadata/{ratingKey}?includeMarkers=1` for each matched item (about 1,100 requests,
-     one at a time) into a new record holding the item's `duration` (ms), each `Media[].duration`, and its markers
-     (`Marker[]` with `type == "credits"`, `startTimeOffset` in ms, `final`). The claimed set is built the way
+     one at a time) into a new record holding the item's `duration` (ms), each Media's `duration` **together with its
+     `Part[].file` paths**, and its markers (`Marker[]` with `type == "credits"`, `startTimeOffset` in ms, `final`).
+     Each CineFilm copy is matched to its Media by path, never by position. The claimed set is built the way
      `PlexImportService` builds it, walking every film in list order.
    - A marker is stored only when all of these hold, else the item is skipped and counted in the report:
      - the item has one file per copy (Plex lists each film twice, a `.m4v` and an `.mp4` copy; an item with `ptN`
@@ -240,9 +241,11 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
        mid-credits scene) is at least 60% into the item and at least 60 s before its end (the edition guard; all 864
        pass today).
    - Stored in `plex_credits_marker` (V23), **one row per matched CineFilm media file** (each copy the item's paths
-     pair with), with that file's current fingerprint, so nothing needs Plex afterwards. The edition guard is checked
-     again against each CineFilm file's own duration, so a copy up to 2 s shorter cannot turn a passing marker into one
-     less than 60 s from its end. Running it again replaces rows; it never deletes a row for a film
+     pair with), with that file's current fingerprint, so nothing needs Plex afterwards. `start_ms` is Plex's marker
+     **plus `max(0, the copy's duration − the item's duration)`**, so a copy with up to 2 s of extra lead-in can only
+     move the marker later. The edition guard is checked again against each CineFilm file's own duration: a copy that
+     fails it, or whose duration is unknown, is skipped and counted in the report; the item's other copies are still
+     stored. Running it again replaces rows; it never deletes a row for a film
      Plex no longer lists. The report says imported, skipped (with the reason) and unmatched counts.
    - Nothing is applied.
 2b. **Detector fixes, still report only.** The classifier rules in "Per-frame features" and the motion changes in
@@ -265,12 +268,14 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
      starfield, epilogue card, colour title sequence), and two negatives are added: a slow tilt over lit windows, and
      a still dark scene in which a small figure moves. No frames from real films go into the repository.
    - **The gate before phase 3** (after 2b's release and 2c's import, once the backfill has run): a read-only query
-     joining `credits_detection` (`FOUND`, version 2) to `plex_credits_marker` on the same file and fingerprint must
+     joining `credits_detection` (`FOUND`, the current `ANALYSIS_VERSION`) to `plex_credits_marker` on the same file
+     and fingerprint must
      return **zero rows** with `offset_ms < start_ms − 15000`. Any such row is a defect fixed in a further 2b round
      first. That measures the detector on films Plex could read; `AUTO` will only ever be used on the about 220 it
      could not, which are likely the harder endings. So the gate also checks, by stills as in phase 2, a sample of
-     **20 `FOUND` rows on films with no Plex marker** (or all of them if fewer): any marker before the credits start
-     blocks phase 3's `AUTO` step. The results go into this plan.
+     **20 `FOUND` rows on files with no `plex_credits_marker` row whose fingerprint matches** (or all of them if
+     fewer), judging the raw `offset_ms`, not the offset plus 20 s: any marker before the credits start blocks phase
+     3's `AUTO` step. The results go into this plan.
 3. **Apply, source column, Admin.** `credits_marker_source` and its carrying, applying, the watched-rule change if the
    owner agrees, the Admin list and overrides. Precedence per edition: `OWNER`; then `PLEX` (the last part's
    `plex_credits_marker` row, fingerprint still matching); then the detector's `FOUND` plus a **20 s margin** (`AUTO`),
