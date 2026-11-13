@@ -37,7 +37,7 @@ files or workflows itself. Docs (this file, `docs/`, `AGENTS.md`) may be written
    conclusions, finds what Codex would flag. Repeat until it reports no findings: the whole branch before the first
    push, then only the fix. **Codex runs only on the PR**: no routine local `codex review` (it draws on the same
    quota). Keep PRs small: aim for half of 4a's size.
-3. **Commit** on a feature branch (conventional commit, changelog entry).
+3. **Sonnet's commits are on a feature branch** (conventional commit, changelog entry).
 4. **Push and open a ready PR** (not a draft) against `main`.
 5. **Wait for CI and Codex, fix what they find** through Sonnet, push again. Codex reviews a PR when it opens and
    on an `@codex review` comment, not on later pushes. **All of one review's findings go into one fix push**, and
@@ -48,13 +48,13 @@ files or workflows itself. Docs (this file, `docs/`, `AGENTS.md`) may be written
 6. **Merge (squash) when CI is green and Codex's review of the exact head commit is clean** (step 5), re-reading both
    just before: `gh pr merge --squash --match-head-commit <sha>`. A docs-only PR instead needs green CI, every
    finding of its opening Codex review fixed, and the Claude reviewer clean on the head. If Codex can't review (quota
-   out, a failed review, or a docs-only PR's opening review that never arrived), don't merge on CI alone: ask the
-   owner. If `main` has moved since the PR's CI ran (another PR merged meanwhile), update the branch and let CI run
-   again first: a new gate can pass on a PR and still break code that landed beside it. **Don't update for docs-only
-   moves**: when every commit added to `main` since then touches only `docs/`, `*.md` or `changelog.d/` and none of
-   the PR's files, merge as it is (an update makes a new head that needs a new Codex review; it cost #129 a round).
-   **The owner does not review PRs** (owner, 2026-11-08): the planner merges each phase itself once these gates pass,
-   without asking.
+   out, a failed review, or a review not posted within an hour of CI going green, a docs-only PR's opening review
+   included), don't merge on CI alone: ask the owner. If `main` has moved since the PR's CI ran (another PR merged
+   meanwhile), update the branch and let CI run again first: a new gate can pass on a PR and still break code that
+   landed beside it. **Don't update for docs-only moves**: when every commit added to `main` since then touches only
+   `docs/`, `*.md` or `changelog.d/` and none of the PR's files, merge as it is (an update makes a new head that
+   needs a new Codex review; it cost #129 a round). **The owner does not review PRs** (owner, 2026-11-08): the
+   planner merges each phase itself once these gates pass, without asking.
 7. Multi-phase plans repeat 2–6 per phase, each branched from the updated `main`.
 
 Never done by a session: creating or deleting tags, pushing to `main`, force-pushing a shared branch.
