@@ -163,6 +163,31 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
    rows, **applies nothing**. Pure `FrameFeatures` and `CreditsFinder` unit-tested with synthetic frames: crawl,
    cards, black-only ending, short "The End" card, mid-credits scene, colour title sequence, letterboxed night scene
    with lights, starfield ending, epilogue card, dim HDR-like text, two-part edition, credits before the window.
+   **Built 2026-11-13 in two PRs: #128 (the pure analysis) and this PR (reading, storage, refresher).**
+   Differences from the text above, all in phase 1b:
+   - The migration is `V20__credits_detection.sql` (V19 was taken by forced downloads). Table only, as planned.
+   - Timeouts: 90 s per single-frame seek and 5 minutes for the dense decode (`CreditsFrameReader`). A whole file is
+     abandoned on the first failure or timeout and retried after 6 hours (or at once when it changes).
+   - Frames are written as PGM under `<cinefilm.cache.dir>/credits/job-*`, one fresh directory per job, deleted when the
+     job closes and again at start-up for what a killed process left. Every single-frame seek reuses one file name and
+     the reader deletes it after reading, so a seek that exits 0 without writing a frame can never be mistaken for the
+     previous one. No `cropdetect`: the active area uses the pure `ActiveArea` on the five 30-60% frames.
+   - A coarse frame is never taken closer than 1 s to the end of the file (a seek there can find no frame to decode).
+   - The playback wait uses `PlaybackState.lastPlayedAt`, which `reportProgress` sets on every report: one
+     `select max(last_played_at)` per check, no new in-memory timestamp. The check runs before each file and before
+     every ffmpeg call (the reader takes a checkpoint), so a film that starts mid-file stops the run within one seek and
+     the file is simply analysed again later.
+   - "Continue watching first" is approximated per edition as a playback position past 0 and not removed from Continue
+     watching (the real rule looks at the film's last played edition and the minimum watch time); it only orders the
+     backfill. Due files are found with three queries however many films there are.
+   - An hourly `CreditsScheduler` nudge (like `SidecarTimingScheduler`) re-starts a run that stopped for playback or a
+     scan, so the backfill does not wait for the next scan. `LibraryLock.CREDITS` is the new holder; a scan refused
+     because of it says "Credits are being saved".
+   - Config: `cinefilm.credits.enabled` (default true; false in the test profile), documented in
+     `application.properties`. `cinefilm.tools.ffmpeg`, `cinefilm.transcode.nice` and `cinefilm.cache.dir` are reused.
+   - The real-tools test (`CreditsRealToolsTest`, CI only) does not use `drawtext` (it needs libfreetype and a font): it
+     writes a crawl as PGM frames, encodes them with libx264 at 2 frames a second after 6 minutes of plain colour, and
+     asserts `FOUND` within a few seconds of 6:00. It could not be run on the dev Mac (no ffmpeg), so CI is its first run.
 2. **Measure on the server** before anything is applied. About 30 films checked by still: both LOTR extended
    editions, a Bond, a Marvel film with mid- and post-credits scenes, a Pixar film, a letterboxed night ending, a
    starfield ending, an HDR remux, a black-and-white film, a film with credits over picture. Also the time a film

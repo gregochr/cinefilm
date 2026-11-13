@@ -29,10 +29,7 @@ final class TimingKeys {
      *     changed one, so it is not read)
      */
     static String fingerprint(MediaFile file) {
-        if (file.getSizeBytes() == null || file.getModifiedAt() == null) {
-            return null;
-        }
-        return file.getSizeBytes() + ":" + file.getModifiedAt().toEpochMilli();
+        return file.fingerprint();
     }
 
     /**
