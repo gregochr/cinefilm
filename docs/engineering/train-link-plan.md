@@ -6,6 +6,9 @@ Four small pull requests: **A** a 240p floor for every film; **B** the player fo
 the record shows the bank; **C** a buffer of up to eight minutes; **D** the floor held back while the buffer is deep.
 A and B are independent. C needs B. D needs all three.
 
+**All four are merged (2026-11-13: #123, #124, #125, #126).** They are live with the first release after that. What
+is left is the owner's by-hand check after the release and the next train journey's record ("How each is proved").
+
 ## What the first train record showed
 
 *The Rock*, Chrome on the Mac, LNER's Wi-Fi (Icomera), 2026-11-12, one sitting in two records. 17:23: 32 minutes
@@ -248,8 +251,35 @@ every spell, with eight minutes in hand that could have paid for 360p. D spends 
   doc already has it); a level hls.js removes leaves the gate's top index stale, which is harmless; a browser that
   keeps hitting its buffer limit lowers hls.js's ceiling under 420 s, after which the hold never arms.
 
+## Seen in a real browser (2026-11-13)
+
+After D's last commit the real engine and the real hls.js 1.7.4 were run in Chromium (the desktop app's browser)
+against a public five-level test stream, from a throwaway page that is not in the repository. Its levels were named
+240p to original by height: 0.25, 0.46, 0.84, 2.1 and 6.2 Mbit/s. Seen:
+
+- **Order:** `MANIFEST_PARSED`, then `LEVEL_SWITCHING`, then the first loaded segment, then `LEVEL_SWITCHED`. With
+  a deep buffer the level on screen stayed a level behind the one being fetched for minutes.
+- **The gate:** the cap rose one level after 60 s at the cap. When hls.js started to fetch a lower level the cap
+  came down at once, minutes before that level reached the screen.
+- **The buffer:** about 380 s at the 2.1 Mbit/s level (the formula gives 372) and 483 s once the 0.84 Mbit/s level
+  was being fetched, about 100 MB in all, with no buffer-full error (`maxMaxBufferLength` stayed 480).
+- **The hold:** at 425 s buffered while the 480p level was being fetched, `minAutoBitrate` became the 360p level's
+  bitrate and `hls.minAutoLevel` became 1. With hls.js's speed estimate then driven down to 150 kbit/s, its next
+  choice was the 360p level, not the 240p one.
+- **Release and no pull:** a seek to an unbuffered point dropped the minimum to 0 at once; hls.js fetched 240p and
+  the cap followed. With the buffer deep again and 240p being fetched, the minimum stayed 0.
+
+How it was done, for the next time: the estimate must be driven by feeding the estimator slow samples. Setting
+`hls.bandwidthEstimate` resets it, after which hls.js cannot estimate and falls back to its first level.
+
 ## What nobody has verified
 
-The encoder at 240p (picture, speed, real bitrate, AAC at 64 kbit/s); the browsers' buffer limits and whether WebKit
-evicts ahead of the playhead; Safari on the Mac (hls.js) and the iPhone; whether the train's Wi-Fi rations data; a
-real train with any of this in place.
+- **A link that is really slow or dead.** The browser run drove the estimate by hand and could not throttle or cut
+  the network, so the timeout paths (the cap coming down, the hold letting go, the fall to 240p) rest on the reading
+  of the hls.js source and on the tests.
+- **The encoder at 240p:** picture, speed with one more rung, real bitrate against the declared peak, AAC at
+  64 kbit/s. CI encodes the rung in software only.
+- **Other browsers:** Safari on the Mac (hls.js), Firefox, and whether WebKit evicts ahead of the playhead. The
+  iPhone's own player is not touched by B to D.
+- **The server's own streams** with any of this, and a buffer of eight minutes at their bitrates in a browser.
+- Whether the train's Wi-Fi rations data, and a real train with any of this in place.

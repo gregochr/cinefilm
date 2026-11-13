@@ -327,16 +327,18 @@ those findings can be had locally first: the same reviewer, reading the same `AG
   of fixes for a PR or Codex finding. Run it after Sonnet's gates are green and after the planner's own read of the
   diff. It applies to any code change, UI or not. Skipping it on fix rounds cost PR #105 four Codex rounds (owner,
   2026-11-11).
-- **What:** the whole branch (`codex review --base origin/main`), not only the latest fix: a fix can expose a sibling
-  of the problem it fixed (for example, the same check needed on another screen).
+- **What (lean rounds, owner 2026-11-12, to save Codex quota):** before the **first** push, the whole branch
+  (`codex review --base origin/main`). Before a **fix** push, only the fix (`codex review --base <the head already
+  pushed>`); the PR's own Codex review still reads the whole branch before merge. Large PRs burn quota fast (each
+  re-read of a 7,000-line PR turns up a new edge case), so split work into PRs of a few thousand lines at most.
 - **How:** the planner runs it in Sonnet's worktree, from the repo root (Codex reads `AGENTS.md` there by itself):
   `codex review --uncommitted` for work not yet committed, or `codex review --base origin/main` once it is. Run it
   in the background with its output sent to a scratch file; it takes about two minutes. The log is long (every
   command Codex ran); its verdict and findings are the last block, after the final `codex` line. The CLI is
   signed in on the owner's laptop (`codex login status`).
 - **Then:** send each finding to Sonnet, or reject it with a reason, as for a PR finding. Sonnet fixes, re-runs the
-  gates, and the planner runs Codex again. Codex does not find the same things on every run, so one clean run is
-  weak evidence. Stop after **two runs in a row** find nothing new, then commit and push (or open the PR).
+  gates, and Codex runs once more on that fix only. **One clean run** is enough to push (it was two in a row until
+  2026-11-12; the owner chose lean rounds when the quota kept running out).
 - **Still request the PR review.** The PR's Codex run is the merge gate (`CLAUDE.md` step 6); the local run only
   makes it likely to be clean the first time.
 
