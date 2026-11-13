@@ -81,8 +81,8 @@ measured inside the active area. As revised in phase 2b (the phase 1 values were
 - text-likeness: as phase 1 (thin runs above the bright limit with both neighbours at or below the sharp-edge
   limit, counted inside the central 70% of the width, in rows with at least 3 such runs), with
   `TEXT_LIKE_SHARE` 0.30 of the bright pixels.
-- **Subtitles:** the text pixels just counted that lie in rows at or below `top + 70%` of the active area's height
-  are the bottom-band text. When they are 80% or more of the text pixels, the frame is not text-like.
+- **Subtitles:** the text pixels just counted that lie in rows with `y >= top + (int) (0.7 * height)` of the active
+  area are the bottom-band text. When they are 80% or more of the text pixels, the frame is not text-like.
 - `BLACK`: dark share ≥ 0.98. `TEXT_ON_DARK`: dark share ≥ 0.70, bright share 0.002–0.20 and text-like.
   `PICTURE`: anything else.
 - `CreditsMotion`'s row profiles and changed-pixel counts keep using the **window's** peak (as measured); only its
@@ -120,7 +120,7 @@ track just for this (that demuxes the whole file), and **no threshold relies on 
 
 ### Verdicts
 
-- `FOUND`: every rule met and no subtitle contradiction. Applied (phase 3).
+- `FOUND`: every rule met and no subtitle contradiction. Applied in phase 3 only as its precedence allows (below).
 - `UNSURE`: a rule narrowly broken, or a subtitle contradiction. Stored with reasons, not applied.
 - `NOT_FOUND`: no qualifying run (a short "The End" card, credits over picture, credits before the window).
 - A failed or timed-out read is not stored; the file is retried with a back-off like `SidecarTimingRefresher`'s, so
@@ -143,10 +143,16 @@ end, else `UNSURE`. The same guard applies to an imported Plex marker (phase 2c)
 - **The source travels with the marker everywhere the marker moves:** `StateCarry`, `EditionJoin` (both places it
   carries `markerMs`) and `EditionArranger` (which clears the marker when the parts change: it clears the source
   too). A carried `OWNER` marker stays `OWNER`.
-- Applying (a short write under a new `LibraryLock` holder `CREDITS`, revalidated against the fingerprint; the lock
-  is never held while ffmpeg runs; a refused lock is retried later): for each edition whose last part has a `FOUND`
-  row, set `credits_marker_ms` and `AUTO` unless the source is `OWNER`. When the source is `AUTO` and the last part no
-  longer has a `FOUND` row, clear both.
+- Applying (phase 3; a short write under the `LibraryLock` holder `CREDITS`, revalidated against the fingerprints; the
+  lock is never held while ffmpeg runs; a refused lock is retried later). Per edition, from its last part, the first
+  that holds wins:
+  1. source `OWNER`: left alone;
+  2. a `plex_credits_marker` row whose fingerprint matches the file and that passes the edition guard: that marker,
+     source `PLEX`;
+  3. once the gate in phase 2b has passed, a `FOUND` row of the current `ANALYSIS_VERSION` whose fingerprint matches
+     and that passes the guard: its offset **plus 20 s** (never past the guard's 60 s before the end), source `AUTO`;
+  4. otherwise the marker and source are cleared (the 97% fallback).
+  So a `PLEX` marker whose file changed falls back to the detector's answer for the new file, then to nothing.
 
 ## When it runs
 
@@ -220,8 +226,11 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
    - An Admin action of its own, "Import credits from Plex", beside Import from Plex, reusing its `PlexClient`
      configuration (`PLEX_URL`, `PLEX_TOKEN`) and its file matching (`PlexPairing` / `PlexRules.relativePath`, with its
      claimed-set and title guards). **GET requests only**: no write to Plex, no watched-state merge.
-   - Plex's list call carries no markers, so each matched item is fetched once with `includeMarkers=1` (about 1,100
-     requests, one at a time).
+   - Plex's list call carries no markers, and `PlexModels.PlexFilm`/`PlexMedia` keep only part paths. A new `PlexApi`
+     method fetches `GET /library/metadata/{ratingKey}?includeMarkers=1` for each matched item (about 1,100 requests,
+     one at a time) into a new record holding the item's `duration` (ms), each `Media[].duration`, and its markers
+     (`Marker[]` with `type == "credits"`, `startTimeOffset` in ms, `final`). The claimed set is built the way
+     `PlexImportService` builds it, walking every film in list order.
    - A marker is stored only when all of these hold, else the item is skipped and counted in the report:
      - the item has one file per copy (Plex lists each film twice, a `.m4v` and an `.mp4` copy; an item with `ptN`
        parts is a split edition, and Plex has no markers for any of the three it has, so they are skipped);
@@ -230,8 +239,10 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
      - its first credits marker (type `credits`; final or not, since a non-final one is a credits run followed by a
        mid-credits scene) is at least 60% into the item and at least 60 s before its end (the edition guard; all 864
        pass today).
-   - Stored in `plex_credits_marker` (V23) against the matched CineFilm media file, with that file's current
-     fingerprint, so nothing needs Plex afterwards. Running it again replaces rows; it never deletes a row for a film
+   - Stored in `plex_credits_marker` (V23), **one row per matched CineFilm media file** (each copy the item's paths
+     pair with), with that file's current fingerprint, so nothing needs Plex afterwards. The edition guard is checked
+     again against each CineFilm file's own duration, so a copy up to 2 s shorter cannot turn a passing marker into one
+     less than 60 s from its end. Running it again replaces rows; it never deletes a row for a film
      Plex no longer lists. The report says imported, skipped (with the reason) and unmatched counts.
    - Nothing is applied.
 2b. **Detector fixes, still report only.** The classifier rules in "Per-frame features" and the motion changes in
@@ -244,7 +255,8 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
      `DENSE_SPAN_MS` (300 s), both clamped to the file as now; 600 frames; `DENSE_TIMEOUT` 9 minutes (5 × 600/360,
      rounded up). `refine` still starts its search 5 s before the candidate.
    - `CARD_CHANGE_MIN_SHARE` 0.001 and `CARD_STILL_MAX_SHARE` **0.0005** (noise within one card is about 0.0001), so
-     no pair counts as both still and changed.
+     no pair counts as both still and changed. Measured: all 23 verdicts and times are identical with the still limit
+     at 0.001 and at 0.0005.
    - Unit tests with synthetic frames for each measured failure: anti-aliased white text scoring only 0.6–0.8 of the
      text-like share; thin grey text far below the window's peak; dense columns leaving only 75% of the frame dark;
      burned-in subtitles in the bottom band of a dark scene (not text-like); a crawl entering from the bottom (late,
@@ -255,7 +267,10 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
    - **The gate before phase 3** (after 2b's release and 2c's import, once the backfill has run): a read-only query
      joining `credits_detection` (`FOUND`, version 2) to `plex_credits_marker` on the same file and fingerprint must
      return **zero rows** with `offset_ms < start_ms − 15000`. Any such row is a defect fixed in a further 2b round
-     first. The results go into this plan.
+     first. That measures the detector on films Plex could read; `AUTO` will only ever be used on the about 220 it
+     could not, which are likely the harder endings. So the gate also checks, by stills as in phase 2, a sample of
+     **20 `FOUND` rows on films with no Plex marker** (or all of them if fewer): any marker before the credits start
+     blocks phase 3's `AUTO` step. The results go into this plan.
 3. **Apply, source column, Admin.** `credits_marker_source` and its carrying, applying, the watched-rule change if the
    owner agrees, the Admin list and overrides. Precedence per edition: `OWNER`; then `PLEX` (the last part's
    `plex_credits_marker` row, fingerprint still matching); then the detector's `FOUND` plus a **20 s margin** (`AUTO`),
