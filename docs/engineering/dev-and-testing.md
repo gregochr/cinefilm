@@ -299,6 +299,10 @@ Once per change to the ladder or the buffer (`train-link-plan.md`):
     well above 1×.
 14. On "Train, typical" Auto plays at 240p without stalling. On "Train, bad" from a cold start some stalling is
     expected: 300 kbit/s is under the 340 or so the floor needs on the wire, and only a banked buffer covers that.
+15. With no throttling, choose Quality, 360p and let the film play for five minutes: the scrubber's buffered bar
+    reaches about eight minutes ahead of the playhead and stays there, and the console shows no hls.js warning
+    about reducing the buffer length. Afterwards Admin, Playback health, Full record: the sixth figure of the
+    minute rows climbs to about 480. Then switch to "Train, bad": the film plays on from the buffer for minutes.
 
 - DevTools throttles the page's own requests (the hls.js segments included) and only while DevTools is open. It
   does not reach Safari: use Network Link Conditioner there (macOS: Additional Tools for Xcode; iPhone: Settings,
