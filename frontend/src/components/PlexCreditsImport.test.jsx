@@ -245,21 +245,39 @@ describe('PlexCreditsImport', () => {
       calls += 1;
       return respond(calls === 1 ? running(5) : fixtures.adminPlexCredits);
     });
+    vi.useFakeTimers();
     render(<PlexCreditsImport reachable />);
-    const group = await block();
-    await within(group).findByText('5 / 40 films');
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByText('5 / 40 films')).toBeInTheDocument();
     expect(screen.queryByText(/^Credits import (finished|stopped)/)).toBeNull();
 
-    expect(
-      await within(group).findByText(
-        'Credits import finished: 860 imported.',
-        {},
-        { timeout: 4000 },
-      ),
-    ).toBeInTheDocument();
-    expect(
-      within(group).getByText('Credits import finished: 860 imported.').closest('[role="status"]'),
-    ).not.toBeNull();
+    await act(() => vi.advanceTimersByTimeAsync(SCAN_POLL_MS));
+
+    const sentence = screen.getByText('Credits import finished: 860 imported.');
+    expect(sentence.closest('[role="status"]')).not.toBeNull();
+  });
+
+  it('keeps the same alert mounted while polls keep failing, so it is not announced again', async () => {
+    let reads = 0;
+    installFetch((method, url) => {
+      if (url !== '/api/admin/plex/credits') return null;
+      reads += 1;
+      return reads === 1 ? respond(running(5)) : respond(null, 500);
+    });
+    vi.useFakeTimers();
+    render(<PlexCreditsImport reachable />);
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    await act(() => vi.advanceTimersByTimeAsync(SCAN_POLL_MS));
+    const alert = screen.getByRole('alert');
+    const again = screen.getByRole('button', { name: 'Check again' });
+
+    for (let poll = 0; poll < 3; poll += 1) {
+      await act(() => vi.advanceTimersByTimeAsync(SCAN_POLL_MS));
+    }
+
+    expect(reads).toBe(5);
+    expect(screen.getByRole('alert')).toBe(alert);
+    expect(screen.getByRole('button', { name: 'Check again' })).toBe(again);
   });
 
   it('says nothing for a finished import that was already there when the block opened', async () => {
@@ -392,7 +410,7 @@ describe('usePlexCreditsImport', () => {
     window.removeEventListener(LIBRARY_CHANGED_EVENT, changed);
   });
 
-  it('keeps polling after a start whose next reads fail, until one answers', async () => {
+  it('keeps polling after a start whose next reads fail, one read at a time, until one answers', async () => {
     let started = false;
     let reads = 0;
     installFetch((method, url) => {
@@ -410,15 +428,96 @@ describe('usePlexCreditsImport', () => {
     await settle();
     await act(() => result.current.startImport());
     await settle();
+    expect(reads).toBe(1);
     expect(result.current.credits.running).toBe(true);
     expect(result.current.error).not.toBeNull();
 
+    await settle(SCAN_POLL_MS - 1);
+    expect(reads).toBe(1);
+    await settle(1);
+    expect(reads).toBe(2);
+    expect(result.current.error).not.toBeNull();
     await settle(SCAN_POLL_MS);
-    await settle(SCAN_POLL_MS);
+    expect(reads).toBe(3);
 
-    expect(reads).toBeGreaterThanOrEqual(3);
     expect(result.current.error).toBeNull();
     expect(result.current.credits.progress.processed).toBe(9);
+  });
+
+  it('keeps the start’s running status when a read issued before the start answers after it', async () => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    let reads = 0;
+    installFetch(async (method, url) => {
+      if (url === '/api/admin/plex/credits/import') return respond(running(0, 0), 202);
+      if (url !== '/api/admin/plex/credits') return null;
+      reads += 1;
+      if (reads === 2) {
+        await gate;
+        return respond(IDLE);
+      }
+      return reads === 1 ? respond(IDLE) : respond(null, 500);
+    });
+    vi.useFakeTimers();
+    const { result } = renderHook(() => usePlexCreditsImport());
+    await settle();
+    act(() => result.current.reload());
+    await settle();
+    expect(reads).toBe(2);
+
+    await act(() => result.current.startImport());
+    release();
+    await settle();
+
+    expect(result.current.credits.running).toBe(true);
+    await settle(SCAN_POLL_MS);
+    expect(reads).toBe(4);
+    expect(result.current.credits.running).toBe(true);
+  });
+
+  it('announces every finish, even one with the same words, and clears it while the next run goes', async () => {
+    const finished = (startedAt, finishedAt) => ({
+      running: false,
+      progress: null,
+      lastImport: {
+        ...fixtures.adminPlexCredits.lastImport,
+        startedAt,
+        finishedAt,
+      },
+    });
+    const sentence = 'Credits import finished: 860 imported.';
+    const script = [
+      finished('2026-11-13T10:00:00Z', '2026-11-13T10:10:00Z'),
+      running(3),
+      finished('2026-11-13T11:00:00Z', '2026-11-13T11:10:00Z'),
+      running(4),
+      finished('2026-11-13T12:00:00Z', '2026-11-13T12:10:00Z'),
+    ];
+    let next = 0;
+    installFetch((method, url) => {
+      if (url === '/api/admin/plex/credits/import') return respond(running(0, 0), 202);
+      if (url !== '/api/admin/plex/credits') return null;
+      return respond(script[Math.min(next++, script.length - 1)]);
+    });
+    vi.useFakeTimers();
+    const { result } = renderHook(() => usePlexCreditsImport());
+    await settle();
+    expect(result.current.announcement).toBe('');
+
+    await act(() => result.current.startImport());
+    await settle();
+    expect(result.current.credits.running).toBe(true);
+    expect(result.current.announcement).toBe('');
+    await settle(SCAN_POLL_MS);
+    expect(result.current.announcement).toBe(sentence);
+
+    await act(() => result.current.startImport());
+    await settle();
+    expect(result.current.announcement).toBe('');
+    await settle(SCAN_POLL_MS);
+    expect(result.current.announcement).toBe(sentence);
   });
 
   it('leaves no timer behind when it unmounts while an import runs', async () => {
