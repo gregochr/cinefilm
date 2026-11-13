@@ -5,568 +5,597 @@ import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
-import static gregochr.cinefilm.TestData.state;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
-import gregochr.cinefilm.ApiTestBase;
+import gregochr.cinefilm.credits.CreditsDetectionRepository.Stored;
 import gregochr.cinefilm.credits.CreditsDetectionService.DueFile;
 import gregochr.cinefilm.credits.CreditsDetectionService.SaveOutcome;
+import gregochr.cinefilm.credits.CreditsFrameReader.Job;
 import gregochr.cinefilm.credits.CreditsFrameReader.ReadException;
+import gregochr.cinefilm.credits.CreditsFrameReader.TimedFrame;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
-import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.film.MediaKind;
 import gregochr.cinefilm.film.Playability;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.library.LibraryLock;
-import gregochr.cinefilm.playback.PlaybackState;
+import gregochr.cinefilm.playback.PlaybackStateRepository;
 import gregochr.cinefilm.subtitle.EmbeddedCueStarts;
 import gregochr.cinefilm.subtitle.EmbeddedCueStartsRepository;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.EntityManagerFactory;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
-import org.hibernate.SessionFactory;
-import org.hibernate.stat.Statistics;
-import org.junit.jupiter.api.AfterEach;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 /**
- * The database side of credits detection against the real repositories on H2 (which files are due and in what order,
- * and the save, which revalidates the file and takes the library lock), and the analysis of one file against a
- * stand-in for ffmpeg that writes a film whose credits crawl up from 7:30.
+ * The credits detection service's decisions with every collaborator faked and no Spring context: which files are due
+ * and in what order, how a file is analysed (cue starts only from a current usable read, the candidate to dense to
+ * refine flow, a failing reader), and the save (lock, revalidation, exact row, lock always released). The same rules
+ * against H2 are in {@code CreditsDetectionServiceApiTest}.
  */
-class CreditsDetectionServiceTest extends ApiTestBase {
+@ExtendWith(MockitoExtension.class)
+class CreditsDetectionServiceTest {
 
-    private static final Instant LATER = NOW.plus(Duration.ofHours(1));
-    /** Where the stand-in film's credits start. */
+    private static final Path FILE = Path.of("/library/Taken.m4v");
+    private static final Instant LATER = NOW.plusSeconds(1);
     private static final long CREDITS_AT = 450_000;
     private static final long FILM_LENGTH = 10 * MIN;
+    private static final String PRINT = "1001:" + NOW.toEpochMilli();
+    private static final DueFile DUE = new DueFile(10L, "Taken.m4v", PRINT, FILM_LENGTH, "Taken");
 
-    @TempDir
-    Path cache;
-
-    @Autowired
-    private CreditsDetectionService service;
-
-    @Autowired
-    private CreditsDetectionRepository detections;
-
-    @Autowired
+    @Mock
     private EditionRepository editions;
 
-    @Autowired
-    private MediaFileRepository mediaFiles;
+    @Mock
+    private MediaFileRepository files;
 
-    @Autowired
+    @Mock
+    private CreditsDetectionRepository detections;
+
+    @Mock
     private EmbeddedCueStartsRepository cueStarts;
 
-    @Autowired
-    private LibraryLock lock;
+    @Mock
+    private PlaybackStateRepository states;
 
-    @Autowired
+    @Mock
+    private CreditsFrameReader reader;
+
+    @Mock
+    private Job job;
+
+    @Mock
     private PlatformTransactionManager transactions;
 
-    @Autowired
-    private EntityManager entityManager;
-
-    @Autowired
-    private EntityManagerFactory factory;
-
-    private Statistics statistics;
+    private final LibraryLock lock = new LibraryLock();
+    private final Runnable checkpoint = () -> { };
+    private CreditsDetectionService service;
 
     @BeforeEach
-    void enableStatistics() {
-        statistics = factory.unwrap(SessionFactory.class).getStatistics();
-        statistics.setStatisticsEnabled(true);
-    }
-
-    @AfterEach
-    void disableStatistics() {
-        statistics.setStatisticsEnabled(false);
+    void setUp() {
+        service = new CreditsDetectionService(editions, files, detections, cueStarts, states, reader, lock,
+            transactions);
     }
 
     // ---- Fixtures ------------------------------------------------------------------------------------------------
 
-    /** A film with one edition of {@code parts} one-hour files, each with a size and modification time. */
-    private Film filmOf(String title, int parts, Instant addedAt) {
-        Film built = film(null, title, 2000, addedAt);
-        Edition edition = edition(built, null, "Original", parts * 60 * MIN, null);
+    /** An edition of {@code parts} one-hour files with ids {@code base + part}, a size and a time, added at a time. */
+    private static Edition editionOf(long id, String title, int parts, Instant addedAt) {
+        Edition built = edition(film(id, title, 2000, addedAt), id, "Original", parts * 60 * MIN, null);
         for (int i = 1; i <= parts; i++) {
-            MediaFile file = file(edition, parts == 1 ? title + ".m4v" : title + " - pt" + i + ".m4v");
+            MediaFile file = file(built, parts == 1 ? title + ".m4v" : title + " - pt" + i + ".m4v");
+            file.setId(id * 10 + i);
             file.setPartNumber(i);
             file.setDurationMs(60 * MIN);
             file.setSizeBytes(1_000L + i);
             file.setModifiedAt(NOW);
         }
-        return films.saveAndFlush(built);
+        return built;
     }
 
-    private Film filmOf(String title) {
-        return filmOf(title, 1, NOW);
-    }
-
-    private static MediaFile part(Film film, int number) {
-        return film.getEditions().get(0).originalParts().get(number - 1);
-    }
-
-    private static Long fileId(Film film) {
-        return part(film, 1).getId();
+    private static MediaFile part(Edition edition, int number) {
+        return edition.originalParts().get(number - 1);
     }
 
     private List<Long> dueIds() {
         return service.dueFiles().stream().map(DueFile::mediaFileId).toList();
     }
 
-    private void stored(MediaFile file, String fingerprint) {
-        CreditsDetection row = new CreditsDetection();
-        row.setMediaFileId(file.getId());
-        row.setFingerprint(fingerprint);
-        row.setVerdict(CreditsVerdict.NOT_FOUND);
-        row.setReasons("No credits");
-        row.setCheckedAt(NOW);
-        detections.saveAndFlush(row);
+    private void library(Edition... all) {
+        when(editions.findAllWithFiles()).thenReturn(List.of(all));
     }
 
-    private static DueFile due(MediaFile file) {
-        return new DueFile(file.getId(), file.getPath(), file.fingerprint(), 60 * MIN, "Film");
+    private MediaFile savedFile() {
+        MediaFile file = part(editionOf(1L, "Taken", 1, NOW), 1);
+        file.setId(10L);
+        file.setSizeBytes(1_001L);
+        return file;
     }
 
-    // ---- Which files are due -------------------------------------------------------------------------------------
+    // ---- dueFiles ------------------------------------------------------------------------------------------------
 
     @Test
-    void aFilmWithNoStoredResultIsDueWithItsFileFingerprintLengthAndTitle() {
-        Film film = filmOf("Taken");
+    void aFileWithNoStoredResultIsDueWithAllItsDetails() {
+        Edition taken = editionOf(1L, "Taken", 1, NOW);
+        library(taken);
 
         assertThat(service.dueFiles()).containsExactly(
-            new DueFile(fileId(film), "Taken.m4v", "1001:" + NOW.toEpochMilli(), 60 * MIN, "Taken"));
+            new DueFile(11L, "Taken.m4v", "1001:" + NOW.toEpochMilli(), 60 * MIN, "Taken"));
     }
 
     @Test
-    void onlyTheLastPartOfASplitEditionIsDue() {
-        Film film = filmOf("The Long Film", 2, NOW);
+    void onlyTheLastPartInPlayOrderIsDue() {
+        Edition split = editionOf(2L, "The Long Film", 3, NOW);
+        library(split);
 
-        assertThat(dueIds()).containsExactly(part(film, 2).getId());
+        assertThat(dueIds()).containsExactly(part(split, 3).getId());
     }
 
     @Test
-    void theLastOfThreePartsIsTheOnlyOneDue() {
-        Film film = filmOf("Three Parts", 3, NOW);
+    void aStoredResultWithTheSameFingerprintMakesTheFileDoneAndADifferentOneDueAgain() {
+        Edition done = editionOf(1L, "Done", 1, NOW);
+        Edition changed = editionOf(2L, "Changed", 1, NOW.minusSeconds(1));
+        when(detections.findAllStored()).thenReturn(List.of(
+            new Stored(part(done, 1).getId(), part(done, 1).fingerprint()),
+            new Stored(part(changed, 1).getId(), "1001:1")));
+        library(done, changed);
 
-        assertThat(dueIds()).containsExactly(part(film, 3).getId());
+        assertThat(dueIds()).containsExactly(part(changed, 1).getId());
     }
 
     @Test
-    void aFileWhoseStoredResultMatchesItsFingerprintIsNotDue() {
-        Film film = filmOf("Taken");
-        stored(part(film, 1), part(film, 1).fingerprint());
+    void aStoredResultOfAnEarlierPartDoesNotCountForTheLastPart() {
+        Edition split = editionOf(2L, "The Long Film", 2, NOW);
+        when(detections.findAllStored()).thenReturn(List.of(
+            new Stored(part(split, 1).getId(), part(split, 1).fingerprint())));
+        library(split);
 
-        assertThat(dueIds()).isEmpty();
-    }
-
-    @Test
-    void aChangedFileIsDueAgain() {
-        Film film = filmOf("Taken");
-        MediaFile file = part(film, 1);
-        stored(file, file.fingerprint());
-        file.setSizeBytes(file.getSizeBytes() + 1);
-        mediaFiles.saveAndFlush(file);
-
-        assertThat(dueIds()).containsExactly(file.getId());
-    }
-
-    @Test
-    void aFileTouchedAtAnotherTimeIsDueAgain() {
-        Film film = filmOf("Taken");
-        MediaFile file = part(film, 1);
-        stored(file, file.fingerprint());
-        file.setModifiedAt(NOW.plusMillis(1));
-        mediaFiles.saveAndFlush(file);
-
-        assertThat(dueIds()).containsExactly(file.getId());
-    }
-
-    @Test
-    void aStoredResultOfThePartThatIsNoLongerLastDoesNotMakeTheNewLastPartDone() {
-        Film film = filmOf("The Long Film", 2, NOW);
-        stored(part(film, 1), part(film, 1).fingerprint());
-
-        assertThat(dueIds()).containsExactly(part(film, 2).getId());
+        assertThat(dueIds()).containsExactly(part(split, 2).getId());
     }
 
     @Test
     void filesTheAnalysisCannotReadAreNotDue() {
-        Film missing = filmOf("Missing");
+        Edition missing = editionOf(1L, "Missing", 1, NOW);
         part(missing, 1).setPresence(Presence.MISSING);
-        Film broken = filmOf("Broken");
+        Edition broken = editionOf(2L, "Broken", 1, NOW);
         part(broken, 1).setPlayability(Playability.NEEDS_CONVERSION);
-        Film noSize = filmOf("No size");
+        Edition noSize = editionOf(3L, "No size", 1, NOW);
         part(noSize, 1).setSizeBytes(null);
-        Film noTime = filmOf("No time");
+        Edition noTime = editionOf(4L, "No time", 1, NOW);
         part(noTime, 1).setModifiedAt(null);
-        Film noDuration = filmOf("No duration");
+        Edition noDuration = editionOf(5L, "No duration", 1, NOW);
         part(noDuration, 1).setDurationMs(null);
-        Film zeroDuration = filmOf("Zero duration");
+        Edition zeroDuration = editionOf(6L, "Zero duration", 1, NOW);
         part(zeroDuration, 1).setDurationMs(0L);
-        Film fine = filmOf("Fine");
-        films.flush();
-        entityManager.clear();
+        Edition noOriginal = editionOf(7L, "Premade only", 1, NOW);
+        part(noOriginal, 1).setKind(MediaKind.PREMADE_720);
+        Edition fine = editionOf(8L, "Fine", 1, NOW);
+        library(missing, broken, noSize, noTime, noDuration, zeroDuration, noOriginal, fine);
 
-        assertThat(dueIds()).containsExactly(fileId(fine));
+        assertThat(dueIds()).containsExactly(part(fine, 1).getId());
     }
 
     @Test
-    void aFilesLengthIsItsVideoDurationWhenKnown() {
-        Film film = filmOf("Taken");
-        part(film, 1).setVideoDurationMs(59 * MIN);
-        films.saveAndFlush(film);
+    void theVideoDurationIsTheLengthWhenKnownElseTheContainers() {
+        Edition withVideo = editionOf(1L, "With video", 1, NOW);
+        part(withVideo, 1).setVideoDurationMs(59 * MIN);
+        Edition containerOnly = editionOf(2L, "Container only", 1, NOW.minusSeconds(1));
+        library(withVideo, containerOnly);
 
-        assertThat(service.dueFiles()).extracting(DueFile::durationMs).containsExactly(59 * MIN);
+        assertThat(service.dueFiles()).extracting(DueFile::mediaFileId, DueFile::durationMs)
+            .containsExactly(tuple(part(withVideo, 1).getId(), 59 * MIN),
+                tuple(part(containerOnly, 1).getId(), 60 * MIN));
     }
 
     @Test
-    void anEditionWithOnlyPremadeRenditionsIsNotDue() {
-        Film film = filmOf("Taken");
-        part(film, 1).setKind(MediaKind.PREMADE_720);
-        films.saveAndFlush(film);
+    void editionsInProgressComeFirstThenTheNewestAddedThenTheNewestId() {
+        Edition oldest = editionOf(1L, "Oldest", 1, NOW.minus(Duration.ofDays(30)));
+        Edition newest = editionOf(2L, "Newest", 1, NOW.minus(Duration.ofDays(1)));
+        Edition middle = editionOf(3L, "Middle", 1, NOW.minus(Duration.ofDays(10)));
+        Edition tieLow = editionOf(4L, "Tie low", 1, NOW.minus(Duration.ofDays(40)));
+        Edition tieHigh = editionOf(5L, "Tie high", 1, NOW.minus(Duration.ofDays(40)));
+        when(states.findInProgressEditionIds()).thenReturn(List.of(oldest.getId()));
+        library(tieLow, oldest, newest, tieHigh, middle);
+
+        assertThat(dueIds()).containsExactly(part(oldest, 1).getId(), part(newest, 1).getId(),
+            part(middle, 1).getId(), part(tieHigh, 1).getId(), part(tieLow, 1).getId());
+    }
+
+    @Test
+    void nothingInTheLibraryMeansNothingDue() {
+        library();
 
         assertThat(service.dueFiles()).isEmpty();
     }
 
-    @Test
-    void filmsInProgressComeFirstThenTheMostRecentlyAddedFiles() {
-        Film oldest = filmOf("Oldest", 1, NOW.minus(Duration.ofDays(30)));
-        Film newest = filmOf("Newest", 1, NOW.minus(Duration.ofDays(1)));
-        Film middle = filmOf("Middle", 1, NOW.minus(Duration.ofDays(10)));
-        saveState(state(oldest.getEditions().get(0), 5 * MIN, false, NOW, null));
+    // ---- detect --------------------------------------------------------------------------------------------------
 
-        assertThat(dueIds()).containsExactly(fileId(oldest), fileId(newest), fileId(middle));
+    /** Five picture frames for the active area. */
+    private static List<GreyFrame> activeFrames() {
+        List<GreyFrame> frames = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            frames.add(SyntheticFrames.picture());
+        }
+        return frames;
     }
 
-    @Test
-    void aFilmRemovedFromContinueWatchingOrNotStartedIsNotMovedUp() {
-        Film oldest = filmOf("Oldest", 1, NOW.minus(Duration.ofDays(30)));
-        Film hidden = filmOf("Hidden", 1, NOW.minus(Duration.ofDays(20)));
-        Film unstarted = filmOf("Unstarted", 1, NOW.minus(Duration.ofDays(10)));
-        Film newest = filmOf("Newest", 1, NOW.minus(Duration.ofDays(1)));
-        PlaybackState hiddenState = state(hidden.getEditions().get(0), 5 * MIN, false, NOW, null);
-        hiddenState.setHiddenFromContinueWatching(true);
-        saveState(hiddenState);
-        saveState(state(unstarted.getEditions().get(0), 0, true, NOW, NOW));
-
-        assertThat(dueIds()).containsExactly(fileId(newest), fileId(unstarted), fileId(hidden), fileId(oldest));
+    /** Coarse frames 360 to 595 s: picture until {@link #CREDITS_AT}, then a crawl. */
+    private static List<TimedFrame> coarseFrames(boolean withCredits) {
+        List<TimedFrame> frames = new ArrayList<>();
+        for (long at = 360_000; at < FILM_LENGTH; at += 5_000) {
+            frames.add(new TimedFrame(at, withCredits && at >= CREDITS_AT
+                ? SyntheticFrames.crawl((int) ((at - CREDITS_AT) / 500), 3) : SyntheticFrames.picture()));
+        }
+        return frames;
     }
 
-    @Test
-    void filesAddedAtTheSameTimeComeNewestIdFirst() {
-        Film first = filmOf("First", 1, NOW);
-        Film second = filmOf("Second", 1, NOW);
-
-        assertThat(dueIds()).containsExactly(fileId(second), fileId(first));
+    /** Dense frames 360 to 540 s of the same film. */
+    private static List<DenseFrame> denseFrames() {
+        List<DenseFrame> frames = new ArrayList<>();
+        for (long at = 360_000; at < 540_000; at += 500) {
+            frames.add(new DenseFrame(at, at < CREDITS_AT ? SyntheticFrames.picture()
+                : SyntheticFrames.crawl((int) ((at - CREDITS_AT) / 500), 3)));
+        }
+        return frames;
     }
 
-    @Test
-    void theNumberOfStatementsDoesNotGrowWithTheNumberOfFilms() {
-        filmOf("One", 1, NOW);
-        long withOne = statementsOfOneCall();
-
-        filmOf("Two", 2, NOW);
-        filmOf("Three", 3, NOW);
-        long withThree = statementsOfOneCall();
-
-        assertThat(withOne).isPositive();
-        assertThat(withThree).isEqualTo(withOne);
+    private void jobReads(boolean withCredits) {
+        when(reader.open(FILE, FILM_LENGTH, checkpoint)).thenReturn(job);
+        when(job.activeAreaFrames()).thenReturn(activeFrames());
+        when(job.coarseFrames()).thenReturn(coarseFrames(withCredits));
     }
 
-    private long statementsOfOneCall() {
-        entityManager.flush();
-        entityManager.clear();
-        statistics.clear();
-        service.dueFiles();
-        return statistics.getPrepareStatementCount();
-    }
-
-    // ---- Saving --------------------------------------------------------------------------------------------------
-
-    @Test
-    void aFoundResultIsStoredAgainstTheFileWithItsFingerprintOffsetReasonsAndTime() {
-        MediaFile file = part(filmOf("Taken"), 1);
-        CreditsResult result = new CreditsResult(CreditsVerdict.FOUND, 3_600_500L,
-            List.of("Text moves up from 1:00:00", "Nobody is talking"));
-
-        SaveOutcome outcome = service.save(due(file), result, NOW);
-
-        assertThat(outcome).isEqualTo(SaveOutcome.SAVED);
-        CreditsDetection row = detections.findById(file.getId()).orElseThrow();
-        assertThat(row.getFingerprint()).isEqualTo(file.fingerprint());
-        assertThat(row.getVerdict()).isEqualTo(CreditsVerdict.FOUND);
-        assertThat(row.getOffsetMs()).isEqualTo(3_600_500L);
-        assertThat(row.getReasons()).isEqualTo("Text moves up from 1:00:00\nNobody is talking");
-        assertThat(row.getCheckedAt()).isEqualTo(NOW);
-    }
-
-    @Test
-    void aNotFoundResultHasNoOffsetAndAnUnsureOneMayHaveOne() {
-        MediaFile first = part(filmOf("Taken"), 1);
-        MediaFile second = part(filmOf("Taken 2"), 1);
-
-        service.save(due(first), new CreditsResult(CreditsVerdict.NOT_FOUND, null, List.of("Nothing")), NOW);
-        service.save(due(second), new CreditsResult(CreditsVerdict.UNSURE, 1_000L, List.of("Maybe")), NOW);
-
-        assertThat(detections.findById(first.getId()).orElseThrow().getVerdict()).isEqualTo(CreditsVerdict.NOT_FOUND);
-        assertThat(detections.findById(first.getId()).orElseThrow().getOffsetMs()).isNull();
-        assertThat(detections.findById(second.getId()).orElseThrow().getVerdict()).isEqualTo(CreditsVerdict.UNSURE);
-        assertThat(detections.findById(second.getId()).orElseThrow().getOffsetMs()).isEqualTo(1_000L);
-    }
-
-    @Test
-    void savingAgainReplacesTheFilesOneRow() {
-        MediaFile file = part(filmOf("Taken"), 1);
-        service.save(due(file), new CreditsResult(CreditsVerdict.NOT_FOUND, null, List.of("Nothing")), NOW);
-
-        service.save(due(file), new CreditsResult(CreditsVerdict.FOUND, 99L, List.of("Found it")), LATER);
-
-        assertThat(detections.findAll()).hasSize(1);
-        CreditsDetection row = detections.findById(file.getId()).orElseThrow();
-        assertThat(row.getVerdict()).isEqualTo(CreditsVerdict.FOUND);
-        assertThat(row.getOffsetMs()).isEqualTo(99L);
-        assertThat(row.getCheckedAt()).isEqualTo(LATER);
-    }
-
-    @Test
-    void reasonsAreCutAtTwoThousandCharacters() {
-        MediaFile file = part(filmOf("Taken"), 1);
-
-        service.save(due(file), new CreditsResult(CreditsVerdict.UNSURE, null, List.of("x".repeat(2_001))), NOW);
-        MediaFile exact = part(filmOf("Exact"), 1);
-        service.save(due(exact), new CreditsResult(CreditsVerdict.UNSURE, null, List.of("y".repeat(2_000))), NOW);
-
-        assertThat(detections.findById(file.getId()).orElseThrow().getReasons()).isEqualTo("x".repeat(2_000));
-        assertThat(detections.findById(exact.getId()).orElseThrow().getReasons()).isEqualTo("y".repeat(2_000));
-    }
-
-    @Test
-    void aResultForAFileThatChangedWhileItWasAnalysedIsDroppedAndTheFileIsDueAgain() {
-        MediaFile file = part(filmOf("Taken"), 1);
-        DueFile asAnalysed = due(file);
-        file.setSizeBytes(file.getSizeBytes() + 1);
-        mediaFiles.saveAndFlush(file);
-
-        SaveOutcome outcome = service.save(asAnalysed, new CreditsResult(CreditsVerdict.NOT_FOUND, null,
-            List.of("Nothing")), NOW);
-
-        assertThat(outcome).isEqualTo(SaveOutcome.DROPPED);
-        assertThat(detections.findAll()).isEmpty();
-        assertThat(dueIds()).containsExactly(file.getId());
-    }
-
-    @Test
-    void aResultForAFileThatIsNoLongerPresentIsDropped() {
-        MediaFile file = part(filmOf("Taken"), 1);
-        DueFile asAnalysed = due(file);
-        file.setPresence(Presence.MISSING);
-        mediaFiles.saveAndFlush(file);
-
-        assertThat(service.save(asAnalysed, new CreditsResult(CreditsVerdict.NOT_FOUND, null, List.of("Nothing")),
-            NOW)).isEqualTo(SaveOutcome.DROPPED);
-        assertThat(detections.findAll()).isEmpty();
-    }
-
-    @Test
-    void aResultForAFileThatWasRemovedIsDropped() {
-        DueFile gone = new DueFile(987_654L, "Gone.m4v", "1:1", 60 * MIN, "Gone");
-
-        assertThat(service.save(gone, new CreditsResult(CreditsVerdict.NOT_FOUND, null, List.of("Nothing")), NOW))
-            .isEqualTo(SaveOutcome.DROPPED);
-    }
-
-    @Test
-    void whileAScanHoldsTheLockNothingIsStoredAndTheLockStaysWithTheScan() {
-        MediaFile file = part(filmOf("Taken"), 1);
-        assertThat(lock.tryAcquire(LibraryLock.SCAN)).isTrue();
-
-        SaveOutcome outcome = service.save(due(file), new CreditsResult(CreditsVerdict.NOT_FOUND, null,
-            List.of("Nothing")), NOW);
-
-        assertThat(outcome).isEqualTo(SaveOutcome.BUSY);
-        assertThat(detections.findAll()).isEmpty();
-        assertThat(lock.heldBy(LibraryLock.SCAN)).isTrue();
-        lock.release();
-    }
-
-    @Test
-    void theLockIsTakenForTheWriteAndGivenBackAfterIt() {
-        MediaFile file = part(filmOf("Taken"), 1);
-
-        service.save(due(file), new CreditsResult(CreditsVerdict.NOT_FOUND, null, List.of("Nothing")), NOW);
-
-        assertThat(lock.holder()).isNull();
-        assertThat(lock.tryAcquire(LibraryLock.SCAN)).isTrue();
-        lock.release();
-    }
-
-    @Test
-    void theLockIsGivenBackEvenWhenTheWriteFails() {
-        MediaFile file = part(filmOf("Taken"), 1);
-        CreditsResult result = new CreditsResult(CreditsVerdict.UNSURE, null, List.of("x"));
-        DueFile badFingerprint = new DueFile(file.getId(), file.getPath(), null, 60 * MIN, "Taken");
-
-        assertThatThrownBy(() -> service.save(badFingerprint, result, NOW)).isInstanceOf(NullPointerException.class);
-
-        assertThat(lock.holder()).isNull();
-    }
-
-    // ---- Analysing one file --------------------------------------------------------------------------------------
-
-    private CreditsDetectionService serviceReading(FakeFfmpeg ffmpeg) {
-        CreditsFrameReader reader = new CreditsFrameReader(ffmpeg, "ffmpeg", 0, cache.toString());
-        return new CreditsDetectionService(editions, mediaFiles, detections, cueStarts, states, reader, lock,
-            transactions);
-    }
-
-    /** A film of picture whose credits start crawling up at {@link #CREDITS_AT}. */
-    private static FakeFfmpeg filmWithCrawl() {
-        FakeFfmpeg ffmpeg = new FakeFfmpeg();
-        ffmpeg.frameAt = ms -> ms < CREDITS_AT ? SyntheticFrames.picture()
-            : SyntheticFrames.crawl((int) ((ms - CREDITS_AT) / 500), 3);
-        return ffmpeg;
-    }
-
-    private DueFile tenMinuteFilm() {
-        MediaFile file = part(filmOf("Taken"), 1);
-        return new DueFile(file.getId(), file.getPath(), file.fingerprint(), FILM_LENGTH, "Taken");
-    }
-
-    private void cachedCues(DueFile due, String fingerprint, EmbeddedCueStarts.Status status, List<Long> starts) {
+    private void cueRow(String fingerprint, EmbeddedCueStarts.Status status, List<Long> starts) {
         EmbeddedCueStarts row = new EmbeddedCueStarts();
-        row.setMediaFileId(due.mediaFileId());
+        row.setMediaFileId(10L);
         row.setFingerprint(fingerprint);
         row.setStatus(status);
         row.setSubtitleStreamCount(2);
         row.setStartsMs(starts);
         row.setReadAt(NOW);
-        cueStarts.saveAndFlush(row);
+        when(cueStarts.findById(10L)).thenReturn(Optional.of(row));
+    }
+
+    private static void assertFoundAtCreditsStart(CreditsResult result) {
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
+        assertThat(result.offsetMs()).isEqualTo(450_000L);
     }
 
     @Test
-    void anEndingWithACrawlIsFoundWhereTheCrawlStartsAfterOneSeekPerSampleAndOneDenseDecode() {
-        FakeFfmpeg ffmpeg = filmWithCrawl();
-        DueFile due = tenMinuteFilm();
+    void aCandidateIsRefinedOnTheDenseFramesAroundItAndTheJobIsClosed() {
+        jobReads(true);
+        when(job.denseFrames(CREDITS_AT)).thenReturn(denseFrames());
 
-        CreditsResult result = serviceReading(ffmpeg).detect(due, Path.of("/library/Taken.m4v"), () -> { });
+        CreditsResult result = service.detect(DUE, FILE, checkpoint);
 
         assertThat(result.verdict()).isEqualTo(CreditsVerdict.FOUND);
-        assertThat(result.offsetMs()).isBetween(CREDITS_AT, CREDITS_AT + 1_000);
-        // Five active-area seeks, 48 coarse ones (7:30 to 10:00 is the last 4 minutes and then some) and one decode.
-        assertThat(ffmpeg.commands).hasSize(5 + 48 + 1);
-        assertThat(ffmpeg.commands.getLast()).contains("-start_number", "-t");
-        assertThat(cache.resolve("credits")).isEmptyDirectory();
+        assertThat(result.offsetMs()).isEqualTo(450_000L);
+        assertThat(result.reasons()).containsExactly("Text on a dark screen moves up steadily from 0:07:30");
+        verify(job).denseFrames(CREDITS_AT);
+        verify(job).close();
+    }
+
+    /** Frames of a 2.39:1 night scene in a 16:9 frame, as the active area and the whole window see them. */
+    private void jobReadsALetterboxedNightEnding() {
+        when(reader.open(FILE, FILM_LENGTH, checkpoint)).thenReturn(job);
+        List<GreyFrame> active = new ArrayList<>();
+        for (int row : new int[] {20, 30, 40, 25, 35}) {
+            active.add(SyntheticFrames.letterboxedNight(row));
+        }
+        when(job.activeAreaFrames()).thenReturn(active);
+        List<TimedFrame> coarse = new ArrayList<>();
+        for (long at = 360_000; at < FILM_LENGTH; at += 5_000) {
+            coarse.add(new TimedFrame(at, SyntheticFrames.letterboxedNight(20)));
+        }
+        when(job.coarseFrames()).thenReturn(coarse);
     }
 
     @Test
-    void anEndingThatIsAllPictureIsNotFoundWithoutADenseDecode() {
-        FakeFfmpeg ffmpeg = new FakeFfmpeg();
+    void theBarsOfALetterboxedFilmAreNotCountedSoADarkLitNightEndingIsNotTakenForCredits() {
+        jobReadsALetterboxedNightEnding();
 
-        CreditsResult result = serviceReading(ffmpeg).detect(tenMinuteFilm(), Path.of("/library/Taken.m4v"),
-            () -> { });
+        CreditsResult result = service.detect(DUE, FILE, checkpoint);
+
+        // Measured over the whole frame the black bars make the scene over 80% dark with three bright windows, which
+        // looks like text on a dark screen all the way through; inside the picture it is only 75% dark.
+        assertThat(result.verdict()).isEqualTo(CreditsVerdict.NOT_FOUND);
+        assertThat(result.offsetMs()).isNull();
+        assertThat(result.reasons()).containsExactly("The ending has no black screen and no text on a dark screen");
+        verify(job, never()).denseFrames(anyLong());
+        verify(job).close();
+    }
+
+    @Test
+    void withNoCandidateTheResultIsNotFoundAndNoDenseDecodeIsAsked() {
+        jobReads(false);
+
+        CreditsResult result = service.detect(DUE, FILE, checkpoint);
 
         assertThat(result.verdict()).isEqualTo(CreditsVerdict.NOT_FOUND);
         assertThat(result.offsetMs()).isNull();
         assertThat(result.reasons()).containsExactly("The ending has no black screen and no text on a dark screen");
-        assertThat(ffmpeg.commands).hasSize(5 + 48);
-        assertThat(cache.resolve("credits")).isEmptyDirectory();
+        verify(job, never()).denseFrames(anyLong());
+        verify(job).close();
     }
 
     @Test
-    void dialogueInTheCachedCueStartsPastTheCreditsStartMakesTheResultUnsure() {
-        DueFile due = tenMinuteFilm();
-        cachedCues(due, due.fingerprint(), EmbeddedCueStarts.Status.USABLE, List.of(300_000L, 460_000L, 485_000L));
+    void cueStartsFromACurrentUsableReadAreUsedSoLateDialogueMakesTheResultUnsure() {
+        jobReads(true);
+        when(job.denseFrames(CREDITS_AT)).thenReturn(denseFrames());
+        cueRow(PRINT, EmbeddedCueStarts.Status.USABLE, List.of(300_000L, 460_000L, 485_000L));
 
-        CreditsResult result = serviceReading(filmWithCrawl()).detect(due, Path.of("/library/Taken.m4v"), () -> { });
+        CreditsResult result = service.detect(DUE, FILE, checkpoint);
 
         assertThat(result.verdict()).isEqualTo(CreditsVerdict.UNSURE);
-        assertThat(result.reasons()).singleElement().asString().startsWith("Someone is still talking");
+        assertThat(result.offsetMs()).isEqualTo(450_000L);
+        assertThat(result.reasons()).containsExactly("Someone is still talking 35 s after the credits seem to start");
     }
 
     @Test
-    void cachedCueStartsThatEndBeforeTheCreditsLeaveTheResultFound() {
-        DueFile due = tenMinuteFilm();
-        cachedCues(due, due.fingerprint(), EmbeddedCueStarts.Status.USABLE, List.of(300_000L, 440_000L));
+    void cueStartsFromAnOlderVersionOfTheFileAreIgnored() {
+        jobReads(true);
+        when(job.denseFrames(CREDITS_AT)).thenReturn(denseFrames());
+        cueRow("1001:1", EmbeddedCueStarts.Status.USABLE, List.of(300_000L, 460_000L, 485_000L));
 
-        assertThat(serviceReading(filmWithCrawl()).detect(due, Path.of("/library/Taken.m4v"), () -> { }).verdict())
-            .isEqualTo(CreditsVerdict.FOUND);
+        assertFoundAtCreditsStart(service.detect(DUE, FILE, checkpoint));
     }
 
     @Test
-    void cueStartsReadFromAnOlderVersionOfTheFileAreIgnored() {
-        DueFile due = tenMinuteFilm();
-        cachedCues(due, "1:1", EmbeddedCueStarts.Status.USABLE, List.of(300_000L, 460_000L, 485_000L));
+    void aReadWithNoUsableTrackGivesNoCueStarts() {
+        jobReads(true);
+        when(job.denseFrames(CREDITS_AT)).thenReturn(denseFrames());
+        cueRow(PRINT, EmbeddedCueStarts.Status.NO_REFERENCE, List.of(300_000L, 460_000L, 485_000L));
 
-        assertThat(serviceReading(filmWithCrawl()).detect(due, Path.of("/library/Taken.m4v"), () -> { }).verdict())
-            .isEqualTo(CreditsVerdict.FOUND);
+        assertFoundAtCreditsStart(service.detect(DUE, FILE, checkpoint));
     }
 
     @Test
-    void aFileWithNoUsableEnglishTrackIsAnalysedWithoutDialogue() {
-        DueFile due = tenMinuteFilm();
-        cachedCues(due, due.fingerprint(), EmbeddedCueStarts.Status.NO_REFERENCE, List.of());
+    void aFileWithNoReadAtAllIsAnalysedWithoutCueStarts() {
+        jobReads(true);
+        when(job.denseFrames(CREDITS_AT)).thenReturn(denseFrames());
+        when(cueStarts.findById(10L)).thenReturn(Optional.empty());
 
-        assertThat(serviceReading(filmWithCrawl()).detect(due, Path.of("/library/Taken.m4v"), () -> { }).verdict())
-            .isEqualTo(CreditsVerdict.FOUND);
+        assertFoundAtCreditsStart(service.detect(DUE, FILE, checkpoint));
     }
 
     @Test
-    void aFailingFfmpegAbandonsTheWholeFileAndLeavesNoDirectory() {
-        FakeFfmpeg ffmpeg = filmWithCrawl();
-        ffmpeg.failOnCall = 10;
+    void aReaderThatFailsMidFileAbandonsTheFileClosesTheJobAndPassesTheFailureOn() {
+        when(reader.open(FILE, FILM_LENGTH, checkpoint)).thenReturn(job);
+        when(job.activeAreaFrames()).thenReturn(activeFrames());
+        ReadException failure = new ReadException("ffmpeg timed out reading the frame at 370.000");
+        when(job.coarseFrames()).thenThrow(failure);
 
-        assertThatThrownBy(() -> serviceReading(ffmpeg).detect(tenMinuteFilm(), Path.of("/library/Taken.m4v"),
-            () -> { })).isInstanceOf(ReadException.class);
+        assertThatThrownBy(() -> service.detect(DUE, FILE, checkpoint)).isSameAs(failure);
 
-        assertThat(ffmpeg.commands).hasSize(10);
-        assertThat(cache.resolve("credits")).isEmptyDirectory();
+        verify(job).close();
     }
 
     @Test
-    void aFailingDenseDecodeAbandonsTheFileToo() {
-        FakeFfmpeg ffmpeg = filmWithCrawl();
-        ffmpeg.failOnCall = 5 + 48 + 1;
+    void aFailingDenseDecodeAlsoClosesTheJob() {
+        jobReads(true);
+        ReadException failure = new ReadException("ffmpeg exited with status 1 reading the frames around 450.000");
+        when(job.denseFrames(CREDITS_AT)).thenThrow(failure);
 
-        assertThatThrownBy(() -> serviceReading(ffmpeg).detect(tenMinuteFilm(), Path.of("/library/Taken.m4v"),
-            () -> { })).isInstanceOf(ReadException.class);
+        assertThatThrownBy(() -> service.detect(DUE, FILE, checkpoint)).isSameAs(failure);
 
-        assertThat(cache.resolve("credits")).isEmptyDirectory();
+        verify(job).close();
     }
 
     @Test
-    void aCheckpointThatStopsTheRunBetweenTheCoarseAndDensePassesStopsBeforeTheDenseDecode() {
-        FakeFfmpeg ffmpeg = filmWithCrawl();
-        Runnable stopsBeforeTheDenseDecode = () -> {
-            if (ffmpeg.commands.size() == 5 + 48) {
-                throw new IllegalStateException("playback started");
-            }
-        };
+    void aJobThatCannotBeOpenedFailsTheFileWithNothingToClose() {
+        ReadException failure = new ReadException("The frame directory could not be made");
+        when(reader.open(FILE, FILM_LENGTH, checkpoint)).thenThrow(failure);
 
-        assertThatThrownBy(() -> serviceReading(ffmpeg).detect(tenMinuteFilm(), Path.of("/library/Taken.m4v"),
-            stopsBeforeTheDenseDecode)).hasMessage("playback started");
+        assertThatThrownBy(() -> service.detect(DUE, FILE, checkpoint)).isSameAs(failure);
 
-        assertThat(ffmpeg.commands).hasSize(5 + 48);
-        assertThat(cache.resolve("credits")).isEmptyDirectory();
+        verifyNoInteractions(job);
+    }
+
+    // ---- save ----------------------------------------------------------------------------------------------------
+
+    /** Stubs the transaction manager to hand out a status for a plain read-write transaction (and for nothing else). */
+    private SimpleTransactionStatus transaction() {
+        SimpleTransactionStatus status = new SimpleTransactionStatus();
+        when(transactions.getTransaction(argThat(definition ->
+            definition.getPropagationBehavior() == TransactionDefinition.PROPAGATION_REQUIRED
+                && !definition.isReadOnly()))).thenReturn(status);
+        return status;
+    }
+
+    private static CreditsResult found() {
+        return new CreditsResult(CreditsVerdict.FOUND, 3_723_500L, List.of("Text moves up", "Nobody is talking"));
     }
 
     @Test
-    void nothingIsStoredByAnalysingAFile() {
-        serviceReading(filmWithCrawl()).detect(tenMinuteFilm(), Path.of("/library/Taken.m4v"), () -> { });
+    void successWritesExactlyTheRowFieldsAndReleasesTheLock() {
+        SimpleTransactionStatus status = transaction();
+        MediaFile file = savedFile();
+        when(files.findById(10L)).thenReturn(Optional.of(file));
+        when(detections.findById(10L)).thenReturn(Optional.empty());
 
-        assertThat(detections.findAll()).isEmpty();
+        SaveOutcome outcome = service.save(DUE, found(), NOW);
+
+        assertThat(outcome).isEqualTo(SaveOutcome.SAVED);
+        ArgumentCaptor<CreditsDetection> saved = ArgumentCaptor.forClass(CreditsDetection.class);
+        verify(detections).save(saved.capture());
+        CreditsDetection row = saved.getValue();
+        assertThat(row.getMediaFileId()).isEqualTo(10L);
+        assertThat(row.getFingerprint()).isEqualTo(PRINT);
+        assertThat(row.getVerdict()).isEqualTo(CreditsVerdict.FOUND);
+        assertThat(row.getOffsetMs()).isEqualTo(3_723_500L);
+        assertThat(row.getReasons()).isEqualTo("Text moves up\nNobody is talking");
+        assertThat(row.getCheckedAt()).isEqualTo(NOW);
+        assertThat(lock.holder()).isNull();
+        verify(transactions).commit(status);
+    }
+
+    @Test
+    void anExistingRowIsUpdatedNotReplacedAndANotFoundResultClearsTheOffset() {
+        SimpleTransactionStatus status = transaction();
+        MediaFile file = savedFile();
+        when(files.findById(10L)).thenReturn(Optional.of(file));
+        CreditsDetection existing = new CreditsDetection();
+        existing.setMediaFileId(10L);
+        existing.setFingerprint("old");
+        existing.setVerdict(CreditsVerdict.FOUND);
+        existing.setOffsetMs(99L);
+        existing.setReasons("old");
+        existing.setCheckedAt(NOW.minusSeconds(60));
+        when(detections.findById(10L)).thenReturn(Optional.of(existing));
+
+        service.save(DUE, new CreditsResult(CreditsVerdict.NOT_FOUND, null, List.of("None")), NOW);
+
+        verify(detections).save(existing);
+        assertThat(existing.getVerdict()).isEqualTo(CreditsVerdict.NOT_FOUND);
+        assertThat(existing.getOffsetMs()).isNull();
+        assertThat(existing.getFingerprint()).isEqualTo(PRINT);
+        assertThat(existing.getReasons()).isEqualTo("None");
+        assertThat(existing.getCheckedAt()).isEqualTo(NOW);
+        verify(transactions).commit(status);
+    }
+
+    @Test
+    void reasonsOverTwoThousandCharactersAreCutAtTwoThousand() {
+        SimpleTransactionStatus status = transaction();
+        when(files.findById(10L)).thenReturn(Optional.of(savedFile()));
+        when(detections.findById(10L)).thenReturn(Optional.empty());
+
+        service.save(DUE, new CreditsResult(CreditsVerdict.UNSURE, null, List.of("x".repeat(2_001))), NOW);
+
+        ArgumentCaptor<CreditsDetection> saved = ArgumentCaptor.forClass(CreditsDetection.class);
+        verify(detections).save(saved.capture());
+        assertThat(saved.getValue().getReasons()).isEqualTo("x".repeat(2_000));
+        verify(transactions).commit(status);
+    }
+
+    @Test
+    void reasonsOfExactlyTwoThousandCharactersAreKeptWhole() {
+        SimpleTransactionStatus status = transaction();
+        when(files.findById(10L)).thenReturn(Optional.of(savedFile()));
+        when(detections.findById(10L)).thenReturn(Optional.empty());
+
+        service.save(DUE, new CreditsResult(CreditsVerdict.UNSURE, null, List.of("y".repeat(2_000))), LATER);
+
+        ArgumentCaptor<CreditsDetection> saved = ArgumentCaptor.forClass(CreditsDetection.class);
+        verify(detections).save(saved.capture());
+        assertThat(saved.getValue().getReasons()).isEqualTo("y".repeat(2_000));
+        assertThat(saved.getValue().getCheckedAt()).isEqualTo(LATER);
+        verify(transactions).commit(status);
+    }
+
+    @Test
+    void aRefusedLockIsBusyAndTouchesNothingAndLeavesTheHoldersLock() {
+        assertThat(lock.tryAcquire(LibraryLock.SCAN)).isTrue();
+
+        SaveOutcome outcome = service.save(DUE, found(), NOW);
+
+        assertThat(outcome).isEqualTo(SaveOutcome.BUSY);
+        verifyNoInteractions(files, detections);
+        assertThat(lock.heldBy(LibraryLock.SCAN)).isTrue();
+    }
+
+    @Test
+    void aFileThatIsGoneIsDroppedAndTheLockIsReleased() {
+        SimpleTransactionStatus status = transaction();
+        when(files.findById(10L)).thenReturn(Optional.empty());
+
+        assertThat(service.save(DUE, found(), NOW)).isEqualTo(SaveOutcome.DROPPED);
+
+        verifyNoInteractions(detections);
+        assertThat(lock.holder()).isNull();
+        verify(transactions).commit(status);
+    }
+
+    @Test
+    void aFileThatIsNoLongerPresentIsDroppedAndTheLockIsReleased() {
+        SimpleTransactionStatus status = transaction();
+        MediaFile file = savedFile();
+        file.setPresence(Presence.MISSING);
+        when(files.findById(10L)).thenReturn(Optional.of(file));
+
+        assertThat(service.save(DUE, found(), NOW)).isEqualTo(SaveOutcome.DROPPED);
+
+        verifyNoInteractions(detections);
+        assertThat(lock.holder()).isNull();
+        verify(transactions).commit(status);
+    }
+
+    @Test
+    void aFileWhoseFingerprintChangedIsDroppedAndTheLockIsReleased() {
+        SimpleTransactionStatus status = transaction();
+        MediaFile file = savedFile();
+        file.setSizeBytes(2_000L);
+        when(files.findById(10L)).thenReturn(Optional.of(file));
+
+        assertThat(service.save(DUE, found(), NOW)).isEqualTo(SaveOutcome.DROPPED);
+
+        verifyNoInteractions(detections);
+        assertThat(lock.holder()).isNull();
+        verify(transactions).commit(status);
+    }
+
+    @Test
+    void theLockIsReleasedWhenTheWriteThrows() {
+        SimpleTransactionStatus status = transaction();
+        MediaFile file = savedFile();
+        when(files.findById(10L)).thenReturn(Optional.of(file));
+        when(detections.findById(10L)).thenReturn(Optional.empty());
+        IllegalStateException failure = new IllegalStateException("database is down");
+        when(detections.save(any(CreditsDetection.class))).thenThrow(failure);
+
+        assertThatThrownBy(() -> service.save(DUE, found(), NOW)).isSameAs(failure);
+
+        assertThat(lock.holder()).isNull();
+        verify(transactions).rollback(status);
+    }
+
+    @Test
+    void theLockIsReleasedWhenTheFileLookupThrows() {
+        SimpleTransactionStatus status = transaction();
+        IllegalStateException failure = new IllegalStateException("database is down");
+        when(files.findById(10L)).thenThrow(failure);
+
+        assertThatThrownBy(() -> service.save(DUE, found(), NOW)).isSameAs(failure);
+
+        assertThat(lock.holder()).isNull();
+        verify(transactions).rollback(status);
+    }
+
+    @Test
+    void theLockIsHeldByCreditsWhileTheWriteRuns() {
+        SimpleTransactionStatus status = transaction();
+        MediaFile file = savedFile();
+        when(files.findById(10L)).thenAnswer(call -> {
+            assertThat(lock.heldBy(LibraryLock.CREDITS)).isTrue();
+            return Optional.of(file);
+        });
+        when(detections.findById(10L)).thenReturn(Optional.empty());
+
+        service.save(DUE, found(), NOW);
+
+        assertThat(lock.holder()).isNull();
+        verify(transactions).commit(status);
     }
 }
