@@ -82,12 +82,16 @@ some earlier dark stretch:
 
 - Walk back from the end while seconds stay credits-like (`BLACK` or `TEXT_ON_DARK`), allowing `PICTURE` gaps up to
   120 s (mid- and post-credits scenes). The run must be at least 60 s long with at least 30 s of `TEXT_ON_DARK`.
-- **Motion anchor:** the first 30 s of the run (from the dense pass) must look like credits moving: a crawl (rows of
-  text shifting up by a steady number of pixels per frame, found by matching row-brightness profiles between frames)
-  or cards (static text that changes abruptly at least twice). Still text on dark alone (an epilogue card, a starfield,
-  candles, a night sky) is not enough.
-- At most 10 s of `BLACK` before the first moving text counts as the start (the fade out); longer black is part of
-  the film.
+- **Motion anchor:** the marker is placed **where the credits start moving**, never earlier. In the dense pass, 30 s
+  windows are tried from the first text frame onwards, 5 s apart; the first window that looks like credits moving
+  gives the start: a crawl (rows of text shifting up by a steady number of pixels per frame, found by matching
+  row-brightness profiles between frames; the start is the first moving pair) or cards (static text that changes
+  abruptly at least twice; the start is the first change, so the first card's few seconds are given up). Still text
+  before that point (an epilogue card, a starfield, candles, a night sky) is never part of the marker, so searching
+  past it can only move the marker later. Still text with no motion anywhere in the dense pass is `UNSURE`.
+- At most 10 s of `BLACK` immediately before the motion start counts as the start (the fade out); longer black, or
+  black separated from the motion by still text, is part of the film. (Revised 2026-11-13 after local Codex: the
+  first rule anchored the start to the first text frame, which could put the marker on an epilogue card.)
 - The run must not start with a single `TEXT_ON_DARK` card followed by `PICTURE` ("Ten years later").
 
 Known limit, accepted: a stylised colour title sequence before the crawl (Bond, Pixar, Marvel) is `PICTURE`, so the
