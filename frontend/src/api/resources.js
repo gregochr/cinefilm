@@ -106,6 +106,9 @@ export const adminApi = {
   saveEditions: (filmId, request) => put(`/api/admin/films/${filmId}/editions`, request),
   plex: (options) => get('/api/admin/plex', options),
   startPlexImport: () => post('/api/admin/plex/import'),
+  /** The one-off import of Plex's credits markers: status with progress and the last report. */
+  plexCredits: (options) => get('/api/admin/plex/credits', options),
+  startPlexCreditsImport: () => post('/api/admin/plex/credits/import'),
   transcoding: (options) => get('/api/admin/transcoding', options),
   stopTranscodingSession: (id) => del(`/api/admin/transcoding/sessions/${id}`),
   playbackHealth: (options) => get('/api/admin/playback-health', options),

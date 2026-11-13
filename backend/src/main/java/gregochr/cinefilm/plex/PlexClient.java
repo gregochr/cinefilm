@@ -2,7 +2,10 @@ package gregochr.cinefilm.plex;
 
 import gregochr.cinefilm.plex.PlexModels.PlexFilm;
 import gregochr.cinefilm.plex.PlexModels.PlexImage;
+import gregochr.cinefilm.plex.PlexModels.PlexItemMarkers;
+import gregochr.cinefilm.plex.PlexModels.PlexMarker;
 import gregochr.cinefilm.plex.PlexModels.PlexMedia;
+import gregochr.cinefilm.plex.PlexModels.PlexMediaTiming;
 import gregochr.cinefilm.tmdb.Sleeper;
 import java.net.URI;
 import java.time.Duration;
@@ -10,6 +13,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Semaphore;
+import java.util.regex.Pattern;
 import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,6 +51,7 @@ public class PlexClient implements PlexApi {
     static final int IMAGE_CAP = 10 * 1024 * 1024;
     private static final MediaType[] JSON_TYPES = {MediaType.APPLICATION_JSON};
     private static final MediaType[] IMAGE_TYPES = {MediaType.IMAGE_JPEG, MediaType.IMAGE_PNG};
+    private static final Pattern RATING_KEY = Pattern.compile("\\d{1,18}");
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final RestClient client;
@@ -133,6 +138,45 @@ public class PlexClient implements PlexApi {
             .queryParam("height", height).queryParam("minSize", 1).queryParam("upscale", 0)
             .queryParam("url", "{url}").build(path), List.of(), IMAGE_TYPES, imageCap, MAX_RETRIES);
         return new PlexImage(answer.body(), answer.contentType());
+    }
+
+    @Override
+    public PlexItemMarkers itemMarkers(String ratingKey) {
+        if (ratingKey == null || !RATING_KEY.matcher(ratingKey).matches()) {
+            throw new PlexException("Plex rating key is not a number", null);
+        }
+        JsonNode item = json("plex item markers", b -> b.path("/library/metadata/{key}")
+            .queryParam("includeMarkers", 1).build(ratingKey), List.of())
+            .path("MediaContainer").path("Metadata").path(0);
+        if (item.isMissingNode()) {
+            throw new PlexException("Plex has no item for plex item markers", null);
+        }
+        List<PlexMediaTiming> media = new ArrayList<>();
+        for (JsonNode version : item.path("Media")) {
+            List<String> parts = new ArrayList<>();
+            for (JsonNode part : version.path("Part")) {
+                String file = text(part, "file");
+                if (file != null) {
+                    parts.add(file);
+                }
+            }
+            media.add(new PlexMediaTiming(number(version, "duration"), List.copyOf(parts)));
+        }
+        List<PlexMarker> markers = new ArrayList<>();
+        for (JsonNode marker : item.path("Marker")) {
+            Long start = number(marker, "startTimeOffset");
+            String type = text(marker, "type");
+            if (start != null && type != null) {
+                markers.add(new PlexMarker(type, start, marker.path("final").asBoolean(false)));
+            }
+        }
+        return new PlexItemMarkers(number(item, "duration"), List.copyOf(media), List.copyOf(markers));
+    }
+
+    /** A numeric field, or null when it is missing or not a number. */
+    private static Long number(JsonNode node, String name) {
+        JsonNode value = node.path(name);
+        return value.isNumber() ? value.asLong() : null;
     }
 
     /** Reads a section's list a page at a time until {@code totalSize} items have been read. */

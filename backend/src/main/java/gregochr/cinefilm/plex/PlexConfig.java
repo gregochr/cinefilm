@@ -37,6 +37,16 @@ public class PlexConfig {
         return RestClient.builder().baseUrl(baseUrl.strip()).requestFactory(factory).build();
     }
 
+    /** A single daemon thread for the credits import, apart from the Plex import's so neither waits for the other. */
+    @Bean
+    public Executor plexCreditsExecutor() {
+        return Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "plex-credits-import");
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
     /** A single daemon thread: only one import ever runs at a time. */
     @Bean
     public Executor plexImportExecutor() {

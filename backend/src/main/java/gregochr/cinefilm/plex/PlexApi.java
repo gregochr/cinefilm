@@ -2,6 +2,7 @@ package gregochr.cinefilm.plex;
 
 import gregochr.cinefilm.plex.PlexModels.PlexFilm;
 import gregochr.cinefilm.plex.PlexModels.PlexImage;
+import gregochr.cinefilm.plex.PlexModels.PlexItemMarkers;
 import java.util.List;
 
 /**
@@ -48,4 +49,12 @@ public interface PlexApi {
      * @throws PlexException when Plex cannot answer or the image is too big
      */
     PlexImage image(String path, int width, int height);
+
+    /**
+     * One item's durations and markers (the list call carries neither).
+     *
+     * @param ratingKey the item's {@code ratingKey}, digits only
+     * @throws PlexException when the key is not a number, Plex cannot answer, or it has no such item
+     */
+    PlexItemMarkers itemMarkers(String ratingKey);
 }

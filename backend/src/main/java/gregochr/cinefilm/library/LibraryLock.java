@@ -28,6 +28,9 @@ public class LibraryLock {
     /** Holder name of the credits detection saving a result. */
     public static final String CREDITS = "credits";
 
+    /** Holder name of the credits import writing its rows (taken only for that short write). */
+    public static final String PLEX_CREDITS = "plex-credits";
+
     private final AtomicReference<String> holder = new AtomicReference<>();
 
     /**

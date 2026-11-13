@@ -99,4 +99,12 @@ class EditionGuardTest {
         assertThat(unknown.verdict()).isEqualTo(CreditsVerdict.UNSURE);
         assertThat(unknown.markerMs()).isNull();
     }
+
+    @Test
+    void plausibleIsAtLeastSixtyPercentInAndSixtySecondsBeforeTheEndOnBothEdges() {
+        assertThat(EditionGuard.plausible(4_320_000L, 7_200_000L)).isTrue();
+        assertThat(EditionGuard.plausible(4_319_999L, 7_200_000L)).isFalse();
+        assertThat(EditionGuard.plausible(7_140_000L, 7_200_000L)).isTrue();
+        assertThat(EditionGuard.plausible(7_140_001L, 7_200_000L)).isFalse();
+    }
 }

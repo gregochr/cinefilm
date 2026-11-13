@@ -167,3 +167,46 @@ export function usePlexImport() {
 
   return { plex: data, error, loading, starting, notice, startImport, reload };
 }
+
+/**
+ * The "Import credits from Plex" block: status, polled while an import runs (each answer arms the next look, so
+ * requests never overlap), plus the start. Starting while one already runs (409) is not an error: the notice says so
+ * and the block shows the running import. A second click while a start is in flight is ignored.
+ */
+export function usePlexCreditsImport() {
+  const { data, error, loading, reload } = useResource('admin-plex-credits', (options) =>
+    adminApi.plexCredits(options),
+  );
+  const [starting, setStarting] = useState(false);
+  const [notice, setNotice] = useState(null);
+  const startedRef = useRef(false);
+  const running = Boolean(data?.running);
+
+  useEffect(() => {
+    if (!running) return undefined;
+    const id = setTimeout(reload, SCAN_POLL_MS);
+    return () => clearTimeout(id);
+  }, [running, data, error, reload]);
+
+  const startImport = useCallback(async () => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    setStarting(true);
+    setNotice(null);
+    try {
+      await adminApi.startPlexCreditsImport();
+    } catch (failure) {
+      setNotice(
+        failure instanceof ApiError && failure.status === 409
+          ? 'A credits import is already running.'
+          : 'Could not start the credits import.',
+      );
+    } finally {
+      startedRef.current = false;
+      setStarting(false);
+      reload();
+    }
+  }, [reload]);
+
+  return { credits: data, error, loading, starting, notice, startImport, reload };
+}
