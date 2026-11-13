@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  creditsFinishedText,
   creditsProgressText,
   creditsSkipLines,
   creditsTiles,
@@ -75,5 +76,23 @@ describe('creditsSkipLines', () => {
 
   it('is empty when nothing was skipped', () => {
     expect(creditsSkipLines({ ...report, skipped: [] })).toEqual([]);
+  });
+});
+
+describe('creditsFinishedText', () => {
+  it('says how many markers were stored', () => {
+    expect(creditsFinishedText({ error: null, report })).toBe(
+      'Credits import finished: 860 imported.',
+    );
+  });
+
+  it('says why an import stopped', () => {
+    expect(creditsFinishedText({ error: 'Plex is not reachable', report: null })).toBe(
+      'Credits import stopped: Plex is not reachable',
+    );
+  });
+
+  it('counts zero when there is neither an error nor a report', () => {
+    expect(creditsFinishedText({})).toBe('Credits import finished: 0 imported.');
   });
 });

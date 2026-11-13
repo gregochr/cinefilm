@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, announceLibraryChanged } from '../api/client.js';
 import { adminApi } from '../api/resources.js';
+import { creditsFinishedText } from './plexCreditsFormat.js';
 import { useResource } from './useResource.js';
 
 /** How often the Library scan panel asks for progress while a scan runs. */
@@ -172,6 +173,11 @@ export function usePlexImport() {
  * The "Import credits from Plex" block: status, polled while an import runs (each answer arms the next look, so
  * requests never overlap), plus the start. Starting while one already runs (409) is not an error: the notice says so
  * and the block shows the running import. A second click while a start is in flight is ignored.
+ *
+ * The start's 202 carries the new status: it is shown at once and kept until a status read answers, so a failing read
+ * right after the start still shows the import running, and polling goes on (after a failed read too) while the
+ * status shown is running. `announcement` is the sentence to put in a live region when a run finishes while the
+ * block is open (never for the first status loaded).
  */
 export function usePlexCreditsImport() {
   const { data, error, loading, reload } = useResource('admin-plex-credits', (options) =>
@@ -179,9 +185,32 @@ export function usePlexCreditsImport() {
   );
   const [starting, setStarting] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [started, setStarted] = useState(null);
+  const [announcement, setAnnouncement] = useState('');
   const startedRef = useRef(false);
-  const running = Boolean(data?.running);
+  const seenFinished = useRef(undefined);
+  const credits = started ?? data;
+  const running = Boolean(credits?.running);
   useAnnounceWhenFinished(data ? (data.lastImport?.finishedAt ?? null) : undefined);
+
+  // A status read that answers is newer than the start's answer.
+  useEffect(() => {
+    setStarted(null);
+  }, [data]);
+
+  const last = credits?.lastImport;
+  useEffect(() => {
+    if (!credits) return;
+    const finishedAt = last?.finishedAt ?? null;
+    if (
+      seenFinished.current !== undefined &&
+      finishedAt !== null &&
+      seenFinished.current !== finishedAt
+    ) {
+      setAnnouncement(creditsFinishedText(last));
+    }
+    seenFinished.current = finishedAt;
+  }, [credits, last]);
 
   useEffect(() => {
     if (!running) return undefined;
@@ -195,7 +224,7 @@ export function usePlexCreditsImport() {
     setStarting(true);
     setNotice(null);
     try {
-      await adminApi.startPlexCreditsImport();
+      setStarted((await adminApi.startPlexCreditsImport()) ?? null);
     } catch (failure) {
       setNotice(
         failure instanceof ApiError && failure.status === 409
@@ -209,5 +238,5 @@ export function usePlexCreditsImport() {
     }
   }, [reload]);
 
-  return { credits: data, error, loading, starting, notice, startImport, reload };
+  return { credits, error, loading, starting, notice, announcement, startImport, reload };
 }

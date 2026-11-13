@@ -191,6 +191,86 @@ describe('PlexCreditsImport', () => {
     ).toBeInTheDocument();
   });
 
+  it('says the status could not be refreshed while still showing the last one it had', async () => {
+    let fail = false;
+    installFetch((m, url) => {
+      if (url === '/api/admin/plex/credits/import') {
+        return respond({ ...fixtures.adminPlexCredits, running: true }, 202);
+      }
+      return url === '/api/admin/plex/credits'
+        ? respond(fail ? null : fixtures.adminPlexCredits, fail ? 500 : 200)
+        : null;
+    });
+    render(<PlexCreditsImport reachable />);
+    const group = await block();
+    await within(group).findByRole('list', { name: 'Credits import report' });
+
+    fail = true;
+    await userEvent.click(within(group).getByRole('button', { name: 'Import credits from Plex' }));
+
+    expect(
+      await within(group).findByText('Couldn\u2019t refresh the credits import status.'),
+    ).toBeInTheDocument();
+    expect(within(group).getByRole('list', { name: 'Credits import report' })).toBeInTheDocument();
+  });
+
+  it('shows the import running from the start’s answer even when the next status read fails', async () => {
+    let started = false;
+    installFetch((method, url) => {
+      if (url === '/api/admin/plex/credits/import') {
+        started = true;
+        return respond(running(0, 0), 202);
+      }
+      if (url === '/api/admin/plex/credits') return started ? respond(null, 500) : respond(IDLE);
+      return null;
+    });
+    render(<PlexCreditsImport reachable />);
+    const group = await block();
+    const button = within(group).getByRole('button', { name: 'Import credits from Plex' });
+    await waitFor(() => expect(button).toBeEnabled());
+
+    await userEvent.click(button);
+
+    expect(await within(group).findByText('Reading Plex…')).toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: 'Importing credits…' })).toBeDisabled();
+    expect(
+      await within(group).findByText('Couldn\u2019t refresh the credits import status.'),
+    ).toBeInTheDocument();
+  });
+
+  it('announces in a status region when an import finishes, not for the first status', async () => {
+    let calls = 0;
+    installFetch((m, url) => {
+      if (url !== '/api/admin/plex/credits') return null;
+      calls += 1;
+      return respond(calls === 1 ? running(5) : fixtures.adminPlexCredits);
+    });
+    render(<PlexCreditsImport reachable />);
+    const group = await block();
+    await within(group).findByText('5 / 40 films');
+    expect(screen.queryByText(/^Credits import (finished|stopped)/)).toBeNull();
+
+    expect(
+      await within(group).findByText(
+        'Credits import finished: 860 imported.',
+        {},
+        { timeout: 4000 },
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(group).getByText('Credits import finished: 860 imported.').closest('[role="status"]'),
+    ).not.toBeNull();
+  });
+
+  it('says nothing for a finished import that was already there when the block opened', async () => {
+    installFetch(statusRoute(fixtures.adminPlexCredits));
+    render(<PlexCreditsImport reachable />);
+    const group = await block();
+    await within(group).findByRole('list', { name: 'Credits import report' });
+
+    expect(within(group).queryByText(/^Credits import finished/)).toBeNull();
+  });
+
   it('shows the server’s text when a credits import is already running (409)', async () => {
     installFetch((method, url) =>
       url === '/api/admin/plex/credits/import'
@@ -310,6 +390,35 @@ describe('usePlexCreditsImport', () => {
 
     expect(changed).toHaveBeenCalledTimes(1);
     window.removeEventListener(LIBRARY_CHANGED_EVENT, changed);
+  });
+
+  it('keeps polling after a start whose next reads fail, until one answers', async () => {
+    let started = false;
+    let reads = 0;
+    installFetch((method, url) => {
+      if (url === '/api/admin/plex/credits/import') {
+        started = true;
+        return respond(running(0, 0), 202);
+      }
+      if (url !== '/api/admin/plex/credits') return null;
+      if (!started) return respond(IDLE);
+      reads += 1;
+      return reads < 3 ? respond(null, 500) : respond(running(9));
+    });
+    vi.useFakeTimers();
+    const { result } = renderHook(() => usePlexCreditsImport());
+    await settle();
+    await act(() => result.current.startImport());
+    await settle();
+    expect(result.current.credits.running).toBe(true);
+    expect(result.current.error).not.toBeNull();
+
+    await settle(SCAN_POLL_MS);
+    await settle(SCAN_POLL_MS);
+
+    expect(reads).toBeGreaterThanOrEqual(3);
+    expect(result.current.error).toBeNull();
+    expect(result.current.credits.progress.processed).toBe(9);
   });
 
   it('leaves no timer behind when it unmounts while an import runs', async () => {

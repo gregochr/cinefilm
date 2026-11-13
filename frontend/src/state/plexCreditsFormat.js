@@ -32,3 +32,9 @@ export function creditsSkipLines(report) {
     text: `${skip.description}: ${skip.count}`,
   }));
 }
+
+/** What a screen reader is told when an import finishes: the count stored, or why it stopped. */
+export function creditsFinishedText(last) {
+  if (last.error) return `Credits import stopped: ${last.error}`;
+  return `Credits import finished: ${last.report?.imported ?? 0} imported.`;
+}

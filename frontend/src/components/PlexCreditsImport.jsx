@@ -17,7 +17,8 @@ import { usePlexCreditsImport } from '../state/useAdmin.js';
  */
 export default function PlexCreditsImport({ reachable }) {
   const titleId = useId();
-  const { credits, error, loading, starting, notice, startImport, reload } = usePlexCreditsImport();
+  const { credits, error, loading, starting, notice, announcement, startImport, reload } =
+    usePlexCreditsImport();
   const running = Boolean(credits?.running);
   return (
     <div className="admin__report-list" role="group" aria-labelledby={titleId}>
@@ -33,10 +34,12 @@ export default function PlexCreditsImport({ reachable }) {
           <SkeletonBlock style={{ height: 48 }} />
         </div>
       ) : null}
-      {!credits && !loading && error ? (
+      {!loading && error ? (
         <div className="admin__actions">
           <span className="admin__notice" role="alert">
-            Couldn&rsquo;t load the credits import status.
+            {credits
+              ? 'Couldn\u2019t refresh the credits import status.'
+              : 'Couldn\u2019t load the credits import status.'}
           </span>
           <Button variant="secondary" onClick={reload}>
             Check again
@@ -52,6 +55,9 @@ export default function PlexCreditsImport({ reachable }) {
         >
           {running ? 'Importing credits…' : 'Import credits from Plex'}
         </Button>
+        <span className="admin__notice" role="status">
+          {announcement}
+        </span>
         {notice ? (
           <span className="admin__notice" role="status">
             {notice}
