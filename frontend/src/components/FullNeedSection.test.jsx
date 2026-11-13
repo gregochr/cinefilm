@@ -138,6 +138,92 @@ describe('Full subtitles: the list', () => {
   });
 });
 
+describe('Full subtitles: the chip it opens on', () => {
+  const only = (need) => [film(1, { need }), film(2, { need })];
+
+  it('opens on Unsure when nothing is needed', async () => {
+    await open({ films: [film(1, { need: 'UNSURE' }), film(2, { need: 'NOT_NEEDED' })] });
+    expect(chip(/^Unsure/)).toHaveAttribute('aria-pressed', 'true');
+    expect(titles()).toEqual(['Film 1 (1981)']);
+  });
+
+  it('counts a film TMDB has not been asked about as unsure', async () => {
+    await open({ films: [film(1, { need: 'UNKNOWN' }), film(2, { need: 'NOT_NEEDED' })] });
+    expect(chip(/^Unsure/)).toHaveAttribute('aria-pressed', 'true');
+    expect(titles()).toEqual(['Film 1 (1981)']);
+  });
+
+  it('opens on Not needed when nothing is needed or unsure', async () => {
+    await open({ films: only('NOT_NEEDED') });
+    expect(chip(/^Not needed/)).toHaveAttribute('aria-pressed', 'true');
+    expect(titles()).toEqual(['Film 1 (1981)', 'Film 2 (1981)']);
+  });
+
+  it('stays on Needed when there are no films at all', async () => {
+    await open({ films: [] });
+    expect(chip(/^Needed/)).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('No films here.')).toBeVisible();
+  });
+
+  it('is not moved by a refresh that brings in a needed film', async () => {
+    const state = serve({ films: only('UNSURE') });
+    const { rerender } = render(<FullNeedSection refreshKey="a" />);
+    await screen.findByRole('group', { name: 'Show full subtitles' });
+    expect(chip(/^Unsure/)).toHaveAttribute('aria-pressed', 'true');
+
+    state.films.push(film(3, { need: 'NEEDED' }));
+    rerender(<FullNeedSection refreshKey="b" />);
+
+    await waitFor(() => expect(chip(/^Needed/)).toHaveTextContent('(1)'));
+    expect(chip(/^Unsure/)).toHaveAttribute('aria-pressed', 'true');
+    expect(chip(/^Needed/)).toHaveAttribute('aria-pressed', 'false');
+    expect(titles()).toEqual(['Film 1 (1981)', 'Film 2 (1981)']);
+  });
+
+  it('keeps the chip the owner chose through a refresh', async () => {
+    const state = serve({ films: only('UNSURE') });
+    const { rerender } = render(<FullNeedSection refreshKey="a" />);
+    await screen.findByRole('group', { name: 'Show full subtitles' });
+    await userEvent.click(chip(/^Not needed/));
+
+    state.films.push(film(3, { need: 'NEEDED' }));
+    rerender(<FullNeedSection refreshKey="b" />);
+
+    await waitFor(() => expect(chip(/^Needed/)).toHaveTextContent('(1)'));
+    expect(chip(/^Not needed/)).toHaveAttribute('aria-pressed', 'true');
+    expect(titles()).toEqual([]);
+  });
+});
+
+describe('Full subtitles: where each film’s subtitles stand', () => {
+  it('says in one line whether your file plays, a download plays unchecked, or there is none', async () => {
+    await open();
+    expect(within(rowOf('Das Boot (1981)')).getByText('Playing: your file')).toBeVisible();
+    expect(within(rowOf('Rashomon (1950)')).getByText('None yet')).toBeVisible();
+    await userEvent.click(chip(/^Unsure/));
+    expect(
+      within(rowOf('Amélie (2001)')).getByText('Playing: download (not checked yet)'),
+    ).toBeVisible();
+  });
+
+  it('has no Show files button when nobody listens', async () => {
+    await open();
+    expect(screen.queryByRole('button', { name: /^Show the full subtitle files/ })).toBeNull();
+  });
+
+  it('has a Show files button named for the film that tells the listener which film', async () => {
+    const onShowFiles = vi.fn();
+    serve();
+    render(<FullNeedSection refreshKey="a" onShowFiles={onShowFiles} />);
+    await screen.findByRole('group', { name: 'Show full subtitles' });
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Show the full subtitle files of Das Boot (1981)' }),
+    );
+
+    expect(onShowFiles).toHaveBeenCalledExactlyOnceWith({ filmId: 3, title: 'Das Boot (1981)' });
+  });
+});
+
 describe('Full subtitles: the owner’s choice', () => {
   const group = (name) => screen.getByRole('group', { name: `Full subtitles for ${name}` });
 

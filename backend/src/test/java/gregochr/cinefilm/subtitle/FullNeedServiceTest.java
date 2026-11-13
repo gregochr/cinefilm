@@ -1,6 +1,7 @@
 package gregochr.cinefilm.subtitle;
 
 import static gregochr.cinefilm.TestData.NOW;
+import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -11,7 +12,10 @@ import static org.mockito.Mockito.when;
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
+import gregochr.cinefilm.film.Edition;
+import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.FilmDtos.FullSubtitleDto;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.FullNeedRow;
 import gregochr.cinefilm.film.FullNeedChoice;
@@ -23,9 +27,11 @@ import gregochr.cinefilm.subtitle.ForcedNeedDtos.ChoiceRequest;
 import gregochr.cinefilm.subtitle.FullNeedDtos.EditionAudioDto;
 import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedFilmDto;
 import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedListDto;
+import gregochr.cinefilm.subtitle.FullNeedDtos.FullSubtitleStateDto;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,6 +54,12 @@ class FullNeedServiceTest {
 
     @Mock
     private MediaFileRepository files;
+
+    @Mock
+    private EditionRepository editions;
+
+    @Mock
+    private FullSubtitleService fullSubtitles;
 
     private final LibraryLock lock = new LibraryLock();
     private final List<String> events = new ArrayList<>();
@@ -72,7 +84,7 @@ class FullNeedServiceTest {
                 events.add("rollback, lock " + lock.holder());
             }
         };
-        service = new FullNeedService(films, files, lock, manager);
+        service = new FullNeedService(films, files, editions, fullSubtitles, lock, manager);
     }
 
     private static FullNeedRow row(long id, String title, String original, FullNeedChoice owner) {
@@ -116,10 +128,47 @@ class FullNeedServiceTest {
 
         assertThat(list.films()).extracting(FullNeedFilmDto::filmId).containsExactly(1L, 5L);
         assertThat(list.films().get(0)).isEqualTo(new FullNeedFilmDto(1L, "Amelie", 2000, "NEEDED", "FOREIGN_AUDIO",
-            null, List.of(new EditionAudioDto("Original", "French"))));
+            null, List.of(new EditionAudioDto("Original", "French")), null));
         assertThat(list.films().get(1).reason()).isEqualTo("OWNER");
         assertThat(list.films().get(1).ownerChoice()).isEqualTo("NEEDED");
         assertThat(list.counts().needed()).isEqualTo(2);
+    }
+
+    @Test
+    void eachFilmSaysWhatItPlaysAsFullSubtitlesFromOneFetchOfTheirEditions() {
+        when(films.findFullNeedRows()).thenReturn(List.of(row(1, "Owner", "fr", null), row(2, "Download", "fr", null),
+            row(3, "Both", "fr", null), row(4, "None", "fr", null)));
+        when(files.findAudioRows(List.of(1L, 2L, 3L, 4L))).thenReturn(List.of());
+        Edition mine = edition(film(1L, "Owner", 2000, NOW), 10L, "Original", 100, null);
+        Edition fetched = edition(film(2L, "Download", 2000, NOW), 20L, "Original", 100, null);
+        Edition cut = edition(film(3L, "Both", 2000, NOW), 30L, "Cut", 100, null);
+        Edition theatrical = edition(film(3L, "Both", 2000, NOW), 31L, "Theatrical", 100, null);
+        Edition silent = edition(film(4L, "None", 2000, NOW), 40L, "Original", 100, null);
+        List<Edition> all = List.of(mine, fetched, cut, theatrical, silent);
+        when(editions.findWithFilesByFilmIdIn(List.of(1L, 2L, 3L, 4L))).thenReturn(all);
+        when(fullSubtitles.forEditions(all)).thenReturn(Map.of(
+            10L, new FullSubtitleDto("SIDECAR", 1), 20L, new FullSubtitleDto("DOWNLOAD", 2),
+            30L, new FullSubtitleDto("DOWNLOAD", 3), 31L, new FullSubtitleDto("SIDECAR", 4)));
+
+        List<FullNeedFilmDto> listed = service.list().films();
+
+        assertThat(listed).extracting(FullNeedFilmDto::fullSubtitle).containsExactly(
+            new FullSubtitleStateDto("SIDECAR"), new FullSubtitleStateDto("DOWNLOAD"),
+            new FullSubtitleStateDto("SIDECAR"), null);
+        verify(editions).findWithFilesByFilmIdIn(List.of(1L, 2L, 3L, 4L));
+    }
+
+    @Test
+    void choosingAnswersWithWhatTheFilmPlays() {
+        Film amelie = stored(7L, "fr", null);
+        when(films.findByIdForUpdate(7L)).thenReturn(Optional.of(amelie));
+        when(files.findAudioRows(List.of(7L))).thenReturn(List.of());
+        Edition original = edition(amelie, 70L, "Original", 100, null);
+        when(editions.findWithFilesByFilmIdIn(List.of(7L))).thenReturn(List.of(original));
+        when(fullSubtitles.forEditions(List.of(original))).thenReturn(Map.of(70L, new FullSubtitleDto("DOWNLOAD", 1)));
+
+        assertThat(service.choose(7L, new ChoiceRequest("NEEDED")).fullSubtitle())
+            .isEqualTo(new FullSubtitleStateDto("DOWNLOAD"));
     }
 
     @Test
@@ -215,7 +264,7 @@ class FullNeedServiceTest {
 
         assertThat(amelie.getFullNeedOwner()).isEqualTo(FullNeedChoice.NOT_NEEDED);
         assertThat(dto).isEqualTo(new FullNeedFilmDto(7L, "Amelie", 2001, "NOT_NEEDED", "OWNER", "NOT_NEEDED",
-            List.of(new EditionAudioDto("Original", "French"))));
+            List.of(new EditionAudioDto("Original", "French")), null));
         assertThat(events).containsExactly("begin, lock subtitle", "commit, lock subtitle");
         assertThat(lock.holder()).isNull();
     }

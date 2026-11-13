@@ -62,7 +62,7 @@ class SubtitleAdminFullDownloadsTest extends ForcedDownloadTestBase {
         assertThat(dto.openSubtitlesFileId()).isEqualTo(5012L);
         assertThat(dto.state()).isEqualTo("matched");
         assertThat(dto.served()).isTrue();
-        assertThat(dto.servedReason()).isEqualTo("Ready to play as English (full)");
+        assertThat(dto.servedReason()).isEqualTo("Playing as English (full); not checked yet");
         assertThat(dto.check()).isNull();
         assertThat(dto.alignment()).isNull();
     }
@@ -76,7 +76,46 @@ class SubtitleAdminFullDownloadsTest extends ForcedDownloadTestBase {
         assertThat(listed(owner).served()).isTrue();
         SidecarDto dto = listed(download);
         assertThat(dto.served()).isFalse();
+        assertThat(dto.servedReason()).isEqualTo("Not used: your own full file plays instead");
+    }
+
+    @Test
+    void aSecondFullDownloadIsNotUsedBecauseAnotherDownloadTakesItsPlace() {
+        Film film = fullFilm();
+        SubtitleSidecar first = fullDownload(film, 5011);
+        SubtitleSidecar second = fullDownload(film, 5012);
+
+        assertThat(listed(first).served()).isTrue();
+        SidecarDto dto = listed(second);
+        assertThat(dto.served()).isFalse();
         assertThat(dto.servedReason()).isEqualTo("Not used: another full subtitle file takes its place");
+    }
+
+    @Test
+    void aConflictBetweenTheOwnersFullFilesKeepsTheDownloadOutToo() {
+        Film film = fullFilm();
+        SubtitleSidecar download = fullDownload(film, 5012);
+        fullSidecar("Oldboy.en.srt", fileId(film, 1), true);
+        fullSidecar("Oldboy.eng.srt", fileId(film, 1), true);
+
+        SidecarDto dto = listed(download);
+
+        assertThat(dto.served()).isFalse();
+        assertThat(dto.servedReason())
+            .isEqualTo("Not used: your own full files compete for the same place, so none plays");
+    }
+
+    @Test
+    void aFullDownloadForAFilmTheOwnerSaidIsNotNeededIsNotPlayed() {
+        Film film = fullFilm();
+        SubtitleSidecar download = fullDownload(film, 5012);
+        film.setFullNeedOwner(FullNeedChoice.NOT_NEEDED);
+        films.saveAndFlush(film);
+
+        SidecarDto dto = listed(download);
+
+        assertThat(dto.served()).isFalse();
+        assertThat(dto.servedReason()).isEqualTo("Not used: this film is marked as needing no full subtitles");
     }
 
     @Test

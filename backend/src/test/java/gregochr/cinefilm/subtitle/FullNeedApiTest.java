@@ -42,7 +42,7 @@ class FullNeedApiTest extends SubtitleTestBase {
     }
 
     /** Replaces the audio tracks of a film's part: each label is a language, a leading {@code *} marks the default. */
-    private void audioOf(Film film, int part, String... labels) {
+    private Film audioOf(Film film, int part, String... labels) {
         MediaFile file = film.getEditions().get(0).originalParts().get(part - 1);
         file.getAudioStreams().clear();
         int index = 0;
@@ -54,7 +54,7 @@ class FullNeedApiTest extends SubtitleTestBase {
             stream.setLanguage(label.replace("*", "").isEmpty() ? null : label.replace("*", ""));
             file.getAudioStreams().add(stream);
         }
-        films.saveAndFlush(film);
+        return films.saveAndFlush(film);
     }
 
     @Test
@@ -81,6 +81,7 @@ class FullNeedApiTest extends SubtitleTestBase {
             .andExpect(jsonPath("$.films[0].editions.length()").value(1))
             .andExpect(jsonPath("$.films[0].editions[0].name").value("Original"))
             .andExpect(jsonPath("$.films[0].editions[0].audio").value("French"))
+            .andExpect(jsonPath("$.films[0].fullSubtitle").value((Object) null))
             .andExpect(jsonPath("$.films[1].need").value("NOT_NEEDED"))
             .andExpect(jsonPath("$.films[1].reason").value("ENGLISH_AUDIO"))
             .andExpect(jsonPath("$.films[1].editions[0].audio").value("English"))
@@ -94,6 +95,29 @@ class FullNeedApiTest extends SubtitleTestBase {
             .andExpect(jsonPath("$.counts.unsure").value(1))
             .andExpect(jsonPath("$.counts.notNeeded").value(1))
             .andExpect(jsonPath("$.counts.unknown").value(0));
+    }
+
+    @Test
+    void eachFilmSaysWhatItPlaysAsFullSubtitlesTheOwnersFileBeforeADownload() throws Exception {
+        Film mine = withLanguages("A Mine", "fr");
+        fullSidecar("A Mine.en.srt", fileId(mine, 1), false);
+        Film fetched = withLanguages("B Fetched", "fr");
+        fetched.setImdbId("tt0000002");
+        films.saveAndFlush(fetched);
+        SubtitleSidecar download = sidecar("opensubtitles:" + fetched.getEditions().get(0).getId() + ":77",
+            fileId(fetched, 1), true);
+        download.setKind(SubtitleKind.FULL);
+        download.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
+        download.setOpenSubtitlesFileId(77L);
+        download.setImdbId("tt0000002");
+        sidecars.saveAndFlush(download);
+        withLanguages("C None", "fr");
+
+        mvc.perform(get("/api/admin/subtitles/full-need"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.films[0].fullSubtitle.source").value("SIDECAR"))
+            .andExpect(jsonPath("$.films[1].fullSubtitle.source").value("DOWNLOAD"))
+            .andExpect(jsonPath("$.films[2].fullSubtitle").value((Object) null));
     }
 
     @Test
@@ -125,10 +149,10 @@ class FullNeedApiTest extends SubtitleTestBase {
         Statistics statistics = factory.unwrap(SessionFactory.class).getStatistics();
         statistics.setStatisticsEnabled(true);
         try {
-            audioOf(withLanguages("One", "fr"), 1, "*French");
+            fullSidecar("One.en.srt", fileId(audioOf(withLanguages("One", "fr"), 1, "*French"), 1), false);
             long withOne = statementsOfOneList(statistics);
 
-            audioOf(withLanguages("Two", "fr"), 1, "*French");
+            fullSidecar("Two.en.srt", fileId(audioOf(withLanguages("Two", "fr"), 1, "*French"), 1), false);
             audioOf(withLanguages("Three", "de"), 1, "*German", "English");
             long withThree = statementsOfOneList(statistics);
 

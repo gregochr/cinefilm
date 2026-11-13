@@ -17,6 +17,7 @@ import gregochr.cinefilm.subtitle.FullNeedDtos.EditionAudioDto;
 import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedCountsDto;
 import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedFilmDto;
 import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedListDto;
+import gregochr.cinefilm.subtitle.FullNeedDtos.FullSubtitleStateDto;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,7 +32,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class FullNeedControllerTest {
 
     private static final FullNeedFilmDto AMELIE = new FullNeedFilmDto(7L, "Amelie", 2001, "NEEDED", "OWNER",
-        "NEEDED", List.of(new EditionAudioDto("Original", "French"), new EditionAudioDto("Dub", null)));
+        "NEEDED", List.of(new EditionAudioDto("Original", "French"), new EditionAudioDto("Dub", null)),
+        new FullSubtitleStateDto("DOWNLOAD"));
 
     @Autowired
     private MockMvc mvc;
@@ -59,6 +61,7 @@ class FullNeedControllerTest {
             .andExpect(jsonPath("$.films[0].editions[0].name").value("Original"))
             .andExpect(jsonPath("$.films[0].editions[0].audio").value("French"))
             .andExpect(jsonPath("$.films[0].editions[1].audio").value((Object) null))
+            .andExpect(jsonPath("$.films[0].fullSubtitle.source").value("DOWNLOAD"))
             .andExpect(jsonPath("$.counts.needed").value(1))
             .andExpect(jsonPath("$.counts.unsure").value(2))
             .andExpect(jsonPath("$.counts.unknown").value(3))

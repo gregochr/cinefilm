@@ -19,6 +19,14 @@ public final class FullNeedDtos {
     }
 
     /**
+     * The full English subtitle a film plays.
+     *
+     * @param source {@code SIDECAR} (the owner's file beside the film) or {@code DOWNLOAD} (from OpenSubtitles)
+     */
+    public record FullSubtitleStateDto(String source) {
+    }
+
+    /**
      * One film's row.
      *
      * @param filmId the film
@@ -28,9 +36,12 @@ public final class FullNeedDtos {
      * @param reason why (see {@link FullNeed.Reason})
      * @param ownerChoice {@code NEEDED}, {@code NOT_NEEDED} or null for automatic
      * @param editions the film's present editions and their audio labels
+     * @param fullSubtitle what the film plays as full English subtitles on some edition (the owner's file when any
+     *     edition plays one, else a download), or null when no edition plays one
      */
     public record FullNeedFilmDto(Long filmId, String title, Integer year, String need, String reason,
-                                  String ownerChoice, List<EditionAudioDto> editions) {
+                                  String ownerChoice, List<EditionAudioDto> editions,
+                                  FullSubtitleStateDto fullSubtitle) {
     }
 
     /**

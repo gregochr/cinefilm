@@ -380,9 +380,11 @@ describe('file filters', () => {
     file({ id: 5, check: checkOf({ verdict: 'CHECK' }) }),
   ];
 
-  it('are All, Needs checking and Unchecked, in that order', () => {
+  it('are All, Forced, Full, Needs checking, Unchecked and Downloads, in that order', () => {
     expect(FILE_FILTERS.map((f) => f.label)).toEqual([
       'All',
+      'Forced',
+      'Full',
       'Needs checking',
       'Unchecked',
       'Downloads',
@@ -400,8 +402,22 @@ describe('file filters', () => {
   });
 
   it('counts each chip', () => {
-    expect(fileFilterCounts(items)).toEqual({ all: 5, check: 2, unchecked: 1, downloads: 0 });
-    expect(fileFilterCounts([])).toEqual({ all: 0, check: 0, unchecked: 0, downloads: 0 });
+    expect(fileFilterCounts(items)).toEqual({
+      all: 5,
+      forced: 5,
+      full: 0,
+      check: 2,
+      unchecked: 1,
+      downloads: 0,
+    });
+    expect(fileFilterCounts([])).toEqual({
+      all: 0,
+      forced: 0,
+      full: 0,
+      check: 0,
+      unchecked: 0,
+      downloads: 0,
+    });
   });
 
   it('lists the downloads by origin, and counts them', () => {
