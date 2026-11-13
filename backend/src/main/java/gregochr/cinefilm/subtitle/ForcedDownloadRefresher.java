@@ -196,7 +196,11 @@ public class ForcedDownloadRefresher {
                 return;
             }
             dailyLimit = limits.today();
+            boolean replacementsDone = false;
             for (DueDownload due : service.due()) {
+                if (replacementsDone && due.kind() == Kind.REPLACEMENT && due.promotion() == null) {
+                    continue;
+                }
                 try {
                     if (fill(due)) {
                         added++;
@@ -204,6 +208,12 @@ public class ForcedDownloadRefresher {
                         nothing++;
                     }
                 } catch (ReferenceFetcher.Stop e) {
+                    if (e.ceiling() && due.kind() == Kind.REPLACEMENT) {
+                        LOG.info("Subtitle downloads: replacements reached their share of today's budget, "
+                            + "going on with missing subtitles");
+                        replacementsDone = true;
+                        continue;
+                    }
                     LOG.info("Subtitle downloads stopped: {}", e.getMessage());
                     break;
                 } catch (OpenSubtitlesUnavailableException e) {

@@ -535,6 +535,52 @@ class ForcedDownloadRefresherTest {
     }
 
     @Test
+    void whenReplacementsReachTheirShareTheRemainingOnesAreSkippedAndMissingOnesStillGetTheirDownloads() {
+        when(budget.take(DAY, REPLACEMENT_LIMIT)).thenReturn(false);
+        when(budget.take(DAY, LIMIT)).thenReturn(true);
+        DueDownload missing = due(Kind.MISSING, 2, 20, 5022);
+        when(service.due()).thenReturn(List.of(due(Kind.REPLACEMENT, 1, 10, 5011),
+            due(Kind.REPLACEMENT, 3, 30, 5033), missing));
+        when(api.download(5022)).thenReturn(downloaded(CUES));
+        storingReferences();
+        when(service.add(eq(missing), any(OpenSubtitlesReference.class), eq(NOW))).thenReturn(AddOutcome.ADDED);
+
+        startAndRun();
+
+        verify(api).download(5022);
+        verify(api, never()).download(5011);
+        verify(api, never()).download(5033);
+        assertThat(messages()).contains("Subtitle downloads: replacements reached their share of today's budget, "
+            + "going on with missing subtitles",
+            "Subtitle downloads finished: 1 added, 0 with nothing added, 0 failed");
+    }
+
+    @Test
+    void openSubtitlesQuotaDuringAReplacementStopsEverythingAndNoMissingEditionIsTried() {
+        when(service.due()).thenReturn(List.of(due(Kind.REPLACEMENT, 1, 10, 5011), due(Kind.MISSING, 2, 20, 5022)));
+        when(budget.take(DAY, REPLACEMENT_LIMIT)).thenReturn(true);
+        when(api.download(5011)).thenThrow(new OpenSubtitlesQuotaException(null));
+
+        startAndRun();
+
+        verify(api, never()).download(5022);
+        verify(budget, never()).take(DAY, LIMIT);
+        assertThat(messages()).contains("Subtitle downloads stopped: OpenSubtitles' download limit is reached");
+    }
+
+    @Test
+    void aMissingEditionReachingTheWholeLimitEndsTheRun() {
+        when(service.due()).thenReturn(List.of(due(Kind.MISSING, 2, 20, 5022), due(Kind.REPLACEMENT, 1, 10, 5011)));
+        when(budget.take(DAY, LIMIT)).thenReturn(false);
+
+        startAndRun();
+
+        verify(api, never()).download(5011);
+        verify(budget, never()).take(DAY, REPLACEMENT_LIMIT);
+        assertThat(messages()).contains("Subtitle downloads stopped: today's download budget is spent");
+    }
+
+    @Test
     void whenTheBudgetIsSpentTheRunStopsAndLaterEditionsAreLeftForTomorrow() {
         when(service.due()).thenReturn(List.of(due(Kind.MISSING, 1, 10, 5011), due(Kind.MISSING, 2, 20, 5022)));
         when(budget.take(DAY, LIMIT)).thenReturn(false);
@@ -556,7 +602,8 @@ class ForcedDownloadRefresherTest {
         startAndRun();
 
         verify(api, never()).download(anyInt());
-        assertThat(messages()).contains("Subtitle downloads stopped: today's download budget is spent");
+        assertThat(messages()).containsExactly("Subtitle downloads: replacements reached their share of today's "
+            + "budget, going on with missing subtitles", NOTHING_DONE);
     }
 
     @Test

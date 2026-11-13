@@ -47,8 +47,16 @@ final class ReferenceFetcher {
     static final class Stop extends RuntimeException {
         private static final long serialVersionUID = 1L;
 
-        Stop(String message) {
+        private final boolean ceiling;
+
+        Stop(String message, boolean ceiling) {
             super(message, null, false, false);
+            this.ceiling = ceiling;
+        }
+
+        /** True when only the caller's own ceiling was reached; false when OpenSubtitles' limit is. */
+        boolean ceiling() {
+            return ceiling;
         }
     }
 
@@ -94,14 +102,14 @@ final class ReferenceFetcher {
         Instant now = clock.instant();
         LocalDate day = LocalDate.ofInstant(now, ZoneOffset.UTC);
         if (!budget.take(day, limit)) {
-            throw new Stop("today's download budget is spent");
+            throw new Stop("today's download budget is spent", true);
         }
         OpenSubtitlesDownload download;
         try {
             download = api.download(candidate.fileId());
         } catch (OpenSubtitlesQuotaException e) {
             budget.exhaust(day, limit, cap(e.resetTimeUtc(), now));
-            throw new Stop("OpenSubtitles' download limit is reached");
+            throw new Stop("OpenSubtitles' download limit is reached", false);
         } catch (OpenSubtitlesChargedException e) {
             // OpenSubtitles issued its link, so the account is charged: no refund, whatever went wrong after.
             OpenSubtitlesReference failed = recordFailure(filmId, imdbId, candidate, stored, e.permanent(), now);
