@@ -217,8 +217,8 @@ export function usePlexCreditsImport() {
     return readCreditsStatus(options.signal)
       .then((status) => ({ ...status, read }))
       .finally(() => {
-        // Only the latest call's own settling (an answer, a failure or its abort) ends the in-flight mark.
-        if (read === calls.current) readInFlight.current = false;
+        // A read's settling (an answer, a failure, its timeout or its abort) ends the in-flight mark.
+        readInFlight.current = false;
       });
   });
   const [starting, setStarting] = useState(false);

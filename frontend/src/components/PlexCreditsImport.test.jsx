@@ -591,7 +591,7 @@ describe('usePlexCreditsImport', () => {
     expect(result.current.error).toBeNull();
   });
 
-  it('never lets the poll timer or a superseded read end the in-flight mark of the latest read', async () => {
+  it('lets Check again replace a pending poll read, and no poll timer aborts the new read', async () => {
     let releasePoll;
     const pollGate = new Promise((resolve) => {
       releasePoll = resolve;
