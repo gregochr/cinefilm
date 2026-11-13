@@ -324,7 +324,8 @@ Codex's review quota is small and shared by local and PR runs; it ran out twice 
 **only the PR**, and everything that can be found before a push is found by cheaper means first (owner,
 2026-11-13). Before **every** push, the first and each fix round, in this order:
 
-1. **The gates pass** (`CLAUDE.md`), run by Sonnet until green.
+1. **The gates pass** (`CLAUDE.md`), run by Sonnet until green, and **Sonnet has committed**: the check and the
+   reviewer read commits, so uncommitted work would look clean (the check refuses to run on it).
 2. **The planner's test-class check prints nothing** (below).
 3. **A fresh read-only Claude reviewer finds nothing.** The planner starts a new subagent (Agent tool, Opus or
    Fable, never the session that wrote the code) whose brief holds:
@@ -348,8 +349,8 @@ Codex's review quota is small and shared by local and PR runs; it ran out twice 
 - **No branch update for docs-only moves of `main`** (`CLAUDE.md` step 6): when every commit added to `main` touches
   only `docs/`, `*.md` or `changelog.d/` and none of the PR's files. An update makes a new head, which needs a new
   Codex review.
-- **When Codex can't review** (quota out, or the review fails): don't merge on CI alone. Ask the owner, who can reset
-  the quota or decide.
+- **When Codex can't review** (quota out, or the review fails or never arrives, including a docs-only PR's opening
+  review): don't merge on CI alone. Ask the owner, who can reset the quota or decide.
 - **No routine local `codex review`.** It spends the same quota. Use it only when the owner asks for it.
 
 History: until 2026-11-12, local Codex ran before every push (two clean runs in a row, then one). It caught real
@@ -358,7 +359,7 @@ flagged: local Codex is not an `AGENTS.md` audit, which is why steps 2 and 3 exi
 
 ### Planner's test-class check (every diff review)
 
-Step 2 above, in Sonnet's worktree, from the repo root. Paste it as it is, in any shell: it runs itself in bash
+Step 2 above, in Sonnet's worktree, from the repo root, after Sonnet has committed. Paste it as it is, in any shell: it runs itself in bash
 (`BASE=<commit>` in front checks against something other than `origin/main`). It prints nothing when all is well,
 and one line for:
 
@@ -376,13 +377,15 @@ and one line for:
   say which.
 
 Each line goes back to Sonnet before the push. Renames count as new files (`--no-renames`), so a renamed and changed
-class is checked. Not followed: a custom annotation that wraps `@SpringBootTest`, and an interface carrying Spring
-annotations that a test `implements`. Neither exists in this repo; add one to `SPRING` if it is ever made.
+class is checked. Fully qualified annotations (`@org.springframework.stereotype.Service`), annotations with arguments before
+`@Service` on the same line, and comments (`/* … */`, `//`, Javadoc) are handled. Not followed: a custom annotation
+that wraps `@SpringBootTest`, and an interface carrying Spring annotations that a test `implements`. Neither exists in this repo; add one to `SPRING` if it is ever made.
 
 ```bash
 bash -s "${BASE:-origin/main}" <<'EOF'
 base=$1
-code() { sed -E -e 's://.*$::' -e '/^[[:space:]]*(\/\*|\*)/d' "$1"; }  # the file without comment lines
+[ -z "$(git status --porcelain)" ] || { echo "UNCOMMITTED CHANGES: commit first, the check reads commits only"; exit 1; }
+code() { sed -E -e 's:/\*([^*]|\*+[^*/])*\*+/::g' -e 's://.*$::' -e '/^[[:space:]]*(\/\*|\*)/d' "$1"; }  # without comments
 # chain_has FILE REGEX: true when the test class, or any test base class it extends, matches REGEX outside comments.
 chain_has() {
   local t=$1 re=$2 sup n=0
@@ -396,9 +399,9 @@ chain_has() {
   done
   return 1
 }
-SPRING='@(SpringBootTest|WebMvcTest|DataJpaTest|SpringJUnitConfig|ContextConfiguration)\b|SpringExtension'
-MOCKMVC='@WebMvcTest\b|@AutoConfigureMockMvc\b|MockMvc(Tester)?[[:space:]]+[a-zA-Z_]+[[:space:]]*[;=]'
-ANNOTATED='^[[:space:]]*(@[^[:space:]]+[[:space:]]+)*@'  # other annotations may come first on the line
+SPRING='@([a-z0-9_]+\.)*(SpringBootTest|WebMvcTest|DataJpaTest|SpringJUnitConfig|ContextConfiguration)\b|SpringExtension'
+MOCKMVC='@([a-z0-9_]+\.)*(WebMvcTest|AutoConfigureMockMvc)\b|MockMvc(Tester)?[[:space:]]+[a-zA-Z_]+[[:space:]]*[;=]'
+ANNOTATED='^[[:space:]]*(@[A-Za-z0-9_.]+(\([^)]*\))?[[:space:]]+)*@([a-z0-9_]+\.)*'  # other annotations may come first on the line
 # own_tests CLASS: <Class>Test, <Class>UnitTest, or <Class><Suffix>Test when <Class><Suffix> is not itself a main class.
 own_tests() {
   git ls-files 'backend/src/test/java/*.java' | grep -v '/integration/' | grep -E "/$1[A-Za-z0-9]*Test\.java$" \
@@ -441,7 +444,10 @@ EOF
   - `@Service("named")` with no test;
   - a `@Component` with no test;
   - a renamed and changed service;
-  - `@Slf4j @Service` on one line with no test;
+  - `@Slf4j @Service` and `@Transactional(readOnly = true) @Service` on one line, and a fully qualified
+    `@org.springframework.stereotype.Service`, with no test;
+  - a test with a fully qualified `@SpringBootTest`, `/* boots */ @SpringBootTest`, or
+    `@SpringBootTest(properties = …)` with a `@Nested` class;
   - a controller whose test only mentions MockMvc in a comment or a commented-out field, and one with no test;
   - an untested frontend module, and a renamed one.
 
@@ -457,8 +463,9 @@ EOF
 
 History: the first two versions missed inherited test bases, broke on frontend modules with one test extension
 (both found by the PR's Codex on #130), and silently passed everything when pasted into zsh, missed renames, counted
-other classes' tests, matched MockMvc in comments, missed `@Slf4j @Service` and `MockMvcTester`, and read a nested
-class's `extends` (all found by the Claude reviewer).
+other classes' tests, matched MockMvc in comments, missed `@Slf4j @Service` and `MockMvcTester`, read a nested
+class's `extends`, missed fully qualified and argument-carrying annotations, and reported clean on uncommitted work
+(all found by the Claude reviewer). Its fixture repo and expected output are rebuilt from the cases listed above.
 
 ### Self-check in every Sonnet brief
 
