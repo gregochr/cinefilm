@@ -59,9 +59,9 @@ class SidecarCheckRefresherTest {
 
     /** The UTC day of {@code NOW} (in London it is already 1 April). */
     private static final LocalDate DAY = LocalDate.of(2024, 3, 31);
-    private static final int LIMIT = 90;
+    private static final int LIMIT = 20;
     /** What the checks may bring the day's downloads to: half the limit. */
-    private static final int CHECK_LIMIT = 45;
+    private static final int CHECK_LIMIT = 6;
     private static final String NOTHING_DONE =
         "Subtitle file checks finished: 0 saved, 0 changed meanwhile, 0 unusable references, 0 failed";
     private static final List<SubtitleCue> CUES = List.of(new SubtitleCue(10_000, 11_000, "a"),
@@ -89,11 +89,12 @@ class SidecarCheckRefresherTest {
     private final List<Runnable> queued = new ArrayList<>();
     private final Logger refresherLog = (Logger) LoggerFactory.getLogger(SidecarCheckRefresher.class);
     private final ListAppender<ILoggingEvent> logged = new ListAppender<>();
+    private final FakeDailyLimit limits = new FakeDailyLimit(LIMIT);
     private SidecarCheckRefresher refresher;
 
     @BeforeEach
     void setUp() {
-        refresher = new SidecarCheckRefresher(api, budget, references, service, CLOCK, queued::add, LIMIT, events);
+        refresher = new SidecarCheckRefresher(api, budget, references, service, CLOCK, queued::add, limits, events);
         logged.start();
         refresherLog.addAppender(logged);
     }
@@ -222,7 +223,7 @@ class SidecarCheckRefresherTest {
         SidecarCheckRefresher refusing = new SidecarCheckRefresher(api, budget, references, service, CLOCK,
             command -> {
                 throw new RejectedExecutionException("full");
-            }, LIMIT, events);
+            }, limits, events);
         when(api.downloadsEnabled()).thenReturn(true);
 
         assertThatThrownBy(refusing::startDue).isInstanceOf(RejectedExecutionException.class);
@@ -231,7 +232,7 @@ class SidecarCheckRefresherTest {
 
     /** The refresher on an executor that runs the work at once, so a trigger can arrive from inside a run. */
     private SidecarCheckRefresher synchronous() {
-        return new SidecarCheckRefresher(api, budget, references, service, CLOCK, Runnable::run, LIMIT, events);
+        return new SidecarCheckRefresher(api, budget, references, service, CLOCK, Runnable::run, limits, events);
     }
 
     @Test
@@ -406,20 +407,24 @@ class SidecarCheckRefresherTest {
     }
 
     @Test
-    void theChecksShareOfTheDailyLimitIsWhatTheBudgetIsAskedFor() {
-        SidecarCheckRefresher five = new SidecarCheckRefresher(api, budget, references, service, CLOCK,
-            queued::add, 11, events);
+    void theChecksShareOfTheDailyLimitIsWhatTheBudgetIsAskedForAndFollowsTheLimitEachRun() {
+        limits.set(11);
         DueCheck due = due(1, 10, 5011);
         when(api.downloadsEnabled()).thenReturn(true);
         when(service.due()).thenReturn(List.of(due));
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
-        when(budget.take(DAY, 5)).thenReturn(false);
+        when(budget.take(DAY, 3)).thenReturn(false);
+        when(budget.take(DAY, 300)).thenReturn(false);
 
-        five.startDue();
-        queued.get(0).run();
+        refresher.startDue();
+        queued.remove(0).run();
+        limits.set(1000);
+        refresher.startDue();
+        queued.remove(0).run();
 
-        // Half of 11, rounded down: the other half of the day's downloads is kept for missing subtitles.
-        verify(budget).take(DAY, 5);
+        // 30% of 11, rounded down, then 30% of 1000: the limit is read again at the start of every run.
+        verify(budget).take(DAY, 3);
+        verify(budget).take(DAY, 300);
     }
 
     @Test
@@ -519,7 +524,7 @@ class SidecarCheckRefresherTest {
             queued.clear();
 
             SidecarCheckRefresher fresh = new SidecarCheckRefresher(api, budget, references, service, CLOCK,
-                queued::add, LIMIT, events);
+                queued::add, limits, events);
             fresh.startDue();
             queued.get(0).run();
 
@@ -585,7 +590,7 @@ class SidecarCheckRefresherTest {
             org.mockito.Mockito.doThrow(new OpenSubtitlesQuotaException(reset)).when(api).download(5011);
             when(api.downloadsEnabled()).thenReturn(true);
             SidecarCheckRefresher fresh = new SidecarCheckRefresher(api, budget, references, service, CLOCK,
-                queued::add, LIMIT, events);
+                queued::add, limits, events);
 
             fresh.startDue();
             queued.get(0).run();

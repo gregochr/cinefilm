@@ -76,9 +76,9 @@ Compare the result with `deploy/.env.example` for any other keys it lists.
 
 **OpenSubtitles downloads** (the check of the forced `.srt` files beside the films) are off while `OPENSUBTITLES_API_KEY`,
 `OPENSUBTITLES_USERNAME` or `OPENSUBTITLES_PASSWORD` is blank; the search needs only the key. Edit the lines in
-`~/cinefilm/.env`; do not paste them into chat or a commit. At most 90 downloads a day are made
-(`cinefilm.opensubtitles.daily-download-limit`, counted per UTC day in `opensubtitles_budget`; the account's dev-mode
-allowance is 100, the rest is for the owner's own use) and the run stops for the day when OpenSubtitles says its limit is
+`~/cinefilm/.env`; do not paste them into chat or a commit. The downloads a day are the account's own
+allowance, read from the login reply (20 on a free account, 1000 on VIP; 20 until it is known), counted per UTC day in
+`opensubtitles_budget`; `cinefilm.opensubtitles.daily-download-limit` (default 1000) only caps it. The run stops for the day when OpenSubtitles says its limit is
 reached. Each file is downloaded once and kept (`opensubtitles_reference`). Checks run after each search run and scan,
 at start-up and daily at 06:30 (London).
 

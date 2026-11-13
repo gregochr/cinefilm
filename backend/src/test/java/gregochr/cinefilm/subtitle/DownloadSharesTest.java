@@ -8,19 +8,26 @@ import org.junit.jupiter.api.Test;
 class DownloadSharesTest {
 
     @Test
-    void aLimitOf90GivesMissingAllReplacementsSixtyThreeAndComparisonsFortyFive() {
-        assertThat(DownloadShares.forMissing(90)).isEqualTo(90);
-        assertThat(DownloadShares.forReplacements(90)).isEqualTo(63);
-        assertThat(DownloadShares.forChecks(90)).isEqualTo(45);
+    void aFreeAccountsTwentyGivesMissingAllReplacementsFourteenAndComparisonsSix() {
+        assertThat(DownloadShares.forMissing(20)).isEqualTo(20);
+        assertThat(DownloadShares.forReplacements(20)).isEqualTo(14);
+        assertThat(DownloadShares.forChecks(20)).isEqualTo(6);
+    }
+
+    @Test
+    void aVipAccountsThousandGivesAThousandSevenHundredAndThreeHundred() {
+        assertThat(DownloadShares.forMissing(1000)).isEqualTo(1000);
+        assertThat(DownloadShares.forReplacements(1000)).isEqualTo(700);
+        assertThat(DownloadShares.forChecks(1000)).isEqualTo(300);
     }
 
     @Test
     void sharesAreExactIntegersRoundedDown() {
         assertThat(DownloadShares.forReplacements(11)).isEqualTo(7);
-        assertThat(DownloadShares.forChecks(11)).isEqualTo(5);
+        assertThat(DownloadShares.forChecks(11)).isEqualTo(3);
         assertThat(DownloadShares.forReplacements(1)).isZero();
         assertThat(DownloadShares.forChecks(1)).isZero();
-        assertThat(DownloadShares.forChecks(100)).isEqualTo(50);
+        assertThat(DownloadShares.forChecks(100)).isEqualTo(30);
     }
 
     @Test
@@ -32,7 +39,9 @@ class DownloadSharesTest {
     }
 
     @Test
-    void aNegativeLimitGivesNothing() {
+    void aZeroOrNegativeLimitGivesNothing() {
+        assertThat(DownloadShares.forReplacements(0)).isZero();
+        assertThat(DownloadShares.forChecks(0)).isZero();
         assertThat(DownloadShares.forReplacements(-5)).isZero();
         assertThat(DownloadShares.forChecks(-5)).isZero();
     }

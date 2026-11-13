@@ -41,23 +41,33 @@ final class ReferenceFetcher {
     private final OpenSubtitlesBudget budget;
     private final OpenSubtitlesReferenceRepository references;
     private final Clock clock;
+    private final DailyDownloadLimit limits;
 
     /** Why a run ends early: the budget is spent or OpenSubtitles' limit is reached. Not an error. */
     static final class Stop extends RuntimeException {
         private static final long serialVersionUID = 1L;
 
-        Stop(String message) {
+        private final boolean ceiling;
+
+        Stop(String message, boolean ceiling) {
             super(message, null, false, false);
+            this.ceiling = ceiling;
+        }
+
+        /** True when only the caller's own ceiling was reached; false when OpenSubtitles' limit is. */
+        boolean ceiling() {
+            return ceiling;
         }
     }
 
     /** Creates the fetcher over the given collaborators. */
     ReferenceFetcher(OpenSubtitlesApi api, OpenSubtitlesBudget budget, OpenSubtitlesReferenceRepository references,
-                     Clock clock) {
+                     Clock clock, DailyDownloadLimit limits) {
         this.api = api;
         this.budget = budget;
         this.references = references;
         this.clock = clock;
+        this.limits = limits;
     }
 
     /**
@@ -92,14 +102,14 @@ final class ReferenceFetcher {
         Instant now = clock.instant();
         LocalDate day = LocalDate.ofInstant(now, ZoneOffset.UTC);
         if (!budget.take(day, limit)) {
-            throw new Stop("today's download budget is spent");
+            throw new Stop("today's download budget is spent", true);
         }
         OpenSubtitlesDownload download;
         try {
             download = api.download(candidate.fileId());
         } catch (OpenSubtitlesQuotaException e) {
             budget.exhaust(day, limit, cap(e.resetTimeUtc(), now));
-            throw new Stop("OpenSubtitles' download limit is reached");
+            throw new Stop("OpenSubtitles' download limit is reached", false);
         } catch (OpenSubtitlesChargedException e) {
             // OpenSubtitles issued its link, so the account is charged: no refund, whatever went wrong after.
             OpenSubtitlesReference failed = recordFailure(filmId, imdbId, candidate, stored, e.permanent(), now);
@@ -113,10 +123,26 @@ final class ReferenceFetcher {
             throw e;
         }
         OpenSubtitlesReference saved = store(filmId, imdbId, candidate, stored, download, now);
+        syncWithAccount(day, download.remaining());
         if (download.remaining() != null && download.remaining() <= 0) {
             budget.exhaust(day, limit, cap(download.resetTimeUtc(), now));
         }
         return saved;
+    }
+
+    /**
+     * OpenSubtitles says how many downloads are left: when that is fewer than the day's limit less our own count, the
+     * account is shared with something else, so our count is raised to match (it is never lowered). Runs under the
+     * fetch lock, so the check run and the download run cannot interleave here.
+     */
+    private void syncWithAccount(LocalDate day, Integer remaining) {
+        if (remaining == null) {
+            return;
+        }
+        int used = limits.today() - Math.max(0, remaining);
+        if (used > 0) {
+            budget.raiseUsed(day, used);
+        }
     }
 
     /**

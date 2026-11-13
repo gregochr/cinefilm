@@ -49,9 +49,9 @@ import org.slf4j.LoggerFactory;
 class SidecarCheckWalkTest {
 
     private static final LocalDate DAY = LocalDate.of(2024, 3, 31);
-    private static final int LIMIT = 90;
+    private static final int LIMIT = 20;
     /** What the checks may bring the day's downloads to: half the limit. */
-    private static final int CHECK_LIMIT = 45;
+    private static final int CHECK_LIMIT = 6;
     private static final long FILM = 1;
     private static final long EDITION = 10;
     private static final String IMDB = "tt1";
@@ -77,11 +77,12 @@ class SidecarCheckWalkTest {
     private final List<Runnable> queued = new ArrayList<>();
     private final Logger refresherLog = (Logger) LoggerFactory.getLogger(SidecarCheckRefresher.class);
     private final ListAppender<ILoggingEvent> logged = new ListAppender<>();
+    private final FakeDailyLimit limits = new FakeDailyLimit(LIMIT);
     private SidecarCheckRefresher refresher;
 
     @BeforeEach
     void setUp() {
-        refresher = new SidecarCheckRefresher(api, budget, references, service, CLOCK, queued::add, LIMIT, events);
+        refresher = new SidecarCheckRefresher(api, budget, references, service, CLOCK, queued::add, limits, events);
         logged.start();
         refresherLog.addAppender(logged);
     }

@@ -18,7 +18,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
@@ -33,9 +32,11 @@ import org.springframework.stereotype.Service;
  * <p>Per edition, a stored reference that fits is promoted first (it costs no download); otherwise the best candidate
  * for the edition's cut is fetched through {@link ReferenceFetcher} (stored at once, never fetched twice) and made the
  * edition's download unless it is full subtitles or unreadable, then the next. The day's budget is shared with the
- * comparisons of {@link DownloadShares}: missing subtitles first and up to the whole limit, then replacements up to
- * their ceiling. A spent budget or an OpenSubtitles limit ends the run; an outage ends it with nothing added; a failure
- * on one edition is counted and the run goes on. A download that was added is then proven by its timing fit, or a
+ * comparisons of {@link DownloadShares}: promotions first (free), then replacements up to their ceiling (the owner's
+ * file failed, so the film shows nothing now), then missing subtitles up to the whole limit. The day's limit is read
+ * from {@link DailyDownloadLimit} at the start of each run. A spent budget or an OpenSubtitles limit ends the run; an
+ * outage ends it with nothing added; a failure on one edition is counted and the run goes on. A download that was
+ * added is then proven by its timing fit, or a
  * second opinion from another OpenSubtitles file ({@link SubtitleDownloadsFinished} starts the timing check). A request
  * that arrives while a run is going makes it go round once more. Nothing here throws to its caller.
  */
@@ -50,7 +51,9 @@ public class ForcedDownloadRefresher {
     private final ForcedDownloadService service;
     private final Clock clock;
     private final Executor executor;
-    private final int dailyLimit;
+    private final DailyDownloadLimit limits;
+    /** The day's limit, read at the start of each run; one run at a time. */
+    private volatile int dailyLimit;
     private final ApplicationEventPublisher events;
     private final Object guard = new Object();
     private boolean running;
@@ -62,15 +65,15 @@ public class ForcedDownloadRefresher {
     public ForcedDownloadRefresher(OpenSubtitlesApi api, OpenSubtitlesBudget budget,
                                    OpenSubtitlesReferenceRepository references, ForcedDownloadService service,
                                    Clock clock, @Qualifier("forcedDownloadExecutor") Executor executor,
-                                   @Value("${cinefilm.opensubtitles.daily-download-limit:90}") int dailyLimit,
+                                   DailyDownloadLimit limits,
                                    ApplicationEventPublisher events) {
         this.api = api;
         this.budget = budget;
-        this.fetcher = new ReferenceFetcher(api, budget, references, clock);
+        this.fetcher = new ReferenceFetcher(api, budget, references, clock, limits);
         this.service = service;
         this.clock = clock;
         this.executor = executor;
-        this.dailyLimit = dailyLimit;
+        this.limits = limits;
         this.events = events;
     }
 
@@ -192,7 +195,12 @@ public class ForcedDownloadRefresher {
                 LOG.info("Subtitle downloads wait: OpenSubtitles' download limit is reached until {}", blockedUntil);
                 return;
             }
+            dailyLimit = limits.today();
+            boolean replacementsDone = false;
             for (DueDownload due : service.due()) {
+                if (replacementsDone && due.kind() == Kind.REPLACEMENT && due.promotion() == null) {
+                    continue;
+                }
                 try {
                     if (fill(due)) {
                         added++;
@@ -200,6 +208,12 @@ public class ForcedDownloadRefresher {
                         nothing++;
                     }
                 } catch (ReferenceFetcher.Stop e) {
+                    if (e.ceiling() && due.kind() == Kind.REPLACEMENT) {
+                        LOG.info("Subtitle downloads: replacements reached their share of today's budget, "
+                            + "going on with missing subtitles");
+                        replacementsDone = true;
+                        continue;
+                    }
                     LOG.info("Subtitle downloads stopped: {}", e.getMessage());
                     break;
                 } catch (OpenSubtitlesUnavailableException e) {

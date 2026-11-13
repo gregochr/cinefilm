@@ -126,6 +126,34 @@ class OpenSubtitlesBudgetTest extends ApiTestBase {
     }
 
     @Test
+    void raisingTheCountToWhatOpenSubtitlesReportsNeverLowersIt() {
+        budget.take(DAY, 20);
+        budget.take(DAY, 20);
+        budget.take(DAY, 20);
+
+        budget.raiseUsed(DAY, 9);
+        assertThat(days.findById(DAY).orElseThrow().getUsed()).isEqualTo(9);
+
+        budget.raiseUsed(DAY, 4);
+        assertThat(days.findById(DAY).orElseThrow().getUsed()).isEqualTo(9);
+
+        budget.raiseUsed(DAY, 9);
+        assertThat(days.findById(DAY).orElseThrow().getUsed()).isEqualTo(9);
+        assertThat(budget.take(DAY, 10)).isTrue();
+        assertThat(budget.take(DAY, 10)).isFalse();
+    }
+
+    @Test
+    void raisingTheCountOnADayWithNoRowCreatesItAndLeavesOtherDaysAlone() {
+        budget.take(DAY.plusDays(1), 20);
+
+        budget.raiseUsed(DAY, 6);
+
+        assertThat(days.findById(DAY).orElseThrow().getUsed()).isEqualTo(6);
+        assertThat(days.findById(DAY.plusDays(1)).orElseThrow().getUsed()).isEqualTo(1);
+    }
+
+    @Test
     void withNothingExhaustedNothingIsBlocked() {
         budget.take(DAY, 90);
 

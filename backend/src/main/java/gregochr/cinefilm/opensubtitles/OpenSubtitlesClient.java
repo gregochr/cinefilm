@@ -15,6 +15,7 @@ import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.function.LongSupplier;
 import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
@@ -68,6 +69,7 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
     private static final Pattern LIMIT_MESSAGE = Pattern.compile("(?i)limit|quota");
     private static final String HOST_SUFFIX = ".opensubtitles.com";
     private static final String LINK_REFUSED = "OpenSubtitles download link refused";
+    private static final int MAX_ALLOWANCE = 10_000;
     private static final int HTTPS_PORT = 443;
     private static final int MAX_HOST_CHARS = 253;
     private static final int GZIP_FIRST = 0x1f;
@@ -93,6 +95,8 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
     private String sessionToken;
     /** The account's own API host from the last login when it is acceptable, or null; guarded by {@code this}. */
     private String downloadHost;
+    /** The downloads a day the account allows, from the last login when it said so, or 0; guarded by {@code this}. */
+    private int allowedDownloads;
 
     /**
      * Creates the client for the OpenSubtitles RestClient, the API key ({@code OPENSUBTITLES_API_KEY}), the
@@ -350,6 +354,24 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
         sessionToken = null;
     }
 
+    private synchronized int knownAllowance() {
+        return allowedDownloads;
+    }
+
+    @Override
+    public OptionalInt allowedDownloads() {
+        if (!downloadsEnabled()) {
+            return OptionalInt.empty();
+        }
+        try {
+            session();
+        } catch (OpenSubtitlesUnavailableException e) {
+            return OptionalInt.empty();
+        }
+        int known = knownAllowance();
+        return known > 0 ? OptionalInt.of(known) : OptionalInt.empty();
+    }
+
     private synchronized String downloadHost() {
         return downloadHost;
     }
@@ -377,6 +399,19 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
         JsonNode base = root.path("base_url");
         String host = base.isString() ? base.asString().strip().toLowerCase(Locale.ROOT) : "";
         downloadHost = isOpenSubtitlesHost(host) ? host : null;
+        allowedDownloads = allowanceOf(root.path("user").path("allowed_downloads"));
+        if (allowedDownloads > 0) {
+            LOG.info("OpenSubtitles allows {} downloads a day for this account", allowedDownloads);
+        }
+    }
+
+    /** The allowance when it is a whole number from 1 to {@link #MAX_ALLOWANCE}; 0 (unknown) for anything else. */
+    private static int allowanceOf(JsonNode value) {
+        if (!value.isIntegralNumber() || !value.canConvertToInt()) {
+            return 0;
+        }
+        int n = value.asInt();
+        return n >= 1 && n <= MAX_ALLOWANCE ? n : 0;
     }
 
     /** One HTTP answer. The body is null when none was read or it was over its cap. */

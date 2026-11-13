@@ -1,5 +1,7 @@
 package gregochr.cinefilm.opensubtitles;
 
+import java.util.OptionalInt;
+
 /**
  * What CineFilm asks of OpenSubtitles: search, and download of a subtitle file. An outage is an
  * {@link OpenSubtitlesUnavailableException}, never a half answer and never "no results".
@@ -37,4 +39,13 @@ public interface OpenSubtitlesApi {
      *     downloads are off (nothing was charged)
      */
     OpenSubtitlesDownload download(long fileId);
+
+    /**
+     * The downloads a day this account is allowed, as its login reply says (20 for a free account, 1000 for a VIP
+     * one). Logs in first when downloads are enabled and there is no session yet (a login is not a charged call); the
+     * answer is kept until the session is renewed, so asking again costs nothing.
+     *
+     * @return the allowance, or empty when downloads are off, the login failed or the reply did not say
+     */
+    OptionalInt allowedDownloads();
 }
