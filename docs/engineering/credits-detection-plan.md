@@ -269,9 +269,8 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
      a still dark scene in which a small figure moves. No frames from real films go into the repository.
    - **The gate before phase 3** (after 2b's release and 2c's import, once the backfill has run): a read-only query
      joining `credits_detection` (`FOUND`, the current `ANALYSIS_VERSION`) to `plex_credits_marker` on the same file
-     and fingerprint must
-     return **zero rows** with `offset_ms < start_ms − 15000`. Any such row is a defect fixed in a further 2b round
-     first. That measures the detector on films Plex could read; `AUTO` will only ever be used on the about 220 it
+     and fingerprint must return **zero rows** with `offset_ms < start_ms − 15000`. Any such row is a defect fixed in a
+     further 2b round first. That measures the detector on films Plex could read; `AUTO` will only ever be used on the about 220 it
      could not, which are likely the harder endings. So the gate also checks, by stills as in phase 2, a sample of
      **20 `FOUND` rows on files with no `plex_credits_marker` row whose fingerprint matches** (or all of them if
      fewer), judging the raw `offset_ms`, not the offset plus 20 s: any marker before the credits start blocks phase
