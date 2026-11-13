@@ -169,9 +169,10 @@ end, else `UNSURE`. The same guard applies to an imported Plex marker (phase 2c)
 
 Today the marker is also the watched threshold. A late marker (after a title sequence) would stop a film counting as
 watched when the owner stops during those titles, keep it in Continue watching, and change what a Plex re-import
-counts as watched. Proposed: **watched at `min(marker, 92%)`** in `WatchedRule` and in `resume.js`'s watched check;
-the overlay keeps using the marker alone. Existing in-progress states are not re-evaluated when a marker lands. This
-touches handover decision 1, so it is an owner decision (below).
+counts as watched. **Decided (owner, 2026-11-13): "films end at credits time".** The marker stays the watched
+threshold, as today; `min(marker, 92%)` was considered and rejected. A film stopped in the last seconds before a
+detected marker (which carries the 20 s margin) stays in Continue watching; that is accepted. Existing in-progress
+states are not re-evaluated when a marker lands.
 
 ## Admin (phase 3)
 
@@ -404,4 +405,5 @@ and Plex's precedence limit the damage.
 
 1. **Stopgap — decided (owner, 2026-11-12): 97%.** With no marker the overlay appears at 97% of the runtime; watched
    stays at 92% (backend `WatchedRule`, decision 1). Shipped as its own small PR before phase 1.
-2. **Watched rule (open):** `min(marker, 92%)` as above, or keep "watched at the marker".
+2. **Watched rule — decided (owner, 2026-11-13): watched at the marker** ("films end at credits time"), not
+   `min(marker, 92%)`.
