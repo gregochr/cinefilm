@@ -82,6 +82,18 @@ class LibraryLockTest {
     }
 
     @Test
+    void aScanCannotStartWhileCreditsAreBeingSavedAndSaysSo() {
+        lock.tryAcquire(LibraryLock.CREDITS);
+        ScanService scans = scans();
+
+        assertThatThrownBy(() -> scans.start("admin")).isInstanceOf(ScanAlreadyRunningException.class)
+            .hasMessage("Credits are being saved");
+
+        assertThat(queued).isEmpty();
+        assertThat(lock.heldBy(LibraryLock.CREDITS)).isTrue();
+    }
+
+    @Test
     void aScanCannotStartWhileAMatchIsBeingFixedAndSaysSo() {
         lock.tryAcquire(LibraryLock.MATCH);
         ScanService scans = scans();
