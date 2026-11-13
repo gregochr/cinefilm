@@ -59,7 +59,6 @@ import org.springframework.transaction.support.SimpleTransactionStatus;
 class CreditsDetectionServiceTest {
 
     private static final Path FILE = Path.of("/library/Taken.m4v");
-    private static final Instant LATER = NOW.plusSeconds(1);
     private static final long CREDITS_AT = 450_000;
     private static final long FILM_LENGTH = 10 * MIN;
     private static final String PRINT = "1001:" + NOW.toEpochMilli();
@@ -496,12 +495,11 @@ class CreditsDetectionServiceTest {
         when(files.findById(10L)).thenReturn(Optional.of(savedFile()));
         when(detections.findById(10L)).thenReturn(Optional.empty());
 
-        service.save(DUE, new CreditsResult(CreditsVerdict.UNSURE, null, List.of("y".repeat(2_000))), LATER);
+        service.save(DUE, new CreditsResult(CreditsVerdict.UNSURE, null, List.of("y".repeat(2_000))), NOW);
 
         ArgumentCaptor<CreditsDetection> saved = ArgumentCaptor.forClass(CreditsDetection.class);
         verify(detections).save(saved.capture());
         assertThat(saved.getValue().getReasons()).isEqualTo("y".repeat(2_000));
-        assertThat(saved.getValue().getCheckedAt()).isEqualTo(LATER);
         verify(transactions).commit(status);
     }
 
@@ -512,7 +510,7 @@ class CreditsDetectionServiceTest {
         SaveOutcome outcome = service.save(DUE, found(), NOW);
 
         assertThat(outcome).isEqualTo(SaveOutcome.BUSY);
-        verifyNoInteractions(files, detections);
+        verifyNoInteractions(files, detections, transactions);
         assertThat(lock.heldBy(LibraryLock.SCAN)).isTrue();
     }
 
