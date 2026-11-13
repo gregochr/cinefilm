@@ -133,6 +133,24 @@ class PlexCreditsRulesTest {
     }
 
     @Test
+    void aVersionWithTwoPartsIsSplitEvenWhenOnlyOnePartHasAFile() {
+        PlexMediaTiming oneFileOfTwo = new PlexMediaTiming(HOUR2, List.of(PREFIX + "T - pt1.m4v"), 2);
+
+        Decision decision = decide(item(HOUR2, List.of(oneFileOfTwo), credits(MARKER)), copy(1, "T - pt1.m4v", HOUR2));
+
+        assertThat(decision.rows()).isEmpty();
+        assertThat(decision.skipped()).isEqualTo(Map.of(PlexCreditsSkip.MULTI_PART, 1));
+    }
+
+    @Test
+    void aVersionWhoseOnlyPartHasNoFileIsNoMediaNotSplit() {
+        PlexMediaTiming noFile = new PlexMediaTiming(HOUR2, List.of(), 1);
+
+        assertThat(decide(item(HOUR2, List.of(noFile), credits(MARKER))).skipped())
+            .isEqualTo(Map.of(PlexCreditsSkip.NO_MEDIA, 1));
+    }
+
+    @Test
     void anItemWithNoVersionOrAVersionWithNoFileIsSkipped() {
         assertThat(decide(item(HOUR2, List.of(), credits(MARKER))).skipped())
             .isEqualTo(Map.of(PlexCreditsSkip.NO_MEDIA, 1));

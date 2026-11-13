@@ -154,13 +154,15 @@ public class PlexClient implements PlexApi {
         List<PlexMediaTiming> media = new ArrayList<>();
         for (JsonNode version : item.path("Media")) {
             List<String> parts = new ArrayList<>();
+            int partCount = 0;
             for (JsonNode part : version.path("Part")) {
+                partCount++;
                 String file = text(part, "file");
                 if (file != null) {
                     parts.add(file);
                 }
             }
-            media.add(new PlexMediaTiming(number(version, "duration"), List.copyOf(parts)));
+            media.add(new PlexMediaTiming(number(version, "duration"), List.copyOf(parts), partCount));
         }
         List<PlexMarker> markers = new ArrayList<>();
         for (JsonNode marker : item.path("Marker")) {

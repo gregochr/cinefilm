@@ -107,7 +107,7 @@ final class PlexCreditsRules {
         if (item.media().isEmpty() || item.media().stream().anyMatch(m -> m.parts().isEmpty())) {
             return PlexCreditsSkip.NO_MEDIA;
         }
-        if (item.media().stream().anyMatch(m -> m.parts().size() != 1)) {
+        if (item.media().stream().anyMatch(m -> m.partCount() > 1)) {
             return PlexCreditsSkip.MULTI_PART;
         }
         if (item.durationMs() == null || item.durationMs() <= 0) {

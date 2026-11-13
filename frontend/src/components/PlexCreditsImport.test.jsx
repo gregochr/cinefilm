@@ -1,6 +1,7 @@
 import { act, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { LIBRARY_CHANGED_EVENT } from '../api/client.js';
 import { SCAN_POLL_MS, usePlexCreditsImport } from '../state/useAdmin.js';
 import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
 import PlexCreditsImport from './PlexCreditsImport.jsx';
@@ -94,6 +95,40 @@ describe('PlexCreditsImport', () => {
       await within(group).findByText('13 Nov 14:20 · Plex is not reachable'),
     ).toBeInTheDocument();
     expect(within(group).queryByRole('list', { name: 'Credits import report' })).toBeNull();
+  });
+
+  it('shows that it is loading, and keeps the button off until the status is known', async () => {
+    installFetch(() => new Promise(() => {}));
+    render(<PlexCreditsImport reachable />);
+    const group = await block();
+
+    expect(
+      within(group).getByRole('status', { name: 'Loading credits import' }),
+    ).toBeInTheDocument();
+    expect(within(group).queryByText('Not run yet')).toBeNull();
+    expect(within(group).getByRole('button', { name: 'Import credits from Plex' })).toBeDisabled();
+  });
+
+  it('says the status could not be loaded instead of Not run yet, and recovers on Check again', async () => {
+    let fail = true;
+    installFetch((m, url) =>
+      url === '/api/admin/plex/credits' ? respond(fail ? null : IDLE, fail ? 500 : 200) : null,
+    );
+    render(<PlexCreditsImport reachable />);
+    const group = await block();
+
+    expect(
+      await within(group).findByText('Couldn\u2019t load the credits import status.'),
+    ).toBeInTheDocument();
+    expect(within(group).queryByText('Not run yet')).toBeNull();
+    expect(within(group).getByRole('button', { name: 'Import credits from Plex' })).toBeDisabled();
+
+    fail = false;
+    await userEvent.click(within(group).getByRole('button', { name: 'Check again' }));
+
+    expect(await within(group).findByText('Not run yet')).toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: 'Import credits from Plex' })).toBeEnabled();
+    expect(within(group).queryByRole('button', { name: 'Check again' })).toBeNull();
   });
 
   it('disables the button when Plex is not reachable', async () => {
@@ -200,6 +235,26 @@ describe('usePlexCreditsImport', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
     unmount();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('announces a library change when an import finishes, but not for the first status', async () => {
+    const changed = vi.fn();
+    window.addEventListener(LIBRARY_CHANGED_EVENT, changed);
+    let calls = 0;
+    installFetch((m, url) => {
+      if (url !== '/api/admin/plex/credits') return null;
+      calls += 1;
+      return respond(calls === 1 ? running(5) : fixtures.adminPlexCredits);
+    });
+    vi.useFakeTimers();
+    renderHook(() => usePlexCreditsImport());
+    await settle();
+    expect(changed).not.toHaveBeenCalled();
+
+    await settle(SCAN_POLL_MS);
+
+    expect(changed).toHaveBeenCalledTimes(1);
+    window.removeEventListener(LIBRARY_CHANGED_EVENT, changed);
   });
 
   it('leaves no timer behind when it unmounts while an import runs', async () => {

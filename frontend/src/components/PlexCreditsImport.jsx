@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import { Button } from './Button.jsx';
+import { SkeletonBlock } from './Skeleton.jsx';
 import { progressPercent } from '../state/scanFormat.js';
 import {
   creditsProgressText,
@@ -16,9 +17,8 @@ import { usePlexCreditsImport } from '../state/useAdmin.js';
  */
 export default function PlexCreditsImport({ reachable }) {
   const titleId = useId();
-  const { credits, starting, notice, startImport } = usePlexCreditsImport();
+  const { credits, error, loading, starting, notice, startImport, reload } = usePlexCreditsImport();
   const running = Boolean(credits?.running);
-  const last = credits?.lastImport;
   return (
     <div className="admin__report-list" role="group" aria-labelledby={titleId}>
       <h3 id={titleId} className="admin__subtitle">
@@ -28,6 +28,46 @@ export default function PlexCreditsImport({ reachable }) {
         Copies the credits start Plex holds for each film, once, so it can be checked against what
         CineFilm finds. Nothing is changed in Plex, and no film uses these yet.
       </p>
+      {!credits && loading ? (
+        <div role="status" aria-label="Loading credits import">
+          <SkeletonBlock style={{ height: 48 }} />
+        </div>
+      ) : null}
+      {!credits && !loading && error ? (
+        <div className="admin__actions">
+          <span className="admin__notice" role="alert">
+            Couldn&rsquo;t load the credits import status.
+          </span>
+          <Button variant="secondary" onClick={reload}>
+            Check again
+          </Button>
+        </div>
+      ) : null}
+      {credits ? <CreditsStatus credits={credits} /> : null}
+      <div className="admin__actions">
+        <Button
+          variant="secondary"
+          disabled={running || starting || !reachable || !credits}
+          onClick={startImport}
+        >
+          {running ? 'Importing credits…' : 'Import credits from Plex'}
+        </Button>
+        {notice ? (
+          <span className="admin__notice" role="status">
+            {notice}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** The progress, last import and report of a loaded status. */
+function CreditsStatus({ credits }) {
+  const running = Boolean(credits.running);
+  const last = credits.lastImport;
+  return (
+    <>
       {running && credits.progress ? (
         <div className="admin__progress">
           <div
@@ -72,20 +112,6 @@ export default function PlexCreditsImport({ reachable }) {
           ) : null}
         </>
       ) : null}
-      <div className="admin__actions">
-        <Button
-          variant="secondary"
-          disabled={running || starting || !reachable}
-          onClick={startImport}
-        >
-          {running ? 'Importing credits…' : 'Import credits from Plex'}
-        </Button>
-        {notice ? (
-          <span className="admin__notice" role="status">
-            {notice}
-          </span>
-        ) : null}
-      </div>
-    </div>
+    </>
   );
 }

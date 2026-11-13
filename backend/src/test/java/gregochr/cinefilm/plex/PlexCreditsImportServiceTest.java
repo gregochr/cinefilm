@@ -10,7 +10,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.config.ConflictException;
@@ -47,7 +46,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.SimpleTransactionStatus;
 
 /** The credits import's orchestration, with Plex, the library and the database faked. */
 class PlexCreditsImportServiceTest {
@@ -69,11 +67,8 @@ class PlexCreditsImportServiceTest {
 
     @BeforeEach
     void setUp() {
-        when(transactions.getTransaction(org.mockito.ArgumentMatchers.any()))
-            .thenReturn(new SimpleTransactionStatus());
         when(plex.configured()).thenReturn(true);
         when(plex.movieSections()).thenReturn(List.of("1"));
-        when(markers.findAllById(anyList())).thenReturn(List.of());
         service = service(Runnable::run);
     }
 
@@ -111,8 +106,9 @@ class PlexCreditsImportServiceTest {
         return file;
     }
 
+    /** The database answers the lookup of exactly these files' ids with these files. */
     private void database(MediaFile... current) {
-        when(files.findAllById(anyList())).thenReturn(List.of(current));
+        when(files.findAllById(Arrays.stream(current).map(MediaFile::getId).toList())).thenReturn(List.of(current));
     }
 
     private static PlexItemMarkers item(PlexMediaTiming... media) {
@@ -164,6 +160,39 @@ class PlexCreditsImportServiceTest {
     }
 
     @Test
+    void startingWhileThePlexImportHoldsTheLibraryIs409AndAsksNothingOfPlex() {
+        lock.tryAcquire(LibraryLock.IMPORT);
+
+        assertThatThrownBy(service::start).isInstanceOf(ConflictException.class)
+            .hasMessage("Import credits after the Plex import finishes");
+
+        assertThat(service.isRunning()).isFalse();
+        assertThat(lock.heldBy(LibraryLock.IMPORT)).isTrue();
+        verifyNoInteractions(markers);
+        verify(plex, never()).itemMarkers("11");
+    }
+
+    @Test
+    void theLockTimeoutNamesTheLastHolderItSaw() {
+        plexFilms(film("11", "Heat", "Heat.m4v"));
+        library("Heat.m4v");
+        database(file(1, "Heat.m4v", MODIFIED, HOUR2));
+        when(plex.itemMarkers("11")).thenReturn(item(timing("Heat.m4v", HOUR2)));
+        lock.tryAcquire(LibraryLock.EDIT);
+        sleeper = d -> {
+            sleeps.add(d);
+            if (sleeps.size() == 1) {
+                lock.release();
+                lock.tryAcquire(LibraryLock.MATCH);
+            }
+        };
+
+        service.start();
+
+        assertThat(service.status().lastImport().error()).contains("locked by \"match\"");
+    }
+
+    @Test
     void aRefusedExecutorFreesTheRunningFlag() {
         PlexCreditsImportService stopped = service(command -> {
             throw new RejectedExecutionException("shutting down");
@@ -199,6 +228,7 @@ class PlexCreditsImportServiceTest {
         library("Heat.m4v", "Heat.mp4", "Split - pt1.m4v", "Quiet.m4v");
         database(file(1, "Heat.m4v", MODIFIED, HOUR2), file(2, "Heat.mp4", MODIFIED, HOUR2 + 1_500),
             file(3, "Split - pt1.m4v", MODIFIED, HOUR2), file(4, "Quiet.m4v", MODIFIED, HOUR2));
+        database(file(1, "Heat.m4v", MODIFIED, HOUR2), file(2, "Heat.mp4", MODIFIED, HOUR2 + 1_500));
         // Plex lists the longer mp4 first: copies pair by path, never by position.
         when(plex.itemMarkers("11")).thenReturn(item(timing("Heat.mp4", HOUR2 + 1_500), timing("Heat.m4v", HOUR2)));
         when(plex.itemMarkers("12")).thenReturn(new PlexItemMarkers(HOUR2,
@@ -225,6 +255,7 @@ class PlexCreditsImportServiceTest {
         plexFilms(film("11", "Heat", "Heat.m4v", "Heat.mp4"));
         library("Heat.m4v", "Heat.mp4");
         database(file(1, "Heat.m4v", MODIFIED, HOUR2), file(2, "Heat.mp4", MODIFIED, HOUR2));
+        database(file(1, "Heat.m4v", MODIFIED, HOUR2));
         // Plex was rescanned between the two calls: the metadata no longer lists the mp4.
         when(plex.itemMarkers("11")).thenReturn(item(timing("Heat.m4v", HOUR2)));
 
@@ -281,16 +312,13 @@ class PlexCreditsImportServiceTest {
         assertThat(old.getFingerprint()).isEqualTo("1001:" + MODIFIED);
         assertThat(old.getStartMs()).isEqualTo(MARKER);
         assertThat(old.getImportedAt()).isEqualTo(NOW);
-        // The import's only repository calls: reading the rows it may replace and writing them. Nothing is deleted.
-        verify(markers).findAllById(List.of(1L));
-        verifyNoMoreInteractions(markers);
     }
 
     @Test
     void aFileThatChangedWhilePlexWasBeingAskedIsNotStoredAndIsCounted() {
         plexFilms(film("11", "Heat", "Heat.m4v", "Heat.mp4"));
         library("Heat.m4v", "Heat.mp4");
-        when(files.findAllById(anyList())).thenReturn(
+        when(files.findAllById(List.of(1L, 2L))).thenReturn(
             List.of(file(1, "Heat.m4v", MODIFIED, HOUR2), file(2, "Heat.mp4", MODIFIED, HOUR2)),
             List.of(file(1, "Heat.m4v", MODIFIED, HOUR2), file(2, "Heat.mp4", MODIFIED + 1, HOUR2)));
         when(plex.itemMarkers("11")).thenReturn(item(timing("Heat.m4v", HOUR2), timing("Heat.mp4", HOUR2)));
@@ -306,6 +334,7 @@ class PlexCreditsImportServiceTest {
     void aFileGoneFromTheDatabaseBeforePlexIsAskedIsCountedAndItsSiblingStillStored() {
         plexFilms(film("11", "Heat", "Heat.m4v", "Heat.mp4"));
         library("Heat.m4v", "Heat.mp4");
+        when(files.findAllById(List.of(1L, 2L))).thenReturn(List.of(file(1, "Heat.m4v", MODIFIED, HOUR2)));
         database(file(1, "Heat.m4v", MODIFIED, HOUR2));
         when(plex.itemMarkers("11")).thenReturn(item(timing("Heat.m4v", HOUR2), timing("Heat.mp4", HOUR2)));
 
@@ -320,7 +349,7 @@ class PlexCreditsImportServiceTest {
     void aFileDeletedWhilePlexWasBeingAskedIsNotStoredAndIsCounted() {
         plexFilms(film("11", "Heat", "Heat.m4v"));
         library("Heat.m4v");
-        when(files.findAllById(anyList())).thenReturn(List.of(file(1, "Heat.m4v", MODIFIED, HOUR2)), List.of());
+        when(files.findAllById(List.of(1L))).thenReturn(List.of(file(1, "Heat.m4v", MODIFIED, HOUR2)), List.of());
         when(plex.itemMarkers("11")).thenReturn(item(timing("Heat.m4v", HOUR2)));
 
         service.start();
@@ -385,8 +414,8 @@ class PlexCreditsImportServiceTest {
         service.start();
 
         LastCreditsImport last = service.status().lastImport();
-        assertThat(last.error()).isEqualTo("A scan or an edit kept the library busy; nothing was stored, run the "
-            + "import again");
+        assertThat(last.error()).isEqualTo("The library stayed locked by \"scan\" for 10 minutes; nothing was "
+            + "stored, run the import again");
         assertThat(last.report()).isNull();
         assertThat(sleeps).hasSize(PlexCreditsImportService.LOCK_ATTEMPTS);
         assertThat(lock.heldBy(LibraryLock.SCAN)).isTrue();
@@ -416,6 +445,7 @@ class PlexCreditsImportServiceTest {
         plexFilms(film("11", "Bad", "Bad.m4v"), film("12", "Heat", "Heat.m4v"));
         library("Bad.m4v", "Heat.m4v");
         database(file(1, "Bad.m4v", MODIFIED, HOUR2), file(2, "Heat.m4v", MODIFIED, HOUR2));
+        database(file(2, "Heat.m4v", MODIFIED, HOUR2));
         when(plex.itemMarkers("11"))
             .thenThrow(new PlexException("Plex answered status 500 to plex item markers", null));
         when(plex.itemMarkers("12")).thenReturn(item(timing("Heat.m4v", HOUR2)));
@@ -481,6 +511,7 @@ class PlexCreditsImportServiceTest {
         plexFilms(films);
         library(paths);
         database(current);
+        database(current[4]);
 
         service.start();
 

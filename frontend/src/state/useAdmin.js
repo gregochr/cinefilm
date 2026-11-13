@@ -181,6 +181,7 @@ export function usePlexCreditsImport() {
   const [notice, setNotice] = useState(null);
   const startedRef = useRef(false);
   const running = Boolean(data?.running);
+  useAnnounceWhenFinished(data ? (data.lastImport?.finishedAt ?? null) : undefined);
 
   useEffect(() => {
     if (!running) return undefined;

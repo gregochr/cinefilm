@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
@@ -27,7 +27,9 @@ describe('Admin: Import credits from Plex', () => {
     const panel = await screen.findByRole('region', { name: 'Plex import' });
 
     const group = await within(panel).findByRole('group', { name: 'Credits from Plex' });
-    expect(within(group).getByRole('button', { name: 'Import credits from Plex' })).toBeEnabled();
+    await waitFor(() =>
+      expect(within(group).getByRole('button', { name: 'Import credits from Plex' })).toBeEnabled(),
+    );
     expect(within(panel).getByRole('button', { name: 'Import from Plex' })).toBeEnabled();
   });
 
@@ -45,9 +47,9 @@ describe('Admin: Import credits from Plex', () => {
     renderApp('/admin');
     const panel = await screen.findByRole('region', { name: 'Plex import' });
 
-    await userEvent.click(
-      await within(panel).findByRole('button', { name: 'Import credits from Plex' }),
-    );
+    const button = await within(panel).findByRole('button', { name: 'Import credits from Plex' });
+    await waitFor(() => expect(button).toBeEnabled());
+    await userEvent.click(button);
 
     expect(
       fetchMock.mock.calls.filter(

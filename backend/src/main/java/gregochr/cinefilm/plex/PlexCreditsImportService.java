@@ -107,11 +107,15 @@ public class PlexCreditsImportService {
      * Starts an import in the background.
      *
      * @throws NotFoundException when Plex is not configured
-     * @throws ConflictException when an import is already running
+     * @throws ConflictException when an import is already running, or the Plex import is (it holds the library lock
+     *     for its whole run, far longer than the write step would wait)
      */
     public void start() {
         if (!plex.configured()) {
             throw new NotFoundException("Plex is not configured");
+        }
+        if (lock.heldBy(LibraryLock.IMPORT)) {
+            throw new ConflictException("Import credits after the Plex import finishes");
         }
         if (!running.compareAndSet(false, true)) {
             throw new ConflictException("A credits import is already running");
@@ -242,19 +246,21 @@ public class PlexCreditsImportService {
     }
 
     private void acquireLock() {
+        String holder = "another job";
         for (int attempt = 0; attempt < LOCK_ATTEMPTS; attempt++) {
             if (lock.tryAcquire(LibraryLock.PLEX_CREDITS)) {
                 return;
             }
+            holder = java.util.Objects.requireNonNullElse(lock.holder(), holder);
             try {
                 sleeper.sleep(LOCK_WAIT);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw new PlexException("Interrupted while waiting for a scan to finish; nothing was stored", e);
+                throw new PlexException("Interrupted while waiting for the library lock; nothing was stored", e);
             }
         }
-        throw new PlexException("A scan or an edit kept the library busy; nothing was stored, run the import again",
-            null);
+        throw new PlexException("The library stayed locked by \"" + holder + "\" for 10 minutes; nothing was "
+            + "stored, run the import again", null);
     }
 
     private int writeLocked(List<Row> rows, Instant importTime, Map<PlexCreditsSkip, Integer> skipped) {
