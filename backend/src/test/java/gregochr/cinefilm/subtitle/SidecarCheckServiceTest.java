@@ -532,7 +532,8 @@ class SidecarCheckServiceTest extends SubtitleTestBase {
         service.markTried(editionId, "tt0936501", 5011, NOW);
         service.markTried(editionId, "tt0936501", 5011, LATER);
 
-        assertThat(candidates.findByEditionIdIn(List.of(editionId))).singleElement().satisfies(row -> {
+        List<ForcedCheckCandidate> rows = candidates.findByEditionIdInAndKind(List.of(editionId), SubtitleKind.FORCED);
+        assertThat(rows).singleElement().satisfies(row -> {
             assertThat(row.getOsFileId()).isEqualTo(5011L);
             assertThat(row.getImdbId()).isEqualTo("tt0936501");
             assertThat(row.getTriedAt()).isEqualTo(NOW);

@@ -26,6 +26,7 @@ import gregochr.cinefilm.subtitle.SidecarSync;
 import gregochr.cinefilm.subtitle.SubtitleAdminService;
 import gregochr.cinefilm.subtitle.SubtitleCheckBase;
 import gregochr.cinefilm.subtitle.SubtitleDtos.SidecarDto;
+import gregochr.cinefilm.subtitle.SubtitleKind;
 import gregochr.cinefilm.subtitle.SubtitleSidecar;
 import gregochr.cinefilm.subtitle.SubtitleSidecarRepository;
 import jakarta.persistence.EntityManager;
@@ -246,9 +247,11 @@ class ForcedDownloadIntegrationTest extends IntegrationTestBase {
         blocks.saveAndFlush(block);
         entityManager.clear();
 
-        assertThat(blocks.existsByEditionIdAndImdbIdAndOsFileId(film.getEditions().get(0).getId(), "tt0936501", 5011))
+        assertThat(blocks.existsByEditionIdAndImdbIdAndOsFileIdAndKind(
+                film.getEditions().get(0).getId(), "tt0936501", 5011, SubtitleKind.FORCED))
             .isTrue();
-        assertThat(blocks.findByEditionIdIn(List.of(film.getEditions().get(0).getId()))).hasSize(1);
+        assertThat(blocks.findByEditionIdInAndKind(List.of(film.getEditions().get(0).getId()), SubtitleKind.FORCED))
+            .hasSize(1);
         ForcedDownloadBlock again = new ForcedDownloadBlock();
         again.setEditionId(film.getEditions().get(0).getId());
         again.setImdbId("tt0936501");
@@ -288,7 +291,8 @@ class ForcedDownloadIntegrationTest extends IntegrationTestBase {
 
         assertThat(sidecars.findById(download.getId())).isEmpty();
         assertThat(downloadChecks.findById(row.getId())).isEmpty();
-        assertThat(blocks.existsByEditionIdAndImdbIdAndOsFileId(film.getEditions().get(0).getId(), "tt0936501", 5011))
+        assertThat(blocks.existsByEditionIdAndImdbIdAndOsFileIdAndKind(
+                film.getEditions().get(0).getId(), "tt0936501", 5011, SubtitleKind.FORCED))
             .isTrue();
         assertThat(references.findAll()).hasSize(1);
     }

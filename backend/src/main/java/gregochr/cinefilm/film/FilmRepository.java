@@ -184,7 +184,8 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
     /**
      * Removes the subtitles downloaded from OpenSubtitles for a film's editions (a change of IMDb id means they were
      * for another film). The scan and everything else leave downloads alone; this and the owner's removal are the only
-     * deletions. The timing and comparison rows of a download go with it (foreign keys cascade).
+     * deletions. The timing and comparison rows of a download go with it (foreign keys cascade). It deliberately
+     * ignores the subtitle kind: forced and full downloads were both fetched for the old IMDb id, so both go.
      */
     @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
     @org.springframework.data.jpa.repository.Query(

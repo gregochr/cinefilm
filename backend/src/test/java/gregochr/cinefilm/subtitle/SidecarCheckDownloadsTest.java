@@ -212,8 +212,9 @@ class SidecarCheckDownloadsTest extends ForcedDownloadTestBase {
         Film film = film();
         download(film, 5011);
 
-        assertThat(Set.copyOf(sidecars.findFilmIdsWithPresentSubtitle())).containsExactly(film.getId());
-        assertThat(sidecars.findFilmIdsWithPresentSidecar()).isEmpty();
+        assertThat(Set.copyOf(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)))
+            .containsExactly(film.getId());
+        assertThat(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED)).isEmpty();
         assertThat(service.due()).hasSize(1);
     }
 }

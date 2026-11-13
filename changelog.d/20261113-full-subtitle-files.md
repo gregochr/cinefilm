@@ -1,0 +1,3 @@
+### Added — full English subtitle files beside a film
+
+The library scan now finds full English subtitle files next to a film (`Film.en.srt`, `Film.eng.srt`, and the same with `sdh`, `hi` or `cc` in the name) as well as forced ones, and the film page lists them as a separate full subtitle with its own address; the player menu for it comes next. They are kept apart from the forced subtitles everywhere: a full file never plays as a forced subtitle, never counts as proof that a film needs forced subtitles, and is never checked, timed or counted against a download. Admin lists them with a "Full" label, where they can be attached to an edition, nudged in time or given back to name matching. The player does not show them yet.

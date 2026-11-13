@@ -1,5 +1,6 @@
 package gregochr.cinefilm.subtitle;
 
+import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionTimeline;
 import gregochr.cinefilm.film.MediaFile;
@@ -8,6 +9,7 @@ import gregochr.cinefilm.web.JsonEtag;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Slot;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
@@ -42,6 +44,38 @@ final class ServedSubtitles {
         cues.sort(Comparator.comparingLong(SubtitleCue::startMs).thenComparingLong(SubtitleCue::endMs));
         boolean verified = pick.slots().stream().allMatch(s -> s.sidecar().isVerifiedFor(partIds));
         return new ServedSubtitle(version(partIds, pick, starts), verified, List.copyOf(cues));
+    }
+
+    /**
+     * What the WebVTT route serves for a pick: each file's cues moved by its part's start and the owner's offset
+     * together (so a cue shifted earlier than its part's start lands on the edition's timeline, not clipped at the
+     * part's own 0), the text escaped, and the parts joined into one file. Used for forced and full files alike.
+     *
+     * @param edition the edition (its files must be loaded)
+     * @param pick what {@link SidecarPrecedence} picked for it (at least one slot)
+     * @param unavailable the message of the 404 when a later part's start on the timeline is unknown
+     * @return the WebVTT text
+     * @throws NotFoundException when the timeline of a split edition is unknown
+     */
+    static String vtt(Edition edition, Pick pick, String unavailable) {
+        List<String> texts = new ArrayList<>();
+        EditionTimeline timeline = null;
+        for (Slot slot : pick.slots()) {
+            long start = 0;
+            if (slot.partIndex() > 0) {
+                if (timeline == null) {
+                    try {
+                        timeline = EditionTimeline.of(edition);
+                    } catch (IllegalArgumentException e) {
+                        throw new NotFoundException(unavailable);
+                    }
+                }
+                start = timeline.partStartMs(slot.partIndex());
+            }
+            texts.add(VttWriter.write(SrtParser.cues(slot.sidecar().getCuesText()),
+                start + slot.sidecar().getOffsetMs()));
+        }
+        return texts.size() == 1 ? texts.get(0) : VttShifter.join(texts, Collections.nCopies(texts.size(), 0L));
     }
 
     /**

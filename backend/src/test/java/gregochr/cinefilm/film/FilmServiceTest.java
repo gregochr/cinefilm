@@ -22,6 +22,7 @@ import gregochr.cinefilm.playback.PreferencesService;
 import gregochr.cinefilm.settings.ServerSettingsService;
 import gregochr.cinefilm.subtitle.ForcedSubtitleService;
 import gregochr.cinefilm.subtitle.FullNeedService;
+import gregochr.cinefilm.subtitle.FullSubtitleService;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,12 +62,15 @@ class FilmServiceTest {
     @Mock
     private FullNeedService fullNeed;
 
+    @Mock
+    private FullSubtitleService fullSubtitles;
+
     private FilmService service;
 
     @BeforeEach
     void setUp() {
         service = new FilmService(loader, films, preferences, transcoder, indexes, settings, forcedSubtitles,
-            fullNeed);
+            fullNeed, fullSubtitles);
     }
 
     private static Film owned(long id, String title, int year, String... genres) {
@@ -245,6 +249,22 @@ class FilmServiceTest {
         when(transcoder.mode()).thenReturn(EncoderMode.UNAVAILABLE);
 
         assertThat(service.detail(1L).editions().get(0).forcedSubtitle()).isEqualTo(forced);
+    }
+
+    @Test
+    void detailGivesEachEditionItsFullSubtitleFromTheFullSubtitleService() {
+        Film heat = owned(1L, "Heat", 1995, "Crime");
+        Long editionId = heat.getEditions().get(0).getId();
+        var full = new FilmDtos.FullSubtitleDto("SIDECAR", 1_700_000_000_000L);
+        when(films.findById(1L)).thenReturn(Optional.of(heat));
+        when(loader.views(List.of(heat))).thenReturn(List.of(view(heat)));
+        when(fullSubtitles.forEditions(heat.getEditions())).thenReturn(java.util.Map.of(editionId, full));
+        when(transcoder.mode()).thenReturn(EncoderMode.UNAVAILABLE);
+
+        var edition = service.detail(1L).editions().get(0);
+
+        assertThat(edition.fullSubtitle()).isEqualTo(full);
+        assertThat(edition.forcedSubtitle()).isNull();
     }
 
     @Test

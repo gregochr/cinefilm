@@ -87,7 +87,7 @@ class SubtitleAdminServiceUnitTest {
 
     private void listAndFind() {
         when(sidecars.findById(5L)).thenReturn(Optional.of(row));
-        when(sidecars.findAllByOrderByPathAscIdAsc()).thenReturn(List.of(row));
+        when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FORCED)).thenReturn(List.of(row));
     }
 
     @Test
@@ -230,7 +230,8 @@ class SubtitleAdminServiceUnitTest {
         SubtitleSidecar download = downloadRow();
         when(sidecars.findById(8L)).thenReturn(Optional.of(download));
         when(editions.existsById(40L)).thenReturn(true);
-        when(blocks.existsByEditionIdAndImdbIdAndOsFileId(40L, "tt0167261", 5011L)).thenReturn(false);
+        when(blocks.existsByEditionIdAndImdbIdAndOsFileIdAndKind(40L, "tt0167261", 5011L, SubtitleKind.FORCED))
+            .thenReturn(false);
 
         service.remove(8L);
 
@@ -260,7 +261,8 @@ class SubtitleAdminServiceUnitTest {
         SubtitleSidecar download = downloadRow();
         when(sidecars.findById(8L)).thenReturn(Optional.of(download));
         when(editions.existsById(40L)).thenReturn(true);
-        when(blocks.existsByEditionIdAndImdbIdAndOsFileId(40L, "tt0167261", 5011L)).thenReturn(true);
+        when(blocks.existsByEditionIdAndImdbIdAndOsFileIdAndKind(40L, "tt0167261", 5011L, SubtitleKind.FORCED))
+            .thenReturn(true);
 
         service.remove(8L);
 
@@ -274,7 +276,8 @@ class SubtitleAdminServiceUnitTest {
         download.setPath("opensubtitles:77:5011");
         when(sidecars.findById(8L)).thenReturn(Optional.of(download));
         when(editions.existsById(77L)).thenReturn(true);
-        when(blocks.existsByEditionIdAndImdbIdAndOsFileId(77L, "tt0167261", 5011L)).thenReturn(false);
+        when(blocks.existsByEditionIdAndImdbIdAndOsFileIdAndKind(77L, "tt0167261", 5011L, SubtitleKind.FORCED))
+            .thenReturn(false);
 
         service.remove(8L);
 
@@ -344,5 +347,130 @@ class SubtitleAdminServiceUnitTest {
                 .hasMessage("A scan is running");
         }
         assertThat(lock.holder()).isEqualTo(LibraryLock.SCAN);
+    }
+
+    /** The forced side of the list is empty: the file lookup for no files is asked all the same. */
+    private void noForcedRows() {
+        when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FORCED)).thenReturn(List.of());
+        when(files.findAllById(java.util.Set.of())).thenReturn(List.of());
+    }
+
+    private SubtitleSidecar fullRow(long id, String path, Long fileId) {
+        SubtitleSidecar full = new SubtitleSidecar();
+        full.setId(id);
+        full.setKind(SubtitleKind.FULL);
+        full.setPath(path);
+        full.setMediaFileId(fileId);
+        full.setCuesText(row.getCuesText());
+        full.setCueCount(1);
+        full.setUpdatedAt(NOW);
+        return full;
+    }
+
+    @Test
+    void theListHasTheForcedRowsThenTheFullOnesInPathOrderEachWithItsKindAndNoChecks() {
+        row.setPath("B.en.forced.srt");
+        SubtitleSidecar full = fullRow(6L, "A.en.srt", 10L);
+        SubtitleSidecar loose = fullRow(7L, "C.en.srt", null);
+        when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FORCED)).thenReturn(List.of(row));
+        when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FULL)).thenReturn(List.of(full, loose));
+        when(files.findAllById(java.util.Set.of())).thenReturn(List.of());
+        when(files.findAllById(java.util.Set.of(10L))).thenReturn(List.of(split.originalParts().get(0)));
+
+        List<SidecarDto> listed = service.list();
+
+        assertThat(listed).extracting(SidecarDto::path).containsExactly("A.en.srt", "B.en.forced.srt", "C.en.srt");
+        assertThat(listed).extracting(SidecarDto::kind).containsExactly("FULL", "FORCED", "FULL");
+        SidecarDto matched = listed.get(0);
+        assertThat(matched.state()).isEqualTo("matched");
+        assertThat(matched.served()).isTrue();
+        assertThat(matched.servedReason()).isEqualTo("Ready to play as English (full)");
+        assertThat(matched.check()).isNull();
+        assertThat(matched.alignment()).isNull();
+        assertThat(matched.replacedByDownload()).isFalse();
+        assertThat(listed.get(2).state()).isEqualTo("unmatched");
+        assertThat(listed.get(2).servedReason()).isEqualTo("Not used: it is not attached to a film");
+    }
+
+    @Test
+    void aFullFileOnALaterPartWhoseStartIsUnknownIsNotOfferedAndSaysSo() {
+        SubtitleSidecar onPartTwo = fullRow(6L, "A.en.srt", 20L);
+        split.originalParts().get(0).setDurationMs(null);
+        when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FULL)).thenReturn(List.of(onPartTwo));
+        noForcedRows();
+        when(files.findAllById(java.util.Set.of(20L))).thenReturn(List.of(split.originalParts().get(1)));
+
+        SidecarDto dto = service.list().get(0);
+
+        assertThat(dto.served()).isFalse();
+        assertThat(dto.state()).isEqualTo("matched");
+        assertThat(dto.servedReason()).isEqualTo("Not used: the lengths of the film's parts are not known yet");
+    }
+
+    @Test
+    void aFullFileTheSubtitlesMenuDoesNotOfferSaysWhy() {
+        SubtitleSidecar missing = fullRow(6L, "A.en.srt", 10L);
+        missing.setPresence(gregochr.cinefilm.film.Presence.MISSING);
+        SubtitleSidecar empty = fullRow(7L, "B.en.srt", 20L);
+        empty.setCueCount(0);
+        SubtitleSidecar one = fullRow(8L, "C.en.srt", 10L);
+        SubtitleSidecar two = fullRow(9L, "D.en.srt", 10L);
+        when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FULL))
+            .thenReturn(List.of(missing, empty, one, two));
+        noForcedRows();
+        when(files.findAllById(java.util.Set.of(10L, 20L))).thenReturn(split.originalParts());
+
+        List<SidecarDto> listed = service.list();
+
+        assertThat(listed).extracting(SidecarDto::servedReason).containsExactly("Not used: the file is missing",
+            "Not used: it has no lines", "Not used: two full subtitle files compete for the same place",
+            "Not used: two full subtitle files compete for the same place");
+        assertThat(listed).extracting(SidecarDto::state).containsExactly("matched", "matched", "conflict", "conflict");
+        assertThat(listed).extracting(SidecarDto::served).containsOnly(false);
+    }
+
+    @Test
+    void aFullFileCannotBeCheckedOrUncheckedAsForced() {
+        SubtitleSidecar full = fullRow(6L, "A.en.srt", 10L);
+        when(sidecars.findById(6L)).thenReturn(Optional.of(full));
+
+        assertThatThrownBy(() -> service.verify(6L)).isInstanceOf(BadRequestException.class)
+            .hasMessage("Only a forced subtitle can be checked");
+        assertThatThrownBy(() -> service.unverify(6L)).isInstanceOf(BadRequestException.class)
+            .hasMessage("Only a forced subtitle can be checked");
+        assertThat(full.getOwnerVerifiedAt()).isNull();
+    }
+
+    @Test
+    void aFullFileCanBeAttachedAndNudgedLikeAForcedOne() {
+        SubtitleSidecar full = fullRow(6L, "A.en.srt", null);
+        when(sidecars.findById(6L)).thenReturn(Optional.of(full));
+        noForcedRows();
+        when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FULL)).thenReturn(List.of(full));
+        when(editions.findById(40L)).thenReturn(Optional.of(split));
+        when(files.findAllById(java.util.Set.of(20L))).thenReturn(List.of(split.originalParts().get(1)));
+
+        service.attach(6L, new AttachRequest(40L, 2));
+        service.offset(6L, new OffsetRequest(-250));
+
+        assertThat(full.getMediaFileId()).isEqualTo(20L);
+        assertThat(full.isOwnerAttached()).isTrue();
+        assertThat(full.getOffsetMs()).isEqualTo(-250);
+        assertThat(full.getKind()).isEqualTo(SubtitleKind.FULL);
+    }
+
+    @Test
+    void removingAFullDownloadBlocksItsFileAsAFullOne() {
+        SubtitleSidecar download = downloadRow();
+        download.setKind(SubtitleKind.FULL);
+        when(sidecars.findById(8L)).thenReturn(Optional.of(download));
+        when(editions.existsById(40L)).thenReturn(true);
+        when(blocks.existsByEditionIdAndImdbIdAndOsFileIdAndKind(40L, "tt0167261", 5011L, SubtitleKind.FULL))
+            .thenReturn(false);
+
+        service.remove(8L);
+
+        verify(blocks).save(argThat(block -> block.getKind() == SubtitleKind.FULL && block.getOsFileId() == 5011L));
+        verify(sidecars).delete(download);
     }
 }

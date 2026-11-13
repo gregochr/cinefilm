@@ -319,7 +319,9 @@ class ForcedDownloadServiceTest extends ForcedDownloadTestBase {
         assertThat(row.getDownloadedAt()).isEqualTo(LATER);
         assertThat(row.getUpdatedAt()).isEqualTo(LATER);
         assertThat(row.getOffsetMs()).isZero();
-        assertThat(ledger.existsByEditionIdAndImdbIdAndOsFileId(edition(film).getId(), IMDB, 7001)).isTrue();
+        assertThat(ledger.existsByEditionIdAndImdbIdAndOsFileIdAndKind(
+                edition(film).getId(), IMDB, 7001, SubtitleKind.FORCED))
+            .isTrue();
         // It is now waiting to be proven: nothing more is due.
         assertThat(service.due()).isEmpty();
         assertThat(lock.holder()).isNull();
@@ -336,7 +338,7 @@ class ForcedDownloadServiceTest extends ForcedDownloadTestBase {
 
         assertThat(service.add(due, due.promotion(), LATER)).isEqualTo(AddOutcome.ADDED);
 
-        assertThat(ledger.findByEditionIdIn(List.of(edition(film).getId()))).hasSize(1);
+        assertThat(ledger.findByEditionIdInAndKind(List.of(edition(film).getId()), SubtitleKind.FORCED)).hasSize(1);
         assertThat(sidecars.findAll()).filteredOn(SubtitleSidecar::isDownload).hasSize(1);
     }
 

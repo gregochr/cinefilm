@@ -127,6 +127,11 @@ export function subtitleProblem(failure) {
   return 'Something went wrong. Try again.';
 }
 
+/** Whether this is a full English subtitle file (the server says so in `kind`); anything else is forced-only. */
+export function isFull(item) {
+  return item.kind === 'FULL';
+}
+
 /** Whether playback serves this file (the server says): only those are compared with OpenSubtitles. */
 export function isServed(item) {
   return item.served === true;
@@ -138,6 +143,8 @@ export function isServed(item) {
  * for AGREES) or the quiet explanation (unchecked); `reference` is the muted "Compared with ... · checked ..." line.
  */
 export function checkSummary(item) {
+  // A full file is only found and served for now, never compared with OpenSubtitles' forced files.
+  if (isFull(item)) return null;
   const check = item.check;
   if (!check) {
     if (!isServed(item)) return null;
@@ -228,9 +235,21 @@ export const REMOVED_NOTICE = "Download removed. CineFilm won't use it for this 
 /** The filter chips on the file list, in order; `matches` says which files a chip lists. */
 export const FILE_FILTERS = [
   { key: 'all', label: 'All', matches: () => true },
-  { key: 'check', label: 'Needs checking', matches: (item) => item.check?.verdict === 'CHECK' },
-  { key: 'unchecked', label: 'Unchecked', matches: (item) => !item.check && isServed(item) },
-  { key: 'downloads', label: 'Downloads', matches: isDownload },
+  {
+    key: 'check',
+    label: 'Needs checking',
+    matches: (item) => !isFull(item) && item.check?.verdict === 'CHECK',
+  },
+  {
+    key: 'unchecked',
+    label: 'Unchecked',
+    matches: (item) => !isFull(item) && !item.check && isServed(item),
+  },
+  {
+    key: 'downloads',
+    label: 'Downloads',
+    matches: (item) => !isFull(item) && isDownload(item),
+  },
 ];
 
 /** The files a chip lists (all of them for an unknown key). */

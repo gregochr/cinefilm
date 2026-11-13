@@ -2,6 +2,8 @@ package gregochr.cinefilm.subtitle;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -38,4 +40,9 @@ public class ForcedCheckCandidate {
 
     @Column(nullable = false)
     private Instant triedAt;
+
+    /** Which kind of subtitle the comparison was for; {@code FORCED} unless a caller says otherwise. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private SubtitleKind kind = SubtitleKind.FORCED;
 }

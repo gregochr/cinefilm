@@ -9,8 +9,9 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 
 /**
- * Decides which film file a forced subtitle file belongs to, by exact name only (owner decision, 2026-11-11). The
- * subtitle's path without its {@code .en.forced.srt} or {@code .forced.en.srt} suffix must equal a film file's path
+ * Decides which film file a subtitle file (forced or full) belongs to, by exact name only (owner decision,
+ * 2026-11-11). The subtitle's path without its language tokens and {@code .srt} ({@link SidecarNames}) must equal a
+ * film file's path
  * without its video extension, ignoring case, in the same folder: {@code Taken.en.forced.srt} belongs to
  * {@code Taken.m4v}, {@code X - pt1.en.forced.srt} to {@code X - pt1.m4v}. Several files that match (the same stem
  * as {@code .m4v} and {@code .mkv}) are ambiguous, so none is chosen. Everything else (a whole-edition file for a
@@ -26,8 +27,8 @@ final class SidecarMatcher {
     record FileRef(Long id, String path) {
     }
 
-    /** The match: the film file. */
-    record Match(Long mediaFileId) {
+    /** The match: the film file, and the kind of subtitle (forced or full) the name spells. */
+    record Match(Long mediaFileId, SubtitleKind kind) {
     }
 
     private final Map<String, List<Long>> byName = new HashMap<>();
@@ -44,10 +45,13 @@ final class SidecarMatcher {
      * The film file a subtitle belongs to.
      *
      * @param sidecarPath the subtitle's path relative to the library root
-     * @return the match, or empty when no film file, or more than one, has exactly that name
+     * @return the match, or empty when the name is not a subtitle's, or no film file, or more than one, has exactly
+     *     that name
      */
     Optional<Match> match(String sidecarPath) {
-        List<Long> ids = byName.getOrDefault(SidecarNames.stem(sidecarPath).toLowerCase(Locale.ROOT), List.of());
-        return ids.size() == 1 ? Optional.of(new Match(ids.get(0))) : Optional.empty();
+        return SidecarNames.classify(sidecarPath).flatMap(named -> {
+            List<Long> ids = byName.getOrDefault(named.stem().toLowerCase(Locale.ROOT), List.of());
+            return ids.size() == 1 ? Optional.of(new Match(ids.get(0), named.kind())) : Optional.empty();
+        });
     }
 }

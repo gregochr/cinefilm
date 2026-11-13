@@ -48,7 +48,7 @@ class SubtitleAdminLockTest {
         row.setId(5L);
         row.setPath("A.en.forced.srt");
         when(sidecars.findById(5L)).thenReturn(Optional.of(row));
-        when(sidecars.findAllByOrderByPathAscIdAsc()).thenReturn(List.of(row));
+        when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FORCED)).thenReturn(List.of(row));
         SubtitleAdminService service = new SubtitleAdminService(sidecars, mock(MediaFileRepository.class),
             mock(EditionRepository.class), mock(SidecarSync.class), mock(ForcedResolver.class),
             mock(ForcedDownloadBlockRepository.class), CLOCK, lock, manager, mock(ApplicationEventPublisher.class));

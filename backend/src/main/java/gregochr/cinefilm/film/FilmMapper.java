@@ -6,6 +6,7 @@ import gregochr.cinefilm.film.FilmDtos.CollectionRef;
 import gregochr.cinefilm.film.FilmDtos.EditionDto;
 import gregochr.cinefilm.film.FilmDtos.FileInfo;
 import gregochr.cinefilm.film.FilmDtos.ForcedSubtitleDto;
+import gregochr.cinefilm.film.FilmDtos.FullSubtitleDto;
 import gregochr.cinefilm.film.FilmDtos.FilmCard;
 import gregochr.cinefilm.film.FilmDtos.FilmDetail;
 import gregochr.cinefilm.film.FilmDtos.ImdbRating;
@@ -103,6 +104,21 @@ public final class FilmMapper {
     public static FilmDetail detail(FilmView view, Preferences preferences, boolean inCollection, EncoderMode mode,
                                     Function<MediaFile, CutList> cuts, Function<Edition, ForcedSubtitleDto> forced,
                                     String fullNeed) {
+        return detail(view, preferences, inCollection, mode, cuts, forced, fullNeed, edition -> null);
+    }
+
+    /**
+     * The full detail page with the stored cut lists, the forced and full subtitles and the full-subtitles need in
+     * play.
+     *
+     * @param cuts the film file's stored cut list, or null when it is not indexed yet
+     * @param forced the forced subtitle an edition plays, or null when it has none
+     * @param fullNeed whether the film needs full English subtitles, or null when not worked out
+     * @param full the full English subtitle an edition offers, or null when it has none
+     */
+    public static FilmDetail detail(FilmView view, Preferences preferences, boolean inCollection, EncoderMode mode,
+                                    Function<MediaFile, CutList> cuts, Function<Edition, ForcedSubtitleDto> forced,
+                                    String fullNeed, Function<Edition, FullSubtitleDto> full) {
         Film film = view.film();
         FilmCard card = card(view, 0);
         CollectionRef collection = film.getCollection() == null || !inCollection ? null
@@ -113,7 +129,8 @@ public final class FilmMapper {
             view.directors().stream().map(FilmMapper::personRef).toList(),
             view.cast().stream().map(c -> new CastEntry(personRef(c.getPerson()), c.getCharacter())).toList(),
             film.getEditions().stream().filter(e -> !e.hiddenFromBrowse())
-                .map(e -> edition(e, view.state(e), mode, cuts, forced.apply(e))).toList(), preferences,
+                .map(e -> edition(e, view.state(e), mode, cuts, forced.apply(e), full.apply(e))).toList(),
+            preferences,
             ratings(film), fullNeed);
     }
 
@@ -128,7 +145,8 @@ public final class FilmMapper {
     }
 
     private static EditionDto edition(Edition edition, Optional<PlaybackState> state, EncoderMode mode,
-                                       Function<MediaFile, CutList> cuts, ForcedSubtitleDto forced) {
+                                       Function<MediaFile, CutList> cuts, ForcedSubtitleDto forced,
+                                       FullSubtitleDto full) {
         MediaFile original = edition.originalFile();
         List<AudioStreamDto> audio = original == null ? List.of() : original.getAudioStreams().stream()
             .map(a -> new AudioStreamDto(a.getId(), a.getIndex(), a.getLanguage(), a.getChannels(), a.getCodec(),
@@ -139,7 +157,7 @@ public final class FilmMapper {
         return new EditionDto(edition.getId(), edition.getName(), edition.getYear(), edition.getRuntimeMs(),
             edition.getNote(), edition.getCreditsMarkerMs(), state.map(PlaybackState::getPositionMs).orElse(0L),
             state.map(PlaybackState::isWatched).orElse(false), fileInfo(original), audio, subtitles,
-            qualities(edition, mode, cuts), Math.max(1, edition.partCount()), forced);
+            qualities(edition, mode, cuts), Math.max(1, edition.partCount()), forced, full);
     }
 
     private static FileInfo fileInfo(MediaFile original) {

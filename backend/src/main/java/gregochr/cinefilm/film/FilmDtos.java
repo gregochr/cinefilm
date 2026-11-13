@@ -86,6 +86,18 @@ public final class FilmDtos {
     public record ForcedSubtitleDto(String source, boolean ownerVerified, long version) {
     }
 
+    /**
+     * The full English subtitle an edition has, found and served (the player menu comes in phase 5c), served by
+     * {@code GET /api/editions/{id}/full-subtitles.vtt}.
+     *
+     * @param source where it comes from; {@code SIDECAR} (an {@code X.en.srt} file beside the film) is the only one
+     *     for now
+     * @param version a stable number from which files it is made of, their offsets and last changes: it goes on the
+     *     subtitle URL so a nudge in Admin is fetched again
+     */
+    public record FullSubtitleDto(String source, long version) {
+    }
+
     /** A selectable quality. */
     public record QualityDto(String id, Long bitrate, boolean premade, boolean available) {
     }
@@ -94,12 +106,13 @@ public final class FilmDtos {
      * One edition with its streams and qualities. {@code parts} is how many files the edition is made of (1 for a film
      * in one piece): a split film plays as one continuous film (times are edition times, from the start of part 1), is
      * never direct-played and shows no part numbers; the audio and subtitle streams are part 1's, the logical ones.
-     * {@code forcedSubtitle} is null when the edition has no forced subtitle to play.
+     * {@code forcedSubtitle} is null when the edition has no forced subtitle to play; {@code fullSubtitle} is null when
+     * it has no full English subtitle file to offer.
      */
     public record EditionDto(Long id, String name, Integer year, long runtimeMs, String note, Long creditsMarkerMs,
                              long positionMs, boolean watched, FileInfo file, List<AudioStreamDto> audioStreams,
                              List<SubtitleStreamDto> subtitleStreams, List<QualityDto> qualities, int parts,
-                             ForcedSubtitleDto forcedSubtitle) {
+                             ForcedSubtitleDto forcedSubtitle, FullSubtitleDto fullSubtitle) {
     }
 
     /** Remembered per-film choices. */

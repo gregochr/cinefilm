@@ -86,14 +86,14 @@ public class SidecarCheckService {
         for (OsBestRef ref : films.findOpenSubtitlesBest()) {
             best.put(ref.id(), ref);
         }
-        Set<Long> filmIds = new HashSet<>(sidecars.findFilmIdsWithPresentSubtitle());
+        Set<Long> filmIds = new HashSet<>(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED));
         filmIds.retainAll(best.keySet());
         if (filmIds.isEmpty()) {
             return List.of();
         }
         List<Edition> fetched = editions.findWithFilesByFilmIdIn(filmIds);
         Map<Long, Resolution> resolved = resolver.resolve(fetched);
-        List<ForcedCheckCandidate> ledger = candidates.findByEditionIdIn(resolved.keySet());
+        List<ForcedCheckCandidate> ledger = candidates.findByEditionIdInAndKind(resolved.keySet(), SubtitleKind.FORCED);
         List<DueCheck> due = new ArrayList<>();
         for (Edition edition : fetched) {
             Resolution resolution = resolved.get(edition.getId());
@@ -175,12 +175,14 @@ public class SidecarCheckService {
      */
     @Transactional
     public void markTried(Long editionId, String imdbId, long osFileId, Instant now) {
-        if (candidates.existsByEditionIdAndImdbIdAndOsFileId(editionId, imdbId, osFileId)) {
+        if (candidates.existsByEditionIdAndImdbIdAndOsFileIdAndKind(editionId, imdbId, osFileId,
+            SubtitleKind.FORCED)) {
             return;
         }
         ForcedCheckCandidate row = new ForcedCheckCandidate();
         row.setEditionId(editionId);
         row.setImdbId(imdbId);
+        row.setKind(SubtitleKind.FORCED);
         row.setOsFileId(osFileId);
         row.setTriedAt(now);
         candidates.save(row);
