@@ -216,6 +216,32 @@ describe('PlexCreditsImport', () => {
     expect(within(group).getByRole('list', { name: 'Credits import report' })).toBeInTheDocument();
   });
 
+  it('keeps Check again focused when there is no status yet and it looks again', async () => {
+    let reads = 0;
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    installFetch(async (m, url) => {
+      if (url !== '/api/admin/plex/credits') return null;
+      reads += 1;
+      if (reads === 1) return respond(null, 500);
+      await gate;
+      return respond(IDLE);
+    });
+    render(<PlexCreditsImport reachable />);
+    const group = await block();
+    const again = await within(group).findByRole('button', { name: 'Check again' });
+
+    await userEvent.click(again);
+
+    expect(reads).toBe(2);
+    expect(within(group).getByRole('button', { name: 'Check again' })).toBe(again);
+    expect(again).toHaveFocus();
+    release();
+    expect(await within(group).findByText('Not run yet')).toBeInTheDocument();
+  });
+
   it('keeps Check again where it is, and focused, while a refresh looks again', async () => {
     let reads = 0;
     let release;
@@ -564,7 +590,48 @@ describe('usePlexCreditsImport', () => {
     expect(result.current.error).toBeNull();
   });
 
-  it('keeps the start’s status when a read called before the start answers in the same render', async () => {
+  it('never lets the poll timer or a superseded read end the in-flight mark of the latest read', async () => {
+    let releasePoll;
+    const pollGate = new Promise((resolve) => {
+      releasePoll = resolve;
+    });
+    let releaseCheck;
+    const checkGate = new Promise((resolve) => {
+      releaseCheck = resolve;
+    });
+    let reads = 0;
+    installFetch(async (method, url) => {
+      if (url !== '/api/admin/plex/credits') return null;
+      reads += 1;
+      if (reads === 2) {
+        await pollGate;
+        return respond(running(2));
+      }
+      if (reads === 3) {
+        await checkGate;
+        return respond(running(3));
+      }
+      return respond(running(reads));
+    });
+    vi.useFakeTimers();
+    const { result } = renderHook(() => usePlexCreditsImport());
+    await settle();
+    await settle(SCAN_POLL_MS);
+    expect(reads).toBe(2);
+
+    act(() => result.current.reload());
+    await settle();
+    expect(reads).toBe(3);
+    releasePoll();
+    await settle(SCAN_POLL_MS * 3);
+    expect(reads).toBe(3);
+    releaseCheck();
+    await settle();
+
+    expect(result.current.credits.progress.processed).toBe(3);
+  });
+
+  it('keeps the start’s status when a read called before the start answers in the same batch', async () => {
     let releaseOld;
     const oldGate = new Promise((resolve) => {
       releaseOld = resolve;
@@ -595,8 +662,11 @@ describe('usePlexCreditsImport', () => {
     await settle();
     expect(reads).toBe(2);
 
-    releaseOld();
-    await act(() => result.current.startImport());
+    // The old read's answer and the start's 202 are applied in one batch, before React renders.
+    await act(async () => {
+      releaseOld();
+      await result.current.startImport();
+    });
     await settle();
 
     expect(reads).toBe(3);

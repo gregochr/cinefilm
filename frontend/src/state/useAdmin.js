@@ -188,10 +188,16 @@ export function usePlexImport() {
  */
 export function usePlexCreditsImport() {
   const calls = useRef(0);
-  const { data, error, loading, reload, refresh } = useResource('admin-plex-credits', (options) => {
+  const { data, error, loading, refresh } = useResource('admin-plex-credits', (options) => {
     calls.current += 1;
     const read = calls.current;
-    return adminApi.plexCredits(options).then((status) => ({ ...status, read }));
+    return adminApi
+      .plexCredits(options)
+      .then((status) => ({ ...status, read }))
+      .finally(() => {
+        // Only the latest call's own settling (an answer, a failure or its abort) ends the in-flight mark.
+        if (read === calls.current) readInFlight.current = false;
+      });
   });
   const [starting, setStarting] = useState(false);
   const [notice, setNotice] = useState(null);
@@ -199,8 +205,6 @@ export function usePlexCreditsImport() {
   const [announcement, setAnnouncement] = useState('');
   const startedRef = useRef(false);
   const seenFinished = useRef(undefined);
-  const dataRef = useRef(data);
-  dataRef.current = data;
   const timer = useRef(null);
   const readInFlight = useRef(false);
   const credits = started && !(data && data.read > started.afterRead) ? started.status : data;
@@ -230,23 +234,14 @@ export function usePlexCreditsImport() {
     read();
   }, []);
 
-  // A read has answered: data or error changed, and it is not the loading state of a reload just issued.
-  useEffect(() => {
-    if (!loading) readInFlight.current = false;
-  }, [data, error, loading]);
-
   useEffect(() => {
     if (!running || loading || readInFlight.current) return undefined;
     timer.current = setTimeout(() => look(refresh), SCAN_POLL_MS);
     return () => clearTimeout(timer.current);
   }, [running, data, error, loading, look, refresh]);
 
-  // Without a status on screen "Check again" shows the loading state; with one it looks quietly, so the button the
-  // user just pressed stays where it is.
-  const checkAgain = useCallback(
-    () => look(dataRef.current ? refresh : reload),
-    [look, refresh, reload],
-  );
+  // "Check again" looks quietly, so the button the user just pressed (and its alert) stay where they are.
+  const checkAgain = useCallback(() => look(refresh), [look, refresh]);
 
   const startImport = useCallback(async () => {
     if (startedRef.current) return;
