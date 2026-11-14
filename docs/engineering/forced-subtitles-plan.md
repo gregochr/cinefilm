@@ -1122,7 +1122,8 @@ links to each film's rows.
     track that is needed and has no text version: every picture track is an empty placeholder, a full track in an
     English-original film, or a LOTR forced track with a text forced file here or online. OCR (way A) and burn-in
     (way B) would cost a build and a dependency for nothing the owner would see. The full-size picture tracks stay
-    useful as phase 3 timing references (`EmbeddedStreams` reads their packet times without OCR). **Revisit** only if
+    useful as phase 3 timing references (`EmbeddedStreams` picks them and `EmbeddedCueReader` reads their packet
+    times, no OCR). **Revisit** only if
     a new rip brings a picture track to a foreign-language film, or a forced-size picture track to a film with no forced
     text here or online. The same read-only pass finds it. **Alternative given up:** build OCR anyway for future rips.
     It would be built against no real need, and OpenSubtitles already covers the films it would serve.
@@ -1238,14 +1239,14 @@ scripts were kept outside the repo.
 | **Picture only: needed, and no text version here or online** | **0** |
 
 - **Every film with a picture track is English-original.** No foreign-language film has one, so no picture track is
-  needed for full subtitles (phase 5 needs full subtitles only for foreign films, decision 70).
+  needed for full subtitles (phase 5 needs full subtitles only for foreign films, decision 67).
 - **The forced-size tracks are the three LOTR theatrical cuts.** Each has a text version: Return of the King's is
-  matched. For Fellowship and Two Towers, the owner's unmatched `.srt` files are attached in Admin (owner decision 3),
-  or the forced downloader fetches the text from OpenSubtitles.
+  matched. For Fellowship and Two Towers, the owner's unmatched `.srt` files can be attached in Admin (owner
+  decision 3, still open), or the forced downloader fetches the text from OpenSubtitles.
 - **Placeholders are already hidden.** `FfprobeParser` stores only text codecs, so no picture track, empty or not, ever
   reaches the subtitle menu.
 
-**Decision 71** follows.
+Recorded as decision 71 (in the phase 5 decisions list above).
 
 ## Owner decisions needed
 
