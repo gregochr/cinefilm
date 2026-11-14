@@ -27,9 +27,9 @@ import org.springframework.stereotype.Component;
 public class TmdbMatcher {
 
     /** Minimum score for an automatic match. Exact title alone (50) is not enough; with the year or runtime it is. */
-    static final int ACCEPT_SCORE = 60;
+    public static final int ACCEPT_SCORE = 60;
     /** How far ahead of the second candidate the best must be. */
-    static final int MARGIN = 10;
+    public static final int MARGIN = 10;
     static final int MAX_CANDIDATES = 5;
     static final long RUNTIME_TOLERANCE_MS = 8 * 60_000L;
     private static final double EXACT_TITLE = 50;

@@ -302,6 +302,28 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
             + "order by f.sortTitle, f.id")
     List<FullNeedRow> findFullNeedRows();
 
+    /**
+     * Whether a film's full-subtitle search is current, from the columns alone (the candidates' text is not read).
+     *
+     * @param id the film
+     * @param imdbId its current IMDb id
+     * @param searchedImdbId the IMDb id the full search was for, or null
+     * @param hasCandidates true when the search stored a result (the array may be empty)
+     */
+    record OsFullState(Long id, String imdbId, String searchedImdbId, boolean hasCandidates) {
+
+        /** True when the film has an IMDb id and a full search stored a result for that id. */
+        public boolean searched() {
+            return imdbId != null && imdbId.equals(searchedImdbId) && hasCandidates;
+        }
+    }
+
+    /** Every film with an IMDb id and what its full-subtitle search stored (no candidates text). */
+    @org.springframework.data.jpa.repository.Query(
+        "select new gregochr.cinefilm.film.FilmRepository$OsFullState(f.id, f.imdbId, f.osFullSearchedImdbId, "
+            + "case when f.osFullCandidates is null then false else true end) from Film f where f.imdbId is not null")
+    List<OsFullState> findOpenSubtitlesFullStates();
+
     /** When ratings were last fetched for any film, or null when never. */
     @org.springframework.data.jpa.repository.Query("select max(f.ratingsFetchedAt) from Film f")
     java.time.Instant findLatestRatingsFetchedAt();

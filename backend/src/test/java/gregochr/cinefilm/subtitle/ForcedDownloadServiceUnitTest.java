@@ -165,8 +165,8 @@ class ForcedDownloadServiceUnitTest {
 
     private void needed(boolean isNeeded) {
         FilmNeedDto dto = new FilmNeedDto(1L, "Taken", 2008, isNeeded ? "NEEDED" : "UNSURE", "OPENSUBTITLES", null,
-            "en", List.of("en"), false, 2, NOW);
-        when(need.list()).thenReturn(new NeedListDto(List.of(dto), new CountsDto(1, 1, 0, 0, 0)));
+            "en", List.of("en"), false, 2, NOW, false, false);
+        when(need.list()).thenReturn(new NeedListDto(List.of(dto), new CountsDto(1, 1, 0, 0, 0, 0, 0)));
     }
 
     private void searched() {

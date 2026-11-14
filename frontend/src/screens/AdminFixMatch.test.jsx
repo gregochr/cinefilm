@@ -13,7 +13,9 @@ const isApply = (m, url) => m === 'POST' && url === '/api/admin/films/31/match';
 async function openPanel() {
   renderApp('/admin');
   const attention = await screen.findByRole('region', { name: 'Films needing attention' });
-  await userEvent.click(await within(attention).findByRole('button', { name: 'Find the film…' }));
+  // The first unmatched film is The Wicker Man (id 31); the fixtures list a second one after the other kinds.
+  const openers = await within(attention).findAllByRole('button', { name: 'Find the film…' });
+  await userEvent.click(openers[0]);
   return screen.findByRole('region', { name: 'Fix match' });
 }
 
@@ -23,7 +25,7 @@ describe('Admin: Fix match', () => {
     renderApp('/admin');
     const attention = await screen.findByRole('region', { name: 'Films needing attention' });
     const buttons = await within(attention).findAllByRole('button', { name: 'Find the film…' });
-    expect(buttons).toHaveLength(1);
+    expect(buttons).toHaveLength(2);
     expect(buttons[0]).toHaveAccessibleDescription(
       'Search TMDB and choose which film this file is.',
     );

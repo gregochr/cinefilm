@@ -31,7 +31,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class ForcedNeedControllerTest {
 
     private static final FilmNeedDto TAKEN = new FilmNeedDto(7L, "Taken", 2008, "NEEDED", "OWNER", "NEEDED", "en",
-        List.of("en", "fr", "sq"), true, 7, Instant.parse("2024-03-31T23:30:00Z"));
+        List.of("en", "fr", "sq"), true, 7, Instant.parse("2024-03-31T23:30:00Z"), true, false);
 
     @Autowired
     private MockMvc mvc;
@@ -45,7 +45,7 @@ class ForcedNeedControllerTest {
 
     @Test
     void theListReturnsEveryFilmWithItsShapeAndTheCounts() throws Exception {
-        when(service.list()).thenReturn(new NeedListDto(List.of(TAKEN), new CountsDto(1, 0, 2, 3, 4)));
+        when(service.list()).thenReturn(new NeedListDto(List.of(TAKEN), new CountsDto(1, 0, 2, 3, 4, 5, 6)));
 
         mvc.perform(get("/api/admin/forced-subtitles/films").with(user("owner")))
             .andExpect(status().isOk())
@@ -66,7 +66,11 @@ class ForcedNeedControllerTest {
             .andExpect(jsonPath("$.counts.neededMissing").value(0))
             .andExpect(jsonPath("$.counts.unsure").value(2))
             .andExpect(jsonPath("$.counts.unknown").value(3))
-            .andExpect(jsonPath("$.counts.notNeeded").value(4));
+            .andExpect(jsonPath("$.films[0].unresolved").value(true))
+            .andExpect(jsonPath("$.films[0].beingChecked").value(false))
+            .andExpect(jsonPath("$.counts.notNeeded").value(4))
+            .andExpect(jsonPath("$.counts.unresolved").value(5))
+            .andExpect(jsonPath("$.counts.beingChecked").value(6));
     }
 
     @Test

@@ -18,6 +18,7 @@ import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmDtos.FullSubtitleDto;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.FullNeedRow;
+import gregochr.cinefilm.film.FilmRepository.OsFullState;
 import gregochr.cinefilm.film.FullNeedChoice;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.film.MediaFileRepository.AudioRow;
@@ -28,6 +29,7 @@ import gregochr.cinefilm.subtitle.FullNeedDtos.EditionAudioDto;
 import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedFilmDto;
 import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedListDto;
 import gregochr.cinefilm.subtitle.FullNeedDtos.FullSubtitleStateDto;
+import gregochr.cinefilm.subtitle.PendingDownloads.Pending;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -61,6 +63,9 @@ class FullNeedServiceTest {
     @Mock
     private FullSubtitleService fullSubtitles;
 
+    @Mock
+    private PendingDownloads pending;
+
     private final LibraryLock lock = new LibraryLock();
     private final List<String> events = new ArrayList<>();
     private FullNeedService service;
@@ -84,7 +89,7 @@ class FullNeedServiceTest {
                 events.add("rollback, lock " + lock.holder());
             }
         };
-        service = new FullNeedService(films, files, editions, fullSubtitles, lock, manager);
+        service = new FullNeedService(films, files, editions, fullSubtitles, pending, lock, manager);
     }
 
     private static FullNeedRow row(long id, String title, String original, FullNeedChoice owner) {
@@ -128,7 +133,7 @@ class FullNeedServiceTest {
 
         assertThat(list.films()).extracting(FullNeedFilmDto::filmId).containsExactly(1L, 5L);
         assertThat(list.films().get(0)).isEqualTo(new FullNeedFilmDto(1L, "Amelie", 2000, "NEEDED", "FOREIGN_AUDIO",
-            null, List.of(new EditionAudioDto("Original", "French")), null));
+            null, List.of(new EditionAudioDto("Original", "French")), null, "fr", true, false));
         assertThat(list.films().get(1).reason()).isEqualTo("OWNER");
         assertThat(list.films().get(1).ownerChoice()).isEqualTo("NEEDED");
         assertThat(list.counts().needed()).isEqualTo(2);
@@ -266,7 +271,7 @@ class FullNeedServiceTest {
 
         assertThat(amelie.getFullNeedOwner()).isEqualTo(FullNeedChoice.NOT_NEEDED);
         assertThat(dto).isEqualTo(new FullNeedFilmDto(7L, "Amelie", 2001, "NOT_NEEDED", "OWNER", "NOT_NEEDED",
-            List.of(new EditionAudioDto("Original", "French")), null));
+            List.of(new EditionAudioDto("Original", "French")), null, "fr", false, false));
         assertThat(events).containsExactly("begin, lock subtitle", "commit, lock subtitle");
         assertThat(lock.holder()).isNull();
     }
@@ -389,5 +394,113 @@ class FullNeedServiceTest {
         assertThat(service.isNeeded(7L)).isTrue();
         assertThat(service.isNeeded(8L)).isFalse();
         assertThat(service.isNeeded(9L)).isFalse();
+    }
+
+    /** Six in-scope films in every state the rule tells apart; ids 1..6, search states as in the comments. */
+    private void sixFilmsInEveryState() {
+        when(films.findFullNeedRows()).thenReturn(List.of(row(1, "NoImdb", "fr", null),
+            row(2, "NotSearched", "fr", null), row(3, "Coming", "fr", null), row(4, "Stuck", "fr", null),
+            row(5, "Plays", "fr", null), row(6, "Heat", "en", FullNeedChoice.NOT_NEEDED)));
+        when(files.findAudioRows(List.of(1L, 2L, 3L, 4L, 5L, 6L))).thenReturn(List.of());
+        when(films.findOpenSubtitlesFullStates()).thenReturn(List.of(
+            new OsFullState(2L, "tt2", null, false), new OsFullState(3L, "tt3", "tt3", true),
+            new OsFullState(4L, "tt4", "tt4", true), new OsFullState(5L, "tt5", "tt5", true),
+            new OsFullState(6L, "tt6", "tt6", true)));
+        Edition playing = edition(film(5L, "Plays", 2000, NOW), 50L, "Original", 100, null);
+        when(editions.findWithFilesByFilmIdIn(List.of(1L, 2L, 3L, 4L, 5L, 6L))).thenReturn(List.of(playing));
+        when(fullSubtitles.forEditions(List.of(playing))).thenReturn(Map.of(50L, new FullSubtitleDto("DOWNLOAD", 1)));
+    }
+
+    @Test
+    void theFlagsAndCountsComeFromTheRuleForEveryState() {
+        sixFilmsInEveryState();
+        when(pending.full(Map.of(3L, "tt3", 4L, "tt4")))
+            .thenReturn(new Pending(java.util.Set.of(3L), java.util.Set.of(3L)));
+
+        FullNeedListDto list = service.list();
+
+        // 1: no IMDb id, unresolved. 2: not searched yet, being checked. 3: a candidate and an edition due, being
+        // checked. 4: searched, nothing to try, unresolved. 5: a subtitle plays. 6: not needed.
+        assertThat(list.films()).extracting(FullNeedFilmDto::unresolved)
+            .containsExactly(true, false, false, true, false, false);
+        assertThat(list.films()).extracting(FullNeedFilmDto::beingChecked)
+            .containsExactly(false, true, true, false, false, false);
+        assertThat(list.counts().unresolved()).isEqualTo(2);
+        assertThat(list.counts().beingChecked()).isEqualTo(2);
+        verify(pending).full(Map.of(3L, "tt3", 4L, "tt4"));
+    }
+
+    @Test
+    void aCandidateWithNoDueEditionLeftOrADueEditionWithNoCandidateLeavesTheFilmUnresolved() {
+        sixFilmsInEveryState();
+        when(pending.full(Map.of(3L, "tt3", 4L, "tt4")))
+            .thenReturn(new Pending(java.util.Set.of(3L), java.util.Set.of(4L)));
+
+        FullNeedListDto list = service.list();
+
+        assertThat(list.films().get(2).unresolved()).isTrue();
+        assertThat(list.films().get(2).beingChecked()).isFalse();
+        assertThat(list.films().get(3).unresolved()).isTrue();
+        assertThat(list.films().get(3).beingChecked()).isFalse();
+    }
+
+    @Test
+    void unresolvedOrBeingCheckedIsExactlyNeededWithNoFullSubtitle() {
+        sixFilmsInEveryState();
+        when(pending.full(Map.of(3L, "tt3", 4L, "tt4")))
+            .thenReturn(new Pending(java.util.Set.of(3L), java.util.Set.of(3L)));
+
+        List<FullNeedFilmDto> listed = service.list().films();
+
+        assertThat(listed.stream().filter(f -> f.unresolved() || f.beingChecked()).map(FullNeedFilmDto::filmId))
+            .containsExactlyElementsOf(listed.stream()
+                .filter(f -> "NEEDED".equals(f.need()) && f.fullSubtitle() == null)
+                .map(FullNeedFilmDto::filmId).toList());
+        assertThat(listed.stream().filter(f -> f.unresolved() && f.beingChecked())).isEmpty();
+    }
+
+    @Test
+    void theOriginalLanguageIsTmdbsCode() {
+        sixFilmsInEveryState();
+        when(pending.full(Map.of(3L, "tt3", 4L, "tt4"))).thenReturn(Pending.NONE);
+
+        assertThat(service.list().films()).extracting(FullNeedFilmDto::originalLanguage)
+            .containsExactly("fr", "fr", "fr", "fr", "fr", "en");
+    }
+
+    @Test
+    void choosingAnswersTheFlagsToo() {
+        Film amelie = stored(7L, "fr", null);
+        amelie.setImdbId("tt7");
+        amelie.setOsFullSearchedImdbId("tt7");
+        amelie.setOsFullCandidates("[]");
+        when(films.findByIdForUpdate(7L)).thenReturn(Optional.of(amelie));
+        when(files.findAudioRows(List.of(7L))).thenReturn(List.of());
+        when(pending.full(Map.of(7L, "tt7"))).thenReturn(new Pending(java.util.Set.of(7L), java.util.Set.of(7L)));
+
+        FullNeedFilmDto dto = service.choose(7L, new ChoiceRequest("NEEDED"));
+
+        assertThat(dto.beingChecked()).isTrue();
+        assertThat(dto.unresolved()).isFalse();
+        assertThat(dto.originalLanguage()).isEqualTo("fr");
+    }
+
+    @Test
+    void choosingAFilmNotYetSearchedIsBeingCheckedAndOneWithoutAnImdbIdIsUnresolved() {
+        Film searchable = stored(7L, "fr", null);
+        searchable.setImdbId("tt7");
+        Film bare = stored(8L, "fr", null);
+        when(films.findByIdForUpdate(7L)).thenReturn(Optional.of(searchable));
+        when(films.findByIdForUpdate(8L)).thenReturn(Optional.of(bare));
+        when(files.findAudioRows(List.of(7L))).thenReturn(List.of());
+        when(files.findAudioRows(List.of(8L))).thenReturn(List.of());
+
+        FullNeedFilmDto notSearched = service.choose(7L, new ChoiceRequest("NEEDED"));
+        FullNeedFilmDto noImdb = service.choose(8L, new ChoiceRequest("NEEDED"));
+
+        assertThat(notSearched.beingChecked()).isTrue();
+        assertThat(notSearched.unresolved()).isFalse();
+        assertThat(noImdb.beingChecked()).isFalse();
+        assertThat(noImdb.unresolved()).isTrue();
     }
 }

@@ -144,7 +144,12 @@ describe('fixture server', () => {
 
   it('serves the Admin scan status and attention list', async () => {
     expect((await call('GET', '/api/admin/scan')).folder).toBe('/media');
-    expect((await call('GET', '/api/admin/attention')).items.length).toBeGreaterThan(0);
+    const attention = await call('GET', '/api/admin/attention');
+    expect(attention.items.length).toBeGreaterThan(0);
+    const confident = attention.items.filter((i) => i.confident);
+    expect(confident.map((i) => i.title)).toEqual(['Suspiria']);
+    expect(confident[0].candidates[0].score).toBe(60);
+    expect(attention.items.filter((i) => i.kind === 'needs-match' && !i.confident)).toHaveLength(1);
   });
 
   it('serves the Admin transcoding state and stops a session', async () => {
@@ -370,6 +375,8 @@ describe('fixture server: Admin settings', () => {
       unsure: 1,
       unknown: 1,
       notNeeded: 2,
+      unresolved: 1,
+      beingChecked: 1,
     });
 
     const chosen = await call('PUT', '/api/admin/films/2/forced-need', { choice: 'NOT_NEEDED' });
@@ -378,10 +385,18 @@ describe('fixture server: Admin settings', () => {
       need: 'NOT_NEEDED',
       reason: 'OWNER',
       ownerChoice: 'NOT_NEEDED',
+      unresolved: false,
+      beingChecked: false,
     });
     const after = await call('GET', '/api/admin/forced-subtitles/films');
     expect(after.films.find((f) => f.filmId === 2).need).toBe('NOT_NEEDED');
-    expect(after.counts).toMatchObject({ needed: 2, neededMissing: 1, notNeeded: 3 });
+    expect(after.counts).toMatchObject({
+      needed: 2,
+      neededMissing: 1,
+      notNeeded: 3,
+      unresolved: 0,
+      beingChecked: 1,
+    });
 
     const automatic = await call('PUT', '/api/admin/films/2/forced-need', { choice: null });
     expect(automatic).toEqual(before.films.find((f) => f.filmId === 2));
@@ -399,12 +414,20 @@ describe('fixture server: Admin settings', () => {
       ownerChoice: null,
       need: 'NOT_NEEDED',
       reason: 'ENGLISH_ONLY',
+      unresolved: false,
+      beingChecked: false,
     });
     const list = await call('GET', '/api/admin/forced-subtitles/films');
     expect(list.films.find((f) => f.filmId === 7)).toEqual(cleared);
 
     const again = await call('PUT', '/api/admin/films/7/forced-need', { choice: 'NEEDED' });
-    expect(again).toMatchObject({ ownerChoice: 'NEEDED', need: 'NEEDED', reason: 'OWNER' });
+    expect(again).toMatchObject({
+      ownerChoice: 'NEEDED',
+      need: 'NEEDED',
+      reason: 'OWNER',
+      unresolved: true,
+      beingChecked: false,
+    });
   });
 
   it('refuses a choice for an unknown film (404) or a bad value (400)', async () => {
@@ -423,18 +446,32 @@ describe('fixture server: Admin settings', () => {
 
   it('serves the full-subtitles list, and a PUT applies the owner’s choice and Automatic restores the rule', async () => {
     const before = await call('GET', '/api/admin/subtitles/full-need');
-    expect(titles(before)).toEqual(['Das Boot', 'Léon', 'Amélie', 'Rashomon']);
-    expect(before.counts).toEqual({ needed: 2, unsure: 0, unknown: 1, notNeeded: 1 });
+    expect(titles(before)).toEqual(['Das Boot', 'Léon', 'Amélie', 'Rashomon', 'Come and See']);
+    expect(before.counts).toEqual({
+      needed: 3,
+      unsure: 0,
+      unknown: 1,
+      notNeeded: 1,
+      unresolved: 1,
+      beingChecked: 1,
+    });
 
     const chosen = await call('PUT', '/api/admin/films/3/full-need', { choice: 'NOT_NEEDED' });
     expect(chosen).toMatchObject({
       need: 'NOT_NEEDED',
       reason: 'OWNER',
       ownerChoice: 'NOT_NEEDED',
+      unresolved: false,
+      beingChecked: false,
     });
     const after = await call('GET', '/api/admin/subtitles/full-need');
     expect(after.films.find((f) => f.filmId === 3)).toEqual(chosen);
-    expect(after.counts).toMatchObject({ needed: 1, notNeeded: 2 });
+    expect(after.counts).toMatchObject({
+      needed: 2,
+      notNeeded: 2,
+      unresolved: 1,
+      beingChecked: 1,
+    });
 
     const automatic = await call('PUT', '/api/admin/films/3/full-need', { choice: null });
     expect(automatic).toEqual(before.films.find((f) => f.filmId === 3));
@@ -444,6 +481,31 @@ describe('fixture server: Admin settings', () => {
       reason: 'ORIGINAL_AUDIO_ASSUMED',
       ownerChoice: null,
     });
+  });
+
+  it('gives a full row the flags the server would for the owner’s choice, and Automatic restores the loaded ones', async () => {
+    const loaded = (await call('GET', '/api/admin/subtitles/full-need')).films.find(
+      (f) => f.filmId === 7,
+    );
+    expect(loaded).toMatchObject({ unresolved: false, beingChecked: true, originalLanguage: 'ru' });
+
+    expect(
+      await call('PUT', '/api/admin/films/7/full-need', { choice: 'NOT_NEEDED' }),
+    ).toMatchObject({ unresolved: false, beingChecked: false });
+    expect(await call('PUT', '/api/admin/films/4/full-need', { choice: 'NEEDED' })).toMatchObject({
+      need: 'NEEDED',
+      unresolved: true,
+      beingChecked: false,
+    });
+    expect(await call('PUT', '/api/admin/films/7/full-need', { choice: 'NEEDED' })).toMatchObject({
+      unresolved: false,
+      beingChecked: true,
+    });
+    expect(await call('PUT', '/api/admin/films/7/full-need', { choice: null })).toMatchObject({
+      unresolved: false,
+      beingChecked: true,
+    });
+    await call('PUT', '/api/admin/films/4/full-need', { choice: null });
   });
 
   it('refuses a full-subtitles choice for an unknown film (404) or a bad value (400)', async () => {

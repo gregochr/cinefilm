@@ -19,11 +19,16 @@ import gregochr.cinefilm.subtitle.ForcedNeedDtos.ChoiceRequest;
 import gregochr.cinefilm.subtitle.ForcedNeedDtos.CountsDto;
 import gregochr.cinefilm.subtitle.ForcedNeedDtos.FilmNeedDto;
 import gregochr.cinefilm.subtitle.ForcedNeedDtos.NeedListDto;
+import gregochr.cinefilm.subtitle.PendingDownloads.Pending;
+import gregochr.cinefilm.todo.AdminTodoRules;
+import gregochr.cinefilm.todo.AdminTodoRules.ForcedFacts;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -43,18 +48,21 @@ public class ForcedNeedService {
     private final MediaFileRepository files;
     private final EditionRepository editions;
     private final ForcedSubtitleService forcedSubtitles;
+    private final PendingDownloads pending;
     private final LibraryLock lock;
     private final TransactionTemplate tx;
 
     /** Creates the service. */
     public ForcedNeedService(FilmRepository films, SubtitleSidecarRepository sidecars, MediaFileRepository files,
-                             EditionRepository editions, ForcedSubtitleService forcedSubtitles, LibraryLock lock,
+                             EditionRepository editions, ForcedSubtitleService forcedSubtitles,
+                             PendingDownloads pending, LibraryLock lock,
                              PlatformTransactionManager transactions) {
         this.films = films;
         this.sidecars = sidecars;
         this.files = files;
         this.editions = editions;
         this.forcedSubtitles = forcedSubtitles;
+        this.pending = pending;
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
     }
@@ -69,10 +77,15 @@ public class ForcedNeedService {
         Set<Long> withEmbedded = new HashSet<>(files.findFilmIdsWithEmbeddedForced());
         // Only the films with a subtitle of their own (a couple of dozen) are asked what playback would serve.
         Set<Long> served = withSubtitle.isEmpty() ? Set.of() : servedFilmIds(withSubtitle);
-        List<FilmNeedDto> dtos = new ArrayList<>();
+        List<Eval> evals = new ArrayList<>();
         for (NeedRow row : rows) {
-            dtos.add(dto(row, withSidecar.contains(row.id()), served.contains(row.id()),
+            evals.add(eval(row, withSidecar.contains(row.id()), served.contains(row.id()),
                 withEmbedded.contains(row.id())));
+        }
+        Pending due = pendingFor(evals);
+        List<FilmNeedDto> dtos = new ArrayList<>();
+        for (Eval eval : evals) {
+            dtos.add(dto(eval, due));
         }
         return new NeedListDto(dtos, counts(dtos));
     }
@@ -111,9 +124,9 @@ public class ForcedNeedService {
     @Transactional(readOnly = true)
     public boolean isNeeded(Long filmId) {
         Film film = films.findById(filmId).orElse(null);
-        return film != null && "NEEDED".equals(dto(row(film, film.getForcedNeedOwner()),
+        return film != null && eval(row(film, film.getForcedNeedOwner()),
             sidecars.countPresentForFilm(filmId, SubtitleKind.FORCED) > 0, false,
-            files.countEmbeddedForcedForFilm(filmId) > 0).need());
+            files.countEmbeddedForcedForFilm(filmId) > 0).decision().need() == Need.NEEDED;
     }
 
     private static NeedRow row(Film film, ForcedNeedChoice choice) {
@@ -129,7 +142,8 @@ public class ForcedNeedService {
         boolean hasSidecar = sidecars.countPresentForFilm(filmId, SubtitleKind.FORCED) > 0;
         boolean served = sidecars.countPresentSubtitlesForFilm(filmId, SubtitleKind.FORCED) > 0
             && !servedFilmIds(List.of(filmId)).isEmpty();
-        return dto(row, hasSidecar, served, files.countEmbeddedForcedForFilm(filmId) > 0);
+        Eval eval = eval(row, hasSidecar, served, files.countEmbeddedForcedForFilm(filmId) > 0);
+        return dto(eval, pendingFor(List.of(eval)));
     }
 
     /**
@@ -162,7 +176,12 @@ public class ForcedNeedService {
         }
     }
 
-    private static FilmNeedDto dto(NeedRow row, boolean hasSidecar, boolean served, boolean hasEmbeddedForced) {
+    /** One film's need worked out, before the flags that need the download pipeline's facts. */
+    private record Eval(NeedRow row, Decision decision, List<String> spoken, Integer openSubtitles,
+                        Instant openSubtitlesAt, boolean served) {
+    }
+
+    private static Eval eval(NeedRow row, boolean hasSidecar, boolean served, boolean hasEmbeddedForced) {
         List<String> spoken = SpokenLanguages.parse(row.spokenLanguages());
         // TMDB counts as asked once stamped and while the film still has an id; a film it no longer has has no
         // languages at all.
@@ -175,9 +194,33 @@ public class ForcedNeedService {
         Integer openSubtitles = searched ? row.osForcedCount() : null;
         Instant openSubtitlesAt = searched ? row.osSearchedAt() : null;
         Decision decision = ForcedNeed.decide(row.owner(), hasSidecar, hasEmbeddedForced, openSubtitles, languages);
-        return new FilmNeedDto(row.id(), row.title(), row.year(), decision.need().name(), decision.reason().name(),
-            row.owner() == null ? null : row.owner().name(), row.originalLanguage(), spoken, served, openSubtitles,
-            openSubtitlesAt);
+        return new Eval(row, decision, spoken, openSubtitles, openSubtitlesAt, served);
+    }
+
+    /**
+     * The pipeline's facts for the films that could be "being checked" by a download: shown, no forced subtitle served
+     * and OpenSubtitles had files for them. Only those need the editions looked at (one bulk read).
+     */
+    private Pending pendingFor(List<Eval> evals) {
+        Map<Long, String> imdbIds = new LinkedHashMap<>();
+        for (Eval eval : evals) {
+            Integer count = eval.openSubtitles();
+            if (eval.decision().need() == Need.NEEDED && !eval.served() && eval.row().imdbId() != null
+                && count != null && count > 0) {
+                imdbIds.put(eval.row().id(), eval.row().imdbId());
+            }
+        }
+        return imdbIds.isEmpty() ? Pending.NONE : pending.forced(imdbIds);
+    }
+
+    private static FilmNeedDto dto(Eval eval, Pending due) {
+        NeedRow row = eval.row();
+        ForcedFacts facts = new ForcedFacts(eval.decision().need() == Need.NEEDED, eval.served(),
+            row.imdbId() != null, eval.openSubtitles(), due.withDueEdition().contains(row.id()));
+        return new FilmNeedDto(row.id(), row.title(), row.year(), eval.decision().need().name(),
+            eval.decision().reason().name(), row.owner() == null ? null : row.owner().name(), row.originalLanguage(),
+            eval.spoken(), eval.served(), eval.openSubtitles(), eval.openSubtitlesAt(),
+            AdminTodoRules.unresolvedForced(facts), AdminTodoRules.beingCheckedForced(facts));
     }
 
     private static CountsDto counts(List<FilmNeedDto> rows) {
@@ -186,7 +229,11 @@ public class ForcedNeedService {
         int unsure = 0;
         int unknown = 0;
         int notNeeded = 0;
+        int unresolved = 0;
+        int beingChecked = 0;
         for (FilmNeedDto row : rows) {
+            unresolved += row.unresolved() ? 1 : 0;
+            beingChecked += row.beingChecked() ? 1 : 0;
             switch (Need.valueOf(row.need())) {
                 case NEEDED -> {
                     needed++;
@@ -199,6 +246,6 @@ public class ForcedNeedService {
                 case NOT_NEEDED -> notNeeded++;
             }
         }
-        return new CountsDto(needed, neededMissing, unsure, unknown, notNeeded);
+        return new CountsDto(needed, neededMissing, unsure, unknown, notNeeded, unresolved, beingChecked);
     }
 }

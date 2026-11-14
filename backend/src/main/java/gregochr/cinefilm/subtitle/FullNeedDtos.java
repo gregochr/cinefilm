@@ -38,10 +38,16 @@ public final class FullNeedDtos {
      * @param editions the film's present editions and their audio labels
      * @param fullSubtitle what the film plays as full English subtitles on some edition (the owner's file when any
      *     edition plays one, else a download), or null when no edition plays one
+     * @param originalLanguage TMDB's original language code, or null
+     * @param unresolved true when the need is {@code NEEDED}, no full subtitle plays and nothing automatic is still to
+     *     come: the owner has to act (see {@code AdminTodoRules})
+     * @param beingChecked true when the need is {@code NEEDED}, no full subtitle plays and an automatic search or
+     *     download is still to come
      */
     public record FullNeedFilmDto(Long filmId, String title, Integer year, String need, String reason,
                                   String ownerChoice, List<EditionAudioDto> editions,
-                                  FullSubtitleStateDto fullSubtitle) {
+                                  FullSubtitleStateDto fullSubtitle, String originalLanguage, boolean unresolved,
+                                  boolean beingChecked) {
     }
 
     /**
@@ -51,8 +57,11 @@ public final class FullNeedDtos {
      * @param unsure films that are {@code UNSURE}
      * @param unknown films that are {@code UNKNOWN}
      * @param notNeeded films that are {@code NOT_NEEDED}
+     * @param unresolved films whose row is {@code unresolved}
+     * @param beingChecked films whose row is {@code beingChecked}
      */
-    public record FullNeedCountsDto(int needed, int unsure, int unknown, int notNeeded) {
+    public record FullNeedCountsDto(int needed, int unsure, int unknown, int notNeeded, int unresolved,
+                                    int beingChecked) {
     }
 
     /**

@@ -11,7 +11,9 @@
       "spokenLanguages": ["en"],
       "hasForcedSubtitle": false,
       "openSubtitlesForcedCount": 0,
-      "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z"
+      "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
+      "unresolved": false,
+      "beingChecked": false
     },
     {
       "filmId": 2,
@@ -24,7 +26,9 @@
       "spokenLanguages": ["en", "fr", "ru"],
       "hasForcedSubtitle": false,
       "openSubtitlesForcedCount": 0,
-      "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z"
+      "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
+      "unresolved": true,
+      "beingChecked": false
     },
     {
       "filmId": 3,
@@ -37,7 +41,9 @@
       "spokenLanguages": ["de"],
       "hasForcedSubtitle": false,
       "openSubtitlesForcedCount": 7,
-      "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z"
+      "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
+      "unresolved": false,
+      "beingChecked": true
     },
     {
       "filmId": 4,
@@ -50,7 +56,9 @@
       "spokenLanguages": ["en", "de", "fr"],
       "hasForcedSubtitle": true,
       "openSubtitlesForcedCount": 0,
-      "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z"
+      "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
+      "unresolved": false,
+      "beingChecked": false
     },
     {
       "filmId": 5,
@@ -63,7 +71,9 @@
       "spokenLanguages": ["en"],
       "hasForcedSubtitle": false,
       "openSubtitlesForcedCount": 0,
-      "openSubtitlesSearchedAt": null
+      "openSubtitlesSearchedAt": null,
+      "unresolved": false,
+      "beingChecked": false
     },
     {
       "filmId": 6,
@@ -76,7 +86,9 @@
       "spokenLanguages": [],
       "hasForcedSubtitle": false,
       "openSubtitlesForcedCount": 0,
-      "openSubtitlesSearchedAt": null
+      "openSubtitlesSearchedAt": null,
+      "unresolved": false,
+      "beingChecked": false
     },
     {
       "filmId": 7,
@@ -89,8 +101,18 @@
       "spokenLanguages": ["en", "fr"],
       "hasForcedSubtitle": false,
       "openSubtitlesForcedCount": 0,
-      "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z"
+      "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
+      "unresolved": false,
+      "beingChecked": false
     }
   ],
-  "counts": { "needed": 3, "neededMissing": 2, "unsure": 1, "unknown": 1, "notNeeded": 2 }
+  "counts": {
+    "needed": 3,
+    "neededMissing": 2,
+    "unsure": 1,
+    "unknown": 1,
+    "notNeeded": 2,
+    "unresolved": 1,
+    "beingChecked": 1
+  }
 }

@@ -222,12 +222,32 @@ const CHOICES = new Set(['NEEDED', 'NOT_NEEDED']);
  */
 const forcedChoices = new Map();
 /** What the automatic rule says for a fixture film that is loaded with an owner choice. */
-const AUTOMATIC_BASELINE = { 7: { need: 'NOT_NEEDED', reason: 'ENGLISH_ONLY' } };
+const AUTOMATIC_BASELINE = {
+  7: { need: 'NOT_NEEDED', reason: 'ENGLISH_ONLY', unresolved: false, beingChecked: false },
+};
+/** A film that is not needed is in neither state; the server's rule is not rerun here. */
+const NOT_IN_PLAY = { unresolved: false, beingChecked: false };
+/**
+ * What the server's rule would say for each fixture film if the owner said "needed": data worked out by hand from the
+ * fixture's facts (a subtitle already plays, nothing online, files online with a due edition), not computed.
+ */
+const FORCED_IF_NEEDED = {
+  1: { unresolved: true, beingChecked: false },
+  2: { unresolved: true, beingChecked: false },
+  3: { unresolved: false, beingChecked: true },
+  4: NOT_IN_PLAY,
+  5: { unresolved: true, beingChecked: false },
+  6: { unresolved: true, beingChecked: false },
+  7: { unresolved: true, beingChecked: false },
+};
 
 function forcedRow(loaded) {
   if (!forcedChoices.has(loaded.filmId)) return loaded;
   const choice = forcedChoices.get(loaded.filmId);
-  if (choice) return { ...loaded, need: choice, reason: 'OWNER', ownerChoice: choice };
+  if (choice) {
+    const flags = choice === 'NEEDED' ? FORCED_IF_NEEDED[loaded.filmId] : NOT_IN_PLAY;
+    return { ...loaded, need: choice, reason: 'OWNER', ownerChoice: choice, ...flags };
+  }
   return { ...loaded, ...AUTOMATIC_BASELINE[loaded.filmId], ownerChoice: null };
 }
 
@@ -242,6 +262,8 @@ function forcedNeedList() {
       unsure: count('UNSURE'),
       unknown: count('UNKNOWN'),
       notNeeded: count('NOT_NEEDED'),
+      unresolved: rows.filter((r) => r.unresolved).length,
+      beingChecked: rows.filter((r) => r.beingChecked).length,
     },
   };
 }
@@ -261,11 +283,22 @@ const fullChoices = new Map();
 
 /** What the automatic rule says for a fixture film that is loaded with an owner choice (it is `OWNER` as loaded). */
 const FULL_AUTOMATIC = { 6: { need: 'NEEDED', reason: 'ORIGINAL_AUDIO_ASSUMED' } };
+/** What the server's rule would say for each fixture film if the owner said "needed" (worked out by hand, as above). */
+const FULL_IF_NEEDED = {
+  3: NOT_IN_PLAY,
+  4: { unresolved: true, beingChecked: false },
+  5: NOT_IN_PLAY,
+  6: { unresolved: true, beingChecked: false },
+  7: { unresolved: false, beingChecked: true },
+};
 
 function fullRow(loaded) {
   if (!fullChoices.has(loaded.filmId)) return loaded;
   const choice = fullChoices.get(loaded.filmId);
-  if (choice) return { ...loaded, need: choice, reason: 'OWNER', ownerChoice: choice };
+  if (choice) {
+    const flags = choice === 'NEEDED' ? FULL_IF_NEEDED[loaded.filmId] : NOT_IN_PLAY;
+    return { ...loaded, need: choice, reason: 'OWNER', ownerChoice: choice, ...flags };
+  }
   return { ...loaded, ...FULL_AUTOMATIC[loaded.filmId], ownerChoice: null };
 }
 
@@ -279,6 +312,8 @@ function fullNeedList() {
       unsure: count('UNSURE'),
       unknown: count('UNKNOWN'),
       notNeeded: count('NOT_NEEDED'),
+      unresolved: rows.filter((r) => r.unresolved).length,
+      beingChecked: rows.filter((r) => r.beingChecked).length,
     },
   };
 }

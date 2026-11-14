@@ -13,16 +13,19 @@
           "title": "The Wicker Man",
           "year": 1973,
           "runtimeMinutes": 93,
-          "posterPath": "/a.jpg"
+          "posterPath": "/a.jpg",
+          "score": 62
         },
         {
           "tmdbId": 9708,
           "title": "The Wicker Man",
           "year": 2006,
           "runtimeMinutes": 102,
-          "posterPath": null
+          "posterPath": null,
+          "score": 58
         }
-      ]
+      ],
+      "confident": false
     },
     {
       "kind": "protected",
@@ -31,7 +34,8 @@
       "year": 1969,
       "detail": "Protected by FairPlay, so it can't be played",
       "files": ["Kes.m4v"],
-      "candidates": []
+      "candidates": [],
+      "confident": false
     },
     {
       "kind": "needs-conversion",
@@ -40,7 +44,8 @@
       "year": 1979,
       "detail": "Needs converting to MP4 before it can be played",
       "files": ["Alien.avi"],
-      "candidates": []
+      "candidates": [],
+      "confident": false
     },
     {
       "kind": "multiple-files",
@@ -49,7 +54,8 @@
       "year": 1982,
       "detail": "2 untagged versions of one film, runtimes differ by 22%",
       "files": ["Blade Runner.m4v", "Blade Runner Final Cut.m4v"],
-      "candidates": []
+      "candidates": [],
+      "confident": false
     },
     {
       "kind": "parts-mismatch",
@@ -58,7 +64,27 @@
       "year": 2002,
       "detail": "Part 2: video codec is h264, part 1 has hevc",
       "files": ["The Two Towers pt1.m4v", "The Two Towers pt2.m4v"],
-      "candidates": []
+      "candidates": [],
+      "confident": false
+    },
+    {
+      "kind": "needs-match",
+      "filmId": 34,
+      "title": "Suspiria",
+      "year": 1977,
+      "detail": "1 possible match",
+      "files": ["Suspiria.m4v"],
+      "candidates": [
+        {
+          "tmdbId": 37557,
+          "title": "Suspiria",
+          "year": 1977,
+          "runtimeMinutes": 98,
+          "posterPath": "/s.jpg",
+          "score": 60
+        }
+      ],
+      "confident": true
     }
   ]
 }

@@ -238,7 +238,7 @@ public class ForcedDownloadService {
     }
 
     /** True when a present owner's full file with lines is attached to one of the edition's parts. */
-    private static boolean hasOwnerFile(Edition edition, List<SubtitleSidecar> allFull) {
+    static boolean hasOwnerFile(Edition edition, List<SubtitleSidecar> allFull) {
         List<Long> partIds = partIdsOf(edition);
         return allFull.stream().anyMatch(s -> !s.isDownload() && s.getPresence() == Presence.PRESENT
             && s.getCueCount() > 0 && partIds.contains(s.getMediaFileId()));
@@ -249,7 +249,7 @@ public class ForcedDownloadService {
      * {@code hasLiveDownload}. A download that is not present does not suppress a retry; removed files stay counted
      * by the cap through their blocks.
      */
-    private static boolean hasDownload(Edition edition, List<SubtitleSidecar> allFull) {
+    static boolean hasDownload(Edition edition, List<SubtitleSidecar> allFull) {
         return allFull.stream().anyMatch(s -> s.isDownload() && Downloads.madeFor(edition, s)
             && s.getPresence() == Presence.PRESENT && s.getCueCount() > 0);
     }
@@ -299,7 +299,7 @@ public class ForcedDownloadService {
     }
 
     /** Why (and whether) an edition is due, from its resolution (the need is already shown). */
-    private static Optional<Kind> kind(Resolution resolution) {
+    static Optional<Kind> kind(Resolution resolution) {
         FileSide file = resolution.fileAssessment() == null ? null : new FileSide(resolution.fileAssessment(),
             resolution.filePick().slots().stream().mapToInt(s -> s.sidecar().getCueCount()).sum());
         return DownloadPlan.kind(true, resolution.fileConflict(), file, resolution.decision().hasLiveDownload(),
@@ -310,7 +310,7 @@ public class ForcedDownloadService {
      * The OpenSubtitles file ids already used up for an edition, IMDb id and kind: its downloads and the ones removed.
      * A download or block of the other kind never counts.
      */
-    private static Set<Long> skippedFileIds(Edition edition, String imdbId, SubtitleKind kind,
+    static Set<Long> skippedFileIds(Edition edition, String imdbId, SubtitleKind kind,
                                             List<ForcedDownloadBlock> allBlocks, List<SubtitleSidecar> allDownloads) {
         Set<Long> skipped = new HashSet<>();
         allBlocks.stream().filter(b -> b.getKind() == kind && b.getEditionId().equals(edition.getId())

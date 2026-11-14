@@ -197,7 +197,8 @@ class AdminControllerTest {
     @Test
     void getAttentionReturnsTheItemsWithTheirCandidates() throws Exception {
         when(admin.attention()).thenReturn(new Attention(List.of(new AttentionItem("needs-match", 9L, "Dune", null,
-            "2 possible matches", List.of("Dune.m4v"), List.of(new CandidateDto(841, "Dune", 1984, 136, "/p.jpg"))))));
+            "2 possible matches", List.of("Dune.m4v"),
+            List.of(new CandidateDto(841, "Dune", 1984, 136, "/p.jpg", 72)), true))));
 
         mvc.perform(get("/api/admin/attention").with(user("owner")))
             .andExpect(status().isOk())
@@ -209,6 +210,8 @@ class AdminControllerTest {
             .andExpect(jsonPath("$.items[0].files[0]").value("Dune.m4v"))
             .andExpect(jsonPath("$.items[0].candidates[0].tmdbId").value(841))
             .andExpect(jsonPath("$.items[0].candidates[0].runtimeMinutes").value(136))
-            .andExpect(jsonPath("$.items[0].candidates[0].posterPath").value("/p.jpg"));
+            .andExpect(jsonPath("$.items[0].candidates[0].posterPath").value("/p.jpg"))
+            .andExpect(jsonPath("$.items[0].candidates[0].score").value(72))
+            .andExpect(jsonPath("$.items[0].confident").value(true));
     }
 }

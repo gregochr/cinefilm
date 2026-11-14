@@ -11,6 +11,7 @@ import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmDtos.FullSubtitleDto;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.FullNeedRow;
+import gregochr.cinefilm.film.FilmRepository.OsFullState;
 import gregochr.cinefilm.film.FullNeedChoice;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.film.MediaFileRepository.AudioRow;
@@ -27,6 +28,9 @@ import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedCountsDto;
 import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedFilmDto;
 import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedListDto;
 import gregochr.cinefilm.subtitle.FullNeedDtos.FullSubtitleStateDto;
+import gregochr.cinefilm.subtitle.PendingDownloads.Pending;
+import gregochr.cinefilm.todo.AdminTodoRules;
+import gregochr.cinefilm.todo.AdminTodoRules.FullFacts;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -57,17 +61,19 @@ public class FullNeedService {
     private final MediaFileRepository files;
     private final EditionRepository editions;
     private final FullSubtitleService fullSubtitles;
+    private final PendingDownloads pending;
     private final LibraryLock lock;
     private final TransactionTemplate tx;
 
     /** Creates the service. */
     public FullNeedService(FilmRepository films, MediaFileRepository files, EditionRepository editions,
-                           FullSubtitleService fullSubtitles, LibraryLock lock,
+                           FullSubtitleService fullSubtitles, PendingDownloads pending, LibraryLock lock,
                            PlatformTransactionManager transactions) {
         this.films = films;
         this.files = files;
         this.editions = editions;
         this.fullSubtitles = fullSubtitles;
+        this.pending = pending;
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
     }
@@ -87,9 +93,18 @@ public class FullNeedService {
             : editionAudio(files.findAudioRows(inScope.stream().map(FullNeedRow::id).toList()));
         Map<Long, FullSubtitleStateDto> playing = inScope.isEmpty() ? Map.of()
             : playing(inScope.stream().map(FullNeedRow::id).toList());
-        List<FullNeedFilmDto> dtos = new ArrayList<>();
+        Map<Long, OsFullState> search = new HashMap<>();
+        if (!inScope.isEmpty()) {
+            films.findOpenSubtitlesFullStates().forEach(state -> search.put(state.id(), state));
+        }
+        List<Eval> evals = new ArrayList<>();
         for (FullNeedRow row : inScope) {
-            dtos.add(dto(row, audio.getOrDefault(row.id(), List.of()), playing.get(row.id())));
+            evals.add(eval(row, audio.getOrDefault(row.id(), List.of()), playing.get(row.id()), search.get(row.id())));
+        }
+        Pending due = pendingFor(evals);
+        List<FullNeedFilmDto> dtos = new ArrayList<>();
+        for (Eval eval : evals) {
+            dtos.add(dto(eval, due));
         }
         return new FullNeedListDto(dtos, counts(dtos));
     }
@@ -164,8 +179,11 @@ public class FullNeedService {
         Film film = films.findByIdForUpdate(filmId).orElseThrow(() -> new NotFoundException("No such film"));
         film.setFullNeedOwner(choice);
         FullNeedRow row = row(film, choice);
-        return dto(row, editionAudio(files.findAudioRows(List.of(filmId))).getOrDefault(filmId, List.of()),
-            playing(List.of(filmId)).get(filmId));
+        OsFullState state = new OsFullState(filmId, film.getImdbId(), film.getOsFullSearchedImdbId(),
+            film.getOsFullCandidates() != null);
+        Eval eval = eval(row, editionAudio(files.findAudioRows(List.of(filmId))).getOrDefault(filmId, List.of()),
+            playing(List.of(filmId)).get(filmId), state);
+        return dto(eval, pendingFor(List.of(eval)));
     }
 
     /**
@@ -258,16 +276,56 @@ public class FullNeedService {
         return FullNeed.decide(row.owner(), languages, editions.stream().map(EditionAudio::label).toList());
     }
 
-    private static FullNeedFilmDto dto(FullNeedRow row, List<EditionAudio> editions, FullSubtitleStateDto playing) {
-        Decision decision = decide(row, editions);
-        return new FullNeedFilmDto(row.id(), row.title(), row.year(), decision.need().name(),
-            decision.reason().name(), row.owner() == null ? null : row.owner().name(),
-            editions.stream().map(e -> new EditionAudioDto(e.name(), e.label())).toList(), playing);
+    /** One film's need worked out, before the flags that need the download pipeline's facts. */
+    private record Eval(FullNeedRow row, Decision decision, List<EditionAudio> editions, FullSubtitleStateDto playing,
+                        OsFullState search) {
+
+        boolean needed() {
+            return decision.need() == Need.NEEDED;
+        }
+
+        boolean hasImdbId() {
+            return search != null && search.imdbId() != null;
+        }
+
+        boolean searched() {
+            return search != null && search.searched();
+        }
+    }
+
+    private static Eval eval(FullNeedRow row, List<EditionAudio> editions, FullSubtitleStateDto playing,
+                             OsFullState search) {
+        return new Eval(row, decide(row, editions), editions, playing, search);
+    }
+
+    /**
+     * The pipeline's facts for the films that could be "being checked" by a download: shown, no full subtitle playing
+     * and searched for under their current IMDb id. Only those need the editions looked at (one bulk read).
+     */
+    private Pending pendingFor(List<Eval> evals) {
+        Map<Long, String> imdbIds = new LinkedHashMap<>();
+        for (Eval eval : evals) {
+            if (eval.needed() && eval.playing() == null && eval.searched()) {
+                imdbIds.put(eval.row().id(), eval.search().imdbId());
+            }
+        }
+        return imdbIds.isEmpty() ? Pending.NONE : pending.full(imdbIds);
+    }
+
+    private static FullNeedFilmDto dto(Eval eval, Pending due) {
+        FullNeedRow row = eval.row();
+        FullFacts facts = new FullFacts(eval.needed(), eval.playing() != null, eval.hasImdbId(), eval.searched(),
+            due.withCandidate().contains(row.id()), due.withDueEdition().contains(row.id()));
+        return new FullNeedFilmDto(row.id(), row.title(), row.year(), eval.decision().need().name(),
+            eval.decision().reason().name(), row.owner() == null ? null : row.owner().name(),
+            eval.editions().stream().map(e -> new EditionAudioDto(e.name(), e.label())).toList(), eval.playing(),
+            row.originalLanguage(), AdminTodoRules.unresolvedFull(facts), AdminTodoRules.beingCheckedFull(facts));
     }
 
     private static FullNeedCountsDto counts(List<FullNeedFilmDto> rows) {
         return new FullNeedCountsDto(count(rows, Need.NEEDED), count(rows, Need.UNSURE), count(rows, Need.UNKNOWN),
-            count(rows, Need.NOT_NEEDED));
+            count(rows, Need.NOT_NEEDED), (int) rows.stream().filter(FullNeedFilmDto::unresolved).count(),
+            (int) rows.stream().filter(FullNeedFilmDto::beingChecked).count());
     }
 
     private static int count(List<FullNeedFilmDto> rows, Need need) {
