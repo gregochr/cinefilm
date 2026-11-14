@@ -744,7 +744,7 @@ class CreditsDatasetJobTest {
     void anErrorDuringPreparationEndsFailedAndDoesNotEscapeTheTask() {
         targetIds(1);
         targets.duringList = () -> {
-            throw new AssertionError("boom");
+            throw new NoClassDefFoundError("boom");
         };
         job.start();
 
@@ -765,7 +765,7 @@ class CreditsDatasetJobTest {
         Files.createDirectories(props.dir());
         Files.writeString(props.marker(), "a run was going");
         targets.duringList = () -> {
-            throw new AssertionError("boom");
+            throw new NoClassDefFoundError("boom");
         };
         job.onStartup();
 
@@ -780,12 +780,19 @@ class CreditsDatasetJobTest {
         targetIds(1);
         Files.createDirectories(props.dir());
         Files.writeString(props.marker(), "a run was going");
+        // The disk read inside the status fails once, with an unchecked exception that freeBytes does not catch.
+        disk.duringRead = once(() -> {
+            throw new SecurityException("no access");
+        });
         job.onStartup();
-        when(refresher.dueNotHeldBack()).thenThrow(new IllegalStateException("database is down"));
 
+        queue.poll().run();
+
+        assertThat(warnings()).containsExactly(
+            "Credits dataset job: started again, but its status could not be read: no access");
+        assertThat(job.status().state()).isEqualTo(State.RUNNING);
         drain();
-
-        assertThat(warnings()).containsExactly("Credits dataset job: could not start again: database is down");
+        assertThat(job.status().state()).isEqualTo(State.DONE);
     }
 
     @Test

@@ -260,15 +260,20 @@ public class CreditsDatasetJob {
 
     /** Runs on the credits thread, so it prepares inline instead of queueing a second task. */
     private void resume() {
+        long gen;
         try {
-            prepareAndGo(admit(true));
+            gen = admit(true);
+        } catch (Declined e) {
+            LOG.info("Credits dataset job: not starting again: stopped or started meanwhile");
+            return;
+        }
+        prepareAndGo(gen);
+        try {
             State state = status().state();
             LOG.info("Credits dataset job: {}",
                 state == State.RUNNING ? "starting again" : "not starting again: " + state);
-        } catch (Declined e) {
-            LOG.info("Credits dataset job: not starting again: stopped or started meanwhile");
         } catch (RuntimeException e) {
-            LOG.warn("Credits dataset job: could not start again: {}", describe(e));
+            LOG.warn("Credits dataset job: started again, but its status could not be read: {}", describe(e));
         }
     }
 
