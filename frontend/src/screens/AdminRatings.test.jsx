@@ -16,7 +16,11 @@ describe('Admin: ratings in the Library scan card', () => {
     renderApp('/admin/library');
     const panel = await panelOf();
     expect(within(panel).getByText('Ratings last refreshed 08 Nov 12:41')).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: 'Refresh ratings' })).toBeEnabled();
+    const refresh = within(panel).getByRole('button', { name: 'Refresh all ratings' });
+    expect(refresh).toBeEnabled();
+    expect(refresh).toHaveAccessibleDescription(
+      'Re-fetches IMDb and Rotten Tomatoes scores for every film.',
+    );
   });
 
   it('says ratings were never refreshed', async () => {
@@ -37,7 +41,7 @@ describe('Admin: ratings in the Library scan card', () => {
     const panel = await panelOf();
     expect(within(panel).getByText('Ratings need an OMDb API key')).toBeInTheDocument();
     expect(within(panel).queryByText(/Ratings last refreshed/)).not.toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: 'Refresh ratings' })).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: 'Refresh all ratings' })).toBeDisabled();
   });
 
   it('Refresh ratings posts, shows it running, and returns to ready with the new date', async () => {
@@ -61,7 +65,7 @@ describe('Admin: ratings in the Library scan card', () => {
     renderApp('/admin/library');
     const panel = await panelOf();
 
-    await userEvent.click(within(panel).getByRole('button', { name: 'Refresh ratings' }));
+    await userEvent.click(within(panel).getByRole('button', { name: 'Refresh all ratings' }));
 
     expect(posted).toBe(1);
     expect(
@@ -72,7 +76,7 @@ describe('Admin: ratings in the Library scan card', () => {
     expect(
       await within(panel).findByText('Ratings last refreshed 09 Nov 05:35'),
     ).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: 'Refresh ratings' })).toBeEnabled();
+    expect(within(panel).getByRole('button', { name: 'Refresh all ratings' })).toBeEnabled();
   });
 
   it('a refresh already running when the page opens keeps the button disabled', async () => {
@@ -91,7 +95,7 @@ describe('Admin: ratings in the Library scan card', () => {
     );
     renderApp('/admin/library');
     const panel = await panelOf();
-    await userEvent.click(within(panel).getByRole('button', { name: 'Refresh ratings' }));
+    await userEvent.click(within(panel).getByRole('button', { name: 'Refresh all ratings' }));
     expect(
       await within(panel).findByText('Could not start the ratings refresh.'),
     ).toBeInTheDocument();

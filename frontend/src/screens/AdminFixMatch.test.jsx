@@ -13,7 +13,7 @@ const isApply = (m, url) => m === 'POST' && url === '/api/admin/films/31/match';
 async function openPanel() {
   renderApp('/admin');
   const attention = await screen.findByRole('region', { name: 'Films needing attention' });
-  await userEvent.click(await within(attention).findByRole('button', { name: 'Fix match' }));
+  await userEvent.click(await within(attention).findByRole('button', { name: 'Find the film…' }));
   return screen.findByRole('region', { name: 'Fix match' });
 }
 
@@ -22,7 +22,11 @@ describe('Admin: Fix match', () => {
     installFetch();
     renderApp('/admin');
     const attention = await screen.findByRole('region', { name: 'Films needing attention' });
-    expect(await within(attention).findAllByRole('button', { name: 'Fix match' })).toHaveLength(1);
+    const buttons = await within(attention).findAllByRole('button', { name: 'Find the film…' });
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]).toHaveAccessibleDescription(
+      'Search TMDB and choose which film this file is.',
+    );
   });
 
   it('opens with the title in the search box, the file name, and the TMDB results to pick from', async () => {
@@ -188,7 +192,7 @@ describe('Admin: a slow apply for a film that is no longer on screen', () => {
     });
     renderApp('/admin');
     const list = await screen.findByRole('region', { name: 'Films needing attention' });
-    const buttons = await within(list).findAllByRole('button', { name: 'Fix match' });
+    const buttons = await within(list).findAllByRole('button', { name: 'Find the film…' });
     await userEvent.click(buttons[0]);
     const first = await screen.findByRole('region', { name: 'Fix match' });
     await userEvent.click((await within(first).findAllByRole('radio'))[0]);

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Button } from '../../components/Button.jsx';
+import { ActionWithHint } from '../../components/ActionWithHint.jsx';
+import { buttons } from '../../state/adminCopy.js';
 import { SkeletonBlock } from '../../components/Skeleton.jsx';
 import PlexCreditsImport from '../../components/PlexCreditsImport.jsx';
 import { ErrorState } from '../../components/StateMessages.jsx';
@@ -54,9 +55,14 @@ function RatingsLine({ scan, starting, notice, onRefresh }) {
           : 'Ratings need an OMDb API key'}
       </p>
       <div className="admin__actions">
-        <Button disabled={!enabled || running || starting} onClick={onRefresh}>
-          {running ? 'Refreshing ratings…' : 'Refresh ratings'}
-        </Button>
+        <ActionWithHint
+          layout="line"
+          hint={buttons.refreshRatings.hint}
+          disabled={!enabled || running || starting}
+          onClick={onRefresh}
+        >
+          {running ? buttons.refreshRatings.busyLabel : buttons.refreshRatings.label}
+        </ActionWithHint>
         {notice ? (
           <span className="admin__notice" role="status">
             {notice}
@@ -136,9 +142,15 @@ function ScanPanel({
           ))}
         </ul>
         <div className="admin__actions">
-          <Button variant="primary" disabled={running || starting} onClick={onScan}>
-            {running ? 'Scanning…' : 'Scan now'}
-          </Button>
+          <ActionWithHint
+            layout="line"
+            variant="primary"
+            hint={buttons.scanLibrary.hint}
+            disabled={running || starting}
+            onClick={onScan}
+          >
+            {running ? buttons.scanLibrary.busyLabel : buttons.scanLibrary.label}
+          </ActionWithHint>
           {notice ? (
             <span className="admin__notice" role="status">
               {notice}
@@ -243,17 +255,18 @@ function PlexPanel({ plex, starting, notice, onImport, onRecheck }) {
       </dl>
       {last?.report ? <ImportReport report={last.report} /> : null}
       <div className="admin__actions">
-        <Button
-          variant="secondary"
+        <ActionWithHint
+          layout="line"
+          hint={buttons.importPlex.hint}
           disabled={running || starting || !plex.reachable}
           onClick={onImport}
         >
-          {running ? 'Importing…' : 'Import from Plex'}
-        </Button>
+          {running ? buttons.importPlex.busyLabel : buttons.importPlex.label}
+        </ActionWithHint>
         {!running && !plex.reachable ? (
-          <Button variant="secondary" onClick={onRecheck}>
-            Check again
-          </Button>
+          <ActionWithHint layout="line" hint={buttons.tryPlex.hint} onClick={onRecheck}>
+            {buttons.tryPlex.label}
+          </ActionWithHint>
         ) : null}
         {notice ? (
           <span className="admin__notice" role="status">

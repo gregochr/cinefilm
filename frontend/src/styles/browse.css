@@ -1328,3 +1328,44 @@
     font-size: 28px;
   }
 }
+
+/* A button with its visible hint line (Admin). Right-aligned in a row, left on a card line and on phones. */
+.action-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 480px;
+}
+.action-hint--row {
+  align-items: flex-end;
+  margin-left: auto;
+}
+.action-hint--line {
+  align-items: flex-start;
+}
+.action-hint__text {
+  margin: 0;
+  color: #8a8173;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.action-hint--row .action-hint__text {
+  text-align: right;
+}
+@media (max-width: 600px) {
+  .action-hint,
+  .action-hint--row,
+  .action-hint--line {
+    align-items: stretch;
+    width: 100%;
+    max-width: none;
+    margin-left: 0;
+  }
+  .action-hint .btn {
+    width: 100%;
+    height: 44px;
+  }
+  .action-hint--row .action-hint__text {
+    text-align: left;
+  }
+}

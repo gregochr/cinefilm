@@ -4,6 +4,7 @@ import { describePlayback, environmentLabel } from '../state/healthFormat.js';
 import { forgetNetwork, rememberedNetworks } from '../state/networks.js';
 import { usePlaybackHealth } from '../state/usePlaybackHealth.js';
 import { Button } from './Button.jsx';
+import { buttons, rememberedNetworksNote } from '../state/adminCopy.js';
 import { SkeletonBlock } from './Skeleton.jsx';
 import { ErrorState } from './StateMessages.jsx';
 
@@ -54,13 +55,17 @@ function RememberedNetworks({ networks, onForget }) {
               <span className="admin__tag">{environmentLabel(environment)}</span>
             </div>
             <div className="admin__actions admin__item-actions">
-              <Button aria-label={`Forget ${operator}`} onClick={() => onForget(operator)}>
-                Forget
+              <Button
+                aria-label={`${buttons.forget.label} ${operator}`}
+                onClick={() => onForget(operator)}
+              >
+                {buttons.forget.label}
               </Button>
             </div>
           </li>
         ))}
       </ul>
+      <p className="admin__notice">{rememberedNetworksNote}</p>
     </>
   );
 }

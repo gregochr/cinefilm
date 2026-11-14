@@ -8,7 +8,8 @@ import {
   indexText,
 } from '../state/transcodingFormat.js';
 import { rungName } from '../player/ladder.js';
-import { Button } from './Button.jsx';
+import { ActionWithHint } from './ActionWithHint.jsx';
+import { buttons } from '../state/adminCopy.js';
 import { SkeletonBlock } from './Skeleton.jsx';
 import { ErrorState } from './StateMessages.jsx';
 
@@ -27,9 +28,13 @@ function Sessions({ sessions, onStop }) {
             {formatScanTime(session.startedAt)}
           </div>
           <div className="admin__actions">
-            <Button onClick={() => onStop(session.id)} aria-label={`Stop ${session.filmTitle}`}>
-              Stop
-            </Button>
+            <ActionWithHint
+              hint={buttons.stopStream.hint}
+              onClick={() => onStop(session.id)}
+              aria-label={`${buttons.stopStream.label}: ${session.filmTitle}`}
+            >
+              {buttons.stopStream.label}
+            </ActionWithHint>
           </div>
         </li>
       ))}

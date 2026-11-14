@@ -1,4 +1,5 @@
-import { Button } from '../../components/Button.jsx';
+import { ActionWithHint } from '../../components/ActionWithHint.jsx';
+import { buttons } from '../../state/adminCopy.js';
 import { SkeletonBlock } from '../../components/Skeleton.jsx';
 import { ErrorState } from '../../components/StateMessages.jsx';
 import { formatRuntime } from '../../player/time.js';
@@ -51,16 +52,22 @@ function AttentionPanel({ attention, loading, error, onRetry, onFixMatch, onEdit
             {item.candidates.length > 0 ? <Candidates candidates={item.candidates} /> : null}
             {item.kind === 'needs-match' ? (
               <div className="admin__actions admin__item-actions">
-                <Button onClick={(event) => onFixMatch(item, event.currentTarget)}>
-                  Fix match
-                </Button>
+                <ActionWithHint
+                  hint={buttons.findFilm.hint}
+                  onClick={(event) => onFixMatch(item, event.currentTarget)}
+                >
+                  {buttons.findFilm.label}
+                </ActionWithHint>
               </div>
             ) : null}
             {item.kind === 'multiple-files' ? (
               <div className="admin__actions admin__item-actions">
-                <Button onClick={(event) => onEditEditions(item, event.currentTarget)}>
-                  Edit editions
-                </Button>
+                <ActionWithHint
+                  hint={buttons.sortEditions.hint}
+                  onClick={(event) => onEditEditions(item, event.currentTarget)}
+                >
+                  {buttons.sortEditions.label}
+                </ActionWithHint>
               </div>
             ) : null}
           </li>
