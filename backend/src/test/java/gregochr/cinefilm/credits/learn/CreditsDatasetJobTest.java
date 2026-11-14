@@ -776,7 +776,7 @@ class CreditsDatasetJobTest {
     }
 
     @Test
-    void aResumeNeverReadsTheStatusSoAFailingDiskOrDatabaseCannotAffectIt() throws IOException {
+    void aResumeNeverReadsTheStatusSoAFailingDiskCannotAffectIt() throws IOException {
         targetIds(1);
         Files.createDirectories(props.dir());
         Files.writeString(props.marker(), "a run was going");
@@ -790,6 +790,7 @@ class CreditsDatasetJobTest {
         assertThat(disk.reads).isZero();
         assertThat(warnings()).isEmpty();
         assertThat(messages()).contains("Credits dataset job: starting again");
+        // Disarmed: the status and every task step read the free space.
         disk.duringRead = () -> { };
         assertThat(job.status().state()).isEqualTo(State.RUNNING);
         drain();
