@@ -172,8 +172,10 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
 
 - Flyway migration adding nullable/defaulted `watched_ms`, `stall_count`, `stall_ms`, `startup_ms`, `has_problem`
   (stalls, reconnects, fell back, errors, timeouts), `environment`; index on `started_at`.
-- **Backfill in Java** (a Flyway Java migration parsing `summary` with the app's `JsonMapper`), so it runs the same
-  on H2 (tests) and Postgres; at most 2,000 rows.
+  `has_problem` is exactly: `stallCount > 0`, `reconnectCount > 0`, `fellBack`, `netErrors > 0` or `timeouts > 0`;
+  step-downs (`stepsDown`) do not count, being the adaptive quality working.
+- **Backfill in Java** (a Flyway Java migration parsing `summary` with its own `JsonMapper` into a frozen private
+  record, so it never depends on live classes), so it runs the same on H2 (tests) and Postgres; at most 2,000 rows.
 - `create()` and `replaceIfNewer` write every new column from the same parsed report.
 - `GET /api/admin/playback-health?since={iso}&minWatchedMs={n}&problems={bool}&page={p}&size={n}`: ordered by
   `started_at` desc, `since` compares `started_at`; answers `{ playbacks, total }`. With no parameters it keeps

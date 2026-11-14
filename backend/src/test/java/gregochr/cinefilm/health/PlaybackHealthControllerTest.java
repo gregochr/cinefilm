@@ -15,11 +15,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import gregochr.cinefilm.auth.SecurityConfig;
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.NotFoundException;
+import gregochr.cinefilm.health.HealthDtos.ChartList;
+import gregochr.cinefilm.health.HealthDtos.ChartRow;
 import gregochr.cinefilm.health.HealthDtos.PlaybackList;
+import gregochr.cinefilm.health.HealthDtos.PlaybackPage;
 import gregochr.cinefilm.health.HealthDtos.PlaybackRow;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -222,7 +226,174 @@ class PlaybackHealthControllerTest {
     }
 
     @Test
+    void theListWithNoParametersHasNoTotal() throws Exception {
+        when(health.recent()).thenReturn(new PlaybackList(List.of(row())));
+
+        mvc.perform(signedIn(get("/api/admin/playback-health")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.total").doesNotExist());
+    }
+
+    @Test
+    void theParametersReachTheServiceAndTheAnswerCarriesTheTotal() throws Exception {
+        when(health.query(Instant.parse("2024-03-01T00:00:00Z"), 180_000L, true, 2, 50))
+            .thenReturn(new PlaybackPage(List.of(row()), 123));
+
+        mvc.perform(signedIn(get("/api/admin/playback-health"))
+                .param("since", "2024-03-01T00:00:00Z").param("minWatchedMs", "180000")
+                .param("problems", "true").param("page", "2").param("size", "50"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.total").value(123))
+            .andExpect(jsonPath("$.playbacks[0].playbackId").value(ID));
+    }
+
+    @Test
+    void oneParameterAloneIsEnoughToSelectTheFilteredList() throws Exception {
+        when(health.query(null, null, null, 1, null)).thenReturn(new PlaybackPage(List.of(), 0));
+
+        mvc.perform(signedIn(get("/api/admin/playback-health")).param("page", "1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.total").value(0))
+            .andExpect(jsonPath("$.playbacks.length()").value(0));
+    }
+
+    @Test
+    void aBadSinceIsA400() throws Exception {
+        mvc.perform(signedIn(get("/api/admin/playback-health")).param("since", "yesterday"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+    }
+
+    @Test
+    void anUnrelatedParameterLeavesTheOldShapeWithNoTotal() throws Exception {
+        when(health.recent()).thenReturn(new PlaybackList(List.of(row())));
+
+        mvc.perform(signedIn(get("/api/admin/playback-health")).param("foo", "1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.playbacks.length()").value(1))
+            .andExpect(jsonPath("$.total").doesNotExist());
+    }
+
+    @Test
+    void theFirstValueOfARepeatedParameterWins() throws Exception {
+        when(health.query(null, null, null, null, 1)).thenReturn(new PlaybackPage(List.of(), 0));
+
+        mvc.perform(signedIn(get("/api/admin/playback-health")).param("size", "1", "50"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.total").value(0));
+    }
+
+    @Test
+    void aPresentButEmptyParameterIsA400NotTheOldShape() throws Exception {
+        for (String name : List.of("since", "minWatchedMs", "problems", "page", "size")) {
+            mvc.perform(signedIn(get("/api/admin/playback-health")).param(name, ""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Invalid request"));
+        }
+    }
+
+    @Test
+    void aChartSinceOutsideYears1970To9999IsA400AndTheEdgesAreAccepted() throws Exception {
+        for (String bad : List.of("1969-12-31T23:59:59Z", "+10000-01-01T00:00:00Z")) {
+            mvc.perform(signedIn(get("/api/admin/playback-health/chart")).param("since", bad))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Invalid request"));
+        }
+        when(health.chart(Instant.parse("1970-01-01T00:00:00Z"))).thenReturn(new ChartList(List.of()));
+        when(health.chart(Instant.parse("9999-12-31T23:59:59Z"))).thenReturn(new ChartList(List.of()));
+        mvc.perform(signedIn(get("/api/admin/playback-health/chart")).param("since", "1970-01-01T00:00:00Z"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sessions").isArray());
+        mvc.perform(signedIn(get("/api/admin/playback-health/chart")).param("since", "9999-12-31T23:59:59Z"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sessions").isArray());
+        verify(health).chart(Instant.parse("1970-01-01T00:00:00Z"));
+        verify(health).chart(Instant.parse("9999-12-31T23:59:59Z"));
+    }
+
+    @Test
+    void theFirstValueOfARepeatedChartSinceWins() throws Exception {
+        when(health.chart(Instant.parse("2024-03-01T00:00:00Z"))).thenReturn(new ChartList(List.of()));
+
+        mvc.perform(signedIn(get("/api/admin/playback-health/chart"))
+                .param("since", "2024-03-01T00:00:00Z", "2020-01-01T00:00:00Z"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sessions").isArray());
+        verify(health).chart(Instant.parse("2024-03-01T00:00:00Z"));
+    }
+
+    @Test
+    void anEmptyChartSinceIsA400() throws Exception {
+        mvc.perform(signedIn(get("/api/admin/playback-health/chart")).param("since", ""))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+    }
+
+    @Test
+    void aProblemsValueThatIsNotTrueOrFalseIsA400() throws Exception {
+        mvc.perform(signedIn(get("/api/admin/playback-health")).param("problems", "1"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+    }
+
+    @Test
+    void aBadNumberIsA400() throws Exception {
+        mvc.perform(signedIn(get("/api/admin/playback-health")).param("size", "many"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+    }
+
+    @Test
+    void aRefusalFromTheServiceIsA400() throws Exception {
+        when(health.query(null, null, null, null, 101)).thenThrow(new BadRequestException("Invalid request"));
+
+        mvc.perform(signedIn(get("/api/admin/playback-health")).param("size", "101"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+    }
+
+    @Test
+    void theChartRouteAnswersTheSessionsAndIsNotTakenForAPlaybackId() throws Exception {
+        ChartRow session = new ChartRow(ID, 7L, "Blade Runner", Instant.parse("2024-03-31T23:00:00Z"), 200_000, 2,
+            9_400, 2_380L, "train", Map.of("480p", 58_000L), "Mozilla/5.0");
+        when(health.chart(Instant.parse("2024-03-01T00:00:00Z"))).thenReturn(new ChartList(List.of(session)));
+
+        mvc.perform(signedIn(get("/api/admin/playback-health/chart")).param("since", "2024-03-01T00:00:00Z"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sessions.length()").value(1))
+            .andExpect(jsonPath("$.sessions[0].playbackId").value(ID))
+            .andExpect(jsonPath("$.sessions[0].watchedMs").value(200000))
+            .andExpect(jsonPath("$.sessions[0].stallCount").value(2))
+            .andExpect(jsonPath("$.sessions[0].startupMs").value(2380))
+            .andExpect(jsonPath("$.sessions[0].environment").value("train"))
+            .andExpect(jsonPath("$.sessions[0].rungMs['480p']").value(58000))
+            .andExpect(jsonPath("$.sessions[0].userAgent").value("Mozilla/5.0"));
+    }
+
+    @Test
+    void theChartWithoutSinceAsksForAllOfThem() throws Exception {
+        when(health.chart(null)).thenReturn(new ChartList(List.of()));
+
+        mvc.perform(signedIn(get("/api/admin/playback-health/chart")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sessions.length()").value(0));
+    }
+
+    @Test
+    void aBadChartSinceIsA400() throws Exception {
+        mvc.perform(signedIn(get("/api/admin/playback-health/chart")).param("since", "x"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+    }
+
+    @Test
     void theAdminRoutesNeedASession() throws Exception {
+        mvc.perform(get("/api/admin/playback-health/chart"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Authentication required"));
+        mvc.perform(get("/api/admin/playback-health").param("page", "0"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Authentication required"));
         mvc.perform(get("/api/admin/playback-health"))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.error").value("Authentication required"));

@@ -8,6 +8,12 @@ import { formatScanTime } from './scanFormat.js';
 const MINUTE_MS = 60_000;
 const RUNG_ORDER = ['original', '1080p', '720p', '480p', '360p', '240p'];
 const DEVICE_WORDS = ['iPhone', 'iPad', 'Android', 'Windows', 'Mac', 'Linux'];
+/**
+ * The shortest watched time that counts as a film session (three minutes): shorter ones are tests, skips and
+ * misclicks. The same figure as `PlaybackHealthService.FILM_SESSION_MIN_MS` on the server.
+ */
+export const FILM_SESSION_MIN_MS = 180_000;
+
 const ENVIRONMENTS = { home: 'Home', train: 'Train', away: 'Away' };
 
 const num = (value) => (Number.isFinite(value) ? value : 0);

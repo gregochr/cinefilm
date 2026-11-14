@@ -73,6 +73,7 @@ describe('PlaybackHealthPanel', () => {
       'Full record of Heat',
       'Full record of Blade Runner',
       'Full record of The Wicker Man',
+      'Full record of The Wicker Man',
     ]);
     const heat = within(list).getByRole('link', { name: 'Full record of Heat' });
     expect(heat).toHaveTextContent('Full record');
@@ -150,7 +151,7 @@ describe('PlaybackHealthPanel', () => {
     release();
     expect(await screen.findByRole('list', { name: 'Recent playbacks' })).toBeInTheDocument();
     expect(fetchMock.mock.calls.filter((c) => c[0] === URL)).toHaveLength(2);
-    expect(screen.getAllByRole('listitem')).toHaveLength(3);
+    expect(screen.getAllByRole('listitem')).toHaveLength(4);
   });
 });
 
