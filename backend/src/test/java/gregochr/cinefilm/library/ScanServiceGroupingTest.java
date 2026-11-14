@@ -272,6 +272,7 @@ class ScanServiceGroupingTest {
         verify(matcher).matchTagged(949L, null);
         verifyNoMoreInteractions(matcher);
         verify(ingest, never()).pending();
+        verify(ingest).finishRun(5L, CLOCK.instant(), 1, 1, 0, null);
     }
 
     @Test
