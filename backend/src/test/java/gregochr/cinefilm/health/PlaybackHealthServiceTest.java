@@ -14,6 +14,8 @@ import static gregochr.cinefilm.health.HealthSamples.text;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -23,7 +25,9 @@ import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.health.HealthDtos.ChartRow;
 import gregochr.cinefilm.health.HealthDtos.PlaybackList;
+import gregochr.cinefilm.health.HealthDtos.PlaybackPage;
 import gregochr.cinefilm.health.HealthDtos.PlaybackRow;
 import java.time.Instant;
 import java.util.List;
@@ -36,7 +40,11 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -112,6 +120,22 @@ class PlaybackHealthServiceTest {
     }
 
     @Test
+    void theFirstReportAlsoSavesTheFigureColumnsFromTheReport() {
+        knownEdition();
+        when(repository.count()).thenReturn(1L);
+
+        service.report(ID, compactExample());
+
+        PlaybackHealth row = saved();
+        assertThat(row.getWatchedMs()).isEqualTo(171_000);
+        assertThat(row.getStallCount()).isEqualTo(2);
+        assertThat(row.getStallMs()).isEqualTo(9_400);
+        assertThat(row.getStartupMs()).isEqualTo(2_380);
+        assertThat(row.isHasProblem()).isTrue();
+        assertThat(row.getEnvironment()).isEqualTo("train");
+    }
+
+    @Test
     void startedAtIsTheClockMinusTheElapsedTimeOfTheReport() {
         knownEdition();
         when(repository.count()).thenReturn(1L);
@@ -182,7 +206,8 @@ class PlaybackHealthServiceTest {
         when(repository.findByPlaybackId(ID)).thenReturn(Optional.of(stored(1, ID, "{}")));
         ObjectNode body = example();
         body.put("seq", 9);
-        when(repository.replaceIfNewer(ID, 9, text(body), NOW)).thenReturn(1);
+        when(repository.replaceIfNewer(ID, 9, text(body), NOW, HealthFigures.of(HealthSamples.report(body))))
+            .thenReturn(1);
 
         assertThatCode(() -> service.report(ID, text(body))).doesNotThrowAnyException();
     }
@@ -190,7 +215,8 @@ class PlaybackHealthServiceTest {
     @Test
     void aReportThatIsNotNewerChangesNothingAndIsNotAnError() {
         when(repository.findByPlaybackId(ID)).thenReturn(Optional.of(stored(1, ID, "{}")));
-        when(repository.replaceIfNewer(ID, 4, compactExample(), NOW)).thenReturn(0);
+        when(repository.replaceIfNewer(ID, 4, compactExample(), NOW,
+            HealthFigures.of(HealthSamples.report(example())))).thenReturn(0);
 
         assertThatCode(() -> service.report(ID, compactExample())).doesNotThrowAnyException();
     }
@@ -204,6 +230,25 @@ class PlaybackHealthServiceTest {
         assertThatThrownBy(() -> service.report(ID, text(body)))
             .isExactlyInstanceOf(BadRequestException.class)
             .hasMessage("Invalid health report");
+    }
+
+    @Test
+    void aLaterReportPassesTheFiguresOfThatReportToTheUpdate() {
+        when(repository.findByPlaybackId(ID)).thenReturn(Optional.of(stored(1, ID, "{}")));
+        ObjectNode body = example();
+        body.put("seq", 9);
+        body.put("watchedMs", 200_000);
+        body.put("stallCount", 0);
+        body.put("reconnectCount", 0);
+        body.put("stepsDown", 0);
+        body.put("netErrors", 0);
+        body.put("timeouts", 0);
+        body.remove("startupMs");
+
+        service.report(ID, text(body));
+
+        HealthFigures expected = new HealthFigures(200_000, 0, 9_400, null, false, "train");
+        verify(repository).replaceIfNewer(ID, 9, JSON.writeValueAsString(HealthSamples.report(body)), NOW, expected);
     }
 
     // report: the id
@@ -417,5 +462,137 @@ class PlaybackHealthServiceTest {
         assertThatThrownBy(() -> service.one(ID))
             .isExactlyInstanceOf(NotFoundException.class)
             .hasMessage("No such playback");
+    }
+
+    // query
+
+    private static final Sort NEWEST_FIRST = Sort.by(Sort.Direction.DESC, "startedAt")
+        .and(Sort.by(Sort.Direction.DESC, "id"));
+
+    @SuppressWarnings("unchecked")
+    private void answers(Pageable pageable, List<PlaybackHealth> rows, long total) {
+        when(repository.findAll(any(Specification.class), eq(pageable)))
+            .thenReturn(new PageImpl<>(rows, pageable, total));
+    }
+
+    @Test
+    void queryReturnsTheRowsWithoutMinutesAndTheTotalOfAllThatMatch() {
+        answers(PageRequest.of(1, 2, NEWEST_FIRST),
+            List.of(stored(3, ID, compactExample()), stored(2, OTHER_ID, compactExample())), 7);
+
+        PlaybackPage result = service.query(null, null, null, 1, 2);
+
+        assertThat(result.total()).isEqualTo(7);
+        assertThat(result.playbacks()).extracting(PlaybackRow::playbackId).containsExactly(ID, OTHER_ID);
+        assertThat(result.playbacks().get(0).report().has("minutes")).isFalse();
+    }
+
+    @Test
+    void queryDefaultsToTheFirstPageOfTwentyNewestStartedFirst() {
+        answers(PageRequest.of(0, 20, NEWEST_FIRST), List.of(stored(1, ID, compactExample())), 1);
+
+        PlaybackPage result = service.query(NOW, 180_000L, true, null, null);
+
+        assertThat(result.playbacks()).hasSize(1);
+        assertThat(result.total()).isEqualTo(1);
+    }
+
+    @Test
+    void queryLeavesOutARowWhoseSummaryCannotBeReadButStillCountsIt() {
+        answers(PageRequest.of(0, 20, NEWEST_FIRST),
+            List.of(stored(2, OTHER_ID, "not json"), stored(1, ID, compactExample())), 2);
+
+        PlaybackPage result = service.query(null, null, null, null, null);
+
+        assertThat(result.playbacks()).extracting(PlaybackRow::playbackId).containsExactly(ID);
+        assertThat(result.total()).isEqualTo(2);
+    }
+
+    @Test
+    void queryAcceptsTheLargestPageSize() {
+        answers(PageRequest.of(0, 100, NEWEST_FIRST), List.of(), 0);
+
+        assertThat(service.query(null, null, null, 0, 100).playbacks()).isEmpty();
+    }
+
+    @Test
+    void queryAcceptsAMinimumWatchedTimeOfZero() {
+        answers(PageRequest.of(0, 20, NEWEST_FIRST), List.of(), 0);
+
+        assertThat(service.query(null, 0L, null, null, null).total()).isZero();
+    }
+
+    @Test
+    void queryRefusesAPageBelowZero() {
+        assertThatThrownBy(() -> service.query(null, null, null, -1, null))
+            .isExactlyInstanceOf(BadRequestException.class)
+            .hasMessage("Invalid request");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, -1, 101})
+    void queryRefusesASizeOutsideOneToAHundred(int size) {
+        assertThatThrownBy(() -> service.query(null, null, null, null, size))
+            .isExactlyInstanceOf(BadRequestException.class)
+            .hasMessage("Invalid request");
+    }
+
+    @Test
+    void queryRefusesANegativeMinimumWatchedTime() {
+        assertThatThrownBy(() -> service.query(null, -1L, null, null, null))
+            .isExactlyInstanceOf(BadRequestException.class)
+            .hasMessage("Invalid request");
+    }
+
+    // chart
+
+    @SuppressWarnings("unchecked")
+    private void chartRows(List<PlaybackHealth> rows) {
+        Sort oldestFirst = Sort.by(Sort.Direction.ASC, "startedAt").and(Sort.by(Sort.Direction.ASC, "id"));
+        when(repository.findAll(any(Specification.class), eq(oldestFirst))).thenReturn(rows);
+    }
+
+    @Test
+    void chartCarriesTheStoredFiguresTheRungTimesAndTheUserAgent() {
+        PlaybackHealth row = stored(1, ID, compactExample());
+        row.setFigures(HealthFigures.of(HealthSamples.report(example())));
+        chartRows(List.of(row));
+
+        ChartRow chart = service.chart(NOW).sessions().get(0);
+
+        assertThat(chart.playbackId()).isEqualTo(ID);
+        assertThat(chart.filmId()).isEqualTo(FILM_ID);
+        assertThat(chart.filmTitle()).isEqualTo("Blade Runner");
+        assertThat(chart.startedAt()).isEqualTo(NOW.minusSeconds(600));
+        assertThat(chart.watchedMs()).isEqualTo(171_000);
+        assertThat(chart.stallCount()).isEqualTo(2);
+        assertThat(chart.stallMs()).isEqualTo(9_400);
+        assertThat(chart.startupMs()).isEqualTo(2_380);
+        assertThat(chart.environment()).isEqualTo("train");
+        assertThat(chart.rungMs()).containsEntry("480p", 58_000L).containsEntry("360p", 113_000L);
+        assertThat(chart.userAgent()).startsWith("Mozilla/5.0");
+    }
+
+    @Test
+    void chartKeepsARowWhoseSummaryCannotBeReadWithoutRungsOrUserAgent() {
+        chartRows(List.of(stored(1, ID, "not json")));
+
+        ChartRow chart = service.chart(null).sessions().get(0);
+
+        assertThat(chart.playbackId()).isEqualTo(ID);
+        assertThat(chart.rungMs()).isNull();
+        assertThat(chart.userAgent()).isNull();
+    }
+
+    @Test
+    void chartKeepsARowWhoseReportHasNoClient() {
+        chartRows(List.of(stored(1, ID, "{\"seq\":1}")));
+
+        assertThat(service.chart(null).sessions().get(0).userAgent()).isNull();
+    }
+
+    @Test
+    void aFilmSessionIsThreeMinutes() {
+        assertThat(PlaybackHealthService.FILM_SESSION_MIN_MS).isEqualTo(180_000L);
     }
 }

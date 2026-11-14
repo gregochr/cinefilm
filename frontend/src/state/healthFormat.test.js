@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fixtures } from '../test/mockApi.jsx';
 import {
+  FILM_SESSION_MIN_MS,
   deviceLabel,
   describePlayback,
   environmentLabel,
@@ -20,6 +21,12 @@ const row = (report = {}, extra = {}) => ({
   startedAt: '2026-11-10T19:43:05Z',
   report,
   ...extra,
+});
+
+describe('FILM_SESSION_MIN_MS', () => {
+  it('is three minutes, as on the server', () => {
+    expect(FILM_SESSION_MIN_MS).toBe(180_000);
+  });
 });
 
 describe('environmentLabel', () => {

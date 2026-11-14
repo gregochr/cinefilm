@@ -52,4 +52,32 @@ public class PlaybackHealth {
 
     @Column(nullable = false, length = MAX_SUMMARY_LENGTH)
     private String summary;
+
+    /** The figures below are copied from the report by {@link HealthFigures}; see V26. */
+    @Column(nullable = false)
+    private long watchedMs;
+
+    @Column(nullable = false)
+    private long stallCount;
+
+    @Column(nullable = false)
+    private long stallMs;
+
+    private Long startupMs;
+
+    @Column(nullable = false)
+    private boolean hasProblem;
+
+    @Column(length = 16)
+    private String environment;
+
+    /** Copies the queryable figures from a report's {@link HealthFigures}. */
+    public void setFigures(HealthFigures figures) {
+        watchedMs = figures.watchedMs();
+        stallCount = figures.stallCount();
+        stallMs = figures.stallMs();
+        startupMs = figures.startupMs();
+        hasProblem = figures.hasProblem();
+        environment = figures.environment();
+    }
 }

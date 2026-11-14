@@ -284,6 +284,9 @@ CREATE TABLE playback_health (
 CREATE INDEX playback_health_updated_at_idx ON playback_health (updated_at);
 ```
 
+- **Queryable figures** (`V26`, admin-redesign phase 3a): `watched_ms`, `stall_count`, `stall_ms`, `startup_ms`,
+  `has_problem`, `environment` and an index on `started_at` copy a few figures of the report, written from one
+  place (`HealthFigures`) on every create and every newer report; `V27` (Java) filled them for older rows.
 - **The report is one JSON column**, `VARCHAR` like `media_keyframes.cuts` so Hibernate validates on PostgreSQL and
   on H2. What is measured will change as we learn what matters; a new figure then needs no migration. The server
   validates the typed report, stores its own serialisation, and hands it back as parsed JSON. A row whose summary

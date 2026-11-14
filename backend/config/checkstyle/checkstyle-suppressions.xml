@@ -17,4 +17,6 @@
     <suppress id="bannedMainRealClock" files="[\\/]src[\\/]test[\\/]"/>
     <!-- Reads the real clock on purpose: it runs the real ffmpeg and the deadline is wall time (see its class Javadoc). -->
     <suppress id="bannedTestRealClock" files="[\\/]TranscodeRealToolsTest\.java$"/>
+    <!-- Flyway Java migrations are named V<version>__<Description> by Flyway's own convention. -->
+    <suppress checks="TypeName" files="[\\/]db[\\/]migration[\\/]V\d+__\w+\.java$"/>
 </suppressions>
