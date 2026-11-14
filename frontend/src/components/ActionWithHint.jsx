@@ -17,15 +17,12 @@ export function ActionWithHint({
 }) {
   const hintId = useId();
   return (
-    <div
-      role="group"
-      className={['action-hint', `action-hint--${layout}`, className].filter(Boolean).join(' ')}
-    >
+    <div className={['action-hint', className].filter(Boolean).join(' ')}>
       <Button variant={variant} aria-describedby={hint ? hintId : undefined} {...rest}>
         {children}
       </Button>
       {hint ? (
-        <p id={hintId} className="action-hint__text">
+        <p id={hintId} className={`action-hint__text action-hint__text--${layout}`}>
           {hint}
         </p>
       ) : null}

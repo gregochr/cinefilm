@@ -1333,15 +1333,14 @@
 .action-hint {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 6px;
   max-width: 480px;
 }
-.action-hint--row {
+/* The hint's layout class says which: a row of a list is right-aligned, a card's own action left-aligned. */
+.action-hint:has(> .action-hint__text--row) {
   align-items: flex-end;
   margin-left: auto;
-}
-.action-hint--line {
-  align-items: flex-start;
 }
 .action-hint__text {
   margin: 0;
@@ -1349,13 +1348,12 @@
   font-size: var(--cf-size-label);
   line-height: 1.4;
 }
-.action-hint--row .action-hint__text {
+.action-hint__text--row {
   text-align: right;
 }
 @media (max-width: 600px) {
   .action-hint,
-  .action-hint--row,
-  .action-hint--line {
+  .action-hint:has(> .action-hint__text--row) {
     align-items: stretch;
     width: 100%;
     max-width: none;
@@ -1365,7 +1363,7 @@
     width: 100%;
     height: 44px;
   }
-  .action-hint--row .action-hint__text {
+  .action-hint__text--row {
     text-align: left;
   }
 }

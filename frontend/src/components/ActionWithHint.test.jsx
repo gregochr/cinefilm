@@ -55,9 +55,8 @@ describe('ActionWithHint', () => {
         </ActionWithHint>
       </>,
     );
-    const [row, line] = screen.getAllByRole('group');
-    expect(row).toHaveClass('action-hint--row');
-    expect(line).toHaveClass('action-hint--line');
+    expect(screen.getByText('Row hint.')).toHaveClass('action-hint__text--row');
+    expect(screen.getByText('Line hint.')).toHaveClass('action-hint__text--line');
   });
 
   it('keeps an aria-label as the name and the hint as the description', () => {
