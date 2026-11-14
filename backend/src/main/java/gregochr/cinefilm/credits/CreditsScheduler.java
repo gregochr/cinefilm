@@ -1,5 +1,6 @@
 package gregochr.cinefilm.credits;
 
+import gregochr.cinefilm.credits.learn.CreditsDatasetJob;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -15,15 +16,21 @@ import org.springframework.stereotype.Component;
 public class CreditsScheduler {
 
     private final CreditsRefresher refresher;
+    private final CreditsDatasetJob dataset;
 
     /** Creates the scheduler. */
-    public CreditsScheduler(CreditsRefresher refresher) {
+    public CreditsScheduler(CreditsRefresher refresher, CreditsDatasetJob dataset) {
         this.refresher = refresher;
+        this.dataset = dataset;
     }
 
-    /** Starts a run only when the last one stopped to let playback or an edit go first. */
+    /**
+     * Starts a run only when the last one stopped to let playback or an edit go first, then does the same for the
+     * credits dataset job (so the detection's own films are first in the queue).
+     */
     @Scheduled(cron = "0 45 * * * *", zone = "${cinefilm.time-zone}")
     public void hourly() {
         refresher.startIfDeferred();
+        dataset.startIfDeferred();
     }
 }

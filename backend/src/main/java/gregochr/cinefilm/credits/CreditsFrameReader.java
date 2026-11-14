@@ -40,7 +40,9 @@ public class CreditsFrameReader {
     /** How long the dense decode (600 frames from a seek) may run. */
     static final Duration DENSE_TIMEOUT = Duration.ofMinutes(9);
     /** The width every frame is scaled to. */
-    static final int OUTPUT_WIDTH = 480;
+    public static final int OUTPUT_WIDTH = 480;
+    /** One coarse frame is taken this often across the window. */
+    public static final long COARSE_STEP_MS = CreditsTuning.SAMPLE_MS;
     /** How many frames the active area is measured on. */
     static final int ACTIVE_SAMPLES = 5;
     /** The window is at most this long... */
@@ -52,19 +54,22 @@ public class CreditsFrameReader {
     /** The dense pass covers this long, from {@link #DENSE_LEAD_MS} before the candidate. */
     static final long DENSE_SPAN_MS = 300_000;
     /** The dense pass takes this many frames a second. */
-    static final int DENSE_FPS = 2;
+    public static final int DENSE_FPS = 2;
     /** One dense frame lasts this long. */
     static final long DENSE_FRAME_MS = 1000 / DENSE_FPS;
     /** A seek never goes closer than this to the end of the file, where there may be no frame left to decode. */
     static final long END_MARGIN_MS = 1_000;
 
-    private static final String FILTER = "scale='trunc(iw*sar/2)*2':ih,setsar=1,scale=" + OUTPUT_WIDTH + ":-2";
+    /** The ffmpeg filter every frame goes through: un-squeeze a non-square pixel aspect, then scale to the width. */
+    public static final String FILTER = "scale='trunc(iw*sar/2)*2':ih,setsar=1,scale=" + OUTPUT_WIDTH + ":-2";
     private static final String FRAME_FILE = "frame.pgm";
     private static final String DENSE_PATTERN = "d_%05d.pgm";
     private static final String RGB_FRAME_FILE = "frame.ppm";
     private static final String RGB_DENSE_PATTERN = "r_%05d.ppm";
-    private static final String GREY_FORMAT = "gray";
-    private static final String RGB_FORMAT = "rgb24";
+    /** The pixel format of the grey frames the active area and the product's rules read (limited range). */
+    public static final String GREY_FORMAT = "gray";
+    /** The pixel format of the colour frames (full range). */
+    public static final String RGB_FORMAT = "rgb24";
 
     /** A frame and where in the file it was taken. */
     public record TimedFrame(long offsetMs, GreyFrame frame) {
@@ -119,7 +124,7 @@ public class CreditsFrameReader {
     }
 
     /** The offsets of the five frames the active area is measured on: 30%, 37.5%, 45%, 52.5% and 60% of the file. */
-    static List<Long> activeOffsets(long durationMs) {
+    public static List<Long> activeOffsets(long durationMs) {
         List<Long> offsets = new ArrayList<>();
         for (int i = 0; i < ACTIVE_SAMPLES; i++) {
             offsets.add(durationMs * (300 + 75L * i) / 1000);
@@ -134,7 +139,7 @@ public class CreditsFrameReader {
     public static List<Long> coarseOffsets(long durationMs) {
         List<Long> offsets = new ArrayList<>();
         for (long at = durationMs - windowMs(durationMs); at <= durationMs - END_MARGIN_MS;
-             at += CreditsTuning.SAMPLE_MS) {
+             at += COARSE_STEP_MS) {
             offsets.add(at);
         }
         return offsets;
