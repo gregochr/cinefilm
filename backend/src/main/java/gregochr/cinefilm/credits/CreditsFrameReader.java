@@ -328,7 +328,8 @@ public class CreditsFrameReader {
          *
          * @param offsetMs where in the file to take it, 0 up to but not including the file's length
          * @return the frame
-         * @throws IllegalArgumentException when the offset is negative or not before the end of the file
+         * @throws IllegalArgumentException when the offset is negative or not before the end of the file, or the job's
+         *     duration is not 1 to {@code Long.MAX_VALUE - DENSE_SPAN_MS}
          * @throws ReadException when ffmpeg fails, times out or writes nothing readable
          */
         public RgbFrame rgbFrame(long offsetMs) {
@@ -355,7 +356,8 @@ public class CreditsFrameReader {
          * @param lengthMs how long it lasts, 1 to {@value #DENSE_SPAN_MS}
          * @return the frames, in order; never empty
          * @throws IllegalArgumentException when the length is not 1 to {@value #DENSE_SPAN_MS}, the start is at or
-         *     past the end of the file, or the range ends before the file starts
+         *     past the end of the file, the range ends before the file starts, or the job's duration is not 1 to
+         *     {@code Long.MAX_VALUE - DENSE_SPAN_MS}
          * @throws ReadException when ffmpeg fails, times out or writes no frames
          */
         public List<TimedRgb> rgbDense(long startMs, long lengthMs) {

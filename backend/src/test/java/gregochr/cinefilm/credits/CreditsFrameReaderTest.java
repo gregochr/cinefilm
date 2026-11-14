@@ -545,9 +545,24 @@ class CreditsFrameReaderTest {
         long largest = Long.MAX_VALUE - CreditsFrameReader.DENSE_SPAN_MS;
         try (Job job = reader().open(FILM, largest, () -> { })) {
             assertThat(job.rgbFrame(1_000)).isNotNull();
+            ffmpeg.commands.clear();
+
+            List<TimedRgb> frames = job.rgbDense(largest - 1, CreditsFrameReader.DENSE_SPAN_MS);
+
+            assertThat(frames).extracting(TimedRgb::offsetMs).containsExactly(largest - 1);
+            List<String> command = ffmpeg.commands.getFirst();
+            assertThat(command.get(command.indexOf("-ss") + 1)).isEqualTo("9223372036854475.806");
+            assertThat(command.get(command.indexOf("-t") + 1)).isEqualTo("0.001");
+            assertThat(command.get(command.indexOf("-frames:v") + 1)).isEqualTo("1");
         }
+        assertThat(CreditsFrameReader.seekTime(largest - 1)).isEqualTo("9223372036854475.806");
+        // The grey reads never check the duration: on a job of length 0 they run as before (no coarse frame fits
+        // before the end, and the dense decode asks ffmpeg for no frames and so finds none).
         try (Job job = reader().open(FILM, 0, () -> { })) {
             assertThat(job.activeAreaFrames()).hasSize(5);
+            assertThat(job.coarseFrames()).isEmpty();
+            assertThatThrownBy(() -> job.denseFrames(0)).isInstanceOf(ReadException.class)
+                .hasMessage("ffmpeg wrote no frames around 0.000");
         }
     }
 
