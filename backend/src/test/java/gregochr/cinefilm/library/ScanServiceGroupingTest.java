@@ -127,11 +127,13 @@ class ScanServiceGroupingTest {
     void repairIsToldNotToUseTmdbWhenTheWalkAlreadyFoundItDown() throws IOException {
         newFile("Heat {tmdb-949}.m4v", 170);
         when(matcher.matchTagged(949L, null)).thenReturn(Optional.of(UNAVAILABLE));
+        when(grouping.repair(false)).thenReturn(new LibraryGrouping.RepairResult(0, false));
 
         service.start("admin");
 
         verify(grouping).repair(false);
         verify(grouping).group();
+        verify(ingest).finishRun(5L, CLOCK.instant(), 1, 1, 0, null);
     }
 
     @Test
@@ -262,6 +264,7 @@ class ScanServiceGroupingTest {
     void aTmdbOutageOnATaggedLookupLeavesTheFileForALaterScan() throws IOException {
         FoundFile file = newFile("Heat {tmdb-949}.m4v", 170);
         when(matcher.matchTagged(949L, null)).thenReturn(Optional.of(UNAVAILABLE));
+        when(grouping.repair(false)).thenReturn(new LibraryGrouping.RepairResult(0, false));
 
         service.start("admin");
 

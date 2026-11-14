@@ -261,6 +261,8 @@ class RepairRulesTest {
     void aFilmWithAnIneligibleGroupBesideAnEligibleOneIsNotLookedUpAtAll() {
         assertThat(RepairRules.lookups("Elf", 10719L, List.of(fact(1, 10, 100, "Elf.m4v"),
             fact(1, 20, 200, "Buddy {edition-X}.m4v"), fact(1, 30, 300, "Enchanted.m4v")))).isEmpty();
+        assertThat(RepairRules.lookups("Elf", 10719L, List.of(fact(1, 10, 100, "Elf.m4v"),
+            fact(1, 20, 200, "Enchanted.m4v"), fact(1, 30, 300, "The Buddy {edition-X}.m4v")))).isEmpty();
     }
 
     @Test

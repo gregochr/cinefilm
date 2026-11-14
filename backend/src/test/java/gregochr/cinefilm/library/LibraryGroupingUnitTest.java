@@ -99,7 +99,7 @@ class LibraryGroupingUnitTest {
 
     private List<GroupingChange> saved() {
         return mockingDetails(changes).getInvocations().stream()
-            .filter(call -> call.getMethod().getName().equals("save"))
+            .filter(call -> call.getMethod().getName().startsWith("save"))
             .map(call -> (GroupingChange) call.getArgument(0)).toList();
     }
 
@@ -271,7 +271,7 @@ class LibraryGroupingUnitTest {
     }
 
     @Test
-    void aFailedSplitIsLoggedAndTheRepairGoesOn() {
+    void aFailedSplitWritesNoChangeAndTheRepairGoesOn() {
         Film elf = film("Elf", ELF, "Elf.m4v", "Enchanted.m4v");
         film("Blade Runner", 78L, "Blade Runner.m4v", "Blader Runner.m4v");
         tmdbKnowsElf();
