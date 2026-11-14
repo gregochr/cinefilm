@@ -1,5 +1,6 @@
 package gregochr.cinefilm.health;
 
+import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.health.HealthDtos.ChartList;
 import gregochr.cinefilm.health.HealthDtos.PlaybackRow;
 import jakarta.servlet.http.HttpServletRequest;
@@ -7,6 +8,9 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,6 +22,8 @@ import org.springframework.web.bind.annotation.RestController;
 /** The report route the player sends to, and the Admin routes that read the reports back. */
 @RestController
 public class PlaybackHealthController {
+
+    private static final List<String> LIST_PARAMETERS = List.of("since", "minWatchedMs", "problems", "page", "size");
 
     private final PlaybackHealthService health;
 
@@ -49,23 +55,44 @@ public class PlaybackHealthController {
     }
 
     /**
-     * The viewings. With none of the query parameters, the 20 most recently updated and no {@code total}, as ever;
-     * with any, the filtered, paged list newest start first.
+     * The viewings. With none of the query parameters present, the 20 most recently updated and no {@code total}, as
+     * ever; with any present (whatever its value), the filtered, paged list newest start first. A parameter that is
+     * present must hold a valid value: an empty or malformed one is a 400 {@code Invalid request}.
      */
     @GetMapping("/api/admin/playback-health")
-    Object list(@RequestParam(required = false) Instant since, @RequestParam(required = false) Long minWatchedMs,
-                @RequestParam(required = false) Boolean problems, @RequestParam(required = false) Integer page,
-                @RequestParam(required = false) Integer size) {
-        if (since == null && minWatchedMs == null && problems == null && page == null && size == null) {
-            return health.recent();
+    ResponseEntity<?> list(@RequestParam Map<String, String> params) {
+        if (LIST_PARAMETERS.stream().noneMatch(params::containsKey)) {
+            return ResponseEntity.ok(health.recent());
         }
-        return health.query(since, minWatchedMs, problems, page, size);
+        return ResponseEntity.ok(health.query(parse(params, "since", Instant::parse),
+            parse(params, "minWatchedMs", Long::parseLong), parse(params, "problems", PlaybackHealthController::bool),
+            parse(params, "page", Integer::parseInt), parse(params, "size", Integer::parseInt)));
     }
 
     /** The film sessions since a time (all when omitted), with only the chart's fields. */
     @GetMapping("/api/admin/playback-health/chart")
-    ChartList chart(@RequestParam(required = false) Instant since) {
-        return health.chart(since);
+    ChartList chart(@RequestParam Map<String, String> params) {
+        return health.chart(parse(params, "since", Instant::parse));
+    }
+
+    /** A present parameter read with {@code reader}; null when absent; 400 when empty or malformed. */
+    private static <T> T parse(Map<String, String> params, String name, Function<String, T> reader) {
+        String value = params.get(name);
+        if (value == null) {
+            return null;
+        }
+        try {
+            return reader.apply(value);
+        } catch (RuntimeException e) {
+            throw new BadRequestException("Invalid request");
+        }
+    }
+
+    private static Boolean bool(String value) {
+        if ("true".equals(value) || "false".equals(value)) {
+            return Boolean.valueOf(value);
+        }
+        throw new IllegalArgumentException("not a boolean");
     }
 
     @GetMapping("/api/admin/playback-health/{playbackId}")

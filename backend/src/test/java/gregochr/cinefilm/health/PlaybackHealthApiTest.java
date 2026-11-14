@@ -534,11 +534,25 @@ class PlaybackHealthApiTest extends ApiTestBase {
 
     @ParameterizedTest
     @CsvSource({"size,0", "size,101", "size,-1", "page,-1", "minWatchedMs,-1", "since,yesterday", "problems,maybe",
-        "size,ten"})
+        "size,ten", "page,2147483647", "since,''", "page,''", "size,''", "minWatchedMs,''", "problems,''",
+        "problems,1", "problems,yes"})
     void aBadParameterIsA400(String name, String value) throws Exception {
         mvc.perform(get("/api/admin/playback-health").param(name, value))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.error").value("Invalid request"));
+    }
+
+    @Test
+    void anEmptyValueIsNotTheOldShapeWithNoTotal() throws Exception {
+        mvc.perform(get("/api/admin/playback-health").param("since", ""))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void aPageSizeOfOneIsAccepted() throws Exception {
+        mvc.perform(get("/api/admin/playback-health").param("size", "1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.total").value(0));
     }
 
     @Test

@@ -4,8 +4,8 @@
 --
 -- watched_ms, stall_count, stall_ms: the report's watchedMs, stallCount, stallMs (0 until a report says otherwise).
 -- startup_ms: the report's startupMs; null when the first frame never came.
--- has_problem: true when the report shows a stall, a reconnect, a step down to a lower rung, a fall back to direct
---   play, a network error or a timeout.
+-- has_problem: true when the report shows a stall, a reconnect, a fall back to direct play, a network error or a
+--   timeout (stallCount, reconnectCount, fellBack, netErrors, timeouts). A step down to a lower rung is not one.
 -- environment: the report's environment (home, train, away, unknown); null for a row whose report could not be read.
 ALTER TABLE playback_health ADD COLUMN watched_ms BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE playback_health ADD COLUMN stall_count BIGINT NOT NULL DEFAULT 0;

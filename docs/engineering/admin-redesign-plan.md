@@ -172,6 +172,8 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
 
 - Flyway migration adding nullable/defaulted `watched_ms`, `stall_count`, `stall_ms`, `startup_ms`, `has_problem`
   (stalls, reconnects, fell back, errors, timeouts), `environment`; index on `started_at`.
+  `has_problem` is exactly: `stallCount > 0`, `reconnectCount > 0`, `fellBack`, `netErrors > 0` or `timeouts > 0`;
+  step-downs (`stepsDown`) do not count, being the adaptive quality working.
 - **Backfill in Java** (a Flyway Java migration parsing `summary` with the app's `JsonMapper`), so it runs the same
   on H2 (tests) and Postgres; at most 2,000 rows.
 - `create()` and `replaceIfNewer` write every new column from the same parsed report.

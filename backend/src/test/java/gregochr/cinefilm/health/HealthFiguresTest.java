@@ -36,12 +36,20 @@ class HealthFiguresTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"stallCount", "reconnectCount", "stepsDown", "netErrors", "timeouts"})
+    @ValueSource(strings = {"stallCount", "reconnectCount", "netErrors", "timeouts"})
     void eachCountAboveZeroIsAProblemOnItsOwn(String field) {
         ObjectNode node = smooth();
         node.put(field, 1);
 
         assertThat(HealthFigures.of(report(node)).hasProblem()).isTrue();
+    }
+
+    @Test
+    void aStepDownToALowerRungIsNotAProblem() {
+        ObjectNode node = smooth();
+        node.put("stepsDown", 5);
+
+        assertThat(HealthFigures.of(report(node)).hasProblem()).isFalse();
     }
 
     @Test

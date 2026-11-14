@@ -464,7 +464,7 @@ class PlaybackHealthServiceTest {
             .hasMessage("No such playback");
     }
 
-    // query
+    // query (the filters' predicates, order and paging are proven against a real database in PlaybackHealthApiTest)
 
     private static final Sort NEWEST_FIRST = Sort.by(Sort.Direction.DESC, "startedAt")
         .and(Sort.by(Sort.Direction.DESC, "id"));
@@ -535,6 +535,28 @@ class PlaybackHealthServiceTest {
         assertThatThrownBy(() -> service.query(null, null, null, null, size))
             .isExactlyInstanceOf(BadRequestException.class)
             .hasMessage("Invalid request");
+    }
+
+    @Test
+    void queryAcceptsASizeOfOne() {
+        answers(PageRequest.of(0, 1, NEWEST_FIRST), List.of(), 0);
+
+        assertThat(service.query(null, null, null, 0, 1).playbacks()).isEmpty();
+    }
+
+    @Test
+    void queryRefusesAnOffsetBeyondWhatTheDatabaseTakes() {
+        assertThatThrownBy(() -> service.query(null, null, null, Integer.MAX_VALUE, 2))
+            .isExactlyInstanceOf(BadRequestException.class)
+            .hasMessage("Invalid request");
+    }
+
+    @Test
+    void queryAcceptsTheLargestOffset() {
+        // 21,474,836 pages of 100 is 2,147,483,600, still within an int.
+        answers(PageRequest.of(21_474_836, 100, NEWEST_FIRST), List.of(), 0);
+
+        assertThat(service.query(null, null, null, 21_474_836, 100).total()).isZero();
     }
 
     @Test

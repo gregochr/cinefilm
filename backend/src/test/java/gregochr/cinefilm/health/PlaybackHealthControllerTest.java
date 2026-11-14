@@ -265,6 +265,29 @@ class PlaybackHealthControllerTest {
     }
 
     @Test
+    void aPresentButEmptyParameterIsA400NotTheOldShape() throws Exception {
+        for (String name : List.of("since", "minWatchedMs", "problems", "page", "size")) {
+            mvc.perform(signedIn(get("/api/admin/playback-health")).param(name, ""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Invalid request"));
+        }
+    }
+
+    @Test
+    void anEmptyChartSinceIsA400() throws Exception {
+        mvc.perform(signedIn(get("/api/admin/playback-health/chart")).param("since", ""))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+    }
+
+    @Test
+    void aProblemsValueThatIsNotTrueOrFalseIsA400() throws Exception {
+        mvc.perform(signedIn(get("/api/admin/playback-health")).param("problems", "1"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+    }
+
+    @Test
     void aBadNumberIsA400() throws Exception {
         mvc.perform(signedIn(get("/api/admin/playback-health")).param("size", "many"))
             .andExpect(status().isBadRequest())

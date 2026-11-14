@@ -120,14 +120,17 @@ public class PlaybackHealthService {
      * per-minute track, and the number of all that match. Every filter is optional: {@code since} keeps the viewings
      * that started at or after it, {@code minWatchedMs} those that played at least that long, {@code problems}
      * those whose {@code hasProblem} equals it. {@code page} counts from 0 (default 0) and {@code size} is 1 to
-     * {@link #MAX_PAGE_SIZE} (default {@link #DEFAULT_PAGE_SIZE}); anything else is a 400. A stored report that
+     * {@link #MAX_PAGE_SIZE} (default {@link #DEFAULT_PAGE_SIZE}), and {@code page * size} may not pass
+     * {@link Integer#MAX_VALUE} (the offset asked of the database); anything else is a 400. A stored report that
      * cannot be read is left out of the page but still counted in the total.
      */
     @Transactional(readOnly = true)
     public PlaybackPage query(Instant since, Long minWatchedMs, Boolean problems, Integer page, Integer size) {
         int pageNumber = page == null ? 0 : page;
         int pageSize = size == null ? DEFAULT_PAGE_SIZE : size;
-        if (pageNumber < 0 || pageSize < 1 || pageSize > MAX_PAGE_SIZE || (minWatchedMs != null && minWatchedMs < 0)) {
+        if (pageNumber < 0 || pageSize < 1 || pageSize > MAX_PAGE_SIZE
+            || (long) pageNumber * pageSize > Integer.MAX_VALUE
+            || (minWatchedMs != null && minWatchedMs < 0)) {
             throw new BadRequestException("Invalid request");
         }
         Sort newestFirst = Sort.by(Sort.Direction.DESC, "startedAt").and(Sort.by(Sort.Direction.DESC, "id"));

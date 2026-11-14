@@ -9,6 +9,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -51,6 +52,13 @@ class PlaybackHealthBackfillIntegrationTest extends IntegrationTestBase {
         ResultSet found = statement.executeQuery();
         assertThat(found.next()).isTrue();
         return found;
+    }
+
+    @AfterEach
+    void dropTheSchema() throws SQLException {
+        try (Connection connection = connection(); java.sql.Statement statement = connection.createStatement()) {
+            statement.execute("DROP SCHEMA IF EXISTS " + SCHEMA + " CASCADE");
+        }
     }
 
     @Test

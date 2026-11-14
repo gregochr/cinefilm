@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import gregochr.cinefilm.health.HealthFigures;
 import gregochr.cinefilm.health.HealthSamples;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -131,11 +130,30 @@ class V27__BackfillPlaybackHealthFiguresTest {
         }
     }
 
+    private boolean problemFor(String json) throws Exception {
+        insert(1, json);
+        new V27__BackfillPlaybackHealthFigures().migrate(context);
+        return row(1).getBoolean("has_problem");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{\"stallCount\":1}", "{\"reconnectCount\":1}", "{\"fellBack\":true}",
+        "{\"netErrors\":1}", "{\"timeouts\":1}"})
+    void eachOfTheFiveSignsIsAProblem(String json) throws Exception {
+        assertThat(problemFor(json)).isTrue();
+    }
+
     @Test
-    void figuresOfReadsAReportAndRefusesWhatIsNotOne() {
-        assertThat(V27__BackfillPlaybackHealthFigures.figuresOf(HealthSamples.EXAMPLE))
-            .contains(new HealthFigures(171_000, 2, 9_400, 2_380L, true, "train"));
-        assertThat(V27__BackfillPlaybackHealthFigures.figuresOf("nope")).isEmpty();
-        assertThat(V27__BackfillPlaybackHealthFigures.figuresOf("null")).isEmpty();
+    void aStepDownAloneIsNotAProblem() throws Exception {
+        assertThat(problemFor("{\"stepsDown\":3,\"stepsUp\":1,\"watchedMs\":200000}")).isFalse();
+    }
+
+    @Test
+    void anEnvironmentLongerThanTheColumnIsLeftNull() throws Exception {
+        insert(1, "{\"environment\":\"" + "x".repeat(17) + "\"}");
+
+        new V27__BackfillPlaybackHealthFigures().migrate(context);
+
+        assertThat(row(1).getString("environment")).isNull();
     }
 }
