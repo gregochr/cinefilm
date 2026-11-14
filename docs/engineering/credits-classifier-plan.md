@@ -180,8 +180,8 @@ The bigger gap is credits over picture, not white backgrounds. "Labels" says how
   - **one variant is tested in cross-validation**: including the lit frames that also show text. It is adopted only
     if the earliest out-of-fold error does not get worse.
 - **Plex errors.** The development films with the largest errors are looked at as stills. A clear Plex error is left
-  out through the exclusions file (its reason lands in the labels' `excluded_note` and the report), and is never
-  relabelled by guesswork.
+  out through the exclusions file (its reason lands in the labels' `excluded_note` when `OWNER_EXCLUDED` is the
+  recorded reason, and always in the report), and is never relabelled by guesswork.
 - **The output** goes to `~/cinefilm-labels/labels-<date>.json`. That is library data, so it is never committed (the
   repository is public). Its schema is one object per file:
   - `media_file_id`, `fingerprint`, `unit_key`, `side` (`dev` or `test`), `fold` (0–4, development only);
