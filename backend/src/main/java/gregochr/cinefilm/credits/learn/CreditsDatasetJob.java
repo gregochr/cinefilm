@@ -57,6 +57,12 @@ import org.springframework.stereotype.Service;
  * moving to a new generation; the task still in ffmpeg stops at its next checkpoint and deletes its partial directory.
  * The single executor thread keeps an old task and a new one from running side by side.
  *
+ * <p>A start only takes over under the lock (so the 404 and the 409 are immediate) and answers {@code RUNNING}; its
+ * preparation (the directories, the ffmpeg version, the targets, the sweep of {@code frames/} and the marker) is a task
+ * on the credits executor, like every file. So {@code prepare} and {@code sweep} run only on the credits thread, and a
+ * stop followed by a second start cannot have two preparations, or a preparation and a file, touching
+ * {@code frames/} at once. A preparation that fails shows as {@code FAILED} in the next status.
+ *
  * <p>The JVM's own PNG and JPEG encoding runs at the server's normal priority; only ffmpeg runs at the job's niceness.
  */
 @Service
@@ -148,43 +154,50 @@ public class CreditsDatasetJob {
     // ---- The routes ----------------------------------------------------------------------------------------------
 
     /**
-     * Starts a run: makes the directories, reads the ffmpeg version, loads the targets, skips the files that already
-     * hold a current {@code complete.json}, deletes the stale or partial directories, writes the marker and submits the
-     * first task. A failure before the chain begins leaves the state {@code FAILED} with {@code lastError}.
+     * Starts a run. Only the take-over happens here, under the lock; the rest is one task on the credits executor, so
+     * that every change to {@code frames/} is made on the single credits thread: it makes the directories, reads the
+     * ffmpeg version, loads the targets, skips the files that already hold a current {@code complete.json}, deletes the
+     * directories that are not a finished read, writes the marker and carries on with the first file. A failure there
+     * leaves the state {@code FAILED} with {@code lastError}, which shows in the next status.
      *
-     * @return the status
+     * @return the status: {@code RUNNING}, with nothing counted yet
      * @throws NotFoundException when the job is switched off
      * @throws ConflictException when a run is going
      */
     public DatasetStatus start() {
-        return start(false);
-    }
-
-    private DatasetStatus start(boolean resumeOnly) {
-        if (!props.enabled()) {
-            throw new NotFoundException("The dataset job is off");
-        }
-        long gen = begin(resumeOnly);
-        if (props.overlapsReaderDir()) {
-            fail(gen, "The dataset directory or the output directory is inside the credits detection's work "
-                + "directory, which is wiped at start-up (cinefilm.credits.dataset.dir, "
-                + "cinefilm.credits.dataset.out-dir)");
-            return status();
-        }
-        Prepared prepared;
+        long gen = admit(false);
         try {
-            prepared = prepare();
-        } catch (IOException | RuntimeException e) {
-            fail(gen, describe(e));
-            return status();
-        }
-        adopt(gen, prepared);
-        try {
-            proceed(gen);
+            executor.execute(() -> prepareAndGo(gen));
         } catch (RuntimeException e) {
             fail(gen, describe(e));
         }
         return status();
+    }
+
+    private long admit(boolean resumeOnly) {
+        if (!props.enabled()) {
+            throw new NotFoundException("The dataset job is off");
+        }
+        return begin(resumeOnly);
+    }
+
+    /** The preparation of a run, then its first file. Runs on the credits thread; a stale generation exits at once. */
+    private void prepareAndGo(long gen) {
+        if (!isRunning(gen)) {
+            return;
+        }
+        try {
+            if (props.overlapsReaderDir()) {
+                fail(gen, "The dataset directory or the output directory is inside the credits detection's work "
+                    + "directory, which is wiped at start-up (cinefilm.credits.dataset.dir, "
+                    + "cinefilm.credits.dataset.out-dir)");
+                return;
+            }
+            adopt(gen, prepare());
+            proceed(gen);
+        } catch (IOException | RuntimeException e) {
+            fail(gen, describe(e));
+        }
     }
 
     /**
@@ -243,9 +256,11 @@ public class CreditsDatasetJob {
         }
     }
 
+    /** Runs on the credits thread, so it prepares inline instead of queueing a second task. */
     private void resume() {
         try {
-            State state = start(true).state();
+            prepareAndGo(admit(true));
+            State state = status().state();
             LOG.info("Credits dataset job: {}",
                 state == State.RUNNING ? "starting again" : "not starting again: " + state);
         } catch (Declined e) {

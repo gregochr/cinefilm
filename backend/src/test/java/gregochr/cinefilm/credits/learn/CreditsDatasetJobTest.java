@@ -230,6 +230,19 @@ class CreditsDatasetJobTest {
         targets.list = list;
     }
 
+    /**
+     * Starts a run and runs just its preparation task (the last one queued), as the credits thread would, then reads
+     * the status. Tasks already queued stay where they are.
+     */
+    private DatasetStatus startNow(CreditsDatasetJob target) {
+        int queued = queue.size();
+        target.start();
+        if (queue.size() > queued) {
+            queue.pollLast().run();
+        }
+        return target.status();
+    }
+
     private void drain() {
         while (!queue.isEmpty()) {
             queue.poll().run();
@@ -272,7 +285,7 @@ class CreditsDatasetJobTest {
     void aRunReadsEveryTargetOneTaskAtATimeAndEndsDoneWithTheMarkerRemoved() throws IOException {
         targetIds(1, 2, 3);
 
-        DatasetStatus started = job.start();
+        DatasetStatus started = startNow(job);
 
         assertThat(started.state()).isEqualTo(State.RUNNING);
         assertThat(started.enabled()).isTrue();
@@ -314,7 +327,7 @@ class CreditsDatasetJobTest {
     @Test
     void completeJsonHoldsExactlyWhatWasRead() throws IOException {
         targetIds(7);
-        job.start();
+        startNow(job);
         drain();
 
         assertThat(readComplete(7)).isEqualTo(new DatasetComplete(1, 7L, "fp7", 100_000L, 95_000L,
@@ -329,7 +342,7 @@ class CreditsDatasetJobTest {
     void ffmpegIsAskedItsVersionWithATenSecondTimeout() {
         targetIds(1);
 
-        job.start();
+        startNow(job);
 
         assertThat(runner.versionCommands).containsExactly(List.of("ffmpeg", "-version"));
         assertThat(runner.versionTimeouts).containsExactly(Duration.ofSeconds(10));
@@ -339,7 +352,7 @@ class CreditsDatasetJobTest {
     void everyFfmpegCallOfAFileRunsUnderTheJobsOwnNiceness() {
         targetIds(1);
 
-        job.start();
+        startNow(job);
         drain();
 
         assertThat(ffmpeg.commands).isNotEmpty().allSatisfy(command ->
@@ -376,7 +389,7 @@ class CreditsDatasetJobTest {
         targetIds(4, 5);
         List<Long> seen = new ArrayList<>();
         onGuardCall = () -> seen.add(job.status().currentMediaFileId());
-        job.start();
+        startNow(job);
 
         queue.poll().run();
 
@@ -411,7 +424,7 @@ class CreditsDatasetJobTest {
     @Test
     void startWhileRunningIs409AndTheChainIsUnchanged() {
         targetIds(1, 2);
-        job.start();
+        startNow(job);
         queue.poll().run();
         DatasetStatus before = job.status();
 
@@ -428,7 +441,7 @@ class CreditsDatasetJobTest {
     void startCreatesTheFramesAndOutputDirectories() {
         targetIds(1);
 
-        job.start();
+        startNow(job);
 
         assertThat(props.framesDir()).isDirectory();
         assertThat(props.outDir()).isDirectory();
@@ -440,7 +453,7 @@ class CreditsDatasetJobTest {
         finished(1, "fp1");
         Files.writeString(frames(1).resolve("marker.txt"), "keep");
 
-        DatasetStatus started = job.start();
+        DatasetStatus started = startNow(job);
         drain();
 
         assertThat(started.alreadyComplete()).isEqualTo(1);
@@ -466,7 +479,7 @@ class CreditsDatasetJobTest {
         Files.writeString(frames(4).resolve("coarse/60000.png"), "partial");
         Files.createDirectories(frames(99));
 
-        DatasetStatus started = job.start();
+        DatasetStatus started = startNow(job);
 
         assertThat(started.alreadyComplete()).isZero();
         // The stale and partial directories, and one with no target at all, are deleted before the first task.
@@ -485,7 +498,7 @@ class CreditsDatasetJobTest {
         Files.createDirectories(props.framesDir());
         Files.writeString(props.framesDir().resolve("stray.txt"), "x");
 
-        job.start();
+        startNow(job);
 
         assertThat(props.framesDir().resolve("stray.txt")).exists();
     }
@@ -497,7 +510,7 @@ class CreditsDatasetJobTest {
         Files.createDirectories(frames(77).resolve("coarse"));
         Files.writeString(frames(77).resolve("coarse/60000.png"), "kept");
 
-        job.start();
+        startNow(job);
 
         assertThat(frames(77).resolve("complete.json")).exists();
         assertThat(frames(77).resolve("coarse/60000.png")).exists();
@@ -511,7 +524,7 @@ class CreditsDatasetJobTest {
         finished(1, "changed-since");
         finished(2, "fp2");
 
-        DatasetStatus started = job.start();
+        DatasetStatus started = startNow(job);
 
         assertThat(frameDirs()).containsExactly("2");
         assertThat(started.alreadyComplete()).isEqualTo(1);
@@ -527,7 +540,7 @@ class CreditsDatasetJobTest {
         finished(2, "fp2");
         Files.writeString(frames(2).resolve("complete.json.tmp"), "half");
 
-        job.start();
+        startNow(job);
 
         assertThat(frames(1)).doesNotExist();
         assertThat(frames(2).resolve("complete.json.tmp")).exists();
@@ -537,7 +550,7 @@ class CreditsDatasetJobTest {
     void anEmptyTargetListEndsDoneAtTheFirstTask() {
         targetIds();
 
-        DatasetStatus started = job.start();
+        DatasetStatus started = startNow(job);
         drain();
 
         assertThat(started.targets()).isZero();
@@ -548,11 +561,11 @@ class CreditsDatasetJobTest {
     @Test
     void aRunThatEndedCanBeStartedAgainAndResetsItsCounters() {
         targetIds(1, 2);
-        job.start();
+        startNow(job);
         drain();
         assertThat(job.status().complete()).isEqualTo(2);
 
-        DatasetStatus again = job.start();
+        DatasetStatus again = startNow(job);
 
         // Both directories hold a current complete.json now.
         assertThat(again.alreadyComplete()).isEqualTo(2);
@@ -570,7 +583,7 @@ class CreditsDatasetJobTest {
         targetIds(1);
         runner.version = new CommandRunner.Result(1, "", false);
 
-        DatasetStatus status = job.start();
+        DatasetStatus status = startNow(job);
 
         assertThat(status.state()).isEqualTo(State.FAILED);
         assertThat(status.lastError()).isEqualTo("ffmpeg -version gave no answer");
@@ -583,14 +596,14 @@ class CreditsDatasetJobTest {
     void aVersionCommandThatPrintsNothingFailsTheStart() {
         runner.version = new CommandRunner.Result(0, "", false);
 
-        assertThat(job.start().lastError()).isEqualTo("ffmpeg -version gave no answer");
+        assertThat(startNow(job).lastError()).isEqualTo("ffmpeg -version gave no answer");
     }
 
     @Test
     void aVersionCommandThatCannotBeRunFailsTheStartWithTheReason() {
         runner.versionFailure = new IOException("No such file or directory");
 
-        DatasetStatus status = job.start();
+        DatasetStatus status = startNow(job);
 
         assertThat(status.state()).isEqualTo(State.FAILED);
         assertThat(status.lastError()).isEqualTo("ffmpeg could not be run: No such file or directory");
@@ -601,7 +614,7 @@ class CreditsDatasetJobTest {
     void aVersionCommandThatTimedOutFailsTheStart() {
         runner.version = new CommandRunner.Result(-1, "ffmpeg version 7", true);
 
-        assertThat(job.start().state()).isEqualTo(State.FAILED);
+        assertThat(startNow(job).state()).isEqualTo(State.FAILED);
     }
 
     @Test
@@ -610,7 +623,7 @@ class CreditsDatasetJobTest {
         Files.writeString(props.marker(), "left behind");
         targets.listFailure = new IllegalStateException("database is down");
 
-        DatasetStatus status = job.start();
+        DatasetStatus status = startNow(job);
 
         assertThat(status.state()).isEqualTo(State.FAILED);
         assertThat(status.lastError()).isEqualTo("database is down");
@@ -622,14 +635,14 @@ class CreditsDatasetJobTest {
     void aFailureWithNoMessageIsReportedByItsClassName() {
         targets.listFailure = new IllegalStateException();
 
-        assertThat(job.start().lastError()).isEqualTo("IllegalStateException");
+        assertThat(startNow(job).lastError()).isEqualTo("IllegalStateException");
     }
 
     @Test
     void aDatasetDirectoryThatCannotBeMadeFailsTheStart() throws IOException {
         Files.writeString(props.dir(), "a file where the directory should be");
 
-        DatasetStatus status = job.start();
+        DatasetStatus status = startNow(job);
 
         assertThat(status.state()).isEqualTo(State.FAILED);
         assertThat(status.lastError()).isNotBlank();
@@ -640,7 +653,7 @@ class CreditsDatasetJobTest {
         targetIds(1);
         Files.createDirectories(props.marker());
 
-        DatasetStatus status = job.start();
+        DatasetStatus status = startNow(job);
 
         assertThat(status.state()).isEqualTo(State.FAILED);
         assertThat(status.lastError()).startsWith("The running marker could not be written: ");
@@ -652,7 +665,7 @@ class CreditsDatasetJobTest {
         DatasetProperties inside = props(temp.resolve("cache/credits/dataset"), true);
         CreditsDatasetJob overlapping = job(inside);
 
-        DatasetStatus status = overlapping.start();
+        DatasetStatus status = startNow(overlapping);
 
         assertThat(status.state()).isEqualTo(State.FAILED);
         assertThat(status.lastError()).contains("inside the credits detection's work directory");
@@ -664,10 +677,10 @@ class CreditsDatasetJobTest {
     void afterAFailedStartTheNextStartIsAccepted() {
         targetIds(1);
         runner.version = new CommandRunner.Result(1, "", false);
-        assertThat(job.start().state()).isEqualTo(State.FAILED);
+        assertThat(startNow(job).state()).isEqualTo(State.FAILED);
         runner.version = new CommandRunner.Result(0, "ffmpeg version 7", false);
 
-        DatasetStatus status = job.start();
+        DatasetStatus status = startNow(job);
         drain();
 
         assertThat(status.state()).isEqualTo(State.RUNNING);
@@ -682,11 +695,75 @@ class CreditsDatasetJobTest {
             throw new RejectedExecutionException("full");
         };
 
-        DatasetStatus status = job.start();
+        DatasetStatus status = startNow(job);
 
         assertThat(status.state()).isEqualTo(State.FAILED);
         assertThat(status.lastError()).isEqualTo("full");
         assertThat(props.marker()).doesNotExist();
+    }
+
+    // ---- Preparation is a task on the credits thread ----------------------------------------------------------------
+
+    @Test
+    void startAnswersRunningWithNothingDoneUntilThePreparationTaskRuns() {
+        targetIds(1);
+
+        DatasetStatus started = job.start();
+
+        assertThat(started.state()).isEqualTo(State.RUNNING);
+        assertThat(started.targets()).isZero();
+        assertThat(queue).hasSize(1);
+        assertThat(runner.versionCommands).isEmpty();
+        assertThat(targets.listCalls).isZero();
+        assertThat(props.framesDir()).doesNotExist();
+        assertThat(props.marker()).doesNotExist();
+
+        queue.poll().run();
+
+        assertThat(runner.versionCommands).hasSize(1);
+        assertThat(job.status().targets()).isEqualTo(1);
+        assertThat(props.marker()).exists();
+        assertThat(queue).hasSize(1);
+    }
+
+    @Test
+    void aPreparationThatFailsShowsAsFailedAfterTheQueueIsDrainedNotInTheStartsAnswer() {
+        targetIds(1);
+        runner.version = new CommandRunner.Result(1, "", false);
+
+        DatasetStatus started = job.start();
+        assertThat(started.state()).isEqualTo(State.RUNNING);
+        drain();
+
+        assertThat(job.status().state()).isEqualTo(State.FAILED);
+        assertThat(job.status().lastError()).isEqualTo("ffmpeg -version gave no answer");
+        assertThat(props.marker()).doesNotExist();
+    }
+
+    @Test
+    void aStopThenASecondStartWhileTheFirstPreparationIsQueuedMakesTheFirstExitWithoutTouchingTheDisk()
+        throws IOException {
+        targetIds(1);
+        job.start();
+        job.stop();
+        job.start();
+        assertThat(queue).hasSize(2);
+        // A partial directory that the newer run will sweep, but the older preparation must not.
+        Files.createDirectories(frames(9));
+
+        queue.poll().run();
+
+        assertThat(runner.versionCommands).isEmpty();
+        assertThat(targets.listCalls).isZero();
+        assertThat(frames(9)).exists();
+        assertThat(queue).hasSize(1);
+
+        drain();
+
+        assertThat(runner.versionCommands).hasSize(1);
+        assertThat(frames(9)).doesNotExist();
+        assertThat(job.status().state()).isEqualTo(State.DONE);
+        assertThat(job.status().complete()).isEqualTo(1);
     }
 
     // ---- Start-up ------------------------------------------------------------------------------------------------
@@ -723,7 +800,7 @@ class CreditsDatasetJobTest {
         Files.createDirectories(props.dir());
         Files.writeString(props.marker(), "a run was going");
         job.onStartup();
-        job.start();
+        startNow(job);
 
         queue.poll().run();
 
@@ -780,7 +857,7 @@ class CreditsDatasetJobTest {
             temp.resolve("cache/credits/out").toString(), 19, 15, "ffmpeg", temp.resolve("cache").toString());
         CreditsDatasetJob overlapping = job(outside);
 
-        DatasetStatus status = overlapping.start();
+        DatasetStatus status = startNow(overlapping);
 
         assertThat(status.state()).isEqualTo(State.FAILED);
         assertThat(status.lastError()).contains("out-dir").contains("inside the credits detection's work directory");
@@ -809,7 +886,7 @@ class CreditsDatasetJobTest {
     void playbackPartWayDeletesThePartialDirectoryDefersAndKeepsTheMarker() throws IOException {
         targetIds(1, 2, 3);
         busyAtCall = 25;
-        job.start();
+        startNow(job);
 
         drain();
 
@@ -831,7 +908,7 @@ class CreditsDatasetJobTest {
     void theHourlyNudgeResumesAWaitingRunKeepingItsCounters() throws IOException {
         targetIds(1, 2, 3);
         busyAtCall = 25;
-        job.start();
+        startNow(job);
         drain();
         assertThat(job.status().complete()).isEqualTo(1);
 
@@ -856,7 +933,7 @@ class CreditsDatasetJobTest {
     @Test
     void theHourlyNudgeDoesNothingWhileTheChainIsRunning() {
         targetIds(1, 2);
-        job.start();
+        startNow(job);
         assertThat(queue).hasSize(1);
 
         job.startIfDeferred();
@@ -871,7 +948,7 @@ class CreditsDatasetJobTest {
         assertThat(queue).isEmpty();
 
         targetIds(1);
-        job.start();
+        startNow(job);
         drain();
         job.startIfDeferred();
 
@@ -883,7 +960,7 @@ class CreditsDatasetJobTest {
     void anExecutorThatRefusesTheResumeFailsTheRun() {
         targetIds(1, 2);
         busyAtCall = 3;
-        job.start();
+        startNow(job);
         drain();
         assertThat(job.status().state()).isEqualTo(State.WAITING);
         executor = task -> {
@@ -903,7 +980,7 @@ class CreditsDatasetJobTest {
     void stopPartWayIsStoppedAtOnceAndTheTaskStopsAtItsNextCheckpointDeletingItsPartialDirectory()
         throws IOException {
         targetIds(1, 2, 3);
-        job.start();
+        startNow(job);
         List<DatasetStatus> right = new ArrayList<>();
         onGuardCall = () -> {
             if (guardCalls == 25) {
@@ -933,7 +1010,7 @@ class CreditsDatasetJobTest {
     void stopWhileWaitingIsStoppedClearsTheWaitAndTheHourlyNudgeThenDoesNothing() {
         targetIds(1, 2);
         busyAtCall = 3;
-        job.start();
+        startNow(job);
         drain();
         assertThat(job.status().state()).isEqualTo(State.WAITING);
 
@@ -950,11 +1027,11 @@ class CreditsDatasetJobTest {
     @Test
     void stopThenStartBeforeTheOldTaskRunsAgainIsAcceptedAndTheOldTaskExitsWithoutTouchingState() {
         targetIds(1, 2);
-        job.start();
+        startNow(job);
         assertThat(queue).hasSize(1);
         job.stop();
 
-        DatasetStatus restarted = job.start();
+        DatasetStatus restarted = startNow(job);
 
         assertThat(restarted.state()).isEqualTo(State.RUNNING);
         assertThat(queue).hasSize(2);
@@ -979,7 +1056,7 @@ class CreditsDatasetJobTest {
         targetIds(1);
         targets.duringList = job::stop;
 
-        DatasetStatus status = job.start();
+        DatasetStatus status = startNow(job);
 
         assertThat(status.state()).isEqualTo(State.STOPPED);
         assertThat(queue).isEmpty();
@@ -989,12 +1066,12 @@ class CreditsDatasetJobTest {
     @Test
     void stopOnARunThatIsDoneOrFailedKeepsItsStateButRemovesTheMarker() throws IOException {
         targetIds(1);
-        job.start();
+        startNow(job);
         drain();
         assertThat(job.stop().state()).isEqualTo(State.DONE);
 
         targets.listFailure = new IllegalStateException("database is down");
-        job.start();
+        startNow(job);
         Files.writeString(props.marker(), "x");
 
         assertThat(job.stop().state()).isEqualTo(State.FAILED);
@@ -1004,7 +1081,7 @@ class CreditsDatasetJobTest {
     @Test
     void aMarkerThatCannotBeRemovedDoesNotStopTheStopAndIsLogged() throws IOException {
         targetIds(1);
-        job.start();
+        startNow(job);
         Files.delete(props.marker());
         Files.createDirectories(props.marker());
         Files.writeString(props.marker().resolve("inside"), "x");
@@ -1023,7 +1100,7 @@ class CreditsDatasetJobTest {
         targetIds(1, 2);
         disk.free = 15 * GB - 1;
 
-        job.start();
+        startNow(job);
         drain();
 
         DatasetStatus status = job.status();
@@ -1040,7 +1117,7 @@ class CreditsDatasetJobTest {
         targetIds(1);
         disk.free = 15 * GB;
 
-        job.start();
+        startNow(job);
         drain();
 
         assertThat(job.status().state()).isEqualTo(State.DONE);
@@ -1049,7 +1126,7 @@ class CreditsDatasetJobTest {
     @Test
     void theFloorIsCheckedBeforeEveryFileSoTheJobStopsWhenTheDiskFillsPartWay() {
         targetIds(1, 2, 3);
-        job.start();
+        startNow(job);
         queue.poll().run();
         disk.free = 1 * GB;
 
@@ -1064,7 +1141,7 @@ class CreditsDatasetJobTest {
         targetIds(1);
         disk.failure = new IOException("device not ready");
 
-        job.start();
+        startNow(job);
         drain();
 
         DatasetStatus status = job.status();
@@ -1081,7 +1158,7 @@ class CreditsDatasetJobTest {
         targetIds(1, 2);
         targets.changedBeforeRead.add(1L);
 
-        job.start();
+        startNow(job);
         drain();
 
         DatasetStatus status = job.status();
@@ -1098,7 +1175,7 @@ class CreditsDatasetJobTest {
         targetIds(1, 2);
         targets.changedAfterRead.add(1L);
 
-        job.start();
+        startNow(job);
         drain();
 
         DatasetStatus status = job.status();
@@ -1116,7 +1193,7 @@ class CreditsDatasetJobTest {
         targetIds(1, 2);
         ffmpeg.failOnCall = 8;
 
-        job.start();
+        startNow(job);
         drain();
 
         DatasetStatus status = job.status();
@@ -1133,7 +1210,7 @@ class CreditsDatasetJobTest {
         targetIds(41);
         ffmpeg.failOnCall = 3;
 
-        job.start();
+        startNow(job);
         drain();
 
         assertThat(warnings()).containsExactly(
@@ -1146,7 +1223,7 @@ class CreditsDatasetJobTest {
         targetIds(1, 2);
         unresolvable.add("f1.m4v");
 
-        job.start();
+        startNow(job);
         drain();
 
         DatasetStatus status = job.status();
@@ -1161,7 +1238,7 @@ class CreditsDatasetJobTest {
         targetIds(1, 2, 3, 4);
         unresolvable.addAll(List.of("f1.m4v", "f2.m4v", "f3.m4v", "f4.m4v"));
 
-        job.start();
+        startNow(job);
         drain();
 
         DatasetStatus status = job.status();
@@ -1188,12 +1265,12 @@ class CreditsDatasetJobTest {
     void aRunThatGaveUpCanBeStartedAgainInTheSameProcessAndForgetsItsFailures() {
         targetIds(1, 2, 3, 4);
         unresolvable.addAll(List.of("f1.m4v", "f2.m4v", "f3.m4v"));
-        job.start();
+        startNow(job);
         drain();
         assertThat(job.status().state()).isEqualTo(State.FAILED);
         unresolvable.clear();
 
-        job.start();
+        startNow(job);
         drain();
 
         assertThat(job.status().state()).isEqualTo(State.DONE);
@@ -1205,7 +1282,7 @@ class CreditsDatasetJobTest {
     void stopOnARunThatGaveUpRemovesTheMarkerSoARestartDoesNotResume() throws IOException {
         targetIds(1, 2, 3);
         unresolvable.addAll(List.of("f1.m4v", "f2.m4v", "f3.m4v"));
-        job.start();
+        startNow(job);
         drain();
         assertThat(props.marker()).exists();
 
@@ -1220,7 +1297,7 @@ class CreditsDatasetJobTest {
         targetIds(1, 2, 3, 4, 5, 6);
         unresolvable.addAll(List.of("f1.m4v", "f2.m4v", "f4.m4v", "f5.m4v"));
 
-        job.start();
+        startNow(job);
         drain();
 
         DatasetStatus status = job.status();
@@ -1235,7 +1312,7 @@ class CreditsDatasetJobTest {
         unresolvable.addAll(List.of("f1.m4v", "f2.m4v", "f4.m4v", "f5.m4v"));
         targets.changedBeforeRead.add(3L);
 
-        job.start();
+        startNow(job);
         drain();
 
         DatasetStatus status = job.status();
@@ -1249,7 +1326,7 @@ class CreditsDatasetJobTest {
         targetIds(1, 2);
         ffmpeg.garbage = "not a picture".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
 
-        job.start();
+        startNow(job);
         drain();
 
         assertThat(job.status().state()).isEqualTo(State.DONE);
@@ -1262,7 +1339,7 @@ class CreditsDatasetJobTest {
     void anExceptionEscapingTheTaskBodyEndsFailedWithTheMarkerRemovedAndALaterStartIsAccepted() {
         targetIds(1, 2);
         targets.currentFailure = new IllegalStateException("database is down");
-        job.start();
+        startNow(job);
         drain();
 
         DatasetStatus failed = job.status();
@@ -1272,7 +1349,7 @@ class CreditsDatasetJobTest {
         assertThat(queue).isEmpty();
 
         targets.currentFailure = null;
-        DatasetStatus again = job.start();
+        DatasetStatus again = startNow(job);
         drain();
 
         assertThat(again.state()).isEqualTo(State.RUNNING);
@@ -1283,7 +1360,7 @@ class CreditsDatasetJobTest {
     @Test
     void anExecutorThatRefusesTheNextTaskEndsFailed() {
         targetIds(1, 2);
-        job.start();
+        startNow(job);
         executor = task -> {
             throw new RejectedExecutionException("full");
         };
@@ -1300,7 +1377,7 @@ class CreditsDatasetJobTest {
     @Test
     void anErrorThatIsNotAnExceptionAlsoEndsTheChainFailedAndNeverEscapes() {
         targetIds(1);
-        job.start();
+        startNow(job);
         when(refresher.dueNotHeldBack()).thenThrow(new AssertionError("boom")).thenReturn(0);
 
         queue.poll().run();
@@ -1312,12 +1389,12 @@ class CreditsDatasetJobTest {
     @Test
     void aTaskOfAnOlderRunThatFailsPartWayChangesNoCounterOfTheNewRun() throws IOException {
         targetIds(1, 2, 3);
-        job.start();
+        startNow(job);
         // Part way through file 2 the owner stops and starts again, and the old task's read then fails.
         onGuardCall = () -> {
             if (guardCalls == 25) {
                 job.stop();
-                job.start();
+                startNow(job);
                 throw new IllegalStateException("boom");
             }
         };
@@ -1350,7 +1427,7 @@ class CreditsDatasetJobTest {
     @Test
     void aStopWhileTheRefresherIsBeingAskedStopsTheChainBeforeItYieldsToIt() {
         targetIds(1);
-        job.start();
+        startNow(job);
         Runnable stopOnce = once(job::stop);
         when(refresher.dueNotHeldBack()).thenAnswer(call -> {
             stopOnce.run();
@@ -1367,7 +1444,7 @@ class CreditsDatasetJobTest {
     @Test
     void aStopWhileTheRefresherIsBeingAskedStopsTheChainBeforeItTakesAFile() {
         targetIds(1);
-        job.start();
+        startNow(job);
         Runnable stopOnce = once(job::stop);
         when(refresher.dueNotHeldBack()).thenAnswer(call -> {
             stopOnce.run();
@@ -1384,7 +1461,7 @@ class CreditsDatasetJobTest {
     @Test
     void aStopWhileTheDiskIsBeingReadIsNotTurnedIntoNoSpace() {
         targetIds(1);
-        job.start();
+        startNow(job);
         disk.free = 0;
         disk.duringRead = once(job::stop);
 
@@ -1404,7 +1481,7 @@ class CreditsDatasetJobTest {
                 job.stop();
             }
         };
-        job.start();
+        startNow(job);
 
         drain();
 
@@ -1422,7 +1499,7 @@ class CreditsDatasetJobTest {
             stopOnce.run();
             return "abc";
         });
-        job.start();
+        startNow(job);
 
         drain();
 
@@ -1438,7 +1515,7 @@ class CreditsDatasetJobTest {
     void aResumeTakesANewGenerationSoTheTaskThatSetTheWaitCannotAlsoCarryTheChainOn() {
         targetIds(1, 2);
         busyAtCall = 25;
-        job.start();
+        startNow(job);
         Runnable last = null;
         while (!queue.isEmpty()) {
             last = queue.poll();
@@ -1488,7 +1565,7 @@ class CreditsDatasetJobTest {
         Files.writeString(props.marker(), "a run was going");
         job.onStartup();
         Runnable resume = queue.poll();
-        job.start();
+        startNow(job);
         drain();
         assertThat(job.status().state()).isEqualTo(State.DONE);
 
@@ -1507,7 +1584,7 @@ class CreditsDatasetJobTest {
                 throw new PlaybackGuard.Busy("a film started");
             }
         };
-        job.start();
+        startNow(job);
 
         drain();
 
@@ -1523,7 +1600,7 @@ class CreditsDatasetJobTest {
         targetIds(1);
         targets.duringCurrent = once(job::stop);
         targets.currentFailure = new IllegalStateException("database is down");
-        job.start();
+        startNow(job);
 
         drain();
 
@@ -1537,7 +1614,7 @@ class CreditsDatasetJobTest {
         targetIds(1, 2);
         targets.changedBeforeRead.add(1L);
         targets.duringCurrent = once(job::stop);
-        job.start();
+        startNow(job);
 
         queue.poll().run();
 
@@ -1555,7 +1632,7 @@ class CreditsDatasetJobTest {
                 job.stop();
             }
         };
-        job.start();
+        startNow(job);
 
         queue.poll().run();
 
@@ -1573,7 +1650,7 @@ class CreditsDatasetJobTest {
                 job.stop();
             }
         };
-        job.start();
+        startNow(job);
 
         queue.poll().run();
 
@@ -1585,7 +1662,7 @@ class CreditsDatasetJobTest {
     @Test
     void aDirectoryLeftForTheFileSinceTheStartIsClearedBeforeItIsRead() throws IOException {
         targetIds(1);
-        job.start();
+        startNow(job);
         Files.createDirectories(frames(1));
         Files.writeString(frames(1).resolve("left-over.txt"), "from an earlier attempt");
 
@@ -1602,7 +1679,7 @@ class CreditsDatasetJobTest {
         Files.createDirectories(stale.resolve("inside"));
         Files.setPosixFilePermissions(stale, PosixFilePermissions.fromString("---------"));
         try {
-            DatasetStatus status = job.start();
+            DatasetStatus status = startNow(job);
 
             assertThat(status.state()).isEqualTo(State.RUNNING);
             // Run as root the permissions do not bind and the delete simply works.
@@ -1623,7 +1700,7 @@ class CreditsDatasetJobTest {
     @Test
     void theFirstTimeTheRefresherHasDueFilesTheJobStartsItAndGoesOnAfterItsWorker() {
         targetIds(1);
-        job.start();
+        startNow(job);
         dueScript.addAll(List.of(1, 0));
 
         queue.poll().run();
@@ -1641,7 +1718,7 @@ class CreditsDatasetJobTest {
     void theSecondTimeInARowTheJobWaitsForTheRefresherKeepingTheMarkerAndResumesWithAFreshYield()
         throws IOException {
         targetIds(1);
-        job.start();
+        startNow(job);
         dueScript.addAll(List.of(1, 1));
 
         drain();
@@ -1666,7 +1743,7 @@ class CreditsDatasetJobTest {
     @Test
     void processingAFileResetsTheCountOfYieldsInARow() {
         targetIds(1, 2);
-        job.start();
+        startNow(job);
         // yield, read file 1, yield again (not a wait: a file was done in between), read file 2.
         dueScript.addAll(List.of(1, 0, 1, 0));
 
@@ -1681,7 +1758,7 @@ class CreditsDatasetJobTest {
     void aSkippedFileAlsoResetsTheCountOfYieldsInARow() {
         targetIds(1, 2);
         targets.changedBeforeRead.add(1L);
-        job.start();
+        startNow(job);
         dueScript.addAll(List.of(1, 0, 1, 0));
 
         drain();
@@ -1694,7 +1771,7 @@ class CreditsDatasetJobTest {
     void aFailedFileAlsoResetsTheCountOfYieldsInARow() {
         targetIds(1, 2);
         unresolvable.add("f1.m4v");
-        job.start();
+        startNow(job);
         dueScript.addAll(List.of(1, 0, 1, 0));
 
         drain();
@@ -1706,7 +1783,7 @@ class CreditsDatasetJobTest {
     @Test
     void aStopWhileTheRefresherIsBeingAwaitedEndsTheChain() {
         targetIds(1);
-        job.start();
+        startNow(job);
         dueScript.addAll(List.of(1));
         queue.poll().run();
         job.stop();
@@ -1739,7 +1816,7 @@ class CreditsDatasetJobTest {
             CLOCK, queue::add);
         targetIds(1, 2);
 
-        sharing.start();
+        startNow(sharing);
         queue.poll().run();
         // File 1 is read and the first file's task queued the next.
         assertThat(ffmpeg.commands).hasSize(5 + 8 + 1);
