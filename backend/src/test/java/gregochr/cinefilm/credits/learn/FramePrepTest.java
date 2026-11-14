@@ -303,31 +303,87 @@ class FramePrepTest {
             .hasMessage("The bytes are not a readable JPEG picture");
     }
 
+    private static final ActiveArea LETTERBOX_AREA = new ActiveArea(0, 30, 480, 210);
+
+    /**
+     * A 480x270 frame with red bars (the top and bottom 30 rows) around a picture of two halves: blue on the left,
+     * yellow on the right, the seam at column 240.
+     */
+    private static RgbFrame letterboxed() {
+        int[] pixels = new int[480 * 270];
+        for (int y = 0; y < 270; y++) {
+            for (int x = 0; x < 480; x++) {
+                pixels[y * 480 + x] = y < 30 || y >= 240 ? 0xFF0000 : x < 240 ? 0x0000FF : 0xFFFF00;
+            }
+        }
+        return rgb(480, 270, pixels);
+    }
+
+    /** Within 40 of the colour in every channel (a lossy encode and the resampling blur only the seam). */
+    private static boolean near(int pixel, int colour) {
+        for (int shift = 16; shift >= 0; shift -= 8) {
+            if (Math.abs((pixel >> shift & 0xFF) - (colour >> shift & 0xFF)) > 40) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Every pixel, but those near the seam at column 112, is the colour of its side and none is red. */
+    private static void assertBarsGoneAndSidesKept(RgbFrame picture) {
+        assertThat(picture.width()).isEqualTo(224);
+        assertThat(picture.height()).isEqualTo(224);
+        for (int y = 0; y < 224; y++) {
+            for (int x = 0; x < 224; x++) {
+                if (Math.abs(x - 112) < 12) {
+                    continue;
+                }
+                int pixel = picture.rgb(x, y);
+                assertThat(near(pixel, x < 112 ? 0x0000FF : 0xFFFF00))
+                    .as("pixel (%d, %d) is %06X", x, y, pixel).isTrue();
+            }
+        }
+    }
+
+    /** The first column of a row whose red is over half: where the picture turns from blue to yellow. */
+    private static int seamColumn(RgbFrame picture, int row) {
+        for (int x = 0; x < picture.width(); x++) {
+            if ((picture.rgb(x, row) >> 16 & 0xFF) > 128) {
+                return x;
+            }
+        }
+        throw new AssertionError("no yellow in row " + row);
+    }
+
     @Test
-    void colourJpegCropsSquashesAndEncodes() {
-        RgbFrame frame = flat(480, 270, 0x6080A0);
-        ActiveArea area = new ActiveArea(0, 30, 480, 210);
+    void colourJpegCutsTheBarsOffAndKeepsEachSideOfThePicture() {
+        byte[] jpeg = FramePrep.colourJpeg(letterboxed(), LETTERBOX_AREA);
 
-        byte[] jpeg = FramePrep.colourJpeg(frame, area);
+        RgbFrame decoded = FramePrep.decodeJpeg(jpeg);
 
-        assertThat(jpeg).isEqualTo(FramePrep.jpeg(FramePrep.squash(FramePrep.crop(frame, area), 224, 224)));
+        assertBarsGoneAndSidesKept(decoded);
+        // 240 of 480 columns is 112 of 224; an area cut a few pixels to the side would move the seam.
+        assertThat(seamColumn(decoded, 112)).isBetween(111, 113);
         assertThat(FramePrep.COLOUR_SIZE).isEqualTo(224);
     }
 
     @Test
-    void colourForModelIsTheDecodedStoredJpegAtTwoTwentyFourSquare() {
-        byte[] pixels = new byte[480 * 270 * 3];
-        for (int i = 0; i < pixels.length; i++) {
-            pixels[i] = (byte) (i * 7 % 251);
-        }
-        RgbFrame frame = new RgbFrame(480, 270, pixels);
-        ActiveArea area = new ActiveArea(0, 30, 480, 210);
+    void colourForModelShowsTheModelTheCroppedPictureAtTwoTwentyFourSquare() {
+        RgbFrame frame = letterboxed();
 
-        RgbFrame model = FramePrep.colourForModel(frame, area);
+        RgbFrame model = FramePrep.colourForModel(frame, LETTERBOX_AREA);
 
-        assertThat(model.width()).isEqualTo(224);
-        assertThat(model.height()).isEqualTo(224);
-        assertSame(model, FramePrep.decodeJpeg(FramePrep.colourJpeg(frame, area)));
+        assertBarsGoneAndSidesKept(model);
+        assertThat(seamColumn(model, 112)).isBetween(111, 113);
+        assertSame(model, FramePrep.decodeJpeg(FramePrep.colourJpeg(frame, LETTERBOX_AREA)));
+    }
+
+    @Test
+    void colourJpegOfAnAreaThatDoesNotStartAtTheLeftCutsFromTheAreasOwnLeft() {
+        // The same picture, cut from column 8: the seam moves left by 8 columns of 472, to 232 of 472.
+        RgbFrame decoded = FramePrep.decodeJpeg(FramePrep.colourJpeg(letterboxed(), new ActiveArea(8, 30, 472, 210)));
+
+        assertThat(seamColumn(decoded, 112)).isBetween(109, 111);
     }
 
     @Test
@@ -399,5 +455,129 @@ class FramePrepTest {
 
         // The encoder's default quality is 0.75; 0.95 keeps more detail and so takes more bytes.
         assertThat(FramePrep.jpeg(noisy).length).isGreaterThan(standard.size() * 3 / 2);
+    }
+
+    // ---- Golden fixtures -----------------------------------------------------------------------------------------
+
+    /** A 224x224 gradient with a stripe of white columns and of black rows, so the encoder meets edges too. */
+    private static RgbFrame goldenColour() {
+        int[] pixels = new int[224 * 224];
+        for (int y = 0; y < 224; y++) {
+            for (int x = 0; x < 224; x++) {
+                int pixel = (x * 255 / 223) << 16 | (y * 255 / 223) << 8 | (x * y % 256);
+                if (x % 32 < 2) {
+                    pixel = 0xFFFFFF;
+                }
+                if (y % 48 < 3) {
+                    pixel = 0x000000;
+                }
+                pixels[y * 224 + x] = pixel;
+            }
+        }
+        return rgb(224, 224, pixels);
+    }
+
+    private static GreyFrame goldenGrey() {
+        byte[] pixels = new byte[240 * 135];
+        for (int y = 0; y < 135; y++) {
+            for (int x = 0; x < 240; x++) {
+                pixels[y * 240 + x] = (byte) (x * 3 + y * 5 + (x / 16 + y / 16) % 2 * 80);
+            }
+        }
+        return new GreyFrame(240, 135, pixels);
+    }
+
+    private static String sha256(byte[] data) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(data));
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static byte[] rawRgb(RgbFrame frame) {
+        byte[] raw = new byte[frame.width() * frame.height() * 3];
+        int at = 0;
+        for (int y = 0; y < frame.height(); y++) {
+            for (int x = 0; x < frame.width(); x++) {
+                int pixel = frame.rgb(x, y);
+                raw[at++] = (byte) (pixel >> 16);
+                raw[at++] = (byte) (pixel >> 8);
+                raw[at++] = (byte) pixel;
+            }
+        }
+        return raw;
+    }
+
+    // If one of these three fails, the JDK's JPEG or PNG encoder or decoder has changed (a new JDK, a different
+    // base image). The stored dataset was written by one and the product reads with another, so training and the
+    // product would no longer see the same pixels. Find out why before changing a hash; never re-baseline blindly.
+    @Test
+    void theJpegOfAFixedPatternIsByteForByteTheStoredOne() {
+        assertThat(sha256(FramePrep.jpeg(goldenColour())))
+            .isEqualTo("7b4a853b39eac1923d06fbd3119e27504e90ebde4fd587a039b3182c770a7583");
+    }
+
+    @Test
+    void theDecodedJpegOfAFixedPatternIsPixelForPixelTheStoredOne() {
+        assertThat(sha256(rawRgb(FramePrep.decodeJpeg(FramePrep.jpeg(goldenColour())))))
+            .isEqualTo("1cbf323470d837435ad0a5695e7c12afb5714e8ef9fc0cf54792d367167d9663");
+    }
+
+    @Test
+    void theGreyPngOfAFixedPatternIsByteForByteTheStoredOne() {
+        assertThat(sha256(FramePrep.png(goldenGrey())))
+            .isEqualTo("60952f6e9fd3b9050b944604b3813abec08d31663059fc40269df34712552567");
+        assertSame(FramePrep.decodePng(FramePrep.png(goldenGrey())), goldenGrey());
+    }
+
+    // ---- Squash at uneven ratios ---------------------------------------------------------------------------------
+
+    @Test
+    void squashFiveByThreeToThreeByTwoHasExactValues() {
+        // Red 40x + 25y, green 200 - 35x + 15y, blue 17 (xy + 1).
+        byte[] pixels = new byte[5 * 3 * 3];
+        for (int y = 0; y < 3; y++) {
+            for (int x = 0; x < 5; x++) {
+                int at = (y * 5 + x) * 3;
+                pixels[at] = (byte) (40 * x + 25 * y);
+                pixels[at + 1] = (byte) (200 - 35 * x + 15 * y);
+                pixels[at + 2] = (byte) (17 * (x * y + 1));
+            }
+        }
+
+        RgbFrame result = FramePrep.squash(new RgbFrame(5, 3, pixels), 3, 2);
+
+        // Working for output pixel (1, 1): sx = (1 + 0.5) * 5 / 3 - 0.5 = 2.0, so x0 = 2 and fx = 0.
+        // sy = (1 + 0.5) * 3 / 2 - 0.5 = 1.75, so y0 = 1, y1 = 2 and fy = 0.75. With fx = 0 only column 2 counts:
+        //   red   (2,1) = 80 + 25 = 105, (2,2) = 80 + 50 = 130: 0.25 * 105 + 0.75 * 130 = 123.75, floor(124.25) = 124
+        //   green (2,1) = 145,           (2,2) = 160:           0.25 * 145 + 0.75 * 160 = 156.25, floor(156.75) = 156
+        //   blue  (2,1) = 51,            (2,2) = 85:            0.25 * 51  + 0.75 * 85  = 76.5,   floor(77.0)    = 77
+        // which is 0x7C9C4D. The other pixels follow the same formula.
+        assertSame(result, rgb(3, 2,
+            0x14C012, 0x56861A, 0x994B21,
+            0x39D71B, 0x7C9C4D, 0xBE627E));
+    }
+
+    @Test
+    void squashFifteenBySevenToSevenByThreeHasExactValues() {
+        // About the 480 to 224 ratio in miniature, x and y at different ratios. The channels wrap so no two
+        // neighbours are alike: red (17x + 29y) mod 256, green (3x^2 + 40y) mod 256, blue 255 - 13x - 7y.
+        byte[] pixels = new byte[15 * 7 * 3];
+        for (int y = 0; y < 7; y++) {
+            for (int x = 0; x < 15; x++) {
+                int at = (y * 15 + x) * 3;
+                pixels[at] = (byte) (17 * x + 29 * y);
+                pixels[at + 1] = (byte) (3 * x * x + 40 * y);
+                pixels[at + 2] = (byte) (255 - 13 * x - 7 * y);
+            }
+        }
+
+        RgbFrame result = FramePrep.squash(new RgbFrame(15, 7, pixels), 7, 3);
+
+        assertSame(result, rgb(7, 3,
+            0x1D1CF3, 0x4131D7, 0x6662BB, 0x8AAE9F, 0xAF5F83, 0xD39968, 0xAE694C,
+            0x617AE3, 0x858FC7, 0xAABFAB, 0xCE0B8F, 0xCE7373, 0x17AE57, 0x3B963B,
+            0xA4D7D2, 0xC9AFB6, 0xA4359B, 0x12687F, 0x36C463, 0x5B5447, 0x7F852B));
     }
 }

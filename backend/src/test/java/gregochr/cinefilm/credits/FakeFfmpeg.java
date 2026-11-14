@@ -34,6 +34,10 @@ final class FakeFfmpeg implements CommandRunner {
     byte[] garbage;
     /** How many dense frames to write; -1 for as many as were asked for. */
     int denseCount = -1;
+    /** The index of the dense frame written as garbage (-1 for none). */
+    int corruptDenseIndex = -1;
+    /** When set, the failing call writes its frames first, as ffmpeg may before it exits with an error. */
+    boolean writeBeforeFailing;
 
     /** The colour picture at an offset in milliseconds, for commands that write {@code .ppm} files. */
     LongFunction<RgbFrame> rgbAt = ms -> flat(10, 20, 30);
@@ -87,13 +91,20 @@ final class FakeFfmpeg implements CommandRunner {
             if (ioFailure != null) {
                 throw ioFailure;
             }
+            if (writeBeforeFailing) {
+                writeFrames(command);
+            }
             return failure;
         }
-        Path output = Path.of(command.getLast());
-        lastDirectory = output.getParent();
-        if (writeNothing) {
-            return new Result(0, "", false);
+        lastDirectory = Path.of(command.getLast()).getParent();
+        if (!writeNothing) {
+            writeFrames(command);
         }
+        return new Result(0, "", false);
+    }
+
+    private void writeFrames(List<String> command) throws IOException {
+        Path output = Path.of(command.getLast());
         long seekMs = Math.round(Double.parseDouble(command.get(command.indexOf("-ss") + 1)) * 1000);
         boolean colour = command.getLast().endsWith(".ppm");
         if (command.getLast().contains("%05d")) {
@@ -102,12 +113,12 @@ final class FakeFfmpeg implements CommandRunner {
             for (int i = 0; i < count; i++) {
                 Path frame = output.getParent().resolve(output.getFileName().toString().formatted(i));
                 long at = seekMs + 500L * i;
-                Files.write(frame, colour ? ppm(rgbAt.apply(at)) : pgm(frameAt.apply(at)));
+                Files.write(frame, i == corruptDenseIndex ? "not a picture".getBytes(StandardCharsets.US_ASCII)
+                    : colour ? ppm(rgbAt.apply(at)) : pgm(frameAt.apply(at)));
             }
         } else {
             Files.write(output, garbage != null ? garbage
                 : colour ? ppm(rgbAt.apply(seekMs)) : pgm(frameAt.apply(seekMs)));
         }
-        return new Result(0, "", false);
     }
 }

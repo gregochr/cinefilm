@@ -14,6 +14,7 @@ import javax.imageio.ImageIO;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
 import javax.imageio.stream.ImageOutputStream;
+import javax.imageio.stream.MemoryCacheImageInputStream;
 import javax.imageio.stream.MemoryCacheImageOutputStream;
 
 /**
@@ -214,12 +215,23 @@ public final class FramePrep {
                 image.setRGB(x, y, frame.rgb(x, y));
             }
         }
-        return encode("JPEG", bytes -> {
-            ImageWriter writer = ImageIO.getImageWritersByFormatName("jpeg").next();
+        return write("JPEG", "jpeg", image);
+    }
+
+    /**
+     * Writes an image with the named format's {@code ImageWriter} into a {@link MemoryCacheImageOutputStream}, so
+     * nothing touches the disk cache. The JPEG writer is set to quality {@value #JPEG_QUALITY}; the PNG writer has no
+     * quality.
+     */
+    private static byte[] write(String what, String format, BufferedImage image) {
+        return encode(what, bytes -> {
+            ImageWriter writer = ImageIO.getImageWritersByFormatName(format).next();
             try (ImageOutputStream out = new MemoryCacheImageOutputStream(bytes)) {
                 ImageWriteParam param = writer.getDefaultWriteParam();
-                param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-                param.setCompressionQuality(JPEG_QUALITY);
+                if ("jpeg".equals(format)) {
+                    param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+                    param.setCompressionQuality(JPEG_QUALITY);
+                }
                 writer.setOutput(out);
                 writer.write(null, new IIOImage(image, null, null), param);
             } finally {
@@ -285,7 +297,7 @@ public final class FramePrep {
         }
         BufferedImage image = new BufferedImage(frame.width(), frame.height(), BufferedImage.TYPE_BYTE_GRAY);
         image.getRaster().setDataElements(0, 0, frame.width(), frame.height(), pixels);
-        return encode("PNG", bytes -> ImageIO.write(image, "png", bytes));
+        return write("PNG", "png", image);
     }
 
     /**
@@ -306,7 +318,7 @@ public final class FramePrep {
 
     private static BufferedImage decode(byte[] data, String what) {
         try {
-            BufferedImage image = ImageIO.read(new ByteArrayInputStream(data));
+            BufferedImage image = ImageIO.read(new MemoryCacheImageInputStream(new ByteArrayInputStream(data)));
             if (image == null) {
                 throw new IllegalArgumentException("The bytes are not a readable " + what + " picture");
             }

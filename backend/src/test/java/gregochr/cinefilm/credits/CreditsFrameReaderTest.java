@@ -464,11 +464,138 @@ class CreditsFrameReaderTest {
     }
 
     @Test
-    void anRgbDenseRangeThatIsEmptyAfterClampingRunsNothing() {
+    void anRgbDenseRangeThatIsEmptyAfterClampingIsRefusedAndRunsNothing() {
         try (Job job = reader().open(FILM, 600_000, () -> { })) {
-            assertThat(job.rgbDense(700_000, 5_000)).isEmpty();
-            assertThat(job.rgbDense(-9_000, 5_000)).isEmpty();
-            assertThat(job.rgbDense(100_000, 0)).isEmpty();
+            assertThatThrownBy(() -> job.rgbDense(700_000, 5_000)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("The range 700000 ms for 5000 ms is empty within the file (0 to 600000 ms)");
+            assertThatThrownBy(() -> job.rgbDense(600_000, 5_000)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("is empty");
+            assertThatThrownBy(() -> job.rgbDense(-9_000, 5_000)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("is empty");
+            assertThatThrownBy(() -> job.rgbDense(-5_000, 5_000)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("is empty");
+            assertThatThrownBy(() -> job.rgbDense(100_000, 0)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("The range 100000 ms for 0 ms is empty within the file (0 to 600000 ms)");
+        }
+
+        assertThat(ffmpeg.commands).isEmpty();
+    }
+
+    @Test
+    void anRgbDenseRangeOfOneMillisecondAtTheEdgesIsAllowed() {
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            assertThat(job.rgbDense(599_999, 1)).hasSize(1);
+            assertThat(job.rgbDense(-4_999, 5_000)).hasSize(1);
+        }
+    }
+
+    @Test
+    void anRgbDenseLengthThatIsNegativeOrOverFiveMinutesIsRefused() {
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            assertThatThrownBy(() -> job.rgbDense(0, -1)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("The dense length -1 ms must be 0 to 300000 ms");
+            assertThatThrownBy(() -> job.rgbDense(0, 300_001)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("The dense length 300001 ms must be 0 to 300000 ms");
+            assertThat(job.rgbDense(0, 300_000)).hasSize(600);
+        }
+
+        assertThat(ffmpeg.commands).hasSize(1);
+    }
+
+    @Test
+    void anRgbDenseStartNearTheLargestLongDoesNotOverflowIntoAValidRange() {
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            assertThatThrownBy(() -> job.rgbDense(Long.MAX_VALUE, 1_000)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("is empty");
+            assertThatThrownBy(() -> job.rgbDense(Long.MAX_VALUE - 500, 1_000))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("is empty");
+            assertThatThrownBy(() -> job.rgbDense(Long.MAX_VALUE - 1_000, 1_000))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("is empty");
+        }
+
+        assertThat(ffmpeg.commands).isEmpty();
+    }
+
+    @Test
+    void anRgbSeekOutsideTheFileIsRefusedAndRunsNothing() {
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            assertThatThrownBy(() -> job.rgbFrame(-1)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("The frame offset -1 ms is outside the file (0 to 599999 ms)");
+            assertThatThrownBy(() -> job.rgbFrame(600_000)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("The frame offset 600000 ms is outside the file (0 to 599999 ms)");
+            assertThat(ffmpeg.commands).isEmpty();
+
+            assertThat(job.rgbFrame(0)).isNotNull();
+            assertThat(job.rgbFrame(599_999)).isNotNull();
+        }
+
+        assertThat(ffmpeg.commands).extracting(c -> c.get(c.indexOf("-ss") + 1))
+            .containsExactly("0.000", "599.999");
+    }
+
+    @Test
+    void framesLeftByAFailedRgbDenseCallAreNotReturnedByTheNextOne() {
+        ffmpeg.failOnCall = 1;
+        ffmpeg.writeBeforeFailing = true;
+        ffmpeg.denseCount = 3;
+        ffmpeg.corruptDenseIndex = 0;
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            // ffmpeg wrote r_00000 to r_00002 and exited with an error (and the first one is unreadable).
+            assertThatThrownBy(() -> job.rgbDense(100_000, 5_000)).isInstanceOf(ReadException.class);
+            Path dir = onlyJobDirectory();
+            assertThat(dir.resolve("r_00001.ppm")).exists();
+
+            ffmpeg.failOnCall = 0;
+            ffmpeg.denseCount = 1;
+            ffmpeg.corruptDenseIndex = -1;
+            ffmpeg.writeBeforeFailing = false;
+            List<TimedRgb> frames = job.rgbDense(200_000, 5_000);
+
+            assertThat(frames).extracting(TimedRgb::offsetMs).containsExactly(200_000L);
+        }
+    }
+
+    @Test
+    void framesLeftAfterAnUnreadableSecondFrameAreNotReturnedByTheNextCall() {
+        ffmpeg.denseCount = 3;
+        ffmpeg.corruptDenseIndex = 1;
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            assertThatThrownBy(() -> job.rgbDense(100_000, 5_000)).isInstanceOf(ReadException.class);
+            assertThat(onlyJobDirectory().resolve("r_00002.ppm")).exists();
+
+            ffmpeg.denseCount = 2;
+            ffmpeg.corruptDenseIndex = -1;
+            List<TimedRgb> frames = job.rgbDense(200_000, 5_000);
+
+            assertThat(frames).extracting(TimedRgb::offsetMs).containsExactly(200_000L, 200_500L);
+        }
+    }
+
+    @Test
+    void aFrameLeftByAFailedRgbSeekIsNotReadByTheNextOne() {
+        ffmpeg.failOnCall = 1;
+        ffmpeg.writeBeforeFailing = true;
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            assertThatThrownBy(() -> job.rgbFrame(1_000)).isInstanceOf(ReadException.class);
+            assertThat(onlyJobDirectory().resolve("frame.ppm")).exists();
+
+            ffmpeg.writeNothing = true;
+            assertThatThrownBy(() -> job.rgbFrame(2_000)).isInstanceOf(ReadException.class)
+                .hasMessageStartingWith("ffmpeg wrote no readable frame");
+        }
+    }
+
+    @Test
+    void anOldFileThatCannotBeRemovedIsAReadFailure() throws IOException {
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            Path dir = onlyJobDirectory();
+            Files.createDirectories(dir.resolve("frame.ppm").resolve("inside"));
+            Files.createDirectories(dir.resolve("r_00000.ppm").resolve("inside"));
+
+            assertThatThrownBy(() -> job.rgbFrame(1_000)).isInstanceOf(ReadException.class)
+                .hasMessageStartingWith("An old frame could not be removed");
+            assertThatThrownBy(() -> job.rgbDense(1_000, 5_000)).isInstanceOf(ReadException.class)
+                .hasMessageStartingWith("Old frames could not be removed");
         }
 
         assertThat(ffmpeg.commands).isEmpty();

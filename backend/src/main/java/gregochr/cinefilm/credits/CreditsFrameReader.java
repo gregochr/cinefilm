@@ -3,6 +3,7 @@ package gregochr.cinefilm.credits;
 import gregochr.cinefilm.library.CommandRunner;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -322,36 +323,55 @@ public class CreditsFrameReader {
         }
 
         /**
-         * One colour frame at 480 pixels wide, by a single-frame seek.
+         * One colour frame at 480 pixels wide, by a single-frame seek. Unlike the grey reads, whose offsets come from
+         * this class's own arithmetic, the offset is caller input and is checked.
          *
-         * @param offsetMs where in the file to take it
+         * @param offsetMs where in the file to take it, 0 up to but not including the file's length
          * @return the frame
+         * @throws IllegalArgumentException when the offset is negative or not before the end of the file
+         * @throws ReadException when ffmpeg fails, times out or writes nothing readable
          */
         public RgbFrame rgbFrame(long offsetMs) {
+            if (offsetMs < 0 || offsetMs >= durationMs) {
+                throw new IllegalArgumentException(
+                    "The frame offset " + offsetMs + " ms is outside the file (0 to " + (durationMs - 1) + " ms)");
+            }
             checkpoint.run();
             Path output = dir.resolve(RGB_FRAME_FILE);
+            deleteFile(output);
             run(frameCommand(niceness, ffmpeg, source, offsetMs, output, RGB_FORMAT), SEEK_TIMEOUT,
                 "the frame at " + seekTime(offsetMs));
             return readRgb(output);
         }
 
         /**
-         * Colour frames at two a second from one sequential decode. The range is clamped to {@code [0, duration]}; a
-         * range that is empty after clamping returns no frames without running ffmpeg. A frame's offset is the start
-         * plus its index times 500 ms.
+         * Colour frames at two a second from one sequential decode, the same command shape as the grey dense pass.
+         * The range is clamped to {@code [0, duration]}. A frame's offset is the start plus its index times 500 ms.
+         * Any {@code r_*.ppm} left in the job's directory by an earlier failed call is deleted first, so a call returns
+         * only its own frames.
          *
-         * @param startMs where the decode starts
-         * @param lengthMs how long it lasts
-         * @return the frames, in order
+         * @param startMs where the decode starts (before 0 is clamped to 0)
+         * @param lengthMs how long it lasts, 0 to {@link #DENSE_SPAN_MS}
+         * @return the frames, in order; never empty
+         * @throws IllegalArgumentException when the length is negative or over {@link #DENSE_SPAN_MS}, or the range
+         *     is empty once clamped to the file
+         * @throws ReadException when ffmpeg fails, times out or writes no frames
          */
         public List<TimedRgb> rgbDense(long startMs, long lengthMs) {
-            long start = Math.min(durationMs, Math.max(0, startMs));
-            long end = Math.min(durationMs, Math.max(start, startMs + lengthMs));
-            DenseRange range = new DenseRange(start, end - start);
-            if (range.lengthMs() == 0) {
-                return List.of();
+            if (lengthMs < 0 || lengthMs > DENSE_SPAN_MS) {
+                throw new IllegalArgumentException(
+                    "The dense length " + lengthMs + " ms must be 0 to " + DENSE_SPAN_MS + " ms");
             }
+            // The length is small, so the sum overflows only for a start within 300 s of Long.MAX_VALUE.
+            long start = Math.max(0, startMs);
+            long end = startMs > Long.MAX_VALUE - lengthMs ? durationMs : Math.min(durationMs, startMs + lengthMs);
+            if (start >= end) {
+                throw new IllegalArgumentException("The range " + startMs + " ms for " + lengthMs
+                    + " ms is empty within the file (0 to " + durationMs + " ms)");
+            }
+            DenseRange range = new DenseRange(start, end - start);
             checkpoint.run();
+            deleteStaleDense();
             run(denseCommand(niceness, ffmpeg, source, range, dir.resolve(RGB_DENSE_PATTERN), RGB_FORMAT),
                 DENSE_TIMEOUT, "the frames around " + seekTime(start));
             List<TimedRgb> frames = new ArrayList<>();
@@ -363,6 +383,24 @@ public class CreditsFrameReader {
                 throw new ReadException("ffmpeg wrote no frames around " + seekTime(start));
             }
             return frames;
+        }
+
+        private void deleteStaleDense() {
+            try (DirectoryStream<Path> stale = Files.newDirectoryStream(dir, "r_*.ppm")) {
+                for (Path file : stale) {
+                    Files.delete(file);
+                }
+            } catch (IOException e) {
+                throw new ReadException("Old frames could not be removed: " + e.getMessage(), e);
+            }
+        }
+
+        private void deleteFile(Path file) {
+            try {
+                Files.deleteIfExists(file);
+            } catch (IOException e) {
+                throw new ReadException("An old frame could not be removed: " + e.getMessage(), e);
+            }
         }
 
         /** The dense file of an index, as the pattern numbers them. */
