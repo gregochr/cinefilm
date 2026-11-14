@@ -72,13 +72,17 @@ class PendingDownloadsTest {
     private ForcedCheckCandidateRepository ledger;
 
     private PendingDownloads pending;
+    private PendingDownloads pendingWithDownloadsOff;
     private Film film;
     private Edition edition;
     private MediaFile part;
 
     @BeforeEach
     void setUp() {
-        pending = new PendingDownloads(films, editions, sidecars, resolver, references, blocks, ledger);
+        pending = new PendingDownloads(films, editions, sidecars, resolver, references, blocks, ledger,
+            OpenSubtitlesSwitches.on());
+        pendingWithDownloadsOff = new PendingDownloads(films, editions, sidecars, resolver, references, blocks,
+            ledger, new OpenSubtitlesSwitches(true, false));
         film = film(1L, "Amelie", 2001, NOW);
         film.setImdbId(IMDB);
         edition = edition(film, 40L, "Original", 90 * MIN, null);
@@ -458,5 +462,13 @@ class PendingDownloadsTest {
             .thenReturn(List.of(stored(5011, SubtitleComparison.FULL_LINES, 0)));
 
         assertThat(forcedDue()).isFalse();
+    }
+
+    @Test
+    void withDownloadsOffNothingIsPendingAndNothingIsRead() {
+        assertThat(pendingWithDownloadsOff.full(Map.of(1L, IMDB))).isSameAs(Pending.NONE);
+        assertThat(pendingWithDownloadsOff.forced(Map.of(1L, IMDB))).isSameAs(Pending.NONE);
+
+        verifyNoInteractions(films, editions, sidecars, resolver, references, blocks, ledger);
     }
 }

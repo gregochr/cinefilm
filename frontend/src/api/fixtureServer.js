@@ -229,7 +229,8 @@ const AUTOMATIC_BASELINE = {
 const NOT_IN_PLAY = { unresolved: false, beingChecked: false };
 /**
  * What the server's rule would say for each fixture film if the owner said "needed": data worked out by hand from the
- * fixture's facts (a subtitle already plays, nothing online, files online with a due edition), not computed.
+ * fixture's facts (a subtitle already plays, nothing online, files online with a due edition), not computed. It
+ * assumes OpenSubtitles search and downloads are enabled, the usual dev setup.
  */
 const FORCED_IF_NEEDED = {
   1: { unresolved: true, beingChecked: false },
@@ -283,10 +284,14 @@ const fullChoices = new Map();
 
 /** What the automatic rule says for a fixture film that is loaded with an owner choice (it is `OWNER` as loaded). */
 const FULL_AUTOMATIC = { 6: { need: 'NEEDED', reason: 'ORIGINAL_AUDIO_ASSUMED' } };
-/** What the server's rule would say for each fixture film if the owner said "needed" (worked out by hand, as above). */
+/**
+ * What the server's rule would say for each fixture film if the owner said "needed" (worked out by hand, as above).
+ * Like the forced table, it assumes OpenSubtitles search and downloads are enabled, the usual dev setup: a film never
+ * searched for full subtitles (Léon) is then being checked.
+ */
 const FULL_IF_NEEDED = {
   3: NOT_IN_PLAY,
-  4: { unresolved: true, beingChecked: false },
+  4: { unresolved: false, beingChecked: true },
   5: NOT_IN_PLAY,
   6: { unresolved: true, beingChecked: false },
   7: { unresolved: false, beingChecked: true },

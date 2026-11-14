@@ -99,13 +99,21 @@ class AdminServiceUnitTest {
     }
 
     @Test
-    void aGuardRefusedMatchIsOneCandidateAtTheAcceptScoreAndIsConfident() {
-        List<AttentionItem> items = attentionFor(unmatched(1, "Refused", "[" + candidate(10, 60) + "]"));
+    void aTaggedMatchTheGuardRefusedIsOneCandidateAtScore100AndIsConfident() {
+        List<AttentionItem> items = attentionFor(unmatched(1, "Refused", "[" + candidate(10, 100) + "]"));
 
         assertThat(items).singleElement().satisfies(item -> {
             assertThat(item.confident()).isTrue();
-            assertThat(item.candidates()).containsExactly(new CandidateDto(10, "T10", 2000, 90, null, 60));
+            assertThat(item.candidates()).containsExactly(new CandidateDto(10, "T10", 2000, 90, null, 100));
         });
+    }
+
+    @Test
+    void aSingleCandidateAtTheAcceptScoreIsNotConfidentButOneAboveItIs() {
+        assertThat(attentionFor(unmatched(1, "At", "[" + candidate(10, 60) + "]")))
+            .extracting(AttentionItem::confident).containsExactly(false);
+        assertThat(attentionFor(unmatched(2, "Above", "[" + candidate(10, 61) + "]")))
+            .extracting(AttentionItem::confident).containsExactly(true);
     }
 
     @Test

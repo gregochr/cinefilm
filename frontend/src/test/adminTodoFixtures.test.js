@@ -146,12 +146,12 @@ describe('the Admin To do fixtures', () => {
       for (const candidate of candidates) expect(Number.isInteger(candidate.score)).toBe(true);
     });
 
-    it('has a confident needs-match item (a lone candidate at 60) and one that is not (62 against 58)', () => {
+    it('has a confident needs-match item (a tagged refusal, one candidate at 100) and one that is not (62 against 58)', () => {
       const unmatched = items.filter((i) => i.kind === 'needs-match');
       const confident = unmatched.filter((i) => i.confident);
       const unsure = unmatched.filter((i) => !i.confident);
       expect(confident).toHaveLength(1);
-      expect(confident[0].candidates.map((c) => c.score)).toEqual([60]);
+      expect(confident[0].candidates.map((c) => c.score)).toEqual([100]);
       expect(unsure).toHaveLength(1);
       expect(unsure[0].candidates.map((c) => c.score)).toEqual([62, 58]);
     });

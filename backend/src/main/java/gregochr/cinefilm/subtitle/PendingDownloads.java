@@ -6,6 +6,7 @@ import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.OsBestRef;
 import gregochr.cinefilm.film.FilmRepository.OsFullRef;
 import gregochr.cinefilm.film.MediaFile;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesApi;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.subtitle.ForcedResolver.Resolution;
@@ -27,7 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>The editions are the scheduler's editions ({@code findWithFilesByFilmIdIn}, no presence filter), so an edition
  * whose files are missing counts exactly as it does for the scheduler. The daily limit is deliberately not looked at: a
- * download that is due but deferred is still to come.
+ * download that is due but deferred is still to come. With downloads off (no API key, username or password) the
+ * scheduler never downloads, so nothing is pending and nothing is read.
  */
 @Service
 public class PendingDownloads {
@@ -39,11 +41,13 @@ public class PendingDownloads {
     private final OpenSubtitlesReferenceRepository references;
     private final ForcedDownloadBlockRepository blocks;
     private final ForcedCheckCandidateRepository ledger;
+    private final OpenSubtitlesApi api;
 
     /** Creates the service. */
     public PendingDownloads(FilmRepository films, EditionRepository editions, SubtitleSidecarRepository sidecars,
                             ForcedResolver resolver, OpenSubtitlesReferenceRepository references,
-                            ForcedDownloadBlockRepository blocks, ForcedCheckCandidateRepository ledger) {
+                            ForcedDownloadBlockRepository blocks, ForcedCheckCandidateRepository ledger,
+                            OpenSubtitlesApi api) {
         this.films = films;
         this.editions = editions;
         this.sidecars = sidecars;
@@ -51,6 +55,7 @@ public class PendingDownloads {
         this.references = references;
         this.blocks = blocks;
         this.ledger = ledger;
+        this.api = api;
     }
 
     /**
@@ -74,7 +79,7 @@ public class PendingDownloads {
      */
     @Transactional(readOnly = true)
     public Pending full(Map<Long, String> imdbIds) {
-        if (imdbIds.isEmpty()) {
+        if (imdbIds.isEmpty() || !api.downloadsEnabled()) {
             return Pending.NONE;
         }
         Map<Long, OsFullRef> candidates = new HashMap<>();
@@ -114,7 +119,7 @@ public class PendingDownloads {
      */
     @Transactional(readOnly = true)
     public Pending forced(Map<Long, String> imdbIds) {
-        if (imdbIds.isEmpty()) {
+        if (imdbIds.isEmpty() || !api.downloadsEnabled()) {
             return Pending.NONE;
         }
         Map<Long, OsBestRef> best = new HashMap<>();

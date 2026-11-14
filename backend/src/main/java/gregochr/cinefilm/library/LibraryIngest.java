@@ -59,7 +59,13 @@ public class LibraryIngest {
     private static final int NAME_MAX = 255;
     private static final int OVERVIEW_MAX = 4000;
     private static final int IMDB_ID_MAX = 16;
-    private static final int REFUSED_SCORE = 60;
+    /**
+     * The score stored for a tagged match the guard refused to fold. A {@code {imdb-tt...}} tag is TMDB's own id for
+     * the film, so the match is certain; the guard refused only the folding into another film. 100 keeps it
+     * "confident" in Admin ({@code AdminTodoRules.confident}), which needs a score above the accept score. The score
+     * is otherwise only displayed.
+     */
+    private static final int REFUSED_SCORE = 100;
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final FilmRepository films;

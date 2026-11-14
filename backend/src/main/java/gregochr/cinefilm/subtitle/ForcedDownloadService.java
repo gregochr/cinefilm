@@ -158,6 +158,11 @@ public class ForcedDownloadService {
             if (ref.osCandidates() == null) {
                 continue;
             }
+            if (resolution.decision().step() == ForcedChoice.Step.FAILED_FILE_DROPPED && kind(resolution).isPresent()) {
+                LOG.info("Edition {}: the owner's file failed its checks and looks like full subtitles ({} lines): "
+                    + "nothing is shown until a replacement is proven", edition.getId(),
+                    resolution.filePick().slots().stream().mapToInt(x -> x.sidecar().getCueCount()).sum());
+            }
             DueDownload item = dueFor(edition, resolution, ref, allBlocks, allLedger, allDownloads,
                 storedByFilm.getOrDefault(ref.id(), Map.of()).getOrDefault(ref.imdbId(), Map.of()));
             if (item != null) {
@@ -268,11 +273,6 @@ public class ForcedDownloadService {
         Optional<Kind> kind = kind(resolution);
         if (kind.isEmpty()) {
             return null;
-        }
-        if (resolution.decision().step() == ForcedChoice.Step.FAILED_FILE_DROPPED) {
-            LOG.info("Edition {}: the owner's file failed its checks and looks like full subtitles ({} lines): "
-                + "nothing is shown until a replacement is proven", edition.getId(),
-                resolution.filePick().slots().stream().mapToInt(x -> x.sidecar().getCueCount()).sum());
         }
         List<OpenSubtitlesResult> ranked = OpenSubtitlesRanking.rankFor(
             OpenSubtitlesResult.listFromJson(ref.osCandidates()).stream().filter(OpenSubtitlesResult::isSingleFile)

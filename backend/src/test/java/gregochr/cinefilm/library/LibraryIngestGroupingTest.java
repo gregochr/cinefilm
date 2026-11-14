@@ -131,7 +131,7 @@ class LibraryIngestGroupingTest extends ApiTestBase {
         Film second = all.stream().filter(f -> f.getTmdbId() == null).findFirst().orElseThrow();
         assertThat(second.getMatchStatus()).isEqualTo(MatchStatus.NEEDS_MATCH);
         assertThat(second.getMatchCandidates()).contains("\"tmdbId\":949").contains("\"title\":\"Heat\"")
-            .contains("\"score\":60");
+            .contains("\"score\":100");
         assertThat(second.getEditions()).hasSize(1);
         assertThat(all.stream().filter(f -> f.getTmdbId() != null).findFirst().orElseThrow().getEditions())
             .hasSize(1);

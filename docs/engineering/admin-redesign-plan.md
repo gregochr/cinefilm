@@ -24,6 +24,9 @@ that depend on an answer say so and are not started until it comes.
   `REFUSED_SCORE = 60`; `AdminService` maps to `CandidateDto` without it. Phase 3b adds `confident` to the
   attention item. The board's "82% sure" has no honest mapping from points, so the percentage is **dropped**; the row
   says "best guess: {Title} ({year})".
+- **Old stored scores.** Match candidates stored before 3b-1 hold rounded scores, and a tagged guard-refused match was
+  stored at 60. `confident` needs a top score above 60, so those rows read as not confident until the next scan
+  rewrites them: the safe side, a one-off. New rows hold floored scores and a tagged refusal is stored at 100.
 - **`minutes` rows are already documented** (`foundation-plan.md`, "Playback health API"): seven figures
   `[minute, median kbit/s, rung played, ms moved, ms stalled, seconds buffered ahead, rung being fetched]`, or five
   in older records. The bundle's guessed layout is wrong. The list route strips `minutes`; the per-minute view

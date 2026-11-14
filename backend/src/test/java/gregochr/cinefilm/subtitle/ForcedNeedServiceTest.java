@@ -70,10 +70,11 @@ class ForcedNeedServiceTest {
     private final LibraryLock lock = new LibraryLock();
     private final List<String> events = new ArrayList<>();
     private ForcedNeedService service;
+    private PlatformTransactionManager manager;
 
     @BeforeEach
     void setUp() {
-        PlatformTransactionManager manager = new PlatformTransactionManager() {
+        manager = new PlatformTransactionManager() {
             @Override
             public TransactionStatus getTransaction(TransactionDefinition definition) {
                 events.add("begin, lock " + lock.holder());
@@ -90,7 +91,12 @@ class ForcedNeedServiceTest {
                 events.add("rollback, lock " + lock.holder());
             }
         };
-        service = new ForcedNeedService(films, sidecars, files, editions, forcedSubtitles, pending, lock, manager);
+        service = withSwitches(OpenSubtitlesSwitches.on());
+    }
+
+    private ForcedNeedService withSwitches(OpenSubtitlesSwitches switches) {
+        return new ForcedNeedService(films, sidecars, files, editions, forcedSubtitles, pending, switches, lock,
+            manager);
     }
 
     private static NeedRow row(long id, String title, Long tmdbId, String original, String spoken, Instant asked,
@@ -614,14 +620,16 @@ class ForcedNeedServiceTest {
             row(2, "Chosen", 20L, "en", "en", ASKED, ForcedNeedChoice.NEEDED),
             row(3, "Not", 30L, "en", "en", ASKED, ForcedNeedChoice.NOT_NEEDED)));
         when(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED)).thenReturn(List.of());
-        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of());
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of());
 
         Set<Long> ids = service.neededFilmIds();
 
         assertThat(ids).containsExactly(2L);
         ids.add(9L);
-        verifyNoInteractions(pending);
+        // No pipeline facts, and nothing about what playback serves: no subtitle query, no editions, no playback.
+        verifyNoInteractions(pending, editions, forcedSubtitles);
+        verify(sidecars).findFilmIdsWithPresentSidecar(SubtitleKind.FORCED);
+        verifyNoMoreInteractions(sidecars);
     }
 
     @Test
@@ -761,5 +769,34 @@ class ForcedNeedServiceTest {
 
         assertThat(dto.unresolved()).isTrue();
         assertThat(dto.beingChecked()).isFalse();
+    }
+
+    @Test
+    void withSearchOffANeverSearchedNeededFilmIsUnresolved() {
+        sevenFilmsInEveryState();
+        when(pending.forced(Map.of(4L, "tt4", 5L, "tt5"))).thenReturn(new Pending(Set.of(4L)));
+        service = withSwitches(new OpenSubtitlesSwitches(false, true));
+
+        NeedListDto list = service.list();
+
+        // Film 2 (not searched) is unresolved now; film 4's due download still counts while downloads are on.
+        assertThat(list.films()).extracting(FilmNeedDto::unresolved)
+            .containsExactly(true, true, true, false, true, false, false);
+        assertThat(list.films()).extracting(FilmNeedDto::beingChecked)
+            .containsExactly(false, false, false, true, false, false, false);
+    }
+
+    @Test
+    void withDownloadsOffADueDownloadIsIgnoredAndANeverSearchedFilmIsStillBeingChecked() {
+        sevenFilmsInEveryState();
+        when(pending.forced(Map.of(4L, "tt4", 5L, "tt5"))).thenReturn(new Pending(Set.of(4L)));
+        service = withSwitches(new OpenSubtitlesSwitches(true, false));
+
+        NeedListDto list = service.list();
+
+        assertThat(list.films()).extracting(FilmNeedDto::unresolved)
+            .containsExactly(true, false, true, true, true, false, false);
+        assertThat(list.films()).extracting(FilmNeedDto::beingChecked)
+            .containsExactly(false, true, false, false, false, false, false);
     }
 }

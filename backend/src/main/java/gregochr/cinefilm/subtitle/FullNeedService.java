@@ -18,6 +18,7 @@ import gregochr.cinefilm.film.MediaFileRepository.AudioRow;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.film.SpokenLanguages;
 import gregochr.cinefilm.library.LibraryLock;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesApi;
 import gregochr.cinefilm.subtitle.ForcedNeed.Languages;
 import gregochr.cinefilm.subtitle.ForcedNeedDtos.ChoiceRequest;
 import gregochr.cinefilm.subtitle.FullNeed.Decision;
@@ -62,18 +63,21 @@ public class FullNeedService {
     private final EditionRepository editions;
     private final FullSubtitleService fullSubtitles;
     private final PendingDownloads pending;
+    private final OpenSubtitlesApi api;
     private final LibraryLock lock;
     private final TransactionTemplate tx;
 
     /** Creates the service. */
     public FullNeedService(FilmRepository films, MediaFileRepository files, EditionRepository editions,
-                           FullSubtitleService fullSubtitles, PendingDownloads pending, LibraryLock lock,
+                           FullSubtitleService fullSubtitles, PendingDownloads pending, OpenSubtitlesApi api,
+                           LibraryLock lock,
                            PlatformTransactionManager transactions) {
         this.films = films;
         this.files = files;
         this.editions = editions;
         this.fullSubtitles = fullSubtitles;
         this.pending = pending;
+        this.api = api;
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
     }
@@ -317,10 +321,10 @@ public class FullNeedService {
         return imdbIds.isEmpty() ? Pending.NONE : pending.full(imdbIds);
     }
 
-    private static FullNeedFilmDto dto(Eval eval, Pending due) {
+    private FullNeedFilmDto dto(Eval eval, Pending due) {
         FullNeedRow row = eval.row();
         FullFacts facts = new FullFacts(eval.needed(), eval.playing() != null, eval.hasImdbId(), eval.searched(),
-            due.due().contains(row.id()));
+            due.due().contains(row.id()), api.enabled(), api.downloadsEnabled());
         return new FullNeedFilmDto(row.id(), row.title(), row.year(), eval.decision().need().name(),
             eval.decision().reason().name(), row.owner() == null ? null : row.owner().name(),
             eval.editions().stream().map(e -> new EditionAudioDto(e.name(), e.label())).toList(), eval.playing(),

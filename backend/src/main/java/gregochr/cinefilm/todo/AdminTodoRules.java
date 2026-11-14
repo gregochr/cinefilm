@@ -31,9 +31,11 @@ public final class AdminTodoRules {
      * @param hasImdbId true when the film has an IMDb id (OpenSubtitles is searched by it)
      * @param searched true when OpenSubtitles was searched for full candidates under the film's current IMDb id
      * @param downloadDue true when the download scheduler would download a full subtitle for some edition
+     * @param searchEnabled true when OpenSubtitles searches run at all (an API key is set)
+     * @param downloadsEnabled true when downloads run at all (key, username and password are set)
      */
     public record FullFacts(boolean needed, boolean playsFullSubtitle, boolean hasImdbId, boolean searched,
-                            boolean downloadDue) {
+                            boolean downloadDue, boolean searchEnabled, boolean downloadsEnabled) {
     }
 
     /**
@@ -45,22 +47,26 @@ public final class AdminTodoRules {
      * @param openSubtitlesForcedCount how many forced files OpenSubtitles had for the film's current IMDb id, or null
      *     when it has not been searched
      * @param downloadDue true when the download scheduler would download a forced subtitle for some edition
+     * @param searchEnabled true when OpenSubtitles searches run at all (an API key is set)
+     * @param downloadsEnabled true when downloads run at all (key, username and password are set)
      */
     public record ForcedFacts(boolean needed, boolean hasForcedSubtitle, boolean hasImdbId,
-                              Integer openSubtitlesForcedCount, boolean downloadDue) {
+                              Integer openSubtitlesForcedCount, boolean downloadDue, boolean searchEnabled,
+                              boolean downloadsEnabled) {
     }
 
     /**
      * Whether TMDB's best guess for an unmatched film is confident enough to offer as a one-click "yes": the top
-     * score reaches {@link TmdbMatcher#ACCEPT_SCORE} and either it is the only candidate or it leads the runner-up by
-     * more than {@link TmdbMatcher#MARGIN}. A match the guard refused to fold is one candidate stored at the accept
-     * score, so it is confident.
+     * score is above {@link TmdbMatcher#ACCEPT_SCORE} and either it is the only candidate or it leads the runner-up by
+     * more than {@link TmdbMatcher#MARGIN}. A tagged ({@code {imdb-tt...}}) match the guard refused to fold is one
+     * candidate at {@code REFUSED_SCORE} (100), TMDB's own id and certain; a refused title-search match keeps the
+     * matcher's candidates and is judged like any other.
      *
-     * <p>The matcher compares unrounded totals but stores each score floored to a whole number. A floored top score of
-     * 60 or more means the real one is, so the accept test is exact. Flooring can shrink or grow a lead by almost one
-     * point, so the lead must exceed the margin by one ({@code >= MARGIN + 1}): then the real lead is at least
-     * {@code MARGIN}, and the rule never claims confidence the matcher would refuse (it may decline a lead of exactly
-     * {@code MARGIN} on whole numbers, which is the safe side).
+     * <p>The matcher compares unrounded totals and stores each score as a whole number: floored now, rounded in rows
+     * stored before that change. A stored score above the accept score ({@code >= ACCEPT_SCORE + 1}) means the real one
+     * is at least the accept score under either, and a lead above the margin ({@code >= MARGIN + 1}) means the real
+     * lead is at least the margin. So the rule never claims confidence the matcher would refuse; it may decline an
+     * exact boundary, which is the safe side.
      *
      * @param scores the candidates' scores, in any order (none gives false)
      * @return true when the best guess is confident
@@ -71,7 +77,7 @@ public final class AdminTodoRules {
         }
         List<Integer> ranked = scores.stream().sorted(Comparator.reverseOrder()).toList();
         int best = ranked.get(0);
-        if (best < TmdbMatcher.ACCEPT_SCORE) {
+        if (best < TmdbMatcher.ACCEPT_SCORE + 1) {
             return false;
         }
         return ranked.size() == 1 || best - ranked.get(1) >= TmdbMatcher.MARGIN + 1;
@@ -87,7 +93,7 @@ public final class AdminTodoRules {
         if (!inPlayFull(facts) || !facts.hasImdbId()) {
             return false;
         }
-        return !facts.searched() || facts.downloadDue();
+        return !facts.searched() && facts.searchEnabled() || facts.downloadDue() && facts.downloadsEnabled();
     }
 
     /** An in-play full row nothing automatic will fix: the owner has to act. */
@@ -106,7 +112,10 @@ public final class AdminTodoRules {
             return false;
         }
         Integer count = facts.openSubtitlesForcedCount();
-        return count == null || count > 0 && facts.downloadDue();
+        if (count == null) {
+            return facts.searchEnabled();
+        }
+        return count > 0 && facts.downloadDue() && facts.downloadsEnabled();
     }
 
     /** An in-play forced row nothing automatic will fix: the owner has to act. */

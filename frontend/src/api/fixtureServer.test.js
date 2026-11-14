@@ -148,7 +148,7 @@ describe('fixture server', () => {
     expect(attention.items.length).toBeGreaterThan(0);
     const confident = attention.items.filter((i) => i.confident);
     expect(confident.map((i) => i.title)).toEqual(['Suspiria']);
-    expect(confident[0].candidates[0].score).toBe(60);
+    expect(confident[0].candidates[0].score).toBe(100);
     expect(attention.items.filter((i) => i.kind === 'needs-match' && !i.confident)).toHaveLength(1);
   });
 
@@ -494,6 +494,10 @@ describe('fixture server: Admin settings', () => {
     ).toMatchObject({ unresolved: false, beingChecked: false });
     expect(await call('PUT', '/api/admin/films/4/full-need', { choice: 'NEEDED' })).toMatchObject({
       need: 'NEEDED',
+      unresolved: false,
+      beingChecked: true,
+    });
+    expect(await call('PUT', '/api/admin/films/6/full-need', { choice: 'NEEDED' })).toMatchObject({
       unresolved: true,
       beingChecked: false,
     });

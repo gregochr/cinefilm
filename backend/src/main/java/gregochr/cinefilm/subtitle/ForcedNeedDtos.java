@@ -40,7 +40,8 @@ public final class ForcedNeedDtos {
      * How many films are in each state.
      *
      * @param needed films whose need is {@code NEEDED}
-     * @param neededMissing of those, the ones with no forced subtitle file attached
+     * @param neededMissing of those, the ones with no forced subtitle playback would serve
+     *     ({@code hasForcedSubtitle} false)
      * @param unsure films that are {@code UNSURE}
      * @param unknown films that are {@code UNKNOWN}
      * @param notNeeded films that are {@code NOT_NEEDED}

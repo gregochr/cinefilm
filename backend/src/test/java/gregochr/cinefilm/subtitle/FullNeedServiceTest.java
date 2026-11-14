@@ -5,7 +5,6 @@ import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -70,10 +69,11 @@ class FullNeedServiceTest {
     private final LibraryLock lock = new LibraryLock();
     private final List<String> events = new ArrayList<>();
     private FullNeedService service;
+    private PlatformTransactionManager manager;
 
     @BeforeEach
     void setUp() {
-        PlatformTransactionManager manager = new PlatformTransactionManager() {
+        manager = new PlatformTransactionManager() {
             @Override
             public TransactionStatus getTransaction(TransactionDefinition definition) {
                 events.add("begin, lock " + lock.holder());
@@ -90,7 +90,11 @@ class FullNeedServiceTest {
                 events.add("rollback, lock " + lock.holder());
             }
         };
-        service = new FullNeedService(films, files, editions, fullSubtitles, pending, lock, manager);
+        service = withSwitches(OpenSubtitlesSwitches.on());
+    }
+
+    private FullNeedService withSwitches(OpenSubtitlesSwitches switches) {
+        return new FullNeedService(films, files, editions, fullSubtitles, pending, switches, lock, manager);
     }
 
     private static FullNeedRow row(long id, String title, String original, FullNeedChoice owner) {
@@ -382,7 +386,6 @@ class FullNeedServiceTest {
         assertThat(service.neededFilmIds()).containsExactlyInAnyOrder(1L, 4L);
         // The scheduler asks for the need only: nothing about the pipeline's facts or what the films play.
         verifyNoInteractions(pending, editions, fullSubtitles);
-        verify(films, never()).findOpenSubtitlesFullStates();
     }
 
     @Test
@@ -506,5 +509,36 @@ class FullNeedServiceTest {
         assertThat(notSearched.unresolved()).isFalse();
         assertThat(noImdb.beingChecked()).isFalse();
         assertThat(noImdb.unresolved()).isTrue();
+    }
+
+    @Test
+    void withSearchOffANeverSearchedFilmIsUnresolvedNotBeingChecked() {
+        sixFilmsInEveryState();
+        when(pending.full(Map.of(3L, "tt3", 4L, "tt4"))).thenReturn(new Pending(java.util.Set.of(3L)));
+        service = withSwitches(new OpenSubtitlesSwitches(false, true));
+
+        FullNeedListDto list = service.list();
+
+        // Film 2 (never searched) is now unresolved; film 3's due download still counts while downloads are on.
+        assertThat(list.films()).extracting(FullNeedFilmDto::unresolved)
+            .containsExactly(true, true, false, true, false, false);
+        assertThat(list.films()).extracting(FullNeedFilmDto::beingChecked)
+            .containsExactly(false, false, true, false, false, false);
+        assertThat(list.counts().unresolved()).isEqualTo(3);
+        assertThat(list.counts().beingChecked()).isEqualTo(1);
+    }
+
+    @Test
+    void withDownloadsOffADueDownloadIsIgnoredAndANeverSearchedFilmIsStillBeingChecked() {
+        sixFilmsInEveryState();
+        when(pending.full(Map.of(3L, "tt3", 4L, "tt4"))).thenReturn(new Pending(java.util.Set.of(3L)));
+        service = withSwitches(new OpenSubtitlesSwitches(true, false));
+
+        FullNeedListDto list = service.list();
+
+        assertThat(list.films()).extracting(FullNeedFilmDto::unresolved)
+            .containsExactly(true, false, true, true, false, false);
+        assertThat(list.films()).extracting(FullNeedFilmDto::beingChecked)
+            .containsExactly(false, true, false, false, false, false);
     }
 }
