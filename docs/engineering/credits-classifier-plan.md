@@ -180,14 +180,16 @@ The bigger gap is credits over picture, not white backgrounds. "Labels" says how
   - **one variant is tested in cross-validation**: including the lit frames that also show text. It is adopted only
     if the earliest out-of-fold error does not get worse.
 - **Plex errors.** The development films with the largest errors are looked at as stills. A clear Plex error is left
-  out, with the reason recorded in the manifest, and is never relabelled by guesswork.
+  out through the exclusions file (its reason lands in the labels' `excluded_note` and the report), and is never
+  relabelled by guesswork.
 - **The output** goes to `~/cinefilm-labels/labels-<date>.json`. That is library data, so it is never committed (the
   repository is public). Its schema is one object per file:
   - `media_file_id`, `fingerprint`, `unit_key`, `side` (`dev` or `test`), `fold` (0–4, development only);
   - `target_start_ms`, `shift_ms`;
   - `credits` and `film` (lists of `[from_ms, to_ms)` intervals);
   - `left_out` (a list of `{from_ms, to_ms, reason}`);
-  - `excluded` (a reason, or null, for a file left out entirely).
+  - `excluded` (a reason code, or null, for a file left out entirely), and `excluded_note` (the owner's free-text
+    reason for `OWNER_EXCLUDED`, else null).
 
   The opening type and the end-title flag are added by L3, and never by hand.
 
@@ -626,7 +628,8 @@ L1's brief copies this section as written.
      Me 4* (film 225).
   4. Any other new film takes its hash side and fold.
 - **Expected on today's first run (no previous manifest):** exactly **610 `dev` and 239 `test` files**.
-- Owner exclusions and their reasons live in the exclusions file, the labels and the report, not in the manifest.
+- Owner exclusions and their reasons live in the exclusions file, the labels (`excluded_note`) and the report, not
+  in the manifest.
 - **Each run reports drift and conflicts, counted:**
   - films kept on their old side because they changed unit;
   - units split across sides;
