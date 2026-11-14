@@ -4,9 +4,13 @@ import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
+import gregochr.cinefilm.health.HealthDtos.ChartList;
+import gregochr.cinefilm.health.HealthDtos.ChartRow;
 import gregochr.cinefilm.health.HealthDtos.HealthReport;
 import gregochr.cinefilm.health.HealthDtos.PlaybackList;
+import gregochr.cinefilm.health.HealthDtos.PlaybackPage;
 import gregochr.cinefilm.health.HealthDtos.PlaybackRow;
+import jakarta.persistence.criteria.Predicate;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -15,7 +19,10 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
@@ -41,6 +48,15 @@ public class PlaybackHealthService {
      * trims it again: a bound on growth, not an exact count.
      */
     static final int MAX_ROWS = 2_000;
+
+    /** Shortest watched time, in ms, that counts as a film session: shorter ones are tests, skips and misclicks. */
+    public static final long FILM_SESSION_MIN_MS = 180_000;
+
+    /** Most rows one page of the filtered list holds. */
+    static final int MAX_PAGE_SIZE = 100;
+
+    /** Rows in a page when the request names none. */
+    static final int DEFAULT_PAGE_SIZE = 20;
 
     private static final Logger LOG = LoggerFactory.getLogger(PlaybackHealthService.class);
     private static final Pattern PLAYBACK_ID =
@@ -78,7 +94,8 @@ public class PlaybackHealthService {
             create(playbackId, report, parsed.summary(), now);
         } else if (existing.get().getEditionId().equals(report.editionId())) {
             // 0 rows changed means the stored report is as new or newer: not an error.
-            repository.replaceIfNewer(playbackId, report.seq().intValue(), parsed.summary(), now);
+            repository.replaceIfNewer(playbackId, report.seq().intValue(), parsed.summary(), now,
+                HealthFigures.of(report));
         } else {
             throw invalid();
         }
@@ -96,6 +113,73 @@ public class PlaybackHealthService {
             }
         }
         return new PlaybackList(rows);
+    }
+
+    /**
+     * One page of viewings, newest {@code startedAt} first (the higher id first on a tie), each without the
+     * per-minute track, and the number of all that match. Every filter is optional: {@code since} keeps the viewings
+     * that started at or after it, {@code minWatchedMs} those that played at least that long, {@code problems}
+     * those whose {@code hasProblem} equals it. {@code page} counts from 0 (default 0) and {@code size} is 1 to
+     * {@link #MAX_PAGE_SIZE} (default {@link #DEFAULT_PAGE_SIZE}), and {@code page * size} may not pass
+     * {@link Integer#MAX_VALUE} (the offset asked of the database); anything else is a 400. A stored report that
+     * cannot be read is left out of the page but still counted in the total.
+     */
+    @Transactional(readOnly = true)
+    public PlaybackPage query(Instant since, Long minWatchedMs, Boolean problems, Integer page, Integer size) {
+        int pageNumber = page == null ? 0 : page;
+        int pageSize = size == null ? DEFAULT_PAGE_SIZE : size;
+        if (pageNumber < 0 || pageSize < 1 || pageSize > MAX_PAGE_SIZE
+            || (long) pageNumber * pageSize > Integer.MAX_VALUE
+            || (minWatchedMs != null && minWatchedMs < 0)) {
+            throw new BadRequestException("Invalid request");
+        }
+        Sort newestFirst = Sort.by(Sort.Direction.DESC, "startedAt").and(Sort.by(Sort.Direction.DESC, "id"));
+        Page<PlaybackHealth> found = repository.findAll(matching(since, minWatchedMs, problems),
+            PageRequest.of(pageNumber, pageSize, newestFirst));
+        List<PlaybackRow> rows = new ArrayList<>();
+        for (PlaybackHealth stored : found.getContent()) {
+            ObjectNode report = readable(stored);
+            if (report != null) {
+                report.remove("minutes");
+                rows.add(row(stored, report));
+            }
+        }
+        return new PlaybackPage(rows, found.getTotalElements());
+    }
+
+    /**
+     * Every film session ({@code watchedMs} at least {@link #FILM_SESSION_MIN_MS}) that started at or after
+     * {@code since} (all of them when null), oldest first so the newest comes last, with only the figures the chart
+     * draws. The table is capped, so the answer is small and is not paged.
+     */
+    @Transactional(readOnly = true)
+    public ChartList chart(Instant since) {
+        Sort oldestFirst = Sort.by(Sort.Direction.ASC, "startedAt").and(Sort.by(Sort.Direction.ASC, "id"));
+        List<ChartRow> rows = new ArrayList<>();
+        for (PlaybackHealth stored : repository.findAll(matching(since, FILM_SESSION_MIN_MS, null), oldestFirst)) {
+            HealthReport report = typed(stored);
+            rows.add(new ChartRow(stored.getPlaybackId(), stored.getFilmId(), stored.getFilmTitle(),
+                stored.getStartedAt(), stored.getWatchedMs(), stored.getStallCount(), stored.getStallMs(),
+                stored.getStartupMs(), stored.getEnvironment(), report == null ? null : report.rungMs(),
+                report == null || report.client() == null ? null : report.client().userAgent()));
+        }
+        return new ChartList(rows);
+    }
+
+    private static Specification<PlaybackHealth> matching(Instant since, Long minWatchedMs, Boolean problems) {
+        return (root, query, builder) -> {
+            List<Predicate> all = new ArrayList<>();
+            if (since != null) {
+                all.add(builder.greaterThanOrEqualTo(root.<Instant>get("startedAt"), since));
+            }
+            if (minWatchedMs != null) {
+                all.add(builder.greaterThanOrEqualTo(root.<Long>get("watchedMs"), minWatchedMs));
+            }
+            if (problems != null) {
+                all.add(builder.equal(root.<Boolean>get("hasProblem"), problems));
+            }
+            return builder.and(all.toArray(Predicate[]::new));
+        };
     }
 
     /** One viewing with its whole report; 404 when the id is not one, has no record or its report cannot be read. */
@@ -124,6 +208,7 @@ public class PlaybackHealthService {
         created.setUpdatedAt(now);
         created.setSeq(report.seq().intValue());
         created.setSummary(summary);
+        created.setFigures(HealthFigures.of(report));
         repository.save(created);
         long excess = repository.count() - MAX_ROWS;
         if (excess > 0) {
@@ -152,6 +237,16 @@ public class PlaybackHealthService {
             throw invalid();
         }
         return new ParsedReport(report, summary);
+    }
+
+    /** The stored report as a typed report, or null when it cannot be read. */
+    private HealthReport typed(PlaybackHealth stored) {
+        try {
+            return mapper.readValue(stored.getSummary(), HealthReport.class);
+        } catch (JacksonException e) {
+            LOG.warn("Playback health row {} has an unreadable summary", stored.getId());
+            return null;
+        }
     }
 
     /** The stored report as a JSON object, or null (and a warning naming only the row) when it cannot be read. */

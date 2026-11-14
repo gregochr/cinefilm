@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -375,5 +377,242 @@ class PlaybackHealthApiTest extends ApiTestBase {
         mvc.perform(get("/api/admin/playback-health"))
             .andExpect(jsonPath("$.playbacks[0].playbackId").value(idOf(2)))
             .andExpect(jsonPath("$.playbacks[1].playbackId").value(idOf(1)));
+    }
+
+    // the figure columns
+
+    @Test
+    void aFirstReportWritesTheFigureColumns() throws Exception {
+        send(ID, report(finalCut, 4));
+
+        PlaybackHealth stored = health.findByPlaybackId(ID).orElseThrow();
+        assertThat(stored.getWatchedMs()).isEqualTo(171_000);
+        assertThat(stored.getStallCount()).isEqualTo(2);
+        assertThat(stored.getStallMs()).isEqualTo(9_400);
+        assertThat(stored.getStartupMs()).isEqualTo(2_380);
+        assertThat(stored.isHasProblem()).isTrue();
+        assertThat(stored.getEnvironment()).isEqualTo("train");
+    }
+
+    @Test
+    void aNewerReportReplacesTheFigureColumnsToo() throws Exception {
+        send(ID, report(finalCut, 4));
+        ObjectNode later = report(finalCut, 5);
+        later.put("watchedMs", 400_000);
+        later.put("stallCount", 0);
+        later.put("stallMs", 0);
+        later.put("reconnectCount", 0);
+        later.put("stepsDown", 0);
+        later.put("netErrors", 0);
+        later.put("timeouts", 0);
+        later.put("environment", "home");
+        later.putNull("startupMs");
+
+        send(ID, later);
+
+        PlaybackHealth stored = health.findByPlaybackId(ID).orElseThrow();
+        assertThat(stored.getWatchedMs()).isEqualTo(400_000);
+        assertThat(stored.getStallCount()).isZero();
+        assertThat(stored.getStallMs()).isZero();
+        assertThat(stored.getStartupMs()).isNull();
+        assertThat(stored.isHasProblem()).isFalse();
+        assertThat(stored.getEnvironment()).isEqualTo("home");
+    }
+
+    @Test
+    void anOlderReportLeavesTheFigureColumnsAlone() throws Exception {
+        send(ID, report(finalCut, 4));
+        ObjectNode older = report(finalCut, 3);
+        older.put("watchedMs", 1);
+        older.put("stallCount", 100);
+        older.put("environment", "away");
+
+        send(ID, older);
+
+        PlaybackHealth stored = health.findByPlaybackId(ID).orElseThrow();
+        assertThat(stored.getWatchedMs()).isEqualTo(171_000);
+        assertThat(stored.getStallCount()).isEqualTo(2);
+        assertThat(stored.getEnvironment()).isEqualTo("train");
+    }
+
+    // the filtered list
+
+    private PlaybackHealth figureRow(long number, Instant startedAt, long watchedMs, boolean problem) {
+        PlaybackHealth row = row(idOf(number), startedAt.plusSeconds(60), text(report(finalCut, 1)));
+        row.setStartedAt(startedAt);
+        row.setFigures(new HealthFigures(watchedMs, problem ? 1 : 0, 0, 1_000L, problem, "home"));
+        return health.saveAndFlush(row);
+    }
+
+    @Test
+    void theListWithNoParametersKeepsItsShapeWithNoTotal() throws Exception {
+        send(ID, report(finalCut, 4));
+
+        mvc.perform(get("/api/admin/playback-health"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.playbacks.length()").value(1))
+            .andExpect(jsonPath("$.total").doesNotExist());
+    }
+
+    @Test
+    void minWatchedMsKeepsExactlyThoseAtOrOverIt() throws Exception {
+        figureRow(1, NOW.minusSeconds(300), 179_999, false);
+        figureRow(2, NOW.minusSeconds(200), 180_000, false);
+
+        mvc.perform(get("/api/admin/playback-health").param("minWatchedMs", "180000"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.total").value(1))
+            .andExpect(jsonPath("$.playbacks.length()").value(1))
+            .andExpect(jsonPath("$.playbacks[0].playbackId").value(idOf(2)));
+    }
+
+    @Test
+    void sinceComparesTheStartAndKeepsASessionThatStartedExactlyThen() throws Exception {
+        Instant boundary = NOW.minusSeconds(1_000);
+        figureRow(1, boundary.minusSeconds(1), 200_000, false);
+        figureRow(2, boundary, 200_000, false);
+        figureRow(3, boundary.plusSeconds(1), 200_000, false);
+
+        mvc.perform(get("/api/admin/playback-health").param("since", boundary.toString()))
+            .andExpect(jsonPath("$.total").value(2))
+            .andExpect(jsonPath("$.playbacks[0].playbackId").value(idOf(3)))
+            .andExpect(jsonPath("$.playbacks[1].playbackId").value(idOf(2)));
+    }
+
+    @Test
+    void problemsTrueKeepsOnlyTheSessionsWithOneAndFalseOnlyThoseWithout() throws Exception {
+        figureRow(1, NOW.minusSeconds(300), 200_000, true);
+        figureRow(2, NOW.minusSeconds(200), 200_000, false);
+
+        mvc.perform(get("/api/admin/playback-health").param("problems", "true"))
+            .andExpect(jsonPath("$.total").value(1))
+            .andExpect(jsonPath("$.playbacks[0].playbackId").value(idOf(1)));
+        mvc.perform(get("/api/admin/playback-health").param("problems", "false"))
+            .andExpect(jsonPath("$.total").value(1))
+            .andExpect(jsonPath("$.playbacks[0].playbackId").value(idOf(2)));
+    }
+
+    @Test
+    void filtersCombine() throws Exception {
+        figureRow(1, NOW.minusSeconds(300), 200_000, true);
+        figureRow(2, NOW.minusSeconds(200), 100_000, true);
+        figureRow(3, NOW.minusSeconds(100), 200_000, false);
+
+        mvc.perform(get("/api/admin/playback-health").param("problems", "true").param("minWatchedMs", "180000"))
+            .andExpect(jsonPath("$.total").value(1))
+            .andExpect(jsonPath("$.playbacks[0].playbackId").value(idOf(1)));
+    }
+
+    @Test
+    void pagesAreNewestStartFirstWithTheHigherIdFirstOnATieAndATotalOfAll() throws Exception {
+        // 1 and 2 started at the same instant; 3, 4 and 5 each a second later than the one before.
+        for (int i = 1; i <= 5; i++) {
+            figureRow(i, NOW.minusSeconds(i <= 2 ? 500 : 500 - i), 200_000, false);
+        }
+
+        mvc.perform(get("/api/admin/playback-health").param("size", "2").param("page", "0"))
+            .andExpect(jsonPath("$.total").value(5))
+            .andExpect(jsonPath("$.playbacks.length()").value(2))
+            .andExpect(jsonPath("$.playbacks[0].playbackId").value(idOf(5)))
+            .andExpect(jsonPath("$.playbacks[1].playbackId").value(idOf(4)));
+        mvc.perform(get("/api/admin/playback-health").param("size", "2").param("page", "1"))
+            .andExpect(jsonPath("$.playbacks[0].playbackId").value(idOf(3)))
+            .andExpect(jsonPath("$.playbacks[1].playbackId").value(idOf(2)));
+        mvc.perform(get("/api/admin/playback-health").param("size", "2").param("page", "2"))
+            .andExpect(jsonPath("$.playbacks.length()").value(1))
+            .andExpect(jsonPath("$.playbacks[0].playbackId").value(idOf(1)));
+    }
+
+    @Test
+    void theFilteredRowsHaveNoMinutes() throws Exception {
+        figureRow(1, NOW.minusSeconds(300), 200_000, false);
+
+        mvc.perform(get("/api/admin/playback-health").param("page", "0"))
+            .andExpect(jsonPath("$.playbacks[0].report.minutes").doesNotExist())
+            .andExpect(jsonPath("$.playbacks[0].report.seq").value(1));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"size,0", "size,101", "size,-1", "page,-1", "minWatchedMs,-1", "since,yesterday", "problems,maybe",
+        "size,ten", "page,2147483647", "since,''", "page,''", "size,''", "minWatchedMs,''", "problems,''",
+        "problems,1", "problems,yes", "since,0000-01-01T00:00:00Z", "since,1969-12-31T23:59:59Z",
+        "since,+10000-01-01T00:00:00Z"})
+    void aBadParameterIsA400(String name, String value) throws Exception {
+        mvc.perform(get("/api/admin/playback-health").param(name, value))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
+    }
+
+    @Test
+    void aPageSizeOfOneIsAccepted() throws Exception {
+        mvc.perform(get("/api/admin/playback-health").param("size", "1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.total").value(0));
+    }
+
+    @Test
+    void aPageSizeOfAHundredIsAccepted() throws Exception {
+        mvc.perform(get("/api/admin/playback-health").param("size", "100"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.total").value(0));
+    }
+
+    // the chart
+
+    @Test
+    void theChartHoldsOnlyFilmSessionsOldestFirstWithOnlyTheChartsFields() throws Exception {
+        ObjectNode filmLength = report(finalCut, 4);
+        filmLength.put("watchedMs", 200_000);
+        send(ID, filmLength);
+        figureRow(1, NOW.minusSeconds(86_400), 179_999, false);
+        figureRow(2, NOW.minusSeconds(86_400), 180_000, false);
+
+        mvc.perform(get("/api/admin/playback-health/chart"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sessions.length()").value(2))
+            .andExpect(jsonPath("$.sessions[0].playbackId").value(idOf(2)))
+            .andExpect(jsonPath("$.sessions[0].watchedMs").value(180_000))
+            .andExpect(jsonPath("$.sessions[1].playbackId").value(ID))
+            .andExpect(jsonPath("$.sessions[1].filmId").value(film.getId()))
+            .andExpect(jsonPath("$.sessions[1].filmTitle").value("Blade Runner"))
+            .andExpect(jsonPath("$.sessions[1].startedAt").value("2024-03-31T23:26:55Z"))
+            .andExpect(jsonPath("$.sessions[1].watchedMs").value(200_000))
+            .andExpect(jsonPath("$.sessions[1].stallCount").value(2))
+            .andExpect(jsonPath("$.sessions[1].stallMs").value(9_400))
+            .andExpect(jsonPath("$.sessions[1].startupMs").value(2_380))
+            .andExpect(jsonPath("$.sessions[1].environment").value("train"))
+            .andExpect(jsonPath("$.sessions[1].rungMs['480p']").value(58_000))
+            .andExpect(jsonPath("$.sessions[1].userAgent").value("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"))
+            .andExpect(jsonPath("$.sessions[1].report").doesNotExist())
+            .andExpect(jsonPath("$.sessions[1].editionId").doesNotExist());
+    }
+
+    @Test
+    void theChartAnswersForSinceAndKeepsASessionThatStartedExactlyThen() throws Exception {
+        Instant boundary = NOW.minusSeconds(1_000);
+        figureRow(1, boundary.minusSeconds(1), 200_000, false);
+        figureRow(2, boundary, 200_000, false);
+
+        mvc.perform(get("/api/admin/playback-health/chart").param("since", boundary.toString()))
+            .andExpect(jsonPath("$.sessions.length()").value(1))
+            .andExpect(jsonPath("$.sessions[0].playbackId").value(idOf(2)));
+    }
+
+    @Test
+    void theChartWithNothingRecordedIsEmptyAndABadSinceIsA400() throws Exception {
+        mvc.perform(get("/api/admin/playback-health/chart"))
+            .andExpect(jsonPath("$.sessions.length()").value(0));
+        mvc.perform(get("/api/admin/playback-health/chart").param("since", "x"))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void thePlaybackIdRouteStillWorksBesideTheChartRoute() throws Exception {
+        send(ID, report(finalCut, 4));
+
+        mvc.perform(get("/api/admin/playback-health/{id}", ID))
+            .andExpect(jsonPath("$.playbackId").value(ID));
+        mvc.perform(get("/api/admin/playback-health/chart"))
+            .andExpect(jsonPath("$.sessions").isArray());
     }
 }

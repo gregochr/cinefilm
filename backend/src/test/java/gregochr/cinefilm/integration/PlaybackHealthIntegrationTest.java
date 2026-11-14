@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmPreferenceRepository;
 import gregochr.cinefilm.film.FilmRepository;
+import gregochr.cinefilm.health.HealthFigures;
 import gregochr.cinefilm.health.PlaybackHealth;
 import gregochr.cinefilm.health.PlaybackHealthRepository;
 import gregochr.cinefilm.playback.PlaybackStateRepository;
@@ -36,6 +37,7 @@ import tools.jackson.databind.node.ObjectNode;
 class PlaybackHealthIntegrationTest extends IntegrationTestBase {
 
     private static final String ID = "3f2b8c1e-5d4a-4e7b-9a60-1c2d3e4f5a6b";
+    private static final HealthFigures FIGURES = new HealthFigures(300_000, 1, 500, 800L, true, "away");
 
     @Autowired
     private PlaybackHealthRepository health;
@@ -128,9 +130,10 @@ class PlaybackHealthIntegrationTest extends IntegrationTestBase {
         health.saveAndFlush(row(ID, 4, "{\"v\":4}"));
         Instant later = NOW.plusSeconds(30);
 
-        int higher = inNewTransaction(() -> health.replaceIfNewer(ID, 5, "{\"v\":5}", later));
-        int equal = inNewTransaction(() -> health.replaceIfNewer(ID, 5, "{\"v\":\"equal\"}", later.plusSeconds(1)));
-        int lower = inNewTransaction(() -> health.replaceIfNewer(ID, 3, "{\"v\":3}", later.plusSeconds(2)));
+        int higher = inNewTransaction(() -> health.replaceIfNewer(ID, 5, "{\"v\":5}", later, FIGURES));
+        int equal = inNewTransaction(
+            () -> health.replaceIfNewer(ID, 5, "{\"v\":\"equal\"}", later.plusSeconds(1), FIGURES));
+        int lower = inNewTransaction(() -> health.replaceIfNewer(ID, 3, "{\"v\":3}", later.plusSeconds(2), FIGURES));
 
         assertThat(higher).isEqualTo(1);
         assertThat(equal).isZero();
@@ -140,6 +143,32 @@ class PlaybackHealthIntegrationTest extends IntegrationTestBase {
         assertThat(stored.getSummary()).isEqualTo("{\"v\":5}");
         assertThat(stored.getUpdatedAt()).isEqualTo(later);
         assertThat(stored.getStartedAt()).isEqualTo(NOW.minusSeconds(60));
+        assertThat(stored.getWatchedMs()).isEqualTo(300_000);
+        assertThat(stored.getStallCount()).isEqualTo(1);
+        assertThat(stored.getStallMs()).isEqualTo(500);
+        assertThat(stored.getStartupMs()).isEqualTo(800);
+        assertThat(stored.isHasProblem()).isTrue();
+        assertThat(stored.getEnvironment()).isEqualTo("away");
+    }
+
+    @Test
+    void aNullStartupTimeIsWrittenByTheConditionalUpdate() {
+        health.saveAndFlush(row(ID, 1, "{}"));
+
+        inNewTransaction(() -> health.replaceIfNewer(ID, 2, "{}", NOW,
+            new HealthFigures(0, 0, 0, null, false, null)));
+
+        PlaybackHealth stored = health.findByPlaybackId(ID).orElseThrow();
+        assertThat(stored.getStartupMs()).isNull();
+        assertThat(stored.getEnvironment()).isNull();
+    }
+
+    @Test
+    void theStartedAtIndexExists() {
+        Integer indexes = jdbc.queryForObject(
+            "SELECT count(*) FROM pg_indexes WHERE indexname = 'playback_health_started_at_idx'", Integer.class);
+
+        assertThat(indexes).isEqualTo(1);
     }
 
     @Test

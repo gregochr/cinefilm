@@ -41,4 +41,21 @@ public final class HealthDtos {
     public record PlaybackRow(String playbackId, Long filmId, String filmTitle, Long editionId, Instant startedAt,
                               Instant updatedAt, JsonNode report) {
     }
+
+    /** Response of {@code GET /api/admin/playback-health} with a filter or a page: one page and the count of all. */
+    public record PlaybackPage(List<PlaybackRow> playbacks, long total) {
+    }
+
+    /**
+     * One film-length session as the chart needs it: the stored figures, the time on each rung and the browser's own
+     * description of itself. {@code rungMs} and {@code userAgent} are null when the stored report cannot be read.
+     */
+    public record ChartRow(String playbackId, Long filmId, String filmTitle, Instant startedAt, long watchedMs,
+                           long stallCount, long stallMs, Long startupMs, String environment,
+                           Map<String, Long> rungMs, String userAgent) {
+    }
+
+    /** Response of {@code GET /api/admin/playback-health/chart}: the sessions, the newest last. */
+    public record ChartList(List<ChartRow> sessions) {
+    }
 }

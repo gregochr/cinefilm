@@ -20,6 +20,7 @@ import adminFullNeed from '../test/fixtures/admin-full-need.json';
 import collection from '../test/fixtures/collection.json';
 import collections from '../test/fixtures/collections.json';
 import session from '../test/fixtures/session.json';
+import { FILM_SESSION_MIN_MS } from '../state/healthFormat.js';
 import { buildFixtureSearchIndex } from './fixtureSearchIndex.js';
 
 const PREVIOUS = {
@@ -33,6 +34,95 @@ const details = { 1: heat, 6: bladeRunner, 8: wickerMan };
 const MIN_MINUTES_LIMIT = 30;
 let continueWatchingMinMinutes = 5;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const HEALTH_PARAMS = ['since', 'minWatchedMs', 'problems', 'page', 'size'];
+const DEFAULT_HEALTH_SIZE = 20;
+const CHART_SESSIONS = [
+  {
+    playbackId: 'c1000000-0000-4000-8000-000000000001',
+    filmId: 6,
+    filmTitle: 'Blade Runner',
+    startedAt: '2026-10-20T20:00:00Z',
+    watchedMs: 6_600_000,
+    stallCount: 0,
+    stallMs: 0,
+    startupMs: 1200,
+    environment: 'home',
+    rungMs: { '1080p': 6_600_000 },
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+  },
+  {
+    playbackId: 'c1000000-0000-4000-8000-000000000002',
+    filmId: 8,
+    filmTitle: 'The Wicker Man',
+    startedAt: '2026-10-28T18:30:00Z',
+    watchedMs: 60_000,
+    stallCount: 0,
+    stallMs: 0,
+    startupMs: 900,
+    environment: 'home',
+    rungMs: { '720p': 60_000 },
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',
+  },
+  {
+    playbackId: 'c1000000-0000-4000-8000-000000000003',
+    filmId: 1,
+    filmTitle: 'Heat',
+    startedAt: '2026-11-03T12:10:00Z',
+    watchedMs: 4_320_000,
+    stallCount: 3,
+    stallMs: 21_000,
+    startupMs: 3100,
+    environment: 'away',
+    rungMs: { '480p': 1_800_000, '360p': 2_520_000 },
+    userAgent: 'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X)',
+  },
+  {
+    playbackId: 'c1000000-0000-4000-8000-000000000004',
+    filmId: 1,
+    filmTitle: 'Heat',
+    startedAt: '2026-11-10T19:43:05Z',
+    watchedMs: 4_320_000,
+    stallCount: 2,
+    stallMs: 9400,
+    startupMs: 2380,
+    environment: 'train',
+    rungMs: { '480p': 1_468_800, '360p': 2_851_200 },
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+  },
+];
+
+const hasProblem = (report) =>
+  [report.stallCount, report.reconnectCount, report.netErrors, report.timeouts].some(
+    (n) => n > 0,
+  ) || report.fellBack === true;
+
+/** The filtered, paged list: the same filters and order as the server, `{ playbacks, total }`. */
+function healthPage(params) {
+  const since = params.get('since');
+  const minWatched = params.has('minWatchedMs') ? Number(params.get('minWatchedMs')) : null;
+  const problems = params.has('problems') ? params.get('problems') === 'true' : null;
+  const page = Number(params.get('page') ?? 0);
+  const size = Number(params.get('size') ?? DEFAULT_HEALTH_SIZE);
+  const matching = adminPlaybackHealth.playbacks
+    .filter((p) => !since || Date.parse(p.startedAt) >= Date.parse(since))
+    .filter((p) => minWatched === null || p.report.watchedMs >= minWatched)
+    .filter((p) => problems === null || hasProblem(p.report) === problems)
+    .toSorted((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
+  return { playbacks: matching.slice(page * size, page * size + size), total: matching.length };
+}
+
+/** Every film-length session since `since` (all when omitted), the newest last. */
+function healthChart(params) {
+  const since = params.get('since');
+  return {
+    sessions: CHART_SESSIONS.filter(
+      (s) =>
+        s.watchedMs >= FILM_SESSION_MIN_MS &&
+        (!since || Date.parse(s.startedAt) >= Date.parse(since)),
+    ),
+  };
+}
 
 /** The minimum watch time in ms; a position of at least 1 ms is always needed. The single source for every card. */
 const minWatchMs = () => Math.max(continueWatchingMinMinutes * 60000, 1);
@@ -235,7 +325,12 @@ export async function handle(method, path, body) {
   if (route === '/api/admin/subtitles/full-need') return fullNeedList();
   match = route.match(/^\/api\/admin\/films\/(\d+)\/full-need$/);
   if (match && method === 'PUT') return setFullNeed(Number(match[1]), body);
-  if (route === '/api/admin/playback-health') return adminPlaybackHealth;
+  if (route === '/api/admin/playback-health') {
+    return HEALTH_PARAMS.some((name) => url.searchParams.has(name))
+      ? healthPage(url.searchParams)
+      : adminPlaybackHealth;
+  }
+  if (route === '/api/admin/playback-health/chart') return healthChart(url.searchParams);
   if (route === '/api/admin/transcoding') return adminTranscoding;
   if (/^\/api\/admin\/transcoding\/sessions\//.test(route)) return null;
   if (/^\/api\/editions\/\d+\/sessions$/.test(route)) return session;
