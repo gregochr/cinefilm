@@ -4,8 +4,10 @@ import { Button } from './Button.jsx';
 /**
  * A button with its hint line under it: a visible `<p>`, never a tooltip, so it works on the phone. The button is
  * described by the hint (`aria-describedby`). `layout` is "row" (right-aligned, for a row of a list) or "line"
- * (left-aligned, for a card's own action). The wrapper's `action-hint--row|line` class carries the alignment, so a
- * hint-less button still aligns; jsdom can't observe that, so it is not tested. The hint carries the class too. At 600px and below the button is full width, 44px tall, hint on the left.
+ * (left-aligned, for a card's own action). The wrapper's `action-hint--row|line` class carries the alignment. The
+ * wrapper has no role or text to query (test-standards 'Queries'), so only the hint's own
+ * `action-hint__text--row|line` class is tested. At 600px and below the button is full width, 44px tall, hint on
+ * the left.
  * `variant` is the Button's: the one amber button in Admin is "Scan library now".
  */
 export function ActionWithHint({
