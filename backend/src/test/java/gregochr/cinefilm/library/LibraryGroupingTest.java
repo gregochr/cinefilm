@@ -6,8 +6,13 @@ import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.ApiTestBase;
 import gregochr.cinefilm.TestData;
@@ -23,12 +28,18 @@ import gregochr.cinefilm.film.MatchStatus;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.playback.PlaybackState;
+import gregochr.cinefilm.tmdb.MatchOutcome;
+import gregochr.cinefilm.tmdb.MatchOutcome.Status;
 import gregochr.cinefilm.tmdb.TmdbApi;
+import gregochr.cinefilm.tmdb.TmdbModels.MovieDetails;
+import gregochr.cinefilm.tmdb.TmdbModels.SearchHit;
+import gregochr.cinefilm.tmdb.TmdbUnavailableException;
 import jakarta.persistence.EntityManager;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -131,13 +142,13 @@ class LibraryGroupingTest extends ApiTestBase {
         film("Gladiator", MatchStatus.PENDING, null, "Theatrical Cut", 155,
             "Gladiator (2000) {edition-Theatrical Cut}.m4v");
         reset();
-        grouping.repair();
+        grouping.repair(false);
         grouping.group();
         grouping.refreshDefaults();
         reset();
         long rows = changes.count();
 
-        assertThat(grouping.repair()).isZero();
+        assertThat(grouping.repair(false).done()).isZero();
         assertThat(grouping.group()).isZero();
         assertThat(grouping.refreshDefaults()).isZero();
 
@@ -412,7 +423,7 @@ class LibraryGroupingTest extends ApiTestBase {
         reset();
 
         assertThat(grouping.group()).isZero();
-        assertThat(grouping.repair()).isZero();
+        assertThat(grouping.repair(false).done()).isZero();
 
         assertThat(films.count()).isEqualTo(2);
         assertThat(changes.count()).isZero();
@@ -482,7 +493,7 @@ class LibraryGroupingTest extends ApiTestBase {
         Long fiveId = five.getId();
         reset();
 
-        int first = grouping.repair();
+        int first = grouping.repair(false).done();
         reset();
 
         assertThat(first).isEqualTo(1);
@@ -506,7 +517,7 @@ class LibraryGroupingTest extends ApiTestBase {
             "Moved \"Rocky V\" out of \"Rocky IV\" into films of their own");
         long rows = changes.count();
 
-        assertThat(grouping.repair()).isZero();
+        assertThat(grouping.repair(false).done()).isZero();
         assertThat(grouping.group()).isZero();
 
         assertThat(changes.count()).isEqualTo(rows);
@@ -525,7 +536,7 @@ class LibraryGroupingTest extends ApiTestBase {
         preferences.save(preference);
         reset();
 
-        grouping.repair();
+        grouping.repair(false);
         reset();
 
         FilmPreference after = preferences.findById(rocky.getId()).orElseThrow();
@@ -547,7 +558,7 @@ class LibraryGroupingTest extends ApiTestBase {
         Long audio = preference.getAudioStreamId();
         reset();
 
-        grouping.repair();
+        grouping.repair(false);
         reset();
 
         FilmPreference after = preferences.findById(rocky.getId()).orElseThrow();
@@ -563,7 +574,7 @@ class LibraryGroupingTest extends ApiTestBase {
         films.saveAndFlush(alien);
         reset();
 
-        assertThat(grouping.repair()).isZero();
+        assertThat(grouping.repair(false).done()).isZero();
 
         assertThat(films.count()).isEqualTo(1);
         assertThat(changes.count()).isZero();
@@ -584,7 +595,7 @@ class LibraryGroupingTest extends ApiTestBase {
         Long strayId = stray.getId();
         reset();
 
-        grouping.repair();
+        grouping.repair(false);
         reset();
 
         Film kept = films.findById(rocky.getId()).orElseThrow();
@@ -601,6 +612,160 @@ class LibraryGroupingTest extends ApiTestBase {
         assertThat(states.findById(keptEdition)).isEmpty();
     }
 
+    // ---- TMDB evidence (the real fixtures: Elf holding Enchanted, TMDB's exact "Enchanted" hits)
+
+    private static final SearchHit ENCHANTED_2007 = new SearchHit(4523, "Enchanted", "Enchanted", 2007, 30, null);
+    private static final SearchHit ENCHANTED_1998 = new SearchHit(404277, "Enchanted", "Enchanted", 1998, 1, null);
+    private static final SearchHit ELLA_ENCHANTED = new SearchHit(14442, "Ella Enchanted", "Ella Enchanted", 2004,
+        9, null);
+
+    private static MovieDetails details(long id, String title) {
+        return new MovieDetails(id, title, title, 2003, null, 97, List.of(), null, null, 1, List.of(), List.of(),
+            null);
+    }
+
+    private Film elfHoldingEnchanted() {
+        Film elf = film("Elf", MatchStatus.MATCHED, 10719L, "Original", 97, "Elf.m4v");
+        addEdition(elf, "Original", 103, "Enchanted.m4v", 1);
+        films.saveAndFlush(elf);
+        return elf;
+    }
+
+    private void tmdbKnowsElfAndEnchanted() {
+        when(tmdb.movie(10719L)).thenReturn(Optional.of(details(10719L, "Elf")));
+        when(tmdb.alternativeTitles(10719L)).thenReturn(List.of());
+        when(tmdb.search("Enchanted", null)).thenReturn(List.of(ENCHANTED_2007, ENCHANTED_1998, ELLA_ENCHANTED));
+    }
+
+    @Test
+    void elfHoldingEnchantedIsSplitOnTmdbEvidenceAndTheNewFilmIsNotMergedBackToElf() {
+        Film elf = elfHoldingEnchanted();
+        tmdbKnowsElfAndEnchanted();
+        reset();
+
+        LibraryGrouping.RepairResult result = grouping.repair(true);
+        reset();
+
+        assertThat(result).isEqualTo(new LibraryGrouping.RepairResult(1, false));
+        assertThat(films.count()).isEqualTo(2);
+        Film kept = films.findById(elf.getId()).orElseThrow();
+        assertThat(kept.getEditions()).extracting(e -> e.originalFile().getPath()).containsExactly("Elf.m4v");
+        Film moved = films.findAll().stream().filter(f -> !f.getId().equals(elf.getId())).findFirst().orElseThrow();
+        assertThat(moved.getTitle()).isEqualTo("Enchanted");
+        assertThat(moved.getMatchStatus()).isEqualTo(MatchStatus.PENDING);
+        assertThat(ingest.pending()).extracting(LibraryIngest.Pending::title).containsExactly("Enchanted");
+        assertThat(report(GroupingChange.SPLIT)).containsExactly("Moved \"Enchanted\" out of \"Elf\" into a film of "
+            + "its own (TMDB lists it as a different film)");
+        assertThat(report(GroupingChange.FLAG)).isEmpty();
+
+        ingest.applyOutcome(moved.getId(), new MatchOutcome(Status.MATCHED, details(10719L, "Elf"), List.of()));
+        reset();
+
+        assertThat(films.count()).isEqualTo(2);
+        assertThat(films.findById(moved.getId()).orElseThrow().getMatchStatus()).isEqualTo(MatchStatus.NEEDS_MATCH);
+
+        ingest.applyOutcome(moved.getId(), new MatchOutcome(Status.MATCHED, details(4523L, "Enchanted"),
+            List.of()));
+        reset();
+
+        Film matched = films.findById(moved.getId()).orElseThrow();
+        assertThat(matched.getMatchStatus()).isEqualTo(MatchStatus.MATCHED);
+        assertThat(matched.getTmdbId()).isEqualTo(4523L);
+    }
+
+    @Test
+    void aSecondRepairAfterATmdbSplitAsksNothingAndChangesNothing() {
+        elfHoldingEnchanted();
+        tmdbKnowsElfAndEnchanted();
+        reset();
+        grouping.repair(true);
+        reset();
+        long rows = changes.count();
+        clearInvocations(tmdb);
+
+        assertThat(grouping.repair(true)).isEqualTo(new LibraryGrouping.RepairResult(0, false));
+
+        assertThat(changes.count()).isEqualTo(rows);
+        assertThat(films.count()).isEqualTo(2);
+        verifyNoMoreInteractions(tmdb);
+    }
+
+    @Test
+    void aTmdbOutageKeepsTheFilmFlaggedReportsItAndMakesNoFurtherSearch() {
+        elfHoldingEnchanted();
+        film("Ghost", MatchStatus.MATCHED, 251L, "Original", 127, "Ghost.m4v");
+        Film ghost = films.findAll().stream().filter(f -> f.getTitle().equals("Ghost")).findFirst().orElseThrow();
+        addEdition(ghost, "Original", 88, "The Witches.m4v", 1);
+        films.saveAndFlush(ghost);
+        when(tmdb.movie(10719L)).thenReturn(Optional.of(details(10719L, "Elf")));
+        when(tmdb.alternativeTitles(10719L)).thenReturn(List.of());
+        when(tmdb.search("Enchanted", null)).thenThrow(new TmdbUnavailableException("down", null));
+        reset();
+
+        LibraryGrouping.RepairResult result = grouping.repair(true);
+
+        assertThat(result).isEqualTo(new LibraryGrouping.RepairResult(2, true));
+        assertThat(films.count()).isEqualTo(2);
+        assertThat(report(GroupingChange.FLAG)).containsExactly(
+            "Files look like different films: \"Elf\", \"Enchanted\" in \"Elf\"",
+            "Files look like different films: \"Ghost\", \"The Witches\" in \"Ghost\"");
+        verify(tmdb, never()).search("The Witches", null);
+        verify(tmdb, never()).alternativeTitles(251L);
+    }
+
+    @Test
+    void withTmdbNotUsableRepairMakesNoTmdbCallAndTheFilmStaysFlagged() {
+        elfHoldingEnchanted();
+        reset();
+
+        assertThat(grouping.repair(false)).isEqualTo(new LibraryGrouping.RepairResult(1, false));
+
+        verifyNoMoreInteractions(tmdb);
+        assertThat(films.count()).isEqualTo(1);
+        assertThat(report(GroupingChange.FLAG)).hasSize(1);
+    }
+
+    @Test
+    void aGroupTaggedWithTheFilmsOwnIdIsNeverLookedUpWhateverTmdbWouldSay() {
+        Film elf = film("Elf", MatchStatus.MATCHED, 10719L, "Original", 97, "Elf.m4v");
+        addEdition(elf, "Original", 103, "Enchanted {tmdb-10719}.m4v", 1);
+        films.saveAndFlush(elf);
+        tmdbKnowsElfAndEnchanted();
+        reset();
+
+        assertThat(grouping.repair(true)).isEqualTo(new LibraryGrouping.RepairResult(1, false));
+
+        verifyNoMoreInteractions(tmdb);
+        assertThat(films.count()).isEqualTo(1);
+    }
+
+    @Test
+    void aBladeRunnerCopyWithAnEditionTagStaysFlaggedAndIsNotLookedUp() {
+        Film blade = film("Blade Runner", MatchStatus.MATCHED, 78L, "Original", 117, "Blade Runner.m4v");
+        addEdition(blade, "The Final Cut", 117, "Blader Runner (1982) {edition-The Final Cut}.m4v", 1);
+        films.saveAndFlush(blade);
+        reset();
+
+        assertThat(grouping.repair(true)).isEqualTo(new LibraryGrouping.RepairResult(1, false));
+
+        verifyNoMoreInteractions(tmdb);
+        assertThat(films.count()).isEqualTo(1);
+    }
+
+    @Test
+    void aSequelSplitMakesNoTmdbCallEvenWhenTmdbIsUsable() {
+        Film rocky = film("Rocky IV", MatchStatus.MATCHED, 1001L, "Original", 91, "Rocky IV (1985).m4v");
+        addEdition(rocky, "Original", 104, "Rocky V (1990).m4v", 1);
+        films.saveAndFlush(rocky);
+        reset();
+
+        assertThat(grouping.repair(true)).isEqualTo(new LibraryGrouping.RepairResult(1, false));
+
+        verifyNoMoreInteractions(tmdb);
+        assertThat(report(GroupingChange.SPLIT)).containsExactly(
+            "Moved \"Rocky V\" out of \"Rocky IV\" into films of their own");
+    }
+
     @Test
     void filesThatLookLikeDifferentFilmsAreFlaggedOnceNotEveryScan() {
         Film mixed = film("Heat", MatchStatus.MATCHED, 949L, "Original", 170, "Collateral.m4v");
@@ -608,8 +773,8 @@ class LibraryGroupingTest extends ApiTestBase {
         films.saveAndFlush(mixed);
         reset();
 
-        assertThat(grouping.repair()).isEqualTo(1);
-        assertThat(grouping.repair()).isZero();
+        assertThat(grouping.repair(false).done()).isEqualTo(1);
+        assertThat(grouping.repair(false).done()).isZero();
 
         assertThat(report(GroupingChange.FLAG)).containsExactly(
             "Files look like different films: \"Alien\", \"Collateral\" in \"Heat\"");
@@ -639,7 +804,7 @@ class LibraryGroupingTest extends ApiTestBase {
         EditionJoin failingJoin = mock(EditionJoin.class);
         doThrow(new IllegalArgumentException("boom")).when(failingJoin).join(anyList());
         LibraryGrouping broken = new LibraryGrouping(films, editions, mediaFiles, preferences, changes,
-            failingJoin, failing, transactions, CLOCK);
+            failingJoin, failing, tmdb, transactions, CLOCK);
 
         assertThat(broken.group()).isZero();
 
@@ -659,9 +824,9 @@ class LibraryGroupingTest extends ApiTestBase {
         EditionJoin failingJoin = mock(EditionJoin.class);
         doThrow(new IllegalStateException("boom")).when(failingJoin).unfold(anyLong(), anyList());
         LibraryGrouping broken = new LibraryGrouping(films, editions, mediaFiles, preferences, changes,
-            failingJoin, ingest, transactions, CLOCK);
+            failingJoin, ingest, tmdb, transactions, CLOCK);
 
-        assertThat(broken.repair()).isZero();
+        assertThat(broken.repair(false).done()).isZero();
 
         assertThat(changes.count()).isZero();
     }

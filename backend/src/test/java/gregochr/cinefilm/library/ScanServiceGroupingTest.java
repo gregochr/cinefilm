@@ -58,6 +58,7 @@ class ScanServiceGroupingTest {
         service = new ScanService(new LibraryRoot(library.toString()), scanner, ffprobe, tmdb, matcher, ingest,
             Runnable::run, CLOCK, new LibraryLock(), event -> { }, grouping, sidecars);
         when(tmdb.enabled()).thenReturn(true);
+        when(grouping.repair(true)).thenReturn(new LibraryGrouping.RepairResult(0, false));
         when(ingest.startRun("admin", CLOCK.instant())).thenReturn(5L);
         when(ingest.known()).thenReturn(Map.of());
     }
@@ -87,7 +88,7 @@ class ScanServiceGroupingTest {
 
         InOrder order = inOrder(ingest, grouping);
         order.verify(ingest).markMissing(List.of());
-        order.verify(grouping).repair();
+        order.verify(grouping).repair(true);
         order.verify(grouping).group();
         order.verify(ingest).pending();
         order.verify(ingest).completeCollections();
@@ -98,11 +99,12 @@ class ScanServiceGroupingTest {
     @Test
     void groupingNeedsNoTmdb() {
         when(tmdb.enabled()).thenReturn(false);
+        when(grouping.repair(false)).thenReturn(new LibraryGrouping.RepairResult(0, false));
         when(scanner.scan()).thenReturn(new Found(List.of(), 0));
 
         service.start("admin");
 
-        verify(grouping).repair();
+        verify(grouping).repair(false);
         verify(grouping).group();
         verify(grouping).refreshDefaults();
         verify(ingest, never()).pending();
@@ -111,14 +113,40 @@ class ScanServiceGroupingTest {
     @Test
     void aFailureInRepairIsCountedAndTheRestOfTheScanStillRuns() {
         when(scanner.scan()).thenReturn(new Found(List.of(), 0));
-        doThrow(new IllegalStateException("boom")).when(grouping).repair();
+        doThrow(new IllegalStateException("boom")).when(grouping).repair(true);
 
         service.start("admin");
 
-        verify(grouping, never()).group();
+        verify(grouping).group();
         verify(ingest).pending();
         verify(grouping).refreshDefaults();
         verify(ingest).finishRun(5L, CLOCK.instant(), 0, 0, 0, "1 files could not be processed");
+    }
+
+    @Test
+    void repairIsToldNotToUseTmdbWhenTheWalkAlreadyFoundItDown() throws IOException {
+        newFile("Heat {tmdb-949}.m4v", 170);
+        when(matcher.matchTagged(949L, null)).thenReturn(Optional.of(UNAVAILABLE));
+        when(grouping.repair(false)).thenReturn(new LibraryGrouping.RepairResult(0, false));
+
+        service.start("admin");
+
+        verify(grouping).repair(false);
+        verify(grouping).group();
+        verify(ingest).finishRun(5L, CLOCK.instant(), 1, 1, 0, null);
+    }
+
+    @Test
+    void anOutageFoundByRepairMakesTheRetriesSkip() {
+        when(scanner.scan()).thenReturn(new Found(List.of(), 0));
+        when(grouping.repair(true)).thenReturn(new LibraryGrouping.RepairResult(0, true));
+
+        service.start("admin");
+
+        verify(grouping).group();
+        verify(ingest, never()).pending();
+        verify(ingest, never()).completeCollections();
+        verify(ingest).finishRun(5L, CLOCK.instant(), 0, 0, 0, null);
     }
 
     @Test
@@ -236,6 +264,7 @@ class ScanServiceGroupingTest {
     void aTmdbOutageOnATaggedLookupLeavesTheFileForALaterScan() throws IOException {
         FoundFile file = newFile("Heat {tmdb-949}.m4v", 170);
         when(matcher.matchTagged(949L, null)).thenReturn(Optional.of(UNAVAILABLE));
+        when(grouping.repair(false)).thenReturn(new LibraryGrouping.RepairResult(0, false));
 
         service.start("admin");
 
@@ -243,6 +272,7 @@ class ScanServiceGroupingTest {
         verify(matcher).matchTagged(949L, null);
         verifyNoMoreInteractions(matcher);
         verify(ingest, never()).pending();
+        verify(ingest).finishRun(5L, CLOCK.instant(), 1, 1, 0, null);
     }
 
     @Test

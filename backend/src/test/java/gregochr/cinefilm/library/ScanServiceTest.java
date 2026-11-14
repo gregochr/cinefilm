@@ -70,6 +70,7 @@ class ScanServiceTest {
         deferred = new ScanService(root, scanner, ffprobe, tmdb, matcher, ingest, queued::add, CLOCK,
             new LibraryLock(), events::add, grouping, sidecars);
         when(tmdb.enabled()).thenReturn(true);
+        when(grouping.repair(true)).thenReturn(new LibraryGrouping.RepairResult(0, false));
         when(ingest.startRun("admin", CLOCK.instant())).thenReturn(5L);
         when(ingest.known()).thenReturn(Map.of());
     }
@@ -388,6 +389,7 @@ class ScanServiceTest {
         disk(existing, copy);
         stubProbe(probe, existing, copy);
         when(tmdb.enabled()).thenReturn(false);
+        when(grouping.repair(false)).thenReturn(new LibraryGrouping.RepairResult(0, false));
         when(ingest.known()).thenReturn(Map.of("Heat.m4v",
             known(1, "Heat.m4v", 10L, T1, Presence.PRESENT, Playability.PLAYABLE)));
 
@@ -405,6 +407,7 @@ class ScanServiceTest {
         disk(first, second);
         stubProbe(probe, first, second);
         when(tmdb.enabled()).thenReturn(false);
+        when(grouping.repair(false)).thenReturn(new LibraryGrouping.RepairResult(0, false));
         when(ingest.known()).thenReturn(Map.of("Old.m4v",
             known(1, "Old.m4v", 10L, T1, Presence.PRESENT, Playability.PLAYABLE)));
 
@@ -421,6 +424,7 @@ class ScanServiceTest {
         disk(file);
         stubProbe(probe, file);
         when(tmdb.enabled()).thenReturn(false);
+        when(grouping.repair(false)).thenReturn(new LibraryGrouping.RepairResult(0, false));
         when(ingest.known()).thenReturn(Map.of(
             "SizeDiffers.m4v", known(1, "SizeDiffers.m4v", 11L, T1, Presence.PRESENT, Playability.PLAYABLE),
             "TimeDiffers.m4v", known(2, "TimeDiffers.m4v", 10L, T2, Presence.PRESENT, Playability.PLAYABLE),
@@ -511,6 +515,7 @@ class ScanServiceTest {
         disk(bad, good);
         stubProbe(probe, bad, good);
         when(tmdb.enabled()).thenReturn(false);
+        when(grouping.repair(false)).thenReturn(new LibraryGrouping.RepairResult(0, false));
         doThrow(new IllegalStateException("db")).when(ingest)
             .addNew(bad, Playability.PLAYABLE, probe, new TitleGuess("Bad", null), null);
 
@@ -554,6 +559,7 @@ class ScanServiceTest {
         disk(first, second);
         stubProbe(probe, first, second);
         when(matcher.match(new TitleGuess("A", null), 60_000L)).thenReturn(UNAVAILABLE);
+        when(grouping.repair(false)).thenReturn(new LibraryGrouping.RepairResult(0, false));
 
         service.start("admin");
 
@@ -572,6 +578,7 @@ class ScanServiceTest {
         disk(file);
         stubProbe(probe, file);
         when(tmdb.enabled()).thenReturn(false);
+        when(grouping.repair(false)).thenReturn(new LibraryGrouping.RepairResult(0, false));
 
         service.start("admin");
 
@@ -647,6 +654,7 @@ class ScanServiceTest {
         when(ffprobe.probe(real(first.path()))).thenAnswer(recordProgress);
         when(ffprobe.probe(real(second.path()))).thenAnswer(recordProgress);
         when(tmdb.enabled()).thenReturn(false);
+        when(grouping.repair(false)).thenReturn(new LibraryGrouping.RepairResult(0, false));
 
         deferred.start("admin");
         queued.get(0).run();

@@ -716,20 +716,36 @@ class PlexImportServiceTest {
         AtomicReference<Boolean> locked = new AtomicReference<>();
         org.mockito.Mockito.doAnswer(call -> {
             locked.set(service.isRunning());
-            return 0;
-        }).when(grouping).repair();
+            return new gregochr.cinefilm.library.LibraryGrouping.RepairResult(0, false);
+        }).when(grouping).repair(false);
 
         service.start();
 
         org.mockito.InOrder order = org.mockito.Mockito.inOrder(writer, grouping);
         order.verify(writer).apply(FilmWrite.ofFiles(rocky, List.of(1L), null, null, null, NOW));
-        order.verify(grouping).repair();
+        order.verify(grouping).repair(false);
         order.verify(grouping).group();
         order.verify(grouping).refreshDefaults();
         assertThat(locked.get()).isTrue();
         verify(writer).flag(org.mockito.ArgumentMatchers.argThat(lines -> lines.size() == 1
             && lines.get(0).contains("Rocky V.m4v") && lines.get(0).contains("Rocky IV")),
             org.mockito.ArgumentMatchers.eq(NOW));
+        assertThat(finished().getError()).isNull();
+    }
+
+    @Test
+    void repairMayAskTmdbWhenTmdbIsConfigured() {
+        PlexFilm rocky = film("Rocky IV", null, null, null, PREFIX + "Rocky IV.m4v");
+        library(rocky);
+        known(known(1, "Rocky IV.m4v"));
+        when(writer.preflight(List.of(1L), null)).thenReturn(HAS_ALL);
+        when(writer.apply(FilmWrite.ofFiles(rocky, List.of(1L), null, null, null, NOW))).thenReturn(NOTHING);
+        when(tmdb.enabled()).thenReturn(true);
+
+        service.start();
+
+        verify(grouping).repair(true);
+        verify(grouping).group();
         assertThat(finished().getError()).isNull();
     }
 
@@ -743,7 +759,7 @@ class PlexImportServiceTest {
         org.mockito.Mockito.doThrow(new IllegalStateException("boom")).when(writer).flag(
             List.of("Plex lists \"Rocky V.m4v\" with \"Rocky IV\", but its name is another film's, so it was left "
                 + "out of that film"), NOW);
-        org.mockito.Mockito.doThrow(new IllegalStateException("boom")).when(grouping).repair();
+        org.mockito.Mockito.doThrow(new IllegalStateException("boom")).when(grouping).repair(false);
 
         service.start();
 

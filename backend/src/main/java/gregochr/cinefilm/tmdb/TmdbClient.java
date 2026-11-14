@@ -51,6 +51,7 @@ public class TmdbClient implements TmdbApi {
     private final Sleeper sleeper;
     private final RequestPacer pacer;
     private final Map<Long, Optional<MovieDetails>> movies = new ConcurrentHashMap<>();
+    private final Map<Long, List<String>> alternatives = new ConcurrentHashMap<>();
     private final Map<Long, Optional<CollectionDetails>> collections = new ConcurrentHashMap<>();
 
     /** Creates the client for the TMDB RestClient, the read token ({@code TMDB_READ_TOKEN}) and a sleeper. */
@@ -102,6 +103,26 @@ public class TmdbClient implements TmdbApi {
             .queryParam("append_to_response", "credits").build(id)).map(TmdbClient::movieOf);
         movies.put(id, fetched);
         return fetched;
+    }
+
+    @Override
+    public List<String> alternativeTitles(long id) {
+        List<String> cached = alternatives.get(id);
+        if (cached != null) {
+            return cached;
+        }
+        List<String> titles = new ArrayList<>();
+        get(b -> b.path("/3/movie/{id}/alternative_titles").build(id)).ifPresent(body -> {
+            for (JsonNode t : body.path("titles")) {
+                String title = text(t, "title");
+                if (title != null) {
+                    titles.add(title);
+                }
+            }
+        });
+        List<String> result = List.copyOf(titles);
+        alternatives.put(id, result);
+        return result;
     }
 
     @Override

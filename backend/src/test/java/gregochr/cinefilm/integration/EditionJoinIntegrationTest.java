@@ -158,7 +158,7 @@ class EditionJoinIntegrationTest extends IntegrationTestBase {
         film("Towers", MatchStatus.MATCHED, "Original", 90, "Towers - pt1.m4v");
         film("Towers 2", MatchStatus.PENDING, "Original", 110, "Towers - pt2.m4v");
 
-        grouping.repair();
+        grouping.repair(false);
         int grouped = grouping.group();
         int defaults = grouping.refreshDefaults();
 
@@ -185,14 +185,14 @@ class EditionJoinIntegrationTest extends IntegrationTestBase {
         films.saveAndFlush(rocky);
         states.save(TestData.state(five, 30 * MIN, false, MONDAY, null));
 
-        assertThat(grouping.repair()).isEqualTo(1);
+        assertThat(grouping.repair(false).done()).isEqualTo(1);
 
         assertThat(films.count()).isEqualTo(2);
         Film moved = films.findAll().stream().filter(f -> f.getTitle().equals("Rocky V")).findFirst().orElseThrow();
         assertThat(read(() -> films.findById(moved.getId()).orElseThrow().getEditions().get(0).getId()))
             .isEqualTo(five.getId());
         assertThat(states.findById(five.getId()).orElseThrow().getPositionMs()).isEqualTo(30 * MIN);
-        assertThat(grouping.repair()).isZero();
+        assertThat(grouping.repair(false).done()).isZero();
     }
 
     @Test

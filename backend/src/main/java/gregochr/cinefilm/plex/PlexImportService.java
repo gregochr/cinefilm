@@ -285,7 +285,7 @@ public class PlexImportService {
     /** After the import, under the same lock: repair, auto-resolve, then the default editions. */
     private void groupLibrary() {
         try {
-            grouping.repair();
+            grouping.repair(tmdb.enabled());
             grouping.group();
             grouping.refreshDefaults();
         } catch (RuntimeException e) {

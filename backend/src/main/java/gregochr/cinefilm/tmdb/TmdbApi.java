@@ -32,6 +32,15 @@ public interface TmdbApi {
     Optional<MovieDetails> movie(long id);
 
     /**
+     * The other titles TMDB lists for a film, from {@code /3/movie/{id}/alternative_titles}. Cached by id.
+     *
+     * @param id TMDB id
+     * @return the alternative titles, empty when TMDB has none or does not know the id
+     * @throws TmdbUnavailableException when TMDB cannot answer
+     */
+    List<String> alternativeTitles(long id);
+
+    /**
      * A collection with its parts. Cached by id.
      *
      * @param id TMDB collection id

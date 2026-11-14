@@ -420,6 +420,58 @@ class TmdbClientTest {
             "/3/search/movie?query=Never Recorded Film&include_adult=false");
     }
 
+    private static final String ALTERNATIVES_78 = "https://api.themoviedb.org/3/movie/78/alternative_titles";
+
+    @Test
+    void alternativeTitlesAreTheTitleFieldsInTmdbsOrderWithBlanksSkippedAndTheTokenInTheHeader() {
+        server.expect(once(), requestTo(ALTERNATIVES_78))
+            .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN))
+            .andRespond(withSuccess("{\"id\":78,\"titles\":[{\"iso_3166_1\":\"DE\",\"title\":\"Blade Runner 1\","
+                + "\"type\":\"\"},{\"iso_3166_1\":\"FR\",\"title\":\"  \"},{\"iso_3166_1\":\"IT\"},"
+                + "{\"iso_3166_1\":\"JP\",\"title\":\"Burēdo Rannā\"}]}", MediaType.APPLICATION_JSON));
+
+        assertThat(client.alternativeTitles(78)).containsExactly("Blade Runner 1", "Burēdo Rannā");
+        server.verify();
+    }
+
+    @Test
+    void alternativeTitlesAreCachedById() {
+        server.expect(once(), requestTo(ALTERNATIVES_78))
+            .andRespond(withSuccess("{\"id\":78,\"titles\":[{\"title\":\"Replicant\"}]}", MediaType.APPLICATION_JSON));
+
+        assertThat(client.alternativeTitles(78)).containsExactly("Replicant");
+        assertThat(client.alternativeTitles(78)).containsExactly("Replicant");
+        server.verify();
+    }
+
+    @Test
+    void aFilmWithNoTitlesListOrAnUnknownIdHasNoAlternativeTitles() {
+        server.expect(once(), requestTo(ALTERNATIVES_78)).andRespond(withSuccess("{\"id\":78}",
+            MediaType.APPLICATION_JSON));
+        server.expect(once(), requestTo("https://api.themoviedb.org/3/movie/5/alternative_titles"))
+            .andRespond(withStatus(HttpStatus.NOT_FOUND));
+
+        assertThat(client.alternativeTitles(78)).isEmpty();
+        assertThat(client.alternativeTitles(5)).isEmpty();
+        server.verify();
+    }
+
+    @Test
+    void anOutageWhileFetchingAlternativeTitlesIsUnavailableAndNothingIsCached() {
+        server.expect(manyTimes(), requestTo(ALTERNATIVES_78)).andRespond(withStatus(HttpStatus.BAD_GATEWAY));
+
+        assertThatThrownBy(() -> client.alternativeTitles(78)).isInstanceOf(TmdbUnavailableException.class)
+            .hasMessage("TMDB unavailable after 4 attempts: status 502");
+        assertThat(sleeps).hasSize(3);
+
+        server.reset();
+        server.expect(once(), requestTo(ALTERNATIVES_78))
+            .andRespond(withSuccess("{\"id\":78,\"titles\":[{\"title\":\"Replicant\"}]}", MediaType.APPLICATION_JSON));
+
+        assertThat(client.alternativeTitles(78)).containsExactly("Replicant");
+        server.verify();
+    }
+
     @Test
     void onlyDirectorsAreTakenFromTheCrewAndOddReleaseDatesAreIgnored() {
         server.expect(once(), requestTo("https://api.themoviedb.org/3/movie/1?append_to_response=credits"))
