@@ -301,7 +301,14 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
 - 8b: player "Earlier" / "Later" (and reset) on the existing offset route; Admin's "Show all subtitle files" becomes
   read-only. "Looks right" goes only here, after 8a.
 
-## Open questions for the owner
+## Owner answers (2026-11-14)
+
+All four defaults chosen: **Q1** leave the credits dataset out of Admin; **Q2** drop both switches; **Q3** (a) the
+forced tab lists `NEEDED` films with no forced subtitle found, titled "Forced subtitles not found", actions "Find
+forced subtitles…" / "No foreign scenes" (To do group 4 and its why-line follow); **Q4** the networks line is
+"Forget makes CineFilm ask where you're watching next time on that network." No phase now waits on the owner.
+
+## Open questions for the owner (answered above)
 
 - **Q1.** "Download TMDB credits" in the bundle points at the end-credits classifier's frame dataset, not cast &
   crew. Leave it out of Admin (default), or show it truthfully under Library as "Credits detection · Prepare training
