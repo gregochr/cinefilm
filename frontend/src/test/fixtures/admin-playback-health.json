@@ -76,7 +76,7 @@
         "reconnectMs": 0,
         "recoveries": 0,
         "fellBack": false,
-        "stepsDown": 0,
+        "stepsDown": 2,
         "stepsUp": 0,
         "netErrors": 0,
         "timeouts": 0,

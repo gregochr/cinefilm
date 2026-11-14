@@ -144,6 +144,20 @@ class V27__BackfillPlaybackHealthFiguresTest {
     }
 
     @Test
+    void aReportThatDidNotFallBackIsNotAProblem() throws Exception {
+        assertThat(problemFor("{\"fellBack\":false}")).isFalse();
+    }
+
+    @Test
+    void anEnvironmentOfExactlySixteenCharactersIsKept() throws Exception {
+        insert(1, "{\"environment\":\"" + "x".repeat(16) + "\"}");
+
+        new V27__BackfillPlaybackHealthFigures().migrate(context);
+
+        assertThat(row(1).getString("environment")).hasSize(16);
+    }
+
+    @Test
     void aStepDownAloneIsNotAProblem() throws Exception {
         assertThat(problemFor("{\"stepsDown\":3,\"stepsUp\":1,\"watchedMs\":200000}")).isFalse();
     }

@@ -265,12 +265,46 @@ class PlaybackHealthControllerTest {
     }
 
     @Test
+    void anUnrelatedParameterLeavesTheOldShapeWithNoTotal() throws Exception {
+        when(health.recent()).thenReturn(new PlaybackList(List.of(row())));
+
+        mvc.perform(signedIn(get("/api/admin/playback-health")).param("foo", "1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.playbacks.length()").value(1))
+            .andExpect(jsonPath("$.total").doesNotExist());
+    }
+
+    @Test
+    void theFirstValueOfARepeatedParameterWins() throws Exception {
+        when(health.query(null, null, null, null, 1)).thenReturn(new PlaybackPage(List.of(), 0));
+
+        mvc.perform(signedIn(get("/api/admin/playback-health")).param("size", "1", "50"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.total").value(0));
+    }
+
+    @Test
     void aPresentButEmptyParameterIsA400NotTheOldShape() throws Exception {
         for (String name : List.of("since", "minWatchedMs", "problems", "page", "size")) {
             mvc.perform(signedIn(get("/api/admin/playback-health")).param(name, ""))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Invalid request"));
         }
+    }
+
+    @Test
+    void aChartSinceOutsideYears1970To9999IsA400AndTheEdgesAreAccepted() throws Exception {
+        for (String bad : List.of("1969-12-31T23:59:59Z", "+10000-01-01T00:00:00Z")) {
+            mvc.perform(signedIn(get("/api/admin/playback-health/chart")).param("since", bad))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Invalid request"));
+        }
+        when(health.chart(Instant.parse("1970-01-01T00:00:00Z"))).thenReturn(new ChartList(List.of()));
+        when(health.chart(Instant.parse("9999-12-31T23:59:59Z"))).thenReturn(new ChartList(List.of()));
+        mvc.perform(signedIn(get("/api/admin/playback-health/chart")).param("since", "1970-01-01T00:00:00Z"))
+            .andExpect(status().isOk());
+        mvc.perform(signedIn(get("/api/admin/playback-health/chart")).param("since", "9999-12-31T23:59:59Z"))
+            .andExpect(status().isOk());
     }
 
     @Test

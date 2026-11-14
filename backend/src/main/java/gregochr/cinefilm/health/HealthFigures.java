@@ -4,8 +4,9 @@ import gregochr.cinefilm.health.HealthDtos.HealthReport;
 
 /**
  * The few figures of a health report that are also stored as columns, so Admin can filter and chart by them without
- * reading every report. One extraction, used when a viewing is first stored, when a newer report replaces it and
- * when the rows stored before the columns existed were filled in (V27), so the columns and the report never differ.
+ * reading every report. One extraction, used when a viewing is first stored and when a newer report replaces it, so
+ * the columns and the report never differ. The migration V27, which filled the columns for the rows stored before
+ * they existed, holds a frozen copy of this rule as it was then and does not use this class.
  *
  * <p>{@code hasProblem} is true when the report shows a stall ({@code stallCount}), a reconnect
  * ({@code reconnectCount}), a fall back to direct play ({@code fellBack}), a network error ({@code netErrors}) or a

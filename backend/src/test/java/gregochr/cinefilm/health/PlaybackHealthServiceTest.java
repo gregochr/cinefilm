@@ -552,11 +552,18 @@ class PlaybackHealthServiceTest {
     }
 
     @Test
-    void queryAcceptsTheLargestOffset() {
-        // 21,474,836 pages of 100 is 2,147,483,600, still within an int.
-        answers(PageRequest.of(21_474_836, 100, NEWEST_FIRST), List.of(), 0);
+    void queryAcceptsAnOffsetOfExactlyIntegerMaxValue() {
+        answers(PageRequest.of(Integer.MAX_VALUE, 1, NEWEST_FIRST), List.of(), 0);
 
-        assertThat(service.query(null, null, null, 21_474_836, 100).total()).isZero();
+        assertThat(service.query(null, null, null, Integer.MAX_VALUE, 1).total()).isZero();
+    }
+
+    @Test
+    void queryRefusesAnOffsetOneAboveIntegerMaxValue() {
+        // 2^30 pages of 2 is 2^31, one more than Integer.MAX_VALUE.
+        assertThatThrownBy(() -> service.query(null, null, null, 1 << 30, 2))
+            .isExactlyInstanceOf(BadRequestException.class)
+            .hasMessage("Invalid request");
     }
 
     @Test

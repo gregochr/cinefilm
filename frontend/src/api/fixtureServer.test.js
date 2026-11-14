@@ -165,19 +165,25 @@ describe('fixture server', () => {
   it('serves the filtered, paged playback health list with a total', async () => {
     const all = await call('GET', '/api/admin/playback-health?page=0');
     expect(all.total).toBe(3);
-    expect(all.playbacks[0].filmTitle).toBe('Heat');
-    const huge = await call('GET', '/api/admin/playback-health?minWatchedMs=999999999999');
-    expect(huge).toEqual({ playbacks: [], total: 0 });
-    const some = await call('GET', '/api/admin/playback-health?minWatchedMs=180000');
-    expect(some.total).toBeGreaterThan(0);
-    const bad = await call('GET', '/api/admin/playback-health?problems=true');
-    const good = await call('GET', '/api/admin/playback-health?problems=false');
-    expect(bad.total + good.total).toBe(3);
+    expect(all.playbacks.map((p) => p.filmTitle)).toEqual([
+      'Heat',
+      'Blade Runner',
+      'The Wicker Man',
+    ]);
+    const longOnes = await call('GET', '/api/admin/playback-health?minWatchedMs=180000');
+    expect(longOnes.total).toBe(2);
+    const withProblems = await call('GET', '/api/admin/playback-health?problems=true');
+    expect(withProblems.total).toBe(1);
+    expect(withProblems.playbacks[0].filmTitle).toBe('Heat');
+    const without = await call('GET', '/api/admin/playback-health?problems=false');
+    // Blade Runner stepped down twice and nothing else: a step down is not a problem.
+    expect(without.playbacks.map((p) => p.filmTitle)).toEqual(['Blade Runner', 'The Wicker Man']);
     const paged = await call('GET', '/api/admin/playback-health?size=1&page=1');
     expect(paged.playbacks).toHaveLength(1);
+    expect(paged.playbacks[0].filmTitle).toBe('Blade Runner');
     expect(paged.total).toBe(3);
     const since = await call('GET', '/api/admin/playback-health?since=2999-01-01T00:00:00Z');
-    expect(since.total).toBe(0);
+    expect(since).toEqual({ playbacks: [], total: 0 });
   });
 
   it('serves the playback health chart without the session under three minutes', async () => {
