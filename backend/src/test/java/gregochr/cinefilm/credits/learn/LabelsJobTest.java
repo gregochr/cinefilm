@@ -271,6 +271,8 @@ class LabelsJobTest {
         JsonNode epsilon = labelOf(temp.resolve("labels-2026-11-13.json"), 105);
         assertThat(epsilon.path("excluded").asString()).isEqualTo("MISSING_MARKER_END");
         assertThat(epsilon.path("excluded_note").isNull()).isTrue();
+        assertThat(Files.readString(temp.resolve("labels-2026-11-13-report.txt")))
+            .contains("owner exclusions: 1\n  105: some note\n");
     }
 
     @Test
@@ -279,7 +281,9 @@ class LabelsJobTest {
         Files.writeString(previous, "{\"films\":[{\"film_id\":1,\"unit_key\":\"a\",\"side\":\"dev\",\"fold\":1.7}]}");
 
         assertThatThrownBy(() -> LabelsJob.run(options(temp, previous, null)))
-            .isInstanceOf(tools.jackson.core.JacksonException.class);
+            .isInstanceOf(tools.jackson.databind.exc.InvalidFormatException.class)
+            .hasMessageContaining("Cannot coerce Floating-point value (1.7) to `java.lang.Integer`")
+            .hasMessageContaining("ManifestEntry[\"fold\"]");
     }
 
     private static SplitManifest manifest(String json) {

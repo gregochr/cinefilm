@@ -125,7 +125,8 @@ class LabelsMainTest {
 
         assertThat(run(args(temp.resolve("out"), "--previous-split", bad.toString()))).isEqualTo(1);
         assertThat(errBytes.toString(StandardCharsets.UTF_8).lines().toList()).hasSize(1).first().asString()
-            .startsWith("labels: ");
+            .startsWith("labels: InvalidFormatException: Cannot coerce Floating-point value (1.7)");
+        assertThat(temp.resolve("out")).doesNotExist();
     }
 
     @Test
