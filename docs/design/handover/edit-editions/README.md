@@ -41,6 +41,9 @@ Before building, look at the data model from the editions/parts work (Film → E
   - "Runtimes 2h 35m and 2h 51m — likely Theatrical and Extended"
   - "Runtimes match (2h 50m) — likely copies of one cut. Kept apart so you can compare; rename one, or mark it Not this film."
   - "Runtimes 1h 31m and 1h 44m — these may be different films"
+  - When a file is set aside as Not this film because its name differs, and the runtimes are within 60 seconds or 5 minutes of each other, the line no longer says "different films" (2026-11-14, `docs/engineering/repair-tmdb-evidence-plan.md` PR A):
+    - "The names differ but the runtimes match (1h 57m) — if it's the same film, move it back to keep it here"
+    - "The names differ but the runtimes are close (1h 52m and 1h 57m) — if it's the same film, move it back to keep it here"
 - **Files, grouped by edition:**
   - One card per edition (1px `#2A251F` border, 10px radius).
   - **Group header:** on a `#1A1713` strip, the edition name in 12px uppercase, then "{n} parts · {total runtime}" (or "single file · …") in mono.
@@ -49,7 +52,7 @@ Before building, look at the data model from the editions/parts work (Film → E
     1. **File:**
        - **Name** in IBM Plex Mono 13px, with **middle truncation that always keeps the last 22 characters visible**, so "…ded Edition} - pt1.m4v" survives.
        - **Full name** on hover (`title`) and on keyboard focus (the span is focusable and carries an `aria-label`).
-       - **Meta line** under it in mono 12px, muted: "1h 54m · 1080p · HEVC · 14.2 GB". If the file isn't on disk, add a muted outlined "MISSING" pill.
+       - **Meta line** under it in mono 12px, muted: "1h 54m · 1080p · HEVC · 14.2 GB · 14 Nov 2026, 09:12". The last item is the file's modified time on disk (Europe/London), left out when unknown, so the owner can tell which copy is newer. If the file isn't on disk, add a muted outlined "MISSING" pill.
     2. **Edition:** a labelled select listing the existing editions plus "New edition…". Choosing "New edition…" shows a name field under it: max 32 characters, with a live "{n}/32" counter inside it on the right.
     3. **Part:** a labelled select: "Single file", Part 1–8.
     4. **Not this film:** a secondary pill button.

@@ -1,6 +1,7 @@
 package gregochr.cinefilm.library;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.time.Instant;
 import java.util.List;
 
 /** The Edit editions API shapes: what the panel loads and what it saves. */
@@ -32,10 +33,11 @@ public final class EditionDtos {
      * @param presence PRESENT or MISSING
      * @param editionId the edition it belongs to now
      * @param partNumber its part number now (1 for a single file)
+     * @param modifiedAt the file's last-modified time on disk, or null when unknown
      */
     public record EditionFileDto(Long id, String fileName, Long durationMs, Integer width, Integer height,
                                  String videoCodec, Long sizeBytes, String presence, Long editionId,
-                                 int partNumber) {
+                                 int partNumber, Instant modifiedAt) {
     }
 
     /**

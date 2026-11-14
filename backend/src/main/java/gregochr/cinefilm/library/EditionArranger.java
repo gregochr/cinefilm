@@ -117,7 +117,8 @@ public class EditionArranger {
             for (MediaFile file : edition.originalParts()) {
                 fileDtos.add(new EditionFileDto(file.getId(), fileName(file.getPath()), file.getDurationMs(),
                     file.getWidth(), file.getHeight(), file.getVideoCodec(), file.getSizeBytes(),
-                    file.getPresence().name(), edition.getId(), file.getPartNumber()));
+                    file.getPresence().name(), edition.getId(), file.getPartNumber(),
+                    file.getModifiedAt()));
                 suggestFiles.add(new SuggestFile(file.getId(), file.getPath(), file.getDurationMs(), edition.getId(),
                     edition.getName(), file.getPartNumber()));
             }

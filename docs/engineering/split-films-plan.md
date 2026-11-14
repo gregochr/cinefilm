@@ -100,6 +100,9 @@ split → pending → re-merge flip-flop.
 
 ### Library repair (runs inside the scan, after the walk and **before** `retryPending`; also after a Plex import)
 
+> Amended 2026-11-14 by `repair-tmdb-evidence-plan.md`: repair may now also split on TMDB evidence (the other
+> title exists on TMDB only as films other than this one), so its result depends on TMDB being up.
+
 Only on **strong evidence**, only in non-confirmed films. In a film whose originals have different comparison titles:
 
 - **Split** when exactly one same-title group's comparison title equals the film's own (normalised the same way) and
