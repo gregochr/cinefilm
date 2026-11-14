@@ -10,7 +10,8 @@
       "sizeBytes": 14200000000,
       "presence": "PRESENT",
       "editionId": 101,
-      "partNumber": 1
+      "partNumber": 1,
+      "modifiedAt": "2026-11-14T09:12:00Z"
     },
     {
       "id": 12,
@@ -22,7 +23,8 @@
       "sizeBytes": 15000000000,
       "presence": "PRESENT",
       "editionId": 102,
-      "partNumber": 1
+      "partNumber": 1,
+      "modifiedAt": "2026-07-01T08:05:00Z"
     },
     {
       "id": 13,
@@ -34,7 +36,8 @@
       "sizeBytes": 11800000000,
       "presence": "PRESENT",
       "editionId": 103,
-      "partNumber": 1
+      "partNumber": 1,
+      "modifiedAt": null
     }
   ],
   "editions": [

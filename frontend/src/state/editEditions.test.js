@@ -22,8 +22,13 @@ const towers = () => initialModel(adminEditions);
 
 describe('fileMeta', () => {
   it('reads runtime, resolution, codec and size', () => {
-    expect(fileMeta(adminEditions.files[0])).toBe('1h 54m · 1080p · HEVC · 14.2 GB');
-    expect(fileMeta(adminEditions.files[1])).toBe('2h 1m · 1080p · HEVC · 15.0 GB');
+    expect(fileMeta(adminEditions.files[0])).toBe(
+      '1h 54m · 1080p · HEVC · 14.2 GB · 14 Nov 2026, 09:12',
+    );
+    expect(fileMeta(adminEditions.files[1])).toBe(
+      '2h 1m · 1080p · HEVC · 15.0 GB · 1 Jul 2026, 09:05',
+    );
+    expect(fileMeta(adminEditions.files[2])).toBe('2h 59m · 1080p · HEVC · 11.8 GB');
   });
 
   it('leaves out what is unknown and shows small files in megabytes', () => {
@@ -31,6 +36,23 @@ describe('fileMeta', () => {
     expect(
       fileMeta({ durationMs: 45 * 60000, width: 1280, videoCodec: 'H.264', sizeBytes: 650e6 }),
     ).toBe('45m · 720p · H.264 · 650 MB');
+  });
+});
+
+describe('fileMeta modified time', () => {
+  const base = { durationMs: 0, width: null, videoCodec: null, sizeBytes: null };
+
+  it('shows the time in Europe/London, summer time included, with a day without a leading zero', () => {
+    expect(fileMeta({ ...base, modifiedAt: '2026-11-04T09:12:00Z' })).toBe('4 Nov 2026, 09:12');
+    expect(fileMeta({ ...base, modifiedAt: '2026-07-01T08:05:00Z' })).toBe('1 Jul 2026, 09:05');
+    expect(fileMeta({ ...base, modifiedAt: '2026-11-14T09:12:00Z' })).toBe('14 Nov 2026, 09:12');
+    expect(fileMeta({ ...base, modifiedAt: '2026-09-14T09:12:00Z' })).toBe('14 Sep 2026, 10:12');
+  });
+
+  it('leaves it out when it is null, missing or not a date', () => {
+    expect(fileMeta({ ...base, sizeBytes: 650e6, modifiedAt: null })).toBe('650 MB');
+    expect(fileMeta({ ...base, sizeBytes: 650e6 })).toBe('650 MB');
+    expect(fileMeta({ ...base, sizeBytes: 650e6, modifiedAt: 'yesterday' })).toBe('650 MB');
   });
 });
 
