@@ -81,7 +81,7 @@ describe('Home hero backdrop crop', () => {
       renderApp('/');
       const hero = await screen.findByRole('region', { name: 'Resume Taken' });
       const backdrop = within(within(hero).getByTestId('art')).getByAltText('');
-      expect(getComputedStyle(backdrop).objectPosition).toBe('50% 15%');
+      expect(getComputedStyle(backdrop).objectPosition).toBe('50% 0%');
     } finally {
       style.remove();
     }

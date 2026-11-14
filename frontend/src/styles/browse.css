@@ -260,8 +260,9 @@
   aspect-ratio: auto;
 }
 .hero__art .art__img {
-  /* Crop from near the top: the hero box is about 3:1, and a centred crop of a 16:9 still cuts off heads. */
-  object-position: 50% 15%;
+  /* The hero box is about 3:1, so a 16:9 still overflows it vertically. Anchor the image at its top edge so nothing is
+     cut from the top and the crop comes off the bottom, under the scrim and the text. */
+  object-position: 50% 0%;
 }
 .hero__scrim {
   position: absolute;
