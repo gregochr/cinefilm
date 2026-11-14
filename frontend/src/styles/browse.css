@@ -259,6 +259,10 @@
   border-radius: 0;
   aspect-ratio: auto;
 }
+.hero__art .art__img {
+  /* Crop from near the top: the hero box is about 3:1, and a centred crop of a 16:9 still cuts off heads. */
+  object-position: 50% 15%;
+}
 .hero__scrim {
   position: absolute;
   inset: 0;
