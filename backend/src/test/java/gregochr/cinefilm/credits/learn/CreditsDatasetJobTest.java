@@ -741,6 +741,54 @@ class CreditsDatasetJobTest {
     }
 
     @Test
+    void anErrorDuringPreparationEndsFailedAndDoesNotEscapeTheTask() {
+        targetIds(1);
+        targets.duringList = () -> {
+            throw new AssertionError("boom");
+        };
+        job.start();
+
+        drain();
+
+        assertThat(job.status().state()).isEqualTo(State.FAILED);
+        assertThat(job.status().lastError()).isEqualTo("boom");
+        assertThat(queue).isEmpty();
+        // Not stuck at RUNNING: a later start is accepted.
+        targets.duringList = () -> { };
+        job.start();
+        drain();
+        assertThat(job.status().state()).isEqualTo(State.DONE);
+    }
+
+    @Test
+    void anErrorDuringAResumeEndsFailedAndDoesNotEscapeTheTask() throws IOException {
+        Files.createDirectories(props.dir());
+        Files.writeString(props.marker(), "a run was going");
+        targets.duringList = () -> {
+            throw new AssertionError("boom");
+        };
+        job.onStartup();
+
+        drain();
+
+        assertThat(job.status().state()).isEqualTo(State.FAILED);
+        assertThat(messages()).contains("Credits dataset job: not starting again: FAILED");
+    }
+
+    @Test
+    void aResumeWhoseStatusCannotBeReadLogsAWarningAndDoesNotEscapeTheTask() throws IOException {
+        targetIds(1);
+        Files.createDirectories(props.dir());
+        Files.writeString(props.marker(), "a run was going");
+        job.onStartup();
+        when(refresher.dueNotHeldBack()).thenThrow(new IllegalStateException("database is down"));
+
+        drain();
+
+        assertThat(warnings()).containsExactly("Credits dataset job: could not start again: database is down");
+    }
+
+    @Test
     void aStopThenASecondStartWhileTheFirstPreparationIsQueuedMakesTheFirstExitWithoutTouchingTheDisk()
         throws IOException {
         targetIds(1);

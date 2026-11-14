@@ -160,7 +160,8 @@ public class CreditsDatasetJob {
      * directories that are not a finished read, writes the marker and carries on with the first file. A failure there
      * leaves the state {@code FAILED} with {@code lastError}, which shows in the next status.
      *
-     * @return the status: {@code RUNNING}, with nothing counted yet
+     * @return the status: usually {@code RUNNING} with nothing counted yet; {@code FAILED} at once if the credits
+     *     thread refuses the task; a preparation that fails later shows as {@code FAILED} in the next status
      * @throws NotFoundException when the job is switched off
      * @throws ConflictException when a run is going
      */
@@ -195,7 +196,8 @@ public class CreditsDatasetJob {
             }
             adopt(gen, prepare());
             proceed(gen);
-        } catch (IOException | RuntimeException e) {
+        } catch (Throwable e) {
+            // As in task(): nothing may escape onto the credits thread and leave the run RUNNING with no task.
             fail(gen, describe(e));
         }
     }
@@ -265,6 +267,8 @@ public class CreditsDatasetJob {
                 state == State.RUNNING ? "starting again" : "not starting again: " + state);
         } catch (Declined e) {
             LOG.info("Credits dataset job: not starting again: stopped or started meanwhile");
+        } catch (RuntimeException e) {
+            LOG.warn("Credits dataset job: could not start again: {}", describe(e));
         }
     }
 
