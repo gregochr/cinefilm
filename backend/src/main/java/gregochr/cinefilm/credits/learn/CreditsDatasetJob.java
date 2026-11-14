@@ -268,13 +268,12 @@ public class CreditsDatasetJob {
             return;
         }
         prepareAndGo(gen);
-        try {
-            State state = status().state();
-            LOG.info("Credits dataset job: {}",
-                state == State.RUNNING ? "starting again" : "not starting again: " + state);
-        } catch (RuntimeException e) {
-            LOG.warn("Credits dataset job: started again, but its status could not be read: {}", describe(e));
+        // The state is read under the lock, not through status(), which asks the database and the disk.
+        State state;
+        synchronized (lock) {
+            state = this.state;
         }
+        LOG.info("Credits dataset job: {}", state == State.RUNNING ? "starting again" : "not starting again: " + state);
     }
 
     /**

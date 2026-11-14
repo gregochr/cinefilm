@@ -776,20 +776,21 @@ class CreditsDatasetJobTest {
     }
 
     @Test
-    void aResumeWhoseStatusCannotBeReadLogsAWarningAndDoesNotEscapeTheTask() throws IOException {
+    void aResumeNeverReadsTheStatusSoAFailingDiskOrDatabaseCannotAffectIt() throws IOException {
         targetIds(1);
         Files.createDirectories(props.dir());
         Files.writeString(props.marker(), "a run was going");
-        // The disk read inside the status fails once, with an unchecked exception that freeBytes does not catch.
-        disk.duringRead = once(() -> {
+        disk.duringRead = () -> {
             throw new SecurityException("no access");
-        });
+        };
         job.onStartup();
 
         queue.poll().run();
 
-        assertThat(warnings()).containsExactly(
-            "Credits dataset job: started again, but its status could not be read: no access");
+        assertThat(disk.reads).isZero();
+        assertThat(warnings()).isEmpty();
+        assertThat(messages()).contains("Credits dataset job: starting again");
+        disk.duringRead = () -> { };
         assertThat(job.status().state()).isEqualTo(State.RUNNING);
         drain();
         assertThat(job.status().state()).isEqualTo(State.DONE);
