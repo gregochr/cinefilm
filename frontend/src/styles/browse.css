@@ -1345,8 +1345,8 @@
 }
 .action-hint__text {
   margin: 0;
-  color: #8a8173;
-  font-size: 12px;
+  color: var(--cf-text-hint);
+  font-size: var(--cf-size-label);
   line-height: 1.4;
 }
 .action-hint--row .action-hint__text {

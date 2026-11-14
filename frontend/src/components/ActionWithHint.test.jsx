@@ -44,6 +44,21 @@ describe('ActionWithHint', () => {
     expect(screen.getByRole('button', { name: 'Go' })).toHaveClass('btn--secondary');
   });
 
+  // The alignment is a media-query-only CSS rule, so the layout class is the one thing to assert (style-only exception).
+  it('takes a layout class for its alignment: row by default, line when asked', () => {
+    render(
+      <>
+        <ActionWithHint hint="Row hint.">Row</ActionWithHint>
+        <ActionWithHint layout="line" hint="Line hint.">
+          Line
+        </ActionWithHint>
+      </>,
+    );
+    const [row, line] = screen.getAllByTestId('action-hint');
+    expect(row).toHaveClass('action-hint--row');
+    expect(line).toHaveClass('action-hint--line');
+  });
+
   it('keeps an aria-label as the name and the hint as the description', () => {
     render(
       <ActionWithHint hint="Hint." aria-label="Go now">

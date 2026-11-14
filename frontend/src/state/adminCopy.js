@@ -61,12 +61,12 @@ export const buttons = {
   // Later phases.
   confirmGuess: {
     label: (title, year) => `Yes, it’s ${title} (${year})`,
-    hint: 'Confirms the guess and fetches its poster and details.',
+    hint: 'Confirms the guess and fetches its poster and details',
     source: 'AR1',
   },
   searchEnglishSubtitles: {
     label: 'Search for English subtitles…',
-    hint: 'Shows OpenSubtitles results for this film so you can pick one.',
+    hint: 'Shows OpenSubtitles results for this film so you can pick one',
     source: 'AR1',
   },
   addMyFile: {
@@ -76,18 +76,19 @@ export const buttons = {
   },
   useItAnyway: {
     label: 'Use it anyway',
-    hint: 'Plays that file with the film; you can adjust timing while watching.',
+    hint: 'Plays that file with the film; you can adjust timing while watching',
     source: 'AR1',
   },
   searchAgain: { label: 'Search again…', source: 'AR1' },
+  // Owner's answer Q3 replaces 07's "Yes, find forced subtitles…" (the forced list now holds films with none found).
   findForced: {
-    label: 'Yes, find forced subtitles…',
-    hint: 'Answers the one question: does this English film have foreign dialogue?',
-    source: '07',
+    label: 'Find forced subtitles…',
+    hint: 'Searches OpenSubtitles for a file that only covers the foreign scenes.',
+    source: 'plan',
   },
   noForeignScenes: {
     label: 'No foreign scenes',
-    hint: '“No foreign scenes” marks it done and stops asking.',
+    hint: '“No foreign scenes” marks it done and stops asking',
     source: 'AR1',
   },
   letCineFilmDecide: {

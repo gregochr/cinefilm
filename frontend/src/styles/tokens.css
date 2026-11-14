@@ -15,6 +15,7 @@
   /* Text */
   --cf-text: #ede6da; /* primary */
   --cf-text-2: #d5ccbe; /* secondary (meta, plot) */
+  --cf-text-hint: #8a8173; /* the hint line under an Admin button */
   --cf-text-muted: #a39a8b; /* labels, captions — 4.5:1+ on --cf-bg */
   --cf-text-disabled: #6f675b;
   --cf-on-poster: rgba(255, 248, 236, 0.9);

@@ -29,11 +29,6 @@ const SEVEN = [
   ],
   ['tryPlex', 'Try connecting to Plex', 'Checks whether the Plex server answers now.'],
   [
-    'findForced',
-    'Yes, find forced subtitles…',
-    'Answers the one question: does this English film have foreign dialogue?',
-  ],
-  [
     'letCineFilmDecide',
     'Let CineFilm decide',
     'Forgets your choice; CineFilm decides from the film’s languages again.',
@@ -63,7 +58,27 @@ const SEVEN = [
   ['stopStream', 'Stop this stream', 'Ends playback on that device; it can resume later.'],
 ];
 
+// reference/AR1-ToDo.dc.html: the hints under the row buttons, with no trailing full stop.
+const AR1 = [
+  ['confirmGuess', 'Confirms the guess and fetches its poster and details'],
+  ['searchEnglishSubtitles', 'Shows OpenSubtitles results for this film so you can pick one'],
+  ['useItAnyway', 'Plays that file with the film; you can adjust timing while watching'],
+  ['noForeignScenes', '“No foreign scenes” marks it done and stops asking'],
+];
+
 describe('adminCopy buttons', () => {
+  it.each(AR1)('%s says what AR1 says', (key, hint) => {
+    expect(buttons[key]).toMatchObject({ hint, source: 'AR1' });
+  });
+
+  it("uses the owner's Q3 wording for the forced-subtitle search, not 07's", () => {
+    expect(buttons.findForced).toEqual({
+      label: 'Find forced subtitles…',
+      hint: 'Searches OpenSubtitles for a file that only covers the foreign scenes.',
+      source: 'plan',
+    });
+  });
+
   it.each(SEVEN)('%s says what 07 says', (key, label, hint) => {
     expect(buttons[key]).toMatchObject({ label, hint, source: '07' });
   });

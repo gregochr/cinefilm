@@ -17,7 +17,10 @@ export function ActionWithHint({
 }) {
   const hintId = useId();
   return (
-    <div className={['action-hint', `action-hint--${layout}`, className].filter(Boolean).join(' ')}>
+    <div
+      data-testid="action-hint"
+      className={['action-hint', `action-hint--${layout}`, className].filter(Boolean).join(' ')}
+    >
       <Button variant={variant} aria-describedby={hint ? hintId : undefined} {...rest}>
         {children}
       </Button>
