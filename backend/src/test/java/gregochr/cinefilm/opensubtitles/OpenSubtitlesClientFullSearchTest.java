@@ -27,6 +27,7 @@ import org.springframework.web.client.RestClient;
 class OpenSubtitlesClientFullSearchTest {
 
     private static final String KEY = "secret-key-123";
+    // No parameter at its default value (e.g. hearing_impaired=include): the API answers 301 to any.
     private static final String FULL_URL = "https://api.opensubtitles.com/api/v1/subtitles?foreign_parts_only=exclude"
         + "&imdb_id=936501&languages=en";
 
@@ -55,7 +56,7 @@ class OpenSubtitlesClientFullSearchTest {
     }
 
     @Test
-    void theFullSearchKeepsFullResultsAndTheForcedSearchStillAsksForForcedOnesAndNeitherSendsADefaultParameter() {
+    void theFullSearchKeepsFullResultsWhileTheForcedSearchKeepsForcedOnes() {
         server.expect(once(), requestTo(FULL_URL)).andRespond(withSuccess(
             page(item(1), item(2).set("foreign_parts_only", "false")), MediaType.APPLICATION_JSON));
         server.expect(once(), requestTo(
