@@ -254,7 +254,7 @@ class ForcedNeedQueriesTest extends SubtitleTestBase {
         List<NeedRow> rows = films.findNeedRows();
 
         assertThat(rows).extracting(NeedRow::title, NeedRow::osCandidatesMissing)
-            .contains(org.assertj.core.api.Assertions.tuple("A none", true),
+            .containsExactly(org.assertj.core.api.Assertions.tuple("A none", true),
                 org.assertj.core.api.Assertions.tuple("B empty", false),
                 org.assertj.core.api.Assertions.tuple("C full", false));
         // The search scheduler's own query picks the film with no stored candidates and not the others.

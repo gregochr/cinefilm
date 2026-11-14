@@ -123,15 +123,6 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
                    java.time.Instant languagesFetchedAt, ForcedNeedChoice owner, String imdbId,
                    Integer osForcedCount, java.time.Instant osSearchedAt, String osSearchedImdbId,
                    boolean osCandidatesMissing) {
-
-        /** A row whose candidates are stored (the common case, and what the need rules do not depend on). */
-        public NeedRow(Long id, String title, Integer year, Long tmdbId, String originalLanguage,
-                       String spokenLanguages, java.time.Instant languagesFetchedAt, ForcedNeedChoice owner,
-                       String imdbId, Integer osForcedCount, java.time.Instant osSearchedAt,
-                       String osSearchedImdbId) {
-            this(id, title, year, tmdbId, originalLanguage, spokenLanguages, languagesFetchedAt, owner, imdbId,
-                osForcedCount, osSearchedAt, osSearchedImdbId, false);
-        }
     }
 
     /**

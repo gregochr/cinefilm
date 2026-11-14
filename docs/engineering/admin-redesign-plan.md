@@ -194,7 +194,7 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
 
 - One pure backend class `AdminTodoRules` with `unresolvedFull(row)`, `unresolvedForced(row)`, `beingChecked…`, and
   the "confident match" rule (top stored score ≥ `ACCEPT_SCORE + 1`, and the candidate alone or leading the second by
-  ≥ `MARGIN + 1`; only a tagged guard refusal is a single candidate, stored at 100). The summary and both list services call it, so rail, To do and Subtitles agree.
+  ≥ `MARGIN + 1`; a tagged guard refusal is stored as one candidate at 100). The summary and both list services call it, so rail, To do and Subtitles agree.
   - **Full unresolved:** `NEEDED`, no full subtitle playing, and no automatic download due or pending for it
     (`DownloadPlan` Kind.FULL, OpenSubtitles full candidates not yet searched → "being checked"). `UNKNOWN` (no TMDB
     answer) is counted under "Everything else", not listed.

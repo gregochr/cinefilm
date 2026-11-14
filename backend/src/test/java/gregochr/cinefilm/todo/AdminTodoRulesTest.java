@@ -255,6 +255,14 @@ class AdminTodoRulesTest {
     }
 
     @Test
+    void aFilmWithNoImdbIdIsUnresolvedEvenWithCandidatesMissing() {
+        ForcedFacts facts = new ForcedFacts(true, false, false, 3, true, true, true, true);
+
+        assertThat(AdminTodoRules.unresolvedForced(facts)).isTrue();
+        assertThat(AdminTodoRules.beingCheckedForced(facts)).isFalse();
+    }
+
+    @Test
     void storedCandidatesLeaveASearchedForcedRowToTheDownloadRule() {
         ForcedFacts nothingDue = new ForcedFacts(true, false, true, 3, false, false, true, true);
 
@@ -320,9 +328,12 @@ class AdminTodoRulesTest {
                         FullFacts f = new FullFacts(true, false, true, searched, due, search, downloads);
                         assertThat(AdminTodoRules.unresolvedFull(f) ^ AdminTodoRules.beingCheckedFull(f)).isTrue();
                         for (Integer count : new Integer[] {null, 0, 2}) {
-                            ForcedFacts g = new ForcedFacts(true, false, true, count, false, due, search, downloads);
-                            assertThat(AdminTodoRules.unresolvedForced(g) ^ AdminTodoRules.beingCheckedForced(g))
-                                .isTrue();
+                            for (boolean missing : new boolean[] {false, true}) {
+                                ForcedFacts g = new ForcedFacts(true, false, true, count, missing, due, search,
+                                    downloads);
+                                assertThat(AdminTodoRules.unresolvedForced(g)
+                                    ^ AdminTodoRules.beingCheckedForced(g)).isTrue();
+                            }
                         }
                     }
                 }

@@ -101,7 +101,7 @@ class ForcedNeedServiceTest {
 
     private static NeedRow row(long id, String title, Long tmdbId, String original, String spoken, Instant asked,
                                ForcedNeedChoice owner) {
-        return new NeedRow(id, title, 2000, tmdbId, original, spoken, asked, owner, null, null, null, null);
+        return new NeedRow(id, title, 2000, tmdbId, original, spoken, asked, owner, null, null, null, null, false);
     }
 
     private static NeedRow english(long id, String title) {
@@ -417,11 +417,12 @@ class ForcedNeedServiceTest {
 
     /** An English-only film (rule 7 says NOT_NEEDED) with an OpenSubtitles search of {@code searchedFor}. */
     private static NeedRow searched(String imdbId, Integer count, String searchedFor) {
-        return new NeedRow(1L, "Taken", 2008, 8681L, "en", "en", ASKED, null, imdbId, count, NOW, searchedFor);
+        return new NeedRow(1L, "Taken", 2008, 8681L, "en", "en", ASKED, null, imdbId, count, NOW, searchedFor, false);
     }
 
     private static NeedRow otherLanguages(String imdbId, Integer count, String searchedFor) {
-        return new NeedRow(1L, "Taken", 2008, 8681L, "en", "en,fr", ASKED, null, imdbId, count, NOW, searchedFor);
+        return new NeedRow(1L, "Taken", 2008, 8681L, "en", "en,fr", ASKED, null, imdbId, count, NOW, searchedFor,
+            false);
     }
 
     @Test
@@ -509,7 +510,7 @@ class ForcedNeedServiceTest {
     @Test
     void theOwnersChoiceAndAFileStillBeatAnOpenSubtitlesCount() {
         NeedRow owner = new NeedRow(1L, "Taken", 2008, 8681L, "en", "en", ASKED, ForcedNeedChoice.NOT_NEEDED,
-            "tt0936501", 7, NOW, "tt0936501");
+            "tt0936501", 7, NOW, "tt0936501", false);
 
         FilmNeedDto dto = listed(owner);
 
@@ -670,7 +671,7 @@ class ForcedNeedServiceTest {
 
     private static NeedRow needed(long id, String title, String imdbId, Integer count, String searchedFor) {
         return new NeedRow(id, title, 2000, id * 10, "en", "en", ASKED, ForcedNeedChoice.NEEDED, imdbId, count, NOW,
-            searchedFor);
+            searchedFor, false);
     }
 
     /** Seven films in every state the rule tells apart; film 6 has a forced subtitle served. */
@@ -682,7 +683,8 @@ class ForcedNeedServiceTest {
             needed(4, "Coming", "tt4", 5, "tt4"),
             needed(5, "Stuck", "tt5", 5, "tt5"),
             needed(6, "Plays", "tt6", 5, "tt6"),
-            new NeedRow(7L, "Heat", 2000, 70L, "en", "en", ASKED, ForcedNeedChoice.NOT_NEEDED, "tt7", 5, NOW, "tt7")));
+            new NeedRow(7L, "Heat", 2000, 70L, "en", "en", ASKED, ForcedNeedChoice.NOT_NEEDED, "tt7", 5, NOW, "tt7",
+                false)));
         when(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED)).thenReturn(List.of(6L));
         when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(6L));
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of());
