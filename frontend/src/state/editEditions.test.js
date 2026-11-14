@@ -46,6 +46,7 @@ describe('fileMeta modified time', () => {
     expect(fileMeta({ ...base, modifiedAt: '2026-11-04T09:12:00Z' })).toBe('4 Nov 2026, 09:12');
     expect(fileMeta({ ...base, modifiedAt: '2026-07-01T08:05:00Z' })).toBe('1 Jul 2026, 09:05');
     expect(fileMeta({ ...base, modifiedAt: '2026-11-14T09:12:00Z' })).toBe('14 Nov 2026, 09:12');
+    expect(fileMeta({ ...base, modifiedAt: '2026-09-14T09:12:00Z' })).toBe('14 Sep 2026, 10:12');
   });
 
   it('leaves it out when it is null, missing or not a date', () => {

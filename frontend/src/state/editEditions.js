@@ -24,10 +24,12 @@ function sizeLabel(bytes) {
   return `${Math.round(bytes / 1e6)} MB`;
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 const MODIFIED = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Europe/London',
   day: 'numeric',
-  month: 'short',
+  month: 'numeric',
   year: 'numeric',
   hour: '2-digit',
   minute: '2-digit',
@@ -40,7 +42,7 @@ function modifiedLabel(iso) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
   const p = Object.fromEntries(MODIFIED.formatToParts(date).map((part) => [part.type, part.value]));
-  return `${p.day} ${p.month} ${p.year}, ${p.hour}:${p.minute}`;
+  return `${Number(p.day)} ${MONTHS[Number(p.month) - 1]} ${p.year}, ${p.hour}:${p.minute}`;
 }
 
 /** "1h 54m · 1080p · HEVC · 14.2 GB · 14 Nov 2026, 09:12", with what is unknown left out. */

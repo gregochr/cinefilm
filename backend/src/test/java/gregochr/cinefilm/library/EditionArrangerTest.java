@@ -32,6 +32,7 @@ import gregochr.cinefilm.library.EditionDtos.FileRequest;
 import gregochr.cinefilm.library.EditionDtos.SaveRequest;
 import gregochr.cinefilm.library.EditionDtos.SaveResult;
 import gregochr.cinefilm.playback.PlaybackState;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -45,7 +46,7 @@ class EditionArrangerTest extends ApiTestBase {
     private static final String PT2 = "Towers/The Two Towers {edition-Extended Edition} - pt2.m4v";
     private static final String THEATRICAL = "Towers/The Two Towers {edition-Theatrical Cut}.m4v";
 
-    private static final Instant PT1_MODIFIED = Instant.parse("2026-11-14T09:12:00Z");
+    private static final Instant PT1_MODIFIED = NOW.minus(Duration.ofDays(30));
 
     @Autowired
     private EditionArranger arranger;
