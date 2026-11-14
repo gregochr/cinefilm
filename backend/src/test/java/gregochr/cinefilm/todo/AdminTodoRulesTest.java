@@ -319,20 +319,61 @@ class AdminTodoRulesTest {
     }
 
     @Test
-    void withEveryOpenSubtitlesSwitchTheInPlayRowsAreStillExactlyOneOfTheTwo() {
+    void everyFullCombinationMatchesTheDocumentedTruthTable() {
         boolean[] both = {true, false};
-        for (boolean search : both) {
-            for (boolean downloads : both) {
-                for (boolean searched : both) {
-                    for (boolean due : both) {
-                        FullFacts f = new FullFacts(true, false, true, searched, due, search, downloads);
-                        assertThat(AdminTodoRules.unresolvedFull(f) ^ AdminTodoRules.beingCheckedFull(f)).isTrue();
-                        for (Integer count : new Integer[] {null, 0, 2}) {
-                            for (boolean missing : new boolean[] {false, true}) {
-                                ForcedFacts g = new ForcedFacts(true, false, true, count, missing, due, search,
-                                    downloads);
-                                assertThat(AdminTodoRules.unresolvedForced(g)
-                                    ^ AdminTodoRules.beingCheckedForced(g)).isTrue();
+        for (boolean needed : both) {
+            for (boolean plays : both) {
+                for (boolean imdb : both) {
+                    for (boolean searched : both) {
+                        for (boolean due : both) {
+                            for (boolean search : both) {
+                                for (boolean downloads : both) {
+                                    FullFacts f = new FullFacts(needed, plays, imdb, searched, due, search,
+                                        downloads);
+                                    // The documented rule, written out: in play when needed with nothing playing;
+                                    // being checked when it has an IMDb id and either the search is still to come
+                                    // (and on) or a download is due (and on); unresolved is the rest of in play.
+                                    boolean inPlay = needed && !plays;
+                                    boolean checked = inPlay && imdb && (!searched && search || due && downloads);
+                                    assertThat(AdminTodoRules.beingCheckedFull(f)).isEqualTo(checked);
+                                    assertThat(AdminTodoRules.unresolvedFull(f)).isEqualTo(inPlay && !checked);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    void everyForcedCombinationMatchesTheDocumentedTruthTable() {
+        boolean[] both = {true, false};
+        for (boolean needed : both) {
+            for (boolean has : both) {
+                for (boolean imdb : both) {
+                    for (Integer count : new Integer[] {null, 0, 2}) {
+                        for (boolean missing : both) {
+                            for (boolean due : both) {
+                                for (boolean search : both) {
+                                    for (boolean downloads : both) {
+                                        ForcedFacts g = new ForcedFacts(needed, has, imdb, count, missing, due,
+                                            search, downloads);
+                                        // In play when needed with no subtitle served. Being checked when it has an
+                                        // IMDb id and either the search is still to come or its candidates are
+                                        // missing (needs search on), or files were found and a download is due
+                                        // (needs downloads on).
+                                        boolean inPlay = needed && !has;
+                                        boolean checked = inPlay && imdb
+                                            && (missing || count == null ? search : count > 0 && due && downloads);
+                                        assertThat(AdminTodoRules.beingCheckedForced(g)).isEqualTo(checked);
+                                        assertThat(AdminTodoRules.unresolvedForced(g)).isEqualTo(inPlay && !checked);
+                                        if (!inPlay) {
+                                            assertThat(AdminTodoRules.beingCheckedForced(g)
+                                                || AdminTodoRules.unresolvedForced(g)).isFalse();
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
