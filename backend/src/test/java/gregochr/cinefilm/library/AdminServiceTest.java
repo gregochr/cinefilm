@@ -213,8 +213,9 @@ class AdminServiceTest extends ApiTestBase {
             assertThat(item.detail()).isEqualTo("2 possible matches");
             assertThat(item.files()).containsExactly("Dune.m4v");
             assertThat(item.candidates()).containsExactly(
-                new AdminDtos.CandidateDto(841, "Dune", 1984, 136, "/p.jpg"),
-                new AdminDtos.CandidateDto(438631, "Dune", 2021, null, null));
+                new AdminDtos.CandidateDto(841, "Dune", 1984, 136, "/p.jpg", 50),
+                new AdminDtos.CandidateDto(438631, "Dune", 2021, null, null, 50));
+            assertThat(item.confident()).isFalse();
         });
     }
 

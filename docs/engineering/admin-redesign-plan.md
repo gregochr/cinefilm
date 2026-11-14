@@ -24,6 +24,9 @@ that depend on an answer say so and are not started until it comes.
   `REFUSED_SCORE = 60`; `AdminService` maps to `CandidateDto` without it. Phase 3b adds `confident` to the
   attention item. The board's "82% sure" has no honest mapping from points, so the percentage is **dropped**; the row
   says "best guess: {Title} ({year})".
+- **Old stored scores.** Match candidates stored before 3b-1 hold rounded scores, and a tagged guard-refused match was
+  stored at 60. `confident` needs a top score above 60, so those rows read as not confident until the next scan
+  rewrites them: the safe side, a one-off. New rows hold floored scores and a tagged refusal is stored at 100.
 - **`minutes` rows are already documented** (`foundation-plan.md`, "Playback health API"): seven figures
   `[minute, median kbit/s, rung played, ms moved, ms stalled, seconds buffered ahead, rung being fetched]`, or five
   in older records. The bundle's guessed layout is wrong. The list route strips `minutes`; the per-minute view
@@ -96,7 +99,8 @@ One PR per phase, each from updated `main`, built by Sonnet, gated by CLAUDE.md 
 | 1 | `feat(admin)` | Shell: nested routes, `AdminContext`, rail and phone tabs, redirects; panels move unchanged | — |
 | 2 | `refactor(admin)` | `state/adminCopy.js`, `ActionWithHint`, every Admin label/hint | Q4 for one hint |
 | 3a | `feat(health)` | Health columns + backfill, filtered/paged query, `FILM_SESSION_MIN_MS` both sides | — |
-| 3b | `feat(admin)` | `GET /api/admin/summary`, the shared unresolved rule, `confident`, `originalLanguage` | Q3 |
+| 3b-1 | `feat(subtitles)` | `AdminTodoRules`, unresolved/beingChecked, originalLanguage, confident+score | Q3 |
+| 3b-2 | `feat(admin)` | `GET /api/admin/summary` | 3b-1 |
 | 3c | `feat(admin)` | To do page: status strip, four bounded groups, empty state, rail counts | — |
 | 4a | `feat(subtitles)` | Subtitles section: two tabs, owner choices, "Everything else" | Q3 |
 | 4b | `feat(subtitles)` | Backend: edition-scoped OpenSubtitles search and download | — |
@@ -189,7 +193,8 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
 ### 3b · Summary endpoint and the shared rules (backend)
 
 - One pure backend class `AdminTodoRules` with `unresolvedFull(row)`, `unresolvedForced(row)`, `beingChecked…`, and
-  the "confident match" rule (top candidate score ≥ `ACCEPT_SCORE` with the lead, or the single guard-refused
+  the "confident match" rule (top stored score ≥ `ACCEPT_SCORE + 1`, and the candidate alone or leading the second by
+  ≥ `MARGIN + 1`; a tagged guard refusal is stored as one candidate at 100, and a title search may also leave a single
   candidate). The summary and both list services call it, so rail, To do and Subtitles agree.
   - **Full unresolved:** `NEEDED`, no full subtitle playing, and no automatic download due or pending for it
     (`DownloadPlan` Kind.FULL, OpenSubtitles full candidates not yet searched → "being checked"). `UNKNOWN` (no TMDB

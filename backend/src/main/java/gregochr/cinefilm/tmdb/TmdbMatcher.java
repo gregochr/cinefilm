@@ -27,9 +27,9 @@ import org.springframework.stereotype.Component;
 public class TmdbMatcher {
 
     /** Minimum score for an automatic match. Exact title alone (50) is not enough; with the year or runtime it is. */
-    static final int ACCEPT_SCORE = 60;
+    public static final int ACCEPT_SCORE = 60;
     /** How far ahead of the second candidate the best must be. */
-    static final int MARGIN = 10;
+    public static final int MARGIN = 10;
     static final int MAX_CANDIDATES = 5;
     static final long RUNTIME_TOLERANCE_MS = 8 * 60_000L;
     private static final double EXACT_TITLE = 50;
@@ -134,7 +134,10 @@ public class TmdbMatcher {
     private static Candidate candidate(Ranked r) {
         return new Candidate(r.hit().id(), r.details() != null ? r.details().title() : r.hit().title(), r.year(),
             r.runtime(), r.details() != null ? r.details().posterPath() : r.hit().posterPath(),
-            (int) Math.round(r.total()));
+            // Floored, never rounded, so a stored score is never above the real one. Rows stored before this change
+            // were rounded, so AdminTodoRules.confident needs a score of at least ACCEPT_SCORE + 1 and a lead of at
+            // least MARGIN + 1: neither old nor new rows can then claim more than the matcher's accept test allows.
+            (int) Math.floor(r.total()));
     }
 
     private record Scored(SearchHit hit, double score) {

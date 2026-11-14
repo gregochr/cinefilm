@@ -264,9 +264,10 @@ describe('Admin: Films needing attention panel', () => {
     const panel = await screen.findByRole('region', { name: 'Films needing attention' });
     const items = await within(panel).findAllByRole('listitem');
 
-    expect(items).toHaveLength(5 + 2);
+    expect(items).toHaveLength(6 + 3);
     expect(within(panel).getByText('The Wicker Man')).toBeInTheDocument();
-    expect(within(panel).getByText('Unmatched')).toBeInTheDocument();
+    expect(within(panel).getAllByText('Unmatched')).toHaveLength(2);
+    expect(within(panel).getByText('1 possible match')).toBeInTheDocument();
     expect(within(panel).getByText('2 possible matches')).toBeInTheDocument();
     expect(within(panel).getByText('The Wicker Man.m4v')).toBeInTheDocument();
     expect(within(panel).getByText('Kes (1969)')).toBeInTheDocument();
@@ -295,7 +296,7 @@ describe('Admin: Films needing attention panel', () => {
   it('shows the candidates of an unmatched film read-only, with year and runtime', async () => {
     installFetch();
     renderApp('/admin');
-    const candidates = await screen.findByRole('list', { name: 'Possible matches' });
+    const candidates = (await screen.findAllByRole('list', { name: 'Possible matches' }))[0];
 
     const [first, second] = within(candidates).getAllByRole('listitem');
     expect(first).toHaveTextContent('The Wicker Man (1973) · 1h 33m');
@@ -312,7 +313,14 @@ describe('Admin: Films needing attention panel', () => {
               {
                 ...fixtures.adminAttention.items[0],
                 candidates: [
-                  { tmdbId: 1, title: 'Dune', year: 1984, runtimeMinutes: null, posterPath: null },
+                  {
+                    tmdbId: 1,
+                    title: 'Dune',
+                    year: 1984,
+                    runtimeMinutes: null,
+                    posterPath: null,
+                    score: 50,
+                  },
                 ],
               },
               fixtures.adminAttention.items[1],

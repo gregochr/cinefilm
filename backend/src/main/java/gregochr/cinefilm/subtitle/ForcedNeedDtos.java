@@ -25,23 +25,31 @@ public final class ForcedNeedDtos {
      * @param openSubtitlesForcedCount how many English foreign-parts-only subtitles OpenSubtitles had when last
      *     searched for the film's current IMDb id; null when it has not been searched (or the IMDb id changed since)
      * @param openSubtitlesSearchedAt when that search was made; null with the count
+     * @param unresolved true when the need is {@code NEEDED}, no forced subtitle is served and nothing automatic is
+     *     still to come: the owner has to act (see {@code AdminTodoRules})
+     * @param beingChecked true when the need is {@code NEEDED}, no forced subtitle is served and an automatic search
+     *     or download is still to come
      */
     public record FilmNeedDto(Long filmId, String title, Integer year, String need, String reason,
                               String ownerChoice, String originalLanguage, List<String> spokenLanguages,
                               boolean hasForcedSubtitle, Integer openSubtitlesForcedCount,
-                              Instant openSubtitlesSearchedAt) {
+                              Instant openSubtitlesSearchedAt, boolean unresolved, boolean beingChecked) {
     }
 
     /**
      * How many films are in each state.
      *
      * @param needed films whose need is {@code NEEDED}
-     * @param neededMissing of those, the ones with no forced subtitle file attached
+     * @param neededMissing of those, the ones with no forced subtitle playback would serve
+     *     ({@code hasForcedSubtitle} false)
      * @param unsure films that are {@code UNSURE}
      * @param unknown films that are {@code UNKNOWN}
      * @param notNeeded films that are {@code NOT_NEEDED}
+     * @param unresolved films whose row is {@code unresolved}
+     * @param beingChecked films whose row is {@code beingChecked}
      */
-    public record CountsDto(int needed, int neededMissing, int unsure, int unknown, int notNeeded) {
+    public record CountsDto(int needed, int neededMissing, int unsure, int unknown, int notNeeded, int unresolved,
+                            int beingChecked) {
     }
 
     /**

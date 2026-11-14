@@ -25,6 +25,7 @@ import gregochr.cinefilm.plex.RuntimeSignal;
 import gregochr.cinefilm.subtitle.SidecarCheckRefresher;
 import gregochr.cinefilm.ratings.RatingsRefresher;
 import gregochr.cinefilm.tmdb.MatchOutcome.Candidate;
+import gregochr.cinefilm.todo.AdminTodoRules;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -108,7 +109,8 @@ public class AdminService {
             List<CandidateDto> candidates = candidates(film);
             String detail = candidates.isEmpty() ? "No match found on TMDB"
                 : candidates.size() + (candidates.size() == 1 ? " possible match" : " possible matches");
-            items.add(item("needs-match", film, detail, fileNames(film), candidates));
+            boolean confident = AdminTodoRules.confident(candidates.stream().map(CandidateDto::score).toList());
+            items.add(item("needs-match", film, detail, fileNames(film), candidates, confident));
         }
         addFiles(items, Playability.PROTECTED, "protected", "Protected by FairPlay, so it can't be played");
         addFiles(items, Playability.NEEDS_CONVERSION, "needs-conversion",
@@ -269,8 +271,13 @@ public class AdminService {
 
     private static AttentionItem item(String kind, Film film, String detail, List<String> names,
                                       List<CandidateDto> candidates) {
+        return item(kind, film, detail, names, candidates, false);
+    }
+
+    private static AttentionItem item(String kind, Film film, String detail, List<String> names,
+                                      List<CandidateDto> candidates, boolean confident) {
         return new AttentionItem(kind, film.getId(), film.getTitle(), film.getYear(),
-            detail, names, candidates);
+            detail, names, candidates, confident);
     }
 
     /** Names of the film's original files (every part) that are on disk. */
@@ -297,7 +304,7 @@ public class AdminService {
         try {
             List<Candidate> stored = JSON.readValue(film.getMatchCandidates(), new TypeReference<>() { });
             return stored.stream().map(c -> new CandidateDto(c.tmdbId(), c.title(), c.year(), c.runtimeMinutes(),
-                c.posterPath())).toList();
+                c.posterPath(), c.score())).toList();
         } catch (JacksonException e) {
             return List.of();
         }

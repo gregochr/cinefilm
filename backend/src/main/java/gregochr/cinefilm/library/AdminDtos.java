@@ -81,8 +81,10 @@ public final class AdminDtos {
      * @param year release year, or null
      * @param runtimeMinutes runtime in minutes, or null
      * @param posterPath poster path, or null
+     * @param score the match score TMDB's matcher gave it (accepted automatically at 60 with a lead of 10)
      */
-    public record CandidateDto(long tmdbId, String title, Integer year, Integer runtimeMinutes, String posterPath) {
+    public record CandidateDto(long tmdbId, String title, Integer year, Integer runtimeMinutes, String posterPath,
+                               int score) {
     }
 
     /**
@@ -95,9 +97,11 @@ public final class AdminDtos {
      * @param detail a one-line explanation
      * @param files the original file names involved
      * @param candidates TMDB candidates (needs-match only, otherwise empty)
+     * @param confident true only for a needs-match item whose best candidate is confident (see
+     *     {@code AdminTodoRules.confident}); false for every other kind
      */
     public record AttentionItem(String kind, Long filmId, String title, Integer year, String detail,
-                                List<String> files, List<CandidateDto> candidates) {
+                                List<String> files, List<CandidateDto> candidates, boolean confident) {
     }
 
     /**

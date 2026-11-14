@@ -63,7 +63,7 @@ describe('Full subtitles: the list', () => {
     await open();
     expect(screen.getByRole('heading', { level: 3, name: 'Full subtitles' })).toBeVisible();
     expect(chip(/^Needed/)).toHaveAttribute('aria-pressed', 'true');
-    expect(titles()).toEqual(['Das Boot (1981)', 'Rashomon (1950)']);
+    expect(titles()).toEqual(['Das Boot (1981)', 'Rashomon (1950)', 'Come and See (1985)']);
   });
 
   it('shows the chips Needed, Unsure and Not needed with their counts', async () => {
@@ -72,7 +72,7 @@ describe('Full subtitles: the list', () => {
       within(screen.getByRole('group', { name: 'Show full subtitles' }))
         .getAllByRole('button')
         .map((b) => b.textContent),
-    ).toEqual(['Needed (2)', 'Unsure (1)', 'Not needed (1)']);
+    ).toEqual(['Needed (3)', 'Unsure (1)', 'Not needed (1)']);
   });
 
   it('switches the list with the chips and marks the chosen chip pressed', async () => {
@@ -267,10 +267,10 @@ describe('Full subtitles: the owner’s choice', () => {
       screen.getByRole('button', { name: 'Full subtitles not needed: Das Boot (1981)' }),
     );
 
-    await waitFor(() => expect(titles()).toEqual(['Rashomon (1950)']));
+    await waitFor(() => expect(titles()).toEqual(['Rashomon (1950)', 'Come and See (1985)']));
     expect(state.puts).toEqual([{ filmId: 3, body: { choice: 'NOT_NEEDED' } }]);
     expect(state.lists).toBe(1);
-    expect(chip(/^Needed/)).toHaveTextContent('(1)');
+    expect(chip(/^Needed/)).toHaveTextContent('(2)');
     expect(chip(/^Not needed/)).toHaveTextContent('(2)');
 
     await userEvent.click(chip(/^Not needed/));
@@ -288,7 +288,7 @@ describe('Full subtitles: the owner’s choice', () => {
     );
     await waitFor(() => expect(chip(/^Not needed/)).toHaveTextContent('(0)'));
     expect(state.puts).toEqual([{ filmId: 4, body: { choice: 'NEEDED' } }]);
-    expect(chip(/^Needed/)).toHaveTextContent('(3)');
+    expect(chip(/^Needed/)).toHaveTextContent('(4)');
   });
 
   it('sends null for Automatic', async () => {
@@ -311,7 +311,7 @@ describe('Full subtitles: the owner’s choice', () => {
     expect(
       screen.getByRole('button', { name: 'Full subtitles automatic: Das Boot (1981)' }),
     ).toHaveAttribute('aria-pressed', 'true');
-    expect(titles()).toEqual(['Das Boot (1981)', 'Rashomon (1950)']);
+    expect(titles()).toEqual(['Das Boot (1981)', 'Rashomon (1950)', 'Come and See (1985)']);
   });
 
   it('says it could not save for any other failure, on that film only', async () => {
@@ -362,7 +362,7 @@ describe('Full subtitles: loading and failing', () => {
     expect(
       await screen.findByText(/Couldn.t refresh which films need full subtitles/),
     ).toBeVisible();
-    expect(titles()).toEqual(['Das Boot (1981)', 'Rashomon (1950)']);
+    expect(titles()).toEqual(['Das Boot (1981)', 'Rashomon (1950)', 'Come and See (1985)']);
     fail = false;
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() =>

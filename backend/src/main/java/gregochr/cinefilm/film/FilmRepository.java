@@ -116,10 +116,13 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
      * @param osForcedCount how many foreign-parts-only files OpenSubtitles had, or null when never searched
      * @param osSearchedAt when OpenSubtitles was last searched, or null
      * @param osSearchedImdbId the IMDb id that search was for, or null
+     * @param osCandidatesMissing true when no candidates are stored ({@code os_candidates} null): the search
+     *     scheduler ({@link #findOpenSubtitlesDue}) fills them in whatever the count
      */
     record NeedRow(Long id, String title, Integer year, Long tmdbId, String originalLanguage, String spokenLanguages,
                    java.time.Instant languagesFetchedAt, ForcedNeedChoice owner, String imdbId,
-                   Integer osForcedCount, java.time.Instant osSearchedAt, String osSearchedImdbId) {
+                   Integer osForcedCount, java.time.Instant osSearchedAt, String osSearchedImdbId,
+                   boolean osCandidatesMissing) {
     }
 
     /**
@@ -275,7 +278,8 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
     @org.springframework.data.jpa.repository.Query(
         "select new gregochr.cinefilm.film.FilmRepository$NeedRow(f.id, f.title, f.year, f.tmdbId, "
             + "f.originalLanguage, f.spokenLanguages, f.languagesFetchedAt, f.forcedNeedOwner, "
-            + "f.imdbId, f.osForcedCount, f.osSearchedAt, f.osSearchedImdbId) from Film f "
+            + "f.imdbId, f.osForcedCount, f.osSearchedAt, f.osSearchedImdbId, "
+            + "case when f.osCandidates is null then true else false end) from Film f "
             + "order by f.sortTitle, f.id")
     List<NeedRow> findNeedRows();
 
@@ -301,6 +305,28 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
             + "f.originalLanguage, f.spokenLanguages, f.languagesFetchedAt, f.fullNeedOwner) from Film f "
             + "order by f.sortTitle, f.id")
     List<FullNeedRow> findFullNeedRows();
+
+    /**
+     * Whether a film's full-subtitle search is current, from the columns alone (the candidates' text is not read).
+     *
+     * @param id the film
+     * @param imdbId its current IMDb id
+     * @param searchedImdbId the IMDb id the full search was for, or null
+     * @param hasCandidates true when the search stored a result (the array may be empty)
+     */
+    record OsFullState(Long id, String imdbId, String searchedImdbId, boolean hasCandidates) {
+
+        /** True when the film has an IMDb id and a full search stored a result for that id. */
+        public boolean searched() {
+            return imdbId != null && imdbId.equals(searchedImdbId) && hasCandidates;
+        }
+    }
+
+    /** Every film with an IMDb id and what its full-subtitle search stored (no candidates text). */
+    @org.springframework.data.jpa.repository.Query(
+        "select new gregochr.cinefilm.film.FilmRepository$OsFullState(f.id, f.imdbId, f.osFullSearchedImdbId, "
+            + "case when f.osFullCandidates is null then false else true end) from Film f where f.imdbId is not null")
+    List<OsFullState> findOpenSubtitlesFullStates();
 
     /** When ratings were last fetched for any film, or null when never. */
     @org.springframework.data.jpa.repository.Query("select max(f.ratingsFetchedAt) from Film f")

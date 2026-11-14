@@ -15,7 +15,6 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.subtitle.DownloadPlan.Kind;
 import gregochr.cinefilm.subtitle.ForcedChoice.FileSide;
-import gregochr.cinefilm.subtitle.ForcedNeedDtos.FilmNeedDto;
 import gregochr.cinefilm.subtitle.ForcedResolver.Resolution;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -133,12 +132,7 @@ public class ForcedDownloadService {
     }
 
     private List<DueDownload> forcedDue() {
-        Set<Long> neededFilmIds = new HashSet<>();
-        for (FilmNeedDto film : need.list().films()) {
-            if ("NEEDED".equals(film.need())) {
-                neededFilmIds.add(film.filmId());
-            }
-        }
+        Set<Long> neededFilmIds = need.neededFilmIds();
         Map<Long, OsBestRef> best = new HashMap<>();
         for (OsBestRef ref : films.findOpenSubtitlesBest()) {
             best.put(ref.id(), ref);
@@ -163,6 +157,11 @@ public class ForcedDownloadService {
             OsBestRef ref = best.get(edition.getFilm().getId());
             if (ref.osCandidates() == null) {
                 continue;
+            }
+            if (resolution.decision().step() == ForcedChoice.Step.FAILED_FILE_DROPPED && kind(resolution).isPresent()) {
+                LOG.info("Edition {}: the owner's file failed its checks and looks like full subtitles ({} lines): "
+                    + "nothing is shown until a replacement is proven", edition.getId(),
+                    resolution.filePick().slots().stream().mapToInt(x -> x.sidecar().getCueCount()).sum());
             }
             DueDownload item = dueFor(edition, resolution, ref, allBlocks, allLedger, allDownloads,
                 storedByFilm.getOrDefault(ref.id(), Map.of()).getOrDefault(ref.imdbId(), Map.of()));
@@ -211,7 +210,12 @@ public class ForcedDownloadService {
         return due;
     }
 
-    private DueDownload fullDueFor(Edition edition, OsFullRef ref, List<ForcedDownloadBlock> allBlocks,
+    /**
+     * The scheduler's decision for one edition's full download, pure over bulk-loaded facts: null when nothing is to
+     * be downloaded for it. {@code PendingDownloads} calls this too, so what Admin calls "being checked" is exactly
+     * what the scheduler would act on.
+     */
+    static DueDownload fullDueFor(Edition edition, OsFullRef ref, List<ForcedDownloadBlock> allBlocks,
                                    List<ForcedCheckCandidate> allLedger, List<SubtitleSidecar> allFull,
                                    Map<Long, OpenSubtitlesReference> stored) {
         if (!DownloadPlan.fullDue(hasOwnerFile(edition, allFull), hasDownload(edition, allFull))) {
@@ -238,7 +242,7 @@ public class ForcedDownloadService {
     }
 
     /** True when a present owner's full file with lines is attached to one of the edition's parts. */
-    private static boolean hasOwnerFile(Edition edition, List<SubtitleSidecar> allFull) {
+    static boolean hasOwnerFile(Edition edition, List<SubtitleSidecar> allFull) {
         List<Long> partIds = partIdsOf(edition);
         return allFull.stream().anyMatch(s -> !s.isDownload() && s.getPresence() == Presence.PRESENT
             && s.getCueCount() > 0 && partIds.contains(s.getMediaFileId()));
@@ -249,7 +253,7 @@ public class ForcedDownloadService {
      * {@code hasLiveDownload}. A download that is not present does not suppress a retry; removed files stay counted
      * by the cap through their blocks.
      */
-    private static boolean hasDownload(Edition edition, List<SubtitleSidecar> allFull) {
+    static boolean hasDownload(Edition edition, List<SubtitleSidecar> allFull) {
         return allFull.stream().anyMatch(s -> s.isDownload() && Downloads.madeFor(edition, s)
             && s.getPresence() == Presence.PRESENT && s.getCueCount() > 0);
     }
@@ -258,17 +262,17 @@ public class ForcedDownloadService {
         return edition.originalParts().stream().map(MediaFile::getId).toList();
     }
 
-    private DueDownload dueFor(Edition edition, Resolution resolution, OsBestRef ref,
+    /**
+     * The scheduler's decision for one edition's forced download, pure over bulk-loaded facts: null when nothing is to
+     * be downloaded for it (not due, no single-file candidate, none left after blocks, the ledger and spent
+     * references, or the cap reached). {@code PendingDownloads} calls this too.
+     */
+    static DueDownload dueFor(Edition edition, Resolution resolution, OsBestRef ref,
                                List<ForcedDownloadBlock> allBlocks, List<ForcedCheckCandidate> allLedger,
                                List<SubtitleSidecar> allDownloads, Map<Long, OpenSubtitlesReference> stored) {
         Optional<Kind> kind = kind(resolution);
         if (kind.isEmpty()) {
             return null;
-        }
-        if (resolution.decision().step() == ForcedChoice.Step.FAILED_FILE_DROPPED) {
-            LOG.info("Edition {}: the owner's file failed its checks and looks like full subtitles ({} lines): "
-                + "nothing is shown until a replacement is proven", edition.getId(),
-                resolution.filePick().slots().stream().mapToInt(x -> x.sidecar().getCueCount()).sum());
         }
         List<OpenSubtitlesResult> ranked = OpenSubtitlesRanking.rankFor(
             OpenSubtitlesResult.listFromJson(ref.osCandidates()).stream().filter(OpenSubtitlesResult::isSingleFile)
@@ -299,7 +303,7 @@ public class ForcedDownloadService {
     }
 
     /** Why (and whether) an edition is due, from its resolution (the need is already shown). */
-    private static Optional<Kind> kind(Resolution resolution) {
+    static Optional<Kind> kind(Resolution resolution) {
         FileSide file = resolution.fileAssessment() == null ? null : new FileSide(resolution.fileAssessment(),
             resolution.filePick().slots().stream().mapToInt(s -> s.sidecar().getCueCount()).sum());
         return DownloadPlan.kind(true, resolution.fileConflict(), file, resolution.decision().hasLiveDownload(),
@@ -310,7 +314,7 @@ public class ForcedDownloadService {
      * The OpenSubtitles file ids already used up for an edition, IMDb id and kind: its downloads and the ones removed.
      * A download or block of the other kind never counts.
      */
-    private static Set<Long> skippedFileIds(Edition edition, String imdbId, SubtitleKind kind,
+    static Set<Long> skippedFileIds(Edition edition, String imdbId, SubtitleKind kind,
                                             List<ForcedDownloadBlock> allBlocks, List<SubtitleSidecar> allDownloads) {
         Set<Long> skipped = new HashSet<>();
         allBlocks.stream().filter(b -> b.getKind() == kind && b.getEditionId().equals(edition.getId())

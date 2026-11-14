@@ -26,9 +26,6 @@ import gregochr.cinefilm.subtitle.ForcedChoice.DownloadSide;
 import gregochr.cinefilm.subtitle.ForcedChoice.FileSide;
 import gregochr.cinefilm.subtitle.ForcedChoice.Input;
 import gregochr.cinefilm.subtitle.ForcedDownloadService.AddOutcome;
-import gregochr.cinefilm.subtitle.ForcedNeedDtos.CountsDto;
-import gregochr.cinefilm.subtitle.ForcedNeedDtos.FilmNeedDto;
-import gregochr.cinefilm.subtitle.ForcedNeedDtos.NeedListDto;
 import gregochr.cinefilm.subtitle.ForcedResolver.DownloadState;
 import gregochr.cinefilm.subtitle.ForcedResolver.Resolution;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Pick;
@@ -37,6 +34,7 @@ import gregochr.cinefilm.subtitle.SidecarTrust.Assessment;
 import gregochr.cinefilm.subtitle.SidecarTrust.Proof;
 import gregochr.cinefilm.subtitle.SidecarTrust.Trust;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -164,9 +162,7 @@ class ForcedDownloadServiceUnitTest {
     }
 
     private void needed(boolean isNeeded) {
-        FilmNeedDto dto = new FilmNeedDto(1L, "Taken", 2008, isNeeded ? "NEEDED" : "UNSURE", "OPENSUBTITLES", null,
-            "en", List.of("en"), false, 2, NOW);
-        when(need.list()).thenReturn(new NeedListDto(List.of(dto), new CountsDto(1, 1, 0, 0, 0)));
+        when(need.neededFilmIds()).thenReturn(isNeeded ? new HashSet<>(Set.of(1L)) : new HashSet<>());
     }
 
     private void searched() {

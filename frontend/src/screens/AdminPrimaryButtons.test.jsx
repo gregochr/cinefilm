@@ -40,7 +40,7 @@ const SUBTITLE_TABS = [
   'Needed: Das Boot (1981)',
   'Not needed: Das Boot (1981)',
   'Automatic: Das Boot (1981)',
-  'Needed (2)',
+  'Needed (3)',
   'Unsure (1)',
   'Not needed (1)',
   'Full subtitles needed: Das Boot (1981)',
@@ -51,6 +51,10 @@ const SUBTITLE_TABS = [
   'Full subtitles not needed: Rashomon (1950)',
   'Full subtitles automatic: Rashomon (1950)',
   'Show the full subtitle files of Rashomon (1950)',
+  'Full subtitles needed: Come and See (1985)',
+  'Full subtitles not needed: Come and See (1985)',
+  'Full subtitles automatic: Come and See (1985)',
+  'Show the full subtitle files of Come and See (1985)',
   'All (1)',
   'Forced (1)',
   'Full (0)',
@@ -131,7 +135,11 @@ const LIBRARY_BUTTONS = [
 
 // Every button each section renders, by accessible name, in page order.
 const CASES = [
-  { name: 'To do', path: '/admin', buttons: ['Find the film…', 'Sort out editions…'] },
+  {
+    name: 'To do',
+    path: '/admin',
+    buttons: ['Find the film…', 'Sort out editions…', 'Find the film…'],
+  },
   {
     name: 'Subtitles, a file a download replaced',
     path: '/admin/subtitles',
@@ -265,9 +273,10 @@ describe('Admin: the only amber button', () => {
       });
       renderApp(c.path);
       await screen.findByRole('heading', { level: 1 });
-      await screen.findByRole('button', { name: c.buttons[0] });
+      // findAll: a name may repeat (two unmatched films each have "Find the film…").
+      await screen.findAllByRole('button', { name: c.buttons[0] });
       if (c.steps) await c.steps();
-      for (const name of c.buttons) await screen.findByRole('button', { name });
+      for (const name of c.buttons) await screen.findAllByRole('button', { name });
 
       const rendered = screen.getAllByRole('button');
       expect(rendered.map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual(c.buttons);

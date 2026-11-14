@@ -189,4 +189,31 @@ class FilmOpenSubtitlesFullQueriesTest extends ApiTestBase {
         assertThat(film.getOsFullSearchedImdbId()).isNull();
         assertThat(film.getOsFullSearchedAt()).isNull();
     }
+
+    @Test
+    void theSearchStatesCoverEveryFilmWithAnImdbIdAndSayWhetherTheSearchIsCurrent() {
+        Long nullCandidates = searched("A null", "tt0000001", "tt0000001", null, NOW);
+        Long emptyArray = searched("B empty", "tt0000002", "tt0000002", "[]", NOW);
+        Long full = searched("C results", "tt0000003", "tt0000003", CANDIDATES, NOW);
+        Long other = searched("D other id", "tt0000004", "tt0000009", CANDIDATES, NOW);
+        Long neverSearched = films.saveAndFlush(unsearched("E never", "tt0000005")).getId();
+        films.saveAndFlush(unsearched("F no id", null));
+        entityManager.clear();
+
+        List<FilmRepository.OsFullState> states = films.findOpenSubtitlesFullStates();
+
+        assertThat(states).extracting(FilmRepository.OsFullState::id)
+            .containsExactlyInAnyOrder(nullCandidates, emptyArray, full, other, neverSearched);
+        assertThat(searchedIds(states)).containsExactlyInAnyOrder(emptyArray, full);
+        FilmRepository.OsFullState empty = states.stream().filter(st -> st.id().equals(emptyArray)).findFirst()
+            .orElseThrow();
+        assertThat(empty.hasCandidates()).isTrue();
+        assertThat(empty.imdbId()).isEqualTo("tt0000002");
+        assertThat(empty.searchedImdbId()).isEqualTo("tt0000002");
+    }
+
+    private static List<Long> searchedIds(List<FilmRepository.OsFullState> states) {
+        return states.stream().filter(FilmRepository.OsFullState::searched).map(FilmRepository.OsFullState::id)
+            .toList();
+    }
 }

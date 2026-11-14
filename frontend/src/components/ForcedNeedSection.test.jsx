@@ -103,7 +103,7 @@ describe('Which films need them: the list', () => {
       screen.getByRole('group', { name: `Forced subtitles for ${name}` }).closest('li');
     const taken = within(item('Taken (2008)'));
     expect(taken.getByText('Needed', { selector: 'span' })).toBeVisible();
-    expect(taken.getByText('Also spoken: French, Russian (TMDB)')).toBeVisible();
+    expect(taken.getByText('OpenSubtitles has 2 foreign-parts-only files')).toBeVisible();
     expect(taken.getByText('None yet')).toBeVisible();
     const basterds = within(item('Inglourious Basterds (2009)'));
     expect(basterds.getByText('Forced subtitle file attached')).toBeVisible();

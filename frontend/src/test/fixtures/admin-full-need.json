@@ -7,8 +7,18 @@
       "need": "NEEDED",
       "reason": "FOREIGN_AUDIO",
       "ownerChoice": null,
-      "editions": [{ "name": "Original", "audio": "German" }],
-      "fullSubtitle": { "source": "SIDECAR" }
+      "editions": [
+        {
+          "name": "Original",
+          "audio": "German"
+        }
+      ],
+      "fullSubtitle": {
+        "source": "SIDECAR"
+      },
+      "originalLanguage": "de",
+      "unresolved": false,
+      "beingChecked": false
     },
     {
       "filmId": 4,
@@ -17,8 +27,16 @@
       "need": "NOT_NEEDED",
       "reason": "ENGLISH_AUDIO",
       "ownerChoice": null,
-      "editions": [{ "name": "Original", "audio": "English" }],
-      "fullSubtitle": null
+      "editions": [
+        {
+          "name": "Original",
+          "audio": "English"
+        }
+      ],
+      "fullSubtitle": null,
+      "originalLanguage": "fr",
+      "unresolved": false,
+      "beingChecked": false
     },
     {
       "filmId": 5,
@@ -28,10 +46,21 @@
       "reason": "NO_LANGUAGES",
       "ownerChoice": null,
       "editions": [
-        { "name": "Theatrical Cut", "audio": null },
-        { "name": "Director's Cut", "audio": "French" }
+        {
+          "name": "Theatrical Cut",
+          "audio": null
+        },
+        {
+          "name": "Director's Cut",
+          "audio": "French"
+        }
       ],
-      "fullSubtitle": { "source": "DOWNLOAD" }
+      "fullSubtitle": {
+        "source": "DOWNLOAD"
+      },
+      "originalLanguage": null,
+      "unresolved": false,
+      "beingChecked": false
     },
     {
       "filmId": 6,
@@ -41,8 +70,36 @@
       "reason": "OWNER",
       "ownerChoice": "NEEDED",
       "editions": [],
-      "fullSubtitle": null
+      "fullSubtitle": null,
+      "originalLanguage": "ja",
+      "unresolved": true,
+      "beingChecked": false
+    },
+    {
+      "filmId": 7,
+      "title": "Come and See",
+      "year": 1985,
+      "need": "NEEDED",
+      "reason": "FOREIGN_AUDIO",
+      "ownerChoice": null,
+      "editions": [
+        {
+          "name": "Original",
+          "audio": "Russian"
+        }
+      ],
+      "fullSubtitle": null,
+      "originalLanguage": "ru",
+      "unresolved": false,
+      "beingChecked": true
     }
   ],
-  "counts": { "needed": 2, "unsure": 0, "unknown": 1, "notNeeded": 1 }
+  "counts": {
+    "needed": 3,
+    "unsure": 0,
+    "unknown": 1,
+    "notNeeded": 1,
+    "unresolved": 1,
+    "beingChecked": 1
+  }
 }
