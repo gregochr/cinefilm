@@ -718,7 +718,7 @@ class CreditsDatasetJobTest {
     }
 
     @Test
-    void aStartUpResumeThatFindsTheJobAlreadyRunningSaysSoAndChangesNothing() throws IOException {
+    void aQueuedResumeThatFindsTheJobStartedMeanwhileSaysSoAndChangesNothing() throws IOException {
         targetIds(1);
         Files.createDirectories(props.dir());
         Files.writeString(props.marker(), "a run was going");

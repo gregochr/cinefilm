@@ -148,10 +148,23 @@ public class CreditsDatasetJob {
      * @throws ConflictException when a run is going
      */
     public DatasetStatus start() {
+        return start(false);
+    }
+
+    /** A resume that finds the job started or stopped since it was queued is refused by {@link #begin}. */
+    private static final class Declined extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        Declined() {
+            super("The resume is no longer wanted", null, false, false);
+        }
+    }
+
+    private DatasetStatus start(boolean resumeOnly) {
         if (!props.enabled()) {
             throw new NotFoundException("The dataset job is off");
         }
-        long gen = begin();
+        long gen = begin(resumeOnly);
         if (props.overlapsReaderDir()) {
             fail(gen, "The dataset directory or the output directory is inside the credits detection's work "
                 + "directory, which is wiped at start-up (cinefilm.credits.dataset.dir, "
@@ -231,19 +244,11 @@ public class CreditsDatasetJob {
     }
 
     private void resume() {
-        boolean idle;
-        synchronized (lock) {
-            idle = state == State.IDLE;
-        }
-        // The task may run long after it was queued: a stop deletes the marker, and a start leaves IDLE.
-        if (!idle || !props.overlapsReaderDir() && !Files.exists(props.marker())) {
-            LOG.info("Credits dataset job: not starting again: stopped or started meanwhile");
-            return;
-        }
         try {
-            LOG.info("Credits dataset job: {}", start().state() == State.FAILED ? "could not start" : "starting again");
-        } catch (ConflictException e) {
-            LOG.info("Credits dataset job: already running, not starting again");
+            LOG.info("Credits dataset job: {}",
+                start(true).state() == State.FAILED ? "could not start" : "starting again");
+        } catch (Declined e) {
+            LOG.info("Credits dataset job: not starting again: stopped or started meanwhile");
         }
     }
 
@@ -273,8 +278,13 @@ public class CreditsDatasetJob {
     // ---- Starting ------------------------------------------------------------------------------------------------
 
     /** Takes a new generation and resets the run; refused while one is going. */
-    private long begin() {
+    private long begin(boolean resumeOnly) {
         synchronized (lock) {
+            // The task may run long after it was queued: a stop deletes the marker, and a start leaves IDLE. The check
+            // and the take-over are one step, so a stop cannot land between them.
+            if (resumeOnly && (state != State.IDLE || !props.overlapsReaderDir() && !Files.exists(props.marker()))) {
+                throw new Declined();
+            }
             if (state == State.RUNNING) {
                 throw new ConflictException("The dataset job is already running");
             }

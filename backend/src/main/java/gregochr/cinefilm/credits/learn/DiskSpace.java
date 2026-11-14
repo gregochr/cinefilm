@@ -1,6 +1,7 @@
 package gregochr.cinefilm.credits.learn;
 
 import java.io.IOException;
+import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.springframework.stereotype.Component;
@@ -18,10 +19,15 @@ public class DiskSpace {
      * @throws IOException when the disk cannot be read
      */
     public long usableBytes(Path dir) throws IOException {
+        return store(dir).getUsableSpace();
+    }
+
+    /** The disk a directory is on; a directory that does not exist yet is on its nearest existing parent's. */
+    FileStore store(Path dir) throws IOException {
         Path existing = dir.toAbsolutePath();
         while (!Files.exists(existing)) {
             existing = existing.getParent();
         }
-        return Files.getFileStore(existing).getUsableSpace();
+        return Files.getFileStore(existing);
     }
 }
