@@ -278,10 +278,19 @@ public class ScanService {
         return outcome;
     }
 
-    /** Repair, then auto-resolve: neither needs TMDB, and a failure leaves the work for the next scan. */
+    /**
+     * Repair (which asks TMDB when it can, and tells the scan when TMDB is down), then auto-resolve (which does not
+     * need TMDB). A failure leaves the work for the next scan, and a repair failure never skips the auto-resolve.
+     */
     private void groupLibrary(Run run) {
         try {
-            grouping.repair();
+            LibraryGrouping.RepairResult repaired = grouping.repair(!run.tmdbDown && tmdb.enabled());
+            run.tmdbDown |= repaired.tmdbDown();
+        } catch (RuntimeException e) {
+            run.failed++;
+            LOG.warn("Could not repair the library: {}", e.getClass().getSimpleName());
+        }
+        try {
             grouping.group();
         } catch (RuntimeException e) {
             run.failed++;

@@ -52,6 +52,8 @@ class ScanServiceResilienceTest {
         service = new ScanService(new LibraryRoot(library.toString()), scanner, ffprobe, tmdb, matcher, ingest,
             Runnable::run, CLOCK, new LibraryLock(), event -> { }, grouping, sidecars);
         when(tmdb.enabled()).thenReturn(true);
+        when(grouping.repair(true)).thenReturn(new LibraryGrouping.RepairResult(0, false));
+        when(grouping.repair(false)).thenReturn(new LibraryGrouping.RepairResult(0, false));
         when(ingest.startRun("admin", CLOCK.instant())).thenReturn(5L);
         when(ingest.known()).thenReturn(Map.of());
         when(scanner.scan()).thenReturn(new Found(List.of(), 0));

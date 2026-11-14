@@ -236,6 +236,11 @@ class RatingsRefresherTest {
         }
 
         @Override
+        public List<String> alternativeTitles(long id) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public Optional<CollectionDetails> collection(long id) {
             throw new UnsupportedOperationException();
         }

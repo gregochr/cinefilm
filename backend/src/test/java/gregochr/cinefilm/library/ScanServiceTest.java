@@ -70,6 +70,8 @@ class ScanServiceTest {
         deferred = new ScanService(root, scanner, ffprobe, tmdb, matcher, ingest, queued::add, CLOCK,
             new LibraryLock(), events::add, grouping, sidecars);
         when(tmdb.enabled()).thenReturn(true);
+        when(grouping.repair(true)).thenReturn(new LibraryGrouping.RepairResult(0, false));
+        when(grouping.repair(false)).thenReturn(new LibraryGrouping.RepairResult(0, false));
         when(ingest.startRun("admin", CLOCK.instant())).thenReturn(5L);
         when(ingest.known()).thenReturn(Map.of());
     }

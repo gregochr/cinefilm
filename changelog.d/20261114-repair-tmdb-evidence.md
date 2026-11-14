@@ -1,0 +1,3 @@
+### Fixed — Films filed under the wrong title are split automatically when TMDB shows they are different films
+
+When a film held a file that was really another film, such as "Enchanted" filed under "Elf", the library scan only flagged it for you to sort out by hand. It now asks TMDB: if the other title exists there only as films other than this one, the file moves to a film of its own and is matched on its own. Anything TMDB cannot settle, such as a typo, an alternative title of the same film, an edition-tagged copy or a TMDB outage, stays flagged as before.

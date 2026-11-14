@@ -16,6 +16,10 @@ import gregochr.cinefilm.film.MediaKind;
 import gregochr.cinefilm.library.RepairRules.Decision;
 import gregochr.cinefilm.library.RepairRules.Kind;
 import gregochr.cinefilm.library.RepairRules.TitleGroup;
+import gregochr.cinefilm.tmdb.TmdbApi;
+import gregochr.cinefilm.tmdb.TmdbModels.MovieDetails;
+import gregochr.cinefilm.tmdb.TmdbModels.SearchHit;
+import gregochr.cinefilm.tmdb.TmdbUnavailableException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -26,6 +30,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,13 +61,15 @@ public class LibraryGrouping {
     private final GroupingChangeRepository changes;
     private final EditionJoin join;
     private final LibraryIngest ingest;
+    private final TmdbApi tmdb;
     private final TransactionTemplate tx;
     private final Clock clock;
 
     /** Creates the passes over the repositories, the join, the ingest (for film merges), a clock and transactions. */
     public LibraryGrouping(FilmRepository films, EditionRepository editions, MediaFileRepository files,
                            FilmPreferenceRepository preferences, GroupingChangeRepository changes, EditionJoin join,
-                           LibraryIngest ingest, PlatformTransactionManager transactions, Clock clock) {
+                           LibraryIngest ingest, TmdbApi tmdb, PlatformTransactionManager transactions,
+                           Clock clock) {
         this.films = films;
         this.editions = editions;
         this.files = files;
@@ -70,6 +77,7 @@ public class LibraryGrouping {
         this.changes = changes;
         this.join = join;
         this.ingest = ingest;
+        this.tmdb = tmdb;
         this.tx = new TransactionTemplate(transactions);
         this.clock = clock;
     }
@@ -94,21 +102,46 @@ public class LibraryGrouping {
     }
 
     /**
-     * Library repair: a film whose files have different comparison titles is split on strong evidence (the other titles
-     * move whole to a new pending film, which the scan then matches) and otherwise flagged, never guessed at.
+     * What a repair pass did.
      *
-     * @return how many films were split or newly flagged
+     * @param done how many films were split or newly flagged
+     * @param tmdbDown true when TMDB could not answer, so the lookups stopped (the caller skips its own TMDB work)
      */
-    public int repair() {
+    public record RepairResult(int done, boolean tmdbDown) {
+    }
+
+    /**
+     * Library repair: a film whose files have different comparison titles is split on strong evidence (the other titles
+     * move whole to a new pending film, which the scan then matches) and otherwise flagged, never guessed at. The
+     * evidence is a sequel marker, a different {@code {tmdb-}} tag, or TMDB listing the other title as a different
+     * film. Lookups happen outside any transaction; after the first TMDB outage there are no more in this run.
+     *
+     * @param tmdbUsable false when TMDB is off or already known to be down: no lookups are made
+     * @return how many films were split or newly flagged, and whether TMDB was found to be down
+     */
+    public RepairResult repair(boolean tmdbUsable) {
         Map<Long, List<FileFact>> byFilm = new LinkedHashMap<>();
         facts().forEach(f -> byFilm.computeIfAbsent(f.filmId(), k -> new ArrayList<>()).add(f));
         int done = 0;
+        boolean down = false;
         for (List<FileFact> filmFiles : byFilm.values()) {
             FileFact any = filmFiles.get(0);
-            Decision decision = RepairRules.decide(any.filmTitle(), any.filmTmdbId(), filmFiles);
+            Set<String> different = Set.of();
+            try {
+                if (tmdbUsable && !down) {
+                    different = differentFilms(any, filmFiles);
+                }
+            } catch (TmdbUnavailableException e) {
+                down = true;
+                LOG.warn("TMDB is unavailable, repair goes on without it: {}", e.getClass().getSimpleName());
+            } catch (RuntimeException e) {
+                LOG.warn("Could not look up film {} on TMDB: {}", any.filmId(), e.getClass().getSimpleName());
+            }
+            Decision decision = RepairRules.decide(any.filmTitle(), any.filmTmdbId(), filmFiles, different);
+            Set<String> evidence = different;
             try {
                 if (decision.kind() == Kind.SPLIT) {
-                    tx.executeWithoutResult(status -> split(any, filmFiles, decision));
+                    tx.executeWithoutResult(status -> split(any, filmFiles, decision, evidence));
                     done++;
                 } else if (decision.kind() == Kind.FLAG && flag(decision.summary())) {
                     done++;
@@ -117,7 +150,36 @@ public class LibraryGrouping {
                 LOG.warn("Could not repair film {}: {}", any.filmId(), e.getClass().getSimpleName());
             }
         }
-        return done;
+        return new RepairResult(done, down);
+    }
+
+    /**
+     * The comparison titles of the film's groups that TMDB shows are different films. All or nothing for the film: a
+     * lookup that finds a group that is not a different film means no split, so the rest is not asked.
+     */
+    private Set<String> differentFilms(FileFact any, List<FileFact> filmFiles) {
+        List<TitleGroup> lookups = RepairRules.lookups(any.filmTitle(), any.filmTmdbId(), filmFiles);
+        if (lookups.isEmpty()) {
+            return Set.of();
+        }
+        long reference = RepairRules.reference(any.filmTitle(), any.filmTmdbId(), filmFiles);
+        Set<String> referenceTitles = new LinkedHashSet<>(tmdb.alternativeTitles(reference));
+        Optional<MovieDetails> movie = tmdb.movie(reference);
+        movie.map(MovieDetails::title).ifPresent(referenceTitles::add);
+        movie.map(MovieDetails::originalTitle).ifPresent(referenceTitles::add);
+        Set<String> different = new LinkedHashSet<>();
+        for (TitleGroup group : lookups) {
+            List<SearchHit> hits = new ArrayList<>(tmdb.search(group.title(), group.year()));
+            boolean exact = hits.stream().anyMatch(h -> RepairRules.exactHit(h, group.comparisonTitle()));
+            if (!exact && group.year() != null) {
+                hits.addAll(tmdb.search(group.title(), null));
+            }
+            if (!RepairRules.isDifferentFilm(group.comparisonTitle(), hits, reference, referenceTitles)) {
+                return Set.of();
+            }
+            different.add(group.comparisonTitle());
+        }
+        return different;
     }
 
     /**
@@ -220,7 +282,7 @@ public class LibraryGrouping {
     }
 
     /** Moves every title group other than the film's own to a new pending film, unfolding editions that straddle. */
-    private void split(FileFact any, List<FileFact> filmFiles, Decision decision) {
+    private void split(FileFact any, List<FileFact> filmFiles, Decision decision, Set<String> byTmdb) {
         Film film = films.findById(any.filmId()).orElseThrow();
         unfoldStraddlers(filmFiles);
         List<String> moved = new ArrayList<>();
@@ -244,8 +306,12 @@ public class LibraryGrouping {
             moved.add("\"" + group.title() + "\"");
         }
         forgetMoved(any.filmId(), movedEditions);
+        boolean allByTmdb = decision.others().stream().allMatch(g -> byTmdb.contains(g.comparisonTitle()));
+        String where = !allByTmdb ? "films of their own" : moved.size() == 1
+            ? "a film of its own (TMDB lists it as a different film)"
+            : "films of their own (TMDB lists them as different films)";
         log(GroupingChange.SPLIT, "Moved " + String.join(", ", moved) + " out of \"" + any.filmTitle()
-            + "\" into films of their own");
+            + "\" into " + where);
     }
 
     /** An edition whose files belong to different title groups is unfolded into one edition per group first. */
