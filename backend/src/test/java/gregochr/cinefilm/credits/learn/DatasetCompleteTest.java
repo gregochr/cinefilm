@@ -225,4 +225,69 @@ class DatasetCompleteTest {
 
         assertThat(DatasetComplete.isCurrent(dir, "1000:1")).isFalse();
     }
+
+    /** The JSON of {@code complete("1000:1")} as an object, for a test to change one member of. */
+    private tools.jackson.databind.node.ObjectNode json() {
+        return (tools.jackson.databind.node.ObjectNode) MAPPER.valueToTree(complete("1000:1"));
+    }
+
+    @Test
+    void readReturnsWhatWasWritten() throws IOException {
+        DatasetComplete.write(dir, complete("1000:1"));
+
+        assertThat(DatasetComplete.read(dir)).contains(complete("1000:1"));
+    }
+
+    @Test
+    void readAcceptsAFileWhoseVersionsAndWrittenTimeAreNull() throws IOException {
+        DatasetComplete bare = new DatasetComplete(1, 7L, "1000:1", 600_000L, 570_000L,
+            new DatasetComplete.Window(360_000L, 600_000L), new DatasetComplete.Frame(480, 270),
+            new DatasetComplete.Area(0, 34, 480, 202), List.of(), List.of(), List.of(), null, null, null,
+            DatasetComplete.Settings.current(19), null);
+        DatasetComplete.write(dir, bare);
+
+        assertThat(DatasetComplete.read(dir)).hasValueSatisfying(complete -> {
+            assertThat(complete.ffmpegVersion()).isNull();
+            assertThat(complete.javaVersion()).isNull();
+            assertThat(complete.gitCommit()).isNull();
+            assertThat(complete.writtenAt()).isNull();
+        });
+    }
+
+    @Test
+    void readRefusesAMissingUnparseableOrOtherFormatFile() throws IOException {
+        assertThat(DatasetComplete.read(dir)).isEmpty();
+
+        writeRaw("{not json");
+        assertThat(DatasetComplete.read(dir)).isEmpty();
+
+        writeRaw("null");
+        assertThat(DatasetComplete.read(dir)).isEmpty();
+
+        writeRaw(json().put("format", 2).toString());
+        assertThat(DatasetComplete.read(dir)).isEmpty();
+
+        writeRaw(json().put("format", 0).toString());
+        assertThat(DatasetComplete.read(dir)).isEmpty();
+    }
+
+    @Test
+    void readRefusesAFileThatLacksAPartTheToolReads() throws IOException {
+        for (String part : List.of("window", "frame", "activeArea", "settings", "coarse", "dense")) {
+            writeRaw(json().without(part).toString());
+
+            assertThat(DatasetComplete.read(dir)).as("without " + part).isEmpty();
+        }
+    }
+
+    @Test
+    void readRefusesAnOffsetListWithANull() throws IOException {
+        for (String part : List.of("coarse", "dense")) {
+            tools.jackson.databind.node.ObjectNode node = json();
+            node.putArray(part).add(1).addNull();
+            writeRaw(node.toString());
+
+            assertThat(DatasetComplete.read(dir)).as("null in " + part).isEmpty();
+        }
+    }
 }

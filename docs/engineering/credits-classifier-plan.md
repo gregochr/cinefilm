@@ -309,6 +309,32 @@ For each labelled file, under `/app/cache/credits-dataset/frames/<media_file_id>
 - **Niceness:** set for each job (default 19). It is passed into the reader, which today takes niceness only from
   `cinefilm.transcode.nice`.
 
+### Measuring (L2b-2)
+
+`credits.learn.DatasetMeasureMain` is a plain class run as a throwaway container from the released image (the
+`docker run` block under "Where the code lives, and tool runs", with `-Dloader.main=...DatasetMeasureMain`). Its
+arguments are `--data /data --out /out [--ids 5,7,12] [--stills] [--project 850]`.
+
+- **It only reads `--data`** (mounted `:ro`) and writes `--out`, which must not be inside `--data`. No network, no
+  database.
+- **Four questions** before the full run and L3a:
+  1. Are the frames complete and decodable? `films.csv` has one row per film, `status` `ok`, `incomplete` (no
+     usable format-1 `complete.json`), `mismatched` (it names another file) or `damaged`, and counts of `missing`,
+     `corrupt` (not decodable, or the wrong size) and `extra` files.
+  2. How big is a film's frame set? `pngBytes`, `jpgBytes`, `totalBytes`; `summary.json` projects the dataset as the
+     `ok` films' mean size times `--project` (default 850).
+  3. How long did a film take to read? `readSeconds` is an **estimate**: `complete.json`'s `writtenAt` minus the
+     earliest modification time of the film's frame files, rounded down. It includes any wait for playback, and is
+     blank when the times are missing or the result would be negative.
+  4. What do the values look like around Plex's marker? `frames.csv` has one row per frame: its `fromTargetMs`,
+     the grey mean, percentiles (nearest rank), the shares below 35 and above 200 (measurement placeholders, as L3a
+     re-derives the real thresholds), and the colour channel means and chroma.
+- **Stills** (`--stills`): per film, in `stills/<mediaFileId>/`, the dense frames nearest to target -30, -20, -10, -5,
+  0, +5, +10, +20 and +30 s (`d-30s.jpg`/`.png` ... `d+30s`), copied unchanged, `stills.csv` (their offsets) and
+  `sheet.png`, the nine grey frames in a 3 by 3 grid. A film with no dense frames has no stills and a `note`.
+- **Exit codes:** 0 when it ran, even with damaged films (read the report); 1 on a bad flag, an unreadable `--data`
+  or an `--out` inside it; 2 when `frames/` is missing or holds no film directory.
+
 ## Two model types
 
 Both produce `p(credits)` for each frame, and both feed the same segmenter. They are compared on development

@@ -432,6 +432,48 @@ The browse URL is https://cinefilm.chrisjgregory.dev. A tab still open on the ol
 `https://dockermacmini.tail0c74fa.ts.net/` (port 443) now reaches Caddy under a name it does not serve, so every API
 call fails and pages show "The projector jammed": reopen it on the domain (or the fallback on `:8443`).
 
+## Credits classifier: the 10-film dataset trial (planner, on dockermacmini)
+
+Before the full dataset run, read about 10 films and measure them (`credits-classifier-plan.md`, "Frames: the dataset
+job" and "Measuring (L2b-2)"). Needs the released image that holds `DatasetMeasureMain`. The planner runs these steps,
+never a scheduled job.
+
+1. **Switch the job on.** It is off by default. The server reads `~/cinefilm/.env` (the compose `env_file`), and Spring
+   binds `cinefilm.credits.dataset.enabled` from the environment variable `CINEFILM_CREDITS_DATASET_ENABLED`:
+
+   ```bash
+   cd ~/cinefilm && grep -q '^CINEFILM_CREDITS_DATASET_ENABLED=' .env || echo 'CINEFILM_CREDITS_DATASET_ENABLED=true' >> .env
+   export CINEFILM_VERSION=$(cat .deployed-version) && docker compose up -d cinefilm   # recreates it with the new .env
+   ```
+
+   The directories `cache/credits-dataset` and `cache/credits-dataset-out` are made by the server (uid 1001) at the
+   job's first start. The other settings (`CINEFILM_CREDITS_DATASET_NICE`, `CINEFILM_CREDITS_DATASET_MIN_FREE_GB`)
+   keep their defaults: niceness 19 and stop below 15 GB free.
+2. **Start it.** Signed in as the owner (the `/api` routes need the session cookie, and `POST` needs `X-CineFilm: 1`):
+   `POST /api/admin/credits/dataset/start`. Do it only when `refresherDue` in the status is 0.
+3. **Watch it.** `GET /api/admin/credits/dataset`: `state`, `complete`, `failed`, `currentMediaFileId`, `freeBytes`.
+   It yields to playback and to the credits refresher, so it may sit in `WAITING`.
+4. **Stop it** at about 10 `complete` (`POST /api/admin/credits/dataset/stop`; this also removes the `running`
+   marker, so a restart does not resume it).
+5. **Measure.** The tool reads the dataset read-only and writes beside it; use the image tag that is deployed:
+
+   ```bash
+   docker run --rm --network none --cpus 1 --cpu-shares 2 --memory 3g --entrypoint nice \
+     -v ~/cinefilm-data/cache/credits-dataset:/data:ro -v ~/cinefilm-data/cache/credits-dataset-out:/out \
+     ghcr.io/gregochr/cinefilm:$(cat ~/cinefilm/.deployed-version) -n 19 java -Xmx2g \
+     -Dloader.main=gregochr.cinefilm.credits.learn.DatasetMeasureMain \
+     -cp /app/app.jar org.springframework.boot.loader.launch.PropertiesLauncher \
+     --data /data --out /out --stills
+   ```
+
+   It prints the paths it wrote and exits 0 even if a film is damaged; read `films.csv` (`status`, `missing`,
+   `corrupt`) and `summary.json` (`projectedBytes`, `meanReadSeconds`). Exit 2 means no film directory yet.
+6. **Copy the results** to the planner's folder: `cp -r ~/cinefilm-data/cache/credits-dataset-out/. ~/cinefilm-labels/`
+   (the stills under `stills/<mediaFileId>/` are for looking at, with `sheet.png` first).
+
+Switch the job off again (remove the `.env` line, `docker compose up -d cinefilm`) if the full run is not starting
+straight away.
+
 ## Deferred (not built yet)
 
 Playwright E2E and axe a11y in CI, ZAP, release changelog
