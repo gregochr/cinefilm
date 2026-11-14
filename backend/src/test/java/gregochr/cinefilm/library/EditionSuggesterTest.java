@@ -225,6 +225,8 @@ class EditionSuggesterTest {
             .isEqualTo("The names differ but the runtimes match (2h 0m)" + moveBack);
         assertThat(reasonForExcludedAt(base, base + EditionSuggester.SAME_CUT_MS))
             .isEqualTo("The names differ but the runtimes match (2h 0m)" + moveBack);
+        assertThat(reasonForExcludedAt(base + EditionSuggester.SAME_CUT_MS, base))
+            .isEqualTo("The names differ but the runtimes match (2h 0m)" + moveBack);
         assertThat(reasonForExcludedAt(base, base + EditionSuggester.SAME_CUT_MS + 1))
             .isEqualTo("The names differ but the runtimes are close (2h 0m and 2h 1m)" + moveBack);
         assertThat(reasonForExcludedAt(base + EditionSuggester.SAME_CUT_MS + 1, base))
