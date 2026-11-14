@@ -67,7 +67,7 @@ describe('Home hero', () => {
 });
 
 describe('Home hero backdrop crop', () => {
-  it('crops the backdrop from near the top so heads stay in frame (real stylesheet)', async () => {
+  it('anchors the backdrop at its top edge so heads stay in frame (real stylesheet)', async () => {
     const style = document.createElement('style');
     style.textContent = readFileSync('src/styles/browse.css', 'utf8');
     document.head.appendChild(style);
