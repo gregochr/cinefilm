@@ -33,6 +33,8 @@ public final class EditionSuggester {
     private static final String ORIGINAL = "Original";
     private static final String KEPT_APART = "Kept apart so you can compare; rename one, or mark it Not this film.";
 
+    private static final String MOVE_BACK = " — if it's the same film, move it back to keep it here";
+
     private EditionSuggester() {
     }
 
@@ -218,8 +220,16 @@ public final class EditionSuggester {
         if (a <= 0 || b <= 0) {
             return "These files may be different films";
         }
-        return "Runtimes " + minutes(Math.min(a, b)) + " and " + minutes(Math.max(a, b))
-            + " — these may be different films";
+        long shorter = Math.min(a, b);
+        long longer = Math.max(a, b);
+        if (longer - shorter <= SAME_CUT_MS) {
+            return "The names differ but the runtimes match (" + minutes(shorter) + ")" + MOVE_BACK;
+        }
+        if (longer - shorter <= DIFFERENT_CUTS_MS) {
+            return "The names differ but the runtimes are close (" + minutes(shorter) + " and " + minutes(longer)
+                + ")" + MOVE_BACK;
+        }
+        return "Runtimes " + minutes(shorter) + " and " + minutes(longer) + " — these may be different films";
     }
 
     /** Hours and minutes as the panel shows them: {@code 2h 35m}, or {@code 45m} under an hour. */

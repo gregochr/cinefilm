@@ -41,6 +41,9 @@ Before building, look at the data model from the editions/parts work (Film → E
   - "Runtimes 2h 35m and 2h 51m — likely Theatrical and Extended"
   - "Runtimes match (2h 50m) — likely copies of one cut. Kept apart so you can compare; rename one, or mark it Not this film."
   - "Runtimes 1h 31m and 1h 44m — these may be different films"
+  - When a file is set aside as Not this film because its name differs, and the runtimes are within 60 seconds or 5 minutes of each other, the line no longer says "different films" (2026-11-14, `docs/engineering/repair-tmdb-evidence-plan.md` PR A):
+    - "The names differ but the runtimes match (1h 57m) — if it's the same film, move it back to keep it here"
+    - "The names differ but the runtimes are close (1h 52m and 1h 57m) — if it's the same film, move it back to keep it here"
 - **Files, grouped by edition:**
   - One card per edition (1px `#2A251F` border, 10px radius).
   - **Group header:** on a `#1A1713` strip, the edition name in 12px uppercase, then "{n} parts · {total runtime}" (or "single file · …") in mono.
