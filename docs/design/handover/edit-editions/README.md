@@ -49,7 +49,7 @@ Before building, look at the data model from the editions/parts work (Film → E
     1. **File:**
        - **Name** in IBM Plex Mono 13px, with **middle truncation that always keeps the last 22 characters visible**, so "…ded Edition} - pt1.m4v" survives.
        - **Full name** on hover (`title`) and on keyboard focus (the span is focusable and carries an `aria-label`).
-       - **Meta line** under it in mono 12px, muted: "1h 54m · 1080p · HEVC · 14.2 GB". If the file isn't on disk, add a muted outlined "MISSING" pill.
+       - **Meta line** under it in mono 12px, muted: "1h 54m · 1080p · HEVC · 14.2 GB · 14 Nov 2026, 09:12". The last item is the file's modified time on disk (Europe/London), left out when unknown, so the owner can tell which copy is newer. If the file isn't on disk, add a muted outlined "MISSING" pill.
     2. **Edition:** a labelled select listing the existing editions plus "New edition…". Choosing "New edition…" shows a name field under it: max 32 characters, with a live "{n}/32" counter inside it on the right.
     3. **Part:** a labelled select: "Single file", Part 1–8.
     4. **Not this film:** a secondary pill button.

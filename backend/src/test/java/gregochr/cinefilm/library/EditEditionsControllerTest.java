@@ -1,5 +1,6 @@
 package gregochr.cinefilm.library;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -23,6 +24,7 @@ import gregochr.cinefilm.library.EditionDtos.FileRequest;
 import gregochr.cinefilm.library.EditionDtos.SaveRequest;
 import gregochr.cinefilm.library.EditionDtos.SaveResult;
 import gregochr.cinefilm.library.EditionDtos.SuggestionDto;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,7 +51,8 @@ class EditEditionsControllerTest {
     void theViewIsReturnedWithItsFieldNames() throws Exception {
         when(arranger.view(7L)).thenReturn(new EditionsView(
             List.of(new EditionFileDto(1L, "Heat.m4v", 6_000_000L, 1920, 800, "HEVC", 9_000_000_000L, "MISSING", 5L,
-                2)),
+                2, Instant.parse("2026-11-14T09:12:00Z")),
+                new EditionFileDto(2L, "Heat-copy.m4v", null, null, null, null, null, "PRESENT", 5L, 1, null)),
             List.of(new EditionRefDto(5L, "Original", true)),
             new SuggestionDto("Runtimes match", List.of(new ArrangedEdition(5L, "Original",
                 List.of(new ArrangedFile(1L, null)))), List.of(9L), "Original")));
@@ -66,6 +69,8 @@ class EditEditionsControllerTest {
             .andExpect(jsonPath("$.files[0].presence").value("MISSING"))
             .andExpect(jsonPath("$.files[0].editionId").value(5))
             .andExpect(jsonPath("$.files[0].partNumber").value(2))
+            .andExpect(jsonPath("$.files[0].modifiedAt").value("2026-11-14T09:12:00Z"))
+            .andExpect(jsonPath("$.files[1].modifiedAt").value(nullValue()))
             .andExpect(jsonPath("$.editions[0].id").value(5))
             .andExpect(jsonPath("$.editions[0].name").value("Original"))
             .andExpect(jsonPath("$.editions[0].default").value(true))

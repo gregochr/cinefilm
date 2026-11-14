@@ -73,8 +73,12 @@ describe('Edit editions: opening', () => {
     expect(screen.getByText('From the edition tags and part numbers')).toBeInTheDocument();
     const extended = screen.getByRole('region', { name: 'Edition Extended Edition' });
     expect(within(extended).getByText('2 parts · 3h 55m')).toBeInTheDocument();
-    expect(within(extended).getByText('1h 54m · 1080p · HEVC · 14.2 GB')).toBeInTheDocument();
-    expect(within(extended).getByText('2h 1m · 1080p · HEVC · 15.0 GB')).toBeInTheDocument();
+    expect(
+      within(extended).getByText('1h 54m · 1080p · HEVC · 14.2 GB · 14 Nov 2026, 09:12'),
+    ).toBeInTheDocument();
+    expect(
+      within(extended).getByText('2h 1m · 1080p · HEVC · 15.0 GB · 1 Jul 2026, 09:05'),
+    ).toBeInTheDocument();
     const theatrical = screen.getByRole('region', { name: 'Edition Theatrical Cut' });
     expect(within(theatrical).getByText('single file · 2h 59m')).toBeInTheDocument();
     expect(editionSelect(PT1)).toHaveValue('e0');
@@ -351,7 +355,9 @@ describe('Edit editions: editing', () => {
       ),
     ).toBeInTheDocument();
     expect(within(notThis).getByRole('group', { name: PT2 })).toBeInTheDocument();
-    expect(within(notThis).getByText('2h 1m · 1080p · HEVC · 15.0 GB')).toBeInTheDocument();
+    expect(
+      within(notThis).getByText('2h 1m · 1080p · HEVC · 15.0 GB · 1 Jul 2026, 09:05'),
+    ).toBeInTheDocument();
     expect(
       within(screen.getByRole('region', { name: 'Edition Extended Edition' })).getByText(
         '1 part · 1h 54m',

@@ -24,13 +24,33 @@ function sizeLabel(bytes) {
   return `${Math.round(bytes / 1e6)} MB`;
 }
 
-/** "1h 54m · 1080p · HEVC · 14.2 GB", with what is unknown left out. */
+const MODIFIED = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/London',
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/** "14 Nov 2026, 09:12" in Europe/London, or null when the time is unknown or not a date. */
+function modifiedLabel(iso) {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  const p = Object.fromEntries(MODIFIED.formatToParts(date).map((part) => [part.type, part.value]));
+  return `${p.day} ${p.month} ${p.year}, ${p.hour}:${p.minute}`;
+}
+
+/** "1h 54m · 1080p · HEVC · 14.2 GB · 14 Nov 2026, 09:12", with what is unknown left out. */
 export function fileMeta(file) {
   return [
     file.durationMs > 0 ? formatRuntime(file.durationMs) : null,
     resolutionLabel(file.width),
     file.videoCodec,
     sizeLabel(file.sizeBytes),
+    modifiedLabel(file.modifiedAt),
   ]
     .filter(Boolean)
     .join(' · ');

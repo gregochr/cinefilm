@@ -348,9 +348,9 @@ Plan: `library-scan-plan.md`. What the API and the model now carry:
     `A scan is running` (apply only, when the library lock is held); 503 TMDB unavailable.
 - **Edit editions** (`EditionArranger`, owner-only; the panel is `docs/design/handover/edit-editions/README.md`):
   - `GET /api/admin/films/{id}/editions` returns `{ files: [{ id, fileName, durationMs | null, width | null, height |
-    null, videoCodec | null, sizeBytes | null, presence: "PRESENT"|"MISSING", editionId, partNumber }], editions: [{
+    null, videoCodec | null, sizeBytes | null, presence: "PRESENT"|"MISSING", editionId, partNumber, modifiedAt | null }], editions: [{
     id, name, default }], suggestion: { reason, editions: [{ id | null, name, files: [{ fileId, part | null }] }],
-    notThisFilm: [fileId], defaultName } }`. `files` are the film's original files in edition and part order;
+    notThisFilm: [fileId], defaultName } }`. `files` are the film's original files in edition and part order (`modifiedAt` is the ISO instant the file was last modified on disk);
     `default` marks the edition the film opens on now. The suggestion (`EditionSuggester`) is already in the shape the
     panel edits: `id` is the existing edition a suggested one continues (its history stays), `part` is `null` for a
     single file, `reason` is one line (empty for a single file). A film the owner has settled (`editions_confirmed`)
