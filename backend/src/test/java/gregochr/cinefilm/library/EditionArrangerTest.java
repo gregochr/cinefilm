@@ -32,6 +32,8 @@ import gregochr.cinefilm.library.EditionDtos.FileRequest;
 import gregochr.cinefilm.library.EditionDtos.SaveRequest;
 import gregochr.cinefilm.library.EditionDtos.SaveResult;
 import gregochr.cinefilm.playback.PlaybackState;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +45,8 @@ class EditionArrangerTest extends ApiTestBase {
     private static final String PT1 = "Towers/The Two Towers {edition-Extended Edition} - pt1.m4v";
     private static final String PT2 = "Towers/The Two Towers {edition-Extended Edition} - pt2.m4v";
     private static final String THEATRICAL = "Towers/The Two Towers {edition-Theatrical Cut}.m4v";
+
+    private static final Instant PT1_MODIFIED = NOW.minus(Duration.ofDays(30));
 
     @Autowired
     private EditionArranger arranger;
@@ -67,7 +71,7 @@ class EditionArrangerTest extends ApiTestBase {
     /** pt1 and pt2 each in an edition of their own (as the scan leaves them when it cannot tell) and the theatrical. */
     private Film towers() {
         Film film = film(null, "The Two Towers", 2002, NOW);
-        file(edition(film, null, "Original", 114 * MIN, 5 * MIN), PT1);
+        file(edition(film, null, "Original", 114 * MIN, 5 * MIN), PT1).setModifiedAt(PT1_MODIFIED);
         file(edition(film, null, "Original", 121 * MIN, null), PT2);
         file(edition(film, null, "Original", 179 * MIN, 160 * MIN), THEATRICAL);
         return save(film);
@@ -106,7 +110,8 @@ class EditionArrangerTest extends ApiTestBase {
         assertThat(view.files()).hasSize(3);
         assertThat(view.files().get(0)).isEqualTo(new EditionDtos.EditionFileDto(fileId(film, 0),
             "The Two Towers {edition-Extended Edition} - pt1.m4v", 114 * MIN, 1920, 1080, "HEVC", null, "PRESENT",
-            editionId(film, 0), 1));
+            editionId(film, 0), 1, PT1_MODIFIED));
+        assertThat(view.files().get(1).modifiedAt()).as("a file with no known time stays null").isNull();
         assertThat(view.editions()).extracting(EditionDtos.EditionRefDto::isDefault)
             .as("the scan's pick (the first Original) until the owner chooses").containsExactly(true, false, false);
         assertThat(view.suggestion().reason()).isEqualTo("From the edition tags and part numbers");
