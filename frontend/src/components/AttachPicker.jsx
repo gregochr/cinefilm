@@ -99,7 +99,7 @@ export default function AttachPicker({ name, busy, onAttach, onCancel }) {
         </fieldset>
       ) : null}
       <div className="admin__actions">
-        <Button type="submit" variant="primary" disabled={!picker.target || busy}>
+        <Button type="submit" disabled={!picker.target || busy}>
           {busy ? 'Attaching…' : 'Attach'}
         </Button>
         <Button onClick={onCancel}>Cancel</Button>

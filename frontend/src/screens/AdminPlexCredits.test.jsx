@@ -30,7 +30,7 @@ describe('Admin: Import credits from Plex', () => {
     await waitFor(() =>
       expect(within(group).getByRole('button', { name: 'Import credits from Plex' })).toBeEnabled(),
     );
-    expect(within(panel).getByRole('button', { name: 'Import from Plex' })).toBeEnabled();
+    expect(within(panel).getByRole('button', { name: 'Import from Plex again' })).toBeEnabled();
   });
 
   it('is disabled while Plex is not reachable', async () => {

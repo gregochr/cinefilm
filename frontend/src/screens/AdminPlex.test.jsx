@@ -44,7 +44,11 @@ describe('Admin: Plex import panel', () => {
     expect(within(tiles).getByText('Watched').nextSibling).toHaveTextContent('378');
     expect(within(tiles).getByText('Resume points').nextSibling).toHaveTextContent('143');
     expect(within(tiles).getByText('Failed').nextSibling).toHaveTextContent('1');
-    expect(within(panel).getByRole('button', { name: 'Import from Plex' })).toBeEnabled();
+    const again = within(panel).getByRole('button', { name: 'Import from Plex again' });
+    expect(again).toBeEnabled();
+    expect(again).toHaveAccessibleDescription(
+      'Copies watched state, resume points and artwork; your newer CineFilm changes win.',
+    );
   });
 
   it('lists the films not on disk with how many more there are, and the Plex collections', async () => {
@@ -93,7 +97,7 @@ describe('Admin: Plex import panel', () => {
     renderApp('/admin/library');
     const panel = await screen.findByRole('region', { name: 'Plex import' });
     expect(within(panel).getByText('Not reachable')).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: 'Import from Plex' })).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: 'Import from Plex again' })).toBeDisabled();
   });
 
   it('offers Check again while Plex is unreachable, and Import is enabled once it answers', async () => {
@@ -103,23 +107,31 @@ describe('Admin: Plex import panel', () => {
     );
     renderApp('/admin/library');
     const panel = await screen.findByRole('region', { name: 'Plex import' });
-    expect(within(panel).getByRole('button', { name: 'Import from Plex' })).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: 'Import from Plex again' })).toBeDisabled();
+
+    expect(
+      within(panel).getByRole('button', { name: 'Try connecting to Plex' }),
+    ).toHaveAccessibleDescription('Checks whether the Plex server answers now.');
 
     reachable = true;
-    await userEvent.click(within(panel).getByRole('button', { name: 'Check again' }));
+    await userEvent.click(within(panel).getByRole('button', { name: 'Try connecting to Plex' }));
 
     await waitFor(() =>
-      expect(within(panel).getByRole('button', { name: 'Import from Plex' })).toBeEnabled(),
+      expect(within(panel).getByRole('button', { name: 'Import from Plex again' })).toBeEnabled(),
     );
     expect(within(panel).getByText('Reachable')).toBeInTheDocument();
-    expect(within(panel).queryByRole('button', { name: 'Check again' })).not.toBeInTheDocument();
+    expect(
+      within(panel).queryByRole('button', { name: 'Try connecting to Plex' }),
+    ).not.toBeInTheDocument();
   });
 
   it('has no Check again while Plex is reachable or an import is running', async () => {
     installFetch(plexRoute(running(3)));
     renderApp('/admin/library');
     const panel = await screen.findByRole('region', { name: 'Plex import' });
-    expect(within(panel).queryByRole('button', { name: 'Check again' })).not.toBeInTheDocument();
+    expect(
+      within(panel).queryByRole('button', { name: 'Try connecting to Plex' }),
+    ).not.toBeInTheDocument();
   });
 
   it('starts an import and shows live progress with the button disabled', async () => {
@@ -135,7 +147,7 @@ describe('Admin: Plex import panel', () => {
     renderApp('/admin/library');
     const panel = await screen.findByRole('region', { name: 'Plex import' });
 
-    await userEvent.click(within(panel).getByRole('button', { name: 'Import from Plex' }));
+    await userEvent.click(within(panel).getByRole('button', { name: 'Import from Plex again' }));
 
     expect(await within(panel).findByText('Importing')).toBeInTheDocument();
     expect(within(panel).getByText('12 / 40 films')).toBeInTheDocument();
@@ -149,7 +161,7 @@ describe('Admin: Plex import panel', () => {
         : plexRoute(fixtures.adminPlex)(method, url),
     );
     renderApp('/admin/library');
-    await userEvent.click(await screen.findByRole('button', { name: 'Import from Plex' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Import from Plex again' }));
     expect(
       await screen.findByText('A scan or import is already running, or no scan has finished yet.'),
     ).toBeInTheDocument();
@@ -162,7 +174,7 @@ describe('Admin: Plex import panel', () => {
         : plexRoute(fixtures.adminPlex)(method, url),
     );
     renderApp('/admin/library');
-    await userEvent.click(await screen.findByRole('button', { name: 'Import from Plex' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Import from Plex again' }));
     expect(await screen.findByText('Could not start the import.')).toBeInTheDocument();
   });
 
@@ -217,11 +229,11 @@ describe('Admin: the grouping report after an import', () => {
     });
     renderApp('/admin/library');
     await screen.findByRole('region', { name: 'Plex import' });
-    await screen.findByRole('button', { name: 'Scan now' });
+    await screen.findByRole('button', { name: 'Scan library now' });
     await waitFor(() => expect(reportCalls).toBeGreaterThan(0));
     const before = reportCalls;
 
-    await userEvent.click(screen.getByRole('button', { name: 'Import from Plex' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Import from Plex again' }));
 
     await waitFor(() => expect(reportCalls).toBeGreaterThan(before));
   });

@@ -1,5 +1,6 @@
 import { useId } from 'react';
-import { Button } from '../../components/Button.jsx';
+import { ActionWithHint } from '../../components/ActionWithHint.jsx';
+import { buttons } from '../../state/adminCopy.js';
 import SectionTitle from './SectionTitle.jsx';
 import { SkeletonBlock } from '../../components/Skeleton.jsx';
 import { ErrorState } from '../../components/StateMessages.jsx';
@@ -135,9 +136,14 @@ function SessionPanel() {
       </div>
       <p className="admin__text">Signed in to this browser.</p>
       <div className="admin__actions">
-        <Button variant="secondary" disabled={signingOut} onClick={signOut}>
-          {signingOut ? 'Signing out…' : 'Sign out'}
-        </Button>
+        <ActionWithHint
+          layout="line"
+          hint={buttons.signOut.hint}
+          disabled={signingOut}
+          onClick={signOut}
+        >
+          {signingOut ? buttons.signOut.busyLabel : buttons.signOut.label}
+        </ActionWithHint>
         {error ? (
           <span className="admin__notice" role="status">
             {error}

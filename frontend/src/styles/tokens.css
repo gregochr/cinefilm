@@ -15,6 +15,7 @@
   /* Text */
   --cf-text: #ede6da; /* primary */
   --cf-text-2: #d5ccbe; /* secondary (meta, plot) */
+  --cf-text-hint: #8a8173; /* the hint line under an Admin button */
   --cf-text-muted: #a39a8b; /* labels, captions — 4.5:1+ on --cf-bg */
   --cf-text-disabled: #6f675b;
   --cf-on-poster: rgba(255, 248, 236, 0.9);
@@ -38,7 +39,7 @@
   --cf-size-h2: 32px; /* row headings (26px on phone) */
   --cf-size-body: 17px; /* plot */
   --cf-size-ui: 14px;
-  --cf-size-label: 12px; /* uppercase, letter-spacing .1–.14em */
+  --cf-size-label: 12px; /* small text: uppercase labels (letter-spacing .1–.14em), hint lines */
 
   /* Shape and spacing */
   --cf-radius-poster: 8px;

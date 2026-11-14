@@ -191,6 +191,11 @@ describe('PlaybackHealthPanel: remembered networks', () => {
     expect(within(oldest).getByRole('button', { name: `Forget ${VIRGIN}` })).toHaveTextContent(
       'Forget',
     );
+    expect(
+      screen.getByText(
+        "Forget makes CineFilm ask where you're watching next time on that network.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it('Forget removes the row and the stored answer, keeps the other, and moves focus to the card heading', async () => {

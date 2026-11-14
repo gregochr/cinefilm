@@ -80,7 +80,7 @@ describe('Admin Library section', () => {
       return null;
     });
     renderApp('/admin');
-    const opener = (await screen.findAllByRole('button', { name: 'Fix match' }))[0];
+    const opener = (await screen.findAllByRole('button', { name: 'Find the film…' }))[0];
     await userEvent.click(opener);
     const panel = await screen.findByRole('region', { name: 'Fix match' });
     await userEvent.click((await within(panel).findAllByRole('radio'))[0]);
@@ -130,7 +130,7 @@ describe('Admin Library section: scrolling to an anchor', () => {
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
 
     await act(async () => scan.release(respond(fixtures.adminScan)));
-    await screen.findByRole('button', { name: 'Scan now' });
+    await screen.findByRole('button', { name: 'Scan library now' });
     await act(async () => {});
 
     expect(scrollIntoView).toHaveBeenCalledTimes(1);

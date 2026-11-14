@@ -64,10 +64,13 @@ that depend on an answer say so and are not started until it comes.
 
 - **Data and UI stay separable.** Labels, hints and pure rules live in `frontend/src/state/` (no JSX).
 - **Button rule:** label says what it does to what; "…" means it opens something first. A hint is a visible `<p>`
-  (12px, `#8A8173`, right-aligned in rows, left on phone) linked by `aria-describedby`. In Admin only "Scan library
-  now" is `variant="primary"`.
-- **Copy is exact**, and `adminCopy.js` notes each string's source (`07`, an AR board, or the README). `07` gives no
-  hint for "Scan library now", "Sign out" or "Stop this stream"; those come from the README.
+  (12px, `#8A8173`, right-aligned in rows, left on phone) linked by `aria-describedby`. On the Admin pages only "Scan
+  library now" is `variant="primary"`; a dialog's own confirm button (Fix match, Edit editions) keeps its
+  primary style. This reads README's "In Admin, only Scan library now is primary" as the Admin pages' own buttons;
+  dialogs keep their confirm button's style.
+- **Copy is exact**, and `adminCopy.js` notes each string's source (`07`, an AR board, the README, or the plan's owner answers). `07` gives no
+  hint for "Scan library now" or "Sign out"; those come from the README. "Stop this stream" uses 07's hint until the
+  device is known (phase 5a).
 - **Each section loads on its own**, static skeletons; a failed section shows an inline error banner in the Edit
   editions error colours (never amber). Deliberate exception: the scan and Plex status pollers live in the layout
   (below), because their timestamps drive every section's reloads.

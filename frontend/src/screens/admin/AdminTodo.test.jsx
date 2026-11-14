@@ -39,7 +39,7 @@ describe('Admin To do section', () => {
   it('opens Fix match from a row, and closes it when you move to another section', async () => {
     installFetch();
     renderApp('/admin');
-    await userEvent.click((await screen.findAllByRole('button', { name: 'Fix match' }))[0]);
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Find the film…' }))[0]);
     expect(await screen.findByRole('region', { name: 'Fix match' })).toBeInTheDocument();
 
     await userEvent.click(
@@ -55,7 +55,7 @@ describe('Admin To do section', () => {
   it('closes Edit editions when you move to another section', async () => {
     installFetch();
     renderApp('/admin');
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit editions' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Sort out editions…' }));
     await screen.findByRole('dialog', { name: 'Blade Runner · 1982' });
 
     await userEvent.click(
@@ -81,7 +81,7 @@ describe('Admin To do section', () => {
       return null;
     });
     renderApp('/admin');
-    const opener = (await screen.findAllByRole('button', { name: 'Fix match' }))[0];
+    const opener = (await screen.findAllByRole('button', { name: 'Find the film…' }))[0];
     await userEvent.click(opener);
     const panel = await screen.findByRole('region', { name: 'Fix match' });
     await userEvent.click((await within(panel).findAllByRole('radio'))[0]);
@@ -110,7 +110,7 @@ describe('Admin To do section', () => {
       return null;
     });
     renderApp('/admin');
-    const opener = (await screen.findAllByRole('button', { name: 'Fix match' }))[0];
+    const opener = (await screen.findAllByRole('button', { name: 'Find the film…' }))[0];
     await userEvent.click(opener);
     const panel = await screen.findByRole('region', { name: 'Fix match' });
     await userEvent.click((await within(panel).findAllByRole('radio'))[0]);

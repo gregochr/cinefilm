@@ -261,7 +261,7 @@ function Item({ item, busy, problem, actions, onRemoved }) {
       ) : null}
       <div className="admin__actions admin__item-actions subs__actions">
         {replaced && !item.verified ? (
-          <Button variant="primary" disabled={busy} onClick={() => actions.verify(item.id)}>
+          <Button disabled={busy} onClick={() => actions.verify(item.id)}>
             Use my file (looks right)
           </Button>
         ) : null}

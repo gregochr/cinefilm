@@ -14,7 +14,7 @@ const isSave = (m, url) => m === 'PUT' && url === '/api/admin/films/6/editions';
 async function openFromTheRow() {
   renderApp('/admin');
   const attention = await screen.findByRole('region', { name: 'Films needing attention' });
-  const button = await within(attention).findByRole('button', { name: 'Edit editions' });
+  const button = await within(attention).findByRole('button', { name: 'Sort out editions…' });
   await userEvent.click(button);
   await screen.findByRole('dialog', { name: 'Blade Runner · 1982' });
   await screen.findByRole('region', { name: 'Edition Extended Edition' });
@@ -27,8 +27,10 @@ describe('Admin: Edit editions', () => {
     renderApp('/admin');
     const attention = await screen.findByRole('region', { name: 'Films needing attention' });
 
-    expect(await within(attention).findAllByRole('button', { name: 'Edit editions' })).toHaveLength(
-      1,
+    const buttons = await within(attention).findAllByRole('button', { name: 'Sort out editions…' });
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]).toHaveAccessibleDescription(
+      'Choose which file is which cut, the part order and the default.',
     );
     const item = within(attention).getByText('Blade Runner (1982)');
     expect(item).toBeInTheDocument();
@@ -78,7 +80,7 @@ describe('Admin: Edit editions', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(await screen.findByText('Editions saved')).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.queryByRole('button', { name: 'Edit editions' })).not.toBeInTheDocument(),
+      expect(screen.queryByRole('button', { name: 'Sort out editions…' })).not.toBeInTheDocument(),
     );
     expect(attentionAfterSave).toBe(1);
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1);
@@ -105,7 +107,7 @@ describe('Admin: Edit editions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() =>
-      expect(screen.queryByRole('button', { name: 'Edit editions' })).not.toBeInTheDocument(),
+      expect(screen.queryByRole('button', { name: 'Sort out editions…' })).not.toBeInTheDocument(),
     );
     await waitFor(() =>
       expect(screen.getByRole('heading', { level: 1, name: 'To do' })).toHaveFocus(),
@@ -116,7 +118,9 @@ describe('Admin: Edit editions', () => {
     installFetch((m, url) => (isEditions(m, url) ? respond({ error: 'x' }, 500) : null));
     renderApp('/admin');
     const attention = await screen.findByRole('region', { name: 'Films needing attention' });
-    await userEvent.click(await within(attention).findByRole('button', { name: 'Edit editions' }));
+    await userEvent.click(
+      await within(attention).findByRole('button', { name: 'Sort out editions…' }),
+    );
 
     expect(await screen.findByText('Couldn’t load this film’s files.')).toBeInTheDocument();
     await userEvent.keyboard('{Escape}');
@@ -163,13 +167,15 @@ describe('Admin: Edit editions', () => {
     });
     renderApp('/admin');
     const attention = await screen.findByRole('region', { name: 'Films needing attention' });
-    const buttons = await within(attention).findAllByRole('button', { name: 'Edit editions' });
+    const buttons = await within(attention).findAllByRole('button', { name: 'Sort out editions…' });
     await userEvent.click(buttons[0]);
     await screen.findByRole('region', { name: 'Edition Extended Edition' });
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await screen.findByRole('button', { name: 'Saving…' });
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    await userEvent.click(within(attention).getAllByRole('button', { name: 'Edit editions' })[1]);
+    await userEvent.click(
+      within(attention).getAllByRole('button', { name: 'Sort out editions…' })[1],
+    );
     await screen.findByRole('dialog', { name: 'Alien · 1979' });
     await screen.findByRole('region', { name: 'Edition Extended Edition' });
     await userEvent.selectOptions(screen.getAllByRole('combobox', { name: 'Part' })[1], 'Part 3');

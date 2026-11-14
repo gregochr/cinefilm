@@ -35,7 +35,16 @@ describe('Admin: Library scan panel', () => {
       'Needs conversion3',
       'Need a match2',
     ]);
-    expect(within(panel).getByRole('button', { name: 'Scan now' })).toBeEnabled();
+    const scan = within(panel).getByRole('button', { name: 'Scan library now' });
+    expect(scan).toBeEnabled();
+    expect(scan).toHaveAccessibleDescription(
+      'Looks through your movie folders for new, changed and removed files. A few minutes; you can keep watching.',
+    );
+    // In Admin only this button is amber.
+    expect(scan).toHaveClass('btn--primary');
+    for (const other of screen.getAllByRole('button')) {
+      if (other !== scan) expect(other).not.toHaveClass('btn--primary');
+    }
   });
 
   it('says Never before the first scan', async () => {
@@ -91,7 +100,7 @@ describe('Admin: Library scan panel', () => {
     renderApp('/admin/library');
     const panel = await screen.findByRole('region', { name: 'Library scan' });
 
-    await userEvent.click(within(panel).getByRole('button', { name: 'Scan now' }));
+    await userEvent.click(within(panel).getByRole('button', { name: 'Scan library now' }));
 
     expect(await within(panel).findByText('Running')).toBeInTheDocument();
     const bar = within(panel).getByRole('progressbar', { name: 'Scan progress' });
@@ -124,7 +133,7 @@ describe('Admin: Library scan panel', () => {
 
     expect(await screen.findByText('Idle')).toBeInTheDocument();
     expect(screen.getByText('08 Nov 12:41 · 7 new, 0 missing')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Scan now' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Scan library now' })).toBeEnabled();
   });
 
   it('shows a neutral line while the folder is still being walked', async () => {
@@ -150,7 +159,7 @@ describe('Admin: Library scan panel', () => {
     });
     renderApp('/admin/library');
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Scan now' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Scan library now' }));
 
     expect(await screen.findByText('A scan is already running.')).toBeInTheDocument();
   });
@@ -159,7 +168,7 @@ describe('Admin: Library scan panel', () => {
     installFetch((method) => (method === 'POST' ? respond({ error: 'boom' }, 500) : null));
     renderApp('/admin/library');
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Scan now' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Scan library now' }));
 
     expect(await screen.findByText('Could not start the scan.')).toBeInTheDocument();
   });
@@ -173,7 +182,7 @@ describe('Admin: Library scan panel', () => {
 
     fail = false;
     await userEvent.click(screen.getAllByRole('button', { name: 'Try again' })[0]);
-    expect(await screen.findByRole('button', { name: 'Scan now' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Scan library now' })).toBeInTheDocument();
   });
 
   it('shows a loading skeleton while the status loads', () => {
@@ -188,7 +197,7 @@ describe('Admin: Library scan panel', () => {
     try {
       const fetchMock = installFetch();
       renderApp('/admin#library-scan', { showLocation: true });
-      await screen.findByRole('button', { name: 'Scan now' });
+      await screen.findByRole('button', { name: 'Scan library now' });
       await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
       expect(screen.getByTestId('location')).toHaveTextContent('/admin/library#scan');
       expect(screen.getByRole('heading', { level: 1, name: 'Library' })).toBeInTheDocument();
@@ -234,7 +243,7 @@ describe('Admin: Library scan panel', () => {
     try {
       installFetch();
       renderApp('/admin/library');
-      await screen.findByRole('button', { name: 'Scan now' });
+      await screen.findByRole('button', { name: 'Scan library now' });
       expect(scrollIntoView).not.toHaveBeenCalled();
     } finally {
       delete Element.prototype.scrollIntoView;
@@ -244,7 +253,7 @@ describe('Admin: Library scan panel', () => {
   it('copes with a browser that cannot scroll an element into view', async () => {
     installFetch();
     renderApp('/admin/library#scan');
-    expect(await screen.findByRole('button', { name: 'Scan now' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Scan library now' })).toBeInTheDocument();
   });
 });
 
@@ -510,7 +519,10 @@ describe('Admin: Transcoding panel', () => {
       return null;
     });
     renderApp('/admin/playback');
-    await userEvent.click(await screen.findByRole('button', { name: 'Stop Film 2' }));
+    expect(
+      await screen.findByRole('button', { name: 'Stop this stream: Film 2' }),
+    ).toHaveAccessibleDescription('Ends playback on that device; it can resume later.');
+    await userEvent.click(await screen.findByRole('button', { name: 'Stop this stream: Film 2' }));
     const stop = fetchMock.mock.calls.find((c) => c[1]?.method === 'DELETE');
     expect(stop[0]).toBe('/api/admin/transcoding/sessions/session-2');
     expect(stop[1].headers['X-CineFilm']).toBe('1');
@@ -524,9 +536,9 @@ describe('Admin: Transcoding panel', () => {
       return method === 'DELETE' ? respond(null, 500) : null;
     });
     renderApp('/admin/playback');
-    await userEvent.click(await screen.findByRole('button', { name: 'Stop Film 1' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Stop this stream: Film 1' }));
     expect(await screen.findByText('Could not stop the session.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Stop Film 1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Stop this stream: Film 1' })).toBeInTheDocument();
   });
 
   it('shows the projector-jammed error with Try again when the state cannot be read', async () => {
@@ -578,6 +590,9 @@ describe('Admin: Session panel', () => {
     renderApp('/admin/settings');
     const panel = await screen.findByRole('region', { name: 'Session' });
     expect(within(panel).getByText('Signed in to this browser.')).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: 'Sign out' })).toHaveAccessibleDescription(
+      "Signing out here doesn't affect other devices.",
+    );
     await userEvent.click(within(panel).getByRole('button', { name: 'Sign out' }));
     await waitFor(() =>
       expect(

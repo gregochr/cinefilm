@@ -96,7 +96,7 @@ describe('Admin shell: the old scan address', () => {
     try {
       const fetchMock = installFetch();
       renderApp('/admin#library-scan', { showLocation: true });
-      await screen.findByRole('button', { name: 'Scan now' });
+      await screen.findByRole('button', { name: 'Scan library now' });
       await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
       expect(screen.getByTestId('location')).toHaveTextContent('/admin/library#scan');
       expect(fetchMock.mock.calls.some((c) => c[0] === '/api/admin/attention')).toBe(false);
@@ -131,7 +131,7 @@ describe('Admin shell: the old scan address', () => {
   it('redirects the old address typed in another case, as the router matches it', async () => {
     installFetch();
     renderApp('/Admin#library-scan', { showLocation: true });
-    await screen.findByRole('button', { name: 'Scan now' });
+    await screen.findByRole('button', { name: 'Scan library now' });
     expect(screen.getByTestId('location')).toHaveTextContent('/admin/library#scan');
   });
 
@@ -147,7 +147,7 @@ describe('Admin shell: dialogs hosted by the layout', () => {
   it('Fix match returns focus to the button that opened it when cancelled', async () => {
     installFetch();
     renderApp('/admin');
-    const opener = (await screen.findAllByRole('button', { name: 'Fix match' }))[0];
+    const opener = (await screen.findAllByRole('button', { name: 'Find the film…' }))[0];
     await userEvent.click(opener);
     const panel = await screen.findByRole('region', { name: 'Fix match' });
 
@@ -164,7 +164,7 @@ describe('Admin shell: dialogs hosted by the layout', () => {
         : null,
     );
     renderApp('/admin');
-    const opener = (await screen.findAllByRole('button', { name: 'Fix match' }))[0];
+    const opener = (await screen.findAllByRole('button', { name: 'Find the film…' }))[0];
     await userEvent.click(opener);
     const panel = await screen.findByRole('region', { name: 'Fix match' });
     await userEvent.click((await within(panel).findAllByRole('radio'))[0]);
@@ -180,7 +180,7 @@ describe('Admin shell: dialogs hosted by the layout', () => {
   it('Edit editions returns focus to the button that opened it', async () => {
     installFetch();
     renderApp('/admin');
-    const opener = await screen.findByRole('button', { name: 'Edit editions' });
+    const opener = await screen.findByRole('button', { name: 'Sort out editions…' });
     await userEvent.click(opener);
     await screen.findByRole('dialog', { name: 'Blade Runner · 1982' });
     await act(async () => {});
