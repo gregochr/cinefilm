@@ -2,6 +2,7 @@ package gregochr.cinefilm.summary;
 
 import gregochr.cinefilm.health.PlaybackHealthService;
 import gregochr.cinefilm.library.AdminDtos.AttentionItem;
+import gregochr.cinefilm.library.AdminDtos.LastScanDto;
 import gregochr.cinefilm.library.AdminDtos.ScanStatusDto;
 import gregochr.cinefilm.library.AdminService;
 import gregochr.cinefilm.subtitle.ForcedNeedService;
@@ -13,6 +14,7 @@ import gregochr.cinefilm.transcode.SessionManager;
 import java.util.List;
 import java.util.Set;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Gathers the figures of Admin's rail and To do strip from the services that already compute them, so no rule is
@@ -44,7 +46,11 @@ public class AdminSummaryService {
         this.health = health;
     }
 
-    /** The summary, read fresh. */
+    /**
+     * The summary, read fresh. One read-only transaction, so the reads share a persistence context and the films one
+     * of them loads are not loaded again by the next.
+     */
+    @Transactional(readOnly = true)
     public AdminSummary summary() {
         List<AttentionItem> items = admin.attention().items();
         long pickFilm = items.stream().filter(item -> NEEDS_MATCH.equals(item.kind())).count();
@@ -52,9 +58,11 @@ public class AdminSummaryService {
         long fullMissing = fullNeed.list().counts().unresolved();
         long forcedQuestion = forcedNeed.list().counts().unresolved();
         ScanStatusDto scan = admin.status();
+        LastScanDto last = scan.lastScan();
         return new AdminSummary(new Todo(pickFilm, severalFiles, fullMissing, forcedQuestion),
             fullMissing + forcedQuestion, sessions.sessions().size(),
-            new Library(scan.counts().films(), scan.lastScan() == null ? null : scan.lastScan().finishedAt()),
+            new Library(scan.counts().films(), last == null ? null : last.finishedAt(),
+                last == null ? null : last.error()),
             health.playbackCounts(), health.playingNow());
     }
 }

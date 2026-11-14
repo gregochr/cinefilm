@@ -2,7 +2,7 @@
   "todo": { "pickFilm": 2, "severalFiles": 2, "fullMissing": 1, "forcedQuestion": 1 },
   "subtitlesUnresolved": 2,
   "live": 1,
-  "library": { "films": 538, "lastScanFinishedAt": "2026-11-08T12:41:10Z" },
+  "library": { "films": 538, "lastScanFinishedAt": "2026-11-08T12:41:10Z", "lastScanError": null },
   "playback": { "films": 3, "smooth": 2 },
   "playingNow": [
     {

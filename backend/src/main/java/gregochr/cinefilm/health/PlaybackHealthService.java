@@ -18,8 +18,10 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -199,15 +201,21 @@ public class PlaybackHealthService {
 
     /**
      * The viewings that reported in the last two minutes (the boundary included), newest report first, at most
-     * {@link #PLAYING_NOW_MAX}; direct play and HLS alike. The quality is the rung played in the report's last
-     * minute, else the quality the viewer chose; a stored report that cannot be read still lists, with no device
-     * and no quality.
+     * {@link #PLAYING_NOW_MAX}; direct play and HLS alike. Only the newest report of each edition lists, so a player
+     * that reloaded (a new playback id for the same edition) shows once. A report carries no end marker (the player's
+     * exit report is the same snapshot), so a viewing that ended stays listed until two minutes after its last
+     * report. The quality is the rung played in the report's last minute, else the quality the viewer chose; a
+     * stored report that cannot be read still lists, with no device and no quality.
      */
     @Transactional(readOnly = true)
     public List<PlayingNow> playingNow() {
         Instant since = clock.instant().minus(PLAYING_WINDOW);
         List<PlayingNow> playing = new ArrayList<>();
+        Set<Long> editions = new HashSet<>();
         for (PlaybackHealth stored : repository.updatedSince(since, PageRequest.ofSize(PLAYING_NOW_MAX))) {
+            if (!editions.add(stored.getEditionId())) {
+                continue;
+            }
             HealthReport report = typed(stored);
             playing.add(new PlayingNow(stored.getPlaybackId(), stored.getEditionId(), stored.getFilmTitle(),
                 report == null || report.client() == null ? null : report.client().userAgent(),

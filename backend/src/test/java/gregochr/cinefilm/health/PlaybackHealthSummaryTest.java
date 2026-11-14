@@ -159,9 +159,29 @@ class PlaybackHealthSummaryTest {
     }
 
     @Test
+    void twoRowsOfOneEditionGiveOneEntryTheNewest() {
+        String reloaded = "0a1b2c3d-0000-4000-8000-0123456789ab";
+        playingRows(stored(reloaded, text(example()), "away"), stored(ID, text(example()), "home"));
+
+        assertThat(service.playingNow()).extracting(PlayingNow::playbackId).containsExactly(reloaded);
+        assertThat(service.playingNow().get(0).environment()).isEqualTo("away");
+    }
+
+    @Test
+    void rowsOfDifferentEditionsAreAllKept() {
+        PlaybackHealth other = stored("0a1b2c3d-0000-4000-8000-0123456789ab", text(example()), "away");
+        other.setEditionId(12L);
+        playingRows(stored(ID, text(example()), "home"), other);
+
+        assertThat(service.playingNow()).extracting(PlayingNow::editionId).containsExactly(11L, 12L);
+    }
+
+    @Test
     void theRowsKeepTheRepositorysNewestFirstOrder() {
         String other = "0a1b2c3d-0000-4000-8000-0123456789ab";
-        playingRows(stored(ID, text(example()), "home"), stored(other, text(example()), "away"));
+        PlaybackHealth second = stored(other, text(example()), "away");
+        second.setEditionId(12L);
+        playingRows(stored(ID, text(example()), "home"), second);
 
         assertThat(service.playingNow()).extracting(PlayingNow::playbackId).containsExactly(ID, other);
     }

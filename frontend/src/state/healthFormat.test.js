@@ -347,7 +347,7 @@ describe('networkLine', () => {
 });
 
 describe('describePlayback', () => {
-  const [train, home, unplayed] = fixtures.adminPlaybackHealth.playbacks;
+  const [, train, home, unplayed] = fixtures.adminPlaybackHealth.playbacks;
 
   it('gives all four lines for a train viewing', () => {
     expect(describePlayback(train)).toEqual([

@@ -585,8 +585,8 @@ describe('Admin: Playback health panel', () => {
     const titles = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
     expect(titles.indexOf('Playback health')).toBe(titles.indexOf('Transcoding') + 1);
     const list = await within(panel).findByRole('list', { name: 'Recent playbacks' });
-    expect(within(list).getAllByRole('listitem')).toHaveLength(4);
-    expect(within(list).getByText('Heat')).toBeInTheDocument();
+    expect(within(list).getAllByRole('listitem')).toHaveLength(5);
+    expect(within(list).getAllByText('Heat')).toHaveLength(2);
   });
 });
 

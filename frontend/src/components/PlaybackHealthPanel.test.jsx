@@ -28,7 +28,10 @@ describe('PlaybackHealthPanel', () => {
   it('lists each viewing with its title, tag and lines', async () => {
     installFetch();
     const { list } = await openPanel();
-    const [train, home, unplayed] = within(list).getAllByRole('listitem');
+    const [current, train, home, unplayed] = within(list).getAllByRole('listitem');
+    expect(within(current).getByText('Heat')).toBeInTheDocument();
+    expect(within(current).getByText('Home')).toBeInTheDocument();
+    expect(within(current).getByText('14 Nov 11:58 · 1m watched · Mac')).toBeInTheDocument();
 
     expect(within(train).getByText('Heat')).toBeInTheDocument();
     expect(within(train).getByText('Train')).toBeInTheDocument();
@@ -56,7 +59,7 @@ describe('PlaybackHealthPanel', () => {
   it('renders no empty element for a line that has nothing to say', async () => {
     installFetch();
     const { list } = await openPanel();
-    const unplayed = within(list).getAllByRole('listitem')[2];
+    const unplayed = within(list).getAllByRole('listitem')[3];
     expect(unplayed).toHaveTextContent(
       'The Wicker ManUnknown08 Nov 21:15 · under 1m watched · WindowsNot played yet · No stallsFull record',
     );
@@ -71,11 +74,12 @@ describe('PlaybackHealthPanel', () => {
     const links = within(list).getAllByRole('link');
     expect(links.map((l) => l.getAttribute('aria-label'))).toEqual([
       'Full record of Heat',
+      'Full record of Heat',
       'Full record of Blade Runner',
       'Full record of The Wicker Man',
       'Full record of The Wicker Man',
     ]);
-    const heat = within(list).getByRole('link', { name: 'Full record of Heat' });
+    const [, heat] = within(list).getAllByRole('link', { name: 'Full record of Heat' });
     expect(heat).toHaveTextContent('Full record');
     expect(heat).toHaveAttribute(
       'href',
@@ -86,7 +90,7 @@ describe('PlaybackHealthPanel', () => {
   });
 
   it('shows what the report says as text, never as markup', async () => {
-    const [first] = fixtures.adminPlaybackHealth.playbacks;
+    const [, first] = fixtures.adminPlaybackHealth.playbacks;
     installFetch((m, url) =>
       url === URL
         ? respond({
@@ -151,7 +155,7 @@ describe('PlaybackHealthPanel', () => {
     release();
     expect(await screen.findByRole('list', { name: 'Recent playbacks' })).toBeInTheDocument();
     expect(fetchMock.mock.calls.filter((c) => c[0] === URL)).toHaveLength(2);
-    expect(screen.getAllByRole('listitem')).toHaveLength(4);
+    expect(screen.getAllByRole('listitem')).toHaveLength(5);
   });
 });
 

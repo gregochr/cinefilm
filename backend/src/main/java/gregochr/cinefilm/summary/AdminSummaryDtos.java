@@ -27,8 +27,9 @@ public final class AdminSummaryDtos {
      *
      * @param films films shown in browse, as the scan status counts them
      * @param lastScanFinishedAt when the last finished scan ended, or null when none has
+     * @param lastScanError the last finished scan's short problem note, or null when it succeeded or none has finished
      */
-    public record Library(long films, Instant lastScanFinishedAt) {
+    public record Library(long films, Instant lastScanFinishedAt, String lastScanError) {
     }
 
     /**
@@ -39,7 +40,8 @@ public final class AdminSummaryDtos {
      * @param live live HLS sessions, as {@code /api/admin/transcoding} lists them
      * @param library the library figures
      * @param playback film sessions of the last 30 days and how many played smoothly
-     * @param playingNow viewings that reported in the last two minutes, newest first, at most 10
+     * @param playingNow viewings that reported in the last two minutes, the newest per edition, newest first, at
+     *     most 10
      */
     public record AdminSummary(Todo todo, long subtitlesUnresolved, int live, Library library,
                                PlaybackCounts playback, List<PlayingNow> playingNow) {

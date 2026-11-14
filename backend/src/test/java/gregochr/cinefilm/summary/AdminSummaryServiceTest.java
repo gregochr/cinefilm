@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.annotation.Transactional;
 
 @ExtendWith(MockitoExtension.class)
 class AdminSummaryServiceTest {
@@ -67,6 +68,28 @@ class AdminSummaryServiceTest {
 
     private static LastScanDto finishedAt(Instant when) {
         return new LastScanDto(when.minusSeconds(60), when, "nightly", 10, 0, 0, null);
+    }
+
+    @Test
+    void aFailedLastScanReportsItsErrorAndFinishTime() {
+        LastScanDto failed = new LastScanDto(FINISHED.minusSeconds(60), FINISHED, "nightly", 0, 0, 0,
+            "Library folder is not readable");
+        stubEverything(List.of(), 0, 0, scan(12, failed));
+
+        AdminSummary summary = service.summary();
+
+        assertThat(summary.library().lastScanError()).isEqualTo("Library folder is not readable");
+        assertThat(summary.library().lastScanFinishedAt()).isEqualTo(FINISHED);
+        assertThat(summary.library().films()).isEqualTo(12);
+    }
+
+    @Test
+    void theSummaryRunsInOneReadOnlyTransaction() throws NoSuchMethodException {
+        Transactional transactional = AdminSummaryService.class.getMethod("summary")
+            .getAnnotation(Transactional.class);
+
+        assertThat(transactional).isNotNull();
+        assertThat(transactional.readOnly()).isTrue();
     }
 
     private static FullNeedListDto fullNeed(int unresolved) {
@@ -113,6 +136,7 @@ class AdminSummaryServiceTest {
         assertThat(summary.live()).isEqualTo(2);
         assertThat(summary.library().films()).isEqualTo(321);
         assertThat(summary.library().lastScanFinishedAt()).isEqualTo(FINISHED);
+        assertThat(summary.library().lastScanError()).isNull();
         assertThat(summary.playback()).isEqualTo(new PlaybackCounts(40, 31));
         assertThat(summary.playingNow()).containsExactly(playing);
     }
@@ -154,6 +178,7 @@ class AdminSummaryServiceTest {
 
         assertThat(summary.library().films()).isZero();
         assertThat(summary.library().lastScanFinishedAt()).isNull();
+        assertThat(summary.library().lastScanError()).isNull();
         assertThat(summary.live()).isZero();
         assertThat(summary.playingNow()).isEmpty();
     }

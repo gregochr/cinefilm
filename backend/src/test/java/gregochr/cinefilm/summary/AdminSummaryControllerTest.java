@@ -3,7 +3,6 @@ package gregochr.cinefilm.summary;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -36,7 +35,7 @@ class AdminSummaryControllerTest {
     @Test
     void theSummaryIsServedWithExactlyTheShapeTheClientReads() throws Exception {
         when(summaries.summary()).thenReturn(new AdminSummary(new Todo(3, 2, 7, 11), 18, 2,
-            new Library(321, Instant.parse("2024-03-30T02:00:00Z")), new PlaybackCounts(40, 31),
+            new Library(321, Instant.parse("2024-03-30T02:00:00Z"), null), new PlaybackCounts(40, 31),
             List.of(new PlayingNow("3f2b8c1e-5d4a-4e7b-9a60-1c2d3e4f5a6b", 11, "Blade Runner",
                 "Mozilla/5.0 (Macintosh)", "home", "720p"))));
 
@@ -45,7 +44,7 @@ class AdminSummaryControllerTest {
             .andExpect(content().json("""
                 {"todo":{"pickFilm":3,"severalFiles":2,"fullMissing":7,"forcedQuestion":11},
                  "subtitlesUnresolved":18,"live":2,
-                 "library":{"films":321,"lastScanFinishedAt":"2024-03-30T02:00:00Z"},
+                 "library":{"films":321,"lastScanFinishedAt":"2024-03-30T02:00:00Z","lastScanError":null},
                  "playback":{"films":40,"smooth":31},
                  "playingNow":[{"playbackId":"3f2b8c1e-5d4a-4e7b-9a60-1c2d3e4f5a6b","editionId":11,
                    "filmTitle":"Blade Runner","device":"Mozilla/5.0 (Macintosh)","environment":"home",
@@ -55,7 +54,7 @@ class AdminSummaryControllerTest {
 
     @Test
     void aNeverScannedLibraryAndAnEmptyPlayingNowSerialiseAsNullAndEmpty() throws Exception {
-        when(summaries.summary()).thenReturn(new AdminSummary(new Todo(0, 0, 0, 0), 0, 0, new Library(0, null),
+        when(summaries.summary()).thenReturn(new AdminSummary(new Todo(0, 0, 0, 0), 0, 0, new Library(0, null, null),
             new PlaybackCounts(0, 0), List.of()));
 
         mvc.perform(get("/api/admin/summary").with(user("owner")))
@@ -72,9 +71,12 @@ class AdminSummaryControllerTest {
     }
 
     @Test
-    void aPostWithoutTheCsrfHeaderIs403BeforeAnyRouteIsTried() throws Exception {
-        mvc.perform(post("/api/admin/summary").with(user("owner")))
-            .andExpect(status().isForbidden())
-            .andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
+    void aGetWithoutTheCsrfHeaderSucceeds() throws Exception {
+        when(summaries.summary()).thenReturn(new AdminSummary(new Todo(0, 0, 0, 0), 5, 0, new Library(0, null, null),
+            new PlaybackCounts(0, 0), List.of()));
+
+        mvc.perform(get("/api/admin/summary").with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.subtitlesUnresolved").value(5));
     }
 }

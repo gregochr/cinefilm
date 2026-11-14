@@ -10,7 +10,7 @@ import { FILM_SESSION_MIN_MS } from '../state/healthFormat.js';
 
 const DAY_MS = 86_400_000;
 // The reference "now" the playback figures are read against. The health fixture's sessions started between 6 and 10
-// Nov 2026, so any "now" from 10 Nov to 6 Dec 2026 keeps all of them inside the 30 days; the test pins one.
+// Nov 2026 (the playing-now row started at 14 Nov but watched under three minutes, so it is no film session), so any "now" from 10 Nov to 6 Dec 2026 keeps all of them inside the 30 days; the test pins one.
 const REFERENCE_NOW = Date.parse('2026-11-14T12:00:00Z');
 
 const countKind = (...kinds) => attention.items.filter((i) => kinds.includes(i.kind)).length;
@@ -28,7 +28,11 @@ describe('the Admin summary fixture', () => {
     expect(Object.keys(summary.todo).sort()).toEqual(
       ['forcedQuestion', 'fullMissing', 'pickFilm', 'severalFiles'].sort(),
     );
-    expect(Object.keys(summary.library).sort()).toEqual(['films', 'lastScanFinishedAt']);
+    expect(Object.keys(summary.library).sort()).toEqual([
+      'films',
+      'lastScanError',
+      'lastScanFinishedAt',
+    ]);
     expect(Object.keys(summary.playback).sort()).toEqual(['films', 'smooth']);
     for (const entry of summary.playingNow) {
       expect(Object.keys(entry).sort()).toEqual(
@@ -61,6 +65,7 @@ describe('the Admin summary fixture', () => {
   it('reports the scan fixture’s film count and last finish time', () => {
     expect(summary.library.films).toBe(scan.counts.films);
     expect(summary.library.lastScanFinishedAt).toBe(scan.lastScan.finishedAt);
+    expect(summary.library.lastScanError).toBe(scan.lastScan.error);
   });
 
   it('counts the health fixture’s film sessions that started in the 30 days before the reference time', () => {
@@ -74,6 +79,17 @@ describe('the Admin summary fixture', () => {
     // had network errors, the other two film sessions had none of those.
     expect(filmSessions.filter((row) => row.report.stallCount > 0)).toHaveLength(1);
     expect(summary.playback.smooth).toBe(filmSessions.length - 1);
+  });
+
+  it('lists only viewings the health fixture holds, with the same film, edition and environment', () => {
+    for (const entry of summary.playingNow) {
+      const row = playbackHealth.playbacks.find((p) => p.playbackId === entry.playbackId);
+      expect(row).toBeDefined();
+      expect(row.editionId).toBe(entry.editionId);
+      expect(row.filmTitle).toBe(entry.filmTitle);
+      expect(row.report.environment).toBe(entry.environment);
+      expect(row.report.client.userAgent).toBe(entry.device);
+    }
   });
 
   it('has one playing-now entry, for a film the transcoding fixture has live, at the rung it plays', () => {
