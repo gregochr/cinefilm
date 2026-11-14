@@ -60,9 +60,17 @@ public class CreditsFrameReader {
     private static final String FILTER = "scale='trunc(iw*sar/2)*2':ih,setsar=1,scale=" + OUTPUT_WIDTH + ":-2";
     private static final String FRAME_FILE = "frame.pgm";
     private static final String DENSE_PATTERN = "d_%05d.pgm";
+    private static final String RGB_FRAME_FILE = "frame.ppm";
+    private static final String RGB_DENSE_PATTERN = "r_%05d.ppm";
+    private static final String GREY_FORMAT = "gray";
+    private static final String RGB_FORMAT = "rgb24";
 
     /** A frame and where in the file it was taken. */
     public record TimedFrame(long offsetMs, GreyFrame frame) {
+    }
+
+    /** A colour frame and where in the file it was taken. */
+    public record TimedRgb(long offsetMs, RgbFrame frame) {
     }
 
     /** A read that could not be completed: ffmpeg is missing, failed, timed out or wrote something unreadable. */
@@ -154,9 +162,15 @@ public class CreditsFrameReader {
      * @return the argument list
      */
     static List<String> frameCommand(int niceness, String binary, Path source, long seekMs, Path output) {
+        return frameCommand(niceness, binary, source, seekMs, output, GREY_FORMAT);
+    }
+
+    /** As {@link #frameCommand(int, String, Path, long, Path)} with the pixel format ({@code gray}, {@code rgb24}). */
+    static List<String> frameCommand(int niceness, String binary, Path source, long seekMs, Path output,
+                                     String pixelFormat) {
         List<String> command = prefix(niceness, binary);
         command.addAll(List.of("-ss", seekTime(seekMs), "-i", source.toAbsolutePath().toString(), "-map", "0:v:0",
-            "-frames:v", "1", "-an", "-sn", "-dn", "-vf", FILTER + ",format=gray", "-f", "image2", "-y",
+            "-frames:v", "1", "-an", "-sn", "-dn", "-vf", FILTER + ",format=" + pixelFormat, "-f", "image2", "-y",
             output.toString()));
         return List.copyOf(command);
     }
@@ -172,11 +186,18 @@ public class CreditsFrameReader {
      * @return the argument list
      */
     static List<String> denseCommand(int niceness, String binary, Path source, DenseRange range, Path pattern) {
+        return denseCommand(niceness, binary, source, range, pattern, GREY_FORMAT);
+    }
+
+    /** As {@link #denseCommand(int, String, Path, DenseRange, Path)} with the pixel format. */
+    static List<String> denseCommand(int niceness, String binary, Path source, DenseRange range, Path pattern,
+                                     String pixelFormat) {
         long frames = (range.lengthMs() + DENSE_FRAME_MS - 1) / DENSE_FRAME_MS;
         List<String> command = prefix(niceness, binary);
         command.addAll(List.of("-ss", seekTime(range.startMs()), "-i", source.toAbsolutePath().toString(),
             "-map", "0:v:0", "-t", seekTime(range.lengthMs()), "-frames:v", Long.toString(frames), "-an", "-sn", "-dn",
-            "-vf", FILTER + ",fps=" + DENSE_FPS + ",format=gray", "-start_number", "0", "-f", "image2", "-y",
+            "-vf", FILTER + ",fps=" + DENSE_FPS + ",format=" + pixelFormat,
+            "-start_number", "0", "-f", "image2", "-y",
             pattern.toString()));
         return List.copyOf(command);
     }
@@ -203,9 +224,23 @@ public class CreditsFrameReader {
      * @throws ReadException when the directory cannot be made
      */
     public Job open(Path file, long durationMs, Runnable checkpoint) {
+        return open(file, durationMs, checkpoint, niceness);
+    }
+
+    /**
+     * As {@link #open(Path, long, Runnable)} with the job's own niceness instead of {@code cinefilm.transcode.nice}.
+     *
+     * @param file the media file (an absolute path under the library root)
+     * @param durationMs the file's length on its timeline
+     * @param checkpoint run before every ffmpeg call; it throws to stop the job
+     * @param niceness the niceness every command of the job runs under; 0 or less runs without {@code nice}
+     * @return the job
+     * @throws ReadException when the directory cannot be made
+     */
+    public Job open(Path file, long durationMs, Runnable checkpoint, int niceness) {
         try {
             Files.createDirectories(workDir);
-            return new Job(file, durationMs, checkpoint, Files.createTempDirectory(workDir, "job-"));
+            return new Job(file, durationMs, checkpoint, niceness, Files.createTempDirectory(workDir, "job-"));
         } catch (IOException e) {
             throw new ReadException("The frame directory could not be made: " + e.getMessage(), e);
         }
@@ -238,12 +273,14 @@ public class CreditsFrameReader {
         private final Path source;
         private final long durationMs;
         private final Runnable checkpoint;
+        private final int niceness;
         private final Path dir;
 
-        private Job(Path source, long durationMs, Runnable checkpoint, Path dir) {
+        private Job(Path source, long durationMs, Runnable checkpoint, int niceness, Path dir) {
             this.source = source;
             this.durationMs = durationMs;
             this.checkpoint = checkpoint;
+            this.niceness = niceness;
             this.dir = dir;
         }
 
@@ -284,6 +321,50 @@ public class CreditsFrameReader {
             return frames;
         }
 
+        /**
+         * One colour frame at 480 pixels wide, by a single-frame seek.
+         *
+         * @param offsetMs where in the file to take it
+         * @return the frame
+         */
+        public RgbFrame rgbFrame(long offsetMs) {
+            checkpoint.run();
+            Path output = dir.resolve(RGB_FRAME_FILE);
+            run(frameCommand(niceness, ffmpeg, source, offsetMs, output, RGB_FORMAT), SEEK_TIMEOUT,
+                "the frame at " + seekTime(offsetMs));
+            return readRgb(output);
+        }
+
+        /**
+         * Colour frames at two a second from one sequential decode. The range is clamped to {@code [0, duration]}; a
+         * range that is empty after clamping returns no frames without running ffmpeg. A frame's offset is the start
+         * plus its index times 500 ms.
+         *
+         * @param startMs where the decode starts
+         * @param lengthMs how long it lasts
+         * @return the frames, in order
+         */
+        public List<TimedRgb> rgbDense(long startMs, long lengthMs) {
+            long start = Math.min(durationMs, Math.max(0, startMs));
+            long end = Math.min(durationMs, Math.max(start, startMs + lengthMs));
+            DenseRange range = new DenseRange(start, end - start);
+            if (range.lengthMs() == 0) {
+                return List.of();
+            }
+            checkpoint.run();
+            run(denseCommand(niceness, ffmpeg, source, range, dir.resolve(RGB_DENSE_PATTERN), RGB_FORMAT),
+                DENSE_TIMEOUT, "the frames around " + seekTime(start));
+            List<TimedRgb> frames = new ArrayList<>();
+            for (Path file = dir.resolve(RGB_DENSE_PATTERN.formatted(0)); Files.exists(file);
+                 file = dir.resolve(RGB_DENSE_PATTERN.formatted(frames.size()))) {
+                frames.add(new TimedRgb(start + frames.size() * DENSE_FRAME_MS, readRgb(file)));
+            }
+            if (frames.isEmpty()) {
+                throw new ReadException("ffmpeg wrote no frames around " + seekTime(start));
+            }
+            return frames;
+        }
+
         /** The dense file of an index, as the pattern numbers them. */
         private Path dense(int index) {
             return dir.resolve(DENSE_PATTERN.formatted(index));
@@ -313,13 +394,28 @@ public class CreditsFrameReader {
 
         private GreyFrame read(Path pgm) {
             try {
-                byte[] data = Files.readAllBytes(pgm);
-                Files.delete(pgm);
-                return PgmReader.read(data);
-            } catch (IOException e) {
-                throw new ReadException("ffmpeg wrote no readable frame: " + e.getMessage(), e);
+                return PgmReader.read(take(pgm));
             } catch (IllegalArgumentException e) {
                 throw new ReadException("ffmpeg wrote a frame that is not a greyscale picture: " + e.getMessage(), e);
+            }
+        }
+
+        private RgbFrame readRgb(Path ppm) {
+            try {
+                return PpmReader.read(take(ppm));
+            } catch (IllegalArgumentException e) {
+                throw new ReadException("ffmpeg wrote a frame that is not a colour picture: " + e.getMessage(), e);
+            }
+        }
+
+        /** The file's bytes; the file is deleted so that it is never read twice. */
+        private byte[] take(Path file) {
+            try {
+                byte[] data = Files.readAllBytes(file);
+                Files.delete(file);
+                return data;
+            } catch (IOException e) {
+                throw new ReadException("ffmpeg wrote no readable frame: " + e.getMessage(), e);
             }
         }
 

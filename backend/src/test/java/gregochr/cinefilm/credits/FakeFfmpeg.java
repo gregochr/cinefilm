@@ -35,6 +35,37 @@ final class FakeFfmpeg implements CommandRunner {
     /** How many dense frames to write; -1 for as many as were asked for. */
     int denseCount = -1;
 
+    /** The colour picture at an offset in milliseconds, for commands that write {@code .ppm} files. */
+    LongFunction<RgbFrame> rgbAt = ms -> flat(10, 20, 30);
+
+    /** A 4x2 frame of one colour. */
+    static RgbFrame flat(int red, int green, int blue) {
+        byte[] pixels = new byte[4 * 2 * 3];
+        for (int i = 0; i < pixels.length; i += 3) {
+            pixels[i] = (byte) red;
+            pixels[i + 1] = (byte) green;
+            pixels[i + 2] = (byte) blue;
+        }
+        return new RgbFrame(4, 2, pixels);
+    }
+
+    /** The bytes of a binary PPM, as ffmpeg writes one. */
+    static byte[] ppm(RgbFrame frame) {
+        byte[] header = ("P6\n" + frame.width() + " " + frame.height() + "\n255\n").getBytes(StandardCharsets.US_ASCII);
+        byte[] data = new byte[header.length + frame.width() * frame.height() * 3];
+        System.arraycopy(header, 0, data, 0, header.length);
+        int at = header.length;
+        for (int y = 0; y < frame.height(); y++) {
+            for (int x = 0; x < frame.width(); x++) {
+                int rgb = frame.rgb(x, y);
+                data[at++] = (byte) (rgb >> 16);
+                data[at++] = (byte) (rgb >> 8);
+                data[at++] = (byte) rgb;
+            }
+        }
+        return data;
+    }
+
     /** The bytes of a binary PGM, as ffmpeg writes one. */
     static byte[] pgm(GreyFrame frame) {
         byte[] header = ("P5\n" + frame.width() + " " + frame.height() + "\n255\n").getBytes(StandardCharsets.US_ASCII);
@@ -64,15 +95,18 @@ final class FakeFfmpeg implements CommandRunner {
             return new Result(0, "", false);
         }
         long seekMs = Math.round(Double.parseDouble(command.get(command.indexOf("-ss") + 1)) * 1000);
+        boolean colour = command.getLast().endsWith(".ppm");
         if (command.getLast().contains("%05d")) {
             int asked = Integer.parseInt(command.get(command.indexOf("-frames:v") + 1));
             int count = denseCount < 0 ? asked : denseCount;
             for (int i = 0; i < count; i++) {
-                Path frame = output.getParent().resolve("d_%05d.pgm".formatted(i));
-                Files.write(frame, pgm(frameAt.apply(seekMs + 500L * i)));
+                Path frame = output.getParent().resolve(output.getFileName().toString().formatted(i));
+                long at = seekMs + 500L * i;
+                Files.write(frame, colour ? ppm(rgbAt.apply(at)) : pgm(frameAt.apply(at)));
             }
         } else {
-            Files.write(output, garbage != null ? garbage : pgm(frameAt.apply(seekMs)));
+            Files.write(output, garbage != null ? garbage
+                : colour ? ppm(rgbAt.apply(seekMs)) : pgm(frameAt.apply(seekMs)));
         }
         return new Result(0, "", false);
     }
