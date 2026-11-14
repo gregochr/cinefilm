@@ -17,13 +17,13 @@ describe('App routes', () => {
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
 
-  it('the Admin route shows the Library scan and Films needing attention panels', async () => {
+  it('the Admin route opens on To do, with Films needing attention', async () => {
     installFetch();
     renderApp('/admin');
-    expect(screen.getByRole('heading', { level: 1, name: 'Admin' })).toBeInTheDocument();
-    for (const panel of ['Library scan', 'Films needing attention']) {
-      expect(await screen.findByRole('heading', { level: 2, name: panel })).toBeInTheDocument();
-    }
+    expect(screen.getByRole('heading', { level: 1, name: 'To do' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Films needing attention' }),
+    ).toBeInTheDocument();
   });
 
   it('the player route has no header or tab bar', async () => {
@@ -43,11 +43,11 @@ describe('App routes', () => {
     expect(screen.getByRole('main')).toBeInTheDocument();
   });
 
-  it('the Settings icon opens Admin', async () => {
+  it('the gear opens Admin', async () => {
     installFetch();
     renderApp('/');
-    await userEvent.click(await screen.findByRole('link', { name: 'Settings' }));
-    expect(await screen.findByRole('heading', { level: 1, name: 'Admin' })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('link', { name: 'Admin' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'To do' })).toBeInTheDocument();
   });
 
   it('searching from the header lands in the library with the search applied', async () => {
@@ -103,7 +103,7 @@ describe('App session expiry', () => {
       if (signedOut && url !== '/api/session') return respond(null, 401);
       return null;
     });
-    renderApp('/admin');
+    renderApp('/admin/settings');
     await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
     const card = await screen.findByRole('dialog', { name: 'Signed out' });
     expect(card).toHaveTextContent(

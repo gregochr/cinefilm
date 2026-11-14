@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Admin — iPhone</title><script src="./support.js"></script></head><body><x-dc>
+<helmet><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Inter:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap"><style>
+body{margin:0;background:#0E0C0A}
+*{box-sizing:border-box}
+a{color:#EDE6DA;text-decoration:none}
+.pg{background:#0E0C0A;color:#EDE6DA;font-family:Inter,system-ui,sans-serif;min-height:100vh;padding-bottom:64px}
+.hd{max-width:1360px;margin:0 auto;padding:24px 40px;display:flex;align-items:center;gap:32px}
+.logo{display:flex;align-items:center;gap:12px}
+.logo span{font-family:'Instrument Serif',Georgia,serif;font-style:italic;font-size:30px}
+.topnav{display:flex;gap:24px;font-size:14px;font-weight:500}
+.topnav a{color:#A39A8B;padding-bottom:4px}
+.gear{margin-left:auto;width:40px;height:40px;border-radius:999px;display:grid;place-items:center;border:1px solid #2A251F;color:#EDE6DA}
+.wrap{max-width:1360px;margin:0 auto;padding:8px 40px 0;display:grid;grid-template-columns:220px minmax(0,1fr);gap:48px}
+.rail{display:flex;flex-direction:column;gap:2px;position:sticky;top:24px;align-self:start}
+.rail h1{font-family:'Instrument Serif',Georgia,serif;font-weight:400;font-size:40px;margin:0 0 20px}
+.rail a{display:flex;align-items:center;justify-content:space-between;height:44px;padding:0 14px;border-radius:8px;color:#A39A8B;font-size:15px;font-weight:500;border-left:2px solid transparent}
+.rail a[aria-current]{color:#EDE6DA;background:#15120F;border-left-color:#E8B25A;border-radius:0 8px 8px 0}
+.cnt{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#A39A8B;border:1px solid #2A251F;border-radius:999px;padding:1px 8px}
+.cnt.live{color:#EDE6DA}
+.rail .sub{font-size:12px;color:#6F675B;margin:18px 14px 0;line-height:1.5}
+.main{display:flex;flex-direction:column;gap:28px;min-width:0}
+.ttl{display:flex;align-items:baseline;gap:16px}
+.ttl h2{font-family:'Instrument Serif',Georgia,serif;font-weight:400;font-size:40px;margin:0}
+.muted{color:#A39A8B}
+.dim{color:#6F675B}
+.lead{font-size:15px;color:#D5CCBE;margin:-14px 0 0;max-width:720px;line-height:1.5}
+.card{background:#15120F;border:1px solid #2A251F;border-radius:12px}
+.ch{display:flex;align-items:center;gap:14px;padding:18px 22px;border-bottom:1px solid #2A251F}
+.ch h3{margin:0;font-size:17px;font-weight:600}
+.ch .why{font-size:13px;color:#A39A8B}
+.ch .sp{flex:1}
+.row{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:16px;align-items:center;padding:14px 22px;border-top:1px solid #211D18}
+.row:first-of-type{border-top:0}
+.pst{width:44px;height:66px;border-radius:4px}
+.rt{font-size:15px;font-weight:500}
+.rt .y{color:#A39A8B;font-weight:400}
+.rm{font-size:13px;color:#A39A8B;margin-top:4px;line-height:1.45}
+.mono{font-family:'IBM Plex Mono',monospace}
+.acts{display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:480px}
+.btns{display:flex;gap:8px;flex-wrap:nowrap;justify-content:flex-end}
+.b{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px;border-radius:999px;border:1px solid #4A4339;background:#1A1713;color:#EDE6DA;font-size:14px;font-weight:500;white-space:nowrap;font-family:inherit}
+.b.q{border-color:transparent;background:transparent;color:#D5CCBE;padding:0 10px}
+.b.p{background:#E8B25A;border-color:#E8B25A;color:#1A1206;font-weight:600}
+.b.lg{height:44px;padding:0 20px;font-size:15px}
+.hint{font-size:12px;color:#8A8173;text-align:right;line-height:1.4}
+.foc{box-shadow:0 0 0 2px #0E0C0A,0 0 0 4px #EDE6DA}
+.more{display:flex;justify-content:space-between;align-items:center;padding:12px 22px;border-top:1px solid #2A251F;font-size:14px}
+.more a{color:#D5CCBE}
+.pill{font-size:11px;letter-spacing:.1em;text-transform:uppercase;border:1px solid #4A4339;border-radius:999px;padding:2px 8px;color:#A39A8B}
+.ok{color:#9DBF8E}
+.err{color:#F0876A}
+.strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.st{padding:16px 18px;display:flex;flex-direction:column;gap:6px}
+.st .k{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#A39A8B}
+.st .v{font-size:15px}
+.st a.l{font-size:13px;color:#D5CCBE;margin-top:2px}
+.body{padding:20px 22px;display:flex;flex-direction:column;gap:14px}
+.kv{display:grid;grid-template-columns:200px minmax(0,1fr);gap:8px 20px;font-size:14px}
+.kv dt{color:#A39A8B}.kv dd{margin:0}
+.tiles{display:flex;gap:28px;flex-wrap:wrap}
+.tile .n{font-family:'IBM Plex Mono',monospace;font-size:22px}
+.tile .t{font-size:12px;color:#A39A8B;margin-top:2px}
+.actline{display:flex;align-items:center;gap:16px;padding:16px 22px;border-top:1px solid #2A251F}
+.actline .hint{text-align:left}
+.tabs{display:flex;gap:8px;border-bottom:1px solid #2A251F}
+.tabs a{padding:12px 4px;margin-right:20px;font-size:15px;color:#A39A8B;font-weight:500;display:flex;gap:10px;align-items:center}
+.tabs a[aria-current]{color:#EDE6DA;border-bottom:1px solid #E8B25A}
+.note{font-size:13px;color:#A39A8B;line-height:1.5;padding:14px 22px;border-top:1px solid #2A251F}
+.seg{display:inline-flex;border:1px solid #2A251F;border-radius:999px;padding:3px}
+.seg a{font-size:13px;padding:5px 12px;border-radius:999px;color:#A39A8B}
+.seg a[aria-current]{background:#2A251F;color:#EDE6DA}
+.sw{width:40px;height:24px;border-radius:999px;background:#EDE6DA;position:relative;flex:none}
+.sw::after{content:'';position:absolute;right:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#0E0C0A}
+.sw.off{background:#2A251F}.sw.off::after{left:3px;right:auto;background:#6F675B}
+.set{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:center;padding:18px 22px;border-top:1px solid #211D18}
+.set:first-of-type{border-top:0}
+.set .lbl{font-size:15px;font-weight:500}
+.set .d{font-size:13px;color:#A39A8B;margin-top:4px;line-height:1.45;max-width:620px}
+.inp{display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;border:1px solid #4A4339;border-radius:8px;background:#1A1713;font-family:'IBM Plex Mono',monospace;font-size:14px}
+table.g{width:100%;border-collapse:collapse;font-size:14px}
+table.g th{text-align:left;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#A39A8B;font-weight:500;padding:12px 16px;border-bottom:1px solid #2A251F}
+table.g td{padding:12px 16px;border-top:1px solid #211D18;vertical-align:middle;line-height:1.45}
+table.g td.old{font-family:'IBM Plex Mono',monospace;color:#A39A8B;white-space:nowrap}
+table.g td.new{font-weight:500;white-space:nowrap}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#A39A8B}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+
+.ph{width:390px;background:#0E0C0A;color:#EDE6DA;font-family:Inter,system-ui,sans-serif;padding:0 0 40px}
+.ph .top{display:flex;align-items:center;justify-content:space-between;padding:56px 16px 8px}
+.ph h1{font-family:'Instrument Serif',Georgia,serif;font-weight:400;font-size:34px;margin:0}
+.ph .tabs{padding:0 16px;overflow:hidden;white-space:nowrap}
+.ph .tabs a{margin-right:16px;font-size:14px}
+.ph .lst{padding:16px;display:flex;flex-direction:column;gap:16px}
+.ph .row{grid-template-columns:36px minmax(0,1fr);padding:14px 16px}
+.ph .pst{width:36px;height:54px}
+.ph .acts{grid-column:1 / -1;align-items:stretch;max-width:none}
+.ph .btns{flex-direction:column}
+.ph .b{height:44px;justify-content:center}
+.ph .hint{text-align:left}
+.ph .ch{padding:14px 16px;flex-wrap:wrap;gap:4px 12px}
+.ph .more{padding:12px 16px}
+</style></helmet>
+<div class="ph"><div class="top"><a href="#" aria-label="Back to Home" class="muted" style="font-size:15px">‹ Home</a></div>
+<div class="top" style="padding-top:0"><h1>Admin</h1></div>
+<nav class="tabs" aria-label="Admin sections"><a href="#" aria-current="page">To do <span class="cnt">9</span></a><a href="#">Subtitles</a><a href="#">Library</a><a href="#">Playback</a><a href="#">Settings</a></nav>
+<div class="lst">
+<div class="card st"><div class="k">Library</div><div class="v">1,412 films · scanned 12 min ago</div></div>
+<section class="card"><div class="ch"><h3>Pick the right film</h3><span class="why">3 files</span><span class="sp"></span></div><div class="row"><div class="pst" style="background:#2E3236"></div><div><div class="rt">Heat <span class="y">· 1995?</span></div><div class="rm"><span class="mono">Heat (1995) DC.m4v</span> · 82% sure</div></div><div class="acts"><div class="btns"><button class="b ">Yes, it’s Heat (1995)</button><button class="b q">Find the film…</button></div><div class="hint">Confirms the guess and fetches its details</div></div></div><div class="more"><span class="muted">1 of 3</span><a href="#">Show all</a></div></section><section class="card"><div class="ch"><h3>English subtitles missing</h3><span class="why">4 films</span><span class="sp"></span></div><div class="row"><div class="pst" style="background:#3D2A26"></div><div><div class="rt">Amélie <span class="y">· 2001</span></div><div class="rm">Spoken: French · none found automatically</div></div><div class="acts"><div class="btns"><button class="b ">Search for English subtitles…</button><button class="b q">Add my own file…</button></div><div class="hint">Shows OpenSubtitles results so you can pick one</div></div></div><div class="more"><span class="muted">1 of 4</span><a href="#">All in Subtitles</a></div></section>
+</div></div></x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1300}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script></body></html>

@@ -1,5 +1,5 @@
 import { render } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { vi } from 'vitest';
 import App from '../App.jsx';
 import collection from './fixtures/collection.json';
@@ -146,10 +146,17 @@ export function installFetch(route) {
 
 export const respond = json;
 
-export function renderApp(path = '/') {
+/** Shows the current path and hash under `data-testid="location"`, so a test can assert a redirect. */
+function LocationProbe() {
+  const { pathname, hash } = useLocation();
+  return <p data-testid="location">{`${pathname}${hash}`}</p>;
+}
+
+export function renderApp(path = '/', { showLocation = false } = {}) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <App />
+      {showLocation ? <LocationProbe /> : null}
     </MemoryRouter>,
   );
 }

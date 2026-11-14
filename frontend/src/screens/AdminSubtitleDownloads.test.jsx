@@ -78,7 +78,7 @@ function serve({ items, fail = {}, gate = null, stale = false } = {}) {
 async function openPanel(options) {
   const served = serve(options);
   installFetch(served.route);
-  const view = renderApp('/admin');
+  const view = renderApp('/admin/subtitles');
   const panel = await screen.findByRole('region', { name: 'Subtitles' });
   return { ...served, panel, view };
 }

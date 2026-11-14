@@ -2,7 +2,12 @@ import { Route, Routes } from 'react-router-dom';
 import Layout from './components/Layout.jsx';
 import LogoMark from './components/LogoMark.jsx';
 import SignInCard from './components/SignInCard.jsx';
-import Admin from './screens/Admin.jsx';
+import AdminLayout from './screens/Admin.jsx';
+import AdminLibrary from './screens/admin/AdminLibrary.jsx';
+import AdminPlayback from './screens/admin/AdminPlayback.jsx';
+import AdminSettings from './screens/admin/AdminSettings.jsx';
+import AdminSubtitles from './screens/admin/AdminSubtitles.jsx';
+import AdminTodo from './screens/admin/AdminTodo.jsx';
 import Collection from './screens/Collection.jsx';
 import FilmDetail from './screens/FilmDetail.jsx';
 import Home from './screens/Home.jsx';
@@ -44,7 +49,13 @@ export default function App() {
           <Route path="films/:id" element={<FilmDetail />} />
           <Route path="people/:id" element={<Person />} />
           <Route path="collections/:id" element={<Collection />} />
-          <Route path="admin" element={<Admin />} />
+          <Route path="admin" element={<AdminLayout />}>
+            <Route index element={<AdminTodo />} />
+            <Route path="subtitles" element={<AdminSubtitles />} />
+            <Route path="library" element={<AdminLibrary />} />
+            <Route path="playback" element={<AdminPlayback />} />
+            <Route path="settings" element={<AdminSettings />} />
+          </Route>
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

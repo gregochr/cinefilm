@@ -28,7 +28,7 @@ const input = () =>
 
 async function open(options) {
   const fetchMock = admin(options);
-  renderApp('/admin');
+  renderApp('/admin/settings');
   await card();
   return { fetchMock, field: await input() };
 }
@@ -255,10 +255,9 @@ describe('Admin: Continue watching card', () => {
 
   it('a settings load failure shows the error in the card and leaves the other cards alone', async () => {
     admin({ get: () => respond({}, 500) });
-    renderApp('/admin');
+    renderApp('/admin/settings');
     const region = await card();
     expect(await within(region).findByText('Couldn’t load the settings.')).toBeInTheDocument();
-    expect(await screen.findByRole('region', { name: 'Library scan' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Session' })).toBeInTheDocument();
     expect(within(region).queryByRole('spinbutton')).not.toBeInTheDocument();
   });
@@ -266,7 +265,7 @@ describe('Admin: Continue watching card', () => {
   it('Try again reloads the settings', async () => {
     let fail = true;
     admin({ get: () => (fail ? respond({}, 500) : respond(SETTINGS)) });
-    renderApp('/admin');
+    renderApp('/admin/settings');
     const region = await card();
     await within(region).findByText('Couldn’t load the settings.');
     fail = false;
@@ -276,7 +275,7 @@ describe('Admin: Continue watching card', () => {
 
   it('shows a loading placeholder until the settings arrive', async () => {
     admin({ get: () => new Promise(() => {}) });
-    renderApp('/admin');
+    renderApp('/admin/settings');
     expect(within(await card()).getByRole('status', { name: 'Loading' })).toBeInTheDocument();
   });
 });

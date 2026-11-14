@@ -20,21 +20,21 @@ const plexRoute = (body) => (m, url) => (url === '/api/admin/plex' ? respond(bod
 describe('Admin: Plex import panel', () => {
   it('is hidden when Plex is not configured', async () => {
     installFetch();
-    renderApp('/admin');
+    renderApp('/admin/library');
     await screen.findByRole('region', { name: 'Library scan' });
     expect(screen.queryByRole('region', { name: 'Plex import' })).not.toBeInTheDocument();
   });
 
   it('is hidden while it loads and when the status cannot be loaded', async () => {
     installFetch((m, url) => (url === '/api/admin/plex' ? respond(null, 500) : null));
-    renderApp('/admin');
+    renderApp('/admin/library');
     await screen.findByRole('region', { name: 'Library scan' });
     expect(screen.queryByRole('region', { name: 'Plex import' })).not.toBeInTheDocument();
   });
 
   it('shows reachability, the last import and its report', async () => {
     installFetch(plexRoute(fixtures.adminPlex));
-    renderApp('/admin');
+    renderApp('/admin/library');
     const panel = await screen.findByRole('region', { name: 'Plex import' });
 
     expect(within(panel).getByText('Reachable')).toBeInTheDocument();
@@ -49,7 +49,7 @@ describe('Admin: Plex import panel', () => {
 
   it('lists the films not on disk with how many more there are, and the Plex collections', async () => {
     installFetch(plexRoute(fixtures.adminPlex));
-    renderApp('/admin');
+    renderApp('/admin/library');
     const panel = await screen.findByRole('region', { name: 'Plex import' });
 
     const missing = within(panel).getByRole('list', { name: 'In Plex, not on disk' });
@@ -67,7 +67,7 @@ describe('Admin: Plex import panel', () => {
 
   it('says Never before the first import and shows no report', async () => {
     installFetch(plexRoute({ ...fixtures.adminPlex, lastImport: null }));
-    renderApp('/admin');
+    renderApp('/admin/library');
     const panel = await screen.findByRole('region', { name: 'Plex import' });
     expect(within(panel).getByText('Never')).toBeInTheDocument();
     expect(within(panel).queryByRole('list', { name: 'Import report' })).not.toBeInTheDocument();
@@ -84,13 +84,13 @@ describe('Admin: Plex import panel', () => {
         },
       }),
     );
-    renderApp('/admin');
+    renderApp('/admin/library');
     expect(await screen.findByText('08 Nov 14:09 · Plex is not reachable')).toBeInTheDocument();
   });
 
   it('disables the button and says so when Plex is not reachable', async () => {
     installFetch(plexRoute({ ...fixtures.adminPlex, reachable: false }));
-    renderApp('/admin');
+    renderApp('/admin/library');
     const panel = await screen.findByRole('region', { name: 'Plex import' });
     expect(within(panel).getByText('Not reachable')).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: 'Import from Plex' })).toBeDisabled();
@@ -101,7 +101,7 @@ describe('Admin: Plex import panel', () => {
     installFetch((m, url) =>
       url === '/api/admin/plex' ? respond({ ...fixtures.adminPlex, reachable }) : null,
     );
-    renderApp('/admin');
+    renderApp('/admin/library');
     const panel = await screen.findByRole('region', { name: 'Plex import' });
     expect(within(panel).getByRole('button', { name: 'Import from Plex' })).toBeDisabled();
 
@@ -117,7 +117,7 @@ describe('Admin: Plex import panel', () => {
 
   it('has no Check again while Plex is reachable or an import is running', async () => {
     installFetch(plexRoute(running(3)));
-    renderApp('/admin');
+    renderApp('/admin/library');
     const panel = await screen.findByRole('region', { name: 'Plex import' });
     expect(within(panel).queryByRole('button', { name: 'Check again' })).not.toBeInTheDocument();
   });
@@ -132,7 +132,7 @@ describe('Admin: Plex import panel', () => {
       if (url === '/api/admin/plex') return respond(started ? running(12) : fixtures.adminPlex);
       return null;
     });
-    renderApp('/admin');
+    renderApp('/admin/library');
     const panel = await screen.findByRole('region', { name: 'Plex import' });
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Import from Plex' }));
@@ -148,7 +148,7 @@ describe('Admin: Plex import panel', () => {
         ? respond({ error: 'Run a library scan first' }, 409)
         : plexRoute(fixtures.adminPlex)(method, url),
     );
-    renderApp('/admin');
+    renderApp('/admin/library');
     await userEvent.click(await screen.findByRole('button', { name: 'Import from Plex' }));
     expect(
       await screen.findByText('A scan or import is already running, or no scan has finished yet.'),
@@ -161,14 +161,14 @@ describe('Admin: Plex import panel', () => {
         ? respond({ error: 'boom' }, 500)
         : plexRoute(fixtures.adminPlex)(method, url),
     );
-    renderApp('/admin');
+    renderApp('/admin/library');
     await userEvent.click(await screen.findByRole('button', { name: 'Import from Plex' }));
     expect(await screen.findByText('Could not start the import.')).toBeInTheDocument();
   });
 
   it('shows progress for an import already running when the page opens', async () => {
     installFetch(plexRoute(running(12)));
-    renderApp('/admin');
+    renderApp('/admin/library');
     const panel = await screen.findByRole('region', { name: 'Plex import' });
 
     expect(within(panel).getByText('Importing')).toBeInTheDocument();
@@ -181,16 +181,16 @@ describe('Admin: Plex import panel', () => {
 
   it('shows a neutral line and no current film while Plex is first read', async () => {
     installFetch(plexRoute(running(0, 0, null)));
-    renderApp('/admin');
+    renderApp('/admin/library');
     expect(await screen.findByText('Reading Plex…')).toBeInTheDocument();
     expect(screen.queryByText(/^Now:/)).not.toBeInTheDocument();
   });
 });
 
-describe('Admin: Films needing attention after an import', () => {
-  it('reloads the attention list when an import finishes', async () => {
+describe('Admin: the grouping report after an import', () => {
+  it('reloads the grouping report when an import finishes', async () => {
     let imported = false;
-    let attentionCalls = 0;
+    let reportCalls = 0;
     installFetch((method, url) => {
       if (url === '/api/admin/plex/import') {
         imported = true;
@@ -209,21 +209,21 @@ describe('Admin: Films needing attention after an import', () => {
             : fixtures.adminPlex,
         );
       }
-      if (url === '/api/admin/attention') {
-        attentionCalls += 1;
+      if (url === '/api/admin/grouping-report') {
+        reportCalls += 1;
         return null;
       }
       return null;
     });
-    renderApp('/admin');
+    renderApp('/admin/library');
     await screen.findByRole('region', { name: 'Plex import' });
     await screen.findByRole('button', { name: 'Scan now' });
-    await waitFor(() => expect(attentionCalls).toBeGreaterThan(0));
-    const before = attentionCalls;
+    await waitFor(() => expect(reportCalls).toBeGreaterThan(0));
+    const before = reportCalls;
 
     await userEvent.click(screen.getByRole('button', { name: 'Import from Plex' }));
 
-    await waitFor(() => expect(attentionCalls).toBeGreaterThan(before));
+    await waitFor(() => expect(reportCalls).toBeGreaterThan(before));
   });
 });
 

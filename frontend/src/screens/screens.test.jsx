@@ -48,11 +48,11 @@ describe('Home', () => {
     expect(await screen.findByText('The house lights are up')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Import from Plex' })).toHaveAttribute(
       'href',
-      '/admin#library-scan',
+      '/admin/library#plex-import',
     );
     expect(screen.getByRole('link', { name: 'Scan a folder' })).toHaveAttribute(
       'href',
-      '/admin#library-scan',
+      '/admin/library#scan',
     );
   });
 
@@ -60,7 +60,7 @@ describe('Home', () => {
     installFetch();
     renderApp('/');
     await screen.findByRole('heading', { name: 'Heat' });
-    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/admin');
+    expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/admin');
     const search = screen.getByRole('combobox', { name: 'Search the library' });
     await userEvent.keyboard('/');
     expect(search).toHaveFocus();

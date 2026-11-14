@@ -25,7 +25,7 @@ describe('Header', () => {
     expect(nav).toHaveTextContent('Home');
     expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: 'Library' })).toHaveAttribute('href', '/library');
-    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/admin');
+    expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/admin');
   });
 
   it('the wordmark link is one lockup: the 30px mark beside the CineFilm text', () => {
