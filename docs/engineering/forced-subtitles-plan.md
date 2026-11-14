@@ -1118,6 +1118,14 @@ links to each film's rows.
     The player's 5c default (on when nothing is chosen, full need `NEEDED` and the selected audio not labelled English)
     already switches the subtitle on for unlabelled audio. This reverses decision 62's `UNSURE`. **Alternative given
     up:** wait for the owner's tap. An English dub costs one download, and the owner switches it off once (Not needed).
+71. **Phase 6 (picture subtitles) is not built.** The 2026-11-14 measurement (Phase 6, "Measured") found no picture
+    track that is needed and has no text version: every picture track is an empty placeholder, a full track in an
+    English-original film, or a LOTR forced track with a text forced file here or online. OCR (way A) and burn-in
+    (way B) would cost a build and a dependency for nothing the owner would see. The full-size picture tracks stay
+    useful as phase 3 timing references (`EmbeddedStreams` reads their packet times without OCR). **Revisit** only if
+    a new rip brings a picture track to a foreign-language film, or a forced-size picture track to a film with no forced
+    text here or online. The same read-only pass finds it. **Alternative given up:** build OCR anyway for future rips.
+    It would be built against no real need, and OpenSubtitles already covers the films it would serve.
 
 #### Automatic need (2026-11-13)
 
@@ -1213,6 +1221,31 @@ Two ways, to be settled by a spike at the start of the phase:
 
 Empty placeholder tracks are detected (no packets, or no bitmaps after OCR) and hidden. Phase 6 may shrink a lot if
 phases 4–5 find text versions for most of these films: measure first.
+
+#### Measured (2026-11-14): nothing to build
+
+A read-only pass on dockermacmini (on v0.7.4) went over all 1,108 films. It read every subtitle stream header with
+ffprobe, counted the packets of each picture track (`-count_packets`), and joined each film's original language, its
+present sidecars (kind) and its OpenSubtitles results (`os_forced_count`, `os_full_candidates`) from the database. The
+scripts were kept outside the repo.
+
+| Picture tracks (all `dvd_subtitle`, all `eng`, none flagged forced) | Tracks |
+|---|---|
+| Empty placeholders (no packets) | 94 |
+| Full-size (1,700–5,200 packets), every one in an **English-original** film | 42 |
+| Forced-size, with a text forced file already here (Return of the King, 6 packets) | 2 |
+| Forced-size, with forced text on OpenSubtitles (Fellowship 42 packets, Two Towers 82) | 4 |
+| **Picture only: needed, and no text version here or online** | **0** |
+
+- **Every film with a picture track is English-original.** No foreign-language film has one, so no picture track is
+  needed for full subtitles (phase 5 needs full subtitles only for foreign films, decision 70).
+- **The forced-size tracks are the three LOTR theatrical cuts.** Each has a text version: Return of the King's is
+  matched. For Fellowship and Two Towers, the owner's unmatched `.srt` files are attached in Admin (owner decision 3),
+  or the forced downloader fetches the text from OpenSubtitles.
+- **Placeholders are already hidden.** `FfprobeParser` stores only text codecs, so no picture track, empty or not, ever
+  reaches the subtitle menu.
+
+**Decision 71** follows.
 
 ## Owner decisions needed
 
