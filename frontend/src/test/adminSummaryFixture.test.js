@@ -9,8 +9,10 @@ import transcoding from './fixtures/admin-transcoding.json';
 import { FILM_SESSION_MIN_MS } from '../state/healthFormat.js';
 
 const DAY_MS = 86_400_000;
-// The reference "now" the playback figures are read against. The health fixture's sessions started between 6 and 10
-// Nov 2026 (the playing-now row started at 14 Nov but watched under three minutes, so it is no film session), so any "now" from 10 Nov to 6 Dec 2026 keeps all of them inside the 30 days; the test pins one.
+// The reference "now" the playback figures are read against. The health fixture's sessions started
+// between 6 and 10 Nov 2026 (the playing-now row started at 14 Nov but watched under three minutes,
+// so it is no film session), so any "now" from 10 Nov to 6 Dec 2026 keeps all of them inside the
+// 30 days; the test pins one.
 const REFERENCE_NOW = Date.parse('2026-11-14T12:00:00Z');
 
 const countKind = (...kinds) => attention.items.filter((i) => kinds.includes(i.kind)).length;

@@ -15,6 +15,7 @@ import gregochr.cinefilm.health.HealthDtos.PlaybackCounts;
 import gregochr.cinefilm.health.HealthDtos.PlayingNow;
 import java.time.Duration;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -58,7 +59,7 @@ class PlaybackHealthSummaryTest {
     }
 
     private void playingRows(PlaybackHealth... rows) {
-        when(repository.updatedSince(NOW.minusSeconds(120), PageRequest.ofSize(10))).thenReturn(List.of(rows));
+        when(repository.updatedSince(NOW.minusSeconds(120), PageRequest.ofSize(200))).thenReturn(List.of(rows));
     }
 
     @Test
@@ -165,6 +166,32 @@ class PlaybackHealthSummaryTest {
 
         assertThat(service.playingNow()).extracting(PlayingNow::playbackId).containsExactly(reloaded);
         assertThat(service.playingNow().get(0).environment()).isEqualTo("away");
+    }
+
+    @Test
+    void reloadsOfOneEditionCannotHideAnotherEdition() {
+        PlaybackHealth[] rows = new PlaybackHealth[11];
+        for (int i = 0; i < 10; i++) {
+            rows[i] = stored(new UUID(0, i + 1).toString(), text(example()), "home");
+        }
+        rows[10] = stored("0a1b2c3d-0000-4000-8000-0123456789ab", text(example()), "away");
+        rows[10].setEditionId(12L);
+        playingRows(rows);
+
+        assertThat(service.playingNow()).extracting(PlayingNow::editionId).containsExactly(11L, 12L);
+    }
+
+    @Test
+    void moreThanTenEditionsAreCappedAtTenKeepingTheNewest() {
+        PlaybackHealth[] rows = new PlaybackHealth[12];
+        for (int i = 0; i < 12; i++) {
+            rows[i] = stored(new UUID(0, i + 1).toString(), text(example()), "home");
+            rows[i].setEditionId(100L + i);
+        }
+        playingRows(rows);
+
+        assertThat(service.playingNow()).extracting(PlayingNow::editionId)
+            .containsExactly(100L, 101L, 102L, 103L, 104L, 105L, 106L, 107L, 108L, 109L);
     }
 
     @Test

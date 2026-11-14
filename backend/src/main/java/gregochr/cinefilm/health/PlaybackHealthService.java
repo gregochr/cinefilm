@@ -67,6 +67,13 @@ public class PlaybackHealthService {
     /** Most viewings "playing now" lists. */
     static final int PLAYING_NOW_MAX = 10;
 
+    /**
+     * Most rows read from the two-minute window before they are reduced to one per edition. A safety bound only: the
+     * window holds a few rows in practice, but a player that reloads in a loop must not make the read unbounded, and
+     * the cap of {@link #PLAYING_NOW_MAX} applies after the reduction so reloads of one edition cannot hide another.
+     */
+    static final int PLAYING_NOW_WINDOW_ROWS = 200;
+
     /** Quality ids by the rung code of a {@code minutes} row (code 1 is the first); code 0 means unknown. */
     private static final List<String> RUNG_IDS = List.of(Ladder.ORIGINAL, Ladder.Q_1080, Ladder.Q_720, Ladder.Q_480,
         Ladder.Q_360, Ladder.Q_240);
@@ -212,7 +219,10 @@ public class PlaybackHealthService {
         Instant since = clock.instant().minus(PLAYING_WINDOW);
         List<PlayingNow> playing = new ArrayList<>();
         Set<Long> editions = new HashSet<>();
-        for (PlaybackHealth stored : repository.updatedSince(since, PageRequest.ofSize(PLAYING_NOW_MAX))) {
+        for (PlaybackHealth stored : repository.updatedSince(since, PageRequest.ofSize(PLAYING_NOW_WINDOW_ROWS))) {
+            if (playing.size() == PLAYING_NOW_MAX) {
+                break;
+            }
             if (!editions.add(stored.getEditionId())) {
                 continue;
             }

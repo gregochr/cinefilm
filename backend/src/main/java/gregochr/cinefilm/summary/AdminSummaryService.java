@@ -14,6 +14,7 @@ import gregochr.cinefilm.transcode.SessionManager;
 import java.util.List;
 import java.util.Set;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -47,10 +48,11 @@ public class AdminSummaryService {
     }
 
     /**
-     * The summary, read fresh. One read-only transaction, so the reads share a persistence context and the films one
-     * of them loads are not loaded again by the next.
+     * The summary, read fresh, in one read-only transaction and one database snapshot ({@code REPEATABLE_READ}: on
+     * PostgreSQL a single snapshot for the whole transaction, not one per statement), so the counts agree with each
+     * other. The live sessions and the scan-running flags are in memory, outside the snapshot.
      */
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public AdminSummary summary() {
         List<AttentionItem> items = admin.attention().items();
         long pickFilm = items.stream().filter(item -> NEEDS_MATCH.equals(item.kind())).count();
