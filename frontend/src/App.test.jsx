@@ -43,10 +43,10 @@ describe('App routes', () => {
     expect(screen.getByRole('main')).toBeInTheDocument();
   });
 
-  it('the Settings icon opens Admin', async () => {
+  it('the gear opens Admin', async () => {
     installFetch();
     renderApp('/');
-    await userEvent.click(await screen.findByRole('link', { name: 'Settings' }));
+    await userEvent.click(await screen.findByRole('link', { name: 'Admin' }));
     expect(await screen.findByRole('heading', { level: 1, name: 'To do' })).toBeInTheDocument();
   });
 

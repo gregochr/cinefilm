@@ -13,11 +13,16 @@ export const OLD_SCAN_HASH = '#library-scan';
 /** Where the old scan address now lives. */
 export const SCAN_ROUTE = '/admin/library#scan';
 
+/** A path as the router matches it: no trailing slash and no case. */
+export function normalisePath(pathname) {
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  return path.toLowerCase();
+}
+
 /**
  * True on the five Admin pages, where the phone replaces the app header and tab bar with Admin's own "Home" link
  * and section row. An unknown address under /admin is the "Nothing here" page and keeps the app chrome.
  */
 export function bareOnPhone(pathname) {
-  const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
-  return ADMIN_SECTIONS.some((section) => section.to === path);
+  return ADMIN_SECTIONS.some((section) => section.to === normalisePath(pathname));
 }

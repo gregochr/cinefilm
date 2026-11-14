@@ -2,6 +2,8 @@ import { Button } from '../../components/Button.jsx';
 import { SkeletonBlock } from '../../components/Skeleton.jsx';
 import { ErrorState } from '../../components/StateMessages.jsx';
 import { formatRuntime } from '../../player/time.js';
+import { useFallbackFocus } from './useFallbackFocus.js';
+import SectionTitle from './SectionTitle.jsx';
 import { useAdminContext } from '../../state/adminContext.js';
 import { useAttention } from '../../state/useAdmin.js';
 import { kindLabel, titleWithYear } from '../../state/scanFormat.js';
@@ -82,9 +84,10 @@ function AttentionPanel({ attention, loading, error, onRetry, onFixMatch, onEdit
 export default function AdminTodo() {
   const { settledAt, changed, openFixMatch, openEditEditions } = useAdminContext();
   const attention = useAttention(`${settledAt}|${changed}`);
+  useFallbackFocus(attention.data);
   return (
     <>
-      <h1 className="admin__section-title">To do</h1>
+      <SectionTitle>To do</SectionTitle>
       <div className="admin__grid">
         <AttentionPanel
           attention={attention.data}

@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import { Button } from '../../components/Button.jsx';
+import SectionTitle from './SectionTitle.jsx';
 import { SkeletonBlock } from '../../components/Skeleton.jsx';
 import { ErrorState } from '../../components/StateMessages.jsx';
 import {
@@ -151,7 +152,7 @@ function SessionPanel() {
 export default function AdminSettings() {
   return (
     <>
-      <h1 className="admin__section-title">Settings</h1>
+      <SectionTitle>Settings</SectionTitle>
       <div className="admin__grid">
         <ContinueWatchingPanel />
         <SessionPanel />

@@ -340,7 +340,14 @@ describe('Admin: Films needing attention panel', () => {
 
   it('refreshes when a scan finishes', async () => {
     let scans = 0;
-    const fetchMock = installFetch((method, url) => {
+    installFetch((method, url) => {
+      if (url === '/api/admin/attention') {
+        return scans < 2
+          ? null
+          : respond({
+              items: [{ ...fixtures.adminAttention.items[1], title: 'Fresh Film', year: 1969 }],
+            });
+      }
       if (url === '/api/admin/scan') {
         scans += 1;
         return respond(
@@ -356,14 +363,12 @@ describe('Admin: Films needing attention panel', () => {
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
     renderApp('/admin');
-    await waitFor(() => expect(scans).toBe(1));
-    const attentionCalls = () =>
-      fetchMock.mock.calls.filter((c) => c[0] === '/api/admin/attention').length;
-    const before = attentionCalls();
+    expect(await screen.findByText('Kes (1969)')).toBeInTheDocument();
+    expect(screen.queryByText('Fresh Film (1969)')).not.toBeInTheDocument();
 
     await act(() => vi.advanceTimersByTimeAsync(1500));
 
-    await waitFor(() => expect(attentionCalls()).toBeGreaterThan(before));
+    expect(await screen.findByText('Fresh Film (1969)')).toBeInTheDocument();
   });
 });
 
@@ -386,13 +391,14 @@ describe('Admin: Subtitles refresh', () => {
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
     renderApp('/admin/subtitles');
-    await waitFor(() => expect(scans).toBe(1));
-    const calls = () => fetchMock.mock.calls.filter((c) => c[0] === '/api/admin/subtitles').length;
-    const before = calls();
+    const reads = () => fetchMock.mock.calls.filter((c) => c[0] === '/api/admin/subtitles').length;
+    // The first read, then the one the first scan answer's stamp triggers: nothing else is in flight after that.
+    await waitFor(() => expect(reads()).toBe(2));
+    await screen.findByRole('region', { name: 'Subtitles' });
 
     await act(() => vi.advanceTimersByTimeAsync(1500));
 
-    await waitFor(() => expect(calls()).toBeGreaterThan(before));
+    await waitFor(() => expect(reads()).toBe(3));
   });
 });
 

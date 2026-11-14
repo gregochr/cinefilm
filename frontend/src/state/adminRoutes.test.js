@@ -14,10 +14,16 @@ describe('ADMIN_SECTIONS', () => {
 });
 
 describe('bareOnPhone', () => {
-  it.each(['/admin', '/admin/', '/admin/subtitles', '/admin/library', '/admin/playback'])(
-    'is true on %s',
-    (path) => expect(bareOnPhone(path)).toBe(true),
-  );
+  it.each([
+    '/admin',
+    '/admin/',
+    '/admin/subtitles',
+    '/admin/library',
+    '/admin/playback',
+    '/admin/settings',
+    '/Admin',
+    '/ADMIN/Library/',
+  ])('is true on %s', (path) => expect(bareOnPhone(path)).toBe(true));
 
   it.each(['/', '/library', '/admin/foo', '/admin/library/x', '/films/1'])(
     'is false on %s',

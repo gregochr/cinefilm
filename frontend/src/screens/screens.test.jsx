@@ -60,7 +60,7 @@ describe('Home', () => {
     installFetch();
     renderApp('/');
     await screen.findByRole('heading', { name: 'Heat' });
-    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/admin');
+    expect(screen.getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/admin');
     const search = screen.getByRole('combobox', { name: 'Search the library' });
     await userEvent.keyboard('/');
     expect(search).toHaveFocus();

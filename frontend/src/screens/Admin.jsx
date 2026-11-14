@@ -4,7 +4,7 @@ import FixMatchPanel from '../components/FixMatchPanel.jsx';
 import Toast from '../components/Toast.jsx';
 import { useDocumentVisible } from '../components/useDocumentVisible.js';
 import { AdminContext } from '../state/adminContext.js';
-import { ADMIN_SECTIONS, OLD_SCAN_HASH, SCAN_ROUTE } from '../state/adminRoutes.js';
+import { ADMIN_SECTIONS, OLD_SCAN_HASH, SCAN_ROUTE, normalisePath } from '../state/adminRoutes.js';
 import { useAdminShell } from '../state/useAdminShell.js';
 
 /** Hands focus back to the element a dialog was opened from, when it is still on the page. */
@@ -37,7 +37,8 @@ function AdminNav() {
 
 function AdminShell() {
   const visible = useDocumentVisible();
-  const shell = useAdminShell(visible);
+  const { pathname } = useLocation();
+  const shell = useAdminShell(visible, pathname);
   const { fixing, editing, toast } = shell;
 
   const closeFixMatch = () => {
@@ -45,13 +46,17 @@ function AdminShell() {
     shell.closeFixMatch();
   };
   const applied = (result, stale) => {
-    if (!stale) closeFixMatch();
+    if (!stale) {
+      closeFixMatch();
+      shell.armFocusFallback();
+    }
     shell.markChanged();
   };
   // A saved arrangement settles the row it was opened from, so the lists are read again.
   const edited = (result, stale) => {
     if (!stale) {
       shell.closeEditEditions();
+      shell.armFocusFallback();
       toast.show('Editions saved');
     }
     shell.markChanged();
@@ -93,7 +98,7 @@ function AdminShell() {
  */
 export default function AdminLayout() {
   const { pathname, hash } = useLocation();
-  if (hash === OLD_SCAN_HASH && pathname.replace(/\/+$/, '') === '/admin') {
+  if (hash === OLD_SCAN_HASH && normalisePath(pathname) === '/admin') {
     return <Navigate replace to={SCAN_ROUTE} />;
   }
   return <AdminShell />;

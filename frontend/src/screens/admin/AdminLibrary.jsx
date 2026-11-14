@@ -4,6 +4,7 @@ import { Button } from '../../components/Button.jsx';
 import { SkeletonBlock } from '../../components/Skeleton.jsx';
 import PlexCreditsImport from '../../components/PlexCreditsImport.jsx';
 import { ErrorState } from '../../components/StateMessages.jsx';
+import SectionTitle from './SectionTitle.jsx';
 import { useAdminContext } from '../../state/adminContext.js';
 import { useGroupingReport } from '../../state/useAdmin.js';
 import {
@@ -330,14 +331,16 @@ export default function AdminLibrary() {
   const plexShown = Boolean(plexImport.plex?.configured);
   useEffect(() => {
     if (hash === '#scan' && scanShown) document.getElementById('scan')?.scrollIntoView?.();
+  }, [hash, scanShown]);
+  useEffect(() => {
     if (hash === '#plex-import' && plexShown) {
       document.getElementById('plex-import')?.scrollIntoView?.();
     }
-  }, [hash, scanShown, plexShown]);
+  }, [hash, plexShown]);
 
   return (
     <>
-      <h1 className="admin__section-title">Library</h1>
+      <SectionTitle>Library</SectionTitle>
       <div className="admin__grid">
         <ScanPanel
           scan={scan}

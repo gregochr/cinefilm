@@ -70,6 +70,7 @@ describe('Admin shell: routes and navigation', () => {
     expect(screen.getByTestId('app')).not.toHaveClass('app--bare-phone');
   });
 
+  // data-testid is the one handle here: the class only matters to a media query, so nothing else observes it.
   it('marks the five Admin pages (and no other) so a phone drops the app header and tab bar', async () => {
     installFetch();
     renderApp('/admin/playback');
@@ -125,6 +126,13 @@ describe('Admin shell: the old scan address', () => {
     } finally {
       delete Element.prototype.scrollIntoView;
     }
+  });
+
+  it('redirects the old address typed in another case, as the router matches it', async () => {
+    installFetch();
+    renderApp('/Admin#library-scan', { showLocation: true });
+    await screen.findByRole('button', { name: 'Scan now' });
+    expect(screen.getByTestId('location')).toHaveTextContent('/admin/library#scan');
   });
 
   it('does not redirect /admin without the hash', async () => {

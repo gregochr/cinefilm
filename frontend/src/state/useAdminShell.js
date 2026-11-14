@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useToast } from './useToast.js';
 import { usePlexImport, useScan } from './useAdmin.js';
 
@@ -9,7 +9,7 @@ import { usePlexImport, useScan } from './useAdmin.js';
  *
  * The dialogs remember the element that opened them so the layout can hand focus back on close.
  */
-export function useAdminShell(visible) {
+export function useAdminShell(visible, pathname = '') {
   const scanState = useScan(visible);
   const plexImport = usePlexImport();
   const { scan, reload: reloadScan } = scanState;
@@ -17,6 +17,15 @@ export function useAdminShell(visible) {
   const [fixing, setFixing] = useState(null);
   const [editing, setEditing] = useState(null);
   const toast = useToast();
+  const fallback = useRef(false);
+
+  // Dialogs belong to the section they were opened from: moving to another one closes them.
+  const [seenPath, setSeenPath] = useState(pathname);
+  if (seenPath !== pathname) {
+    setSeenPath(pathname);
+    setFixing(null);
+    setEditing(null);
+  }
 
   // The lists refresh when a scan or a Plex import finishes: both settle matches.
   const settledAt = `${scan?.lastScan?.finishedAt ?? 'never'}|${plexImport.plex?.lastImport?.finishedAt ?? 'none'}`;
@@ -29,6 +38,14 @@ export function useAdminShell(visible) {
   }, [reloadScan]);
   const openFixMatch = useCallback((item, opener) => setFixing({ item, opener }), []);
   const openEditEditions = useCallback((film, opener) => setEditing({ film, opener }), []);
+  const armFocusFallback = useCallback(() => {
+    fallback.current = true;
+  }, []);
+  const takeFocusFallback = useCallback(() => {
+    const armed = fallback.current;
+    fallback.current = false;
+    return armed;
+  }, []);
   const closeFixMatch = useCallback(() => setFixing(null), []);
   const closeEditEditions = useCallback(() => setEditing(null), []);
 
@@ -41,12 +58,14 @@ export function useAdminShell(visible) {
       changed,
       openFixMatch,
       openEditEditions,
+      takeFocusFallback,
     },
     fixing,
     editing,
     closeFixMatch,
     closeEditEditions,
     markChanged,
+    armFocusFallback,
     toast,
   };
 }

@@ -23,7 +23,7 @@ export default function Header() {
       </nav>
       <div className="header__spacer" />
       {showSearch ? <SearchBox /> : null}
-      <Link to="/admin" className="header__settings" aria-label="Settings">
+      <Link to="/admin" className="header__settings" aria-label="Admin">
         <SettingsIcon />
       </Link>
     </header>

@@ -37,14 +37,49 @@ describe('useAdminShell', () => {
     expect(result.current.editing).toBeNull();
   });
 
-  it('counts a change each time markChanged runs', () => {
-    installFetch();
+  it('counts a change each time markChanged runs, and reads the scan status again', async () => {
+    const fetchMock = installFetch();
     const { result } = renderHook(() => useAdminShell(true));
+    const scans = () =>
+      fetchMock.mock.calls.filter(
+        ([url, init]) => url === '/api/admin/scan' && init?.method !== 'POST',
+      ).length;
+    await waitFor(() => expect(scans()).toBe(1));
     expect(result.current.value.changed).toBe(0);
 
     act(() => result.current.markChanged());
+    await waitFor(() => expect(scans()).toBe(2));
     act(() => result.current.markChanged());
 
     expect(result.current.value.changed).toBe(2);
+    await waitFor(() => expect(scans()).toBe(3));
+  });
+
+  it('closes both dialogs when the path changes, and not for the same path', () => {
+    installFetch();
+    const { result, rerender } = renderHook(({ path }) => useAdminShell(true, path), {
+      initialProps: { path: '/admin' },
+    });
+    act(() => result.current.value.openFixMatch({ filmId: 1 }, null));
+    act(() => result.current.value.openEditEditions({ id: 2 }, null));
+
+    rerender({ path: '/admin' });
+    expect(result.current.fixing).not.toBeNull();
+    expect(result.current.editing).not.toBeNull();
+
+    rerender({ path: '/admin/library' });
+    expect(result.current.fixing).toBeNull();
+    expect(result.current.editing).toBeNull();
+  });
+
+  it('hands the focus fallback out once after it is armed', () => {
+    installFetch();
+    const { result } = renderHook(() => useAdminShell(true));
+    expect(result.current.value.takeFocusFallback()).toBe(false);
+
+    act(() => result.current.armFocusFallback());
+
+    expect(result.current.value.takeFocusFallback()).toBe(true);
+    expect(result.current.value.takeFocusFallback()).toBe(false);
   });
 });
