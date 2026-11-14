@@ -81,6 +81,15 @@ public class CreditsDatasetJob {
         }
     }
 
+    /** A resume that finds the job started or stopped since it was queued is refused by {@link #begin}. */
+    private static final class Declined extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        Declined() {
+            super("The resume is no longer wanted", null, false, false);
+        }
+    }
+
     /** What a start works out before the chain begins. */
     private record Prepared(String ffmpegVersion, int targets, int alreadyComplete, List<DatasetTarget> todo) {
     }
@@ -149,15 +158,6 @@ public class CreditsDatasetJob {
      */
     public DatasetStatus start() {
         return start(false);
-    }
-
-    /** A resume that finds the job started or stopped since it was queued is refused by {@link #begin}. */
-    private static final class Declined extends RuntimeException {
-        private static final long serialVersionUID = 1L;
-
-        Declined() {
-            super("The resume is no longer wanted", null, false, false);
-        }
     }
 
     private DatasetStatus start(boolean resumeOnly) {
@@ -245,8 +245,9 @@ public class CreditsDatasetJob {
 
     private void resume() {
         try {
+            State state = start(true).state();
             LOG.info("Credits dataset job: {}",
-                start(true).state() == State.FAILED ? "could not start" : "starting again");
+                state == State.RUNNING ? "starting again" : "not starting again: " + state);
         } catch (Declined e) {
             LOG.info("Credits dataset job: not starting again: stopped or started meanwhile");
         }
@@ -277,7 +278,11 @@ public class CreditsDatasetJob {
 
     // ---- Starting ------------------------------------------------------------------------------------------------
 
-    /** Takes a new generation and resets the run; refused while one is going. */
+    /**
+     * Takes a new generation and resets the run; refused while one is going. For a queued resume ({@code resumeOnly})
+     * it is also refused, with {@link Declined}, unless the job is still IDLE and the marker (or a misplaced directory)
+     * is still there: the check and the take-over are one step under the lock.
+     */
     private long begin(boolean resumeOnly) {
         synchronized (lock) {
             // The task may run long after it was queued: a stop deletes the marker, and a start leaves IDLE. The check

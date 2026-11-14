@@ -730,6 +730,32 @@ class CreditsDatasetJobTest {
         assertThat(messages()).contains("Credits dataset job: not starting again: stopped or started meanwhile");
         assertThat(queue).hasSize(1);
         assertThat(job.status().state()).isEqualTo(State.RUNNING);
+        assertThat(targets.listCalls).isEqualTo(1);
+    }
+
+    @Test
+    void aResumeThatFailsToStartLogsTheStateItEndedIn() throws IOException {
+        Files.createDirectories(props.dir());
+        Files.writeString(props.marker(), "a run was going");
+        targets.listFailure = new IllegalStateException("database is down");
+        job.onStartup();
+
+        drain();
+
+        assertThat(messages()).contains("Credits dataset job: not starting again: FAILED");
+    }
+
+    @Test
+    void aResumeThatIsStoppedWhileItStartsLogsTheStateItEndedIn() throws IOException {
+        targetIds(1);
+        Files.createDirectories(props.dir());
+        Files.writeString(props.marker(), "a run was going");
+        targets.duringList = once(job::stop);
+        job.onStartup();
+
+        drain();
+
+        assertThat(messages()).contains("Credits dataset job: not starting again: STOPPED");
     }
 
     @Test
@@ -745,7 +771,7 @@ class CreditsDatasetJobTest {
         assertThat(status.state()).isEqualTo(State.FAILED);
         assertThat(status.lastError()).contains("cinefilm.credits.dataset.dir");
         assertThat(queue).isEmpty();
-        assertThat(messages()).contains("Credits dataset job: could not start");
+        assertThat(messages()).contains("Credits dataset job: not starting again: FAILED");
     }
 
     @Test
