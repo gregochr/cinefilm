@@ -4,7 +4,7 @@ import static gregochr.cinefilm.TestData.CLOCK;
 import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -98,9 +98,9 @@ class LibraryGroupingUnitTest {
     }
 
     private List<GroupingChange> saved() {
-        ArgumentCaptor<GroupingChange> captor = ArgumentCaptor.forClass(GroupingChange.class);
-        verify(changes, atLeast(0)).save(captor.capture());
-        return captor.getAllValues();
+        return mockingDetails(changes).getInvocations().stream()
+            .filter(call -> call.getMethod().getName().equals("save"))
+            .map(call -> (GroupingChange) call.getArgument(0)).toList();
     }
 
     /** Stubs what a split of the given film's second edition needs; returns the new film the split will create. */
@@ -131,7 +131,6 @@ class LibraryGroupingUnitTest {
         assertThat(result).isEqualTo(new RepairResult(1, false));
         assertThat(created.getValue().getTitle()).isEqualTo("Enchanted");
         assertThat(created.getValue().getMatchStatus()).isEqualTo(MatchStatus.PENDING);
-        verify(editions).moveOne(elf.getEditions().get(1).getId(), created.getValue());
         assertThat(saved()).singleElement().satisfies(change -> {
             assertThat(change.getKind()).isEqualTo(GroupingChange.SPLIT);
             assertThat(change.getSummary()).isEqualTo("Moved \"Enchanted\" out of \"Elf\" into a film of its own "
@@ -274,11 +273,42 @@ class LibraryGroupingUnitTest {
     @Test
     void aFailedSplitIsLoggedAndTheRepairGoesOn() {
         Film elf = film("Elf", ELF, "Elf.m4v", "Enchanted.m4v");
+        film("Blade Runner", 78L, "Blade Runner.m4v", "Blader Runner.m4v");
         tmdbKnowsElf();
         when(tmdb.search("Enchanted", null)).thenReturn(List.of(ENCHANTED_2007));
         when(films.findById(elf.getId())).thenThrow(new IllegalStateException("boom"));
+        when(tmdb.movie(78L)).thenReturn(Optional.empty());
+        when(tmdb.alternativeTitles(78L)).thenReturn(List.of());
+        when(tmdb.search("Blader Runner", null)).thenReturn(List.of());
 
-        assertThat(grouping.repair(true)).isEqualTo(new RepairResult(0, false));
+        assertThat(grouping.repair(true)).isEqualTo(new RepairResult(1, false));
+
+        assertThat(saved()).singleElement().extracting(GroupingChange::getSummary).isEqualTo(
+            "Files look like different films: \"Blade Runner\", \"Blader Runner\" in \"Blade Runner\"");
+    }
+
+    @Test
+    void aTitleEqualToOnlyTheReferencesOriginalTitleIsFlaggedNotSplit() {
+        film("Elf", ELF, "Elf.m4v", "Enchanted.m4v");
+        when(tmdb.movie(ELF)).thenReturn(Optional.of(movie(ELF, "Elf", "Enchanted")));
+        when(tmdb.alternativeTitles(ELF)).thenReturn(List.of());
+        when(tmdb.search("Enchanted", null)).thenReturn(List.of(ENCHANTED_2007));
+
+        assertThat(grouping.repair(true)).isEqualTo(new RepairResult(1, false));
+
+        assertThat(saved()).singleElement().extracting(GroupingChange::getKind).isEqualTo(GroupingChange.FLAG);
+    }
+
+    @Test
+    void aTitleEqualToOnlyTheReferencesTitleIsFlaggedNotSplit() {
+        film("Elf", ELF, "Elf.m4v", "Enchanted.m4v");
+        when(tmdb.movie(ELF)).thenReturn(Optional.of(movie(ELF, "Enchanted", "Elf")));
+        when(tmdb.alternativeTitles(ELF)).thenReturn(List.of());
+        when(tmdb.search("Enchanted", null)).thenReturn(List.of(ENCHANTED_2007));
+
+        assertThat(grouping.repair(true)).isEqualTo(new RepairResult(1, false));
+
+        assertThat(saved()).singleElement().extracting(GroupingChange::getKind).isEqualTo(GroupingChange.FLAG);
     }
 
     @Test

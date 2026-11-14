@@ -53,7 +53,6 @@ class ScanServiceResilienceTest {
             Runnable::run, CLOCK, new LibraryLock(), event -> { }, grouping, sidecars);
         when(tmdb.enabled()).thenReturn(true);
         when(grouping.repair(true)).thenReturn(new LibraryGrouping.RepairResult(0, false));
-        when(grouping.repair(false)).thenReturn(new LibraryGrouping.RepairResult(0, false));
         when(ingest.startRun("admin", CLOCK.instant())).thenReturn(5L);
         when(ingest.known()).thenReturn(Map.of());
         when(scanner.scan()).thenReturn(new Found(List.of(), 0));
@@ -107,6 +106,7 @@ class ScanServiceResilienceTest {
         when(ingest.known()).thenReturn(Map.of("Locked/Heat.m4v", known(2, "Locked/Heat.m4v", 20, T1)));
         when(ffprobe.probe(library.resolve("New.m4v").toRealPath())).thenThrow(new ProbeException("x", null));
         when(tmdb.enabled()).thenReturn(false);
+        when(grouping.repair(false)).thenReturn(new LibraryGrouping.RepairResult(0, false));
 
         service.start("admin");
 
@@ -138,6 +138,7 @@ class ScanServiceResilienceTest {
     @Test
     void collectionsAreNotRetriedWithoutATokenOrAfterAnOutageDuringTheScan() {
         when(tmdb.enabled()).thenReturn(false);
+        when(grouping.repair(false)).thenReturn(new LibraryGrouping.RepairResult(0, false));
         service.start("admin");
         verify(ingest, never()).completeCollections();
 

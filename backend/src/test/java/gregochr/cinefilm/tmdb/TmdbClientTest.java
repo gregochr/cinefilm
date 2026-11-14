@@ -463,6 +463,13 @@ class TmdbClientTest {
         assertThatThrownBy(() -> client.alternativeTitles(78)).isInstanceOf(TmdbUnavailableException.class)
             .hasMessage("TMDB unavailable after 4 attempts: status 502");
         assertThat(sleeps).hasSize(3);
+
+        server.reset();
+        server.expect(once(), requestTo(ALTERNATIVES_78))
+            .andRespond(withSuccess("{\"id\":78,\"titles\":[{\"title\":\"Replicant\"}]}", MediaType.APPLICATION_JSON));
+
+        assertThat(client.alternativeTitles(78)).containsExactly("Replicant");
+        server.verify();
     }
 
     @Test

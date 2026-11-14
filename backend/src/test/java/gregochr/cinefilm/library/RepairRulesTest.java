@@ -258,6 +258,12 @@ class RepairRulesTest {
     }
 
     @Test
+    void aFilmWithAnIneligibleGroupBesideAnEligibleOneIsNotLookedUpAtAll() {
+        assertThat(RepairRules.lookups("Elf", 10719L, List.of(fact(1, 10, 100, "Elf.m4v"),
+            fact(1, 20, 200, "Buddy {edition-X}.m4v"), fact(1, 30, 300, "Enchanted.m4v")))).isEmpty();
+    }
+
+    @Test
     void aGroupThatAlreadyHasTodaysEvidenceIsNotLookedUpButTheOthersAre() {
         List<FileFact> files = List.of(fact(1, 10, 100, "Rocky IV.m4v"), fact(1, 20, 200, "Rocky V.m4v"),
             fact(1, 30, 300, "Enchanted.m4v"), fact(1, 40, 400, "Heat Wave {tmdb-1234}.m4v"));

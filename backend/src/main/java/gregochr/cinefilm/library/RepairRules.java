@@ -120,7 +120,8 @@ public final class RepairRules {
     /**
      * The groups worth asking TMDB about. Empty unless today's decision is FLAG, the film has an own group and a
      * reference id. A group is returned when it lacks today's evidence (a sequel marker, a differing {@code {tmdb-}}
-     * tag) and is eligible: no {@code {tmdb-}} or {@code {imdb-}} tag on any file (the owner's word is never
+     * tag) and is eligible; when any such group is not eligible the film can never split, so nothing is returned.
+     * Eligible means: no {@code {tmdb-}} or {@code {imdb-}} tag on any file (the owner's word is never
      * overruled by a title search) and no edition tag or plain edition word (TMDB lists some cuts as films of their
      * own).
      *
@@ -144,10 +145,14 @@ public final class RepairRules {
             List<FileFact> group = entry.getValue();
             Long tag = taggedId(group);
             boolean today = tag != null && !tag.equals(reference) || sequelDiffers(own, entry.getKey());
-            if (!entry.getKey().equals(own) && !today && eligible(group)) {
-                FileFact first = group.get(0);
-                lookups.add(new TitleGroup(entry.getKey(), first.parsed().title(), first.parsed().year(), group));
+            if (entry.getKey().equals(own) || today) {
+                continue;
             }
+            if (!eligible(group)) {
+                return List.of();
+            }
+            FileFact first = group.get(0);
+            lookups.add(new TitleGroup(entry.getKey(), first.parsed().title(), first.parsed().year(), group));
         }
         return lookups;
     }
