@@ -1,14 +1,13 @@
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { AdminContext, useAdminContext } from './adminContext.js';
+import { adminContextWrapper } from '../test/adminContextWrapper.jsx';
+import { useAdminContext } from './adminContext.js';
 
 describe('useAdminContext', () => {
   it('returns what the layout provides', () => {
     const value = { settledAt: 'never|none', changed: 2 };
     const { result } = renderHook(() => useAdminContext(), {
-      wrapper: ({ children }) => (
-        <AdminContext.Provider value={value}>{children}</AdminContext.Provider>
-      ),
+      wrapper: adminContextWrapper(value),
     });
     expect(result.current).toBe(value);
   });
