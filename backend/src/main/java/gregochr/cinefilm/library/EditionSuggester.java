@@ -223,7 +223,7 @@ public final class EditionSuggester {
         long shorter = Math.min(a, b);
         long longer = Math.max(a, b);
         if (longer - shorter <= SAME_CUT_MS) {
-            return "The names differ but the runtimes match (" + minutes(longer) + ")" + MOVE_BACK;
+            return "The names differ but the runtimes match (" + minutes(shorter) + ")" + MOVE_BACK;
         }
         if (longer - shorter <= DIFFERENT_CUTS_MS) {
             return "The names differ but the runtimes are close (" + minutes(shorter) + " and " + minutes(longer)

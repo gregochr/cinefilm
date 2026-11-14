@@ -221,12 +221,16 @@ class EditionSuggesterTest {
         long base = 120 * MIN;
         String moveBack = " — if it's the same film, move it back to keep it here";
 
+        assertThat(reasonForExcludedAt(base, base + EditionSuggester.SAME_CUT_MS - 1))
+            .isEqualTo("The names differ but the runtimes match (2h 0m)" + moveBack);
         assertThat(reasonForExcludedAt(base, base + EditionSuggester.SAME_CUT_MS))
-            .isEqualTo("The names differ but the runtimes match (2h 1m)" + moveBack);
+            .isEqualTo("The names differ but the runtimes match (2h 0m)" + moveBack);
         assertThat(reasonForExcludedAt(base, base + EditionSuggester.SAME_CUT_MS + 1))
             .isEqualTo("The names differ but the runtimes are close (2h 0m and 2h 1m)" + moveBack);
         assertThat(reasonForExcludedAt(base + EditionSuggester.SAME_CUT_MS + 1, base))
             .isEqualTo("The names differ but the runtimes are close (2h 0m and 2h 1m)" + moveBack);
+        assertThat(reasonForExcludedAt(base, base + EditionSuggester.DIFFERENT_CUTS_MS - 1))
+            .isEqualTo("The names differ but the runtimes are close (2h 0m and 2h 4m)" + moveBack);
         assertThat(reasonForExcludedAt(base, base + EditionSuggester.DIFFERENT_CUTS_MS))
             .isEqualTo("The names differ but the runtimes are close (2h 0m and 2h 5m)" + moveBack);
         assertThat(reasonForExcludedAt(base, base + EditionSuggester.DIFFERENT_CUTS_MS + 1))
