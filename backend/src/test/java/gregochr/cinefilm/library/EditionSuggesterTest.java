@@ -192,6 +192,54 @@ class EditionSuggesterTest {
     }
 
     @Test
+    void matchingRuntimesUnderDifferentNamesSayTheyMatchAndStillExcludeTheFile() {
+        List<SuggestFile> files = List.of(
+            file(1, "Blade Runner.m4v", 7_056_883L, 1, "Original", 1),
+            file(2, "Blader Runner (1982) {edition-The Final Cut}.m4v", 7_056_917L, 2, "Original", 1));
+
+        Suggestion s = EditionSuggester.suggest("Blade Runner", false, null, files);
+
+        assertThat(s.notThisFilm()).containsExactly(2L);
+        assertThat(s.reason()).isEqualTo("The names differ but the runtimes match (1h 57m)"
+            + " — if it's the same film, move it back to keep it here");
+    }
+
+    @Test
+    void farApartRuntimesUnderDifferentNamesStillSayDifferentFilms() {
+        List<SuggestFile> files = List.of(
+            file(1, "Elf.m4v", 5_803_243L, 1, "Original", 1),
+            file(2, "Enchanted.m4v", 6_182_280L, 2, "Original", 1));
+
+        Suggestion s = EditionSuggester.suggest("Elf", false, null, files);
+
+        assertThat(s.notThisFilm()).containsExactly(2L);
+        assertThat(s.reason()).isEqualTo("Runtimes 1h 36m and 1h 43m — these may be different films");
+    }
+
+    @Test
+    void theReasonChangesWordingAtTheInclusiveRuntimeBoundaries() {
+        long base = 120 * MIN;
+        String moveBack = " — if it's the same film, move it back to keep it here";
+
+        assertThat(reasonForExcludedAt(base, base + EditionSuggester.SAME_CUT_MS))
+            .isEqualTo("The names differ but the runtimes match (2h 1m)" + moveBack);
+        assertThat(reasonForExcludedAt(base, base + EditionSuggester.SAME_CUT_MS + 1))
+            .isEqualTo("The names differ but the runtimes are close (2h 0m and 2h 1m)" + moveBack);
+        assertThat(reasonForExcludedAt(base + EditionSuggester.SAME_CUT_MS + 1, base))
+            .isEqualTo("The names differ but the runtimes are close (2h 0m and 2h 1m)" + moveBack);
+        assertThat(reasonForExcludedAt(base, base + EditionSuggester.DIFFERENT_CUTS_MS))
+            .isEqualTo("The names differ but the runtimes are close (2h 0m and 2h 5m)" + moveBack);
+        assertThat(reasonForExcludedAt(base, base + EditionSuggester.DIFFERENT_CUTS_MS + 1))
+            .isEqualTo("Runtimes 2h 0m and 2h 5m — these may be different films");
+    }
+
+    private static String reasonForExcludedAt(long keptMs, long excludedMs) {
+        List<SuggestFile> files = List.of(file(1, "Film.m4v", keptMs, 1, "Original", 1),
+            file(2, "Other.m4v", excludedMs, 2, "Original", 1));
+        return EditionSuggester.suggest("Film", false, null, files).reason();
+    }
+
+    @Test
     void nothingIsExcludedWhenNoFileCarriesTheFilmsOwnTitle() {
         List<SuggestFile> files = List.of(alone(1, "Seven.m4v", 127), alone(2, "Se7en.m4v", 127));
 
