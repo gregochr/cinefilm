@@ -5,6 +5,7 @@ import { fixtures, installFetch, renderApp, respond } from '../../test/mockApi.j
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
   delete Element.prototype.scrollIntoView;
 });
 
@@ -60,17 +61,21 @@ describe('Admin Library section', () => {
     ).toBeInTheDocument();
   });
 
-  it('reads the grouping report again after a match is applied on To do', async () => {
-    let applied = false;
+  it('reads the grouping report again when a match applies while Library is open', async () => {
+    let release;
+    const post = new Promise((resolve) => {
+      release = resolve;
+    });
+    let reads = 0;
     installFetch((m, url) => {
-      if (m === 'POST' && /\/api\/admin\/films\/\d+\/match$/.test(url)) {
-        applied = true;
-        return respond({ filmId: 31, joined: false });
-      }
-      if (url === '/api/admin/grouping-report' && applied) {
-        return respond({
-          items: [{ ...fixtures.adminGrouping.items[0], summary: 'Joined after the match' }],
-        });
+      if (m === 'POST' && /\/api\/admin\/films\/\d+\/match$/.test(url)) return post;
+      if (url === '/api/admin/grouping-report') {
+        reads += 1;
+        return reads === 1
+          ? null
+          : respond({
+              items: [{ ...fixtures.adminGrouping.items[0], summary: 'Joined after the match' }],
+            });
       }
       return null;
     });
@@ -80,17 +85,19 @@ describe('Admin Library section', () => {
     const panel = await screen.findByRole('region', { name: 'Fix match' });
     await userEvent.click((await within(panel).findAllByRole('radio'))[0]);
     await userEvent.click(within(panel).getByRole('button', { name: 'Use this match' }));
-    await waitFor(() =>
-      expect(screen.queryByRole('region', { name: 'Fix match' })).not.toBeInTheDocument(),
-    );
-
     await userEvent.click(
       within(screen.getByRole('navigation', { name: 'Admin sections' })).getByRole('link', {
         name: 'Library',
       }),
     );
+    await screen.findByRole('list', { name: 'Grouping changes' });
+    expect(reads).toBe(1);
+    expect(screen.queryByText('Joined after the match')).not.toBeInTheDocument();
+
+    await act(async () => release(respond({ filmId: 31, joined: false })));
 
     expect(await screen.findByText('Joined after the match')).toBeInTheDocument();
+    expect(reads).toBe(2);
   });
 });
 
@@ -130,6 +137,30 @@ describe('Admin Library section: scrolling to an anchor', () => {
 
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
     expect(scrollIntoView.mock.contexts[0]).toBe(card);
+  });
+
+  it('does not scroll again when a background poll brings a new scan status', async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    let polls = 0;
+    installFetch((m, url) => {
+      if (url !== '/api/admin/scan') return null;
+      polls += 1;
+      return respond({
+        ...fixtures.adminScan,
+        running: true,
+        progress: { processed: polls * 5, total: 40, current: 'Heat.m4v' },
+      });
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderApp('/admin/library#scan');
+    expect(await screen.findByText('5 / 40 files')).toBeInTheDocument();
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+
+    expect(await screen.findByText('10 / 40 files')).toBeInTheDocument();
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
   });
 
   it('does not scroll when the address has no anchor', async () => {

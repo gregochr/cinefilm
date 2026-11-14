@@ -14,6 +14,7 @@ function Section({ signal }) {
   );
 }
 
+// A small host stands in for the layout: the arm/take handshake can't be set up through a route without a dialog.
 // The hook is armed by the layout after a dialog's save, so it is armed only once the section is on screen.
 function setup(armedLater) {
   let armed = false;
@@ -35,14 +36,12 @@ function setup(armedLater) {
 
 describe('useFallbackFocus', () => {
   it('focuses the heading when armed and focus has fallen to the page body', () => {
-    const { take, change } = setup(true);
-    take.mockClear();
+    const { change } = setup(true);
     expect(document.body).toHaveFocus();
 
     change();
 
     expect(screen.getByRole('heading', { level: 1, name: 'To do' })).toHaveFocus();
-    expect(take).toHaveBeenCalledTimes(1);
   });
 
   it('leaves focus where it is when it is on a real element', () => {

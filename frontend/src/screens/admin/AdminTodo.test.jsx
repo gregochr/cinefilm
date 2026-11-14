@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, renderApp, respond } from '../../test/mockApi.jsx';
@@ -95,25 +95,24 @@ describe('Admin To do section', () => {
   });
 
   it('leaves focus alone when the opener is still there after the lists reload', async () => {
-    installFetch((m, url) =>
+    const fetchMock = installFetch((m, url) =>
       m === 'POST' && url === '/api/admin/films/31/match'
         ? respond({ filmId: 31, joined: false })
         : null,
     );
+    const reads = () => fetchMock.mock.calls.filter((c) => c[0] === '/api/admin/attention').length;
     renderApp('/admin');
     const opener = (await screen.findAllByRole('button', { name: 'Fix match' }))[0];
     await userEvent.click(opener);
     const panel = await screen.findByRole('region', { name: 'Fix match' });
     await userEvent.click((await within(panel).findAllByRole('radio'))[0]);
+    const before = reads();
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Use this match' }));
 
-    await waitFor(() =>
-      expect(screen.queryByRole('region', { name: 'Fix match' })).not.toBeInTheDocument(),
-    );
-    await waitFor(() =>
-      expect(screen.getAllByRole('button', { name: 'Fix match' })).toHaveLength(1),
-    );
-    expect(screen.getByRole('heading', { level: 1, name: 'To do' })).not.toHaveFocus();
+    await waitFor(() => expect(reads()).toBeGreaterThan(before));
+    await act(async () => {});
+    expect(opener).toBeInTheDocument();
+    expect(opener).toHaveFocus();
   });
 });

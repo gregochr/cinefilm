@@ -84,6 +84,34 @@ describe('Admin: Edit editions', () => {
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1);
   });
 
+  it('saving puts focus on the To do heading when the row that opened it goes', async () => {
+    let saved = false;
+    installFetch((m, url) => {
+      if (url === '/api/admin/attention') {
+        return respond(
+          saved
+            ? { items: fixtures.adminAttention.items.filter((i) => i.kind !== 'multiple-files') }
+            : fixtures.adminAttention,
+        );
+      }
+      if (isSave(m, url)) {
+        saved = true;
+        return respond({ filmId: 6, newFilmIds: [] });
+      }
+      return null;
+    });
+    await openFromTheRow();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Edit editions' })).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1, name: 'To do' })).toHaveFocus(),
+    );
+  });
+
   it('a failed editions load inside the panel does not break the page behind it', async () => {
     installFetch((m, url) => (isEditions(m, url) ? respond({ error: 'x' }, 500) : null));
     renderApp('/admin');
