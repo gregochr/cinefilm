@@ -18,7 +18,7 @@ export function ActionWithHint({
   const hintId = useId();
   return (
     <div
-      data-testid="action-hint"
+      role="group"
       className={['action-hint', `action-hint--${layout}`, className].filter(Boolean).join(' ')}
     >
       <Button variant={variant} aria-describedby={hint ? hintId : undefined} {...rest}>

@@ -44,7 +44,8 @@ describe('ActionWithHint', () => {
     expect(screen.getByRole('button', { name: 'Go' })).toHaveClass('btn--secondary');
   });
 
-  // The alignment is a media-query-only CSS rule, so the layout class is the one thing to assert (style-only exception).
+  // The row/line classes carry the alignment at every width (only the phone override sits in a media query), and CSS
+  // is all there is to see: the toHaveClass exception in test-standards.md, "Queries".
   it('takes a layout class for its alignment: row by default, line when asked', () => {
     render(
       <>
@@ -54,7 +55,7 @@ describe('ActionWithHint', () => {
         </ActionWithHint>
       </>,
     );
-    const [row, line] = screen.getAllByTestId('action-hint');
+    const [row, line] = screen.getAllByRole('group');
     expect(row).toHaveClass('action-hint--row');
     expect(line).toHaveClass('action-hint--line');
   });

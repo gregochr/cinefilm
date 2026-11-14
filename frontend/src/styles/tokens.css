@@ -39,7 +39,7 @@
   --cf-size-h2: 32px; /* row headings (26px on phone) */
   --cf-size-body: 17px; /* plot */
   --cf-size-ui: 14px;
-  --cf-size-label: 12px; /* uppercase, letter-spacing .1–.14em */
+  --cf-size-label: 12px; /* small text: uppercase labels (letter-spacing .1–.14em), hint lines */
 
   /* Shape and spacing */
   --cf-radius-poster: 8px;

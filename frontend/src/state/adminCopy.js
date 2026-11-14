@@ -83,7 +83,6 @@ export const buttons = {
   // Owner's answer Q3 replaces 07's "Yes, find forced subtitles…" (the forced list now holds films with none found).
   findForced: {
     label: 'Find forced subtitles…',
-    hint: 'Searches OpenSubtitles for a file that only covers the foreign scenes.',
     source: 'plan',
   },
   noForeignScenes: {

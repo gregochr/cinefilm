@@ -271,7 +271,9 @@ fireEvent.click(container.querySelector('.segmented__btn'));
   files and `src/test/` helpers (`no-restricted-syntax` in `frontend/eslint.config.js`): `querySelector(All)`, `parentElement`,
   `firstChild`, `lastChild` and `children` are errors, as are `.className`/`.classList` reads and
   `getElementsByClassName`/`getElementsByTagName`. (`toHaveClass` is not machine-checked: a few tests use it for the
-  player's hidden state, which jsdom has no other handle for.)
+  player's hidden state, which jsdom has no other handle for. `toHaveClass` may also assert a variant or layout class
+  when the rule exists only in CSS and has no role, state or text to query, e.g. the one amber button in Admin,
+  ActionWithHint's row/line layout.)
 - **`data-testid` is for the decorative.** `aria-hidden` elements have no role by design, so they carry a test-id
   when a test must reach them: `art`, `skeleton`, `skeleton-row`, `continue-fill`, `scrubber-buffered`,
   `player-video`. Everything with a role is found by role.

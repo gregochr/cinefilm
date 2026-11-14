@@ -74,7 +74,6 @@ describe('adminCopy buttons', () => {
   it("uses the owner's Q3 wording for the forced-subtitle search, not 07's", () => {
     expect(buttons.findForced).toEqual({
       label: 'Find forced subtitles…',
-      hint: 'Searches OpenSubtitles for a file that only covers the foreign scenes.',
       source: 'plan',
     });
   });
