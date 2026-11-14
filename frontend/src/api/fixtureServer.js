@@ -92,10 +92,8 @@ const CHART_SESSIONS = [
   },
 ];
 
-const hasProblem = (report) =>
-  [report.stallCount, report.reconnectCount, report.netErrors, report.timeouts].some(
-    (n) => n > 0,
-  ) || report.fellBack === true;
+/** The fixture records with a problem; mirrors the stored has_problem column for them (Heat stalled and reconnected). */
+const PROBLEM_PLAYBACKS = new Set(['3f6c1d2e-8a4b-4c7e-9b15-2d0e6f7a1c34']);
 
 /** The filtered, paged list: the same filters and order as the server, `{ playbacks, total }`. */
 function healthPage(params) {
@@ -107,7 +105,7 @@ function healthPage(params) {
   const matching = adminPlaybackHealth.playbacks
     .filter((p) => !since || Date.parse(p.startedAt) >= Date.parse(since))
     .filter((p) => minWatched === null || p.report.watchedMs >= minWatched)
-    .filter((p) => problems === null || hasProblem(p.report) === problems)
+    .filter((p) => problems === null || PROBLEM_PLAYBACKS.has(p.playbackId) === problems)
     .toSorted((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
   return { playbacks: matching.slice(page * size, page * size + size), total: matching.length };
 }

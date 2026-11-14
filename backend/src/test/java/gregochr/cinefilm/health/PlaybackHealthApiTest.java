@@ -603,7 +603,8 @@ class PlaybackHealthApiTest extends ApiTestBase {
         mvc.perform(get("/api/admin/playback-health/chart"))
             .andExpect(jsonPath("$.sessions.length()").value(0));
         mvc.perform(get("/api/admin/playback-health/chart").param("since", "x"))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid request"));
     }
 
     @Test
