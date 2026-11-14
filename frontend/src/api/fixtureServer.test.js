@@ -152,6 +152,18 @@ describe('fixture server', () => {
     expect(attention.items.filter((i) => i.kind === 'needs-match' && !i.confident)).toHaveLength(1);
   });
 
+  it('serves the Admin summary', async () => {
+    const summary = await call('GET', '/api/admin/summary');
+    expect(summary.todo).toEqual({
+      pickFilm: 2,
+      severalFiles: 2,
+      fullMissing: 1,
+      forcedQuestion: 1,
+    });
+    expect(summary.subtitlesUnresolved).toBe(2);
+    expect(summary.playingNow.map((p) => p.filmTitle)).toEqual(['Heat']);
+  });
+
   it('serves the Admin transcoding state and stops a session', async () => {
     const state = await call('GET', '/api/admin/transcoding');
     expect(state.encoder).toBe('vaapi');

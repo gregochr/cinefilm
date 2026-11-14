@@ -1,0 +1,168 @@
+package gregochr.cinefilm.health;
+
+import static gregochr.cinefilm.TestData.CLOCK;
+import static gregochr.cinefilm.TestData.NOW;
+import static gregochr.cinefilm.health.HealthSamples.JSON;
+import static gregochr.cinefilm.health.HealthSamples.client;
+import static gregochr.cinefilm.health.HealthSamples.example;
+import static gregochr.cinefilm.health.HealthSamples.minutes;
+import static gregochr.cinefilm.health.HealthSamples.text;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
+
+import gregochr.cinefilm.film.EditionRepository;
+import gregochr.cinefilm.health.HealthDtos.PlaybackCounts;
+import gregochr.cinefilm.health.HealthDtos.PlayingNow;
+import java.time.Duration;
+import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageRequest;
+import tools.jackson.databind.node.ObjectNode;
+
+/** The summary reads of {@link PlaybackHealthService}: the window arguments and the shaping of "playing now". */
+@ExtendWith(MockitoExtension.class)
+class PlaybackHealthSummaryTest {
+
+    private static final String ID = "3f2b8c1e-5d4a-4e7b-9a60-1c2d3e4f5a6b";
+
+    @Mock
+    private PlaybackHealthRepository repository;
+
+    @Mock
+    private EditionRepository editions;
+
+    private PlaybackHealthService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new PlaybackHealthService(repository, editions, JSON, CLOCK);
+    }
+
+    private static PlaybackHealth stored(String playbackId, String summary, String environment) {
+        PlaybackHealth row = new PlaybackHealth();
+        row.setPlaybackId(playbackId);
+        row.setEditionId(11L);
+        row.setFilmId(7L);
+        row.setFilmTitle("Blade Runner");
+        row.setStartedAt(NOW.minusSeconds(600));
+        row.setUpdatedAt(NOW.minusSeconds(30));
+        row.setSummary(summary);
+        row.setEnvironment(environment);
+        return row;
+    }
+
+    private void playingRows(PlaybackHealth... rows) {
+        when(repository.updatedSince(NOW.minusSeconds(120), PageRequest.ofSize(10))).thenReturn(List.of(rows));
+    }
+
+    @Test
+    void theCountsAskForThirtyDaysBackAndThreeMinutesWatched() {
+        when(repository.countFilmSessions(NOW.minus(Duration.ofDays(30)), 180_000L)).thenReturn(40L);
+        when(repository.countSmoothFilmSessions(NOW.minus(Duration.ofDays(30)), 180_000L)).thenReturn(31L);
+
+        assertThat(service.playbackCounts()).isEqualTo(new PlaybackCounts(40, 31));
+    }
+
+    @Test
+    void playingNowAsksForTwoMinutesBackAndAtMostTenRows() {
+        playingRows();
+
+        assertThat(service.playingNow()).isEmpty();
+    }
+
+    @Test
+    void anEntryCarriesTheIdsTheTitleTheUserAgentAndTheStoredEnvironment() {
+        playingRows(stored(ID, text(example()), "home"));
+
+        assertThat(service.playingNow()).containsExactly(new PlayingNow(ID, 11, "Blade Runner",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", "home", "360p"));
+    }
+
+    @Test
+    void theEnvironmentComesFromTheColumnNotTheReportText() {
+        ObjectNode report = example();
+        report.put("environment", "away");
+        playingRows(stored(ID, text(report), "train"));
+
+        assertThat(service.playingNow().get(0).environment()).isEqualTo("train");
+    }
+
+    @Test
+    void aRowWithNoEnvironmentHasNull() {
+        playingRows(stored(ID, text(example()), null));
+
+        assertThat(service.playingNow().get(0).environment()).isNull();
+    }
+
+    @ParameterizedTest
+    @CsvSource({"1,original", "2,1080p", "3,720p", "4,480p", "5,360p", "6,240p"})
+    void theQualityIsTheRungPlayedInTheLastMinute(int code, String quality) {
+        ObjectNode report = example();
+        minutes(report).removeAll();
+        minutes(report).add(JSON.createArrayNode().add(0).add(900).add(2).add(1).add(0));
+        minutes(report).add(JSON.createArrayNode().add(1).add(900).add(code).add(1).add(0));
+        playingRows(stored(ID, text(report), "home"));
+
+        assertThat(service.playingNow().get(0).quality()).isEqualTo(quality);
+    }
+
+    @Test
+    void anUnknownRungCodeInTheLastMinuteFallsBackToTheQualityTheViewerChose() {
+        ObjectNode report = example();
+        minutes(report).removeAll();
+        minutes(report).add(JSON.createArrayNode().add(0).add(900).add(4).add(1).add(0));
+        minutes(report).add(JSON.createArrayNode().add(1).add(900).add(0).add(1).add(0));
+        report.put("quality", "720p");
+        playingRows(stored(ID, text(report), "home"));
+
+        assertThat(service.playingNow().get(0).quality()).isEqualTo("720p");
+    }
+
+    @Test
+    void aReportWithNoMinutesYetFallsBackToTheQualityTheViewerChose() {
+        ObjectNode report = example();
+        minutes(report).removeAll();
+        playingRows(stored(ID, text(report), "home"));
+
+        assertThat(service.playingNow().get(0).quality()).isEqualTo("auto");
+    }
+
+    @Test
+    void aReportWithNoClientHasNoDevice() {
+        ObjectNode report = example();
+        report.remove("client");
+        playingRows(stored(ID, text(report), "home"));
+
+        assertThat(service.playingNow().get(0).device()).isNull();
+    }
+
+    @Test
+    void aClientWithNoUserAgentHasNoDevice() {
+        ObjectNode report = example();
+        client(report).remove("userAgent");
+        playingRows(stored(ID, text(report), "home"));
+
+        assertThat(service.playingNow().get(0).device()).isNull();
+    }
+
+    @Test
+    void anUnreadableReportStillListsWithNoDeviceAndNoQuality() {
+        playingRows(stored(ID, "not json", "home"));
+
+        assertThat(service.playingNow()).containsExactly(new PlayingNow(ID, 11, "Blade Runner", null, "home", null));
+    }
+
+    @Test
+    void theRowsKeepTheRepositorysNewestFirstOrder() {
+        String other = "0a1b2c3d-0000-4000-8000-0123456789ab";
+        playingRows(stored(ID, text(example()), "home"), stored(other, text(example()), "away"));
+
+        assertThat(service.playingNow()).extracting(PlayingNow::playbackId).containsExactly(ID, other);
+    }
+}

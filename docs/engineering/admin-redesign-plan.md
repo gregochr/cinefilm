@@ -203,7 +203,7 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
 - `GET /api/admin/summary` → `{ todo: { pickFilm, severalFiles, fullMissing, forcedQuestion }, subtitlesUnresolved,
   live, library: { films, lastScanFinishedAt }, playback: { films, smooth }, playingNow: [{ filmTitle, device,
   environment, quality }] }`. It reuses the services' in-memory rules (the attention and need lists are computed in
-  Java today); cached on `settledAt` so the rail is cheap.
+  Java today); not cached on the server; the frontend refetches on its `settledAt` key and on `changed()`.
 - `full-need` and `forced-subtitles/films` rows gain `unresolved`, and the responses a `beingChecked` count;
   `FullNeedFilmDto` gains `originalLanguage`; attention items gain `confident` and the candidate `score`.
 - Every controller test: 401 and missing-header cases. Unit tests per class with mocked collaborators.

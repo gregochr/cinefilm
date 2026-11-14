@@ -11,7 +11,11 @@ import gregochr.cinefilm.health.HealthDtos.PlaybackList;
 import gregochr.cinefilm.health.HealthDtos.PlaybackPage;
 import gregochr.cinefilm.health.HealthDtos.PlaybackRow;
 import jakarta.persistence.criteria.Predicate;
+import gregochr.cinefilm.health.HealthDtos.PlaybackCounts;
+import gregochr.cinefilm.health.HealthDtos.PlayingNow;
+import gregochr.cinefilm.transcode.Ladder;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,6 +55,22 @@ public class PlaybackHealthService {
 
     /** Shortest watched time, in ms, that counts as a film session: shorter ones are tests, skips and misclicks. */
     public static final long FILM_SESSION_MIN_MS = 180_000;
+
+    /** How far back the Admin summary counts film sessions, by {@code startedAt}. */
+    static final Duration SUMMARY_WINDOW = Duration.ofDays(30);
+
+    /** How recently a viewing must have reported to count as playing now. */
+    static final Duration PLAYING_WINDOW = Duration.ofMinutes(2);
+
+    /** Most viewings "playing now" lists. */
+    static final int PLAYING_NOW_MAX = 10;
+
+    /** Quality ids by the rung code of a {@code minutes} row (code 1 is the first); code 0 means unknown. */
+    private static final List<String> RUNG_IDS = List.of(Ladder.ORIGINAL, Ladder.Q_1080, Ladder.Q_720, Ladder.Q_480,
+        Ladder.Q_360, Ladder.Q_240);
+
+    /** Index of "rung played" in a {@code minutes} row. */
+    private static final int RUNG_PLAYED = 2;
 
     /** Most rows one page of the filtered list holds. */
     static final int MAX_PAGE_SIZE = 100;
@@ -164,6 +184,48 @@ public class PlaybackHealthService {
                 report == null || report.client() == null ? null : report.client().userAgent()));
         }
         return new ChartList(rows);
+    }
+
+    /**
+     * The film sessions of the last 30 days (by {@code startedAt}, the boundary included): those that watched at least
+     * {@link #FILM_SESSION_MIN_MS}, and how many of them had no problem. Two COUNT queries, no rows loaded.
+     */
+    @Transactional(readOnly = true)
+    public PlaybackCounts playbackCounts() {
+        Instant since = clock.instant().minus(SUMMARY_WINDOW);
+        return new PlaybackCounts(repository.countFilmSessions(since, FILM_SESSION_MIN_MS),
+            repository.countSmoothFilmSessions(since, FILM_SESSION_MIN_MS));
+    }
+
+    /**
+     * The viewings that reported in the last two minutes (the boundary included), newest report first, at most
+     * {@link #PLAYING_NOW_MAX}; direct play and HLS alike. The quality is the rung played in the report's last
+     * minute, else the quality the viewer chose; a stored report that cannot be read still lists, with no device
+     * and no quality.
+     */
+    @Transactional(readOnly = true)
+    public List<PlayingNow> playingNow() {
+        Instant since = clock.instant().minus(PLAYING_WINDOW);
+        List<PlayingNow> playing = new ArrayList<>();
+        for (PlaybackHealth stored : repository.updatedSince(since, PageRequest.ofSize(PLAYING_NOW_MAX))) {
+            HealthReport report = typed(stored);
+            playing.add(new PlayingNow(stored.getPlaybackId(), stored.getEditionId(), stored.getFilmTitle(),
+                report == null || report.client() == null ? null : report.client().userAgent(),
+                stored.getEnvironment(), report == null ? null : qualityOf(report)));
+        }
+        return playing;
+    }
+
+    private static String qualityOf(HealthReport report) {
+        // A stored report passed HealthRules: minutes is present, every row has the rung played, codes are 0 to 6.
+        List<List<Long>> minutes = report.minutes();
+        if (!minutes.isEmpty()) {
+            long code = minutes.get(minutes.size() - 1).get(RUNG_PLAYED);
+            if (code >= 1) {
+                return RUNG_IDS.get((int) code - 1);
+            }
+        }
+        return report.quality();
     }
 
     private static Specification<PlaybackHealth> matching(Instant since, Long minWatchedMs, Boolean problems) {
