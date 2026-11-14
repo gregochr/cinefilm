@@ -68,6 +68,11 @@ describe('ActionWithHint', () => {
     expect(screen.getByRole('button', { name: 'Go now' })).toHaveAccessibleDescription('Hint.');
   });
 
+  it('renders a row without a hint: just the button, nothing described', () => {
+    render(<ActionWithHint layout="row">Bare</ActionWithHint>);
+    expect(screen.getByRole('button', { name: 'Bare' })).not.toHaveAccessibleDescription();
+  });
+
   it('renders without a hint and without a dangling aria-describedby', () => {
     render(<ActionWithHint>Plain</ActionWithHint>);
     expect(screen.getByRole('button', { name: 'Plain' })).not.toHaveAttribute('aria-describedby');

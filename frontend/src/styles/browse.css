@@ -1338,9 +1338,12 @@
   max-width: 480px;
 }
 /* The hint's layout class says which: a row of a list is right-aligned, a card's own action left-aligned. */
-.action-hint:has(> .action-hint__text--row) {
+.action-hint--row {
   align-items: flex-end;
   margin-left: auto;
+}
+.action-hint--line {
+  align-items: flex-start;
 }
 .action-hint__text {
   margin: 0;
@@ -1353,7 +1356,8 @@
 }
 @media (max-width: 600px) {
   .action-hint,
-  .action-hint:has(> .action-hint__text--row) {
+  .action-hint--row,
+  .action-hint--line {
     align-items: stretch;
     width: 100%;
     max-width: none;

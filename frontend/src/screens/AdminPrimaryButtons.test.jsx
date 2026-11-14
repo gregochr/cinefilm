@@ -83,6 +83,42 @@ const OPEN_ROW = [
   'Reset timing',
 ];
 
+// An OpenSubtitles download row: not the owner's file, so no attach, and a Remove with a question behind it.
+const dl = {
+  ...plain,
+  id: 50,
+  path: 'Heat (1995)/.cinefilm/opensubtitles-50.srt',
+  origin: 'OPENSUBTITLES',
+  release: 'Heat.1995.1080p.BluRay.x264',
+  openSubtitlesFileId: 123,
+  whole: true,
+  part: null,
+};
+const showDasBoot = async () => {
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'Show the full subtitle files of Das Boot (1981)' }),
+  );
+  await screen.findByRole('button', { name: 'Show all files' });
+};
+// The same tabs, with the one download counted under Downloads.
+const DL_TABS = SUBTITLE_TABS.map((name) => (name === 'Downloads (0)' ? 'Downloads (1)' : name));
+const SHOW_DL_CUES = 'Show the cues of Heat.1995.1080p.BluRay.x264';
+const REMOVE = 'Remove the OpenSubtitles download Heat.1995.1080p.BluRay.x264';
+const clickRemove = async () => {
+  await userEvent.click(await screen.findByRole('button', { name: REMOVE }));
+  await screen.findByRole('group', { name: 'Remove this download' });
+};
+const failRemove = async () => {
+  await clickRemove();
+  await userEvent.click(screen.getByRole('button', { name: 'Remove download' }));
+  await screen.findByRole('button', { name: 'Try again' });
+};
+const failedSearch = async () => {
+  await userEvent.click(await screen.findByRole('button', { name: /^Move .* to another film$/ }));
+  await userEvent.type(await screen.findByLabelText('Find a film'), 'two');
+  await screen.findByText(/Couldn.t search the library/);
+};
+
 const LIBRARY_BUTTONS = [
   'Scan library now',
   'Refresh all ratings',
@@ -134,6 +170,50 @@ const CASES = [
       'Looks right',
     ],
   },
+  {
+    name: 'Subtitles, a download before Remove',
+    path: '/admin/subtitles',
+    items: [dl],
+    buttons: [...DL_TABS, SHOW_DL_CUES, REMOVE],
+  },
+  {
+    name: 'Subtitles, a download asking to be removed',
+    path: '/admin/subtitles',
+    items: [dl],
+    steps: clickRemove,
+    buttons: [...DL_TABS, SHOW_DL_CUES, 'Remove download', 'Keep it'],
+  },
+  {
+    name: 'Subtitles, a download whose removal failed',
+    path: '/admin/subtitles',
+    items: [dl],
+    steps: failRemove,
+    removeFails: true,
+    buttons: [...DL_TABS, SHOW_DL_CUES, 'Try again', 'Keep it'],
+  },
+  {
+    name: 'Subtitles, a film filter with no matches',
+    path: '/admin/subtitles',
+    items: [plain],
+    steps: showDasBoot,
+    buttons: [...SUBTITLE_TABS.slice(0, 22), 'Show all files', ...SUBTITLE_TABS.slice(22)],
+  },
+  {
+    name: 'Subtitles, a failed film search in the attach form',
+    path: '/admin/subtitles',
+    items: [{ ...plain, ownerAttached: true }],
+    steps: failedSearch,
+    searchFails: true,
+    buttons: [
+      ...SUBTITLE_TABS,
+      'Move Heat.en.forced.srt to another film',
+      'Give Heat.en.forced.srt back to automatic matching',
+      'Show the cues of Heat.en.forced.srt',
+      'Try again',
+      'Attach',
+      'Cancel',
+    ],
+  },
   { name: 'Library', path: '/admin/library', buttons: LIBRARY_BUTTONS },
   {
     name: 'Library, Plex unreachable',
@@ -168,6 +248,8 @@ describe('Admin: the only amber button', () => {
       installFetch((m, url) => {
         const path = new URL(url, 'http://test.local').pathname;
         if (path === '/api/admin/subtitles') return respond(c.items ?? [replaced]);
+        if (c.removeFails && m === 'DELETE') return respond(null, 500);
+        if (c.searchFails && path === '/api/films') return respond(null, 500);
         if (/^\/api\/admin\/subtitles\/\d+\/cues$/.test(path)) return respond(CUES);
         if (path === '/api/admin/plex') {
           return respond({ ...fixtures.adminPlex, reachable: c.plexReachable ?? true });

@@ -1,4 +1,4 @@
-/* Admin: Subtitles (forced subtitle files). Plain Admin style; amber only on the one primary "Attach". */
+/* Admin: Subtitles (forced subtitle files). Plain Admin style; No amber: the Admin pages' only primary is Scan library now. */
 .subs__group + .subs__group {
   margin-top: 24px;
 }
