@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 
 import gregochr.cinefilm.credits.CreditsDetectionService.DueFile;
 import gregochr.cinefilm.credits.CreditsFrameReader.Job;
+import gregochr.cinefilm.credits.CreditsFrameReader.TimedRgb;
 import gregochr.cinefilm.library.CommandRunner;
 import gregochr.cinefilm.library.ProcessCommandRunner;
 import gregochr.cinefilm.subtitle.EmbeddedCueStartsRepository;
@@ -146,6 +147,32 @@ class CreditsRealToolsTest {
                 }
             }
             assertThat(white).isTrue();
+        }
+        assertThat(dir.resolve("cache").resolve("credits")).isEmptyDirectory();
+    }
+
+    @Test
+    void colourFramesAreWrittenAsFourHundredAndEightyPixelWideRgbPictures() throws IOException {
+        Path clip = clip(PICTURE_SECONDS, CREDITS_SECONDS);
+
+        try (Job job = reader().open(clip, CLIP_MS, () -> { }, 0)) {
+            RgbFrame seek = job.rgbFrame(100_000);
+            List<TimedRgb> dense = job.rgbDense(353_000, 20_000);
+
+            assertThat(seek.width()).isEqualTo(WIDTH);
+            assertThat(seek.height()).isEqualTo(HEIGHT);
+            // The plain colour 0x6080a0, give or take the lossy encode and the colour conversion.
+            int pixel = seek.rgb(10, 10);
+            assertThat(pixel >> 16 & 0xFF).isBetween(84, 108);
+            assertThat(pixel >> 8 & 0xFF).isBetween(116, 140);
+            assertThat(pixel & 0xFF).isBetween(148, 172);
+            // 20 s at two frames a second.
+            assertThat(dense).hasSizeBetween(39, 40).allSatisfy(frame -> {
+                assertThat(frame.frame().width()).isEqualTo(WIDTH);
+                assertThat(frame.frame().height()).isEqualTo(HEIGHT);
+            });
+            assertThat(dense.getFirst().offsetMs()).isEqualTo(353_000);
+            assertThat(dense.get(1).offsetMs()).isEqualTo(353_500);
         }
         assertThat(dir.resolve("cache").resolve("credits")).isEmptyDirectory();
     }
