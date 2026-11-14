@@ -65,12 +65,13 @@ class PlaybackHealthSummaryQueryTest extends ApiTestBase {
     }
 
     @Test
-    void threeMinutesExactlyCountsAndOneMillisecondShortDoesNot() {
+    void threeMinutesExactlyAndOneMillisecondOverCountAndOneMillisecondShortDoesNot() {
         session(NOW.minusSeconds(100), 179_999, false);
         session(NOW.minusSeconds(100), 180_000, false);
+        session(NOW.minusSeconds(100), 180_001, false);
 
-        assertThat(health.countFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isEqualTo(1);
-        assertThat(health.countSmoothFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isEqualTo(1);
+        assertThat(health.countFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isEqualTo(2);
+        assertThat(health.countSmoothFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isEqualTo(2);
     }
 
     @Test
@@ -107,12 +108,13 @@ class PlaybackHealthSummaryQueryTest extends ApiTestBase {
     // playing now
 
     @Test
-    void updatedExactlyTwoMinutesAgoIsIncludedAndOneMillisecondOlderIsNot() {
+    void updatedExactlyTwoMinutesAgoAndOneMillisecondNewerAreIncludedAndOneMillisecondOlderIsNot() {
         PlaybackHealth edge = updated(TWO_MINUTES_AGO);
         updated(TWO_MINUTES_AGO.minusMillis(1));
+        PlaybackHealth over = updated(TWO_MINUTES_AGO.plusMillis(1));
 
         assertThat(health.updatedSince(TWO_MINUTES_AGO, PageRequest.ofSize(10)))
-            .extracting(PlaybackHealth::getPlaybackId).containsExactly(edge.getPlaybackId());
+            .extracting(PlaybackHealth::getPlaybackId).containsExactly(over.getPlaybackId(), edge.getPlaybackId());
     }
 
     @Test

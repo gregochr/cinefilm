@@ -182,6 +182,19 @@ class PlaybackHealthSummaryTest {
     }
 
     @Test
+    void exactlyTenEditionsAreAllKept() {
+        PlaybackHealth[] rows = new PlaybackHealth[10];
+        for (int i = 0; i < 10; i++) {
+            rows[i] = stored(new UUID(0, i + 1).toString(), text(example()), "home");
+            rows[i].setEditionId(100L + i);
+        }
+        playingRows(rows);
+
+        assertThat(service.playingNow()).extracting(PlayingNow::editionId)
+            .containsExactly(100L, 101L, 102L, 103L, 104L, 105L, 106L, 107L, 108L, 109L);
+    }
+
+    @Test
     void moreThanTenEditionsAreCappedAtTenKeepingTheNewest() {
         PlaybackHealth[] rows = new PlaybackHealth[12];
         for (int i = 0; i < 12; i++) {

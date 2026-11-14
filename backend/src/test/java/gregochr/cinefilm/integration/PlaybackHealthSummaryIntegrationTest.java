@@ -50,21 +50,25 @@ class PlaybackHealthSummaryIntegrationTest extends IntegrationTestBase {
     void theCountsKeepTheThirtyDayAndThreeMinuteLinesAndSplitOutTheSmoothOnes() {
         row(THIRTY_DAYS_AGO, NOW, 180_000, false);
         row(THIRTY_DAYS_AGO.minusMillis(1), NOW, 200_000, false);
+        row(THIRTY_DAYS_AGO.plusMillis(1), NOW, 200_000, false);
         row(NOW.minusSeconds(100), NOW, 179_999, false);
+        row(NOW.minusSeconds(100), NOW, 180_001, false);
         row(NOW.minusSeconds(100), NOW, 200_000, true);
 
-        assertThat(health.countFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isEqualTo(2);
-        assertThat(health.countSmoothFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isEqualTo(1);
+        assertThat(health.countFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isEqualTo(4);
+        assertThat(health.countSmoothFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isEqualTo(3);
     }
 
     @Test
     void playingNowKeepsTheTwoMinuteLineOrdersNewestFirstAndCaps() {
         PlaybackHealth edge = row(NOW.minusSeconds(900), TWO_MINUTES_AGO, 200_000, false);
         row(NOW.minusSeconds(900), TWO_MINUTES_AGO.minusMillis(1), 200_000, false);
+        PlaybackHealth over = row(NOW.minusSeconds(900), TWO_MINUTES_AGO.plusMillis(1), 200_000, false);
         PlaybackHealth newest = row(NOW.minusSeconds(900), NOW.minusSeconds(5), 200_000, false);
 
         assertThat(health.updatedSince(TWO_MINUTES_AGO, PageRequest.ofSize(10)))
-            .extracting(PlaybackHealth::getPlaybackId).containsExactly(newest.getPlaybackId(), edge.getPlaybackId());
+            .extracting(PlaybackHealth::getPlaybackId)
+            .containsExactly(newest.getPlaybackId(), over.getPlaybackId(), edge.getPlaybackId());
         assertThat(health.updatedSince(TWO_MINUTES_AGO, PageRequest.ofSize(1)))
             .extracting(PlaybackHealth::getPlaybackId).containsExactly(newest.getPlaybackId());
     }
