@@ -464,18 +464,31 @@ class CreditsFrameReaderTest {
     }
 
     @Test
-    void anRgbDenseRangeThatIsEmptyAfterClampingIsRefusedAndRunsNothing() {
+    void anRgbDenseRangeThatEndsBeforeTheFileStartsIsRefusedAndRunsNothing() {
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            assertThatThrownBy(() -> job.rgbDense(-9_000, 5_000)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("The dense range from -9000 ms for 5000 ms ends before the file starts");
+            assertThatThrownBy(() -> job.rgbDense(-5_000, 5_000)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("The dense range from -5000 ms for 5000 ms ends before the file starts");
+            assertThatThrownBy(() -> job.rgbDense(Long.MIN_VALUE, 300_000))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("The dense range from -9223372036854775808 ms for 300000 ms ends before the file starts");
+        }
+
+        assertThat(ffmpeg.commands).isEmpty();
+    }
+
+    @Test
+    void anRgbDenseRangeThatStartsAtOrPastTheEndOfTheFileIsRefusedAndRunsNothing() {
         try (Job job = reader().open(FILM, 600_000, () -> { })) {
             assertThatThrownBy(() -> job.rgbDense(700_000, 5_000)).isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("The range 700000 ms for 5000 ms is empty within the file (0 to 600000 ms)");
+                .hasMessage("The dense range at 700000 ms starts at or past the end of the file (600000 ms)");
             assertThatThrownBy(() -> job.rgbDense(600_000, 5_000)).isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("is empty");
-            assertThatThrownBy(() -> job.rgbDense(-9_000, 5_000)).isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("is empty");
-            assertThatThrownBy(() -> job.rgbDense(-5_000, 5_000)).isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("is empty");
-            assertThatThrownBy(() -> job.rgbDense(100_000, 0)).isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("The range 100000 ms for 0 ms is empty within the file (0 to 600000 ms)");
+                .hasMessage("The dense range at 600000 ms starts at or past the end of the file (600000 ms)");
+            assertThatThrownBy(() -> job.rgbDense(Long.MAX_VALUE, 1_000))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("The dense range at 9223372036854775807 ms starts at or past the end of the file "
+                    + "(600000 ms)");
         }
 
         assertThat(ffmpeg.commands).isEmpty();
@@ -490,30 +503,18 @@ class CreditsFrameReaderTest {
     }
 
     @Test
-    void anRgbDenseLengthThatIsNegativeOrOverFiveMinutesIsRefused() {
+    void anRgbDenseLengthThatIsNotOneToFiveMinutesIsRefused() {
         try (Job job = reader().open(FILM, 600_000, () -> { })) {
             assertThatThrownBy(() -> job.rgbDense(0, -1)).isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("The dense length -1 ms must be 0 to 300000 ms");
+                .hasMessage("The dense length -1 ms must be 1 to 300000 ms");
+            assertThatThrownBy(() -> job.rgbDense(100_000, 0)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("The dense length 0 ms must be 1 to 300000 ms");
             assertThatThrownBy(() -> job.rgbDense(0, 300_001)).isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("The dense length 300001 ms must be 0 to 300000 ms");
+                .hasMessage("The dense length 300001 ms must be 1 to 300000 ms");
             assertThat(job.rgbDense(0, 300_000)).hasSize(600);
         }
 
         assertThat(ffmpeg.commands).hasSize(1);
-    }
-
-    @Test
-    void anRgbDenseStartNearTheLargestLongDoesNotOverflowIntoAValidRange() {
-        try (Job job = reader().open(FILM, 600_000, () -> { })) {
-            assertThatThrownBy(() -> job.rgbDense(Long.MAX_VALUE, 1_000)).isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("is empty");
-            assertThatThrownBy(() -> job.rgbDense(Long.MAX_VALUE - 500, 1_000))
-                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("is empty");
-            assertThatThrownBy(() -> job.rgbDense(Long.MAX_VALUE - 1_000, 1_000))
-                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("is empty");
-        }
-
-        assertThat(ffmpeg.commands).isEmpty();
     }
 
     @Test

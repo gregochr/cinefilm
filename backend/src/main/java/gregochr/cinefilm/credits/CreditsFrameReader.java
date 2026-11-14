@@ -351,24 +351,30 @@ public class CreditsFrameReader {
          * only its own frames.
          *
          * @param startMs where the decode starts (before 0 is clamped to 0)
-         * @param lengthMs how long it lasts, 0 to {@link #DENSE_SPAN_MS}
+         * @param lengthMs how long it lasts, 1 to {@value #DENSE_SPAN_MS}
          * @return the frames, in order; never empty
-         * @throws IllegalArgumentException when the length is negative or over {@link #DENSE_SPAN_MS}, or the range
-         *     is empty once clamped to the file
+         * @throws IllegalArgumentException when the length is not 1 to {@value #DENSE_SPAN_MS}, the start is at or
+         *     past the end of the file, or the range ends before the file starts
          * @throws ReadException when ffmpeg fails, times out or writes no frames
          */
         public List<TimedRgb> rgbDense(long startMs, long lengthMs) {
-            if (lengthMs < 0 || lengthMs > DENSE_SPAN_MS) {
+            if (lengthMs < 1 || lengthMs > DENSE_SPAN_MS) {
                 throw new IllegalArgumentException(
-                    "The dense length " + lengthMs + " ms must be 0 to " + DENSE_SPAN_MS + " ms");
+                    "The dense length " + lengthMs + " ms must be 1 to " + DENSE_SPAN_MS + " ms");
             }
-            // The length is small, so the sum overflows only for a start within 300 s of Long.MAX_VALUE.
+            if (startMs >= durationMs) {
+                throw new IllegalArgumentException("The dense range at " + startMs
+                    + " ms starts at or past the end of the file (" + durationMs + " ms)");
+            }
+            // No overflow: the length is at most 300,000 and the start is below the duration, so the sum is below
+            // the duration plus 300,000; for a negative start it is a negative number plus a small one.
+            long sum = startMs + lengthMs;
+            if (sum <= 0) {
+                throw new IllegalArgumentException("The dense range from " + startMs + " ms for " + lengthMs
+                    + " ms ends before the file starts");
+            }
             long start = Math.max(0, startMs);
-            long end = startMs > Long.MAX_VALUE - lengthMs ? durationMs : Math.min(durationMs, startMs + lengthMs);
-            if (start >= end) {
-                throw new IllegalArgumentException("The range " + startMs + " ms for " + lengthMs
-                    + " ms is empty within the file (0 to " + durationMs + " ms)");
-            }
+            long end = Math.min(durationMs, sum);
             DenseRange range = new DenseRange(start, end - start);
             checkpoint.run();
             deleteStaleDense();

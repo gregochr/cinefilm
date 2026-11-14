@@ -9,8 +9,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
+import java.util.Iterator;
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
 import javax.imageio.stream.ImageOutputStream;
@@ -317,12 +319,21 @@ public final class FramePrep {
     }
 
     private static BufferedImage decode(byte[] data, String what) {
-        try {
-            BufferedImage image = ImageIO.read(new MemoryCacheImageInputStream(new ByteArrayInputStream(data)));
-            if (image == null) {
+        // ImageIO.read(ImageInputStream) closes the stream itself when it finds a reader and leaves it open when it
+        // does not, so a try-with-resources around it would fail on close. The reader is driven here instead (as
+        // ImageIO.read does, with the default parameters), which lets the stream and the reader both be closed here.
+        try (MemoryCacheImageInputStream in = new MemoryCacheImageInputStream(new ByteArrayInputStream(data))) {
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(in);
+            if (!readers.hasNext()) {
                 throw new IllegalArgumentException("The bytes are not a readable " + what + " picture");
             }
-            return image;
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(in, true, true);
+                return reader.read(0, reader.getDefaultReadParam());
+            } finally {
+                reader.dispose();
+            }
         } catch (IOException e) {
             throw new IllegalArgumentException("The " + what + " picture could not be read: " + e.getMessage(), e);
         }
