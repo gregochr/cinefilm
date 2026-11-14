@@ -432,29 +432,62 @@ The browse URL is https://cinefilm.chrisjgregory.dev. A tab still open on the ol
 `https://dockermacmini.tail0c74fa.ts.net/` (port 443) now reaches Caddy under a name it does not serve, so every API
 call fails and pages show "The projector jammed": reopen it on the domain (or the fallback on `:8443`).
 
-## Credits classifier: the 10-film dataset trial (planner, on dockermacmini)
+## Credits classifier: the 10-film dataset trial (on dockermacmini)
 
 Before the full dataset run, read about 10 films and measure them (`credits-classifier-plan.md`, "Frames: the dataset
-job" and "Measuring (L2b-2)"). Needs the released image that holds `DatasetMeasureMain`. The planner runs these steps,
-never a scheduled job.
+job" and "Measuring (L2b-2)"). Needs the released image that holds `DatasetMeasureMain`. **The owner runs the steps
+that sign in** (2 to 4): they use the owner's password, which the planner never types or handles. The planner runs the
+read-only checks.
 
 1. **Switch the job on.** It is off by default. The server reads `~/cinefilm/.env` (the compose `env_file`), and Spring
-   binds `cinefilm.credits.dataset.enabled` from the environment variable `CINEFILM_CREDITS_DATASET_ENABLED`:
+   binds `cinefilm.credits.dataset.enabled` from `CINEFILM_CREDITS_DATASET_ENABLED`. Do this when nothing is playing:
+   recreating the container drops a playing film.
 
    ```bash
-   cd ~/cinefilm && grep -q '^CINEFILM_CREDITS_DATASET_ENABLED=' .env || echo 'CINEFILM_CREDITS_DATASET_ENABLED=true' >> .env
+   cd ~/cinefilm
+   [ -z "$(tail -c1 .env)" ] || echo >> .env                          # make sure the last line ends in a newline
+   sed -i '/^CINEFILM_CREDITS_DATASET_ENABLED=/d' .env                # drop any old value, so a stale =false cannot win
+   echo 'CINEFILM_CREDITS_DATASET_ENABLED=true' >> .env
+   grep -c '^CINEFILM_CREDITS_DATASET_ENABLED=true' .env              # prints 1; never print the whole .env
    export CINEFILM_VERSION=$(cat .deployed-version) && docker compose up -d cinefilm   # recreates it with the new .env
    ```
 
    The directories `cache/credits-dataset` and `cache/credits-dataset-out` are made by the server (uid 1001) at the
    job's first start. The other settings (`CINEFILM_CREDITS_DATASET_NICE`, `CINEFILM_CREDITS_DATASET_MIN_FREE_GB`)
    keep their defaults: niceness 19 and stop below 15 GB free.
-2. **Start it.** Signed in as the owner (the `/api` routes need the session cookie, and `POST` needs `X-CineFilm: 1`):
-   `POST /api/admin/credits/dataset/start`. Do it only when `refresherDue` in the status is 0.
-3. **Watch it.** `GET /api/admin/credits/dataset`: `state`, `complete`, `failed`, `currentMediaFileId`, `freeBytes`.
-   It yields to playback and to the credits refresher, so it may sit in `WAITING`.
-4. **Stop it** at about 10 `complete` (`POST /api/admin/credits/dataset/stop`; this also removes the `running`
-   marker, so a restart does not resume it).
+2. **Sign in (owner).** The `/api` routes need the session cookie and every `POST` needs `X-CineFilm: 1`. The body
+   `{"password": ...}` is built from `$CF_PW` and goes in on stdin, so it never reaches the history, the process list
+   or the terminal (`printf` is a shell builtin). Needs `jq`.
+
+   ```bash
+   umask 077; read -rs CF_PW
+   printf '%s' "$CF_PW" | jq -Rs '{password: .}' | curl -sS -c ~/cf-jar -H 'Content-Type: application/json' \
+     -H 'X-CineFilm: 1' --data @- http://127.0.0.1:8090/api/session
+   unset CF_PW
+   ```
+
+   It answers 200 `{"authenticated":true}` (401 on a wrong password).
+3. **Check it is on, then start it (owner).** The status must say `"enabled":true` and `refresherDue` 0 first:
+
+   ```bash
+   curl -sS -b ~/cf-jar http://127.0.0.1:8090/api/admin/credits/dataset
+   curl -sS -b ~/cf-jar -H 'X-CineFilm: 1' -X POST http://127.0.0.1:8090/api/admin/credits/dataset/start
+   ```
+4. **Watch it, and stop it at about 10 `complete` (owner).** The job yields to playback and to the credits refresher, so
+   it may sit in `WAITING`.
+
+   ```bash
+   curl -sS -b ~/cf-jar http://127.0.0.1:8090/api/admin/credits/dataset      # state, complete, failed, freeBytes
+   curl -sS -b ~/cf-jar -H 'X-CineFilm: 1' -X POST http://127.0.0.1:8090/api/admin/credits/dataset/stop   # also removes the `running` marker
+   rm ~/cf-jar                                                                 # when done with the API
+   ```
+
+   **Without a login (the planner),** count the finished films, and read the log for progress and waits:
+
+   ```bash
+   find ~/cinefilm-data/cache/credits-dataset/frames -name complete.json | wc -l
+   docker logs --since 1h cinefilm 2>&1 | grep -i "dataset"
+   ```
 5. **Measure.** The tool reads the dataset read-only and writes beside it; use the image tag that is deployed:
 
    ```bash
@@ -467,12 +500,23 @@ never a scheduled job.
    ```
 
    It prints the paths it wrote and exits 0 even if a film is damaged; read `films.csv` (`status`, `missing`,
-   `corrupt`) and `summary.json` (`projectedBytes`, `meanReadSeconds`). Exit 2 means no film directory yet.
-6. **Copy the results** to the planner's folder: `cp -r ~/cinefilm-data/cache/credits-dataset-out/. ~/cinefilm-labels/`
-   (the stills under `stills/<mediaFileId>/` are for looking at, with `sheet.png` first).
+   `corrupt`, `duplicates`) and `summary.json` (`projectedBytes`, `meanReadSeconds`). Exit 2 means no film directory yet.
+6. **Copy the results** into a dated folder (the stills under `stills/<mediaFileId>/` are for looking at, with
+   `sheet.png` first):
 
-Switch the job off again (remove the `.env` line, `docker compose up -d cinefilm`) if the full run is not starting
-straight away.
+   ```bash
+   mkdir -p ~/cinefilm-labels/measure-$(date +%F) && cp -r ~/cinefilm-data/cache/credits-dataset-out/. ~/cinefilm-labels/measure-$(date +%F)/
+   ```
+
+Switch the job off again if the full run is not starting straight away (when nothing is playing; this also recreates
+the container):
+
+```bash
+cd ~/cinefilm
+sed -i '/^CINEFILM_CREDITS_DATASET_ENABLED=/d' .env
+grep -c '^CINEFILM_CREDITS_DATASET_ENABLED=' .env                  # prints 0
+export CINEFILM_VERSION=$(cat .deployed-version) && docker compose up -d cinefilm
+```
 
 ## Deferred (not built yet)
 

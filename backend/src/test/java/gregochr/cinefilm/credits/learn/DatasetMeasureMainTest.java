@@ -148,6 +148,20 @@ class DatasetMeasureMainTest {
     }
 
     @Test
+    void anUncheckedIoFailureWhileWalkingExitsOneWithOneLine() throws Exception {
+        DatasetMeasureJob failing = mock(DatasetMeasureJob.class);
+        when(failing.run(org.mockito.ArgumentMatchers.any())).thenThrow(
+            new java.io.UncheckedIOException(new IOException("Permission denied")));
+
+        int code = DatasetMeasureMain.run(new String[] {"--data", "x", "--out", "y"},
+            new PrintStream(outBytes, true, StandardCharsets.UTF_8),
+            new PrintStream(errBytes, true, StandardCharsets.UTF_8), failing);
+
+        assertThat(code).isEqualTo(1);
+        assertThat(err()).isEqualTo("measure: UncheckedIOException: java.io.IOException: Permission denied\n");
+    }
+
+    @Test
     void noFilmDirectoriesExitsTwoWithOneLineAndWritesNothing() {
         Path out = temp.resolve("out");
 

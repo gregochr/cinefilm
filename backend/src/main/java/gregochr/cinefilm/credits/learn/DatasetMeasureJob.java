@@ -49,7 +49,8 @@ final class DatasetMeasureJob {
 
     static final List<String> FILMS_COLUMNS = List.of("mediaFileId", "status", "durationMs", "targetStartMs",
         "windowStartMs", "frameWidth", "frameHeight", "areaLeft", "areaTop", "areaWidth", "areaHeight", "coarseCount",
-        "denseCount", "missing", "corrupt", "extra", "pngBytes", "jpgBytes", "totalBytes", "readSeconds",
+        "denseCount", "missing", "corrupt", "extra", "duplicates",
+        "pngBytes", "jpgBytes", "totalBytes", "readSeconds",
         "ffmpegVersion", "javaVersion", "gitCommit", "note");
     static final List<String> FRAMES_COLUMNS = List.of("mediaFileId", "kind", "offsetMs", "fromTargetMs", "greyMean",
         "greyP5", "greyP50", "greyP95", "darkShare", "brightShare", "meanR", "meanG", "meanB", "chroma", "pngBytes",
@@ -119,7 +120,7 @@ final class DatasetMeasureJob {
         if (!Files.isDirectory(data)) {
             throw new IllegalArgumentException("--data is not a directory: " + data);
         }
-        if (out.startsWith(data)) {
+        if (resolved(out).startsWith(data.toRealPath())) {
             throw new IllegalArgumentException("--out must not be inside --data: " + out);
         }
         Path framesRoot = data.resolve("frames");
@@ -155,6 +156,18 @@ final class DatasetMeasureJob {
             written.add(stillsDir);
         }
         return written;
+    }
+
+    /**
+     * The path with every symbolic link resolved: the real path of its nearest existing ancestor, then the part that
+     * does not exist yet, so that an output directory not made yet is still compared by where it would really be.
+     */
+    private static Path resolved(Path path) throws IOException {
+        Path existing = path;
+        while (!Files.exists(existing)) {
+            existing = existing.getParent();
+        }
+        return existing.toRealPath().resolve(existing.relativize(path)).normalize();
     }
 
     // ---- Which films ---------------------------------------------------------------------------------------------
@@ -311,6 +324,7 @@ final class DatasetMeasureJob {
         fields.add(Integer.toString(result.missing()));
         fields.add(Integer.toString(result.corrupt()));
         fields.add(Integer.toString(result.extra()));
+        fields.add(Integer.toString(result.duplicates()));
         fields.add(Long.toString(result.pngBytes()));
         fields.add(Long.toString(result.jpgBytes()));
         fields.add(Long.toString(result.totalBytes()));

@@ -320,7 +320,8 @@ arguments are `--data /data --out /out [--ids 5,7,12] [--stills] [--project 850]
 - **Four questions** before the full run and L3a:
   1. Are the frames complete and decodable? `films.csv` has one row per film, `status` `ok`, `incomplete` (no
      usable format-1 `complete.json`), `mismatched` (it names another file) or `damaged`, and counts of `missing`,
-     `corrupt` (not decodable, or the wrong size) and `extra` files.
+     `corrupt` (unreadable, not decodable, or the wrong size), `extra` files and `duplicates` (an offset listed twice,
+     measured once; any of missing, corrupt or duplicates makes the film `damaged`). One bad file never stops the run.
   2. How big is a film's frame set? `pngBytes`, `jpgBytes`, `totalBytes`; `summary.json` projects the dataset as the
      `ok` films' mean size times `--project` (default 850).
   3. How long did a film take to read? `readSeconds` is an **estimate**: `complete.json`'s `writtenAt` minus the

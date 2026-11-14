@@ -2,6 +2,7 @@ package gregochr.cinefilm.credits.learn;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.io.UncheckedIOException;
 import java.time.Clock;
 import java.time.ZoneOffset;
 import java.util.function.IntConsumer;
@@ -54,7 +55,7 @@ public final class DatasetMeasureMain {
         } catch (DatasetMeasureJob.NoFilmsException e) {
             err.println("measure: " + oneLine(e.getMessage()));
             return 2;
-        } catch (IllegalArgumentException | IOException | JacksonException e) {
+        } catch (IllegalArgumentException | IOException | UncheckedIOException | JacksonException e) {
             err.println("measure: " + e.getClass().getSimpleName() + ": " + oneLine(e.getMessage()));
             return 1;
         }

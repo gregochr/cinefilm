@@ -133,15 +133,17 @@ class DatasetMeasureJobTest {
         assertThat(Files.readString(out.resolve("films.csv"))).isEqualTo(
             row("mediaFileId", "status", "durationMs", "targetStartMs", "windowStartMs", "frameWidth", "frameHeight",
                 "areaLeft", "areaTop", "areaWidth", "areaHeight", "coarseCount", "denseCount", "missing", "corrupt",
-                "extra", "pngBytes", "jpgBytes", "totalBytes", "readSeconds", "ffmpegVersion", "javaVersion",
+                "extra", "duplicates", "pngBytes", "jpgBytes", "totalBytes", "readSeconds", "ffmpegVersion",
+                "javaVersion",
                 "gitCommit", "note")
             + row("5", "damaged", "600000", "100000", "360000", "8", "4", "0", "0", "8", "4", "1", "1", "1", "0", "0",
+                "0",
                 Long.toString(png5), Long.toString(jpg5), Long.toString(tree(film5)), "30", "\"ffmpeg, 6\"", "25.0.1",
                 "def", "")
-            + row("7", "ok", "600000", "100000", "360000", "8", "4", "0", "0", "8", "4", "2", "3", "0", "0", "0",
+            + row("7", "ok", "600000", "100000", "360000", "8", "4", "0", "0", "8", "4", "2", "3", "0", "0", "0", "0",
                 Long.toString(png7), Long.toString(jpg7), Long.toString(tree(film7)), "599", "ffmpeg 7", "25.0.1",
                 "abc", "")
-            + "12,incomplete" + ",".repeat(22) + "\n");
+            + "12,incomplete" + ",".repeat(23) + "\n");
         assertThat(Files.readString(out.resolve("frames.csv"))).isEqualTo(
             row("mediaFileId", "kind", "offsetMs", "fromTargetMs", "greyMean", "greyP5", "greyP50", "greyP95",
                 "darkShare", "brightShare", "meanR", "meanG", "meanB", "chroma", "pngBytes", "jpgBytes")
@@ -296,7 +298,7 @@ class DatasetMeasureJobTest {
         List<List<String>> films = csv(out.resolve("films.csv"));
         assertThat(films).hasSize(3);
         assertThat(films.get(1).getFirst()).isEqualTo("7");
-        assertThat(films.get(2)).hasSize(24);
+        assertThat(films.get(2)).hasSize(25);
         assertThat(films.get(2).subList(0, 2)).containsExactly("99", "incomplete");
         assertThat(films.get(2).getLast()).isEqualTo("no frames directory");
         assertThat(csv(out.resolve("frames.csv")).stream().map(List::getFirst).distinct().toList())
@@ -338,7 +340,7 @@ class DatasetMeasureJobTest {
         job.run(options(false));
 
         assertThat(Files.readString(out.resolve("films.csv")).lines().skip(1).toList())
-            .containsExactly("9,mismatched" + ",".repeat(22));
+            .containsExactly("9,mismatched" + ",".repeat(23));
         assertThat(csv(out.resolve("frames.csv"))).hasSize(1);
         JsonNode summary = MAPPER.readTree(Files.readAllBytes(out.resolve("summary.json")));
         assertThat(summary.path("statusCounts").path("mismatched").asInt()).isEqualTo(1);
@@ -427,6 +429,79 @@ class DatasetMeasureJobTest {
             .isInstanceOf(IllegalArgumentException.class);
 
         assertThat(inside).doesNotExist();
+    }
+
+    @Test
+    void anOutputReachedThroughASymbolicLinkIntoTheDataIsRefused() throws IOException {
+        threeFilms();
+        Path link = temp.resolve("link");
+        try {
+            Files.createSymbolicLink(link, data);
+        } catch (IOException | UnsupportedOperationException e) {
+            assumeThat(false).as("symbolic links can be made here").isTrue();
+        }
+        Path viaLink = link.resolve("newout");
+        Path dataViaLink = temp.resolve("datalink");
+        Files.createSymbolicLink(dataViaLink, data);
+
+        assertThatThrownBy(() -> job.run(options(data, viaLink, false, 850)))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> job.run(options(data, link.resolve("frames/7"), false, 850)))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> job.run(options(dataViaLink, data.resolve("out"), false, 850)))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> job.run(options(dataViaLink, link, false, 850)))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThat(data.resolve("newout")).doesNotExist();
+    }
+
+    @Test
+    void aFileThatCannotBeReadDamagesItsFilmAndEveryReportIsStillWritten() throws IOException,
+        DatasetMeasureJob.NoFilmsException {
+        threeFilms();
+        Path locked = film7.resolve("dense/100000.jpg");
+        Files.setPosixFilePermissions(locked, PosixFilePermissions.fromString("---------"));
+        try {
+            assumeThat(Files.isReadable(locked)).as("permissions bind for this user").isFalse();
+
+            List<Path> written = job.run(options(false));
+
+            assertThat(written).hasSize(3).allSatisfy(path -> assertThat(path).isRegularFile());
+            assertThat(filmRow(out.resolve("films.csv"), "7")).containsEntry("status", "damaged")
+                .containsEntry("corrupt", "1").containsEntry("missing", "0");
+        } finally {
+            Files.setPosixFilePermissions(locked, PosixFilePermissions.fromString("rw-r--r--"));
+        }
+    }
+
+    @Test
+    void aDuplicateOffsetGetsOneFramesRowAndIsCountedAndDamages() throws IOException,
+        DatasetMeasureJob.NoFilmsException {
+        MeasureFixtures.film(frames, "17", MeasureFixtures.complete(17, "f", "c", WRITTEN, List.of(0L, 0L),
+            List.of(100_000L, 100_000L, 100_000L)));
+
+        job.run(options(false));
+
+        assertThat(filmRow(out.resolve("films.csv"), "17")).containsEntry("status", "damaged")
+            .containsEntry("duplicates", "3").containsEntry("coarseCount", "2").containsEntry("denseCount", "3");
+        assertThat(csv(out.resolve("frames.csv")).stream().skip(1).map(row -> row.get(1) + " " + row.get(2)).toList())
+            .containsExactly("coarse 0", "dense 100000");
+    }
+
+    @Test
+    void numbersAreWrittenTheSameWhateverTheDefaultLocale() throws IOException, DatasetMeasureJob.NoFilmsException {
+        threeFilms();
+        java.util.Locale saved = java.util.Locale.getDefault();
+        java.util.Locale.setDefault(java.util.Locale.GERMANY);
+        try {
+            job.run(options(false, 7L));
+        } finally {
+            java.util.Locale.setDefault(saved);
+        }
+
+        assertThat(csv(out.resolve("frames.csv")).get(1).subList(0, 14)).containsExactly("7", "coarse", "0",
+            "-100000", "20.00", "20", "20", "20", "1.0000", "0.0000", "20.00", "20.00", "20.00", "0.00");
+        assertThat(Files.readString(out.resolve("summary.json"))).contains("\"meanReadSeconds\" : 599.0");
     }
 
     @Test

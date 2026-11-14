@@ -1,6 +1,7 @@
 package gregochr.cinefilm.credits.learn;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assumptions.assumeThat;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -246,6 +247,59 @@ class FilmCheckTest {
         dir = Files.move(dir, temp.resolve("007"));
 
         assertThat(check().status()).isEqualTo(FilmCheck.Status.MISMATCHED);
+    }
+
+    @Test
+    void aDecoderThatThrowsWhateverItThrowsMakesTheFileCorruptAndTheCheckGoesOn() throws IOException {
+        FilmCheck.Result result = FilmCheck.check(dir, seen::add, data -> {
+            throw new IllegalStateException("boom");
+        }, data -> {
+            throw new ArrayIndexOutOfBoundsException("boom");
+        });
+
+        assertThat(result.status()).isEqualTo(FilmCheck.Status.DAMAGED);
+        assertThat(result.corrupt()).isEqualTo(6);
+        assertThat(result.missing()).isZero();
+        assertThat(seen).isEmpty();
+    }
+
+    @Test
+    void aFileThatCannotBeReadIsCorruptAndTheRestIsStillChecked() throws IOException {
+        Path locked = dir.resolve("coarse/0.png");
+        Files.setPosixFilePermissions(locked, java.nio.file.attribute.PosixFilePermissions.fromString("---------"));
+        try {
+            assumeThat(Files.isReadable(locked)).as("permissions bind for this user").isFalse();
+
+            FilmCheck.Result result = check();
+
+            assertThat(result.status()).isEqualTo(FilmCheck.Status.DAMAGED);
+            assertThat(result.corrupt()).isEqualTo(1);
+            assertThat(result.missing()).isZero();
+            assertThat(seen).extracting(FilmCheck.Measured::offsetMs).containsExactly(5_000L, 100_000L);
+        } finally {
+            Files.setPosixFilePermissions(locked,
+                java.nio.file.attribute.PosixFilePermissions.fromString("rw-r--r--"));
+        }
+    }
+
+    @Test
+    void anOffsetListedTwiceIsMeasuredOnceCountedAsADuplicateAndDamages() throws IOException {
+        Path film = MeasureFixtures.film(temp, "9", MeasureFixtures.complete(9, "f", "c", "2026-11-10T12:10:00Z",
+            List.of(0L, 0L, 5_000L), List.of(100_000L, 100_000L, 100_000L)));
+
+        FilmCheck.Result result = FilmCheck.check(film, seen::add);
+
+        assertThat(result.status()).isEqualTo(FilmCheck.Status.DAMAGED);
+        assertThat(result.duplicates()).isEqualTo(3);
+        assertThat(result.missing()).isZero();
+        assertThat(result.corrupt()).isZero();
+        assertThat(result.extra()).isZero();
+        assertThat(seen).extracting(FilmCheck.Measured::kind, FilmCheck.Measured::offsetMs)
+            .containsExactly(org.assertj.core.groups.Tuple.tuple("coarse", 0L),
+                org.assertj.core.groups.Tuple.tuple("coarse", 5_000L),
+                org.assertj.core.groups.Tuple.tuple("dense", 100_000L));
+        assertThat(result.pngBytes()).isEqualTo(Files.size(film.resolve("coarse/0.png"))
+            + Files.size(film.resolve("coarse/5000.png")) + Files.size(film.resolve("dense/100000.png")));
     }
 
     @Test
