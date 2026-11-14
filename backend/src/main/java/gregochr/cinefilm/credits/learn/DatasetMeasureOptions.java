@@ -11,19 +11,24 @@ import java.util.TreeSet;
  * The command line of the dataset measurement tool.
  *
  * @param data the dataset directory, holding {@code frames/<mediaFileId>/}
- * @param out the output directory
+ * @param out the output directory; each run makes a directory of its own inside it
+ * @param labels the labels file ({@code labels-<date>.json}) that says each film's side
  * @param ids the media file ids to measure; empty means every directory under {@code frames/}
  * @param stills whether to write the stills too
  * @param project how many films the projected size is for
+ * @param look {@code L5} or {@code gate} to include the test films, or null (the test films are always skipped)
  */
-record DatasetMeasureOptions(Path data, Path out, Set<Long> ids, boolean stills, long project) {
+record DatasetMeasureOptions(Path data, Path out, Path labels, Set<Long> ids, boolean stills, long project,
+                             String look) {
 
     /** The films the planned dataset holds, which the projected size is for unless {@code --project} says otherwise. */
     static final long DEFAULT_PROJECT = 850;
 
-    private static final List<String> REQUIRED = List.of("data", "out");
-    private static final List<String> OPTIONAL = List.of("ids", "project");
+    private static final List<String> REQUIRED = List.of("data", "out", "labels");
+    private static final List<String> OPTIONAL = List.of("ids", "project", "look");
+    private static final List<String> LOOKS = List.of("L5", "gate");
     private static final String STILLS = "stills";
+    private static final String LOOK_EQUALS = "--look=";
 
     /**
      * Parses {@code --flag value} pairs and the {@code --stills} switch.
@@ -38,6 +43,12 @@ record DatasetMeasureOptions(Path data, Path out, Set<Long> ids, boolean stills,
         boolean stills = false;
         for (int i = 0; i < args.length; i++) {
             String name = args[i];
+            if (name.startsWith(LOOK_EQUALS)) {
+                if (flags.put("look", name.substring(LOOK_EQUALS.length())) != null) {
+                    throw new IllegalArgumentException("flag --look given twice");
+                }
+                continue;
+            }
             String flag = name.startsWith("--") ? name.substring(2) : name;
             if (flag.equals(name) || !REQUIRED.contains(flag) && !OPTIONAL.contains(flag) && !STILLS.equals(flag)) {
                 throw new IllegalArgumentException("unknown argument " + name);
@@ -61,8 +72,12 @@ record DatasetMeasureOptions(Path data, Path out, Set<Long> ids, boolean stills,
                 throw new IllegalArgumentException("missing required flag --" + name);
             }
         }
+        String look = flags.get("look");
+        if (look != null && !LOOKS.contains(look)) {
+            throw new IllegalArgumentException("--look must be L5 or gate");
+        }
         return new DatasetMeasureOptions(Path.of(flags.get("data")), Path.of(flags.get("out")),
-            ids(flags.get("ids")), stills, project(flags.get("project")));
+            Path.of(flags.get("labels")), ids(flags.get("ids")), stills, project(flags.get("project")), look);
     }
 
     private static Set<Long> ids(String value) {

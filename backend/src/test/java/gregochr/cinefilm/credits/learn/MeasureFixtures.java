@@ -7,8 +7,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Builds small synthetic datasets for the measurement tool's tests: 8 by 4 frames as ffmpeg wrote them, so 4 by 2 grey
@@ -68,6 +70,22 @@ final class MeasureFixtures {
             Files.write(folder.resolve(offset + ".png"), FramePrep.png(grey(level)));
             Files.write(folder.resolve(offset + ".jpg"), FramePrep.jpeg(colour(4, level)));
         }
+    }
+
+    /** A label for one file: its side and exclusion, and nothing else the measurement tool reads. */
+    static LabelRecord label(long mediaFileId, Side side, ExcludeReason excluded) {
+        return new LabelRecord(mediaFileId, "1000:1", "unit-" + mediaFileId, side, side == Side.DEV ? 0 : null, null,
+            null, null, List.of(), List.of(), List.of(), excluded, null);
+    }
+
+    /** Writes a labels file the way {@code LabelsJob} does: a JSON array with one record per line. */
+    static Path labelsFile(Path file, LabelRecord... records) throws IOException {
+        JsonMapper mapper = JsonMapper.builder().build();
+        List<String> lines = new ArrayList<>();
+        for (LabelRecord record : records) {
+            lines.add(mapper.writeValueAsString(record));
+        }
+        return Files.writeString(file, records.length == 0 ? "[]" : "[\n" + String.join(",\n", lines) + "\n]");
     }
 
     /** Sets the modification time of every frame file of a film. */

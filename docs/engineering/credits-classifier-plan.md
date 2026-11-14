@@ -313,10 +313,19 @@ For each labelled file, under `/app/cache/credits-dataset/frames/<media_file_id>
 
 `credits.learn.DatasetMeasureMain` is a plain class run as a throwaway container from the released image (the
 `docker run` block under "Where the code lives, and tool runs", with `-Dloader.main=...DatasetMeasureMain`). Its
-arguments are `--data /data --out /out [--ids 5,7,12] [--stills] [--project 850]`.
+arguments are `--data /data --labels /labels/labels-<date>.json --out /out [--ids 5,7,12] [--stills] [--project 850]
+[--look=L5|gate]`.
 
-- **It only reads `--data`** (mounted `:ro`) and writes `--out`, which must not be inside `--data`. No network, no
-  database.
+- **It measures development films only.** `--labels` is L1's `labels-<date>.json`. A film directory is opened only when
+  its label has `side` `dev` and no exclusion. Every other directory (test side, excluded, or not in the labels) is
+  never opened: no `complete.json` read, no file decoded, no row. `summary.json` counts them by reason (`test`,
+  `excluded`, `unlabelled`) and lists ids only for `excluded` and `unlabelled`: **the ids of test films are never
+  written anywhere.** `--ids` narrows within the development films, and an id of another kind is counted the same way.
+  Test films are included only with `--look=L5` or `--look=gate` (the plan's two looks); each use is printed on stderr
+  and recorded in `summary.json` as `look`.
+- **It reads only `--data` and `--labels`** (`--data` mounted `:ro`) and writes one directory of its own,
+  `<out>/measure-<yyyyMMdd'T'HHmmss'Z'>/` (made with `createDirectory`; a run never overwrites or deletes another, and
+  never leaves stale stills). `--out` must not be inside `--data`. No network, no database.
 - **Four questions** before the full run and L3a:
   1. Are the frames complete and decodable? `films.csv` has one row per film, `status` `ok`, `incomplete` (no
      usable format-1 `complete.json`), `mismatched` (it names another file) or `damaged`, and counts of `missing`,

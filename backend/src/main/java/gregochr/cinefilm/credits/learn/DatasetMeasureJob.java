@@ -3,11 +3,14 @@ package gregochr.cinefilm.credits.learn;
 import gregochr.cinefilm.credits.GreyFrame;
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -16,6 +19,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 import tools.jackson.databind.SerializationFeature;
@@ -24,11 +28,18 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * One run of the dataset measurement tool: for each film directory under {@code <data>/frames/}, one at a time, it
  * checks the files ({@link FilmCheck}), measures every sound frame ({@link FrameStats}), and writes {@code frames.csv},
- * {@code films.csv} and {@code summary.json} to the output directory, plus stills with {@code --stills}. It reads only
- * the dataset directory and writes only the output directory; no database, no network, never a Spring bean.
+ * {@code films.csv} and {@code summary.json}, plus stills with {@code --stills}, into a directory of its own,
+ * {@code <out>/measure-<yyyyMMdd'T'HHmmss'Z'>/} (made with {@code createDirectory}, so a run never overwrites or
+ * deletes an earlier one). It reads only the dataset directory and the labels file and writes only that directory; no
+ * database, no network, never a Spring bean.
+ *
+ * <p><strong>Only development films are measured.</strong> A film directory is opened only when the labels file lists
+ * the film on the development side with no exclusion (the test side too, but only with a look, {@code L5} or
+ * {@code gate}). Every other directory is counted in {@code summary.json} and never opened: no
+ * {@code complete.json} read, no file decoded, no row. The ids of test films are never written anywhere.
  *
  * <p>The columns of {@code films.csv} and {@code frames.csv} are the {@code *_COLUMNS} constants below. Films are
- * ordered by media file id (numeric names first, in numeric order); frames by film, then coarse before dense, then by
+ * ordered by media file id; frames by film, then coarse before dense, then by
  * offset. The means and maxima of the summary are over the {@code ok} films. {@code readSeconds} is an estimate: the
  * {@code writtenAt} of {@code complete.json} minus the earliest modification time of the film's frame files, rounded
  * down, so a directory that was copied without its times, or paused for playback, gives a wrong figure; it is blank
@@ -60,6 +71,9 @@ final class DatasetMeasureJob {
     private static final String NO_DIRECTORY = "no frames directory";
 
     private static final JsonMapper MAPPER = JsonMapper.builder().enable(SerializationFeature.INDENT_OUTPUT).build();
+    /** The name of a run's directory is {@code measure-} and the run's time in this form. */
+    private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
+        .withZone(ZoneOffset.UTC);
 
     private final Clock clock;
     private final GitCommit gitCommit;
@@ -84,11 +98,33 @@ final class DatasetMeasureJob {
      * @param gitCommits the distinct commits the frames were written by
      * @param toolGitCommit the commit of this tool
      * @param measuredAt when the run was made (ISO instant)
+     * @param look {@code L5} or {@code gate} when the test films were included, else null
+     * @param skipped the film directories that were not opened, by reason
      */
     record Summary(Map<String, Integer> statusCounts, Double meanTotalBytes, Long maxTotalBytes,
                    Double meanReadSeconds, Long maxReadSeconds, long projectFilms, Long projectedBytes,
                    List<String> ffmpegVersions, List<String> javaVersions, List<String> gitCommits,
-                   String toolGitCommit, String measuredAt) {
+                   String toolGitCommit, String measuredAt, String look, Skipped skipped) {
+    }
+
+    /**
+     * The film directories that were not opened, which is every one that is not a development film with no exclusion
+     * (and, with a look, every one that is not excluded). The ids of test films are never listed.
+     *
+     * @param test how many are on the test side (counted only)
+     * @param excluded how many the labels exclude
+     * @param unlabelled how many the labels do not list
+     * @param excludedIds the ids of the excluded ones
+     * @param unlabelledIds the directory names of the unlabelled ones
+     */
+    record Skipped(int test, int excluded, int unlabelled, List<Long> excludedIds, List<String> unlabelledIds) {
+    }
+
+    /** Why a directory is not opened. */
+    private enum Skip { TEST, EXCLUDED, UNLABELLED }
+
+    /** What was chosen to measure, and what was left alone. */
+    private record Plan(List<Entry> entries, Skipped skipped) {
     }
 
     /** One film's row of {@code films.csv}, kept (it is small) until the summary is made. */
@@ -123,16 +159,25 @@ final class DatasetMeasureJob {
         if (resolved(out).startsWith(data.toRealPath())) {
             throw new IllegalArgumentException("--out must not be inside --data: " + out);
         }
+        Map<Long, LabelRecord> labels = LabelsFile.read(options.labels());
         Path framesRoot = data.resolve("frames");
         List<Path> found = directories(framesRoot);
         if (found.isEmpty()) {
             throw new NoFilmsException("no film directories under " + framesRoot);
         }
-        List<Entry> entries = entries(found, options);
+        Plan plan = plan(found, options, labels);
+        List<Entry> entries = plan.entries();
 
+        Instant now = clock.instant();
         Files.createDirectories(out);
-        Path stillsDir = options.stills() ? out.resolve("stills") : null;
-        Path framesCsv = out.resolve("frames.csv");
+        Path runDir = out.resolve("measure-" + STAMP.format(now));
+        try {
+            Files.createDirectory(runDir);
+        } catch (FileAlreadyExistsException e) {
+            throw new IllegalArgumentException("this run's directory already exists: " + runDir, e);
+        }
+        Path stillsDir = options.stills() ? runDir.resolve("stills") : null;
+        Path framesCsv = runDir.resolve("frames.csv");
         List<FilmRow> films = new ArrayList<>();
         try (BufferedWriter frames = Files.newBufferedWriter(framesCsv)) {
             frames.write(CsvWriter.row(FRAMES_COLUMNS));
@@ -141,17 +186,17 @@ final class DatasetMeasureJob {
                     FilmCheck.Status.INCOMPLETE), null, NO_DIRECTORY) : measure(entry, frames, stillsDir));
             }
         }
-        Path filmsCsv = out.resolve("films.csv");
+        Path filmsCsv = runDir.resolve("films.csv");
         try (BufferedWriter writer = Files.newBufferedWriter(filmsCsv)) {
             writer.write(CsvWriter.row(FILMS_COLUMNS));
             for (FilmRow film : films) {
                 writer.write(CsvWriter.row(filmFields(film)));
             }
         }
-        Path summary = out.resolve("summary.json");
-        Files.write(summary, MAPPER.writeValueAsBytes(summarise(films, options.project())));
+        Path summary = runDir.resolve("summary.json");
+        Files.write(summary, MAPPER.writeValueAsBytes(summarise(films, options, now, plan.skipped())));
 
-        List<Path> written = new ArrayList<>(List.of(filmsCsv, framesCsv, summary));
+        List<Path> written = new ArrayList<>(List.of(runDir, filmsCsv, framesCsv, summary));
         if (stillsDir != null) {
             written.add(stillsDir);
         }
@@ -181,34 +226,63 @@ final class DatasetMeasureJob {
         }
     }
 
-    /** The directories to measure, plus an entry with no directory for each wanted id that has none, in id order. */
-    private static List<Entry> entries(List<Path> found, DatasetMeasureOptions options) {
-        List<Entry> entries = new ArrayList<>();
+    /**
+     * Chooses what to measure. The candidates are the directories (only those whose ids {@code --ids} names, when it is
+     * given) plus each wanted id that has no directory. A candidate is measured only when the labels list it, it has no
+     * exclusion, and it is on the development side (or the test side, with a look). Every other candidate is counted
+     * and never opened. A test film is counted only, never listed.
+     */
+    private static Plan plan(List<Path> found, DatasetMeasureOptions options, Map<Long, LabelRecord> labels) {
+        Map<String, Path> candidates = new TreeMap<>();
         for (Path dir : found) {
             String name = dir.getFileName().toString();
-            if (options.ids().isEmpty() || isWanted(name, options)) {
-                entries.add(new Entry(name, dir));
+            Long id = canonicalId(name);
+            if (options.ids().isEmpty() || id != null && options.ids().contains(id)) {
+                candidates.put(name, dir);
             }
         }
         for (long id : options.ids()) {
-            if (found.stream().noneMatch(dir -> dir.getFileName().toString().equals(Long.toString(id)))) {
-                entries.add(new Entry(Long.toString(id), null));
+            candidates.putIfAbsent(Long.toString(id), null);
+        }
+        List<Entry> entries = new ArrayList<>();
+        int test = 0;
+        TreeSet<Long> excludedIds = new TreeSet<>();
+        TreeSet<String> unlabelledIds = new TreeSet<>(Comparator.comparingInt(String::length)
+            .thenComparing(Comparator.naturalOrder()));
+        for (Map.Entry<String, Path> candidate : candidates.entrySet()) {
+            Long id = canonicalId(candidate.getKey());
+            Skip skip = classify(id == null ? null : labels.get(id), options.look() != null);
+            if (skip == null) {
+                entries.add(new Entry(candidate.getKey(), candidate.getValue()));
+            } else if (skip == Skip.TEST) {
+                test++;
+            } else if (skip == Skip.EXCLUDED) {
+                excludedIds.add(id);
+            } else {
+                unlabelledIds.add(candidate.getKey());
             }
         }
-        entries.sort(Comparator.comparing((Entry entry) -> numeric(entry.name()) == null)
-            .thenComparing(entry -> numeric(entry.name()) == null ? 0L : numeric(entry.name()))
-            .thenComparing(Entry::name));
-        return entries;
+        entries.sort(Comparator.comparingLong(entry -> Long.parseLong(entry.name())));
+        return new Plan(entries, new Skipped(test, excludedIds.size(), unlabelledIds.size(),
+            List.copyOf(excludedIds), List.copyOf(unlabelledIds)));
     }
 
-    private static boolean isWanted(String name, DatasetMeasureOptions options) {
-        Long id = numeric(name);
-        return id != null && options.ids().contains(id) && name.equals(id.toString());
+    /** Null to measure, else why not. A test film without a look is {@code TEST} even when it is also excluded. */
+    private static Skip classify(LabelRecord label, boolean look) {
+        if (label == null || label.side() == null) {
+            return Skip.UNLABELLED;
+        }
+        if (label.side() == Side.TEST && !look) {
+            return Skip.TEST;
+        }
+        return label.excluded() == null ? null : Skip.EXCLUDED;
     }
 
-    private static Long numeric(String name) {
+    /** The id a directory name stands for, when the name is exactly that id written out; else null. */
+    private static Long canonicalId(String name) {
         try {
-            return Long.parseLong(name);
+            long id = Long.parseLong(name);
+            return name.equals(Long.toString(id)) ? id : null;
         } catch (NumberFormatException e) {
             return null;
         }
@@ -342,7 +416,7 @@ final class DatasetMeasureJob {
 
     // ---- Summary -------------------------------------------------------------------------------------------------
 
-    private Summary summarise(List<FilmRow> films, long project) {
+    private Summary summarise(List<FilmRow> films, DatasetMeasureOptions options, Instant now, Skipped skipped) {
         Map<String, Integer> counts = new LinkedHashMap<>();
         for (FilmCheck.Status status : List.of(FilmCheck.Status.OK, FilmCheck.Status.INCOMPLETE,
             FilmCheck.Status.MISMATCHED, FilmCheck.Status.DAMAGED)) {
@@ -363,9 +437,10 @@ final class DatasetMeasureJob {
                 Optional.ofNullable(complete.gitCommit()).ifPresent(commits::add);
             });
         }
+        long project = options.project();
         return new Summary(counts, meanTotal, maxTotal, mean(seconds), max(seconds), project,
             meanTotal == null ? null : Math.round(meanTotal * project), List.copyOf(ffmpeg), List.copyOf(java),
-            List.copyOf(commits), gitCommit.commit(), clock.instant().toString());
+            List.copyOf(commits), gitCommit.commit(), now.toString(), options.look(), skipped);
     }
 
     private static Double mean(List<Long> values) {

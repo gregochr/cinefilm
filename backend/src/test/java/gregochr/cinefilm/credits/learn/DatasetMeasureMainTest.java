@@ -23,6 +23,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 class DatasetMeasureMainTest {
 
+    private static final String RUN = "measure-20261114T090000Z";
+
     @TempDir
     Path temp;
 
@@ -31,6 +33,7 @@ class DatasetMeasureMainTest {
     private Path data;
     private Path frames;
     private DatasetMeasureJob job;
+    private Path labels;
 
     @BeforeEach
     void setUp() throws IOException {
@@ -39,9 +42,16 @@ class DatasetMeasureMainTest {
         GitCommit git = mock(GitCommit.class);
         when(git.commit()).thenReturn("toolsha");
         job = new DatasetMeasureJob(Clock.fixed(Instant.parse("2026-11-14T09:00:00Z"), ZoneOffset.UTC), git);
+        labels = MeasureFixtures.labelsFile(temp.resolve("labels.json"), MeasureFixtures.label(7, Side.DEV, null));
     }
 
-    private int run(String... args) {
+    /** Runs with the given flags, and with {@code --labels} added unless they have it. */
+    private int run(String... given) {
+        List<String> all = new ArrayList<>(List.of(given));
+        if (!all.contains("--labels")) {
+            all.addAll(List.of("--labels", labels.toString()));
+        }
+        String[] args = all.toArray(String[]::new);
         return DatasetMeasureMain.run(args, new PrintStream(outBytes, true, StandardCharsets.UTF_8),
             new PrintStream(errBytes, true, StandardCharsets.UTF_8), job);
     }
@@ -68,8 +78,8 @@ class DatasetMeasureMainTest {
 
         assertThat(code).isZero();
         assertThat(err()).isEmpty();
-        assertThat(out()).isEqualTo("wrote " + out.resolve("films.csv") + "\nwrote " + out.resolve("frames.csv")
-            + "\nwrote " + out.resolve("summary.json") + "\n");
+        assertThat(out()).isEqualTo("wrote " + out.resolve(RUN) + "\nwrote " + out.resolve(RUN + "/films.csv")
+            + "\nwrote " + out.resolve(RUN + "/frames.csv") + "\nwrote " + out.resolve(RUN + "/summary.json") + "\n");
     }
 
     @Test
@@ -79,7 +89,7 @@ class DatasetMeasureMainTest {
 
         assertThat(run("--data", data.toString(), "--out", out.toString(), "--stills")).isZero();
 
-        assertThat(out().lines().toList()).hasSize(4).last().isEqualTo("wrote " + out.resolve("stills"));
+        assertThat(out().lines().toList()).hasSize(5).last().isEqualTo("wrote " + out.resolve(RUN + "/stills"));
     }
 
     @Test
@@ -88,7 +98,63 @@ class DatasetMeasureMainTest {
         Files.delete(frames.resolve("7/dense/100000.png"));
 
         assertThat(run("--data", data.toString(), "--out", temp.resolve("out").toString())).isZero();
-        assertThat(Files.readString(temp.resolve("out/films.csv"))).contains("7,damaged,");
+        assertThat(Files.readString(temp.resolve("out/" + RUN + "/films.csv"))).contains("7,damaged,");
+    }
+
+    @Test
+    void aLookIsAnnouncedLoudlyOnStderrAndTheTestFilmsAreMeasured() throws IOException {
+        oneFilm();
+        MeasureFixtures.film(frames, "4242", MeasureFixtures.complete(4242, "f", "c", "2026-11-10T12:10:00Z",
+            List.of(0L), List.of()));
+        Path both = MeasureFixtures.labelsFile(temp.resolve("both.json"), MeasureFixtures.label(7, Side.DEV, null),
+            MeasureFixtures.label(4242, Side.TEST, null));
+        Path out = temp.resolve("out");
+
+        int code = run("--data", data.toString(), "--out", out.toString(), "--labels", both.toString(),
+            "--look=L5");
+
+        assertThat(code).isZero();
+        assertThat(err().lines().toList()).hasSize(1).first().asString()
+            .startsWith("measure: LOOK L5: THE TEST FILMS ARE INCLUDED IN THIS RUN.");
+        assertThat(Files.readString(out.resolve(RUN + "/films.csv"))).contains("\n4242,ok,");
+    }
+
+    @Test
+    void withNoLookNothingIsSaidAndTheTestFilmsAreLeftOut() throws IOException {
+        oneFilm();
+        MeasureFixtures.film(frames, "4242", MeasureFixtures.complete(4242, "f", "c", "2026-11-10T12:10:00Z",
+            List.of(0L), List.of()));
+        Path both = MeasureFixtures.labelsFile(temp.resolve("both.json"), MeasureFixtures.label(7, Side.DEV, null),
+            MeasureFixtures.label(4242, Side.TEST, null));
+        Path out = temp.resolve("out");
+
+        assertThat(run("--data", data.toString(), "--out", out.toString(), "--labels", both.toString())).isZero();
+
+        assertThat(err()).isEmpty();
+        assertThat(Files.readString(out.resolve(RUN + "/films.csv"))).doesNotContain("4242");
+    }
+
+    @Test
+    void anUnknownLookExitsOneBeforeAnythingRuns() {
+        assertThat(run("--data", "x", "--out", "y", "--look=all")).isEqualTo(1);
+
+        assertThat(err()).isEqualTo("measure: IllegalArgumentException: --look must be L5 or gate\n");
+    }
+
+    @Test
+    void aMissingLabelsFlagAndAnUnreadableLabelsFileExitOne() throws IOException {
+        oneFilm();
+        assertThat(DatasetMeasureMain.run(new String[] {"--data", data.toString(), "--out", "y"},
+            new PrintStream(outBytes, true, StandardCharsets.UTF_8),
+            new PrintStream(errBytes, true, StandardCharsets.UTF_8), job)).isEqualTo(1);
+        assertThat(err()).isEqualTo("measure: IllegalArgumentException: missing required flag --labels\n");
+
+        errBytes.reset();
+        Path missing = temp.resolve("none.json");
+        assertThat(run("--data", data.toString(), "--out", temp.resolve("out").toString(), "--labels",
+            missing.toString())).isEqualTo(1);
+        assertThat(err()).isEqualTo("measure: NoSuchFileException: " + missing + "\n");
+        assertThat(temp.resolve("out")).doesNotExist();
     }
 
     @Test
@@ -155,7 +221,7 @@ class DatasetMeasureMainTest {
         when(failing.run(any())).thenThrow(
             new UncheckedIOException(new IOException("Permission denied")));
 
-        int code = DatasetMeasureMain.run(new String[] {"--data", "x", "--out", "y"},
+        int code = DatasetMeasureMain.run(new String[] {"--data", "x", "--out", "y", "--labels", "z"},
             new PrintStream(outBytes, true, StandardCharsets.UTF_8),
             new PrintStream(errBytes, true, StandardCharsets.UTF_8), failing);
 
@@ -197,9 +263,13 @@ class DatasetMeasureMainTest {
         oneFilm();
         Path out = temp.resolve("out");
 
-        DatasetMeasureMain.main(new String[] {"--data", data.toString(), "--out", out.toString()});
+        DatasetMeasureMain.main(new String[] {"--data", data.toString(), "--out", out.toString(), "--labels",
+            labels.toString()});
 
-        assertThat(out.resolve("summary.json")).isRegularFile();
-        assertThat(Files.readString(out.resolve("summary.json"))).contains("\"toolGitCommit\"");
+        try (var runs = Files.list(out)) {
+            Path runDir = runs.findFirst().orElseThrow();
+            assertThat(runDir.getFileName().toString()).matches("measure-\\d{8}T\\d{6}Z");
+            assertThat(Files.readString(runDir.resolve("summary.json"))).contains("\"toolGitCommit\"");
+        }
     }
 }

@@ -474,8 +474,11 @@ read-only checks.
    curl -sS -b ~/cf-jar http://127.0.0.1:8090/api/admin/credits/dataset
    curl -sS -b ~/cf-jar -H 'X-CineFilm: 1' -X POST http://127.0.0.1:8090/api/admin/credits/dataset/start
    ```
-4. **Watch it, and stop it at about 10 `complete` (owner).** The job yields to playback and to the credits refresher, so
-   it may sit in `WAITING`.
+4. **Watch it, and stop it when about 10 development films are `complete` (owner).** The job yields to playback and to
+   the credits refresher, so it may sit in `WAITING`. **It reads films in media-file-id order, whatever their split, so
+   the first 10 `complete` may include test films.** The measuring tool skips those (step 5), so the trial may need to
+   run past 10 `complete` to reach about 10 development films: watch the `skipped` counts in the tool's `summary.json`,
+   or the row count of `films.csv`, and stop when that gives about 10.
 
    ```bash
    curl -sS -b ~/cf-jar http://127.0.0.1:8090/api/admin/credits/dataset      # state, complete, failed, freeBytes
@@ -494,24 +497,31 @@ read-only checks.
    find ~/cinefilm-data/cache/credits-dataset/frames -name complete.json | wc -l
    docker logs --since 1h cinefilm 2>&1 | grep -iE "dataset|frames of file|running marker"
    ```
-5. **Measure.** The tool reads the dataset read-only and writes beside it; use the image tag that is deployed:
+5. **Measure.** The tool reads the dataset read-only. **It measures development films only:** `--labels` is L1's
+   `labels-<date>.json` (use the newest one in `~/cinefilm-labels/`; the line below names the 2026-11-13 file), and a
+   film directory is opened only when that file lists the film on the development side with no exclusion. Test,
+   excluded and unlabelled directories are counted in `summary.json` (`skipped`) and never opened. Use the image tag
+   that is deployed:
 
    ```bash
    docker run --rm --network none --cpus 1 --cpu-shares 2 --memory 3g --entrypoint nice \
-     -v ~/cinefilm-data/cache/credits-dataset:/data:ro -v ~/cinefilm-data/cache/credits-dataset-out:/out \
+     -v ~/cinefilm-data/cache/credits-dataset:/data:ro -v ~/cinefilm-labels:/labels:ro \
+     -v ~/cinefilm-data/cache/credits-dataset-out:/out \
      ghcr.io/gregochr/cinefilm:$(cat ~/cinefilm/.deployed-version) -n 19 java -Xmx2g \
      -Dloader.main=gregochr.cinefilm.credits.learn.DatasetMeasureMain \
      -cp /app/app.jar org.springframework.boot.loader.launch.PropertiesLauncher \
-     --data /data --out /out --stills
+     --data /data --labels /labels/labels-2026-11-13.json --out /out --stills
    ```
 
-   It prints the paths it wrote and exits 0 even if a film is damaged; read `films.csv` (`status`, `missing`,
-   `corrupt`, `duplicates`) and `summary.json` (`projectedBytes`, `meanReadSeconds`). Exit 2 means no film directory yet.
-6. **Copy the results** into a dated folder (the stills under `stills/<mediaFileId>/` are for looking at, with
-   `sheet.png` first):
+   Never add `--look=L5` or `--look=gate` here: they include the test films and are for the plan's two looks only. The
+   tool writes a directory of its own, `/out/measure-<UTC time>/`, and refuses to reuse one. It prints the paths it
+   wrote and exits 0 even if a film is damaged; read `films.csv` (`status`, `missing`, `corrupt`, `duplicates`) and
+   `summary.json` (`skipped`, `projectedBytes`, `meanReadSeconds`). Exit 2 means no film directory yet.
+6. **Copy that run's directory** (the stills under `stills/<mediaFileId>/` are for looking at, with `sheet.png`
+   first):
 
    ```bash
-   mkdir -p ~/cinefilm-labels/measure-$(date +%F) && cp -r ~/cinefilm-data/cache/credits-dataset-out/. ~/cinefilm-labels/measure-$(date +%F)/
+   cp -r ~/cinefilm-data/cache/credits-dataset-out/measure-<stamp> ~/cinefilm-labels/
    ```
 
 Switch the job off again if the full run is not starting straight away (when nothing is playing; this also recreates

@@ -50,7 +50,12 @@ public final class DatasetMeasureMain {
      */
     static int run(String[] args, PrintStream out, PrintStream err, DatasetMeasureJob job) {
         try {
-            job.run(DatasetMeasureOptions.parse(args)).forEach(path -> out.println("wrote " + path));
+            DatasetMeasureOptions options = DatasetMeasureOptions.parse(args);
+            if (options.look() != null) {
+                err.println("measure: LOOK " + options.look() + ": THE TEST FILMS ARE INCLUDED IN THIS RUN."
+                    + " This is one of the two looks the plan allows (L5, the gate); summary.json records it.");
+            }
+            job.run(options).forEach(path -> out.println("wrote " + path));
             return 0;
         } catch (DatasetMeasureJob.NoFilmsException e) {
             err.println("measure: " + oneLine(e.getMessage()));
