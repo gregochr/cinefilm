@@ -99,7 +99,10 @@ const showDasBoot = async () => {
     await screen.findByRole('button', { name: 'Show the full subtitle files of Das Boot (1981)' }),
   );
   await screen.findByRole('button', { name: 'Show all files' });
+  await screen.findByText('No files here.');
 };
+// "Show all files" sits between the full-need rows and the file filter chips, which start at "All (1)".
+const FILTER_CHIPS_AT = SUBTITLE_TABS.indexOf('All (1)');
 // The same tabs, with the one download counted under Downloads.
 const DL_TABS = SUBTITLE_TABS.map((name) => (name === 'Downloads (0)' ? 'Downloads (1)' : name));
 const SHOW_DL_CUES = 'Show the cues of Heat.1995.1080p.BluRay.x264';
@@ -196,7 +199,11 @@ const CASES = [
     path: '/admin/subtitles',
     items: [plain],
     steps: showDasBoot,
-    buttons: [...SUBTITLE_TABS.slice(0, 22), 'Show all files', ...SUBTITLE_TABS.slice(22)],
+    buttons: [
+      ...SUBTITLE_TABS.slice(0, FILTER_CHIPS_AT),
+      'Show all files',
+      ...SUBTITLE_TABS.slice(FILTER_CHIPS_AT),
+    ],
   },
   {
     name: 'Subtitles, a failed film search in the attach form',
