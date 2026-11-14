@@ -14,36 +14,36 @@ import java.util.function.LongFunction;
  * A stand-in for ffmpeg: records every command and its timeout, and writes the PGM files the command asks for, the
  * picture of each coming from a function of the offset it was asked to take.
  */
-final class FakeFfmpeg implements CommandRunner {
+public final class FakeFfmpeg implements CommandRunner {
 
-    final List<List<String>> commands = new ArrayList<>();
-    final List<Duration> timeouts = new ArrayList<>();
+    public final List<List<String>> commands = new ArrayList<>();
+    public final List<Duration> timeouts = new ArrayList<>();
     /** The directory the last command wrote into. */
-    Path lastDirectory;
+    public Path lastDirectory;
     /** The picture at an offset in milliseconds. */
-    LongFunction<GreyFrame> frameAt = ms -> SyntheticFrames.picture();
+    public LongFunction<GreyFrame> frameAt = ms -> SyntheticFrames.picture();
     /** The 1-based call that fails (0 for none). */
-    int failOnCall;
+    public int failOnCall;
     /** What the failing call does: throw this... */
-    IOException ioFailure;
+    public IOException ioFailure;
     /** ...or return this. */
-    Result failure = new Result(1, "", false);
+    public Result failure = new Result(1, "", false);
     /** When set, the files are not written. */
-    boolean writeNothing;
+    public boolean writeNothing;
     /** When set, this is written instead of a picture. */
-    byte[] garbage;
+    public byte[] garbage;
     /** How many dense frames to write; -1 for as many as were asked for. */
-    int denseCount = -1;
+    public int denseCount = -1;
     /** The index of the dense frame written as garbage (-1 for none). */
-    int corruptDenseIndex = -1;
+    public int corruptDenseIndex = -1;
     /** When set, the failing call writes its frames first, as ffmpeg may before it exits with an error. */
-    boolean writeBeforeFailing;
+    public boolean writeBeforeFailing;
 
     /** The colour picture at an offset in milliseconds, for commands that write {@code .ppm} files. */
-    LongFunction<RgbFrame> rgbAt = ms -> flat(10, 20, 30);
+    public LongFunction<RgbFrame> rgbAt = ms -> flat(10, 20, 30);
 
     /** A 4x2 frame of one colour. */
-    static RgbFrame flat(int red, int green, int blue) {
+    public static RgbFrame flat(int red, int green, int blue) {
         byte[] pixels = new byte[4 * 2 * 3];
         for (int i = 0; i < pixels.length; i += 3) {
             pixels[i] = (byte) red;
@@ -54,7 +54,7 @@ final class FakeFfmpeg implements CommandRunner {
     }
 
     /** The bytes of a binary PPM, as ffmpeg writes one. */
-    static byte[] ppm(RgbFrame frame) {
+    public static byte[] ppm(RgbFrame frame) {
         byte[] header = ("P6\n" + frame.width() + " " + frame.height() + "\n255\n").getBytes(StandardCharsets.US_ASCII);
         byte[] data = new byte[header.length + frame.width() * frame.height() * 3];
         System.arraycopy(header, 0, data, 0, header.length);
@@ -71,7 +71,7 @@ final class FakeFfmpeg implements CommandRunner {
     }
 
     /** The bytes of a binary PGM, as ffmpeg writes one. */
-    static byte[] pgm(GreyFrame frame) {
+    public static byte[] pgm(GreyFrame frame) {
         byte[] header = ("P5\n" + frame.width() + " " + frame.height() + "\n255\n").getBytes(StandardCharsets.US_ASCII);
         byte[] data = new byte[header.length + frame.width() * frame.height()];
         System.arraycopy(header, 0, data, 0, header.length);

@@ -35,7 +35,8 @@ public final class FramePrep {
     /** The side of the square colour picture the model sees. */
     public static final int COLOUR_SIZE = 224;
 
-    private static final float JPEG_QUALITY = 0.95f;
+    /** The JPEG quality of every stored colour picture. */
+    public static final float JPEG_QUALITY = 0.95f;
 
     private FramePrep() {
     }

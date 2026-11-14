@@ -4,8 +4,6 @@ import gregochr.cinefilm.credits.CreditsDetectionService.DueFile;
 import gregochr.cinefilm.credits.CreditsDetectionService.SaveOutcome;
 import gregochr.cinefilm.library.LibraryRoot;
 import gregochr.cinefilm.library.ScanFinished;
-import gregochr.cinefilm.playback.PlaybackStateRepository;
-import gregochr.cinefilm.transcode.SessionManager;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
@@ -20,6 +18,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Service;
 
 /**
@@ -29,12 +28,12 @@ import org.springframework.stereotype.Service;
  * applies nothing.
  *
  * <p>Playback comes first. The run stops, to be tried again at the next trigger or the hourly nudge, when any HLS
- * session is encoding or playback progress was reported in the last {@value #QUIET_MINUTES} minutes (direct play reads
- * over SMB too); that is checked before each film and before every ffmpeg call, and a file stopped part-way is
- * abandoned and its frames deleted. A scan or an Admin edit holding the library lock when a result is saved stops the
- * run too. A file that fails (ffmpeg missing, an error, a timeout) is not stored and not tried again for
- * {@value #BACKOFF_HOURS} hours unless it changes. A request that arrives while a run is going makes it go round once
- * more. Nothing here throws to its caller.
+ * session is encoding or playback progress was reported in the last {@value PlaybackGuard#QUIET_MINUTES} minutes
+ * (direct play reads over SMB too; see {@link PlaybackGuard}); that is checked before each film and before every
+ * ffmpeg call, and a file stopped part-way is abandoned and its frames deleted. A scan or an Admin edit holding the
+ * library lock when a result is saved stops the run too. A file that fails (ffmpeg missing, an error, a timeout) is
+ * not stored and not tried again for {@value #BACKOFF_HOURS} hours unless it changes. A request that arrives while a
+ * run is going makes it go round once more. Nothing here throws to its caller.
  */
 @Service
 public class CreditsRefresher {
@@ -45,16 +44,13 @@ public class CreditsRefresher {
     static final int BACKOFF_HOURS = 6;
     /** How long a file that could not be read is left alone. */
     static final Duration BACKOFF = Duration.ofHours(BACKOFF_HOURS);
-    /** How long after the last progress report playback still counts as going, in minutes. */
-    static final int QUIET_MINUTES = 5;
-    /** How long after the last progress report playback still counts as going. */
-    static final Duration QUIET = Duration.ofMinutes(QUIET_MINUTES);
+    /** The order of the start-up listener: before the credits dataset job's, which uses the directory it clears. */
+    public static final int STARTUP_ORDER = 1;
 
     private final CreditsDetectionService service;
     private final CreditsFrameReader reader;
     private final LibraryRoot root;
-    private final SessionManager sessions;
-    private final PlaybackStateRepository playback;
+    private final PlaybackGuard guard;
     private final Clock clock;
     private final Executor executor;
     private final boolean enabled;
@@ -78,14 +74,13 @@ public class CreditsRefresher {
 
     /** Creates the service; the executor is {@code creditsExecutor}. */
     public CreditsRefresher(CreditsDetectionService service, CreditsFrameReader reader, LibraryRoot root,
-                            SessionManager sessions, PlaybackStateRepository playback, Clock clock,
+                            PlaybackGuard guard, Clock clock,
                             @Qualifier("creditsExecutor") Executor executor,
                             @Value("${cinefilm.credits.enabled:true}") boolean enabled) {
         this.service = service;
         this.reader = reader;
         this.root = root;
-        this.sessions = sessions;
-        this.playback = playback;
+        this.guard = guard;
         this.clock = clock;
         this.executor = executor;
         this.enabled = enabled;
@@ -98,6 +93,7 @@ public class CreditsRefresher {
 
     /** Clears what a killed process left behind and starts a run at start-up, or says the analysis is off. */
     @EventListener(ApplicationReadyEvent.class)
+    @Order(STARTUP_ORDER)
     public void onStartup() {
         if (enabled) {
             reader.deleteLeftovers();
@@ -126,6 +122,26 @@ public class CreditsRefresher {
         // Set before trying to take the run: a run that is just finishing re-checks it after giving the run up.
         pending.set(true);
         return launch();
+    }
+
+    /**
+     * How many of the files due for analysis are not held back by the failure back-off: the work the refresher would
+     * start now. The credits dataset job yields while it is above 0.
+     *
+     * @return 0 when the analysis is off; 1 when the due files cannot be listed (so the caller yields); otherwise the
+     *     count
+     */
+    public int dueNotHeldBack() {
+        if (!enabled) {
+            return 0;
+        }
+        try {
+            return (int) service.dueFiles().stream().filter(due -> !heldBack(due)).count();
+        } catch (RuntimeException e) {
+            LOG.warn("Could not count the due credits files: {}",
+                e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+            return 1;
+        }
     }
 
     /** Asks for a run only when the last one stopped to let playback or an edit go first. */
@@ -169,14 +185,14 @@ public class CreditsRefresher {
         int failed = 0;
         try {
             for (DueFile due : service.dueFiles()) {
-                checkPlayback();
+                guard.check();
                 if (heldBack(due)) {
                     continue;
                 }
                 try {
                     analyse(due);
                     analysed++;
-                } catch (Wait e) {
+                } catch (Wait | PlaybackGuard.Busy e) {
                     throw e;
                 } catch (RuntimeException e) {
                     failedAt.put(due.mediaFileId(), new Failure(due.fingerprint(), clock.instant()));
@@ -185,7 +201,7 @@ public class CreditsRefresher {
                         e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
                 }
             }
-        } catch (Wait e) {
+        } catch (Wait | PlaybackGuard.Busy e) {
             deferred.set(true);
             LOG.info("Credits detection waits: {}", e.getMessage());
         } catch (RuntimeException e) {
@@ -201,22 +217,11 @@ public class CreditsRefresher {
             && clock.instant().isBefore(failure.at().plus(BACKOFF));
     }
 
-    /** Stops the run while playback needs the machine: an encoder is running, or progress was reported lately. */
-    private void checkPlayback() {
-        if (sessions.isEncoding()) {
-            throw new Wait("a film is being transcoded");
-        }
-        Instant lastProgress = playback.findLatestLastPlayedAt();
-        if (lastProgress != null && clock.instant().isBefore(lastProgress.plus(QUIET))) {
-            throw new Wait("a film was played in the last " + QUIET_MINUTES + " minutes");
-        }
-    }
-
     private void analyse(DueFile due) {
         Instant started = clock.instant();
         Path file = root.resolveFile(due.path())
             .orElseThrow(() -> new CreditsFrameReader.ReadException("The film file cannot be found"));
-        CreditsResult result = service.detect(due, file, this::checkPlayback);
+        CreditsResult result = service.detect(due, file, guard::check);
         failedAt.remove(due.mediaFileId());
         SaveOutcome saved = service.save(due, result, clock.instant());
         if (saved == SaveOutcome.BUSY) {

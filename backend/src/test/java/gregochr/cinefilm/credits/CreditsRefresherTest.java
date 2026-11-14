@@ -99,11 +99,13 @@ class CreditsRefresherTest {
             return now;
         }
     };
+    private PlaybackGuard guard;
     private CreditsRefresher refresher;
 
     @BeforeEach
     void setUp() {
-        refresher = new CreditsRefresher(service, reader, root, sessions, playback, clock, queued::add, true);
+        guard = new PlaybackGuard(sessions, playback, clock);
+        refresher = new CreditsRefresher(service, reader, root, guard, clock, queued::add, true);
         logged.start();
         refresherLog.addAppender(logged);
     }
@@ -482,7 +484,7 @@ class CreditsRefresherTest {
 
     @Test
     void anExecutorThatRefusesTheRunGivesTheRunUpAndSaysSo() {
-        CreditsRefresher refusing = new CreditsRefresher(service, reader, root, sessions, playback, clock,
+        CreditsRefresher refusing = new CreditsRefresher(service, reader, root, guard, clock,
             task -> {
                 throw new RejectedExecutionException("full");
             }, true);
@@ -494,7 +496,7 @@ class CreditsRefresherTest {
 
     @Test
     void whenItIsSwitchedOffNothingStartsAndStartUpSaysWhy() {
-        CreditsRefresher off = new CreditsRefresher(service, reader, root, sessions, playback, clock, queued::add,
+        CreditsRefresher off = new CreditsRefresher(service, reader, root, guard, clock, queued::add,
             false);
 
         assertThat(off.startDue()).isFalse();
@@ -532,5 +534,83 @@ class CreditsRefresherTest {
         assertThat(CreditsRefresher.class.getMethod("onStartup")
             .getAnnotation(org.springframework.context.event.EventListener.class).value())
             .containsExactly(ApplicationReadyEvent.class);
+    }
+
+    @Test
+    void busyThrownPartWayThroughAFileLeavesTheRunDeferredAndRecordsNoFailure() {
+        when(service.dueFiles()).thenReturn(List.of(TAKEN));
+        onDisk(TAKEN, FILE);
+        when(service.detect(eq(TAKEN), eq(FILE), any(Runnable.class)))
+            .thenThrow(new PlaybackGuard.Busy("a film is being transcoded")).thenReturn(NOT_FOUND);
+        when(service.save(TAKEN, NOT_FOUND, NOW)).thenReturn(SaveOutcome.SAVED);
+
+        startAndRun();
+
+        assertThat(messages()).containsExactly("Credits detection waits: a film is being transcoded",
+            "Credits detection finished: 0 files analysed, 0 failed");
+        // Not held back: the nudge analyses it at once, with no six hour wait.
+        assertThat(refresher.dueNotHeldBack()).isEqualTo(1);
+        refresher.startIfDeferred();
+        assertThat(queued).hasSize(1);
+        queued.get(0).run();
+        verify(service).save(TAKEN, NOT_FOUND, NOW);
+    }
+
+    // ---- dueNotHeldBack ------------------------------------------------------------------------------------------
+
+    @Test
+    void dueNotHeldBackCountsTheDueFilesLeavingOutTheOnesTheBackOffHoldsBack() {
+        when(service.dueFiles()).thenReturn(List.of(TAKEN, HEAT));
+        assertThat(refresher.dueNotHeldBack()).isEqualTo(2);
+
+        failsToRead(TAKEN, FILE);
+        detects(HEAT, Path.of("/library/Heat.m4v"), NOT_FOUND);
+        when(service.save(HEAT, NOT_FOUND, NOW)).thenReturn(SaveOutcome.SAVED);
+        startAndRun();
+
+        assertThat(refresher.dueNotHeldBack()).isEqualTo(1);
+        // The back-off ends after six hours.
+        now = NOW.plus(SIX_HOURS);
+        assertThat(refresher.dueNotHeldBack()).isEqualTo(2);
+    }
+
+    @Test
+    void aHeldBackFileWhoseFingerprintChangedCountsAgain() {
+        when(service.dueFiles()).thenReturn(List.of(TAKEN));
+        failsToRead(TAKEN, FILE);
+        startAndRun();
+        assertThat(refresher.dueNotHeldBack()).isZero();
+
+        DueFile changed = new DueFile(7L, "Taken.m4v", "1000:2", 6_000_000L, "Taken");
+        when(service.dueFiles()).thenReturn(List.of(changed));
+
+        assertThat(refresher.dueNotHeldBack()).isEqualTo(1);
+    }
+
+    @Test
+    void dueNotHeldBackIsZeroWhenTheAnalysisIsOffAndAsksNothing() {
+        CreditsRefresher off = new CreditsRefresher(service, reader, root, guard, clock, queued::add, false);
+
+        assertThat(off.dueNotHeldBack()).isZero();
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void dueNotHeldBackIsOneWhenTheDueFilesCannotBeListedSoTheCallerYields() {
+        when(service.dueFiles()).thenThrow(new IllegalStateException("database is down"));
+
+        assertThat(refresher.dueNotHeldBack()).isEqualTo(1);
+
+        assertThat(messages()).containsExactly("Could not count the due credits files: database is down");
+    }
+
+    @Test
+    void dueNotHeldBackNamesTheClassWhenTheFailureHasNoMessage() {
+        when(service.dueFiles()).thenThrow(new IllegalStateException());
+
+        assertThat(refresher.dueNotHeldBack()).isEqualTo(1);
+
+        assertThat(messages()).containsExactly("Could not count the due credits files: IllegalStateException");
     }
 }
