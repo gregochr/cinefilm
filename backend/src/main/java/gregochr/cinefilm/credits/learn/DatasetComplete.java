@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
 import tools.jackson.core.JacksonException;
@@ -109,6 +110,31 @@ public record DatasetComplete(int format, long mediaFileId, String fingerprint, 
         } catch (IOException | JacksonException e) {
             return Optional.empty();
         }
+    }
+
+    /**
+     * A directory's {@code complete.json} as a whole, for the measurement tool (which reads frames it did not write
+     * and so has no fingerprint to compare). Only a file that parses, has the current format and holds every part the
+     * tool reads (window, frame, picture area, settings, and both offset lists without a null in them) is returned.
+     *
+     * @param dir the file's directory
+     * @return the file; empty when it is missing, unparseable, of another format or lacks a part
+     */
+    public static Optional<DatasetComplete> read(Path dir) {
+        try {
+            DatasetComplete complete = MAPPER.readValue(Files.readAllBytes(dir.resolve(FILE_NAME)),
+                DatasetComplete.class);
+            return complete != null && complete.format() == FORMAT && complete.window() != null
+                && complete.frame() != null && complete.activeArea() != null && complete.settings() != null
+                && hasOffsets(complete.coarse()) && hasOffsets(complete.dense()) ? Optional.of(complete)
+                : Optional.empty();
+        } catch (IOException | JacksonException e) {
+            return Optional.empty();
+        }
+    }
+
+    private static boolean hasOffsets(List<Long> offsets) {
+        return offsets != null && offsets.stream().noneMatch(Objects::isNull);
     }
 
     /**

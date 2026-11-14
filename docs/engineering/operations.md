@@ -432,6 +432,110 @@ The browse URL is https://cinefilm.chrisjgregory.dev. A tab still open on the ol
 `https://dockermacmini.tail0c74fa.ts.net/` (port 443) now reaches Caddy under a name it does not serve, so every API
 call fails and pages show "The projector jammed": reopen it on the domain (or the fallback on `:8443`).
 
+## Credits classifier: the 10-film dataset trial (on dockermacmini)
+
+Before the full dataset run, read about 10 films and measure them (`credits-classifier-plan.md`, "Frames: the dataset
+job" and "Measuring (L2b-2)"). Needs the released image that holds `DatasetMeasureMain`. **The owner runs the steps
+that sign in** (2 to 4): they use the owner's password, which the planner never types or handles. The planner runs the
+read-only checks.
+
+1. **Switch the job on.** It is off by default. The server reads `~/cinefilm/.env` (the compose `env_file`), and Spring
+   binds `cinefilm.credits.dataset.enabled` from `CINEFILM_CREDITS_DATASET_ENABLED`. Do this when nothing is playing:
+   recreating the container drops a playing film.
+
+   ```bash
+   cd ~/cinefilm
+   [ -z "$(tail -c1 .env)" ] || echo >> .env                          # make sure the last line ends in a newline
+   sed -i '/^CINEFILM_CREDITS_DATASET_ENABLED=/d' .env                # drop any old value, so a stale =false cannot win
+   echo 'CINEFILM_CREDITS_DATASET_ENABLED=true' >> .env
+   grep -c '^CINEFILM_CREDITS_DATASET_ENABLED=true' .env              # prints 1; never print the whole .env
+   export CINEFILM_VERSION=$(cat .deployed-version) && docker compose up -d cinefilm   # recreates it with the new .env
+   ```
+
+   The directories `cache/credits-dataset` and `cache/credits-dataset-out` are made by the server (uid 1001) at the
+   job's first start. The other settings (`CINEFILM_CREDITS_DATASET_NICE`, `CINEFILM_CREDITS_DATASET_MIN_FREE_GB`)
+   keep their defaults: niceness 19 and stop below 15 GB free.
+2. **Sign in (owner).** The `/api` routes need the session cookie and every `POST` needs `X-CineFilm: 1`. The body
+   `{"password": ...}` is built from the typed password and goes in on stdin, so it never reaches the history, the
+   process list or the terminal (`printf` is a shell builtin). Needs `jq`. Paste this line **on its own** (not together
+   with the next steps), press Enter if no prompt appears, and type the password **only** at the
+   `CineFilm password (input hidden):` prompt. An empty answer prints *Nothing sent*, and `{"authenticated":false}`
+   (a wrong password) means run it again. It runs in a subshell, so the variable and the `umask` vanish with it, and
+   it starts by removing any old cookie jar:
+
+   ```bash
+   ( umask 077; rm -f ~/cf-jar; IFS= read -rsp 'CineFilm password (input hidden): ' CF_PW; echo; if [ -n "$CF_PW" ]; then printf '%s' "$CF_PW" | jq -cRs '{password: .}' | curl -sS -c ~/cf-jar -H 'Content-Type: application/json' -H 'X-CineFilm: 1' --data-binary @- http://127.0.0.1:8090/api/session; echo; else echo 'Nothing sent: run it again.'; fi )
+   ```
+
+   It prints `{"authenticated":true}` when signed in, `{"authenticated":false}` on a wrong password.
+3. **Check it is on, then start it (owner).** The status must say `"enabled":true` and `refresherDue` 0 first:
+
+   ```bash
+   curl -sS -b ~/cf-jar http://127.0.0.1:8090/api/admin/credits/dataset
+   curl -sS -b ~/cf-jar -H 'X-CineFilm: 1' -X POST http://127.0.0.1:8090/api/admin/credits/dataset/start
+   ```
+4. **Watch it, and stop it when about 10 development films are `complete` (owner).** The job yields to playback and to
+   the credits refresher, so it may sit in `WAITING`. **It reads films in media-file-id order, whatever their split, so
+   the first 10 `complete` may include test films.** So the status call's `currentMediaFileId` shows the media id of
+   the film being read, test films included, and the log names a film only when its read fails ("Could not read the
+   frames of file …"): ids only (they are already in the split file), no pictures and no results. The measuring tool skips those films (step 5), so the trial may need to
+   run past 10 `complete` to reach about 10 development films: watch the `skipped` counts in the tool's `summary.json`,
+   or the row count of `films.csv`, and stop when that gives about 10.
+
+   ```bash
+   curl -sS -b ~/cf-jar http://127.0.0.1:8090/api/admin/credits/dataset      # state, complete, failed, freeBytes
+   curl -sS -b ~/cf-jar -H 'X-CineFilm: 1' -X POST http://127.0.0.1:8090/api/admin/credits/dataset/stop   # also removes the `running` marker
+   ```
+
+   **Sign out when you finish, early stops included** (this ends the session, then removes the cookie jar):
+
+   ```bash
+   curl -sS -b ~/cf-jar -H 'X-CineFilm: 1' -X DELETE http://127.0.0.1:8090/api/session; rm -f ~/cf-jar
+   ```
+
+   **Without a login (the planner),** count the finished films, and read the log for progress and waits:
+
+   ```bash
+   find ~/cinefilm-data/cache/credits-dataset/frames -name complete.json | wc -l
+   docker logs --since 1h cinefilm 2>&1 | grep -iE "dataset|frames of file|running marker"
+   ```
+5. **Measure.** The tool reads the dataset read-only. **It measures development films only:** `--labels` is L1's
+   `labels-<date>.json` (use the newest one in `~/cinefilm-labels/`; the line below names the 2026-11-13 file), and a
+   film directory is opened only when that file lists the film on the development side with no exclusion. Test,
+   excluded and unlabelled directories are counted in `summary.json` (`skipped`) and never opened. Use the image tag
+   that is deployed:
+
+   ```bash
+   docker run --rm --network none --cpus 1 --cpu-shares 2 --memory 3g --entrypoint nice \
+     -v ~/cinefilm-data/cache/credits-dataset:/data:ro -v ~/cinefilm-labels:/labels:ro \
+     -v ~/cinefilm-data/cache/credits-dataset-out:/out \
+     ghcr.io/gregochr/cinefilm:$(cat ~/cinefilm/.deployed-version) -n 19 java -Xmx2g \
+     -Dloader.main=gregochr.cinefilm.credits.learn.DatasetMeasureMain \
+     -cp /app/app.jar org.springframework.boot.loader.launch.PropertiesLauncher \
+     --data /data --labels /labels/labels-2026-11-13.json --out /out --stills
+   ```
+
+   The tool has no option to include test films, and `summary.json` holds counts of the skipped directories only,
+   never their ids. It writes a directory of its own, `/out/measure-<UTC time>/`, and refuses to reuse one. It prints
+   the paths it wrote and exits 0 even if a film is damaged; read `films.csv` (`status`, `missing`, `corrupt`, `duplicates`) and
+   `summary.json` (`skipped`, `projectedBytes`, `meanReadSeconds`). Exit 2 means no film directory yet.
+6. **Copy that run's directory** (the stills under `stills/<mediaFileId>/` are for looking at, with `sheet.png`
+   first):
+
+   ```bash
+   cp -r ~/cinefilm-data/cache/credits-dataset-out/measure-<stamp> ~/cinefilm-labels/
+   ```
+
+Switch the job off again if the full run is not starting straight away (when nothing is playing; this also recreates
+the container):
+
+```bash
+cd ~/cinefilm
+sed -i '/^CINEFILM_CREDITS_DATASET_ENABLED=/d' .env
+grep -c '^CINEFILM_CREDITS_DATASET_ENABLED=' .env                  # prints 0
+export CINEFILM_VERSION=$(cat .deployed-version) && docker compose up -d cinefilm
+```
+
 ## Deferred (not built yet)
 
 Playwright E2E and axe a11y in CI, ZAP, release changelog

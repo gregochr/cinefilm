@@ -309,6 +309,42 @@ For each labelled file, under `/app/cache/credits-dataset/frames/<media_file_id>
 - **Niceness:** set for each job (default 19). It is passed into the reader, which today takes niceness only from
   `cinefilm.transcode.nice`.
 
+### Measuring (L2b-2)
+
+`credits.learn.DatasetMeasureMain` is a plain class run as a throwaway container from the released image (the
+`docker run` block under "Where the code lives, and tool runs", with `-Dloader.main=...DatasetMeasureMain`). Its
+arguments are `--data /data --labels /labels/labels-<date>.json --out /out [--ids 5,7,12] [--stills] [--project 850]`.
+
+- **It measures development films only, and never test films: it has no option to.** `--labels` is L1's
+  `labels-<date>.json`. A film directory is opened only when its label has `side` `dev` and no exclusion. Every other
+  directory (test side, excluded, or not in the labels) is never opened: no `complete.json` read, no file decoded, no
+  row. `summary.json` holds only counts of them by reason (`skipped`: `test`, `excluded`, `unlabelled`): **no skipped
+  id of any kind is written anywhere**, because an unlabelled directory may belong to a test film and an exclusion
+  may sit in a test unit. `--ids` narrows within the development films, and an id of another kind is counted the
+  same way. The L5 and gate looks (`--look`) belong to the evaluation tools, which log them in the manifest.
+- **It reads only `--data` and `--labels`** (`--data` mounted `:ro`) and writes one directory of its own,
+  `<out>/measure-<yyyyMMdd'T'HHmmss'Z'>/` (made with `createDirectory`; a run never overwrites or deletes another, and
+  never leaves stale stills). `--out` must not be inside `--data`. No network, no database.
+- **Four questions** before the full run and L3a:
+  1. Are the frames complete and decodable? `films.csv` has one row per film, `status` `ok`, `incomplete` (no
+     usable format-1 `complete.json`), `mismatched` (it names another file) or `damaged`, and counts of `missing`,
+     `corrupt` (unreadable, not decodable, or the wrong size), `extra` files and `duplicates` (an offset listed twice,
+     measured once; any of missing, corrupt or duplicates makes the film `damaged`). One bad frame file never stops the run; an
+     unreadable `coarse/` or `dense/` directory does (exit 1).
+  2. How big is a film's frame set? `pngBytes`, `jpgBytes`, `totalBytes`; `summary.json` projects the dataset as the
+     `ok` films' mean size times `--project` (default 850).
+  3. How long did a film take to read? `readSeconds` is an **estimate**: `complete.json`'s `writtenAt` minus the
+     earliest modification time of the film's frame files, rounded down. It includes any wait for playback, and is
+     blank when the times are missing or the result would be negative.
+  4. What do the values look like around Plex's marker? `frames.csv` has one row per frame: its `fromTargetMs`,
+     the grey mean, percentiles (nearest rank), the shares below 35 and above 200 (measurement placeholders, as L3a
+     re-derives the real thresholds), and the colour channel means and chroma.
+- **Stills** (`--stills`): per film, in `stills/<mediaFileId>/`, the dense frames nearest to target -30, -20, -10, -5,
+  0, +5, +10, +20 and +30 s (`d-30s.jpg`/`.png` ... `d+30s`), copied unchanged, `stills.csv` (their offsets) and
+  `sheet.png`, the nine grey frames in a 3 by 3 grid. A film with no dense frames has no stills and a `note`.
+- **Exit codes:** 0 when it ran, even with damaged films (read the report); 1 on a bad flag, an unreadable `--data`
+  or an `--out` inside it; 2 when `frames/` is missing or holds no film directory.
+
 ## Two model types
 
 Both produce `p(credits)` for each frame, and both feed the same segmenter. They are compared on development
