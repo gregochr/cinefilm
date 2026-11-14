@@ -456,14 +456,12 @@ read-only checks.
    job's first start. The other settings (`CINEFILM_CREDITS_DATASET_NICE`, `CINEFILM_CREDITS_DATASET_MIN_FREE_GB`)
    keep their defaults: niceness 19 and stop below 15 GB free.
 2. **Sign in (owner).** The `/api` routes need the session cookie and every `POST` needs `X-CineFilm: 1`. The body
-   `{"password": ...}` is built from `$CF_PW` and goes in on stdin, so it never reaches the history, the process list
-   or the terminal (`printf` is a shell builtin). Needs `jq`.
+   `{"password": ...}` is built from the typed password and goes in on stdin, so it never reaches the history, the
+   process list or the terminal (`printf` is a shell builtin). Needs `jq`. Paste this one line, press Enter, then type
+   the password at the prompt (the whole thing runs in a subshell, so the variable and the `umask` vanish with it):
 
    ```bash
-   umask 077; read -rs CF_PW
-   printf '%s' "$CF_PW" | jq -Rs '{password: .}' | curl -sS -c ~/cf-jar -H 'Content-Type: application/json' \
-     -H 'X-CineFilm: 1' --data @- http://127.0.0.1:8090/api/session
-   unset CF_PW
+   ( umask 077; IFS= read -rsp 'CineFilm password (input hidden): ' CF_PW; echo; printf '%s' "$CF_PW" | jq -cRs '{password: .}' | curl -sS -c ~/cf-jar -H 'Content-Type: application/json' -H 'X-CineFilm: 1' --data-binary @- http://127.0.0.1:8090/api/session )
    ```
 
    It answers 200 `{"authenticated":true}` (401 on a wrong password).
@@ -479,14 +477,19 @@ read-only checks.
    ```bash
    curl -sS -b ~/cf-jar http://127.0.0.1:8090/api/admin/credits/dataset      # state, complete, failed, freeBytes
    curl -sS -b ~/cf-jar -H 'X-CineFilm: 1' -X POST http://127.0.0.1:8090/api/admin/credits/dataset/stop   # also removes the `running` marker
-   rm ~/cf-jar                                                                 # when done with the API
+   ```
+
+   **Sign out when you finish, early stops included** (this ends the session, then removes the cookie jar):
+
+   ```bash
+   curl -sS -b ~/cf-jar -H 'X-CineFilm: 1' -X DELETE http://127.0.0.1:8090/api/session; rm -f ~/cf-jar
    ```
 
    **Without a login (the planner),** count the finished films, and read the log for progress and waits:
 
    ```bash
    find ~/cinefilm-data/cache/credits-dataset/frames -name complete.json | wc -l
-   docker logs --since 1h cinefilm 2>&1 | grep -i "dataset"
+   docker logs --since 1h cinefilm 2>&1 | grep -iE "dataset|frames of file"
    ```
 5. **Measure.** The tool reads the dataset read-only and writes beside it; use the image tag that is deployed:
 

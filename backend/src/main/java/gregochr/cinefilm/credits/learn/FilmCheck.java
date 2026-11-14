@@ -79,7 +79,7 @@ final class FilmCheck {
      * @param status the verdict
      * @param complete the {@code complete.json}; null for {@code INCOMPLETE} and {@code MISMATCHED}
      * @param missing how many listed files are absent
-     * @param corrupt how many listed files do not decode or have the wrong size
+     * @param corrupt how many listed files cannot be read, do not decode or have the wrong size
      * @param extra how many files in {@code coarse/} and {@code dense/} are not listed
      * @param duplicates how many listings repeat an offset already listed in the same list (each offset is checked
      *     and measured once)

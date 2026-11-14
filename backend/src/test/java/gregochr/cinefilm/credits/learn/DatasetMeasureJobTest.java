@@ -8,9 +8,11 @@ import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.credits.GreyFrame;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Clock;
 import java.time.Instant;
@@ -18,6 +20,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -411,7 +414,7 @@ class DatasetMeasureJobTest {
         for (String name : List.of("films.csv", "frames.csv")) {
             byte[] bytes = Files.readAllBytes(out.resolve(name));
             assertThat(bytes[0]).isEqualTo((byte) 'm');
-            assertThat(new String(bytes, java.nio.charset.StandardCharsets.UTF_8)).doesNotContain("\r");
+            assertThat(new String(bytes, StandardCharsets.UTF_8)).doesNotContain("\r");
         }
     }
 
@@ -491,12 +494,12 @@ class DatasetMeasureJobTest {
     @Test
     void numbersAreWrittenTheSameWhateverTheDefaultLocale() throws IOException, DatasetMeasureJob.NoFilmsException {
         threeFilms();
-        java.util.Locale saved = java.util.Locale.getDefault();
-        java.util.Locale.setDefault(java.util.Locale.GERMANY);
+        Locale saved = Locale.getDefault();
+        Locale.setDefault(Locale.GERMANY);
         try {
             job.run(options(false, 7L));
         } finally {
-            java.util.Locale.setDefault(saved);
+            Locale.setDefault(saved);
         }
 
         assertThat(csv(out.resolve("frames.csv")).get(1).subList(0, 14)).containsExactly("7", "coarse", "0",
@@ -604,7 +607,7 @@ class DatasetMeasureJobTest {
             assertThat(out.resolve("stills/7/sheet.png")).isRegularFile();
             assertThat(snapshot()).isEqualTo(before);
         } finally {
-            Set<java.nio.file.attribute.PosixFilePermission> writable = PosixFilePermissions.fromString("rwxrwxrwx");
+            Set<PosixFilePermission> writable = PosixFilePermissions.fromString("rwxrwxrwx");
             for (Path path : everything) {
                 Files.setPosixFilePermissions(path, writable);
             }

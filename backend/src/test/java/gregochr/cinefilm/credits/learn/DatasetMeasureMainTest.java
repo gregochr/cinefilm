@@ -1,12 +1,14 @@
 package gregochr.cinefilm.credits.learn;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -150,8 +152,8 @@ class DatasetMeasureMainTest {
     @Test
     void anUncheckedIoFailureWhileWalkingExitsOneWithOneLine() throws Exception {
         DatasetMeasureJob failing = mock(DatasetMeasureJob.class);
-        when(failing.run(org.mockito.ArgumentMatchers.any())).thenThrow(
-            new java.io.UncheckedIOException(new IOException("Permission denied")));
+        when(failing.run(any())).thenThrow(
+            new UncheckedIOException(new IOException("Permission denied")));
 
         int code = DatasetMeasureMain.run(new String[] {"--data", "x", "--out", "y"},
             new PrintStream(outBytes, true, StandardCharsets.UTF_8),

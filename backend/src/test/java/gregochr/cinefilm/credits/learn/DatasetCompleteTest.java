@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /** {@code complete.json}: written last and atomically, and current only with the right format and fingerprint. */
 class DatasetCompleteTest {
@@ -227,8 +228,8 @@ class DatasetCompleteTest {
     }
 
     /** The JSON of {@code complete("1000:1")} as an object, for a test to change one member of. */
-    private tools.jackson.databind.node.ObjectNode json() {
-        return (tools.jackson.databind.node.ObjectNode) MAPPER.valueToTree(complete("1000:1"));
+    private ObjectNode json() {
+        return (ObjectNode) MAPPER.valueToTree(complete("1000:1"));
     }
 
     @Test
@@ -283,7 +284,7 @@ class DatasetCompleteTest {
     @Test
     void readRefusesAnOffsetListWithANull() throws IOException {
         for (String part : List.of("coarse", "dense")) {
-            tools.jackson.databind.node.ObjectNode node = json();
+            ObjectNode node = json();
             node.putArray(part).add(1).addNull();
             writeRaw(node.toString());
 

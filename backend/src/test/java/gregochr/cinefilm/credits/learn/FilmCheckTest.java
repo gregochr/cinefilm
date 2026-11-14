@@ -2,10 +2,14 @@ package gregochr.cinefilm.credits.learn;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assumptions.assumeThat;
+import static org.assertj.core.groups.Tuple.tuple;
 
+import gregochr.cinefilm.credits.RgbFrame;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -49,9 +53,9 @@ class FilmCheckTest {
         assertThat(result.corrupt()).isZero();
         assertThat(result.extra()).isZero();
         assertThat(seen).extracting(FilmCheck.Measured::kind, FilmCheck.Measured::offsetMs)
-            .containsExactly(org.assertj.core.groups.Tuple.tuple("coarse", 0L),
-                org.assertj.core.groups.Tuple.tuple("coarse", 5_000L),
-                org.assertj.core.groups.Tuple.tuple("dense", 100_000L));
+            .containsExactly(tuple("coarse", 0L),
+                tuple("coarse", 5_000L),
+                tuple("dense", 100_000L));
         long pngs = size("coarse/0.png") + size("coarse/5000.png") + size("dense/100000.png");
         long jpgs = size("coarse/0.jpg") + size("coarse/5000.jpg") + size("dense/100000.jpg");
         assertThat(result.pngBytes()).isEqualTo(pngs);
@@ -68,7 +72,7 @@ class FilmCheckTest {
     @Test
     void theEarliestModificationTimeOfAnyListedFileIsReported() throws IOException {
         Instant earlier = Instant.parse("2026-11-10T12:00:00.900Z");
-        Files.setLastModifiedTime(dir.resolve("dense/100000.jpg"), java.nio.file.attribute.FileTime.from(earlier));
+        Files.setLastModifiedTime(dir.resolve("dense/100000.jpg"), FileTime.from(earlier));
 
         assertThat(check().earliestModified()).isEqualTo(earlier);
     }
@@ -157,7 +161,7 @@ class FilmCheckTest {
     @Test
     void aColourFrameThatIsTheRightWidthButNotSquareIsCorrupt() throws IOException {
         Files.write(dir.resolve("coarse/5000.jpg"),
-            FramePrep.jpeg(new gregochr.cinefilm.credits.RgbFrame(4, 5, new byte[4 * 5 * 3])));
+            FramePrep.jpeg(new RgbFrame(4, 5, new byte[4 * 5 * 3])));
 
         assertThat(check().corrupt()).isEqualTo(1);
     }
@@ -266,7 +270,7 @@ class FilmCheckTest {
     @Test
     void aFileThatCannotBeReadIsCorruptAndTheRestIsStillChecked() throws IOException {
         Path locked = dir.resolve("coarse/0.png");
-        Files.setPosixFilePermissions(locked, java.nio.file.attribute.PosixFilePermissions.fromString("---------"));
+        Files.setPosixFilePermissions(locked, PosixFilePermissions.fromString("---------"));
         try {
             assumeThat(Files.isReadable(locked)).as("permissions bind for this user").isFalse();
 
@@ -278,7 +282,7 @@ class FilmCheckTest {
             assertThat(seen).extracting(FilmCheck.Measured::offsetMs).containsExactly(5_000L, 100_000L);
         } finally {
             Files.setPosixFilePermissions(locked,
-                java.nio.file.attribute.PosixFilePermissions.fromString("rw-r--r--"));
+                PosixFilePermissions.fromString("rw-r--r--"));
         }
     }
 
@@ -295,9 +299,9 @@ class FilmCheckTest {
         assertThat(result.corrupt()).isZero();
         assertThat(result.extra()).isZero();
         assertThat(seen).extracting(FilmCheck.Measured::kind, FilmCheck.Measured::offsetMs)
-            .containsExactly(org.assertj.core.groups.Tuple.tuple("coarse", 0L),
-                org.assertj.core.groups.Tuple.tuple("coarse", 5_000L),
-                org.assertj.core.groups.Tuple.tuple("dense", 100_000L));
+            .containsExactly(tuple("coarse", 0L),
+                tuple("coarse", 5_000L),
+                tuple("dense", 100_000L));
         assertThat(result.pngBytes()).isEqualTo(Files.size(film.resolve("coarse/0.png"))
             + Files.size(film.resolve("coarse/5000.png")) + Files.size(film.resolve("dense/100000.png")));
     }
