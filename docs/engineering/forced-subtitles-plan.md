@@ -1123,10 +1123,10 @@ links to each film's rows.
     English-original film, or a LOTR forced track with a text forced file here or online. OCR (way A) and burn-in
     (way B) would cost a build and a dependency for nothing the owner would see. The full-size picture tracks stay
     useful as phase 3 timing references (`EmbeddedStreams` picks them and `EmbeddedCueReader` reads their packet
-    times, no OCR). **Revisit** only if
-    a new rip brings a picture track to a foreign-language film, or a forced-size picture track to a film with no forced
-    text here or online. The same read-only pass finds it. **Alternative given up:** build OCR anyway for future rips.
-    It would be built against no real need, and OpenSubtitles already covers the films it would serve.
+    times, no OCR). **Revisit** only if a new rip brings a picture track to a foreign-language film, or a forced-size
+    picture track to a film with no forced text here or online. The same read-only pass finds it. **Alternative given
+    up:** build OCR anyway for future rips. It would be built against no real need, and OpenSubtitles already covers
+    the films it would serve.
 
 #### Automatic need (2026-11-13)
 
