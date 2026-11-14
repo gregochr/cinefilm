@@ -162,7 +162,7 @@ class AdminTodoRulesTest {
     // ---- forced subtitles ----
 
     private static ForcedFacts forced(boolean needed, boolean has, boolean imdb, Integer count, boolean due) {
-        return new ForcedFacts(needed, has, imdb, count, due, true, true);
+        return new ForcedFacts(needed, has, imdb, count, false, due, true, true);
     }
 
     @Test
@@ -238,6 +238,30 @@ class AdminTodoRulesTest {
         }
     }
 
+    // ---- candidates missing ----
+
+    @Test
+    void aSearchedForcedRowWithNoStoredCandidatesIsBeingCheckedWhileSearchIsOn() {
+        // The search scheduler picks every film with an IMDb id and no stored candidates, whatever the count.
+        for (Integer count : new Integer[] {0, 3}) {
+            ForcedFacts on = new ForcedFacts(true, false, true, count, true, false, true, true);
+            ForcedFacts searchOff = new ForcedFacts(true, false, true, count, true, false, false, true);
+
+            assertThat(AdminTodoRules.beingCheckedForced(on)).isTrue();
+            assertThat(AdminTodoRules.unresolvedForced(on)).isFalse();
+            assertThat(AdminTodoRules.beingCheckedForced(searchOff)).isFalse();
+            assertThat(AdminTodoRules.unresolvedForced(searchOff)).isTrue();
+        }
+    }
+
+    @Test
+    void storedCandidatesLeaveASearchedForcedRowToTheDownloadRule() {
+        ForcedFacts nothingDue = new ForcedFacts(true, false, true, 3, false, false, true, true);
+
+        assertThat(AdminTodoRules.beingCheckedForced(nothingDue)).isFalse();
+        assertThat(AdminTodoRules.unresolvedForced(nothingDue)).isTrue();
+    }
+
     // ---- OpenSubtitles off ----
 
     @Test
@@ -268,8 +292,8 @@ class AdminTodoRulesTest {
 
     @Test
     void aForcedRowNotSearchedIsBeingCheckedOnlyWhileSearchingIsOn() {
-        ForcedFacts on = new ForcedFacts(true, false, true, null, false, true, true);
-        ForcedFacts searchOff = new ForcedFacts(true, false, true, null, false, false, true);
+        ForcedFacts on = new ForcedFacts(true, false, true, null, false, false, true, true);
+        ForcedFacts searchOff = new ForcedFacts(true, false, true, null, false, false, false, true);
 
         assertThat(AdminTodoRules.beingCheckedForced(on)).isTrue();
         assertThat(AdminTodoRules.beingCheckedForced(searchOff)).isFalse();
@@ -278,8 +302,8 @@ class AdminTodoRulesTest {
 
     @Test
     void aForcedDownloadDueCountsOnlyWhileDownloadsAreOn() {
-        ForcedFacts on = new ForcedFacts(true, false, true, 3, true, true, true);
-        ForcedFacts downloadsOff = new ForcedFacts(true, false, true, 3, true, true, false);
+        ForcedFacts on = new ForcedFacts(true, false, true, 3, false, true, true, true);
+        ForcedFacts downloadsOff = new ForcedFacts(true, false, true, 3, false, true, true, false);
 
         assertThat(AdminTodoRules.beingCheckedForced(on)).isTrue();
         assertThat(AdminTodoRules.beingCheckedForced(downloadsOff)).isFalse();
@@ -296,7 +320,7 @@ class AdminTodoRulesTest {
                         FullFacts f = new FullFacts(true, false, true, searched, due, search, downloads);
                         assertThat(AdminTodoRules.unresolvedFull(f) ^ AdminTodoRules.beingCheckedFull(f)).isTrue();
                         for (Integer count : new Integer[] {null, 0, 2}) {
-                            ForcedFacts g = new ForcedFacts(true, false, true, count, due, search, downloads);
+                            ForcedFacts g = new ForcedFacts(true, false, true, count, false, due, search, downloads);
                             assertThat(AdminTodoRules.unresolvedForced(g) ^ AdminTodoRules.beingCheckedForced(g))
                                 .isTrue();
                         }

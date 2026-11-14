@@ -223,9 +223,43 @@ class ForcedNeedQueriesTest extends SubtitleTestBase {
 
         assertThat(rows).extracting(NeedRow::title).containsExactly("Alien", "Zulu");
         assertThat(rows.get(0)).isEqualTo(new NeedRow(alien.getId(), "Alien", 2000, 348L, "en", "en,es", LATER,
-            ForcedNeedChoice.NEEDED, null, null, null, null));
+            ForcedNeedChoice.NEEDED, null, null, null, null, true));
         assertThat(rows.get(1)).isEqualTo(new NeedRow(zulu.getId(), "Zulu", 2000, null, null, null, null, null,
-            null, null, null, null));
+            null, null, null, null, true));
+    }
+
+    @Test
+    void theNeedRowSaysWhetherTheFilmHasNoStoredCandidatesLikeTheSearchSchedulersQuery() {
+        Film none = filmWithParts("A none", 1, 90);
+        none.setImdbId("tt0000001");
+        none.setOsSearchedImdbId("tt0000001");
+        none.setOsSearchedAt(NOW);
+        none.setOsForcedCount(3);
+        Film empty = filmWithParts("B empty", 1, 90);
+        empty.setImdbId("tt0000002");
+        empty.setOsSearchedImdbId("tt0000002");
+        empty.setOsSearchedAt(NOW);
+        empty.setOsForcedCount(0);
+        empty.setOsCandidates("[]");
+        Film full = filmWithParts("C full", 1, 90);
+        full.setImdbId("tt0000003");
+        full.setOsSearchedImdbId("tt0000003");
+        full.setOsSearchedAt(NOW);
+        full.setOsForcedCount(1);
+        full.setOsCandidates("[{\"id\":1,\"fileId\":2}]");
+        films.saveAndFlush(none);
+        films.saveAndFlush(empty);
+        films.saveAndFlush(full);
+
+        List<NeedRow> rows = films.findNeedRows();
+
+        assertThat(rows).extracting(NeedRow::title, NeedRow::osCandidatesMissing)
+            .contains(org.assertj.core.api.Assertions.tuple("A none", true),
+                org.assertj.core.api.Assertions.tuple("B empty", false),
+                org.assertj.core.api.Assertions.tuple("C full", false));
+        // The search scheduler's own query picks the film with no stored candidates and not the others.
+        assertThat(films.findOpenSubtitlesDue(NOW.minusSeconds(86_400L * 30)).stream()
+            .map(ref -> ref.imdbId())).contains("tt0000001").doesNotContain("tt0000002", "tt0000003");
     }
 
     @Test

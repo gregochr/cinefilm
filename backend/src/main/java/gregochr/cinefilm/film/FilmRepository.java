@@ -116,10 +116,22 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
      * @param osForcedCount how many foreign-parts-only files OpenSubtitles had, or null when never searched
      * @param osSearchedAt when OpenSubtitles was last searched, or null
      * @param osSearchedImdbId the IMDb id that search was for, or null
+     * @param osCandidatesMissing true when no candidates are stored ({@code os_candidates} null): the search
+     *     scheduler ({@link #findOpenSubtitlesDue}) fills them in whatever the count
      */
     record NeedRow(Long id, String title, Integer year, Long tmdbId, String originalLanguage, String spokenLanguages,
                    java.time.Instant languagesFetchedAt, ForcedNeedChoice owner, String imdbId,
-                   Integer osForcedCount, java.time.Instant osSearchedAt, String osSearchedImdbId) {
+                   Integer osForcedCount, java.time.Instant osSearchedAt, String osSearchedImdbId,
+                   boolean osCandidatesMissing) {
+
+        /** A row whose candidates are stored (the common case, and what the need rules do not depend on). */
+        public NeedRow(Long id, String title, Integer year, Long tmdbId, String originalLanguage,
+                       String spokenLanguages, java.time.Instant languagesFetchedAt, ForcedNeedChoice owner,
+                       String imdbId, Integer osForcedCount, java.time.Instant osSearchedAt,
+                       String osSearchedImdbId) {
+            this(id, title, year, tmdbId, originalLanguage, spokenLanguages, languagesFetchedAt, owner, imdbId,
+                osForcedCount, osSearchedAt, osSearchedImdbId, false);
+        }
     }
 
     /**
@@ -275,7 +287,8 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
     @org.springframework.data.jpa.repository.Query(
         "select new gregochr.cinefilm.film.FilmRepository$NeedRow(f.id, f.title, f.year, f.tmdbId, "
             + "f.originalLanguage, f.spokenLanguages, f.languagesFetchedAt, f.forcedNeedOwner, "
-            + "f.imdbId, f.osForcedCount, f.osSearchedAt, f.osSearchedImdbId) from Film f "
+            + "f.imdbId, f.osForcedCount, f.osSearchedAt, f.osSearchedImdbId, "
+            + "case when f.osCandidates is null then true else false end) from Film f "
             + "order by f.sortTitle, f.id")
     List<NeedRow> findNeedRows();
 

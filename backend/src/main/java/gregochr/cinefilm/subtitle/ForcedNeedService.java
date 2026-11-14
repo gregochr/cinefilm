@@ -171,7 +171,8 @@ public class ForcedNeedService {
     private static NeedRow row(Film film, ForcedNeedChoice choice) {
         return new NeedRow(film.getId(), film.getTitle(), film.getYear(), film.getTmdbId(),
             film.getOriginalLanguage(), film.getSpokenLanguages(), film.getLanguagesFetchedAt(), choice,
-            film.getImdbId(), film.getOsForcedCount(), film.getOsSearchedAt(), film.getOsSearchedImdbId());
+            film.getImdbId(), film.getOsForcedCount(), film.getOsSearchedAt(), film.getOsSearchedImdbId(),
+            film.getOsCandidates() == null);
     }
 
     private FilmNeedDto chooseLocked(Long filmId, ForcedNeedChoice choice) {
@@ -256,8 +257,8 @@ public class ForcedNeedService {
     private FilmNeedDto dto(Eval eval, Pending due) {
         NeedRow row = eval.row();
         ForcedFacts facts = new ForcedFacts(eval.decision().need() == Need.NEEDED, eval.served(),
-            row.imdbId() != null, eval.openSubtitles(), due.due().contains(row.id()), api.enabled(),
-            api.downloadsEnabled());
+            row.imdbId() != null, eval.openSubtitles(), row.osCandidatesMissing(), due.due().contains(row.id()),
+            api.enabled(), api.downloadsEnabled());
         return new FilmNeedDto(row.id(), row.title(), row.year(), eval.decision().need().name(),
             eval.decision().reason().name(), row.owner() == null ? null : row.owner().name(), row.originalLanguage(),
             eval.spoken(), eval.served(), eval.openSubtitles(), eval.openSubtitlesAt(),

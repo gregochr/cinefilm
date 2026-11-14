@@ -193,4 +193,23 @@ class FilmOpenSubtitlesIntegrationTest extends IntegrationTestBase {
             .map(FilmRepository.OsFullState::id)).contains(empty.getId(), full.getId())
             .doesNotContain(none.getId(), other.getId());
     }
+
+    @Test
+    void theNeedRowSaysWhetherCandidatesAreMissingOnPostgres() {
+        Film none = saved("Need None", "tt0000041");
+        Film empty = saved("Need Empty", "tt0000042");
+        none.setOsForcedCount(3);
+        empty.setOsForcedCount(0);
+        empty.setOsCandidates("[]");
+        films.saveAndFlush(none);
+        films.saveAndFlush(empty);
+        entityManager.clear();
+
+        List<NeedRow> rows = films.findNeedRows();
+
+        assertThat(rows.stream().filter(r -> r.id().equals(none.getId())).findFirst().orElseThrow()
+            .osCandidatesMissing()).isTrue();
+        assertThat(rows.stream().filter(r -> r.id().equals(empty.getId())).findFirst().orElseThrow()
+            .osCandidatesMissing()).isFalse();
+    }
 }

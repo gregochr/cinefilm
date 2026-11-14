@@ -329,17 +329,17 @@ Plan: `library-scan-plan.md`. What the API and the model now carry:
   that finds nothing while files are known is treated as an unmounted share and marks nothing missing. A TMDB outage
   leaves a film `PENDING` (title from the file) and it is retried by the next scan.
 - **Admin To do rules (`AdminTodoRules`, package `todo`):** pure, shared by the Admin lists so rail, To do and
-  Subtitles cannot disagree. *Confident match:* the top score is at least `TmdbMatcher.ACCEPT_SCORE` and the candidate
-  is alone or leads the second by more than `TmdbMatcher.MARGIN`; a tagged (`{imdb-tt…}`) match the guard refused is
-  one candidate at `REFUSED_SCORE` (100), while a refused title-search match keeps the matcher's candidates and is
-  judged like any other. The matcher decides on unrounded totals and stores whole numbers (floored now, rounded in
-  older rows), so the rule needs a top score of at least `ACCEPT_SCORE + 1` and a lead of at least `MARGIN + 1`: it
-  never claims more than the matcher would, and may decline an exact boundary.
+  Subtitles cannot disagree. *Confident match:* the top score is at least `TmdbMatcher.ACCEPT_SCORE + 1` and the candidate is alone or leads the
+  second by at least `TmdbMatcher.MARGIN + 1`. The matcher decides on unrounded totals and stores whole numbers (floored
+  now, rounded in older rows), so asking one more point of each means neither can claim more than the matcher would; an
+  exact boundary may be declined, the safe side. A tagged (`{imdb-tt…}`) match the guard refused is one candidate at
+  `REFUSED_SCORE` (100), while a refused title-search match keeps the matcher's candidates and is judged like any other.
   *Full row in play:* `need == NEEDED` and no full English subtitle plays. *Forced row in play:* `need == NEEDED` and
   `hasForcedSubtitle` is false (today's `needed-missing`; a film's embedded forced track counts as a subtitle that
   plays). An in-play row is **being checked** when the film has an IMDb id and either OpenSubtitles has not been
   searched for its current IMDb id (full: no stored full search for that id; forced: `openSubtitlesForcedCount` is
-  null) **and searching is enabled** (an API key is set), or the **download scheduler would download for some
+  null, or the film has no stored candidates, which the search scheduler fills in: `os_candidates` null, the same
+  predicate as `findOpenSubtitlesDue`) **and searching is enabled** (an API key is set), or the **download scheduler would download for some
   edition** and downloads are enabled (key, username and password are set; with downloads off `PendingDownloads` reads
   nothing and returns none): full, `ForcedDownloadService.fullDueFor` is
   non-null for an edition; forced, the count is above 0 and `ForcedDownloadService.dueFor` is non-null for an edition.

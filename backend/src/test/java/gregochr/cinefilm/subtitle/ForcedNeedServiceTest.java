@@ -760,6 +760,7 @@ class ForcedNeedServiceTest {
         taken.setOsForcedCount(2);
         taken.setOsSearchedAt(NOW);
         taken.setOsSearchedImdbId("tt9");
+        taken.setOsCandidates("[]");
         when(films.findByIdForUpdate(7L)).thenReturn(Optional.of(taken));
         when(sidecars.countPresentForFilm(7L, SubtitleKind.FORCED)).thenReturn(0L);
         when(files.countEmbeddedForcedForFilm(7L)).thenReturn(0L);
@@ -798,5 +799,50 @@ class ForcedNeedServiceTest {
             .containsExactly(true, false, true, true, true, false, false);
         assertThat(list.films()).extracting(FilmNeedDto::beingChecked)
             .containsExactly(false, true, false, false, false, false, false);
+    }
+
+    private static NeedRow legacy() {
+        // Searched under the current IMDb id with files found, but from before the candidates were kept.
+        return new NeedRow(1L, "Taken", 2008, 8681L, "en", "en,fr", ASKED, null, "tt1", 3, NOW, "tt1", true);
+    }
+
+    @Test
+    void aLegacySearchedRowWithNoStoredCandidatesIsBeingCheckedWhileSearchIsOn() {
+        when(pending.forced(Map.of(1L, "tt1"))).thenReturn(Pending.NONE);
+
+        FilmNeedDto dto = listed(legacy());
+
+        assertThat(dto.need()).isEqualTo("NEEDED");
+        assertThat(dto.beingChecked()).isTrue();
+        assertThat(dto.unresolved()).isFalse();
+    }
+
+    @Test
+    void aLegacySearchedRowWithNoStoredCandidatesIsUnresolvedWhileSearchIsOff() {
+        when(pending.forced(Map.of(1L, "tt1"))).thenReturn(Pending.NONE);
+        service = withSwitches(new OpenSubtitlesSwitches(false, true));
+
+        FilmNeedDto dto = listed(legacy());
+
+        assertThat(dto.beingChecked()).isFalse();
+        assertThat(dto.unresolved()).isTrue();
+    }
+
+    @Test
+    void choosingAFilmWithNoStoredCandidatesAnswersBeingChecked() {
+        Film taken = stored(7L, "en", "en,fr", null);
+        taken.setImdbId("tt9");
+        taken.setOsForcedCount(2);
+        taken.setOsSearchedAt(NOW);
+        taken.setOsSearchedImdbId("tt9");
+        when(films.findByIdForUpdate(7L)).thenReturn(Optional.of(taken));
+        when(sidecars.countPresentForFilm(7L, SubtitleKind.FORCED)).thenReturn(0L);
+        when(files.countEmbeddedForcedForFilm(7L)).thenReturn(0L);
+        when(pending.forced(Map.of(7L, "tt9"))).thenReturn(Pending.NONE);
+
+        FilmNeedDto dto = service.choose(7L, new ChoiceRequest("NEEDED"));
+
+        assertThat(dto.beingChecked()).isTrue();
+        assertThat(dto.unresolved()).isFalse();
     }
 }
