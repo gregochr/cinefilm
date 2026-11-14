@@ -484,13 +484,12 @@ public class OpenSubtitlesClient implements OpenSubtitlesApi {
     private Answer<String> searchOnce(long imdbNumber, boolean full) throws InterruptedException {
         pacer.await();
         // Parameters in alphabetical order, as the API wants (it redirects otherwise); the id has no "tt" and no
-        // leading zeros. The full search leaves foreign-parts-only files out and keeps hearing-impaired ones.
+        // leading zeros. Never send a parameter at its default value: the API answers 301 to a canonical URL
+        // without it (and this client rightly does not follow redirects). The full search leaves
+        // foreign-parts-only files out; hearing-impaired files are included by default, so that is not sent.
         return client.get()
             .uri(b -> {
                 b.path("/api/v1/subtitles").queryParam("foreign_parts_only", full ? "exclude" : "only");
-                if (full) {
-                    b.queryParam("hearing_impaired", "include");
-                }
                 return b.queryParam("imdb_id", imdbNumber).queryParam("languages", "en").build();
             })
             .header("Api-Key", key).header(HttpHeaders.USER_AGENT, userAgent)

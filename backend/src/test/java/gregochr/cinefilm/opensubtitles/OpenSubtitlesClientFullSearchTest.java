@@ -28,7 +28,7 @@ class OpenSubtitlesClientFullSearchTest {
 
     private static final String KEY = "secret-key-123";
     private static final String FULL_URL = "https://api.opensubtitles.com/api/v1/subtitles?foreign_parts_only=exclude"
-        + "&hearing_impaired=include&imdb_id=936501&languages=en";
+        + "&imdb_id=936501&languages=en";
 
     private final List<Duration> sleeps = new ArrayList<>();
     private final AtomicLong ticks = new AtomicLong();
@@ -65,6 +65,32 @@ class OpenSubtitlesClientFullSearchTest {
 
         assertThat(client.searchFull("tt0936501").best().id()).isEqualTo(2);
         assertThat(client.searchForced("tt0936501").best().id()).isEqualTo(1);
+        server.verify();
+    }
+
+    @Test
+    void theFullAndForcedSearchesSendExactlyTheseParametersAndNoDefaultOne() {
+        server.expect(once(), request -> assertThat(request.getURI().getRawQuery())
+            .isEqualTo("foreign_parts_only=exclude&imdb_id=936501&languages=en"))
+            .andRespond(withSuccess(page(item(1).set("foreign_parts_only", "false")), MediaType.APPLICATION_JSON));
+        server.expect(once(), request -> assertThat(request.getURI().getRawQuery())
+            .isEqualTo("foreign_parts_only=only&imdb_id=936501&languages=en"))
+            .andRespond(withSuccess(page(item(1)), MediaType.APPLICATION_JSON));
+
+        client.searchFull("tt0936501");
+        client.searchForced("tt0936501");
+
+        server.verify();
+    }
+
+    @Test
+    void aRedirectAnsweringTheFullSearchIsAnOutageAndIsNeverFollowed() {
+        server.expect(once(), requestTo(FULL_URL)).andRespond(withStatus(HttpStatus.MOVED_PERMANENTLY)
+            .header("Location", "/api/v1/subtitles?foreign_parts_only=exclude&imdb_id=936501&languages=en"));
+
+        assertThatThrownBy(() -> client.searchFull("tt0936501")).isInstanceOf(OpenSubtitlesUnavailableException.class)
+            .hasMessage("OpenSubtitles answered status 301");
+        assertThat(sleeps).isEmpty();
         server.verify();
     }
 
