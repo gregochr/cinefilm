@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, renderApp, respond } from '../../test/mockApi.jsx';
@@ -95,23 +95,28 @@ describe('Admin To do section', () => {
   });
 
   it('leaves focus alone when the opener is still there after the lists reload', async () => {
-    const fetchMock = installFetch((m, url) =>
-      m === 'POST' && url === '/api/admin/films/31/match'
-        ? respond({ filmId: 31, joined: false })
-        : null,
-    );
-    const reads = () => fetchMock.mock.calls.filter((c) => c[0] === '/api/admin/attention').length;
+    let applied = false;
+    installFetch((m, url) => {
+      if (m === 'POST' && url === '/api/admin/films/31/match') {
+        applied = true;
+        return respond({ filmId: 31, joined: false });
+      }
+      if (url === '/api/admin/attention' && applied) {
+        const [first, ...rest] = fixtures.adminAttention.items;
+        return respond({
+          items: [{ ...first, detail: 'Still unmatched after the reload' }, ...rest],
+        });
+      }
+      return null;
+    });
     renderApp('/admin');
     const opener = (await screen.findAllByRole('button', { name: 'Fix match' }))[0];
     await userEvent.click(opener);
     const panel = await screen.findByRole('region', { name: 'Fix match' });
     await userEvent.click((await within(panel).findAllByRole('radio'))[0]);
-    const before = reads();
-
     await userEvent.click(within(panel).getByRole('button', { name: 'Use this match' }));
 
-    await waitFor(() => expect(reads()).toBeGreaterThan(before));
-    await act(async () => {});
+    expect(await screen.findByText('Still unmatched after the reload')).toBeInTheDocument();
     expect(opener).toBeInTheDocument();
     expect(opener).toHaveFocus();
   });

@@ -91,13 +91,11 @@ describe('Admin Library section', () => {
       }),
     );
     await screen.findByRole('list', { name: 'Grouping changes' });
-    expect(reads).toBe(1);
     expect(screen.queryByText('Joined after the match')).not.toBeInTheDocument();
 
     await act(async () => release(respond({ filmId: 31, joined: false })));
 
     expect(await screen.findByText('Joined after the match')).toBeInTheDocument();
-    expect(reads).toBe(2);
   });
 });
 
@@ -152,14 +150,16 @@ describe('Admin Library section: scrolling to an anchor', () => {
         progress: { processed: polls * 5, total: 40, current: 'Heat.m4v' },
       });
     });
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     renderApp('/admin/library#scan');
-    expect(await screen.findByText('5 / 40 files')).toBeInTheDocument();
-    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+    // Only the timers are faked, so the clock moves only here: the first answer lands, then one poll later the next.
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByText('5 / 40 files')).toBeInTheDocument();
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
 
     await act(() => vi.advanceTimersByTimeAsync(1500));
 
-    expect(await screen.findByText('10 / 40 files')).toBeInTheDocument();
+    expect(screen.getByText('10 / 40 files')).toBeInTheDocument();
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
   });
 

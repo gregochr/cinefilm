@@ -14,8 +14,8 @@ function Section({ signal }) {
   );
 }
 
-// A small host stands in for the layout: the arm/take handshake can't be set up through a route without a dialog.
-// The hook is armed by the layout after a dialog's save, so it is armed only once the section is on screen.
+// A small host stands in for the layout: the layout arms the hook after a dialog's save, once the section is on
+// screen, and that handshake can't be set up through a route without a dialog.
 function setup(armedLater) {
   let armed = false;
   const take = vi.fn(() => armed);
@@ -26,7 +26,6 @@ function setup(armedLater) {
   );
   const { rerender } = render(view(1));
   return {
-    take,
     change: () => {
       armed = armedLater;
       rerender(view(2));

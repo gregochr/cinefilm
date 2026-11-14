@@ -1301,7 +1301,7 @@
   }
   .admin__link-nav {
     flex: none;
-    padding: 0 4px;
+    padding: 0 6px;
     border-left: 0;
     border-bottom: 1px solid transparent;
     border-radius: 0;
@@ -1316,6 +1316,7 @@
   }
   /* The row scrolls, so the ring is drawn inside the link where the scroller cannot clip it. */
   .admin__link-nav:focus-visible {
+    outline-offset: -4px;
     box-shadow:
       inset 0 0 0 2px var(--cf-text),
       inset 0 0 0 4px var(--cf-bg);

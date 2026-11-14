@@ -20,7 +20,7 @@ describe('Admin: Library scan panel', () => {
     renderApp('/admin/library');
     const panel = await screen.findByRole('region', { name: 'Library scan' });
 
-    expect(within(panel).getByText('/media')).toBeInTheDocument();
+    expect(await within(panel).findByText('/media')).toBeInTheDocument();
     expect(within(panel).getByText('08 Nov 12:41 · 2 new, 0 missing')).toBeInTheDocument();
     expect(within(panel).getByText('Idle')).toBeInTheDocument();
     const counts = within(panel).getByRole('list', { name: 'Library counts' });
