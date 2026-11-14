@@ -55,7 +55,7 @@ class OpenSubtitlesClientFullSearchTest {
     }
 
     @Test
-    void theFullSearchKeepsFullResultsAndTheForcedSearchStillAsksForForcedOnes() {
+    void theFullSearchKeepsFullResultsAndTheForcedSearchStillAsksForForcedOnesAndNeitherSendsADefaultParameter() {
         server.expect(once(), requestTo(FULL_URL)).andRespond(withSuccess(
             page(item(1), item(2).set("foreign_parts_only", "false")), MediaType.APPLICATION_JSON));
         server.expect(once(), requestTo(
@@ -69,22 +69,7 @@ class OpenSubtitlesClientFullSearchTest {
     }
 
     @Test
-    void theFullAndForcedSearchesSendExactlyTheseParametersAndNoDefaultOne() {
-        server.expect(once(), request -> assertThat(request.getURI().getRawQuery())
-            .isEqualTo("foreign_parts_only=exclude&imdb_id=936501&languages=en"))
-            .andRespond(withSuccess(page(item(1).set("foreign_parts_only", "false")), MediaType.APPLICATION_JSON));
-        server.expect(once(), request -> assertThat(request.getURI().getRawQuery())
-            .isEqualTo("foreign_parts_only=only&imdb_id=936501&languages=en"))
-            .andRespond(withSuccess(page(item(1)), MediaType.APPLICATION_JSON));
-
-        client.searchFull("tt0936501");
-        client.searchForced("tt0936501");
-
-        server.verify();
-    }
-
-    @Test
-    void aRedirectAnsweringTheFullSearchIsAnOutageAndIsNeverFollowed() {
+    void aRedirectAnsweringTheFullSearchIsAnOutageWithoutRetry() {
         server.expect(once(), requestTo(FULL_URL)).andRespond(withStatus(HttpStatus.MOVED_PERMANENTLY)
             .header("Location", "/api/v1/subtitles?foreign_parts_only=exclude&imdb_id=936501&languages=en"));
 

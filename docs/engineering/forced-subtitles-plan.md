@@ -1133,7 +1133,7 @@ the need, so an automatic `NOT_NEEDED` adds no downloads but never hides an exis
 5d is split in two. **5d-1** finds, downloads and plays full English subtitles and measures them; **5d-2** acts on the
 proof. Built in 5d-1:
 
-- **Search.** `OpenSubtitlesApi.searchFull(imdbId)` asks for `languages=en`, and `foreign_parts_only=exclude`
+- **Search.** `OpenSubtitlesApi.searchFull(imdbId)` asks for `foreign_parts_only=exclude` and `languages=en`
   (alphabetical, as the forced search; it relies on the `hearing_impaired=include` default and never sends it, because
   the API redirects with a 301 on any default value). `OpenSubtitlesParser.parseFull` keeps only results
   whose flag is a real `false` (a missing or non-boolean flag fits neither search), keeps hearing-impaired files and marks
