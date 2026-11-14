@@ -45,7 +45,7 @@ describe('usePlaybackHealth', () => {
       act(() => result.current.reload());
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
       await waitFor(() => expect(result.current.loading).toBe(false));
-      expect(result.current.playbacks).toHaveLength(3);
+      expect(result.current.playbacks).toHaveLength(4);
     } finally {
       vi.useRealTimers();
     }

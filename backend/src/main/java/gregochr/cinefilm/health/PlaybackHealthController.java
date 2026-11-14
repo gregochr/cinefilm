@@ -91,7 +91,10 @@ public class PlaybackHealthController {
         }
     }
 
-    /** An ISO instant in the years 1970 to 9999, the range the database's timestamps can compare with. */
+    /**
+     * An ISO instant in the years 1970 to 9999. That is a sanity range, not the database's: an earlier or later year
+     * is a typo, and an extreme one can fail the JDBC conversion with a 500.
+     */
     private static Instant since(String value) {
         Instant parsed = Instant.parse(value);
         int year = parsed.atZone(ZoneOffset.UTC).getYear();

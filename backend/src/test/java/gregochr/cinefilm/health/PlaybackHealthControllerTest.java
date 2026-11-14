@@ -302,9 +302,24 @@ class PlaybackHealthControllerTest {
         when(health.chart(Instant.parse("1970-01-01T00:00:00Z"))).thenReturn(new ChartList(List.of()));
         when(health.chart(Instant.parse("9999-12-31T23:59:59Z"))).thenReturn(new ChartList(List.of()));
         mvc.perform(signedIn(get("/api/admin/playback-health/chart")).param("since", "1970-01-01T00:00:00Z"))
-            .andExpect(status().isOk());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sessions").isArray());
         mvc.perform(signedIn(get("/api/admin/playback-health/chart")).param("since", "9999-12-31T23:59:59Z"))
-            .andExpect(status().isOk());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sessions").isArray());
+        verify(health).chart(Instant.parse("1970-01-01T00:00:00Z"));
+        verify(health).chart(Instant.parse("9999-12-31T23:59:59Z"));
+    }
+
+    @Test
+    void theFirstValueOfARepeatedChartSinceWins() throws Exception {
+        when(health.chart(Instant.parse("2024-03-01T00:00:00Z"))).thenReturn(new ChartList(List.of()));
+
+        mvc.perform(signedIn(get("/api/admin/playback-health/chart"))
+                .param("since", "2024-03-01T00:00:00Z", "2020-01-01T00:00:00Z"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sessions").isArray());
+        verify(health).chart(Instant.parse("2024-03-01T00:00:00Z"));
     }
 
     @Test

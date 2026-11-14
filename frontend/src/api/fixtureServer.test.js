@@ -158,30 +158,40 @@ describe('fixture server', () => {
 
   it('serves the Admin playback health list', async () => {
     const { playbacks } = await call('GET', '/api/admin/playback-health');
-    expect(playbacks.map((p) => p.filmTitle)).toEqual(['Heat', 'Blade Runner', 'The Wicker Man']);
+    expect(playbacks.map((p) => p.filmTitle)).toEqual([
+      'Heat',
+      'Blade Runner',
+      'The Wicker Man',
+      'The Wicker Man',
+    ]);
     expect(playbacks[0].report.environment).toBe('train');
   });
 
   it('serves the filtered, paged playback health list with a total', async () => {
     const all = await call('GET', '/api/admin/playback-health?page=0');
-    expect(all.total).toBe(3);
+    expect(all.total).toBe(4);
     expect(all.playbacks.map((p) => p.filmTitle)).toEqual([
       'Heat',
       'Blade Runner',
       'The Wicker Man',
+      'The Wicker Man',
     ]);
     const longOnes = await call('GET', '/api/admin/playback-health?minWatchedMs=180000');
-    expect(longOnes.total).toBe(2);
+    expect(longOnes.total).toBe(3);
     const withProblems = await call('GET', '/api/admin/playback-health?problems=true');
     expect(withProblems.total).toBe(1);
     expect(withProblems.playbacks[0].filmTitle).toBe('Heat');
     const without = await call('GET', '/api/admin/playback-health?problems=false');
-    // Blade Runner stepped down twice and nothing else: a step down is not a problem.
-    expect(without.playbacks.map((p) => p.filmTitle)).toEqual(['Blade Runner', 'The Wicker Man']);
+    // The last session stepped down twice and nothing else went wrong: a step down is not a problem.
+    expect(without.playbacks.map((p) => p.playbackId)).toEqual([
+      'a91e5b07-4d3c-42f8-8e6a-7c1b9d0f5e22',
+      'c07d8e19-5b2a-4f61-a3d4-1e8f6b9c2a50',
+      '5b2e9a40-7c1d-4e83-8f26-0d4a1c7e9b35',
+    ]);
     const paged = await call('GET', '/api/admin/playback-health?size=1&page=1');
     expect(paged.playbacks).toHaveLength(1);
     expect(paged.playbacks[0].filmTitle).toBe('Blade Runner');
-    expect(paged.total).toBe(3);
+    expect(paged.total).toBe(4);
     const since = await call('GET', '/api/admin/playback-health?since=2999-01-01T00:00:00Z');
     expect(since).toEqual({ playbacks: [], total: 0 });
   });

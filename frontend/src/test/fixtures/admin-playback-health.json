@@ -38,7 +38,10 @@
         "kbpsMedian": 910,
         "kbpsHigh": 2400,
         "kbpsSamples": 41,
-        "rungMs": { "480p": 1468800, "360p": 2851200 },
+        "rungMs": {
+          "480p": 1468800,
+          "360p": 2851200
+        },
         "client": {
           "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
           "screen": "1512x982",
@@ -76,7 +79,7 @@
         "reconnectMs": 0,
         "recoveries": 0,
         "fellBack": false,
-        "stepsDown": 2,
+        "stepsDown": 0,
         "stepsUp": 0,
         "netErrors": 0,
         "timeouts": 0,
@@ -84,7 +87,9 @@
         "kbpsMedian": null,
         "kbpsHigh": null,
         "kbpsSamples": 0,
-        "rungMs": { "original": 6700000 },
+        "rungMs": {
+          "original": 6700000
+        },
         "client": {
           "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15",
           "screen": "390x844",
@@ -135,6 +140,56 @@
           "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           "screen": "1920x1080",
           "cores": 12
+        }
+      }
+    },
+    {
+      "playbackId": "5b2e9a40-7c1d-4e83-8f26-0d4a1c7e9b35",
+      "filmId": 8,
+      "filmTitle": "The Wicker Man",
+      "editionId": 11,
+      "startedAt": "2026-11-06T20:00:00Z",
+      "updatedAt": "2026-11-06T21:30:00Z",
+      "report": {
+        "seq": 3,
+        "editionId": 11,
+        "elapsedMs": 5410000,
+        "environment": "home",
+        "operator": "AS5089 Virgin Media Limited",
+        "latencyMs": 48,
+        "engine": "hlsjs",
+        "quality": "auto",
+        "autoplayRefused": false,
+        "startupMs": 1400,
+        "watchedMs": 5400000,
+        "stallCount": 0,
+        "stallMs": 0,
+        "longestStallMs": 0,
+        "seekCount": 1,
+        "seekWaitMs": 1800,
+        "reloadCount": 0,
+        "reloadMs": 0,
+        "reconnectCount": 0,
+        "reconnectMs": 0,
+        "recoveries": 0,
+        "fellBack": false,
+        "stepsDown": 2,
+        "stepsUp": 1,
+        "netErrors": 0,
+        "timeouts": 0,
+        "kbpsLow": 420,
+        "kbpsMedian": 910,
+        "kbpsHigh": 2400,
+        "kbpsSamples": 41,
+        "rungMs": {
+          "1080p": 1800000,
+          "720p": 2400000,
+          "480p": 1200000
+        },
+        "client": {
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+          "screen": "1512x982",
+          "cores": 8
         }
       }
     }
