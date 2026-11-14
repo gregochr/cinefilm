@@ -459,14 +459,15 @@ read-only checks.
    `{"password": ...}` is built from the typed password and goes in on stdin, so it never reaches the history, the
    process list or the terminal (`printf` is a shell builtin). Needs `jq`. Paste this line **on its own** (not together
    with the next steps), press Enter if no prompt appears, and type the password **only** at the
-   `CineFilm password (input hidden):` prompt. An empty answer sends nothing; a 401 means run it again. It runs in a
-   subshell, so the variable and the `umask` vanish with it, and it starts by removing any old cookie jar:
+   `CineFilm password (input hidden):` prompt. An empty answer prints *Nothing sent*, and `{"authenticated":false}`
+   (a wrong password) means run it again. It runs in a subshell, so the variable and the `umask` vanish with it, and
+   it starts by removing any old cookie jar:
 
    ```bash
-   ( umask 077; rm -f ~/cf-jar; IFS= read -rsp 'CineFilm password (input hidden): ' CF_PW; echo; [ -n "$CF_PW" ] && printf '%s' "$CF_PW" | jq -cRs '{password: .}' | curl -sS -c ~/cf-jar -H 'Content-Type: application/json' -H 'X-CineFilm: 1' --data-binary @- http://127.0.0.1:8090/api/session; echo )
+   ( umask 077; rm -f ~/cf-jar; IFS= read -rsp 'CineFilm password (input hidden): ' CF_PW; echo; if [ -n "$CF_PW" ]; then printf '%s' "$CF_PW" | jq -cRs '{password: .}' | curl -sS -c ~/cf-jar -H 'Content-Type: application/json' -H 'X-CineFilm: 1' --data-binary @- http://127.0.0.1:8090/api/session; echo; else echo 'Nothing sent: run it again.'; fi )
    ```
 
-   It answers 200 `{"authenticated":true}` (401 on a wrong password).
+   It prints `{"authenticated":true}` when signed in, `{"authenticated":false}` on a wrong password.
 3. **Check it is on, then start it (owner).** The status must say `"enabled":true` and `refresherDue` 0 first:
 
    ```bash
