@@ -134,7 +134,9 @@ public class TmdbMatcher {
     private static Candidate candidate(Ranked r) {
         return new Candidate(r.hit().id(), r.details() != null ? r.details().title() : r.hit().title(), r.year(),
             r.runtime(), r.details() != null ? r.details().posterPath() : r.hit().posterPath(),
-            (int) Math.round(r.total()));
+            // Floored, never rounded: a floored top score of 60 or more means the real one is, so a stored 60 never
+            // overclaims the matcher's accept test, and AdminTodoRules.confident can stay conservative on the lead.
+            (int) Math.floor(r.total()));
     }
 
     private record Scored(SearchHit hit, double score) {

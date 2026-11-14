@@ -13,17 +13,22 @@ import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
+import gregochr.cinefilm.film.FilmRepository.OsBestRef;
 import gregochr.cinefilm.film.FilmRepository.OsFullRef;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
-import gregochr.cinefilm.subtitle.ForcedChoice.DownloadSide;
+import gregochr.cinefilm.subtitle.ForcedChoice.FileSide;
 import gregochr.cinefilm.subtitle.ForcedChoice.Input;
 import gregochr.cinefilm.subtitle.ForcedResolver.Resolution;
 import gregochr.cinefilm.subtitle.PendingDownloads.Pending;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Pick;
+import gregochr.cinefilm.subtitle.SidecarPrecedence.Slot;
+import gregochr.cinefilm.subtitle.SidecarTrust.Assessment;
+import gregochr.cinefilm.subtitle.SidecarTrust.Proof;
+import gregochr.cinefilm.subtitle.SidecarTrust.Trust;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,12 +38,17 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-/** Which films still have an automatic download to come, with the repositories and the resolver faked. */
+/**
+ * Which films the scheduler would download for, with the repositories and the resolver faked. The decision itself is
+ * {@link ForcedDownloadService#fullDueFor} and {@link ForcedDownloadService#dueFor}, which this runs over the same
+ * facts as the scheduler.
+ */
 @ExtendWith(MockitoExtension.class)
 class PendingDownloadsTest {
 
     private static final String IMDB = "tt0936501";
     private static final String CUES = "1\n00:00:10,000 --> 00:00:12,000\nHello\n\n";
+    private static final Assessment FAILED = new Assessment(Trust.FAILED, Proof.NONE);
 
     @Mock
     private FilmRepository films;
@@ -58,6 +68,9 @@ class PendingDownloadsTest {
     @Mock
     private ForcedDownloadBlockRepository blocks;
 
+    @Mock
+    private ForcedCheckCandidateRepository ledger;
+
     private PendingDownloads pending;
     private Film film;
     private Edition edition;
@@ -65,7 +78,7 @@ class PendingDownloadsTest {
 
     @BeforeEach
     void setUp() {
-        pending = new PendingDownloads(films, editions, sidecars, resolver, references, blocks);
+        pending = new PendingDownloads(films, editions, sidecars, resolver, references, blocks, ledger);
         film = film(1L, "Amelie", 2001, NOW);
         film.setImdbId(IMDB);
         edition = edition(film, 40L, "Original", 90 * MIN, null);
@@ -111,39 +124,59 @@ class PendingDownloadsTest {
         return row;
     }
 
-    private static ForcedDownloadBlock block(SubtitleKind kind, long fileId) {
+    private static ForcedDownloadBlock block(SubtitleKind kind, long editionId, long fileId) {
         ForcedDownloadBlock block = new ForcedDownloadBlock();
         block.setKind(kind);
-        block.setEditionId(40L);
+        block.setEditionId(editionId);
         block.setImdbId(IMDB);
         block.setOsFileId(fileId);
         block.setRemovedAt(NOW);
         return block;
     }
 
+    private static ForcedCheckCandidate compared(SubtitleKind kind, long editionId, long fileId) {
+        ForcedCheckCandidate row = new ForcedCheckCandidate();
+        row.setEditionId(editionId);
+        row.setImdbId(IMDB);
+        row.setKind(kind);
+        row.setOsFileId(fileId);
+        row.setTriedAt(NOW);
+        return row;
+    }
+
+    private Edition secondEdition() {
+        Edition cut = edition(film, 41L, "Cut", 95 * MIN, null);
+        MediaFile cutPart = file(cut, "Amelie.Cut.m4v");
+        cutPart.setId(11L);
+        cutPart.setPartNumber(1);
+        cutPart.setPresence(Presence.PRESENT);
+        return cut;
+    }
+
+    // ---- full ----
+
     private void fullCandidates(OpenSubtitlesResult... results) {
         when(films.findOpenSubtitlesFull()).thenReturn(List.of(new OsFullRef(1L, IMDB, candidates(results))));
         when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
     }
 
-    // ---- full ----
+    private boolean fullDue() {
+        return pending.full(Map.of(1L, IMDB)).due().contains(1L);
+    }
 
     @Test
     void noFilmsToAskAboutIsNothingPendingAndReadsNothing() {
         assertThat(pending.full(Map.of())).isSameAs(Pending.NONE);
         assertThat(pending.forced(Map.of())).isSameAs(Pending.NONE);
 
-        verifyNoInteractions(films, editions, sidecars, resolver, references, blocks);
+        verifyNoInteractions(films, editions, sidecars, resolver, references, blocks, ledger);
     }
 
     @Test
-    void aFilmWithFullCandidatesAndAnEditionWithNothingYetIsPendingOnBothCounts() {
+    void aFilmWithAFullCandidateAndAnEditionWithNothingYetIsDue() {
         fullCandidates(candidate(5011, 1), candidate(5012, 1));
 
-        Pending result = pending.full(Map.of(1L, IMDB));
-
-        assertThat(result.withCandidate()).containsExactly(1L);
-        assertThat(result.withDueEdition()).containsExactly(1L);
+        assertThat(fullDue()).isTrue();
     }
 
     @Test
@@ -156,186 +189,274 @@ class PendingDownloadsTest {
     }
 
     @Test
-    void candidatesSplitOverSeveralFilesCannotBeDownloadedAndDoNotCount() {
+    void candidatesSplitOverSeveralFilesCannotBeDownloadedSoNothingIsDue() {
         fullCandidates(candidate(5011, 2));
 
-        Pending result = pending.full(Map.of(1L, IMDB));
-
-        assertThat(result.withCandidate()).isEmpty();
-        assertThat(result.withDueEdition()).containsExactly(1L);
+        assertThat(fullDue()).isFalse();
     }
 
     @Test
-    void aCandidateWhoseStoredReferenceIsSpentDoesNotCount() {
+    void aBlockedOnlyCandidateIsNotDue() {
         fullCandidates(candidate(5011, 1));
-        // Usable but short of the 300 lines of a full subtitle: final, and not promotable as full.
-        when(references.findByFilmIdIn(Set.of(1L))).thenReturn(List.of(stored(5011, 5, 0)));
+        when(blocks.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FULL))
+            .thenReturn(List.of(block(SubtitleKind.FULL, 40, 5011)));
 
-        assertThat(pending.full(Map.of(1L, IMDB)).withCandidate()).isEmpty();
+        assertThat(fullDue()).isFalse();
     }
 
     @Test
-    void aCandidateWhoseStoredReferenceFailedOnlyOnceOrIsFullStillCounts() {
-        fullCandidates(candidate(5011, 1), candidate(5012, 1));
-        when(references.findByFilmIdIn(Set.of(1L))).thenReturn(List.of(stored(5011, 0, 2),
-            stored(5012, SubtitleComparison.FULL_LINES, 0)));
-
-        assertThat(pending.full(Map.of(1L, IMDB)).withCandidate()).containsExactly(1L);
-    }
-
-    @Test
-    void aCandidateWhoseReferenceFailedThreeTimesDoesNotCount() {
+    void aLedgeredOnlyCandidateIsNotDue() {
         fullCandidates(candidate(5011, 1));
-        when(references.findByFilmIdIn(Set.of(1L))).thenReturn(List.of(stored(5011, 0, 3)));
+        when(ledger.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FULL))
+            .thenReturn(List.of(compared(SubtitleKind.FULL, 40, 5011)));
 
-        assertThat(pending.full(Map.of(1L, IMDB)).withCandidate()).isEmpty();
+        assertThat(fullDue()).isFalse();
     }
 
     @Test
-    void anEditionAtTheCapIsNotDueButItsFilmStillHasACandidate() {
+    void aLedgerRowOfAnotherEditionOrImdbIdDoesNotUseUpTheCandidate() {
         fullCandidates(candidate(5011, 1));
-        when(blocks.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FULL)).thenReturn(List.of(
-            block(SubtitleKind.FULL, 1), block(SubtitleKind.FULL, 2), block(SubtitleKind.FULL, 3)));
+        ForcedCheckCandidate otherImdb = compared(SubtitleKind.FULL, 40, 5011);
+        otherImdb.setImdbId("tt0000009");
+        when(ledger.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FULL))
+            .thenReturn(List.of(otherImdb, compared(SubtitleKind.FULL, 99, 5011)));
 
-        Pending result = pending.full(Map.of(1L, IMDB));
-
-        assertThat(result.withCandidate()).containsExactly(1L);
-        assertThat(result.withDueEdition()).isEmpty();
+        assertThat(fullDue()).isTrue();
     }
 
     @Test
-    void anEditionOneShortOfTheCapIsStillDue() {
+    void anEditionAtTheCapIsNotDueAndOneShortOfItIs() {
         fullCandidates(candidate(5011, 1));
         when(blocks.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FULL)).thenReturn(List.of(
-            block(SubtitleKind.FULL, 1), block(SubtitleKind.FULL, 2)));
+            block(SubtitleKind.FULL, 40, 1), block(SubtitleKind.FULL, 40, 2)));
 
-        assertThat(pending.full(Map.of(1L, IMDB)).withDueEdition()).containsExactly(1L);
+        assertThat(fullDue()).isTrue();
+
+        when(blocks.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FULL)).thenReturn(List.of(
+            block(SubtitleKind.FULL, 40, 1), block(SubtitleKind.FULL, 40, 2), block(SubtitleKind.FULL, 40, 3)));
+
+        assertThat(fullDue()).isFalse();
     }
 
     @Test
-    void aForcedBlockNeverUsesUpTheFullCap() {
+    void aForcedBlockNeverUsesUpTheFullCapOrACandidate() {
         fullCandidates(candidate(5011, 1));
         when(blocks.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FULL)).thenReturn(List.of(
-            block(SubtitleKind.FORCED, 1), block(SubtitleKind.FORCED, 2), block(SubtitleKind.FORCED, 3)));
+            block(SubtitleKind.FORCED, 40, 5011), block(SubtitleKind.FORCED, 40, 2),
+            block(SubtitleKind.FORCED, 40, 3)));
 
-        assertThat(pending.full(Map.of(1L, IMDB)).withDueEdition()).containsExactly(1L);
+        assertThat(fullDue()).isTrue();
     }
 
     @Test
-    void anEditionWithAnOwnersFullFileOrALiveDownloadIsNotDue() {
+    void anEditionWithAnOwnersFullFileOrALiveFullDownloadIsNotDue() {
         fullCandidates(candidate(5011, 1));
         when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FULL))
             .thenReturn(List.of(sidecar(SubtitleKind.FULL, SubtitleSidecar.Origin.FILE, 1, 400)));
 
-        assertThat(pending.full(Map.of(1L, IMDB)).withDueEdition()).isEmpty();
+        assertThat(fullDue()).isFalse();
 
         when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FULL))
-            .thenReturn(List.of(sidecar(SubtitleKind.FULL, SubtitleSidecar.Origin.OPENSUBTITLES, 5011, 400)));
+            .thenReturn(List.of(sidecar(SubtitleKind.FULL, SubtitleSidecar.Origin.OPENSUBTITLES, 5099, 400)));
 
-        assertThat(pending.full(Map.of(1L, IMDB)).withDueEdition()).isEmpty();
+        assertThat(fullDue()).isFalse();
     }
 
     @Test
-    void anOwnersFileWithNoLinesDoesNotMakeAnEditionNotDue() {
+    void anOwnersFullFileWithNoLinesDoesNotMakeAnEditionNotDue() {
         fullCandidates(candidate(5011, 1));
-        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FULL)).thenReturn(List.of(
-            sidecar(SubtitleKind.FULL, SubtitleSidecar.Origin.FILE, 1, 0)));
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FULL))
+            .thenReturn(List.of(sidecar(SubtitleKind.FULL, SubtitleSidecar.Origin.FILE, 1, 0)));
 
-        assertThat(pending.full(Map.of(1L, IMDB)).withDueEdition()).containsExactly(1L);
+        assertThat(fullDue()).isTrue();
     }
 
     @Test
-    void anEditionWhosePartIsMissingFromDiskIsNotDue() {
+    void aCandidateWhoseStoredReferenceIsSpentIsNotDueAndOneThatFailedTwiceIs() {
+        fullCandidates(candidate(5011, 1));
+        // Usable but short of the 300 lines of a full subtitle: final, and not promotable as full.
+        when(references.findByFilmIdIn(Set.of(1L))).thenReturn(List.of(stored(5011, 5, 0)));
+
+        assertThat(fullDue()).isFalse();
+
+        when(references.findByFilmIdIn(Set.of(1L))).thenReturn(List.of(stored(5011, 0, 2)));
+
+        assertThat(fullDue()).isTrue();
+
+        when(references.findByFilmIdIn(Set.of(1L))).thenReturn(List.of(stored(5011, 0, 3)));
+
+        assertThat(fullDue()).isFalse();
+    }
+
+    @Test
+    void aCandidateBlockedOnOneEditionIsStillDueOnAnotherEdition() {
+        fullCandidates(candidate(5011, 1));
+        Edition cut = secondEdition();
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition, cut));
+        when(blocks.findByEditionIdInAndKind(List.of(40L, 41L), SubtitleKind.FULL))
+            .thenReturn(List.of(block(SubtitleKind.FULL, 40, 5011)));
+
+        assertThat(fullDue()).isTrue();
+    }
+
+    @Test
+    void aFilmIsNotDueWhenNoEditionCanTakeAnyCandidate() {
+        fullCandidates(candidate(5011, 1));
+        Edition cut = secondEdition();
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition, cut));
+        // The one candidate is blocked on edition 40, and edition 41 has the owner's full file.
+        when(blocks.findByEditionIdInAndKind(List.of(40L, 41L), SubtitleKind.FULL))
+            .thenReturn(List.of(block(SubtitleKind.FULL, 40, 5011)));
+        SubtitleSidecar owner = sidecar(SubtitleKind.FULL, SubtitleSidecar.Origin.FILE, 1, 400);
+        owner.setMediaFileId(11L);
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L, 11L), SubtitleKind.FULL)).thenReturn(List.of(owner));
+
+        assertThat(fullDue()).isFalse();
+    }
+
+    @Test
+    void anEditionWhosePartIsMissingStillCountsBecauseTheSchedulerIncludesIt() {
         fullCandidates(candidate(5011, 1));
         part.setPresence(Presence.MISSING);
 
-        Pending result = pending.full(Map.of(1L, IMDB));
-
-        assertThat(result.withCandidate()).containsExactly(1L);
-        assertThat(result.withDueEdition()).isEmpty();
-    }
-
-    @Test
-    void oneDueEditionAmongSeveralMakesTheFilmDue() {
-        fullCandidates(candidate(5011, 1));
-        Edition cut = edition(film, 41L, "Cut", 95 * MIN, null);
-        MediaFile cutPart = file(cut, "Amelie.Cut.m4v");
-        cutPart.setId(11L);
-        cutPart.setPartNumber(1);
-        cutPart.setPresence(Presence.PRESENT);
-        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition, cut));
-        // The first edition is at the cap; the second has no blocks.
-        ForcedDownloadBlock one = block(SubtitleKind.FULL, 1);
-        ForcedDownloadBlock two = block(SubtitleKind.FULL, 2);
-        ForcedDownloadBlock three = block(SubtitleKind.FULL, 3);
-        when(blocks.findByEditionIdInAndKind(List.of(40L, 41L), SubtitleKind.FULL))
-            .thenReturn(List.of(one, two, three));
-
-        assertThat(pending.full(Map.of(1L, IMDB)).withDueEdition()).containsExactly(1L);
+        assertThat(fullDue()).isTrue();
     }
 
     // ---- forced ----
 
-    private Resolution resolution(boolean conflict, boolean embedded) {
-        Pick pick = new Pick(List.of(), conflict ? Set.of(5L, 6L) : Set.of());
-        return new Resolution(edition, List.of(10L), pick, null, null, null, null, Map.of(), List.of(), embedded,
-            ForcedChoice.decide(new Input(null, List.<DownloadSide>of(), embedded)), Map.of());
+    private void forcedCandidates(String json) {
+        when(films.findOpenSubtitlesBest()).thenReturn(List.of(new OsBestRef(1L, IMDB, "{}", json)));
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
+    }
+
+    private boolean forcedDue() {
+        return pending.forced(Map.of(1L, IMDB)).due().contains(1L);
+    }
+
+    private Resolution resolution(Assessment fileAssessment, boolean conflict, boolean embedded) {
+        SubtitleSidecar owner = sidecar(SubtitleKind.FORCED, SubtitleSidecar.Origin.FILE, 5, 1);
+        List<Slot> slots = fileAssessment == null || conflict ? List.of() : List.of(new Slot(owner, 0));
+        Pick pick = new Pick(slots, conflict ? Set.of(5L, 6L) : Set.of());
+        FileSide side = fileAssessment == null || conflict ? null : new FileSide(fileAssessment, 1);
+        return new Resolution(edition, List.of(10L), pick, slots.isEmpty() ? null : "fv",
+            fileAssessment == null || conflict ? null : fileAssessment, null, null, Map.of(), List.of(), embedded,
+            ForcedChoice.decide(new Input(side, List.of(), embedded)), Map.of());
+    }
+
+    private void resolves(Resolution resolution) {
+        when(resolver.resolve(List.of(edition))).thenReturn(Map.of(40L, resolution));
     }
 
     @Test
-    void anEditionWithNoSubtitleAtAllIsDueForAForcedDownload() {
-        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
-        when(resolver.resolve(List.of(edition))).thenReturn(Map.of(40L, resolution(false, false)));
+    void aMissingEditionWithASingleFileCandidateIsDueForAForcedDownload() {
+        forcedCandidates(candidates(candidate(5011, 1)));
+        resolves(resolution(null, false, false));
 
-        Pending result = pending.forced(Map.of(1L, IMDB));
+        assertThat(forcedDue()).isTrue();
+    }
 
-        assertThat(result.withDueEdition()).containsExactly(1L);
-        assertThat(result.withCandidate()).isEmpty();
+    @Test
+    void aFilmWithNoStoredBestResultOrNoCandidatesJsonIsNotAsked() {
+        when(films.findOpenSubtitlesBest()).thenReturn(List.of(new OsBestRef(2L, IMDB, "{}", "[]")));
+
+        assertThat(pending.forced(Map.of(1L, IMDB))).isSameAs(Pending.NONE);
+
+        when(films.findOpenSubtitlesBest()).thenReturn(List.of(new OsBestRef(1L, IMDB, "{}", null)));
+
+        assertThat(pending.forced(Map.of(1L, IMDB))).isSameAs(Pending.NONE);
+        verifyNoInteractions(editions);
+    }
+
+    @Test
+    void aCountAboveZeroWithOnlyMultiFileCandidatesIsNotDue() {
+        forcedCandidates(candidates(candidate(5011, 2), candidate(5012, 3)));
+        resolves(resolution(null, false, false));
+
+        assertThat(forcedDue()).isFalse();
     }
 
     @Test
     void aConflictOrAnEmbeddedTrackMeansNothingIsDue() {
-        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
-        when(resolver.resolve(List.of(edition))).thenReturn(Map.of(40L, resolution(true, false)));
+        forcedCandidates(candidates(candidate(5011, 1)));
+        resolves(resolution(null, true, false));
 
-        assertThat(pending.forced(Map.of(1L, IMDB)).withDueEdition()).isEmpty();
+        assertThat(forcedDue()).isFalse();
 
-        when(resolver.resolve(List.of(edition))).thenReturn(Map.of(40L, resolution(false, true)));
+        resolves(resolution(null, false, true));
 
-        assertThat(pending.forced(Map.of(1L, IMDB)).withDueEdition()).isEmpty();
+        assertThat(forcedDue()).isFalse();
     }
 
     @Test
     void aForcedEditionAtTheCapIsNotDueAndOneBelowItIs() {
-        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
-        when(resolver.resolve(List.of(edition))).thenReturn(Map.of(40L, resolution(false, false)));
+        forcedCandidates(candidates(candidate(5011, 1)));
+        resolves(resolution(null, false, false));
         when(blocks.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FORCED)).thenReturn(List.of(
-            block(SubtitleKind.FORCED, 1), block(SubtitleKind.FORCED, 2)));
+            block(SubtitleKind.FORCED, 40, 1), block(SubtitleKind.FORCED, 40, 2)));
 
-        assertThat(pending.forced(Map.of(1L, IMDB)).withDueEdition()).containsExactly(1L);
+        assertThat(forcedDue()).isTrue();
 
         when(blocks.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FORCED)).thenReturn(List.of(
-            block(SubtitleKind.FORCED, 1), block(SubtitleKind.FORCED, 2), block(SubtitleKind.FORCED, 3)));
+            block(SubtitleKind.FORCED, 40, 1), block(SubtitleKind.FORCED, 40, 2), block(SubtitleKind.FORCED, 40, 3)));
 
-        assertThat(pending.forced(Map.of(1L, IMDB)).withDueEdition()).isEmpty();
+        assertThat(forcedDue()).isFalse();
     }
 
     @Test
     void aFullBlockNeverUsesUpTheForcedCap() {
-        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
-        when(resolver.resolve(List.of(edition))).thenReturn(Map.of(40L, resolution(false, false)));
+        forcedCandidates(candidates(candidate(5011, 1)));
+        resolves(resolution(null, false, false));
         when(blocks.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FORCED)).thenReturn(List.of(
-            block(SubtitleKind.FULL, 1), block(SubtitleKind.FULL, 2), block(SubtitleKind.FULL, 3)));
+            block(SubtitleKind.FULL, 40, 1), block(SubtitleKind.FULL, 40, 2), block(SubtitleKind.FULL, 40, 3)));
 
-        assertThat(pending.forced(Map.of(1L, IMDB)).withDueEdition()).containsExactly(1L);
+        assertThat(forcedDue()).isTrue();
     }
 
     @Test
-    void aForcedDownloadWhosePartIsMissingIsNotDue() {
-        part.setPresence(Presence.MISSING);
-        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
-        when(resolver.resolve(List.of())).thenReturn(Map.of());
+    void everyCandidateBlockedOrLedgeredLeavesAMissingEditionNotDue() {
+        forcedCandidates(candidates(candidate(5011, 1), candidate(5012, 1)));
+        resolves(resolution(null, false, false));
+        when(blocks.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FORCED))
+            .thenReturn(List.of(block(SubtitleKind.FORCED, 40, 5011)));
+        when(ledger.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FORCED))
+            .thenReturn(List.of(compared(SubtitleKind.FORCED, 40, 5012)));
 
-        assertThat(pending.forced(Map.of(1L, IMDB)).withDueEdition()).isEmpty();
+        assertThat(forcedDue()).isFalse();
+    }
+
+    @Test
+    void aReplacementEditionWhoseCandidatesAreAllLedgeredIsNotDueButOneWithACandidateLeftIs() {
+        forcedCandidates(candidates(candidate(5011, 1), candidate(5012, 1)));
+        resolves(resolution(FAILED, false, false));
+        when(ledger.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FORCED)).thenReturn(List.of(
+            compared(SubtitleKind.FORCED, 40, 5011), compared(SubtitleKind.FORCED, 40, 5012)));
+
+        assertThat(forcedDue()).isFalse();
+
+        when(ledger.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FORCED))
+            .thenReturn(List.of(compared(SubtitleKind.FORCED, 40, 5011)));
+
+        assertThat(forcedDue()).isTrue();
+    }
+
+    @Test
+    void aReplacementEditionWhoseCandidatesAreAllBlockedIsNotDue() {
+        forcedCandidates(candidates(candidate(5011, 1)));
+        resolves(resolution(FAILED, false, false));
+        when(blocks.findByEditionIdInAndKind(List.of(40L), SubtitleKind.FORCED))
+            .thenReturn(List.of(block(SubtitleKind.FORCED, 40, 5011)));
+
+        assertThat(forcedDue()).isFalse();
+    }
+
+    @Test
+    void aSpentStoredReferenceLeavesNothingToFetch() {
+        forcedCandidates(candidates(candidate(5011, 1)));
+        resolves(resolution(null, false, false));
+        // Final and usable, but 300 lines is full subtitles: not promotable as forced.
+        when(references.findByFilmIdIn(Set.of(1L)))
+            .thenReturn(List.of(stored(5011, SubtitleComparison.FULL_LINES, 0)));
+
+        assertThat(forcedDue()).isFalse();
     }
 }

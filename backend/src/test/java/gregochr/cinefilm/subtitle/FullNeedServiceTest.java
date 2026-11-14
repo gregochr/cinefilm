@@ -5,6 +5,7 @@ import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -379,6 +380,9 @@ class FullNeedServiceTest {
             track(5, 50, "Original", 500, 1, Presence.PRESENT, "English", true)));
 
         assertThat(service.neededFilmIds()).containsExactlyInAnyOrder(1L, 4L);
+        // The scheduler asks for the need only: nothing about the pipeline's facts or what the films play.
+        verifyNoInteractions(pending, editions, fullSubtitles);
+        verify(films, never()).findOpenSubtitlesFullStates();
     }
 
     @Test
@@ -415,7 +419,7 @@ class FullNeedServiceTest {
     void theFlagsAndCountsComeFromTheRuleForEveryState() {
         sixFilmsInEveryState();
         when(pending.full(Map.of(3L, "tt3", 4L, "tt4")))
-            .thenReturn(new Pending(java.util.Set.of(3L), java.util.Set.of(3L)));
+            .thenReturn(new Pending(java.util.Set.of(3L)));
 
         FullNeedListDto list = service.list();
 
@@ -431,10 +435,10 @@ class FullNeedServiceTest {
     }
 
     @Test
-    void aCandidateWithNoDueEditionLeftOrADueEditionWithNoCandidateLeavesTheFilmUnresolved() {
+    void aSearchedFilmTheSchedulerWouldNotDownloadForIsUnresolved() {
         sixFilmsInEveryState();
         when(pending.full(Map.of(3L, "tt3", 4L, "tt4")))
-            .thenReturn(new Pending(java.util.Set.of(3L), java.util.Set.of(4L)));
+            .thenReturn(new Pending(java.util.Set.of()));
 
         FullNeedListDto list = service.list();
 
@@ -448,7 +452,7 @@ class FullNeedServiceTest {
     void unresolvedOrBeingCheckedIsExactlyNeededWithNoFullSubtitle() {
         sixFilmsInEveryState();
         when(pending.full(Map.of(3L, "tt3", 4L, "tt4")))
-            .thenReturn(new Pending(java.util.Set.of(3L), java.util.Set.of(3L)));
+            .thenReturn(new Pending(java.util.Set.of(3L)));
 
         List<FullNeedFilmDto> listed = service.list().films();
 
@@ -476,7 +480,7 @@ class FullNeedServiceTest {
         amelie.setOsFullCandidates("[]");
         when(films.findByIdForUpdate(7L)).thenReturn(Optional.of(amelie));
         when(files.findAudioRows(List.of(7L))).thenReturn(List.of());
-        when(pending.full(Map.of(7L, "tt7"))).thenReturn(new Pending(java.util.Set.of(7L), java.util.Set.of(7L)));
+        when(pending.full(Map.of(7L, "tt7"))).thenReturn(new Pending(java.util.Set.of(7L)));
 
         FullNeedFilmDto dto = service.choose(7L, new ChoiceRequest("NEEDED"));
 

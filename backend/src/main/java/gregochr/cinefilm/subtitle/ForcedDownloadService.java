@@ -15,7 +15,6 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.subtitle.DownloadPlan.Kind;
 import gregochr.cinefilm.subtitle.ForcedChoice.FileSide;
-import gregochr.cinefilm.subtitle.ForcedNeedDtos.FilmNeedDto;
 import gregochr.cinefilm.subtitle.ForcedResolver.Resolution;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -133,12 +132,7 @@ public class ForcedDownloadService {
     }
 
     private List<DueDownload> forcedDue() {
-        Set<Long> neededFilmIds = new HashSet<>();
-        for (FilmNeedDto film : need.list().films()) {
-            if ("NEEDED".equals(film.need())) {
-                neededFilmIds.add(film.filmId());
-            }
-        }
+        Set<Long> neededFilmIds = need.neededFilmIds();
         Map<Long, OsBestRef> best = new HashMap<>();
         for (OsBestRef ref : films.findOpenSubtitlesBest()) {
             best.put(ref.id(), ref);
@@ -211,7 +205,12 @@ public class ForcedDownloadService {
         return due;
     }
 
-    private DueDownload fullDueFor(Edition edition, OsFullRef ref, List<ForcedDownloadBlock> allBlocks,
+    /**
+     * The scheduler's decision for one edition's full download, pure over bulk-loaded facts: null when nothing is to
+     * be downloaded for it. {@code PendingDownloads} calls this too, so what Admin calls "being checked" is exactly
+     * what the scheduler would act on.
+     */
+    static DueDownload fullDueFor(Edition edition, OsFullRef ref, List<ForcedDownloadBlock> allBlocks,
                                    List<ForcedCheckCandidate> allLedger, List<SubtitleSidecar> allFull,
                                    Map<Long, OpenSubtitlesReference> stored) {
         if (!DownloadPlan.fullDue(hasOwnerFile(edition, allFull), hasDownload(edition, allFull))) {
@@ -258,7 +257,12 @@ public class ForcedDownloadService {
         return edition.originalParts().stream().map(MediaFile::getId).toList();
     }
 
-    private DueDownload dueFor(Edition edition, Resolution resolution, OsBestRef ref,
+    /**
+     * The scheduler's decision for one edition's forced download, pure over bulk-loaded facts: null when nothing is to
+     * be downloaded for it (not due, no single-file candidate, none left after blocks, the ledger and spent
+     * references, or the cap reached). {@code PendingDownloads} calls this too.
+     */
+    static DueDownload dueFor(Edition edition, Resolution resolution, OsBestRef ref,
                                List<ForcedDownloadBlock> allBlocks, List<ForcedCheckCandidate> allLedger,
                                List<SubtitleSidecar> allDownloads, Map<Long, OpenSubtitlesReference> stored) {
         Optional<Kind> kind = kind(resolution);

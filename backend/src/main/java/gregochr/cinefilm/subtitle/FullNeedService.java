@@ -149,14 +149,19 @@ public class FullNeedService {
 
     /**
      * The ids of the films whose full-subtitle need is {@code NEEDED} (the films in {@link #list}'s scope: the rest
-     * are never needed).
+     * are never needed), for the download scheduler. It reads only what the need depends on: not what each film plays,
+     * not the search state, and nothing from {@link PendingDownloads} (the scheduler uses none of the flags). The
+     * caller may change the set.
      */
     @Transactional(readOnly = true)
     public Set<Long> neededFilmIds() {
+        List<FullNeedRow> inScope = films.findFullNeedRows().stream().filter(FullNeedService::inScope).toList();
+        Map<Long, List<EditionAudio>> audio = inScope.isEmpty() ? Map.of()
+            : editionAudio(files.findAudioRows(inScope.stream().map(FullNeedRow::id).toList()));
         Set<Long> ids = new HashSet<>();
-        for (FullNeedFilmDto film : list().films()) {
-            if (Need.NEEDED.name().equals(film.need())) {
-                ids.add(film.filmId());
+        for (FullNeedRow row : inScope) {
+            if (decide(row, audio.getOrDefault(row.id(), List.of())).need() == Need.NEEDED) {
+                ids.add(row.id());
             }
         }
         return ids;
@@ -315,7 +320,7 @@ public class FullNeedService {
     private static FullNeedFilmDto dto(Eval eval, Pending due) {
         FullNeedRow row = eval.row();
         FullFacts facts = new FullFacts(eval.needed(), eval.playing() != null, eval.hasImdbId(), eval.searched(),
-            due.withCandidate().contains(row.id()), due.withDueEdition().contains(row.id()));
+            due.due().contains(row.id()));
         return new FullNeedFilmDto(row.id(), row.title(), row.year(), eval.decision().need().name(),
             eval.decision().reason().name(), row.owner() == null ? null : row.owner().name(),
             eval.editions().stream().map(e -> new EditionAudioDto(e.name(), e.label())).toList(), eval.playing(),

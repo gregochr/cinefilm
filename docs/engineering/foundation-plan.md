@@ -330,15 +330,21 @@ Plan: `library-scan-plan.md`. What the API and the model now carry:
   leaves a film `PENDING` (title from the file) and it is retried by the next scan.
 - **Admin To do rules (`AdminTodoRules`, package `todo`):** pure, shared by the Admin lists so rail, To do and
   Subtitles cannot disagree. *Confident match:* the top score is at least `TmdbMatcher.ACCEPT_SCORE` and the candidate
-  is alone or leads the second by at least `TmdbMatcher.MARGIN` (a guard-refused match is one candidate at 60).
-  *Full row in play:* `need == NEEDED` and no full English subtitle plays. It is **being checked** when it has an IMDb
-  id and either its current IMDb id has not been searched for full candidates, or a stored full candidate can still
-  become a download (not spent, `DownloadPlan.toFetch`/`promotable`) and a present edition is `DownloadPlan.fullDue`
-  with room under `MAX_DOWNLOADS`; otherwise it is **unresolved**. *Forced row in play:* `need == NEEDED` and
-  `hasForcedSubtitle` is false (today's `needed-missing`). It is being checked when it has an IMDb id and either
-  `openSubtitlesForcedCount` is null, or it is above 0 and a present edition is due (`DownloadPlan.kind`) with room
-  under the cap; otherwise unresolved. The daily download limit is never looked at, so a deferred download is still
-  being checked. Rows that are not in play are neither. `PendingDownloads` gathers the pipeline facts in bulk.
+  is alone or leads the second by more than `TmdbMatcher.MARGIN` (a guard-refused match is one candidate at 60). The
+  matcher stores each score floored (`Math.floor`) while it decides on the unrounded totals, so the lead must be at
+  least `MARGIN + 1` on the stored whole numbers for the real lead to be at least `MARGIN`: the rule never claims more
+  than the matcher would (it may decline a lead of exactly 10 on whole numbers).
+  *Full row in play:* `need == NEEDED` and no full English subtitle plays. *Forced row in play:* `need == NEEDED` and
+  `hasForcedSubtitle` is false (today's `needed-missing`; a film's embedded forced track counts as a subtitle that
+  plays). An in-play row is **being checked** when the film has an IMDb id and either OpenSubtitles has not been
+  searched for its current IMDb id (full: no stored full search for that id; forced: `openSubtitlesForcedCount` is
+  null), or the **download scheduler would download for some edition**: full, `ForcedDownloadService.fullDueFor` is
+  non-null for an edition; forced, the count is above 0 and `ForcedDownloadService.dueFor` is non-null for an edition.
+  Those are the scheduler's own decisions (due, a candidate left after blocks, the ledger and spent references, under
+  `MAX_DOWNLOADS`), run by `PendingDownloads` over the scheduler's own edition set (editions whose files are missing
+  included). Otherwise the row is **unresolved**. The daily download limit is never looked at, so a deferred download
+  is still being checked. Rows that are not in play are neither. Only Admin's lists and the owner's choice compute the
+  flags; the scheduler's `neededFilmIds()` does not.
 - **`ScanStatus`:** `{ running, folder, progress: { processed, total, current } | null, lastScan: { startedAt,
   finishedAt, trigger: "startup"|"nightly"|"admin", filesSeen, newFiles, missingFiles, error } | null, counts: {
   films, newFiles, missing, protectedFiles, needsConversion, needsMatch, unreadable } }`.

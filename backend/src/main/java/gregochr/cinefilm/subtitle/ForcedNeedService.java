@@ -67,27 +67,56 @@ public class ForcedNeedService {
         this.tx = new TransactionTemplate(transactions);
     }
 
-    /** Every film by sort title, with its need and the counts. */
+    /**
+     * Every film by sort title, with its need, the unresolved and being-checked flags, and the counts. The flags ask
+     * the download pipeline's facts ({@link PendingDownloads}), so only Admin's list and the owner's choice pay for
+     * them.
+     */
     @Transactional(readOnly = true)
     public NeedListDto list() {
-        List<NeedRow> rows = films.findNeedRows();
-        // Evidence of need (rule 2) is an owner's file only: a download exists because the need was already shown.
-        Set<Long> withSidecar = new HashSet<>(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED));
-        Set<Long> withSubtitle = new HashSet<>(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED));
-        Set<Long> withEmbedded = new HashSet<>(files.findFilmIdsWithEmbeddedForced());
-        // Only the films with a subtitle of their own (a couple of dozen) are asked what playback would serve.
-        Set<Long> served = withSubtitle.isEmpty() ? Set.of() : servedFilmIds(withSubtitle);
-        List<Eval> evals = new ArrayList<>();
-        for (NeedRow row : rows) {
-            evals.add(eval(row, withSidecar.contains(row.id()), served.contains(row.id()),
-                withEmbedded.contains(row.id())));
-        }
+        List<Eval> evals = evaluate();
         Pending due = pendingFor(evals);
         List<FilmNeedDto> dtos = new ArrayList<>();
         for (Eval eval : evals) {
             dtos.add(dto(eval, due));
         }
         return new NeedListDto(dtos, counts(dtos));
+    }
+
+    /**
+     * The ids of the films whose forced-subtitle need is {@code NEEDED}, as {@link #list} would say, for the download
+     * scheduler. It does not work out the unresolved and being-checked flags (nothing there uses them). The caller may
+     * change the set.
+     */
+    @Transactional(readOnly = true)
+    public Set<Long> neededFilmIds() {
+        Set<Long> ids = new HashSet<>();
+        for (Eval eval : evaluate()) {
+            if (eval.decision().need() == Need.NEEDED) {
+                ids.add(eval.row().id());
+            }
+        }
+        return ids;
+    }
+
+    /** Every film's need, worked out from three queries and one bounded fetch, without the pipeline's facts. */
+    private List<Eval> evaluate() {
+        List<NeedRow> rows = films.findNeedRows();
+        // Evidence of need (rule 2) is an owner's file only: a download exists because the need was already shown.
+        Set<Long> withSidecar = new HashSet<>(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED));
+        Set<Long> withSubtitle = new HashSet<>(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED));
+        Set<Long> withEmbedded = new HashSet<>(files.findFilmIdsWithEmbeddedForced());
+        // Only the films with a subtitle of their own or an embedded forced track (a couple of dozen) are asked what
+        // playback would serve.
+        Set<Long> toAsk = new HashSet<>(withSubtitle);
+        toAsk.addAll(withEmbedded);
+        Set<Long> served = toAsk.isEmpty() ? Set.of() : servedFilmIds(toAsk);
+        List<Eval> evals = new ArrayList<>();
+        for (NeedRow row : rows) {
+            evals.add(eval(row, withSidecar.contains(row.id()), served.contains(row.id()),
+                withEmbedded.contains(row.id())));
+        }
+        return evals;
     }
 
     /**
@@ -140,9 +169,10 @@ public class ForcedNeedService {
         film.setForcedNeedOwner(choice);
         NeedRow row = row(film, choice);
         boolean hasSidecar = sidecars.countPresentForFilm(filmId, SubtitleKind.FORCED) > 0;
-        boolean served = sidecars.countPresentSubtitlesForFilm(filmId, SubtitleKind.FORCED) > 0
+        boolean embedded = files.countEmbeddedForcedForFilm(filmId) > 0;
+        boolean served = (sidecars.countPresentSubtitlesForFilm(filmId, SubtitleKind.FORCED) > 0 || embedded)
             && !servedFilmIds(List.of(filmId)).isEmpty();
-        Eval eval = eval(row, hasSidecar, served, files.countEmbeddedForcedForFilm(filmId) > 0);
+        Eval eval = eval(row, hasSidecar, served, embedded);
         return dto(eval, pendingFor(List.of(eval)));
     }
 
@@ -216,7 +246,7 @@ public class ForcedNeedService {
     private static FilmNeedDto dto(Eval eval, Pending due) {
         NeedRow row = eval.row();
         ForcedFacts facts = new ForcedFacts(eval.decision().need() == Need.NEEDED, eval.served(),
-            row.imdbId() != null, eval.openSubtitles(), due.withDueEdition().contains(row.id()));
+            row.imdbId() != null, eval.openSubtitles(), due.due().contains(row.id()));
         return new FilmNeedDto(row.id(), row.title(), row.year(), eval.decision().need().name(),
             eval.decision().reason().name(), row.owner() == null ? null : row.owner().name(), row.originalLanguage(),
             eval.spoken(), eval.served(), eval.openSubtitles(), eval.openSubtitlesAt(),

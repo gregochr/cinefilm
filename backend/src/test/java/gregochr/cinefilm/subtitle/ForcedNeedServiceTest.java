@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
+import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
@@ -130,20 +131,24 @@ class ForcedNeedServiceTest {
         when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(2L));
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of(3L));
         Film two = withEdition(stored(2L, "en", "en", null));
-        when(editions.findWithFilesByFilmIdIn(Set.of(2L))).thenReturn(two.getEditions());
-        playbackServes(two, true);
+        Film three = withEdition(stored(3L, "en", "en", null));
+        List<Edition> both = List.of(two.getEditions().get(0), three.getEditions().get(0));
+        when(editions.findWithFilesByFilmIdIn(Set.of(2L, 3L))).thenReturn(both);
+        when(forcedSubtitles.playableEditionIds(both))
+            .thenReturn(Set.of(both.get(0).getId(), both.get(1).getId()));
 
         NeedListDto list = service.list();
 
         assertThat(list.films()).extracting(FilmNeedDto::filmId).containsExactly(1L, 2L, 3L);
-        assertThat(list.films()).extracting(FilmNeedDto::hasForcedSubtitle).containsExactly(false, true, false);
+        // The embedded forced track of film 3 counts as a subtitle playback serves, as the contract says.
+        assertThat(list.films()).extracting(FilmNeedDto::hasForcedSubtitle).containsExactly(false, true, true);
         assertThat(list.films()).extracting(FilmNeedDto::reason)
             .containsExactly("ENGLISH_ONLY", "SIDECAR", "EMBEDDED_FORCED");
         verify(films).findNeedRows();
         verify(sidecars).findFilmIdsWithPresentSidecar(SubtitleKind.FORCED);
         verify(sidecars).findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED);
         verify(files).findFilmIdsWithEmbeddedForced();
-        verify(editions).findWithFilesByFilmIdIn(Set.of(2L));
+        verify(editions).findWithFilesByFilmIdIn(Set.of(2L, 3L));
         verifyNoMoreInteractions(films, sidecars, files);
     }
 
@@ -234,8 +239,10 @@ class ForcedNeedServiceTest {
         when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L));
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of(2L));
         Film hasFile = withEdition(stored(1L, "en", "en", null));
-        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(hasFile.getEditions());
-        playbackServes(hasFile, true);
+        Film embeddedOnly = withEdition(stored(2L, "en", "en", null));
+        List<Edition> asked = List.of(hasFile.getEditions().get(0), embeddedOnly.getEditions().get(0));
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L, 2L))).thenReturn(asked);
+        when(forcedSubtitles.playableEditionIds(asked)).thenReturn(Set.of(asked.get(0).getId(), asked.get(1).getId()));
         when(films.findNeedRows()).thenReturn(List.of(
             english(1, "Has file"), english(2, "Embedded only"),
             row(3, "Chosen needed", 30L, "en", "en", ASKED, ForcedNeedChoice.NEEDED),
@@ -247,7 +254,7 @@ class ForcedNeedServiceTest {
 
         CountsDto counts = service.list().counts();
 
-        assertThat(counts).isEqualTo(new CountsDto(3, 2, 1, 2, 3, 2, 0));
+        assertThat(counts).isEqualTo(new CountsDto(3, 1, 1, 2, 3, 1, 0));
     }
 
     @Test
@@ -565,11 +572,56 @@ class ForcedNeedServiceTest {
         when(films.findByIdForUpdate(7L)).thenReturn(Optional.of(taken));
         when(sidecars.countPresentForFilm(7L, SubtitleKind.FORCED)).thenReturn(0L);
         when(files.countEmbeddedForcedForFilm(7L)).thenReturn(2L);
+        Film withEdition = withEdition(taken);
+        when(editions.findWithFilesByFilmIdIn(List.of(7L))).thenReturn(withEdition.getEditions());
+        playbackServes(withEdition, true);
 
         FilmNeedDto dto = service.choose(7L, null);
 
         assertThat(dto.need()).isEqualTo("NEEDED");
         assertThat(dto.reason()).isEqualTo("EMBEDDED_FORCED");
+        assertThat(dto.hasForcedSubtitle()).isTrue();
+        assertThat(dto.unresolved()).isFalse();
+        assertThat(dto.beingChecked()).isFalse();
+    }
+
+    @Test
+    void anEmbeddedOnlyFilmIsNotInPlayAndHasNeitherFlag() {
+        when(films.findNeedRows()).thenReturn(List.of(english(1, "Embedded only")));
+        when(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED)).thenReturn(List.of());
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of());
+        when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of(1L));
+        Film embedded = withEdition(stored(1L, "en", "en", null));
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(embedded.getEditions());
+        playbackServes(embedded, true);
+
+        NeedListDto list = service.list();
+
+        FilmNeedDto dto = list.films().get(0);
+        assertThat(dto.need()).isEqualTo("NEEDED");
+        assertThat(dto.reason()).isEqualTo("EMBEDDED_FORCED");
+        assertThat(dto.hasForcedSubtitle()).isTrue();
+        assertThat(dto.unresolved()).isFalse();
+        assertThat(dto.beingChecked()).isFalse();
+        assertThat(list.counts().neededMissing()).isZero();
+        assertThat(list.counts().unresolved()).isZero();
+        assertThat(list.counts().beingChecked()).isZero();
+    }
+
+    @Test
+    void theSchedulersNeededIdsAreOnlyTheNeededFilmsAndNeverTouchThePipelineFacts() {
+        when(films.findNeedRows()).thenReturn(List.of(english(1, "Heat"),
+            row(2, "Chosen", 20L, "en", "en", ASKED, ForcedNeedChoice.NEEDED),
+            row(3, "Not", 30L, "en", "en", ASKED, ForcedNeedChoice.NOT_NEEDED)));
+        when(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED)).thenReturn(List.of());
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of());
+        when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of());
+
+        Set<Long> ids = service.neededFilmIds();
+
+        assertThat(ids).containsExactly(2L);
+        ids.add(9L);
+        verifyNoInteractions(pending);
     }
 
     @Test
@@ -634,7 +686,7 @@ class ForcedNeedServiceTest {
     @Test
     void theFlagsAndCountsComeFromTheRuleForEveryState() {
         sevenFilmsInEveryState();
-        when(pending.forced(Map.of(4L, "tt4", 5L, "tt5"))).thenReturn(new Pending(Set.of(), Set.of(4L)));
+        when(pending.forced(Map.of(4L, "tt4", 5L, "tt5"))).thenReturn(new Pending(Set.of(4L)));
 
         NeedListDto list = service.list();
 
@@ -652,7 +704,7 @@ class ForcedNeedServiceTest {
     @Test
     void unresolvedOrBeingCheckedIsExactlyTodaysNeededMissingSet() {
         sevenFilmsInEveryState();
-        when(pending.forced(Map.of(4L, "tt4", 5L, "tt5"))).thenReturn(new Pending(Set.of(), Set.of(4L)));
+        when(pending.forced(Map.of(4L, "tt4", 5L, "tt5"))).thenReturn(new Pending(Set.of(4L)));
 
         NeedListDto list = service.list();
 
@@ -685,7 +737,7 @@ class ForcedNeedServiceTest {
         when(films.findByIdForUpdate(7L)).thenReturn(Optional.of(taken));
         when(sidecars.countPresentForFilm(7L, SubtitleKind.FORCED)).thenReturn(0L);
         when(files.countEmbeddedForcedForFilm(7L)).thenReturn(0L);
-        when(pending.forced(Map.of(7L, "tt9"))).thenReturn(new Pending(Set.of(), Set.of(7L)));
+        when(pending.forced(Map.of(7L, "tt9"))).thenReturn(new Pending(Set.of(7L)));
 
         FilmNeedDto due = service.choose(7L, new ChoiceRequest("NEEDED"));
 

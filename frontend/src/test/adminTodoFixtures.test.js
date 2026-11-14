@@ -92,6 +92,19 @@ describe('the Admin To do fixtures', () => {
       }
     });
 
+    it('a count and the time of its search are both present or both null, as the server sends them', () => {
+      for (const row of rows) {
+        expect(row.openSubtitlesForcedCount === null).toBe(row.openSubtitlesSearchedAt === null);
+      }
+    });
+
+    it('UNSURE only means not searched yet, and an unsure row is not in play', () => {
+      for (const row of rows.filter((r) => r.need === 'UNSURE')) {
+        expect(row.openSubtitlesForcedCount).toBeNull();
+        expect(row.unresolved || row.beingChecked).toBe(false);
+      }
+    });
+
     it('has a row in each state, and being checked means files are online', () => {
       expect(rows.filter((r) => r.unresolved).map((r) => r.title)).toEqual(['Taken']);
       expect(rows.filter((r) => r.beingChecked).map((r) => r.title)).toEqual(['Das Boot']);

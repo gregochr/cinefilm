@@ -169,4 +169,28 @@ class FilmOpenSubtitlesIntegrationTest extends IntegrationTestBase {
         assertThat(cleared.getOsFullSearchedImdbId()).isNull();
         assertThat(cleared.getOsFullSearchedAt()).isNull();
     }
+
+    @Test
+    void theFullSearchStatesRunOnPostgresAndSeeAnEmptyArrayAsSearched() {
+        Film none = saved("State Null", "tt0000031");
+        Film empty = saved("State Empty", "tt0000032");
+        Film other = saved("State Other", "tt0000033");
+        Film full = saved("State Full", "tt0000034");
+        Film noId = saved("State No Id", null);
+        assertThat(films.saveOpenSubtitlesFull(empty.getId(), "tt0000032", "[]", NOW)).isEqualTo(1);
+        assertThat(films.saveOpenSubtitlesFull(full.getId(), "tt0000034", "[{\"id\":1,\"fileId\":2}]", NOW))
+            .isEqualTo(1);
+        other.setOsFullSearchedImdbId("tt0000099");
+        other.setOsFullCandidates("[]");
+        films.saveAndFlush(other);
+        entityManager.clear();
+
+        List<FilmRepository.OsFullState> states = films.findOpenSubtitlesFullStates();
+
+        assertThat(states).extracting(FilmRepository.OsFullState::id).contains(none.getId(), empty.getId(),
+            other.getId(), full.getId()).doesNotContain(noId.getId());
+        assertThat(states.stream().filter(FilmRepository.OsFullState::searched)
+            .map(FilmRepository.OsFullState::id)).contains(empty.getId(), full.getId())
+            .doesNotContain(none.getId(), other.getId());
+    }
 }

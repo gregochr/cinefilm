@@ -3,14 +3,12 @@ package gregochr.cinefilm.subtitle;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.FilmRepository;
+import gregochr.cinefilm.film.FilmRepository.OsBestRef;
 import gregochr.cinefilm.film.FilmRepository.OsFullRef;
 import gregochr.cinefilm.film.MediaFile;
-import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
-import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.subtitle.ForcedResolver.Resolution;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -20,26 +18,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Which films still have an automatic subtitle download to come: the facts {@code AdminTodoRules} judges "being
- * checked" on. It answers from the same code the download pipeline uses ({@link DownloadPlan},
- * {@link ForcedDownloadService}'s due tests) over editions, downloads and blocks fetched together, so the cost does
- * not grow with the number of films. The daily limit is deliberately not looked at: a download that is due but deferred
- * is still to come.
+ * Which films the download scheduler would download something for: the fact {@code AdminTodoRules} calls "a download is
+ * due". It is the scheduler's own decision, not an approximation of it: for each edition it runs
+ * {@link ForcedDownloadService#fullDueFor} or {@link ForcedDownloadService#dueFor}, the same pure functions
+ * {@link ForcedDownloadService#due()} runs, over the same facts (the film's candidates, the edition's blocks, its
+ * ledger, its downloads and the stored references) loaded together for all the films asked about, so the cost does not
+ * grow with the number of films.
+ *
+ * <p>The editions are the scheduler's editions ({@code findWithFilesByFilmIdIn}, no presence filter), so an edition
+ * whose files are missing counts exactly as it does for the scheduler. The daily limit is deliberately not looked at: a
+ * download that is due but deferred is still to come.
  */
 @Service
 public class PendingDownloads {
-
-    /**
-     * What the pipeline still has for some films.
-     *
-     * @param withCandidate films that have a stored candidate that can still become a download (full only)
-     * @param withDueEdition films that have a present edition due a download with room under the cap
-     */
-    public record Pending(Set<Long> withCandidate, Set<Long> withDueEdition) {
-
-        /** Nothing pending. */
-        public static final Pending NONE = new Pending(Set.of(), Set.of());
-    }
 
     private final FilmRepository films;
     private final EditionRepository editions;
@@ -47,27 +38,39 @@ public class PendingDownloads {
     private final ForcedResolver resolver;
     private final OpenSubtitlesReferenceRepository references;
     private final ForcedDownloadBlockRepository blocks;
+    private final ForcedCheckCandidateRepository ledger;
 
     /** Creates the service. */
     public PendingDownloads(FilmRepository films, EditionRepository editions, SubtitleSidecarRepository sidecars,
                             ForcedResolver resolver, OpenSubtitlesReferenceRepository references,
-                            ForcedDownloadBlockRepository blocks) {
+                            ForcedDownloadBlockRepository blocks, ForcedCheckCandidateRepository ledger) {
         this.films = films;
         this.editions = editions;
         this.sidecars = sidecars;
         this.resolver = resolver;
         this.references = references;
         this.blocks = blocks;
+        this.ledger = ledger;
     }
 
     /**
-     * For films searched for full candidates under their current IMDb id: which still have a candidate that can become
-     * a download (not spent: {@link DownloadPlan#toFetch}, whose spent test is {@link DownloadPlan#promotable}), and
-     * which have a present edition that is {@link DownloadPlan#fullDue} with room under
-     * {@value DownloadPlan#MAX_DOWNLOADS}.
+     * What the scheduler would do for some films.
      *
-     * @param imdbIds the films to ask about, by id, with their current IMDb id
-     * @return the films with a usable candidate, and the films with a due edition with room
+     * @param due the films for which some edition would be given a download
+     */
+    public record Pending(Set<Long> due) {
+
+        /** Nothing pending. */
+        public static final Pending NONE = new Pending(Set.of());
+    }
+
+    /**
+     * Of these films, those the scheduler would download a full English subtitle for: some edition would come back from
+     * {@link ForcedDownloadService#fullDueFor} (due, under the cap, and with a candidate left after blocks, the ledger
+     * and spent references).
+     *
+     * @param imdbIds the films to ask about (shown, no full subtitle playing, searched), by id
+     * @return the films with a full download to come
      */
     @Transactional(readOnly = true)
     public Pending full(Map<Long, String> imdbIds) {
@@ -83,77 +86,64 @@ public class PendingDownloads {
         if (candidates.isEmpty()) {
             return Pending.NONE;
         }
-        Map<Long, Map<String, Map<Long, OpenSubtitlesReference>>> stored = storedByFilm(candidates.keySet());
-        Set<Long> withCandidate = new HashSet<>();
-        candidates.forEach((id, ref) -> {
-            List<OpenSubtitlesResult> single = OpenSubtitlesResult.listFromJson(ref.osFullCandidates()).stream()
-                .filter(OpenSubtitlesResult::isSingleFile).toList();
-            Map<Long, OpenSubtitlesReference> byFile = stored.getOrDefault(id, Map.of())
-                .getOrDefault(ref.imdbId(), Map.of());
-            if (!DownloadPlan.toFetch(single, Set.of(), Set.of(), byFile, SubtitleKind.FULL).isEmpty()) {
-                withCandidate.add(id);
-            }
-        });
-        List<Edition> fetched = presentEditions(candidates.keySet());
+        List<Edition> fetched = editions.findWithFilesByFilmIdIn(candidates.keySet());
         List<Long> editionIds = fetched.stream().map(Edition::getId).toList();
-        List<SubtitleSidecar> allFull = sidecars.findByMediaFileIdInAndKind(partIds(fetched), SubtitleKind.FULL);
-        List<SubtitleSidecar> downloads = allFull.stream().filter(SubtitleSidecar::isDownload).toList();
+        List<Long> partIds = fetched.stream().flatMap(e -> e.originalParts().stream()).map(MediaFile::getId).toList();
         List<ForcedDownloadBlock> allBlocks = blocks.findByEditionIdInAndKind(editionIds, SubtitleKind.FULL);
-        Set<Long> withDue = new HashSet<>();
+        List<ForcedCheckCandidate> allLedger = ledger.findByEditionIdInAndKind(editionIds, SubtitleKind.FULL);
+        List<SubtitleSidecar> allFull = sidecars.findByMediaFileIdInAndKind(partIds, SubtitleKind.FULL);
+        Map<Long, Map<String, Map<Long, OpenSubtitlesReference>>> stored = storedByFilm(candidates.keySet());
+        Set<Long> due = new HashSet<>();
         for (Edition edition : fetched) {
-            Long filmId = edition.getFilm().getId();
-            String imdbId = candidates.get(filmId).imdbId();
-            if (DownloadPlan.fullDue(ForcedDownloadService.hasOwnerFile(edition, allFull),
-                ForcedDownloadService.hasDownload(edition, allFull))
-                && DownloadPlan.remaining(ForcedDownloadService.skippedFileIds(edition, imdbId, SubtitleKind.FULL,
-                    allBlocks, downloads)) > 0) {
-                withDue.add(filmId);
+            OsFullRef ref = candidates.get(edition.getFilm().getId());
+            if (ForcedDownloadService.fullDueFor(edition, ref, allBlocks, allLedger, allFull,
+                stored.getOrDefault(ref.id(), Map.of()).getOrDefault(ref.imdbId(), Map.of())) != null) {
+                due.add(ref.id());
             }
         }
-        return new Pending(withCandidate, withDue);
+        return new Pending(due);
     }
 
     /**
-     * Which of these films (whose need is shown, with no forced subtitle playing, and that OpenSubtitles had forced
-     * files for) have a present edition that is due a forced download ({@link DownloadPlan#kind}) with room under
-     * {@value DownloadPlan#MAX_DOWNLOADS}.
+     * Of these films, those the scheduler would download a forced subtitle for: they have candidates from a search of
+     * their current IMDb id, and some edition would come back from {@link ForcedDownloadService#dueFor} (due, a
+     * single-file candidate or a promotion left after blocks, the ledger and spent references, under the cap).
      *
-     * @param imdbIds the films to ask about, by id, with their current IMDb id
-     * @return the films with a due edition with room ({@code withCandidate} is empty)
+     * @param imdbIds the films to ask about (shown, no forced subtitle playing, files found online), by id
+     * @return the films with a forced download to come
      */
     @Transactional(readOnly = true)
     public Pending forced(Map<Long, String> imdbIds) {
         if (imdbIds.isEmpty()) {
             return Pending.NONE;
         }
-        List<Edition> fetched = presentEditions(imdbIds.keySet());
-        Map<Long, Resolution> resolved = resolver.resolve(fetched);
-        List<Long> editionIds = fetched.stream().map(Edition::getId).toList();
-        List<ForcedDownloadBlock> allBlocks = blocks.findByEditionIdInAndKind(editionIds, SubtitleKind.FORCED);
-        List<SubtitleSidecar> downloads = sidecars.findByMediaFileIdInAndKind(partIds(fetched), SubtitleKind.FORCED)
-            .stream().filter(SubtitleSidecar::isDownload).toList();
-        Set<Long> withDue = new HashSet<>();
-        for (Edition edition : fetched) {
-            Long filmId = edition.getFilm().getId();
-            if (ForcedDownloadService.kind(resolved.get(edition.getId())).isPresent()
-                && DownloadPlan.remaining(ForcedDownloadService.skippedFileIds(edition, imdbIds.get(filmId),
-                    SubtitleKind.FORCED, allBlocks, downloads)) > 0) {
-                withDue.add(filmId);
+        Map<Long, OsBestRef> best = new HashMap<>();
+        for (OsBestRef ref : films.findOpenSubtitlesBest()) {
+            if (imdbIds.containsKey(ref.id()) && ref.osCandidates() != null) {
+                best.put(ref.id(), ref);
             }
         }
-        return new Pending(Set.of(), withDue);
-    }
-
-    /** The films' editions whose part 1 is on disk, with their files. */
-    private List<Edition> presentEditions(Collection<Long> filmIds) {
-        return editions.findWithFilesByFilmIdIn(filmIds).stream().filter(e -> {
-            MediaFile part1 = e.originalFile();
-            return part1 != null && part1.getPresence() == Presence.PRESENT;
-        }).toList();
-    }
-
-    private static List<Long> partIds(List<Edition> fetched) {
-        return fetched.stream().flatMap(e -> e.originalParts().stream()).map(MediaFile::getId).toList();
+        if (best.isEmpty()) {
+            return Pending.NONE;
+        }
+        List<Edition> fetched = editions.findWithFilesByFilmIdIn(best.keySet());
+        Map<Long, Resolution> resolved = resolver.resolve(fetched);
+        List<Long> editionIds = fetched.stream().map(Edition::getId).toList();
+        List<Long> partIds = fetched.stream().flatMap(e -> e.originalParts().stream()).map(MediaFile::getId).toList();
+        List<ForcedDownloadBlock> allBlocks = blocks.findByEditionIdInAndKind(editionIds, SubtitleKind.FORCED);
+        List<ForcedCheckCandidate> allLedger = ledger.findByEditionIdInAndKind(editionIds, SubtitleKind.FORCED);
+        List<SubtitleSidecar> downloads = sidecars.findByMediaFileIdInAndKind(partIds, SubtitleKind.FORCED).stream()
+            .filter(SubtitleSidecar::isDownload).toList();
+        Map<Long, Map<String, Map<Long, OpenSubtitlesReference>>> stored = storedByFilm(best.keySet());
+        Set<Long> due = new HashSet<>();
+        for (Edition edition : fetched) {
+            OsBestRef ref = best.get(edition.getFilm().getId());
+            if (ForcedDownloadService.dueFor(edition, resolved.get(edition.getId()), ref, allBlocks, allLedger,
+                downloads, stored.getOrDefault(ref.id(), Map.of()).getOrDefault(ref.imdbId(), Map.of())) != null) {
+                due.add(ref.id());
+            }
+        }
+        return new Pending(due);
     }
 
     private Map<Long, Map<String, Map<Long, OpenSubtitlesReference>>> storedByFilm(Set<Long> filmIds) {

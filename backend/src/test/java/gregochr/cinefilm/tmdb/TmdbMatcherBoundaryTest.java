@@ -133,4 +133,15 @@ class TmdbMatcherBoundaryTest {
         assertThat(TmdbMatcher.distance("ab", "xyz")).isEqualTo(3);
         assertThat(TmdbMatcher.distance("flaw", "lawn")).isEqualTo(2);
     }
+
+    @Test
+    void aStoredScoreIsFlooredNotRoundedSoItNeverOverclaimsTheAcceptTest() {
+        // An exact title (50) plus a popularity tie-break of 0.95 is 50.95: stored as 50, not 51.
+        when(tmdb.search("Short", null)).thenReturn(List.of(hit(1, "Short", 2000, 950)));
+        when(tmdb.movie(1)).thenReturn(Optional.empty());
+
+        MatchOutcome outcome = matcher.match(new TitleGuess("Short", null), 0);
+
+        assertThat(outcome.candidates()).singleElement().satisfies(c -> assertThat(c.score()).isEqualTo(50));
+    }
 }

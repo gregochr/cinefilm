@@ -236,7 +236,7 @@ const FORCED_IF_NEEDED = {
   2: { unresolved: true, beingChecked: false },
   3: { unresolved: false, beingChecked: true },
   4: NOT_IN_PLAY,
-  5: { unresolved: true, beingChecked: false },
+  5: { unresolved: false, beingChecked: true },
   6: { unresolved: true, beingChecked: false },
   7: { unresolved: true, beingChecked: false },
 };

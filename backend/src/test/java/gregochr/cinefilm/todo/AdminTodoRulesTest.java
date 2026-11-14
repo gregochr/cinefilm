@@ -28,14 +28,18 @@ class AdminTodoRulesTest {
     @Test
     void theTopScoreMustReachTheAcceptScore() {
         assertThat(AdminTodoRules.confident(List.of(59, 10))).isFalse();
-        assertThat(AdminTodoRules.confident(List.of(60, 50))).isTrue();
+        assertThat(AdminTodoRules.confident(List.of(60, 48))).isTrue();
         assertThat(AdminTodoRules.confident(List.of(61, 10))).isTrue();
     }
 
     @Test
-    void theLeadOverTheSecondMustReachTheMargin() {
-        assertThat(AdminTodoRules.confident(List.of(80, 71))).isFalse();
-        assertThat(AdminTodoRules.confident(List.of(80, 70))).isTrue();
+    void theLeadMustExceedTheMarginByOneBecauseStoredScoresAreFloored() {
+        // Raw 75.2 and 65.4 (a real lead of 9.8, which the matcher refuses) are stored as 75 and 65.
+        assertThat(AdminTodoRules.confident(List.of(75, 65))).isFalse();
+        // Raw 70.0 and 60.0 would be accepted, but floored whole numbers cannot prove it: the safe side.
+        assertThat(AdminTodoRules.confident(List.of(70, 60))).isFalse();
+        assertThat(AdminTodoRules.confident(List.of(71, 60))).isTrue();
+        assertThat(AdminTodoRules.confident(List.of(80, 70))).isFalse();
         assertThat(AdminTodoRules.confident(List.of(80, 69))).isTrue();
     }
 
@@ -54,7 +58,7 @@ class AdminTodoRulesTest {
     @Test
     void theOrderOfTheScoresDoesNotMatter() {
         assertThat(AdminTodoRules.confident(List.of(50, 80, 65))).isTrue();
-        assertThat(AdminTodoRules.confident(List.of(75, 80, 65))).isFalse();
+        assertThat(AdminTodoRules.confident(List.of(71, 80, 65))).isFalse();
     }
 
     @Test
@@ -64,50 +68,42 @@ class AdminTodoRulesTest {
 
     // ---- full subtitles ----
 
-    /** Needed, nothing playing, an IMDb id, searched, a candidate and a due edition: being checked. */
-    private static FullFacts full(boolean needed, boolean plays, boolean imdb, boolean searched, boolean candidate,
-                                  boolean due) {
-        return new FullFacts(needed, plays, imdb, searched, candidate, due);
+    /** Needed, nothing playing, an IMDb id, searched, and the scheduler would download something: being checked. */
+    private static FullFacts full(boolean needed, boolean plays, boolean imdb, boolean searched, boolean due) {
+        return new FullFacts(needed, plays, imdb, searched, due);
     }
 
     @Test
     void aFullRowWithNoImdbIdIsUnresolvedWhateverElse() {
-        FullFacts facts = full(true, false, false, true, true, true);
+        FullFacts facts = full(true, false, false, true, true);
 
         assertThat(AdminTodoRules.unresolvedFull(facts)).isTrue();
         assertThat(AdminTodoRules.beingCheckedFull(facts)).isFalse();
-        FullFacts notSearched = full(true, false, false, false, false, false);
+        FullFacts notSearched = full(true, false, false, false, false);
         assertThat(AdminTodoRules.unresolvedFull(notSearched)).isTrue();
         assertThat(AdminTodoRules.beingCheckedFull(notSearched)).isFalse();
     }
 
     @Test
     void aFullRowNotYetSearchedForItsCurrentImdbIdIsBeingChecked() {
-        FullFacts facts = full(true, false, true, false, false, false);
+        FullFacts facts = full(true, false, true, false, false);
 
         assertThat(AdminTodoRules.beingCheckedFull(facts)).isTrue();
         assertThat(AdminTodoRules.unresolvedFull(facts)).isFalse();
     }
 
     @Test
-    void aFullRowSearchedWithNoCandidatesIsUnresolved() {
-        FullFacts facts = full(true, false, true, true, false, true);
+    void aFullRowSearchedWhereTheSchedulerWouldDownloadNothingIsUnresolved() {
+        // No candidates, every candidate blocked or already compared, or every edition at the cap.
+        FullFacts facts = full(true, false, true, true, false);
 
         assertThat(AdminTodoRules.unresolvedFull(facts)).isTrue();
         assertThat(AdminTodoRules.beingCheckedFull(facts)).isFalse();
     }
 
     @Test
-    void aFullRowWithCandidatesButEveryEditionAtTheCapIsUnresolved() {
-        FullFacts facts = full(true, false, true, true, true, false);
-
-        assertThat(AdminTodoRules.unresolvedFull(facts)).isTrue();
-        assertThat(AdminTodoRules.beingCheckedFull(facts)).isFalse();
-    }
-
-    @Test
-    void aFullRowWithCandidatesAndAnEditionUnderTheCapIsBeingChecked() {
-        FullFacts facts = full(true, false, true, true, true, true);
+    void aFullRowSearchedWhereTheSchedulerWouldDownloadSomethingIsBeingChecked() {
+        FullFacts facts = full(true, false, true, true, true);
 
         assertThat(AdminTodoRules.beingCheckedFull(facts)).isTrue();
         assertThat(AdminTodoRules.unresolvedFull(facts)).isFalse();
@@ -116,7 +112,7 @@ class AdminTodoRulesTest {
     @Test
     void aFullRowThatPlaysASubtitleIsNeitherWhateverTheRest() {
         for (boolean searched : new boolean[] {true, false}) {
-            FullFacts facts = full(true, true, true, searched, true, true);
+            FullFacts facts = full(true, true, true, searched, true);
 
             assertThat(AdminTodoRules.inPlayFull(facts)).isFalse();
             assertThat(AdminTodoRules.unresolvedFull(facts)).isFalse();
@@ -127,8 +123,8 @@ class AdminTodoRulesTest {
     @Test
     void aFullRowThatIsNotNeededIsNeitherWhateverTheRest() {
         // UNKNOWN, UNSURE and NOT_NEEDED all arrive as needed = false.
-        FullFacts facts = full(false, false, false, false, false, false);
-        FullFacts withEverything = full(false, false, true, false, true, true);
+        FullFacts facts = full(false, false, false, false, false);
+        FullFacts withEverything = full(false, false, true, false, true);
 
         for (FullFacts f : List.of(facts, withEverything)) {
             assertThat(AdminTodoRules.inPlayFull(f)).isFalse();
@@ -144,16 +140,14 @@ class AdminTodoRulesTest {
             for (boolean plays : both) {
                 for (boolean imdb : both) {
                     for (boolean searched : both) {
-                        for (boolean candidate : both) {
-                            for (boolean due : both) {
-                                FullFacts f = full(needed, plays, imdb, searched, candidate, due);
-                                boolean inPlay = needed && !plays;
-                                assertThat(AdminTodoRules.inPlayFull(f)).isEqualTo(inPlay);
-                                assertThat(AdminTodoRules.unresolvedFull(f) || AdminTodoRules.beingCheckedFull(f))
-                                    .isEqualTo(inPlay);
-                                assertThat(AdminTodoRules.unresolvedFull(f) && AdminTodoRules.beingCheckedFull(f))
-                                    .isFalse();
-                            }
+                        for (boolean due : both) {
+                            FullFacts f = full(needed, plays, imdb, searched, due);
+                            boolean inPlay = needed && !plays;
+                            assertThat(AdminTodoRules.inPlayFull(f)).isEqualTo(inPlay);
+                            assertThat(AdminTodoRules.unresolvedFull(f) || AdminTodoRules.beingCheckedFull(f))
+                                .isEqualTo(inPlay);
+                            assertThat(AdminTodoRules.unresolvedFull(f) && AdminTodoRules.beingCheckedFull(f))
+                                .isFalse();
                         }
                     }
                 }
