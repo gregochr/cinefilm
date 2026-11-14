@@ -65,7 +65,7 @@ that depend on an answer say so and are not started until it comes.
 - **Data and UI stay separable.** Labels, hints and pure rules live in `frontend/src/state/` (no JSX).
 - **Button rule:** label says what it does to what; "…" means it opens something first. A hint is a visible `<p>`
   (12px, `#8A8173`, right-aligned in rows, left on phone) linked by `aria-describedby`. On the Admin pages only "Scan
-  library now" is `variant="primary"`; a dialog's own confirm button (Fix match, Edit editions, attach) keeps its
+  library now" is `variant="primary"`; a dialog's own confirm button (Fix match, Edit editions) keeps its
   primary style. This reads README's "In Admin, only Scan library now is primary" as the Admin pages' own buttons;
   dialogs keep their confirm button's style.
 - **Copy is exact**, and `adminCopy.js` notes each string's source (`07`, an AR board, the README, or the plan's owner answers). `07` gives no

@@ -123,8 +123,6 @@ const CASES = [
     path: '/admin/subtitles',
     items: [{ ...plain, ownerAttached: true, offsetMs: 1000 }],
     steps: openCuesAndAttach,
-    // The attach form's own confirm button keeps its primary style, like a dialog's (plan, Shared rules).
-    confirm: 'Attach',
     buttons: [
       ...SUBTITLE_TABS,
       'Move Heat.en.forced.srt to another film',
@@ -187,7 +185,7 @@ describe('Admin: the only amber button', () => {
       // A style-only rule has no role, state or text to query, so this reads the variant class
       // (the toHaveClass exception in test-standards.md, "Queries").
       for (const button of rendered) {
-        if (button.textContent === 'Scan library now' || c.confirm === button.textContent) {
+        if (button.textContent === 'Scan library now') {
           expect(button).toHaveClass('btn--primary');
         } else {
           expect(button, button.textContent).not.toHaveClass('btn--primary');
