@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -62,6 +63,28 @@ describe('Home hero', () => {
       'href',
       '/films/5/play',
     );
+  });
+});
+
+describe('Home hero backdrop crop', () => {
+  it('crops the backdrop from near the top so heads stay in frame (real stylesheet)', async () => {
+    const style = document.createElement('style');
+    style.textContent = readFileSync('src/styles/browse.css', 'utf8');
+    document.head.appendChild(style);
+    try {
+      homeWith({
+        hero: film(1, 'Taken', {
+          backdropPath: '/taken.jpg',
+          progress: { positionMs: 1000, runtimeMs: 6000000 },
+        }),
+      });
+      renderApp('/');
+      const hero = await screen.findByRole('region', { name: 'Resume Taken' });
+      const backdrop = within(within(hero).getByTestId('art')).getByAltText('');
+      expect(getComputedStyle(backdrop).objectPosition).toBe('50% 15%');
+    } finally {
+      style.remove();
+    }
   });
 });
 
