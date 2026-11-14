@@ -1,6 +1,7 @@
 package gregochr.cinefilm.credits;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 /**
  * The binary Netpbm parser {@link PgmReader} ({@code P5}) and {@link PpmReader} ({@code P6}) share: a header of magic
@@ -10,19 +11,24 @@ import java.nio.charset.StandardCharsets;
 final class Netpbm {
 
     /**
-     * What was read: the size and the pixel bytes. A class rather than a record because a record over an array would
-     * compare and print the array by identity; the bytes are handed out as a copy, as {@link GreyFrame} does.
+     * What was read: the size and where the pixel bytes lie in the file. A class rather than a record because a
+     * record over an array would compare and print the array by identity; the bytes are handed out as a copy, as
+     * {@link GreyFrame} does, and the file's bytes are never changed.
      */
     static final class Image {
         private final int width;
         private final int height;
-        private final byte[] pixels;
+        private final byte[] data;
+        private final int offset;
+        private final int length;
 
-        /** Takes ownership of the array, which the parser has just filled and keeps no reference to. */
-        private Image(int width, int height, byte[] pixels) {
+        /** Refers to the file's bytes without copying them; the caller must not change the file while this is used. */
+        private Image(int width, int height, byte[] data, int offset, int length) {
             this.width = width;
             this.height = height;
-            this.pixels = pixels;
+            this.data = data;
+            this.offset = offset;
+            this.length = length;
         }
 
         int width() {
@@ -33,9 +39,9 @@ final class Netpbm {
             return height;
         }
 
-        /** A copy of the pixel bytes. */
+        /** A new copy of the pixel bytes on every call. */
         byte[] pixels() {
-            return pixels.clone();
+            return Arrays.copyOfRange(data, offset, offset + length);
         }
     }
 
@@ -83,9 +89,7 @@ final class Netpbm {
         if (available > expected) {
             throw new IllegalArgumentException(name + " has " + (available - expected) + " bytes after the pixels");
         }
-        byte[] pixels = new byte[expected];
-        System.arraycopy(data, cursor.position(), pixels, 0, expected);
-        return new Image(width, height, pixels);
+        return new Image(width, height, data, cursor.position(), expected);
     }
 
     /** Walks the header, skipping whitespace and {@code #} comments between values. */

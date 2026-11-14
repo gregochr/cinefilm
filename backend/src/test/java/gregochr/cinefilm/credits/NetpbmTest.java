@@ -33,6 +33,21 @@ class NetpbmTest {
     }
 
     @Test
+    void everyPixelsCallIsAFreshCopyAndTheInputFileIsNeverChanged() {
+        byte[] data = file("P5\n2 2\n255\n", 4);
+        byte[] before = data.clone();
+
+        Netpbm.Image image = Netpbm.read(data, "PGM", "P5", 1);
+        byte[] first = image.pixels();
+        byte[] second = image.pixels();
+        first[0] = 99;
+
+        assertThat(second).isNotSameAs(first).containsExactly(0, 1, 2, 3);
+        assertThat(image.pixels()).containsExactly(0, 1, 2, 3);
+        assertThat(data).isEqualTo(before);
+    }
+
+    @Test
     void theNameAndMagicOfTheFormatAppearInTheMessages() {
         assertThatThrownBy(() -> Netpbm.read(file("P6\n1 1\n255\n", 3), "PGM", "P5", 1))
             .isInstanceOf(IllegalArgumentException.class)
