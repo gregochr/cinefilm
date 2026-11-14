@@ -58,4 +58,30 @@ public final class HealthDtos {
     /** Response of {@code GET /api/admin/playback-health/chart}: the sessions, the newest last. */
     public record ChartList(List<ChartRow> sessions) {
     }
+
+    /**
+     * Film sessions of the last 30 days, for the Admin summary.
+     *
+     * @param films sessions that started in the window and watched at least
+     *     {@link PlaybackHealthService#FILM_SESSION_MIN_MS}
+     * @param smooth those of them without a problem
+     */
+    public record PlaybackCounts(long films, long smooth) {
+    }
+
+    /**
+     * One viewing that reported in the last two minutes, for the Admin summary's "Playing now".
+     *
+     * @param playbackId the viewing's id
+     * @param editionId the edition being played
+     * @param filmTitle the film's title, as copied at the first report
+     * @param device the browser's user agent as reported, or null when the stored report cannot be read or carries
+     *     none; the client words it
+     * @param environment {@code home}, {@code train}, {@code away} or null when the report named none
+     * @param quality the rung played in the report's last minute ({@code original}, {@code 1080p} ... {@code 240p}),
+     *     else the quality the viewer chose ({@code auto} included); null when the stored report cannot be read
+     */
+    public record PlayingNow(String playbackId, long editionId, String filmTitle, String device, String environment,
+                             String quality) {
+    }
 }

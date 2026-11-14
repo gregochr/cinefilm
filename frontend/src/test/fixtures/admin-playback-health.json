@@ -1,6 +1,54 @@
 {
   "playbacks": [
     {
+      "playbackId": "7d1e4a92-3b5c-4f08-a6d1-9c2e0b8f4a17",
+      "filmId": 1,
+      "filmTitle": "Heat",
+      "editionId": 11,
+      "startedAt": "2026-11-14T11:58:00Z",
+      "updatedAt": "2026-11-14T12:00:00Z",
+      "report": {
+        "seq": 3,
+        "editionId": 11,
+        "elapsedMs": 120000,
+        "environment": "home",
+        "operator": "AS5089 Virgin Media Limited",
+        "latencyMs": 12,
+        "engine": "hlsjs",
+        "quality": "auto",
+        "autoplayRefused": false,
+        "startupMs": 900,
+        "watchedMs": 118000,
+        "stallCount": 0,
+        "stallMs": 0,
+        "longestStallMs": 0,
+        "seekCount": 0,
+        "seekWaitMs": 0,
+        "reloadCount": 0,
+        "reloadMs": 0,
+        "reconnectCount": 0,
+        "reconnectMs": 0,
+        "recoveries": 0,
+        "fellBack": false,
+        "stepsDown": 0,
+        "stepsUp": 0,
+        "netErrors": 0,
+        "timeouts": 0,
+        "kbpsLow": 5200,
+        "kbpsMedian": 7400,
+        "kbpsHigh": 9100,
+        "kbpsSamples": 12,
+        "rungMs": {
+          "720p": 118000
+        },
+        "client": {
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+          "screen": "1512x982",
+          "cores": 8
+        }
+      }
+    },
+    {
       "playbackId": "3f6c1d2e-8a4b-4c7e-9b15-2d0e6f7a1c34",
       "filmId": 1,
       "filmTitle": "Heat",

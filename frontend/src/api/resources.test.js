@@ -152,6 +152,12 @@ describe('image URLs', () => {
     expect(editionsApi.stillUrl(11, -5)).toBe('/api/editions/11/still?atMs=0');
   });
 
+  it('reads the Admin summary with GET', async () => {
+    const last = stubFetch();
+    await adminApi.summary();
+    expect(last()).toMatchObject({ path: '/api/admin/summary', method: 'GET' });
+  });
+
   it('reads the transcoding state and stops a session with DELETE', async () => {
     const last = stubFetch();
     await adminApi.transcoding();

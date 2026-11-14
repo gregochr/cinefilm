@@ -1,0 +1,17 @@
+{
+  "todo": { "pickFilm": 2, "severalFiles": 2, "fullMissing": 1, "forcedQuestion": 1 },
+  "subtitlesUnresolved": 2,
+  "live": 1,
+  "library": { "films": 538, "lastScanFinishedAt": "2026-11-08T12:41:10Z", "lastScanError": null },
+  "playback": { "films": 3, "smooth": 2 },
+  "playingNow": [
+    {
+      "playbackId": "7d1e4a92-3b5c-4f08-a6d1-9c2e0b8f4a17",
+      "editionId": 11,
+      "filmTitle": "Heat",
+      "device": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+      "environment": "home",
+      "quality": "720p"
+    }
+  ]
+}

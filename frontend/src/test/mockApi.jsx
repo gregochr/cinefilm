@@ -10,6 +10,7 @@ import bladeRunner from './fixtures/film-blade-runner.json';
 import heat from './fixtures/film-heat.json';
 import wickerMan from './fixtures/film-wicker-man.json';
 import adminAttention from './fixtures/admin-attention.json';
+import adminSummary from './fixtures/admin-summary.json';
 import adminScan from './fixtures/admin-scan.json';
 import adminGrouping from './fixtures/admin-grouping.json';
 import adminEditions from './fixtures/admin-editions.json';
@@ -96,6 +97,7 @@ export function defaultRoute(method, url) {
   if (path === '/api/admin/ratings/refresh')
     return json({ ...adminScan, ratingsRunning: true }, 202);
   if (path === '/api/admin/attention') return json(adminAttention);
+  if (path === '/api/admin/summary') return json(adminSummary);
   if (path === '/api/admin/grouping-report') return json(adminGrouping);
   if (/^\/api\/admin\/films\/\d+\/match$/.test(path)) {
     return method === 'POST' ? json({ filmId: 31, joined: false }) : json(adminMatch);
