@@ -9,8 +9,34 @@ import java.nio.charset.StandardCharsets;
  */
 final class Netpbm {
 
-    /** What was read: the size and a fresh copy of the pixel bytes. */
-    record Image(int width, int height, byte[] pixels) {
+    /**
+     * What was read: the size and the pixel bytes. A class rather than a record because a record over an array would
+     * compare and print the array by identity; the bytes are handed out as a copy, as {@link GreyFrame} does.
+     */
+    static final class Image {
+        private final int width;
+        private final int height;
+        private final byte[] pixels;
+
+        /** Takes ownership of the array, which the parser has just filled and keeps no reference to. */
+        private Image(int width, int height, byte[] pixels) {
+            this.width = width;
+            this.height = height;
+            this.pixels = pixels;
+        }
+
+        int width() {
+            return width;
+        }
+
+        int height() {
+            return height;
+        }
+
+        /** A copy of the pixel bytes. */
+        byte[] pixels() {
+            return pixels.clone();
+        }
     }
 
     private Netpbm() {
