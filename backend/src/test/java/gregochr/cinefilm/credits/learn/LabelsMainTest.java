@@ -103,6 +103,22 @@ class LabelsMainTest {
     }
 
     @Test
+    void eachMalformedPreviousManifestExitsOneWithOneLineAndWritesNothing() throws IOException {
+        Path bad = temp.resolve("previous.json");
+        String dev = "{\"film_id\":7,\"unit_key\":\"a\",\"side\":\"dev\",\"fold\":";
+        for (String json : List.of("{}", "null", "{\"films\":[{\"film_id\":7,\"unit_key\":\"a\"}]}",
+            "{\"films\":[" + dev + "null}]}", "{\"films\":[" + dev + "1}," + dev + "1}]}")) {
+            Files.writeString(bad, json);
+            errBytes.reset();
+
+            assertThat(run(args(temp.resolve("out"), "--previous-split", bad.toString()))).as(json).isEqualTo(1);
+            assertThat(errBytes.toString(StandardCharsets.UTF_8).lines().toList()).as(json).hasSize(1).first()
+                .asString().startsWith("labels: IllegalArgumentException: previous split ");
+        }
+        assertThat(temp.resolve("out")).doesNotExist();
+    }
+
+    @Test
     void aBadPreviousManifestExitsNonZeroWithOneLine() throws IOException {
         Path bad = temp.resolve("previous.json");
         Files.writeString(bad, "{\"films\": 7}");

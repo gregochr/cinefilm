@@ -72,7 +72,12 @@ final class ExportReader {
 
     private static Integer optionalInt(List<String> fields, int column, int line) {
         Long value = optionalLong(fields, column, line);
-        return value == null ? null : Math.toIntExact(value);
+        try {
+            return value == null ? null : Math.toIntExact(value);
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException("export row " + line + ": " + COLUMNS.get(column)
+                + " is not a number", e);
+        }
     }
 
     private static Boolean bool(List<String> fields, int column, int line) {

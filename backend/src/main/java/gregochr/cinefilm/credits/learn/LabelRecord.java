@@ -19,9 +19,10 @@ import java.util.List;
  * @param film stretches that are film
  * @param leftOut stretches left out, each with its reason
  * @param excluded why the whole file is left out, or null
+ * @param excludedNote the owner's free-text reason from the exclusions file for {@code OWNER_EXCLUDED}, else null
  */
 @JsonPropertyOrder({"media_file_id", "fingerprint", "unit_key", "side", "fold", "target_start_ms", "shift_ms",
-    "leading_island", "credits", "film", "left_out", "excluded"})
+    "leading_island", "credits", "film", "left_out", "excluded", "excluded_note"})
 public record LabelRecord(@JsonProperty("media_file_id") long mediaFileId,
                           @JsonProperty("fingerprint") String fingerprint,
                           @JsonProperty("unit_key") String unitKey, @JsonProperty("side") Side side,
@@ -30,5 +31,6 @@ public record LabelRecord(@JsonProperty("media_file_id") long mediaFileId,
                           @JsonProperty("leading_island") Boolean leadingIsland,
                           @JsonProperty("credits") List<Span> credits, @JsonProperty("film") List<Span> film,
                           @JsonProperty("left_out") List<LeftOut> leftOut,
-                          @JsonProperty("excluded") ExcludeReason excluded) {
+                          @JsonProperty("excluded") ExcludeReason excluded,
+                          @JsonProperty("excluded_note") String excludedNote) {
 }

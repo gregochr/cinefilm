@@ -32,6 +32,9 @@ final class CsvReader {
                     field.append('"');
                     i++;
                 } else {
+                    if (i + 1 < length && "\r\n,".indexOf(text.charAt(i + 1)) < 0) {
+                        throw new IllegalArgumentException("CSV has text after a closing quote");
+                    }
                     quoted = false;
                 }
             } else if (c == '"') {

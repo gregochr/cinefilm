@@ -77,7 +77,8 @@ class LabelsJobTest {
             + "\"leading_island\":false,\"credits\":[[4805000,5395000]],\"film\":[[3900000,4795000]],"
             + "\"left_out\":[{\"from_ms\":4795000,\"to_ms\":4805000,\"reason\":\"BOUNDARY\"},"
             + "{\"from_ms\":5395000,\"to_ms\":5405000,\"reason\":\"BOUNDARY\"},"
-            + "{\"from_ms\":5405000,\"to_ms\":6000000,\"reason\":\"AFTER_LAST_CREDITS\"}],\"excluded\":null},");
+            + "{\"from_ms\":5405000,\"to_ms\":6000000,\"reason\":\"AFTER_LAST_CREDITS\"}],\"excluded\":null,"
+            + "\"excluded_note\":null},");
     }
 
     @Test
@@ -87,7 +88,7 @@ class LabelsJobTest {
         assertThat(lines(temp.resolve("labels-2026-11-13.json")).get(5)).isEqualTo(
             "{\"media_file_id\":105,\"fingerprint\":\"1005:1700000000000\",\"unit_key\":\"cid:8\",\"side\":\"dev\","
             + "\"fold\":4,\"target_start_ms\":null,\"shift_ms\":null,\"leading_island\":null,\"credits\":[],"
-            + "\"film\":[],\"left_out\":[],\"excluded\":\"MISSING_MARKER_END\"},");
+            + "\"film\":[],\"left_out\":[],\"excluded\":\"MISSING_MARKER_END\",\"excluded_note\":null},");
     }
 
     @Test
@@ -246,6 +247,56 @@ class LabelsJobTest {
 
         assertThatThrownBy(() -> LabelsJob.run(missing)).isInstanceOf(NoSuchFileException.class);
         assertThatThrownBy(() -> LabelsJob.run(noPrevious)).isInstanceOf(NoSuchFileException.class);
+    }
+
+    @Test
+    void theOwnersReasonIsInExcludedNoteOnlyForAnOwnerExcludedFile() throws IOException {
+        LabelsJob.run(options(temp, null, FIXTURES.resolve("exclusions.csv")));
+        Path labels = temp.resolve("labels-2026-11-13.json");
+
+        assertThat(labelOf(labels, 116).path("excluded_note").asString()).isEqualTo(
+            "Plex marker is wrong: stills, not credits");
+        assertThat(labelOf(labels, 105).path("excluded_note").isNull()).isTrue();
+        assertThat(labelOf(labels, 101).path("excluded_note").isNull()).isTrue();
+    }
+
+    private static SplitManifest manifest(String json) {
+        return MAPPER.readValue(json, SplitManifest.class);
+    }
+
+    @Test
+    void aWellFormedPreviousManifestPassesValidation() {
+        LabelsJob.validate(manifest("{\"films\":[{\"film_id\":1,\"unit_key\":\"a\",\"side\":\"dev\",\"fold\":0},"
+            + "{\"film_id\":2,\"unit_key\":\"b\",\"side\":\"dev\",\"fold\":4},"
+            + "{\"film_id\":3,\"unit_key\":\"c\",\"side\":\"test\",\"fold\":null}]}"));
+    }
+
+    @Test
+    void aMalformedPreviousManifestIsRejectedWithOneLine() {
+        String dev = "{\"film_id\":7,\"unit_key\":\"a\",\"side\":\"dev\",\"fold\":";
+        String fold = "has a fold that does not fit its side (dev 0-4, test none)";
+        Map<String, String> bad = new java.util.LinkedHashMap<>();
+        bad.put("{}", "previous split has no films list");
+        bad.put("{\"films\":null}", "previous split has no films list");
+        bad.put("{\"films\":[null]}", "previous split has a null film entry");
+        bad.put("{\"films\":[{\"film_id\":7,\"unit_key\":\"a\",\"fold\":1}]}",
+            "previous split film 7 needs a unit_key and a side");
+        bad.put("{\"films\":[{\"film_id\":7,\"side\":\"dev\",\"fold\":1}]}",
+            "previous split film 7 needs a unit_key and a side");
+        bad.put("{\"films\":[" + dev + "null}]}", "previous split film 7 " + fold);
+        bad.put("{\"films\":[" + dev + "-1}]}", "previous split film 7 " + fold);
+        bad.put("{\"films\":[" + dev + "5}]}", "previous split film 7 " + fold);
+        bad.put("{\"films\":[{\"film_id\":7,\"unit_key\":\"a\",\"side\":\"test\",\"fold\":0}]}",
+            "previous split film 7 " + fold);
+        bad.put("{\"films\":[" + dev + "1}," + dev + "2}]}", "previous split repeats film_id 7");
+        bad.forEach((json, message) -> assertThatThrownBy(() -> LabelsJob.validate(manifest(json)))
+            .as(json).isInstanceOf(IllegalArgumentException.class).hasMessage(message));
+    }
+
+    @Test
+    void theJsonNullManifestIsRejected() {
+        assertThatThrownBy(() -> LabelsJob.validate(manifest("null"))).isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("previous split has no films list");
     }
 
     @Test

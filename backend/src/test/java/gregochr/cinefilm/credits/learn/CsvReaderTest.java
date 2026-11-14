@@ -70,7 +70,13 @@ class CsvReaderTest {
 
     @Test
     void textAfterAClosingQuoteIsAnError() {
-        assertThatThrownBy(() -> CsvReader.parse("\"ab\"\"c\"\"x\"y\""))
-            .isInstanceOf(IllegalArgumentException.class).hasMessage("CSV has a quote in the middle of a field");
+        assertThatThrownBy(() -> CsvReader.parse("\"ab\"y"))
+            .isInstanceOf(IllegalArgumentException.class).hasMessage("CSV has text after a closing quote");
+    }
+
+    @Test
+    void aClosingQuoteMayBeFollowedByACommaARowEndOrTheEnd() {
+        assertThat(CsvReader.parse("\"a\",\"b\"\r\n\"c\"\n\"d\"")).containsExactly(List.of("a", "b"), List.of("c"),
+            List.of("d"));
     }
 }

@@ -93,6 +93,12 @@ class ExportReaderTest {
     }
 
     @Test
+    void aYearTooBigForAnIntIsNotANumber() {
+        assertThatThrownBy(() -> ExportReader.parse(HEADER + "\n" + fixtureRow("9", "99999999999")))
+            .isInstanceOf(IllegalArgumentException.class).hasMessage("export row 1: film_year is not a number");
+    }
+
+    @Test
     void aRepeatedFileIdIsAnError() {
         assertThatThrownBy(() -> ExportReader.parse(HEADER + "\n" + fixtureRow() + "\n" + fixtureRow()))
             .isInstanceOf(IllegalArgumentException.class).hasMessage("export row 2 repeats media_file_id 7");

@@ -44,6 +44,7 @@ final class LabelsJob {
         List<Object> looks = List.of();
         if (options.previousSplit() != null) {
             SplitManifest manifest = MAPPER.readValue(read(options.previousSplit()), SplitManifest.class);
+            validate(manifest);
             manifest.films().forEach(entry -> previous.put(entry.filmId(), entry));
             looks = manifest.looks() == null ? List.of() : manifest.looks();
         }
@@ -68,7 +69,8 @@ final class LabelsJob {
             ManifestEntry entry = split.entries().get(row.filmId());
             records.add(new LabelRecord(row.mediaFileId(), row.fingerprint(), entry.unitKey(), entry.side(),
                 entry.side() == Side.DEV ? entry.fold() : null, label.targetStartMs(), label.shiftMs(),
-                label.leadingIsland(), label.credits(), label.film(), label.leftOut(), label.excluded()));
+                label.leadingIsland(), label.credits(), label.film(), label.leftOut(), label.excluded(),
+                label.excluded() == ExcludeReason.OWNER_EXCLUDED ? ownerReasons.get(row.mediaFileId()) : null));
         }
 
         String date = options.date().toString();
@@ -83,6 +85,33 @@ final class LabelsJob {
         Files.writeString(reportFile, LabelsReport.render(options.date(), records, archive, split, preseed.size(),
             ownerReasons), StandardCharsets.UTF_8);
         return List.of(labelsFile, splitFile, reportFile);
+    }
+
+    /** Rejects a previous manifest that is not a well-formed split, so a bad file can never be carried over. */
+    static void validate(SplitManifest manifest) {
+        if (manifest == null || manifest.films() == null) {
+            throw new IllegalArgumentException("previous split has no films list");
+        }
+        Set<Long> seen = new HashSet<>();
+        for (ManifestEntry entry : manifest.films()) {
+            if (entry == null) {
+                throw new IllegalArgumentException("previous split has a null film entry");
+            }
+            if (entry.unitKey() == null || entry.side() == null) {
+                throw new IllegalArgumentException("previous split film " + entry.filmId()
+                    + " needs a unit_key and a side");
+            }
+            Integer fold = entry.fold();
+            boolean foldOk = entry.side() == Side.DEV ? fold != null && fold >= 0 && fold < CreditsSplit.FOLDS
+                : fold == null;
+            if (!foldOk) {
+                throw new IllegalArgumentException("previous split film " + entry.filmId()
+                    + " has a fold that does not fit its side (dev 0-4, test none)");
+            }
+            if (!seen.add(entry.filmId())) {
+                throw new IllegalArgumentException("previous split repeats film_id " + entry.filmId());
+            }
+        }
     }
 
     /** A JSON array with one element per line, so a diff of two runs reads line by line. */

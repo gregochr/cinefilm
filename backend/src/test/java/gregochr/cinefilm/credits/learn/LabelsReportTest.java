@@ -11,7 +11,7 @@ class LabelsReportTest {
 
     private static LabelRecord record(long id, String unit, Side side, Boolean island, ExcludeReason excluded) {
         return new LabelRecord(id, "f", unit, side, null, null, null, island, List.of(), List.of(), List.of(),
-            excluded);
+            excluded, null);
     }
 
     @Test
