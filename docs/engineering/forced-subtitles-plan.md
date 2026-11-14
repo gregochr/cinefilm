@@ -1041,8 +1041,9 @@ downloads, 5e finishes Admin. Migrations take the **next free number at build ti
 
 **5d: download full subtitles.**
 - **Search:** `OpenSubtitlesApi.searchFull(imdbId)`.
-  - It asks for English with `foreign_parts_only=exclude` and `hearing_impaired=include`, in alphabetical parameter
-    order (`OpenSubtitlesClient`).
+  - It asks for English with `foreign_parts_only=exclude`, in alphabetical parameter order
+    (`OpenSubtitlesClient`). It does not send `hearing_impaired`: `include` is that parameter's default, and the API
+    answers 301 to any parameter sent at its default, so defaults are never sent.
   - Ranking demotes hearing-impaired files, so they are used only when nothing else exists.
   - The parser gets a full-files filter, because `OpenSubtitlesParser.result` drops every result that is not
     foreign-parts-only.
@@ -1132,8 +1133,9 @@ the need, so an automatic `NOT_NEEDED` adds no downloads but never hides an exis
 5d is split in two. **5d-1** finds, downloads and plays full English subtitles and measures them; **5d-2** acts on the
 proof. Built in 5d-1:
 
-- **Search.** `OpenSubtitlesApi.searchFull(imdbId)` asks for `languages=en`, `foreign_parts_only=exclude` and
-  `hearing_impaired=include` (alphabetical, as the forced search). `OpenSubtitlesParser.parseFull` keeps only results
+- **Search.** `OpenSubtitlesApi.searchFull(imdbId)` asks for `foreign_parts_only=exclude` and `languages=en`
+  (alphabetical, as the forced search; it relies on the `hearing_impaired=include` default and never sends it, because
+  the API redirects with a 301 on any default value). `OpenSubtitlesParser.parseFull` keeps only results
   whose flag is a real `false` (a missing or non-boolean flag fits neither search), keeps hearing-impaired files and marks
   them, and keeps the single-file rule. `OpenSubtitlesRanking.fullCandidates` ranks with hearing-impaired files below
   every other (cut tags and the top 3 plus the best of each tag, at most 8, are unchanged). Results are stored in

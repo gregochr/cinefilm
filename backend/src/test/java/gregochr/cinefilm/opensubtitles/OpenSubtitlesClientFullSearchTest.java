@@ -27,8 +27,9 @@ import org.springframework.web.client.RestClient;
 class OpenSubtitlesClientFullSearchTest {
 
     private static final String KEY = "secret-key-123";
+    // No parameter at its default value (e.g. hearing_impaired=include): the API answers 301 to any.
     private static final String FULL_URL = "https://api.opensubtitles.com/api/v1/subtitles?foreign_parts_only=exclude"
-        + "&hearing_impaired=include&imdb_id=936501&languages=en";
+        + "&imdb_id=936501&languages=en";
 
     private final List<Duration> sleeps = new ArrayList<>();
     private final AtomicLong ticks = new AtomicLong();
@@ -55,7 +56,7 @@ class OpenSubtitlesClientFullSearchTest {
     }
 
     @Test
-    void theFullSearchKeepsFullResultsAndTheForcedSearchStillAsksForForcedOnes() {
+    void theFullSearchKeepsFullResultsWhileTheForcedSearchKeepsForcedOnes() {
         server.expect(once(), requestTo(FULL_URL)).andRespond(withSuccess(
             page(item(1), item(2).set("foreign_parts_only", "false")), MediaType.APPLICATION_JSON));
         server.expect(once(), requestTo(
@@ -65,6 +66,17 @@ class OpenSubtitlesClientFullSearchTest {
 
         assertThat(client.searchFull("tt0936501").best().id()).isEqualTo(2);
         assertThat(client.searchForced("tt0936501").best().id()).isEqualTo(1);
+        server.verify();
+    }
+
+    @Test
+    void aRedirectAnsweringTheFullSearchIsAnOutageWithoutRetry() {
+        server.expect(once(), requestTo(FULL_URL)).andRespond(withStatus(HttpStatus.MOVED_PERMANENTLY)
+            .header("Location", "/api/v1/subtitles?foreign_parts_only=exclude&imdb_id=936501&languages=en"));
+
+        assertThatThrownBy(() -> client.searchFull("tt0936501")).isInstanceOf(OpenSubtitlesUnavailableException.class)
+            .hasMessage("OpenSubtitles answered status 301");
+        assertThat(sleeps).isEmpty();
         server.verify();
     }
 
