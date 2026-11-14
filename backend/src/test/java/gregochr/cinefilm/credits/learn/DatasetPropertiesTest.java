@@ -49,6 +49,14 @@ class DatasetPropertiesTest {
     }
 
     @Test
+    void anOutputDirectoryInsideTheReadersDirectoryOverlapsItToo() {
+        DatasetProperties props = new DatasetProperties(true, "/cache/credits-dataset", "/cache/credits/out", 19, 15,
+            "ffmpeg", "/cache");
+
+        assertThat(props.overlapsReaderDir()).isTrue();
+    }
+
+    @Test
     void aSiblingWhoseNameOnlyStartsTheSameDoesNotOverlap() {
         assertThat(props("/cache/credits-dataset", "/cache").overlapsReaderDir()).isFalse();
         assertThat(props("/elsewhere/credits", "/cache").overlapsReaderDir()).isFalse();

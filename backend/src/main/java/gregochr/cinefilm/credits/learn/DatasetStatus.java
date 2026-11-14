@@ -34,8 +34,6 @@ public record DatasetStatus(boolean enabled, State state, Waiting waitingFor, in
         IDLE,
         /** A chain of file tasks is going. */
         RUNNING,
-        /** Reserved: a stop takes effect at once, so the job is never in this state. */
-        STOPPING,
         /** Left for later: playback or the credits detection needs the machine. The hourly nudge resumes it. */
         WAITING,
         /** Stopped by the owner. */

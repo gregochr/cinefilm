@@ -18,7 +18,6 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import gregochr.cinefilm.credits.CreditsDetectionService.DueFile;
 import gregochr.cinefilm.credits.CreditsDetectionService.SaveOutcome;
-import gregochr.cinefilm.credits.learn.CreditsDatasetJob;
 import gregochr.cinefilm.library.LibraryRoot;
 import gregochr.cinefilm.library.ScanFinished;
 import gregochr.cinefilm.playback.PlaybackStateRepository;
@@ -613,15 +612,5 @@ class CreditsRefresherTest {
         assertThat(refresher.dueNotHeldBack()).isEqualTo(1);
 
         assertThat(messages()).containsExactly("Could not count the due credits files: IllegalStateException");
-    }
-
-    @Test
-    void theStartupListenerIsOrderedBeforeTheDatasetJobsBecauseItWipesTheDirectoryTheJobUses() throws Exception {
-        int refresherOrder = CreditsRefresher.class.getMethod("onStartup")
-            .getAnnotation(org.springframework.core.annotation.Order.class).value();
-        int datasetOrder = CreditsDatasetJob.class.getMethod("onStartup")
-            .getAnnotation(org.springframework.core.annotation.Order.class).value();
-
-        assertThat(refresherOrder).isLessThan(datasetOrder);
     }
 }

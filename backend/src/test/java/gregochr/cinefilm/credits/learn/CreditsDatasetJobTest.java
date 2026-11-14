@@ -130,6 +130,7 @@ class CreditsDatasetJobTest {
         private RuntimeException listFailure;
         private Runnable duringList = () -> { };
         private Runnable duringCurrent = () -> { };
+        private int listCalls;
 
         FakeTargets() {
             super(null, null, null);
@@ -137,6 +138,7 @@ class CreditsDatasetJobTest {
 
         @Override
         public List<DatasetTarget> targets() {
+            listCalls++;
             duringList.run();
             if (listFailure != null) {
                 throw listFailure;
@@ -478,14 +480,57 @@ class CreditsDatasetJobTest {
     }
 
     @Test
-    void aStrayFileInTheFramesDirectoryIsRemovedToo() throws IOException {
+    void aStrayFileInTheFramesDirectoryIsLeftAlone() throws IOException {
         targetIds(1);
         Files.createDirectories(props.framesDir());
         Files.writeString(props.framesDir().resolve("stray.txt"), "x");
 
         job.start();
 
-        assertThat(props.framesDir().resolve("stray.txt")).doesNotExist();
+        assertThat(props.framesDir().resolve("stray.txt")).exists();
+    }
+
+    @Test
+    void aFinishedDirectoryOfAFileThatIsNotATargetNowIsKeptAndCounted() throws IOException {
+        targetIds(1);
+        finished(77, "fp77");
+        Files.createDirectories(frames(77).resolve("coarse"));
+        Files.writeString(frames(77).resolve("coarse/60000.png"), "kept");
+
+        job.start();
+
+        assertThat(frames(77).resolve("complete.json")).exists();
+        assertThat(frames(77).resolve("coarse/60000.png")).exists();
+        assertThat(messages()).contains(
+            "Credits dataset job: 1 finished directories of files that are not targets now were left alone");
+    }
+
+    @Test
+    void aFinishedDirectoryWhoseFileChangedIsDeletedAndOneWithTheRightFingerprintIsKept() throws IOException {
+        targetIds(1, 2);
+        finished(1, "changed-since");
+        finished(2, "fp2");
+
+        DatasetStatus started = job.start();
+
+        assertThat(frameDirs()).containsExactly("2");
+        assertThat(started.alreadyComplete()).isEqualTo(1);
+        assertThat(messages()).contains(
+            "Credits dataset job: 0 finished directories of files that are not targets now were left alone");
+    }
+
+    @Test
+    void aLeftOverTemporaryFileGoesWithADirectoryThatIsDeletedAndIsLeftInAKeptOne() throws IOException {
+        targetIds(1, 2);
+        Files.createDirectories(frames(1));
+        Files.writeString(frames(1).resolve("complete.json.tmp"), "half");
+        finished(2, "fp2");
+        Files.writeString(frames(2).resolve("complete.json.tmp"), "half");
+
+        job.start();
+
+        assertThat(frames(1)).doesNotExist();
+        assertThat(frames(2).resolve("complete.json.tmp")).exists();
     }
 
     @Test
@@ -659,24 +704,62 @@ class CreditsDatasetJobTest {
         Files.writeString(props.marker(), "a run was going");
         job.onStartup();
 
-        assertThat(job.status().state()).isEqualTo(State.RUNNING);
+        // Nothing is done inline: one task is queued, and no ffmpeg call or target query happens until it runs.
         assertThat(queue).hasSize(1);
+        assertThat(job.status().state()).isEqualTo(State.IDLE);
+        assertThat(runner.versionCommands).isEmpty();
+        assertThat(targets.listCalls).isZero();
+        queue.poll().run();
+        assertThat(targets.listCalls).isEqualTo(1);
+        assertThat(job.status().state()).isEqualTo(State.RUNNING);
         assertThat(messages()).contains("Credits dataset job: starting again");
         drain();
         assertThat(job.status().state()).isEqualTo(State.DONE);
     }
 
     @Test
-    void atStartUpADatasetDirectoryInsideTheReadersDirectoryIsRefusedWithAReason() {
+    void aStartUpResumeThatFindsTheJobAlreadyRunningSaysSoAndChangesNothing() throws IOException {
+        targetIds(1);
+        Files.createDirectories(props.dir());
+        Files.writeString(props.marker(), "a run was going");
+        job.onStartup();
+        job.start();
+
+        queue.poll().run();
+
+        assertThat(messages()).contains("Credits dataset job: already running, not starting again");
+        assertThat(queue).hasSize(1);
+        assertThat(job.status().state()).isEqualTo(State.RUNNING);
+    }
+
+    @Test
+    void atStartUpADatasetDirectoryInsideTheReadersDirectoryIsRefusedWithAReasonOnTheExecutor() {
         CreditsDatasetJob overlapping = job(props(temp.resolve("cache/credits"), true));
 
         overlapping.onStartup();
+        assertThat(queue).hasSize(1);
+        assertThat(overlapping.status().state()).isEqualTo(State.IDLE);
+        drain();
 
         DatasetStatus status = overlapping.status();
         assertThat(status.state()).isEqualTo(State.FAILED);
         assertThat(status.lastError()).contains("cinefilm.credits.dataset.dir");
         assertThat(queue).isEmpty();
         assertThat(messages()).contains("Credits dataset job: could not start");
+    }
+
+    @Test
+    void anOutputDirectoryInsideTheReadersDirectoryIsRefusedToo() {
+        DatasetProperties outside = new DatasetProperties(true, temp.resolve("dataset").toString(),
+            temp.resolve("cache/credits/out").toString(), 19, 15, "ffmpeg", temp.resolve("cache").toString());
+        CreditsDatasetJob overlapping = job(outside);
+
+        DatasetStatus status = overlapping.start();
+
+        assertThat(status.state()).isEqualTo(State.FAILED);
+        assertThat(status.lastError()).contains("out-dir").contains("inside the credits detection's work directory");
+        assertThat(queue).isEmpty();
+        assertThat(outside.framesDir()).doesNotExist();
     }
 
     @Test
@@ -1288,7 +1371,7 @@ class CreditsDatasetJobTest {
     }
 
     @Test
-    void aStopThatArrivesJustBeforeAFileIsCountedChangesNoCounter() {
+    void aStopThatArrivesJustBeforeCompleteJsonIsMovedIntoPlaceLeavesNoCompleteJsonAndNoCounterChanged() {
         targetIds(1, 2);
         Runnable stopOnce = once(job::stop);
         when(git.commit()).thenAnswer(call -> {
@@ -1303,6 +1386,61 @@ class CreditsDatasetJobTest {
         assertThat(status.state()).isEqualTo(State.STOPPED);
         assertThat(status.complete()).isZero();
         assertThat(queue).isEmpty();
+        // The stale task's move was refused under the monitor, and its directory (tmp file included) is gone.
+        assertThat(frames(1)).doesNotExist();
+    }
+
+    @Test
+    void aResumeTakesANewGenerationSoTheTaskThatSetTheWaitCannotAlsoCarryTheChainOn() throws Exception {
+        targetIds(1, 2);
+        busyAtCall = 25;
+        job.start();
+        drain();
+        assertThat(job.status().state()).isEqualTo(State.WAITING);
+        java.lang.reflect.Method step = CreditsDatasetJob.class.getDeclaredMethod("step", long.class);
+        java.lang.reflect.Method nextTarget = CreditsDatasetJob.class.getDeclaredMethod("nextTarget", long.class);
+        java.lang.reflect.Method proceed = CreditsDatasetJob.class.getDeclaredMethod("proceed", long.class);
+        step.setAccessible(true);
+        nextTarget.setAccessible(true);
+        proceed.setAccessible(true);
+
+        // While it waits, even the current generation's task does nothing: the run is not going.
+        int reads = disk.reads;
+        step.invoke(job, 1L);
+        assertThat(disk.reads).isEqualTo(reads);
+        assertThat(((DatasetTarget) nextTarget.invoke(job, 1L)).mediaFileId()).isEqualTo(-1);
+        proceed.invoke(job, 1L);
+        assertThat(queue).isEmpty();
+
+        job.startIfDeferred();
+
+        // The old task's late hand-over (generation 1) finds a newer generation and queues nothing.
+        proceed.invoke(job, 1L);
+        step.invoke(job, 1L);
+        assertThat(queue).hasSize(1);
+        assertThat(disk.reads).isEqualTo(reads);
+        drain();
+        assertThat(job.status().state()).isEqualTo(State.DONE);
+        assertThat(job.status().complete()).isEqualTo(2);
+    }
+
+    @Test
+    void playbackStartingAfterTheLastFfmpegCallDoesNotDiscardAFinishedFile() {
+        targetIds(1);
+        onGuardCall = () -> {
+            if (guardCalls > 16) {
+                throw new PlaybackGuard.Busy("a film started");
+            }
+        };
+        job.start();
+
+        drain();
+
+        assertThat(job.status().state()).isEqualTo(State.DONE);
+        assertThat(job.status().complete()).isEqualTo(1);
+        // 5 + 8 + 1 reads and 2 dense writes: no check follows the last of them.
+        assertThat(guardCalls).isEqualTo(16);
+        assertThat(frames(1).resolve("complete.json")).exists();
     }
 
     @Test

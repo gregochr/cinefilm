@@ -51,8 +51,8 @@ public record DatasetProperties(boolean enabled, Path dir, Path outDir, int nice
         return dir.resolve("running");
     }
 
-    /** True when the dataset directory is the frame reader's own, which is wiped at start-up. */
+    /** True when the dataset or output directory is inside the frame reader's own, which is wiped at start-up. */
     public boolean overlapsReaderDir() {
-        return dir.startsWith(readerDir);
+        return dir.startsWith(readerDir) || outDir.startsWith(readerDir);
     }
 }

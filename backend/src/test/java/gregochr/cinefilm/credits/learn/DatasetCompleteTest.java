@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,6 +21,9 @@ import tools.jackson.databind.json.JsonMapper;
 class DatasetCompleteTest {
 
     private static final JsonMapper MAPPER = JsonMapper.builder().build();
+
+    private static final DatasetComplete.Mover MOVE = (from, to) ->
+        Files.move(from, to, StandardCopyOption.ATOMIC_MOVE);
 
     @TempDir
     Path temp;
@@ -77,7 +81,7 @@ class DatasetCompleteTest {
                 + (Files.exists(dir.resolve("complete.json")) ? "final" : ""));
         };
 
-        DatasetComplete.write(dir, complete("1000:1"), recorder);
+        DatasetComplete.write(dir, complete("1000:1"), recorder, MOVE);
 
         assertThat(flushed.subList(0, 5)).containsExactlyInAnyOrder("", "coarse", "coarse/360000.png", "dense",
             "dense/540000.jpg");
@@ -96,11 +100,33 @@ class DatasetCompleteTest {
             throw new IOException("disk error");
         };
 
-        assertThatThrownBy(() -> DatasetComplete.write(dir, complete("1000:1"), failing))
+        assertThatThrownBy(() -> DatasetComplete.write(dir, complete("1000:1"), failing, MOVE))
             .isInstanceOf(IOException.class).hasMessage("disk error");
 
         assertThat(dir.resolve("complete.json")).doesNotExist();
         assertThat(DatasetComplete.isCurrent(dir, "1000:1")).isFalse();
+    }
+
+    @Test
+    void aMoverThatRefusesLeavesNoTemporaryFileAndNoFinalFile() throws IOException {
+        assertThatThrownBy(() -> DatasetComplete.write(dir, complete("1000:1"), (from, to) -> {
+            assertThat(from).exists();
+            throw new IllegalStateException("refused");
+        })).isInstanceOf(IllegalStateException.class).hasMessage("refused");
+
+        assertThat(dir.resolve("complete.json.tmp")).doesNotExist();
+        assertThat(dir.resolve("complete.json")).doesNotExist();
+    }
+
+    @Test
+    void theFingerprintIsReadOnlyFromAFileOfTheCurrentFormat() throws IOException {
+        assertThat(DatasetComplete.fingerprint(dir)).isEmpty();
+        writeRaw("{\"format\": 1, \"fingerprint\": \"9:9\"}");
+        assertThat(DatasetComplete.fingerprint(dir)).contains("9:9");
+        writeRaw("{\"format\": 0, \"fingerprint\": \"9:9\"}");
+        assertThat(DatasetComplete.fingerprint(dir)).isEmpty();
+        writeRaw("not json");
+        assertThat(DatasetComplete.fingerprint(dir)).isEmpty();
     }
 
     @Test

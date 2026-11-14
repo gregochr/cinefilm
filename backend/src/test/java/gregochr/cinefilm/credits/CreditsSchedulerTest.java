@@ -1,33 +1,28 @@
 package gregochr.cinefilm.credits;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
-import gregochr.cinefilm.credits.learn.CreditsDatasetJob;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
-import org.mockito.InOrder;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 
 class CreditsSchedulerTest {
 
     @Test
-    void theHourlyNudgeOnlyPicksUpWorkALastRunLeftTheRefresherFirstThenTheDatasetJob() {
+    void theHourlyNudgeOnlyPicksUpWorkALastRunLeft() {
         CreditsRefresher refresher = mock(CreditsRefresher.class);
-        CreditsDatasetJob dataset = mock(CreditsDatasetJob.class);
 
-        new CreditsScheduler(refresher, dataset).hourly();
+        new CreditsScheduler(refresher).hourly();
 
-        InOrder order = inOrder(refresher, dataset);
-        order.verify(refresher).startIfDeferred();
-        order.verify(dataset).startIfDeferred();
-        verifyNoMoreInteractions(refresher, dataset);
+        verify(refresher).startIfDeferred();
+        verifyNoMoreInteractions(refresher);
     }
 
     @Test

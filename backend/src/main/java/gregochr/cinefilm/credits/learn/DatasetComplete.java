@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Stream;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -95,6 +96,22 @@ public record DatasetComplete(int format, long mediaFileId, String fingerprint, 
     }
 
     /**
+     * The fingerprint in a directory's {@code complete.json}, when that file parses and has the current format.
+     *
+     * @param dir the file's directory
+     * @return the fingerprint; empty when the file is missing, unparseable or of another format
+     */
+    public static Optional<String> fingerprint(Path dir) {
+        try {
+            JsonNode node = MAPPER.readTree(Files.readAllBytes(dir.resolve(FILE_NAME)));
+            return node.path("format").asInt(-1) == FORMAT ? Optional.of(node.path("fingerprint").asString(""))
+                : Optional.empty();
+        } catch (IOException | JacksonException e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
      * Whether a file's directory holds a finished, current read: a {@code complete.json} that parses, has the current
      * format and holds this fingerprint. Anything else (missing, unparseable, an old format, a stale fingerprint) is
      * not complete.
@@ -104,12 +121,7 @@ public record DatasetComplete(int format, long mediaFileId, String fingerprint, 
      * @return true when the directory is complete and current
      */
     public static boolean isCurrent(Path dir, String fingerprint) {
-        try {
-            JsonNode node = MAPPER.readTree(Files.readAllBytes(dir.resolve(FILE_NAME)));
-            return node.path("format").asInt(-1) == FORMAT && fingerprint.equals(node.path("fingerprint").asString(""));
-        } catch (IOException | JacksonException e) {
-            return false;
-        }
+        return fingerprint(dir).filter(fingerprint::equals).isPresent();
     }
 
     /**
@@ -122,7 +134,38 @@ public record DatasetComplete(int format, long mediaFileId, String fingerprint, 
      * @throws IOException when a file cannot be flushed, written or moved
      */
     public static void write(Path dir, DatasetComplete complete) throws IOException {
-        write(dir, complete, DatasetComplete::fsync);
+        write(dir, complete, DatasetComplete::fsync, DatasetComplete::move);
+    }
+
+    /**
+     * Writes the file as {@link #write(Path, DatasetComplete)} does, but lets the caller make the final move (for
+     * instance under a lock, with a check that the run is still current). If the mover throws, the temporary file is
+     * deleted and there is no final file.
+     *
+     * @param dir the file's directory, with its frames already written
+     * @param complete what to write
+     * @param mover moves the temporary file over the final name; it may throw to refuse
+     * @throws IOException when a file cannot be flushed, written or moved
+     */
+    public static void write(Path dir, DatasetComplete complete, Mover mover) throws IOException {
+        write(dir, complete, DatasetComplete::fsync, mover);
+    }
+
+    /** Moves the finished temporary file over the final name. */
+    @FunctionalInterface
+    public interface Mover {
+        /**
+         * Moves the file.
+         *
+         * @param temp the flushed temporary file
+         * @param target the final name
+         * @throws IOException when it cannot be moved
+         */
+        void move(Path temp, Path target) throws IOException;
+    }
+
+    private static void move(Path temp, Path target) throws IOException {
+        Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE);
     }
 
     /** Flushes one file or directory to disk; separate so that a test can record what is flushed, and when. */
@@ -137,7 +180,7 @@ public record DatasetComplete(int format, long mediaFileId, String fingerprint, 
         void flush(Path path) throws IOException;
     }
 
-    static void write(Path dir, DatasetComplete complete, Flusher flusher) throws IOException {
+    static void write(Path dir, DatasetComplete complete, Flusher flusher, Mover mover) throws IOException {
         try (Stream<Path> tree = Files.walk(dir)) {
             for (Path path : tree.toList()) {
                 flusher.flush(path);
@@ -146,7 +189,12 @@ public record DatasetComplete(int format, long mediaFileId, String fingerprint, 
         Path temp = dir.resolve(TEMP_NAME);
         Files.write(temp, MAPPER.writeValueAsBytes(complete));
         flusher.flush(temp);
-        Files.move(temp, dir.resolve(FILE_NAME), StandardCopyOption.ATOMIC_MOVE);
+        try {
+            mover.move(temp, dir.resolve(FILE_NAME));
+        } catch (IOException | RuntimeException e) {
+            Files.deleteIfExists(temp);
+            throw e;
+        }
         flusher.flush(dir);
     }
 

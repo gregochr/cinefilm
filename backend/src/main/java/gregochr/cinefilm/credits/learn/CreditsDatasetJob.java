@@ -14,13 +14,17 @@ import java.io.UncheckedIOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.stream.Stream;
@@ -149,8 +153,9 @@ public class CreditsDatasetJob {
         }
         long gen = begin();
         if (props.overlapsReaderDir()) {
-            fail(gen, "The dataset directory is inside the credits detection's work directory, which is wiped at "
-                + "start-up (cinefilm.credits.dataset.dir)");
+            fail(gen, "The dataset directory or the output directory is inside the credits detection's work "
+                + "directory, which is wiped at start-up (cinefilm.credits.dataset.dir, "
+                + "cinefilm.credits.dataset.out-dir)");
             return status();
         }
         Prepared prepared;
@@ -202,7 +207,8 @@ public class CreditsDatasetJob {
             state = State.RUNNING;
             waitingFor = null;
             yields = 0;
-            gen = generation;
+            // A new generation: a task still unwinding from the wait must not also carry the chain on.
+            gen = ++generation;
         }
         try {
             proceed(gen);
@@ -211,12 +217,24 @@ public class CreditsDatasetJob {
         }
     }
 
-    /** At start-up, after the credits refresher: starts again when the marker says a run was going. */
+    /**
+     * At start-up, after the credits refresher's listener (which wipes the reader's directory): when the marker says a
+     * run was going, or a directory is misplaced, queues the start on the credits executor, behind the refresher's own
+     * start-up worker and off the main thread. Nothing is read or queried here.
+     */
     @EventListener(ApplicationReadyEvent.class)
     @Order(STARTUP_ORDER)
     public void onStartup() {
         if (props.enabled() && (props.overlapsReaderDir() || Files.exists(props.marker()))) {
+            executor.execute(this::resume);
+        }
+    }
+
+    private void resume() {
+        try {
             LOG.info("Credits dataset job: {}", start().state() == State.FAILED ? "could not start" : "starting again");
+        } catch (ConflictException e) {
+            LOG.info("Credits dataset job: already running, not starting again");
         }
     }
 
@@ -276,23 +294,42 @@ public class CreditsDatasetJob {
         Files.createDirectories(props.outDir());
         String version = readFfmpegVersion();
         List<DatasetTarget> all = targets.targets();
-        Set<Path> current = new HashSet<>();
+        Map<String, DatasetTarget> byName = new HashMap<>();
         List<DatasetTarget> todo = new ArrayList<>();
+        int current = 0;
         for (DatasetTarget target : all) {
+            byName.put(frameDir(target).getFileName().toString(), target);
             if (DatasetComplete.isCurrent(frameDir(target), target.fingerprint())) {
-                current.add(frameDir(target));
+                current++;
             } else {
                 todo.add(target);
             }
         }
-        try (DirectoryStream<Path> existing = Files.newDirectoryStream(props.framesDir())) {
+        sweep(byName);
+        return new Prepared(version, all.size(), current, List.copyOf(todo));
+    }
+
+    /**
+     * Deletes the frame directories that are not a finished read of the file they are for: those with no parseable
+     * {@code complete.json} of the current format (partial, old, unparseable), and those of a current target whose
+     * {@code complete.json} holds another fingerprint. A finished directory of a file that is not a target now (it may
+     * be briefly missing or unplayable) and anything that is not a directory are left alone.
+     */
+    private void sweep(Map<String, DatasetTarget> byName) throws IOException {
+        int kept = 0;
+        try (DirectoryStream<Path> existing = Files.newDirectoryStream(props.framesDir(), Files::isDirectory)) {
             for (Path dir : existing) {
-                if (!current.contains(dir)) {
+                Optional<String> fingerprint = DatasetComplete.fingerprint(dir);
+                DatasetTarget target = byName.get(dir.getFileName().toString());
+                if (fingerprint.isEmpty() || target != null && !fingerprint.get().equals(target.fingerprint())) {
                     deleteTree(dir);
+                } else if (target == null) {
+                    kept++;
                 }
             }
         }
-        return new Prepared(version, all.size(), current.size(), List.copyOf(todo));
+        LOG.info("Credits dataset job: {} finished directories of files that are not targets now were left alone",
+            kept);
     }
 
     private String readFfmpegVersion() throws IOException {
@@ -344,6 +381,13 @@ public class CreditsDatasetJob {
         submit(gen);
     }
 
+    /** True while this task's chain is the live one: its generation is current and the run is going. */
+    private boolean isRunning(long gen) {
+        synchronized (lock) {
+            return gen == generation && state == State.RUNNING;
+        }
+    }
+
     /** One task. Nothing escapes it: anything unexpected ends the chain with {@code FAILED}. */
     private void task(long gen) {
         try {
@@ -355,7 +399,7 @@ public class CreditsDatasetJob {
 
     /** One file: each way out either submits the next task through {@link #proceed} or ends the chain. */
     private void step(long gen) {
-        if (!isCurrent(gen)) {
+        if (!isRunning(gen)) {
             return;
         }
         try {
@@ -402,7 +446,7 @@ public class CreditsDatasetJob {
     /** The next file not yet done or failed in this run; {@link #NONE} when there is none or the run was stopped. */
     private DatasetTarget nextTarget(long gen) {
         synchronized (lock) {
-            if (gen != generation) {
+            if (gen != generation || state != State.RUNNING) {
                 return NONE;
             }
             while (next < cursor.size() && failedIds.contains(cursor.get(next).mediaFileId())) {
@@ -436,8 +480,11 @@ public class CreditsDatasetJob {
                 written = DatasetFrames.write(job, target, dir, checkpoint);
             }
             if (targets.stillCurrent(target)) {
-                checkpoint.run();
-                DatasetComplete.write(dir, completeJson(target, written));
+                // No ffmpeg call follows, so playback no longer matters; only a stop does.
+                if (!isCurrent(gen)) {
+                    throw new Stopped();
+                }
+                DatasetComplete.write(dir, completeJson(target, written), (temp, done) -> commit(gen, temp, done));
                 record(gen, Outcome.COMPLETE);
             } else {
                 deleteTree(dir);
@@ -457,6 +504,16 @@ public class CreditsDatasetJob {
             deleteTree(dir);
             LOG.warn("Could not read the frames of file {}: {}", target.mediaFileId(), describe(e));
             recordFailure(gen, target);
+        }
+    }
+
+    /** The final move of a {@code complete.json}, made under the monitor so that a start cannot slip in before it. */
+    private void commit(long gen, Path temp, Path target) throws IOException {
+        synchronized (lock) {
+            if (gen != generation) {
+                throw new Stopped();
+            }
+            Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE);
         }
     }
 

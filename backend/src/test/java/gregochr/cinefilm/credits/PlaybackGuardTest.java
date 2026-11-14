@@ -5,6 +5,7 @@ import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.playback.PlaybackStateRepository;
@@ -39,6 +40,7 @@ class PlaybackGuardTest {
 
         assertThatThrownBy(guard::check).isInstanceOf(PlaybackGuard.Busy.class)
             .hasMessage("a film is being transcoded");
+        verifyNoInteractions(playback);
     }
 
     @Test
