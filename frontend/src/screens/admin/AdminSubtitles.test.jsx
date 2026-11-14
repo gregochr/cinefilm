@@ -2,6 +2,9 @@ import { screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installFetch, renderApp, respond } from '../../test/mockApi.jsx';
 
+// The Subtitles card shows one "Loading" placeholder until its list arrives.
+const SKELETONS = 1;
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -28,5 +31,3 @@ describe('Admin Subtitles section', () => {
     expect(await screen.findAllByRole('button', { name: 'Try again' })).not.toHaveLength(0);
   });
 });
-
-const SKELETONS = 1;
