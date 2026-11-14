@@ -377,6 +377,30 @@ class DatasetMeasureJobTest {
     }
 
     @Test
+    void aWrittenTimeThatIsNullLeavesTheReadTimeBlank() throws IOException, DatasetMeasureJob.NoFilmsException {
+        Path film = MeasureFixtures.film(frames, "15", MeasureFixtures.complete(15, "f", "c", null, List.of(0L),
+            List.of()));
+        MeasureFixtures.touch(film, Instant.parse("2026-11-10T12:05:00Z"));
+
+        job.run(options(false));
+
+        assertThat(filmRow(out.resolve("films.csv"), "15")).containsEntry("readSeconds", "").containsEntry("status",
+            "ok");
+    }
+
+    @Test
+    void framesAreOrderedCoarseFirstThenByOffsetWhateverTheOrderOfTheLists() throws IOException,
+        DatasetMeasureJob.NoFilmsException {
+        MeasureFixtures.film(frames, "16", MeasureFixtures.complete(16, "f", "c", WRITTEN, List.of(200_000L, 150_000L),
+            List.of(130_000L, 70_000L)));
+
+        job.run(options(false));
+
+        assertThat(csv(out.resolve("frames.csv")).stream().skip(1).map(row -> row.get(1) + " " + row.get(2)).toList())
+            .containsExactly("coarse 150000", "coarse 200000", "dense 70000", "dense 130000");
+    }
+
+    @Test
     void outputIsUtf8WithoutABomAndHeadersAreOnlyWrittenOnce() throws IOException, DatasetMeasureJob.NoFilmsException {
         threeFilms();
 

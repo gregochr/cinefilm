@@ -35,6 +35,11 @@ class CsvWriterTest {
     }
 
     @Test
+    void aSpecialCharacterAtTheStartOfAFieldQuotesIt() {
+        assertThat(CsvWriter.row(List.of(",a", "\"b", "\nc", "\rd"))).isEqualTo("\",a\",\"\"\"b\",\"\nc\",\"\rd\"\n");
+    }
+
+    @Test
     void whatItWritesIsReadBackByTheReader() {
         List<String> row = List.of("plain", "a,b", "q\"q", "line\nbreak", "cr\rhere", "end");
 
