@@ -476,9 +476,9 @@ read-only checks.
    ```
 4. **Watch it, and stop it when about 10 development films are `complete` (owner).** The job yields to playback and to
    the credits refresher, so it may sit in `WAITING`. **It reads films in media-file-id order, whatever their split, so
-   the first 10 `complete` may include test films.** So the log check and the status call below show the media ids of
-   every film the job reads, test films included: ids only (they are already in the split file), no pictures and no
-   results. The measuring tool skips those films (step 5), so the trial may need to
+   the first 10 `complete` may include test films.** So the status call's `currentMediaFileId` shows the media id of
+   the film being read, test films included, and the log names a film only when its read fails ("Could not read the
+   frames of file …"): ids only (they are already in the split file), no pictures and no results. The measuring tool skips those films (step 5), so the trial may need to
    run past 10 `complete` to reach about 10 development films: watch the `skipped` counts in the tool's `summary.json`,
    or the row count of `films.csv`, and stop when that gives about 10.
 

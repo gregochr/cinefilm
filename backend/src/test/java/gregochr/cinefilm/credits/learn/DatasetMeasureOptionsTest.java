@@ -40,11 +40,16 @@ class DatasetMeasureOptionsTest {
     }
 
     @Test
-    void thereIsNoWayToIncludeTheTestFilms() {
+    void aLookFlagIsAnUnknownArgument() {
         String[] base = {"--data", "/d", "--out", "/o", "--labels", "/l"};
-        assertRefused("unknown argument --look=L5", "--data", "/d", "--out", "/o", "--labels", "/l", "--look=L5");
-        assertRefused("unknown argument --look", "--data", "/d", "--out", "/o", "--labels", "/l", "--look", "gate");
-        assertThat(parse(base)).isNotNull();
+        String[] equals = Arrays.copyOf(base, base.length + 1);
+        equals[base.length] = "--look=L5";
+        String[] separate = Arrays.copyOf(base, base.length + 2);
+        separate[base.length] = "--look";
+        separate[base.length + 1] = "gate";
+
+        assertRefused("unknown argument --look=L5", equals);
+        assertRefused("unknown argument --look", separate);
     }
 
     @Test

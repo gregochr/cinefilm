@@ -102,7 +102,7 @@ class DatasetMeasureMainTest {
     }
 
     @Test
-    void theTestFilmsAreLeftOutAndNothingIsSaidOnStderr() throws IOException {
+    void theTestFilmsAreLeftOutSilently() throws IOException {
         oneFilm();
         MeasureFixtures.film(frames, "4242", MeasureFixtures.complete(4242, "f", "c", "2026-11-10T12:10:00Z",
             List.of(0L), List.of()));
@@ -117,7 +117,7 @@ class DatasetMeasureMainTest {
     }
 
     @Test
-    void aLookFlagIsAnUnknownFlagAndExitsOne() {
+    void aLookFlagIsRefusedAsUnknown() {
         assertThat(run("--data", "x", "--out", "y", "--look=L5")).isEqualTo(1);
 
         assertThat(err()).isEqualTo("measure: IllegalArgumentException: unknown argument --look=L5\n");
