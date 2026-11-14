@@ -476,7 +476,9 @@ read-only checks.
    ```
 4. **Watch it, and stop it when about 10 development films are `complete` (owner).** The job yields to playback and to
    the credits refresher, so it may sit in `WAITING`. **It reads films in media-file-id order, whatever their split, so
-   the first 10 `complete` may include test films.** The measuring tool skips those (step 5), so the trial may need to
+   the first 10 `complete` may include test films.** So the log check and the status call below show the media ids of
+   every film the job reads, test films included: ids only (they are already in the split file), no pictures and no
+   results. The measuring tool skips those films (step 5), so the trial may need to
    run past 10 `complete` to reach about 10 development films: watch the `skipped` counts in the tool's `summary.json`,
    or the row count of `films.csv`, and stop when that gives about 10.
 
@@ -513,9 +515,9 @@ read-only checks.
      --data /data --labels /labels/labels-2026-11-13.json --out /out --stills
    ```
 
-   Never add `--look=L5` or `--look=gate` here: they include the test films and are for the plan's two looks only. The
-   tool writes a directory of its own, `/out/measure-<UTC time>/`, and refuses to reuse one. It prints the paths it
-   wrote and exits 0 even if a film is damaged; read `films.csv` (`status`, `missing`, `corrupt`, `duplicates`) and
+   The tool has no option to include test films, and `summary.json` holds counts of the skipped directories only,
+   never their ids. It writes a directory of its own, `/out/measure-<UTC time>/`, and refuses to reuse one. It prints
+   the paths it wrote and exits 0 even if a film is damaged; read `films.csv` (`status`, `missing`, `corrupt`, `duplicates`) and
    `summary.json` (`skipped`, `projectedBytes`, `meanReadSeconds`). Exit 2 means no film directory yet.
 6. **Copy that run's directory** (the stills under `stills/<mediaFileId>/` are for looking at, with `sheet.png`
    first):

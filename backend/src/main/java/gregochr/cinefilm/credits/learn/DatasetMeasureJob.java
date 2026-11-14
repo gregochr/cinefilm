@@ -34,9 +34,9 @@ import tools.jackson.databind.json.JsonMapper;
  * database, no network, never a Spring bean.
  *
  * <p><strong>Only development films are measured.</strong> A film directory is opened only when the labels file lists
- * the film on the development side with no exclusion (the test side too, but only with a look, {@code L5} or
- * {@code gate}). Every other directory is counted in {@code summary.json} and never opened: no
- * {@code complete.json} read, no file decoded, no row. The ids of test films are never written anywhere.
+ * the film on the development side with no exclusion. Every other directory is counted in {@code summary.json} and
+ * never opened: no {@code complete.json} read, no file decoded, no row. There is no option to measure test films, and
+ * no skipped id of any kind is written anywhere.
  *
  * <p>The columns of {@code films.csv} and {@code frames.csv} are the {@code *_COLUMNS} constants below. Films are
  * ordered by media file id; frames by film, then coarse before dense, then by
@@ -98,26 +98,24 @@ final class DatasetMeasureJob {
      * @param gitCommits the distinct commits the frames were written by
      * @param toolGitCommit the commit of this tool
      * @param measuredAt when the run was made (ISO instant)
-     * @param look {@code L5} or {@code gate} when the test films were included, else null
      * @param skipped the film directories that were not opened, by reason
      */
     record Summary(Map<String, Integer> statusCounts, Double meanTotalBytes, Long maxTotalBytes,
                    Double meanReadSeconds, Long maxReadSeconds, long projectFilms, Long projectedBytes,
                    List<String> ffmpegVersions, List<String> javaVersions, List<String> gitCommits,
-                   String toolGitCommit, String measuredAt, String look, Skipped skipped) {
+                   String toolGitCommit, String measuredAt, Skipped skipped) {
     }
 
     /**
-     * The film directories that were not opened, which is every one that is not a development film with no exclusion
-     * (and, with a look, every one that is not excluded). The ids of test films are never listed.
+     * The film directories that were not opened, which is every one that is not a development film with no exclusion.
+     * Counts only: an unlabelled directory may belong to a test film and an exclusion may sit in a test unit, so no
+     * skipped id is ever written.
      *
-     * @param test how many are on the test side (counted only)
-     * @param excluded how many the labels exclude
+     * @param test how many are on the test side
+     * @param excluded how many the labels exclude (and are not on the test side)
      * @param unlabelled how many the labels do not list
-     * @param excludedIds the ids of the excluded ones
-     * @param unlabelledIds the directory names of the unlabelled ones
      */
-    record Skipped(int test, int excluded, int unlabelled, List<Long> excludedIds, List<String> unlabelledIds) {
+    record Skipped(int test, int excluded, int unlabelled) {
     }
 
     /** Why a directory is not opened. */
@@ -229,8 +227,7 @@ final class DatasetMeasureJob {
     /**
      * Chooses what to measure. The candidates are the directories (only those whose ids {@code --ids} names, when it is
      * given) plus each wanted id that has no directory. A candidate is measured only when the labels list it, it has no
-     * exclusion, and it is on the development side (or the test side, with a look). Every other candidate is counted
-     * and never opened. A test film is counted only, never listed.
+     * exclusion, and it is on the development side. Every other candidate is counted and never opened.
      */
     private static Plan plan(List<Path> found, DatasetMeasureOptions options, Map<Long, LabelRecord> labels) {
         Map<String, Path> candidates = new TreeMap<>();
@@ -245,34 +242,27 @@ final class DatasetMeasureJob {
             candidates.putIfAbsent(Long.toString(id), null);
         }
         List<Entry> entries = new ArrayList<>();
-        int test = 0;
-        TreeSet<Long> excludedIds = new TreeSet<>();
-        TreeSet<String> unlabelledIds = new TreeSet<>(Comparator.comparingInt(String::length)
-            .thenComparing(Comparator.naturalOrder()));
+        int[] counts = new int[Skip.values().length];
         for (Map.Entry<String, Path> candidate : candidates.entrySet()) {
             Long id = canonicalId(candidate.getKey());
-            Skip skip = classify(id == null ? null : labels.get(id), options.look() != null);
+            Skip skip = classify(id == null ? null : labels.get(id));
             if (skip == null) {
                 entries.add(new Entry(candidate.getKey(), candidate.getValue()));
-            } else if (skip == Skip.TEST) {
-                test++;
-            } else if (skip == Skip.EXCLUDED) {
-                excludedIds.add(id);
             } else {
-                unlabelledIds.add(candidate.getKey());
+                counts[skip.ordinal()]++;
             }
         }
         entries.sort(Comparator.comparingLong(entry -> Long.parseLong(entry.name())));
-        return new Plan(entries, new Skipped(test, excludedIds.size(), unlabelledIds.size(),
-            List.copyOf(excludedIds), List.copyOf(unlabelledIds)));
+        return new Plan(entries, new Skipped(counts[Skip.TEST.ordinal()], counts[Skip.EXCLUDED.ordinal()],
+            counts[Skip.UNLABELLED.ordinal()]));
     }
 
-    /** Null to measure, else why not. A test film without a look is {@code TEST} even when it is also excluded. */
-    private static Skip classify(LabelRecord label, boolean look) {
+    /** Null to measure, else why not. A test film is {@code TEST} even when it is also excluded. */
+    private static Skip classify(LabelRecord label) {
         if (label == null || label.side() == null) {
             return Skip.UNLABELLED;
         }
-        if (label.side() == Side.TEST && !look) {
+        if (label.side() == Side.TEST) {
             return Skip.TEST;
         }
         return label.excluded() == null ? null : Skip.EXCLUDED;
@@ -440,7 +430,7 @@ final class DatasetMeasureJob {
         long project = options.project();
         return new Summary(counts, meanTotal, maxTotal, mean(seconds), max(seconds), project,
             meanTotal == null ? null : Math.round(meanTotal * project), List.copyOf(ffmpeg), List.copyOf(java),
-            List.copyOf(commits), gitCommit.commit(), now.toString(), options.look(), skipped);
+            List.copyOf(commits), gitCommit.commit(), now.toString(), skipped);
     }
 
     private static Double mean(List<Long> values) {

@@ -102,25 +102,7 @@ class DatasetMeasureMainTest {
     }
 
     @Test
-    void aLookIsAnnouncedLoudlyOnStderrAndTheTestFilmsAreMeasured() throws IOException {
-        oneFilm();
-        MeasureFixtures.film(frames, "4242", MeasureFixtures.complete(4242, "f", "c", "2026-11-10T12:10:00Z",
-            List.of(0L), List.of()));
-        Path both = MeasureFixtures.labelsFile(temp.resolve("both.json"), MeasureFixtures.label(7, Side.DEV, null),
-            MeasureFixtures.label(4242, Side.TEST, null));
-        Path out = temp.resolve("out");
-
-        int code = run("--data", data.toString(), "--out", out.toString(), "--labels", both.toString(),
-            "--look=L5");
-
-        assertThat(code).isZero();
-        assertThat(err().lines().toList()).hasSize(1).first().asString()
-            .startsWith("measure: LOOK L5: THE TEST FILMS ARE INCLUDED IN THIS RUN.");
-        assertThat(Files.readString(out.resolve(RUN + "/films.csv"))).contains("\n4242,ok,");
-    }
-
-    @Test
-    void withNoLookNothingIsSaidAndTheTestFilmsAreLeftOut() throws IOException {
+    void theTestFilmsAreLeftOutAndNothingIsSaidOnStderr() throws IOException {
         oneFilm();
         MeasureFixtures.film(frames, "4242", MeasureFixtures.complete(4242, "f", "c", "2026-11-10T12:10:00Z",
             List.of(0L), List.of()));
@@ -135,10 +117,10 @@ class DatasetMeasureMainTest {
     }
 
     @Test
-    void anUnknownLookExitsOneBeforeAnythingRuns() {
-        assertThat(run("--data", "x", "--out", "y", "--look=all")).isEqualTo(1);
+    void aLookFlagIsAnUnknownFlagAndExitsOne() {
+        assertThat(run("--data", "x", "--out", "y", "--look=L5")).isEqualTo(1);
 
-        assertThat(err()).isEqualTo("measure: IllegalArgumentException: --look must be L5 or gate\n");
+        assertThat(err()).isEqualTo("measure: IllegalArgumentException: unknown argument --look=L5\n");
     }
 
     @Test

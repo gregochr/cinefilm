@@ -85,11 +85,11 @@ class DatasetMeasureJobTest {
     }
 
     private DatasetMeasureOptions options(Path data, Path out, boolean stills, long project, Long... ids) {
-        return new DatasetMeasureOptions(data, out, labels, new TreeSet<>(List.of(ids)), stills, project, null);
+        return new DatasetMeasureOptions(data, out, labels, new TreeSet<>(List.of(ids)), stills, project);
     }
 
-    private DatasetMeasureOptions splitOptions(Path labelsFile, String look, boolean stills, Long... ids) {
-        return new DatasetMeasureOptions(data, out, labelsFile, new TreeSet<>(List.of(ids)), stills, 850, look);
+    private DatasetMeasureOptions splitOptions(Path labelsFile, boolean stills, Long... ids) {
+        return new DatasetMeasureOptions(data, out, labelsFile, new TreeSet<>(List.of(ids)), stills, 850);
     }
 
     private DatasetMeasureOptions options(boolean stills, Long... ids) {
@@ -340,7 +340,7 @@ class DatasetMeasureJobTest {
     }
 
     @Test
-    void filmsAreOrderedByNumberThenByName() throws IOException, DatasetMeasureJob.NoFilmsException {
+    void filmsAreOrderedByNumber() throws IOException, DatasetMeasureJob.NoFilmsException {
         for (String name : List.of("100", "9", "20")) {
             Files.createDirectories(frames.resolve(name));
         }
@@ -431,9 +431,10 @@ class DatasetMeasureJobTest {
         StringBuilder all = new StringBuilder();
         try (Stream<Path> walk = Files.walk(out)) {
             for (Path path : walk.toList()) {
-                all.append(path).append('\n');
-                if (Files.isRegularFile(path)) {
-                    all.append(new String(Files.readAllBytes(path), StandardCharsets.ISO_8859_1)).append('\n');
+                all.append(out.relativize(path)).append('\n');
+                if (Files.isRegularFile(path) && !path.toString().endsWith(".png")
+                    && !path.toString().endsWith(".jpg")) {
+                    all.append(Files.readString(path)).append('\n');
                 }
             }
         }
@@ -446,20 +447,20 @@ class DatasetMeasureJobTest {
             MeasureFixtures.label(6, Side.DEV, null),
             MeasureFixtures.label(4242, Side.TEST, null),
             MeasureFixtures.label(4343, Side.TEST, ExcludeReason.SPLIT_CONFLICT),
-            MeasureFixtures.label(8, Side.DEV, ExcludeReason.NOT_PRESENT),
+            MeasureFixtures.label(8181, Side.DEV, ExcludeReason.NOT_PRESENT),
             MeasureFixtures.label(0, Side.DEV, null),
-            MeasureFixtures.label(6000, null, null));
+            MeasureFixtures.label(6161, null, null));
     }
 
     @Test
     void testExcludedAndUnlabelledFilmsAreCountedAndTheirDirectoriesNeverOpened() throws IOException,
         DatasetMeasureJob.NoFilmsException {
         threeFilms();
-        for (String name : List.of("4242", "4343", "8", "9", "abc", "007", "6000")) {
+        for (String name : List.of("4242", "4343", "8181", "9191", "abc", "007", "6161")) {
             trap(name);
         }
 
-        job.run(splitOptions(splitLabels(), null, true));
+        job.run(splitOptions(splitLabels(), true));
 
         assertThat(csv(run.resolve("films.csv")).stream().skip(1).map(List::getFirst).toList())
             .containsExactly("5");
@@ -469,14 +470,14 @@ class DatasetMeasureJobTest {
         JsonNode skipped = summary.path("skipped");
         assertThat(skipped.path("test").asInt()).isEqualTo(2);
         assertThat(skipped.path("excluded").asInt()).isEqualTo(1);
-        assertThat(skipped.path("excludedIds").get(0).asLong()).isEqualTo(8);
-        assertThat(skipped.path("excludedIds").size()).isEqualTo(1);
         assertThat(skipped.path("unlabelled").asInt()).isEqualTo(6);
-        assertThat(strings(skipped.path("unlabelledIds"))).containsExactly("7", "9", "12", "007", "abc", "6000");
-        assertThat(skipped.has("testIds")).isFalse();
-        assertThat(summary.path("look").isNull()).isTrue();
+        assertThat(new ArrayList<>(skipped.propertyNames()))
+            .containsExactlyInAnyOrder("test", "excluded", "unlabelled");
+        assertThat(summary.has("look")).isFalse();
         assertThat(summary.path("statusCounts").path("incomplete").asInt()).isZero();
         assertThat(run.resolve("stills/4242")).doesNotExist();
+        assertThat(everythingWritten()).doesNotContain("4242").doesNotContain("4343").doesNotContain("8181")
+            .doesNotContain("9191").doesNotContain("6161").doesNotContain("abc").doesNotContain("007");
     }
 
     @Test
@@ -487,41 +488,11 @@ class DatasetMeasureJobTest {
         MeasureFixtures.film(frames, "4343", MeasureFixtures.complete(4343, "f", "c", WRITTEN, List.of(0L),
             List.of(100_000L)));
 
-        job.run(splitOptions(splitLabels(), null, true));
+        job.run(splitOptions(splitLabels(), true));
         new DatasetMeasureJob(Clock.fixed(Instant.parse("2026-11-14T09:00:05Z"), ZoneOffset.UTC), git)
-            .run(splitOptions(splitLabels(), null, true, 4242L, 5L));
+            .run(splitOptions(splitLabels(), true, 4242L, 5L));
 
         assertThat(everythingWritten()).doesNotContain("4242").doesNotContain("4343");
-    }
-
-    @Test
-    void aLookIncludesTheTestFilmsAndRecordsTheLook() throws IOException, DatasetMeasureJob.NoFilmsException {
-        threeFilms();
-        MeasureFixtures.film(frames, "4242", MeasureFixtures.complete(4242, "f", "c", WRITTEN, List.of(0L),
-            List.of(100_000L)));
-        trap("4343");
-
-        job.run(splitOptions(splitLabels(), "L5", false));
-
-        assertThat(csv(run.resolve("films.csv")).stream().skip(1).map(List::getFirst).toList())
-            .containsExactly("5", "4242");
-        JsonNode summary = MAPPER.readTree(Files.readAllBytes(run.resolve("summary.json")));
-        assertThat(summary.path("look").asString()).isEqualTo("L5");
-        assertThat(summary.path("skipped").path("test").asInt()).isZero();
-        assertThat(summary.path("skipped").path("excluded").asInt()).isEqualTo(1);
-        assertThat(summary.path("skipped").path("excludedIds").get(0).asLong()).isEqualTo(4343);
-    }
-
-    @Test
-    void theGateLookIsRecordedToo() throws IOException, DatasetMeasureJob.NoFilmsException {
-        MeasureFixtures.film(frames, "4242", MeasureFixtures.complete(4242, "f", "c", WRITTEN, List.of(0L),
-            List.of()));
-
-        job.run(splitOptions(splitLabels(), "gate", false));
-
-        assertThat(MAPPER.readTree(Files.readAllBytes(run.resolve("summary.json"))).path("look").asString())
-            .isEqualTo("gate");
-        assertThat(filmRow(run.resolve("films.csv"), "4242")).containsEntry("status", "ok");
     }
 
     @Test
@@ -530,10 +501,10 @@ class DatasetMeasureJobTest {
         threeFilms();
         MeasureFixtures.film(frames, "6", MeasureFixtures.complete(6, "f", "c", WRITTEN, List.of(0L), List.of()));
         trap("4242");
-        trap("8");
-        trap("9");
+        trap("8181");
+        trap("9191");
 
-        job.run(splitOptions(splitLabels(), null, false, 5L, 4242L, 8L, 9L, 77L, 4343L));
+        job.run(splitOptions(splitLabels(), false, 5L, 4242L, 8181L, 9191L, 7777L, 4343L));
 
         assertThat(csv(run.resolve("films.csv")).stream().skip(1).map(List::getFirst).toList())
             .containsExactly("5");
@@ -541,7 +512,8 @@ class DatasetMeasureJobTest {
         assertThat(skipped.path("test").asInt()).isEqualTo(2);
         assertThat(skipped.path("excluded").asInt()).isEqualTo(1);
         assertThat(skipped.path("unlabelled").asInt()).isEqualTo(2);
-        assertThat(strings(skipped.path("unlabelledIds"))).containsExactly("9", "77");
+        assertThat(everythingWritten()).doesNotContain("4242").doesNotContain("4343").doesNotContain("8181")
+            .doesNotContain("9191").doesNotContain("7777");
     }
 
     @Test
@@ -549,7 +521,7 @@ class DatasetMeasureJobTest {
         DatasetMeasureJob.NoFilmsException {
         threeFilms();
 
-        job.run(splitOptions(splitLabels(), null, false, 6L));
+        job.run(splitOptions(splitLabels(), false, 6L));
 
         assertThat(filmRow(run.resolve("films.csv"), "6")).containsEntry("note", "no frames directory");
     }
@@ -558,10 +530,10 @@ class DatasetMeasureJobTest {
     void aMissingOrUnreadableLabelsFileStopsTheRunBeforeAnythingIsWritten() throws IOException {
         threeFilms();
 
-        assertThatThrownBy(() -> job.run(splitOptions(temp.resolve("no-labels.json"), null, false)))
+        assertThatThrownBy(() -> job.run(splitOptions(temp.resolve("no-labels.json"), false)))
             .isInstanceOf(NoSuchFileException.class);
         Path bad = Files.writeString(temp.resolve("bad.json"), "{\"films\": []}");
-        assertThatThrownBy(() -> job.run(splitOptions(bad, null, false)))
+        assertThatThrownBy(() -> job.run(splitOptions(bad, false)))
             .isInstanceOf(JacksonException.class);
         assertThat(out).doesNotExist();
     }

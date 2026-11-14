@@ -313,16 +313,15 @@ For each labelled file, under `/app/cache/credits-dataset/frames/<media_file_id>
 
 `credits.learn.DatasetMeasureMain` is a plain class run as a throwaway container from the released image (the
 `docker run` block under "Where the code lives, and tool runs", with `-Dloader.main=...DatasetMeasureMain`). Its
-arguments are `--data /data --labels /labels/labels-<date>.json --out /out [--ids 5,7,12] [--stills] [--project 850]
-[--look=L5|gate]`.
+arguments are `--data /data --labels /labels/labels-<date>.json --out /out [--ids 5,7,12] [--stills] [--project 850]`.
 
-- **It measures development films only.** `--labels` is L1's `labels-<date>.json`. A film directory is opened only when
-  its label has `side` `dev` and no exclusion. Every other directory (test side, excluded, or not in the labels) is
-  never opened: no `complete.json` read, no file decoded, no row. `summary.json` counts them by reason (`test`,
-  `excluded`, `unlabelled`) and lists ids only for `excluded` and `unlabelled`: **the ids of test films are never
-  written anywhere.** `--ids` narrows within the development films, and an id of another kind is counted the same way.
-  Test films are included only with `--look=L5` or `--look=gate` (the plan's two looks); each use is printed on stderr
-  and recorded in `summary.json` as `look`.
+- **It measures development films only, and never test films: it has no option to.** `--labels` is L1's
+  `labels-<date>.json`. A film directory is opened only when its label has `side` `dev` and no exclusion. Every other
+  directory (test side, excluded, or not in the labels) is never opened: no `complete.json` read, no file decoded, no
+  row. `summary.json` holds only counts of them by reason (`skipped`: `test`, `excluded`, `unlabelled`): **no skipped
+  id of any kind is written anywhere**, because an unlabelled directory may belong to a test film and an exclusion
+  may sit in a test unit. `--ids` narrows within the development films, and an id of another kind is counted the
+  same way. The L5 and gate looks (`--look`) belong to the evaluation tools, which log them in the manifest.
 - **It reads only `--data` and `--labels`** (`--data` mounted `:ro`) and writes one directory of its own,
   `<out>/measure-<yyyyMMdd'T'HHmmss'Z'>/` (made with `createDirectory`; a run never overwrites or deletes another, and
   never leaves stale stills). `--out` must not be inside `--data`. No network, no database.

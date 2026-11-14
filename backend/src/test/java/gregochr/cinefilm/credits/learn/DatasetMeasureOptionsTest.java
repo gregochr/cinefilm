@@ -27,41 +27,24 @@ class DatasetMeasureOptionsTest {
         assertThat(options.ids()).isEmpty();
         assertThat(options.stills()).isFalse();
         assertThat(options.project()).isEqualTo(850);
-        assertThat(options.look()).isNull();
     }
 
     @Test
     void everyFlagIsRead() {
         DatasetMeasureOptions options = parse("--out", "/o", "--stills", "--ids", "12,5,12,7", "--project", "40",
-            "--labels", "/l", "--look", "gate", "--data", "/d");
+            "--labels", "/l", "--data", "/d");
 
         assertThat(options.ids()).containsExactly(5L, 7L, 12L);
         assertThat(options.stills()).isTrue();
         assertThat(options.project()).isEqualTo(40);
-        assertThat(options.look()).isEqualTo("gate");
     }
 
     @Test
-    void theLookTakesEqualsOrASeparateValue() {
-        assertThat(parse("--data", "/d", "--out", "/o", "--labels", "/l", "--look=L5").look()).isEqualTo("L5");
-        assertThat(parse("--data", "/d", "--out", "/o", "--labels", "/l", "--look", "L5").look()).isEqualTo("L5");
-        assertThat(parse("--data", "/d", "--out", "/o", "--labels", "/l", "--look=gate").look()).isEqualTo("gate");
-    }
-
-    @Test
-    void anyOtherLookIsRefused() {
-        String message = "--look must be L5 or gate";
-        assertRefused(message, "--data", "/d", "--out", "/o", "--labels", "/l", "--look=l5");
-        assertRefused(message, "--data", "/d", "--out", "/o", "--labels", "/l", "--look=");
-        assertRefused(message, "--data", "/d", "--out", "/o", "--labels", "/l", "--look", "test");
-        assertRefused(message, "--data", "/d", "--out", "/o", "--labels", "/l", "--look=all");
-    }
-
-    @Test
-    void aRepeatedLookIsNamed() {
-        assertRefused("flag --look given twice", "--look=L5", "--look=gate");
-        assertRefused("flag --look given twice", "--look", "L5", "--look=gate");
-        assertRefused("flag --look given twice", "--look=L5", "--look", "gate");
+    void thereIsNoWayToIncludeTheTestFilms() {
+        String[] base = {"--data", "/d", "--out", "/o", "--labels", "/l"};
+        assertRefused("unknown argument --look=L5", "--data", "/d", "--out", "/o", "--labels", "/l", "--look=L5");
+        assertRefused("unknown argument --look", "--data", "/d", "--out", "/o", "--labels", "/l", "--look", "gate");
+        assertThat(parse(base)).isNotNull();
     }
 
     @Test
