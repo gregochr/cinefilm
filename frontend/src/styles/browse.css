@@ -1355,6 +1355,12 @@
   text-align: right;
 }
 @media (max-width: 600px) {
+  /* An action row holding full-width hinted buttons stacks them; rows of plain buttons keep their layout. */
+  .admin__actions:has(> .action-hint) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
   .action-hint,
   .action-hint--row,
   .action-hint--line {
