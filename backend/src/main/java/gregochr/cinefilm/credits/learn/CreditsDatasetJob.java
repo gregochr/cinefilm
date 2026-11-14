@@ -231,6 +231,15 @@ public class CreditsDatasetJob {
     }
 
     private void resume() {
+        boolean idle;
+        synchronized (lock) {
+            idle = state == State.IDLE;
+        }
+        // The task may run long after it was queued: a stop deletes the marker, and a start leaves IDLE.
+        if (!idle || !props.overlapsReaderDir() && !Files.exists(props.marker())) {
+            LOG.info("Credits dataset job: not starting again: stopped or started meanwhile");
+            return;
+        }
         try {
             LOG.info("Credits dataset job: {}", start().state() == State.FAILED ? "could not start" : "starting again");
         } catch (ConflictException e) {
@@ -446,7 +455,7 @@ public class CreditsDatasetJob {
     /** The next file not yet done or failed in this run; {@link #NONE} when there is none or the run was stopped. */
     private DatasetTarget nextTarget(long gen) {
         synchronized (lock) {
-            if (gen != generation || state != State.RUNNING) {
+            if (gen != generation) {
                 return NONE;
             }
             while (next < cursor.size() && failedIds.contains(cursor.get(next).mediaFileId())) {

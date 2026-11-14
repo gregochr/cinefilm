@@ -727,7 +727,7 @@ class CreditsDatasetJobTest {
 
         queue.poll().run();
 
-        assertThat(messages()).contains("Credits dataset job: already running, not starting again");
+        assertThat(messages()).contains("Credits dataset job: not starting again: stopped or started meanwhile");
         assertThat(queue).hasSize(1);
         assertThat(job.status().state()).isEqualTo(State.RUNNING);
     }
@@ -1150,8 +1150,26 @@ class CreditsDatasetJobTest {
 
         // With the marker still there, a restart starts again once the share is back.
         unresolvable.clear();
-        job.onStartup();
+        CreditsDatasetJob restarted = job(props);
+        restarted.onStartup();
         drain();
+        assertThat(restarted.status().state()).isEqualTo(State.DONE);
+        assertThat(restarted.status().complete()).isEqualTo(4);
+        assertThat(restarted.status().failed()).isZero();
+    }
+
+    @Test
+    void aRunThatGaveUpCanBeStartedAgainInTheSameProcessAndForgetsItsFailures() {
+        targetIds(1, 2, 3, 4);
+        unresolvable.addAll(List.of("f1.m4v", "f2.m4v", "f3.m4v"));
+        job.start();
+        drain();
+        assertThat(job.status().state()).isEqualTo(State.FAILED);
+        unresolvable.clear();
+
+        job.start();
+        drain();
+
         assertThat(job.status().state()).isEqualTo(State.DONE);
         assertThat(job.status().complete()).isEqualTo(4);
         assertThat(job.status().failed()).isZero();
@@ -1391,37 +1409,68 @@ class CreditsDatasetJobTest {
     }
 
     @Test
-    void aResumeTakesANewGenerationSoTheTaskThatSetTheWaitCannotAlsoCarryTheChainOn() throws Exception {
+    void aResumeTakesANewGenerationSoTheTaskThatSetTheWaitCannotAlsoCarryTheChainOn() {
         targetIds(1, 2);
         busyAtCall = 25;
         job.start();
-        drain();
+        Runnable last = null;
+        while (!queue.isEmpty()) {
+            last = queue.poll();
+            last.run();
+        }
+        // The last task is the generation 1 task that set WAITING.
         assertThat(job.status().state()).isEqualTo(State.WAITING);
-        java.lang.reflect.Method step = CreditsDatasetJob.class.getDeclaredMethod("step", long.class);
-        java.lang.reflect.Method nextTarget = CreditsDatasetJob.class.getDeclaredMethod("nextTarget", long.class);
-        java.lang.reflect.Method proceed = CreditsDatasetJob.class.getDeclaredMethod("proceed", long.class);
-        step.setAccessible(true);
-        nextTarget.setAccessible(true);
-        proceed.setAccessible(true);
-
-        // While it waits, even the current generation's task does nothing: the run is not going.
         int reads = disk.reads;
-        step.invoke(job, 1L);
+
+        last.run();
+
         assertThat(disk.reads).isEqualTo(reads);
-        assertThat(((DatasetTarget) nextTarget.invoke(job, 1L)).mediaFileId()).isEqualTo(-1);
-        proceed.invoke(job, 1L);
         assertThat(queue).isEmpty();
 
         job.startIfDeferred();
+        last.run();
 
-        // The old task's late hand-over (generation 1) finds a newer generation and queues nothing.
-        proceed.invoke(job, 1L);
-        step.invoke(job, 1L);
+        // The replayed old task finds a newer generation: nothing is read and only the resume's task is queued.
         assertThat(queue).hasSize(1);
         assertThat(disk.reads).isEqualTo(reads);
         drain();
         assertThat(job.status().state()).isEqualTo(State.DONE);
         assertThat(job.status().complete()).isEqualTo(2);
+    }
+
+    @Test
+    void aQueuedResumeThatRunsAfterAStopDoesNotStartARun() throws IOException {
+        targetIds(1);
+        Files.createDirectories(props.dir());
+        Files.writeString(props.marker(), "a run was going");
+        job.onStartup();
+        assertThat(queue).hasSize(1);
+
+        job.stop();
+        queue.poll().run();
+
+        assertThat(job.status().state()).isEqualTo(State.IDLE);
+        assertThat(queue).isEmpty();
+        assertThat(targets.listCalls).isZero();
+        assertThat(messages()).contains("Credits dataset job: not starting again: stopped or started meanwhile");
+    }
+
+    @Test
+    void aQueuedResumeThatRunsAfterAManualRunFinishedDoesNotRestartIt() throws IOException {
+        targetIds(1);
+        Files.createDirectories(props.dir());
+        Files.writeString(props.marker(), "a run was going");
+        job.onStartup();
+        Runnable resume = queue.poll();
+        job.start();
+        drain();
+        assertThat(job.status().state()).isEqualTo(State.DONE);
+
+        resume.run();
+
+        assertThat(job.status().state()).isEqualTo(State.DONE);
+        assertThat(queue).isEmpty();
+        assertThat(targets.listCalls).isEqualTo(1);
     }
 
     @Test

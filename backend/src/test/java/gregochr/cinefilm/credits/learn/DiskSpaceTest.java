@@ -16,7 +16,9 @@ class DiskSpaceTest {
 
     @Test
     void anExistingDirectoryHasItsDisksUsableSpace() throws IOException {
-        assertThat(new DiskSpace().usableBytes(temp)).isEqualTo(Files.getFileStore(temp).getUsableSpace())
+        // Other processes write to the disk between the two reads, so allow a little drift.
+        assertThat(new DiskSpace().usableBytes(temp))
+            .isCloseTo(Files.getFileStore(temp).getUsableSpace(), org.assertj.core.data.Offset.offset(100_000_000L))
             .isPositive();
     }
 

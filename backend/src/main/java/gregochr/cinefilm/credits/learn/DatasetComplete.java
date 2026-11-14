@@ -192,7 +192,11 @@ public record DatasetComplete(int format, long mediaFileId, String fingerprint, 
         try {
             mover.move(temp, dir.resolve(FILE_NAME));
         } catch (IOException | RuntimeException e) {
-            Files.deleteIfExists(temp);
+            try {
+                Files.deleteIfExists(temp);
+            } catch (IOException deleteFailure) {
+                e.addSuppressed(deleteFailure);
+            }
             throw e;
         }
         flusher.flush(dir);

@@ -119,6 +119,18 @@ class DatasetCompleteTest {
     }
 
     @Test
+    void aTemporaryFileThatCannotBeDeletedDoesNotHideTheMoversException() {
+        IllegalStateException refused = new IllegalStateException("refused");
+
+        assertThatThrownBy(() -> DatasetComplete.write(dir, complete("1000:1"), (from, to) -> {
+            Files.delete(from);
+            Files.createDirectories(from.resolve("inside"));
+            throw refused;
+        })).isSameAs(refused).satisfies(e -> assertThat(e.getSuppressed()).hasSize(1)
+            .allSatisfy(suppressed -> assertThat(suppressed).isInstanceOf(IOException.class)));
+    }
+
+    @Test
     void theFingerprintIsReadOnlyFromAFileOfTheCurrentFormat() throws IOException {
         assertThat(DatasetComplete.fingerprint(dir)).isEmpty();
         writeRaw("{\"format\": 1, \"fingerprint\": \"9:9\"}");

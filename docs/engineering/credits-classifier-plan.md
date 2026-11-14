@@ -304,7 +304,8 @@ For each labelled file, under `/app/cache/credits-dataset/frames/<media_file_id>
     the job.
   - Its playback checkpoint is `checkPlayback`, extracted from `CreditsRefresher` into a shared `PlaybackGuard` and
     called before every ffmpeg call.
-  - When playback blocks it, it sets a deferred flag, and `CreditsScheduler`'s hourly nudge restarts it.
+  - When playback blocks it, the job goes `WAITING`, and `CreditsDatasetScheduler`'s hourly nudge resumes a `WAITING`
+    run.
 - **Niceness:** set for each job (default 19). It is passed into the reader, which today takes niceness only from
   `cinefilm.transcode.nice`.
 
