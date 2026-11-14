@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, renderApp, respond } from '../../test/mockApi.jsx';
@@ -117,6 +117,7 @@ describe('Admin To do section', () => {
     await userEvent.click(within(panel).getByRole('button', { name: 'Use this match' }));
 
     expect(await screen.findByText('Still unmatched after the reload')).toBeInTheDocument();
+    await act(async () => {});
     expect(opener).toBeInTheDocument();
     expect(opener).toHaveFocus();
   });
