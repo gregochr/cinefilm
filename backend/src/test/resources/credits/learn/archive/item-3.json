@@ -1,0 +1,39 @@
+{
+ "MediaContainer": {
+  "size": 1,
+  "Metadata": [
+   {
+    "ratingKey": "3",
+    "type": "movie",
+    "duration": 6000000,
+    "Media": [
+     {
+      "duration": 6000000,
+      "Part": [
+       {
+        "file": "/Volumes/Test Media/Movies/Gamma.m4v",
+        "size": 1
+       }
+      ]
+     }
+    ],
+    "Marker": [
+     {
+      "id": 1,
+      "type": "credits",
+      "startTimeOffset": 4800000,
+      "endTimeOffset": 4820000,
+      "final": true
+     },
+     {
+      "id": 1,
+      "type": "credits",
+      "startTimeOffset": 4900000,
+      "endTimeOffset": 5000000,
+      "final": true
+     }
+    ]
+   }
+  ]
+ }
+}

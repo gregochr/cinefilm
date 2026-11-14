@@ -105,7 +105,7 @@ public class CreditsFrameReader {
     // ---- Pure arithmetic and commands ----------------------------------------------------------------------------
 
     /** The length of the window: the last 35 minutes of the file, or 40% of it when that is less. */
-    static long windowMs(long durationMs) {
+    public static long windowMs(long durationMs) {
         return Math.min(WINDOW_MAX_MS, durationMs * WINDOW_PERCENT / 100);
     }
 
@@ -122,7 +122,7 @@ public class CreditsFrameReader {
      * The offsets of the coarse frames: from the start of the window, one every {@link CreditsTuning#SAMPLE_MS}, none
      * closer than {@value #END_MARGIN_MS} ms to the end.
      */
-    static List<Long> coarseOffsets(long durationMs) {
+    public static List<Long> coarseOffsets(long durationMs) {
         List<Long> offsets = new ArrayList<>();
         for (long at = durationMs - windowMs(durationMs); at <= durationMs - END_MARGIN_MS;
              at += CreditsTuning.SAMPLE_MS) {

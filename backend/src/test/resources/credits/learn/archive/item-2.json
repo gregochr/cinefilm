@@ -1,0 +1,39 @@
+{
+ "MediaContainer": {
+  "size": 1,
+  "Metadata": [
+   {
+    "ratingKey": "2",
+    "type": "movie",
+    "duration": 6000000,
+    "Media": [
+     {
+      "duration": 6000000,
+      "Part": [
+       {
+        "file": "/Volumes/Test Media/Movies/Beta.m4v",
+        "size": 1
+       }
+      ]
+     }
+    ],
+    "Marker": [
+     {
+      "id": 1,
+      "type": "credits",
+      "startTimeOffset": 5100000,
+      "endTimeOffset": 5300000,
+      "final": false
+     },
+     {
+      "id": 1,
+      "type": "credits",
+      "startTimeOffset": 4800000,
+      "endTimeOffset": 4900000,
+      "final": false
+     }
+    ]
+   }
+  ]
+ }
+}

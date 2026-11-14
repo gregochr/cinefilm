@@ -1,0 +1,32 @@
+{
+ "MediaContainer": {
+  "size": 1,
+  "Metadata": [
+   {
+    "ratingKey": "10",
+    "type": "movie",
+    "duration": 6000000,
+    "Media": [
+     {
+      "duration": 6000000,
+      "Part": [
+       {
+        "file": "/Volumes/Test Media/Movies/Kappa.m4v",
+        "size": 1
+       }
+      ]
+     }
+    ],
+    "Marker": [
+     {
+      "id": 1,
+      "type": "credits",
+      "startTimeOffset": 4800000,
+      "endTimeOffset": 5400000,
+      "final": false
+     }
+    ]
+   }
+  ]
+ }
+}

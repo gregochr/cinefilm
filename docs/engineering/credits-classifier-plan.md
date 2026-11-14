@@ -79,7 +79,7 @@ The bigger gap is credits over picture, not white backgrounds. "Labels" says how
   way once they exist.
 - **Done on 2026-11-13:** the export below, taken read-only (`export-2026-11-13.csv`, 849 rows), with its SQL in
   `export.sql` beside it, in `~/cinefilm-labels/` on the server and the Mac. All 849 computed fingerprints equal the
-  stored `plex_fingerprint`. 397 of the 849 films belong to a collection.
+  stored `plex_fingerprint`. 397 of the 849 files (842 films) belong to a collection.
 - **The version 2 baseline.** The 2b detector's rows (`ANALYSIS_VERSION` 2) are the baseline. When the v2 backfill
   finishes, and again before any version 3 release is deployed (the refresher starts overwriting on startup), the
   planner runs a read-only `\copy (select * from credits_detection) to …` into `~/cinefilm-labels/`.
@@ -180,14 +180,16 @@ The bigger gap is credits over picture, not white backgrounds. "Labels" says how
   - **one variant is tested in cross-validation**: including the lit frames that also show text. It is adopted only
     if the earliest out-of-fold error does not get worse.
 - **Plex errors.** The development films with the largest errors are looked at as stills. A clear Plex error is left
-  out, with the reason recorded in the manifest, and is never relabelled by guesswork.
+  out through the exclusions file (its reason lands in the labels' `excluded_note` when `OWNER_EXCLUDED` is the
+  recorded reason, and always in the report), and is never relabelled by guesswork.
 - **The output** goes to `~/cinefilm-labels/labels-<date>.json`. That is library data, so it is never committed (the
   repository is public). Its schema is one object per file:
   - `media_file_id`, `fingerprint`, `unit_key`, `side` (`dev` or `test`), `fold` (0–4, development only);
   - `target_start_ms`, `shift_ms`;
   - `credits` and `film` (lists of `[from_ms, to_ms)` intervals);
   - `left_out` (a list of `{from_ms, to_ms, reason}`);
-  - `excluded` (a reason, or null, for a file left out entirely).
+  - `excluded` (a reason code, or null, for a file left out entirely), and `excluded_note` (the owner's free-text
+    reason for `OWNER_EXCLUDED`, else null).
 
   The opening type and the end-title flag are added by L3, and never by hand.
 
@@ -226,7 +228,7 @@ computed on the product's 240 px grey frames, inside the active area:
     film of its new unit. A conflict between members, where two old films now share a unit but sit on different
     sides, excludes the newcomers with a reason, never moves an old film.
 - **The pre-seed list** forces films already examined while designing the detectors into development, together
-  with their whole units:
+  with their whole units (a film already in a previous manifest keeps its recorded side, carry-over rule 1):
   - *Wicked*, *Gladiator II* and *Civil War* (this plan);
   - every film named in `credits-detection-plan.md`'s phase 1 and 2 measurements.
 
@@ -619,13 +621,15 @@ L1's brief copies this section as written.
      conflict.
   2. A new film whose unit already has members **in the previous manifest** takes the side and fold of those
      members, using the member with the lowest `film_id`. If those members sit on more than one side, the new film
-     is excluded as `SPLIT_CONFLICT`.
+     is excluded as `SPLIT_CONFLICT`. Its record and manifest entry carry its own hash side and fold, for reference;
+     later runs keep that side under rule 1, so a conflict is reported once, on the run that found it.
   3. A new film whose **unit contains a pre-seeded film** (the film itself included) goes to `dev`, with its hash
      fold. So a pre-seeded unit is never split: today *Despicable Me 2* (film 224) goes to `dev` with *Despicable
      Me 4* (film 225).
   4. Any other new film takes its hash side and fold.
 - **Expected on today's first run (no previous manifest):** exactly **610 `dev` and 239 `test` files**.
-- Owner exclusions and their reasons live in the exclusions file, the labels and the report, not in the manifest.
+- Owner exclusions and their reasons live in the exclusions file, the labels (`excluded_note`) and the report, not
+  in the manifest.
 - **Each run reports drift and conflicts, counted:**
   - films kept on their old side because they changed unit;
   - units split across sides;
