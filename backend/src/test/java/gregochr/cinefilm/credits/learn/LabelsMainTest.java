@@ -119,6 +119,16 @@ class LabelsMainTest {
     }
 
     @Test
+    void aFractionalFoldExitsOneWithOneLine() throws IOException {
+        Path bad = temp.resolve("previous.json");
+        Files.writeString(bad, "{\"films\":[{\"film_id\":7,\"unit_key\":\"a\",\"side\":\"dev\",\"fold\":1.7}]}");
+
+        assertThat(run(args(temp.resolve("out"), "--previous-split", bad.toString()))).isEqualTo(1);
+        assertThat(errBytes.toString(StandardCharsets.UTF_8).lines().toList()).hasSize(1).first().asString()
+            .startsWith("labels: ");
+    }
+
+    @Test
     void aBadPreviousManifestExitsNonZeroWithOneLine() throws IOException {
         Path bad = temp.resolve("previous.json");
         Files.writeString(bad, "{\"films\": 7}");

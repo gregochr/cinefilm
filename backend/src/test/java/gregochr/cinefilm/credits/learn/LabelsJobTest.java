@@ -207,6 +207,7 @@ class LabelsJobTest {
         assertThat(gamma.path("side").asString()).isEqualTo("dev");
         assertThat(gamma.path("fold").asInt()).isEqualTo(1);
         assertThat(gamma.path("target_start_ms").isNull()).isTrue();
+        assertThat(gamma.path("excluded_note").isNull()).isTrue();
         assertThat(lines(temp.resolve("split-2026-11-13.json")).reversed().get(1))
             .isEqualTo("\"looks\": [{\"look\":\"L5\",\"date\":\"2026-11-02\"}]");
         String report = Files.readString(temp.resolve("labels-2026-11-13-report.txt"));
@@ -258,6 +259,27 @@ class LabelsJobTest {
             "Plex marker is wrong: stills, not credits");
         assertThat(labelOf(labels, 105).path("excluded_note").isNull()).isTrue();
         assertThat(labelOf(labels, 101).path("excluded_note").isNull()).isTrue();
+    }
+
+    @Test
+    void aListedFileWhoseEarlierReasonWinsHasNoNote() throws IOException {
+        Path exclusions = temp.resolve("x.csv");
+        Files.writeString(exclusions, "media_file_id,reason\n105,\"some note\"\n");
+
+        LabelsJob.run(options(temp, null, exclusions));
+
+        JsonNode epsilon = labelOf(temp.resolve("labels-2026-11-13.json"), 105);
+        assertThat(epsilon.path("excluded").asString()).isEqualTo("MISSING_MARKER_END");
+        assertThat(epsilon.path("excluded_note").isNull()).isTrue();
+    }
+
+    @Test
+    void aFractionalFoldInThePreviousManifestIsRejected() throws IOException {
+        Path previous = temp.resolve("previous.json");
+        Files.writeString(previous, "{\"films\":[{\"film_id\":1,\"unit_key\":\"a\",\"side\":\"dev\",\"fold\":1.7}]}");
+
+        assertThatThrownBy(() -> LabelsJob.run(options(temp, previous, null)))
+            .isInstanceOf(tools.jackson.core.JacksonException.class);
     }
 
     private static SplitManifest manifest(String json) {

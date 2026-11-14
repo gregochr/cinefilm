@@ -15,7 +15,8 @@ final class CsvReader {
      *
      * @param text the whole file
      * @return the rows, in order
-     * @throws IllegalArgumentException when a quote is never closed, or a quote follows other text in a field
+     * @throws IllegalArgumentException when a quote is never closed, a quote follows other text in a field, or text
+     *     follows a closing quote
      */
     static List<List<String>> parse(String text) {
         List<List<String>> rows = new ArrayList<>();

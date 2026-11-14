@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -21,7 +22,8 @@ import tools.jackson.databind.json.JsonMapper;
  */
 final class LabelsJob {
 
-    private static final JsonMapper MAPPER = JsonMapper.builder().build();
+    private static final JsonMapper MAPPER = JsonMapper.builder()
+        .disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT).build();
     private static final List<String> EXCLUSION_HEADER = List.of("media_file_id", "reason");
 
     private LabelsJob() {
