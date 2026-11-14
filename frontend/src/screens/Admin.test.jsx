@@ -17,7 +17,7 @@ const running = (processed, total = 40, current = 'Heat.m4v') => ({
 describe('Admin: Library scan panel', () => {
   it('shows the folder, the last scan and the counts, with Scan now ready', async () => {
     installFetch();
-    renderApp('/admin');
+    renderApp('/admin/library');
     const panel = await screen.findByRole('region', { name: 'Library scan' });
 
     expect(within(panel).getByText('/media')).toBeInTheDocument();
@@ -42,7 +42,7 @@ describe('Admin: Library scan panel', () => {
     installFetch((m, url) =>
       url === '/api/admin/scan' ? respond({ ...fixtures.adminScan, lastScan: null }) : null,
     );
-    renderApp('/admin');
+    renderApp('/admin/library');
     expect(await screen.findByText('Never')).toBeInTheDocument();
   });
 
@@ -58,7 +58,7 @@ describe('Admin: Library scan panel', () => {
           })
         : null,
     );
-    renderApp('/admin');
+    renderApp('/admin/library');
     expect(
       await screen.findByText('1 files outside the library folder were refused'),
     ).toBeInTheDocument();
@@ -73,7 +73,7 @@ describe('Admin: Library scan panel', () => {
           })
         : null,
     );
-    renderApp('/admin');
+    renderApp('/admin/library');
     const counts = await screen.findByRole('list', { name: 'Library counts' });
     expect(within(counts).getAllByRole('listitem').at(-1)).toHaveTextContent('Unreadable4');
   });
@@ -88,7 +88,7 @@ describe('Admin: Library scan panel', () => {
       if (url === '/api/admin/scan') return respond(started ? running(12) : fixtures.adminScan);
       return null;
     });
-    renderApp('/admin');
+    renderApp('/admin/library');
     const panel = await screen.findByRole('region', { name: 'Library scan' });
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Scan now' }));
@@ -115,7 +115,7 @@ describe('Admin: Library scan panel', () => {
       });
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    renderApp('/admin');
+    renderApp('/admin/library');
     expect(await screen.findByText('10 / 40 files')).toBeInTheDocument();
 
     await act(() => vi.advanceTimersByTimeAsync(1500));
@@ -129,14 +129,14 @@ describe('Admin: Library scan panel', () => {
 
   it('shows a neutral line while the folder is still being walked', async () => {
     installFetch((m, url) => (url === '/api/admin/scan' ? respond(running(0, 0, null)) : null));
-    renderApp('/admin');
+    renderApp('/admin/library');
     expect(await screen.findByText('Looking through the folder…')).toBeInTheDocument();
     expect(screen.queryByText(/^Now:/)).not.toBeInTheDocument();
   });
 
   it('keeps Scan now disabled for a scan already running when the page opens', async () => {
     installFetch((m, url) => (url === '/api/admin/scan' ? respond(running(5)) : null));
-    renderApp('/admin');
+    renderApp('/admin/library');
     expect(await screen.findByRole('button', { name: 'Scanning…' })).toBeDisabled();
   });
 
@@ -148,7 +148,7 @@ describe('Admin: Library scan panel', () => {
       if (url === '/api/admin/scan' && method === 'GET') return respond(fixtures.adminScan);
       return null;
     });
-    renderApp('/admin');
+    renderApp('/admin/library');
 
     await userEvent.click(await screen.findByRole('button', { name: 'Scan now' }));
 
@@ -157,7 +157,7 @@ describe('Admin: Library scan panel', () => {
 
   it('reports a scan that could not be started', async () => {
     installFetch((method) => (method === 'POST' ? respond({ error: 'boom' }, 500) : null));
-    renderApp('/admin');
+    renderApp('/admin/library');
 
     await userEvent.click(await screen.findByRole('button', { name: 'Scan now' }));
 
@@ -167,7 +167,7 @@ describe('Admin: Library scan panel', () => {
   it('shows a loading state, then an error with Try again if the status cannot be loaded', async () => {
     let fail = true;
     installFetch((m, url) => (url === '/api/admin/scan' && fail ? respond(null, 500) : null));
-    renderApp('/admin');
+    renderApp('/admin/library');
     const alert = await screen.findByText('Couldn’t load the library scan.');
     expect(alert).toBeInTheDocument();
 
@@ -178,18 +178,21 @@ describe('Admin: Library scan panel', () => {
 
   it('shows a loading skeleton while the status loads', () => {
     installFetch(() => new Promise(() => {}));
-    renderApp('/admin');
-    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(7);
+    renderApp('/admin/library');
+    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(2);
   });
 
-  it('scrolls the panel into view for the empty-library link (#library-scan)', async () => {
+  it('redirects the old /admin#library-scan address to the scan, scrolls once and never loads To do', async () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
     try {
-      installFetch();
-      renderApp('/admin#library-scan');
+      const fetchMock = installFetch();
+      renderApp('/admin#library-scan', { showLocation: true });
       await screen.findByRole('button', { name: 'Scan now' });
-      await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+      expect(screen.getByTestId('location')).toHaveTextContent('/admin/library#scan');
+      expect(screen.getByRole('heading', { level: 1, name: 'Library' })).toBeInTheDocument();
+      expect(fetchMock.mock.calls.some((c) => c[0] === '/api/admin/attention')).toBe(false);
     } finally {
       delete Element.prototype.scrollIntoView;
     }
@@ -209,7 +212,7 @@ describe('Admin: Library scan panel', () => {
         });
       });
       vi.useFakeTimers({ shouldAdvanceTime: true });
-      renderApp('/admin#library-scan');
+      renderApp('/admin/library#scan');
       const card = await screen.findByRole('region', { name: 'Library scan' });
       await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
 
@@ -230,7 +233,7 @@ describe('Admin: Library scan panel', () => {
     Element.prototype.scrollIntoView = scrollIntoView;
     try {
       installFetch();
-      renderApp('/admin');
+      renderApp('/admin/library');
       await screen.findByRole('button', { name: 'Scan now' });
       expect(scrollIntoView).not.toHaveBeenCalled();
     } finally {
@@ -240,7 +243,7 @@ describe('Admin: Library scan panel', () => {
 
   it('copes with a browser that cannot scroll an element into view', async () => {
     installFetch();
-    renderApp('/admin#library-scan');
+    renderApp('/admin/library#scan');
     expect(await screen.findByRole('button', { name: 'Scan now' })).toBeInTheDocument();
   });
 });
@@ -353,7 +356,7 @@ describe('Admin: Films needing attention panel', () => {
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
     renderApp('/admin');
-    await screen.findByText('5 / 40 files');
+    await waitFor(() => expect(scans).toBe(1));
     const attentionCalls = () =>
       fetchMock.mock.calls.filter((c) => c[0] === '/api/admin/attention').length;
     const before = attentionCalls();
@@ -382,8 +385,8 @@ describe('Admin: Subtitles refresh', () => {
       return null;
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    renderApp('/admin');
-    await screen.findByText('5 / 40 files');
+    renderApp('/admin/subtitles');
+    await waitFor(() => expect(scans).toBe(1));
     const calls = () => fetchMock.mock.calls.filter((c) => c[0] === '/api/admin/subtitles').length;
     const before = calls();
 
@@ -394,12 +397,12 @@ describe('Admin: Subtitles refresh', () => {
 });
 
 describe('Admin: page', () => {
-  it('has the Admin heading, its eight panels, and the TMDB credit', async () => {
+  it('has Continue watching, Session and the TMDB credit on Settings', async () => {
     installFetch();
-    renderApp('/admin');
-    expect(await screen.findByRole('heading', { level: 1, name: 'Admin' })).toBeInTheDocument();
-    expect(screen.getAllByRole('region')).toHaveLength(8);
-    expect(screen.getByRole('region', { name: 'Subtitles' })).toBeInTheDocument();
+    renderApp('/admin/settings');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
+    expect(await screen.findAllByRole('region')).toHaveLength(2);
+    expect(screen.getByRole('region', { name: 'Continue watching' })).toBeInTheDocument();
     expect(
       screen.getByText('This product uses the TMDB API but is not endorsed or certified by TMDB.'),
     ).toBeInTheDocument();
@@ -424,9 +427,7 @@ describe('Admin: page', () => {
     renderApp('/admin');
     expect(await screen.findByText('<img src=x onerror=alert(1)> (1969)')).toBeInTheDocument();
     expect(screen.getByText('<b>bold</b>.m4v')).toBeInTheDocument();
-    expect(screen.getAllByRole('img').map((img) => img.getAttribute('aria-label'))).toEqual([
-      'TMDB',
-    ]);
+    expect(screen.queryAllByRole('img')).toEqual([]);
   });
 });
 
@@ -439,7 +440,7 @@ const session = (n) => ({
 describe('Admin: Transcoding panel', () => {
   it('shows the encoder, the keyframe index progress and the stream cache size', async () => {
     installFetch();
-    renderApp('/admin');
+    renderApp('/admin/playback');
     const panel = await screen.findByRole('region', { name: 'Transcoding' });
     expect(within(panel).getByText('VAAPI (hardware)')).toBeInTheDocument();
     expect(within(panel).getByText('412 of 538 films indexed')).toBeInTheDocument();
@@ -448,7 +449,7 @@ describe('Admin: Transcoding panel', () => {
 
   it('lists each session with its film, rung, speed, segments ahead and start time', async () => {
     installFetch();
-    renderApp('/admin');
+    renderApp('/admin/playback');
     const panel = await screen.findByRole('region', { name: 'Transcoding' });
     const sessions = within(panel).getByRole('list', { name: 'Playback sessions' });
     const [first] = within(sessions).getAllByRole('listitem');
@@ -467,7 +468,7 @@ describe('Admin: Transcoding panel', () => {
           })
         : null,
     );
-    renderApp('/admin');
+    renderApp('/admin/playback');
     const panel = await screen.findByRole('region', { name: 'Transcoding' });
     expect(within(panel).getByText('Software (x264)')).toBeInTheDocument();
     expect(panel).toHaveTextContent('— · 1 segment ahead');
@@ -479,7 +480,7 @@ describe('Admin: Transcoding panel', () => {
         ? respond({ ...fixtures.adminTranscoding, encoder: 'unavailable', sessions: [] })
         : null,
     );
-    renderApp('/admin');
+    renderApp('/admin/playback');
     const panel = await screen.findByRole('region', { name: 'Transcoding' });
     expect(within(panel).getByText('Unavailable')).toBeInTheDocument();
     expect(within(panel).getByText('Nothing is being transcoded.')).toBeInTheDocument();
@@ -502,7 +503,7 @@ describe('Admin: Transcoding panel', () => {
       }
       return null;
     });
-    renderApp('/admin');
+    renderApp('/admin/playback');
     await userEvent.click(await screen.findByRole('button', { name: 'Stop Film 2' }));
     const stop = fetchMock.mock.calls.find((c) => c[1]?.method === 'DELETE');
     expect(stop[0]).toBe('/api/admin/transcoding/sessions/session-2');
@@ -516,7 +517,7 @@ describe('Admin: Transcoding panel', () => {
         return respond({ ...fixtures.adminTranscoding, sessions: [session(1)] });
       return method === 'DELETE' ? respond(null, 500) : null;
     });
-    renderApp('/admin');
+    renderApp('/admin/playback');
     await userEvent.click(await screen.findByRole('button', { name: 'Stop Film 1' }));
     expect(await screen.findByText('Could not stop the session.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Stop Film 1' })).toBeInTheDocument();
@@ -527,7 +528,7 @@ describe('Admin: Transcoding panel', () => {
     installFetch((m, url) =>
       url === '/api/admin/transcoding' && fail ? respond(null, 500) : null,
     );
-    renderApp('/admin');
+    renderApp('/admin/playback');
     const panel = await screen.findByRole('region', { name: 'Transcoding' });
     expect(await within(panel).findByRole('alert')).toHaveTextContent('The projector jammed');
     fail = false;
@@ -538,7 +539,7 @@ describe('Admin: Transcoding panel', () => {
   it('refreshes every 5 s while it is open', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const fetchMock = installFetch();
-    renderApp('/admin');
+    renderApp('/admin/playback');
     await screen.findByText('VAAPI (hardware)');
     const reads = () =>
       fetchMock.mock.calls.filter((c) => c[0] === '/api/admin/transcoding').length;
@@ -553,7 +554,7 @@ describe('Admin: Transcoding panel', () => {
 describe('Admin: Playback health panel', () => {
   it('comes directly after the Transcoding card, with the recent playbacks', async () => {
     installFetch();
-    renderApp('/admin');
+    renderApp('/admin/playback');
     const panel = await screen.findByRole('region', { name: 'Playback health' });
     const titles = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
     expect(titles.indexOf('Playback health')).toBe(titles.indexOf('Transcoding') + 1);
@@ -568,7 +569,7 @@ describe('Admin: Session panel', () => {
     const fetchMock = installFetch((m, url) =>
       m === 'DELETE' && url === '/api/session' ? respond(null, 204) : null,
     );
-    renderApp('/admin');
+    renderApp('/admin/settings');
     const panel = await screen.findByRole('region', { name: 'Session' });
     expect(within(panel).getByText('Signed in to this browser.')).toBeInTheDocument();
     await userEvent.click(within(panel).getByRole('button', { name: 'Sign out' }));
@@ -591,7 +592,7 @@ describe('Admin: Session panel', () => {
         : null,
     );
     // installFetch awaits the route result, so a pending promise holds the response.
-    renderApp('/admin');
+    renderApp('/admin/settings');
     await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
     const busy = await screen.findByRole('button', { name: 'Signing out…' });
     expect(busy).toBeDisabled();
@@ -602,7 +603,7 @@ describe('Admin: Session panel', () => {
     installFetch((m, url) =>
       m === 'DELETE' && url === '/api/session' ? respond(null, 500) : null,
     );
-    renderApp('/admin');
+    renderApp('/admin/settings');
     await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
     const notice = await screen.findByText("Couldn't sign out. Try again.");
     expect(notice).toHaveAttribute('role', 'status');

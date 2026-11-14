@@ -56,7 +56,6 @@ describe('Admin: Edit editions', () => {
   it('saving closes it, says Editions saved, and reads the attention list again so a resolved row goes', async () => {
     let saved = false;
     let attentionAfterSave = 0;
-    let reportAfterSave = 0;
     const fetchMock = installFetch((m, url) => {
       if (url === '/api/admin/attention') {
         if (saved) attentionAfterSave += 1;
@@ -66,7 +65,6 @@ describe('Admin: Edit editions', () => {
             : fixtures.adminAttention,
         );
       }
-      if (url === '/api/admin/grouping-report' && saved) reportAfterSave += 1;
       if (isSave(m, url)) {
         saved = true;
         return respond({ filmId: 6, newFilmIds: [] });
@@ -83,7 +81,6 @@ describe('Admin: Edit editions', () => {
       expect(screen.queryByRole('button', { name: 'Edit editions' })).not.toBeInTheDocument(),
     );
     expect(attentionAfterSave).toBe(1);
-    expect(reportAfterSave).toBe(1);
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1);
   });
 
@@ -96,7 +93,7 @@ describe('Admin: Edit editions', () => {
     expect(await screen.findByText('Couldn’t load this film’s files.')).toBeInTheDocument();
     await userEvent.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Admin' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'To do' })).toBeInTheDocument();
   });
 
   it('leaves the keyboard to the sign-in card when the session expires over it', async () => {

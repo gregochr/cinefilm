@@ -1,4 +1,5 @@
 import { Outlet, useLocation } from 'react-router-dom';
+import { bareOnPhone } from '../state/adminRoutes.js';
 import { isSheetOpen } from '../state/searchSheet.js';
 import Header from './Header.jsx';
 import SearchSheet from './SearchSheet.jsx';
@@ -7,12 +8,12 @@ import { useSearchIndexLifecycle } from './useSearchIndexLifecycle.js';
 import { useSlashFocus } from './useSlashFocus.js';
 
 export default function Layout() {
-  const { search } = useLocation();
+  const { search, pathname } = useLocation();
   useSlashFocus();
   // Warm the shared search index so it is ready (and revalidating) before anything renders it.
   useSearchIndexLifecycle();
   return (
-    <div className="app">
+    <div className={`app${bareOnPhone(pathname) ? ' app--bare-phone' : ''}`} data-testid="app">
       <Header />
       <main className="page">
         <Outlet />

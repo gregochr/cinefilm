@@ -178,15 +178,10 @@ describe('Admin: a slow apply for a film that is no longer on screen', () => {
       release = resolve;
     });
     let attentionCalls = 0;
-    let reportCalls = 0;
     installFetch((m, url) => {
       if (url === '/api/admin/attention') {
         attentionCalls += 1;
         return respond(attention);
-      }
-      if (url === '/api/admin/grouping-report') {
-        reportCalls += 1;
-        return null;
       }
       if (isApply(m, url)) return slow;
       return null;
@@ -208,12 +203,10 @@ describe('Admin: a slow apply for a film that is no longer on screen', () => {
     const open = screen.getByRole('region', { name: 'Fix match' });
     await userEvent.click((await within(open).findAllByRole('radio'))[1]);
     const attentionBefore = attentionCalls;
-    const reportBefore = reportCalls;
 
     release(respond({ filmId: 31, joined: false }));
 
     await waitFor(() => expect(attentionCalls).toBeGreaterThan(attentionBefore));
-    await waitFor(() => expect(reportCalls).toBeGreaterThan(reportBefore));
     const still = screen.getByRole('region', { name: 'Fix match' });
     expect(within(still).getByRole('searchbox')).toHaveValue('Local Hero');
     expect(within(still).getAllByRole('radio')[1]).toBeChecked();
@@ -223,7 +216,7 @@ describe('Admin: a slow apply for a film that is no longer on screen', () => {
 describe('Admin: grouping report', () => {
   it('lists the newest changes with a label, a time and what happened', async () => {
     installFetch();
-    renderApp('/admin');
+    renderApp('/admin/library');
     const panel = await screen.findByRole('region', { name: 'Grouping report' });
     const list = await within(panel).findByRole('list', { name: 'Grouping changes' });
 
@@ -242,13 +235,13 @@ describe('Admin: grouping report', () => {
     installFetch((m, url) =>
       url === '/api/admin/grouping-report' ? respond({ items: [] }) : null,
     );
-    renderApp('/admin');
+    renderApp('/admin/library');
     expect(await screen.findByText('Nothing has been grouped or split yet.')).toBeInTheDocument();
   });
 
   it('offers a retry when the report cannot load', async () => {
     installFetch((m, url) => (url === '/api/admin/grouping-report' ? respond(null, 500) : null));
-    renderApp('/admin');
+    renderApp('/admin/library');
     const panel = await screen.findByRole('region', { name: 'Grouping report' });
     expect(await within(panel).findByText(/Couldn.t load the grouping report/)).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: 'Try again' })).toBeInTheDocument();

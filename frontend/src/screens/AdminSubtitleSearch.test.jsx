@@ -11,7 +11,7 @@ async function openScanCard(over) {
   installFetch((method, url) =>
     url === '/api/admin/scan' ? respond({ ...fixtures.adminScan, ...over }) : null,
   );
-  renderApp('/admin');
+  renderApp('/admin/library');
   return screen.findByRole('region', { name: 'Library scan' });
 }
 
@@ -42,6 +42,29 @@ describe('Admin: the subtitle search line in the Library scan card', () => {
 
   it('keeps polling while a search runs alone, then shows when it finished', async () => {
     let polls = 0;
+    installFetch((method, url) => {
+      if (url !== '/api/admin/scan') return null;
+      polls += 1;
+      return respond(
+        polls < 3
+          ? { ...fixtures.adminScan, openSubtitlesRunning: true }
+          : { ...fixtures.adminScan, openSubtitlesLastSearchedAt: '2026-11-13T06:05:00Z' },
+      );
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderApp('/admin/library');
+    const card = await screen.findByRole('region', { name: 'Library scan' });
+    expect(await within(card).findByText('Searching for subtitles…')).toBeVisible();
+
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+
+    expect(await within(card).findByText('Subtitles searched 13 Nov 06:05')).toBeVisible();
+    expect(within(card).queryByText('Searching for subtitles…')).not.toBeInTheDocument();
+  });
+
+  it('reads the subtitle files again when a search finishes, so the new evidence shows on Subtitles', async () => {
+    let polls = 0;
     let fileReads = 0;
     installFetch((method, url) => {
       if (url === '/api/admin/subtitles') {
@@ -57,17 +80,14 @@ describe('Admin: the subtitle search line in the Library scan card', () => {
       );
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    renderApp('/admin');
-    const card = await screen.findByRole('region', { name: 'Library scan' });
-    expect(await within(card).findByText('Searching for subtitles…')).toBeVisible();
+    renderApp('/admin/subtitles');
+    await screen.findByRole('region', { name: 'Subtitles' });
+    const before = fileReads;
 
     await act(() => vi.advanceTimersByTimeAsync(1500));
     await act(() => vi.advanceTimersByTimeAsync(1500));
 
-    expect(await within(card).findByText('Subtitles searched 13 Nov 06:05')).toBeVisible();
-    // The subtitle files are read again, so the new checks and evidence show.
-    await waitFor(() => expect(fileReads).toBeGreaterThan(1));
-    expect(within(card).queryByText('Searching for subtitles…')).not.toBeInTheDocument();
+    await waitFor(() => expect(fileReads).toBeGreaterThan(before));
   });
 
   it('keeps polling while the checks run after the search, then reads the files again and shows the verdicts', async () => {
@@ -91,7 +111,7 @@ describe('Admin: the subtitle search line in the Library scan card', () => {
       });
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    renderApp('/admin');
+    renderApp('/admin/subtitles');
     const panel = await screen.findByRole('region', { name: 'Subtitles' });
     expect(await within(panel).findByText('Unchecked')).toBeVisible();
 

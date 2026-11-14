@@ -60,7 +60,7 @@ function serve({ items = [file()], cues = CUES, onCall = () => {}, fail = {} } =
 async function openPanel(options) {
   const served = serve(options);
   const fetchMock = installFetch(served.route);
-  renderApp('/admin');
+  renderApp('/admin/subtitles');
   const panel = await screen.findByRole('region', { name: 'Subtitles' });
   return { ...served, fetchMock, panel };
 }
@@ -146,7 +146,7 @@ describe('Admin: Subtitles panel, the list', () => {
 
   it('shows a loading status while the list loads', async () => {
     installFetch((method, url) => (url === '/api/admin/subtitles' ? new Promise(() => {}) : null));
-    renderApp('/admin');
+    renderApp('/admin/subtitles');
     const panel = await screen.findByRole('region', { name: 'Subtitles' });
     expect(within(panel).getByRole('status', { name: 'Loading' })).toBeInTheDocument();
   });
@@ -156,7 +156,7 @@ describe('Admin: Subtitles panel, the list', () => {
     installFetch((method, url) =>
       url === '/api/admin/subtitles' && fail ? respond(null, 500) : null,
     );
-    renderApp('/admin');
+    renderApp('/admin/subtitles');
     const panel = await screen.findByRole('region', { name: 'Subtitles' });
     expect(await within(panel).findByText(/Couldn.t load the subtitle files/)).toBeInTheDocument();
 
@@ -240,7 +240,7 @@ describe('Admin: Subtitles panel, the cues', () => {
       if (url === '/api/admin/subtitles/1/cues') return fail ? respond(null, 500) : respond(CUES);
       return null;
     });
-    renderApp('/admin');
+    renderApp('/admin/subtitles');
     const panel = await screen.findByRole('region', { name: 'Subtitles' });
     const li = (await within(panel).findByText('Heat (1995)/Heat.en.forced.srt')).closest('li');
     await userEvent.click(within(li).getByRole('button', { name: /Show the cues/ }));
@@ -386,7 +386,7 @@ describe('Admin: Subtitles panel, one request at a time', () => {
       }
       return null;
     });
-    renderApp('/admin');
+    renderApp('/admin/subtitles');
     const panel = await screen.findByRole('region', { name: 'Subtitles' });
     const rowOne = (await within(panel).findByText('A/One.en.forced.srt')).closest('li');
     const rowTwo = within(panel).getByText('B/Two.en.forced.srt').closest('li');
@@ -426,7 +426,7 @@ describe('Admin: Subtitles panel, quick nudges', () => {
       if (url === '/api/admin/subtitles/1/cues') return respond(CUES);
       return null;
     });
-    renderApp('/admin');
+    renderApp('/admin/subtitles');
     const panel = await screen.findByRole('region', { name: 'Subtitles' });
     const li = (await within(panel).findByText('Heat (1995)/Heat.en.forced.srt')).closest('li');
     await userEvent.click(within(li).getByRole('button', { name: /Show the cues/ }));
@@ -471,7 +471,7 @@ describe('Admin: Subtitles panel, a list that fails to refresh', () => {
       return null;
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    renderApp('/admin');
+    renderApp('/admin/subtitles');
     const panel = await screen.findByRole('region', { name: 'Subtitles' });
     expect(await within(panel).findByText('Heat (1995)/Heat.en.forced.srt')).toBeInTheDocument();
 
@@ -510,7 +510,7 @@ describe('Admin: Subtitles panel, cues that fail to refresh', () => {
       }
       return null;
     });
-    renderApp('/admin');
+    renderApp('/admin/subtitles');
     const panel = await screen.findByRole('region', { name: 'Subtitles' });
     const li = (await within(panel).findByText('Heat (1995)/Heat.en.forced.srt')).closest('li');
     await userEvent.click(within(li).getByRole('button', { name: /Show the cues/ }));
@@ -560,7 +560,7 @@ describe('Admin: Subtitles panel, cues after a scan changes the file', () => {
       return null;
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    renderApp('/admin');
+    renderApp('/admin/subtitles');
     const panel = await screen.findByRole('region', { name: 'Subtitles' });
     const li = (await within(panel).findByText('Heat (1995)/Heat.en.forced.srt')).closest('li');
     await userEvent.click(within(li).getByRole('button', { name: /Show the cues/ }));
@@ -590,7 +590,7 @@ describe('Admin: Subtitles panel, cues after a re-attach', () => {
       }
       return null;
     });
-    renderApp('/admin');
+    renderApp('/admin/subtitles');
     const panel = await screen.findByRole('region', { name: 'Subtitles' });
     const li = (await within(panel).findByText('Heat (1995)/Heat.en.forced.srt')).closest('li');
     await userEvent.click(within(li).getByRole('button', { name: /Show the cues/ }));
@@ -707,7 +707,7 @@ describe('Admin: Subtitles panel, attaching', () => {
       items: [file({ id: 2, path: 'T.en.forced.srt', state: 'unmatched', filmId: null, parts: 0 })],
     });
     installFetch(withFilms(served.route));
-    renderApp('/admin');
+    renderApp('/admin/subtitles');
     const panel = await screen.findByRole('region', { name: 'Subtitles' });
     const li = (await within(panel).findByText('T.en.forced.srt')).closest('li');
     await userEvent.click(within(li).getByRole('button', { name: /^Attach/ }));
@@ -802,7 +802,7 @@ describe('Admin: Subtitles panel, attaching', () => {
       if (url === '/api/films/5' && fail) return respond(null, 500);
       return withFilms(route)(method, url, init);
     });
-    renderApp('/admin');
+    renderApp('/admin/subtitles');
     const panel = await screen.findByRole('region', { name: 'Subtitles' });
     const li = (await within(panel).findByText('T.en.forced.srt')).closest('li');
     await userEvent.click(within(li).getByRole('button', { name: /^Attach/ }));
@@ -826,7 +826,7 @@ describe('Admin: Subtitles panel, attaching', () => {
       items: [file({ id: 2, path: 'T.en.forced.srt', state: 'unmatched', filmId: null, parts: 0 })],
     });
     installFetch(withFilms(route));
-    renderApp('/admin');
+    renderApp('/admin/subtitles');
     const panel = await screen.findByRole('region', { name: 'Subtitles' });
     const li = (await within(panel).findByText('T.en.forced.srt')).closest('li');
     await userEvent.click(within(li).getByRole('button', { name: /^Attach/ }));

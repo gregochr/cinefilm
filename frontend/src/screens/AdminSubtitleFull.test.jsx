@@ -103,7 +103,7 @@ const chip = (panel, name) =>
 async function openPanel(items) {
   const served = serve(items);
   installFetch(served.route);
-  renderApp('/admin');
+  renderApp('/admin/subtitles');
   const panel = await screen.findByRole('region', { name: 'Subtitles' });
   return { ...served, panel };
 }

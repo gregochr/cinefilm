@@ -48,11 +48,11 @@ describe('Home', () => {
     expect(await screen.findByText('The house lights are up')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Import from Plex' })).toHaveAttribute(
       'href',
-      '/admin#library-scan',
+      '/admin/library#plex-import',
     );
     expect(screen.getByRole('link', { name: 'Scan a folder' })).toHaveAttribute(
       'href',
-      '/admin#library-scan',
+      '/admin/library#scan',
     );
   });
 

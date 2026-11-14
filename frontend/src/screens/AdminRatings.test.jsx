@@ -13,7 +13,7 @@ const panelOf = () => screen.findByRole('region', { name: 'Library scan' });
 describe('Admin: ratings in the Library scan card', () => {
   it('says when ratings were last refreshed, with Refresh ratings ready', async () => {
     installFetch();
-    renderApp('/admin');
+    renderApp('/admin/library');
     const panel = await panelOf();
     expect(within(panel).getByText('Ratings last refreshed 08 Nov 12:41')).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: 'Refresh ratings' })).toBeEnabled();
@@ -25,7 +25,7 @@ describe('Admin: ratings in the Library scan card', () => {
         ? respond({ ...fixtures.adminScan, ratingsLastRefreshedAt: null })
         : null,
     );
-    renderApp('/admin');
+    renderApp('/admin/library');
     expect(await screen.findByText('Ratings never refreshed')).toBeInTheDocument();
   });
 
@@ -33,7 +33,7 @@ describe('Admin: ratings in the Library scan card', () => {
     installFetch((m, url) =>
       url === '/api/admin/scan' ? respond({ ...fixtures.adminScan, ratingsEnabled: false }) : null,
     );
-    renderApp('/admin');
+    renderApp('/admin/library');
     const panel = await panelOf();
     expect(within(panel).getByText('Ratings need an OMDb API key')).toBeInTheDocument();
     expect(within(panel).queryByText(/Ratings last refreshed/)).not.toBeInTheDocument();
@@ -58,7 +58,7 @@ describe('Admin: ratings in the Library scan card', () => {
       return null;
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    renderApp('/admin');
+    renderApp('/admin/library');
     const panel = await panelOf();
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Refresh ratings' }));
@@ -79,7 +79,7 @@ describe('Admin: ratings in the Library scan card', () => {
     installFetch((m, url) =>
       url === '/api/admin/scan' ? respond({ ...fixtures.adminScan, ratingsRunning: true }) : null,
     );
-    renderApp('/admin');
+    renderApp('/admin/library');
     expect(await screen.findByRole('button', { name: 'Refreshing ratings…' })).toBeDisabled();
   });
 
@@ -89,7 +89,7 @@ describe('Admin: ratings in the Library scan card', () => {
         ? respond({ error: 'boom' }, 500)
         : null,
     );
-    renderApp('/admin');
+    renderApp('/admin/library');
     const panel = await panelOf();
     await userEvent.click(within(panel).getByRole('button', { name: 'Refresh ratings' }));
     expect(
