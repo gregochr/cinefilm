@@ -332,6 +332,7 @@ public class CreditsFrameReader {
          * @throws ReadException when ffmpeg fails, times out or writes nothing readable
          */
         public RgbFrame rgbFrame(long offsetMs) {
+            requireUsableDuration();
             if (offsetMs < 0 || offsetMs >= durationMs) {
                 throw new IllegalArgumentException(
                     "The frame offset " + offsetMs + " ms is outside the file (0 to " + (durationMs - 1) + " ms)");
@@ -358,6 +359,7 @@ public class CreditsFrameReader {
          * @throws ReadException when ffmpeg fails, times out or writes no frames
          */
         public List<TimedRgb> rgbDense(long startMs, long lengthMs) {
+            requireUsableDuration();
             if (lengthMs < 1 || lengthMs > DENSE_SPAN_MS) {
                 throw new IllegalArgumentException(
                     "The dense length " + lengthMs + " ms must be 1 to " + DENSE_SPAN_MS + " ms");
@@ -366,8 +368,9 @@ public class CreditsFrameReader {
                 throw new IllegalArgumentException("The dense range at " + startMs
                     + " ms starts at or past the end of the file (" + durationMs + " ms)");
             }
-            // No overflow: the length is at most 300,000 and the start is below the duration, so the sum is below
-            // the duration plus 300,000; for a negative start it is a negative number plus a small one.
+            // No overflow: the duration is at most Long.MAX_VALUE - DENSE_SPAN_MS (requireUsableDuration), the start
+            // is below it and the length is at most DENSE_SPAN_MS, so the sum stays below Long.MAX_VALUE; for a
+            // negative start it is a negative number plus a small one.
             long sum = startMs + lengthMs;
             if (sum <= 0) {
                 throw new IllegalArgumentException("The dense range from " + startMs + " ms for " + lengthMs
@@ -389,6 +392,14 @@ public class CreditsFrameReader {
                 throw new ReadException("ffmpeg wrote no frames around " + seekTime(start));
             }
             return frames;
+        }
+
+        /** The colour reads do arithmetic on the duration; the grey reads are unchanged and do not call this. */
+        private void requireUsableDuration() {
+            if (durationMs <= 0 || durationMs > Long.MAX_VALUE - DENSE_SPAN_MS) {
+                throw new IllegalArgumentException(
+                    "The file's duration " + durationMs + " ms is not a usable length");
+            }
         }
 
         private void deleteStaleDense() {

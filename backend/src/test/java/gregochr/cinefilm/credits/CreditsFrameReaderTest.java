@@ -518,6 +518,40 @@ class CreditsFrameReaderTest {
     }
 
     @Test
+    void colourReadsRefuseAJobWhoseDurationIsNotAUsableLengthAndRunNothing() {
+        AtomicInteger checks = new AtomicInteger();
+        long tooLong = Long.MAX_VALUE - CreditsFrameReader.DENSE_SPAN_MS + 1;
+        for (long duration : new long[] {0, -1}) {
+            try (Job job = reader().open(FILM, duration, checks::incrementAndGet)) {
+                assertThatThrownBy(() -> job.rgbFrame(0)).isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("The file's duration " + duration + " ms is not a usable length");
+                assertThatThrownBy(() -> job.rgbDense(0, 1_000)).isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("The file's duration " + duration + " ms is not a usable length");
+            }
+        }
+        try (Job job = reader().open(FILM, tooLong, checks::incrementAndGet)) {
+            assertThatThrownBy(() -> job.rgbFrame(0)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("The file's duration " + tooLong + " ms is not a usable length");
+            assertThatThrownBy(() -> job.rgbDense(0, 1_000)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("The file's duration " + tooLong + " ms is not a usable length");
+        }
+
+        assertThat(ffmpeg.commands).isEmpty();
+        assertThat(checks).hasValue(0);
+    }
+
+    @Test
+    void theLargestUsableDurationStillWorksAndTheGreyReadsDoNotCheckIt() {
+        long largest = Long.MAX_VALUE - CreditsFrameReader.DENSE_SPAN_MS;
+        try (Job job = reader().open(FILM, largest, () -> { })) {
+            assertThat(job.rgbFrame(1_000)).isNotNull();
+        }
+        try (Job job = reader().open(FILM, 0, () -> { })) {
+            assertThat(job.activeAreaFrames()).hasSize(5);
+        }
+    }
+
+    @Test
     void anRgbSeekOutsideTheFileIsRefusedAndRunsNothing() {
         try (Job job = reader().open(FILM, 600_000, () -> { })) {
             assertThatThrownBy(() -> job.rgbFrame(-1)).isInstanceOf(IllegalArgumentException.class)
