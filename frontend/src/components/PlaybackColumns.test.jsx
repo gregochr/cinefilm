@@ -1,9 +1,12 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { fixtures } from '../test/mockApi.jsx';
 import PlaybackColumns from './PlaybackColumns.jsx';
 
+/** A session from the API-shaped fixture, as another one. */
 const row = (id, over = {}) => ({
+  ...structuredClone(fixtures.adminPlaybackChart.sessions[0]),
   playbackId: id,
   filmTitle: `Film ${id}`,
   startedAt: '2026-11-10T19:43:05Z',
@@ -61,9 +64,16 @@ describe('PlaybackColumns', () => {
     await user.hover(screen.getByRole('button', { name: /^Film b,/ }));
     expect(onSelect).toHaveBeenCalledWith('b');
     onSelect.mockClear();
-    const touched = screen.getByRole('button', { name: /^Film a,/ });
-    touched.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'touch' }));
+    // The same pointerover, once typed as a touch and once as a mouse: only the mouse selects.
+    const target = screen.getByRole('button', { name: /^Film a,/ });
+    const over = (pointerType) =>
+      act(() => {
+        target.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType }));
+      });
+    over('touch');
     expect(onSelect).not.toHaveBeenCalled();
+    over('mouse');
+    expect(onSelect).toHaveBeenCalledWith('a');
   });
 
   it('moves with the arrows, Home and End, stopping at the ends, and ignores other keys', async () => {
@@ -88,5 +98,34 @@ describe('PlaybackColumns', () => {
     const calls = onSelect.mock.calls.length;
     await user.keyboard('q');
     expect(onSelect).toHaveBeenCalledTimes(calls);
+  });
+
+  it('draws the 100%, 50% and 0% labels and the stalls label of the board', () => {
+    render(<PlaybackColumns sessions={SESSIONS} selectedId="a" onSelect={() => {}} />);
+    for (const text of ['100%', '50%', '0%', 'stalls']) {
+      expect(screen.getByText(text)).toBeInTheDocument();
+    }
+  });
+
+  it('scrolls the selected column into view on mount and when the selection changes', () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      const { rerender } = render(
+        <PlaybackColumns sessions={SESSIONS} selectedId="c" onSelect={() => {}} />,
+      );
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(scroll.mock.contexts[0]).toBe(screen.getByRole('button', { name: /^Film c,/ }));
+      expect(scroll).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
+      rerender(<PlaybackColumns sessions={SESSIONS} selectedId="a" onSelect={() => {}} />);
+      expect(scroll.mock.contexts[1]).toBe(screen.getByRole('button', { name: /^Film a,/ }));
+    } finally {
+      delete Element.prototype.scrollIntoView;
+    }
+  });
+
+  it('copes with a selection that is not a column', () => {
+    render(<PlaybackColumns sessions={SESSIONS} selectedId={undefined} onSelect={() => {}} />);
+    expect(screen.getAllByRole('button')).toHaveLength(3);
   });
 });

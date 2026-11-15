@@ -1,11 +1,11 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import {
+  bucketShares,
   columnLabel,
   environmentLetter,
   RUNG_BUCKETS,
-  rungShares,
+  sessionDotSize,
   STALL_COLOUR,
-  stallDotSize,
 } from '../state/playbackChart.js';
 import { playbackChart as copy } from '../state/adminCopy.js';
 
@@ -18,14 +18,33 @@ function target(key, at, count) {
   return null;
 }
 
+/** The 100% / 50% / 0% labels at the left of the bars, and "stalls" at the left of the dot row (AR4). */
+function Axis() {
+  return (
+    <div className="pchart__axis" aria-hidden="true">
+      <div className="pchart__ticks">
+        <span>100%</span>
+        <span>50%</span>
+        <span>0%</span>
+      </div>
+      <div className="pchart__axis-stalls">{copy.stallsAxis}</div>
+    </div>
+  );
+}
+
 /**
  * One button per session, oldest to newest: a stack of the time on each rung, then a dot sized by the stall time, then
  * the environment letter. One column is in the tab order (the selected one, a roving tabindex); the arrow keys, Home
  * and End move the selection and focus along the row, hovering with a mouse or clicking selects. Each button says its
- * session in words (`aria-label`), so nothing relies on colour.
+ * session in words (`aria-label`), so nothing relies on colour. The selected column is scrolled into view, since the
+ * row scrolls sideways and the newest session, selected first, is at its far end.
  */
 export default function PlaybackColumns({ sessions, selectedId, onSelect, describedBy }) {
   const buttons = useRef(new Map());
+  useEffect(() => {
+    // jsdom has no scrollIntoView.
+    buttons.current.get(selectedId)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [sessions, selectedId]);
   const move = (event, index) => {
     const to = target(event.key, index, sessions.length);
     if (to === null) return;
@@ -35,60 +54,63 @@ export default function PlaybackColumns({ sessions, selectedId, onSelect, descri
     buttons.current.get(next.playbackId)?.focus();
   };
   return (
-    <div className="pchart__scroll">
-      <div
-        className="pchart__cols"
-        role="group"
-        aria-label={copy.chartLabel}
-        aria-describedby={describedBy}
-      >
-        {sessions.map((session, index) => {
-          const shares = rungShares(session.rungMs);
-          const dot = stallDotSize(session.stallMs);
-          const selected = session.playbackId === selectedId;
-          return (
-            <button
-              key={session.playbackId}
-              ref={(element) => {
-                if (element) buttons.current.set(session.playbackId, element);
-                else buttons.current.delete(session.playbackId);
-              }}
-              type="button"
-              className="pchart__col"
-              aria-label={columnLabel(session)}
-              aria-pressed={selected}
-              tabIndex={selected ? 0 : -1}
-              onClick={() => onSelect(session.playbackId)}
-              onPointerEnter={(event) => {
-                if (event.pointerType === 'mouse') onSelect(session.playbackId);
-              }}
-              onKeyDown={(event) => move(event, index)}
-            >
-              <span className="pchart__bar" aria-hidden="true">
-                {RUNG_BUCKETS.map(({ key, colour }) =>
-                  shares[key] > 0 ? (
+    <div className="pchart__plot">
+      <Axis />
+      <div className="pchart__scroll">
+        <div
+          className="pchart__cols"
+          role="group"
+          aria-label={copy.chartLabel}
+          aria-describedby={describedBy}
+        >
+          {sessions.map((session, index) => {
+            const shares = bucketShares(session.rungMs);
+            const dot = sessionDotSize(session);
+            const selected = session.playbackId === selectedId;
+            return (
+              <button
+                key={session.playbackId}
+                ref={(element) => {
+                  if (element) buttons.current.set(session.playbackId, element);
+                  else buttons.current.delete(session.playbackId);
+                }}
+                type="button"
+                className="pchart__col"
+                aria-label={columnLabel(session)}
+                aria-pressed={selected}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => onSelect(session.playbackId)}
+                onPointerEnter={(event) => {
+                  if (event.pointerType === 'mouse') onSelect(session.playbackId);
+                }}
+                onKeyDown={(event) => move(event, index)}
+              >
+                <span className="pchart__bar" aria-hidden="true">
+                  {RUNG_BUCKETS.map(({ key, colour }) =>
+                    shares[key] > 0 ? (
+                      <span
+                        key={key}
+                        className="pchart__seg"
+                        style={{ flexGrow: shares[key], background: colour }}
+                      />
+                    ) : null,
+                  )}
+                </span>
+                <span className="pchart__stall" aria-hidden="true">
+                  {dot > 0 ? (
                     <span
-                      key={key}
-                      className="pchart__seg"
-                      style={{ flexGrow: shares[key], background: colour }}
+                      className="pchart__dot"
+                      style={{ width: dot, height: dot, background: STALL_COLOUR }}
                     />
-                  ) : null,
-                )}
-              </span>
-              <span className="pchart__stall" aria-hidden="true">
-                {dot > 0 ? (
-                  <span
-                    className="pchart__dot"
-                    style={{ width: dot, height: dot, background: STALL_COLOUR }}
-                  />
-                ) : null}
-              </span>
-              <span className="pchart__env" aria-hidden="true">
-                {environmentLetter(session.environment)}
-              </span>
-            </button>
-          );
-        })}
+                  ) : null}
+                </span>
+                <span className="pchart__env" aria-hidden="true">
+                  {environmentLetter(session.environment)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

@@ -1,28 +1,28 @@
 import { act, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { installFetch, respond } from '../test/mockApi.jsx';
+import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
 import SelectedSession from './SelectedSession.jsx';
 
 afterEach(() => vi.unstubAllGlobals());
 
-const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)';
+/** A session from the API-shaped chart fixture (on a Mac with a touch hint, so it reads as an iPad), as another one. */
 const session = (id, title) => ({
+  ...structuredClone(fixtures.adminPlaybackChart.sessions[0]),
   playbackId: id,
   filmTitle: title,
   startedAt: '2026-11-10T19:43:05Z',
   watchedMs: 4_320_000,
-  stallCount: 0,
-  stallMs: 0,
   environment: 'home',
-  userAgent: MAC,
   touch: true,
 });
 const A = session('00000000-0000-4000-8000-00000000000a', 'Alpha');
 const B = session('00000000-0000-4000-8000-00000000000b', 'Beta');
-const record = (s, operator = 'AS5089 Virgin Media Limited') => ({
-  playbackId: s.playbackId,
-  startedAt: s.startedAt,
-  report: {
+/** The API-shaped record fixture, as the record of `s` with a quiet, smooth report. */
+const record = (s, operator = 'AS5089 Virgin Media Limited') => {
+  const full = structuredClone(fixtures.adminPlaybackRecord);
+  full.playbackId = s.playbackId;
+  full.startedAt = s.startedAt;
+  Object.assign(full.report, {
     environment: 'home',
     operator,
     latencyMs: 12,
@@ -30,15 +30,15 @@ const record = (s, operator = 'AS5089 Virgin Media Limited') => ({
     watchedMs: s.watchedMs,
     stallCount: 0,
     stallMs: 0,
+    reconnectCount: 0,
     rungMs: { original: 4_320_000 },
     kbpsMedian: 1500,
     kbpsLow: 800,
     kbpsHigh: 2000,
     kbpsSamples: 4,
-    minutes: [[0, 1000, 1, 60000, 0]],
-    client: { userAgent: MAC, touch: true },
-  },
-});
+  });
+  return full;
+};
 
 describe('SelectedSession', () => {
   it('names the film and its facts at once, the device read with the touch hint', () => {
@@ -90,5 +90,26 @@ describe('SelectedSession', () => {
     expect(screen.getByRole('img', { name: /Beta/ })).toBeInTheDocument();
     expect(screen.queryByRole('img', { name: /Alpha/ })).not.toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Selected film session' })).toHaveTextContent('Beta');
+  });
+
+  it('says there are no minutes for a record that is gone (404), and offers no retry', async () => {
+    installFetch(() => respond({ error: 'No such playback' }, 404));
+    render(<SelectedSession session={A} />);
+    expect(
+      await screen.findByText('No minute by minute figures for this session.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+  });
+
+  it('shows an error banner with a retry for any other failure (500)', async () => {
+    installFetch(() => respond({ error: 'x' }, 500));
+    render(<SelectedSession session={A} />);
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Couldn’t load that session’s minutes.');
+    expect(within(alert).getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    expect(
+      screen.queryByText('No minute by minute figures for this session.'),
+    ).not.toBeInTheDocument();
   });
 });

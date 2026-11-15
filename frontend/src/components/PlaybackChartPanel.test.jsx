@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { installFetch, respond } from '../test/mockApi.jsx';
+import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
 import PlaybackChartPanel from './PlaybackChartPanel.jsx';
 
 afterEach(() => {
@@ -9,22 +9,17 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)';
 const NOW = new Date('2026-11-14T12:00:00.000Z');
 
+/** A session from the API-shaped fixture, as another one: the identity and the figures a test needs differ. */
 const chartRow = (n, title, over = {}) => ({
+  ...structuredClone(fixtures.adminPlaybackChart.sessions[0]),
   playbackId: `00000000-0000-4000-8000-00000000000${n}`,
-  filmId: n,
   filmTitle: title,
   startedAt: `2026-11-0${n}T20:00:00Z`,
   watchedMs: 4_320_000,
-  stallCount: 0,
-  stallMs: 0,
   startupMs: 1000 * n,
-  environment: 'home',
   rungMs: { original: 4_320_000 },
-  userAgent: MAC,
-  touch: false,
   ...over,
 });
 
@@ -39,42 +34,26 @@ const SESSIONS = [
   chartRow(3, 'Gamma', { environment: 'away' }),
 ];
 
-const minutes7 = [
-  [0, 1000, 1, 60000, 0, 8, 1],
-  [1, 2000, 3, 56000, 4000, 9, 3],
-];
-const minutes5 = [
-  [0, 1000, 1, 60000, 0],
-  [1, 2000, 3, 56000, 4000],
-];
+const minutes7 = structuredClone(fixtures.adminPlaybackRecord.report.minutes);
+const minutes5 = minutes7.map((row) => row.slice(0, 5));
 
-const recordOf = (row, minutes) => ({
-  playbackId: row.playbackId,
-  filmId: row.filmId,
-  filmTitle: row.filmTitle,
-  editionId: 11,
-  startedAt: row.startedAt,
-  updatedAt: row.startedAt,
-  report: {
+/** The API-shaped record fixture, as the record of `row`, with the figures a test reads. */
+const recordOf = (row, minutes) => {
+  const record = structuredClone(fixtures.adminPlaybackRecord);
+  record.playbackId = row.playbackId;
+  record.filmTitle = row.filmTitle;
+  record.startedAt = row.startedAt;
+  Object.assign(record.report, {
     environment: row.environment,
-    operator: 'AS5089 Virgin Media Limited',
-    latencyMs: 12,
     startupMs: row.startupMs,
     watchedMs: row.watchedMs,
     stallCount: row.stallCount,
     stallMs: row.stallMs,
-    longestStallMs: 0,
-    reconnectCount: 0,
-    fellBack: false,
-    kbpsLow: 800,
-    kbpsMedian: 1500,
-    kbpsHigh: 2000,
-    kbpsSamples: 4,
     rungMs: row.rungMs,
     minutes,
-    client: { userAgent: row.userAgent, touch: row.touch },
-  },
-});
+  });
+  return record;
+};
 
 /** A server for the chart and the records; `sessions` and `records` can be changed by the test. */
 function server({ sessions = SESSIONS, records = {}, chartStatus = 200, recordStatus = 200 } = {}) {
@@ -152,7 +131,7 @@ describe('PlaybackChartPanel', () => {
         name: 'Speed and quality minute by minute for Gamma',
       }),
     ).toBeInTheDocument();
-    expect(selected).toHaveTextContent('Away (Virgin Media Limited)');
+    expect(selected).toHaveTextContent('Away (EE Limited)');
     expect(within(selected).getByText(/^Start 3\.0 s · No stalls/)).toBeInTheDocument();
     // The record's own first line is the heading, not repeated.
     expect(within(selected).queryByText(/watched · Mac/)).not.toBeInTheDocument();
@@ -315,6 +294,16 @@ describe('PlaybackChartPanel', () => {
     await user.click(within(alert).getByRole('button', { name: 'Try again' }));
     expect(await screen.findByRole('img', { name: /Gamma/ })).toBeInTheDocument();
     expect(api.charts()).toHaveLength(1);
+  });
+
+  it('says there are no minutes for a record that is gone, without a Try again that cannot help', async () => {
+    server({ recordStatus: 404 });
+    await ready();
+    expect(
+      await screen.findByText('No minute by minute figures for this session.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
   });
 
   it('shows a skeleton for the minutes while they load', async () => {

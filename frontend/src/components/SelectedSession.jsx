@@ -20,6 +20,9 @@ export default function SelectedSession({ session }) {
         <SkeletonBlock className="pchart__strip-skeleton" />
       </div>
     );
+  } else if (error?.status === 404) {
+    // The record is gone (the table keeps the last 2,000): trying again cannot bring it back.
+    detail = <p className="admin__text">{copy.noMinutes}</p>;
   } else if (error) {
     detail = (
       <div className="admin__todo-error" role="alert">

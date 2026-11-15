@@ -66,7 +66,7 @@ function bucketTimes(rungMs) {
  * rungs, adding up to 1; all 0 when no time is recorded (a report that cannot be read has no `rungMs`). A rung id the
  * ladder does not know is left out of the total.
  */
-export function rungShares(rungMs) {
+export function bucketShares(rungMs) {
   const { ms, total } = bucketTimes(rungMs);
   return Object.fromEntries(
     Object.entries(ms).map(([key, value]) => [key, total === 0 ? 0 : value / total]),
@@ -84,6 +84,15 @@ export function stallDotSize(stallMs) {
   if (ms < STALL_SMALL_BELOW_MS) return 8;
   if (ms < STALL_MEDIUM_BELOW_MS) return 12;
   return 16;
+}
+
+/**
+ * The dot under a chart column: shown whenever the session stalled (`stallCount` > 0, the same test as the "stalled"
+ * tile), sized by `stallMs`; a stall that left no measured time still gets the smallest dot.
+ */
+export function sessionDotSize(session) {
+  if (!(num(session.stallCount) > 0)) return 0;
+  return Math.max(stallDotSize(session.stallMs), stallDotSize(1));
 }
 
 /** The middle value; the mean of the two middle ones for an even count; null for none. */
@@ -135,7 +144,7 @@ const percentOf = (share) => Math.round(share * 100);
 
 /** "Original 70%, 480p or lower 30%": the buckets that hold time, or "no quality recorded". */
 function qualityWords(rungMs) {
-  const shares = rungShares(rungMs);
+  const shares = bucketShares(rungMs);
   const parts = RUNG_BUCKETS.filter(({ key }) => shares[key] > 0).map(
     ({ key, label }) => `${label} ${percentOf(shares[key])}%`,
   );
@@ -165,7 +174,10 @@ export function chartSummary(sessions, { days, environment }) {
   return copy.summary(sessions.length, days, where, parts.join(', '));
 }
 
-/** "Heat · 10 Nov 19:43 · iPad · Train (EE) · 1h 12m watched"; `operator` is the record's, once it is read. */
+/**
+ * The parts after the film's title in the selected session's heading, as an array: ["10 Nov 19:43", "iPad",
+ * "Train (EE)", "1h 12m watched"]. `operator` is the record's, once it is read; without it the place stands alone.
+ */
 export function sessionHeading(session, operator) {
   const place = environmentLabel(session.environment);
   return [

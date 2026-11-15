@@ -19,6 +19,7 @@ export default function PlaybackMinuteStrip({ minutes, film }) {
         {strip.bands.map((band) => (
           <rect
             key={band.x}
+            data-testid="strip-band"
             x={band.x}
             y={STRIP.bandY}
             width={band.width}
@@ -28,6 +29,7 @@ export default function PlaybackMinuteStrip({ minutes, film }) {
         ))}
         {strip.line ? (
           <path
+            data-testid="strip-line"
             d={strip.line}
             fill="none"
             stroke="#EDE6DA"
@@ -39,6 +41,7 @@ export default function PlaybackMinuteStrip({ minutes, film }) {
         ) : null}
         {strip.stalls.map((dot) => (
           <circle
+            data-testid="strip-stall"
             key={dot.minute}
             cx={dot.x}
             cy={STRIP.dotY}

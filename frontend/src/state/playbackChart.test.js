@@ -10,7 +10,8 @@ import {
   median,
   minuteStrip,
   percentText,
-  rungShares,
+  sessionDotSize,
+  bucketShares,
   sessionHeading,
   stalledNote,
   startupText,
@@ -66,10 +67,17 @@ describe('environment', () => {
   });
 });
 
-describe('rungShares', () => {
+describe('bucketShares', () => {
   it('splits the time into the four buckets, 480p and below together', () => {
     expect(
-      rungShares({ original: 100, '1080p': 100, '720p': 100, '480p': 50, '360p': 25, '240p': 25 }),
+      bucketShares({
+        original: 100,
+        '1080p': 100,
+        '720p': 100,
+        '480p': 50,
+        '360p': 25,
+        '240p': 25,
+      }),
     ).toEqual({
       original: 0.25,
       p1080: 0.25,
@@ -79,20 +87,20 @@ describe('rungShares', () => {
   });
 
   it('adds up to one whenever there is time', () => {
-    const shares = rungShares({ original: 1, '720p': 2, '360p': 4 });
+    const shares = bucketShares({ original: 1, '720p': 2, '360p': 4 });
     expect(Object.values(shares).reduce((a, b) => a + b, 0)).toBeCloseTo(1, 10);
   });
 
   it('is all zero for no time, no rungs or no report', () => {
     const zero = { original: 0, p1080: 0, p720: 0, low: 0 };
-    expect(rungShares({})).toEqual(zero);
-    expect(rungShares({ original: 0 })).toEqual(zero);
-    expect(rungShares(null)).toEqual(zero);
-    expect(rungShares(undefined)).toEqual(zero);
+    expect(bucketShares({})).toEqual(zero);
+    expect(bucketShares({ original: 0 })).toEqual(zero);
+    expect(bucketShares(null)).toEqual(zero);
+    expect(bucketShares(undefined)).toEqual(zero);
   });
 
   it('leaves out a rung the ladder does not know, and a bad figure', () => {
-    expect(rungShares({ original: 10, auto: 90, '720p': -5, '1080p': 'x' })).toEqual({
+    expect(bucketShares({ original: 10, auto: 90, '720p': -5, '1080p': 'x' })).toEqual({
       original: 1,
       p1080: 0,
       p720: 0,
@@ -115,6 +123,25 @@ describe('stallDotSize', () => {
 
   it('draws nothing for a missing or negative figure', () => {
     expect([undefined, null, NaN, -1].map(stallDotSize)).toEqual([0, 0, 0, 0]);
+  });
+});
+
+describe('sessionDotSize', () => {
+  it('shows a dot for every session that stalled, sized by its stall time', () => {
+    expect(sessionDotSize(session({ stallCount: 2, stallMs: 9400 }))).toBe(12);
+    expect(sessionDotSize(session({ stallCount: 1, stallMs: 25_000 }))).toBe(16);
+  });
+
+  it('gives a stall that left no measured time the smallest dot, as the stalled tile counts it', () => {
+    const row = session({ stallCount: 1, stallMs: 0 });
+    expect(sessionDotSize(row)).toBe(8);
+    expect(chartTiles([row]).stalled).toBe(1);
+  });
+
+  it('shows none for a session without a stall, however long its stall time says', () => {
+    expect(sessionDotSize(session({ stallCount: 0, stallMs: 0 }))).toBe(0);
+    expect(sessionDotSize(session({ stallCount: 0, stallMs: 9000 }))).toBe(0);
+    expect(sessionDotSize(session({ stallCount: undefined }))).toBe(0);
   });
 });
 

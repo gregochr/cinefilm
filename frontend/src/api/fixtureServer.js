@@ -66,7 +66,7 @@ const CHART_SESSIONS = [
     environment: 'home',
     rungMs: { '720p': 60_000 },
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',
-    touch: false,
+    touch: true,
   },
   {
     playbackId: 'c1000000-0000-4000-8000-000000000003',
@@ -102,7 +102,8 @@ const CHART_SESSIONS = [
  * The per-minute figures of a fixture session, as the player writes them: seven figures
  * `[minute, median kbit/s, rung played, ms moved, ms stalled, seconds buffered ahead, rung being fetched]` (rung codes
  * 1 original, 2 1080p, 3 720p, 4 480p, 5 360p), or the five of an older record (`seven` false) without the last two.
- * The speed swings with the minute, and the first minutes of a stalled session stall.
+ * The speed swings with the minute, and a session that stalled stalls for 4.2 s in every minute whose number is 5 more
+ * than a multiple of 17 (minutes 5, 22, 39, ...).
  */
 function fixtureMinutes(chart, seven) {
   const count = Math.round(chart.watchedMs / 60_000);

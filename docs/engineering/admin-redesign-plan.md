@@ -248,8 +248,16 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
   come from the chart row; the figures line and the strip from `GET /api/admin/playback-health/{id}`, read on its own
   per selected id (an earlier id's request is aborted and a late answer ignored; the operator joins the heading when
   the record arrives, and the record's first `describePlayback` line is not repeated under that heading). A column
-  is a button with a roving tabindex (arrows, Home, End; a mouse entering selects, a touch does not); columns are 22 px
-  wide with a mouse and 44 px on a coarse pointer, the row scrolling sideways when 90 days will not fit. **Backend:**
+  is a button with a roving tabindex (arrows, Home, End; a mouse entering selects, a touch does not); columns are fixed
+  at 22 px with a mouse and 44 px when any pointer is coarse (`any-pointer: coarse`, which also lifts the range and
+  environment pills to 44 px), left-aligned, the row scrolling sideways when 90 days will not fit; the selected column
+  is scrolled into view, since the newest is at the far end. **The 22 px mouse columns are an explicit exception to
+  the 44 px rule** (WCAG 2.5.8: the 6 px gaps give each target 28 px of spacing, and the arrow keys are the other
+  way in). The 100% / 50% / 0% and "stalls" labels of the board sit left of the columns. A column's stack is the
+  share of the time **on known rungs** (`bucketShares`), while the mono line under the heading is the share of the
+  **watched** time (`healthFormat.rungShares`); the two can differ by the few seconds that no rung covers. The stall
+  dot and the "stalled" tile both key on `stallCount` > 0 (the dot sized by `stallMs`, never smaller than the small
+  one). A 404 for the selected record (the table keeps 2,000) reads as "No minute by minute figures", with no retry. **Backend:**
   `ChartRow` gained `touch` (`@JsonInclude(NON_NULL)`, so older rows read as before). **Invented copy (planner, 5a-2):**
   the tile "sessions watched" (the board says "films watched"), the notes "all at home" and "all away" beside the
   board's "all on the train", the group names of the filters, the chart's summary sentence, the empty, loading and
