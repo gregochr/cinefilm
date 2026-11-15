@@ -921,8 +921,8 @@ describe('fixture server: Admin settings', () => {
 
   // After the attach test: it works on row 1, which that test attached by hand.
   describe('the per-file tools of Film detail', () => {
-    const failure = async (method, path) => {
-      const pending = handle(method, path).catch((e) => e);
+    const failure = async (method, path, body) => {
+      const pending = handle(method, path, body).catch((e) => e);
       await vi.advanceTimersByTimeAsync(80);
       return pending;
     };
@@ -956,6 +956,26 @@ describe('fixture server: Admin settings', () => {
       const undone = await call('DELETE', '/api/admin/subtitles/7/verify');
       expect(undone).toMatchObject({ id: 7, verified: false });
       expect((await failure('POST', '/api/admin/subtitles/999/verify')).status).toBe(404);
+    });
+
+    it('sets a file’s timing as the owner’s word, moves its version on, and refuses what the server refuses', async () => {
+      const before = (await call('GET', '/api/admin/subtitles')).find((f) => f.id === 3);
+
+      const answer = await call('PUT', '/api/admin/subtitles/3/offset', { offsetMs: 500 });
+
+      expect(answer).toMatchObject({ id: 3, offsetMs: 500, offsetSource: 'OWNER' });
+      expect(answer.version).toBeGreaterThan(before.version);
+      expect((await call('GET', '/api/admin/subtitles')).find((f) => f.id === 3).offsetMs).toBe(
+        500,
+      );
+      expect((await failure('PUT', '/api/admin/subtitles/3/offset', {})).status).toBe(400);
+      expect(
+        (await failure('PUT', '/api/admin/subtitles/3/offset', { offsetMs: 600001 })).status,
+      ).toBe(400);
+      expect(
+        (await failure('PUT', '/api/admin/subtitles/999/offset', { offsetMs: 1 })).status,
+      ).toBe(404);
+      await call('PUT', '/api/admin/subtitles/3/offset', { offsetMs: before.offsetMs });
     });
 
     it('serves a few lines of a file on its timeline, and 404s a file that is gone', async () => {

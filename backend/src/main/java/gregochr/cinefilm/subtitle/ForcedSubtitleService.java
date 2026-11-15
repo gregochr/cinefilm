@@ -57,7 +57,8 @@ public class ForcedSubtitleService {
                 boolean verified = pick.slots().stream().allMatch(s -> s.sidecar().isVerifiedFor(resolution.partIds()));
                 String source = resolution.decision().source() == Source.DOWNLOAD ? DOWNLOAD : SIDECAR;
                 long version = version(source, pick);
-                byEdition.put(editionId, new ForcedSubtitleDto(source, verified, version, sidecarIds(pick)));
+                byEdition.put(editionId, new ForcedSubtitleDto(source, verified, version, sidecarIds(pick),
+                    offsetsMs(pick)));
             }
         });
         return byEdition;
@@ -66,6 +67,11 @@ public class ForcedSubtitleService {
     /** The ids of the subtitle rows a pick is made of, in slot order: which files play, for a client to tell. */
     static List<Long> sidecarIds(Pick pick) {
         return pick.slots().stream().map(slot -> slot.sidecar().getId()).toList();
+    }
+
+    /** The timing offset of each row a pick is made of, in slot order (the same order as {@link #sidecarIds}). */
+    static List<Long> offsetsMs(Pick pick) {
+        return pick.slots().stream().map(slot -> (long) slot.sidecar().getOffsetMs()).toList();
     }
 
     /**

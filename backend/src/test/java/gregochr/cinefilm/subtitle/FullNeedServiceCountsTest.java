@@ -96,7 +96,7 @@ class FullNeedServiceCountsTest {
         Edition shown = editionOf(1, 10, Presence.PRESENT);
         when(editions.findWithFilesByFilmIdIn(List.of(1L))).thenReturn(List.of(shown));
         when(fullSubtitles.forEditions(List.of(shown)))
-            .thenReturn(Map.of(10L, new FullSubtitleDto("SIDECAR", 1, List.of())));
+            .thenReturn(Map.of(10L, new FullSubtitleDto("SIDECAR", 1, List.of(), List.of())));
         when(editions.findAllWithFilesIncludingEmpty()).thenReturn(List.of(shown));
 
         FullNeedCountsDto counts = counts();
@@ -113,7 +113,7 @@ class FullNeedServiceCountsTest {
         Edition waits = editionOf(2, 20, Presence.PRESENT);
         when(editions.findWithFilesByFilmIdIn(List.of(1L, 2L))).thenReturn(List.of(plays, waits));
         when(fullSubtitles.forEditions(List.of(plays, waits)))
-            .thenReturn(Map.of(10L, new FullSubtitleDto("SIDECAR", 1, List.of())));
+            .thenReturn(Map.of(10L, new FullSubtitleDto("SIDECAR", 1, List.of(), List.of())));
         when(editions.findAllWithFilesIncludingEmpty()).thenReturn(List.of(plays, waits));
 
         FullNeedListDto list = service.list();
@@ -129,7 +129,7 @@ class FullNeedServiceCountsTest {
         Edition hidden = editionOf(1, 10, Presence.MISSING);
         when(editions.findWithFilesByFilmIdIn(List.of(1L))).thenReturn(List.of(hidden));
         when(fullSubtitles.forEditions(List.of(hidden)))
-            .thenReturn(Map.of(10L, new FullSubtitleDto("SIDECAR", 1, List.of())));
+            .thenReturn(Map.of(10L, new FullSubtitleDto("SIDECAR", 1, List.of(), List.of())));
         when(editions.findAllWithFilesIncludingEmpty()).thenReturn(List.of(hidden));
 
         FullNeedListDto list = service.list();
@@ -228,7 +228,7 @@ class FullNeedServiceCountsTest {
         Edition shown = editionOf(3, 30, Presence.PRESENT);
         when(editions.findWithFilesByFilmIdIn(List.of(2L))).thenReturn(List.of(hiddenSubtitled));
         when(fullSubtitles.forEditions(List.of(hiddenSubtitled)))
-            .thenReturn(Map.of(20L, new FullSubtitleDto("SIDECAR", 1, List.of())));
+            .thenReturn(Map.of(20L, new FullSubtitleDto("SIDECAR", 1, List.of(), List.of())));
         when(editions.findAllWithFilesIncludingEmpty()).thenReturn(List.of(hiddenEnglish, hiddenSubtitled, shown));
 
         FullNeedCountsDto counts = counts();
@@ -257,7 +257,7 @@ class FullNeedServiceCountsTest {
         Edition shown = editionOf(1, 10, Presence.PRESENT);
         when(editions.findWithFilesByFilmIdIn(List.of(1L))).thenReturn(List.of(shown));
         when(fullSubtitles.forEditions(List.of(shown)))
-            .thenReturn(Map.of(10L, new FullSubtitleDto("DOWNLOAD", 1, List.of())));
+            .thenReturn(Map.of(10L, new FullSubtitleDto("DOWNLOAD", 1, List.of(), List.of())));
         when(editions.findAllWithFilesIncludingEmpty()).thenReturn(List.of(shown));
 
         FullNeedCountsDto counts = counts();

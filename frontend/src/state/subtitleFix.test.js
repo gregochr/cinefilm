@@ -7,6 +7,7 @@ import {
   fileTools,
   filmFiles,
   shownDownloadKind,
+  shownFileKind,
   shownTargets,
   wrongProblem,
   wrongTargets,
@@ -115,6 +116,45 @@ describe('shownDownloadKind', () => {
 
   it('names nothing when Off shows nothing', () => {
     expect(shownDownloadKind({ ...base, choice: SUBTITLE_OFF, fullSubtitle: download })).toBeNull();
+  });
+});
+
+describe('shownFileKind', () => {
+  const base = { streams: [], forcedSubtitle: null, fullSubtitle: null };
+  const download = { source: 'DOWNLOAD', version: 1 };
+  const sidecar = { source: 'SIDECAR', version: 1 };
+
+  it.each([
+    ['the owner’s full file', { choice: FULL_KEY, fullSubtitle: sidecar }, 'FULL'],
+    ['a downloaded full file', { choice: FULL_KEY, fullSubtitle: download }, 'FULL'],
+    [
+      'the owner’s forced file while Off',
+      { choice: SUBTITLE_OFF, forcedSubtitle: sidecar },
+      'FORCED',
+    ],
+    [
+      'a downloaded forced file while Off',
+      { choice: SUBTITLE_OFF, forcedSubtitle: download },
+      'FORCED',
+    ],
+  ])('names the kind for %s', (_name, over, kind) => {
+    expect(shownFileKind({ ...base, ...over })).toBe(kind);
+  });
+
+  it('names nothing for an embedded stream, even when files exist', () => {
+    expect(
+      shownFileKind({
+        choice: 113,
+        streams: [{ id: 113, index: 3, language: 'English', forced: false }],
+        forcedSubtitle: download,
+        fullSubtitle: sidecar,
+      }),
+    ).toBeNull();
+  });
+
+  it('names nothing when Off shows nothing, or the full choice has no full file', () => {
+    expect(shownFileKind({ ...base, choice: SUBTITLE_OFF, fullSubtitle: sidecar })).toBeNull();
+    expect(shownFileKind({ ...base, choice: FULL_KEY })).toBeNull();
   });
 });
 

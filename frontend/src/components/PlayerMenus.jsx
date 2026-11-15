@@ -7,22 +7,30 @@ import {
   subtitleOptions,
 } from '../player/tracks.js';
 import { workerOffline } from '../player/ladder.js';
-import { subtitlesWrong } from '../state/subtitleFixCopy.js';
+import { subtitleTiming, subtitlesWrong } from '../state/subtitleFixCopy.js';
+import { EARLIER, LATER, timingReadout } from '../state/subtitleTiming.js';
 import { CheckIcon } from './icons.jsx';
 
-/** Moves focus between enabled menu items with the arrow keys. */
+/**
+ * Moves focus between enabled menu items with the arrow keys. The position comes from every item, so the focused one
+ * counts even when it is disabled for now (`aria-disabled`, e.g. while saving): the arrows go on from where it is.
+ */
 function onMenuKeyDown(event) {
   if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-  const items = [
-    ...event.currentTarget.querySelectorAll(
-      '[role="menuitemradio"]:not(:disabled), [role="menuitem"]:not([aria-disabled="true"])',
-    ),
+  const all = [
+    ...event.currentTarget.querySelectorAll('[role="menuitemradio"], [role="menuitem"]'),
   ];
-  if (!items.length) return;
+  const usable = (item) => !item.disabled && item.getAttribute('aria-disabled') !== 'true';
+  if (!all.some(usable)) return;
   event.preventDefault();
-  const at = items.indexOf(document.activeElement);
   const step = event.key === 'ArrowDown' ? 1 : -1;
-  items[(at + step + items.length) % items.length].focus();
+  const at = all.indexOf(document.activeElement);
+  // From outside the items, ArrowDown starts at the first and ArrowUp at the last.
+  let index = at === -1 ? (step === 1 ? -1 : all.length) : at;
+  do {
+    index = (index + step + all.length) % all.length;
+  } while (!usable(all[index]));
+  all[index].focus();
 }
 
 function useFocusChecked(ref) {
@@ -118,6 +126,59 @@ function WrongSubtitles({ busy, problem, onWrong }) {
   );
 }
 
+/**
+ * "Earlier", "Later" and "Reset timing" for the subtitle file that shows (`timing.available`). Three plain actions, not
+ * choices (`menuitem`), under a hairline, never amber. `aria-disabled`, not `disabled`, while a change is saved or when
+ * there is nothing to reset, so the pressed button keeps focus. The readout says the offset, or that it is being saved.
+ */
+function TimingControls({ timing }) {
+  const saving = timing.busy || timing.loading;
+  const blocked = timing.busy || timing.frozen;
+  const readout = saving ? subtitleTiming.busy : timingReadout(timing.offsets);
+  const action = (label, spoken, detail, onPress, blocked) => (
+    <button
+      type="button"
+      role="menuitem"
+      className="menu__item menu__item--quiet"
+      aria-label={spoken}
+      aria-disabled={blocked || undefined}
+      onClick={() => {
+        if (!blocked) onPress();
+      }}
+    >
+      <span className="menu__tick" aria-hidden="true" />
+      <span className="menu__name">{label}</span>
+      {detail ? <span className="menu__detail">{detail}</span> : null}
+    </button>
+  );
+  return (
+    <div
+      className="menu__timing"
+      role="group"
+      aria-label={subtitleTiming.group}
+      aria-busy={saving || undefined}
+    >
+      <div className="menu__readout" role="status">
+        {readout ? (saving ? readout : subtitleTiming.readout(readout)) : null}
+      </div>
+      {action(subtitleTiming.earlier, EARLIER.spoken, EARLIER.label, timing.onEarlier, blocked)}
+      {action(subtitleTiming.later, LATER.spoken, LATER.label, timing.onLater, blocked)}
+      {action(
+        subtitleTiming.reset,
+        subtitleTiming.reset,
+        null,
+        timing.onReset,
+        blocked || timing.atZero,
+      )}
+      {timing.problem ? (
+        <p className="menu__problem" role="alert">
+          {timing.problem}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function AudioSubtitlesPanel({
   audioStreams,
   audioValue,
@@ -128,6 +189,7 @@ export function AudioSubtitlesPanel({
   onAudio,
   onSubtitle,
   wrong = null,
+  timing = null,
 }) {
   const ref = useRef(null);
   const subtitlesRef = useRef(null);
@@ -196,6 +258,7 @@ export function AudioSubtitlesPanel({
             </Item>
           ))
         )}
+        {timing?.available ? <TimingControls timing={timing} /> : null}
         {wrong?.available ? (
           <WrongSubtitles busy={wrong.busy} problem={wrong.problem} onWrong={wrong.onWrong} />
         ) : null}

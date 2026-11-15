@@ -165,6 +165,11 @@ export function defaultRoute(method, url, init = {}) {
         cues: [{ startMs: 60000, endMs: 62500, text: `A line of ${row.path}` }],
       });
     }
+    // The answer is the changed row (`SidecarDto`): the offset is the owner's word and `version` moves on.
+    if (subtitleRoute[2] === '/offset' && method === 'PUT') {
+      const { offsetMs } = JSON.parse(init.body);
+      return json({ ...row, offsetMs, offsetSource: 'OWNER', version: row.version + 1 });
+    }
     if (subtitleRoute[2] === '/verify') return json({ ...row, verified: method === 'POST' });
     if (subtitleRoute[2] === '/detach') {
       return json({
