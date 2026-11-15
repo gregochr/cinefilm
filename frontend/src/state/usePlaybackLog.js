@@ -9,16 +9,17 @@ const LOADING = {
   error: false,
   moreError: false,
   loadingMore: false,
-  exhausted: false,
 };
 
 /**
  * The Admin "Playback log": one page of playbacks at a time for the chosen filter ('all', 'films' or 'problems'),
  * read from the server, which does the filtering (the browser never filters). `more()` appends the next page
- * until every row is shown (`pages` counts the pages read, so a row that moved between pages cannot skip one).
- * A page that is short or adds no new row means there is no more to read (`exhausted`), whatever `total` says: a
- * play that started meanwhile can leave `total` above the rows that can be reached. Only the newest request may
- * change what is shown: a filter switch or a retry abandons the older request (it is aborted, and an answer that still arrives is ignored).
+ * until the pages read cover `total` (`pages` counts the pages read, so a row that moved between pages cannot skip
+ * one, and a failed "show more" counts as none). More is decided from that page offset, never from the rows
+ * returned: a page can hold fewer than 50 rows when a stored report is unreadable (the server leaves it out of
+ * `playbacks` but counts it in `total`), and a play that started meanwhile pushes rows down a page, so the rows
+ * shown can stay under `total`. Only the newest request may change what is shown: a filter switch or a retry
+ * abandons the older request (it is aborted, and an answer that still arrives is ignored).
  *
  * `rows` is null until the first page of the filter arrives (or has failed: `error`). `moreError` is a failed
  * "show more", which keeps the rows already shown.
@@ -48,7 +49,6 @@ export function usePlaybackLog() {
             rows: [...shown, ...added],
             pages: append ? previous.pages + 1 : 1,
             total: answer.total,
-            exhausted: answer.playbacks.length < LOG_PAGE_SIZE || added.length === 0,
           };
         });
       })
@@ -101,7 +101,7 @@ export function usePlaybackLog() {
     error: state.error,
     moreError: state.moreError,
     loadingMore: state.loadingMore,
-    hasMore: state.rows !== null && !state.exhausted && state.rows.length < state.total,
+    hasMore: state.rows !== null && state.pages * LOG_PAGE_SIZE < state.total,
     more,
     reload,
   };

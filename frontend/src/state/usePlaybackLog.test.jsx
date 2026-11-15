@@ -139,23 +139,52 @@ describe('usePlaybackLog', () => {
     expect(result.current).toMatchObject({ total: 53, hasMore: false });
   });
 
-  it('stops offering more when a full page adds no new row, though total is above the rows shown', async () => {
-    const repeat = answer('p0', 50, 120);
+  it('keeps offering more after a short page and reads the next one: an unreadable report leaves a row out', async () => {
+    const fetchMock = installFetch((m, url) => {
+      if (url === ALL_0) return respond(answer('p0', 49, 120));
+      if (url === ALL_1) return respond(answer('p1', 50, 120));
+      return null;
+    });
+    const { result } = renderHook(() => usePlaybackLog());
+    await waitFor(() => expect(result.current.rows).toHaveLength(49));
+    expect(result.current.hasMore).toBe(true);
+    act(() => result.current.more());
+    await waitFor(() => expect(result.current.rows).toHaveLength(99));
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([ALL_0, ALL_1]);
+    expect(result.current.hasMore).toBe(true);
+  });
+
+  it('stops once the pages read cover the total, whatever number of rows they held', async () => {
     installFetch((m, url) => {
-      if (url === ALL_0) return respond(answer('p0', 50, 120));
-      if (url === ALL_1) return respond(repeat);
+      if (url === ALL_0) return respond(answer('p0', 50, 100));
+      if (url === ALL_1) return respond(answer('p1', 49, 100));
       return null;
     });
     const { result } = renderHook(() => usePlaybackLog());
     await waitFor(() => expect(result.current.rows).toHaveLength(50));
     expect(result.current.hasMore).toBe(true);
     act(() => result.current.more());
-    await waitFor(() => expect(result.current.loadingMore).toBe(false));
-    expect(result.current.rows).toHaveLength(50);
-    expect(result.current.hasMore).toBe(false);
+    await waitFor(() => expect(result.current.rows).toHaveLength(99));
+    expect(result.current).toMatchObject({ total: 100, hasMore: false });
   });
 
-  it('offers more again after a filter switch that follows an exhausted log', async () => {
+  it('starts again from the first page on reload, with the pages read forgotten', async () => {
+    const fetchMock = installFetch((m, url) => {
+      if (url === ALL_0) return respond(answer('p0', 50, 100));
+      if (url === ALL_1) return respond(answer('p1', 50, 100));
+      return null;
+    });
+    const { result } = renderHook(() => usePlaybackLog());
+    await waitFor(() => expect(result.current.rows).toHaveLength(50));
+    act(() => result.current.more());
+    await waitFor(() => expect(result.current.hasMore).toBe(false));
+    act(() => result.current.reload());
+    await waitFor(() => expect(result.current.rows).toHaveLength(50));
+    expect(result.current.hasMore).toBe(true);
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([ALL_0, ALL_1, ALL_0]);
+  });
+
+  it('offers more again after a filter switch that follows a log that was all read', async () => {
     installFetch((m, url) => {
       if (url === ALL_0) return respond(answer('a', 3, 9));
       if (url === FILMS_0) return respond(answer('f', 50, 80));
@@ -182,6 +211,8 @@ describe('usePlaybackLog', () => {
     await waitFor(() => expect(result.current.moreError).toBe(true));
     expect(result.current).toMatchObject({ loadingMore: false, error: false });
     expect(result.current.rows).toHaveLength(50);
+    // The failed read is not a page read: more is still on offer.
+    expect(result.current.hasMore).toBe(true);
 
     fail = false;
     act(() => result.current.more());

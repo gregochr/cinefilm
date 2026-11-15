@@ -408,7 +408,9 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
   **Log:** `usePlaybackLog` reads `GET /api/admin/playback-health?…&page=n&size=50` and nothing else; "Films only" sends
   `minWatchedMs=180000` (`FILM_SESSION_MIN_MS`), "With problems" `problems=true`, All only the paging. The browser never
   filters; a filter switch aborts the older request and ignores a late answer; "Show 50 more" reads page `pages` and
-  appends, skipping a row id already shown (a new play pushes rows down a page); it stops when rows shown reach `total`, or when a page comes back short or adds no new row (rows a new play pushed down can leave the shown count one or two under `total` for good). The
+  appends, skipping a row id already shown (a new play pushes rows down a page); it stops once the pages read cover `total` (`pages` × 50 ≥ `total`; decided from the page offset, not the rows
+  returned: the server leaves an unreadable stored report out of a page but counts it in `total`, and a new play pushes
+  rows down a page, so the shown count can sit under `total`; a failed "show more" does not count as a page read). The
   "browsing" pill is `watchedMs < FILM_SESSION_MIN_MS` (the one rule, `isBrowsing`). Details are four lines of words from
   `state/playbackLog.js` (`reportDetails`: Player, Network, Quality, Interruptions, reusing `healthFormat`'s
   `speedText`, `rungParts`, `stallDuration`); "Copy raw report" copies the **list route's** report (it has no
