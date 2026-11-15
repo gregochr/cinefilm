@@ -68,10 +68,11 @@ public final class OpenSubtitlesParser {
         }
         if (full) {
             List<OpenSubtitlesResult> candidates = OpenSubtitlesRanking.fullCandidates(kept);
-            return new OpenSubtitlesSearch(kept.size(), candidates.isEmpty() ? null : candidates.get(0), candidates);
+            return new OpenSubtitlesSearch(kept.size(), candidates.isEmpty() ? null : candidates.get(0), candidates,
+                List.copyOf(kept));
         }
         return new OpenSubtitlesSearch(kept.size(), OpenSubtitlesRanking.best(kept).orElse(null),
-            OpenSubtitlesRanking.candidates(kept));
+            OpenSubtitlesRanking.candidates(kept), List.copyOf(kept));
     }
 
     private static OpenSubtitlesResult result(JsonNode item, long imdbNumber, boolean full) {

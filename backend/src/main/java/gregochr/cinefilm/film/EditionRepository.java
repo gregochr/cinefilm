@@ -2,6 +2,7 @@ package gregochr.cinefilm.film;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -16,6 +17,10 @@ public interface EditionRepository extends JpaRepository<Edition, Long> {
      */
     @Query("select distinct e from Edition e join fetch e.mediaFiles join fetch e.film where e.film.id in :filmIds")
     List<Edition> findWithFilesByFilmIdIn(Collection<Long> filmIds);
+
+    /** One edition with its film loaded (and no files), for code that needs the film's id, title or IMDb id. */
+    @Query("select e from Edition e join fetch e.film where e.id = :id")
+    Optional<Edition> findWithFilmById(Long id);
 
     /**
      * Every edition with its files and its film loaded in one statement, for a pass over the whole library that must

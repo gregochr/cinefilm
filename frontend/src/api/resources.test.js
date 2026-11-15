@@ -326,6 +326,23 @@ describe('Forced subtitle resources', () => {
     expect(last().body).toEqual({ choice: null });
   });
 
+  it('searches OpenSubtitles for an edition by kind and downloads the file the owner picked', async () => {
+    const last = stubFetch();
+    await adminApi.searchOpenSubtitles(40, 'forced');
+    expect(last()).toMatchObject({
+      path: '/api/admin/editions/40/opensubtitles?kind=forced',
+      method: 'GET',
+    });
+    await adminApi.searchOpenSubtitles(40, 'full');
+    expect(last().path).toBe('/api/admin/editions/40/opensubtitles?kind=full');
+    await adminApi.downloadOpenSubtitles(40, { fileId: 5011, kind: 'forced' });
+    expect(last()).toMatchObject({
+      path: '/api/admin/editions/40/opensubtitles/download',
+      method: 'POST',
+      body: { fileId: 5011, kind: 'forced' },
+    });
+  });
+
   it('lists the files and reads one file’s cues', async () => {
     const last = stubFetch();
     await adminApi.subtitles();

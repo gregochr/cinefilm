@@ -93,6 +93,13 @@ public class SubtitleSidecar {
     /** When the owner said the lines are right and in sync; null when they have not. */
     private Instant ownerVerifiedAt;
 
+    /**
+     * When the owner picked this download in the Admin picker; null for every other row. Unlike the owner's check it
+     * is never cleared by a nudge, a reset, an undo or a change of the edition's parts: a pick stays the pick until a
+     * later pick for the same edition and kind takes the mark.
+     */
+    private Instant ownerChosenAt;
+
     /** The comma-joined ids of the edition's part files when the owner verified. */
     @Column(length = 500)
     private String verifiedParts;
@@ -127,6 +134,11 @@ public class SubtitleSidecar {
 
     /** When a download was made; null for a file. */
     private Instant downloadedAt;
+
+    /** True when the owner picked this download in the Admin picker. */
+    public boolean isOwnerChosen() {
+        return ownerChosenAt != null;
+    }
 
     /** Where a subtitle came from. */
     public enum Origin {
