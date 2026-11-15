@@ -19,7 +19,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.LongStream;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
@@ -781,6 +785,145 @@ class CreditsFrameReaderTest {
                 .hasMessage("ffmpeg wrote a frame that is not a colour picture: "
                     + "Only binary PPM (P6) is supported, found P5")
                 .hasCauseInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    // ---- A film whose last seconds have no picture --------------------------------------------------------------
+
+    private static List<Long> coarseOffsetsBefore(long durationMs, long stopMs) {
+        return CreditsFrameReader.coarseOffsets(durationMs).stream().filter(o -> o < stopMs).toList();
+    }
+
+    @Test
+    void aSeekInTheLastTenSecondsThatWritesNothingEndsTheCoarsePassWithTheFramesSoFar() {
+        ffmpeg.writesNothingAt = ms -> ms >= 595_000;
+        List<TimedFrame> frames;
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            frames = job.coarseFrames();
+        }
+
+        assertThat(offsets(frames)).isEqualTo(coarseOffsetsBefore(600_000, 595_000));
+        assertThat(frames.getLast().offsetMs()).isEqualTo(590_000);
+        assertThat(ffmpeg.commands).hasSize(frames.size() + 1);
+    }
+
+    @Test
+    void theTailBeginsExactlyTenSecondsBeforeTheEndAndThatSeekIsInsideIt() {
+        ffmpeg.writesNothingAt = ms -> ms >= 590_000;
+        List<TimedFrame> frames;
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            frames = job.coarseFrames();
+        }
+
+        assertThat(frames.getLast().offsetMs()).isEqualTo(585_000);
+        assertThat(offsets(frames)).isEqualTo(coarseOffsetsBefore(600_000, 590_000));
+    }
+
+    @Test
+    void aMissingOutputJustOutsideTheTailStillAbandonsTheFile() {
+        ffmpeg.writesNothingAt = ms -> ms == 585_000;
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            assertThatThrownBy(job::coarseFrames).isInstanceOf(ReadException.class)
+                .hasMessageStartingWith("ffmpeg wrote no readable frame");
+        }
+
+        assertThat(ffmpeg.commands).hasSize(CreditsFrameReader.coarseOffsets(600_000).indexOf(585_000L) + 1);
+    }
+
+    @Test
+    void aNonZeroExitInTheTailStillAbandonsTheFile() {
+        ffmpeg.failsAt = ms -> ms == 595_000;
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            assertThatThrownBy(job::coarseFrames).isInstanceOf(ReadException.class)
+                .hasMessage("ffmpeg exited with status 1 reading the frame at 595.000");
+        }
+    }
+
+    @Test
+    void aTimeoutInTheTailStillAbandonsTheFile() {
+        ffmpeg.failsAt = ms -> ms == 595_000;
+        ffmpeg.failure = new CommandRunner.Result(-1, "", true);
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            assertThatThrownBy(job::coarseFrames).isInstanceOf(ReadException.class)
+                .hasMessage("ffmpeg timed out reading the frame at 595.000");
+        }
+    }
+
+    @Test
+    void anEmptyFileInTheTailStillAbandonsTheFile() {
+        ffmpeg.writesEmptyAt = ms -> ms == 595_000;
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            assertThatThrownBy(job::coarseFrames).isInstanceOf(ReadException.class)
+                .hasMessageStartingWith("ffmpeg wrote a frame that is not a greyscale picture")
+                .hasCauseInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    @Test
+    void aCorruptFileInTheTailStillAbandonsTheFile() {
+        ffmpeg.garbage = "not a picture".getBytes(StandardCharsets.US_ASCII);
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            assertThatThrownBy(job::coarseFrames).isInstanceOf(ReadException.class)
+                .hasMessageStartingWith("ffmpeg wrote a frame that is not a greyscale picture");
+        }
+    }
+
+    @Test
+    void aCoarsePassThatReadNothingBeforeTheFramelessTailStillFails() {
+        // A 12 s file: the window is 4.8 s, so every coarse seek is inside the tail.
+        ffmpeg.writesNothingAt = ms -> true;
+        try (Job job = reader().open(FILM, 12_000, () -> { })) {
+            assertThatThrownBy(job::coarseFrames).isInstanceOf(ReadException.class)
+                .hasMessage("ffmpeg wrote no frame at 7.200 and no coarse frame was read before it");
+        }
+    }
+
+    @Test
+    void aStaleFrameLeftInTheDirectoryIsNeverReadAsTheOutputOfASeekThatWroteNothing() {
+        ffmpeg.writesNothingAt = ms -> true;
+        AtomicInteger plants = new AtomicInteger();
+        try (Job job = reader().open(FILM, 12_000, () -> plantStaleFrame(plants))) {
+            assertThatThrownBy(job::coarseFrames).isInstanceOf(ReadException.class)
+                .hasMessage("ffmpeg wrote no frame at 7.200 and no coarse frame was read before it");
+        }
+
+        assertThat(plants).hasValue(1);
+    }
+
+    private void plantStaleFrame(AtomicInteger plants) {
+        try {
+            Files.write(onlyJobDirectory().resolve("frame.pgm"), FakeFfmpeg.pgm(SyntheticFrames.picture()));
+            plants.incrementAndGet();
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @Test
+    void endingTheCoarsePassEarlyIsLoggedOnceWithTheFileAndTheOffset() {
+        Logger log = (Logger) LoggerFactory.getLogger(CreditsFrameReader.class);
+        ListAppender<ILoggingEvent> logged = new ListAppender<>();
+        logged.start();
+        log.addAppender(logged);
+        try {
+            ffmpeg.writesNothingAt = ms -> ms >= 595_000;
+            try (Job job = reader().open(FILM, 600_000, () -> { })) {
+                job.coarseFrames();
+            }
+        } finally {
+            log.detachAppender(logged);
+        }
+
+        assertThat(logged.list).extracting(ILoggingEvent::getFormattedMessage).containsExactly(
+            "Credits: the coarse pass of Film (2000).mkv ended early at 595000 ms: the end of the file has no picture");
+    }
+
+    @Test
+    void aMissingOutputOnTheActiveAreaReadsStillAbandonsTheFile() {
+        ffmpeg.writesNothingAt = ms -> true;
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            assertThatThrownBy(job::activeAreaFrames).isInstanceOf(ReadException.class)
+                .hasMessageStartingWith("ffmpeg wrote no readable frame");
         }
     }
 
