@@ -32,7 +32,8 @@ other networks, so it is not repeated.
 
 Each request names a function for the answer (`callback=cb`) and carries a time stamp, so nothing on the way can
 answer from a cache. An answer over 200,000 bytes is refused, and one nested more than 32 levels deep is not taken
-as data.
+as data. The script needs curl 8.4.0 or newer, which is what stops an answer that has no length at that limit; with
+an older curl it refuses to start.
 
 Each round is one line of JSON in `~/train-feed-logger/logs/train-feed-<date>-<time>.jsonl`, written at once. The
 `logs` folder, when the script is the one to create it, and every log are readable by the owner alone. **The log

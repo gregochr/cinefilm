@@ -153,6 +153,8 @@ assert_eq "no speed sample without a terminal" false "$(jv "$LOG" '"speed" in L[
 assert_eq "start record: version 2" 2 "$(jv "$LOG" 'L[0]["version"]')"
 assert_eq "start record: no speed site" null "$(jv "$LOG" 'L[0]["speed_site"]')"
 assert_eq "start record: the timeout" 3.0 "$(jv "$LOG" 'L[0]["timeout"]')"
+REAL_CURL=$(/usr/bin/curl --version | head -n 1 | cut -d ' ' -f 2)
+assert_eq "start record: the curl version, as this machine's curl reports it" "\"$REAL_CURL\"" "$(jv "$LOG" 'L[0]["curl"]')"
 assert_contains "the line shows users" "$OUT" "38 of 93 online"
 assert_contains "the line shows each link" "$OUT" "links: lte -62, disconnected 0, lte -35"
 assert_contains "the line shows the internet check" "$OUT" "internet "
@@ -478,8 +480,14 @@ assert_eq "--no-film with --speed-site: sampled from the given site" "$SCRIPT_BY
 assert_eq "--no-film with --speed-site: the site is recorded" "\"$SITE_F\"" "$(jv "$LOG" 'L[0]["speed_site"]')"
 
 echo "pure functions"
-RESULTS=$(python3 -B - "$LOGGER" 2>&1 <<'PY'
-import contextlib, importlib.util, io, json, sys, types
+# Stand-ins for curl, each a two-line script that prints one version line.
+for stub in "8.3.0:curl 8.3.0 (x86_64-pc-linux-gnu) libcurl/8.3.0" "8.4.0:curl 8.4.0 (x) libcurl/8.4.0" \
+    "8.10.1:curl 8.10.1 (x) libcurl/8.10.1" "7.88.1:curl 7.88.1 (x) libcurl/7.88.1" "text:hello, this is not curl"; do
+    printf '#!/bin/sh\necho "%s"\n' "${stub#*:}" > "$TMP/curl-${stub%%:*}"
+    chmod +x "$TMP/curl-${stub%%:*}"
+done
+RESULTS=$(python3 -B - "$LOGGER" "$TMP" 2>&1 <<'PY'
+import contextlib, importlib.util, io, json, os, shutil, sys, tempfile, types
 
 spec = importlib.util.spec_from_file_location("train_feed_logger", sys.argv[1])
 m = importlib.util.module_from_spec(spec)
@@ -805,6 +813,58 @@ check("failed_line: an escape sequence is made printable", "round failed: ?[31mb
       m.failed_line("\x1b[31mboom"))
 check("failed_line: the text is cut at 200 characters", "round failed: " + "x" * 200, m.failed_line("x" * 300))
 
+def curl_at(path):
+    real = m.CURL
+    m.CURL = path
+    try:
+        version = m.curl_version()
+        return version, m.curl_problem(version)
+    finally:
+        m.CURL = real
+
+
+stubs = sys.argv[2]
+for name, version, refused in [("8.3.0", (8, 3, 0), True), ("8.4.0", (8, 4, 0), False),
+                               ("8.10.1", (8, 10, 1), False), ("7.88.1", (7, 88, 1), True)]:
+    found, problem = curl_at(stubs + "/curl-" + name)
+    check("curl %s: the version is read as numbers" % name, version, found)
+    check("curl %s: %s" % (name, "refused, naming the version" if refused else "accepted"),
+          True if refused else None, (name in problem) if refused else problem)
+found, problem = curl_at(stubs + "/curl-text")
+check("curl: a first line that is not a curl version is refused", (None, True), (found, "could not be read" in problem))
+found, problem = curl_at(stubs + "/curl-missing")
+check("curl: a path that does not exist is refused", (None, True), (found, "could not be read" in problem))
+check("curl: two parts are enough (8.4 is 8.4.0)", None, m.curl_problem((8, 4)))
+check("curl: the real one on this machine is new enough", None, m.curl_problem(m.curl_version()))
+
+
+def main_with(curl_path):
+    """Runs main() with a stand-in curl and an empty HOME: what it exits with, what it said, what it created."""
+    home = tempfile.mkdtemp()
+    saved = (m.CURL, sys.argv, os.environ.get("HOME"))
+    m.CURL, sys.argv = curl_path, ["train-feed-logger.py", "--no-wifi", "--no-awake", "--probe", "off", "--rounds", "1"]
+    os.environ["HOME"] = home
+    said = io.StringIO()
+    try:
+        with contextlib.redirect_stderr(said):
+            code = m.main()
+    except SystemExit as stopped:
+        code = stopped.code
+    finally:
+        m.CURL, sys.argv = saved[0], saved[1]
+        os.environ["HOME"] = saved[2]
+    made = os.listdir(home)
+    shutil.rmtree(home)
+    return code, said.getvalue(), made
+
+
+code, said, made = main_with(stubs + "/curl-8.3.0")
+check("main: an old curl stops the start with exit 2", 2, code)
+check("main: and says what is needed and what was found", True, "needs curl 8.4.0" in said and "8.3.0" in said)
+check("main: and creates nothing", [], made)
+code, said, made = main_with(stubs + "/curl-missing")
+check("main: an unreadable curl stops the start with exit 2 too", (2, [], True), (code, made, "could not be read" in said))
+
 a_down = {"now": False}
 
 
@@ -842,7 +902,7 @@ while IFS= read -r line; do
         "FAIL "*) bad "${line#FAIL }"; PURE=$((PURE + 1)) ;;
     esac
 done <<< "$RESULTS"
-assert_eq "all 105 pure checks reported" 105 "$PURE"
+assert_eq "all 121 pure checks reported" 121 "$PURE"
 
 echo "compiles"
 PYTHONPYCACHEPREFIX="$TMP/pyc" python3 -m py_compile "$LOGGER" "$STAND_IN"

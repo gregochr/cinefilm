@@ -18,7 +18,8 @@ git checkout must not put it in the repository.
 
 It only reads: it sends nothing but those requests, changes nothing, and stops when its window is closed (or
 with Ctrl-C). While it runs it keeps the Mac from idling to sleep. Feed data is untrusted: what is printed has
-every character outside printable ASCII replaced, while the log keeps the raw values.
+every character outside printable ASCII replaced, while the log keeps the raw values. It needs curl 8.4.0 or
+newer, which is what stops an answer that has no length at the size limit, and refuses to start with an older one.
 """
 import argparse
 import json
@@ -58,6 +59,7 @@ GIVE_UP_AFTER = 3  # failures in a row before a part of the feed is only tried e
 # Deeper than this is not feed data: the real feed is four levels deep, the interpreter's own limit differs between
 # Python versions, and a structure it accepts could still be too deep to write back out as JSON.
 MAX_DEPTH = 32
+MIN_CURL = (8, 4, 0)
 WRAPPED = re.compile(r"^[\w$.]*\s*\((.*)\)\s*;?$", re.S)
 CURL_ERRORS = {
     6: "could not find it",
@@ -84,6 +86,7 @@ def fetch(url, timeout, insecure=False, max_size=None):
     if insecure:
         cmd.append("-k")
     if max_size:
+        # From curl 8.4.0 this stops a body that has no length too, which is why an older curl is refused at the start.
         cmd += ["--max-filesize", str(max_size)]
     cmd.append(url)
     started = time.time()
@@ -103,10 +106,6 @@ def fetch(url, timeout, insecure=False, max_size=None):
     if done.returncode != 0:
         why = CURL_ERRORS.get(done.returncode, "curl error %d" % done.returncode)
         return {"ok": False, "why": why, "ms": ms, "curl": done.returncode}
-    if max_size and len(raw_body) > max_size:
-        # What --max-filesize is backed up by: a curl older than 8.4 does not stop a body that has no length at
-        # the limit (newer curl stops it first, so on those both checks overlap).
-        return {"ok": False, "why": CURL_ERRORS[63], "ms": ms, "curl": 63}
     try:
         code = int(fields[0])
     except (IndexError, ValueError):
@@ -180,6 +179,27 @@ def ask_part(base, part, timeout, untrusted=False):
             result["data"] = data
             result["named"] = result["body"].lstrip().startswith("cb(")
     return result
+
+
+def curl_version():
+    """The version of curl as a tuple of numbers, read from the first line of `curl --version`, or None."""
+    try:
+        done = subprocess.run([CURL, "--version"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    found = re.match(r"curl (\d+(?:\.\d+)*)", done.stdout.decode("utf-8", "replace"))
+    return tuple(int(part) for part in found.group(1).split(".")) if found else None
+
+
+def curl_problem(version):
+    """None when curl is new enough (MIN_CURL or newer), otherwise the sentence to print."""
+    need = ("This needs curl 8.4.0 or newer, because an older curl cannot stop an answer that has no length "
+            "at the size limit")
+    if version is None:
+        return "%s, and the version of %s could not be read." % (need, CURL)
+    if (tuple(version) + (0, 0, 0))[:3] >= MIN_CURL:  # as numbers: 8.10.1 is newer than 8.4.0
+        return None
+    return "%s, and %s is %s." % (need, CURL, ".".join(str(part) for part in version))
 
 
 def probe(url):
@@ -607,6 +627,11 @@ def main():
                         help="seconds allowed for the speed sample (default %g)" % DEFAULT_SPEED_TIMEOUT_S)
     args = parser.parse_args()
     check_arguments(parser, args)
+    curl = curl_version()
+    problem = curl_problem(curl)
+    if problem:
+        sys.stderr.write(problem + "\n")
+        return 2
 
     bases = [base if base.endswith("/") else base + "/" for base in (args.base or DEFAULT_BASES)]
     probe_url = None if args.probe == "off" else args.probe
@@ -673,7 +698,7 @@ def main():
     write({
         "t": int(now * 1000), "event": "start", "tool": "train-feed-logger", "version": VERSION,
         "bases": bases, "parts": PARTS, "probe": probe_url, "interval": interval,
-        "speed_site": speed_site, "timeout": args.timeout,
+        "speed_site": speed_site, "timeout": args.timeout, "curl": ".".join(str(part) for part in curl),
         "macos": platform.mac_ver()[0], "python": platform.python_version(),
     })
 
