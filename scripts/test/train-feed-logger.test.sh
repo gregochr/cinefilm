@@ -186,6 +186,10 @@ for path in generate_big generate_big_nolength; do
     assert_eq "$path: a numeric ms" true "$(jv "$LOG" 'isinstance(L[1]["probe"]["ms"], int)')"
     assert_contains "$path: the line says what answered" "$OUT" " ms (answered 200)"
 done
+run_logger --base "$BASE" --probe "http://127.0.0.1:$P/generate_404_big" --rounds 1
+assert_eq "a 404 with a big body is a failure, not a working check" '{"ms": null, "why": "answered 404"}' \
+    "$(jv "$LOG" 'L[1]["probe"]')"
+assert_contains "and the line says so" "$OUT" "internet answered 404"
 run_logger --base "$BASE" --probe "file:///etc/hostname" --rounds 1
 assert_eq "a probe address that is not http or https is not asked" \
     '{"ms": null, "why": "only http and https are asked"}' "$(jv "$LOG" 'L[1]["probe"]')"
@@ -272,7 +276,7 @@ assert_eq "the other parts were read" '["position", "connectivity", "users", "sy
 
 echo "an answer too big to read"
 run_logger --base "http://127.0.0.1:$P/big/api/jsonp/" --probe off --rounds 1 --timeout 5
-assert_eq "150,000 bytes of valid data are read as data" 150000 "$(jv "$LOG" 'len(L[1]["feed"]["position"]["pad"])')"
+assert_eq "40,000 bytes of valid data, just under the limit, are read as data" 40000 "$(jv "$LOG" 'len(L[1]["feed"]["position"]["pad"])')"
 assert_contains "and the feed answers" "$OUT" "feed answering (http)"
 run_logger --base "http://127.0.0.1:$P/huge/api/jsonp/" --probe off --rounds 1 --timeout 5
 assert_contains "over the limit, with a Content-Length" "$OUT" "feed not answering (http: answer too large)"

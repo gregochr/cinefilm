@@ -48,7 +48,7 @@ DEFAULT_SPEED_TIMEOUT_S = 12
 # The owner's own server; its page shell is served without a session.
 SPEED_SITE = "https://cinefilm.chrisjgregory.dev"
 SPEED_BYTES = 262144
-FEED_MAX_BYTES = 200000  # a hostile or broken feed must not make us hold a huge body
+FEED_MAX_BYTES = 50000  # a hostile or broken feed must not make us hold a huge body
 PRINT_MAX = 40
 QUESTION = "Will a film be playing on this laptop during the journey? [Y/n] "
 ANSWER_WAIT_S = 60  # the question must never hold logging up
@@ -235,12 +235,12 @@ def probe(url):
                      "--max-filesize", str(PROBE_MAX_BYTES))
     if "why" in got:
         return {"ms": None, "why": got["why"]}
+    if got["curl"] not in (0, 63):
+        return {"ms": None, "why": CURL_ERRORS.get(got["curl"], "curl error %d" % got["curl"])}
+    if not 200 <= got["code"] < 300:  # whatever the body: a redirect or a 404 is not a working internet check
+        return {"ms": None, "why": "answered %d" % got["code"]}
     if got["curl"] == 63:  # too big: the status was still received
         return {"ms": int(got["first"] * 1000), "code": got["code"], "body": "not read"}
-    if got["curl"] != 0:
-        return {"ms": None, "why": CURL_ERRORS.get(got["curl"], "curl error %d" % got["curl"])}
-    if not 200 <= got["code"] < 300:
-        return {"ms": None, "why": "answered %d" % got["code"]}
     return {"ms": int(got["total"] * 1000), "code": got["code"]}
 
 

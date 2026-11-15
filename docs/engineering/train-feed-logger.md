@@ -31,7 +31,7 @@ first round reads the laptop's own Wi-Fi link once (signal, noise, rate); readin
 other networks, so it is not repeated.
 
 Each request names a function for the answer (`callback=cb`) and carries a time stamp, so nothing on the way can
-answer from a cache. An answer over 200,000 bytes is refused, and one nested more than 32 levels deep is not taken
+answer from a cache. An answer over 50,000 bytes is refused, and one nested more than 32 levels deep is not taken
 as data. The script needs curl 8.4.0 or newer, which is what stops an answer that has no length at that limit; with
 an older curl it refuses to start.
 

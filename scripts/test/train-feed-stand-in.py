@@ -12,14 +12,15 @@ It is not a test file itself (its name does not end in .test.sh, so run-all.sh d
 
 Feed:  GET /api/jsonp/<part>/?callback=cb  ->  cb({...});   (with no callback: ({...});)
        Path prefixes pick a behaviour: /anon/... ignores the callback name, /html/... answers a web page as a
-       sign-in portal would, /slow/... answers after three seconds, /big/... pads each answer to 150,000 bytes
-       (valid), /huge/... to over 250,000 bytes with a Content-Length, /chunked/... the same without one,
-       /bigindex/... answers the parts normally but its index (/api/jsonp/) with 250,000 bytes.
+       sign-in portal would, /slow/... answers after three seconds, /big/... pads each answer to 40,000 bytes
+       (valid), /huge/... to 60,000 bytes with a Content-Length, /chunked/... the same without one,
+       /bigindex/... answers the parts normally but its index (/api/jsonp/) with 60,000 bytes.
        --connection-log writes one line for every connection accepted, including ones whose TLS handshake a
        client then refuses (those never reach a request, so --request-log cannot see them).
 Site:  / is a page naming /assets/index-test.js (300,000 bytes, which honours a Range header and sends slowly
        enough for a speed to be measurable); /generate_204 is an empty 204 and /generate_200 a page that answers 200;
-       /generate_big answers 200 with a 1 MiB body and a Content-Length, /generate_big_nolength the same without one.
+       /generate_big answers 200 with a 1 MiB body and a Content-Length, /generate_big_nolength the same without one,
+       /generate_404_big a 404 with a 1 MiB body.
        Site variants: ignoresrange and ignoresrange-nolength send the whole script, 200, whatever Range says (the
        second without a Content-Length); otherorigin names a script on 127.0.0.1 port --other-port.
 """
@@ -38,10 +39,10 @@ PAGE = (b'<!doctype html><html><head>'
         b'<script type="module" crossorigin src="/assets/index-test.js"></script>'
         b'</head><body></body></html>')
 PAGE_GONE = PAGE.replace(b"index-test.js", b"index-gone.js")  # a release changed the script's hashed name
-PAGE_BIG = b"<!doctype html><html><body>" + b"x" * 250000 + b"</body></html>"
+PAGE_BIG = b"<!doctype html><html><body>" + b"x" * 60000 + b"</body></html>"
 PAGE_NO_SCRIPT = b"<!doctype html><html><head></head><body>nothing to download here</body></html>"
 SIGN_IN = b"<html><body>Sign in to the train Wi-Fi</body></html>"
-PADDING = {"big": 150000, "huge": 250000, "chunked": 250000}
+PADDING = {"big": 40000, "huge": 60000, "chunked": 60000}
 PARTS = ("position", "connectivity", "users", "user", "system")
 OPTIONS = None
 STATE = {"positions": 0}
@@ -118,6 +119,8 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(200, "text/html", SIGN_IN)
         elif path == "/generate_big":
             self.reply(200, "text/html", b"x" * 1048576)
+        elif path == "/generate_404_big":
+            self.reply(404, "text/html", b"x" * 1048576)
         elif path == "/generate_big_nolength":
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
@@ -144,7 +147,7 @@ class Handler(BaseHTTPRequestHandler):
             time.sleep(3)
         if part == "":
             text = "parts: " + " ".join(PARTS)
-            self.reply(200, "text/plain", (text + " " * 250000 if mode == "bigindex" else text).encode())
+            self.reply(200, "text/plain", (text + " " * 60000 if mode == "bigindex" else text).encode())
             return
         data = feed(part)
         if data is None:
