@@ -355,7 +355,7 @@ class PlaybackHealthControllerTest {
     @Test
     void theChartRouteAnswersTheSessionsAndIsNotTakenForAPlaybackId() throws Exception {
         ChartRow session = new ChartRow(ID, 7L, "Blade Runner", Instant.parse("2024-03-31T23:00:00Z"), 200_000, 2,
-            9_400, 2_380L, "train", Map.of("480p", 58_000L), "Mozilla/5.0");
+            9_400, 2_380L, "train", Map.of("480p", 58_000L), "Mozilla/5.0", true);
         when(health.chart(Instant.parse("2024-03-01T00:00:00Z"))).thenReturn(new ChartList(List.of(session)));
 
         mvc.perform(signedIn(get("/api/admin/playback-health/chart")).param("since", "2024-03-01T00:00:00Z"))
@@ -367,7 +367,20 @@ class PlaybackHealthControllerTest {
             .andExpect(jsonPath("$.sessions[0].startupMs").value(2380))
             .andExpect(jsonPath("$.sessions[0].environment").value("train"))
             .andExpect(jsonPath("$.sessions[0].rungMs['480p']").value(58000))
-            .andExpect(jsonPath("$.sessions[0].userAgent").value("Mozilla/5.0"));
+            .andExpect(jsonPath("$.sessions[0].userAgent").value("Mozilla/5.0"))
+            .andExpect(jsonPath("$.sessions[0].touch").value(true));
+    }
+
+    @Test
+    void aChartRowWithNoTouchHintLeavesTheFieldOut() throws Exception {
+        ChartRow session = new ChartRow(ID, 7L, "Blade Runner", Instant.parse("2024-03-31T23:00:00Z"), 200_000, 0,
+            0, 900L, "home", Map.of("original", 200_000L), "Mozilla/5.0", null);
+        when(health.chart(null)).thenReturn(new ChartList(List.of(session)));
+
+        mvc.perform(signedIn(get("/api/admin/playback-health/chart")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sessions[0].userAgent").value("Mozilla/5.0"))
+            .andExpect(jsonPath("$.sessions[0].touch").doesNotExist());
     }
 
     @Test

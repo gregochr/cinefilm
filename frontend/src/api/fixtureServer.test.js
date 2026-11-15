@@ -228,6 +228,47 @@ describe('fixture server', () => {
     expect(recent.sessions).toHaveLength(2);
   });
 
+  it('carries the touch hint on the chart rows', async () => {
+    const { sessions } = await call('GET', '/api/admin/playback-health/chart');
+    expect(sessions.map((s) => s.touch)).toEqual([false, true, false]);
+  });
+
+  it('serves one full record with per-minute rows of seven figures, or five in an older one', async () => {
+    const seven = await call(
+      'GET',
+      '/api/admin/playback-health/c1000000-0000-4000-8000-000000000004',
+    );
+    expect(seven).toMatchObject({
+      filmTitle: 'Heat',
+      report: { environment: 'train', client: { touch: false } },
+    });
+    expect(seven.report.minutes).toHaveLength(72);
+    expect(seven.report.minutes.every((row) => row.length === 7)).toBe(true);
+    expect(seven.report.minutes.some((row) => row[4] > 0)).toBe(true);
+    const five = await call(
+      'GET',
+      '/api/admin/playback-health/c1000000-0000-4000-8000-000000000003',
+    );
+    expect(five.report.client.touch).toBe(true);
+    expect(five.report.minutes.every((row) => row.length === 5)).toBe(true);
+  });
+
+  it('serves a listed record with no minutes and answers 404 for an unknown one', async () => {
+    const listed = await call(
+      'GET',
+      '/api/admin/playback-health/7d1e4a92-3b5c-4f08-a6d1-9c2e0b8f4a17',
+    );
+    expect(listed.filmTitle).toBe('Heat');
+    expect(listed.report.minutes).toEqual([]);
+    const pending = handle(
+      'GET',
+      '/api/admin/playback-health/00000000-0000-4000-8000-000000000000',
+    );
+    const outcome = expect(pending).rejects.toMatchObject({ status: 404 });
+    await vi.advanceTimersByTimeAsync(80);
+    await outcome;
+  });
+
   it('creates and removes a playback session', async () => {
     const session = await call('POST', '/api/editions/11/sessions', { quality: 'auto' });
     expect(session.masterUrl).toBe(`/api/sessions/${session.sessionId}/master.m3u8`);

@@ -7,14 +7,21 @@ afterEach(() => {
 });
 
 describe('Admin Playback section', () => {
-  it('is named Playback and holds Now playing, Transcoding, then Playback health', async () => {
+  it('is named Playback and holds Now playing, How films played, Transcoding, then Playback health', async () => {
     installFetch();
     renderApp('/admin/playback');
     expect(screen.getByRole('heading', { level: 1, name: 'Playback' })).toBeInTheDocument();
     await screen.findByRole('region', { name: 'Now playing' });
+    await screen.findByRole('region', { name: 'How films played' });
     await screen.findByRole('region', { name: 'Transcoding' });
     await screen.findByRole('region', { name: 'Playback health' });
-    expect(screen.getAllByRole('region')).toHaveLength(3);
+    expect(screen.getAllByRole('region')).toHaveLength(4);
+    expect(
+      screen
+        .getAllByRole('heading', { level: 2 })
+        .map((h) => h.textContent)
+        .slice(0, 3),
+    ).toEqual(['Now playing', 'How films played', 'Transcoding']);
   });
 
   it('shows one skeleton per card while they load', () => {
