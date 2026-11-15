@@ -611,8 +611,8 @@ describe('fixture server: Admin settings', () => {
       expect(fileIds(forced)).toEqual([5012, 5011, 5013]);
       expect(forced.results[0]).toEqual({
         fileId: 5012,
-        release: 'Heat.1995.Directors.Cut.BluRay.x264',
-        fileName: 'Heat.1995.Directors.Cut.BluRay.x264.srt',
+        release: 'Taken.2008.Directors.Cut.BluRay.x264',
+        fileName: 'Taken.2008.Directors.Cut.BluRay.x264.srt',
         fps: 23.976,
         downloadCount: 4210,
         fromTrusted: true,
@@ -628,6 +628,14 @@ describe('fixture server: Admin settings', () => {
       const full = await call('GET', '/api/admin/editions/102/opensubtitles?kind=full');
       expect(full).toMatchObject({ editionId: 102, kind: 'full' });
       expect(fileIds(full)).toEqual([6012, 6011]);
+      // The names are made for the edition's own film, whatever the fixture file calls them.
+      expect(full.results.map((r) => r.release)).toEqual([
+        'Rashomon.1950.Directors.Cut.BluRay.x264',
+        'Rashomon.1950.BluRay.SDH',
+      ]);
+      expect(forced.results[1].fileName).toBeNull();
+      const unknownFilm = await call('GET', '/api/admin/editions/103/opensubtitles?kind=full');
+      expect(unknownFilm.results[0].release).toBe('Heat.1995.Directors.Cut.BluRay.x264');
     });
 
     it('downloads only a file the last search offered, once, and counts what is left', async () => {
@@ -710,6 +718,105 @@ describe('fixture server: Admin settings', () => {
           kind: 'forced',
         }),
       ).toMatchObject({ status: 404, message: 'No such edition' });
+    });
+  });
+
+  describe('the picker’s failures and what a download settles in the lists', () => {
+    const refused = async (method, path, body) => {
+      const pending = handle(method, path, body).catch((error) => error);
+      await vi.advanceTimersByTimeAsync(80);
+      return pending;
+    };
+
+    it('answers the daily limit (429) for the lowest-ranked forced file, with the server’s text in the body', async () => {
+      await call('GET', '/api/admin/editions/101/opensubtitles?kind=forced');
+
+      const failure = await refused('POST', '/api/admin/editions/101/opensubtitles/download', {
+        fileId: 5013,
+        kind: 'forced',
+      });
+
+      expect(failure).toBeInstanceOf(ApiError);
+      expect(failure.status).toBe(429);
+      expect(failure.body).toEqual({
+        error: 'OpenSubtitles daily limit reached — try again tomorrow.',
+      });
+      // It was refused, not downloaded: the file can still be asked for, and nothing was counted.
+      expect(await call('GET', '/api/admin/editions/101/opensubtitles?kind=forced')).toMatchObject({
+        downloadsLeft: 3,
+      });
+    });
+
+    it('answers a charged download that could not be delivered (502) for the second full file', async () => {
+      await call('GET', '/api/admin/editions/102/opensubtitles?kind=full');
+
+      const failure = await refused('POST', '/api/admin/editions/102/opensubtitles/download', {
+        fileId: 6011,
+        kind: 'full',
+      });
+
+      expect(failure.status).toBe(502);
+      expect(failure.body).toEqual({
+        error:
+          "OpenSubtitles counted this download against today's limit but could not deliver the file. Try again.",
+      });
+    });
+
+    it('carries the error text of its other refusals in a body too, as the API does', async () => {
+      const failure = await refused('GET', '/api/admin/editions/999/opensubtitles?kind=full');
+
+      expect(failure.body).toEqual({ error: 'No such edition' });
+    });
+
+    it('settles a forced row once a file is downloaded for the edition it names, and drops its edition', async () => {
+      const before = (await call('GET', '/api/admin/forced-subtitles/films')).films.find(
+        (f) => f.filmId === 3,
+      );
+      expect(before).toMatchObject({ editionId: 31, beingChecked: true, hasForcedSubtitle: false });
+      await call('GET', '/api/admin/editions/31/opensubtitles?kind=forced');
+
+      await call('POST', '/api/admin/editions/31/opensubtitles/download', {
+        fileId: 5012,
+        kind: 'forced',
+      });
+
+      const list = await call('GET', '/api/admin/forced-subtitles/films');
+      expect(list.films.find((f) => f.filmId === 3)).toMatchObject({
+        editionId: null,
+        beingChecked: false,
+        unresolved: false,
+        hasForcedSubtitle: true,
+      });
+      expect(list.counts.beingChecked).toBe(0);
+    });
+
+    it('settles a full row the same way: a downloaded subtitle plays, so it is no longer being checked', async () => {
+      const before = (await call('GET', '/api/admin/subtitles/full-need')).films.find(
+        (f) => f.filmId === 7,
+      );
+      expect(before).toMatchObject({ editionId: 71, beingChecked: true, subtitled: false });
+      await call('GET', '/api/admin/editions/71/opensubtitles?kind=full');
+
+      await call('POST', '/api/admin/editions/71/opensubtitles/download', {
+        fileId: 6012,
+        kind: 'full',
+      });
+
+      const list = await call('GET', '/api/admin/subtitles/full-need');
+      expect(list.films.find((f) => f.filmId === 7)).toMatchObject({
+        fullSubtitle: { source: 'DOWNLOAD' },
+        beingChecked: false,
+        unresolved: false,
+        subtitled: true,
+      });
+    });
+
+    it('gives a film the owner called needed the edition the picker searches', async () => {
+      const chosen = await call('PUT', '/api/admin/films/1/forced-need', { choice: 'NEEDED' });
+
+      expect(chosen).toMatchObject({ editionId: 11, unresolved: true });
+      const cleared = await call('PUT', '/api/admin/films/1/forced-need', { choice: 'NOT_NEEDED' });
+      expect(cleared.editionId).toBeNull();
     });
   });
 

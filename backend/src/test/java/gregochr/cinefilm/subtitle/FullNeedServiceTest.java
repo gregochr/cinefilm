@@ -139,7 +139,7 @@ class FullNeedServiceTest {
 
         assertThat(list.films()).extracting(FullNeedFilmDto::filmId).containsExactly(1L, 5L);
         assertThat(list.films().get(0)).isEqualTo(new FullNeedFilmDto(1L, "Amelie", 2000, "NEEDED", "FOREIGN_AUDIO",
-            null, List.of(new EditionAudioDto("Original", "French")), null, "fr", true, false, false));
+            null, List.of(new EditionAudioDto("Original", "French")), null, "fr", true, false, false, 10L, null));
         assertThat(list.films().get(1).reason()).isEqualTo("OWNER");
         assertThat(list.films().get(1).ownerChoice()).isEqualTo("NEEDED");
         assertThat(list.counts().needed()).isEqualTo(2);
@@ -256,6 +256,34 @@ class FullNeedServiceTest {
         assertThat(films.get(1).editions()).isEmpty();
         assertThat(films.get(1).need()).isEqualTo("NEEDED");
         assertThat(films.get(1).reason()).isEqualTo("ORIGINAL_AUDIO_ASSUMED");
+        // The picker searches the French cut (what makes the film needed), not the English one that comes first.
+        assertThat(films).extracting(FullNeedFilmDto::editionId).containsExactly(11L, null);
+        assertThat(films).extracting(FullNeedFilmDto::editionName).containsExactly("Director's Cut", null);
+    }
+
+    @Test
+    void thePickerEditionIsTheFirstForeignOneElseTheFirstUnlabelledElseTheFirst() {
+        when(films.findFullNeedRows()).thenReturn(List.of(row(1, "A", "fr", null), row(2, "B", "fr", null),
+            row(3, "C", "fr", null), row(4, "D", "fr", null)));
+        when(files.findAudioRows(List.of(1L, 2L, 3L, 4L))).thenReturn(List.of(
+            // A: English, unlabelled, French: the French one.
+            track(1, 10, "Theatrical", 100, 1, Presence.PRESENT, "English", true),
+            silent(1, 11, "Extended", 110, 1),
+            track(1, 12, "Cut", 120, 1, Presence.PRESENT, "French", true),
+            // B: English, then unlabelled: the unlabelled one.
+            track(2, 20, "Theatrical", 200, 1, Presence.PRESENT, "eng", true),
+            silent(2, 21, "Extended", 210, 1),
+            // C: every edition English: the first.
+            track(3, 30, "Theatrical", 300, 1, Presence.PRESENT, "English", true),
+            track(3, 31, "Extended", 310, 1, Presence.PRESENT, "en", true),
+            // D: one edition: its name is not needed to tell cuts apart.
+            track(4, 40, "Original", 400, 1, Presence.PRESENT, "French", true)));
+
+        List<FullNeedFilmDto> films = service.list().films();
+
+        assertThat(films).extracting(FullNeedFilmDto::editionId).containsExactly(12L, 21L, 30L, 40L);
+        assertThat(films).extracting(FullNeedFilmDto::editionName)
+            .containsExactly("Cut", "Extended", "Theatrical", null);
     }
 
     @Test
@@ -295,7 +323,7 @@ class FullNeedServiceTest {
 
         assertThat(amelie.getFullNeedOwner()).isEqualTo(FullNeedChoice.NOT_NEEDED);
         assertThat(dto).isEqualTo(new FullNeedFilmDto(7L, "Amelie", 2001, "NOT_NEEDED", "OWNER", "NOT_NEEDED",
-            List.of(new EditionAudioDto("Original", "French")), null, "fr", false, false, false));
+            List.of(new EditionAudioDto("Original", "French")), null, "fr", false, false, false, 70L, null));
         assertThat(events).containsExactly("begin, lock subtitle", "commit, lock subtitle");
         assertThat(lock.holder()).isNull();
     }

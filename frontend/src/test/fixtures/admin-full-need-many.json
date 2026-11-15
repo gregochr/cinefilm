@@ -7,12 +7,19 @@
       "need": "NEEDED",
       "reason": "OWNER",
       "ownerChoice": "NEEDED",
-      "editions": [],
+      "editions": [
+        {
+          "name": "Original",
+          "audio": null
+        }
+      ],
       "fullSubtitle": null,
       "originalLanguage": "ja",
       "unresolved": true,
       "beingChecked": false,
-      "subtitled": false
+      "subtitled": false,
+      "editionId": 3000,
+      "editionName": null
     },
     {
       "filmId": 301,
@@ -21,12 +28,19 @@
       "need": "NEEDED",
       "reason": "OWNER",
       "ownerChoice": "NEEDED",
-      "editions": [],
+      "editions": [
+        {
+          "name": "Original",
+          "audio": null
+        }
+      ],
       "fullSubtitle": null,
       "originalLanguage": "ja",
       "unresolved": true,
       "beingChecked": false,
-      "subtitled": false
+      "subtitled": false,
+      "editionId": 3010,
+      "editionName": null
     },
     {
       "filmId": 302,
@@ -35,12 +49,19 @@
       "need": "NEEDED",
       "reason": "OWNER",
       "ownerChoice": "NEEDED",
-      "editions": [],
+      "editions": [
+        {
+          "name": "Original",
+          "audio": null
+        }
+      ],
       "fullSubtitle": null,
       "originalLanguage": "ja",
       "unresolved": true,
       "beingChecked": false,
-      "subtitled": false
+      "subtitled": false,
+      "editionId": 3020,
+      "editionName": null
     },
     {
       "filmId": 303,
@@ -49,12 +70,19 @@
       "need": "NEEDED",
       "reason": "OWNER",
       "ownerChoice": "NEEDED",
-      "editions": [],
+      "editions": [
+        {
+          "name": "Original",
+          "audio": null
+        }
+      ],
       "fullSubtitle": null,
       "originalLanguage": "ja",
       "unresolved": true,
       "beingChecked": false,
-      "subtitled": false
+      "subtitled": false,
+      "editionId": 3030,
+      "editionName": null
     },
     {
       "filmId": 304,
@@ -63,12 +91,19 @@
       "need": "NEEDED",
       "reason": "OWNER",
       "ownerChoice": "NEEDED",
-      "editions": [],
+      "editions": [
+        {
+          "name": "Original",
+          "audio": null
+        }
+      ],
       "fullSubtitle": null,
       "originalLanguage": "ja",
       "unresolved": true,
       "beingChecked": false,
-      "subtitled": false
+      "subtitled": false,
+      "editionId": 3040,
+      "editionName": null
     },
     {
       "filmId": 305,
@@ -77,12 +112,19 @@
       "need": "NEEDED",
       "reason": "OWNER",
       "ownerChoice": "NEEDED",
-      "editions": [],
+      "editions": [
+        {
+          "name": "Original",
+          "audio": null
+        }
+      ],
       "fullSubtitle": null,
       "originalLanguage": "ja",
       "unresolved": true,
       "beingChecked": false,
-      "subtitled": false
+      "subtitled": false,
+      "editionId": 3050,
+      "editionName": null
     },
     {
       "filmId": 306,
@@ -91,12 +133,19 @@
       "need": "NEEDED",
       "reason": "OWNER",
       "ownerChoice": "NEEDED",
-      "editions": [],
+      "editions": [
+        {
+          "name": "Original",
+          "audio": null
+        }
+      ],
       "fullSubtitle": null,
       "originalLanguage": "ja",
       "unresolved": true,
       "beingChecked": false,
-      "subtitled": false
+      "subtitled": false,
+      "editionId": 3060,
+      "editionName": null
     },
     {
       "filmId": 310,
@@ -105,12 +154,21 @@
       "need": "NEEDED",
       "reason": "FOREIGN_AUDIO",
       "ownerChoice": null,
-      "editions": [{ "name": "Original", "audio": "German" }],
-      "fullSubtitle": { "source": "SIDECAR" },
+      "editions": [
+        {
+          "name": "Original",
+          "audio": "German"
+        }
+      ],
+      "fullSubtitle": {
+        "source": "SIDECAR"
+      },
       "originalLanguage": "de",
       "unresolved": false,
       "beingChecked": false,
-      "subtitled": true
+      "subtitled": true,
+      "editionId": 3100,
+      "editionName": null
     }
   ],
   "counts": {

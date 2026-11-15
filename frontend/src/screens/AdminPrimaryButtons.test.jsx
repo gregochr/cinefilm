@@ -30,6 +30,7 @@ const replaced = {
 // The buttons above the file rows: the foreign-language tab's one row, Everything else, then the file filter chips.
 // The two tabs themselves are role=tab, not buttons. Each case adds its file row's buttons.
 const SUBTITLE_TABS = [
+  'Search for English subtitles…',
   'Add my own file…',
   'Show the 1 film',
   'Hide the subtitle files',
@@ -115,6 +116,8 @@ const CASES = [
       'Find the film…',
       'Sort out editions…',
       'Sort out editions…',
+      'Search for English subtitles…',
+      'Find forced subtitles…',
     ],
   },
   {

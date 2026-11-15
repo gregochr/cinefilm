@@ -64,6 +64,8 @@ describe('the Admin To do fixtures', () => {
         expect(Object.keys(row).sort()).toEqual(
           [
             'beingChecked',
+            'editionId',
+            'editionName',
             'editions',
             'filmId',
             'fullSubtitle',
