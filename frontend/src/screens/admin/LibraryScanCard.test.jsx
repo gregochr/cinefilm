@@ -45,8 +45,8 @@ describe('LibraryScanCard', () => {
     renderCard();
     expect(screen.getByText('/media')).toBeInTheDocument();
     const tiles = within(screen.getByRole('list', { name: 'Library counts' }));
-    expect(tiles.getByText('Films').nextSibling).toHaveTextContent('538');
-    expect(tiles.getByText('Need a match').nextSibling).toHaveTextContent('2');
+    expect(tiles.getByText('Films').previousSibling).toHaveTextContent('538');
+    expect(tiles.getByText('Need a match').previousSibling).toHaveTextContent('2');
   });
 
   it('links the protected, needs-conversion and unreadable tiles to their lists, and no other tile', () => {
@@ -54,11 +54,20 @@ describe('LibraryScanCard', () => {
       scan: { ...fixtures.adminScan, counts: { ...fixtures.adminScan.counts, unreadable: 2 } },
     });
     const links = within(screen.getByRole('list', { name: 'Library counts' })).getAllByRole('link');
-    expect(links.map((l) => [l.textContent, l.getAttribute('href')])).toEqual([
-      ['Protected1', '/admin/library/files/protected'],
-      ['Needs conversion3', '/admin/library/files/needs-conversion'],
-      ['Unreadable2', '/admin/library/files/unreadable'],
+    expect(links.map((l) => [l.getAttribute('aria-label'), l.getAttribute('href')])).toEqual([
+      ['Can’t play (protected): 1, open the list', '/admin/library/files/protected'],
+      ['Needs conversion: 3, open the list', '/admin/library/files/needs-conversion'],
+      ['Unreadable: 2, open the list', '/admin/library/files/unreadable'],
     ]);
+    expect(
+      screen.getByRole('link', { name: 'Can’t play (protected): 1, open the list' }),
+    ).toBeInTheDocument();
+  });
+
+  it('puts each tile’s number above its label', () => {
+    renderCard();
+    const tiles = within(screen.getByRole('list', { name: 'Library counts' }));
+    expect(tiles.getAllByRole('listitem')[0]).toHaveTextContent(/^538Films$/);
   });
 
   it('draws Scan library now as the one primary button, with its hint', async () => {

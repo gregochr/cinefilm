@@ -41,14 +41,18 @@ function ScanProgress({ progress }) {
 function CountTile({ tile }) {
   const content = (
     <>
-      <span className="admin__count-label">{tile.label}</span>
       <span className="admin__count-value">{tile.value}</span>
+      <span className="admin__count-label">{tile.label}</span>
     </>
   );
   return (
     <li className="admin__count">
       {tile.to ? (
-        <Link to={tile.to} className="admin__count-link">
+        <Link
+          to={tile.to}
+          className="admin__count-link"
+          aria-label={libraryPage.scan.openList(tile.label, tile.value)}
+        >
           {content}
         </Link>
       ) : (
@@ -129,9 +133,7 @@ export default function LibraryScanCard({
         <h2 id="admin-scan-title" className="admin__title">
           {libraryPage.scan.title}
         </h2>
-        {scan ? (
-          <span className="admin__mono admin__why">{describeScanHeader(scan.lastScan, now)}</span>
-        ) : null}
+        {scan ? <span className="admin__why">{describeScanHeader(scan.lastScan, now)}</span> : null}
       </div>
       {body}
       <LibraryChanges

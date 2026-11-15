@@ -25,11 +25,30 @@ describe('Admin: Import from Plex card', () => {
     expect(screen.queryByRole('region', { name: 'Import from Plex' })).not.toBeInTheDocument();
   });
 
-  it('is hidden while it loads and when the status cannot be loaded', async () => {
-    installFetch((m, url) => (url === '/api/admin/plex' ? respond(null, 500) : null));
+  it('shows the card with an error and Try again when the status cannot be loaded, then recovers', async () => {
+    let fail = true;
+    installFetch((m, url) =>
+      url === '/api/admin/plex' ? (fail ? respond(null, 500) : respond(fixtures.adminPlex)) : null,
+    );
     renderApp('/admin/library');
-    await screen.findByRole('region', { name: 'Library scan' });
-    expect(screen.queryByRole('region', { name: 'Import from Plex' })).not.toBeInTheDocument();
+    const card = await screen.findByRole('region', { name: 'Import from Plex' });
+    expect(
+      await within(card).findByText('Couldn’t load the Plex import status.'),
+    ).toBeInTheDocument();
+
+    fail = false;
+    await userEvent.click(within(card).getByRole('button', { name: 'Try again' }));
+
+    expect(
+      await screen.findByRole('button', { name: 'Import from Plex again' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Couldn’t load the Plex import status.')).toBeNull();
+  });
+
+  it('is not drawn while the status is still loading', () => {
+    installFetch((m, url) => (url === '/api/admin/plex' ? new Promise(() => {}) : null));
+    renderApp('/admin/library');
+    expect(screen.queryByRole('region', { name: 'Import from Plex' })).toBeNull();
   });
 
   it('shows reachability, the last import and its report', async () => {

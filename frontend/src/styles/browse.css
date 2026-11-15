@@ -610,22 +610,6 @@
   font-family: var(--cf-font-mono);
   font-size: 13px;
 }
-.admin__pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--cf-size-ui);
-  color: var(--cf-text-muted);
-}
-.admin__pill--running {
-  color: var(--cf-amber);
-}
-.admin__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: currentColor;
-}
 .admin__rows {
   display: grid;
   grid-template-columns: 120px 1fr;
@@ -696,26 +680,21 @@
   align-items: center;
   gap: 16px;
 }
-.admin__ratings {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--cf-line);
-}
 .admin__ratings-line {
   margin: 0;
   color: var(--cf-text-muted);
 }
-/* Library: the line beside a card's title ("Last scan 12 min ago · took 1m 48s"). It wraps on a narrow screen. */
+/* Library: the line right after a card's title ("Last scan 12 min ago"), muted, in the body font. On a narrow screen
+   it wraps under the title, left-aligned. */
 .admin__why {
   color: var(--cf-text-muted);
-  text-align: right;
+  font-size: var(--cf-size-ui);
   overflow-wrap: anywhere;
 }
 .admin__head:has(> .admin__why) {
   flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 4px 14px;
 }
 /* A count tile that opens a list: a block, at least 44px tall, the ring comes from the global :focus-visible. */
 .admin__count-link {

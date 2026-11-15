@@ -401,7 +401,7 @@ Plan: `library-scan-plan.md`. What the API and the model now carry:
     body; 404 unknown film; 409 `A scan is running` when the library lock is held (by a scan, an import, a match or
     another save).
 - **Grouping report:** `GET /api/admin/grouping-report` returns `{ items: [{ happenedAt, kind: "split"|"join"|"flag",
-  summary }] }`, the newest 20 `grouping_change` rows, newest first.
+  summary }] }`, every `grouping_change` row logged from the last finished scan's `startedAt` to its `finishedAt` (both included), newest first, with no cap (a scan holds the library lock, so no other writer logs inside that window); `items` is empty before a scan has finished. Owner edits outside a scan (Fix match, Edit editions, Plex import) are not in it.
 - **Forced subtitle files** (`docs/engineering/forced-subtitles-plan.md`): the same walk collects English `.srt` files
   by their trailing dot-tokens (`SidecarNames`, any case, same skips): `<stem>.en.forced.srt` or
   `<stem>.forced.en.srt` (also `eng`) is kind `FORCED`; `<stem>.en.srt` or `.eng.srt`, with at most one of `sdh`, `hi`

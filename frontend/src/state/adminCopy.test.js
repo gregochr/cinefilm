@@ -316,6 +316,10 @@ describe('adminCopy libraryPage', () => {
     expect(libraryPage.plex.title).toBe('Import from Plex');
     expect(libraryPage.plex.lastReport).toBe('Last report');
     expect(libraryPage.cast.title).toBe('Cast & crew');
+    expect(libraryPage.scan.openList('Needs conversion', 3)).toBe(
+      'Needs conversion: 3, open the list',
+    );
+    expect(libraryPage.plex.loadError).toBe('Couldn’t load the Plex import status.');
   });
 
   it('counts films with credits, with the empty library and the singular worded apart', () => {

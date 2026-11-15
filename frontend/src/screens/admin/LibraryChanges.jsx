@@ -16,7 +16,9 @@ import {
  * closed, inside the scan card. The list shows 25 changes at a time, with a button for the next page.
  */
 export default function LibraryChanges({ report, loading, error, onRetry }) {
-  const [shown, setShown] = useState(GROUPING_PAGE_SIZE);
+  // The page count belongs to one report: a new report (after another scan) starts at the first page again.
+  const [paging, setPaging] = useState({ report, shown: GROUPING_PAGE_SIZE });
+  const shown = paging.report === report ? paging.shown : GROUPING_PAGE_SIZE;
   const items = report?.items ?? [];
   const copy = libraryPage.changes;
   let body;
@@ -46,7 +48,10 @@ export default function LibraryChanges({ report, loading, error, onRetry }) {
           ))}
         </ul>
         {page.moreLabel ? (
-          <Button className="admin__more" onClick={() => setShown((n) => n + GROUPING_PAGE_SIZE)}>
+          <Button
+            className="admin__more"
+            onClick={() => setPaging({ report, shown: shown + GROUPING_PAGE_SIZE })}
+          >
             {page.moreLabel}
           </Button>
         ) : null}

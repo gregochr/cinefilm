@@ -135,10 +135,17 @@ public class AdminService {
         return new Attention(items);
     }
 
-    /** The newest 20 lines of the grouping report, newest first. */
+    /**
+     * What the last finished scan changed: every grouping line logged from its start to its finish (both included),
+     * newest first, with no cap. A scan holds the library lock, so no other writer logs a line inside that window.
+     * Empty before the first scan has finished.
+     */
     @Transactional(readOnly = true)
     public GroupingReport groupingReport() {
-        return new GroupingReport(changes.findTop20ByOrderByHappenedAtDescIdDesc().stream()
+        return new GroupingReport(runs.findFirstByFinishedAtNotNullOrderByIdDesc()
+            .map(run -> changes.findByHappenedAtBetweenOrderByHappenedAtDescIdDesc(run.getStartedAt(),
+                run.getFinishedAt()))
+            .orElse(List.of()).stream()
             .map(c -> new GroupingChangeDto(c.getHappenedAt(), c.getKind(), c.getSummary())).toList());
     }
 

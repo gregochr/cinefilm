@@ -157,6 +157,7 @@ class ScanApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.counts.protectedFiles").value(0))
             .andExpect(jsonPath("$.counts.needsConversion").value(0))
             .andExpect(jsonPath("$.counts.needsMatch").value(0))
+            .andExpect(jsonPath("$.counts.filmsWithCredits").value(0))
             .andExpect(jsonPath("$.progress").doesNotExist());
 
         mvc.perform(get("/api/films"))

@@ -59,7 +59,7 @@ export function countTiles(counts) {
     { key: 'films', label: 'Films', value: counts.films },
     { key: 'newFiles', label: 'New', value: counts.newFiles },
     { key: 'missing', label: 'Missing', value: counts.missing },
-    { key: 'protectedFiles', label: 'Protected', value: counts.protectedFiles },
+    { key: 'protectedFiles', label: 'Can’t play (protected)', value: counts.protectedFiles },
     { key: 'needsConversion', label: 'Needs conversion', value: counts.needsConversion },
     { key: 'needsMatch', label: 'Need a match', value: counts.needsMatch },
   ];

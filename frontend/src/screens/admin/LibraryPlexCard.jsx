@@ -1,6 +1,8 @@
 import { useId, useState } from 'react';
 import { ActionWithHint } from '../../components/ActionWithHint.jsx';
 import { Button } from '../../components/Button.jsx';
+import PlexCreditsImport from '../../components/PlexCreditsImport.jsx';
+import { ErrorState } from '../../components/StateMessages.jsx';
 import { buttons, libraryPage } from '../../state/adminCopy.js';
 import {
   broughtAcross,
@@ -42,13 +44,27 @@ function ImportReport({ report, id }) {
 
 /**
  * The "Import from Plex" card, drawn only when Plex is configured on the server (nothing renders until the status
- * says so). A key-value block says whether Plex answers and what the last import brought across; "Import from Plex
+ * says so). When the very first read of the status fails the card is still drawn, with an inline error and Try
+ * again (`onRecheck`), so a failure is not mistaken for Plex not being set up. A key-value block says whether Plex answers and what the last import brought across; "Import from Plex
  * again" copies again, "Try connecting to Plex" shows only while Plex is unreachable, and the last report is behind a
- * quiet "Last report" button that opens and closes it.
+ * quiet "Last report" button that opens and closes it. Below sits "Import credits from Plex", which copies Plex's
+ * end-credits start markers (not cast and crew), so it belongs with the import and not with Cast & crew.
  */
-export default function LibraryPlexCard({ plex, starting, notice, onImport, onRecheck }) {
+export default function LibraryPlexCard({ plex, error, starting, notice, onImport, onRecheck }) {
   const [reportOpen, setReportOpen] = useState(false);
   const reportId = useId();
+  if (!plex && error) {
+    return (
+      <section id="plex-import" className="admin__card" aria-labelledby="admin-plex-title">
+        <div className="admin__head">
+          <h2 id="admin-plex-title" className="admin__title">
+            {libraryPage.plex.title}
+          </h2>
+        </div>
+        <ErrorState onRetry={onRecheck}>{libraryPage.plex.loadError}</ErrorState>
+      </section>
+    );
+  }
   if (!plex || !plex.configured) return null;
   const running = plex.running;
   const last = plex.lastImport;
@@ -58,7 +74,7 @@ export default function LibraryPlexCard({ plex, starting, notice, onImport, onRe
         <h2 id="admin-plex-title" className="admin__title">
           {libraryPage.plex.title}
         </h2>
-        <span className="admin__mono admin__why">{plexHeaderLine(last)}</span>
+        <span className="admin__why">{plexHeaderLine(last)}</span>
       </div>
       {running && plex.progress ? (
         <div className="admin__progress">
@@ -118,6 +134,7 @@ export default function LibraryPlexCard({ plex, starting, notice, onImport, onRe
         ) : null}
       </div>
       {reportOpen && last?.report ? <ImportReport report={last.report} id={reportId} /> : null}
+      <PlexCreditsImport reachable={plex.reachable} />
     </section>
   );
 }

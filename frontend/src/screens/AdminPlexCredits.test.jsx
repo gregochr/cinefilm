@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
@@ -10,40 +10,42 @@ afterEach(() => {
 const plexRoute = (plex) => (m, url) => (url === '/api/admin/plex' ? respond(plex) : null);
 
 describe('Admin: Import credits from Plex', () => {
-  it('is not asked for or shown when Plex is not configured, though the count still is', async () => {
+  it('is not asked for or shown when Plex is not configured, once the Plex status has answered', async () => {
     const fetchMock = installFetch();
     renderApp('/admin/library');
-    const card = await screen.findByRole('region', { name: 'Cast & crew' });
-    expect(await within(card).findByText('530 of 538 films have credits')).toBeInTheDocument();
-    expect(within(card).queryByRole('button')).toBeNull();
+    await screen.findByRole('region', { name: 'Library scan' });
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([url]) => url === '/api/admin/plex')).toBe(true),
+    );
+    await act(async () => {});
 
+    expect(screen.queryByRole('region', { name: 'Import from Plex' })).toBeNull();
     expect(screen.queryByRole('group', { name: 'Credits from Plex' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Import credits from Plex' })).toBeNull();
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/admin/plex/credits')).toHaveLength(
       0,
     );
   });
 
-  it('sits in the Cast & crew card, under the count of films with credits', async () => {
+  it('sits inside the Import from Plex card beside Import from Plex, not under Cast & crew', async () => {
     installFetch(plexRoute(fixtures.adminPlex));
     renderApp('/admin/library');
-    const card = await screen.findByRole('region', { name: 'Cast & crew' });
+    const panel = await screen.findByRole('region', { name: 'Import from Plex' });
 
-    expect(await within(card).findByText('530 of 538 films have credits')).toBeInTheDocument();
-    const group = await within(card).findByRole('group', { name: 'Credits from Plex' });
+    const group = await within(panel).findByRole('group', { name: 'Credits from Plex' });
     await waitFor(() =>
       expect(within(group).getByRole('button', { name: 'Import credits from Plex' })).toBeEnabled(),
     );
-    expect(
-      within(screen.getByRole('region', { name: 'Import from Plex' })).queryByRole('group', {
-        name: 'Credits from Plex',
-      }),
-    ).toBeNull();
+    expect(within(panel).getByRole('button', { name: 'Import from Plex again' })).toBeEnabled();
+    const cast = await screen.findByRole('region', { name: 'Cast & crew' });
+    expect(within(cast).queryByRole('group')).toBeNull();
+    expect(within(cast).queryByRole('button')).toBeNull();
   });
 
   it('is disabled while Plex is not reachable', async () => {
     installFetch(plexRoute({ ...fixtures.adminPlex, reachable: false }));
     renderApp('/admin/library');
-    const panel = await screen.findByRole('region', { name: 'Cast & crew' });
+    const panel = await screen.findByRole('region', { name: 'Import from Plex' });
 
     const button = await within(panel).findByRole('button', { name: 'Import credits from Plex' });
     expect(button).toBeDisabled();
@@ -52,7 +54,7 @@ describe('Admin: Import credits from Plex', () => {
   it('starts the credits import without touching the Plex import', async () => {
     const fetchMock = installFetch(plexRoute(fixtures.adminPlex));
     renderApp('/admin/library');
-    const panel = await screen.findByRole('region', { name: 'Cast & crew' });
+    const panel = await screen.findByRole('region', { name: 'Import from Plex' });
 
     const button = await within(panel).findByRole('button', { name: 'Import credits from Plex' });
     await waitFor(() => expect(button).toBeEnabled());

@@ -30,8 +30,8 @@ export default function AdminLibraryFiles({ list }) {
   } else {
     body = (
       <ul className="admin__list" aria-label={list.title}>
-        {items.map((item) => (
-          <li key={`${item.filmId}-${item.files.join('|')}`} className="admin__item">
+        {items.map((item, i) => (
+          <li key={`${item.filmId}-${i}-${item.files.join('|')}`} className="admin__item">
             <div className="admin__item-head">
               <Link to={`/films/${item.filmId}`} className="admin__item-title">
                 {titleWithYear(item.title, item.year)}

@@ -144,7 +144,12 @@ describe('countTiles', () => {
       { key: 'films', label: 'Films', value: 538 },
       { key: 'newFiles', label: 'New', value: 2 },
       { key: 'missing', label: 'Missing', value: 1 },
-      { key: 'protectedFiles', label: 'Protected', value: 3, to: '/admin/library/files/protected' },
+      {
+        key: 'protectedFiles',
+        label: 'Can’t play (protected)',
+        value: 3,
+        to: '/admin/library/files/protected',
+      },
       {
         key: 'needsConversion',
         label: 'Needs conversion',

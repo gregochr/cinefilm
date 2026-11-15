@@ -9,7 +9,8 @@ import LibraryScanCard from './LibraryScanCard.jsx';
 import SectionTitle from './SectionTitle.jsx';
 
 /**
- * Library: the scan (with what it changed), the ratings, the Plex import and Cast & crew. Opens on `#scan` or
+ * Library: the scan (with what it changed), the ratings, the Plex import (with the credits-marker import) and
+ * Cast & crew. Opens on `#scan` or
  * `#plex-import` when asked.
  */
 export default function AdminLibrary() {
@@ -66,12 +67,13 @@ export default function AdminLibrary() {
         />
         <LibraryPlexCard
           plex={plexImport.plex}
+          error={plexImport.error}
           starting={plexImport.starting}
           notice={plexImport.notice}
           onImport={plexImport.startImport}
           onRecheck={plexImport.reload}
         />
-        <LibraryCastCard scan={scan} loading={loading} plex={plexImport.plex} />
+        <LibraryCastCard scan={scan} loading={loading} />
       </div>
     </>
   );

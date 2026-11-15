@@ -8,11 +8,13 @@ afterEach(() => {
 });
 
 describe('Admin Library file lists', () => {
-  it('opens from the Protected tile with the protected films, their reason and file names', async () => {
+  it('opens from the protected tile with the protected films, their reason and file names', async () => {
     installFetch();
     renderApp('/admin/library');
 
-    await userEvent.click(await screen.findByRole('link', { name: /Protected/ }));
+    await userEvent.click(
+      await screen.findByRole('link', { name: /^Can’t play \(protected\): 1/ }),
+    );
 
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Protected files' }),

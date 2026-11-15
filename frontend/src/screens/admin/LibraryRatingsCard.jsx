@@ -18,7 +18,7 @@ export default function LibraryRatingsCard({ scan, starting, notice, onRefresh }
         <h2 id="admin-ratings-title" className="admin__title">
           {libraryPage.ratings.title}
         </h2>
-        <span className="admin__mono admin__why">
+        <span className="admin__why">
           {enabled
             ? describeRatingsRefresh(scan.ratingsLastRefreshedAt, formatScanDay)
             : libraryPage.ratings.needsKey}

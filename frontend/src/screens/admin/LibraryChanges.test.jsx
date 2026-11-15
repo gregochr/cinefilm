@@ -75,6 +75,27 @@ describe('LibraryChanges', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
+  it('starts at the first page again when a new report arrives', async () => {
+    const { rerender } = render(<LibraryChanges report={reportOf(60)} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Show 25 more' }));
+    expect(listed()).toHaveLength(50);
+
+    rerender(<LibraryChanges report={reportOf(60)} />);
+
+    expect(listed()).toHaveLength(25);
+    expect(screen.getByRole('button', { name: 'Show 25 more' })).toBeInTheDocument();
+  });
+
+  it('keeps the pages already shown when the same report renders again', async () => {
+    const report = reportOf(60);
+    const { rerender } = render(<LibraryChanges report={report} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Show 25 more' }));
+
+    rerender(<LibraryChanges report={report} loading />);
+
+    expect(listed()).toHaveLength(50);
+  });
+
   it('says so when nothing has been grouped, with zero counts in the summary', () => {
     render(<LibraryChanges report={{ items: [] }} />);
     expect(screen.getByText('Nothing has been grouped or split yet.')).toBeInTheDocument();

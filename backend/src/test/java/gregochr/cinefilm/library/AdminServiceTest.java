@@ -10,6 +10,8 @@ import static gregochr.cinefilm.TestData.person;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gregochr.cinefilm.ApiTestBase;
 import gregochr.cinefilm.film.CreditRole;
@@ -282,17 +284,48 @@ class AdminServiceTest extends ApiTestBase {
     }
 
     @Test
-    void theGroupingReportIsTheNewest20LinesNewestFirst() {
-        for (int i = 0; i < 25; i++) {
-            groupingChanges.save(new GroupingChange(NOW.minusSeconds(1000 - i), GroupingChange.JOIN, "line " + i));
+    void theGroupingReportIsEveryLineOfTheLastFinishedScanNewestFirstWithNoCap() {
+        Instant start = NOW.minusSeconds(600);
+        Instant finish = NOW.minusSeconds(500);
+        run(NOW.minusSeconds(5000), NOW.minusSeconds(4900), 1, 0, 0, null);
+        run(start, finish, 1, 0, 0, null);
+        run(NOW.minusSeconds(10), null, 0, 0, 0, null);
+        groupingChanges.save(new GroupingChange(start.minusMillis(1), GroupingChange.FLAG, "before"));
+        groupingChanges.save(new GroupingChange(finish.plusMillis(1), GroupingChange.SPLIT, "after"));
+        groupingChanges.save(new GroupingChange(start, GroupingChange.JOIN, "at start"));
+        groupingChanges.save(new GroupingChange(finish, GroupingChange.SPLIT, "at finish"));
+        for (int i = 0; i < 30; i++) {
+            groupingChanges.save(new GroupingChange(start.plusSeconds(1 + i), GroupingChange.JOIN, "line " + i));
         }
 
         AdminDtos.GroupingReport report = admin.groupingReport();
 
-        assertThat(report.items()).hasSize(20);
-        assertThat(report.items().get(0)).isEqualTo(new AdminDtos.GroupingChangeDto(NOW.minusSeconds(976), "join",
-            "line 24"));
-        assertThat(report.items().get(19).summary()).isEqualTo("line 5");
+        assertThat(report.items()).hasSize(32);
+        assertThat(report.items().get(0)).isEqualTo(new AdminDtos.GroupingChangeDto(finish, "split", "at finish"));
+        assertThat(report.items().get(1).summary()).isEqualTo("line 29");
+        assertThat(report.items().get(31)).isEqualTo(new AdminDtos.GroupingChangeDto(start, "join", "at start"));
+        assertThat(report.items()).extracting(AdminDtos.GroupingChangeDto::summary)
+            .doesNotContain("before", "after");
+    }
+
+    @Test
+    void theGroupingReportIsEmptyBeforeAnyScanHasFinishedWhateverWasLogged() {
+        run(NOW.minusSeconds(10), null, 0, 0, 0, null);
+        groupingChanges.save(new GroupingChange(NOW.minusSeconds(5), GroupingChange.JOIN, "owner edit"));
+
+        assertThat(admin.groupingReport().items()).isEmpty();
+    }
+
+    @Test
+    void theGroupingReportEndpointAnswersTheLastScansLinesOnly() throws Exception {
+        run(NOW.minusSeconds(600), NOW.minusSeconds(500), 1, 0, 0, null);
+        groupingChanges.save(new GroupingChange(NOW.minusSeconds(550), GroupingChange.JOIN, "in the scan"));
+        groupingChanges.save(new GroupingChange(NOW.minusSeconds(100), GroupingChange.SPLIT, "owner edit later"));
+
+        mvc.perform(get("/api/admin/grouping-report"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].summary").value("in the scan"));
     }
 
     @Test

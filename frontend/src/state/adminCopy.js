@@ -351,6 +351,7 @@ export const libraryPage = {
     lastScan: (ago, took) => `Last scan ${ago} · took ${took}`, // README
     neverScanned: 'Not scanned yet', // planner, 6
     countsLabel: 'Library counts', // existing
+    openList: (label, value) => `${label}: ${value}, open the list`, // planner, 6
   },
   changes: {
     summary: 'What the last scan changed', // AR3
@@ -377,6 +378,7 @@ export const libraryPage = {
     notReachable: 'Not reachable', // planner, 6
     importing: 'Importing', // planner, 6
     lastReport: 'Last report', // AR3
+    loadError: 'Couldn’t load the Plex import status.', // planner, 6
   },
   cast: {
     title: 'Cast & crew', // AR3

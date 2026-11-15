@@ -1,8 +1,16 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
-import { fixtures } from '../../test/mockApi.jsx';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fixtures, installFetch } from '../../test/mockApi.jsx';
 import LibraryPlexCard from './LibraryPlexCard.jsx';
+
+beforeEach(() => {
+  installFetch();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function renderCard(props) {
   return render(
@@ -157,7 +165,49 @@ describe('LibraryPlexCard', () => {
 
   it('shows a notice beside the buttons, and disables the import while the start request runs', () => {
     renderCard({ notice: 'Could not start the import.', starting: true });
-    expect(screen.getByRole('status')).toHaveTextContent('Could not start the import.');
+    expect(screen.getByText('Could not start the import.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Import from Plex again' })).toBeDisabled();
+  });
+
+  it('holds Import credits from Plex, which copies end-credits markers, below the import', async () => {
+    installFetch();
+    renderCard();
+
+    const group = await screen.findByRole('group', { name: 'Credits from Plex' });
+    expect(
+      await within(group).findByRole('button', { name: 'Import credits from Plex' }),
+    ).toBeEnabled();
+    expect(within(group).getByText(/credits start Plex holds/)).toBeInTheDocument();
+  });
+
+  it('turns the credits import off while Plex is unreachable', async () => {
+    installFetch();
+    renderCard({ plex: { ...fixtures.adminPlex, reachable: false } });
+    const group = await screen.findByRole('group', { name: 'Credits from Plex' });
+    expect(
+      await within(group).findByRole('button', { name: 'Import credits from Plex' }),
+    ).toBeDisabled();
+  });
+
+  it('shows the card with an inline error and Try again when the first status read failed', async () => {
+    const onRecheck = vi.fn();
+    renderCard({ plex: undefined, error: new Error('x'), onRecheck });
+
+    const card = screen.getByRole('region', { name: 'Import from Plex' });
+    expect(within(card).getByText('Couldn’t load the Plex import status.')).toBeInTheDocument();
+    expect(within(card).queryByRole('group')).toBeNull();
+    await userEvent.click(within(card).getByRole('button', { name: 'Try again' }));
+    expect(onRecheck).toHaveBeenCalledTimes(1);
+  });
+
+  it('draws nothing while the first read is still running, and keeps the card when a later read fails', () => {
+    installFetch();
+    const { container, unmount } = renderCard({ plex: undefined, error: null });
+    expect(container).toBeEmptyDOMElement();
+    unmount();
+
+    renderCard({ error: new Error('x') });
+    expect(screen.queryByText('Couldn’t load the Plex import status.')).toBeNull();
+    expect(screen.getByText('Plex server').nextSibling).toHaveTextContent('Reachable');
   });
 });

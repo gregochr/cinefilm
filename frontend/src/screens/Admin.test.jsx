@@ -27,12 +27,12 @@ describe('Admin: Library scan panel', () => {
       .getAllByRole('listitem')
       .map((item) => item.textContent);
     expect(tiles).toEqual([
-      'Films538',
-      'New2',
-      'Missing0',
-      'Protected1',
-      'Needs conversion3',
-      'Need a match2',
+      '538Films',
+      '2New',
+      '0Missing',
+      '1Can’t play (protected)',
+      '3Needs conversion',
+      '2Need a match',
     ]);
     const scan = within(panel).getByRole('button', { name: 'Scan library now' });
     expect(scan).toBeEnabled();
@@ -83,7 +83,7 @@ describe('Admin: Library scan panel', () => {
     );
     renderApp('/admin/library');
     const counts = await screen.findByRole('list', { name: 'Library counts' });
-    expect(within(counts).getAllByRole('listitem').at(-1)).toHaveTextContent('Unreadable4');
+    expect(within(counts).getAllByRole('listitem').at(-1)).toHaveTextContent('4Unreadable');
   });
 
   it('Scan now starts a scan, and the panel shows live progress in the button’s place', async () => {
@@ -132,7 +132,7 @@ describe('Admin: Library scan panel', () => {
     expect(await screen.findByRole('button', { name: 'Scan library now' })).toBeEnabled();
     expect(screen.queryByRole('progressbar', { name: 'Scan progress' })).toBeNull();
     const counts = screen.getByRole('list', { name: 'Library counts' });
-    expect(within(counts).getByText('New').nextSibling).toHaveTextContent('7');
+    expect(within(counts).getByText('New').previousSibling).toHaveTextContent('7');
   });
 
   it('shows a neutral line while the folder is still being walked', async () => {
