@@ -5,6 +5,7 @@ import {
   everythingElse,
   fileChoiceNote,
   fileChoices,
+  isCurrentTarget,
   filmTitle,
   foreignActions,
   foreignLine,
@@ -318,6 +319,31 @@ describe('fileChoices', () => {
     );
     expect(fileChoiceNote(file({ ...own, parts: 1, part: 1 }), 6)).toBe('on this film · Extended');
     expect(fileChoiceNote(file({ ...own, editionName: null, parts: 1 }), 6)).toBe('on this film');
+  });
+});
+
+describe('isCurrentTarget', () => {
+  const placed = { filmId: 6, editionId: 60, whole: true, part: null };
+
+  it('is true for the same film and edition when the file is the whole film', () => {
+    expect(isCurrentTarget(placed, 6, { editionId: 60, part: null })).toBe(true);
+  });
+
+  it('is false for another edition, another film or no file', () => {
+    expect(isCurrentTarget(placed, 6, { editionId: 61, part: null })).toBe(false);
+    expect(isCurrentTarget(placed, 7, { editionId: 60, part: null })).toBe(false);
+    expect(isCurrentTarget({ ...placed, filmId: null }, 6, { editionId: 60, part: null })).toBe(
+      false,
+    );
+    expect(isCurrentTarget(undefined, 6, { editionId: 60, part: null })).toBe(false);
+  });
+
+  it('compares the part for a file that sits on one part', () => {
+    const onPart = { filmId: 6, editionId: 60, whole: false, part: 2 };
+    expect(isCurrentTarget(onPart, 6, { editionId: 60, part: 2 })).toBe(true);
+    expect(isCurrentTarget(onPart, 6, { editionId: 60, part: 1 })).toBe(false);
+    expect(isCurrentTarget(onPart, 6, { editionId: 60, part: null })).toBe(false);
+    expect(isCurrentTarget(placed, 6, { editionId: 60, part: 1 })).toBe(false);
   });
 });
 

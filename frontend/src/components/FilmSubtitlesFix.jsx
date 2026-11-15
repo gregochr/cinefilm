@@ -26,7 +26,7 @@ import SubtitleCueList from './SubtitleCueList.jsx';
 import { useDialog } from './useDialog.js';
 
 /** One subtitle file of the film with the tools that apply to it (`fileTools`). */
-function FixFile({ item, busy, problem, actions, onRemoved, onDone, usedMine }) {
+function FixFile({ item, busy, problem, actions, onRemoved, onDone }) {
   const [previewing, setPreviewing] = useState(false);
   const cuesId = useId();
   const tools = fileTools(item);
@@ -74,10 +74,7 @@ function FixFile({ item, busy, problem, actions, onRemoved, onDone, usedMine }) 
             aria-label={`${check.label}: ${name}`}
             disabled={busy}
             onClick={async () => {
-              if (await actions.verify(item.id)) {
-                usedMine.delete(item.id);
-                onDone(check.done);
-              }
+              if (await actions.verify(item.id)) onDone(check.done);
             }}
           >
             {check.label}
@@ -88,11 +85,10 @@ function FixFile({ item, busy, problem, actions, onRemoved, onDone, usedMine }) 
             aria-label={`${check.undo}: ${check.label}, ${name}`}
             disabled={busy}
             onClick={async () => {
-              if (await actions.unverify(item.id)) {
-                // "Use my file instead" made this check (the server then serves the file, so it no longer reads as
-                // replaced): undoing it hands the film back to the download.
-                onDone(usedMine.delete(item.id) ? check.undoneReplaced : check.undone);
-              }
+              // The server's answer says whether the download plays again (it recomputes the row).
+              const row = await actions.unverify(item.id);
+              if (row)
+                onDone(row.replacedByDownload === true ? check.undoneReplaced : check.undone);
             }}
           >
             {check.undo}
@@ -105,10 +101,7 @@ function FixFile({ item, busy, problem, actions, onRemoved, onDone, usedMine }) 
             aria-label={`${buttons.useMyFileInstead.label}: ${name}`}
             disabled={busy}
             onClick={async () => {
-              if (await actions.verify(item.id)) {
-                usedMine.add(item.id);
-                onDone(copy.usedMine);
-              }
+              if (await actions.verify(item.id)) onDone(copy.usedMine);
             }}
           >
             {buttons.useMyFileInstead.label}
@@ -159,7 +152,7 @@ function FixFile({ item, busy, problem, actions, onRemoved, onDone, usedMine }) 
 }
 
 /** The list of the film's files, or why there is none. */
-function Files({ subtitles, files, onRemoved, onDone, usedMine }) {
+function Files({ subtitles, files, onRemoved, onDone }) {
   const { items, loading, error, reload } = subtitles;
   if (loading && !items) {
     return (
@@ -185,7 +178,6 @@ function Files({ subtitles, files, onRemoved, onDone, usedMine }) {
               actions={subtitles}
               onRemoved={onRemoved}
               onDone={onDone}
-              usedMine={usedMine}
             />
           ))}
         </ul>
@@ -211,8 +203,6 @@ export default function FilmSubtitlesFix({ film, opener, onClose, onChanged }) {
   const [adding, setAdding] = useState(false);
   const [attachBusy, setAttachBusy] = useState(false);
   const [notice, setNotice] = useState({ n: 0, text: REMOVED_NOTICE });
-  // The files whose check came from "Use my file instead", for this dialog's lifetime (read only inside handlers).
-  const [usedMine] = useState(() => new Set());
   const closeRef = useRef(null);
   const noticeRef = useRef(null);
   const addRef = useRef(null);
@@ -294,7 +284,6 @@ export default function FilmSubtitlesFix({ film, opener, onClose, onChanged }) {
               files={files}
               onRemoved={() => say(REMOVED_NOTICE)}
               onDone={say}
-              usedMine={usedMine}
             />
             <div className="fix__add">
               <ActionWithHint

@@ -19,7 +19,7 @@ export function parseStartAt(value) {
 }
 
 /**
- * Where playback starts. An explicit time (`at`, "Play from here" in Admin) is used as it is, kept inside the
+ * Where playback starts. An explicit time (`at`, "Play from here" in Film detail's Fix… panel) is used as it is, kept inside the
  * film; otherwise the start of the film when asked (`startAtZero`), else the resume point.
  */
 export function startPosition({ at = null, startAtZero = false, savedMs = 0, runtimeMs = 0 }) {

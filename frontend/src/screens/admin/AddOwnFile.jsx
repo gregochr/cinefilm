@@ -55,7 +55,7 @@ export default function AddOwnFile({
       ) : null}
       {picker.filesError ? <Problem onRetry={picker.retryFiles}>{copy.loadError}</Problem> : null}
       {picker.files && picker.files.length === 0 ? (
-        <p className="admin__text">{copy.none}</p>
+        <p className="admin__text">{allKinds ? copy.noneAny : copy.none}</p>
       ) : null}
       {picker.files && picker.files.length > 0 ? (
         <fieldset className="subs__choices">
@@ -122,6 +122,7 @@ export default function AddOwnFile({
           ))}
         </fieldset>
       ) : null}
+      {picker.unchanged ? <p className="admin__text">{copy.unchanged}</p> : null}
       {picker.problem ? (
         <p className="admin__todo-problem" role="alert">
           {picker.problem}
@@ -131,9 +132,9 @@ export default function AddOwnFile({
         {/* aria-disabled, not disabled: the button keeps focus while its request runs; the hook ignores clicks. */}
         <Button
           type="submit"
-          aria-disabled={!picker.target || picker.attaching || undefined}
+          aria-disabled={!picker.target || picker.attaching || picker.unchanged || undefined}
           onClick={(event) => {
-            if (!picker.target || picker.attaching) event.preventDefault();
+            if (!picker.target || picker.attaching || picker.unchanged) event.preventDefault();
           }}
         >
           {picker.attaching ? copy.attaching : copy.attach}

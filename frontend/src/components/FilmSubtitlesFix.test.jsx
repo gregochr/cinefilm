@@ -73,8 +73,11 @@ function serve({ answer = () => null } = {}) {
       if (method === 'POST') {
         row.wasReplaced = row.replacedByDownload;
         row.replacedByDownload = false;
-      } else if (row.wasReplaced) {
-        row.replacedByDownload = true;
+      } else {
+        // The server recomputes: it reads as replaced only while a download of the film is still there.
+        row.replacedByDownload =
+          row.wasReplaced === true &&
+          list.some((r) => r.origin === 'OPENSUBTITLES' && r.filmId === row.filmId);
       }
       return respond(row);
     }
@@ -251,6 +254,36 @@ describe('FilmSubtitlesFix', () => {
       expect(
         await within(dialog).findByRole('button', { name: /^Use my file instead/ }),
       ).toBeVisible();
+    });
+
+    it('Undo says the download plays again even after the dialog was closed and opened again', async () => {
+      serve();
+      const { dialog } = await open();
+      await userEvent.click(within(dialog).getByRole('button', { name: /^Use my file instead/ }));
+      await within(dialog).findByText('Your file plays instead of the download.');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+      await userEvent.click(screen.getByRole('button', { name: 'Open the fixer' }));
+      const again = await screen.findByRole('dialog', { name: 'Blade Runner (1982)' });
+      await userEvent.click(await within(again).findByRole('button', { name: /^Undo/ }));
+
+      expect(await within(again).findByText('The download plays again.')).toBeVisible();
+    });
+
+    it('Undo says the check is taken away when the download was deleted in the meantime', async () => {
+      serve();
+      const { dialog } = await open();
+      await userEvent.click(within(dialog).getByRole('button', { name: /^Use my file instead/ }));
+      await within(dialog).findByText('Your file plays instead of the download.');
+      await userEvent.click(within(dialog).getByRole('button', { name: /Delete this download/ }));
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Delete download' }));
+      await within(dialog).findByText(/Download removed/);
+
+      await userEvent.click(await within(dialog).findByRole('button', { name: /^Undo/ }));
+
+      expect(await within(dialog).findByText('The check is taken away.')).toBeVisible();
+      expect(within(dialog).queryByText('The download plays again.')).not.toBeInTheDocument();
     });
 
     it('sends one request on a double click', async () => {
@@ -491,6 +524,38 @@ describe('FilmSubtitlesFix', () => {
       expect(hide).toHaveAttribute('aria-expanded', 'true');
       await userEvent.click(hide);
       expect(within(dialog).queryByText('<b>Tears</b> in rain')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Preview lines', () => {
+    it('reads the lines again when the row’s version changes, so they are never another version’s', async () => {
+      let version = 1;
+      serve({
+        answer: (method, url) => {
+          if (url === '/api/admin/subtitles' && method === 'GET') {
+            return respond([{ ...rows()[0], version }]);
+          }
+          if (url === '/api/admin/subtitles/6/cues') {
+            return respond({
+              offsetMs: 0,
+              cues: [{ startMs: 61000, endMs: 63000, text: `Lines v${version}` }],
+            });
+          }
+          if (url === '/api/admin/subtitles/6/verify') {
+            version = 2;
+            return respond({ ...rows()[0], version, verified: true });
+          }
+          return null;
+        },
+      });
+      const { dialog } = await open();
+      await userEvent.click(within(dialog).getByRole('button', { name: /^Preview lines/ }));
+      expect(await within(dialog).findByText('Lines v1')).toBeVisible();
+
+      await userEvent.click(within(dialog).getByRole('button', { name: /^Looks right/ }));
+
+      expect(await within(dialog).findByText('Lines v2')).toBeVisible();
+      expect(within(dialog).queryByText('Lines v1')).not.toBeInTheDocument();
     });
   });
 

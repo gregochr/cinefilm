@@ -166,6 +166,15 @@ export function fileChoiceNote(file, filmId) {
   return subtitlesPage.addFile.attachedTo(file.filmTitle ?? 'another film');
 }
 
+/**
+ * True when attaching `file` to `target` (`attachTarget`'s answer) would put it where it already is: the same film and
+ * edition, and the whole film or the same part.
+ */
+export function isCurrentTarget(file, filmId, target) {
+  if (!file || file.filmId !== filmId || file.editionId !== target.editionId) return false;
+  return file.whole ? target.part === null : target.part === file.part;
+}
+
 /** The body of the attach request once an edition and (for a split edition) a part are chosen, else null. */
 export function attachTarget(edition, part) {
   if (!edition) return null;

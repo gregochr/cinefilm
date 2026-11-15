@@ -833,11 +833,14 @@ describe('fixture server: Admin settings', () => {
       unresolved: true,
     });
 
+    await call('POST', '/api/admin/subtitles/1/verify');
     const answer = await call('POST', '/api/admin/subtitles/1/attach', {
       editionId: 62,
       part: null,
     });
 
+    // Moving a file takes its check away.
+    expect(answer.verified).toBe(false);
     expect(answer).toMatchObject({
       id: 1,
       state: 'matched',
@@ -946,6 +949,16 @@ describe('fixture server: Admin settings', () => {
       expect((await failure('POST', '/api/admin/subtitles/999/detach')).status).toBe(404);
     });
 
+    it('answers a verify as the server recomputes the row: a checked file no longer reads as replaced by a download, and does again once unchecked', async () => {
+      const before = (await call('GET', '/api/admin/subtitles')).find((f) => f.id === 7);
+      expect(before.replacedByDownload).toBe(true);
+
+      const checked = await call('POST', '/api/admin/subtitles/7/verify');
+      expect(checked).toMatchObject({ verified: true, replacedByDownload: false });
+      const undone = await call('DELETE', '/api/admin/subtitles/7/verify');
+      expect(undone).toMatchObject({ verified: false, replacedByDownload: true });
+    });
+
     it('marks a file as checked on POST verify and unmarks it on DELETE', async () => {
       const checked = await call('POST', '/api/admin/subtitles/7/verify');
       expect(checked).toMatchObject({ id: 7, verified: true });
@@ -956,6 +969,13 @@ describe('fixture server: Admin settings', () => {
       const undone = await call('DELETE', '/api/admin/subtitles/7/verify');
       expect(undone).toMatchObject({ id: 7, verified: false });
       expect((await failure('POST', '/api/admin/subtitles/999/verify')).status).toBe(404);
+    });
+
+    it('clears a file’s check when its timing is set, as the server’s change does', async () => {
+      await call('POST', '/api/admin/subtitles/3/verify');
+      const answer = await call('PUT', '/api/admin/subtitles/3/offset', { offsetMs: 0 });
+
+      expect(answer.verified).toBe(false);
     });
 
     it('sets a file’s timing as the owner’s word, moves its version on, and refuses what the server refuses', async () => {

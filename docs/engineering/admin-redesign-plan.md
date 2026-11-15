@@ -591,8 +591,8 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
   - **Attaching an owner's forced file (review fix):** Admin's "Attach to… / Move to…" worked on every owner file,
     forced ones included, but "Add my own file…" listed only full files, so a loose or wrongly placed forced file had
     nowhere to go. In the Fix dialog only (`AddOwnFile allKinds` → `useFilmFilePicker(filmId, { allKinds })` →
-    `fileChoices(files, filmId, true)`), it now offers the owner's files of both kinds (never downloads, missing files
-    or this film's own), unattached first, each as "{name} · Full|Forced · not attached to a film | on {film}"
+    `fileChoices(files, filmId, true)`), it now offers the owner's files of both kinds (never downloads or missing files;
+    this film's own are offered too, see below), unattached first, each as "{name} · Full|Forced · not attached to a film | on {film}"
     (existing `attachedTo`/`unattached` copy; "Full"/"Forced" are 8a's tag words). Admin's To do / full-need picker
     keeps full files only. Server: `SubtitleAdminService.attachLocked` takes any sidecar and only `retarget`s it to the
     edition's media file (and marks it owner-attached); the file's kind comes from its name and is untouched, so a
@@ -600,8 +600,17 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
     already holds that place, in which case neither plays (a conflict) until one is moved. For that, `allKinds` also
     offers this film's own owner files, "on this film · {edition}, part {n}" (`subtitlesPage.addFile.onThisFilm`,
     planner, 8b-2), re-targeted by the same attach route; the conflict warning now reads "Move one of them with Add my
-    own file… in the film's Fix… panel." (planner, 8b-2). The Undo notice follows the dialog's own memory of which
-    files "Use my file instead" checked (after it the server serves the file, so it no longer reads as replaced).
+    own file… in the film's Fix… panel." (planner, 8b-2). The Undo notice follows the server's answer to the
+    undo (`DELETE …/verify` returns the row recomputed): "The download plays again." when `replacedByDownload` is true
+    in it, else "The check is taken away." (after "Use my file instead" the server serves the file, so the row no
+    longer reads as replaced, and a deleted download is not brought back). In the picker, "Attach" stays inert, with
+    "That file is already there. Pick another edition or part." (planner, 8b-2), when the target is exactly the
+    file's current film, edition and part, since the server clears a file's check on any attach. With `allKinds` an
+    empty list reads "None of your subtitle files are waiting. …" (planner, 8b-2); the To do path keeps its line.
+    **Accepted losses (spec-sanctioned):** timing of a file that is not playing (the player nudges only the file on
+    screen) and previewing the lines of an unattached file before attaching it (Preview lines is per file of the
+    film). Dev mocks (`fixtureServer.js`, `mockApi.jsx`) now answer verify as the server does (a checked file stops
+    reading as replaced; undoing gives it back) and clear `verified` on an attach or a retiming.
     `kindTag` (`state/subtitleFix.js`) is the one Full/Forced word. The dialog's tests send the
     attach for a forced file under another film end to end through the mocks. "Undo" after "Use my file instead" says
     "The download plays again." (`subtitleCheck.undoneReplaced`). `filmLabel` was dead and is deleted. `NUDGES` was deleted and then restored on the merge with 8b-1, which

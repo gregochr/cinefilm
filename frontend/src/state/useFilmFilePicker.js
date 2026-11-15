@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { adminApi, filmsApi } from '../api/resources.js';
-import { attachTarget, fileChoices } from './adminSubtitles.js';
+import { attachTarget, fileChoices, isCurrentTarget } from './adminSubtitles.js';
 import { subtitleProblem } from './subtitleAdmin.js';
 import { useResource } from './useResource.js';
 
@@ -31,9 +31,17 @@ export function useFilmFilePicker(filmId, { allKinds = false } = {}) {
   const edition =
     editions.find((e) => e.id === editionId) ?? (editions.length === 1 ? editions[0] : null);
   const target = fileId != null ? attachTarget(edition, part) : null;
+  // Attaching a file to where it already is changes nothing, but the server clears its check: not offered.
+  const unchanged =
+    target !== null &&
+    isCurrentTarget(
+      files?.find((file) => file.id === fileId),
+      filmId,
+      target,
+    );
 
   const attach = useCallback(async () => {
-    if (running.current || target === null) return false;
+    if (running.current || target === null || unchanged) return false;
     running.current = true;
     setAttaching(true);
     setProblem(null);
@@ -47,7 +55,7 @@ export function useFilmFilePicker(filmId, { allKinds = false } = {}) {
       running.current = false;
       setAttaching(false);
     }
-  }, [fileId, target]);
+  }, [fileId, target, unchanged]);
 
   return {
     files,
@@ -68,6 +76,7 @@ export function useFilmFilePicker(filmId, { allKinds = false } = {}) {
     part,
     pickPart: setPart,
     target,
+    unchanged,
     attaching,
     problem,
     attach,

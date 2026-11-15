@@ -328,7 +328,10 @@ function attachSubtitle(id, body) {
   const found = filmOfEdition(body.editionId);
   if (!found) throw apiError(404, 'No such edition');
   const part = body.part ?? null;
+  // Like the server's `changed()`: a moved file's check is gone, and it reads as replaced again if it was.
   attachedSubtitles.set(id, {
+    verified: false,
+    replacedByDownload: row.replacedByDownload,
     state: 'matched',
     ownerAttached: true,
     filmId: found.film.id,
@@ -369,10 +372,22 @@ function detachSubtitle(id) {
   return listedSubtitle(id);
 }
 
-/** "Use my file instead" (verify) and its undo: the owner's file is marked as checked, or not. */
+/**
+ * "Use my file instead" (verify) and its undo: the owner's file is marked as checked, or not. As the server answers
+ * (it recomputes the row): a checked file is served, so it no longer reads as replaced by a download; undoing the
+ * check gives that back, if there is still a download.
+ */
 function verifySubtitle(id, verified) {
-  listedSubtitle(id);
-  attachedSubtitles.set(id, { ...attachedSubtitles.get(id), verified });
+  const before = listedSubtitle(id);
+  const base = adminSubtitles.find((r) => r.id === id);
+  const replaced =
+    base.replacedByDownload === true &&
+    subtitleList().some((r) => r.origin === 'OPENSUBTITLES' && r.filmId === before.filmId);
+  attachedSubtitles.set(id, {
+    ...attachedSubtitles.get(id),
+    verified,
+    replacedByDownload: verified ? false : replaced,
+  });
   return listedSubtitle(id);
 }
 
@@ -391,6 +406,8 @@ function setSubtitleOffset(id, body) {
     offsetMs: body.offsetMs,
     offsetSource: 'OWNER',
     version: before.version + 1,
+    // Like the server's `changed()`: a retimed file is no longer the one the owner checked.
+    verified: false,
   });
   return listedSubtitle(id);
 }

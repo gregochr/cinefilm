@@ -513,6 +513,11 @@ export const subtitlesPage = {
     cancel: 'Cancel',
     loadingEditions: 'Loading that film’s editions…',
     noEdition: 'This film has no edition a subtitle file can be added to.',
+    // planner, 8b-2: the Fix panel's picker offers files of every kind
+    noneAny:
+      'None of your subtitle files are waiting. Put the file beside the film and scan the library; it will appear here.',
+    // planner, 8b-2: shown instead of sending an attach that would change nothing (and clear the file's check)
+    unchanged: 'That file is already there. Pick another edition or part.',
     none: 'No full subtitle files are waiting. Put the file beside the film and scan the library; it will appear here.',
     loading: 'Looking for subtitle files…',
     loadError: 'Couldn’t load the subtitle files.',
