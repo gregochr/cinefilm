@@ -192,7 +192,7 @@ describe('Admin shell: dialogs hosted by the layout', () => {
   it('Edit editions returns focus to the button that opened it', async () => {
     installFetch();
     renderApp('/admin');
-    const opener = await screen.findByRole('button', { name: 'Sort out editions…' });
+    const opener = (await screen.findAllByRole('button', { name: 'Sort out editions…' }))[0];
     await userEvent.click(opener);
     await screen.findByRole('dialog', { name: 'Blade Runner · 1982' });
     await act(async () => {});

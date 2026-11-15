@@ -1,0 +1,255 @@
+{
+  "items": [
+    {
+      "kind": "needs-match",
+      "filmId": 100,
+      "title": "Match film 1",
+      "year": 1977,
+      "detail": "1 possible match",
+      "files": ["match-1.m4v"],
+      "candidates": [
+        {
+          "tmdbId": 37557,
+          "title": "Suspiria",
+          "year": 1977,
+          "runtimeMinutes": 98,
+          "posterPath": "/s.jpg",
+          "score": 100
+        }
+      ],
+      "confident": true
+    },
+    {
+      "kind": "needs-match",
+      "filmId": 101,
+      "title": "Match film 2",
+      "year": null,
+      "detail": "2 possible matches",
+      "files": ["match-2.m4v"],
+      "candidates": [
+        {
+          "tmdbId": 16307,
+          "title": "The Wicker Man",
+          "year": 1973,
+          "runtimeMinutes": 93,
+          "posterPath": "/a.jpg",
+          "score": 62
+        },
+        {
+          "tmdbId": 9708,
+          "title": "The Wicker Man",
+          "year": 2006,
+          "runtimeMinutes": 102,
+          "posterPath": null,
+          "score": 58
+        }
+      ],
+      "confident": false
+    },
+    {
+      "kind": "needs-match",
+      "filmId": 102,
+      "title": "Match film 3",
+      "year": null,
+      "detail": "2 possible matches",
+      "files": ["match-3.m4v"],
+      "candidates": [
+        {
+          "tmdbId": 16307,
+          "title": "The Wicker Man",
+          "year": 1973,
+          "runtimeMinutes": 93,
+          "posterPath": "/a.jpg",
+          "score": 62
+        },
+        {
+          "tmdbId": 9708,
+          "title": "The Wicker Man",
+          "year": 2006,
+          "runtimeMinutes": 102,
+          "posterPath": null,
+          "score": 58
+        }
+      ],
+      "confident": false
+    },
+    {
+      "kind": "needs-match",
+      "filmId": 103,
+      "title": "Match film 4",
+      "year": null,
+      "detail": "2 possible matches",
+      "files": ["match-4.m4v"],
+      "candidates": [
+        {
+          "tmdbId": 16307,
+          "title": "The Wicker Man",
+          "year": 1973,
+          "runtimeMinutes": 93,
+          "posterPath": "/a.jpg",
+          "score": 62
+        },
+        {
+          "tmdbId": 9708,
+          "title": "The Wicker Man",
+          "year": 2006,
+          "runtimeMinutes": 102,
+          "posterPath": null,
+          "score": 58
+        }
+      ],
+      "confident": false
+    },
+    {
+      "kind": "needs-match",
+      "filmId": 104,
+      "title": "Match film 5",
+      "year": null,
+      "detail": "2 possible matches",
+      "files": ["match-5.m4v"],
+      "candidates": [
+        {
+          "tmdbId": 16307,
+          "title": "The Wicker Man",
+          "year": 1973,
+          "runtimeMinutes": 93,
+          "posterPath": "/a.jpg",
+          "score": 62
+        },
+        {
+          "tmdbId": 9708,
+          "title": "The Wicker Man",
+          "year": 2006,
+          "runtimeMinutes": 102,
+          "posterPath": null,
+          "score": 58
+        }
+      ],
+      "confident": false
+    },
+    {
+      "kind": "needs-match",
+      "filmId": 105,
+      "title": "Match film 6",
+      "year": null,
+      "detail": "2 possible matches",
+      "files": ["match-6.m4v"],
+      "candidates": [
+        {
+          "tmdbId": 16307,
+          "title": "The Wicker Man",
+          "year": 1973,
+          "runtimeMinutes": 93,
+          "posterPath": "/a.jpg",
+          "score": 62
+        },
+        {
+          "tmdbId": 9708,
+          "title": "The Wicker Man",
+          "year": 2006,
+          "runtimeMinutes": 102,
+          "posterPath": null,
+          "score": 58
+        }
+      ],
+      "confident": false
+    },
+    {
+      "kind": "needs-match",
+      "filmId": 106,
+      "title": "Match film 7",
+      "year": null,
+      "detail": "2 possible matches",
+      "files": ["match-7.m4v"],
+      "candidates": [
+        {
+          "tmdbId": 16307,
+          "title": "The Wicker Man",
+          "year": 1973,
+          "runtimeMinutes": 93,
+          "posterPath": "/a.jpg",
+          "score": 62
+        },
+        {
+          "tmdbId": 9708,
+          "title": "The Wicker Man",
+          "year": 2006,
+          "runtimeMinutes": 102,
+          "posterPath": null,
+          "score": 58
+        }
+      ],
+      "confident": false
+    },
+    {
+      "kind": "multiple-files",
+      "filmId": 200,
+      "title": "Files film 1",
+      "year": 1982,
+      "detail": "2 untagged versions of one film, runtimes differ by 22%",
+      "files": ["1-Blade Runner.m4v", "1-Blade Runner Final Cut.m4v"],
+      "candidates": [],
+      "confident": false
+    },
+    {
+      "kind": "parts-mismatch",
+      "filmId": 201,
+      "title": "Files film 2",
+      "year": 2002,
+      "detail": "Part 2: video codec is h264, part 1 has hevc",
+      "files": ["2-The Two Towers pt1.m4v", "2-The Two Towers pt2.m4v"],
+      "candidates": [],
+      "confident": false
+    },
+    {
+      "kind": "multiple-files",
+      "filmId": 202,
+      "title": "Files film 3",
+      "year": 1982,
+      "detail": "2 untagged versions of one film, runtimes differ by 22%",
+      "files": ["3-Blade Runner.m4v", "3-Blade Runner Final Cut.m4v"],
+      "candidates": [],
+      "confident": false
+    },
+    {
+      "kind": "parts-mismatch",
+      "filmId": 203,
+      "title": "Files film 4",
+      "year": 2002,
+      "detail": "Part 2: video codec is h264, part 1 has hevc",
+      "files": ["4-The Two Towers pt1.m4v", "4-The Two Towers pt2.m4v"],
+      "candidates": [],
+      "confident": false
+    },
+    {
+      "kind": "multiple-files",
+      "filmId": 204,
+      "title": "Files film 5",
+      "year": 1982,
+      "detail": "2 untagged versions of one film, runtimes differ by 22%",
+      "files": ["5-Blade Runner.m4v", "5-Blade Runner Final Cut.m4v"],
+      "candidates": [],
+      "confident": false
+    },
+    {
+      "kind": "parts-mismatch",
+      "filmId": 205,
+      "title": "Files film 6",
+      "year": 2002,
+      "detail": "Part 2: video codec is h264, part 1 has hevc",
+      "files": ["6-The Two Towers pt1.m4v", "6-The Two Towers pt2.m4v"],
+      "candidates": [],
+      "confident": false
+    },
+    {
+      "kind": "protected",
+      "filmId": 32,
+      "title": "Kes",
+      "year": 1969,
+      "detail": "Protected by FairPlay, so it can't be played",
+      "files": ["Kes.m4v"],
+      "candidates": [],
+      "confident": false
+    }
+  ]
+}

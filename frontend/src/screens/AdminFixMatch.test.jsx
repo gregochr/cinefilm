@@ -12,7 +12,7 @@ const isApply = (m, url) => m === 'POST' && url === '/api/admin/films/31/match';
 
 async function openPanel() {
   renderApp('/admin');
-  const attention = await screen.findByRole('region', { name: 'Films needing attention' });
+  const attention = await screen.findByRole('region', { name: 'Pick the right film' });
   // The first unmatched film is The Wicker Man (id 31); the fixtures list a second one after the other kinds.
   const openers = await within(attention).findAllByRole('button', { name: 'Find the film…' });
   await userEvent.click(openers[0]);
@@ -23,7 +23,7 @@ describe('Admin: Fix match', () => {
   it('only unmatched films get a Fix match button', async () => {
     installFetch();
     renderApp('/admin');
-    const attention = await screen.findByRole('region', { name: 'Films needing attention' });
+    const attention = await screen.findByRole('region', { name: 'Pick the right film' });
     const buttons = await within(attention).findAllByRole('button', { name: 'Find the film…' });
     expect(buttons).toHaveLength(2);
     expect(buttons[0]).toHaveAccessibleDescription(
@@ -193,7 +193,7 @@ describe('Admin: a slow apply for a film that is no longer on screen', () => {
       return null;
     });
     renderApp('/admin');
-    const list = await screen.findByRole('region', { name: 'Films needing attention' });
+    const list = await screen.findByRole('region', { name: 'Pick the right film' });
     const buttons = await within(list).findAllByRole('button', { name: 'Find the film…' });
     await userEvent.click(buttons[0]);
     const first = await screen.findByRole('region', { name: 'Fix match' });

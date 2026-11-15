@@ -17,12 +17,12 @@ describe('App routes', () => {
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
   });
 
-  it('the Admin route opens on To do, with Films needing attention', async () => {
+  it('the Admin route opens on To do, with the groups of things to do', async () => {
     installFetch();
     renderApp('/admin');
     expect(screen.getByRole('heading', { level: 1, name: 'To do' })).toBeInTheDocument();
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Films needing attention' }),
+      await screen.findByRole('heading', { level: 2, name: 'Pick the right film' }),
     ).toBeInTheDocument();
   });
 

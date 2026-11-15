@@ -60,7 +60,8 @@ export const buttons = {
 
   // Later phases.
   confirmGuess: {
-    label: (title, year) => `Yes, it’s ${title} (${year})`,
+    // AR1; a guess with no year (TMDB lists none) reads "Yes, it’s {Title}" (planner, 3c-2).
+    label: (title, year) => (year ? `Yes, it’s ${title} (${year})` : `Yes, it’s ${title}`),
     hint: 'Confirms the guess and fetches its poster and details',
     source: 'AR1',
   },
@@ -156,6 +157,28 @@ export const todoGroups = {
     why: 'English films with foreign dialogue and no forced subtitle found',
     source: 'plan',
   },
+};
+
+/** The footer controls under a To do group. */
+export const todoFooter = {
+  allInSubtitles: 'All in Subtitles →', // AR1
+  showFewer: 'Show fewer', // planner, 3c-2 (AR1 shows no way back after "Show all {n}")
+  source: 'AR1 for "All in Subtitles →"; planner 3c-2 for "Show fewer"',
+};
+
+/** The To do rows' small lines and the load messages AR1 does not show. All planner, 3c-2 unless noted. */
+export const todoRow = {
+  bestGuess: (guess) => `best guess: ${guess}`, // AR1
+  noGuess: 'best guess: none', // AR1
+  files: (n) => `${n} ${n === 1 ? 'file' : 'files'}`,
+  loadErrors: {
+    attention: 'Couldn’t load the films that need sorting out.',
+    full: 'Couldn’t load the films missing English subtitles.',
+    forced: 'Couldn’t load the films with forced subtitles to find.',
+  },
+  retry: 'Try again',
+  loadingLabel: 'Loading',
+  source: 'AR1 for "best guess: …"; planner 3c-2 for the rest',
 };
 
 /** "Showing {k} of {n}" under a group card on desktop. */

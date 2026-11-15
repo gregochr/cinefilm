@@ -13,8 +13,10 @@ const isSave = (m, url) => m === 'PUT' && url === '/api/admin/films/6/editions';
 
 async function openFromTheRow() {
   renderApp('/admin');
-  const attention = await screen.findByRole('region', { name: 'Films needing attention' });
-  const button = await within(attention).findByRole('button', { name: 'Sort out editions…' });
+  const attention = await screen.findByRole('region', { name: 'Sort out several files' });
+  const button = (
+    await within(attention).findAllByRole('button', { name: 'Sort out editions…' })
+  )[0];
   await userEvent.click(button);
   await screen.findByRole('dialog', { name: 'Blade Runner · 1982' });
   await screen.findByRole('region', { name: 'Edition Extended Edition' });
@@ -22,18 +24,18 @@ async function openFromTheRow() {
 }
 
 describe('Admin: Edit editions', () => {
-  it('only the Several files row gets an Edit editions button', async () => {
+  it('each Sort out several files row (several files, parts that do not match) gets an Edit editions button', async () => {
     installFetch();
     renderApp('/admin');
-    const attention = await screen.findByRole('region', { name: 'Films needing attention' });
+    const group = await screen.findByRole('region', { name: 'Sort out several files' });
 
-    const buttons = await within(attention).findAllByRole('button', { name: 'Sort out editions…' });
-    expect(buttons).toHaveLength(1);
+    const buttons = await within(group).findAllByRole('button', { name: 'Sort out editions…' });
+    expect(buttons).toHaveLength(2);
     expect(buttons[0]).toHaveAccessibleDescription(
       'Choose which file is which cut, the part order and the default.',
     );
-    const item = within(attention).getByText('Blade Runner (1982)');
-    expect(item).toBeInTheDocument();
+    expect(within(group).getByText('Blade Runner (1982)')).toBeInTheDocument();
+    expect(within(group).getByText('The Two Towers (2002)')).toBeInTheDocument();
   });
 
   it('opens the panel for that film, with the suggestion loaded for it', async () => {
@@ -63,7 +65,11 @@ describe('Admin: Edit editions', () => {
         if (saved) attentionAfterSave += 1;
         return respond(
           saved
-            ? { items: fixtures.adminAttention.items.filter((i) => i.kind !== 'multiple-files') }
+            ? {
+                items: fixtures.adminAttention.items.filter(
+                  (i) => !['multiple-files', 'parts-mismatch'].includes(i.kind),
+                ),
+              }
             : fixtures.adminAttention,
         );
       }
@@ -92,7 +98,11 @@ describe('Admin: Edit editions', () => {
       if (url === '/api/admin/attention') {
         return respond(
           saved
-            ? { items: fixtures.adminAttention.items.filter((i) => i.kind !== 'multiple-files') }
+            ? {
+                items: fixtures.adminAttention.items.filter(
+                  (i) => !['multiple-files', 'parts-mismatch'].includes(i.kind),
+                ),
+              }
             : fixtures.adminAttention,
         );
       }
@@ -117,9 +127,9 @@ describe('Admin: Edit editions', () => {
   it('a failed editions load inside the panel does not break the page behind it', async () => {
     installFetch((m, url) => (isEditions(m, url) ? respond({ error: 'x' }, 500) : null));
     renderApp('/admin');
-    const attention = await screen.findByRole('region', { name: 'Films needing attention' });
+    const attention = await screen.findByRole('region', { name: 'Sort out several files' });
     await userEvent.click(
-      await within(attention).findByRole('button', { name: 'Sort out editions…' }),
+      (await within(attention).findAllByRole('button', { name: 'Sort out editions…' }))[0],
     );
 
     expect(await screen.findByText('Couldn’t load this film’s files.')).toBeInTheDocument();
@@ -166,7 +176,7 @@ describe('Admin: Edit editions', () => {
       return null;
     });
     renderApp('/admin');
-    const attention = await screen.findByRole('region', { name: 'Films needing attention' });
+    const attention = await screen.findByRole('region', { name: 'Sort out several files' });
     const buttons = await within(attention).findAllByRole('button', { name: 'Sort out editions…' });
     await userEvent.click(buttons[0]);
     await screen.findByRole('region', { name: 'Edition Extended Edition' });

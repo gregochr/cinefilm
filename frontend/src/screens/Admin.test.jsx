@@ -257,104 +257,7 @@ describe('Admin: Library scan panel', () => {
   });
 });
 
-describe('Admin: Films needing attention panel', () => {
-  it('lists each entry with its title, year, kind, detail and file names', async () => {
-    installFetch();
-    renderApp('/admin');
-    const panel = await screen.findByRole('region', { name: 'Films needing attention' });
-    const items = await within(panel).findAllByRole('listitem');
-
-    expect(items).toHaveLength(6 + 3);
-    expect(within(panel).getByText('The Wicker Man')).toBeInTheDocument();
-    expect(within(panel).getAllByText('Unmatched')).toHaveLength(2);
-    expect(within(panel).getByText('1 possible match')).toBeInTheDocument();
-    expect(within(panel).getByText('2 possible matches')).toBeInTheDocument();
-    expect(within(panel).getByText('The Wicker Man.m4v')).toBeInTheDocument();
-    expect(within(panel).getByText('Kes (1969)')).toBeInTheDocument();
-    expect(within(panel).getByText('Protected')).toBeInTheDocument();
-    expect(
-      within(panel).getByText("Protected by FairPlay, so it can't be played"),
-    ).toBeInTheDocument();
-    expect(within(panel).getByText('Alien (1979)')).toBeInTheDocument();
-    expect(within(panel).getByText('Needs conversion')).toBeInTheDocument();
-    expect(within(panel).getByText('Blade Runner (1982)')).toBeInTheDocument();
-    expect(within(panel).getByText('Several files')).toBeInTheDocument();
-    expect(
-      within(panel).getByText('2 untagged versions of one film, runtimes differ by 22%'),
-    ).toBeInTheDocument();
-    expect(
-      within(panel).getByText('Parts don\u2019t match \u2014 will transcode'),
-    ).toBeInTheDocument();
-    expect(
-      within(panel).getByText('Part 2: video codec is h264, part 1 has hevc'),
-    ).toBeInTheDocument();
-    expect(
-      within(panel).getByText('Blade Runner.m4v · Blade Runner Final Cut.m4v'),
-    ).toBeInTheDocument();
-  });
-
-  it('shows the candidates of an unmatched film read-only, with year and runtime', async () => {
-    installFetch();
-    renderApp('/admin');
-    const candidates = (await screen.findAllByRole('list', { name: 'Possible matches' }))[0];
-
-    const [first, second] = within(candidates).getAllByRole('listitem');
-    expect(first).toHaveTextContent('The Wicker Man (1973) · 1h 33m');
-    expect(second).toHaveTextContent('The Wicker Man (2006) · 1h 42m');
-    expect(within(candidates).queryByRole('button')).not.toBeInTheDocument();
-    expect(within(candidates).queryByRole('radio')).not.toBeInTheDocument();
-  });
-
-  it('leaves the runtime out when TMDB gave none, and shows no list for other kinds', async () => {
-    installFetch((m, url) =>
-      url === '/api/admin/attention'
-        ? respond({
-            items: [
-              {
-                ...fixtures.adminAttention.items[0],
-                candidates: [
-                  {
-                    tmdbId: 1,
-                    title: 'Dune',
-                    year: 1984,
-                    runtimeMinutes: null,
-                    posterPath: null,
-                    score: 50,
-                  },
-                ],
-              },
-              fixtures.adminAttention.items[1],
-            ],
-          })
-        : null,
-    );
-    renderApp('/admin');
-    const candidates = await screen.findByRole('list', { name: 'Possible matches' });
-
-    expect(candidates).toHaveTextContent('Dune (1984)');
-    expect(candidates).not.toHaveTextContent('·');
-    expect(screen.getAllByRole('list', { name: 'Possible matches' })).toHaveLength(1);
-  });
-
-  it('says nothing needs attention when the list is empty', async () => {
-    installFetch((m, url) => (url === '/api/admin/attention' ? respond({ items: [] }) : null));
-    renderApp('/admin');
-    expect(await screen.findByText('Nothing needs attention.')).toBeInTheDocument();
-  });
-
-  it('shows an error with Try again when the list cannot be loaded', async () => {
-    let fail = true;
-    installFetch((m, url) => (url === '/api/admin/attention' && fail ? respond(null, 500) : null));
-    renderApp('/admin');
-    expect(
-      await screen.findByText('Couldn’t load the films needing attention.'),
-    ).toBeInTheDocument();
-
-    fail = false;
-    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByText('Kes (1969)')).toBeInTheDocument();
-  });
-
+describe('Admin: To do lists', () => {
   it('refreshes when a scan finishes', async () => {
     let scans = 0;
     installFetch((method, url) => {
@@ -362,7 +265,7 @@ describe('Admin: Films needing attention panel', () => {
         return scans < 2
           ? null
           : respond({
-              items: [{ ...fixtures.adminAttention.items[1], title: 'Fresh Film', year: 1969 }],
+              items: [{ ...fixtures.adminAttention.items[3], title: 'Fresh Film', year: 1969 }],
             });
       }
       if (url === '/api/admin/scan') {
@@ -380,7 +283,7 @@ describe('Admin: Films needing attention panel', () => {
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
     renderApp('/admin');
-    expect(await screen.findByText('Kes (1969)')).toBeInTheDocument();
+    expect(await screen.findByText('Blade Runner (1982)')).toBeInTheDocument();
     expect(screen.queryByText('Fresh Film (1969)')).not.toBeInTheDocument();
 
     await act(() => vi.advanceTimersByTimeAsync(1500));
@@ -439,7 +342,7 @@ describe('Admin: page', () => {
         ? respond({
             items: [
               {
-                ...fixtures.adminAttention.items[1],
+                ...fixtures.adminAttention.items[0],
                 title: '<img src=x onerror=alert(1)>',
                 files: ['<b>bold</b>.m4v'],
               },
@@ -448,8 +351,8 @@ describe('Admin: page', () => {
         : null,
     );
     renderApp('/admin');
-    expect(await screen.findByText('<img src=x onerror=alert(1)> (1969)')).toBeInTheDocument();
-    expect(screen.getByText('<b>bold</b>.m4v')).toBeInTheDocument();
+    expect(await screen.findByText('<img src=x onerror=alert(1)>')).toBeInTheDocument();
+    expect(screen.getByText(/<b>bold<\/b>\.m4v/)).toBeInTheDocument();
     expect(screen.queryAllByRole('img')).toEqual([]);
   });
 });

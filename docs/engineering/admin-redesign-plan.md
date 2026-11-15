@@ -12,7 +12,7 @@ that depend on an answer say so and are not started until it comes.
 
 ## Checked against the code (2026-11-14)
 
-- **`/api/admin/credits/dataset` is not TMDB credits.** It is the end-credits *classifier's* frame dataset job
+- **`/api/admin/credits/dataset` is not TMDB credits.** It is the end-credits _classifier's_ frame dataset job
   (`credits/learn/CreditsDatasetJob`, `credits-classifier-plan.md` L2b). The bundle's "Download TMDB credits" would
   start a long frame-extraction job under a false label. Not built as specified (Q1).
 - **Cast & crew has no "films with credits" count.** `PlexCreditsStatus` is `running`, `progress`, `lastImport`
@@ -94,24 +94,24 @@ that depend on an answer say so and are not started until it comes.
 One PR per phase, each from updated `main`, built by Sonnet, gated by CLAUDE.md steps 2–6. Keep each PR small.
 1 and 2 come first; 3a before 3b and 5a; 3b before 4a; 4b before 4c; 8a before 8b.
 
-| # | Commit | Content | Waits on |
-|---|---|---|---|
-| 1 | `feat(admin)` | Shell: nested routes, `AdminContext`, rail and phone tabs, redirects; panels move unchanged | — |
-| 2 | `refactor(admin)` | `state/adminCopy.js`, `ActionWithHint`, every Admin label/hint | Q4 for one hint |
-| 3a | `feat(health)` | Health columns + backfill, filtered/paged query, `FILM_SESSION_MIN_MS` both sides | — |
-| 3b-1 | `feat(subtitles)` | `AdminTodoRules`, unresolved/beingChecked, originalLanguage, confident+score | Q3 |
-| 3b-2 | `feat(admin)` | `GET /api/admin/summary` | 3b-1 |
-| 3c-1 | `feat(admin)` | summary hook, rail counts, To do heading and status strip | — |
-| 3c-2 | `feat(admin)` | the four To do groups, "Yes, it's…", empty state | 3c-1 |
-| 4a | `feat(subtitles)` | Subtitles section: two tabs, owner choices, "Everything else" | Q3 |
-| 4b | `feat(subtitles)` | Backend: edition-scoped OpenSubtitles search and download | — |
-| 4c | `feat(subtitles)` | Picker dialog, wired into both tabs and To do | — |
-| 5a | `feat(admin)` | Playback: now playing, "How films played" chart, per-minute view | — |
-| 5b | `feat(admin)` | Playback log, conversion, remembered networks | Q4 |
-| 6 | `feat(admin)` | Library tidy-up incl. Cast & crew count | Q1 |
-| 7 | `feat(admin)` | Settings section | Q2 |
-| 8a | `feat(film)` | Film detail "Subtitles → Fix…" and the player's "Subtitles are wrong" | — |
-| 8b | `feat(player)` | Player "Earlier / Later"; Admin's file list becomes read-only | — |
+| #    | Commit            | Content                                                                                     | Waits on        |
+| ---- | ----------------- | ------------------------------------------------------------------------------------------- | --------------- |
+| 1    | `feat(admin)`     | Shell: nested routes, `AdminContext`, rail and phone tabs, redirects; panels move unchanged | —               |
+| 2    | `refactor(admin)` | `state/adminCopy.js`, `ActionWithHint`, every Admin label/hint                              | Q4 for one hint |
+| 3a   | `feat(health)`    | Health columns + backfill, filtered/paged query, `FILM_SESSION_MIN_MS` both sides           | —               |
+| 3b-1 | `feat(subtitles)` | `AdminTodoRules`, unresolved/beingChecked, originalLanguage, confident+score                | Q3              |
+| 3b-2 | `feat(admin)`     | `GET /api/admin/summary`                                                                    | 3b-1            |
+| 3c-1 | `feat(admin)`     | summary hook, rail counts, To do heading and status strip                                   | —               |
+| 3c-2 | `feat(admin)`     | the four To do groups, "Yes, it's…", empty state                                            | 3c-1            |
+| 4a   | `feat(subtitles)` | Subtitles section: two tabs, owner choices, "Everything else"                               | Q3              |
+| 4b   | `feat(subtitles)` | Backend: edition-scoped OpenSubtitles search and download                                   | —               |
+| 4c   | `feat(subtitles)` | Picker dialog, wired into both tabs and To do                                               | —               |
+| 5a   | `feat(admin)`     | Playback: now playing, "How films played" chart, per-minute view                            | —               |
+| 5b   | `feat(admin)`     | Playback log, conversion, remembered networks                                               | Q4              |
+| 6    | `feat(admin)`     | Library tidy-up incl. Cast & crew count                                                     | Q1              |
+| 7    | `feat(admin)`     | Settings section                                                                            | Q2              |
+| 8a   | `feat(film)`      | Film detail "Subtitles → Fix…" and the player's "Subtitles are wrong"                       | —               |
+| 8b   | `feat(player)`    | Player "Earlier / Later"; Admin's file list becomes read-only                               | —               |
 
 ### 1 · Shell
 
@@ -121,6 +121,7 @@ components go in `frontend/src/screens/admin/`.
 
 **`AdminLayout`** (`screens/Admin.jsx` becomes it) provides an `AdminContext` (`state/`-side hook, no JSX in the
 logic) holding:
+
 - the single `useScan(visible)` and `usePlexImport()` pollers (moved, not duplicated);
 - `settledAt`, the version string built today from the two `finishedAt`s, plus the subtitle-search and
   subtitle-check timestamps as today (`Admin.jsx:547-551, 621`);
@@ -202,8 +203,8 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
     answer) is counted under "Everything else", not listed.
   - **Forced unresolved:** per Q3's answer.
 - `GET /api/admin/summary` → `{ todo: { pickFilm, severalFiles, fullMissing, forcedQuestion }, subtitlesUnresolved,
-  live, library: { films, lastScanFinishedAt }, playback: { films, smooth }, playingNow: [{ filmTitle, device,
-  environment, quality }] }`. It reuses the services' in-memory rules (the attention and need lists are computed in
+live, library: { films, lastScanFinishedAt }, playback: { films, smooth }, playingNow: [{ filmTitle, device,
+environment, quality }] }`. It reuses the services' in-memory rules (the attention and need lists are computed in
   Java today); not cached on the server; the frontend refetches on its `settledAt` key and on `changed()`.
 - `full-need` and `forced-subtitles/films` rows gain `unresolved`, and the responses a `beingChecked` count;
   `FullNeedFilmDto` gains `originalLanguage`; attention items gain `confident` and the candidate `score`.
@@ -217,6 +218,11 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
   per `06`, only the Library card shows.
 - **3c-1 decision:** a failed re-read keeps the last good figures (rail counts, heading count, strip) with no banner; the
   next 30 s poll retries. The error banner shows only when no summary has been read yet.
+- **3c-2 decision (built):** groups 3 and 4 are read-only rows (title, a reason line) with the "All in Subtitles →"
+  footer, always shown, since their actions arrive with 4a/4c. Groups 1 and 2 read the attention list; 3 and 4 the
+  two need lists, each its own request with its own skeleton and error banner. "Yes, it's…" hides its row at once on
+  success and the lists and summary re-read; "Show all" becomes "Show fewer" on the same button. Copy the planner
+  added is marked in `adminCopy.js` ("planner, 3c-2"). **3c is complete.**
 - **Groups** (copy from `AR1`), up to **5** rows, footer as in `adminCopy` with "Show all {n}" (expands in place) or
   "All in Subtitles →":
   1. Pick the right film — `needs-match`. `confident` → "Yes, it's {Title} ({year})" (the existing match `POST`) +
