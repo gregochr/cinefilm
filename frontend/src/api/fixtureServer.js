@@ -291,9 +291,9 @@ const removedSubtitleIds = new Set();
 
 function removeSubtitle(id) {
   const row = adminSubtitles.find((r) => r.id === id && !removedSubtitleIds.has(r.id));
-  if (!row) throw new ApiError(404, 'No such subtitle file');
+  if (!row) throw apiError(404, 'No such subtitle file');
   if (row.origin !== 'OPENSUBTITLES') {
-    throw new ApiError(400, 'Only a download can be removed');
+    throw apiError(400, 'Only a download can be removed');
   }
   removedSubtitleIds.add(id);
   return null;
@@ -323,10 +323,10 @@ function filmOfEdition(editionId) {
 
 function attachSubtitle(id, body) {
   const row = adminSubtitles.find((r) => r.id === id && !removedSubtitleIds.has(r.id));
-  if (!row) throw new ApiError(404, 'No such subtitle file');
-  if (!Number.isInteger(body?.editionId)) throw new ApiError(400, 'editionId is required');
+  if (!row) throw apiError(404, 'No such subtitle file');
+  if (!Number.isInteger(body?.editionId)) throw apiError(400, 'editionId is required');
   const found = filmOfEdition(body.editionId);
-  if (!found) throw new ApiError(404, 'No such edition');
+  if (!found) throw apiError(404, 'No such edition');
   const part = body.part ?? null;
   attachedSubtitles.set(id, {
     state: 'matched',
@@ -341,6 +341,52 @@ function attachSubtitle(id, body) {
   });
   filmsWithOwnFile.add(found.film.id);
   return subtitleList().find((r) => r.id === id);
+}
+
+/** The row as listed, or a 404 as the server answers for an id it does not know (or a removed download). */
+function listedSubtitle(id) {
+  const row = subtitleList().find((r) => r.id === id);
+  if (!row) throw apiError(404, 'No such subtitle file');
+  return row;
+}
+
+/** Gives a hand-attached file back to automatic matching: it is unattached again, as the server answers. */
+function detachSubtitle(id) {
+  const row = listedSubtitle(id);
+  if (!row.ownerAttached) throw apiError(400, 'That file was not attached by hand');
+  filmsWithOwnFile.delete(row.filmId);
+  attachedSubtitles.set(id, {
+    state: 'unmatched',
+    ownerAttached: false,
+    filmId: null,
+    filmTitle: null,
+    editionId: null,
+    editionName: null,
+    parts: 0,
+    part: null,
+    whole: false,
+  });
+  return listedSubtitle(id);
+}
+
+/** "Use my file instead" (verify) and its undo: the owner's file is marked as checked, or not. */
+function verifySubtitle(id, verified) {
+  listedSubtitle(id);
+  attachedSubtitles.set(id, { ...attachedSubtitles.get(id), verified });
+  return listedSubtitle(id);
+}
+
+/** The first lines of a file on its film's timeline: three made-up cues per file, enough to preview. */
+function subtitleCues(id) {
+  const row = listedSubtitle(id);
+  return {
+    offsetMs: row.offsetMs,
+    cues: [1, 2, 3].map((n) => ({
+      startMs: n * 60_000 + row.offsetMs,
+      endMs: n * 60_000 + 2_500 + row.offsetMs,
+      text: `Line ${n} of ${row.path}`,
+    })),
+  };
 }
 
 const CHOICES = new Set(['NEEDED', 'NOT_NEEDED']);
@@ -696,6 +742,12 @@ export async function handle(method, path, body) {
   }
   match = route.match(/^\/api\/admin\/subtitles\/(\d+)\/attach$/);
   if (match && method === 'POST') return attachSubtitle(Number(match[1]), body);
+  match = route.match(/^\/api\/admin\/subtitles\/(\d+)\/detach$/);
+  if (match && method === 'POST') return detachSubtitle(Number(match[1]));
+  match = route.match(/^\/api\/admin\/subtitles\/(\d+)\/verify$/);
+  if (match) return verifySubtitle(Number(match[1]), method === 'POST');
+  match = route.match(/^\/api\/admin\/subtitles\/(\d+)\/cues$/);
+  if (match) return subtitleCues(Number(match[1]));
   match = route.match(/^\/api\/admin\/subtitles\/(\d+)$/);
   if (match && method === 'DELETE') return removeSubtitle(Number(match[1]));
   if (route === '/api/admin/forced-subtitles/films') return forcedNeedList();

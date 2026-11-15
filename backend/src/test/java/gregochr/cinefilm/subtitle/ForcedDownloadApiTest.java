@@ -22,10 +22,12 @@ class ForcedDownloadApiTest extends ForcedDownloadTestBase {
     @Test
     void theFilmDetailOffersADownloadAsTheForcedSubtitleWithItsVersion() throws Exception {
         Film taken = film();
-        download(taken, 5011).setUpdatedAt(NOW.plusMillis(4321));
+        var row = download(taken, 5011);
+        row.setUpdatedAt(NOW.plusMillis(4321));
 
         mvc.perform(get("/api/films/{id}", taken.getId()))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.editions[0].forcedSubtitle.sidecarIds[0]").value(row.getId().intValue()))
             .andExpect(jsonPath("$.editions[0].forcedSubtitle.source").value("DOWNLOAD"))
             .andExpect(jsonPath("$.editions[0].forcedSubtitle.ownerVerified").value(false))
             .andExpect(jsonPath("$.editions[0].forcedSubtitle.version").isNumber());

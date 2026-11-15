@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useEffect, useId } from 'react';
 import { Button } from '../../components/Button.jsx';
 import { subtitlesPage } from '../../state/adminCopy.js';
 import { fileChoiceNote } from '../../state/adminSubtitles.js';
@@ -20,10 +20,16 @@ function Problem({ children, onRetry }) {
 /**
  * "Add my own file…" for one film: choose one of the owner's full subtitle files, the edition and (for a split
  * edition) the part, then "Attach". It is the existing attach route, scoped to the film. `onAttached` runs once the
- * server has accepted it; `onCancel` closes the form (not while an attach is in flight). Nothing is sent before "Attach".
+ * server has accepted it; `onCancel` closes the form (not while an attach is in flight); `onBusyChange(boolean)`, when given, says when an attach starts and ends. Nothing is sent before "Attach".
  */
-export default function AddOwnFile({ filmId, title, onAttached, onCancel }) {
+export default function AddOwnFile({ filmId, title, onAttached, onCancel, onBusyChange }) {
   const picker = useFilmFilePicker(filmId);
+  // Tells the host while an attach is in flight, so it can keep this form open (its guard lives in this instance).
+  useEffect(() => {
+    onBusyChange?.(picker.attaching);
+    // Unmounting (the attach finished and the form closed) ends it too.
+    return () => onBusyChange?.(false);
+  }, [picker.attaching, onBusyChange]);
   const group = useId();
   const submit = async (event) => {
     event.preventDefault();

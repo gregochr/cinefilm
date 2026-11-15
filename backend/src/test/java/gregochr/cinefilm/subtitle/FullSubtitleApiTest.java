@@ -19,10 +19,13 @@ class FullSubtitleApiTest extends SubtitleTestBase {
     @Test
     void theFilmDetailOffersTheFullSubtitleAndTheForcedOneIsStillNull() throws Exception {
         Film taken = filmWithParts("Taken", 1, 90);
-        fullSidecar("Taken.en.srt", fileId(taken, 1), false).setUpdatedAt(NOW.plusMillis(1234));
+        var row = fullSidecar("Taken.en.srt", fileId(taken, 1), false);
+        row.setUpdatedAt(NOW.plusMillis(1234));
 
         mvc.perform(get("/api/films/{id}", taken.getId()))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.editions[0].fullSubtitle.sidecarIds[0]").value(row.getId().intValue()))
+            .andExpect(jsonPath("$.editions[0].fullSubtitle.sidecarIds.length()").value(1))
             .andExpect(jsonPath("$.editions[0].fullSubtitle.source").value("SIDECAR"))
             .andExpect(jsonPath("$.editions[0].fullSubtitle.version").isNumber())
             .andExpect(jsonPath("$.editions[0].forcedSubtitle").value((Object) null));

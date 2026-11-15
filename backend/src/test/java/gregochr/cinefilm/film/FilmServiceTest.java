@@ -242,7 +242,7 @@ class FilmServiceTest {
     void detailGivesEachEditionItsForcedSubtitleFromTheForcedSubtitleService() {
         Film heat = owned(1L, "Heat", 1995, "Crime");
         Long editionId = heat.getEditions().get(0).getId();
-        var forced = new FilmDtos.ForcedSubtitleDto("SIDECAR", false, 1_700_000_000_000L);
+        var forced = new FilmDtos.ForcedSubtitleDto("SIDECAR", false, 1_700_000_000_000L, List.of(5L));
         when(films.findById(1L)).thenReturn(Optional.of(heat));
         when(loader.views(List.of(heat))).thenReturn(List.of(view(heat)));
         when(forcedSubtitles.forEditions(heat.getEditions())).thenReturn(java.util.Map.of(editionId, forced));
@@ -255,7 +255,7 @@ class FilmServiceTest {
     void detailGivesEachEditionItsFullSubtitleFromTheFullSubtitleService() {
         Film heat = owned(1L, "Heat", 1995, "Crime");
         Long editionId = heat.getEditions().get(0).getId();
-        var full = new FilmDtos.FullSubtitleDto("SIDECAR", 1_700_000_000_000L);
+        var full = new FilmDtos.FullSubtitleDto("SIDECAR", 1_700_000_000_000L, List.of(5L));
         when(films.findById(1L)).thenReturn(Optional.of(heat));
         when(loader.views(List.of(heat))).thenReturn(List.of(view(heat)));
         when(fullSubtitles.forEditions(heat.getEditions())).thenReturn(java.util.Map.of(editionId, full));

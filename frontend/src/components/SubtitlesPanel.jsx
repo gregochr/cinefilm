@@ -1,14 +1,11 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { subtitlesPage } from '../state/adminCopy.js';
 import {
   FILE_FILTERS,
   NUDGES,
   REMOVED_NOTICE,
-  REMOVE_CONFIRM,
   alignmentSummary,
   checkSummary,
-  cueTime,
   fileFilterCounts,
   fileName,
   filterSidecars,
@@ -18,68 +15,22 @@ import {
   originLine,
   ownerTimingLine,
   placement,
-  playFromHereMs,
-  playerPath,
   reportLine,
   servedLine,
   sidecarGroups,
   takeFiles,
   warningsFor,
 } from '../state/subtitleAdmin.js';
-import { cueResourceKey, useSubtitleCues, useSubtitles } from '../state/useSubtitles.js';
+import { cueResourceKey, useSubtitles } from '../state/useSubtitles.js';
 import AttachPicker from './AttachPicker.jsx';
 import { Button } from './Button.jsx';
+import RemoveDownload from './RemoveDownload.jsx';
 import { SkeletonBlock } from './Skeleton.jsx';
+import SubtitleCueList from './SubtitleCueList.jsx';
 import { ErrorState } from './StateMessages.jsx';
 
 /** How many files are listed before "Show more". */
 export const FILES_PAGE = 50;
-
-/** The cues of one file with "Play from here" (the player opens 3 s before the cue). Cue text is rendered as text. */
-function CueList({ item, id }) {
-  const { data, error, loading, reload } = useSubtitleCues(item);
-  if (loading && !data) {
-    return (
-      <div role="status" aria-label="Loading cues">
-        <SkeletonBlock style={{ height: 80 }} />
-      </div>
-    );
-  }
-  const failure = error ? (
-    <ErrorState onRetry={reload}>Couldn&rsquo;t load the cues.</ErrorState>
-  ) : null;
-  if (!data) return failure;
-  if (data.cues.length === 0) {
-    return (
-      <>
-        {failure}
-        <p className="admin__text">This file has no cues.</p>
-      </>
-    );
-  }
-  return (
-    <>
-      {failure}
-      <ol className="subs__cues" id={id} aria-label={`Cues in ${fileName(item.path)}`}>
-        {data.cues.map((cue, i) => (
-          <li key={`${i}-${cue.startMs}`} className="subs__cue">
-            <span className="admin__mono subs__time">{cueTime(cue)}</span>
-            <span className="subs__text">{cue.text}</span>
-            {item.filmId == null ? null : (
-              <Link
-                className="admin__link"
-                to={playerPath(item, playFromHereMs(cue))}
-                aria-label={`Play from here: ${cue.text.replace(/\s+/g, ' ')}`}
-              >
-                Play from here
-              </Link>
-            )}
-          </li>
-        ))}
-      </ol>
-    </>
-  );
-}
 
 function Timing({ item, busy, actions }) {
   return (
@@ -145,53 +96,6 @@ function TimingLine({ item }) {
         </>
       ) : null}
       {owner ? <p className="subs__check-note">{owner}</p> : null}
-    </div>
-  );
-}
-
-/** Removing a download: "Remove", then an inline confirmation. Focus goes to the safe choice, and back on cancel. */
-function RemoveDownload({ item, name, busy, failed, actions, onRemoved }) {
-  const [confirming, setConfirming] = useState(false);
-  const removeRef = useRef(null);
-  const keepRef = useRef(null);
-  const returnFocus = useRef(false);
-  useEffect(() => {
-    if (confirming) keepRef.current?.focus();
-    else if (returnFocus.current) {
-      returnFocus.current = false;
-      removeRef.current?.focus();
-    }
-  }, [confirming]);
-  const confirm = async () => {
-    if (await actions.remove(item.id)) onRemoved();
-  };
-  const cancel = () => {
-    returnFocus.current = true;
-    setConfirming(false);
-  };
-  if (!confirming) {
-    return (
-      <Button
-        ref={removeRef}
-        aria-label={`Remove the OpenSubtitles download ${name}`}
-        disabled={busy}
-        onClick={() => setConfirming(true)}
-      >
-        Remove
-      </Button>
-    );
-  }
-  return (
-    <div className="subs__confirm" role="group" aria-label="Remove this download">
-      <p className="admin__text">{REMOVE_CONFIRM}</p>
-      <div className="admin__actions">
-        <Button disabled={busy} onClick={confirm}>
-          {failed ? 'Try again' : 'Remove download'}
-        </Button>
-        <Button ref={keepRef} disabled={busy} onClick={cancel}>
-          Keep it
-        </Button>
-      </div>
     </div>
   );
 }
@@ -325,7 +229,7 @@ function Item({ item, busy, problem, actions, onRemoved }) {
             </>
           ) : null}
           {/* A new key remounts the list, so cues for another attachment, offset or version are never shown. */}
-          <CueList key={cueResourceKey(item)} item={item} id={cuesId} />
+          <SubtitleCueList key={cueResourceKey(item)} item={item} id={cuesId} />
         </div>
       ) : null}
     </li>
