@@ -148,8 +148,8 @@ export const playingNow = {
   streams: (n) => `${n} ${n === 1 ? 'stream' : 'streams'}`, // 04: "1 stream"; the plural is the planner's
   empty: 'Nothing playing.', // README
   converting: 'converting on the fly', // AR4
-  // The same honest line as the Transcoding card's Stop (`buttons.stopStream.hint`), not AR4's "Ends playback on the
-  // iPad" (see there).
+  // The honest line of `buttons.stopStream.hint` (Stop ends the server's conversion, not the playback), not AR4's
+  // "Ends playback on the iPad" (see there).
   stopHint: () => buttons.stopStream.hint,
   stopFailed: 'Couldn’t stop that stream. Try again.', // planner, 5a-1
   loadError: 'Couldn’t load what is playing.', // planner, 5a-1
@@ -210,6 +210,71 @@ export const playbackChart = {
   noMinutes: 'No minute by minute figures for this session.', // planner, 5a-2
   source:
     'AR4 and 04 for the title, filters, tiles, legend, hint and strip words; the planner for the rest (5a-2)',
+};
+
+/**
+ * The Playback section's "Playback log" card (AR4, `screens/04-playback.png`). Strings marked "planner" are not on
+ * the board.
+ */
+export const playbackLog = {
+  title: 'Playback log', // AR4
+  why: 'Every time play was pressed · newest first · keeps the last 2,000', // AR4
+  filtersLabel: 'Which plays to show', // planner, 5b
+  filters: [
+    { key: 'all', label: 'All' }, // AR4
+    { key: 'films', label: 'Films only (3 min+)' }, // AR4
+    { key: 'problems', label: 'With problems' }, // AR4
+  ],
+  tableLabel: 'Playbacks, newest first', // planner, 5b
+  columns: ['Started', 'Film', 'Watched', 'Where', 'Start', 'Stalls', 'Quality'], // AR4 (the eighth column, the buttons, has no heading)
+  actionsColumn: 'Details', // planner, 5b: the screen-reader heading of AR4's unlabelled column
+  browsing: 'browsing', // AR4
+  details: 'Details', // AR4
+  hideDetails: 'Hide details', // AR4
+  // The accessible name of a row's Details button: its visible word, then which play (planner, 5b).
+  buttonName: (label, film, started) => `${label}: ${film}, ${started}`,
+  copyReport: 'Copy raw report', // AR4
+  copied: 'Copied', // README ("Copied" toast)
+  copyFailed: 'Couldn’t copy the report. Your browser did not allow it.', // planner, 5b
+  showing: (shown, total) => `Showing ${shown} of ${total}`, // AR4
+  showMore: 'Show 50 more', // AR4
+  empty: {
+    all: 'No playbacks recorded yet.', // planner, 5b (the old Playback health card's line)
+    films: 'No plays of 3 minutes or more.', // planner, 5b
+    problems: 'No plays with problems.', // planner, 5b
+  },
+  loadingLabel: 'Loading the playback log', // planner, 5b
+  loadError: 'Couldn’t load the playback log.', // planner, 5b
+  moreError: 'Couldn’t load more. Try again.', // planner, 5b
+  detailLabels: {
+    player: 'Player', // AR4
+    network: 'Network', // AR4
+    quality: 'Quality', // AR4
+    interruptions: 'Interruptions', // AR4
+  },
+  source:
+    'AR4 and the README for the card, columns, filters, pill, details and toast; the planner for the rest (5b)',
+};
+
+/** The Playback section's "Conversion" card (AR4). "Pre-made versions" is not shown: nothing in the API counts them. */
+export const conversion = {
+  title: 'Conversion', // AR4
+  seekIndex: 'Seek index', // AR4
+  streamCache: 'Stream cache', // planner, 5b: the old Transcoding card's label; AR4 does not show it
+  loadingLabel: 'Loading the conversion state', // planner, 5b
+  loadError: 'Couldn’t load the conversion state.', // planner, 5b
+  source: 'AR4 for the title and the Seek index label; the planner for the rest (5b)',
+};
+
+/** The Playback section's "Remembered networks" card (AR4). */
+export const networks = {
+  title: 'Remembered networks', // AR4
+  // AR4's "This browser starts at the quality that worked last time" is not true (the start quality is measured each
+  // time; this browser only remembers where you said you were watching).
+  why: 'This browser remembers where you said you were watching', // planner, 5b
+  empty: 'No networks remembered yet.', // planner, 5b
+  forgetFailed: 'Couldn’t forget that network. Try again.', // planner, 5b
+  source: 'AR4 for the title; the planner for the rest (5b)',
 };
 
 /** The line under Remembered networks (owner's answer Q4; 07's hint is false). */

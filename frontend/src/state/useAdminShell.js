@@ -101,6 +101,7 @@ export function useAdminShell(visible, pathname = '') {
       markChanged,
       armFocusFallback,
       takeFocusFallback,
+      showToast: toast.show,
     },
     fixing,
     editing,

@@ -44,6 +44,14 @@ describe('useAdminShell', () => {
     expect(result.current.value.changed).toBe(1);
   });
 
+  it('hands sections the toast’s show function, which sets the layout’s toast message', () => {
+    installFetch();
+    const { result } = renderHook(() => useAdminShell(true));
+    expect(result.current.toast.message).toBeNull();
+    act(() => result.current.value.showToast('Copied'));
+    expect(result.current.toast.message).toBe('Copied');
+  });
+
   it('remembers what opened each dialog, and closes them', () => {
     installFetch();
     const { result } = renderHook(() => useAdminShell(true));

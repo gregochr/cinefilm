@@ -9,6 +9,7 @@ import {
   operatorName,
   playLine,
   qualityLine,
+  rungParts,
   rungShares,
   speedText,
   stallDuration,
@@ -229,6 +230,23 @@ describe('playLine', () => {
     expect(
       playLine(row({ ...played, stallCount: 2, stallMs: 9400, reconnectCount: 1, fellBack: true })),
     ).toBe('Start 2.4 s · 2 stalls, 9 s · 1 reconnect · fell back to direct play');
+  });
+});
+
+describe('rungParts', () => {
+  it('gives each rung its id, name and rounded share, in ladder order', () => {
+    expect(rungParts({ watchedMs: 100_000, rungMs: { '360p': 66_000, original: 34_000 } })).toEqual(
+      [
+        { id: 'original', name: 'Original', ms: 34_000, percent: 34 },
+        { id: '360p', name: '360p', ms: 66_000, percent: 66 },
+      ],
+    );
+  });
+
+  it('is empty when nothing was watched or no rung holds 1%', () => {
+    expect(rungParts({ watchedMs: 0, rungMs: { original: 1000 } })).toEqual([]);
+    expect(rungParts({ watchedMs: 100_000, rungMs: { '480p': 999 } })).toEqual([]);
+    expect(rungParts({ watchedMs: 100_000 })).toEqual([]);
   });
 });
 

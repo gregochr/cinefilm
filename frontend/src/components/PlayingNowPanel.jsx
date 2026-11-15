@@ -60,7 +60,7 @@ function Rows({ rows, stopping, failures, onStop }) {
 /**
  * Playback: "Now playing", from the summary's `playingNow` (direct play included), with "Stop this stream" where an
  * HLS session of that edition is live. `transcoding` is the section's one read of the live sessions, shared with the
- * Transcoding card.
+ * Conversion card.
  */
 export default function PlayingNowPanel({ transcoding }) {
   const { adminSummary } = useAdminContext();
