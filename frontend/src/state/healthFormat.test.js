@@ -237,8 +237,8 @@ describe('rungParts', () => {
   it('gives each rung its id, name and rounded share, in ladder order', () => {
     expect(rungParts({ watchedMs: 100_000, rungMs: { '360p': 66_000, original: 34_000 } })).toEqual(
       [
-        { id: 'original', name: 'Original', percent: 34 },
-        { id: '360p', name: '360p', percent: 66 },
+        { id: 'original', name: 'Original', ms: 34_000, percent: 34 },
+        { id: '360p', name: '360p', ms: 66_000, percent: 66 },
       ],
     );
   });

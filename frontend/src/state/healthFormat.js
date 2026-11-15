@@ -70,7 +70,10 @@ export function playLine(row) {
   return line;
 }
 
-/** [{ id: "480p", name: "480p", percent: 34 }, ...]: rungs in ladder order holding at least 1% of the watched time. */
+/**
+ * [{ id: "480p", name: "480p", ms: 34000, percent: 34 }, ...]: rungs in ladder order holding at least 1% of the
+ * watched time; `ms` is the time on the rung, `percent` its rounded share (for display only).
+ */
 export function rungParts(report) {
   const watchedMs = num(report.watchedMs);
   if (watchedMs <= 0) return [];
@@ -78,6 +81,7 @@ export function rungParts(report) {
   return RUNG_ORDER.filter((id) => num(rungMs[id]) * 100 >= watchedMs).map((id) => ({
     id,
     name: rungName(id),
+    ms: num(rungMs[id]),
     percent: Math.round((num(rungMs[id]) * 100) / watchedMs),
   }));
 }

@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SIGNED_IN_EVENT } from '../api/client.js';
 import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
 import { usePlaybackLog } from './usePlaybackLog.js';
 
@@ -241,6 +242,37 @@ describe('usePlaybackLog', () => {
     const { result } = renderHook(() => usePlaybackLog());
     await waitFor(() => expect(result.current.rows).toEqual([]));
     expect(result.current).toMatchObject({ total: 0, hasMore: false, loading: false });
+  });
+
+  it('reads the first page again after a sign-in that follows a 401, for the selected filter', async () => {
+    let expired = true;
+    const fetchMock = installFetch((m, url) => {
+      if (url === ALL_0) return respond(answer('a', 1, 1));
+      if (url === FILMS_0) return expired ? respond(null, 401) : respond(answer('f', 2, 2));
+      return null;
+    });
+    const { result } = renderHook(() => usePlaybackLog());
+    await waitFor(() => expect(result.current.rows).toHaveLength(1));
+    act(() => result.current.setFilter('films'));
+    await waitFor(() => expect(result.current.error).toBe(true));
+
+    expired = false;
+    act(() => {
+      window.dispatchEvent(new CustomEvent(SIGNED_IN_EVENT));
+    });
+    expect(result.current).toMatchObject({ error: false, loading: true, filter: 'films' });
+    await waitFor(() => expect(result.current.rows).toHaveLength(2));
+    expect(result.current.rows[0].playbackId).toBe('f-0');
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([ALL_0, FILMS_0, FILMS_0]);
+  });
+
+  it('no longer reads on a sign-in once unmounted', async () => {
+    const fetchMock = installFetch((m, url) => (url === ALL_0 ? respond(answer('a', 1, 1)) : null));
+    const { result, unmount } = renderHook(() => usePlaybackLog());
+    await waitFor(() => expect(result.current.rows).toHaveLength(1));
+    unmount();
+    window.dispatchEvent(new CustomEvent(SIGNED_IN_EVENT));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('aborts the request that is still open when it unmounts', () => {

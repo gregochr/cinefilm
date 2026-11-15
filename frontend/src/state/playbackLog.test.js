@@ -144,7 +144,14 @@ describe('mainRung', () => {
     );
   });
 
-  it('gives a tie to the rung earlier in the ladder', () => {
+  it('compares the time on each rung, not the rounded shares that are displayed', () => {
+    // Both shares round to 50%, but 360p has more time.
+    expect(mainRung({ watchedMs: 100_000, rungMs: { '720p': 49_600, '360p': 50_400 } })).toBe(
+      '360p',
+    );
+  });
+
+  it('gives an exact tie in time to the rung earlier in the ladder', () => {
     expect(mainRung({ watchedMs: 100_000, rungMs: { '360p': 50_000, '720p': 50_000 } })).toBe(
       '720p',
     );

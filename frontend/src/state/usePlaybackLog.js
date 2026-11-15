@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { SIGNED_IN_EVENT } from '../api/client.js';
 import { adminApi } from '../api/resources.js';
 import { LOG_PAGE_SIZE, logQuery } from './playbackLog.js';
 
@@ -70,6 +71,21 @@ export function usePlaybackLog() {
       request.current.controller?.abort();
       request.current = { id: request.current.id + 1, controller: null };
     };
+  }, [fetchPage]);
+
+  // A sign-in after a session expiry (which can have failed the first read with a 401) reads the first page again,
+  // for the filter then selected, as `useResource` does for the cards built on it.
+  const filterRef = useRef(filter);
+  useEffect(() => {
+    filterRef.current = filter;
+  });
+  useEffect(() => {
+    const onSignedIn = () => {
+      setState(LOADING);
+      fetchPage(filterRef.current, 0, false);
+    };
+    window.addEventListener(SIGNED_IN_EVENT, onSignedIn);
+    return () => window.removeEventListener(SIGNED_IN_EVENT, onSignedIn);
   }, [fetchPage]);
 
   const setFilter = useCallback(

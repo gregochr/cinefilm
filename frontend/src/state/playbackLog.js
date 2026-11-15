@@ -43,14 +43,14 @@ export function watchedText(ms) {
 }
 
 /**
- * The one rung a play spent most of its watched time on, as its name ("720p", "Original"); a tie goes to the
- * rung earlier in the ladder (the better picture); "—" when no rung holds 1% (nothing watched). The shares of all
- * the rungs are in the row's Details.
+ * The one rung a play spent most of its watched time on, as its name ("720p", "Original"), by the time on each
+ * rung (not the rounded shares); an exact tie goes to the rung earlier in the ladder (the better picture); "—"
+ * when no rung holds 1% (nothing watched). The shares of all the rungs are in the row's Details.
  */
 export function mainRung(report) {
   const parts = rungParts(report);
   if (parts.length === 0) return '—';
-  return parts.reduce((best, part) => (part.percent > best.percent ? part : best)).name;
+  return parts.reduce((best, part) => (part.ms > best.ms ? part : best)).name;
 }
 
 /** The cells of one table row, as text: `stalled` is true when the stall count is above zero. */
