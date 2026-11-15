@@ -17,10 +17,10 @@ function Card({ eyebrow, text, failed = false, to, link, phone = false }) {
 }
 
 /**
- * The three status cards under the To do intro (Library, Playback, Playing now), each linking to its section.
- * Phones show only the Library card (a CSS rule on `admin__strip-card--wide-only`, AR6). A static skeleton holds the
- * card shapes until the first summary arrives (a later re-read keeps the cards on screen); a failed read is an inline error banner (never amber) with a retry.
- * `now` (epoch ms) is the moment "scanned {ago}" counts from.
+ * The three status cards under the To do intro (Library, Playback, Playing now), each linking to its section. Phones
+ * show only the Library card (a CSS rule on `admin__strip-card--wide-only`, AR6). A static skeleton holds the card
+ * shapes until the first summary arrives (a later re-read keeps the cards on screen); a failed read is an inline error
+ * banner (never amber) with a retry. `now` (epoch ms) is the moment "scanned {ago}" counts from.
  */
 export default function AdminStatusStrip({ summary, error, onRetry, now = Date.now() }) {
   if (error && !summary) {

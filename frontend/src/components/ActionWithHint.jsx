@@ -8,6 +8,7 @@ import { Button } from './Button.jsx';
  * wrapper has no role or text to query (test-standards 'Queries'), so only the hint's own
  * `action-hint__text--row|line` class is tested. At 600px and below the button is full width, 44px tall, hint on
  * the left.
+ * The button is at least 44px tall; a To do row grows past that when its label wraps.
  * `variant` is the Button's: the one amber button in Admin is "Scan library now".
  */
 export function ActionWithHint({

@@ -9,19 +9,19 @@ const without = (record, key) => {
 
 /**
  * The Admin list of which films need a kind of subtitles, and the owner's choice per film: the logic forced and full
- * subtitles share. `name` keys the list's cache, `load(options)` reads the list (`{ films }`) and `save(filmId, choice)`
- * writes one choice and returns that film's row. `refreshKey` changes
- * whenever the subtitle files may have changed (a scan, a file attached, moved or detached), and the list is read
- * again. A choice is one write per film at a time, never aborted (the server may still process it): a newer
- * click on a film that is saving waits and replaces any earlier waiting choice, and is sent when the write settles,
- * even if that write failed. Only the last write's answer is applied to the row (`saving[filmId]` is set until
- * then) and only its failure is reported in `problems[filmId]`, with the row left at the last answer the server
- * gave. Other films stay free. Nothing is refetched, and a list read that started before the save arrived cannot
- * undo it. `onSaved(row)` runs once when a film's chain ends having saved at least one write, with the last saved row, even when
- * a later queued write failed (the screen re-reads what depends on it); `counts` is the server's `counts` of the list last read. After unmount the write in flight is never aborted,
- * its result sets no state and no waiting choice is sent, but a write that was saved still calls `onSaved` (once, as above): the
- * owner left the page after choosing, and what depends on the choice (the layout's summary and rail counts) is not
- * the page's.
+ * subtitles share. `name` keys the list's cache, `load(options)` reads the list (`{ films }`) and `save(filmId,
+ * choice)` writes one choice and returns that film's row. `refreshKey` changes whenever the subtitle files may have
+ * changed (a scan, a file attached, moved or detached), and the list is read again. A choice is one write per film at a
+ * time, never aborted (the server may still process it): a newer click on a film that is saving waits and replaces any
+ * earlier waiting choice, and is sent when the write settles, even if that write failed. Only the last write's answer
+ * is applied to the row (`saving[filmId]` is set until then) and only its failure is reported in `problems[filmId]`,
+ * with the row left at the last answer the server gave. Other films stay free. Nothing is refetched, and a list read
+ * that started before the save arrived cannot undo it. `onSaved(row)` runs once when a film's chain ends having saved
+ * at least one write, with the last saved row, even when a later queued write failed (the screen re-reads what depends
+ * on it); `counts` is the server's `counts` of the list last read. After unmount the write in flight is never aborted,
+ * its result sets no state and no waiting choice is sent, but a write that was saved still calls `onSaved` (once, as
+ * above): the owner left the page after choosing, and what depends on the choice (the layout's summary and rail counts)
+ * is not the page's.
  */
 export function useNeedChoices({ name, refreshKey, load, save, onSaved }) {
   // One counter orders everything: a list read is numbered when it starts, a saved choice when its answer arrives.

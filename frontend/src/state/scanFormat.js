@@ -146,8 +146,9 @@ export function describeCreditsCount(counts) {
 }
 
 /**
- * The Subtitles section's OpenSubtitles line (it left the Library scan card in 4a): "Subtitles searched 12 Nov 06:00", "Searching for subtitles…" while a
- * search runs, "Subtitles not searched yet" before the first; null when the search is off. `format` formats the time.
+ * The Subtitles section's OpenSubtitles line (it left the Library scan card in 4a): "Subtitles searched 12 Nov 06:00",
+ * "Searching for subtitles…" while a search runs, "Subtitles not searched yet" before the first; null when the search
+ * is off. `format` formats the time.
  */
 export function describeSubtitleSearch({ enabled, running, lastSearchedAt }, format) {
   if (!enabled) return null;

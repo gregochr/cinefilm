@@ -11,7 +11,8 @@ import { useFallbackFocus } from './useFallbackFocus.js';
 
 /**
  * Once a confirmed row is hidden, focus goes straight to the section title when it was on that row (or nowhere): the
- * button it was on is about to leave the page, and a fallback waiting for a later list change could be spent by another.
+ * button it was on is about to leave the page, and a fallback waiting for a later list change could be spent by
+ * another.
  */
 function leaveRow(opener) {
   const active = document.activeElement;
