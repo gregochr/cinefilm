@@ -61,7 +61,6 @@ const SEVEN = [
     'Delete this download',
     'Deletes the downloaded file; CineFilm won’t fetch it again.',
   ],
-  ['stopStream', 'Stop this stream', 'Ends playback on that device; it can resume later.'],
 ];
 
 // reference/AR1-ToDo.dc.html: the hints under the row buttons, with no trailing full stop.
@@ -217,17 +216,17 @@ describe('adminCopy playingNow', () => {
     expect(playingNow.converting).toBe('converting on the fly');
   });
 
-  it('words the Stop hint as AR4 does for a device named alone', () => {
-    expect(playingNow.stopHint('iPad')).toBe('Ends playback on the iPad; it can resume from here');
+  it('words the Stop hint honestly: it ends the conversion, not the playback', () => {
+    expect(buttons.stopStream).toEqual({
+      label: 'Stop this stream',
+      hint: 'Stops converting this stream on the server; if it’s still playing, the player starts it again.',
+      source: 'plan',
+    });
+    expect(playingNow.stopHint()).toBe(buttons.stopStream.hint);
   });
 
-  it('drops the article before a browser-on-system name', () => {
-    expect(playingNow.stopHint('Safari on Mac')).toBe(
-      'Ends playback on Safari on Mac; it can resume from here',
-    );
-  });
-
-  it('falls back to 07’s line while the device is unknown', () => {
-    expect(playingNow.stopHint(null)).toBe(buttons.stopStream.hint);
+  it('has the failure and load-error lines', () => {
+    expect(playingNow.stopFailed).toBe('Couldn’t stop that stream. Try again.');
+    expect(playingNow.loadError).toBe('Couldn’t load what is playing.');
   });
 });

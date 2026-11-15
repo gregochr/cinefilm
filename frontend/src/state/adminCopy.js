@@ -41,12 +41,13 @@ export const buttons = {
     hint: 'Checks whether the Plex server answers now.',
     source: '07',
   },
-  // 07's wording, kept for the Transcoding panel's own Stop, whose session carries no device. "Playing now" knows the
-  // device and uses AR4's line, `playingNow.stopHint`.
+  // The label is 07's. 07's and AR4's hints ("Ends playback on …") are not true: Stop ends the server's converting
+  // session (`SessionManager.end`), the player sees a 404 as an expired session and starts a new one. The hint says
+  // what Stop does (planner, 5a-1). A real "end playback" is an open item in the plan (5a-1 decision).
   stopStream: {
     label: 'Stop this stream',
-    hint: 'Ends playback on that device; it can resume later.',
-    source: '07',
+    hint: 'Stops converting this stream on the server; if it’s still playing, the player starts it again.',
+    source: 'plan',
   },
   // 07 says Forget "starts at a safe quality and measures again", which is not what it does: the owner's answer
   // (Q4) is the line under the list, `rememberedNetworksNote`.
@@ -123,22 +124,19 @@ export const buttons = {
   },
 };
 
-/** The Playback section's "Playing now" card (AR4, `screens/04-playback.png`). */
+/** The Playback section's "Now playing" card (AR4, `screens/04-playback.png`). */
 export const playingNow = {
-  title: 'Now playing', // 04 and AR4 (the README says "Playing now")
+  title: 'Now playing', // 04, AR4 and the README's Playback section ("Playing now" is the To do card's)
   streams: (n) => `${n} ${n === 1 ? 'stream' : 'streams'}`, // 04: "1 stream"; the plural is the planner's
   empty: 'Nothing playing.', // README
   converting: 'converting on the fly', // AR4
-  // AR4: "Ends playback on the iPad; it can resume from here". A browser name already says "on" ("Safari on Mac"),
-  // which would read "on the Safari on Mac", so the article goes only before a device named alone. With no
-  // device known it is 07's line (planner, 5a-1).
-  stopHint: (device) => {
-    if (!device) return 'Ends playback on that device; it can resume later.';
-    return `Ends playback on ${/ on /.test(device) ? '' : 'the '}${device}; it can resume from here`;
-  },
+  // The same honest line as the Transcoding card's Stop (`buttons.stopStream.hint`), not AR4's "Ends playback on the
+  // iPad" (see there).
+  stopHint: () => buttons.stopStream.hint,
   stopFailed: 'Couldn’t stop that stream. Try again.', // planner, 5a-1
+  loadError: 'Couldn’t load what is playing.', // planner, 5a-1
   source:
-    '04 and AR4 for the title, count, empty line, "converting on the fly" and the hint; planner 5a-1 for the rest',
+    '04 and AR4 for the title, count and "converting on the fly"; the README for the empty line; planner 5a-1 for the rest',
 };
 
 /** The line under Remembered networks (owner's answer Q4; 07's hint is false). */

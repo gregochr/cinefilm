@@ -261,7 +261,7 @@ All behind the session cookie; the `PUT` needs `X-CineFilm`.
 `^\d{1,5}x\d{1,5}$`; `rungMs` keys only rung ids (`Ladder.QUALITY_IDS` without `auto`) with non-null values;
 `minutes` at most 360 entries of exactly five or exactly seven non-null numbers (five from a tab still running a
 player older than `train-link-plan.md`), each rung code from 0 to 6; nullable only `operator`,
-`latencyMs`, `engine`, `startupMs`, the three `kbps` figures and `client.cores`; and the stored serialisation at
+`latencyMs`, `engine`, `startupMs`, the three `kbps` figures and `client.cores`; `client.touch` is optional (absent in older reports) and nullable, coerced as a boolean, and left out of the stored text when null; and the stored serialisation at
 most 16,000 characters. Unknown fields are ignored. A field added in a later release is nullable on the server.
 
 The body is read as text and its length checked before it is parsed, so a malformed body on this route answers

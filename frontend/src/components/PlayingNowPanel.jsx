@@ -81,7 +81,7 @@ export default function PlayingNowPanel({ transcoding }) {
       </div>
     );
   } else if (!summary) {
-    body = <ErrorState onRetry={reloadSummary}>Couldn&rsquo;t load what is playing.</ErrorState>;
+    body = <ErrorState onRetry={reloadSummary}>{playingNow.loadError}</ErrorState>;
   } else {
     body = <Rows rows={rows} stopping={stopping} failures={failures} onStop={stop} />;
   }

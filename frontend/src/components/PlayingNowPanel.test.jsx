@@ -52,7 +52,7 @@ function server({ playing, sessions, onDelete }) {
 const card = () => screen.findByRole('region', { name: 'Now playing' });
 
 describe('Admin Playback: Now playing', () => {
-  it('lists one stream with its device, where, quality and Stop with AR4’s hint', async () => {
+  it('lists one stream with its device, where, quality and Stop with its honest hint', async () => {
     server({ playing: [stream(1)], sessions: [live(1)] });
     renderApp('/admin/playback');
     const panel = await card();
@@ -61,7 +61,9 @@ describe('Admin Playback: Now playing', () => {
     expect(within(panel).getByText('Mac · Home · 720p, converting on the fly')).toBeInTheDocument();
     expect(
       within(panel).getByRole('button', { name: 'Stop this stream: Film 1 (Mac)' }),
-    ).toHaveAccessibleDescription('Ends playback on the Mac; it can resume from here');
+    ).toHaveAccessibleDescription(
+      'Stops converting this stream on the server; if it’s still playing, the player starts it again.',
+    );
   });
 
   it('names an iPad by the touch hint', async () => {
@@ -71,7 +73,9 @@ describe('Admin Playback: Now playing', () => {
     expect(await within(panel).findByText(/^iPad · Home/)).toBeInTheDocument();
     expect(
       within(panel).getByRole('button', { name: 'Stop this stream: Film 1 (iPad)' }),
-    ).toHaveAccessibleDescription('Ends playback on the iPad; it can resume from here');
+    ).toHaveAccessibleDescription(
+      'Stops converting this stream on the server; if it’s still playing, the player starts it again.',
+    );
   });
 
   it('lists several streams and offers Stop only where an HLS session of that edition is live', async () => {
@@ -228,7 +232,42 @@ describe('Admin Playback: Now playing', () => {
     expect(await within(panel).findByText('Nothing playing.')).toBeInTheDocument();
   });
 
-  it('stops the newest session of the edition when a reload left an older one', async () => {
+  it('keeps a stopped entry hidden while only the session is gone, and shows it again with Stop on a new session', async () => {
+    const { state, reads } = server({
+      playing: [stream(1)],
+      sessions: [live(1)],
+      onDelete: (s) => {
+        // The player is still playing and reporting: only the server's session ends.
+        s.sessions = [];
+        return null;
+      },
+    });
+    renderApp('/admin/playback');
+    const panel = await card();
+    const stop = await within(panel).findByRole('button', {
+      name: 'Stop this stream: Film 1 (Mac)',
+    });
+    const before = reads('/api/admin/summary');
+    await userEvent.click(stop);
+    expect(await within(panel).findByText('Nothing playing.')).toBeInTheDocument();
+    // The summary was read again and still lists the stream, yet the row stays hidden.
+    await waitFor(() => expect(reads('/api/admin/summary')).toBeGreaterThan(before));
+    expect(state.playing).toHaveLength(1);
+    expect(within(panel).getByText('Nothing playing.')).toBeInTheDocument();
+
+    // The player recovers under the same playback id with a new session: the row returns, with Stop.
+    state.sessions = [live(1, { id: 'session-new', startedAt: '2026-11-09T19:09:00Z' })];
+    expect(
+      await within(panel).findByRole(
+        'button',
+        { name: 'Stop this stream: Film 1 (Mac)' },
+        { timeout: 8000 },
+      ),
+    ).toBeInTheDocument();
+    expect(within(panel).getByText('Film 1')).toBeInTheDocument();
+  }, 15000);
+
+  it('stops the newest session of the edition when there are two', async () => {
     const { deletes } = server({
       playing: [stream(1)],
       sessions: [

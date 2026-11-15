@@ -7,9 +7,9 @@ import { environmentLabel } from './healthFormat.js';
 import { describeDevice } from './userAgent.js';
 
 /**
- * The live HLS session an entry can be stopped through: the newest started session of the entry's edition, or null
- * (direct play has no session, so nothing to stop). A reload of the player can leave an older session of the same
- * edition behind; the newest is the one the viewer is on.
+ * The live HLS session an entry can be stopped through: the session of the entry's edition, or null (direct play has
+ * no session, so nothing to stop). The server keeps at most one per edition (`SessionManager.create` replaces any
+ * live one), so taking the newest started is only a defence.
  */
 export function liveSessionFor(editionId, sessions) {
   let newest = null;
@@ -23,7 +23,7 @@ export function liveSessionFor(editionId, sessions) {
 /**
  * One entry as the card draws it: the film, the device label, the detail line "{device} · {environment} · {quality}"
  * (the quality gains ", converting on the fly" while an HLS session exists; an unknown environment or quality is left
- * out), the Stop hint (07's line while the device is unknown), and the id of the session to stop (null: no Stop).
+ * out), the Stop hint, and the id of the session to stop (null: no Stop).
  */
 export function playingNowRow(entry, sessions) {
   const session = liveSessionFor(entry.editionId, sessions);
@@ -36,7 +36,7 @@ export function playingNowRow(entry, sessions) {
     filmTitle: entry.filmTitle,
     device,
     detail: [device, environment, quality].filter(Boolean).join(' · '),
-    hint: playingNow.stopHint(entry.device ? device : null),
+    hint: playingNow.stopHint(),
     sessionId: session ? session.id : null,
   };
 }

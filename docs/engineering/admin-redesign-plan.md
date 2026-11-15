@@ -72,8 +72,8 @@ that depend on an answer say so and are not started until it comes.
   primary style. This reads README's "In Admin, only Scan library now is primary" as the Admin pages' own buttons;
   dialogs keep their confirm button's style.
 - **Copy is exact**, and `adminCopy.js` notes each string's source (`07`, an AR board, the README, or the plan's owner answers). `07` gives no
-  hint for "Scan library now" or "Sign out"; those come from the README. "Stop this stream" uses 07's hint until the
-  device is known (phase 5a).
+  hint for "Scan library now" or "Sign out"; those come from the README. "Stop this stream" uses the honest hint of the 5a-1
+  decision, not 07's or AR4's "Ends playback on …" (Stop does not end playback).
 - **Each section loads on its own**, static skeletons; a failed section shows an inline error banner in the Edit
   editions error colours (never amber). Deliberate exception: the scan and Plex status pollers live in the layout
   (below), because their timestamps drive every section's reloads.
@@ -218,19 +218,25 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
   per `06`, only the Library card shows.
 - **3c-1 decision:** a failed re-read keeps the last good figures (rail counts, heading count, strip) with no banner; the
   next 30 s poll retries. The error banner shows only when no summary has been read yet.
-- **5a-1 decision (built):** "Now playing" is the first card of Playback (title and "1 stream" from `04`; the README
-  calls it "Playing now"), built from the summary's `playingNow` with no request of its own. The section reads
-  `/api/admin/transcoding` once and shares it with the Transcoding card. Stop shows where a live session has the entry's
-  `editionId` (the newest started one when a reload left two) and uses `DELETE /api/admin/transcoding/sessions/{id}`.
-  In flight the button is `aria-disabled` and a second click is ignored; a failure shows "Couldn't stop that stream.
-  Try again." and keeps the entry; success hides the entry at once (the summary lists it up to 2 minutes after its last
-  report), moves focus to the section title if it was on that row, and re-reads the live list and the summary. The
-  hint is AR4's ("Ends playback on the iPad; it can resume from here", no "the" before a "Safari on Mac" name; 07's
-  line while the device is unknown). The row has no poster and no "1h 12m in" (neither is in `playingNow`) and no
-  operator in "(EE)". The touch hint is `client.touch` in the health report, stored in the report JSON (no migration:
-  the report is a JSON text column and `ClientInfo` gained a field) and passed through to `playingNow.touch`; the log
-  rows carry it inside `report.client`. `describeDevice(userAgent, touch)` reads a Macintosh user agent with `touch` as
-  an iPad. Chart rows carry no `touch` yet.
+- **5a-1 decision (built):** "Now playing" is the first card of Playback (title and "1 stream" from `04`; the README's
+  Playback section says "Now playing" too), built from the summary's `playingNow` with no request of its own. The
+  section reads `/api/admin/transcoding` once and shares it with the Transcoding card. Stop shows where a live session
+  has the entry's `editionId` (the server keeps at most one per edition, `SessionManager.create` replaces any live one,
+  so "newest" is only a defence) and uses `DELETE /api/admin/transcoding/sessions/{id}`. In flight the button is
+  `aria-disabled` and a second click is ignored; a failure shows "Couldn't stop that stream. Try again." and keeps the
+  entry; success moves focus to the section title if it was on that row and re-reads the live list and the summary
+  (the Transcoding card's Stop re-reads the summary too). **Stop does not end playback:** it calls
+  `SessionManager.end`, the player sees the 404 as an expired session and `recover()` creates a new one under the same
+  `playbackId`. So the hint (planner, 5a-1) is "Stops converting this stream on the server; if it's still playing, the
+  player starts it again.", on both Stop buttons, instead of 07's and AR4's "Ends playback on …". A stopped entry is
+  hidden keyed on the stopped session id: only while its edition has no live session or still has that one; a session
+  with another id brings it back with Stop. **Open item for the owner:** a real "end playback" needs a distinct
+  stopped-by-admin answer that the player does not recover from. It is deliberately not built here because it changes
+  player recovery. The row has no poster, no year, no "1h 12m in" (none is in `playingNow`) and no operator in "(EE)".
+  The touch hint is `client.touch` in the health report, stored in the report JSON (no migration: the report is a JSON
+  text column and `ClientInfo` gained a field) and passed through to `playingNow.touch`; the log rows carry it inside
+  `report.client`. `describeDevice(userAgent, touch)` reads a Macintosh user agent with `touch` as an iPad. Chart rows
+  carry no `touch` yet.
 - **3c-2 decision (built):** groups 3 and 4 are read-only rows (title, a reason line) with the "All in Subtitles →"
   footer, always shown, since their actions arrive with 4a/4c. Groups 1 and 2 read the attention list; 3 and 4 the
   two need lists, each its own request with its own skeleton and error banner. The skeleton or banner shows until a

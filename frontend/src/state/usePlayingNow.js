@@ -16,9 +16,12 @@ const without = (object, key) => {
  * `rows` are the entries as the card draws them. A row with a `sessionId` has a live HLS session and can be stopped:
  * `stop(row)` sends the stop once, and a second call for the same row while it is in flight does nothing
  * (`stopping` holds the playback ids in flight). A failure sets `failures[playbackId]` and keeps the row; a success
- * hides the row at once (its player stops reporting, but the summary still lists it for up to two minutes), calls
- * `onLeft(row)` so the section can move focus off the button that is leaving, and re-reads both lists. A new try
- * on the same row clears its old failure. The flags are looked up by playback id, and a later viewing has a new one.
+ * hides the row (`ended[playbackId]` is the session that was stopped), calls `onLeft(row)` so the section can move
+ * focus off the button that is leaving, and re-reads both lists. Stop ends only the server's converting session: a
+ * player that is still playing starts a new one under the same playback id, and the summary keeps listing the row
+ * while it reports. So a hidden row stays hidden only while its edition has no live session or still has the stopped
+ * one; a session with another id brings the row back, with Stop. A new try on a row clears its old failure. The
+ * flags are looked up by playback id, and a later viewing has a new one.
  */
 export function usePlayingNow({ entries, sessions, reloadSessions, reloadSummary, onLeft }) {
   const [stopping, setStopping] = useState({});
@@ -42,7 +45,7 @@ export function usePlayingNow({ entries, sessions, reloadSessions, reloadSummary
         inFlight.current.delete(id);
         setStopping((s) => without(s, id));
       }
-      setEnded((e) => ({ ...e, [id]: true }));
+      setEnded((e) => ({ ...e, [id]: row.sessionId }));
       onLeft?.(row);
       reloadSessions();
       reloadSummary();
@@ -51,7 +54,10 @@ export function usePlayingNow({ entries, sessions, reloadSessions, reloadSummary
   );
 
   const rows = (entries ?? [])
-    .filter((entry) => !ended[entry.playbackId])
-    .map((entry) => playingNowRow(entry, sessions));
+    .map((entry) => playingNowRow(entry, sessions))
+    .filter((row) => {
+      const stopped = ended[row.playbackId];
+      return !stopped || (row.sessionId !== null && row.sessionId !== stopped);
+    });
   return { rows, stopping, failures, stop };
 }

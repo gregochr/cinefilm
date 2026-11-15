@@ -190,8 +190,7 @@
         "client": {
           "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
           "screen": "1920x1080",
-          "cores": 12,
-          "touch": false
+          "cores": 12
         }
       }
     },

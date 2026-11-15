@@ -40,7 +40,7 @@ describe('liveSessionFor', () => {
     expect(liveSessionFor(11, [session({ filmTitle: 'Another' }), other]).id).toBe('s1');
   });
 
-  it('takes the newest started session when a reload left an older one behind', () => {
+  it('takes the newest started session if there were ever two (the server keeps one; this is a defence)', () => {
     const older = session({ id: 'older', startedAt: '2026-11-09T19:00:00Z' });
     const newer = session({ id: 'newer', startedAt: '2026-11-09T19:05:00Z' });
     expect(liveSessionFor(11, [older, newer]).id).toBe('newer');
@@ -56,7 +56,7 @@ describe('playingNowRow', () => {
       filmTitle: 'Heat',
       device: 'Mac',
       detail: 'Mac · Away · 720p, converting on the fly',
-      hint: 'Ends playback on the Mac; it can resume from here',
+      hint: 'Stops converting this stream on the server; if it’s still playing, the player starts it again.',
       sessionId: 's1',
     });
   });
@@ -67,11 +67,10 @@ describe('playingNowRow', () => {
     expect(row.sessionId).toBeNull();
   });
 
-  it('names an iPad that sends a desktop Mac user agent by the touch hint, in the line and the hint', () => {
+  it('names an iPad that sends a desktop Mac user agent by the touch hint', () => {
     const row = playingNowRow(entry({ device: SAFARI_MAC, touch: true }), [session()]);
     expect(row.device).toBe('Safari on iPad');
     expect(row.detail).toBe('Safari on iPad · Away · 720p, converting on the fly');
-    expect(row.hint).toBe('Ends playback on Safari on iPad; it can resume from here');
     expect(playingNowRow(entry({ device: SAFARI_MAC, touch: false }), []).device).toBe(
       'Safari on Mac',
     );
@@ -84,10 +83,14 @@ describe('playingNowRow', () => {
     expect(playingNowRow(entry({ environment: null }), []).detail).toBe('Mac · 720p');
   });
 
-  it('falls back to "Unknown device" and 07’s hint when the device is unknown', () => {
-    const row = playingNowRow(entry({ device: null, touch: null }), [session()]);
-    expect(row.device).toBe('Unknown device');
-    expect(row.detail).toBe('Unknown device · Away · 720p, converting on the fly');
-    expect(row.hint).toBe('Ends playback on that device; it can resume later.');
+  it('says "Unknown device" for an unrecognised or missing user agent, with the same honest hint', () => {
+    for (const device of [null, 'curl/8.4.0']) {
+      const row = playingNowRow(entry({ device, touch: null }), [session()]);
+      expect(row.device).toBe('Unknown device');
+      expect(row.detail).toBe('Unknown device · Away · 720p, converting on the fly');
+      expect(row.hint).toBe(
+        'Stops converting this stream on the server; if it’s still playing, the player starts it again.',
+      );
+    }
   });
 });

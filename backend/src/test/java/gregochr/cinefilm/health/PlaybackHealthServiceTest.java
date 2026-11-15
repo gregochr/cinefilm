@@ -170,14 +170,28 @@ class PlaybackHealthServiceTest {
         assertThat(JSON.readTree(saved().getSummary()).get("client").has("touch")).isFalse();
     }
 
-    @Test
-    void aTouchHintThatIsNotABooleanIsRefused() {
+    @ParameterizedTest
+    @ValueSource(strings = {"maybe"})
+    void aTouchHintThatCannotBeReadAsABooleanIsRefused(String value) {
         ObjectNode body = example();
-        client(body).put("touch", "maybe");
+        client(body).put("touch", value);
 
         assertThatThrownBy(() -> service.report(ID, text(body)))
             .isExactlyInstanceOf(BadRequestException.class)
             .hasMessage("Invalid health report");
+    }
+
+    @Test
+    void aTouchHintSentAsTheTextTrueIsCoercedAndStoredAsABoolean() {
+        knownEdition();
+        when(repository.count()).thenReturn(1L);
+        ObjectNode body = example();
+        client(body).put("touch", "true");
+
+        service.report(ID, text(body));
+
+        assertThat(JSON.readTree(saved().getSummary()).get("client").get("touch").isBoolean()).isTrue();
+        assertThat(JSON.readTree(saved().getSummary()).get("client").get("touch").asBoolean()).isTrue();
     }
 
     @Test
