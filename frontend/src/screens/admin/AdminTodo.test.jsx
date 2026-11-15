@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, renderApp, respond } from '../../test/mockApi.jsx';
@@ -72,10 +72,13 @@ describe('Admin To do groups', () => {
       within(several).getByText('2 files · Part 2: video codec is h264, part 1 has hevc'),
     ).toBeInTheDocument();
     const english = await group('English subtitles missing');
-    expect(within(english).getByText('Rashomon (1950)')).toBeInTheDocument();
-    expect(within(english).getByText('None yet')).toBeInTheDocument();
+    expect(within(english).getByText('Rashomon')).toBeInTheDocument();
+    expect(within(english).getByText('· 1950')).toBeInTheDocument();
+    expect(
+      within(english).getByText('Spoken: Japanese · none found automatically on OpenSubtitles'),
+    ).toBeInTheDocument();
     const forced = await group('Forced subtitles not found');
-    expect(within(forced).getByText('Taken (2008)')).toBeInTheDocument();
+    expect(within(forced).getByText('Taken')).toBeInTheDocument();
     expect(
       within(forced).getByText('OpenSubtitles has 2 foreign-parts-only files'),
     ).toBeInTheDocument();
@@ -87,7 +90,7 @@ describe('Admin To do groups', () => {
 
     const pick = await group('Pick the right film');
     const wicker = rowOf(pick, 'The Wicker Man');
-    const suspiria = rowOf(pick, 'Suspiria (1977)');
+    const suspiria = rowOf(pick, 'Suspiria');
     expect(within(wicker).queryByRole('button', { name: /^Yes/ })).not.toBeInTheDocument();
     expect(within(wicker).getByRole('button', { name: 'Find the film…' })).toBeInTheDocument();
     const yes = within(suspiria).getByRole('button', { name: 'Yes, it’s Suspiria (1977)' });
@@ -240,12 +243,10 @@ describe('Admin To do: Yes, it’s …', () => {
     const pick = await group('Pick the right film');
 
     await userEvent.click(
-      within(rowOf(pick, 'Suspiria (1977)')).getByRole('button', { name: /^Yes, it’s/ }),
+      within(rowOf(pick, 'Suspiria')).getByRole('button', { name: /^Yes, it’s/ }),
     );
 
-    await waitFor(() =>
-      expect(within(pick).queryByText('Suspiria (1977)')).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(within(pick).queryByText('Suspiria')).not.toBeInTheDocument());
     expect(
       await within(rail()).findByRole('link', { name: 'To do, 5 things' }),
     ).toBeInTheDocument();
@@ -273,7 +274,7 @@ describe('Admin To do: Yes, it’s …', () => {
     renderApp('/admin');
     const pick = await group('Pick the right film');
     await userEvent.click(
-      within(rowOf(pick, 'Suspiria (1977)')).getByRole('button', { name: /^Yes, it’s/ }),
+      within(rowOf(pick, 'Suspiria')).getByRole('button', { name: /^Yes, it’s/ }),
     );
 
     await waitFor(() =>
@@ -293,7 +294,7 @@ describe('Admin To do: Yes, it’s …', () => {
     });
     renderApp('/admin');
     const pick = await group('Pick the right film');
-    const yes = within(rowOf(pick, 'Suspiria (1977)')).getByRole('button', { name: /^Yes, it’s/ });
+    const yes = within(rowOf(pick, 'Suspiria')).getByRole('button', { name: /^Yes, it’s/ });
 
     await userEvent.click(yes);
     await userEvent.click(yes);
@@ -301,9 +302,7 @@ describe('Admin To do: Yes, it’s …', () => {
     expect(yes).toHaveAttribute('aria-disabled', 'true');
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
     release();
-    await waitFor(() =>
-      expect(within(pick).queryByText('Suspiria (1977)')).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(within(pick).queryByText('Suspiria')).not.toBeInTheDocument());
   });
 
   it('shows an inline error and keeps the row when the post fails, and the next click tries again', async () => {
@@ -316,7 +315,7 @@ describe('Admin To do: Yes, it’s …', () => {
     });
     renderApp('/admin');
     const pick = await group('Pick the right film');
-    const row = rowOf(pick, 'Suspiria (1977)');
+    const row = rowOf(pick, 'Suspiria');
     const yes = within(row).getByRole('button', { name: /^Yes, it’s/ });
 
     await userEvent.click(yes);
@@ -324,7 +323,7 @@ describe('Admin To do: Yes, it’s …', () => {
     expect(await within(row).findByRole('alert')).toHaveTextContent(
       'Something went wrong. Try again.',
     );
-    expect(within(pick).getByText('Suspiria (1977)')).toBeInTheDocument();
+    expect(within(pick).getByText('Suspiria')).toBeInTheDocument();
     expect(yes).not.toHaveAttribute('aria-disabled');
     // A failed post changes nothing, so nothing is read again.
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/admin/summary')).toHaveLength(1);
@@ -332,9 +331,7 @@ describe('Admin To do: Yes, it’s …', () => {
 
     await userEvent.click(yes);
 
-    await waitFor(() =>
-      expect(within(pick).queryByText('Suspiria (1977)')).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(within(pick).queryByText('Suspiria')).not.toBeInTheDocument());
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -344,12 +341,136 @@ describe('Admin To do: Yes, it’s …', () => {
     const pick = await group('Pick the right film');
 
     await userEvent.click(
-      within(rowOf(pick, 'Suspiria (1977)')).getByRole('button', { name: /^Yes, it’s/ }),
+      within(rowOf(pick, 'Suspiria')).getByRole('button', { name: /^Yes, it’s/ }),
     );
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'A scan is running. Try again when it finishes.',
     );
+  });
+});
+
+describe('Admin To do: Yes, it’s … on the row', () => {
+  it('moves focus straight to the section title when the row is hidden, without waiting for a list read', async () => {
+    let matched = false;
+    installFetch((m, url) => {
+      if (m === 'POST' && url === SUSPIRIA_MATCH) {
+        matched = true;
+        return respond({ filmId: 34, joined: false });
+      }
+      // The re-read never answers: nothing but the hiding can have moved focus.
+      return url === ATTENTION && matched ? new Promise(() => {}) : null;
+    });
+    renderApp('/admin');
+    const pick = await group('Pick the right film');
+    const yes = within(rowOf(pick, 'Suspiria')).getByRole('button', { name: /^Yes, it’s/ });
+
+    await userEvent.click(yes);
+
+    await waitFor(() => expect(within(pick).queryByText('Suspiria')).not.toBeInTheDocument());
+    expect(screen.getByRole('heading', { level: 1, name: 'To do' })).toHaveFocus();
+  });
+
+  it('leaves focus alone when it had already moved off the row', async () => {
+    let release;
+    installFetch((m, url) =>
+      m === 'POST' && url === SUSPIRIA_MATCH
+        ? new Promise((resolve) => {
+            release = () => resolve(respond({ filmId: 34, joined: false }));
+          })
+        : null,
+    );
+    renderApp('/admin');
+    const pick = await group('Pick the right film');
+    await userEvent.click(
+      within(rowOf(pick, 'Suspiria')).getByRole('button', { name: /^Yes, it’s/ }),
+    );
+    const elsewhere = within(rowOf(pick, 'The Wicker Man')).getByRole('button', {
+      name: 'Find the film…',
+    });
+    elsewhere.focus();
+
+    release();
+
+    await waitFor(() => expect(within(pick).queryByText('Suspiria')).not.toBeInTheDocument());
+    expect(elsewhere).toHaveFocus();
+  });
+
+  it('dims both buttons of the row while its post runs and ignores Find the film… then', async () => {
+    let release;
+    installFetch((m, url) =>
+      m === 'POST' && url === SUSPIRIA_MATCH
+        ? new Promise((resolve) => {
+            release = () => resolve(respond({ filmId: 34, joined: false }));
+          })
+        : null,
+    );
+    renderApp('/admin');
+    const pick = await group('Pick the right film');
+    const row = rowOf(pick, 'Suspiria');
+
+    await userEvent.click(within(row).getByRole('button', { name: /^Yes, it’s/ }));
+    const find = within(row).getByRole('button', { name: 'Find the film…' });
+    await userEvent.click(find);
+
+    expect(find).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.queryByRole('region', { name: 'Fix match' })).not.toBeInTheDocument();
+    release();
+    await waitFor(() => expect(within(pick).queryByText('Suspiria')).not.toBeInTheDocument());
+  });
+
+  it('says the film has gone for a 404, in the row’s own words, and reads the lists again', async () => {
+    const fetchMock = installFetch((m, url) =>
+      m === 'POST' && url === SUSPIRIA_MATCH ? respond({ error: 'gone' }, 404) : null,
+    );
+    renderApp('/admin');
+    const pick = await group('Pick the right film');
+    const attentionReads = () => fetchMock.mock.calls.filter(([url]) => url === ATTENTION).length;
+    const before = attentionReads();
+
+    await userEvent.click(
+      within(rowOf(pick, 'Suspiria')).getByRole('button', { name: /^Yes, it’s/ }),
+    );
+
+    await waitFor(() => expect(attentionReads()).toBeGreaterThan(before));
+    expect(screen.queryByText(/Close this|Type a title/)).not.toBeInTheDocument();
+  });
+
+  it('says something went wrong, with no dialog wording, for a 400', async () => {
+    installFetch((m, url) =>
+      m === 'POST' && url === SUSPIRIA_MATCH ? respond({ error: 'bad' }, 400) : null,
+    );
+    renderApp('/admin');
+    const pick = await group('Pick the right film');
+
+    await userEvent.click(
+      within(rowOf(pick, 'Suspiria')).getByRole('button', { name: /^Yes, it’s/ }),
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong. Try again.');
+  });
+
+  it('keeps the last list with no banner when a re-read fails after the first answer', async () => {
+    let matched = false;
+    installFetch((m, url) => {
+      if (m === 'POST' && url === SUSPIRIA_MATCH) {
+        matched = true;
+        return respond({ filmId: 34, joined: false });
+      }
+      return url === ATTENTION && matched ? respond({ error: 'boom' }, 500) : null;
+    });
+    renderApp('/admin');
+    const pick = await group('Pick the right film');
+
+    await userEvent.click(
+      within(rowOf(pick, 'Suspiria')).getByRole('button', { name: /^Yes, it’s/ }),
+    );
+
+    await waitFor(() => expect(within(pick).queryByText('Suspiria')).not.toBeInTheDocument());
+    await act(async () => {});
+    expect(within(pick).getByText('The Wicker Man')).toBeInTheDocument();
+    expect(await group('Sort out several files')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
 
@@ -429,7 +550,7 @@ describe('Admin To do: the dialogs', () => {
     installFetch();
     renderApp('/admin');
     const pick = await group('Pick the right film');
-    const opener = within(rowOf(pick, 'Suspiria (1977)')).getByRole('button', {
+    const opener = within(rowOf(pick, 'Suspiria')).getByRole('button', {
       name: 'Find the film…',
     });
 
@@ -445,7 +566,7 @@ describe('Admin To do: the dialogs', () => {
     installFetch();
     renderApp('/admin');
     const several = await group('Sort out several files');
-    const opener = within(rowOf(several, 'The Two Towers (2002)')).getByRole('button', {
+    const opener = within(rowOf(several, 'The Two Towers')).getByRole('button', {
       name: 'Sort out editions…',
     });
 
@@ -477,7 +598,7 @@ describe('Admin To do: the dialogs', () => {
     renderApp('/admin');
     const several = await group('Sort out several files');
     await userEvent.click(
-      within(rowOf(several, 'Blade Runner (1982)')).getByRole('button', {
+      within(rowOf(several, 'Blade Runner')).getByRole('button', {
         name: 'Sort out editions…',
       }),
     );

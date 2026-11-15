@@ -13,16 +13,14 @@ const SUSPIRIA = fixtures.adminAttention.items.find((i) => i.filmId === 34);
 
 function mount(over = {}) {
   const onChanged = vi.fn();
-  const armFocusFallback = vi.fn();
   const base = {
     settledAt: 's',
     subtitlesVersion: 'v',
     changed: 0,
     onChanged,
-    armFocusFallback,
   };
   const hook = renderHook((props) => useAdminTodo(props), { initialProps: { ...base, ...over } });
-  return { ...hook, onChanged, armFocusFallback, base };
+  return { ...hook, onChanged, base };
 }
 
 const callsTo = (fetchMock, url) => fetchMock.mock.calls.filter(([u]) => u === url).length;
@@ -82,19 +80,20 @@ describe('useAdminTodo: reading', () => {
 });
 
 describe('useAdminTodo: confirm', () => {
-  it('posts the best candidate, hides the row, readies the focus fallback and reports the change', async () => {
+  it('posts the best candidate, hides the row, tells the screen and reports the change', async () => {
     const fetchMock = installFetch((m, url) =>
       m === 'POST' && url === MATCH ? respond({ filmId: 34, joined: false }) : null,
     );
-    const { result, onChanged, armFocusFallback } = mount();
+    const { result, onChanged } = mount();
+    const onHidden = vi.fn();
     await waitFor(() => expect(result.current.allRead).toBe(true));
 
-    await act(() => result.current.confirm(SUSPIRIA));
+    await act(() => result.current.confirm(SUSPIRIA, { onHidden }));
 
     const [[, init]] = posts(fetchMock);
     expect(JSON.parse(init.body)).toEqual({ tmdbId: 37557 });
     expect(result.current.groups[0].rows.map((r) => r.filmId)).toEqual([31]);
-    expect(armFocusFallback).toHaveBeenCalledTimes(1);
+    expect(onHidden).toHaveBeenCalledTimes(1);
     expect(onChanged).toHaveBeenCalledTimes(1);
     expect(result.current.confirming).toEqual([]);
     expect(result.current.problems[34]).toBeNull();
@@ -161,7 +160,8 @@ describe('useAdminTodo: confirm', () => {
 
   it('keeps the row, sets the problem and reports no change when the post fails, then clears it on a retry', async () => {
     let fail = true;
-    const { result, onChanged, armFocusFallback } = (() => {
+    const onHidden = vi.fn();
+    const { result, onChanged } = (() => {
       installFetch((m, url) => {
         if (m !== 'POST' || url !== MATCH) return null;
         return fail ? respond({ error: 'x' }, 503) : respond({ filmId: 34, joined: false });
@@ -170,14 +170,14 @@ describe('useAdminTodo: confirm', () => {
     })();
     await waitFor(() => expect(result.current.allRead).toBe(true));
 
-    await act(() => result.current.confirm(SUSPIRIA));
+    await act(() => result.current.confirm(SUSPIRIA, { onHidden }));
 
     expect(result.current.problems[34]).toBe(
       'TMDB isn’t available right now. Try again in a moment.',
     );
     expect(result.current.groups[0].rows).toHaveLength(2);
     expect(onChanged).not.toHaveBeenCalled();
-    expect(armFocusFallback).not.toHaveBeenCalled();
+    expect(onHidden).not.toHaveBeenCalled();
     expect(result.current.confirming).toEqual([]);
     fail = false;
 
@@ -185,6 +185,113 @@ describe('useAdminTodo: confirm', () => {
 
     expect(result.current.problems[34]).toBeNull();
     expect(result.current.groups[0].rows).toHaveLength(1);
+    expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [404, 'That film is no longer in the library. The list is being updated.', true],
+    [400, 'Something went wrong. Try again.', false],
+    [500, 'Something went wrong. Try again.', false],
+    [409, 'A scan is running. Try again when it finishes.', false],
+  ])(
+    'words a %i for the row, and reads the lists again only when the film is gone',
+    async (status, message, gone) => {
+      installFetch((m, url) =>
+        m === 'POST' && url === MATCH ? respond({ error: 'x' }, status) : null,
+      );
+      const { result, onChanged } = mount();
+      await waitFor(() => expect(result.current.allRead).toBe(true));
+
+      await act(() => result.current.confirm(SUSPIRIA));
+
+      expect(result.current.problems[34]).toBe(message);
+      expect(result.current.groups[0].rows).toHaveLength(2);
+      expect(onChanged).toHaveBeenCalledTimes(gone ? 1 : 0);
+    },
+  );
+
+  it('forgets a problem when a read replaces the attention list', async () => {
+    installFetch((m, url) => (m === 'POST' && url === MATCH ? respond({}, 400) : null));
+    const { result, rerender, base } = mount();
+    await waitFor(() => expect(result.current.allRead).toBe(true));
+    await act(() => result.current.confirm(SUSPIRIA));
+    expect(result.current.problems[34]).toBe('Something went wrong. Try again.');
+
+    rerender({ ...base, changed: 1 });
+
+    await waitFor(() => expect(result.current.problems[34]).toBeUndefined());
+  });
+
+  it('keeps the row hidden when a read lands while the post is in flight, and reports one change', async () => {
+    let release;
+    installFetch((m, url) =>
+      m === 'POST' && url === MATCH
+        ? new Promise((resolve) => {
+            release = () => resolve(respond({ filmId: 34, joined: false }));
+          })
+        : null,
+    );
+    const { result, rerender, base, onChanged } = mount();
+    await waitFor(() => expect(result.current.allRead).toBe(true));
+    let pending;
+    act(() => {
+      pending = result.current.confirm(SUSPIRIA);
+    });
+    const before = result.current.attention.data;
+
+    rerender({ ...base, settledAt: 's2' });
+    await waitFor(() => expect(result.current.attention.data).not.toBe(before));
+    await act(async () => {
+      release();
+      await pending;
+    });
+
+    expect(result.current.groups[0].rows.map((r) => r.filmId)).toEqual([31]);
+    expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the row hidden when the re-read after the confirm fails', async () => {
+    let failReads = false;
+    installFetch((m, url) => {
+      if (m === 'POST' && url === MATCH) {
+        failReads = true;
+        return respond({ filmId: 34, joined: false });
+      }
+      return url === ATTENTION && failReads ? respond(null, 500) : null;
+    });
+    const { result, rerender, base } = mount();
+    await waitFor(() => expect(result.current.allRead).toBe(true));
+    await act(() => result.current.confirm(SUSPIRIA));
+
+    rerender({ ...base, changed: 1 });
+    await waitFor(() => expect(result.current.attention.error).not.toBeNull());
+
+    // The last answer stays on screen, and so does the hiding that belongs to it.
+    expect(result.current.groups[0].rows.map((r) => r.filmId)).toEqual([31]);
+  });
+
+  it('does not touch the screen when the page has gone mid-post, but still reports the change', async () => {
+    let release;
+    installFetch((m, url) =>
+      m === 'POST' && url === MATCH
+        ? new Promise((resolve) => {
+            release = () => resolve(respond({ filmId: 34, joined: false }));
+          })
+        : null,
+    );
+    const { result, unmount, onChanged } = mount();
+    await waitFor(() => expect(result.current.allRead).toBe(true));
+    const onHidden = vi.fn();
+    let pending;
+    act(() => {
+      pending = result.current.confirm(SUSPIRIA, { onHidden });
+    });
+
+    unmount();
+    release();
+    await pending;
+
+    expect(onHidden).not.toHaveBeenCalled();
     expect(onChanged).toHaveBeenCalledTimes(1);
   });
 

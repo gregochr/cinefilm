@@ -34,8 +34,8 @@ describe('Admin: Edit editions', () => {
     expect(buttons[0]).toHaveAccessibleDescription(
       'Choose which file is which cut, the part order and the default.',
     );
-    expect(within(group).getByText('Blade Runner (1982)')).toBeInTheDocument();
-    expect(within(group).getByText('The Two Towers (2002)')).toBeInTheDocument();
+    expect(within(group).getByText('Blade Runner')).toBeInTheDocument();
+    expect(within(group).getByText('The Two Towers')).toBeInTheDocument();
   });
 
   it('opens the panel for that film, with the suggestion loaded for it', async () => {

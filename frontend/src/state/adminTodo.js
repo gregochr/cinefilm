@@ -1,9 +1,10 @@
 // What the To do page lists, and how: which attention kinds go in which group, the cap of rows, the footers and the
 // small lines under each row. Pure, no JSX: the Apple TV and native clients reuse it. The server decides every rule
 // (kind, `confident`, `unresolved`); nothing here re-derives one.
+import { ApiError } from '../api/client.js';
 import { todoRow } from './adminCopy.js';
-import { audioNote, fullSubtitleLine } from './fullNeed.js';
-import { reasonText } from './forcedNeed.js';
+import { fullSubtitleLine } from './fullNeed.js';
+import { languageName, reasonText } from './forcedNeed.js';
 import { titleWithYear } from './scanFormat.js';
 
 /** The most rows a group shows until "Show all {n}". */
@@ -90,12 +91,44 @@ export function filesLine(item) {
   return `${todoRow.files(item.files.length)} · ${item.detail}`;
 }
 
-/** The small line under a full-subtitles row: "Audio: German · None yet". */
+/**
+ * The small line under a full-subtitles row (AR1): "Spoken: Japanese · none found automatically on OpenSubtitles".
+ * The language is the film's `originalLanguage`; a film with a subtitle that plays but is unresolved says what plays
+ * instead of "none found".
+ */
 export function fullLine(row) {
-  return [audioNote(row), fullSubtitleLine(row)].filter(Boolean).join(' · ');
+  const spoken = row.originalLanguage
+    ? todoRow.spoken(languageName(row.originalLanguage))
+    : todoRow.languageUnknown;
+  return `${spoken} · ${row.fullSubtitle ? fullSubtitleLine(row) : todoRow.noneFound}`;
 }
 
 /** The small line under a forced-subtitles row: the server's reason in words. */
 export function forcedLine(row) {
   return reasonText(row);
+}
+
+/**
+ * A row's title and its muted year: `{ title, year }`, year a string or null. A needs-match film with no year of its
+ * own shows the best guess's year marked with a question mark (AR1: "Heat · 1995?").
+ */
+export function rowTitle(row) {
+  if (row.year) return { title: row.title, year: String(row.year) };
+  const guess = row.kind === 'needs-match' ? bestGuess(row) : null;
+  return guess?.year
+    ? { title: row.title, year: todoRow.guessedYear(guess.year) }
+    : { title: row.title, year: null };
+}
+
+/**
+ * What a failed "Yes, it's …" says on its row: `{ message, gone }`. `gone` (404) means the film has left the library,
+ * so the caller reads the lists again; the other statuses keep the row and say what to do.
+ */
+export function confirmProblem(failure) {
+  const status = failure instanceof ApiError ? failure.status : 0;
+  const copy = todoRow.confirmProblems;
+  if (status === 404) return { message: copy.gone, gone: true };
+  if (status === 409) return { message: copy.scan, gone: false };
+  if (status === 503) return { message: copy.tmdb, gone: false };
+  return { message: copy.other, gone: false };
 }

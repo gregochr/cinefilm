@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ApiError } from '../api/client.js';
 import {
   TODO_GROUP_KEYS,
   TODO_ROW_CAP,
@@ -11,6 +12,8 @@ import {
   groupOfKind,
   guessTitle,
   matchLine,
+  confirmProblem,
+  rowTitle,
   visibleRows,
 } from './adminTodo.js';
 import attention from '../test/fixtures/admin-attention.json';
@@ -202,11 +205,18 @@ describe('the lines under a row', () => {
     );
   });
 
-  it('words a full-subtitles row from the audio and the subtitle that plays', () => {
+  it('words a full-subtitles row from the original language and what plays: none found, or the file', () => {
     const rashomon = fullNeed.films.find((r) => r.title === 'Rashomon');
-    expect(fullLine(rashomon)).toBe('None yet');
+    expect(fullLine(rashomon)).toBe('Spoken: Japanese · none found automatically on OpenSubtitles');
     expect(fullLine(fullNeed.films.find((r) => r.title === 'Das Boot'))).toBe(
-      'Audio: German · Playing: your file',
+      'Spoken: German · Playing: your file',
+    );
+  });
+
+  it('says the language is not known yet when TMDB has not given one', () => {
+    const row = { ...fullNeed.films[0], originalLanguage: null, fullSubtitle: null };
+    expect(fullLine(row)).toBe(
+      'Language not known yet · none found automatically on OpenSubtitles',
     );
   });
 
@@ -214,5 +224,59 @@ describe('the lines under a row', () => {
     expect(forcedLine(forcedNeed.films.find((r) => r.title === 'Taken'))).toBe(
       'OpenSubtitles has 2 foreign-parts-only files',
     );
+  });
+});
+
+describe('rowTitle', () => {
+  it('gives the title and the film’s own year', () => {
+    expect(rowTitle(attention.items[5])).toEqual({ title: 'Suspiria', year: '1977' });
+    expect(rowTitle(fullNeed.films[0])).toEqual({ title: 'Das Boot', year: '1981' });
+  });
+
+  it('marks the best guess’s year with a question mark when the film has none of its own', () => {
+    expect(rowTitle(attention.items[0])).toEqual({ title: 'The Wicker Man', year: '1973?' });
+  });
+
+  it('gives no year when there is nothing to show, and never guesses for another kind', () => {
+    expect(rowTitle(item('needs-match', 1, { year: null }))).toEqual({
+      title: 'Film 1',
+      year: null,
+    });
+    const other = item('multiple-files', 1, {
+      year: null,
+      candidates: [{ tmdbId: 1, title: 'A', year: 1999, score: 10 }],
+    });
+    expect(rowTitle(other)).toEqual({ title: 'Film 1', year: null });
+  });
+});
+
+describe('confirmProblem', () => {
+  it('says the film is gone for a 404, and asks for a re-read', () => {
+    expect(confirmProblem(new ApiError(404))).toEqual({
+      message: 'That film is no longer in the library. The list is being updated.',
+      gone: true,
+    });
+  });
+
+  it.each([
+    [409, 'A scan is running. Try again when it finishes.'],
+    [503, 'TMDB isn’t available right now. Try again in a moment.'],
+    [400, 'Something went wrong. Try again.'],
+    [500, 'Something went wrong. Try again.'],
+  ])('words a %i for the row without a re-read', (status, message) => {
+    expect(confirmProblem(new ApiError(status))).toEqual({ message, gone: false });
+  });
+
+  it('is generic for a failure that is not an API answer', () => {
+    expect(confirmProblem(new TypeError('network'))).toEqual({
+      message: 'Something went wrong. Try again.',
+      gone: false,
+    });
+  });
+
+  it('never uses the Fix match dialog’s words', () => {
+    for (const status of [400, 404, 409, 500, 503]) {
+      expect(confirmProblem(new ApiError(status)).message).not.toMatch(/Close this|Type a title/);
+    }
   });
 });

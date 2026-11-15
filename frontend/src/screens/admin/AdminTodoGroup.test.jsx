@@ -14,12 +14,18 @@ const find = (list, key) => list.find((g) => g.key === key);
 
 function renderGroup(group, props = {}) {
   const handlers = { onConfirm: vi.fn(), onFindFilm: vi.fn(), onSortOut: vi.fn() };
-  render(
+  const view = render(
     <MemoryRouter>
       <AdminTodoGroup group={group} confirming={[]} problems={{}} {...handlers} {...props} />
     </MemoryRouter>,
   );
-  return handlers;
+  const rerender = (next) =>
+    view.rerender(
+      <MemoryRouter>
+        <AdminTodoGroup group={next} confirming={[]} problems={{}} {...handlers} {...props} />
+      </MemoryRouter>,
+    );
+  return { ...handlers, rerender };
 }
 
 const film = groups({ attention: attention.items });
@@ -56,7 +62,10 @@ describe('AdminTodoGroup: Pick the right film', () => {
       within(suspiria).getByRole('button', { name: 'Yes, it’s Suspiria (1977)' }),
     );
 
-    expect(onConfirm).toHaveBeenCalledWith(attention.items[5]);
+    expect(onConfirm).toHaveBeenCalledWith(
+      attention.items[5],
+      within(suspiria).getByRole('button', { name: 'Yes, it’s Suspiria (1977)' }),
+    );
     expect(onFindFilm).not.toHaveBeenCalled();
     expect(within(suspiria).getByRole('button', { name: 'Find the film…' })).toBeInTheDocument();
   });
@@ -115,6 +124,69 @@ describe('AdminTodoGroup: Pick the right film', () => {
   });
 });
 
+describe('AdminTodoGroup: titles, counts and busy rows', () => {
+  it('mutes the year after the title, and marks a year that is only the best guess with a question mark', () => {
+    renderGroup(find(film, 'pickFilm'));
+
+    const [wicker, suspiria] = screen.getAllByRole('listitem');
+    // The Wicker Man has no year of its own; its best guess (1973) is shown as a guess.
+    expect(within(wicker).getByText('· 1973?')).toBeInTheDocument();
+    expect(within(suspiria).getByText('· 1977')).toBeInTheDocument();
+    expect(within(suspiria).queryByText(/\?/)).not.toBeInTheDocument();
+  });
+
+  it('shows no year when there is none to show', () => {
+    const bare = { ...attention.items[0], candidates: [] };
+    renderGroup(find(groups({ attention: [bare] }), 'pickFilm'));
+
+    expect(screen.getByText('The Wicker Man')).toBeInTheDocument();
+    expect(screen.queryByText(/^·/)).not.toBeInTheDocument();
+  });
+
+  it('carries a count for the phone header beside the why-line: files for the match group, films for the rest', () => {
+    renderGroup(find(manyFilm, 'pickFilm'));
+    expect(screen.getByText('7 files')).toBeInTheDocument();
+  });
+
+  it('counts films in the other groups, singular at one', () => {
+    renderGroup(find(groups({ attention: [], full: fullNeed.films }), 'fullMissing'));
+    expect(screen.getByText('1 film')).toBeInTheDocument();
+  });
+
+  it('marks both buttons of a busy row aria-disabled and ignores a click on Find the film…', async () => {
+    const { onFindFilm } = renderGroup(find(film, 'pickFilm'), { confirming: [34] });
+    const suspiria = screen.getAllByRole('listitem')[1];
+    const findButton = within(suspiria).getByRole('button', { name: 'Find the film…' });
+
+    expect(findButton).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(findButton);
+
+    expect(onFindFilm).not.toHaveBeenCalled();
+    // The other row is not busy.
+    expect(
+      within(screen.getAllByRole('listitem')[0]).getByRole('button', { name: 'Find the film…' }),
+    ).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('starts folded again after a group shrank to the cap while expanded', async () => {
+    const view = renderGroup(find(manyFilm, 'pickFilm'));
+    await userEvent.click(screen.getByRole('button', { name: 'Show all 7' }));
+    expect(screen.getAllByRole('listitem')).toHaveLength(7);
+    const five = {
+      ...find(manyFilm, 'pickFilm'),
+      rows: find(manyFilm, 'pickFilm').rows.slice(0, 5),
+      total: 5,
+    };
+
+    view.rerender(five);
+    expect(screen.queryByRole('button', { name: /^Show/ })).not.toBeInTheDocument();
+    view.rerender(find(manyFilm, 'pickFilm'));
+
+    expect(screen.getAllByRole('listitem')).toHaveLength(5);
+    expect(screen.getByRole('button', { name: 'Show all 7' })).toBeInTheDocument();
+  });
+});
+
 describe('AdminTodoGroup: Sort out several files', () => {
   it('shows the suggestion line and "Sort out editions…" for several-files and parts-mismatch rows', async () => {
     const { onSortOut } = renderGroup(find(film, 'severalFiles'));
@@ -123,7 +195,7 @@ describe('AdminTodoGroup: Sort out several files', () => {
     expect(
       within(region).getByText('2 files · 2 untagged versions of one film, runtimes differ by 22%'),
     ).toBeInTheDocument();
-    expect(within(region).getByText('The Two Towers (2002)')).toBeInTheDocument();
+    expect(within(region).getByText('The Two Towers')).toBeInTheDocument();
     const buttons = within(region).getAllByRole('button', { name: 'Sort out editions…' });
     expect(buttons[1]).toHaveAccessibleDescription(
       'Choose which file is which cut, the part order and the default.',
@@ -151,7 +223,7 @@ describe('AdminTodoGroup: the subtitle groups', () => {
     expect(
       within(region).getByText('Foreign-language films with nothing to read'),
     ).toBeInTheDocument();
-    expect(within(region).getByText('Rashomon (1950)')).toBeInTheDocument();
+    expect(within(region).getByText('Rashomon')).toBeInTheDocument();
     expect(within(region).queryByRole('button')).not.toBeInTheDocument();
     expect(within(region).getByText('Showing 1 of 1')).toBeInTheDocument();
     expect(within(region).getByRole('link', { name: 'All in Subtitles →' })).toHaveAttribute(
@@ -164,7 +236,7 @@ describe('AdminTodoGroup: the subtitle groups', () => {
     renderGroup(find(subtitles, 'forcedQuestion'));
 
     const region = screen.getByRole('region', { name: 'Forced subtitles not found' });
-    expect(within(region).getByText('Taken (2008)')).toBeInTheDocument();
+    expect(within(region).getByText('Taken')).toBeInTheDocument();
     expect(
       within(region).getByText('OpenSubtitles has 2 foreign-parts-only files'),
     ).toBeInTheDocument();

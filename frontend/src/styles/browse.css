@@ -1439,6 +1439,17 @@
 .admin__todo-count--phone {
   display: none;
 }
+.admin__todo-year {
+  font-weight: 400;
+  color: var(--cf-text-muted);
+}
+/* The phone header (AR6) shows a count where the wide one shows the why-line. */
+.admin__todo-group-count {
+  display: none;
+  margin: 0;
+  font-size: 13px;
+  color: var(--cf-text-muted);
+}
 .admin__todo-more {
   display: inline-flex;
   align-items: center;
@@ -1498,6 +1509,28 @@
   }
   .admin__todo-count--phone {
     display: inline;
+  }
+  .admin__todo-why {
+    display: none;
+  }
+  .admin__todo-group-count {
+    display: block;
+  }
+  /* The phone footer drops the count after "Show all" and the arrow after "All in Subtitles" (AR6). */
+  .admin__todo-wide {
+    display: none;
+  }
+  /* 06 shows no "To do" heading and no intro: the heading stays for assistive tech and as the focus target. */
+  .admin__ttl {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .admin__lead {
+    display: none;
   }
 }
 

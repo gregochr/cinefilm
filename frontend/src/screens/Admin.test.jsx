@@ -283,12 +283,12 @@ describe('Admin: To do lists', () => {
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
     renderApp('/admin');
-    expect(await screen.findByText('Blade Runner (1982)')).toBeInTheDocument();
-    expect(screen.queryByText('Fresh Film (1969)')).not.toBeInTheDocument();
+    expect(await screen.findByText('Blade Runner')).toBeInTheDocument();
+    expect(screen.queryByText('Fresh Film')).not.toBeInTheDocument();
 
     await act(() => vi.advanceTimersByTimeAsync(1500));
 
-    expect(await screen.findByText('Fresh Film (1969)')).toBeInTheDocument();
+    expect(await screen.findByText('Fresh Film')).toBeInTheDocument();
   });
 });
 

@@ -6,9 +6,9 @@ import {
   buttons,
   footerDesktop,
   footerPhone,
-  showAll,
   todoFooter,
   todoGroups,
+  todoRow,
 } from '../../state/adminCopy.js';
 import {
   bestGuess,
@@ -17,9 +17,10 @@ import {
   forcedLine,
   fullLine,
   matchLine,
+  rowTitle,
+  TODO_ROW_CAP,
   visibleRows,
 } from '../../state/adminTodo.js';
-import { titleWithYear } from '../../state/scanFormat.js';
 
 // The group keys of `adminTodo.js` (they follow the summary's `todo` figures) and their entries in `todoGroups`.
 const COPY_KEY = {
@@ -29,11 +30,16 @@ const COPY_KEY = {
   forcedQuestion: 'forcedNotFound',
 };
 
-function RowText({ title, line, mono = false }) {
+/** "Heat · 1995": the title with its year muted (AR1); a year that is only a guess carries a question mark. */
+function RowText({ row, line }) {
+  const { title, year } = rowTitle(row);
   return (
     <div className="admin__todo-text">
-      <p className="admin__todo-title">{title}</p>
-      <p className={`admin__todo-line${mono ? ' admin__mono' : ''}`}>{line}</p>
+      <p className="admin__todo-title">
+        {title}
+        {year ? <span className="admin__todo-year"> · {year}</span> : null}
+      </p>
+      <p className="admin__todo-line">{line}</p>
     </div>
   );
 }
@@ -41,27 +47,31 @@ function RowText({ title, line, mono = false }) {
 /** A film the scanner could not match: "Yes, it's …" when the server is confident, and always "Find the film…". */
 function MatchRow({ item, busy, problem, onConfirm, onFindFilm }) {
   const guess = item.confident ? bestGuess(item) : null;
-  const find = (event) => onFindFilm(item, event.currentTarget);
+  // While this row's post runs both buttons are aria-disabled (still focusable); a click on either does nothing.
+  const find = (event) => {
+    if (!busy) onFindFilm(item, event.currentTarget);
+  };
+  const busyProps = { 'aria-disabled': busy || undefined };
   return (
     <li className="admin__todo-row">
-      <RowText title={titleWithYear(item.title, item.year)} line={matchLine(item)} />
+      <RowText row={item} line={matchLine(item)} />
       <div className="admin__actions admin__todo-actions">
         {guess ? (
           <>
             {/* aria-disabled, not disabled: the button keeps focus while its request runs; the hook ignores clicks. */}
             <ActionWithHint
               hint={buttons.confirmGuess.hint}
-              aria-disabled={busy || undefined}
-              onClick={() => onConfirm(item)}
+              {...busyProps}
+              onClick={(event) => onConfirm(item, event.currentTarget)}
             >
               {buttons.confirmGuess.label(guess.title, guess.year)}
             </ActionWithHint>
-            <Button className="admin__todo-quiet" onClick={find}>
+            <Button className="admin__todo-quiet" {...busyProps} onClick={find}>
               {buttons.findFilm.label}
             </Button>
           </>
         ) : (
-          <ActionWithHint hint={buttons.findFilm.hint} onClick={find}>
+          <ActionWithHint hint={buttons.findFilm.hint} {...busyProps} onClick={find}>
             {buttons.findFilm.label}
           </ActionWithHint>
         )}
@@ -79,7 +89,7 @@ function MatchRow({ item, busy, problem, onConfirm, onFindFilm }) {
 function FilesRow({ item, onSortOut }) {
   return (
     <li className="admin__todo-row">
-      <RowText title={titleWithYear(item.title, item.year)} line={filesLine(item)} />
+      <RowText row={item} line={filesLine(item)} />
       <div className="admin__actions admin__todo-actions">
         <ActionWithHint
           hint={buttons.sortEditions.hint}
@@ -96,7 +106,7 @@ function FilesRow({ item, onSortOut }) {
 function SubtitleRow({ row, line }) {
   return (
     <li className="admin__todo-row">
-      <RowText title={titleWithYear(row.title, row.year)} line={line} />
+      <RowText row={row} line={line} />
     </li>
   );
 }
@@ -142,7 +152,10 @@ export default function AdminTodoGroup({
   onFindFilm,
   onSortOut,
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [open, setOpen] = useState(false);
+  // A group that has shrunk to the cap or below has nothing to fold: the next time it grows it starts folded.
+  const expanded = open && group.total > TODO_ROW_CAP;
+  if (open && !expanded) setOpen(false);
   const copy = todoGroups[COPY_KEY[group.key]];
   const headingId = `admin-todo-${group.key}`;
   const footer = footerFor(group, expanded);
@@ -153,6 +166,11 @@ export default function AdminTodoGroup({
           {copy.heading}
         </h2>
         <p className="admin__todo-why">{copy.why}</p>
+        <p className="admin__todo-group-count">
+          {(group.key === 'pickFilm' ? todoRow.groupCount.pickFilm : todoRow.groupCount.other)(
+            group.total,
+          )}
+        </p>
       </div>
       <ul className="admin__todo-rows">
         {visibleRows(group, expanded).map((row) =>
@@ -169,15 +187,18 @@ export default function AdminTodoGroup({
           </span>
           {footer.control === 'subtitles' ? (
             <Link to="/admin/subtitles" className="admin__todo-more">
-              {todoFooter.allInSubtitles}
+              {todoFooter.allInSubtitles}{' '}
+              <span className="admin__todo-wide">{todoFooter.arrow}</span>
             </Link>
           ) : (
-            <button
-              type="button"
-              className="admin__todo-more"
-              onClick={() => setExpanded((open) => !open)}
-            >
-              {expanded ? todoFooter.showFewer : showAll(footer.total)}
+            <button type="button" className="admin__todo-more" onClick={() => setOpen(!expanded)}>
+              {expanded ? (
+                todoFooter.showFewer
+              ) : (
+                <>
+                  {todoFooter.showAll} <span className="admin__todo-wide">{footer.total}</span>
+                </>
+              )}
             </button>
           )}
         </div>

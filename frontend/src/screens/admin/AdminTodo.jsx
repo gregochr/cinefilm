@@ -8,6 +8,18 @@ import AdminTodoNotice from './AdminTodoNotice.jsx';
 import SectionTitle from './SectionTitle.jsx';
 import { useFallbackFocus } from './useFallbackFocus.js';
 
+/**
+ * Once a confirmed row is hidden, focus goes straight to the section title when it was on that row (or nowhere): the
+ * button it was on is about to leave the page, and a fallback waiting for a later list change could be spent by another.
+ */
+function leaveRow(opener) {
+  const active = document.activeElement;
+  const row = opener?.closest('li');
+  if (!active || active === document.body || row?.contains(active)) {
+    document.getElementById('admin-section-title')?.focus();
+  }
+}
+
 const FILM_GROUPS = ['pickFilm', 'severalFiles'];
 
 /**
@@ -21,7 +33,6 @@ export default function AdminTodo() {
     subtitlesVersion,
     changed,
     markChanged,
-    armFocusFallback,
     openFixMatch,
     openEditEditions,
     adminSummary,
@@ -33,7 +44,6 @@ export default function AdminTodo() {
     subtitlesVersion,
     changed,
     onChanged: markChanged,
-    armFocusFallback,
   });
   const { attention, full, forced } = lists;
   useFallbackFocus(attention.data);
@@ -43,7 +53,7 @@ export default function AdminTodo() {
   const rowProps = {
     confirming: lists.confirming,
     problems: lists.problems,
-    onConfirm: lists.confirm,
+    onConfirm: (item, opener) => lists.confirm(item, { onHidden: () => leaveRow(opener) }),
     onFindFilm: openFixMatch,
     onSortOut: openEditions,
   };
@@ -53,7 +63,9 @@ export default function AdminTodo() {
     return found ? <AdminTodoGroup key={key} group={found} {...rowProps} /> : null;
   };
 
-  // A source's slot is its skeleton or its banner until it has rows to show; then its groups (maybe none).
+  // A source's slot is its skeleton or, when its first read failed, its banner, until it has answered once. After
+  // that a failed re-read keeps the last list on screen with no banner (as the summary does), and the next change
+  // reads it again.
   const slot = (source, label, message, keys) => {
     if (source.data) return keys.map(group);
     if (source.error) {

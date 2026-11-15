@@ -147,7 +147,8 @@ describe('adminCopy sections and footers', () => {
   });
 
   it('words the group footer controls and the row lines', () => {
-    expect(todoFooter.allInSubtitles).toBe('All in Subtitles →');
+    expect(todoFooter.allInSubtitles + ' ' + todoFooter.arrow).toBe('All in Subtitles →');
+    expect(todoFooter.showAll).toBe('Show all');
     expect(todoFooter.showFewer).toBe('Show fewer');
     expect(todoRow.bestGuess('Heat (1995)')).toBe('best guess: Heat (1995)');
     expect(todoRow.noGuess).toBe('best guess: none');

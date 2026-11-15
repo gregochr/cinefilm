@@ -34,7 +34,7 @@ describe('useAdminShell', () => {
     await waitFor(() => expect(reads()).toBe(before + 1));
   });
 
-  it('hands sections the change and focus-fallback actions: a change bumps `changed`, and the fallback is taken once', () => {
+  it('hands sections the change action: it bumps `changed`', () => {
     installFetch();
     const { result } = renderHook(() => useAdminShell(true));
     expect(result.current.value.changed).toBe(0);
@@ -42,10 +42,6 @@ describe('useAdminShell', () => {
     act(() => result.current.value.markChanged());
 
     expect(result.current.value.changed).toBe(1);
-    expect(result.current.value.takeFocusFallback()).toBe(false);
-    act(() => result.current.value.armFocusFallback());
-    expect(result.current.value.takeFocusFallback()).toBe(true);
-    expect(result.current.value.takeFocusFallback()).toBe(false);
   });
 
   it('remembers what opened each dialog, and closes them', () => {

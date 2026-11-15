@@ -72,7 +72,6 @@ export function useAdminShell(visible, pathname = '') {
       openFixMatch,
       openEditEditions,
       markChanged,
-      armFocusFallback,
       takeFocusFallback,
     },
     fixing,

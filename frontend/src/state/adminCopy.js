@@ -161,9 +161,11 @@ export const todoGroups = {
 
 /** The footer controls under a To do group. */
 export const todoFooter = {
-  allInSubtitles: 'All in Subtitles →', // AR1
+  allInSubtitles: 'All in Subtitles', // AR1; the arrow is drawn on wide screens only (AR6 has none)
+  arrow: '→', // AR1
+  showAll: 'Show all', // AR1; the count after it is drawn on wide screens only (AR6: "Show all")
   showFewer: 'Show fewer', // planner, 3c-2 (AR1 shows no way back after "Show all {n}")
-  source: 'AR1 for "All in Subtitles →"; planner 3c-2 for "Show fewer"',
+  source: 'AR1 (AR6 for the phone forms); planner 3c-2 for "Show fewer"',
 };
 
 /** The To do rows' small lines and the load messages AR1 does not show. All planner, 3c-2 unless noted. */
@@ -175,6 +177,24 @@ export const todoRow = {
     attention: 'Couldn’t load the films that need sorting out.',
     full: 'Couldn’t load the films missing English subtitles.',
     forced: 'Couldn’t load the films with forced subtitles to find.',
+  },
+  // The phone group header (AR6) shows a count where the wide one shows the why-line.
+  groupCount: {
+    pickFilm: (n) => `${n} ${n === 1 ? 'file' : 'files'}`, // AR6
+    other: (n) => `${n} ${n === 1 ? 'film' : 'films'}`, // AR6 (planner, 3c-2, for the groups it does not show)
+  },
+  // A guess that the file's own year did not give is marked with a question mark (AR1: "Heat · 1995?").
+  guessedYear: (year) => `${year}?`,
+  // The full-subtitles line (AR1); the language-less wording is the planner's, 3c-2.
+  spoken: (language) => `Spoken: ${language}`,
+  languageUnknown: 'Language not known yet',
+  noneFound: 'none found automatically on OpenSubtitles',
+  // "Yes, it's …" failures, worded for a row (the Fix match dialog's words talk about a dialog).
+  confirmProblems: {
+    gone: 'That film is no longer in the library. The list is being updated.',
+    scan: 'A scan is running. Try again when it finishes.',
+    tmdb: 'TMDB isn’t available right now. Try again in a moment.',
+    other: 'Something went wrong. Try again.',
   },
   retry: 'Try again',
   loadingLabel: 'Loading',
