@@ -29,11 +29,16 @@ public final class ForcedNeedDtos {
      *     still to come: the owner has to act (see {@code AdminTodoRules})
      * @param beingChecked true when the need is {@code NEEDED}, no forced subtitle is served and an automatic search
      *     or download is still to come
+     * @param editionId the edition the Admin picker searches OpenSubtitles for: the film's first present edition
+     *     (lowest id, one whose part 1 file is present). Set only while the need is {@code NEEDED} and no forced
+     *     subtitle is served (the rows the Subtitles tab and To do list); null otherwise and for a film with no
+     *     present edition
      */
     public record FilmNeedDto(Long filmId, String title, Integer year, String need, String reason,
                               String ownerChoice, String originalLanguage, List<String> spokenLanguages,
                               boolean hasForcedSubtitle, Integer openSubtitlesForcedCount,
-                              Instant openSubtitlesSearchedAt, boolean unresolved, boolean beingChecked) {
+                              Instant openSubtitlesSearchedAt, boolean unresolved, boolean beingChecked,
+                              Long editionId) {
     }
 
     /**

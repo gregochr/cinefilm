@@ -13,7 +13,8 @@
       "openSubtitlesForcedCount": 2,
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "editionId": 3000
     },
     {
       "filmId": 301,
@@ -28,7 +29,8 @@
       "openSubtitlesForcedCount": 2,
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "editionId": 3010
     },
     {
       "filmId": 302,
@@ -43,7 +45,8 @@
       "openSubtitlesForcedCount": 2,
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "editionId": 3020
     },
     {
       "filmId": 303,
@@ -58,7 +61,8 @@
       "openSubtitlesForcedCount": 2,
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "editionId": 3030
     },
     {
       "filmId": 304,
@@ -73,7 +77,8 @@
       "openSubtitlesForcedCount": 2,
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "editionId": 3040
     },
     {
       "filmId": 305,
@@ -88,7 +93,8 @@
       "openSubtitlesForcedCount": 2,
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "editionId": 3050
     },
     {
       "filmId": 306,
@@ -103,7 +109,8 @@
       "openSubtitlesForcedCount": 2,
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "editionId": 3060
     },
     {
       "filmId": 310,
@@ -118,7 +125,8 @@
       "openSubtitlesForcedCount": 0,
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": false,
-      "beingChecked": false
+      "beingChecked": false,
+      "editionId": null
     }
   ],
   "counts": {

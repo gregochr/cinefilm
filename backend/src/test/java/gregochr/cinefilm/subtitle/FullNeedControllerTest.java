@@ -33,7 +33,7 @@ class FullNeedControllerTest {
 
     private static final FullNeedFilmDto AMELIE = new FullNeedFilmDto(7L, "Amelie", 2001, "NEEDED", "OWNER",
         "NEEDED", List.of(new EditionAudioDto("Original", "French"), new EditionAudioDto("Dub", null)),
-        new FullSubtitleStateDto("DOWNLOAD"), "fr", false, true, true);
+        new FullSubtitleStateDto("DOWNLOAD"), "fr", false, true, true, 71L);
 
     @Autowired
     private MockMvc mvc;
@@ -70,6 +70,7 @@ class FullNeedControllerTest {
             .andExpect(jsonPath("$.films[0].unresolved").value(false))
             .andExpect(jsonPath("$.films[0].beingChecked").value(true))
             .andExpect(jsonPath("$.films[0].subtitled").value(true))
+            .andExpect(jsonPath("$.films[0].editionId").value(71))
             .andExpect(jsonPath("$.counts.notNeeded").value(4))
             .andExpect(jsonPath("$.counts.unresolved").value(5))
             .andExpect(jsonPath("$.counts.beingChecked").value(6))

@@ -8,9 +8,13 @@ import {
   filmTitle,
   foreignActions,
   foreignLine,
+  forcedActions,
   forcedRowLine,
   isUnlabelled,
   ownerChoices,
+  pickerAction,
+  pickerButton,
+  pickerTarget,
   tabAfterKey,
   unresolvedRows,
 } from './adminSubtitles.js';
@@ -22,6 +26,7 @@ const full = (over = {}) => ({
   need: 'NEEDED',
   reason: 'FOREIGN_AUDIO',
   originalLanguage: 'ja',
+  editionId: 102,
   fullSubtitle: null,
   unresolved: true,
   beingChecked: false,
@@ -97,15 +102,76 @@ describe('forcedRowLine', () => {
   });
 });
 
+describe('pickerAction', () => {
+  it('is the plain search for a full row, and the forced search for a forced row', () => {
+    expect(pickerAction(full(), 'full')).toBe('search');
+    expect(pickerAction(full(), 'forced')).toBe('findForced');
+  });
+
+  it('names the language for unlabelled audio when the original language is known', () => {
+    const unlabelled = full({ reason: 'ORIGINAL_AUDIO_ASSUMED', originalLanguage: 'de' });
+    expect(pickerAction(unlabelled, 'full')).toBe('itsInLanguage');
+    expect(pickerAction({ ...unlabelled, originalLanguage: null }, 'full')).toBe('search');
+    expect(pickerAction({ ...unlabelled, originalLanguage: '' }, 'full')).toBe('search');
+  });
+
+  it('is null for a row with no edition to search, for either kind', () => {
+    expect(pickerAction(full({ editionId: null }), 'full')).toBeNull();
+    expect(pickerAction(full({ editionId: undefined }), 'forced')).toBeNull();
+  });
+});
+
+describe('pickerButton', () => {
+  it('words each action, with the board’s hint for the search and none for the others', () => {
+    expect(pickerButton('search', full())).toEqual({
+      label: 'Search for English subtitles…',
+      hint: 'Shows OpenSubtitles results for this film so you can pick one',
+    });
+    expect(pickerButton('findForced', full())).toEqual({
+      label: 'Find forced subtitles…',
+      hint: undefined,
+    });
+    expect(pickerButton('itsInLanguage', full({ originalLanguage: 'de' }))).toEqual({
+      label: 'It’s in German — find subtitles',
+    });
+  });
+});
+
+describe('pickerTarget', () => {
+  it('carries the film for the title, the row’s edition and the kind', () => {
+    expect(pickerTarget(full(), 'full')).toEqual({
+      film: { id: 6, title: 'Rashomon', year: 1950 },
+      editionId: 102,
+      kind: 'full',
+    });
+  });
+});
+
 describe('foreignActions', () => {
-  it('offers "Add my own file…" alone, and "It’s English" too for unlabelled audio', () => {
+  it('offers the search then "Add my own file…", and "It’s English" too for unlabelled audio', () => {
     expect(isUnlabelled(full())).toBe(false);
-    expect(foreignActions(full())).toEqual(['addFile']);
+    expect(foreignActions(full())).toEqual(['search', 'addFile']);
     expect(isUnlabelled(full({ reason: 'ORIGINAL_AUDIO_ASSUMED' }))).toBe(true);
     expect(foreignActions(full({ reason: 'ORIGINAL_AUDIO_ASSUMED' }))).toEqual([
+      'itsInLanguage',
       'addFile',
       'itsEnglish',
     ]);
+  });
+
+  it('leaves the search out of a row with no edition', () => {
+    expect(foreignActions(full({ editionId: null }))).toEqual(['addFile']);
+    expect(foreignActions(full({ editionId: null, reason: 'ORIGINAL_AUDIO_ASSUMED' }))).toEqual([
+      'addFile',
+      'itsEnglish',
+    ]);
+  });
+});
+
+describe('forcedActions', () => {
+  it('offers "Find forced subtitles…" then "No foreign scenes", or the second alone without an edition', () => {
+    expect(forcedActions(full())).toEqual(['findForced', 'noForeignScenes']);
+    expect(forcedActions(full({ editionId: null }))).toEqual(['noForeignScenes']);
   });
 });
 

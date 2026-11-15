@@ -1,6 +1,7 @@
 import { todo, todoRow } from '../../state/adminCopy.js';
 import { todoHeadingCount } from '../../state/adminSummaryFormat.js';
 import { useAdminContext } from '../../state/adminContext.js';
+import { pickerTarget } from '../../state/adminSubtitles.js';
 import { useAdminTodo } from '../../state/useAdminTodo.js';
 import AdminStatusStrip from './AdminStatusStrip.jsx';
 import AdminTodoGroup from './AdminTodoGroup.jsx';
@@ -35,6 +36,8 @@ export default function AdminTodo() {
     markChanged,
     openFixMatch,
     openEditEditions,
+    openSubtitlePicker,
+    armFocusFallback,
     adminSummary,
   } = useAdminContext();
   // The heading never waits for the summary, and a failed re-read leaves the last good count.
@@ -46,7 +49,10 @@ export default function AdminTodo() {
     onChanged: markChanged,
   });
   const { attention, full, forced } = lists;
-  useFallbackFocus(attention.data);
+  // The rows on screen, so the fallback runs once a picked file's row has left (the opener goes with it).
+  useFallbackFocus(
+    lists.groups.map((g) => `${g.key}:${g.rows.map((r) => r.filmId).join(',')}`).join('|'),
+  );
 
   const openEditions = (item, opener) =>
     openEditEditions({ id: item.filmId, title: item.title, year: item.year }, opener);
@@ -56,6 +62,9 @@ export default function AdminTodo() {
     onConfirm: (item, opener) => lists.confirm(item, { onHidden: () => leaveRow(opener) }),
     onFindFilm: openFixMatch,
     onSortOut: openEditions,
+    // A picked file settles the row: if focus falls to the page with it, it goes to the section title.
+    onFindSubtitles: (row, kind, opener) =>
+      openSubtitlePicker(pickerTarget(row, kind), opener, { onPicked: armFocusFallback }),
   };
   const groupFor = (key) => lists.groups.find((g) => g.key === key);
   const group = (key) => {

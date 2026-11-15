@@ -21,6 +21,8 @@ import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.NeedRow;
 import gregochr.cinefilm.film.ForcedNeedChoice;
 import gregochr.cinefilm.film.MediaFileRepository;
+import gregochr.cinefilm.film.MediaFileRepository.AudioRow;
+import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.subtitle.ForcedNeedDtos.ChoiceRequest;
 import gregochr.cinefilm.subtitle.ForcedNeedDtos.CountsDto;
@@ -172,7 +174,7 @@ class ForcedNeedServiceTest {
         FilmNeedDto dto = service.list().films().get(0);
 
         assertThat(dto).isEqualTo(new FilmNeedDto(1L, "Taken", 2000, "NOT_NEEDED", "OWNER", "NOT_NEEDED", "en",
-            List.of("en", "fr", "sq"), true, null, null, false, false));
+            List.of("en", "fr", "sq"), true, null, null, false, false, null));
     }
 
     @Test
@@ -552,7 +554,7 @@ class ForcedNeedServiceTest {
 
         assertThat(taken.getForcedNeedOwner()).isEqualTo(ForcedNeedChoice.NOT_NEEDED);
         assertThat(dto).isEqualTo(new FilmNeedDto(7L, "Taken", 2008, "NOT_NEEDED", "OWNER", "NOT_NEEDED", "en",
-            List.of("en", "fr"), true, null, null, false, false));
+            List.of("en", "fr"), true, null, null, false, false, null));
         assertThat(events).containsExactly("begin, lock subtitle", "commit, lock subtitle");
         assertThat(lock.holder()).isNull();
     }
@@ -709,6 +711,49 @@ class ForcedNeedServiceTest {
         assertThat(list.counts().unresolved()).isEqualTo(3);
         assertThat(list.counts().beingChecked()).isEqualTo(2);
         verify(pending).forced(Map.of(4L, "tt4", 5L, "tt5"));
+    }
+
+    @Test
+    void aNeededFilmWithNoSubtitleCarriesItsFirstPresentEditionForThePickerAndEveryOtherRowCarriesNone() {
+        when(films.findNeedRows()).thenReturn(List.of(
+            row(1, "First", 10L, "en", "en", ASKED, ForcedNeedChoice.NEEDED),
+            row(2, "Gone", 20L, "en", "en", ASKED, ForcedNeedChoice.NEEDED),
+            row(3, "Served", 30L, "en", "en", ASKED, ForcedNeedChoice.NEEDED),
+            english(4, "English")));
+        when(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED)).thenReturn(List.of());
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(3L));
+        when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of());
+        Film served = withEdition(stored(3L, "en", "en", null));
+        when(editions.findWithFilesByFilmIdIn(Set.of(3L))).thenReturn(served.getEditions());
+        playbackServes(served, true);
+        // Film 1: edition 11 is missing, edition 12 is present (its second file is ignored), so 12.
+        // Film 2: nothing is present.
+        when(files.findAudioRows(List.of(1L, 2L))).thenReturn(List.of(
+            new AudioRow(1L, 11L, "Cut", 110L, 1, Presence.MISSING, null, null),
+            new AudioRow(1L, 12L, "Original", 120L, 1, Presence.PRESENT, "English", true),
+            new AudioRow(1L, 12L, "Original", 121L, 2, Presence.MISSING, "English", true),
+            new AudioRow(1L, 13L, "Later", 130L, 1, Presence.PRESENT, "English", true),
+            new AudioRow(2L, 21L, "Only", 210L, 1, Presence.MISSING, null, null)));
+
+        List<FilmNeedDto> list = service.list().films();
+
+        assertThat(list).extracting(FilmNeedDto::editionId).containsExactly(12L, null, null, null);
+        verify(files).findAudioRows(List.of(1L, 2L));
+    }
+
+    @Test
+    void theOwnersChoiceAnswersTheRowWithItsPickerEdition() {
+        Film taken = withEdition(stored(7L, "en", "en", null));
+        when(films.findByIdForUpdate(7L)).thenReturn(Optional.of(taken));
+        when(sidecars.countPresentForFilm(7L, SubtitleKind.FORCED)).thenReturn(0L);
+        when(files.countEmbeddedForcedForFilm(7L)).thenReturn(0L);
+        when(files.findAudioRows(List.of(7L))).thenReturn(List.of(
+            new AudioRow(7L, 70L, "Original", 700L, 1, Presence.PRESENT, "English", true)));
+
+        FilmNeedDto dto = service.choose(7L, new ChoiceRequest("NEEDED"));
+
+        assertThat(dto.need()).isEqualTo("NEEDED");
+        assertThat(dto.editionId()).isEqualTo(70L);
     }
 
     @Test

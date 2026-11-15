@@ -2,7 +2,7 @@
 // "Everything else" figures and the choice of a file for one film. Pure, no JSX: the Apple TV and native clients reuse
 // it. The server decides every rule (`unresolved`, `beingChecked`, `need`, and the `subtitled` and `inEnglish` counts);
 // nothing here re-derives one: this only picks the rows the server flagged and words what it sent.
-import { subtitlesPage, todoRow } from './adminCopy.js';
+import { buttons, subtitlesPage, todoRow } from './adminCopy.js';
 import { fullNeedReason, fullSubtitleLine } from './fullNeed.js';
 import { languageName, reasonText } from './forcedNeed.js';
 import { isFull, partOptions } from './subtitleAdmin.js';
@@ -50,9 +50,50 @@ export function forcedRowLine(row) {
   return reasonText(row);
 }
 
-/** The actions a foreign-language row offers, in order. The picker's ones (4c) are not here yet. */
+/**
+ * The action of a row that opens the OpenSubtitles picker, or null when it cannot: the row has no `editionId` (the
+ * film has no present edition, so there is nothing to search for). `kind` is `full` or `forced`. A full row whose audio
+ * is unlabelled and whose original language is known offers "It's in {language} — find subtitles"; any other full row
+ * "Search for English subtitles…"; a forced row "Find forced subtitles…".
+ */
+export function pickerAction(row, kind) {
+  if (row.editionId == null) return null;
+  if (kind === 'forced') return 'findForced';
+  return isUnlabelled(row) && row.originalLanguage ? 'itsInLanguage' : 'search';
+}
+
+/** The label (and hint, when the copy has one) of a picker action for a row. */
+export function pickerButton(action, row) {
+  if (action === 'itsInLanguage') {
+    return { label: buttons.itsInLanguage.label(languageName(row.originalLanguage)) };
+  }
+  const entry = action === 'findForced' ? buttons.findForced : buttons.searchEnglishSubtitles;
+  return { label: entry.label, hint: entry.hint };
+}
+
+/** What the layout opens the picker with: the film (for the title), the edition to search and the kind. */
+export function pickerTarget(row, kind) {
+  return {
+    film: { id: row.filmId, title: row.title, year: row.year },
+    editionId: row.editionId,
+    kind,
+  };
+}
+
+/**
+ * The actions a foreign-language row offers, in order: the picker's button first (when the row has an edition),
+ * "Add my own file…", and "It's English" for unlabelled audio.
+ */
 export function foreignActions(row) {
-  return isUnlabelled(row) ? ['addFile', 'itsEnglish'] : ['addFile'];
+  const find = pickerAction(row, 'full');
+  const own = isUnlabelled(row) ? ['addFile', 'itsEnglish'] : ['addFile'];
+  return find ? [find, ...own] : own;
+}
+
+/** The actions a forced-subtitles row offers, in order: "Find forced subtitles…" (when it has an edition), then "No foreign scenes". */
+export function forcedActions(row) {
+  const find = pickerAction(row, 'forced');
+  return find ? [find, 'noForeignScenes'] : ['noForeignScenes'];
 }
 
 /**

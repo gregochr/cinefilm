@@ -19,7 +19,8 @@
       "originalLanguage": "de",
       "unresolved": false,
       "beingChecked": false,
-      "subtitled": true
+      "subtitled": true,
+      "editionId": 31
     },
     {
       "filmId": 4,
@@ -38,7 +39,8 @@
       "originalLanguage": "fr",
       "unresolved": false,
       "beingChecked": false,
-      "subtitled": false
+      "subtitled": false,
+      "editionId": 41
     },
     {
       "filmId": 5,
@@ -63,7 +65,8 @@
       "originalLanguage": null,
       "unresolved": false,
       "beingChecked": false,
-      "subtitled": false
+      "subtitled": false,
+      "editionId": 51
     },
     {
       "filmId": 6,
@@ -72,12 +75,18 @@
       "need": "NEEDED",
       "reason": "OWNER",
       "ownerChoice": "NEEDED",
-      "editions": [],
+      "editions": [
+        {
+          "name": "Original",
+          "audio": null
+        }
+      ],
       "fullSubtitle": null,
       "originalLanguage": "ja",
       "unresolved": true,
       "beingChecked": false,
-      "subtitled": false
+      "subtitled": false,
+      "editionId": 102
     },
     {
       "filmId": 7,
@@ -96,7 +105,8 @@
       "originalLanguage": "ru",
       "unresolved": false,
       "beingChecked": true,
-      "subtitled": false
+      "subtitled": false,
+      "editionId": 71
     }
   ],
   "counts": {

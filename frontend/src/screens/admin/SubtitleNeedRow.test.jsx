@@ -10,7 +10,7 @@ afterEach(() => {
 });
 
 function renderRow(props) {
-  const handlers = { onChoose: vi.fn(), onAttached: vi.fn() };
+  const handlers = { onChoose: vi.fn(), onAttached: vi.fn(), onFind: vi.fn() };
   render(
     <ul>
       <SubtitleNeedRow saving={false} problem={undefined} {...handlers} {...props} />
@@ -20,14 +20,69 @@ function renderRow(props) {
 }
 
 describe('SubtitleNeedRow: a foreign-language film', () => {
-  it('offers "Add my own file…" for a film with labelled audio, and nothing for the picker', () => {
+  it('offers the search and "Add my own file…" for a film with labelled audio, in that order', () => {
     renderRow({ row: fullRow(), kind: 'foreign' });
 
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Search for English subtitles…',
+      'Add my own file…',
+    ]);
     expect(screen.getByRole('button', { name: 'Add my own file…' })).toHaveAccessibleDescription(
       'Picks one of your subtitle files for this film',
     );
+    expect(
+      screen.getByRole('button', { name: 'Search for English subtitles…' }),
+    ).toHaveAccessibleDescription('Shows OpenSubtitles results for this film so you can pick one');
+    expect(screen.getByRole('button', { name: 'Search for English subtitles…' })).toHaveAttribute(
+      'aria-haspopup',
+      'dialog',
+    );
     expect(screen.queryByRole('button', { name: 'It’s English' })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button')).toHaveLength(1);
+  });
+
+  it('opens the picker through onFind with the row and the button that was clicked', async () => {
+    const row = fullRow();
+    const { onFind } = renderRow({ row, kind: 'foreign' });
+    const search = screen.getByRole('button', { name: 'Search for English subtitles…' });
+
+    await userEvent.click(search);
+
+    expect(onFind).toHaveBeenCalledTimes(1);
+    expect(onFind).toHaveBeenCalledWith(row, search);
+  });
+
+  it('ignores a click on the search while the row’s choice is saving', async () => {
+    const { onFind } = renderRow({ row: fullRow(), kind: 'foreign', saving: true });
+    const search = screen.getByRole('button', { name: 'Search for English subtitles…' });
+
+    await userEvent.click(search);
+
+    expect(search).toHaveAttribute('aria-disabled', 'true');
+    expect(onFind).not.toHaveBeenCalled();
+  });
+
+  it('offers no search for a film with no edition to search', () => {
+    renderRow({ row: fullRow({ editionId: null }), kind: 'foreign' });
+
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Add my own file…']);
+  });
+
+  it('names the language on the search for unlabelled audio and has no plain search', () => {
+    renderRow({ row: unlabelledRow(), kind: 'foreign' });
+
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'It’s in German — find subtitles',
+      'Add my own file…',
+      'It’s English',
+    ]);
+  });
+
+  it('falls back to the plain search for unlabelled audio when TMDB has no language', () => {
+    renderRow({ row: unlabelledRow({ originalLanguage: null }), kind: 'foreign' });
+
+    expect(
+      screen.getByRole('button', { name: 'Search for English subtitles…' }),
+    ).toBeInTheDocument();
   });
 
   it('offers "It’s English" for unlabelled audio and saves it through onChoose', async () => {
@@ -75,22 +130,45 @@ describe('SubtitleNeedRow: a foreign-language film', () => {
 });
 
 describe('SubtitleNeedRow: an English film with foreign scenes', () => {
-  it('offers only "No foreign scenes" and saves it through onChoose', async () => {
+  it('offers "Find forced subtitles…" and "No foreign scenes", and saves the second through onChoose', async () => {
     const row = forcedRow();
-    const { onChoose } = renderRow({ row, kind: 'forced' });
+    const { onChoose, onFind } = renderRow({ row, kind: 'forced' });
 
     expect(screen.getByText('OpenSubtitles has 2 foreign-parts-only files')).toBeInTheDocument();
-    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Find forced subtitles…',
+      'No foreign scenes',
+    ]);
     await userEvent.click(screen.getByRole('button', { name: 'No foreign scenes' }));
 
     expect(onChoose).toHaveBeenCalledWith(row);
+    expect(onFind).not.toHaveBeenCalled();
+  });
+
+  it('opens the picker through onFind, without saving a choice first', async () => {
+    const row = forcedRow();
+    const { onChoose, onFind } = renderRow({ row, kind: 'forced' });
+    const find = screen.getByRole('button', { name: 'Find forced subtitles…' });
+
+    await userEvent.click(find);
+
+    expect(onFind).toHaveBeenCalledWith(row, find);
+    expect(onChoose).not.toHaveBeenCalled();
+  });
+
+  it('offers only "No foreign scenes" when the film has no edition to search', () => {
+    renderRow({ row: forcedRow({ editionId: null }), kind: 'forced' });
+
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['No foreign scenes']);
   });
 
   it('does nothing while saving', async () => {
-    const { onChoose } = renderRow({ row: forcedRow(), kind: 'forced', saving: true });
+    const { onChoose, onFind } = renderRow({ row: forcedRow(), kind: 'forced', saving: true });
 
     await userEvent.click(screen.getByRole('button', { name: 'No foreign scenes' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Find forced subtitles…' }));
 
     expect(onChoose).not.toHaveBeenCalled();
+    expect(onFind).not.toHaveBeenCalled();
   });
 });

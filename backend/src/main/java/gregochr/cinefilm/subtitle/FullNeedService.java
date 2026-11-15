@@ -83,7 +83,7 @@ public class FullNeedService {
     }
 
     /** One present edition's audio: its name and the label of part 1's default (else first) audio track. */
-    private record EditionAudio(String name, String label) {
+    private record EditionAudio(Long id, String name, String label) {
     }
 
     /**
@@ -294,7 +294,7 @@ public class FullNeedService {
     private static void flush(Map<Long, List<EditionAudio>> byFilm, AudioRow part1, List<Track> tracks) {
         if (part1 != null && part1.presence() == Presence.PRESENT) {
             byFilm.computeIfAbsent(part1.filmId(), id -> new ArrayList<>())
-                .add(new EditionAudio(part1.editionName(), FullNeed.audioLanguage(tracks)));
+                .add(new EditionAudio(part1.editionId(), part1.editionName(), FullNeed.audioLanguage(tracks)));
         }
     }
 
@@ -367,7 +367,8 @@ public class FullNeedService {
             eval.decision().reason().name(), row.owner() == null ? null : row.owner().name(),
             eval.editions().stream().map(e -> new EditionAudioDto(e.name(), e.label())).toList(), eval.playing(),
             row.originalLanguage(), AdminTodoRules.unresolvedFull(facts), AdminTodoRules.beingCheckedFull(facts),
-            browsable && AdminTodoRules.subtitledFull(facts));
+            browsable && AdminTodoRules.subtitledFull(facts),
+            eval.editions().isEmpty() ? null : eval.editions().get(0).id());
     }
 
     private static FullNeedCountsDto counts(List<FullNeedFilmDto> rows, int inEnglish) {

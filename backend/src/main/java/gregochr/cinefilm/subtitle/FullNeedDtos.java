@@ -45,11 +45,13 @@ public final class FullNeedDtos {
      *     download is still to come
      * @param subtitled true when the film shows in browse, its need is {@code NEEDED} and a full subtitle plays (the
      *     rows {@code AdminTodoRules} calls settled)
+     * @param editionId the edition the Admin picker searches OpenSubtitles for: the film's first present edition
+     *     (lowest id, one whose part 1 file is present), or null when it has none
      */
     public record FullNeedFilmDto(Long filmId, String title, Integer year, String need, String reason,
                                   String ownerChoice, List<EditionAudioDto> editions,
                                   FullSubtitleStateDto fullSubtitle, String originalLanguage, boolean unresolved,
-                                  boolean beingChecked, boolean subtitled) {
+                                  boolean beingChecked, boolean subtitled, Long editionId) {
     }
 
     /**

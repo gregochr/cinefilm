@@ -350,6 +350,47 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
 - A `useDialog` dialog listing results; choosing one downloads, closes and the row leaves; errors inline. Wired to
   the foreign tab, the forced "Yes…" and To do. Second click while downloading does nothing; closing mid-request
   ignores the late answer.
+- **4c decision (built):** `components/SubtitlePicker.jsx` is a `useDialog` dialog (the Edit editions frame and error
+  banner, never amber) hosted by the layout like Fix match and Edit editions: `openSubtitlePicker({ film, editionId,
+  kind }, opener, { onPicked })` is in the Admin context, `picking` in `useAdminShell`, and the path changing closes it.
+  The search and download state is `state/useSubtitlePicker.js` (the search is `useResource`, so a newer one aborts an
+  older and its late answer is ignored); the wording of a result and of a failure is `state/subtitlePicker.js`
+  (the server's `$.error` text for every refusal, else the 429 words, else one plain line per phase).
+  - **Edition: a backend shape change.** Neither need list had an edition id. `FullNeedFilmDto` and `FilmNeedDto` gain
+    `editionId`: the film's first present edition (lowest id, part 1 present). Full rows always carry it (it is the first
+    of `editions`); forced rows carry it only while `NEEDED` with no forced subtitle served (one `findAudioRows` query for
+    those films), else null. A null `editionId` means nothing to search, and the button is left out. Foundation plan,
+    contract tests and fixtures updated.
+  - **Buttons.** Foreign rows: "Search for English subtitles…" (AR1's hint) or, for unlabelled audio with a known
+    language, "It's in {language} — find subtitles", then "Add my own file…" and "It's English". Forced rows:
+    "Find forced subtitles…" then "No foreign scenes". To do's English-subtitles and forced rows get the picker button
+    only (the other choices stay in Subtitles). **Departure from the README:** the forced button does not save `NEEDED`
+    first (the README's "Yes, find forced subtitles…"): Q3's tab lists only films that are already `NEEDED`, so the
+    save would change nothing; the button keeps Q3's name "Find forced subtitles…".
+  - **Not built: "Search again…" / "Use it anyway"** for a distrusted download: still no trust in the API (see 4a).
+  - **A result row** shows what the DTO has: the release name (else the file name, else "File {id}"; long names wrap),
+    downloads, fps, "Trusted uploader", "Hearing impaired", the upload year; the footer says how many more files the
+    edition may be given. Results keep the server's order; nothing is ranked or filtered in the browser.
+  - **One download at a time.** The buttons are `aria-disabled` (still focusable) while one runs and after one
+    succeeded; the hook guards with a ref, so two clicks in one frame send one POST. A failure frees the picker.
+  - **Closing mid-request (decided):** the POST is not aborted (the server may still save the file). The late answer sets
+    no state in the dialog; a late success still calls `onDownloaded(answer, { open: false })`, which the layout turns
+    into `markChanged`, so the lists read again and show the server's truth (a row leaves only because the server's list
+    says so). A late failure is dropped. The layout closes only the picker that is still the open one and runs its
+    follow-up (`onPicked`, which To do uses to arm the focus fallback) only then.
+  - **Row leaving and focus.** A success closes the dialog, calls `markChanged` (summary, rail, both Subtitles lists
+    and the To do lists read again) and the row leaves with the re-read, not before. Focus returns to the opener when the
+    dialog closes; when the opener then leaves with its row, the Subtitles panel takes focus (its existing rule, now
+    also set when a picker opens) and To do moves focus to the section title (`useFallbackFocus` now watches the rows on
+    screen, not the attention list, so it runs when a subtitle row leaves).
+  - **Dev mock:** edition ids on the fixture rows; a download settles the film whose row names the edition; the
+    lowest-ranked forced file (5013) answers 429 and the second full file (6011) answers 502; every fixture refusal now
+    carries its text in the body, as the API does.
+  - **Copy** is in `adminCopy.js` `subtitlePicker`, all "planner, 4c" except the 429 text (the server's): the eyebrow
+    and lead per kind, "Searching OpenSubtitles…", "Couldn't search OpenSubtitles. Try again.", "Couldn't download that
+    file. Try again.", "Try again", "OpenSubtitles has no files for this film yet.", "OpenSubtitles results", "Use this
+    file" / "Downloading…", "Cancel", "Close", "File {id}", the detail words ("{n} downloads", "{fps} fps", "Trusted
+    uploader", "Hearing impaired", "Uploaded {year}") and "{n} more files can be added for this edition".
 
 ### 5a · Playback: now playing, chart, per-minute view
 

@@ -456,8 +456,64 @@
   }
 }
 
+/* The OpenSubtitles picker (4c) reuses the dialog frame above; no amber, errors in the banner's colours */
+.sp {
+  width: 720px;
+}
+.sp__lead {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--cf-text-muted);
+}
+.sp__empty {
+  margin: 0;
+  color: var(--cf-text-2);
+}
+.sp__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--cf-line);
+  border-radius: var(--cf-radius-card);
+}
+.sp__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 16px;
+}
+.sp__row + .sp__row {
+  border-top: 1px solid var(--cf-line);
+}
+.sp__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+/* Release names have no spaces: they wrap anywhere rather than push the page sideways. */
+.sp__name {
+  font-family: var(--cf-font-mono);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--cf-text);
+  overflow-wrap: anywhere;
+}
+.sp__meta {
+  font-size: 12px;
+  color: var(--cf-text-muted);
+}
+
 /* Phone: a full-screen sheet, rows stacked, a sticky footer with equal-width buttons */
 @media (max-width: 600px) {
+  .sp__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sp__choose {
+    width: 100%;
+  }
   .ee {
     align-items: stretch;
   }

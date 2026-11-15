@@ -88,7 +88,7 @@ describe('Admin Subtitles section: the page', () => {
     expect(within(panel).queryByText('Das Boot')).not.toBeInTheDocument();
   });
 
-  it('words each foreign row and offers only the actions that exist today', async () => {
+  it('words each foreign row and offers the search, the attach and the choices', async () => {
     serve();
     renderApp('/admin/subtitles');
 
@@ -108,28 +108,26 @@ describe('Admin Subtitles section: the page', () => {
     ).toBeInTheDocument();
     const rashomonRow = rowOf('Rashomon');
     expect(
-      within(rashomonRow).getByRole('button', { name: 'Add my own file…' }),
-    ).toBeInTheDocument();
-    expect(
-      within(rashomonRow).queryByRole('button', { name: 'It’s English' }),
-    ).not.toBeInTheDocument();
+      within(rashomonRow)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['Search for English subtitles…', 'Add my own file…']);
     const downfallRow = rowOf('Downfall');
+    expect(
+      within(downfallRow)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['It’s in German — find subtitles', 'Add my own file…', 'It’s English']);
     expect(
       within(downfallRow).getByRole('button', { name: 'It’s English' }),
     ).toHaveAccessibleDescription('“It’s English” marks it done and stops asking');
-    // Search is the picker's (4c): no button for it, and no distrusted-download buttons (the API has no trust).
-    for (const name of [
-      /Search for English subtitles/,
-      /find subtitles/,
-      /Find forced subtitles/,
-      'Use it anyway',
-      'Search again…',
-    ]) {
+    // No distrusted-download buttons: the API has no trust.
+    for (const name of ['Use it anyway', 'Search again…']) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
     }
   });
 
-  it('words the forced rows and offers "No foreign scenes"', async () => {
+  it('words the forced rows and offers the search and "No foreign scenes"', async () => {
     serve();
     renderApp('/admin/subtitles');
 
@@ -145,8 +143,8 @@ describe('Admin Subtitles section: the page', () => {
       within(panel).getByRole('button', { name: 'No foreign scenes' }),
     ).toHaveAccessibleDescription('“No foreign scenes” marks it done and stops asking');
     expect(
-      within(panel).queryByRole('button', { name: /Find forced subtitles/ }),
-    ).not.toBeInTheDocument();
+      within(panel).getByRole('button', { name: 'Find forced subtitles…' }),
+    ).toBeInTheDocument();
     // Switching tabs hides the other panel.
     expect(
       screen.queryByRole('tabpanel', { name: /Foreign-language films/ }),

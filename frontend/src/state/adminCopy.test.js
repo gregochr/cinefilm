@@ -7,6 +7,7 @@ import {
   rememberedNetworksNote,
   railNames,
   statusStrip,
+  subtitlePicker,
   subtitlesPage,
   todoCount,
   todoFooter,
@@ -301,5 +302,41 @@ describe('adminCopy playingNow', () => {
   it('has the failure and load-error lines', () => {
     expect(playingNow.stopFailed).toBe('Couldn’t stop that stream. Try again.');
     expect(playingNow.loadError).toBe('Couldn’t load what is playing.');
+  });
+});
+
+describe('the OpenSubtitles picker copy', () => {
+  it('has the dialog’s words per kind', () => {
+    expect(subtitlePicker.eyebrow).toEqual({
+      full: 'English subtitles from OpenSubtitles',
+      forced: 'Forced subtitles from OpenSubtitles',
+    });
+    expect(subtitlePicker.lead.full).toBe(
+      'Best matches for this cut come first. Choosing one downloads it and it plays with the film.',
+    );
+    expect(subtitlePicker.lead.forced).toBe(
+      'Only files that hold the foreign lines. Choosing one downloads it and it plays with the film.',
+    );
+  });
+
+  it('has the states, the buttons and the 429 text the server uses', () => {
+    expect(subtitlePicker.loading).toBe('Searching OpenSubtitles…');
+    expect(subtitlePicker.searchError).toBe('Couldn’t search OpenSubtitles. Try again.');
+    expect(subtitlePicker.downloadError).toBe('Couldn’t download that file. Try again.');
+    expect(subtitlePicker.quota).toBe('OpenSubtitles daily limit reached — try again tomorrow.');
+    expect(subtitlePicker.empty).toBe('OpenSubtitles has no files for this film yet.');
+    expect(subtitlePicker.choose).toEqual({ label: 'Use this file', busyLabel: 'Downloading…' });
+    expect(subtitlePicker.chooseName('A.srt')).toBe('Use this file: A.srt');
+    expect(subtitlePicker.unnamed(7)).toBe('File 7');
+    expect(subtitlePicker.source).toContain('planner, 4c');
+  });
+
+  it('counts downloads and files in the singular and plural', () => {
+    expect(subtitlePicker.detail.downloads(1)).toBe('1 download');
+    expect(subtitlePicker.detail.downloads(0)).toBe('0 downloads');
+    expect(subtitlePicker.detail.downloads(12345)).toBe('12,345 downloads');
+    expect(subtitlePicker.left(1)).toBe('1 more file can be added for this edition');
+    expect(subtitlePicker.left(0)).toBe('0 more files can be added for this edition');
+    expect(subtitlePicker.left(3)).toBe('3 more files can be added for this edition');
   });
 });

@@ -22,6 +22,7 @@ export const unlabelledRow = (over = {}) =>
     ownerChoice: null,
     originalLanguage: 'de',
     editions: [{ name: 'Original', audio: null }],
+    editionId: 82,
     ...over,
   });
 
@@ -56,12 +57,26 @@ const forcedCounts = (rows) => ({
  * recorded in `calls`, and every later read of the list shows it, so a reload keeps it. `fail` is a function
  * `(kind) => Response | null` that turns a PUT into a failure; `english` is how many English films the full list
  * does not hold (they count as "in English"); `gate` holds PUTs until the test lets them through.
+ *
+ * It also serves the picker: a search answers the OpenSubtitles fixture for the edition and kind, and a download
+ * (recorded in `downloads`) settles the film whose row names that edition, the way the server's rules would (a full
+ * subtitle plays, or a forced one is served), so every later read of the list leaves the row out. `failDownload` is a
+ * function `(body) => Response | null` that turns a download into a failure; `searchGate` holds searches.
  */
-export function serveNeeds({ full = [], forced = [], english = 0, fail = () => null, gate } = {}) {
+export function serveNeeds({
+  full = [],
+  forced = [],
+  english = 0,
+  fail = () => null,
+  gate,
+  failDownload = () => null,
+  searchGate,
+} = {}) {
   const lists = { full: structuredClone(full), forced: structuredClone(forced) };
   // The rows as the server first sent them: giving a choice back restores what the automatic rule said.
   const original = { full: structuredClone(full), forced: structuredClone(forced) };
   const calls = [];
+  const downloads = [];
   const reads = { full: 0, forced: 0 };
   const route = (method, url, init) => {
     const path = new URL(url, 'http://test.local').pathname;
@@ -72,6 +87,36 @@ export function serveNeeds({ full = [], forced = [], english = 0, fail = () => n
     if (path === '/api/admin/forced-subtitles/films') {
       reads.forced += 1;
       return respond({ films: lists.forced, counts: forcedCounts(lists.forced) });
+    }
+    const picker = path.match(/^\/api\/admin\/editions\/(\d+)\/opensubtitles(\/download)?$/);
+    if (picker) {
+      const editionId = Number(picker[1]);
+      if (!picker[2]) {
+        const kind = new URL(url, 'http://test.local').searchParams.get('kind');
+        const found = { ...structuredClone(fixtures.adminOpenSubtitles[kind]), editionId };
+        return searchGate ? searchGate().then(() => respond(found)) : respond(found);
+      }
+      const body = JSON.parse(init.body);
+      downloads.push({ editionId, ...body });
+      return (async () => {
+        const failure = failDownload(body);
+        if (failure) return failure;
+        const rows = lists[body.kind === 'full' ? 'full' : 'forced'];
+        const row = rows.find((r) => r.editionId === editionId);
+        if (row) {
+          Object.assign(
+            row,
+            { unresolved: false, beingChecked: false },
+            body.kind === 'full'
+              ? { fullSubtitle: { source: 'DOWNLOAD' }, subtitled: true }
+              : { hasForcedSubtitle: true },
+          );
+        }
+        const { release } = fixtures.adminOpenSubtitles[body.kind].results.find(
+          (r) => r.fileId === body.fileId,
+        );
+        return respond({ editionId, ...body, release, downloadsLeft: 2 });
+      })();
     }
     const put = path.match(/^\/api\/admin\/films\/(\d+)\/(full|forced)-need$/);
     if (!put || method !== 'PUT') return null;
@@ -103,5 +148,5 @@ export function serveNeeds({ full = [], forced = [], english = 0, fail = () => n
       return respond(rows[at]);
     })();
   };
-  return { route, calls, reads, lists };
+  return { route, calls, downloads, reads, lists };
 }

@@ -31,7 +31,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class ForcedNeedControllerTest {
 
     private static final FilmNeedDto TAKEN = new FilmNeedDto(7L, "Taken", 2008, "NEEDED", "OWNER", "NEEDED", "en",
-        List.of("en", "fr", "sq"), true, 7, Instant.parse("2024-03-31T23:30:00Z"), true, false);
+        List.of("en", "fr", "sq"), true, 7, Instant.parse("2024-03-31T23:30:00Z"), true, false, 71L);
 
     @Autowired
     private MockMvc mvc;
@@ -57,6 +57,7 @@ class ForcedNeedControllerTest {
             .andExpect(jsonPath("$.films[0].reason").value("OWNER"))
             .andExpect(jsonPath("$.films[0].ownerChoice").value("NEEDED"))
             .andExpect(jsonPath("$.films[0].originalLanguage").value("en"))
+            .andExpect(jsonPath("$.films[0].editionId").value(71))
             .andExpect(jsonPath("$.films[0].spokenLanguages[0]").value("en"))
             .andExpect(jsonPath("$.films[0].spokenLanguages[2]").value("sq"))
             .andExpect(jsonPath("$.films[0].hasForcedSubtitle").value(true))

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { subtitlesPage } from '../../state/adminCopy.js';
+import { pickerTarget } from '../../state/adminSubtitles.js';
 import { panelId, tabId } from './AdminTabList.jsx';
 import AdminTodoNotice from './AdminTodoNotice.jsx';
 import SubtitleNeedRow from './SubtitleNeedRow.jsx';
@@ -11,13 +12,14 @@ const LABELS = { foreign: 'the foreign-language films', forced: 'the forced subt
  * heading with their count. `need` is the list's state (`useNeedChoices`) and `rows` its unresolved rows (null until
  * read). A list that has not answered is a static skeleton, or an inline banner with its own retry when its first
  * read failed; a re-read that fails keeps the rows and says so above them. `active` shows the panel (the other is
- * hidden, still in the page so the tab's `aria-controls` is true). `onChanged` runs after a file is attached.
+ * hidden, still in the page so the tab's `aria-controls` is true). `onChanged` runs after a file is attached;
+ * `onFind(target, opener)` opens the OpenSubtitles picker for a row (`target` is what `pickerTarget` builds).
  *
  * A choice is one request per film: a click on a row that is saving does nothing. When a saved choice or an attached
  * file makes the row leave and focus fell to the page with it, focus moves to this panel (the tab's content), where
  * the next rows are; focus that is somewhere real is left alone, and a failed save keeps the row and its focus.
  */
-export default function SubtitleNeedPanel({ kind, active, need, rows, onChanged }) {
+export default function SubtitleNeedPanel({ kind, active, need, rows, onChanged, onFind }) {
   const panelRef = useRef(null);
   const sent = useRef(new Set());
   const leaving = useRef(null);
@@ -39,6 +41,11 @@ export default function SubtitleNeedPanel({ kind, active, need, rows, onChanged 
     sent.current.add(row.filmId);
     leaving.current = row.filmId;
     need.choose(row.filmId, 'NOT_NEEDED').finally(() => sent.current.delete(row.filmId));
+  };
+  // The picked file settles the row, so the focus rule above covers it too (a cancelled picker leaves the row alone).
+  const find = (row, opener) => {
+    leaving.current = row.filmId;
+    onFind(pickerTarget(row, kind === 'foreign' ? 'full' : 'forced'), opener);
   };
   const attached = (row) => {
     leaving.current = row.filmId;
@@ -84,6 +91,7 @@ export default function SubtitleNeedPanel({ kind, active, need, rows, onChanged 
                   problem={need.problems[row.filmId]}
                   onChoose={choose}
                   onAttached={attached}
+                  onFind={find}
                 />
               ))}
             </ul>
