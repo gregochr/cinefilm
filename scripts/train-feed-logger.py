@@ -101,7 +101,7 @@ def fetch(url, timeout, insecure=False, max_size=None):
         done = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout + 5)
     except subprocess.TimeoutExpired:
         return {"ok": False, "why": "timed out", "ms": int((time.time() - started) * 1000)}
-    except (OSError, ValueError) as error:  # ValueError: a NUL in the address
+    except (OSError, ValueError) as error:  # defensive: a NUL in an address (find_script filters those out first)
         return {"ok": False, "why": "could not run curl (%s)" % error, "ms": 0}
     raw_body, _, raw_tail = done.stdout.rpartition(MARK.encode())
     body, tail = raw_body.decode("utf-8", "replace"), raw_tail.decode("utf-8", "replace")
@@ -218,7 +218,7 @@ def timed_curl(url, timeout, *options):
         done = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout + 5)
     except subprocess.TimeoutExpired:
         return {"why": "timed out"}
-    except (OSError, ValueError) as error:  # ValueError: a NUL in the address
+    except (OSError, ValueError) as error:  # defensive: a NUL in an address (find_script filters those out first)
         return {"why": "could not run curl (%s)" % error}
     try:
         code, size, first, total = done.stdout.decode("ascii", "replace").split()
@@ -235,9 +235,12 @@ def probe(url):
                      "--max-filesize", str(PROBE_MAX_BYTES))
     if "why" in got:
         return {"ms": None, "why": got["why"]}
+    # A status that was received decides first, whatever else curl reports (a 404 that then stalls is a 404).
+    if got["code"] and not 200 <= got["code"] < 300:
+        return {"ms": None, "why": "answered %d" % got["code"]}
     if got["curl"] not in (0, 63):
         return {"ms": None, "why": CURL_ERRORS.get(got["curl"], "curl error %d" % got["curl"])}
-    if not 200 <= got["code"] < 300:  # whatever the body: a redirect or a 404 is not a working internet check
+    if not 200 <= got["code"] < 300:
         return {"ms": None, "why": "answered %d" % got["code"]}
     if got["curl"] == 63:  # too big: the status was still received
         return {"ms": int(got["first"] * 1000), "code": got["code"], "body": "not read"}
@@ -294,9 +297,13 @@ def sample_speed(url, timeout):
         "bytes": got["size"], "ms": int(got["total"] * 1000), "first_byte_ms": int(got["first"] * 1000),
         "kbps": kbps(got["size"], got["first"], got["total"]),
     }
-    if got["curl"] not in (0, 63):
+    if got["code"] and not 200 <= got["code"] < 300:
+        # A status that was received decides first, whatever else curl reports: a 404 that then stalls or drops is
+        # still a 404, and the address is forgotten.
+        result["why"] = "answered %d" % got["code"]
+    elif got["curl"] not in (0, 63):
         result["why"] = CURL_ERRORS.get(got["curl"], "curl error %d" % got["curl"])
-    elif not 200 <= got["code"] < 300:  # whatever the body: a 404 is not a site that ignores ranges
+    elif not 200 <= got["code"] < 300:  # no status at all
         result["why"] = "answered %d" % got["code"]
     elif got["curl"] == 63:  # a 2xx that curl stopped at the limit
         result["why"] = "the site ignores ranges"
@@ -548,7 +555,10 @@ class Logger:
             try:
                 self.take_speed_sample(record)
             except Exception as error:  # pylint: disable=broad-except
-                record["speed"] = {"why": "failed (%s)" % str(error)[:100]}
+                record["speed"] = {"why": "failed (%s: %s)" % (type(error).__name__, str(error)[:100])}
+                # Whatever it was may have come from the script's address: read the page again next round.
+                self.script_url = None
+                self.speed_from_logged = False
         return record
 
     def take_speed_sample(self, record):

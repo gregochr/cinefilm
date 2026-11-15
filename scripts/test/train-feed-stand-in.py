@@ -24,7 +24,7 @@ Site:  / is a page naming /assets/index-test.js (300,000 bytes, which honours a 
        /generate_404_big a 404 with a 1 MiB body.
        Site variants: ignoresrange and ignoresrange-nolength send the whole script, 200, whatever Range says (the
        second without a Content-Length); otherorigin names a script on 127.0.0.1 port --other-port; gone-big
-       answers the script with a 404 and a 1 MiB body.
+       answers the script with a 404 and a 1 MiB body, gone-stall with a 404 and a stalled body.
 """
 import argparse
 import json
@@ -181,6 +181,14 @@ class Handler(BaseHTTPRequestHandler):
         if OPTIONS.site == "gone-big":
             self.reply(404, "text/plain", b"x" * 1048576)
             return
+        if OPTIONS.site == "gone-stall":  # a 404 with no length, some body, then a stall
+            self.send_response(404)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"x" * 1000)
+            self.wfile.flush()
+            time.sleep(6)
+            return
         if OPTIONS.site == "ignoresrange-nolength":  # no Content-Length: the body ends when the connection does
             self.send_response(200)
             self.send_header("Content-Type", "application/javascript")
@@ -238,7 +246,7 @@ def main():
     parser.add_argument("--html-part", help="this part of the feed answers a web page")
     parser.add_argument("--site", default="normal", choices=(
         "normal", "noscript", "trickle", "brokenscript", "bigpage", "ignoresrange", "ignoresrange-nolength",
-        "otherorigin", "gone-big"))
+        "otherorigin", "gone-big", "gone-stall"))
     parser.add_argument("--other-port", type=int)
     parser.add_argument("--request-log")
     parser.add_argument("--connection-log")

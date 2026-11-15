@@ -531,6 +531,15 @@ assert_eq "it is a 404, not a site that ignores ranges, in both rounds" '["answe
     "$(jv "$LOG" '[L[1]["speed"]["why"], L[2]["speed"]["why"]]')"
 assert_eq "the page was read again in round 2: the stale address was forgotten" 2 "$(grep -cx 'GET /' "$TMP/goneb.log")"
 
+echo "a script that answers 404 and then stalls"
+serve gonest --site gone-stall --request-log "$TMP/gonest.log"
+SITE_GS="http://127.0.0.1:$PORT"
+run_logger --base "http://127.0.0.1:$PORT/api/jsonp/" --probe off --speed-site "$SITE_GS" --speed-timeout 1 \
+    --interval 1 --rounds 2
+assert_eq "the status decides, not the timeout, in both rounds" '["answered 404", "answered 404"]' \
+    "$(jv "$LOG" '[L[1]["speed"]["why"], L[2]["speed"]["why"]]')"
+assert_eq "the page was read again in round 2: the stale address was forgotten" 2 "$(grep -cx 'GET /' "$TMP/gonest.log")"
+
 echo "a site that ignores the range"
 serve ignores --site ignoresrange --request-log "$TMP/ignores.log"
 SITE_I="http://127.0.0.1:$PORT"
@@ -1006,9 +1015,54 @@ def round_with_failing_sample(logger):
     return with_fetch(lambda url, timeout, insecure=False, max_size=None: dict(GOOD), lambda: logger.round(1))
 
 
-record = round_with_failing_sample(m.Logger(["http://a.test/api/jsonp/"], None, False, speed_site="http://site.test"))
+sample_logger = m.Logger(["http://a.test/api/jsonp/"], None, False, speed_site="http://site.test")
+sample_logger.script_url = "http://site.test/assets/a.js"  # as if found in an earlier round
+sample_logger.speed_from_logged = True
+record = round_with_failing_sample(sample_logger)
 check("a speed sample that raises leaves the round its feed", sorted(m.PARTS), sorted(record.get("feed", {})))
-check("and records why", {"why": "failed (embedded null byte)"}, record.get("speed"))
+check("and records what and why", {"why": "failed (ValueError: embedded null byte)"}, record.get("speed"))
+check("and forgets the script's address", (None, False), (sample_logger.script_url, sample_logger.speed_from_logged))
+del sample_logger.take_speed_sample  # the real one again
+asked_pages = []
+
+
+def reading_pages(url, timeout, insecure=False, max_size=None):
+    asked_pages.append(url)
+    return dict(GOOD, body='<script src="/assets/a.js"></script>')
+
+
+real_sample = m.sample_speed
+m.sample_speed = lambda url, timeout: {"bytes": 1, "ms": 1, "first_byte_ms": 1, "kbps": None}
+try:
+    with_fetch(reading_pages, lambda: sample_logger.round(2))
+finally:
+    m.sample_speed = real_sample
+check("the next round reads the page again", True, "http://site.test" in asked_pages)
+
+for what, call in (("fetch", lambda: m.fetch("http://x.test/a\x00b", 3)), ("timed_curl", lambda: m.timed_curl("http://x.test/a\x00b", 3))):
+    got = call()
+    check(what + ": a NUL in the address is a why, not an exception", True, "could not run curl" in got["why"])
+
+
+def stubbed_curl(name, version_line_and_exit, call):
+    path = stubs + "/" + name
+    with open(path, "w") as out:
+        out.write("#!/bin/sh\n" + version_line_and_exit + "\n")
+    os.chmod(path, 0o755)
+    real = m.CURL
+    m.CURL = path
+    try:
+        return call()
+    finally:
+        m.CURL = real
+
+
+check("probe: a status that was received decides first, whatever curl exits with", {"ms": None, "why": "answered 404"},
+      stubbed_curl("curl-404-timeout", "printf '404 10 0.1 10.0'; exit 28", lambda: m.probe("http://x.test/")))
+check("sample_speed: the same", "answered 404", stubbed_curl(
+    "curl-404-dropped", "printf '404 10 0.1 10.0'; exit 56", lambda: m.sample_speed("http://x.test/a.js", 3))["why"])
+check("sample_speed: no status at all falls through to curl's reason", "timed out", stubbed_curl(
+    "curl-0-timeout", "printf '000 0 0 0'; exit 28", lambda: m.sample_speed("http://x.test/a.js", 3))["why"])
 
 a_down = {"now": False}
 
@@ -1047,7 +1101,7 @@ while IFS= read -r line; do
         "FAIL "*) bad "${line#FAIL }"; PURE=$((PURE + 1)) ;;
     esac
 done <<< "$RESULTS"
-assert_eq "all 138 pure checks reported" 138 "$PURE"
+assert_eq "all 145 pure checks reported" 145 "$PURE"
 
 echo "compiles"
 PYTHONPYCACHEPREFIX="$TMP/pyc" python3 -m py_compile "$LOGGER" "$STAND_IN"
