@@ -613,6 +613,32 @@ describe('the player’s subtitle timing', () => {
     expect(later()).toHaveAttribute('aria-disabled', 'true');
   });
 
+  it('a change the server does not serve cancels the earlier one still loading: its late load does not swap', async () => {
+    let presses = 0;
+    await openPlayer({
+      mutate: fullOn(SIDECAR([70])),
+      answer: (method) => {
+        if (method !== 'PUT') return null;
+        presses += 1;
+        return presses === 2 ? respond(answerRow({ id: 70, offsetMs: 500, served: false })) : null;
+      },
+    });
+    await openPanel();
+    const track = screen.getByTestId('full-subtitle-track');
+    await userEvent.click(later());
+    const first = await screen.findByTestId('full-subtitle-track-pending');
+
+    await userEvent.click(later());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('This subtitle has changed');
+    await waitFor(() => expect(first).not.toBeInTheDocument());
+    expect(pendingFull()).not.toBeInTheDocument();
+    fireEvent.load(first);
+    expect(screen.getByTestId('full-subtitle-track')).toBe(track);
+    expect(track.track.mode).toBe('showing');
+    expect(screen.getByRole('alert')).toHaveTextContent('This subtitle has changed');
+  });
+
   it('a double click sends one change; the buttons say they are busy and keep focus', async () => {
     let release;
     const gate = new Promise((resolve) => {

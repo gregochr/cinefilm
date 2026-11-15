@@ -17,7 +17,8 @@ export function fileTrackKey(kind, token) {
  * One step. `begin`: a change was saved, its token (and the offsets it carries) starts loading as the pending track (a
  * newer one replaces an older pending). `commit`: that pending track loaded, so it becomes the current one and the old
  * one goes. `fail`: it did not load, so it is dropped and the current one stays. A step for a token that is no longer
- * the pending one does nothing. There is no step for the kind no longer showing: its pending track stays mounted
+ * the pending one does nothing. `cancel`: the file changed under the viewer (the server no longer serves it), so any
+ * pending track is dropped whatever its token, and the current one stays. There is no step for the kind no longer showing: its pending track stays mounted
  * beside the old one, both `disabled`, and is settled (loaded or failed) once the kind shows again, or when it
  * finishes a fetch it had already started.
  */
@@ -42,6 +43,11 @@ export function swapTracks(state, { type, kind, token, offsets }) {
       return track.pending === token
         ? { ...state, [kind]: { ...track, pending: null, pendingOffsets: null } }
         : state;
+    case 'cancel':
+      // The changed file is no longer the one served: nothing pending may take over any more.
+      return track.pending === null
+        ? state
+        : { ...state, [kind]: { ...track, pending: null, pendingOffsets: null } };
     default:
       return state;
   }

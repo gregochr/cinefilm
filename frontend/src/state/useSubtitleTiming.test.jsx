@@ -224,6 +224,31 @@ describe('useSubtitleTiming', () => {
     expect(result.current.problem).toBe(subtitleTiming.changed);
   });
 
+  it('a change the server does not serve cancels what was still loading, and a frozen file takes no press and no retry', async () => {
+    const rows = [row(1, 0)];
+    const { calls } = serve({
+      rows,
+      answer: (method) =>
+        method === 'PUT' ? respond({ ...rows[0], offsetMs: 250, served: false }) : null,
+    });
+    const props = open({ offsets: [0] });
+    const onReplaced = vi.fn();
+    const { result, rerender } = renderHook((p) => useSubtitleTiming(p), {
+      initialProps: { ...props, onReplaced },
+    });
+
+    await act(() => result.current.later());
+    expect(onReplaced).toHaveBeenCalledExactlyOnceWith('FULL');
+
+    // The screen differs from the server, which would be a retry; frozen, nothing is sent or loaded.
+    rerender({ ...props, onReplaced, onScreen: [0] });
+    await act(() => result.current.later());
+    await act(() => result.current.reset());
+    expect(calls).toHaveLength(1);
+    expect(props.onApplied).not.toHaveBeenCalled();
+    expect(onReplaced).toHaveBeenCalledTimes(1);
+  });
+
   it('stops at the first row the server no longer serves: later rows are not sent and nothing reloads', async () => {
     const rows = [row(1, 0), row(2, 0), row(3, 0)];
     const { calls } = serve({

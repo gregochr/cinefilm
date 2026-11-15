@@ -62,6 +62,13 @@ describe('swapTracks', () => {
     expect(swapTracks(state, { type: 'settle', kind: 'FULL' })).toBe(state);
   });
 
+  it('cancel drops any pending track whatever its token, keeps the current one, and does nothing when none is pending', () => {
+    expect(
+      swapTracks(pending('b', 'a', [250], [0]), { type: 'cancel', kind: 'FULL' }).FULL,
+    ).toEqual({ current: 'a', pending: null, currentOffsets: [0], pendingOffsets: null });
+    expect(swapTracks(NO_SWAPS, { type: 'cancel', kind: 'FULL' })).toBe(NO_SWAPS);
+  });
+
   it('leaves the other kind alone and ignores an unknown step', () => {
     const next = swapTracks(NO_SWAPS, { type: 'begin', kind: 'FORCED', token: 'x', offsets: [1] });
 

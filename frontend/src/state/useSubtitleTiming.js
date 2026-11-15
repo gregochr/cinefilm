@@ -18,19 +18,23 @@ import { EARLIER, LATER, nextOffsets, timingProblem, trackToken } from './subtit
  * - One press per file at a time (a ref, so two clicks in one frame send one request); the buttons stay focusable and
  *   `busy` says why they do nothing.
  * - If the server no longer serves a changed row (it answers `served: false`: the owner's check was cleared and another
- *   subtitle plays now), the rows after it are not sent, the track is not reloaded, and the timing of that file stays
+ *   subtitle plays now), the rows after it are not sent, the track is not reloaded, a change still loading is cancelled
+ *   (`onReplaced(kind)`), and the timing of that file stays
  *   `frozen` for the rest of the viewing, with the subtitle-changed line saying why.
  * - What an answer says (offsets, a problem) belongs to the file it was for: a problem is forgotten when the shown file
  *   changes. The offsets learned here are kept for each file, so switching away and back shows them. The `<track>` of a
  *   file that changed is still told (`onApplied`), whatever shows now; nothing is said after the player is gone.
  */
-export function useSubtitleTiming({ kind, ids, offsets, onScreen = null, onApplied }) {
+export function useSubtitleTiming({ kind, ids, offsets, onScreen = null, onApplied, onReplaced }) {
   const fileKey =
     kind && ids?.length && offsets?.length === ids.length ? `${kind}:${ids.join(',')}` : null;
   const shown = useRef({ fileKey, kind, ids, offsets, onScreen });
   shown.current = { fileKey, kind, ids, offsets, onScreen };
   const callback = useRef(onApplied);
   callback.current = onApplied;
+  const replacedCallback = useRef(onReplaced);
+  replacedCallback.current = onReplaced;
+  const frozenKeys = useRef(new Set());
   const alive = useRef(true);
   const flying = useRef(new Set());
   // Offsets learned from answers, by file; the ref is what a press reads, the state is what renders.
@@ -62,7 +66,8 @@ export function useSubtitleTiming({ kind, ids, offsets, onScreen = null, onAppli
   const press = useCallback(
     async (delta) => {
       const { fileKey: key, kind: fileKind, ids: fileIds, offsets: base, onScreen } = shown.current;
-      if (!key || flying.current.has(key)) return;
+      // A file the server no longer serves is left alone for the rest of the viewing: no press, no retry.
+      if (!key || flying.current.has(key) || frozenKeys.current.has(key)) return;
       const start = learned.current[key] ?? base;
       const rows = fileIds.map((id, i) => ({ id, offsetMs: start[i] }));
       // One absolute offset per row that actually moves, in the film's order.
@@ -103,7 +108,12 @@ export function useSubtitleTiming({ kind, ids, offsets, onScreen = null, onAppli
       }
       // The answers say whether each row is still the one served. If not, another subtitle plays now.
       const replaced = answers.some((a) => a.served === false);
-      if (replaced && alive.current) setFrozen((keys) => [...keys, key]);
+      if (replaced) frozenKeys.current.add(key);
+      if (replaced && alive.current) {
+        setFrozen((keys) => [...keys, key]);
+        // An earlier change of this file may still be loading: it must not take over now.
+        replacedCallback.current?.(fileKind);
+      }
       say(key, problem ?? (replaced ? subtitleTiming.changed : null));
       // Whatever shows now, the file that was changed has new timing: its track is told, unless it is no longer served.
       if (answers.length > 0 && !replaced && alive.current) {

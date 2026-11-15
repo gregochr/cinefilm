@@ -412,6 +412,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
     offsets: shownFile?.offsetsMs,
     onScreen: shownOffsets,
     onApplied: (kind, token, offsets) => dispatchSwaps({ type: 'begin', kind, token, offsets }),
+    onReplaced: (kind) => dispatchSwaps({ type: 'cancel', kind }),
   });
   // The new timing's track loaded: it takes over. It failed, or neither loaded nor failed within SWAP_TIMEOUT_MS: it is
   // dropped, the old one stays and the viewer is told. Only the kind that shows is watched (and timed: the 20 s start
