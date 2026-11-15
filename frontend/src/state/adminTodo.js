@@ -92,7 +92,7 @@ export function filesLine(item) {
 }
 
 /**
- * The small line under a full-subtitles row (AR1): "Spoken: Japanese · none found automatically on OpenSubtitles".
+ * The small line under a full-subtitles row (AR1): "Spoken: Japanese · nothing found automatically on OpenSubtitles".
  * The language is the film's `originalLanguage`; a film with a subtitle that plays but is unresolved says what plays
  * instead of "none found".
  */

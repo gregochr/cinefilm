@@ -18,7 +18,8 @@
       },
       "originalLanguage": "de",
       "unresolved": false,
-      "beingChecked": false
+      "beingChecked": false,
+      "subtitled": true
     },
     {
       "filmId": 4,
@@ -36,7 +37,8 @@
       "fullSubtitle": null,
       "originalLanguage": "fr",
       "unresolved": false,
-      "beingChecked": false
+      "beingChecked": false,
+      "subtitled": false
     },
     {
       "filmId": 5,
@@ -60,7 +62,8 @@
       },
       "originalLanguage": null,
       "unresolved": false,
-      "beingChecked": false
+      "beingChecked": false,
+      "subtitled": false
     },
     {
       "filmId": 6,
@@ -73,7 +76,8 @@
       "fullSubtitle": null,
       "originalLanguage": "ja",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "subtitled": false
     },
     {
       "filmId": 7,
@@ -91,7 +95,8 @@
       "fullSubtitle": null,
       "originalLanguage": "ru",
       "unresolved": false,
-      "beingChecked": true
+      "beingChecked": true,
+      "subtitled": false
     }
   ],
   "counts": {
@@ -100,6 +105,8 @@
     "unknown": 1,
     "notNeeded": 1,
     "unresolved": 1,
-    "beingChecked": 1
+    "beingChecked": 1,
+    "subtitled": 1,
+    "inEnglish": 531
   }
 }

@@ -17,10 +17,13 @@ const without = (record, key) => {
  * even if that write failed. Only the last write's answer is applied to the row (`saving[filmId]` is set until
  * then) and only its failure is reported in `problems[filmId]`, with the row left at the last answer the server
  * gave. Other films stay free. Nothing is refetched, and a list read that started before the save arrived cannot
- * undo it. After unmount the write in flight is never aborted, its result is ignored (no state is set) and no waiting
- * choice is sent.
+ * undo it. `onSaved(row)` runs once when a film's chain ends having saved at least one write, with the last saved row, even when
+ * a later queued write failed (the screen re-reads what depends on it); `counts` is the server's `counts` of the list last read. After unmount the write in flight is never aborted,
+ * its result sets no state and no waiting choice is sent, but a write that was saved still calls `onSaved` (once, as above): the
+ * owner left the page after choosing, and what depends on the choice (the layout's summary and rail counts) is not
+ * the page's.
  */
-export function useNeedChoices({ name, refreshKey, load, save }) {
+export function useNeedChoices({ name, refreshKey, load, save, onSaved }) {
   // One counter orders everything: a list read is numbered when it starts, a saved choice when its answer arrives.
   const sequence = useRef(0);
   const { data, error, loading, reload } = useResource(`${name}:${refreshKey}`, async (options) => {
@@ -35,6 +38,9 @@ export function useNeedChoices({ name, refreshKey, load, save }) {
   // The write each film is waiting on, with the choice a newer click wants sent next: `{ pending: null | { choice } }`.
   const chains = useRef(new Map());
   const mounted = useRef(true);
+  // `onSaved` is read when a chain ends, so the latest one runs without making `choose` change.
+  const savedHandler = useRef(onSaved);
+  savedHandler.current = onSaved;
 
   useEffect(() => {
     mounted.current = true;
@@ -63,10 +69,18 @@ export function useNeedChoices({ name, refreshKey, load, save }) {
         chain.pending = null;
         try {
           const row = await save(filmId, next.choice);
+          if (!mounted.current) {
+            savedHandler.current?.(row);
+            return;
+          }
           answer = { row, answeredAt: ++sequence.current };
           failure = null;
         } catch (error) {
-          if (!mounted.current) return;
+          if (!mounted.current) {
+            // A later write failed after the page was left, but an earlier one in the chain had been saved.
+            if (answer) savedHandler.current?.(answer.row);
+            return;
+          }
           failure = error; // only the last write's failure is reported; a queued choice is still sent
         }
         if (!mounted.current) return;
@@ -76,6 +90,7 @@ export function useNeedChoices({ name, refreshKey, load, save }) {
       if (answer) setSaved((prev) => ({ ...prev, [filmId]: answer }));
       if (failure) setProblems((prev) => ({ ...prev, [filmId]: needProblem(failure) }));
       setSaving((prev) => without(prev, filmId));
+      if (answer) savedHandler.current?.(answer.row);
     },
     [save],
   );
@@ -87,5 +102,5 @@ export function useNeedChoices({ name, refreshKey, load, save }) {
       .reduce((list, entry) => applyRow(list, entry.row), data.films);
   }, [data, saved]);
 
-  return { rows, error, loading, reload, problems, saving, choose };
+  return { rows, counts: data?.counts ?? null, error, loading, reload, problems, saving, choose };
 }

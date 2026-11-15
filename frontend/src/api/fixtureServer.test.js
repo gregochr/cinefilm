@@ -471,6 +471,8 @@ describe('fixture server: Admin settings', () => {
       notNeeded: 1,
       unresolved: 1,
       beingChecked: 1,
+      subtitled: 1,
+      inEnglish: 531,
     });
 
     const chosen = await call('PUT', '/api/admin/films/3/full-need', { choice: 'NOT_NEEDED' });
@@ -488,6 +490,9 @@ describe('fixture server: Admin settings', () => {
       notNeeded: 2,
       unresolved: 1,
       beingChecked: 1,
+      // Das Boot was settled and is now not needed: one fewer subtitled film, one more in English.
+      subtitled: 0,
+      inEnglish: 532,
     });
 
     const automatic = await call('PUT', '/api/admin/films/3/full-need', { choice: null });
@@ -662,5 +667,53 @@ describe('fixture server: Admin settings', () => {
         }),
       ).toMatchObject({ status: 404, message: 'No such edition' });
     });
+  });
+
+  // Last: it changes what the later reads of the full-need list say, and the module keeps that state.
+  it('attaches a file by hand on POST like the real route: the row names the film and edition, and the film’s need is settled', async () => {
+    const failure = async (id, body) => {
+      const pending = handle('POST', `/api/admin/subtitles/${id}/attach`, body).catch((e) => e);
+      await vi.advanceTimersByTimeAsync(80);
+      return pending;
+    };
+    const before = await call('GET', '/api/admin/subtitles/full-need');
+    expect(before.films.find((f) => f.filmId === 6)).toMatchObject({
+      fullSubtitle: null,
+      unresolved: true,
+    });
+
+    const answer = await call('POST', '/api/admin/subtitles/1/attach', {
+      editionId: 62,
+      part: null,
+    });
+
+    expect(answer).toMatchObject({
+      id: 1,
+      state: 'matched',
+      ownerAttached: true,
+      filmId: 6,
+      filmTitle: 'Blade Runner',
+      editionId: 62,
+      editionName: "Director's Cut",
+      parts: 1,
+      part: null,
+      whole: true,
+    });
+    const listed = (await call('GET', '/api/admin/subtitles')).find((f) => f.id === 1);
+    expect(listed).toEqual(answer);
+    const after = await call('GET', '/api/admin/subtitles/full-need');
+    expect(after.films.find((f) => f.filmId === 6)).toMatchObject({
+      fullSubtitle: { source: 'SIDECAR' },
+      unresolved: false,
+      beingChecked: false,
+    });
+    expect(after.counts.unresolved).toBe(before.counts.unresolved - 1);
+    expect(after.counts.subtitled).toBe(before.counts.subtitled + 1);
+
+    const part = await call('POST', '/api/admin/subtitles/1/attach', { editionId: 11, part: 2 });
+    expect(part).toMatchObject({ filmId: 1, editionName: 'Theatrical Cut', part: 2, whole: false });
+    expect((await failure(1, {})).status).toBe(400);
+    expect((await failure(1, { editionId: 999 })).status).toBe(404);
+    expect((await failure(999, { editionId: 11 })).status).toBe(404);
   });
 });

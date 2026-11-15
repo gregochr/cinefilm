@@ -217,6 +217,50 @@ function removeSubtitle(id) {
   return null;
 }
 
+/** Files attached by hand so far, by row id, kept in memory: the list shows them attached, as the server would. */
+const attachedSubtitles = new Map();
+
+/** The list as it stands: removed downloads left out, hand attachments laid over their rows. */
+function subtitleList() {
+  return adminSubtitles
+    .filter((row) => !removedSubtitleIds.has(row.id))
+    .map((row) => ({ ...row, ...attachedSubtitles.get(row.id) }));
+}
+
+/** The films a file was attached to by hand: their full-subtitle row then plays the owner's file. */
+const filmsWithOwnFile = new Set();
+
+/** The film and edition a fixture edition id belongs to, or null. */
+function filmOfEdition(editionId) {
+  for (const film of Object.values(details)) {
+    const edition = film.editions.find((e) => e.id === editionId);
+    if (edition) return { film, edition };
+  }
+  return null;
+}
+
+function attachSubtitle(id, body) {
+  const row = adminSubtitles.find((r) => r.id === id && !removedSubtitleIds.has(r.id));
+  if (!row) throw new ApiError(404, 'No such subtitle file');
+  if (!Number.isInteger(body?.editionId)) throw new ApiError(400, 'editionId is required');
+  const found = filmOfEdition(body.editionId);
+  if (!found) throw new ApiError(404, 'No such edition');
+  const part = body.part ?? null;
+  attachedSubtitles.set(id, {
+    state: 'matched',
+    ownerAttached: true,
+    filmId: found.film.id,
+    filmTitle: found.film.title,
+    editionId: found.edition.id,
+    editionName: found.edition.name,
+    parts: found.edition.parts ?? 1,
+    part,
+    whole: part === null,
+  });
+  filmsWithOwnFile.add(found.film.id);
+  return subtitleList().find((r) => r.id === id);
+}
+
 const CHOICES = new Set(['NEEDED', 'NOT_NEEDED']);
 /**
  * The owner's choice per film, kept in memory: absent means the fixture as loaded, NEEDED or NOT_NEEDED an explicit
@@ -281,6 +325,9 @@ function setForcedNeed(filmId, body) {
   return forcedRow(automatic);
 }
 
+/** English-original films outside the full-need list in the fixture library (they count as "in English"). */
+const ENGLISH_OUT_OF_SCOPE = 530;
+
 /** The owner's choice per film on full subtitles, kept in memory; a film without one has the fixture's own row. */
 const fullChoices = new Map();
 
@@ -299,7 +346,17 @@ const FULL_IF_NEEDED = {
   7: { unresolved: false, beingChecked: true },
 };
 
-function fullRow(loaded) {
+function fullRow(row) {
+  const base = fullRowOfChoice(row);
+  // An owner's file attached by hand plays, so the film is settled: not unresolved, not being checked.
+  const settled = filmsWithOwnFile.has(row.filmId)
+    ? { ...base, fullSubtitle: { source: 'SIDECAR' }, unresolved: false, beingChecked: false }
+    : base;
+  // The server's `subtitled` flag: needed, and a full subtitle plays (every fixture film shows in browse).
+  return { ...settled, subtitled: settled.need === 'NEEDED' && Boolean(settled.fullSubtitle) };
+}
+
+function fullRowOfChoice(loaded) {
   if (!fullChoices.has(loaded.filmId)) return loaded;
   const choice = fullChoices.get(loaded.filmId);
   if (choice) {
@@ -321,6 +378,8 @@ function fullNeedList() {
       notNeeded: count('NOT_NEEDED'),
       unresolved: rows.filter((r) => r.unresolved).length,
       beingChecked: rows.filter((r) => r.beingChecked).length,
+      subtitled: rows.filter((r) => r.subtitled).length,
+      inEnglish: ENGLISH_OUT_OF_SCOPE + count('NOT_NEEDED'),
     },
   };
 }
@@ -407,8 +466,10 @@ export async function handle(method, path, body) {
     return method === 'PUT' ? updateSettings(body) : settingsView();
   }
   if (route === '/api/admin/subtitles') {
-    return adminSubtitles.filter((row) => !removedSubtitleIds.has(row.id));
+    return subtitleList();
   }
+  match = route.match(/^\/api\/admin\/subtitles\/(\d+)\/attach$/);
+  if (match && method === 'POST') return attachSubtitle(Number(match[1]), body);
   match = route.match(/^\/api\/admin\/subtitles\/(\d+)$/);
   if (match && method === 'DELETE') return removeSubtitle(Number(match[1]));
   if (route === '/api/admin/forced-subtitles/films') return forcedNeedList();

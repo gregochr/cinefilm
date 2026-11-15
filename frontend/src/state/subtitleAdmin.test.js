@@ -29,6 +29,7 @@ import {
   reportLine,
   servedLine,
   sidecarGroups,
+  takeFiles,
   subtitleProblem,
   warningsFor,
 } from './subtitleAdmin.js';
@@ -547,5 +548,24 @@ describe('removing a download', () => {
       "Remove this download? CineFilm won't use this file for this edition again.",
     );
     expect(REMOVED_NOTICE).toBe("Download removed. CineFilm won't use it for this edition again.");
+  });
+});
+
+describe('takeFiles', () => {
+  const groups = [
+    { key: 'unmatched', title: 'Unmatched', items: [{ id: 1 }] },
+    { key: 'matched', title: 'Matched', items: [{ id: 2 }, { id: 3 }, { id: 4 }] },
+  ];
+
+  it('takes the first files across the groups in the order they are drawn, cutting the group the limit falls in', () => {
+    expect(takeFiles(groups, 3).map((g) => g.items.map((i) => i.id))).toEqual([[1], [2, 3]]);
+    expect(takeFiles(groups, 2).map((g) => g.items.map((i) => i.id))).toEqual([[1], [2]]);
+  });
+
+  it('drops a group the limit never reaches, and keeps all of them at or above the total', () => {
+    expect(takeFiles(groups, 1).map((g) => g.key)).toEqual(['unmatched']);
+    expect(takeFiles(groups, 4).map((g) => g.items.length)).toEqual([1, 3]);
+    expect(takeFiles(groups, 5).map((g) => g.items.length)).toEqual([1, 3]);
+    expect(takeFiles(groups, 0)).toEqual([]);
   });
 });

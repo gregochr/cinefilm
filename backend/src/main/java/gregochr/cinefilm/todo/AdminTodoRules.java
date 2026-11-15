@@ -91,6 +91,11 @@ public final class AdminTodoRules {
         return facts.needed() && !facts.playsFullSubtitle();
     }
 
+    /** A full row is settled: {@code NEEDED} and a full English subtitle plays (the complement of in play). */
+    public static boolean subtitledFull(FullFacts facts) {
+        return facts.needed() && !inPlayFull(facts);
+    }
+
     /** An in-play full row with an automatic download still to come. */
     public static boolean beingCheckedFull(FullFacts facts) {
         if (!inPlayFull(facts) || !facts.hasImdbId()) {

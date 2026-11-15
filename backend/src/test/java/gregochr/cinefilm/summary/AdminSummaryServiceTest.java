@@ -95,7 +95,7 @@ class AdminSummaryServiceTest {
     }
 
     private static FullNeedListDto fullNeed(int unresolved) {
-        return new FullNeedListDto(List.of(), new FullNeedCountsDto(9, 8, 7, 6, unresolved, 5));
+        return new FullNeedListDto(List.of(), new FullNeedCountsDto(9, 8, 7, 6, unresolved, 5, 4, 3));
     }
 
     private static NeedListDto forcedNeed(int unresolved) {

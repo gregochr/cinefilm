@@ -1,6 +1,8 @@
 package gregochr.cinefilm.subtitle;
 
+import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
+import static gregochr.cinefilm.TestData.edition;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -94,14 +96,46 @@ class FullNeedApiTest extends SubtitleTestBase {
             .andExpect(jsonPath("$.counts.needed").value(3))
             .andExpect(jsonPath("$.counts.unsure").value(0))
             .andExpect(jsonPath("$.counts.notNeeded").value(1))
-            .andExpect(jsonPath("$.counts.unknown").value(0));
+            .andExpect(jsonPath("$.counts.unknown").value(0))
+            .andExpect(jsonPath("$.counts.subtitled").value(0))
+            // B Dubbed (English audio) and D English (out of the list's scope) are both not needed.
+            .andExpect(jsonPath("$.counts.inEnglish").value(2));
+    }
+
+    @Test
+    void aFilmShowsInBrowseThroughAnEditionWithNoFileRowButNotWhenEveryEditionIsMissing() throws Exception {
+        // The left join of the browse read matters here: an edition saved with no MediaFile row is not hidden, so
+        // the film shows. An inner join would drop that edition and call the film hidden.
+        Film mixed = withLanguages("A Mixed", "fr");
+        audioOf(mixed, 1, "*French");
+        fullSidecar("A Mixed.en.srt", fileId(mixed, 1), false);
+        mixed.getEditions().get(0).originalParts().get(0).setPresence(Presence.MISSING);
+        edition(mixed, null, "Bare", 90 * MIN, null);
+        films.saveAndFlush(mixed);
+        Film gone = withLanguages("B Gone", "fr");
+        audioOf(gone, 1, "*French");
+        fullSidecar("B Gone.en.srt", fileId(gone, 1), false);
+        gone.getEditions().get(0).originalParts().get(0).setPresence(Presence.MISSING);
+        films.saveAndFlush(gone);
+
+        mvc.perform(get("/api/admin/subtitles/full-need"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.films[0].title").value("A Mixed"))
+            .andExpect(jsonPath("$.films[0].fullSubtitle.source").value("SIDECAR"))
+            .andExpect(jsonPath("$.films[0].subtitled").value(true))
+            .andExpect(jsonPath("$.films[1].title").value("B Gone"))
+            .andExpect(jsonPath("$.films[1].fullSubtitle.source").value("SIDECAR"))
+            .andExpect(jsonPath("$.films[1].subtitled").value(false))
+            .andExpect(jsonPath("$.counts.subtitled").value(1));
     }
 
     @Test
     void eachFilmSaysWhatItPlaysAsFullSubtitlesTheOwnersFileBeforeADownload() throws Exception {
         Film mine = withLanguages("A Mine", "fr");
+        audioOf(mine, 1, "*French");
         fullSidecar("A Mine.en.srt", fileId(mine, 1), false);
         Film fetched = withLanguages("B Fetched", "fr");
+        audioOf(fetched, 1, "*French");
         fetched.setImdbId("tt0000002");
         films.saveAndFlush(fetched);
         SubtitleSidecar download = sidecar("opensubtitles:" + fetched.getEditions().get(0).getId() + ":77",
@@ -117,7 +151,12 @@ class FullNeedApiTest extends SubtitleTestBase {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.films[0].fullSubtitle.source").value("SIDECAR"))
             .andExpect(jsonPath("$.films[1].fullSubtitle.source").value("DOWNLOAD"))
-            .andExpect(jsonPath("$.films[2].fullSubtitle").value((Object) null));
+            .andExpect(jsonPath("$.films[2].fullSubtitle").value((Object) null))
+            // Settled rows are flagged, the one with nothing playing is not, and the count is the rows flagged.
+            .andExpect(jsonPath("$.films[0].subtitled").value(true))
+            .andExpect(jsonPath("$.films[1].subtitled").value(true))
+            .andExpect(jsonPath("$.films[2].subtitled").value(false))
+            .andExpect(jsonPath("$.counts.subtitled").value(2));
     }
 
     @Test

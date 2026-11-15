@@ -125,6 +125,14 @@ class AdminTodoRulesTest {
     }
 
     @Test
+    void aFullRowIsSubtitledOnlyWhenNeededAndAFullSubtitlePlays() {
+        assertThat(AdminTodoRules.subtitledFull(full(true, true, false, false, false))).isTrue();
+        assertThat(AdminTodoRules.subtitledFull(full(true, false, true, false, true))).isFalse();
+        assertThat(AdminTodoRules.subtitledFull(full(false, true, true, true, true))).isFalse();
+        assertThat(AdminTodoRules.subtitledFull(full(false, false, false, false, false))).isFalse();
+    }
+
+    @Test
     void aFullRowThatIsNotNeededIsNeitherWhateverTheRest() {
         // UNKNOWN, UNSURE and NOT_NEEDED all arrive as needed = false.
         FullFacts facts = full(false, false, false, false, false);

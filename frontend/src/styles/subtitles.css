@@ -98,10 +98,7 @@
   box-shadow: none;
 }
 
-/* Which films need forced subtitles: segmented chips and the owner's three choices, 44px targets, no amber. */
-.subs__need {
-  margin-bottom: 28px;
-}
+/* The file list's filter chips, 44px targets, no amber. */
 .subs__segmented {
   height: auto;
   flex-wrap: wrap;
@@ -109,10 +106,6 @@
 }
 .subs__segmented .segmented__btn {
   min-height: 44px;
-}
-.subs__need .admin__item-head {
-  flex-wrap: wrap;
-  gap: 4px 12px;
 }
 
 @media (max-width: 600px) {
