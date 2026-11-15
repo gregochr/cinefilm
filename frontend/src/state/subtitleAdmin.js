@@ -1,7 +1,7 @@
 // Display and rule helpers for the Admin "Subtitles" panel. No JSX: the Apple TV and native clients reuse them.
 import { ApiError } from '../api/client.js';
 import { formatClock } from '../player/time.js';
-import { formatScanTime, titleWithYear } from './scanFormat.js';
+import { formatScanTime } from './scanFormat.js';
 
 /** The server allows a timing offset of this many milliseconds either way. */
 export const MAX_OFFSET_MS = 600000;
@@ -120,11 +120,6 @@ export function partOptions(edition) {
 /** "Extended Edition", "Extended Edition · 2 files". */
 export function editionLabel(edition) {
   return edition.parts > 1 ? `${edition.name} · ${edition.parts} files` : edition.name;
-}
-
-/** "Heat (1995)". */
-export function filmLabel(film) {
-  return titleWithYear(film.title, film.year);
 }
 
 /** What the panel says when an action fails. The server's own message is shown for a rejected request. */

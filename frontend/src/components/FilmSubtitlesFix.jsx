@@ -86,7 +86,9 @@ function FixFile({ item, busy, problem, actions, onRemoved, onDone }) {
             aria-label={`${check.undo}: ${check.label}, ${name}`}
             disabled={busy}
             onClick={async () => {
-              if (await actions.unverify(item.id)) onDone(check.undone);
+              if (await actions.unverify(item.id)) {
+                onDone(item.replacedByDownload ? check.undoneReplaced : check.undone);
+              }
             }}
           >
             {check.undo}
@@ -300,6 +302,7 @@ export default function FilmSubtitlesFix({ film, opener, onClose, onChanged }) {
               </ActionWithHint>
               {adding ? (
                 <AddOwnFile
+                  allKinds
                   filmId={film.id}
                   title={film.title}
                   onAttached={attached}

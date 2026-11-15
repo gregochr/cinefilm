@@ -35,6 +35,7 @@ export const subtitleCheck = {
   undo: 'Undo', // the existing Admin word
   done: 'Marked as checked.', // planner, 8b-2
   undone: 'The check is taken away.', // planner, 8b-2
+  undoneReplaced: 'The download plays again.', // planner, 8b-2: undoing "Use my file instead"
 };
 
 /** The player's "Subtitles are wrong": deletes the download that is showing and blocks it. All "planner, 8a". */

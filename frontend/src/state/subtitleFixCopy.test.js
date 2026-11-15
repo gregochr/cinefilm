@@ -20,6 +20,7 @@ describe('subtitleFixCopy', () => {
     expect(subtitleCheck.hint).toBe('Marks the lines as checked: you’ve seen they’re right.');
     expect(subtitleCheck.done).toBe('Marked as checked.');
     expect(subtitleCheck.undone).toBe('The check is taken away.');
+    expect(subtitleCheck.undoneReplaced).toBe('The download plays again.');
   });
 
   it('names the film in the spoken name of a removing button, so two downloads are told apart', () => {

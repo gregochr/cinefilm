@@ -126,7 +126,7 @@ describe('Admin: Subtitles panel, full subtitle files', () => {
 });
 
 describe('Admin: Subtitles panel, full downloads', () => {
-  it('shows a playing download with its origin, the Playing tag and why, and no check or Looks right', async () => {
+  it('shows a playing download with its origin, the Playing tag and why, and no check', async () => {
     const { panel } = await openPanel([download()]);
 
     const row = await rowOf(panel, 'Downloaded from OpenSubtitles');
@@ -135,7 +135,6 @@ describe('Admin: Subtitles panel, full downloads', () => {
     expect(within(row).getByText('Playing')).toBeVisible();
     expect(within(row).getByText('Playing as English (full); not checked yet')).toBeVisible();
     expect(within(row).queryByText('Unchecked')).not.toBeInTheDocument();
-    expect(within(row).queryByRole('button', { name: /Looks right/ })).not.toBeInTheDocument();
     expect(within(row).queryByRole('button', { name: /Use my file/ })).not.toBeInTheDocument();
   });
 

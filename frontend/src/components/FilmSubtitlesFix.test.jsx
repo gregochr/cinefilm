@@ -231,6 +231,20 @@ describe('FilmSubtitlesFix', () => {
       await waitFor(() => expect(looksRight(dialog)).toHaveLength(1));
     });
 
+    it('Undo after "Use my file instead" says the download plays again, not that a check was taken away', async () => {
+      serve();
+      const { dialog } = await open();
+      await userEvent.click(within(dialog).getByRole('button', { name: /^Use my file instead/ }));
+      await userEvent.click(await within(dialog).findByRole('button', { name: /^Undo/ }));
+
+      const notice = await within(dialog).findByText('The download plays again.');
+      await waitFor(() => expect(notice).toHaveFocus());
+      expect(within(dialog).queryByText('The check is taken away.')).not.toBeInTheDocument();
+      expect(
+        await within(dialog).findByRole('button', { name: /^Use my file instead/ }),
+      ).toBeVisible();
+    });
+
     it('sends one request on a double click', async () => {
       let release;
       const gate = new Promise((resolve) => {
@@ -520,6 +534,69 @@ describe('FilmSubtitlesFix', () => {
       expect(requests.filter((r) => r.startsWith('POST'))).toEqual([
         'POST /api/admin/subtitles/21/attach',
       ]);
+    });
+
+    it('offers the owner’s forced files too, each with its kind and where it sits now, and moves one from another film', async () => {
+      const looseForced = {
+        ...own,
+        id: 22,
+        kind: 'FORCED',
+        path: 'Loose/Loose.en.forced.srt',
+      };
+      const onHeat = {
+        ...own,
+        id: 23,
+        kind: 'FORCED',
+        path: 'Heat (1995)/Heat.en.forced.srt',
+        filmId: 99,
+        filmTitle: 'Heat',
+        state: 'matched',
+      };
+      const heatDownload = {
+        ...onHeat,
+        id: 24,
+        origin: 'OPENSUBTITLES',
+        path: 'Heat (1995)/.cinefilm/os.srt',
+      };
+      const posts = [];
+      serve({
+        answer: (method, url, init) => {
+          if (url === '/api/admin/subtitles' && method === 'GET') {
+            return respond([...rows(), own, looseForced, onHeat, heatDownload]);
+          }
+          if (url === '/api/films/6') {
+            return respond({
+              id: 6,
+              title: 'Blade Runner',
+              editions: [{ id: 61, name: 'Original', parts: 1 }],
+            });
+          }
+          if (url === '/api/admin/subtitles/23/attach') {
+            posts.push(JSON.parse(init.body));
+            return respond({ ...onHeat, filmId: 6 });
+          }
+          return null;
+        },
+      });
+      const { dialog, onChanged } = await open();
+
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Add my own file…' }));
+
+      const form = await within(dialog).findByRole('form');
+      expect(
+        within(form)
+          .getAllByRole('radio')
+          .map((r) => r.closest('label').textContent),
+      ).toEqual([
+        'Blade Runner.en.srt · Full · not attached to a film',
+        'Loose.en.forced.srt · Forced · not attached to a film',
+        'Heat.en.forced.srt · Forced · on Heat',
+      ]);
+      await userEvent.click(within(form).getByRole('radio', { name: /Heat\.en\.forced\.srt/ }));
+      await userEvent.click(within(form).getByRole('button', { name: 'Attach' }));
+
+      await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+      expect(posts).toEqual([{ editionId: 61, part: null }]);
     });
 
     it('keeps the form open while an attach is in flight, so only one attach request goes out', async () => {

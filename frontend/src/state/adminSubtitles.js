@@ -135,12 +135,14 @@ export function filmTitle(row) {
 
 /**
  * The files a film's "Add my own file…" offers: the owner's own full subtitle files that are present and not already
- * on this film, unattached ones first. Downloads are not offered (they are the server's, not the owner's).
+ * on this film, unattached ones first. Downloads are not offered (they are the server's, not the owner's). With
+ * `allKinds` (Film detail's Fix… panel, where Admin's old "Attach to…" now lives) forced files are offered too: the
+ * attach route takes any file and keeps its kind.
  */
-export function fileChoices(files, filmId) {
+export function fileChoices(files, filmId, allKinds = false) {
   const own = (files ?? []).filter(
     (file) =>
-      isFull(file) &&
+      (allKinds || isFull(file)) &&
       file.origin !== 'OPENSUBTITLES' &&
       file.presence !== 'MISSING' &&
       file.filmId !== filmId,

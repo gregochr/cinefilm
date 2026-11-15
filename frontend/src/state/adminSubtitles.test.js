@@ -290,6 +290,19 @@ describe('fileChoices', () => {
     expect(fileChoices(null, 6)).toEqual([]);
   });
 
+  it('offers forced files too with `allKinds`, still never downloads, missing files or this film’s own', () => {
+    const files = [
+      file({ id: 1, kind: 'FORCED', filmId: 9, filmTitle: 'Other' }),
+      file({ id: 2, kind: 'FORCED' }),
+      file({ id: 3, kind: 'FORCED', filmId: 6 }),
+      file({ id: 4 }),
+      file({ id: 5, kind: 'FORCED', origin: 'OPENSUBTITLES' }),
+      file({ id: 6, kind: 'FORCED', presence: 'MISSING' }),
+    ];
+    expect(fileChoices(files, 6, true).map((f) => f.id)).toEqual([2, 4, 1]);
+    expect(fileChoices(files, 6).map((f) => f.id)).toEqual([4]);
+  });
+
   it('says where a file sits now', () => {
     expect(fileChoiceNote(file())).toBe('not attached to a film');
     expect(fileChoiceNote(file({ filmId: 9, filmTitle: 'Other' }))).toBe('on Other');

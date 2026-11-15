@@ -13,7 +13,6 @@ import {
   fileFilterCounts,
   fileName,
   filterSidecars,
-  filmLabel,
   formatOffset,
   groupKey,
   isDownload,
@@ -227,11 +226,6 @@ describe('where in an edition a file can go', () => {
   it('labels an edition with its file count only when it is split', () => {
     expect(editionLabel({ name: 'Theatrical Cut', parts: 1 })).toBe('Theatrical Cut');
     expect(editionLabel({ name: 'Extended Edition', parts: 2 })).toBe('Extended Edition · 2 files');
-  });
-
-  it('labels a film with its year when it has one', () => {
-    expect(filmLabel({ title: 'Heat', year: 1995 })).toBe('Heat (1995)');
-    expect(filmLabel({ title: 'Heat', year: null })).toBe('Heat');
   });
 });
 

@@ -571,7 +571,20 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
     used (`.subs__actions`, `.subs__timing`, `.subs__attach`, `.admin__item-actions`) and their tests. Kept:
     `nudgedOffset`/`MAX_OFFSET_MS`/`formatOffset` (shared with the player), `adminApi.setSubtitleOffset` and
     `attachSubtitle` (the player and `AddOwnFile` use them), the fixture routes.
-  - **Invented copy (planner, 8b-2):** `subtitleCheck.hint` "Marks the lines as checked: you’ve seen they’re right.",
+  - **Attaching an owner's forced file (review fix):** Admin's "Attach to… / Move to…" worked on every owner file,
+    forced ones included, but "Add my own file…" listed only full files, so a loose or wrongly placed forced file had
+    nowhere to go. In the Fix dialog only (`AddOwnFile allKinds` → `useFilmFilePicker(filmId, { allKinds })` →
+    `fileChoices(files, filmId, true)`), it now offers the owner's files of both kinds (never downloads, missing files
+    or this film's own), unattached first, each as "{name} · Full|Forced · not attached to a film | on {film}"
+    (existing `attachedTo`/`unattached` copy; "Full"/"Forced" are 8a's tag words). Admin's To do / full-need picker
+    keeps full files only. Server: `SubtitleAdminService.attachLocked` takes any sidecar and only `retarget`s it to the
+    edition's media file (and marks it owner-attached); the file's kind comes from its name and is untouched, so a
+    forced file attached from a film's Fix dialog plays as that edition's forced subtitle. The dialog's tests send the
+    attach for a forced file under another film end to end through the mocks. "Undo" after "Use my file instead" says
+    "The download plays again." (`subtitleCheck.undoneReplaced`). `filmLabel` was dead and is deleted; `NUDGES` stays
+    out until 8b-1 lands (see the merge note below).
+  - **Invented copy (planner, 8b-2):** `subtitleCheck.undoneReplaced` "The download plays again.",
+    `subtitleCheck.hint` "Marks the lines as checked: you’ve seen they’re right.",
     `subtitleCheck.done` "Marked as checked.", `subtitleCheck.undone` "The check is taken away." (in
     `subtitleFixCopy.js`, its own block), and "Timing shifted {offset}" (`subtitlesPage.files.offset`). "Looks right",
     "Undo" and "You checked this: the lines look right." are Admin's existing words.

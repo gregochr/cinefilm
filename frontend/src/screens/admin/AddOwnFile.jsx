@@ -2,7 +2,8 @@ import { useEffect, useId } from 'react';
 import { Button } from '../../components/Button.jsx';
 import { subtitlesPage } from '../../state/adminCopy.js';
 import { fileChoiceNote } from '../../state/adminSubtitles.js';
-import { editionLabel, fileName, partOptions } from '../../state/subtitleAdmin.js';
+import { subtitleFix } from '../../state/subtitleFixCopy.js';
+import { editionLabel, fileName, isFull, partOptions } from '../../state/subtitleAdmin.js';
 import { useFilmFilePicker } from '../../state/useFilmFilePicker.js';
 
 const copy = subtitlesPage.addFile;
@@ -18,12 +19,19 @@ function Problem({ children, onRetry }) {
 }
 
 /**
- * "Add my own file…" for one film: choose one of the owner's full subtitle files, the edition and (for a split
+ * "Add my own file…" for one film: choose one of the owner's subtitle files (full ones; with `allKinds`, forced ones too, each labelled with its kind), the edition and (for a split
  * edition) the part, then "Attach". It is the existing attach route, scoped to the film. `onAttached` runs once the
  * server has accepted it; `onCancel` closes the form (not while an attach is in flight); `onBusyChange(boolean)`, when given, says when an attach starts and ends. Nothing is sent before "Attach".
  */
-export default function AddOwnFile({ filmId, title, onAttached, onCancel, onBusyChange }) {
-  const picker = useFilmFilePicker(filmId);
+export default function AddOwnFile({
+  filmId,
+  title,
+  onAttached,
+  onCancel,
+  onBusyChange,
+  allKinds = false,
+}) {
+  const picker = useFilmFilePicker(filmId, { allKinds });
   // Tells the host while an attach is in flight, so it can keep this form open (its guard lives in this instance).
   useEffect(() => {
     onBusyChange?.(picker.attaching);
@@ -58,7 +66,11 @@ export default function AddOwnFile({ filmId, title, onAttached, onCancel, onBusy
                 onChange={() => picker.pickFile(file.id)}
               />
               <span>
-                {fileName(file.path)} <span className="admin__text">· {fileChoiceNote(file)}</span>
+                {fileName(file.path)}{' '}
+                <span className="admin__text">
+                  · {allKinds ? `${isFull(file) ? subtitleFix.full : subtitleFix.forced} · ` : ''}
+                  {fileChoiceNote(file)}
+                </span>
               </span>
             </label>
           ))}
