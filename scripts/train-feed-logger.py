@@ -8,10 +8,11 @@ its window open for the journey.
 
 Every 30 seconds it asks the train's own Wi-Fi system (Icomera's local feed at www.ombord.info, a name that
 exists only on the train) where the train is, how strong each of its mobile connections is and how many
-passengers are online, and times one tiny request to the internet. In its first round it also reads this Mac's own Wi-Fi
-link, once: reading it can make the Mac look for other networks, which would disturb the film if repeated.
-When no film will be playing it can also time a download of the first 256 KB of CineFilm's own page code
-(it asks at the start; --film and --no-film answer in advance). Each round is one line of JSON in
+passengers are online, and times one tiny request to the internet. In its first round it also reads this Mac's
+own Wi-Fi link, once: reading it can make the Mac look for other networks, which would disturb the film if
+repeated. When no film will be playing it can also time a download of the first 256 KB of CineFilm's own page
+code (it asks at the start, and assumes a film if nobody answers within a minute; --film and --no-film answer in
+advance). Each round is one line of JSON in
 ~/train-feed-logger/logs, written at once, so nothing is lost if the window closes. The log holds where the train
 went, so it is never written beside this file: a run from a git checkout must not put it in the repository.
 
@@ -24,13 +25,14 @@ import json
 import os
 import platform
 import re
+import select
 import signal
 import subprocess
 import sys
 import threading
 import time
-from urllib.parse import urljoin
 from datetime import datetime, timezone
+from urllib.parse import urljoin
 
 VERSION = 2
 DEFAULT_BASES = ["https://www.ombord.info/api/jsonp/", "http://www.ombord.info/api/jsonp/"]
@@ -43,13 +45,15 @@ DEFAULT_TIMEOUT_S = 8
 DEFAULT_SPEED_TIMEOUT_S = 12
 SPEED_SITE = "https://cinefilm.chrisjgregory.dev"  # the owner's own server; its page shell is served without a session
 SPEED_BYTES = 262144
-FEED_MAX_FILESIZE = 1000000  # a hostile or broken feed must not make us hold a huge body
+FEED_MAX_BYTES = 200000  # a hostile or broken feed must not make us hold a huge body
 PRINT_MAX = 40
 QUESTION = "Will a film be playing on this laptop during the journey? [Y/n] "
+ANSWER_WAIT_S = 60  # the question must never hold logging up
 PROBE_TIMEOUT_S = 10
-MAX_BODY = 60000
-RETRY_EVERY = 10  # rounds between tries of an address, or a part of the feed, that is not answering
-GIVE_UP_AFTER = 3  # failures in a row before a part of the feed is only tried every RETRY_EVERY rounds
+TEXT_KEPT = 300  # characters of a non-feed answer (a sign-in page, say) kept in the log
+INDEX_KEPT = 5000
+DEFAULT_RETRY_EVERY = 10  # rounds between full checks of every address and of parts that keep failing
+GIVE_UP_AFTER = 3  # failures in a row before a part of the feed is only tried every --retry-every rounds
 WRAPPED = re.compile(r"^[\w$.]*\s*\((.*)\)\s*;?$", re.S)
 CURL_ERRORS = {
     6: "could not find it",
@@ -85,7 +89,8 @@ def fetch(url, timeout, insecure=False, max_size=None):
         return {"ok": False, "why": "timed out", "ms": int((time.time() - started) * 1000)}
     except OSError as error:
         return {"ok": False, "why": "could not run curl (%s)" % error, "ms": 0}
-    body, _, tail = done.stdout.decode("utf-8", "replace").rpartition(MARK)
+    raw_body, _, raw_tail = done.stdout.rpartition(MARK.encode())
+    body, tail = raw_body.decode("utf-8", "replace"), raw_tail.decode("utf-8", "replace")
     fields = tail.split(" ", 3)
     try:
         ms = int(float(fields[1]) * 1000)
@@ -94,6 +99,9 @@ def fetch(url, timeout, insecure=False, max_size=None):
     if done.returncode != 0:
         why = CURL_ERRORS.get(done.returncode, "curl error %d" % done.returncode)
         return {"ok": False, "why": why, "ms": ms, "curl": done.returncode}
+    if max_size and len(raw_body) > max_size:
+        # curl stops a body with a length at the limit; one without a length gets here.
+        return {"ok": False, "why": CURL_ERRORS[63], "ms": ms, "curl": 63}
     try:
         code = int(fields[0])
     except (IndexError, ValueError):
@@ -104,7 +112,7 @@ def fetch(url, timeout, insecure=False, max_size=None):
         "code": code,
         "ip": fields[2] if len(fields) > 2 else "",
         "type": fields[3].strip() if len(fields) > 3 else "",
-        "body": body[:MAX_BODY],
+        "body": body,
         "headers": done.stderr.decode("utf-8", "replace")[:1500],
     }
     if not result["ok"]:
@@ -122,21 +130,25 @@ def parse_feed(body):
     for candidate in candidates:
         try:
             data = json.loads(candidate)
-        except ValueError:
+        except (ValueError, RecursionError):  # deep nesting raises the second
             continue
         if isinstance(data, (dict, list)):
             return data
     return None
 
 
-def ask_part(base, part, timeout):
-    """Asks one part of the feed. Adds data when the answer is feed data, and tls when the certificate was refused."""
+def ask_part(base, part, timeout, untrusted=False):
+    """Asks one part of the feed. Adds data when the answer is feed data, and tls when the certificate was refused.
+
+    untrusted: this address's certificate was refused before, so go straight to reading it anyway."""
     url = "%s%s/?callback=cb&_=%d" % (base, part, int(time.time() * 1000))
-    result = fetch(url, timeout, max_size=FEED_MAX_FILESIZE)
-    if not result["ok"] and result.get("curl") in UNTRUSTED:
+    result = fetch(url, timeout, insecure=untrusted, max_size=FEED_MAX_BYTES)
+    if untrusted and result["ok"]:
+        result["tls"] = "untrusted"
+    elif not untrusted and not result["ok"] and result.get("curl") in UNTRUSTED:
         # It answers over https, but with a certificate a browser would refuse. Read it anyway: it is only the
         # train's own status, and knowing this is half the point.
-        retry = fetch(url, timeout, insecure=True, max_size=FEED_MAX_FILESIZE)
+        retry = fetch(url, timeout, insecure=True, max_size=FEED_MAX_BYTES)
         if retry["ok"]:
             result = retry
             result["tls"] = "untrusted"
@@ -145,7 +157,7 @@ def ask_part(base, part, timeout):
         if data is None:
             result["ok"] = False
             result["why"] = "answered, but not with data"
-            result["text"] = result["body"][:300]
+            result["text"] = result["body"][:TEXT_KEPT]
         else:
             result["data"] = data
             result["named"] = result["body"].lstrip().startswith("cb(")
@@ -171,7 +183,7 @@ def kbps(size, first_byte_s, total_s):
 
 def find_script(site, timeout):
     """The address of the site's first script under /assets/, read from its page. Returns (address, why)."""
-    page = fetch(site, timeout)
+    page = fetch(site, timeout, max_size=FEED_MAX_BYTES)
     if not page["ok"]:
         return None, page["why"]
     for value in SCRIPT_SRC.findall(page["body"]):
@@ -210,6 +222,20 @@ def sample_speed(url, timeout):
     return result
 
 
+def read_answer(question, timeout, stdin=None, select_fn=None):
+    """Prints the question and returns the line typed, or None when nobody answers within timeout or input ends."""
+    stdin = stdin or sys.stdin
+    select_fn = select_fn or select.select
+    sys.stdout.write(question)
+    sys.stdout.flush()
+    ready, _, _ = select_fn([stdin], [], [], timeout)
+    line = stdin.readline() if ready else ""
+    if not line:
+        print("\nNo answer: assuming a film will play.")
+        return None
+    return line
+
+
 def wants_speed(film, no_film, speed_site, is_tty, ask):
     """The site to take the speed sample from, or None. Asks only on a terminal, and only when not told."""
     if film:
@@ -221,7 +247,10 @@ def wants_speed(film, no_film, speed_site, is_tty, ask):
     if not is_tty:
         return None
     for _ in range(3):
-        answer = ask(QUESTION).strip().lower()
+        answer = ask(QUESTION)
+        if answer is None:  # nobody answered in time, or no input: assume a film
+            return None
+        answer = answer.strip().lower()
         if answer in ("", "y", "yes"):
             return None
         if answer in ("n", "no"):
@@ -270,20 +299,43 @@ def in_threads(jobs):
     return results
 
 
+class Stop:
+    """A plain flag. threading.Event.set() takes a lock, and a signal handler runs in the main thread, which may
+    be waiting on that same lock: a rare deadlock."""
+
+    def __init__(self):
+        self.now = False
+
+    def request(self, *_):
+        self.now = True
+
+    def sleep(self, seconds):
+        """Sleeps in steps of at most 0.2 s, so a stop request is seen within that."""
+        end = time.time() + seconds
+        while not self.now:
+            left = end - time.time()
+            if left <= 0:
+                return
+            time.sleep(min(0.2, left))
+
+
 class Logger:
     def __init__(self, bases, probe_url, read_wifi, timeout=DEFAULT_TIMEOUT_S, speed_site=None,
-                 speed_timeout=DEFAULT_SPEED_TIMEOUT_S):
+                 speed_timeout=DEFAULT_SPEED_TIMEOUT_S, retry_every=DEFAULT_RETRY_EVERY):
         self.bases = bases
         self.probe_url = probe_url
         self.read_wifi = read_wifi
         self.timeout = timeout
         self.speed_site = speed_site
         self.speed_timeout = speed_timeout
-        self.script_url = None  # found once, then kept for the run
+        self.retry_every = retry_every
+        self.script_url = None  # found once, then kept until the site says it is gone
         self.speed_from_logged = False
         self.state = {base: None for base in bases}  # None not asked yet, "ok", or why not
         self.active = None
-        self.failures = {}
+        self.failures = {}  # per part, for the address in use: they belong to the address
+        self.failures_for = None
+        self.untrusted = set()  # addresses whose certificate was refused: read with -k from then on
         self.seen_first = set()
         self.indexed = set()
 
@@ -292,6 +344,14 @@ class Logger:
             if self.state[base] == "ok":
                 return base
         return None
+
+    def note(self, base, result):
+        self.state[base] = "ok" if result["ok"] else result["why"]
+        if result.get("tls"):
+            self.untrusted.add(base)
+
+    def ask(self, base, part):
+        return ask_part(base, part, self.timeout, base in self.untrusted)
 
     def round(self, n):
         now = time.time()
@@ -310,20 +370,20 @@ class Logger:
             thread.start()
 
         # Ask every address while none is answering, and again every so often; otherwise only the one in use.
-        ask_all = self.active is None or n % RETRY_EVERY == 1
+        retry_round = (n - 1) % self.retry_every == 0
+        ask_all = self.active is None or retry_round
         asked = self.bases if ask_all else [self.active]
-        positions = in_threads({base: (lambda base=base: ask_part(base, "position", self.timeout)) for base in asked})
+        positions = in_threads({base: (lambda base=base: self.ask(base, "position")) for base in asked})
         for base, result in positions.items():
-            self.state[base] = "ok" if result["ok"] else result["why"]
-        if ask_all:
-            record["bases"] = dict(self.state)
+            self.note(base, result)
         self.active = self.first_up()
         # An address that answered at the last full check but was not asked this time: ask it before relying on it.
         while self.active is not None and self.active not in positions:
-            positions[self.active] = ask_part(self.active, "position", self.timeout)
-            result = positions[self.active]
-            self.state[self.active] = "ok" if result["ok"] else result["why"]
+            positions[self.active] = self.ask(self.active, "position")
+            self.note(self.active, positions[self.active])
             self.active = self.first_up()
+        record["asked"] = [base for base in self.bases if base in positions]
+        record["bases"] = dict(self.state)
         # What an address said when it answered with something that is not the feed (a sign-in page, say).
         texts = {base: result["text"] for base, result in positions.items() if "text" in result}
         if texts:
@@ -331,9 +391,15 @@ class Logger:
 
         if self.active is not None:
             base = self.active
-            rest = [part for part in PARTS[1:]
-                    if self.failures.get(part, 0) < GIVE_UP_AFTER or n % RETRY_EVERY == 1]
-            answers = in_threads({part: (lambda part=part: ask_part(base, part, self.timeout)) for part in rest})
+            if base != self.failures_for:
+                self.failures, self.failures_for = {}, base
+            rest, skipped = [], []
+            for part in PARTS[1:]:
+                if self.failures.get(part, 0) >= GIVE_UP_AFTER and not retry_round:
+                    skipped.append(part)
+                else:
+                    rest.append(part)
+            answers = in_threads({part: (lambda part=part: self.ask(base, part)) for part in rest})
             answers["position"] = positions[base]
             feed, ms, errs, first = {}, {}, {}, {}
             for part in PARTS:
@@ -355,19 +421,21 @@ class Logger:
                     self.failures[part] = self.failures.get(part, 0) + 1
             record["base"] = base
             record["ip"] = positions[base].get("ip")
-            if positions[base].get("tls"):
-                record["tls"] = positions[base]["tls"]
+            if base in self.untrusted:
+                record["tls"] = "untrusted"
             record["feed"] = feed
             record["ms"] = ms
             if errs:
                 record["errs"] = errs
+            if skipped:
+                record["skipped"] = skipped
             if first:
                 record["first"] = first
             if base not in self.indexed:
                 # The feed's own list of what it offers, once.
                 self.indexed.add(base)
-                index = fetch(base, self.timeout, insecure=bool(record.get("tls")), max_size=FEED_MAX_FILESIZE)
-                record["index"] = index["body"][:5000] if index["ok"] else index.get("why")
+                index = fetch(base, self.timeout, insecure=base in self.untrusted, max_size=FEED_MAX_BYTES)
+                record["index"] = index["body"][:INDEX_KEPT] if index["ok"] else index.get("why")
 
         for thread in side_threads:
             thread.join(timeout=14)
@@ -390,15 +458,19 @@ class Logger:
             self.speed_from_logged = True
             record["speed_from"] = self.script_url
         record["speed"] = sample_speed(self.script_url, self.speed_timeout)
+        if re.match(r"answered 4\d\d$", record["speed"].get("why", "")):
+            # A release changes the script's hashed name: read the page again next round.
+            self.script_url = None
+            self.speed_from_logged = False
 
 
 def has(value):
     return value is not None and value != ""
 
 
-def printable(value):
+def printable(value, limit=PRINT_MAX):
     """Text that is safe to print: feed data is untrusted and a terminal obeys escape sequences."""
-    return "".join(c if " " <= c <= "~" else "?" for c in str(value)[:PRINT_MAX])
+    return "".join(c if " " <= c <= "~" else "?" for c in str(value)[:limit])
 
 
 def scheme(base):
@@ -426,13 +498,20 @@ def status_line(record, state):
                     continue
                 kind = link.get("technology") if has(link.get("technology")) else link.get("link_state", "?")
                 links.append("%s %s" % (printable(kind), printable(link.get("rssi", ""))))
-            parts.append("links: " + ", ".join(links))
+            if links:
+                parts.append("links: " + ", ".join(links))
     else:
         reasons = ", ".join("%s: %s" % (scheme(base), printable(why or "not asked")) for base, why in state.items())
         parts.append("feed not answering (%s)" % reasons)
     probed = record.get("probe")
     if probed:
-        parts.append("internet %s" % ("%d ms" % probed["ms"] if probed["ms"] is not None else printable(probed["why"])))
+        if probed["ms"] is None:
+            parts.append("internet %s" % printable(probed["why"]))
+        elif probed.get("code") in (None, 204):
+            parts.append("internet %d ms" % probed["ms"])
+        else:
+            # A sign-in page answers 200 where the real address answers an empty 204.
+            parts.append("internet %d ms (answered %s)" % (probed["ms"], printable(probed["code"])))
     speed = record.get("speed")
     if speed:
         if speed.get("why"):
@@ -446,14 +525,34 @@ def status_line(record, state):
     return "  |  ".join(parts)
 
 
+def check_arguments(parser, args):
+    """Refuses values that would silently do the wrong thing (no time limit, a stop after one round)."""
+    if not args.timeout > 0:
+        parser.error("--timeout must be greater than 0")
+    if not args.speed_timeout > 0:
+        parser.error("--speed-timeout must be greater than 0")
+    if not args.interval >= 1:
+        parser.error("--interval must be at least 1")
+    if args.rounds < 0:
+        parser.error("--rounds must be at least 0")
+    if args.retry_every < 1:
+        parser.error("--retry-every must be at least 1")
+    if args.speed_site and not re.match(r"https?://", args.speed_site):
+        parser.error("--speed-site must start with http:// or https://")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Logs a train's own Wi-Fi feed to a file, every half minute.")
     parser.add_argument("--base", action="append", help="a feed address ending in /api/jsonp/ (for trying it out)")
-    parser.add_argument("--interval", type=float, default=30, help="seconds between rounds (default 30)")
-    parser.add_argument("--probe", default=DEFAULT_PROBE, help="the internet check's address, or off")
-    parser.add_argument("--rounds", type=int, default=0, help="stop after this many rounds (default: run on)")
+    parser.add_argument("--interval", type=float, default=30, help="seconds between rounds (default 30, at least 1)")
+    parser.add_argument("--probe", default=DEFAULT_PROBE,
+                        help="the internet check's address, which should answer an empty 204, or off")
+    parser.add_argument("--rounds", type=int, default=0, help="stop after this many rounds (default 0: run on)")
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_S,
                         help="seconds allowed for each feed request (default %g)" % DEFAULT_TIMEOUT_S)
+    parser.add_argument("--retry-every", type=int, default=DEFAULT_RETRY_EVERY,
+                        help="rounds between full checks of every address and of parts that keep failing "
+                             "(default %d, at least 1)" % DEFAULT_RETRY_EVERY)
     # Never beside the script: the log holds where the train went and must not land in a checkout.
     parser.add_argument("--log-dir", default=os.path.expanduser("~/train-feed-logger/logs"),
                         help="where the log goes (default ~/train-feed-logger/logs)")
@@ -465,37 +564,50 @@ def main():
     parser.add_argument("--speed-timeout", type=float, default=DEFAULT_SPEED_TIMEOUT_S,
                         help="seconds allowed for the speed sample (default %g)" % DEFAULT_SPEED_TIMEOUT_S)
     args = parser.parse_args()
-    if args.speed_site and not re.match(r"https?://", args.speed_site):
-        parser.error("--speed-site must start with http:// or https://")
+    check_arguments(parser, args)
 
     bases = [base if base.endswith("/") else base + "/" for base in (args.base or DEFAULT_BASES)]
     probe_url = None if args.probe == "off" else args.probe
-    interval = max(1.0, args.interval)
-
-    def ask(question):
-        try:
-            return input(question)
-        except EOFError:
-            return ""  # no one to answer: assume a film
+    interval = args.interval
 
     try:
         speed_site = wants_speed(args.film, args.no_film, args.speed_site,
-                                 sys.stdin.isatty() and sys.stdout.isatty(), ask)
+                                 sys.stdin.isatty() and sys.stdout.isatty(),
+                                 lambda question: read_answer(question, ANSWER_WAIT_S))
     except KeyboardInterrupt:
         return 0
 
-    os.makedirs(args.log_dir, exist_ok=True)
+    # The log holds where the train went: readable by the owner alone.
+    os.makedirs(args.log_dir, mode=0o700, exist_ok=True)
     path = os.path.join(args.log_dir, "train-feed-%s.jsonl" % datetime.now().strftime("%Y%m%d-%H%M%S"))
-    log = open(path, "a", encoding="utf-8")  # pylint: disable=consider-using-with
+    log = os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a", encoding="utf-8")
 
     def write(record):
         log.write(json.dumps(record, separators=(",", ":")) + "\n")
         log.flush()
         os.fsync(log.fileno())
 
-    stop = threading.Event()
+    printing = True
+
+    def say(text=""):
+        """Prints a line. If the window has gone, stops printing and carries on logging."""
+        nonlocal printing
+        if not printing:
+            return
+        try:
+            print(text)
+            sys.stdout.flush()
+        except OSError:
+            printing = False
+            try:
+                # Python would otherwise exit 120 when it fails to flush the closed stdout at shutdown.
+                os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+            except (OSError, ValueError):
+                pass
+
+    stop = Stop()
     for name in ("SIGINT", "SIGTERM", "SIGHUP"):
-        signal.signal(getattr(signal, name), lambda *_: stop.set())
+        signal.signal(getattr(signal, name), stop.request)
 
     if not args.no_awake:
         try:
@@ -504,15 +616,15 @@ def main():
         except OSError:
             pass
 
-    print("Train feed logger. Leave this window open for the journey, and close it when you get off.")
-    print("Log: %s" % path)
-    print("Asking the train's Wi-Fi system every %g seconds. Away from a train it says the feed is not answering:" % interval)
-    print("that is right, and the internet check still runs.")
+    say("Train feed logger. Leave this window open for the journey, and close it when you get off.")
+    say("Log: %s" % path)
+    say("Asking the train's Wi-Fi system every %g seconds. Away from a train it says the feed is not answering:" % interval)
+    say("that is right, and the internet check still runs.")
     if speed_site:
-        print("Speed sample: each round downloads the first 256 KB of a script from %s to time the link." % printable(speed_site))
-        print("Run it only when no film is playing; it would compete with one.")
-    print("")
-    sys.stdout.flush()
+        say("Speed sample: each round downloads the first 256 KB of a script from %s to time the link."
+            % printable(speed_site, 200))
+        say("Run it only when no film is playing; it would compete with one.")
+    say("")
 
     now = time.time()
     write({
@@ -522,35 +634,33 @@ def main():
         "macos": platform.mac_ver()[0], "python": platform.python_version(),
     })
 
-    logger = Logger(bases, probe_url, not args.no_wifi, args.timeout, speed_site, args.speed_timeout)
+    logger = Logger(bases, probe_url, not args.no_wifi, args.timeout, speed_site, args.speed_timeout,
+                    args.retry_every)
     next_at = time.time()
     n = 0
-    while not stop.is_set():
+    while not stop.now:
         n += 1
         try:
             record = logger.round(n)
         except Exception as error:  # pylint: disable=broad-except
             record = {"t": int(time.time() * 1000), "round": n, "error": str(error)[:300]}
-        if stop.is_set():
+        if stop.now:
             break
         write(record)
-        print(status_line(record, logger.state) if "error" not in record else "round failed: %s" % record["error"])
-        sys.stdout.flush()
+        say(status_line(record, logger.state) if "error" not in record
+            else "round failed: %s" % printable(record["error"], 200))
         if args.rounds and n >= args.rounds:
             break
         next_at += interval
         now = time.time()
         if next_at < now:
             next_at = now  # fell behind: the Mac slept, or a round ran long
-        stop.wait(next_at - now)
+        stop.sleep(next_at - now)
 
     write({"t": int(time.time() * 1000), "event": "stop", "rounds": n})
     log.close()
-    try:
-        print("")
-        print("Stopped after %d rounds. The log is at %s" % (n, path))
-    except OSError:
-        pass  # The window has gone: the log is already written.
+    say("")
+    say("Stopped after %d rounds. The log is at %s" % (n, path))
     return 0
 
 

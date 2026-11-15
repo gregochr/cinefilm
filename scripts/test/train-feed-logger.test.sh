@@ -45,6 +45,32 @@ run_logger() {
     for LOG in "$LOGDIR"/*.jsonl; do break; done
 }
 
+# start_bg NAME ARGS: like run_logger, but in the background so a long run overlaps the other cases.
+# Read it with collect NAME.
+start_bg() {
+    local name="$1"
+    shift
+    mkdir -p "$TMP/$name.logs"
+    (
+        "$LOGGER" --no-wifi --no-awake --log-dir "$TMP/$name.logs" "$@" </dev/null >"$TMP/$name.out" 2>&1
+        echo $? >"$TMP/$name.rc"
+    ) &
+    PIDS+=("$!")
+}
+
+# collect NAME: waits for a start_bg run (at most a minute) and sets OUT, RC, LOG and LOGDIR as run_logger does.
+collect() {
+    local name="$1" tries=0
+    while [ ! -f "$TMP/$name.rc" ] && [ "$tries" -lt 600 ]; do
+        sleep 0.1
+        tries=$((tries + 1))
+    done
+    OUT=$(<"$TMP/$name.out")
+    RC=$(cat "$TMP/$name.rc" 2>/dev/null || echo "never finished")
+    LOGDIR="$TMP/$name.logs"
+    for LOG in "$LOGDIR"/*.jsonl; do break; done
+}
+
 # jv FILE EXPRESSION: the JSON of a Python expression over L, the log's lines as a list of dicts.
 jv() {
     python3 -B -c '
@@ -62,14 +88,48 @@ count_lines() {
     printf '%s\n' "$1" | grep -cF -- "$2"
 }
 
+# count_files DIRECTORY: how many entries it holds
+count_files() {
+    local n=0 f
+    for f in "$1"/*; do
+        if [ -e "$f" ]; then n=$((n + 1)); fi
+    done
+    echo "$n"
+}
+
+# mode_of PATH: its permission bits in octal, e.g. 700
+mode_of() {
+    python3 -B -c 'import os, sys; print(format(os.stat(sys.argv[1]).st_mode & 0o777, "o"))' "$1"
+}
+
 ALL_PARTS='["position", "connectivity", "users", "user", "system"]'
 SCRIPT_BYTES=262144
+INDEX_TEXT="parts: position connectivity users user system"
 
-echo "ordinary feed, two rounds"
+echo "starting the stand-ins and the long runs"
 serve ok
 P=$PORT
 if [ -n "$P" ]; then ok "the stand-in started"; else bad "the stand-in did not start"; fi
 BASE="http://127.0.0.1:$P/api/jsonp/"
+FREE=$(python3 -B -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+
+# Seven rounds, a full check every third round, two addresses; the first has a part that answers 404 and
+# the internet check goes to a port with nothing listening.
+serve lra --missing user --request-log "$TMP/lra.log"
+LRA="http://127.0.0.1:$PORT/api/jsonp/"
+serve lrb --request-log "$TMP/lrb.log"
+LRB="http://127.0.0.1:$PORT/api/jsonp/"
+start_bg longrun --base "$LRA" --base "$LRB" --probe "http://127.0.0.1:$FREE/generate_204" \
+    --interval 1 --rounds 7 --retry-every 3 --timeout 3
+
+# Three rounds; the first address stops answering after its first position request.
+serve dying --die-after 1
+FIRST="http://127.0.0.1:$PORT/api/jsonp/"
+serve second
+SECOND="http://127.0.0.1:$PORT/api/jsonp/"
+start_bg failover --base "$FIRST" --base "$SECOND" --probe off --interval 1 --rounds 3 --timeout 3
+
+echo "ordinary feed, two rounds"
 run_logger --base "$BASE" --probe "http://127.0.0.1:$P/generate_204" --interval 1 --rounds 2 --timeout 3
 assert_eq "exits 0" 0 "$RC"
 assert_eq "both lines say the feed is answering" 2 "$(count_lines "$OUT" "feed answering (http)")"
@@ -84,6 +144,11 @@ assert_eq "an ms figure for each part" true \
 assert_eq "a numeric probe ms" true "$(jv "$LOG" 'isinstance(L[1]["probe"]["ms"], int)')"
 assert_eq "the users answer is kept whole" '{"version": "1.6", "total": "93", "online": "38"}' \
     "$(jv "$LOG" 'L[1]["feed"]["users"]')"
+assert_eq "the feed's index is recorded in round 1" "\"$INDEX_TEXT\"" "$(jv "$LOG" 'L[1]["index"]')"
+assert_eq "and only then" false "$(jv "$LOG" '"index" in L[2]')"
+assert_eq "round 1 asked the one address" "[\"$BASE\"]" "$(jv "$LOG" 'L[1]["asked"]')"
+assert_eq "and round 2 too: the log says what was asked every round" "[\"$BASE\"]" "$(jv "$LOG" 'L[2]["asked"]')"
+assert_eq "round 2 says how the address stands" "{\"$BASE\": \"ok\"}" "$(jv "$LOG" 'L[2]["bases"]')"
 assert_eq "no speed sample without a terminal" false "$(jv "$LOG" '"speed" in L[1]')"
 assert_eq "start record: version 2" 2 "$(jv "$LOG" 'L[0]["version"]')"
 assert_eq "start record: no speed site" null "$(jv "$LOG" 'L[0]["speed_site"]')"
@@ -91,21 +156,38 @@ assert_eq "start record: the timeout" 3.0 "$(jv "$LOG" 'L[0]["timeout"]')"
 assert_contains "the line shows users" "$OUT" "38 of 93 online"
 assert_contains "the line shows each link" "$OUT" "links: lte -62, disconnected 0, lte -35"
 assert_contains "the line shows the internet check" "$OUT" "internet "
+assert_not_contains "a 204 needs no note" "$OUT" "(answered"
 assert_not_contains "no speed in the line" "$OUT" "speed"
 
-echo "default log directory"
+echo "an internet check that answers 200, as a sign-in page does"
+run_logger --base "$BASE" --probe "http://127.0.0.1:$P/generate_200" --rounds 1
+assert_eq "exits 0" 0 "$RC"
+assert_contains "the line says what answered" "$OUT" " ms (answered 200)"
+assert_eq "the record keeps the code" 200 "$(jv "$LOG" 'L[1]["probe"]["code"]')"
+
+echo "default log directory, and who may read the log"
 HOME_DIR="$TMP/home"
 mkdir -p "$HOME_DIR"
-OUT=$(HOME="$HOME_DIR" "$LOGGER" --no-wifi --no-awake --base "$BASE" --probe off --rounds 1 </dev/null 2>&1)
+OUT=$(umask 022; HOME="$HOME_DIR" "$LOGGER" --no-wifi --no-awake --base "$BASE" --probe off --rounds 1 </dev/null 2>&1)
 assert_eq "exits 0" 0 "$?"
 FOUND=0
+HOME_LOG=""
 for f in "$HOME_DIR"/train-feed-logger/logs/train-feed-*.jsonl; do
-    [ -f "$f" ] && FOUND=$((FOUND + 1))
+    if [ -f "$f" ]; then
+        FOUND=$((FOUND + 1))
+        HOME_LOG="$f"
+    fi
 done
 assert_eq "one log under HOME/train-feed-logger/logs" 1 "$FOUND"
 assert_contains "the banner names that directory" "$OUT" "$HOME_DIR/train-feed-logger/logs/train-feed-"
 assert_file_missing "no logs directory beside the script" "$HERE/../logs"
 assert_file_missing "no logs directory beside the test" "$HERE/logs"
+assert_eq "the folder it made is for the owner alone" 700 "$(mode_of "$HOME_DIR/train-feed-logger/logs")"
+assert_eq "the log is for the owner alone" 600 "$(mode_of "$HOME_LOG")"
+mkdir "$TMP/existing"
+chmod 755 "$TMP/existing"
+"$LOGGER" --no-wifi --no-awake --log-dir "$TMP/existing" --base "$BASE" --probe off --rounds 1 >/dev/null 2>&1 </dev/null
+assert_eq "an existing folder keeps its mode" 755 "$(mode_of "$TMP/existing")"
 
 echo "an answer without the function's name"
 run_logger --base "http://127.0.0.1:$P/anon/api/jsonp/" --probe off --rounds 1
@@ -123,6 +205,30 @@ assert_eq "keeps what the address said" '"<html><body>Sign in to the train Wi-Fi
     "$(jv "$LOG" 'L[1]["bases_text"]["http://127.0.0.1:'"$P"'/html/api/jsonp/"]')"
 assert_eq "no probe when it is off" false "$(jv "$LOG" '"probe" in L[1]')"
 
+echo "a position that answers 404"
+serve m404 --missing position
+run_logger --base "http://127.0.0.1:$PORT/api/jsonp/" --probe off --rounds 1
+assert_eq "exits 0" 0 "$RC"
+assert_contains "says why" "$OUT" "feed not answering (http: answered 404)"
+
+echo "another part that answers a web page"
+serve htmlpart --html-part user
+run_logger --base "http://127.0.0.1:$PORT/api/jsonp/" --probe off --rounds 1
+assert_eq "exits 0" 0 "$RC"
+assert_eq "the part is in errs, with what it said" \
+    '{"user": "answered, but not with data", "user_text": "<html><body>Sign in to the train Wi-Fi</body></html>"}' \
+    "$(jv "$LOG" 'L[1]["errs"]')"
+assert_eq "the other parts were read" '["position", "connectivity", "users", "system"]' "$(jv "$LOG" 'list(L[1]["feed"])')"
+
+echo "an answer too big to read"
+run_logger --base "http://127.0.0.1:$P/big/api/jsonp/" --probe off --rounds 1 --timeout 5
+assert_eq "150,000 bytes of valid data are read as data" 150000 "$(jv "$LOG" 'len(L[1]["feed"]["position"]["pad"])')"
+assert_contains "and the feed answers" "$OUT" "feed answering (http)"
+run_logger --base "http://127.0.0.1:$P/huge/api/jsonp/" --probe off --rounds 1 --timeout 5
+assert_contains "over the limit, with a Content-Length" "$OUT" "feed not answering (http: answer too large)"
+run_logger --base "http://127.0.0.1:$P/chunked/api/jsonp/" --probe off --rounds 1 --timeout 5
+assert_contains "over the limit, without a Content-Length" "$OUT" "feed not answering (http: answer too large)"
+
 echo "a slow feed with a short --timeout"
 run_logger --base "http://127.0.0.1:$P/slow/api/jsonp/" --probe off --rounds 1 --timeout 1
 assert_eq "exits 0" 0 "$RC"
@@ -131,61 +237,140 @@ assert_eq "recorded against the address" '"timed out"' \
     "$(jv "$LOG" 'L[1]["bases"]["http://127.0.0.1:'"$P"'/slow/api/jsonp/"]')"
 
 echo "nothing listening"
-FREE=$(python3 -B -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
 run_logger --base "http://127.0.0.1:$FREE/api/jsonp/" --probe off --rounds 1
 assert_eq "exits 0" 0 "$RC"
 assert_contains "could not connect" "$OUT" "feed not answering (http: could not connect)"
+
+echo "limits on the options"
+# refuse OPTION VALUE: exits 2, names the option, and writes no log.
+refuse() {
+    LOGDIR=$(mktemp -d "$TMP/logs.XXXXXX")
+    OUT=$("$LOGGER" --no-wifi --no-awake --log-dir "$LOGDIR" --base "$BASE" --probe off --rounds 1 "$1" "$2" \
+        </dev/null 2>&1)
+    RC=$?
+    assert_eq "$1 $2 is refused" 2 "$RC"
+    assert_contains "$1 $2: the message names the option" "$OUT" "$1 must"
+    assert_eq "$1 $2: no log was started" 0 "$(count_files "$LOGDIR")"
+}
+refuse --timeout 0
+refuse --timeout -1
+refuse --speed-timeout 0
+refuse --interval 0.99
+refuse --rounds -1
+refuse --retry-every 0
+run_logger --base "http://127.0.0.1:$FREE/api/jsonp/" --probe off --rounds 1 --timeout 0.001 --speed-timeout 0.001
+assert_eq "the smallest timeouts are accepted" 0 "$RC"
+assert_eq "and the round was still logged" 1 "$(jv "$LOG" 'len([x for x in L if x.get("round")])')"
 
 echo "an untrusted certificate"
 if command -v openssl >/dev/null 2>&1 \
     && openssl req -x509 -newkey rsa:2048 -nodes -keyout "$TMP/key.pem" -out "$TMP/cert.pem" -days 1 \
         -subj "/CN=127.0.0.1" >/dev/null 2>&1; then
-    serve tls --cert "$TMP/cert.pem" --key "$TMP/key.pem"
+    serve tls --cert "$TMP/cert.pem" --key "$TMP/key.pem" --request-log "$TMP/tls.log"
     run_logger --base "https://127.0.0.1:$PORT/api/jsonp/" --probe off --rounds 1 --timeout 5
     assert_eq "exits 0" 0 "$RC"
     assert_contains "answering, with the certificate named" "$OUT" "feed answering (https, certificate not trusted)"
     assert_eq "tls untrusted in the round" '"untrusted"' "$(jv "$LOG" 'L[1]["tls"]')"
     assert_eq "the data was read" true "$(jv "$LOG" '"latitude" in L[1]["feed"]["position"]')"
+    assert_eq "the other parts went straight to the retry (position, four parts, the index)" 6 \
+        "$(grep -c '^GET' "$TMP/tls.log")"
 else
     echo "  SKIP the certificate case: openssl is missing or could not make a certificate"
 fi
 
 echo "failover to the second address"
-serve dying --die-after 1
-FIRST="http://127.0.0.1:$PORT/api/jsonp/"
-serve second
-SECOND="http://127.0.0.1:$PORT/api/jsonp/"
-run_logger --base "$FIRST" --base "$SECOND" --probe off --interval 1 --rounds 3 --timeout 3
+collect failover
 assert_eq "exits 0" 0 "$RC"
 assert_eq "every round has a feed" 3 "$(count_lines "$OUT" "feed answering (http)")"
 assert_eq "the base moves from the first to the second" "[\"$FIRST\", \"$SECOND\", \"$SECOND\"]" \
     "$(jv "$LOG" '[x["base"] for x in L if x.get("round")]')"
+assert_eq "every round says what it asked" "[[\"$FIRST\", \"$SECOND\"], [\"$FIRST\", \"$SECOND\"], [\"$SECOND\"]]" \
+    "$(jv "$LOG" '[x["asked"] for x in L if x.get("round")]')"
+assert_eq "round 2 says why the first address failed" "{\"$FIRST\": \"empty answer\", \"$SECOND\": \"ok\"}" \
+    "$(jv "$LOG" 'L[2]["bases"]')"
+assert_eq "round 1 had both answering" "{\"$FIRST\": \"ok\", \"$SECOND\": \"ok\"}" "$(jv "$LOG" 'L[1]["bases"]')"
 
-# stop_with SIGNAL: runs the logger until its first round, sends the signal, sets RC, OUT and LOG.
+echo "full checks every third round, and parts that keep failing"
+collect longrun
+assert_eq "exits 0" 0 "$RC"
+assert_eq "seven rounds, each with every part that answers" true \
+    "$(jv "$LOG" 'len(L) == 9 and all(sorted(x["feed"]) == ["connectivity", "position", "system", "users"] for x in L[1:8])')"
+assert_eq "the 404 is in errs in rounds 1 to 4 and 7" '[1, 2, 3, 4, 7]' \
+    "$(jv "$LOG" '[x["round"] for x in L[1:8] if x.get("errs", {}).get("user") == "answered 404"]')"
+assert_eq "it is skipped in rounds 5 and 6" '[5, 6]' "$(jv "$LOG" '[x["round"] for x in L[1:8] if "skipped" in x]')"
+assert_eq "and the skipped list names it" true "$(jv "$LOG" 'all(x["skipped"] == ["user"] for x in L[5:7])')"
+assert_eq "the stand-in was asked for it five times, not seven" 5 "$(grep -c 'GET /api/jsonp/user/' "$TMP/lra.log")"
+assert_eq "both addresses asked in rounds 1, 4 and 7 only" '[2, 1, 1, 2, 1, 1, 2]' \
+    "$(jv "$LOG" '[len(x["asked"]) for x in L[1:8]]')"
+assert_eq "the second address was asked for position three times" 3 "$(grep -c 'GET /api/jsonp/position/' "$TMP/lrb.log")"
+assert_eq "and for nothing else" 3 "$(grep -c '' "$TMP/lrb.log")"
+assert_eq "a failing internet check is recorded" '{"ms": null, "why": "could not connect"}' "$(jv "$LOG" 'L[1]["probe"]')"
+assert_contains "and the line says why" "$OUT" "internet could not connect"
+run_logger --base "$BASE" --base "http://127.0.0.1:$P/anon/api/jsonp/" --probe off --interval 1 --rounds 2 --retry-every 1
+assert_eq "--retry-every 1 makes every round a full check" true "$(jv "$LOG" 'all(len(x["asked"]) == 2 for x in L[1:3])')"
+
+# stop_with SIGNAL [logger options]: runs the logger until its first round, sends the signal and waits at most
+# 5 s for it to end (then kills it, which fails the case). Sets RC, OUT and LOG.
 stop_with() {
+    local sig="$1" pid watchdog tries=0
+    shift
     LOGDIR=$(mktemp -d "$TMP/logs.XXXXXX")
-    "$LOGGER" --no-wifi --no-awake --log-dir "$LOGDIR" --base "$BASE" --probe off --interval 1 \
+    "$LOGGER" --no-wifi --no-awake --log-dir "$LOGDIR" --base "$BASE" --probe off --interval 1 "$@" \
         </dev/null >"$TMP/stop.out" 2>&1 &
-    local pid=$! tries=0
+    pid=$!
     while ! grep -qs '"round":1' "$LOGDIR"/*.jsonl && [ "$tries" -lt 100 ]; do
         sleep 0.1
         tries=$((tries + 1))
     done
-    kill "-$1" "$pid"
+    kill "-$sig" "$pid"
+    (
+        sleep 5
+        kill -9 "$pid"
+    ) >/dev/null 2>&1 &
+    watchdog=$!
     wait "$pid"
     RC=$?
+    kill "$watchdog" 2>/dev/null
+    wait "$watchdog" 2>/dev/null
     OUT=$(<"$TMP/stop.out")
     for LOG in "$LOGDIR"/*.jsonl; do break; done
 }
 
 echo "stopping"
-for sig in INT HUP; do
-    stop_with "$sig"
-    assert_eq "SIG$sig: exits 0" 0 "$RC"
+for sig in INT HUP TERM; do
+    if [ "$sig" = INT ]; then
+        stop_with "$sig" --rounds 0
+    else
+        stop_with "$sig"
+    fi
+    assert_eq "SIG$sig: exits 0, and not by being killed after 5 s" 0 "$RC"
     assert_eq "SIG$sig: the last line is the stop event" '"stop"' "$(jv "$LOG" 'L[-1]["event"]')"
     assert_eq "SIG$sig: it counted the round" true "$(jv "$LOG" 'L[-1]["rounds"] >= 1')"
     assert_contains "SIG$sig: says it stopped" "$OUT" "Stopped after"
 done
+
+echo "the window going away"
+LOGDIR=$(mktemp -d "$TMP/logs.XXXXXX")
+"$LOGGER" --no-wifi --no-awake --log-dir "$LOGDIR" --base "$BASE" --probe off --interval 1 --rounds 3 \
+    </dev/null 2>"$TMP/pipe.err" | head -n 1 >/dev/null
+assert_eq "it still exits 0" 0 "${PIPESTATUS[0]}"
+for LOG in "$LOGDIR"/*.jsonl; do break; done
+assert_eq "the log holds start, three rounds and stop" '["start", "round", "round", "round", "stop"]' \
+    "$(jv "$LOG" '[x.get("event", "round") for x in L]')"
+assert_eq "nothing was written to stderr" "" "$(<"$TMP/pipe.err")"
+
+echo "a machine without system_profiler or caffeinate"
+if [ "$(uname)" = Linux ]; then
+    LOGDIR=$(mktemp -d "$TMP/logs.XXXXXX")
+    OUT=$("$LOGGER" --log-dir "$LOGDIR" --base "$BASE" --probe off --rounds 1 </dev/null 2>&1)
+    RC=$?
+    for LOG in "$LOGDIR"/*.jsonl; do break; done
+    assert_eq "exits 0" 0 "$RC"
+    assert_eq "no wifi reading" false "$(jv "$LOG" '"wifi" in L[1]')"
+    assert_eq "the feed was read" true "$(jv "$LOG" '"feed" in L[1]')"
+else
+    echo "  SKIP the no-Wi-Fi-tools case: on a Mac it would read this machine's real Wi-Fi"
+fi
 
 echo "terminal safety"
 serve esc --escape
@@ -233,6 +418,17 @@ assert_contains "the line says why" "$OUT" "speed: page names no script"
 assert_eq "tried the page again in round 2" 2 "$(grep -cx 'GET /' "$TMP/noscript.log")"
 assert_file_lacks "no download was attempted" "$TMP/noscript.log" "/assets/"
 
+echo "a script that has gone since the page was read"
+serve gone --site brokenscript --request-log "$TMP/gone.log"
+SITE_G="http://127.0.0.1:$PORT"
+run_logger --base "http://127.0.0.1:$PORT/api/jsonp/" --probe off --speed-site "$SITE_G" --interval 1 --rounds 2 --retry-every 1
+assert_eq "exits 0, with the smallest --retry-every" 0 "$RC"
+assert_eq "round 1: the script answered 404" '"answered 404"' "$(jv "$LOG" 'L[1]["speed"]["why"]')"
+assert_eq "round 2: the same" '"answered 404"' "$(jv "$LOG" 'L[2]["speed"]["why"]')"
+assert_eq "the page was read again in round 2" 2 "$(grep -cx 'GET /' "$TMP/gone.log")"
+assert_eq "and the script asked for both times" 2 "$(grep -c 'GET /assets/index-gone.js' "$TMP/gone.log")"
+assert_contains "the line says why" "$OUT" "speed: answered 404"
+
 echo "--film wins over everything; --no-film with --speed-site uses the given site"
 serve film --request-log "$TMP/film.log"
 SITE_F="http://127.0.0.1:$PORT"
@@ -250,7 +446,7 @@ assert_eq "--no-film with --speed-site: the site is recorded" "\"$SITE_F\"" "$(j
 
 echo "pure functions"
 RESULTS=$(python3 -B - "$LOGGER" 2>&1 <<'PY'
-import importlib.util, sys
+import contextlib, importlib.util, io, json, sys, types
 
 spec = importlib.util.spec_from_file_location("train_feed_logger", sys.argv[1])
 m = importlib.util.module_from_spec(spec)
@@ -273,6 +469,7 @@ for name, text, expected in [
     ("empty", "", None),
     ("nothing", None, None),
     ("a bare number is not feed data", "cb(5);", None),
+    ("nesting too deep for the parser", "cb(" + "[" * 5000 + "]" * 5000 + ");", None),
 ]:
     check("parse_feed: " + name, expected, m.parse_feed(text))
 
@@ -283,6 +480,8 @@ check("printable: space and tilde stay", " ~", m.printable(" ~"))
 check("printable: capped at 40", "a" * 40, m.printable("a" * 50))
 check("printable: a number", "52.1", m.printable(52.1))
 check("printable: the cap counts before replacing", "?" * 40, m.printable("\x1b" * 50))
+check("printable: a longer limit", "a" * 200, m.printable("a" * 300, 200))
+check("printable: a longer limit still replaces", "?" * 200, m.printable("\x1b" * 300, 200))
 
 check("kbps: an ordinary transfer", 10486, m.kbps(262144, 1.0, 1.2))
 check("kbps: a phase of exactly 0.05 s", 41943, m.kbps(262144, 1.0, 1.05))
@@ -320,10 +519,164 @@ for name, args, expected, asks in [
     ("no", (False, False, None, True, ["no"]), SITE, 1),
     ("garbage then n", (False, False, None, True, ["x", "n"]), SITE, 2),
     ("garbage three times", (False, False, None, True, ["x", "maybe", "?", "n"]), None, 3),
+    ("no answer is a film", (False, False, None, True, [None]), None, 1),
+    ("no answer after garbage is a film", (False, False, None, True, ["x", None]), None, 2),
 ]:
     got, asked = decide(*args)
     check("wants_speed: " + name, (expected, asks), (got, len(asked)))
     check("wants_speed: " + name + " (the question)", [Q] * asks, asked)
+
+
+def read(stdin_text, ready):
+    calls = []
+    stdin = io.StringIO(stdin_text)
+
+    def fake_select(r, w, x, timeout):
+        calls.append((r, w, x, timeout))
+        return (r if ready else []), [], []
+
+    printed = io.StringIO()
+    with contextlib.redirect_stdout(printed):
+        answer = m.read_answer(Q, 7, stdin, fake_select)
+    return answer, printed.getvalue(), calls, stdin
+
+
+answer, printed, calls, stdin = read("n\n", True)
+check("read_answer: a ready line is returned", "n\n", answer)
+check("read_answer: it prints the question and nothing more", Q, printed)
+check("read_answer: it waited on stdin for the given time", [([stdin], [], [], 7)], calls)
+answer, printed, _, _ = read("n\n", False)
+check("read_answer: nobody answers", None, answer)
+check("read_answer: it says so", Q + "\nNo answer: assuming a film will play.\n", printed)
+answer, printed, _, _ = read("", True)
+check("read_answer: end of input", None, answer)
+check("read_answer: end of input says so too", Q + "\nNo answer: assuming a film will play.\n", printed)
+
+
+def with_subprocess(run):
+    real = m.subprocess
+    m.subprocess = types.SimpleNamespace(run=run, PIPE=-1, DEVNULL=-3)
+    try:
+        return m.wifi_link()
+    finally:
+        m.subprocess = real
+
+
+def profiler(report):
+    return lambda *args, **kwargs: types.SimpleNamespace(stdout=report if isinstance(report, bytes) else json.dumps(report).encode())
+
+
+def missing(*args, **kwargs):
+    raise FileNotFoundError("system_profiler")
+
+
+current = {"_name": "TrainWiFi", "spairport_signal_noise": "-60 dBm / -90 dBm", "spairport_network_rate": 144,
+           "spairport_network_mcs": 7, "spairport_network_phymode": "802.11n", "spairport_network_channel": "6 (2GHz)"}
+report = {"SPAirPortDataType": [{"spairport_airport_interfaces": [
+    {"_name": "awdl0"}, {"_name": "en0", "spairport_current_network_information": current}]}]}
+check("wifi_link: the interface with a network", {
+    "name": "TrainWiFi", "signal_noise": "-60 dBm / -90 dBm", "rate": 144, "mcs": 7, "phy": "802.11n",
+    "channel": "6 (2GHz)"}, with_subprocess(profiler(report)))
+check("wifi_link: no interface has a network", None, with_subprocess(profiler(
+    {"SPAirPortDataType": [{"spairport_airport_interfaces": [{"_name": "awdl0"}]}]})))
+check("wifi_link: malformed output", None, with_subprocess(profiler(b"not json")))
+check("wifi_link: the command is missing", None, with_subprocess(missing))
+
+
+def line(**record):
+    return m.status_line(dict(t=0, **record), {}).split("  |  ")[1:]  # without the time
+
+
+base = {"feed": {}, "base": "http://x/"}
+answering = "feed answering (http)"
+check("status_line: too fast to measure", [answering, "speed too fast to measure"], line(
+    speed={"bytes": 262144, "ms": 900, "first_byte_ms": 100, "kbps": None}, **base))
+check("status_line: nothing received", [answering, "speed: nothing received"], line(
+    speed={"bytes": 0, "ms": None, "first_byte_ms": None, "kbps": None}, **base))
+check("status_line: a why", [answering, "speed: timed out"], line(
+    speed={"bytes": 10, "ms": 1000, "first_byte_ms": 5, "kbps": 3, "why": "timed out"}, **base))
+check("status_line: an exact figure", [answering, "speed 2.4 Mbit/s"], line(
+    speed={"bytes": 262144, "ms": 900, "first_byte_ms": 100, "kbps": 2400}, **base))
+check("status_line: one decimal", [answering, "speed 12.3 Mbit/s"], line(
+    speed={"bytes": 262144, "ms": 900, "first_byte_ms": 100, "kbps": 12345}, **base))
+check("status_line: links skip what is not a link", [answering, "links: lte -60"], line(
+    feed={"connectivity": {"links": ["x", 5, None, {"technology": "lte", "rssi": "-60"}]}}, base="http://x/"))
+check("status_line: no link at all leaves the part out", [answering], line(
+    feed={"connectivity": {"links": ["x", 5]}}, base="http://x/"))
+check("status_line: an internet check that answered 200", [answering, "internet 35 ms (answered 200)"], line(
+    probe={"ms": 35, "code": 200}, **base))
+check("status_line: and one that answered 204", [answering, "internet 35 ms"], line(
+    probe={"ms": 35, "code": 204}, **base))
+check("status_line: and one that failed", [answering, "internet could not connect"], line(
+    probe={"ms": None, "why": "could not connect"}, **base))
+
+
+GOOD = {"ok": True, "ms": 1, "code": 200, "ip": "10.0.0.1", "type": "application/javascript",
+        "body": 'cb({"a": 1});', "headers": ""}
+
+
+def with_fetch(fake, play):
+    real = m.fetch
+    m.fetch = fake
+    try:
+        return play()
+    finally:
+        m.fetch = real
+
+
+calls = []
+
+
+def refusing(url, timeout, insecure=False, max_size=None):
+    calls.append((url, insecure))
+    if not insecure:
+        return {"ok": False, "why": "certificate not trusted", "ms": 1, "curl": 60}
+    return GOOD
+
+
+def two_rounds():
+    logger = m.Logger(["https://x.test/api/jsonp/"], None, False)
+    first = logger.round(1)
+    after_first = len(calls)
+    second = logger.round(2)
+    return first, second, after_first
+
+
+first, second, after_first = with_fetch(refusing, two_rounds)
+check("untrusted: tls in the first round", "untrusted", first["tls"])
+check("untrusted: tls in the second round", "untrusted", second["tls"])
+check("untrusted: only one request was refused in the first round", 1, sum(1 for _, i in calls[:after_first] if not i))
+check("untrusted: none in the second", 0, sum(1 for _, i in calls[after_first:] if not i))
+check("untrusted: the second round asked every part once", 5, len(calls) - after_first)
+check("untrusted: every part was still read", sorted(m.PARTS), sorted(second["feed"]))
+
+a_down = {"now": False}
+
+
+def two_addresses(url, timeout, insecure=False, max_size=None):
+    host = url.split("/")[2]
+    part = url.split("?")[0].rstrip("/").split("/")[-1]
+    if host == "a.test" and part == "user":
+        return {"ok": False, "why": "answered 404", "ms": 1, "code": 404}
+    if host == "a.test" and part == "position" and a_down["now"]:
+        return {"ok": False, "why": "empty answer", "ms": 1, "curl": 52}
+    return GOOD
+
+
+def journey():
+    logger = m.Logger(["http://a.test/api/jsonp/", "http://b.test/api/jsonp/"], None, False)
+    rounds = {}
+    for n in range(1, 6):
+        a_down["now"] = n == 5
+        rounds[n] = logger.round(n)
+    return rounds
+
+
+rounds = with_fetch(two_addresses, journey)
+check("failure counts: a part that keeps failing is skipped on the address in use", ["user"], rounds[4]["skipped"])
+check("failure counts: they start again on another address", [None, "b.test"], [
+    rounds[5].get("skipped"), rounds[5]["base"].split("/")[2]])
+check("failure counts: so the part is asked there", True, "user" in rounds[5]["feed"])
 PY
 )
 assert_eq "the pure functions ran without an error" 0 "$(count_lines "$RESULTS" "Traceback")"
@@ -334,7 +687,7 @@ while IFS= read -r line; do
         "FAIL "*) bad "${line#FAIL }"; PURE=$((PURE + 1)) ;;
     esac
 done <<< "$RESULTS"
-assert_eq "all 46 pure checks reported" 46 "$PURE"
+assert_eq "all 83 pure checks reported" 83 "$PURE"
 
 echo "compiles"
 PYTHONPYCACHEPREFIX="$TMP/pyc" python3 -m py_compile "$LOGGER" "$STAND_IN"

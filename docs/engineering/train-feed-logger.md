@@ -20,7 +20,7 @@ Every 30 seconds it asks, with `curl`:
 
 | Asked | Recorded |
 |---|---|
-| `https://www.ombord.info/api/jsonp/`, then the same over `http`: the parts `position`, `connectivity`, `users`, `user` and `system` | each answer as data, how long it took, the address that answered and whether its certificate was trusted |
+| `https://www.ombord.info/api/jsonp/` and the same over `http` (the `https` one is used when both answer): the parts `position`, `connectivity`, `users`, `user` and `system`, and once the feed's own index | each answer as data, how long it took, the address that answered and whether its certificate was trusted |
 | `https://www.gstatic.com/generate_204` | how long one tiny request to the internet took, or why it failed |
 | only when no film is playing: the first 256 KB of CineFilm's own page code | bytes received, the time, and the speed over the transfer |
 
@@ -30,12 +30,16 @@ feed used the function name it was given: what the player would need to know to 
 first round reads the laptop's own Wi-Fi link once (signal, noise, rate); reading it can make the Mac look for
 other networks, so it is not repeated.
 
-Each round is one line of JSON in `~/train-feed-logger/logs/train-feed-<date>-<time>.jsonl`, written at once. **The
-log holds where the train went**, so it is kept outside any checkout and is never committed (`SECURITY.md`).
+Each request names a function for the answer (`callback=cb`) and carries a time stamp, so nothing on the way can
+answer from a cache. An answer over 200 KB is refused.
+
+Each round is one line of JSON in `~/train-feed-logger/logs/train-feed-<date>-<time>.jsonl`, written at once. The
+folder and the logs are readable by the owner alone. **The log holds where the train went**, so it is kept outside any checkout and is never committed (`SECURITY.md`).
 
 The speed sample would compete with a film, so the script asks at the start whether one will be playing and takes
-the sample only when the answer is no. Run without a terminal it takes none. `--film` and `--no-film` answer the
-question in advance; `--speed-site` samples from another site.
+the sample only when the answer is no. If nobody answers within a minute it assumes a film and starts. Run without
+a terminal it takes none. `--film` and `--no-film` answer the question in advance; `--speed-site` samples from
+another site. When a release changes the script's name, it reads the page again.
 
 ## Running it
 

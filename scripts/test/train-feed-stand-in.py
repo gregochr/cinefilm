@@ -6,16 +6,19 @@ Loopback only: it binds 127.0.0.1 on a free port and writes that port to the fil
 It is not a test file itself (its name does not end in .test.sh, so run-all.sh does not run it).
 
     train-feed-stand-in.py PORT_FILE [--cert C --key K] [--die-after N] [--escape]
-                           [--site normal|noscript|trickle] [--request-log FILE]
+                           [--missing PART] [--html-part PART]
+                           [--site normal|noscript|trickle|brokenscript] [--request-log FILE]
 
 Feed:  GET /api/jsonp/<part>/?callback=cb  ->  cb({...});   (with no callback: ({...});)
        Path prefixes pick a behaviour: /anon/... ignores the callback name, /html/... answers a web page as a
-       sign-in portal would, /slow/... answers after three seconds.
+       sign-in portal would, /slow/... answers after three seconds, /big/... pads each answer to 150,000 bytes
+       (valid), /huge/... to over 250,000 bytes with a Content-Length, /chunked/... the same without one.
 Site:  / is a page naming /assets/index-test.js (300,000 bytes, which honours a Range header and sends slowly
-       enough for a speed to be measurable); /generate_204 is an empty 204.
+       enough for a speed to be measurable); /generate_204 is an empty 204 and /generate_200 a page that answers 200.
 """
 import argparse
 import json
+import os
 import ssl
 import sys
 import threading
@@ -24,9 +27,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 START = time.time()
 SCRIPT = b"x" * 300000
-PAGE = b'<!doctype html><html><head><script type="module" crossorigin src="/assets/index-test.js"></script></head><body></body></html>'
+PAGE = (b'<!doctype html><html><head>'
+        b'<script type="module" crossorigin src="/assets/index-test.js"></script>'
+        b'</head><body></body></html>')
+PAGE_GONE = PAGE.replace(b"index-test.js", b"index-gone.js")  # a release changed the script's hashed name
 PAGE_NO_SCRIPT = b"<!doctype html><html><head></head><body>nothing to download here</body></html>"
 SIGN_IN = b"<html><body>Sign in to the train Wi-Fi</body></html>"
+PADDING = {"big": 150000, "huge": 250000, "chunked": 250000}
 PARTS = ("position", "connectivity", "users", "user", "system")
 OPTIONS = None
 STATE = {"positions": 0}
@@ -82,17 +89,22 @@ class Handler(BaseHTTPRequestHandler):
                 log.write("GET %s\n" % path)
         segments = [s for s in path.split("/") if s]
         mode = ""
-        if segments and segments[0] in ("anon", "html", "slow"):
+        if segments and segments[0] in ("anon", "html", "slow", "big", "huge", "chunked"):
             mode = segments.pop(0)
         if segments[:2] == ["api", "jsonp"]:
             self.feed_request(mode, segments[2] if len(segments) > 2 else "", query)
         elif path == "/":
-            self.reply(200, "text/html", PAGE_NO_SCRIPT if OPTIONS.site == "noscript" else PAGE)
+            page = {"noscript": PAGE_NO_SCRIPT, "brokenscript": PAGE_GONE}.get(OPTIONS.site, PAGE)
+            self.reply(200, "text/html", page)
         elif path == "/assets/index-test.js":
             self.script()
+        elif path == "/assets/index-gone.js":
+            self.reply(404, "text/plain", b"not found")
         elif path == "/generate_204":
             self.send_response(204)
             self.end_headers()
+        elif path == "/generate_200":
+            self.reply(200, "text/html", SIGN_IN)
         else:
             self.reply(404, "text/plain", b"not found")
 
@@ -104,8 +116,11 @@ class Handler(BaseHTTPRequestHandler):
             if dead:
                 self.close_connection = True  # answers nothing: curl reports an empty reply
                 return
-        if mode == "html":
+        if mode == "html" or (part and part == OPTIONS.html_part):
             self.reply(200, "text/html", SIGN_IN)
+            return
+        if part and part == OPTIONS.missing:
+            self.reply(404, "text/plain", b"not found")
             return
         if mode == "slow":
             time.sleep(3)
@@ -121,7 +136,16 @@ class Handler(BaseHTTPRequestHandler):
             if pair.startswith("callback="):
                 callback = pair[len("callback="):]
         name = "" if mode == "anon" else callback
-        self.reply(200, "application/javascript", ("%s(%s);" % (name, json.dumps(data))).encode())
+        if mode in PADDING:
+            data = dict(data, pad="x" * PADDING[mode])
+        body = ("%s(%s);" % (name, json.dumps(data))).encode()
+        if mode == "chunked":  # no Content-Length: the body ends when the connection does
+            self.send_response(200)
+            self.send_header("Content-Type", "application/javascript")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        self.reply(200, "application/javascript", body)
 
     def script(self):
         wanted = self.headers.get("Range")
@@ -168,7 +192,9 @@ def main():
     parser.add_argument("--key")
     parser.add_argument("--die-after", type=int, default=None, help="stop answering after this many position requests")
     parser.add_argument("--escape", action="store_true", help="put an escape sequence in the latitude")
-    parser.add_argument("--site", choices=("normal", "noscript", "trickle"), default="normal")
+    parser.add_argument("--missing", help="this part of the feed answers 404")
+    parser.add_argument("--html-part", help="this part of the feed answers a web page")
+    parser.add_argument("--site", choices=("normal", "noscript", "trickle", "brokenscript"), default="normal")
     parser.add_argument("--request-log")
     OPTIONS = parser.parse_args()
     server = Server(("127.0.0.1", 0), Handler)
@@ -178,7 +204,6 @@ def main():
     with open(OPTIONS.port_file + ".tmp", "w", encoding="utf-8") as out:
         out.write(str(server.server_address[1]))
     # Renamed once complete, so a reader never sees an empty file.
-    import os
     os.rename(OPTIONS.port_file + ".tmp", OPTIONS.port_file)
     server.serve_forever()
     return 0
