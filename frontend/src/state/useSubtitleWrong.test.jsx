@@ -175,4 +175,31 @@ describe('useSubtitleWrong', () => {
     rerender(target);
     expect(result.current.problem).toBeNull();
   });
+
+  it('does not keep a failure that arrives after the viewer moved to another download', async () => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    installFetch((method) =>
+      method === 'DELETE' ? gate.then(() => respond({ error: 'boom' }, 500)) : null,
+    );
+    const { result, rerender } = renderHook((props) => useSubtitleWrong(props), {
+      initialProps: target,
+    });
+    let pending;
+    await act(async () => {
+      pending = result.current.report('FORCED');
+      await Promise.resolve();
+    });
+    rerender({ ...target, kind: 'FULL' });
+
+    await act(async () => {
+      release();
+      await pending;
+    });
+    rerender(target);
+
+    expect(result.current.problem).toBeNull();
+  });
 });

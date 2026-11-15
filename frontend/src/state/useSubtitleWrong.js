@@ -16,6 +16,9 @@ export function useSubtitleWrong({ filmId, editionId, kind: shownKind = null }) 
   const running = useRef(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState(null);
+  // What shows now, for a request that ends after the viewer moved to another download.
+  const shown = useRef(shownKind);
+  shown.current = shownKind;
 
   const report = useCallback(
     async (kind) => {
@@ -37,7 +40,8 @@ export function useSubtitleWrong({ filmId, editionId, kind: shownKind = null }) 
         }
         return true;
       } catch (error) {
-        setFailure({ kind, text: wrongProblem(error) });
+        // A failure for a download that no longer shows is not kept: switching back must not bring it back.
+        if (kind === shown.current) setFailure({ kind, text: wrongProblem(error) });
         return false;
       } finally {
         running.current = false;

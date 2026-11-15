@@ -215,6 +215,27 @@ describe('FilmSubtitlesFix', () => {
     expect(add).toHaveFocus();
   });
 
+  it('leaves focus alone when it is outside the dialog (another modal on top) as a tool finishes', async () => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    serve({
+      answer: (method, url) =>
+        url === '/api/admin/subtitles/7/verify' ? gate.then(() => respond(rows()[1])) : null,
+    });
+    const { dialog, onChanged } = await open();
+    await userEvent.click(within(dialog).getByRole('button', { name: /Use my file instead/ }));
+    const add = screen.getByRole('button', { name: 'Open the fixer' });
+    add.focus();
+
+    await act(async () => release());
+
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    await within(dialog).findByText('Your file plays instead of the download.');
+    expect(add).toHaveFocus();
+  });
+
   it('"Let CineFilm decide" posts detach and the file leaves the film’s list once it is read again', async () => {
     const { requests } = serve();
     const { dialog, onChanged } = await open();

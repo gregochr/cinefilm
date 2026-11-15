@@ -183,13 +183,14 @@ export default function FilmSubtitlesFix({ film, opener, onClose, onChanged }) {
     closeRef.current?.focus();
   }, []);
   // The button that was used is gone (the row left, or its tool no longer applies) and took focus with it: the notice
-  // takes it. Not when the viewer has moved on to something else in the dialog while the request ran.
+  // takes it. Only when focus was lost (on the page): not when the viewer moved on to something else while the request
+  // ran, nor when another modal (the sign-in card) is on top.
   useEffect(() => {
     if (notice.n === 0) return;
     const active = document.activeElement;
-    const lost = !active || active === document.body || !dialogRef.current?.contains(active);
+    const lost = !active || active === document.body;
     if (lost) noticeRef.current?.focus();
-  }, [notice, dialogRef]);
+  }, [notice]);
   const say = (text) => setNotice((prev) => ({ n: prev.n + 1, text }));
   const files = subtitles.items ? filmFiles(subtitles.items, film.id) : [];
   const attached = () => {
