@@ -30,6 +30,8 @@ public final class SidecarTrust {
     public enum Proof {
         /** Nothing does. */
         NONE,
+        /** The owner picked this download in the Admin picker (never judged failed). */
+        CHOSEN,
         /** The owner said it looks right. */
         VERIFIED,
         /** The comparison with OpenSubtitles agrees. */
@@ -58,6 +60,25 @@ public final class SidecarTrust {
      *     then {@code ALIGNED}; a {@code CHECK} that nothing proves is a failure
      */
     public static Assessment assess(boolean ownerVerified, String checkVerdict, boolean aligned) {
+        return assess(false, ownerVerified, checkVerdict, aligned);
+    }
+
+    /**
+     * Where a download stands: as {@link #assess(boolean, String, boolean)}, except that a download the owner picked in
+     * the Admin picker is proven whatever the comparison says (the owner's pick beats a failure, and is the first
+     * proof so that it also plays before other proven downloads).
+     *
+     * @param ownerChosen true when the owner picked it ({@link SubtitleSidecar#isOwnerChosen})
+     * @param ownerVerified true while the owner's check counts
+     * @param checkVerdict the comparison with OpenSubtitles, or null
+     * @param aligned true when the timing fit is current and {@code ALIGNED}
+     * @return the assessment
+     */
+    public static Assessment assess(boolean ownerChosen, boolean ownerVerified, String checkVerdict,
+                                    boolean aligned) {
+        if (ownerChosen) {
+            return new Assessment(Trust.PROVEN, Proof.CHOSEN);
+        }
         if (ownerVerified) {
             return new Assessment(Trust.PROVEN, Proof.VERIFIED);
         }

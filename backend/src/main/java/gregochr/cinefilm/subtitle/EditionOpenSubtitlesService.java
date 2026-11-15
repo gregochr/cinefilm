@@ -4,6 +4,7 @@ import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.config.ServiceUnavailableException;
+import gregochr.cinefilm.config.UnprocessableException;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.library.LibraryLock;
@@ -40,7 +41,8 @@ import org.springframework.stereotype.Service;
  * {@link ForcedDownloadService}: the cap of {@value DownloadPlan#MAX_DOWNLOADS} files per edition, the removed files
  * that stay blocked, the library lock) but takes only a file that a search this server ran for the same edition and
  * kind in the last {@value PickerSearches#TTL_MINUTES} minutes offered ({@link PickerSearches}). The picked file is
- * pinned (see {@link ForcedDownloadService#addChosen}). Nothing is held in a transaction while OpenSubtitles is asked.
+ * marked as the owner's pick ({@code ownerChosenAt}, see {@link ForcedDownloadService#addChosen}). Nothing is held in
+ * a transaction while OpenSubtitles is asked.
  *
  * <p>Two downloads for one edition and kind cannot overlap: the second is refused at once (409) while the first is
  * running, and once it has finished the cap and the "already downloaded" check, made again under the library lock, stop
@@ -141,9 +143,10 @@ public class EditionOpenSubtitlesService {
      * @param editionId the edition
      * @param request the file id and kind
      * @return what was downloaded and how many more files the edition may be given
-     * @throws BadRequestException when the kind or file id is missing or invalid, the file was not in a search for this
-     *     edition and kind in the last {@value PickerSearches#TTL_MINUTES} minutes, or it is not a usable subtitle of
-     *     the kind
+     * @throws BadRequestException when the kind or file id is missing or invalid, or the file was not in a search for
+     *     this edition and kind in the last {@value PickerSearches#TTL_MINUTES} minutes
+     * @throws UnprocessableException when the file was fetched (that may have used one of today's downloads; a stored
+     *     copy is reused free) but is not a usable subtitle of the kind
      * @throws NotFoundException when there is no such edition
      * @throws ConflictException when a scan or an Admin change is running, another download for the edition and kind
      *     is, the film changed, the owner marked it as not needing this kind, the file was removed or is already the
@@ -201,7 +204,7 @@ public class EditionOpenSubtitlesService {
         Instant now = clock.instant();
         ChosenOutcome outcome = downloads.addChosen(filmId, editionId, kind, reference, now);
         if (outcome == ChosenOutcome.UNUSABLE) {
-            throw new BadRequestException(unusable(reference, kind));
+            throw new UnprocessableException(unusable(reference, kind));
         }
         if (outcome != ChosenOutcome.ADDED) {
             refuse(outcome);

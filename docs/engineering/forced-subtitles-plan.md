@@ -256,7 +256,9 @@ Each: what was chosen, why, and the alternative. Numbers continue 2e's.
     checked keeps playing, as the owner decided. For a split edition's per-part files the verdicts are the edition's (one
     comparison) and every file must be aligned for the timing proof. The embedded forced text track counts as proven.
 45. **The playback order** (`ForcedChoice`, pure, a unit test for each row, tie and boundary): 1 a proven owner file; 2 a
-    proven download (the lowest id among several proven ones, a proven one before an unchecked one whatever the ids); 3 the
+    proven download (one the owner picked in the Admin OpenSubtitles picker first (`owner_chosen_at`, always proven, never
+    failed; the latest pick of an edition holds the marker); otherwise the lowest id among several proven ones, a proven one
+    before an unchecked one whatever the ids); 3 the
     embedded forced text track; 4 an owner file that has not failed; 5 a failed owner file replaced by a download that has
     not failed; with no such download it keeps playing, **except at 300 lines or more** (`SubtitleComparison.FULL_LINES`),
     where it is full subtitles and plays nothing; 6 with no owner file, an unchecked download. A failed download never

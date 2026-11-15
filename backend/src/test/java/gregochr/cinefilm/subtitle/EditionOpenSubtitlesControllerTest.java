@@ -13,6 +13,7 @@ import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.config.ServiceUnavailableException;
+import gregochr.cinefilm.config.UnprocessableException;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesChargedException;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesQuotaException;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesUnavailableException;
@@ -235,16 +236,28 @@ class EditionOpenSubtitlesControllerTest {
     }
 
     @Test
-    void aChargedDownloadThatCouldNotBeDeliveredIs502WhetherOrNotItCanBeTriedAgain() throws Exception {
-        when(service.download(40L, REQUEST)).thenThrow(new OpenSubtitlesChargedException("timeout", false),
-            new OpenSubtitlesChargedException("refused", true));
+    void aChargedDownloadThatMayBeTriedAgainIs502() throws Exception {
+        when(service.download(40L, REQUEST)).thenThrow(new OpenSubtitlesChargedException("timeout", false));
 
-        for (int i = 0; i < 2; i++) {
-            mvc.perform(signedIn(post(DOWNLOAD)).content(BODY))
-                .andExpect(status().isBadGateway())
-                .andExpect(jsonPath("$.error").value("OpenSubtitles counted this download against today's limit "
-                    + "but could not deliver the file. Try again."));
-        }
+        mvc.perform(signedIn(post(DOWNLOAD)).content(BODY))
+            .andExpect(status().isBadGateway())
+            .andExpect(jsonPath("$.error").value("OpenSubtitles counted this download against today's limit "
+                + "but could not deliver the file. Try again."));
+    }
+
+    @Test
+    void aFileThatWasFetchedButIsNotUsableIs422WithTheServicesText() throws Exception {
+        when(service.download(40L, REQUEST))
+            .thenThrow(new UnprocessableException("That subtitle file could not be read."));
+        when(service.download(40L, new DownloadRequest(6011L, "full")))
+            .thenThrow(new UnprocessableException("That file is too short to be a full subtitle."));
+
+        mvc.perform(signedIn(post(DOWNLOAD)).content(BODY))
+            .andExpect(status().isUnprocessableContent())
+            .andExpect(jsonPath("$.error").value("That subtitle file could not be read."));
+        mvc.perform(signedIn(post(DOWNLOAD)).content("{\"fileId\":6011,\"kind\":\"full\"}"))
+            .andExpect(status().isUnprocessableContent())
+            .andExpect(jsonPath("$.error").value("That file is too short to be a full subtitle."));
     }
 
     @Test

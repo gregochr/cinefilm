@@ -19,6 +19,7 @@ class ForcedChoiceTest {
 
     private static final Assessment AGREES = new Assessment(Trust.PROVEN, Proof.AGREES);
     private static final Assessment ALIGNED = new Assessment(Trust.PROVEN, Proof.ALIGNED);
+    private static final Assessment CHOSEN = new Assessment(Trust.PROVEN, Proof.CHOSEN);
     private static final Assessment VERIFIED = new Assessment(Trust.PROVEN, Proof.VERIFIED);
     private static final Assessment UNCHECKED = new Assessment(Trust.UNCHECKED, Proof.NONE);
     private static final Assessment FAILED = new Assessment(Trust.FAILED, Proof.NONE);
@@ -241,7 +242,7 @@ class ForcedChoiceTest {
 
     @Test
     void tiesBetweenDownloadsOfOneTrustLevelGoToTheLowestId() {
-        Decision proven = decide(null, false, download(8, AGREES), download(4, ALIGNED), download(6, AGREES));
+        Decision proven = decide(null, false, download(8, AGREES), download(4, ALIGNED), download(6, VERIFIED));
         Decision unchecked = decide(null, false, download(8, UNCHECKED), download(5, UNCHECKED));
 
         assertThat(proven.downloadId()).isEqualTo(4L);
@@ -250,19 +251,38 @@ class ForcedChoiceTest {
     }
 
     @Test
-    void aDownloadTheOwnerVerifiedPlaysBeforeAnyOtherProvenDownloadWhateverItsId() {
-        Decision decision = decide(null, false, download(4, AGREES), download(9, VERIFIED), download(6, ALIGNED));
+    void aDownloadTheOwnerPickedPlaysBeforeAnyOtherProvenDownloadWhateverItsId() {
+        Decision decision = decide(null, false, download(4, VERIFIED), download(9, CHOSEN), download(6, ALIGNED));
 
         assertThat(decision.step()).isEqualTo(Step.PROVEN_DOWNLOAD);
         assertThat(decision.downloadId()).isEqualTo(9L);
+        assertThat(decision.downloadReasons().get(9L)).isEqualTo("Plays: you picked it");
         assertThat(decision.downloadReasons().get(4L)).isEqualTo("Not used: another OpenSubtitles download plays");
     }
 
     @Test
-    void twoDownloadsTheOwnerVerifiedGoToTheLowestId() {
-        Decision decision = decide(null, false, download(9, VERIFIED), download(7, VERIFIED), download(2, AGREES));
+    void aPickedDownloadReplacesAFailedOwnerFileAndSaysSoInTheFilesReason() {
+        Decision decision = decide(file(FAILED), false, download(9, CHOSEN));
 
-        assertThat(decision.downloadId()).isEqualTo(7L);
+        assertThat(decision.step()).isEqualTo(Step.PROVEN_DOWNLOAD);
+        assertThat(decision.fileReplaced()).isTrue();
+        assertThat(decision.fileReason()).isEqualTo("Replaced by an OpenSubtitles download that you picked");
+    }
+
+    @Test
+    void aPickedDownloadBeatsTheEmbeddedTrackAndAnUnprovenOwnerFileButNotAProvenOne() {
+        assertThat(decide(file(UNCHECKED), true, download(9, CHOSEN)).step()).isEqualTo(Step.PROVEN_DOWNLOAD);
+        assertThat(decide(file(UNCHECKED), false, download(9, CHOSEN)).step()).isEqualTo(Step.PROVEN_DOWNLOAD);
+        assertThat(decide(file(AGREES), false, download(9, CHOSEN)).step()).isEqualTo(Step.PROVEN_FILE);
+    }
+
+    @Test
+    void aPickedDownloadIsNeverFailedBecauseTheAssessmentSaysSo() {
+        assertThat(SidecarTrust.assess(true, false, "CHECK", false)).isEqualTo(CHOSEN);
+        assertThat(SidecarTrust.assess(true, true, "AGREES", true)).isEqualTo(CHOSEN);
+        assertThat(SidecarTrust.assess(false, false, "CHECK", false))
+            .isEqualTo(new Assessment(Trust.FAILED, Proof.NONE));
+        assertThat(SidecarTrust.assess(false, true, "CHECK", false)).isEqualTo(VERIFIED);
     }
 
     @Test

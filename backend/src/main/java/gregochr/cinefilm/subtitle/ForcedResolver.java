@@ -197,7 +197,7 @@ public class ForcedResolver {
             CheckDto check = row == null ? null : currentCheck(row, version, edition, referenceById);
             AlignmentDto alignment = alignmentBySidecar.get(d.getId());
             putIfPresent(alignments, d.getId(), alignmentBySidecar);
-            Assessment assessment = SidecarTrust.assess(d.isVerifiedFor(partIds),
+            Assessment assessment = SidecarTrust.assess(d.isOwnerChosen(), d.isVerifiedFor(partIds),
                 check == null ? null : check.verdict(), SidecarTrust.isAligned(alignment));
             states.add(new DownloadState(d, assessment, check, alignment, version));
             sides.add(new DownloadSide(d.getId(), assessment));

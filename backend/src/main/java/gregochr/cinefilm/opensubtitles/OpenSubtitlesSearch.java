@@ -11,12 +11,13 @@ import java.util.List;
  * @param candidates the single-file results the check may compare with, in ranked order
  *     ({@link OpenSubtitlesRanking#candidates}); never null
  * @param results every result that remains, in the order OpenSubtitles listed them (multi-file ones included), for the
- *     Admin picker; never null
+ *     Admin picker; never null. A search made with the three-argument constructor has its candidates here (it knows
+ *     no others), and one made with the two-argument constructor has none
  */
 public record OpenSubtitlesSearch(int count, OpenSubtitlesResult best, List<OpenSubtitlesResult> candidates,
                                   List<OpenSubtitlesResult> results) {
 
-    /** A search whose results are its candidates (the scheduler's searches never look at the rest). */
+    /** A search whose results are its candidates (it knows no others). */
     public OpenSubtitlesSearch(int count, OpenSubtitlesResult best, List<OpenSubtitlesResult> candidates) {
         this(count, best, candidates, candidates);
     }

@@ -8,7 +8,7 @@ import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.film.Edition;
@@ -95,6 +95,18 @@ class ForcedDownloadServiceChosenUnitTest {
     private void rows(SubtitleKind kind, List<ForcedDownloadBlock> editionBlocks, List<SubtitleSidecar> found) {
         when(blocks.findByEditionIdInAndKind(List.of(40L), kind)).thenReturn(editionBlocks);
         when(sidecars.findByMediaFileIdInAndKind(List.of(10L), kind)).thenReturn(found);
+    }
+
+    private List<SubtitleSidecar> savedRows() {
+        ArgumentCaptor<SubtitleSidecar> saved = ArgumentCaptor.forClass(SubtitleSidecar.class);
+        verify(sidecars, atLeast(0)).save(saved.capture());
+        return saved.getAllValues();
+    }
+
+    private List<ForcedCheckCandidate> ledgerRows() {
+        ArgumentCaptor<ForcedCheckCandidate> saved = ArgumentCaptor.forClass(ForcedCheckCandidate.class);
+        verify(ledger, atLeast(0)).save(saved.capture());
+        return saved.getAllValues();
     }
 
     private static OpenSubtitlesReference reference(long fileId, int cueCount) {
@@ -260,10 +272,12 @@ class ForcedDownloadServiceChosenUnitTest {
         assertThat(row.getCueCount()).isEqualTo(12);
         assertThat(row.getImdbId()).isEqualTo(IMDB);
         assertThat(row.getDownloadedAt()).isEqualTo(NOW);
-        // The pin: the owner's own check, so it is proven and a failed comparison can never make it due again.
-        assertThat(row.getOwnerVerifiedAt()).isEqualTo(NOW);
-        assertThat(row.getVerifiedParts()).isEqualTo("10");
-        assertThat(row.isVerifiedFor(List.of(10L))).isTrue();
+        // The pin is the owner's pick, not the owner's check: no "you checked it", and nothing that a nudge clears.
+        assertThat(row.getOwnerChosenAt()).isEqualTo(NOW);
+        assertThat(row.isOwnerChosen()).isTrue();
+        assertThat(row.getOwnerVerifiedAt()).isNull();
+        assertThat(row.getVerifiedParts()).isNull();
+        assertThat(row.isVerifiedFor(List.of(10L))).isFalse();
         assertThat(lock.holder()).isNull();
     }
 
@@ -279,7 +293,8 @@ class ForcedDownloadServiceChosenUnitTest {
         verify(sidecars).save(saved.capture());
         assertThat(saved.getValue().getKind()).isEqualTo(SubtitleKind.FULL);
         assertThat(saved.getValue().getPath()).isEqualTo("opensubtitles:40:6011");
-        assertThat(saved.getValue().isVerifiedFor(List.of(10L))).isTrue();
+        assertThat(saved.getValue().getOwnerChosenAt()).isEqualTo(NOW);
+        assertThat(saved.getValue().getOwnerVerifiedAt()).isNull();
         ArgumentCaptor<ForcedCheckCandidate> tried = ArgumentCaptor.forClass(ForcedCheckCandidate.class);
         verify(ledger).save(tried.capture());
         assertThat(tried.getValue().getEditionId()).isEqualTo(40L);
@@ -287,6 +302,22 @@ class ForcedDownloadServiceChosenUnitTest {
         assertThat(tried.getValue().getKind()).isEqualTo(SubtitleKind.FULL);
         assertThat(tried.getValue().getOsFileId()).isEqualTo(6011L);
         assertThat(tried.getValue().getTriedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void aNewPickTakesTheMarkFromTheEditionsEarlierPickOfTheSameKind() {
+        editionLoads();
+        SubtitleSidecar earlier = download(7501, SubtitleKind.FORCED);
+        earlier.setOwnerChosenAt(NOW.minusSeconds(60));
+        SubtitleSidecar ordinary = download(7502, SubtitleKind.FORCED);
+        rows(SubtitleKind.FORCED, List.of(), List.of(earlier, ordinary));
+
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
+            .isEqualTo(ChosenOutcome.ADDED);
+
+        assertThat(earlier.isOwnerChosen()).isFalse();
+        assertThat(ordinary.isOwnerChosen()).isFalse();
+        assertThat(savedRows()).singleElement().satisfies(row -> assertThat(row.isOwnerChosen()).isTrue());
     }
 
     @Test
@@ -299,8 +330,9 @@ class ForcedDownloadServiceChosenUnitTest {
         assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
             .isEqualTo(ChosenOutcome.ADDED);
 
-        verify(ledger).existsByEditionIdAndImdbIdAndOsFileIdAndKind(40L, IMDB, 5011, SubtitleKind.FORCED);
-        verifyNoMoreInteractions(ledger);
+        assertThat(ledgerRows()).isEmpty();
+        assertThat(savedRows()).singleElement().satisfies(row -> assertThat(row.getOpenSubtitlesFileId())
+            .isEqualTo(5011L));
     }
 
     @Test
@@ -329,9 +361,8 @@ class ForcedDownloadServiceChosenUnitTest {
         assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 0), NOW))
             .isEqualTo(ChosenOutcome.UNUSABLE);
 
-        verifyNoMoreInteractions(ledger);
-        verify(sidecars).findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED);
-        verifyNoMoreInteractions(sidecars);
+        assertThat(savedRows()).isEmpty();
+        assertThat(ledgerRows()).isEmpty();
     }
 
     @Test
@@ -342,8 +373,8 @@ class ForcedDownloadServiceChosenUnitTest {
         assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
             .isEqualTo(ChosenOutcome.CAP_REACHED);
 
-        verify(sidecars).findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED);
-        verifyNoMoreInteractions(sidecars);
+        assertThat(savedRows()).isEmpty();
+        assertThat(ledgerRows()).isEmpty();
         assertThat(lock.holder()).isNull();
     }
 
@@ -381,7 +412,7 @@ class ForcedDownloadServiceChosenUnitTest {
             .isEqualTo(ChosenOutcome.BUSY);
 
         assertThat(lock.holder()).isEqualTo(LibraryLock.SCAN);
-        verifyNoMoreInteractions(editions);
+        assertThat(savedRows()).isEmpty();
     }
 
     @Test

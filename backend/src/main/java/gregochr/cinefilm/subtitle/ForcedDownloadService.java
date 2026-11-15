@@ -495,13 +495,14 @@ public class ForcedDownloadService {
     }
 
     /**
-     * Makes a file the owner picked the edition's download, and pins it: the row carries the owner's check
-     * ({@code ownerVerifiedAt}, the same as "Looks right"), so it is proven, never judged failed (the nightly plan
-     * finds a live download and adds none), and plays before another download. Under the library lock, in one
-     * transaction, after revalidating everything that can have changed since the picker looked: the film's IMDb id,
-     * that the owner has not marked the film as not needing this kind, that the file was not removed or already
-     * downloaded, and that the cap has room. The film's stored candidates and its need are not consulted: the owner
-     * chose this file.
+     * Makes a file the owner picked the edition's download, and pins it: the row carries {@code ownerChosenAt}, so it
+     * is proven whatever a comparison says (never judged failed, so the nightly plan finds a live download and adds
+     * none) and plays before another download; an earlier pick of the edition loses its mark. The owner's check
+     * ({@code ownerVerifiedAt}) is not set, so the timing fit still applies and no "you checked it" is claimed.
+     * Runs under the library lock, in one transaction, after revalidating everything that can have changed since the
+     * picker looked: the film's IMDb id, that the owner has not marked the film as not needing this kind, that the
+     * file was not removed or already downloaded, and that the cap has room. The film's stored candidates and its
+     * need are not consulted: the owner chose this file.
      *
      * @param filmId the edition's film
      * @param editionId the edition
@@ -538,9 +539,12 @@ public class ForcedDownloadService {
         if (!DownloadPlan.promotable(reference, kind)) {
             return ChosenOutcome.UNUSABLE;
         }
+        // The latest pick is the one that plays and is pinned: an earlier pick of the edition goes back to being an
+        // ordinary download.
+        downloadsOf(edition, kind).stream().filter(SubtitleSidecar::isOwnerChosen)
+            .forEach(earlier -> earlier.setOwnerChosenAt(null));
         SubtitleSidecar row = download(edition, reference, now, kind);
-        row.setOwnerVerifiedAt(now);
-        row.setVerifiedParts(SubtitleSidecar.partsKey(partIdsOf(edition)));
+        row.setOwnerChosenAt(now);
         sidecars.save(row);
         if (!ledger.existsByEditionIdAndImdbIdAndOsFileIdAndKind(edition.getId(), reference.getImdbId(),
             reference.getOsFileId(), kind)) {

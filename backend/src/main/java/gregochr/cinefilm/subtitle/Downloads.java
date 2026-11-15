@@ -39,8 +39,8 @@ final class Downloads {
     }
 
     /**
-     * The downloads that count for an edition: one the owner verified (a pick from the OpenSubtitles picker is one)
-     * first, then the lowest id.
+     * The downloads that count for an edition: the one the owner picked in the OpenSubtitles picker first (if any),
+     * then the lowest id.
      *
      * @param edition the edition (its film loaded)
      * @param partIds the ids of its part files
@@ -59,7 +59,7 @@ final class Downloads {
                 && s.getCueCount() > 0
                 && partIds.contains(s.getMediaFileId()) && madeFor(edition, s) && imdbId != null
                 && imdbId.equals(s.getImdbId()))
-            .sorted(Comparator.comparing((SubtitleSidecar s) -> !s.isVerifiedFor(partIds))
+            .sorted(Comparator.comparing((SubtitleSidecar s) -> !s.isOwnerChosen())
                 .thenComparing(SubtitleSidecar::getId)).toList();
     }
 

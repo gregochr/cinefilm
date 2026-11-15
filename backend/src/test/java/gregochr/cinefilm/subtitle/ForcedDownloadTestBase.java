@@ -182,6 +182,11 @@ abstract class ForcedDownloadTestBase extends SubtitleTestBase {
 
     /** Gives the film's files a fingerprint, a read of the embedded track, and a stored fit of one subtitle. */
     protected void fitted(Film film, SubtitleSidecar sidecar, Verdict verdict) {
+        fitted(film, sidecar, verdict, 0);
+    }
+
+    /** As {@link #fitted(Film, SubtitleSidecar, Verdict)}, the fit saying {@code offsetMs} lines the file up. */
+    protected void fitted(Film film, SubtitleSidecar sidecar, Verdict verdict, int offsetMs) {
         for (MediaFile file : edition(film).originalParts()) {
             file.setSizeBytes(1_000L + file.getId());
             file.setModifiedAt(NOW);
@@ -199,7 +204,7 @@ abstract class ForcedDownloadTestBase extends SubtitleTestBase {
         }
         FitJob job = timing.fitJobs(film.getId()).stream().filter(j -> j.sidecarId().equals(sidecar.getId()))
             .findFirst().orElseThrow();
-        timing.save(job, new Result(verdict, 0, verdict == Verdict.ALIGNED ? 1.0 : 0.1, 12, 12, 10, List.of()),
+        timing.save(job, new Result(verdict, offsetMs, verdict == Verdict.ALIGNED ? 1.0 : 0.1, 12, 12, 10, List.of()),
             LATER);
     }
 }

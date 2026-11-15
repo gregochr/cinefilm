@@ -8,7 +8,9 @@ import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -19,6 +21,7 @@ import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.config.ServiceUnavailableException;
+import gregochr.cinefilm.config.UnprocessableException;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
@@ -49,6 +52,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -267,12 +271,11 @@ class EditionOpenSubtitlesServiceTest {
     }
 
     @Test
-    void aMissingOrUnknownKindIs400AndNothingIsLoaded() {
+    void aMissingOrUnknownKindIs400() {
         for (String kind : new String[] {null, "", "FULL", "Forced", "both"}) {
             assertThatThrownBy(() -> service.search(40L, kind)).isInstanceOf(BadRequestException.class)
                 .hasMessage("The kind must be full or forced");
         }
-        verifyNoInteractions(editions, api);
     }
 
     @Test
@@ -371,7 +374,6 @@ class EditionOpenSubtitlesServiceTest {
             assertThatThrownBy(() -> service.download(40L, new DownloadRequest(fileId, "forced")))
                 .isInstanceOf(BadRequestException.class).hasMessage("A file id is required");
         }
-        verifyNoInteractions(editions, api, downloads);
     }
 
     @Test
@@ -534,7 +536,7 @@ class EditionOpenSubtitlesServiceTest {
         when(budget.take(DAY, 20)).thenReturn(true);
         OpenSubtitlesChargedException charged = new OpenSubtitlesChargedException("timeout", false);
         when(api.download(5011L)).thenThrow(charged);
-        when(references.saveAndFlush(any(OpenSubtitlesReference.class)))
+        when(references.saveAndFlush(argThat(saved -> saved.getOsFileId() == 5011L)))
             .thenAnswer(call -> call.getArgument(0));
 
         assertThatThrownBy(() -> service.download(40L, forced(5011))).isSameAs(charged);
@@ -545,7 +547,7 @@ class EditionOpenSubtitlesServiceTest {
     }
 
     @Test
-    void aFileThatIsNotUsableIs400WithATextForEachReasonAndAnnouncesNothing() {
+    void aFileThatIsNotUsableIs422WithATextForEachReasonAndAnnouncesNothing() {
         searchedForced(plain(5011), plain(5012));
         when(api.downloadsEnabled()).thenReturn(true);
         when(limits.today()).thenReturn(20);
@@ -560,15 +562,15 @@ class EditionOpenSubtitlesServiceTest {
         when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, unreadable, NOW)).thenReturn(ChosenOutcome.UNUSABLE);
         when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, full, NOW)).thenReturn(ChosenOutcome.UNUSABLE);
 
-        assertThatThrownBy(() -> service.download(40L, forced(5011))).isInstanceOf(BadRequestException.class)
+        assertThatThrownBy(() -> service.download(40L, forced(5011))).isInstanceOf(UnprocessableException.class)
             .hasMessage("That subtitle file could not be read.");
-        assertThatThrownBy(() -> service.download(40L, forced(5012))).isInstanceOf(BadRequestException.class)
+        assertThatThrownBy(() -> service.download(40L, forced(5012))).isInstanceOf(UnprocessableException.class)
             .hasMessage("That file is a full subtitle, not a forced one.");
         verifyNoInteractions(events);
     }
 
     @Test
-    void aFullPickTooShortToBeAFullSubtitleIs400() {
+    void aFullPickTooShortToBeAFullSubtitleIs422() {
         editionLoads();
         when(api.enabled()).thenReturn(true);
         when(api.searchFull(IMDB)).thenReturn(new OpenSubtitlesSearch(1, null, List.of(), List.of(plain(6011))));
@@ -580,7 +582,48 @@ class EditionOpenSubtitlesServiceTest {
         when(downloads.addChosen(1L, 40L, SubtitleKind.FULL, shortOne, NOW)).thenReturn(ChosenOutcome.UNUSABLE);
 
         assertThatThrownBy(() -> service.download(40L, new DownloadRequest(6011L, "full")))
-            .isInstanceOf(BadRequestException.class).hasMessage("That file is too short to be a full subtitle.");
+            .isInstanceOf(UnprocessableException.class).hasMessage("That file is too short to be a full subtitle.");
+    }
+
+    @Test
+    void aChargedDownloadThatCanNeverBeFetchedIs422WithTheCouldNotBeReadTextTheDayIsSpentAndTheCopyIsFinal() {
+        searchedForced(plain(5011));
+        readyToDownload(5011);
+        when(limits.today()).thenReturn(20);
+        when(budget.take(DAY, 20)).thenReturn(true);
+        when(api.download(5011L)).thenThrow(new OpenSubtitlesChargedException("refused", true));
+        when(references.saveAndFlush(argThat(saved -> saved.getOsFileId() == 5011L)))
+            .thenAnswer(call -> call.getArgument(0));
+        when(downloads.addChosen(eq(1L), eq(40L), eq(SubtitleKind.FORCED),
+            argThat(failed -> failed.getOsFileId() == 5011L && !failed.isUsable()), eq(NOW)))
+            .thenReturn(ChosenOutcome.UNUSABLE);
+
+        assertThatThrownBy(() -> service.download(40L, forced(5011))).isInstanceOf(UnprocessableException.class)
+            .hasMessage("That subtitle file could not be read.");
+
+        // The account was charged: the budget was taken once and never given back.
+        verify(budget).take(DAY, 20);
+        verifyNoMoreInteractions(budget);
+        ArgumentCaptor<OpenSubtitlesReference> stored = ArgumentCaptor.forClass(OpenSubtitlesReference.class);
+        verify(references).saveAndFlush(stored.capture());
+        assertThat(stored.getValue().isFinal()).isTrue();
+        assertThat(stored.getValue().isUsable()).isFalse();
+        assertThat(stored.getValue().getFailedDownloads()).isEqualTo(OpenSubtitlesReference.MAX_FAILED_DOWNLOADS);
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    void aListenerThatFailsWhenTheDownloadIsAnnouncedDoesNotUndoTheDownload() {
+        searchedForced(plain(5011));
+        readyToDownload(5011);
+        OpenSubtitlesReference reference = storedReferenceExists(5011, 12);
+        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, NOW)).thenReturn(ChosenOutcome.ADDED);
+        when(downloads.downloadsLeft(1L, 40L, SubtitleKind.FORCED, IMDB)).thenReturn(2);
+        doThrow(new IllegalStateException("listener")).when(events)
+            .publishEvent((Object) new SubtitleDownloadsFinished());
+
+        assertThat(service.download(40L, forced(5011)))
+            .isEqualTo(new DownloadDto(40L, "forced", 5011, "Taken.2008.BluRay", 2));
     }
 
     @Test

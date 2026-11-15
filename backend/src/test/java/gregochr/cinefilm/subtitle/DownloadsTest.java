@@ -33,7 +33,7 @@ class DownloadsTest {
         partIds = List.of(10L);
     }
 
-    private SubtitleSidecar download(long id, long fileId, boolean verified) {
+    private SubtitleSidecar download(long id, long fileId, boolean chosen) {
         SubtitleSidecar row = new SubtitleSidecar();
         row.setId(id);
         row.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
@@ -43,15 +43,14 @@ class DownloadsTest {
         row.setImdbId(IMDB);
         row.setMediaFileId(10L);
         row.setCueCount(500);
-        if (verified) {
-            row.setOwnerVerifiedAt(NOW);
-            row.setVerifiedParts(SubtitleSidecar.partsKey(partIds));
+        if (chosen) {
+            row.setOwnerChosenAt(NOW);
         }
         return row;
     }
 
     @Test
-    void downloadsComeLowestIdFirstWhenNoneIsVerified() {
+    void downloadsComeLowestIdFirstWhenNoneIsPicked() {
         List<SubtitleSidecar> found = List.of(download(9, 109, false), download(3, 103, false),
             download(5, 105, false));
 
@@ -61,7 +60,7 @@ class DownloadsTest {
     }
 
     @Test
-    void aVerifiedDownloadComesFirstWhateverItsIdAndTheRestKeepTheLowestIdOrder() {
+    void aPickedDownloadComesFirstWhateverItsIdAndTheRestKeepTheLowestIdOrder() {
         List<SubtitleSidecar> found = List.of(download(3, 103, false), download(9, 109, true),
             download(5, 105, false), download(7, 107, true));
 
@@ -71,10 +70,11 @@ class DownloadsTest {
     }
 
     @Test
-    void aVerificationMadeForOtherPartFilesDoesNotPutADownloadFirst() {
-        SubtitleSidecar stale = download(9, 109, true);
-        stale.setVerifiedParts("10,11");
-        List<SubtitleSidecar> found = List.of(download(3, 103, false), stale);
+    void anOwnersCheckDoesNotPutADownloadFirstOnlyAPickDoes() {
+        SubtitleSidecar checked = download(9, 109, false);
+        checked.setOwnerVerifiedAt(NOW);
+        checked.setVerifiedParts(SubtitleSidecar.partsKey(partIds));
+        List<SubtitleSidecar> found = List.of(download(3, 103, false), checked);
 
         List<SubtitleSidecar> counted = Downloads.of(edition, partIds, found, SubtitleKind.FULL);
 

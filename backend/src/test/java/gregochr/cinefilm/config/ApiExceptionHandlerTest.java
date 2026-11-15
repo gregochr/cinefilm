@@ -32,6 +32,14 @@ class ApiExceptionHandlerTest {
     }
 
     @Test
+    void unprocessableIs422WithTheMessageAsTheError() {
+        ResponseEntity<Map<String, String>> response = handler.unprocessable(new UnprocessableException("no use"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_CONTENT);
+        assertThat(response.getBody()).containsExactly(Map.entry("error", "no use"));
+    }
+
+    @Test
     void anUnreadableBodyIs400WithAGenericMessageThatLeaksNothing() {
         ResponseEntity<Map<String, String>> response = handler.unreadable(new HttpMessageNotReadableException(
             "JSON parse error: Unrecognized token 'secret'", new MockHttpInputMessage(new byte[0])));
