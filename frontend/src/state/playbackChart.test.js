@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   bucketColour,
+  bucketShares,
   chartSummary,
   chartTiles,
   columnLabel,
@@ -11,11 +12,10 @@ import {
   minuteStrip,
   percentText,
   sessionDotSize,
-  bucketShares,
   sessionHeading,
   stalledNote,
-  startupText,
   stallDotSize,
+  startupText,
   STRIP,
 } from './playbackChart.js';
 

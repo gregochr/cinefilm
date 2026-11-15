@@ -33,30 +33,51 @@ function Axis() {
 }
 
 /**
+ * Moves only `box` (the row that scrolls sideways) so that `button` is inside it: nothing happens when it already is,
+ * and the nearer edge is used when it is not. `scrollIntoView` and `focus()` would scroll every ancestor too, the page
+ * included, which is why neither is used here.
+ */
+function reveal(box, button) {
+  if (!box || !button) return;
+  const left = button.offsetLeft;
+  const right = left + button.offsetWidth;
+  if (left < box.scrollLeft) box.scrollLeft = left;
+  else if (right > box.scrollLeft + box.clientWidth) box.scrollLeft = right - box.clientWidth;
+}
+
+/**
  * One button per session, oldest to newest: a stack of the time on each rung, then a dot sized by the stall time, then
  * the environment letter. One column is in the tab order (the selected one, a roving tabindex); the arrow keys, Home
  * and End move the selection and focus along the row, hovering with a mouse or clicking selects. Each button says its
- * session in words (`aria-label`), so nothing relies on colour. The selected column is scrolled into view, since the
- * row scrolls sideways and the newest session, selected first, is at its far end.
+ * session in words (`aria-label`), so nothing relies on colour. The row scrolls sideways and the newest session,
+ * selected first, is at its far end, so the selected column is brought into view when the row is first drawn, when its
+ * sessions change and on a keyboard move; a mouse entering a column does not scroll (the column under the pointer
+ * would move away from it).
  */
 export default function PlaybackColumns({ sessions, selectedId, onSelect, describedBy }) {
   const buttons = useRef(new Map());
+  const box = useRef(null);
+  const selection = useRef(selectedId);
   useEffect(() => {
-    // jsdom has no scrollIntoView.
-    buttons.current.get(selectedId)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
-  }, [sessions, selectedId]);
+    selection.current = selectedId;
+  });
+  useEffect(() => {
+    reveal(box.current, buttons.current.get(selection.current));
+  }, [sessions]);
   const move = (event, index) => {
     const to = target(event.key, index, sessions.length);
     if (to === null) return;
     event.preventDefault();
     const next = sessions[to];
     onSelect(next.playbackId);
-    buttons.current.get(next.playbackId)?.focus();
+    const button = buttons.current.get(next.playbackId);
+    button?.focus({ preventScroll: true });
+    reveal(box.current, button);
   };
   return (
     <div className="pchart__plot">
       <Axis />
-      <div className="pchart__scroll">
+      <div className="pchart__scroll" ref={box} data-testid="pchart-scroll">
         <div
           className="pchart__cols"
           role="group"

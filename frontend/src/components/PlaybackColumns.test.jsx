@@ -1,6 +1,6 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixtures } from '../test/mockApi.jsx';
 import PlaybackColumns from './PlaybackColumns.jsx';
 
@@ -107,21 +107,126 @@ describe('PlaybackColumns', () => {
     }
   });
 
-  it('scrolls the selected column into view on mount and when the selection changes', () => {
-    const scroll = vi.fn();
-    Element.prototype.scrollIntoView = scroll;
-    try {
-      const { rerender } = render(
-        <PlaybackColumns sessions={SESSIONS} selectedId="c" onSelect={() => {}} />,
-      );
-      expect(scroll).toHaveBeenCalledTimes(1);
-      expect(scroll.mock.contexts[0]).toBe(screen.getByRole('button', { name: /^Film c,/ }));
-      expect(scroll).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
-      rerender(<PlaybackColumns sessions={SESSIONS} selectedId="a" onSelect={() => {}} />);
-      expect(scroll.mock.contexts[1]).toBe(screen.getByRole('button', { name: /^Film a,/ }));
-    } finally {
+  describe('scrolling the row', () => {
+    const SCROLL = 'scrollLeft';
+    let offsets;
+    let scrollTo;
+    let scrollIntoView;
+
+    /** A row of ten columns, 50 px apart and 22 px wide, in a box 100 px wide that starts scrolled to 0. */
+    beforeEach(() => {
+      offsets = new WeakMap();
+      Object.defineProperty(Element.prototype, SCROLL, {
+        configurable: true,
+        get() {
+          return offsets.get(this) ?? 0;
+        },
+        set(value) {
+          offsets.set(this, value);
+        },
+      });
+      Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+        configurable: true,
+        get() {
+          return 100;
+        },
+      });
+      Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        configurable: true,
+        get() {
+          return 22;
+        },
+      });
+      Object.defineProperty(HTMLElement.prototype, 'offsetLeft', {
+        configurable: true,
+        get() {
+          const index = /^Film (\d+),/.exec(this.getAttribute('aria-label') ?? '')?.[1];
+          return index === undefined ? 0 : Number(index) * 50;
+        },
+      });
+      scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+      scrollIntoView = vi.fn();
+      Element.prototype.scrollIntoView = scrollIntoView;
+    });
+
+    afterEach(() => {
+      for (const [proto, name] of [
+        [Element.prototype, SCROLL],
+        [HTMLElement.prototype, 'clientWidth'],
+        [HTMLElement.prototype, 'offsetWidth'],
+        [HTMLElement.prototype, 'offsetLeft'],
+      ]) {
+        delete proto[name];
+      }
       delete Element.prototype.scrollIntoView;
-    }
+      scrollTo.mockRestore();
+    });
+
+    const TEN = Array.from({ length: 10 }, (_, i) => row(String(i)));
+    const column = (i) => screen.getByRole('button', { name: new RegExp(`^Film ${i},`) });
+    const box = () => screen.getByTestId('pchart-scroll');
+    const never = () => {
+      expect(scrollTo).not.toHaveBeenCalled();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    };
+
+    it('brings the newest column, selected first, into view when the row is drawn', () => {
+      render(<PlaybackColumns sessions={TEN} selectedId="9" onSelect={() => {}} />);
+      // The column spans 450 to 472 and the box shows 100 px: its right edge is put at the box's.
+      expect(box().scrollLeft).toBe(372);
+      never();
+    });
+
+    it('does not move a row whose selected column is already in view', () => {
+      render(<PlaybackColumns sessions={TEN} selectedId="1" onSelect={() => {}} />);
+      expect(box().scrollLeft).toBe(0);
+    });
+
+    it('moves the row when a keyboard move goes past its left edge, and only then', async () => {
+      const user = userEvent.setup();
+      render(<PlaybackColumns sessions={TEN} selectedId="6" onSelect={() => {}} />);
+      expect(box().scrollLeft).toBe(222); // 300 to 322 at the right edge
+      column(6).focus();
+      await user.keyboard('{ArrowLeft}');
+      expect(column(5)).toHaveFocus();
+      expect(box().scrollLeft).toBe(222); // 250 to 272 is inside 222 to 322
+      await user.keyboard('{ArrowLeft}');
+      expect(column(4)).toHaveFocus();
+      expect(box().scrollLeft).toBe(200); // 200 was left of 222
+      await user.keyboard('{End}');
+      expect(box().scrollLeft).toBe(372);
+      never();
+    });
+
+    it('does not move the row when a mouse entering a column selects it', async () => {
+      const onSelect = vi.fn();
+      const user = userEvent.setup();
+      render(<PlaybackColumns sessions={TEN} selectedId="1" onSelect={onSelect} />);
+      expect(box().scrollLeft).toBe(0);
+      await user.hover(column(9));
+      expect(onSelect).toHaveBeenCalledWith('9');
+      expect(box().scrollLeft).toBe(0);
+      never();
+    });
+
+    it('brings the selected column into view again when the sessions change', () => {
+      const { rerender } = render(
+        <PlaybackColumns sessions={TEN} selectedId="9" onSelect={() => {}} />,
+      );
+      box().scrollLeft = 0; // the viewer scrolled away
+      rerender(<PlaybackColumns sessions={[...TEN]} selectedId="9" onSelect={() => {}} />);
+      expect(box().scrollLeft).toBe(372);
+      never();
+    });
+
+    it('does not scroll for a selection change that leaves the sessions as they were', () => {
+      const { rerender } = render(
+        <PlaybackColumns sessions={TEN} selectedId="9" onSelect={() => {}} />,
+      );
+      box().scrollLeft = 0;
+      rerender(<PlaybackColumns sessions={TEN} selectedId="8" onSelect={() => {}} />);
+      expect(box().scrollLeft).toBe(0);
+    });
   });
 
   it('copes with a selection that is not a column', () => {
