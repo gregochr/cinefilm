@@ -96,7 +96,7 @@ describe('deviceLabel', () => {
 
   it('is case sensitive and says Unknown device for anything else or nothing', () => {
     expect(deviceLabel('iphone')).toBe('Unknown device');
-    expect(deviceLabel('iphone')).toBe('Unknown device');
+    expect(deviceLabel('Mozilla/5.0 (X11; CrOS x86_64)')).toBe('ChromeOS');
     expect(deviceLabel('')).toBe('Unknown device');
     expect(deviceLabel(undefined)).toBe('Unknown device');
     expect(deviceLabel(null)).toBe('Unknown device');

@@ -206,6 +206,50 @@ describe('useAdminSummary: holding the first read', () => {
   });
 });
 
+describe('useAdminSummary: readiness latches', () => {
+  it('keeps reading and polling when ready goes back to false after it was true', async () => {
+    const fetchMock = installFetch();
+    vi.useFakeTimers();
+    const { rerender, result } = mount({ visible: true, stamps: { ...STAMPS, ready: true } });
+    await settle();
+    expect(summaryCalls(fetchMock)).toBe(1);
+
+    rerender({ visible: true, stamps: { ...STAMPS, ready: false } });
+    await settle();
+    expect(summaryCalls(fetchMock)).toBe(1);
+    expect(result.current.summary).toEqual(fixtures.adminSummary);
+
+    await settle(SUMMARY_POLL_MS - 1);
+    expect(summaryCalls(fetchMock)).toBe(1);
+    await settle(1);
+    expect(summaryCalls(fetchMock)).toBe(2);
+
+    rerender({ visible: true, stamps: { ...STAMPS, changed: 1, ready: false } });
+    await settle();
+    expect(summaryCalls(fetchMock)).toBe(3);
+  });
+});
+
+describe('useAdminSummary: the poll restarts with a changed stamp', () => {
+  it('polls 30 s after a change read, not 30 s after the start: -1 ms, exact', async () => {
+    const fetchMock = installFetch();
+    vi.useFakeTimers();
+    const { rerender } = mount();
+    await settle();
+    await settle(29_000);
+    expect(summaryCalls(fetchMock)).toBe(1);
+
+    rerender({ visible: true, stamps: { ...STAMPS, changed: 1 } });
+    await settle();
+    expect(summaryCalls(fetchMock)).toBe(2);
+
+    await settle(SUMMARY_POLL_MS - 1);
+    expect(summaryCalls(fetchMock)).toBe(2);
+    await settle(1);
+    expect(summaryCalls(fetchMock)).toBe(3);
+  });
+});
+
 describe('useAdminSummary: a late older answer', () => {
   it('never overwrites the answer to a newer read', async () => {
     const older = deferred();

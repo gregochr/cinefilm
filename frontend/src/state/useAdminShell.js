@@ -39,10 +39,9 @@ export function useAdminShell(visible, pathname = '') {
     settledAt,
     subtitlesVersion,
     changed,
-    // Held until both statuses have answered (or failed) once, so the stamps are final and the first read is the only one.
-    ready:
-      (scan !== null || scanState.error !== null) &&
-      (plexImport.plex !== null || plexImport.error !== null),
+    // Held until the scan status has answered (or failed) once, so the first read has its stamp. Plex is not waited
+    // for (it can take a minute when the Plex host is off): its stamp landing later costs one more read.
+    ready: scan !== null || scanState.error !== null,
   });
 
   const markChanged = useCallback(() => {

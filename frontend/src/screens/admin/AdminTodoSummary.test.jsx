@@ -125,6 +125,54 @@ describe('Admin To do: heading, intro and status strip', () => {
     expect(reads()).toBe(1);
   });
 
+  it('does not wait for Plex: with /api/admin/plex never answering the counts show after one read', async () => {
+    const fetchMock = installFetch((method, url) =>
+      url === '/api/admin/plex' ? new Promise(() => {}) : null,
+    );
+    renderApp('/admin');
+
+    await within(rail()).findByRole('link', { name: 'To do, 6 things' });
+    await screen.findByRole('region', { name: 'Films needing attention' });
+    const reads = fetchMock.mock.calls.filter(([url]) => url === '/api/admin/summary').length;
+    expect(reads).toBe(1);
+  });
+
+  it('reads once when the scan status fails: the error settles the wait', async () => {
+    const fetchMock = installFetch((method, url) =>
+      url === '/api/admin/scan' ? respond({ error: 'boom' }, 500) : null,
+    );
+    renderApp('/admin');
+
+    await within(rail()).findByRole('link', { name: 'To do, 6 things' });
+    await screen.findByRole('region', { name: 'Films needing attention' });
+    const reads = fetchMock.mock.calls.filter(([url]) => url === '/api/admin/summary').length;
+    expect(reads).toBe(1);
+  });
+
+  it('after a failed scan status, a Fix match reads the summary once more (readiness does not flip back)', async () => {
+    const fetchMock = installFetch((method, url) =>
+      url === '/api/admin/scan' ? respond({ error: 'boom' }, 500) : null,
+    );
+    renderApp('/admin');
+    await within(rail()).findByRole('link', { name: 'To do, 6 things' });
+    const reads = () => fetchMock.mock.calls.filter(([url]) => url === '/api/admin/summary').length;
+    const attention = await screen.findByRole('region', { name: 'Films needing attention' });
+    await userEvent.click(
+      (await within(attention).findAllByRole('button', { name: 'Find the film…' }))[0],
+    );
+    const panel = await screen.findByRole('region', { name: 'Fix match' });
+    await userEvent.click((await within(panel).findAllByRole('radio'))[0]);
+
+    await userEvent.click(within(panel).getByRole('button', { name: 'Use this match' }));
+
+    await waitFor(() => expect(reads()).toBe(2));
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Fix match' })).not.toBeInTheDocument(),
+    );
+    expect(reads()).toBe(2);
+    expect(within(rail()).getByRole('link', { name: 'To do, 6 things' })).toBeInTheDocument();
+  });
+
   it('reads the summary again after a Fix match is applied: the To do count drops by one', async () => {
     let reads = 0;
     installFetch((method, url) => {

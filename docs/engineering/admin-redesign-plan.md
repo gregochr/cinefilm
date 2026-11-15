@@ -215,6 +215,8 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
 - **Status strip:** Library "{n} films · scanned {ago}"; Playback "Last 30 days: {smooth} of {n} film sessions played
   smoothly"; Playing now "{film} · {device} · {quality}" or "Nothing playing". Each links to its section. On phone,
   per `06`, only the Library card shows.
+- **3c-1 decision:** a failed re-read keeps the last good figures (rail counts, heading count, strip) with no banner; the
+  next 30 s poll retries. The error banner shows only when no summary has been read yet.
 - **Groups** (copy from `AR1`), up to **5** rows, footer as in `adminCopy` with "Show all {n}" (expands in place) or
   "All in Subtitles →":
   1. Pick the right film — `needs-match`. `confident` → "Yes, it's {Title} ({year})" (the existing match `POST`) +
