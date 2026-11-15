@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import gregochr.cinefilm.credits.CreditsFrameReader.DenseRange;
 import gregochr.cinefilm.credits.CreditsFrameReader.Job;
 import gregochr.cinefilm.credits.CreditsFrameReader.ReadException;
@@ -19,12 +22,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.LongStream;
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.read.ListAppender;
 import org.junit.jupiter.api.Test;
-import org.slf4j.LoggerFactory;
 import org.junit.jupiter.api.io.TempDir;
+import org.slf4j.LoggerFactory;
 
 /**
  * The frame reader against a stand-in for ffmpeg: the exact argument lists, the window and offset arithmetic, what a
@@ -837,6 +837,8 @@ class CreditsFrameReaderTest {
             assertThatThrownBy(job::coarseFrames).isInstanceOf(ReadException.class)
                 .hasMessage("ffmpeg exited with status 1 reading the frame at 595.000");
         }
+
+        assertThat(ffmpeg.commands).hasSize(CreditsFrameReader.coarseOffsets(600_000).size());
     }
 
     @Test
@@ -847,6 +849,8 @@ class CreditsFrameReaderTest {
             assertThatThrownBy(job::coarseFrames).isInstanceOf(ReadException.class)
                 .hasMessage("ffmpeg timed out reading the frame at 595.000");
         }
+
+        assertThat(ffmpeg.commands).hasSize(CreditsFrameReader.coarseOffsets(600_000).size());
     }
 
     @Test
@@ -857,15 +861,48 @@ class CreditsFrameReaderTest {
                 .hasMessageStartingWith("ffmpeg wrote a frame that is not a greyscale picture")
                 .hasCauseInstanceOf(IllegalArgumentException.class);
         }
+
+        assertThat(ffmpeg.commands).hasSize(CreditsFrameReader.coarseOffsets(600_000).size());
     }
 
     @Test
     void aCorruptFileInTheTailStillAbandonsTheFile() {
-        ffmpeg.garbage = "not a picture".getBytes(StandardCharsets.US_ASCII);
+        ffmpeg.writesGarbageAt = ms -> ms == 595_000;
         try (Job job = reader().open(FILM, 600_000, () -> { })) {
             assertThatThrownBy(job::coarseFrames).isInstanceOf(ReadException.class)
                 .hasMessageStartingWith("ffmpeg wrote a frame that is not a greyscale picture");
         }
+
+        assertThat(ffmpeg.commands).hasSize(CreditsFrameReader.coarseOffsets(600_000).size());
+    }
+
+    @Test
+    void aMissingOutputTenThousandAndOneMillisecondsBeforeTheEndStillAbandonsTheFile() {
+        long duration = 600_003;
+        long offset = duration - 10_001;
+        assertThat(CreditsFrameReader.coarseOffsets(duration)).contains(offset);
+        ffmpeg.writesNothingAt = ms -> ms == offset;
+        try (Job job = reader().open(FILM, duration, () -> { })) {
+            assertThatThrownBy(job::coarseFrames).isInstanceOf(ReadException.class)
+                .hasMessageStartingWith("ffmpeg wrote no readable frame");
+        }
+
+        assertThat(ffmpeg.commands).hasSize(CreditsFrameReader.coarseOffsets(duration).indexOf(offset) + 1);
+    }
+
+    @Test
+    void aMissingOutputNineThousandNineHundredAndNinetyNineMillisecondsBeforeTheEndEndsThePass() {
+        long duration = 599_998;
+        long offset = duration - 9_999;
+        assertThat(CreditsFrameReader.coarseOffsets(duration)).contains(offset);
+        ffmpeg.writesNothingAt = ms -> ms >= offset;
+        List<TimedFrame> frames;
+        try (Job job = reader().open(FILM, duration, () -> { })) {
+            frames = job.coarseFrames();
+        }
+
+        assertThat(offsets(frames)).isEqualTo(coarseOffsetsBefore(duration, offset));
+        assertThat(ffmpeg.commands).hasSize(frames.size() + 1);
     }
 
     @Test

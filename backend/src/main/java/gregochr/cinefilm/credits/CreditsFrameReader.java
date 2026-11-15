@@ -455,7 +455,7 @@ public class CreditsFrameReader {
             return dir.resolve(DENSE_PATTERN.formatted(index));
         }
 
-        /** One frame. Every seek writes the same file name and {@link #read} removes it, so none is ever stale. */
+        /** One frame. Every seek deletes any old file first and {@link #read} removes it, so none is ever stale. */
         private GreyFrame grab(long offsetMs) {
             return grab(offsetMs, false);
         }

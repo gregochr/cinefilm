@@ -35,6 +35,8 @@ public final class FakeFfmpeg implements CommandRunner {
     public LongPredicate writesNothingAt = ms -> false;
     /** Single-frame seeks at these offsets (ms) write an empty file. */
     public LongPredicate writesEmptyAt = ms -> false;
+    /** Single-frame seeks at these offsets (ms) write bytes that are not a picture. */
+    public LongPredicate writesGarbageAt = ms -> false;
     /** Single-frame seeks at these offsets (ms) return {@link #failure}. */
     public LongPredicate failsAt = ms -> false;
     /** When set, this is written instead of a picture. */
@@ -110,6 +112,10 @@ public final class FakeFfmpeg implements CommandRunner {
         }
         if (writesEmptyAt.test(at)) {
             Files.write(Path.of(command.getLast()), new byte[0]);
+            return new Result(0, "", false);
+        }
+        if (writesGarbageAt.test(at)) {
+            Files.write(Path.of(command.getLast()), "not a picture".getBytes(StandardCharsets.US_ASCII));
             return new Result(0, "", false);
         }
         if (!writeNothing && !writesNothingAt.test(at)) {
