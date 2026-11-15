@@ -1667,3 +1667,179 @@
     text-align: left;
   }
 }
+
+/* Playback: How films played (AR4) */
+.pchart {
+  grid-column: 1 / -1;
+}
+.pchart__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-bottom: 20px;
+}
+.pchart__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+.pchart__segmented .segmented__btn:focus-visible {
+  box-shadow: var(--cf-focus-ring);
+}
+.pchart__skeleton {
+  min-height: 320px;
+  border-radius: 12px;
+}
+.pchart__tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  margin: 0 0 20px;
+  padding: 0;
+  list-style: none;
+}
+.pchart__tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pchart__tile-n {
+  font-family: var(--cf-font-mono);
+  font-size: 22px;
+}
+.pchart__tile-n--ok {
+  color: #9dbf8e;
+}
+.pchart__tile-n--err {
+  color: #f0876a;
+}
+.pchart__tile-t {
+  font-size: 12px;
+  color: var(--cf-text-muted);
+}
+.pchart__scroll {
+  overflow-x: auto;
+  padding: 4px 4px 8px;
+}
+.pchart__cols {
+  display: flex;
+  gap: 6px;
+  min-width: min-content;
+}
+.pchart__col {
+  display: flex;
+  flex: 1 0 22px;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--cf-text-disabled);
+  font-family: var(--cf-font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+@media (pointer: coarse) {
+  .pchart__col {
+    flex-basis: 44px;
+  }
+}
+.pchart__col[aria-pressed='true'] {
+  box-shadow: 0 0 0 1.5px var(--cf-text);
+}
+.pchart__col:focus-visible {
+  box-shadow: var(--cf-focus-ring);
+}
+.pchart__bar {
+  display: flex;
+  flex-direction: column-reverse;
+  width: 100%;
+  height: 184px;
+  border-radius: 1px;
+  background: var(--cf-surface-2);
+}
+.pchart__seg {
+  flex-basis: 0;
+}
+.pchart__stall {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 16px;
+}
+.pchart__dot {
+  border-radius: 50%;
+}
+.pchart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--cf-text-muted);
+}
+.pchart__legend-item i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 2px;
+}
+.pchart__legend-item i.pchart__legend-dot {
+  border-radius: 50%;
+}
+.pchart__legend-letters {
+  font-family: var(--cf-font-mono);
+}
+.pchart__hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--cf-text-hint);
+  line-height: 1.4;
+}
+.pchart__selected {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--cf-line);
+}
+.pchart__heading {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cf-text-muted);
+}
+.pchart__film {
+  font-size: 15px;
+  color: var(--cf-text);
+}
+.pchart__strip-skeleton {
+  min-height: 124px;
+  border-radius: 12px;
+}
+.pchart__strip-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--cf-text-disabled);
+}
+.pchart__line {
+  margin: 0;
+  color: var(--cf-text-2);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .pchart__filters {
+    margin-left: 0;
+  }
+  .pchart__bar {
+    height: 140px;
+  }
+}

@@ -56,10 +56,13 @@ public final class HealthDtos {
     /**
      * One film-length session as the chart needs it: the stored figures, the time on each rung and the browser's own
      * description of itself. {@code rungMs} and {@code userAgent} are null when the stored report cannot be read.
+     * {@code touch} is the client's touch hint ({@link ClientInfo}); it is left out of the answer when the report has
+     * none (a report from before it, or one that cannot be read), so an old row reads as it did.
      */
     public record ChartRow(String playbackId, Long filmId, String filmTitle, Instant startedAt, long watchedMs,
                            long stallCount, long stallMs, Long startupMs, String environment,
-                           Map<String, Long> rungMs, String userAgent) {
+                           Map<String, Long> rungMs, String userAgent,
+                           @JsonInclude(JsonInclude.Include.NON_NULL) Boolean touch) {
     }
 
     /** Response of {@code GET /api/admin/playback-health/chart}: the sessions, the newest last. */

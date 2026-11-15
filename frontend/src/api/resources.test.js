@@ -170,6 +170,22 @@ describe('image URLs', () => {
     });
   });
 
+  it('reads the chart from a given instant, or all of it, and one whole record', async () => {
+    const last = stubFetch();
+    await adminApi.playbackChart('2026-10-16T08:00:00.000Z');
+    expect(last()).toMatchObject({
+      path: '/api/admin/playback-health/chart?since=2026-10-16T08%3A00%3A00.000Z',
+      method: 'GET',
+    });
+    await adminApi.playbackChart(null);
+    expect(last()).toMatchObject({ path: '/api/admin/playback-health/chart', method: 'GET' });
+    await adminApi.playbackRecord('3f6c1d2e-8a4b-4c7e-9b15-2d0e6f7a1c34');
+    expect(last()).toMatchObject({
+      path: '/api/admin/playback-health/3f6c1d2e-8a4b-4c7e-9b15-2d0e6f7a1c34',
+      method: 'GET',
+    });
+  });
+
   it('reads the playback health list and builds the link to one full record', async () => {
     const last = stubFetch();
     await adminApi.playbackHealth();

@@ -236,7 +236,24 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
   The touch hint is `client.touch` in the health report, stored in the report JSON (no migration: the report is a JSON
   text column and `ClientInfo` gained a field) and passed through to `playingNow.touch`; the log rows carry it inside
   `report.client`. `describeDevice(userAgent, touch)` reads a Macintosh user agent with `touch` as an iPad. Chart rows
-  carry no `touch` yet.
+  carry no `touch` yet (5a-2 adds it, below).
+- **5a-2 decision (built):** "How films played" is the second card of Playback and the only reader of
+  `GET /api/admin/playback-health/chart?since=` (30 or 90 days back, `since` computed when the read starts; a range
+  switch reads again). **The environment filter is applied in the browser**, so switching it re-reads nothing: the route has no
+  environment parameter and 90 days is a few hundred small rows. **The frontend applies no 3-minute filter:** the
+  chart route already keeps only `watchedMs` ≥ `FILM_SESSION_MIN_MS` (179,999 / 180,000 is tested on the server), and
+  AGENTS.md rule 3 forbids a second copy of the rule. Counts are sessions (tile "sessions watched"). Rung shares are
+  fractions of the time on known rungs (`rungMs` keys the ladder does not know are ignored; no time means an empty
+  column); stall dots are 8, 12 and 16 px at 0 < stall < 5 s, < 20 s and above. The selected session's film and facts
+  come from the chart row; the figures line and the strip from `GET /api/admin/playback-health/{id}`, read on its own
+  per selected id (an earlier id's request is aborted and a late answer ignored; the operator joins the heading when
+  the record arrives, and the record's first `describePlayback` line is not repeated under that heading). A column
+  is a button with a roving tabindex (arrows, Home, End; a mouse entering selects, a touch does not); columns are 22 px
+  wide with a mouse and 44 px on a coarse pointer, the row scrolling sideways when 90 days will not fit. **Backend:**
+  `ChartRow` gained `touch` (`@JsonInclude(NON_NULL)`, so older rows read as before). **Invented copy (planner, 5a-2):**
+  the tile "sessions watched" (the board says "films watched"), the notes "all at home" and "all away" beside the
+  board's "all on the train", the group names of the filters, the chart's summary sentence, the empty, loading and
+  error lines, "No minute by minute figures for this session." Everything else is AR4's.
 - **3c-2 decision (built):** groups 3 and 4 are read-only rows (title, a reason line) with the "All in Subtitles →"
   footer, always shown, since their actions arrive with 4a/4c. Groups 1 and 2 read the attention list; 3 and 4 the
   two need lists, each its own request with its own skeleton and error banner. The skeleton or banner shows until a

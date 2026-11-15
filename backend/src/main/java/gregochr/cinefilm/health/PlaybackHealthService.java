@@ -190,7 +190,8 @@ public class PlaybackHealthService {
             rows.add(new ChartRow(stored.getPlaybackId(), stored.getFilmId(), stored.getFilmTitle(),
                 stored.getStartedAt(), stored.getWatchedMs(), stored.getStallCount(), stored.getStallMs(),
                 stored.getStartupMs(), stored.getEnvironment(), report == null ? null : report.rungMs(),
-                report == null || report.client() == null ? null : report.client().userAgent()));
+                report == null || report.client() == null ? null : report.client().userAgent(),
+                report == null || report.client() == null ? null : report.client().touch()));
         }
         return new ChartList(rows);
     }

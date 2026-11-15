@@ -133,6 +133,7 @@ export function defaultRoute(method, url) {
     return json({ continueWatchingMinMinutes: 5, inProgressCount: 3 });
   }
   if (path === '/api/admin/playback-health') return json(adminPlaybackHealth);
+  if (path === '/api/admin/playback-health/chart') return json({ sessions: [] });
   if (path === '/api/admin/subtitles') return json(adminSubtitles);
   if (path === '/api/admin/forced-subtitles/films') return json(adminForcedNeed);
   if (path === '/api/admin/subtitles/full-need') return json(adminFullNeed);

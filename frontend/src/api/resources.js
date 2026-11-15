@@ -114,6 +114,14 @@ export const adminApi = {
   transcoding: (options) => get('/api/admin/transcoding', options),
   stopTranscodingSession: (id) => del(`/api/admin/transcoding/sessions/${id}`),
   playbackHealth: (options) => get('/api/admin/playback-health', options),
+  /** Every film session since `since` (an ISO instant; all when null), oldest first, with only the chart's fields. */
+  playbackChart: (since, options) =>
+    get(
+      `/api/admin/playback-health/chart${since ? `?since=${encodeURIComponent(since)}` : ''}`,
+      options,
+    ),
+  /** One playback's whole record, `report.minutes` included (rows of seven figures, or five in an older record). */
+  playbackRecord: (playbackId, options) => get(`/api/admin/playback-health/${playbackId}`, options),
   /** The whole report of one playback as JSON: a link, not a fetch. */
   playbackHealthUrl: (playbackId) => `/api/admin/playback-health/${playbackId}`,
   /** Every forced subtitle file beside the films, with where it belongs and how it reads. */

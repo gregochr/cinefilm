@@ -647,6 +647,17 @@ class PlaybackHealthServiceTest {
         assertThat(chart.environment()).isEqualTo("train");
         assertThat(chart.rungMs()).containsEntry("480p", 58_000L).containsEntry("360p", 113_000L);
         assertThat(chart.userAgent()).startsWith("Mozilla/5.0");
+        assertThat(chart.touch()).isNull();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void chartCarriesTheTouchHintAsTheReportStatesIt(boolean touch) {
+        ObjectNode report = example();
+        client(report).put("touch", touch);
+        chartRows(List.of(stored(1, ID, text(report))));
+
+        assertThat(service.chart(null).sessions().get(0).touch()).isEqualTo(touch);
     }
 
     @Test
@@ -658,13 +669,16 @@ class PlaybackHealthServiceTest {
         assertThat(chart.playbackId()).isEqualTo(ID);
         assertThat(chart.rungMs()).isNull();
         assertThat(chart.userAgent()).isNull();
+        assertThat(chart.touch()).isNull();
     }
 
     @Test
     void chartKeepsARowWhoseReportHasNoClient() {
         chartRows(List.of(stored(1, ID, "{\"seq\":1}")));
 
-        assertThat(service.chart(null).sessions().get(0).userAgent()).isNull();
+        ChartRow chart = service.chart(null).sessions().get(0);
+        assertThat(chart.userAgent()).isNull();
+        assertThat(chart.touch()).isNull();
     }
 
     @Test
