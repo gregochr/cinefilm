@@ -59,8 +59,10 @@ import { operatorName } from '../state/healthFormat.js';
 import { useFilmToPlay } from '../state/useFilms.js';
 import { usePageExitReport } from '../player/exitReport.js';
 import { usePlayback } from '../state/usePlayback.js';
-import { shownDownloadKind } from '../state/subtitleFix.js';
+import { shownDownloadKind, shownFileKind } from '../state/subtitleFix.js';
 import { subtitlesWrong } from '../state/subtitleFixCopy.js';
+import { trackVersion } from '../state/subtitleTiming.js';
+import { useSubtitleTiming } from '../state/useSubtitleTiming.js';
 import { useSubtitleWrong } from '../state/useSubtitleWrong.js';
 import { useHealthReport } from '../player/useHealthReport.js';
 import { useEnvironment } from '../player/useEnvironment.js';
@@ -166,6 +168,9 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
   // Downloads the viewer reported with "Subtitles are wrong" in this viewing. The server has deleted and blocked them;
   // the film is not read again under a playing viewing, so they are left out here instead.
   const [removed, setRemoved] = useState({ FORCED: false, FULL: false });
+  // A changed timing (the Earlier / Later buttons) gives that kind's subtitle <track> a new address and a new element,
+  // so the browser reads the cues again. Only that track: nothing about the video is involved.
+  const [timingToken, setTimingToken] = useState({ FORCED: null, FULL: null });
   const forcedSubtitle = removed.FORCED ? null : edition.forcedSubtitle;
   const fullSubtitle = removed.FULL ? null : edition.fullSubtitle;
 
@@ -270,7 +275,8 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
       if (element.track) element.track.mode = key === showing ? 'showing' : 'disabled';
     });
   }, [edition.subtitleStreams, forcedSubtitle, fullSubtitle, subtitle]);
-  useEffect(applySubtitleModes, [applySubtitleModes]);
+  // Again when a changed timing mounted a new <track> (its mode starts out disabled).
+  useEffect(applySubtitleModes, [applySubtitleModes, timingToken]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -368,6 +374,20 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
     filmId: film.id,
     editionId: edition.id,
     kind: downloadKind,
+  });
+  // The subtitle file on screen, owner's or downloaded: it is the one the timing buttons change. Its rows are the ids
+  // the film showed for it (one per part).
+  const fileKind = shownFileKind({
+    choice: subtitle,
+    streams: edition.subtitleStreams,
+    forcedSubtitle,
+    fullSubtitle,
+  });
+  const timing = useSubtitleTiming({
+    kind: fileKind,
+    ids: (fileKind === 'FULL' ? fullSubtitle : forcedSubtitle)?.sidecarIds,
+    enabled: menu === 'audio',
+    onApplied: (kind, token) => setTimingToken((t) => ({ ...t, [kind]: token })),
   });
   // Deletes and blocks the download, then stops showing it: a full one falls back to Off (the forced lines still show
   // when there are any), a forced one to what the player would otherwise show. Playback itself is not touched.
@@ -611,7 +631,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
         ))}
         {forcedSubtitle ? (
           <track
-            key={FORCED_KEY}
+            key={`${FORCED_KEY}:${timingToken.FORCED ?? ''}`}
             ref={(element) => {
               if (element) trackRefs.current.set(FORCED_KEY, element);
               else trackRefs.current.delete(FORCED_KEY);
@@ -620,12 +640,15 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
             srcLang="en"
             data-testid="forced-subtitle-track"
             label="English (forced)"
-            src={editionsApi.forcedSubtitleUrl(edition.id, forcedSubtitle.version)}
+            src={editionsApi.forcedSubtitleUrl(
+              edition.id,
+              trackVersion(forcedSubtitle.version, timingToken.FORCED),
+            )}
           />
         ) : null}
         {fullSubtitle ? (
           <track
-            key={FULL_KEY}
+            key={`${FULL_KEY}:${timingToken.FULL ?? ''}`}
             ref={(element) => {
               if (element) trackRefs.current.set(FULL_KEY, element);
               else trackRefs.current.delete(FULL_KEY);
@@ -634,7 +657,10 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
             srcLang="en"
             data-testid="full-subtitle-track"
             label="English (full)"
-            src={editionsApi.fullSubtitleUrl(edition.id, fullSubtitle.version)}
+            src={editionsApi.fullSubtitleUrl(
+              edition.id,
+              trackVersion(fullSubtitle.version, timingToken.FULL),
+            )}
           />
         ) : null}
       </video>
@@ -722,6 +748,15 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
               subtitleValue={subtitle}
               onAudio={chooseAudio}
               onSubtitle={chooseSubtitle}
+              timing={{
+                available: timing.available,
+                offsets: timing.offsets,
+                busy: timing.busy,
+                problem: timing.problem,
+                onEarlier: timing.earlier,
+                onLater: timing.later,
+                onReset: timing.reset,
+              }}
               wrong={{
                 available: downloadKind !== null,
                 busy: wrongSubtitles.busy,

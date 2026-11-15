@@ -345,3 +345,133 @@ describe('AudioSubtitlesPanel: Subtitles are wrong', () => {
     expect(outside).toHaveFocus();
   });
 });
+
+describe('AudioSubtitlesPanel: subtitle timing', () => {
+  const props = {
+    audioStreams: [{ id: 1, language: 'English', channels: '5.1', codec: 'DTS' }],
+    audioValue: 1,
+    subtitleStreams: [{ id: 5, language: 'English' }],
+    hasFullSubtitle: true,
+    subtitleValue: 'full',
+    onAudio: vi.fn(),
+    onSubtitle: vi.fn(),
+  };
+  const timingOf = (over = {}) => ({
+    available: true,
+    offsets: [500],
+    busy: false,
+    problem: null,
+    onEarlier: vi.fn(),
+    onLater: vi.fn(),
+    onReset: vi.fn(),
+    ...over,
+  });
+  const subs = () => screen.getByRole('menu', { name: 'Subtitles' });
+  const earlier = () =>
+    within(subs()).getByRole('menuitem', { name: 'Show lines 0.25 seconds earlier' });
+  const later = () =>
+    within(subs()).getByRole('menuitem', { name: 'Show lines 0.25 seconds later' });
+  const reset = () => within(subs()).getByRole('menuitem', { name: 'Reset timing' });
+
+  it('is not there unless a subtitle file shows', () => {
+    const { rerender } = render(<AudioSubtitlesPanel {...props} />);
+    expect(screen.queryByRole('group', { name: 'Subtitle timing' })).not.toBeInTheDocument();
+
+    rerender(<AudioSubtitlesPanel {...props} timing={timingOf({ available: false })} />);
+    expect(screen.queryByRole('group', { name: 'Subtitle timing' })).not.toBeInTheDocument();
+  });
+
+  it('is three plain actions in the Subtitles menu, not choices, showing the offset', () => {
+    render(<AudioSubtitlesPanel {...props} timing={timingOf()} />);
+
+    expect(within(subs()).getAllByRole('menuitemradio')).toHaveLength(3);
+    expect(within(subs()).getByRole('group', { name: 'Subtitle timing' })).toBeInTheDocument();
+    expect(within(subs()).getByRole('status')).toHaveTextContent('Timing: +0.5 s');
+    expect(earlier()).toHaveTextContent('Earlier');
+    expect(later()).toHaveTextContent('Later');
+  });
+
+  it('says No timing change at 0, and that parts differ when they do', () => {
+    const { rerender } = render(
+      <AudioSubtitlesPanel {...props} timing={timingOf({ offsets: [0] })} />,
+    );
+    expect(within(subs()).getByRole('status')).toHaveTextContent('Timing: No timing change');
+
+    rerender(<AudioSubtitlesPanel {...props} timing={timingOf({ offsets: [250, 500] })} />);
+    expect(within(subs()).getByRole('status')).toHaveTextContent('Timing: differs by part');
+  });
+
+  it('shows no readout while the offset is not known', () => {
+    render(<AudioSubtitlesPanel {...props} timing={timingOf({ offsets: null })} />);
+
+    expect(within(subs()).queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('asks once per click for each action', async () => {
+    const timing = timingOf();
+    render(<AudioSubtitlesPanel {...props} timing={timing} />);
+
+    await userEvent.click(earlier());
+    await userEvent.click(later());
+    await userEvent.click(reset());
+
+    expect(timing.onEarlier).toHaveBeenCalledTimes(1);
+    expect(timing.onLater).toHaveBeenCalledTimes(1);
+    expect(timing.onReset).toHaveBeenCalledTimes(1);
+  });
+
+  it('while saving, says so, does nothing on a click and keeps focus on the pressed button', async () => {
+    const timing = timingOf({ busy: true });
+    render(<AudioSubtitlesPanel {...props} timing={timing} />);
+
+    later().focus();
+    await userEvent.click(later());
+
+    expect(later()).toHaveAttribute('aria-disabled', 'true');
+    expect(earlier()).toHaveAttribute('aria-disabled', 'true');
+    expect(reset()).toHaveAttribute('aria-disabled', 'true');
+    expect(within(subs()).getByRole('status')).toHaveTextContent('Saving…');
+    expect(later()).toHaveFocus();
+    expect(timing.onLater).not.toHaveBeenCalled();
+  });
+
+  it('has nothing to reset when the timing is already 0, but Earlier and Later still work', async () => {
+    const timing = timingOf({ offsets: [0] });
+    render(<AudioSubtitlesPanel {...props} timing={timing} />);
+
+    await userEvent.click(reset());
+    await userEvent.click(later());
+
+    expect(reset()).toHaveAttribute('aria-disabled', 'true');
+    expect(timing.onReset).not.toHaveBeenCalled();
+    expect(timing.onLater).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a problem as an alert line', () => {
+    render(
+      <AudioSubtitlesPanel
+        {...props}
+        timing={timingOf({ problem: 'Couldn’t change the timing. Try again.' })}
+      />,
+    );
+
+    expect(within(subs()).getByRole('alert')).toHaveTextContent(
+      'Couldn’t change the timing. Try again.',
+    );
+  });
+
+  it('is reachable with the arrow keys, after the subtitle choices', async () => {
+    render(<AudioSubtitlesPanel {...props} timing={timingOf()} />);
+    const choices = within(subs()).getAllByRole('menuitemradio');
+    choices[choices.length - 1].focus();
+
+    await userEvent.keyboard('{ArrowDown}');
+    expect(earlier()).toHaveFocus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(later()).toHaveFocus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(reset()).toHaveFocus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(choices[0]).toHaveFocus();
+  });
+});

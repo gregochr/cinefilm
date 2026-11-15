@@ -7,7 +7,8 @@ import {
   subtitleOptions,
 } from '../player/tracks.js';
 import { workerOffline } from '../player/ladder.js';
-import { subtitlesWrong } from '../state/subtitleFixCopy.js';
+import { subtitleTiming, subtitlesWrong } from '../state/subtitleFixCopy.js';
+import { EARLIER, LATER, inSync, timingReadout } from '../state/subtitleTiming.js';
 import { CheckIcon } from './icons.jsx';
 
 /** Moves focus between enabled menu items with the arrow keys. */
@@ -118,6 +119,59 @@ function WrongSubtitles({ busy, problem, onWrong }) {
   );
 }
 
+/**
+ * "Earlier", "Later" and "Reset timing" for the subtitle file that shows (`timing.available`). Three plain actions, not
+ * choices (`menuitem`), under a hairline, never amber. `aria-disabled`, not `disabled`, while a change is saved or when
+ * there is nothing to reset, so the pressed button keeps focus. The readout says the offset, or that it is being saved.
+ */
+function TimingControls({ timing }) {
+  const readout = timing.busy ? subtitleTiming.busy : timingReadout(timing.offsets);
+  const action = (label, spoken, detail, onPress, blocked) => (
+    <button
+      type="button"
+      role="menuitem"
+      className="menu__item menu__item--quiet"
+      aria-label={spoken}
+      aria-disabled={blocked || undefined}
+      onClick={() => {
+        if (!blocked) onPress();
+      }}
+    >
+      <span className="menu__tick" aria-hidden="true" />
+      <span className="menu__name">{label}</span>
+      {detail ? <span className="menu__detail">{detail}</span> : null}
+    </button>
+  );
+  return (
+    <div
+      className="menu__timing"
+      role="group"
+      aria-label={subtitleTiming.group}
+      aria-busy={timing.busy || undefined}
+    >
+      {readout ? (
+        <div className="menu__readout" role="status">
+          {timing.busy ? readout : subtitleTiming.readout(readout)}
+        </div>
+      ) : null}
+      {action(subtitleTiming.earlier, EARLIER.spoken, EARLIER.label, timing.onEarlier, timing.busy)}
+      {action(subtitleTiming.later, LATER.spoken, LATER.label, timing.onLater, timing.busy)}
+      {action(
+        subtitleTiming.reset,
+        subtitleTiming.reset,
+        null,
+        timing.onReset,
+        timing.busy || inSync(timing.offsets),
+      )}
+      {timing.problem ? (
+        <p className="menu__problem" role="alert">
+          {timing.problem}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function AudioSubtitlesPanel({
   audioStreams,
   audioValue,
@@ -128,6 +182,7 @@ export function AudioSubtitlesPanel({
   onAudio,
   onSubtitle,
   wrong = null,
+  timing = null,
 }) {
   const ref = useRef(null);
   const subtitlesRef = useRef(null);
@@ -196,6 +251,7 @@ export function AudioSubtitlesPanel({
             </Item>
           ))
         )}
+        {timing?.available ? <TimingControls timing={timing} /> : null}
         {wrong?.available ? (
           <WrongSubtitles busy={wrong.busy} problem={wrong.problem} onWrong={wrong.onWrong} />
         ) : null}

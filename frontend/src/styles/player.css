@@ -348,6 +348,25 @@
   color: var(--cf-text-disabled);
   cursor: progress;
 }
+/* Subtitle timing: quiet actions under the subtitle choices, set apart by a hairline, never amber. */
+.menu__timing {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--cf-line);
+}
+.menu__readout {
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--cf-text-muted);
+}
+.menu__item--quiet {
+  width: 100%;
+  color: var(--cf-text-muted);
+}
+.menu__item--quiet[aria-disabled='true'] {
+  color: var(--cf-text-disabled);
+  cursor: progress;
+}
 .menu__problem {
   margin: 4px 12px 0;
   font-size: 13px;

@@ -53,6 +53,18 @@ export function shownDownloadKind({ choice, streams, forcedSubtitle, fullSubtitl
   return null;
 }
 
+/**
+ * The kind (`'FULL'` or `'FORCED'`) of the subtitle *file* on screen right now (the owner's own or a download), or null
+ * when what shows is an embedded stream or nothing. `activeSubtitleKey` decides what shows; the edition's forced and
+ * full subtitle are always files, so only the key's kind matters. Timing is offered for exactly these.
+ */
+export function shownFileKind({ choice, streams, forcedSubtitle, fullSubtitle }) {
+  const key = activeSubtitleKey(streams, choice, forcedSubtitle, fullSubtitle);
+  if (key === FULL_KEY && fullSubtitle) return 'FULL';
+  if (key === FORCED_KEY && forcedSubtitle) return 'FORCED';
+  return null;
+}
+
 /** The rows of the download that plays now for one edition and kind: what "Subtitles are wrong" deletes. */
 export function wrongTargets(rows, { filmId, editionId, kind }) {
   return rows.filter(

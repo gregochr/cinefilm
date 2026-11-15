@@ -43,7 +43,7 @@ export const editionsApi = {
   subtitleUrl: (editionId, index) => `/api/editions/${editionId}/subtitles/${index}.vtt`,
   /**
    * The WebVTT of the edition's forced English subtitle on the edition's timeline. `version` (from the film detail's
-   * `forcedSubtitle`) only busts the browser's cache after a nudge in Admin: the server ignores it.
+   * `forcedSubtitle`) only busts the browser's cache after a nudge (Admin, or the player's Earlier / Later): the server ignores it.
    */
   forcedSubtitleUrl: (editionId, version) =>
     `/api/editions/${editionId}/forced-subtitles.vtt${version ? `?v=${version}` : ''}`,

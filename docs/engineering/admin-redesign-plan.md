@@ -549,6 +549,48 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
   - **Dev mock:** `detach`, `verify` (POST and DELETE) and `cues` routes added to `fixtureServer.js` and the default
     `mockApi.jsx` answers; fixture refusals carry `{ error }` in the body.
 
+- **8b-1 decision (built):** player "Earlier" / "Later" / "Reset timing"; Admin keeps its own nudges until 8b-2 removes
+  them. No backend change.
+  - **Where.** In the subtitle column of the Audio and subtitles panel, a `role="group"` "Subtitle timing" of three
+    `menuitem` buttons (quiet, never amber, `aria-disabled` while saving so focus stays) between the choices and
+    "Subtitles are wrong", with a `role="status"` readout and a `menu__problem` alert line. Offered while
+    `shownFileKind` (new, in `state/subtitleFix.js`) says a subtitle *file* shows (owner file or download, forced or
+    full: `activeSubtitleKey` decides, never an embedded stream or Off-with-nothing). The rows are the film DTO's
+    `sidecarIds` (8a) for that kind.
+  - **Step and words.** One step, Admin's finer nudge: `NUDGES` "earlier-025" / "later-025" (0.25 s), reused (not
+    copied) with its spoken names ("Show lines 0.25 seconds earlier"); the clamp is Admin's `nudgedOffset` and the
+    readout its `formatOffset` ("+0.25 s", "No timing change"). The rest is `subtitleTiming` in `subtitleFixCopy.js`,
+    all "planner, 8b-1": "Subtitle timing" (group), "Timing: …" (readout), "differs by part", "Saving…", "Couldn't
+    find that subtitle file.", "Couldn't change the timing. Try again."; "This subtitle has changed since the film
+    started. Reload to see the new one." repeats 8a's line.
+  - **State.** `state/useSubtitleTiming.js` (lives in `PlayerView`, so an answer outlives the panel) over the pure
+    `state/subtitleTiming.js`. The offsets for the readout are read from `GET /api/admin/subtitles` while the panel is
+    open (never at playback start), and again at each press, so a press never works from a stale number. A press sends
+    one absolute `PUT /api/admin/subtitles/{id}/offset` per row that moves, one after the other. **Departure from the
+    brief's "the same new offset for each row":** each row moves by the step from *its own* offset (a multi-part film's
+    rows can differ, the timing check sets them per file) and Reset sets every row to 0; the readout says "differs by
+    part" when they do. If some of the shown rows are gone from the list it says "changed since the film started"
+    and sends nothing.
+  - **Async.** One press per file at a time (a ref, so two clicks in one frame send one request): the buttons are
+    `aria-disabled` with the readout "Saving…". An answer belongs to the file it was for: it is dropped when another
+    file shows (offsets, problem), a problem is forgotten when the shown file changes, and nothing is set or told after
+    the player unmounts. A read that started before a press never overwrites its result. A press that fails half way
+    still tells the track (rows did change) and shows the offsets that did.
+  - **Applying it without touching playback (chosen).** The PUT answers a `SidecarDto` whose `version` is when the row
+    last changed. The hook hands `onApplied(kind, token)` with `token` made of each answered row's `version_offsetMs`;
+    the player keeps one token per kind and gives that kind's `<track>` a new `key` and a new `?v=` (`<film version>.<token>`,
+    the server ignores `v`), so React mounts a fresh `<track>` and the browser reads its cues again (replacing the
+    element, not changing `src`, because a `src` change on a live track is unreliable in Safari). `applySubtitleModes`
+    re-runs on the token and sets the new element to `showing`. Only the `<track>` element changes: no session, seek,
+    `load()`, video `src`, `useStream` or hls code, and the video element is not re-rendered differently. The film is
+    not read again. A change that finishes after the viewer closed the panel or picked another subtitle still reloads
+    the changed file's own track (its timing did change; a disabled track fetches nothing).
+  - **Tests.** `subtitleTiming.test.js`, `useSubtitleTiming.test.jsx`, `PlayerMenus.test.jsx`, `subtitleFix.test.js`,
+    `fixtureServer.test.js` and `screens/PlayerSubtitleTiming.test.jsx` (absolute offsets per row, gating, the track
+    reload with the video's `src`, `currentTime`, `load()`, `pause()` and `play()` untouched and only the two subtitle
+    requests sent, double click, closed panel, late answer after switching, error then recovery). `fixtureServer.js`
+    and the default `mockApi.jsx` answer the offset route with a `SidecarDto` whose `version` moves on.
+
 ## Owner answers (2026-11-14)
 
 All four defaults chosen: **Q1** leave the credits dataset out of Admin; **Q2** drop both switches; **Q3** (a) the

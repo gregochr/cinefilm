@@ -374,6 +374,25 @@ function verifySubtitle(id, verified) {
   return listedSubtitle(id);
 }
 
+/** The server's limit on a timing offset, either way. */
+const MAX_OFFSET_MS = 600_000;
+
+/** Sets a file's timing, as the server does: the owner's word, and the row's `version` moves on. */
+function setSubtitleOffset(id, body) {
+  const before = listedSubtitle(id);
+  if (!Number.isInteger(body?.offsetMs)) throw apiError(400, 'An offset is required');
+  if (Math.abs(body.offsetMs) > MAX_OFFSET_MS) {
+    throw apiError(400, 'The offset must be within 10 minutes either way');
+  }
+  attachedSubtitles.set(id, {
+    ...attachedSubtitles.get(id),
+    offsetMs: body.offsetMs,
+    offsetSource: 'OWNER',
+    version: before.version + 1,
+  });
+  return listedSubtitle(id);
+}
+
 /** The first lines of a file on its film's timeline: three made-up cues per file, enough to preview. */
 function subtitleCues(id) {
   const row = listedSubtitle(id);
@@ -695,6 +714,8 @@ export async function handle(method, path, body) {
   if (match && method === 'POST') return detachSubtitle(Number(match[1]));
   match = route.match(/^\/api\/admin\/subtitles\/(\d+)\/verify$/);
   if (match) return verifySubtitle(Number(match[1]), method === 'POST');
+  match = route.match(/^\/api\/admin\/subtitles\/(\d+)\/offset$/);
+  if (match && method === 'PUT') return setSubtitleOffset(Number(match[1]), body);
   match = route.match(/^\/api\/admin\/subtitles\/(\d+)\/cues$/);
   if (match) return subtitleCues(Number(match[1]));
   match = route.match(/^\/api\/admin\/subtitles\/(\d+)$/);
