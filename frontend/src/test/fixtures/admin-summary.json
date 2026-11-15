@@ -10,6 +10,7 @@
       "editionId": 11,
       "filmTitle": "Heat",
       "device": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+      "touch": false,
       "environment": "home",
       "quality": "720p"
     }

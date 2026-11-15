@@ -107,6 +107,45 @@ class PlaybackHealthApiTest extends ApiTestBase {
     }
 
     @Test
+    void theTouchHintRoundTripsIntoTheLogRowAndPlayingNow() throws Exception {
+        ObjectNode body = report(finalCut, 4);
+        ((ObjectNode) body.get("client")).put("touch", true);
+        send(ID, body);
+
+        mvc.perform(get("/api/admin/playback-health"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.playbacks[0].report.client.touch").value(true));
+        mvc.perform(get("/api/admin/summary"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.playingNow[0].playbackId").value(ID))
+            .andExpect(jsonPath("$.playingNow[0].device").value("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"))
+            .andExpect(jsonPath("$.playingNow[0].touch").value(true));
+    }
+
+    @Test
+    void aReportFromBeforeTheTouchHintReadsAsBefore() throws Exception {
+        send(ID, report(finalCut, 4));
+
+        mvc.perform(get("/api/admin/playback-health"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.playbacks[0].report.client.touch").doesNotExist());
+        mvc.perform(get("/api/admin/summary"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.playingNow[0].touch").value((Object) null));
+    }
+
+    @Test
+    void aTouchHintThatIsNotABooleanIsA400AndStoresNothing() throws Exception {
+        ObjectNode body = report(finalCut, 4);
+        ((ObjectNode) body.get("client")).put("touch", "maybe");
+
+        mvc.perform(put("/api/playback-health/{id}", ID).content(text(body)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid health report"));
+        assertThat(health.count()).isZero();
+    }
+
+    @Test
     void theViewingByIdCarriesTheWholeReportIncludingMinutes() throws Exception {
         send(ID, report(finalCut, 4));
 

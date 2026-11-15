@@ -41,8 +41,8 @@ export const buttons = {
     hint: 'Checks whether the Plex server answers now.',
     source: '07',
   },
-  // 07's wording: the README's "Ends playback on the {device}; it can resume from here" needs a device the
-  // transcoding session does not carry yet. Swap this hint when the session reports one.
+  // 07's wording, kept for the Transcoding panel's own Stop, whose session carries no device. "Playing now" knows the
+  // device and uses AR4's line, `playingNow.stopHint`.
   stopStream: {
     label: 'Stop this stream',
     hint: 'Ends playback on that device; it can resume later.',
@@ -121,6 +121,24 @@ export const buttons = {
     hint: 'Shifts when lines appear; done while watching, where you can see the effect.',
     source: '07',
   },
+};
+
+/** The Playback section's "Playing now" card (AR4, `screens/04-playback.png`). */
+export const playingNow = {
+  title: 'Now playing', // 04 and AR4 (the README says "Playing now")
+  streams: (n) => `${n} ${n === 1 ? 'stream' : 'streams'}`, // 04: "1 stream"; the plural is the planner's
+  empty: 'Nothing playing.', // README
+  converting: 'converting on the fly', // AR4
+  // AR4: "Ends playback on the iPad; it can resume from here". A browser name already says "on" ("Safari on Mac"),
+  // which would read "on the Safari on Mac", so the article goes only before a device named alone. With no
+  // device known it is 07's line (planner, 5a-1).
+  stopHint: (device) => {
+    if (!device) return 'Ends playback on that device; it can resume later.';
+    return `Ends playback on ${/ on /.test(device) ? '' : 'the '}${device}; it can resume from here`;
+  },
+  stopFailed: 'Couldn’t stop that stream. Try again.', // planner, 5a-1
+  source:
+    '04 and AR4 for the title, count, empty line, "converting on the fly" and the hint; planner 5a-1 for the rest',
 };
 
 /** The line under Remembered networks (owner's answer Q4; 07's hint is false). */

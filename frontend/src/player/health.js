@@ -225,6 +225,7 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
         userAgent: String(client.userAgent ?? '').slice(0, MAX_USER_AGENT),
         screen,
         cores: Number.isFinite(client.cores) ? whole(client.cores) : null,
+        touch: client.touch === true,
       },
     };
   };

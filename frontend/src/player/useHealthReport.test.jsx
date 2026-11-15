@@ -570,13 +570,32 @@ describe('the object it returns', () => {
     expect(fetchMock.mock.calls[0][1].keepalive).toBe(true);
   });
 
+  it.each([
+    [0, false],
+    [1, false],
+    [2, true],
+    [5, true],
+    [undefined, false],
+  ])('reports touch from maxTouchPoints %s as %s', (maxTouchPoints, touch) => {
+    const fetchMock = stubFetch();
+    vi.stubGlobal('navigator', { userAgent: 'UA', hardwareConcurrency: 4, maxTouchPoints });
+    const { result } = mount();
+    result.current.playing();
+    expect(bodies(fetchMock)[0].client.touch).toBe(touch);
+  });
+
   it('describes a browser with no navigator and no screen', async () => {
     const fetchMock = stubFetch();
     vi.stubGlobal('navigator', undefined);
     vi.stubGlobal('screen', undefined);
     const { result } = mount();
     result.current.playing();
-    expect(bodies(fetchMock)[0].client).toEqual({ userAgent: '', screen: '0x0', cores: null });
+    expect(bodies(fetchMock)[0].client).toEqual({
+      userAgent: '',
+      screen: '0x0',
+      cores: null,
+      touch: false,
+    });
   });
 });
 

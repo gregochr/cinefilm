@@ -3,6 +3,7 @@ import {
   buttons,
   footerDesktop,
   footerPhone,
+  playingNow,
   rememberedNetworksNote,
   railNames,
   statusStrip,
@@ -204,5 +205,29 @@ describe('the To do count, rail names and status strip copy', () => {
     expect(statusStrip.moreStreams(2)).toBe('+2 more');
     expect(statusStrip.loadError).toBe('Couldn’t load the status.');
     expect(statusStrip.retry).toBe('Try again');
+  });
+});
+
+describe('adminCopy playingNow', () => {
+  it('has the title, count, empty line and converting words of 04 and AR4', () => {
+    expect(playingNow.title).toBe('Now playing');
+    expect(playingNow.streams(1)).toBe('1 stream');
+    expect(playingNow.streams(3)).toBe('3 streams');
+    expect(playingNow.empty).toBe('Nothing playing.');
+    expect(playingNow.converting).toBe('converting on the fly');
+  });
+
+  it('words the Stop hint as AR4 does for a device named alone', () => {
+    expect(playingNow.stopHint('iPad')).toBe('Ends playback on the iPad; it can resume from here');
+  });
+
+  it('drops the article before a browser-on-system name', () => {
+    expect(playingNow.stopHint('Safari on Mac')).toBe(
+      'Ends playback on Safari on Mac; it can resume from here',
+    );
+  });
+
+  it('falls back to 07’s line while the device is unknown', () => {
+    expect(playingNow.stopHint(null)).toBe(buttons.stopStream.hint);
   });
 });

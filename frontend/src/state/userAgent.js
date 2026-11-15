@@ -26,15 +26,17 @@ function systemOf(ua) {
  * browser. The platform alone when the browser is unknown, the browser alone when the platform is, else
  * "Unknown device". The one describer for the whole app (the Playback log uses it too).
  *
- * Limitation: iPadOS Safari sends a desktop Macintosh user agent by default, so an iPad reads as a Mac here; the
- * user agent alone cannot tell (the player's touch hint, planned in the Admin plan's 5a, will).
+ * iPadOS Safari sends a desktop Macintosh user agent by default, which the user agent alone cannot tell from a Mac.
+ * The player reports whether the device has more than one touch point (`touch`): a Macintosh user agent with
+ * `touch === true` is an iPad ("Safari on iPad"). A missing or false
+ * `touch` (an older report) leaves the Mac reading as it was. Touch changes nothing else: an iPhone is an iPhone.
  */
-export function describeDevice(userAgent) {
+export function describeDevice(userAgent, touch = false) {
   const ua = typeof userAgent === 'string' ? userAgent : '';
   if (/iPhone/.test(ua)) return 'iPhone';
   if (/iPad/.test(ua)) return 'iPad';
   if (/Android/.test(ua)) return 'Android';
-  const system = systemOf(ua);
+  const system = touch === true && /Macintosh/.test(ua) ? 'iPad' : systemOf(ua);
   const browser = browserOf(ua);
   if (browser && system) return `${browser} on ${system}`;
   return system ?? browser ?? statusStrip.unknownDevice;

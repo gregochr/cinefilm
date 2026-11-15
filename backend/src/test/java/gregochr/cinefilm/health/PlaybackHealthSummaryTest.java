@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
@@ -82,7 +83,33 @@ class PlaybackHealthSummaryTest {
         playingRows(stored(ID, text(example()), "home"));
 
         assertThat(service.playingNow()).containsExactly(new PlayingNow(ID, 11, "Blade Runner",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", "home", "360p"));
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", null, "home", "360p"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void theTouchHintIsPassedThroughAsTheReportStatesIt(boolean touch) {
+        ObjectNode report = example();
+        client(report).put("touch", touch);
+        playingRows(stored(ID, text(report), "home"));
+
+        assertThat(service.playingNow().get(0).touch()).isEqualTo(touch);
+    }
+
+    @Test
+    void aReportFromBeforeTheTouchHintHasNoTouchValue() {
+        playingRows(stored(ID, text(example()), "home"));
+
+        assertThat(service.playingNow().get(0).touch()).isNull();
+    }
+
+    @Test
+    void aReportWithNoClientHasNoTouchValue() {
+        ObjectNode report = example();
+        report.remove("client");
+        playingRows(stored(ID, text(report), "home"));
+
+        assertThat(service.playingNow().get(0).touch()).isNull();
     }
 
     @Test
@@ -156,7 +183,8 @@ class PlaybackHealthSummaryTest {
     void anUnreadableReportStillListsWithNoDeviceAndNoQuality() {
         playingRows(stored(ID, "not json", "home"));
 
-        assertThat(service.playingNow()).containsExactly(new PlayingNow(ID, 11, "Blade Runner", null, "home", null));
+        assertThat(service.playingNow()).containsExactly(new PlayingNow(ID, 11, "Blade Runner", null, null, "home",
+            null));
     }
 
     @Test

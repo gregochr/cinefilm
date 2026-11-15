@@ -38,7 +38,15 @@ describe('the Admin summary fixture', () => {
     expect(Object.keys(summary.playback).sort()).toEqual(['films', 'smooth']);
     for (const entry of summary.playingNow) {
       expect(Object.keys(entry).sort()).toEqual(
-        ['device', 'editionId', 'environment', 'filmTitle', 'playbackId', 'quality'].sort(),
+        [
+          'device',
+          'editionId',
+          'environment',
+          'filmTitle',
+          'playbackId',
+          'quality',
+          'touch',
+        ].sort(),
       );
     }
   });
@@ -91,6 +99,7 @@ describe('the Admin summary fixture', () => {
       expect(row.filmTitle).toBe(entry.filmTitle);
       expect(row.report.environment).toBe(entry.environment);
       expect(row.report.client.userAgent).toBe(entry.device);
+      expect(row.report.client.touch).toBe(entry.touch);
     }
   });
 

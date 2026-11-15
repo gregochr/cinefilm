@@ -145,6 +145,12 @@ describe('playingNowCard', () => {
     expect(playingNowCard(fixture.playingNow)).toBe('Heat · Mac · 720p');
   });
 
+  it('names an iPad that reports a desktop Mac user agent by its touch hint', () => {
+    expect(playingNowCard([stream({ touch: true })])).toBe('Heat · iPad · 720p');
+    expect(playingNowCard([stream({ touch: false })])).toBe('Heat · Mac · 720p');
+    expect(playingNowCard([stream({ touch: null })])).toBe('Heat · Mac · 720p');
+  });
+
   it('adds "+{k} more" at exactly 2 and 3 streams, and nothing at 1', () => {
     const one = stream();
     expect(playingNowCard([one])).toBe('Heat · Mac · 720p');

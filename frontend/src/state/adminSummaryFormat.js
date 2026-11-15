@@ -80,7 +80,7 @@ export function playingNowCard(playingNow) {
   const [first, ...others] = playingNow;
   const parts = [
     first.filmTitle,
-    describeDevice(first.device),
+    describeDevice(first.device, first.touch),
     first.quality ? rungName(first.quality) : null,
   ];
   if (others.length > 0) parts.push(statusStrip.moreStreams(others.length));

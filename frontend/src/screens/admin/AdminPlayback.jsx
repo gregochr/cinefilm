@@ -1,14 +1,21 @@
 import PlaybackHealthPanel from '../../components/PlaybackHealthPanel.jsx';
+import PlayingNowPanel from '../../components/PlayingNowPanel.jsx';
 import SectionTitle from './SectionTitle.jsx';
 import TranscodingPanel from '../../components/TranscodingPanel.jsx';
+import { useTranscoding } from '../../state/useTranscoding.js';
 
-/** Playback: what is being transcoded and how recent playbacks went. */
+/**
+ * Playback: what is playing now, what is being transcoded and how recent playbacks went. The live sessions are read
+ * once here and shared by "Now playing" (which matches them to a stream by edition, to offer Stop) and Transcoding.
+ */
 export default function AdminPlayback() {
+  const transcoding = useTranscoding();
   return (
     <>
       <SectionTitle>Playback</SectionTitle>
       <div className="admin__grid">
-        <TranscodingPanel />
+        <PlayingNowPanel transcoding={transcoding} />
+        <TranscodingPanel state={transcoding} />
         <PlaybackHealthPanel />
       </div>
     </>

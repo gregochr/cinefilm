@@ -46,10 +46,26 @@ describe('describeDevice', () => {
     expect(describeDevice(userAgent)).toBe(label);
   });
 
-  // Pins today's behaviour: iPadOS Safari sends a desktop Mac user agent, which the user agent alone cannot tell
-  // from a Mac. The player's touch hint (admin-redesign-plan 5a) is what will.
-  it('reads an iPad that sends the desktop user agent as a Mac', () => {
+  // iPadOS Safari sends a desktop Mac user agent; the player's touch hint is what tells it from a Mac.
+  it('reads a Macintosh user agent without touch as a Mac', () => {
     expect(describeDevice(SAFARI_MAC)).toBe('Safari on Mac');
+    expect(describeDevice(SAFARI_MAC, false)).toBe('Safari on Mac');
+    expect(describeDevice(SAFARI_MAC, undefined)).toBe('Safari on Mac');
+    expect(describeDevice(SAFARI_MAC, null)).toBe('Safari on Mac');
+  });
+
+  it('reads a Macintosh user agent with touch as an iPad', () => {
+    expect(describeDevice(SAFARI_MAC, true)).toBe('Safari on iPad');
+    expect(describeDevice(CHROME_MAC, true)).toBe('Chrome on iPad');
+    expect(describeDevice('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', true)).toBe('iPad');
+  });
+
+  it('does not let touch change an iPhone, an iPad, an Android device or a non-Mac desktop', () => {
+    expect(describeDevice(IPHONE, true)).toBe('iPhone');
+    expect(describeDevice(IPAD, true)).toBe('iPad');
+    expect(describeDevice(ANDROID, true)).toBe('Android');
+    expect(describeDevice(CHROME_WIN, true)).toBe('Chrome on Windows');
+    expect(describeDevice('curl/8.4.0', true)).toBe('Unknown device');
   });
 
   it('gives the platform alone when the browser is not recognised (the fixture)', () => {

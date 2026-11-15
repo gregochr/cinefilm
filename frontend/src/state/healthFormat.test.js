@@ -137,6 +137,21 @@ describe('startedLine', () => {
     );
   });
 
+  it('names an iPad that sends a desktop Mac user agent by the touch hint', () => {
+    const safari =
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15';
+    const watchedMs = 4_320_000;
+    expect(startedLine(row({ client: { userAgent: safari, touch: true }, watchedMs }))).toBe(
+      '10 Nov 19:43 · 1h 12m watched · Safari on iPad',
+    );
+    expect(startedLine(row({ client: { userAgent: safari, touch: false }, watchedMs }))).toBe(
+      '10 Nov 19:43 · 1h 12m watched · Safari on Mac',
+    );
+    expect(startedLine(row({ client: { userAgent: safari }, watchedMs }))).toBe(
+      '10 Nov 19:43 · 1h 12m watched · Safari on Mac',
+    );
+  });
+
   it('says under 1m below 60,000 ms and writes minutes from 60,000', () => {
     expect(startedLine(row({ ...mac, watchedMs: 59_999 }))).toBe(
       '10 Nov 19:43 · under 1m watched · Mac',

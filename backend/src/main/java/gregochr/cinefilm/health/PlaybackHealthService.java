@@ -212,7 +212,7 @@ public class PlaybackHealthService {
      * that reloaded (a new playback id for the same edition) shows once. A report carries no end marker (the player's
      * exit report is the same snapshot), so a viewing that ended stays listed until two minutes after its last
      * report. The quality is the rung played in the report's last minute, else the quality the viewer chose; a
-     * stored report that cannot be read still lists, with no device and no quality.
+     * stored report that cannot be read still lists, with no device, no touch hint and no quality.
      */
     @Transactional(readOnly = true)
     public List<PlayingNow> playingNow() {
@@ -229,6 +229,7 @@ public class PlaybackHealthService {
             HealthReport report = typed(stored);
             playing.add(new PlayingNow(stored.getPlaybackId(), stored.getEditionId(), stored.getFilmTitle(),
                 report == null || report.client() == null ? null : report.client().userAgent(),
+                report == null || report.client() == null ? null : report.client().touch(),
                 stored.getEnvironment(), report == null ? null : qualityOf(report)));
         }
         return playing;
