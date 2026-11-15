@@ -132,12 +132,13 @@ export function AudioSubtitlesPanel({
   const ref = useRef(null);
   const subtitlesRef = useRef(null);
   useFocusChecked(ref);
-  // The button leaves once the download is gone. If it took focus with it, land on the checked subtitle instead; when
-  // the viewer is elsewhere in the panel (picked another audio track, say), focus stays where it is.
+  // The button leaves once the download is gone. If it took focus with it (focus fell to the page), land on the checked
+  // subtitle instead; when the viewer's focus is anywhere else, in the panel or outside it, it stays where it is.
   const hadWrong = useRef(Boolean(wrong?.available));
   useEffect(() => {
     const has = Boolean(wrong?.available);
-    if (hadWrong.current && !has && !ref.current?.contains(document.activeElement)) {
+    const lost = !document.activeElement || document.activeElement === document.body;
+    if (hadWrong.current && !has && lost) {
       const root = subtitlesRef.current;
       (
         root?.querySelector('[role="menuitemradio"][aria-checked="true"]') ??

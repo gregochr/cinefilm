@@ -160,7 +160,7 @@ describe('useSubtitleWrong', () => {
     ]);
   });
 
-  it('shows a failure only while the download it was for still shows', async () => {
+  it('forgets a failure once another download (or none) shows', async () => {
     installFetch((method) => (method === 'DELETE' ? respond({ error: 'boom' }, 500) : null));
     const { result, rerender } = renderHook((props) => useSubtitleWrong(props), {
       initialProps: target,
@@ -171,7 +171,8 @@ describe('useSubtitleWrong', () => {
     rerender({ ...target, kind: 'FULL' });
     expect(result.current.problem).toBeNull();
 
+    // Switching back does not bring the old message back.
     rerender(target);
-    expect(result.current.problem).toBe(subtitlesWrong.failed);
+    expect(result.current.problem).toBeNull();
   });
 });

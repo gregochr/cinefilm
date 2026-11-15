@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '../api/client.js';
 import { adminApi } from '../api/resources.js';
 import { LookupFailed, wrongProblem, wrongTargets } from './subtitleFix.js';
@@ -47,6 +47,10 @@ export function useSubtitleWrong({ filmId, editionId, kind: shownKind = null }) 
     [filmId, editionId],
   );
 
-  // A failure belongs to the download it was for: another one on screen starts clean.
+  // A failure belongs to the download it was for: once another kind (or none) shows it is forgotten, so switching away
+  // and back does not bring an old message back.
+  useEffect(() => {
+    setFailure((f) => (f && f.kind !== shownKind ? null : f));
+  }, [shownKind]);
   return { busy, problem: failure?.kind === shownKind ? failure.text : null, report };
 }

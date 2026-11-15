@@ -328,4 +328,20 @@ describe('AudioSubtitlesPanel: Subtitles are wrong', () => {
 
     expect(audio).toHaveFocus();
   });
+
+  it('leaves focus alone when it is outside the panel, such as on a control-bar button', () => {
+    const tree = (over) => (
+      <>
+        <button type="button">Control bar</button>
+        <AudioSubtitlesPanel {...props} wrong={wrongOf(over)} />
+      </>
+    );
+    const { rerender } = render(tree({}));
+    const outside = screen.getByRole('button', { name: 'Control bar' });
+    outside.focus();
+
+    rerender(tree({ available: false }));
+
+    expect(outside).toHaveFocus();
+  });
 });
