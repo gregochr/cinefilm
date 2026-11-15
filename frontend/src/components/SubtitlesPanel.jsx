@@ -96,7 +96,8 @@ function Item({ item }) {
       {served ? <p className="subs__served">{served}</p> : null}
       <div className="admin__item-detail">{placement(item)}</div>
       <div className="admin__item-files admin__mono">{reportLine(item)}</div>
-      {item.filmId != null && item.offsetMs !== 0 ? (
+      {/* An offset the server fitted says so in the timing line below: not told twice. */}
+      {item.filmId != null && item.offsetMs !== 0 && !item.alignment?.applied ? (
         <p className="admin__item-detail">
           {subtitlesPage.files.offset(formatOffset(item.offsetMs))}
         </p>

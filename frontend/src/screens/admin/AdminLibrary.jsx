@@ -35,7 +35,9 @@ export default function AdminLibrary() {
   // Scrolls to a card named by the address once the card is there (a background refresh of the status does not
   // move the page): the scan card for `#scan`, the Plex card for `#plex-import`.
   const scanShown = scan != null;
-  const plexShown = Boolean(plexImport.plex?.configured);
+  // The card is also drawn (as an error with Try again) when the very first read of the Plex status failed.
+  const plexShown =
+    Boolean(plexImport.plex?.configured) || (!plexImport.plex && Boolean(plexImport.error));
   useEffect(() => {
     if (hash === '#scan' && scanShown) document.getElementById('scan')?.scrollIntoView?.();
   }, [hash, scanShown]);

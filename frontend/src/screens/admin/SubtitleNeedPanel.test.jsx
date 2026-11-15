@@ -143,6 +143,21 @@ describe('SubtitleNeedPanel', () => {
     expect(screen.getByRole('tabpanel')).toHaveFocus();
   });
 
+  it('moves focus to the panel when the first of two saved rows leaves while the second is still saving', async () => {
+    const first = forcedRow({ filmId: 41, title: 'First' });
+    const second = forcedRow({ filmId: 42, title: 'Second' });
+    const choose = vi.fn(() => new Promise(() => {}));
+    const { rerender } = renderPanel({ kind: 'forced', rows: [first, second], need: { choose } });
+    for (const button of screen.getAllByRole('button', { name: 'No foreign scenes' })) {
+      await userEvent.click(button);
+    }
+    act(() => document.activeElement.blur());
+
+    rerender({ rows: [second], need: need({ choose, saving: { 42: true } }) });
+
+    expect(screen.getByRole('tabpanel')).toHaveFocus();
+  });
+
   it('leaves focus where it is when the row leaves and focus is on something real', async () => {
     const choose = vi.fn(() => Promise.resolve());
     const { rerender } = render(

@@ -156,23 +156,13 @@ describe('footerFor', () => {
 });
 
 describe('bestGuess and guessTitle', () => {
-  it('is the candidate with the highest score, not simply the first', () => {
-    const wicker = attention.items[0];
-    expect(bestGuess(wicker).tmdbId).toBe(16307);
-    const reordered = { ...wicker, candidates: [...wicker.candidates].reverse() };
-    expect(bestGuess(reordered).tmdbId).toBe(16307);
+  it('is the first candidate, which the server ranks best first', () => {
+    expect(bestGuess(attention.items[0]).tmdbId).toBe(16307);
   });
 
-  it('is null with no candidates, and the first of equal scores', () => {
+  it('is null with no candidates', () => {
     expect(bestGuess(item('needs-match'))).toBeNull();
     expect(bestGuess({ candidates: undefined })).toBeNull();
-    const tie = item('needs-match', 1, {
-      candidates: [
-        { tmdbId: 1, title: 'A', year: 1, score: 50 },
-        { tmdbId: 2, title: 'B', year: 2, score: 50 },
-      ],
-    });
-    expect(bestGuess(tie).tmdbId).toBe(1);
   });
 
   it('words the guess with its year when there is one', () => {

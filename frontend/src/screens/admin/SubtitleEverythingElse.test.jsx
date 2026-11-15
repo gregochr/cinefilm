@@ -106,6 +106,14 @@ describe('SubtitleEverythingElse', () => {
     expect(screen.getByRole('button', { name: 'Hide the 1 film' })).toBe(toggle);
   });
 
+  it('counts the rows it lists when open, if the figure and the list differ for a moment', async () => {
+    renderElse({ figures: figures({ haveSubtitles: 2 }) });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show the 2 films' }));
+
+    expect(screen.getByRole('button', { name: 'Hide the 1 film' })).toBeInTheDocument();
+  });
+
   it('keeps the file list closed, and unread, until asked', async () => {
     const fetchMock = installFetch();
     render(

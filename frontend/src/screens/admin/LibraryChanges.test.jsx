@@ -88,6 +88,18 @@ describe('LibraryChanges', () => {
     expect(screen.getByRole('button', { name: 'Show 25 more' })).toBeInTheDocument();
   });
 
+  it('starts at the first page again when only the time of the first change differs', async () => {
+    const { rerender } = render(<LibraryChanges report={reportOf(60)} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Show 25 more' }));
+    expect(listed()).toHaveLength(50);
+
+    const another = reportOf(60);
+    another.items[0].happenedAt = '2026-12-01T06:00:00Z';
+    rerender(<LibraryChanges report={another} />);
+
+    expect(listed()).toHaveLength(25);
+  });
+
   it('keeps the pages already shown when a refetch returns the same lines', async () => {
     const { rerender } = render(<LibraryChanges report={reportOf(60)} />);
     await userEvent.click(screen.getByRole('button', { name: 'Show 25 more' }));
@@ -111,6 +123,12 @@ describe('LibraryChanges', () => {
     render(<LibraryChanges report={{ items: [] }} />);
     expect(screen.getByText('The last scan changed nothing.')).toBeInTheDocument();
     expect(screen.getByText(/0 split, 0 joined, 0 flagged/)).toBeInTheDocument();
+  });
+
+  it('says nothing about an empty report while it is not yet known whether a scan has finished', () => {
+    render(<LibraryChanges report={{ items: [] }} scanned={null} />);
+    expect(screen.queryByText('Not scanned yet')).toBeNull();
+    expect(screen.queryByText('The last scan changed nothing.')).toBeNull();
   });
 
   it('says not scanned yet, not "changed nothing", before any scan has finished', () => {

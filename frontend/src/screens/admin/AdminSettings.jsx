@@ -107,11 +107,13 @@ function ContinueWatchingCard() {
     );
   } else {
     body = (
-      <AdminTodoNotice
-        label={settingsPage.loadingLabel}
-        error={loadError && !loading ? settingsPage.loadError : null}
-        onRetry={reload}
-      />
+      <div className="admin__card-pad">
+        <AdminTodoNotice
+          label={settingsPage.loadingLabel}
+          error={loadError && !loading ? settingsPage.loadError : null}
+          onRetry={reload}
+        />
+      </div>
     );
   }
   return (

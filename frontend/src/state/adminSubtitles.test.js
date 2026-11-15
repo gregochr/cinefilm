@@ -36,16 +36,16 @@ const full = (over = {}) => ({
 
 describe('tabAfterKey', () => {
   it('steps with the arrows and wraps at both ends', () => {
-    expect(tabAfterKey('foreign', 'ArrowRight')).toBe('forced');
-    expect(tabAfterKey('forced', 'ArrowRight')).toBe('foreign');
-    expect(tabAfterKey('forced', 'ArrowLeft')).toBe('foreign');
-    expect(tabAfterKey('foreign', 'ArrowLeft')).toBe('forced');
+    expect(tabAfterKey(SUBTITLE_TABS, 'foreign', 'ArrowRight')).toBe('forced');
+    expect(tabAfterKey(SUBTITLE_TABS, 'forced', 'ArrowRight')).toBe('foreign');
+    expect(tabAfterKey(SUBTITLE_TABS, 'forced', 'ArrowLeft')).toBe('foreign');
+    expect(tabAfterKey(SUBTITLE_TABS, 'foreign', 'ArrowLeft')).toBe('forced');
   });
 
   it('jumps with Home and End, and ignores every other key', () => {
-    expect(tabAfterKey('forced', 'Home')).toBe('foreign');
-    expect(tabAfterKey('foreign', 'End')).toBe('forced');
-    expect(tabAfterKey('foreign', 'Enter')).toBeNull();
+    expect(tabAfterKey(SUBTITLE_TABS, 'forced', 'Home')).toBe('foreign');
+    expect(tabAfterKey(SUBTITLE_TABS, 'foreign', 'End')).toBe('forced');
+    expect(tabAfterKey(SUBTITLE_TABS, 'foreign', 'Enter')).toBeNull();
     expect(SUBTITLE_TABS).toEqual(['foreign', 'forced']);
   });
 });

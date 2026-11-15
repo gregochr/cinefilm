@@ -70,7 +70,7 @@ describe('usePlaybackChart', () => {
       stalled: 1,
       stalledEnvironment: 'train',
     });
-    expect(result.current.summary).toContain('the last 1 session in 30 days on Train:');
+    expect(result.current.summary).toContain('the last 1 session in 30 days on the train:');
     expect(api.charts()).toHaveLength(1);
   });
 

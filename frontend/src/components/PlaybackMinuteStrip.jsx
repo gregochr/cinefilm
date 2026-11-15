@@ -32,7 +32,7 @@ export default function PlaybackMinuteStrip({ minutes, film }) {
             data-testid="strip-line"
             d={strip.line}
             fill="none"
-            stroke="#EDE6DA"
+            stroke="#D5CCBE"
             strokeWidth="1.5"
             strokeLinecap="round"
             strokeLinejoin="round"

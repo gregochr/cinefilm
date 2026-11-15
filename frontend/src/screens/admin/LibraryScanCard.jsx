@@ -140,7 +140,8 @@ export default function LibraryScanCard({
         report={changes.data}
         loading={changes.loading}
         error={changes.error}
-        scanned={Boolean(scan?.lastScan)}
+        // Unknown (null) until the scan status has answered: neither "Not scanned yet" nor "changed nothing" is true yet.
+        scanned={scan ? Boolean(scan.lastScan) : null}
         onRetry={changes.reload}
       />
     </section>

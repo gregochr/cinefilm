@@ -11,14 +11,14 @@ import { titleWithYear } from './scanFormat.js';
 /** The tabs in the order they are drawn. */
 export const SUBTITLE_TABS = ['foreign', 'forced'];
 
-/** The tab a key moves to: arrows step (wrapping), Home and End jump; null for any other key. */
-export function tabAfterKey(current, key) {
-  const at = SUBTITLE_TABS.indexOf(current);
-  const last = SUBTITLE_TABS.length - 1;
-  if (key === 'ArrowRight') return SUBTITLE_TABS[at === last ? 0 : at + 1];
-  if (key === 'ArrowLeft') return SUBTITLE_TABS[at === 0 ? last : at - 1];
-  if (key === 'Home') return SUBTITLE_TABS[0];
-  if (key === 'End') return SUBTITLE_TABS[last];
+/** The key of the tab (of `keys`) a key moves to: arrows step (wrapping), Home and End jump; null for any other key. */
+export function tabAfterKey(keys, current, key) {
+  const at = keys.indexOf(current);
+  const last = keys.length - 1;
+  if (key === 'ArrowRight') return keys[at === last ? 0 : at + 1];
+  if (key === 'ArrowLeft') return keys[at === 0 ? last : at - 1];
+  if (key === 'Home') return keys[0];
+  if (key === 'End') return keys[last];
   return null;
 }
 
@@ -27,7 +27,11 @@ export function unresolvedRows(rows) {
   return rows ? rows.filter((row) => row.unresolved) : null;
 }
 
-/** Whether the audio is unlabelled and the film's original language was assumed (so the owner can say otherwise). */
+/**
+ * Whether the audio is unlabelled and the film's original language was assumed (so the owner can say otherwise). The
+ * server's `ORIGINAL_AUDIO_ASSUMED` also covers a film with no edition and one whose editions disagree, so "unlabelled"
+ * is the copy's word for all three.
+ */
 export function isUnlabelled(row) {
   return row.reason === 'ORIGINAL_AUDIO_ASSUMED';
 }

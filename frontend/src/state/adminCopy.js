@@ -185,7 +185,6 @@ export const playbackChart = {
   },
   // AR4 says "(all on the train)"; the other places are the planner's wording (5a-2).
   allOn: { train: 'all on the train', home: 'all at home', away: 'all away' },
-  noStalls: 'No stalls', // planner, 5a-2
   noQuality: 'No quality recorded', // planner, 5a-2
   stallsAxis: 'stalls', // AR4
   legend: {
