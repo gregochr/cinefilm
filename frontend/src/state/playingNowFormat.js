@@ -1,4 +1,4 @@
-// The words and the match for the Playback section's "Playing now" card. Pure, no JSX: the Apple TV and native
+// The words and the match for the Playback section's "Now playing" card. Pure, no JSX: the Apple TV and native
 // clients reuse it. The entries come from `GET /api/admin/summary`'s `playingNow`; the live HLS sessions from
 // `GET /api/admin/transcoding`.
 import { rungName } from '../player/ladder.js';

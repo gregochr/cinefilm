@@ -230,7 +230,7 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
   `playbackId`. So the hint (planner, 5a-1) is "Stops converting this stream on the server; if it's still playing, the
   player starts it again.", on both Stop buttons, instead of 07's and AR4's "Ends playback on …". A stopped entry is
   hidden keyed on the stopped session id: only while its edition has no live session or still has that one; a session
-  with another id brings it back with Stop. **Open item for the owner:** a real "end playback" needs a distinct
+  with another id brings it back with Stop and drops the hide for good (a later end of that session does not hide it again). **Open item for the owner:** a real "end playback" needs a distinct
   stopped-by-admin answer that the player does not recover from. It is deliberately not built here because it changes
   player recovery. The row has no poster, no year, no "1h 12m in" (none is in `playingNow`) and no operator in "(EE)".
   The touch hint is `client.touch` in the health report, stored in the report JSON (no migration: the report is a JSON

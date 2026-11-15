@@ -125,6 +125,17 @@ class PlaybackHealthApiTest extends ApiTestBase {
     }
 
     @Test
+    void aTouchHintSentAsTheNumberOneIsStoredAsTrue() throws Exception {
+        ObjectNode body = report(finalCut, 4);
+        ((ObjectNode) body.get("client")).put("touch", 1);
+        send(ID, body);
+
+        mvc.perform(get("/api/admin/playback-health/{id}", ID))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.report.client.touch").value(true));
+    }
+
+    @Test
     void aReportFromBeforeTheTouchHintReadsAsBefore() throws Exception {
         send(ID, report(finalCut, 4));
 

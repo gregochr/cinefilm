@@ -244,13 +244,14 @@ describe('Admin Playback: Now playing', () => {
       },
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderApp('/admin/playback');
     const panel = await card();
     const stop = await within(panel).findByRole('button', {
       name: 'Stop this stream: Film 1 (Mac)',
     });
     const before = reads('/api/admin/summary');
-    await userEvent.click(stop);
+    await user.click(stop);
     expect(await within(panel).findByText('Nothing playing.')).toBeInTheDocument();
     // The summary was read again and still lists the stream, yet the row stays hidden.
     await waitFor(() => expect(reads('/api/admin/summary')).toBeGreaterThan(before));

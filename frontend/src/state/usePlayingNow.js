@@ -10,7 +10,7 @@ const without = (object, key) => {
 };
 
 /**
- * "Playing now" with its Stop. `entries` is the summary's `playingNow`, `sessions` the live HLS sessions (both read
+ * "Now playing" with its Stop. `entries` is the summary's `playingNow`, `sessions` the live HLS sessions (both read
  * by the section already); `reloadSessions` and `reloadSummary` re-read them after a stop that worked.
  *
  * `rows` are the entries as the card draws them. A row with a `sessionId` has a live HLS session and can be stopped:
@@ -20,7 +20,8 @@ const without = (object, key) => {
  * focus off the button that is leaving, and re-reads both lists. Stop ends only the server's converting session: a
  * player that is still playing starts a new one under the same playback id, and the summary keeps listing the row
  * while it reports. So a hidden row stays hidden only while its edition has no live session or still has the stopped
- * one; a session with another id brings the row back, with Stop. A new try on a row clears its old failure. The
+ * one; a session with another id brings the row back, with Stop, and the hide is dropped for good once that
+ * row is seen (so a later end of that session does not hide it again, and the map stays small). A new try on a row clears its old failure. The
  * flags are looked up by playback id, and a later viewing has a new one.
  */
 export function usePlayingNow({ entries, sessions, reloadSessions, reloadSummary, onLeft }) {
@@ -53,11 +54,17 @@ export function usePlayingNow({ entries, sessions, reloadSessions, reloadSummary
     [onLeft, reloadSessions, reloadSummary],
   );
 
-  const rows = (entries ?? [])
-    .map((entry) => playingNowRow(entry, sessions))
-    .filter((row) => {
-      const stopped = ended[row.playbackId];
-      return !stopped || (row.sessionId !== null && row.sessionId !== stopped);
-    });
+  const all = (entries ?? []).map((entry) => playingNowRow(entry, sessions));
+  const shows = (row) => {
+    const stopped = ended[row.playbackId];
+    return !stopped || (row.sessionId !== null && row.sessionId !== stopped);
+  };
+  // A row shown again on a new session no longer needs its hide: drop it now (in render, as `useResource` does for a
+  // new key), so it cannot hide the row once that session ends too.
+  const superseded = all.filter((row) => ended[row.playbackId] && shows(row));
+  if (superseded.length > 0) {
+    setEnded((e) => superseded.reduce((rest, row) => without(rest, row.playbackId), e));
+  }
+  const rows = all.filter(shows);
   return { rows, stopping, failures, stop };
 }

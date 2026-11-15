@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { usePlayingNow } from './usePlayingNow.js';
 
@@ -209,8 +209,20 @@ describe('usePlayingNow after a stop', () => {
   it('shows the row again, with Stop, on a session with another id', async () => {
     const { result, rerender, initial } = await stopped();
     rerender({ ...initial, sessions: [session(1, { id: 's1-new' })] });
-    await waitFor(() => expect(result.current.rows).toHaveLength(1));
+    expect(result.current.rows).toHaveLength(1);
     expect(result.current.rows[0].sessionId).toBe('s1-new');
+  });
+
+  it('drops the hide once the row is shown again: a later end of the new session does not hide it', async () => {
+    const { result, rerender, initial } = await stopped();
+    rerender({ ...initial, sessions: [session(1, { id: 's1-new' })] });
+    expect(result.current.rows).toHaveLength(1);
+    rerender({ ...initial, sessions: [] });
+    expect(result.current.rows).toHaveLength(1);
+    expect(result.current.rows[0].sessionId).toBeNull();
+    // And a further session shows as usual.
+    rerender({ ...initial, sessions: [session(1, { id: 's1-newer' })] });
+    expect(result.current.rows[0].sessionId).toBe('s1-newer');
   });
 
   it('does not hide another playback id of the same edition', async () => {

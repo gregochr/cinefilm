@@ -7,10 +7,10 @@ export const TRANSCODING_POLL_MS = 5000;
 
 /**
  * The Admin Transcoding panel: encoder, keyframe index progress, live sessions and the HLS cache size,
- * refreshed every few seconds, plus "Stop" for one session. `onStopped` runs after each stop attempt, once the live list
- * is read again (the Playback section re-reads the summary there, so "Now playing" agrees).
+ * refreshed every few seconds, plus "Stop" for one session. `onStopped` (required) runs after each stop attempt,
+ * beside the live list's re-read (the Playback section re-reads the summary there, so "Now playing" agrees).
  */
-export function useTranscoding({ onStopped } = {}) {
+export function useTranscoding({ onStopped }) {
   const { data, error, loading, reload } = useResource('admin-transcoding', (options) =>
     adminApi.transcoding(options),
   );
@@ -30,7 +30,7 @@ export function useTranscoding({ onStopped } = {}) {
         setNotice('Could not stop the session.');
       }
       reload();
-      onStopped?.();
+      onStopped();
     },
     [reload, onStopped],
   );
