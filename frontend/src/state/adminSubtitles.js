@@ -168,11 +168,13 @@ export function fileChoiceNote(file, filmId) {
 
 /**
  * True when attaching `file` to `target` (`attachTarget`'s answer) would put it where it already is: the same film and
- * edition, and the whole film or the same part.
+ * edition, and the same place in it. In a split edition a `null` part is the whole film; in a one-part edition it is
+ * part 1 (the server stores such a file on part 1, not as the whole film, so a row may read either way).
  */
 export function isCurrentTarget(file, filmId, target) {
   if (!file || file.filmId !== filmId || file.editionId !== target.editionId) return false;
-  return file.whole ? target.part === null : target.part === file.part;
+  if (file.parts > 1) return file.whole ? target.part === null : target.part === file.part;
+  return (target.part ?? 1) === 1 && (file.whole === true || file.part === 1);
 }
 
 /** The body of the attach request once an edition and (for a split edition) a part are chosen, else null. */

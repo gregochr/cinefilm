@@ -323,7 +323,7 @@ describe('fileChoices', () => {
 });
 
 describe('isCurrentTarget', () => {
-  const placed = { filmId: 6, editionId: 60, whole: true, part: null };
+  const placed = { filmId: 6, editionId: 60, parts: 2, whole: true, part: null };
 
   it('is true for the same film and edition when the file is the whole film', () => {
     expect(isCurrentTarget(placed, 6, { editionId: 60, part: null })).toBe(true);
@@ -339,11 +339,22 @@ describe('isCurrentTarget', () => {
   });
 
   it('compares the part for a file that sits on one part', () => {
-    const onPart = { filmId: 6, editionId: 60, whole: false, part: 2 };
+    const onPart = { filmId: 6, editionId: 60, parts: 2, whole: false, part: 2 };
     expect(isCurrentTarget(onPart, 6, { editionId: 60, part: 2 })).toBe(true);
     expect(isCurrentTarget(onPart, 6, { editionId: 60, part: 1 })).toBe(false);
     expect(isCurrentTarget(onPart, 6, { editionId: 60, part: null })).toBe(false);
     expect(isCurrentTarget(placed, 6, { editionId: 60, part: 1 })).toBe(false);
+  });
+});
+
+describe('isCurrentTarget, a one-part edition', () => {
+  // As the server lists it: stored on part 1, not as the whole film.
+  const single = { filmId: 6, editionId: 60, parts: 1, whole: false, part: 1 };
+
+  it('reads the target’s null part as part 1, so attaching the file where it is changes nothing', () => {
+    expect(isCurrentTarget(single, 6, { editionId: 60, part: null })).toBe(true);
+    expect(isCurrentTarget(single, 6, { editionId: 61, part: null })).toBe(false);
+    expect(isCurrentTarget(single, 7, { editionId: 60, part: null })).toBe(false);
   });
 });
 

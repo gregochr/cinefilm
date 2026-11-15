@@ -79,7 +79,10 @@ describe('AddOwnFile: a file already where it would go', () => {
       filmTitle: 'Rashomon',
       editionId: 60,
       editionName: 'Original',
-      whole: true,
+      // A one-part edition as the server lists it: stored on part 1, not as the whole film.
+      parts: 1,
+      part: 1,
+      whole: false,
       state: 'matched',
       ...over,
     });
