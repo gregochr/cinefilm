@@ -71,16 +71,7 @@ describe('PlaybackLogPanel', () => {
       within(rows[1])
         .getAllByRole('cell')
         .map((c) => c.textContent),
-    ).toEqual([
-      '10 Nov 19:43',
-      'Heat',
-      '1h 12m',
-      'Train · Mac',
-      '2.4 s',
-      '2',
-      '480p 34% · 360p 66%',
-      'Details',
-    ]);
+    ).toEqual(['10 Nov 19:43', 'Heat', '1h 12m', 'Train · Mac', '2.4 s', '2', '360p', 'Details']);
     expect(within(rows[3]).getAllByRole('cell')[4]).toHaveTextContent('—');
     expect(screen.getByText('Showing 5 of 5')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Show 50 more' })).not.toBeInTheDocument();
@@ -188,6 +179,36 @@ describe('PlaybackLogPanel', () => {
     expect(screen.queryByRole('button', { name: 'Show 50 more' })).not.toBeInTheDocument();
   });
 
+  it('takes Show 50 more away when a play that started meanwhile leaves the total out of reach', async () => {
+    const second = manyRows('b', 10);
+    second[0] = { ...second[0], playbackId: 'a-49' };
+    installFetch((m, url) => {
+      if (url === ALL_0) return respond({ playbacks: manyRows('a', 50), total: 60 });
+      if (url === ALL_1) return respond({ playbacks: second, total: 61 });
+      return null;
+    });
+    renderLog();
+    await screen.findByRole('table');
+    await userEvent.click(screen.getByRole('button', { name: 'Show 50 more' }));
+    expect(await screen.findByText('Showing 59 of 61')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show 50 more' })).not.toBeInTheDocument();
+  });
+
+  it('closes every open Details when the filter changes', async () => {
+    installFetch((m, url) => {
+      if (url === ALL_0) return respond(ALL);
+      if (url === FILMS_0) return respond(ALL);
+      return null;
+    });
+    renderLog();
+    await screen.findByRole('table');
+    await userEvent.click(within(dataRows()[1]).getByRole('button', { name: /^Details/ }));
+    expect(screen.getAllByRole('button', { name: /^Hide details/ })).toHaveLength(1);
+    await userEvent.click(screen.getByRole('button', { name: 'Films only (3 min+)' }));
+    await screen.findByRole('table');
+    expect(screen.queryByRole('button', { name: /^Hide details/ })).not.toBeInTheDocument();
+  });
+
   it('keeps the rows and says so when more cannot be loaded', async () => {
     installFetch((m, url) => {
       if (url === ALL_0) return respond({ playbacks: manyRows('a', 50), total: 60 });
@@ -232,6 +253,8 @@ describe('PlaybackLogPanel', () => {
       expect(toggle).toHaveTextContent('Hide details');
       const details = document.getElementById(toggle.getAttribute('aria-controls'));
       expect(details).not.toBeNull();
+      // One cell across the seven columns and the Details button's.
+      expect(within(details).getByRole('cell')).toHaveAttribute('colspan', '8');
       expect(
         within(details)
           .getAllByRole('term')

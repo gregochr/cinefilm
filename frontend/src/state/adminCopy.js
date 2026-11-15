@@ -148,8 +148,8 @@ export const playingNow = {
   streams: (n) => `${n} ${n === 1 ? 'stream' : 'streams'}`, // 04: "1 stream"; the plural is the planner's
   empty: 'Nothing playing.', // README
   converting: 'converting on the fly', // AR4
-  // The same honest line as the Transcoding card's Stop (`buttons.stopStream.hint`), not AR4's "Ends playback on the
-  // iPad" (see there).
+  // The honest line of `buttons.stopStream.hint` (Stop ends the server's conversion, not the playback), not AR4's
+  // "Ends playback on the iPad" (see there).
   stopHint: () => buttons.stopStream.hint,
   stopFailed: 'Couldn’t stop that stream. Try again.', // planner, 5a-1
   loadError: 'Couldn’t load what is playing.', // planner, 5a-1

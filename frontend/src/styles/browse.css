@@ -2161,3 +2161,28 @@
     align-items: flex-start;
   }
 }
+.plog__filters .segmented__btn {
+  white-space: nowrap;
+}
+.plog__filters .segmented__btn:focus-visible {
+  box-shadow: var(--cf-focus-ring);
+}
+@media (any-pointer: coarse) {
+  .plog__filters {
+    height: auto;
+  }
+  .plog__filters .segmented__btn {
+    min-height: 44px;
+  }
+}
+@media (max-width: 600px) {
+  .plog__filters {
+    flex-direction: column;
+    height: auto;
+    width: 100%;
+  }
+  .plog__filters .segmented__btn {
+    min-height: 44px;
+    text-align: left;
+  }
+}

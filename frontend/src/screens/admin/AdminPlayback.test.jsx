@@ -24,6 +24,12 @@ describe('Admin Playback section', () => {
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(CARDS);
   });
 
+  it('counts the log against the server’s total', async () => {
+    installFetch();
+    renderApp('/admin/playback');
+    expect(await screen.findByText('Showing 5 of 5')).toBeInTheDocument();
+  });
+
   it('no longer shows the old Transcoding or Playback health cards', async () => {
     installFetch();
     renderApp('/admin/playback');

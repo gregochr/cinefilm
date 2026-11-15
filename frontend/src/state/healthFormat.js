@@ -1,4 +1,4 @@
-// Display helpers for the Admin "Playback health" card. No JSX, no DOM: other clients reuse them. A report from
+// Display helpers for the Admin Playback section (the playback log and the chart's selected session). No JSX, no DOM: other clients reuse them. A report from
 // an older release can lack any field, so a missing number counts as 0, a missing flag as false and a missing
 // string as unknown.
 import { rungName } from '../player/ladder.js';

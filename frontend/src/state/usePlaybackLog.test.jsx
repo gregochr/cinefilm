@@ -135,6 +135,38 @@ describe('usePlaybackLog', () => {
     act(() => result.current.more());
     await waitFor(() => expect(result.current.rows).toHaveLength(52));
     expect(new Set(result.current.rows.map((r) => r.playbackId)).size).toBe(52);
+    // total (53) is above the 52 rows that can be reached: the short page says there is no more.
+    expect(result.current).toMatchObject({ total: 53, hasMore: false });
+  });
+
+  it('stops offering more when a full page adds no new row, though total is above the rows shown', async () => {
+    const repeat = answer('p0', 50, 120);
+    installFetch((m, url) => {
+      if (url === ALL_0) return respond(answer('p0', 50, 120));
+      if (url === ALL_1) return respond(repeat);
+      return null;
+    });
+    const { result } = renderHook(() => usePlaybackLog());
+    await waitFor(() => expect(result.current.rows).toHaveLength(50));
+    expect(result.current.hasMore).toBe(true);
+    act(() => result.current.more());
+    await waitFor(() => expect(result.current.loadingMore).toBe(false));
+    expect(result.current.rows).toHaveLength(50);
+    expect(result.current.hasMore).toBe(false);
+  });
+
+  it('offers more again after a filter switch that follows an exhausted log', async () => {
+    installFetch((m, url) => {
+      if (url === ALL_0) return respond(answer('a', 3, 9));
+      if (url === FILMS_0) return respond(answer('f', 50, 80));
+      return null;
+    });
+    const { result } = renderHook(() => usePlaybackLog());
+    await waitFor(() => expect(result.current.rows).toHaveLength(3));
+    expect(result.current.hasMore).toBe(false);
+    act(() => result.current.setFilter('films'));
+    await waitFor(() => expect(result.current.rows).toHaveLength(50));
+    expect(result.current.hasMore).toBe(true);
   });
 
   it('keeps the rows and reports moreError when the next page fails, then reads that page again', async () => {

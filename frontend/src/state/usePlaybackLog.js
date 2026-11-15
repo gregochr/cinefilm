@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { adminApi } from '../api/resources.js';
-import { logQuery } from './playbackLog.js';
+import { LOG_PAGE_SIZE, logQuery } from './playbackLog.js';
 
 const LOADING = {
   rows: null,
@@ -9,13 +9,16 @@ const LOADING = {
   error: false,
   moreError: false,
   loadingMore: false,
+  exhausted: false,
 };
 
 /**
  * The Admin "Playback log": one page of playbacks at a time for the chosen filter ('all', 'films' or 'problems'),
  * read from the server, which does the filtering (the browser never filters). `more()` appends the next page
- * until every row is shown (`pages` counts the pages read, so a row that moved between pages cannot skip one). Only the newest request may change what is shown: a filter switch or a retry abandons
- * the older request (it is aborted, and an answer that still arrives is ignored).
+ * until every row is shown (`pages` counts the pages read, so a row that moved between pages cannot skip one).
+ * A page that is short or adds no new row means there is no more to read (`exhausted`), whatever `total` says: a
+ * play that started meanwhile can leave `total` above the rows that can be reached. Only the newest request may
+ * change what is shown: a filter switch or a retry abandons the older request (it is aborted, and an answer that still arrives is ignored).
  *
  * `rows` is null until the first page of the filter arrives (or has failed: `error`). `moreError` is a failed
  * "show more", which keeps the rows already shown.
@@ -39,8 +42,14 @@ export function usePlaybackLog() {
           // A play that starts while the log is open pushes later rows down a page: a row already shown is not added twice.
           const shown = append ? previous.rows : [];
           const known = new Set(shown.map((row) => row.playbackId));
-          const rows = [...shown, ...answer.playbacks.filter((row) => !known.has(row.playbackId))];
-          return { ...LOADING, rows, pages: append ? previous.pages + 1 : 1, total: answer.total };
+          const added = answer.playbacks.filter((row) => !known.has(row.playbackId));
+          return {
+            ...LOADING,
+            rows: [...shown, ...added],
+            pages: append ? previous.pages + 1 : 1,
+            total: answer.total,
+            exhausted: answer.playbacks.length < LOG_PAGE_SIZE || added.length === 0,
+          };
         });
       })
       .catch(() => {
@@ -92,7 +101,7 @@ export function usePlaybackLog() {
     error: state.error,
     moreError: state.moreError,
     loadingMore: state.loadingMore,
-    hasMore: state.rows !== null && state.rows.length < state.total,
+    hasMore: state.rows !== null && !state.exhausted && state.rows.length < state.total,
     more,
     reload,
   };

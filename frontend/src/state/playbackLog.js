@@ -42,11 +42,15 @@ export function watchedText(ms) {
   return formatRuntime(ms);
 }
 
-function qualityCell(report) {
+/**
+ * The one rung a play spent most of its watched time on, as its name ("720p", "Original"); a tie goes to the
+ * rung earlier in the ladder (the better picture); "—" when no rung holds 1% (nothing watched). The shares of all
+ * the rungs are in the row's Details.
+ */
+export function mainRung(report) {
   const parts = rungParts(report);
   if (parts.length === 0) return '—';
-  if (parts.length === 1) return parts[0].name;
-  return parts.map(({ name, percent }) => `${name} ${percent}%`).join(' · ');
+  return parts.reduce((best, part) => (part.percent > best.percent ? part : best)).name;
 }
 
 /** The cells of one table row, as text: `stalled` is true when the stall count is above zero. */
@@ -63,7 +67,7 @@ export function logRow(row) {
     start: report.startupMs == null ? '—' : `${(num(report.startupMs) / 1000).toFixed(1)} s`,
     stalls,
     stalled: stalls > 0,
-    quality: qualityCell(report),
+    quality: mainRung(report),
   };
 }
 

@@ -93,7 +93,10 @@ export default function PlaybackLogPanel() {
               type="button"
               className="segmented__btn"
               aria-pressed={log.filter === key}
-              onClick={() => log.setFilter(key)}
+              onClick={() => {
+                setOpen(new Set());
+                log.setFilter(key);
+              }}
             >
               {label}
             </button>

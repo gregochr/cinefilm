@@ -6,6 +6,7 @@ import {
   LOG_PAGE_SIZE,
   logQuery,
   logRow,
+  mainRung,
   rawReport,
   reportDetails,
   watchedText,
@@ -93,7 +94,7 @@ describe('logRow', () => {
       start: '2.4 s',
       stalls: 2,
       stalled: true,
-      quality: '480p 34% · 360p 66%',
+      quality: '360p',
     });
   });
 
@@ -125,6 +126,33 @@ describe('logRow', () => {
       stalls: 0,
       quality: '—',
     });
+  });
+});
+
+describe('mainRung', () => {
+  it('names the only rung', () => {
+    expect(mainRung({ watchedMs: 100_000, rungMs: { '720p': 100_000 } })).toBe('720p');
+    expect(mainRung({ watchedMs: 100_000, rungMs: { original: 100_000 } })).toBe('Original');
+  });
+
+  it('names the rung with the most time, whatever order the report lists them in', () => {
+    expect(mainRung({ watchedMs: 100_000, rungMs: { '480p': 34_000, '360p': 66_000 } })).toBe(
+      '360p',
+    );
+    expect(mainRung({ watchedMs: 100_000, rungMs: { '360p': 40_000, original: 60_000 } })).toBe(
+      'Original',
+    );
+  });
+
+  it('gives a tie to the rung earlier in the ladder', () => {
+    expect(mainRung({ watchedMs: 100_000, rungMs: { '360p': 50_000, '720p': 50_000 } })).toBe(
+      '720p',
+    );
+  });
+
+  it('is a dash when nothing was watched or no rung holds 1%', () => {
+    expect(mainRung({ watchedMs: 0, rungMs: { original: 1000 } })).toBe('—');
+    expect(mainRung({ watchedMs: 100_000, rungMs: {} })).toBe('—');
   });
 });
 
