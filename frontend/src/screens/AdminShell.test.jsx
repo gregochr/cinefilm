@@ -133,7 +133,7 @@ describe('Admin shell: the old scan address', () => {
           : null,
       );
       renderApp('/admin/library#plex-import');
-      await screen.findByRole('region', { name: 'Plex import' });
+      await screen.findByRole('region', { name: 'Import from Plex' });
       await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
     } finally {
       delete Element.prototype.scrollIntoView;

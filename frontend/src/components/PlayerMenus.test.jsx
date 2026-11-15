@@ -345,3 +345,217 @@ describe('AudioSubtitlesPanel: Subtitles are wrong', () => {
     expect(outside).toHaveFocus();
   });
 });
+
+describe('AudioSubtitlesPanel: subtitle timing', () => {
+  const props = {
+    audioStreams: [{ id: 1, language: 'English', channels: '5.1', codec: 'DTS' }],
+    audioValue: 1,
+    subtitleStreams: [{ id: 5, language: 'English' }],
+    hasFullSubtitle: true,
+    subtitleValue: 'full',
+    onAudio: vi.fn(),
+    onSubtitle: vi.fn(),
+  };
+  const timingOf = (over = {}) => ({
+    available: true,
+    offsets: [500],
+    atZero: false,
+    busy: false,
+    loading: false,
+    frozen: false,
+    problem: null,
+    onEarlier: vi.fn(),
+    onLater: vi.fn(),
+    onReset: vi.fn(),
+    ...over,
+  });
+  const subs = () => screen.getByRole('menu', { name: 'Subtitles' });
+  const earlier = () =>
+    within(subs()).getByRole('menuitem', { name: 'Show lines 0.25 seconds earlier' });
+  const later = () =>
+    within(subs()).getByRole('menuitem', { name: 'Show lines 0.25 seconds later' });
+  const reset = () => within(subs()).getByRole('menuitem', { name: 'Reset timing' });
+
+  it('is not there unless a subtitle file shows', () => {
+    const { rerender } = render(<AudioSubtitlesPanel {...props} />);
+    expect(screen.queryByRole('group', { name: 'Subtitle timing' })).not.toBeInTheDocument();
+
+    rerender(<AudioSubtitlesPanel {...props} timing={timingOf({ available: false })} />);
+    expect(screen.queryByRole('group', { name: 'Subtitle timing' })).not.toBeInTheDocument();
+  });
+
+  it('is three plain actions in the Subtitles menu, not choices, showing the offset', () => {
+    render(<AudioSubtitlesPanel {...props} timing={timingOf()} />);
+
+    expect(within(subs()).getAllByRole('menuitemradio')).toHaveLength(3);
+    expect(within(subs()).getByRole('group', { name: 'Subtitle timing' })).toBeInTheDocument();
+    expect(within(subs()).getByRole('status')).toHaveTextContent('Timing: +0.5 s');
+    expect(earlier()).toHaveTextContent('Earlier');
+    expect(later()).toHaveTextContent('Later');
+  });
+
+  it('says No timing change at 0, and that parts differ when they do', () => {
+    const { rerender } = render(
+      <AudioSubtitlesPanel {...props} timing={timingOf({ offsets: [0] })} />,
+    );
+    expect(within(subs()).getByRole('status')).toHaveTextContent('Timing: No timing change');
+
+    rerender(<AudioSubtitlesPanel {...props} timing={timingOf({ offsets: [250, 500] })} />);
+    expect(within(subs()).getByRole('status')).toHaveTextContent('Timing: differs by part');
+  });
+
+  it('keeps the readout region (empty) while the offset is not known, so the first one is announced', () => {
+    render(<AudioSubtitlesPanel {...props} timing={timingOf({ offsets: null })} />);
+
+    expect(within(subs()).getByRole('status')).toBeEmptyDOMElement();
+  });
+
+  it('asks once per click for each action', async () => {
+    const timing = timingOf();
+    render(<AudioSubtitlesPanel {...props} timing={timing} />);
+
+    await userEvent.click(earlier());
+    await userEvent.click(later());
+    await userEvent.click(reset());
+
+    expect(timing.onEarlier).toHaveBeenCalledTimes(1);
+    expect(timing.onLater).toHaveBeenCalledTimes(1);
+    expect(timing.onReset).toHaveBeenCalledTimes(1);
+  });
+
+  it('while saving, says so, does nothing on a click and keeps focus on the pressed button', async () => {
+    const timing = timingOf({ busy: true });
+    render(<AudioSubtitlesPanel {...props} timing={timing} />);
+
+    later().focus();
+    await userEvent.click(later());
+
+    expect(later()).toHaveAttribute('aria-disabled', 'true');
+    expect(earlier()).toHaveAttribute('aria-disabled', 'true');
+    expect(reset()).toHaveAttribute('aria-disabled', 'true');
+    expect(within(subs()).getByRole('status')).toHaveTextContent('Saving…');
+    expect(later()).toHaveFocus();
+    expect(timing.onLater).not.toHaveBeenCalled();
+  });
+
+  it('has nothing to reset when the timing is already 0, but Earlier and Later still work', async () => {
+    const timing = timingOf({ offsets: [0], atZero: true });
+    render(<AudioSubtitlesPanel {...props} timing={timing} />);
+
+    await userEvent.click(reset());
+    await userEvent.click(later());
+
+    expect(reset()).toHaveAttribute('aria-disabled', 'true');
+    expect(timing.onReset).not.toHaveBeenCalled();
+    expect(timing.onLater).toHaveBeenCalledTimes(1);
+  });
+
+  it('says Saving… while the new timing loads, but the buttons still work', async () => {
+    const timing = timingOf({ loading: true });
+    render(<AudioSubtitlesPanel {...props} timing={timing} />);
+
+    expect(within(subs()).getByRole('status')).toHaveTextContent('Saving…');
+    await userEvent.click(later());
+
+    expect(timing.onLater).toHaveBeenCalledTimes(1);
+  });
+
+  it('is disabled for good once the file has changed under the viewer (frozen)', async () => {
+    const timing = timingOf({ frozen: true, offsets: [250] });
+    render(<AudioSubtitlesPanel {...props} timing={timing} />);
+
+    await userEvent.click(earlier());
+    await userEvent.click(later());
+    await userEvent.click(reset());
+
+    for (const button of [earlier(), later(), reset()]) {
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+    }
+    expect(within(subs()).getByRole('status')).toHaveTextContent('Timing: +0.25 s');
+    expect(timing.onEarlier).not.toHaveBeenCalled();
+    expect(timing.onLater).not.toHaveBeenCalled();
+    expect(timing.onReset).not.toHaveBeenCalled();
+  });
+
+  it('shows a problem as an alert line', () => {
+    render(
+      <AudioSubtitlesPanel
+        {...props}
+        timing={timingOf({ problem: 'Couldn’t change the timing. Try again.' })}
+      />,
+    );
+
+    expect(within(subs()).getByRole('alert')).toHaveTextContent(
+      'Couldn’t change the timing. Try again.',
+    );
+  });
+
+  it('ArrowDown and ArrowUp go on from a focused item that is disabled for now, not back to the first', async () => {
+    render(<AudioSubtitlesPanel {...props} timing={timingOf({ busy: true })} />);
+    const choices = within(subs()).getAllByRole('menuitemradio');
+    later().focus();
+
+    await userEvent.keyboard('{ArrowDown}');
+    // Earlier, Later and Reset are all disabled while saving: the next usable item after them is the first choice.
+    expect(choices[0]).toHaveFocus();
+    later().focus();
+    await userEvent.keyboard('{ArrowUp}');
+    expect(choices[choices.length - 1]).toHaveFocus();
+  });
+
+  it('goes on from the position of a focused disabled item, in the middle of the menu', async () => {
+    render(<AudioSubtitlesPanel {...props} timing={timingOf({ offsets: [0], atZero: true })} />);
+    const choices = within(subs()).getAllByRole('menuitemradio');
+    reset().focus();
+
+    await userEvent.keyboard('{ArrowUp}');
+    expect(later()).toHaveFocus();
+    reset().focus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(choices[0]).toHaveFocus();
+  });
+
+  it('from outside the items ArrowDown starts at the first and ArrowUp at the last', async () => {
+    render(<AudioSubtitlesPanel {...props} timing={timingOf()} />);
+    const choices = within(subs()).getAllByRole('menuitemradio');
+    subs().focus();
+
+    await userEvent.keyboard('{ArrowUp}');
+    expect(reset()).toHaveFocus();
+    subs().focus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(choices[0]).toHaveFocus();
+  });
+
+  it('does nothing when no item is usable', async () => {
+    render(
+      <AudioSubtitlesPanel
+        {...props}
+        audioStreams={[]}
+        subtitleStreams={[]}
+        hasFullSubtitle={false}
+        timing={timingOf({ busy: true })}
+      />,
+    );
+    later().focus();
+
+    await userEvent.keyboard('{ArrowDown}');
+
+    expect(later()).toHaveFocus();
+  });
+
+  it('is reachable with the arrow keys, after the subtitle choices', async () => {
+    render(<AudioSubtitlesPanel {...props} timing={timingOf()} />);
+    const choices = within(subs()).getAllByRole('menuitemradio');
+    choices[choices.length - 1].focus();
+
+    await userEvent.keyboard('{ArrowDown}');
+    expect(earlier()).toHaveFocus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(later()).toHaveFocus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(reset()).toHaveFocus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(choices[0]).toHaveFocus();
+  });
+});

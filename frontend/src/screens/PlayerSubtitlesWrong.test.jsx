@@ -7,7 +7,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const DOWNLOAD = { source: 'DOWNLOAD', version: 1700000000000, sidecarIds: [70] };
+const DOWNLOAD = {
+  source: 'DOWNLOAD',
+  version: 1700000000000,
+  sidecarIds: [70],
+  offsetsMs: [0],
+};
 const SIDECAR = { source: 'SIDECAR', version: 1700000000000 };
 
 // Heat (film 1, edition 11) has English audio and an embedded English subtitle (113) and forced one (114).

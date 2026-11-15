@@ -404,6 +404,64 @@ export const statusStrip = {
     'AR1 for the eyebrows, links, scanned and "Nothing playing"; planner 3c-1 for the rest (see comments)',
 };
 
+/**
+ * The Library section (README "3 · Library", AR3, `screens/03-library.png`). Strings marked "planner, 6" are not on a
+ * board. Button labels and hints are in `buttons` (07). The board's "Download TMDB credits" is not built (Q1), and its
+ * hints for "Refresh all ratings", "Import from Plex again" and "Import credits from Plex" give way to 07's and the
+ * existing, accurate ones: Plex's credits markers say where the end credits start, not who is in the film.
+ */
+export const libraryPage = {
+  scan: {
+    title: 'Library scan', // AR3
+    lastScan: (ago, took) => `Last scan ${ago} · took ${took}`, // README
+    neverScanned: 'Not scanned yet', // planner, 6
+    countsLabel: 'Library counts', // existing
+    openList: (label, value) => `${label}: ${value}, open the list`, // planner, 6
+  },
+  changes: {
+    summary: 'What the last scan changed', // AR3
+    counts: (split, joined, flagged) => `${split} split, ${joined} joined, ${flagged} flagged`, // README
+    listLabel: 'Grouping changes', // existing
+    empty: 'The last scan changed nothing.', // planner, 6
+    loadError: 'Couldn’t load what the last scan changed.', // planner, 6
+    showMore: (n) => `Show ${n} more`, // planner, 6
+  },
+  ratings: {
+    title: 'Ratings', // AR3
+    updated: (day) => `IMDb and Rotten Tomatoes · updated ${day}`, // README
+    neverUpdated: 'IMDb and Rotten Tomatoes · not fetched yet', // planner, 6
+    needsKey: 'Ratings need an OMDb API key', // existing
+  },
+  plex: {
+    title: 'Import from Plex', // AR3
+    lastImport: (line) => `Last import ${line}`, // AR3
+    neverImported: 'Not imported yet', // planner, 6
+    server: 'Plex server', // AR3
+    broughtAcross: 'Brought across', // AR3
+    nothingYet: 'Nothing yet', // planner, 6
+    reachable: 'Reachable', // AR3 (lower case there)
+    notReachable: 'Not reachable', // planner, 6
+    importing: 'Importing', // planner, 6
+    lastReport: 'Last report', // AR3
+    loadError: 'Couldn’t load the Plex import status.', // planner, 6
+    tryAgain: 'Try again', // planner, 6
+  },
+  cast: {
+    title: 'Cast & crew', // AR3
+    // README; the empty library and the singular are the planner's, 6.
+    count: (withCredits, total) =>
+      total === 0
+        ? 'No films in the library yet'
+        : `${withCredits} of ${total} ${total === 1 ? 'film has' : 'films have'} credits`,
+  },
+  files: {
+    back: '‹ Library', // planner, 6
+    empty: 'Nothing here.', // planner, 6
+    loadError: 'Couldn’t load these files.', // planner, 6
+  },
+  source: 'README 3 and AR3; planner 6 for the rest (see comments)',
+};
+
 /** The Subtitles section (AR2), with the wording AR2 does not show marked "planner, 4a". */
 export const subtitlesPage = {
   // AR2's lead; `bold` parts are <b> on the board.

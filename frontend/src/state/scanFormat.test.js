@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  GROUPING_PAGE_SIZE,
   countTiles,
-  describeLastScan,
+  describeCreditsCount,
+  describeGroupingCounts,
+  describeScanHeader,
   describeSubtitleSearch,
+  formatDuration,
+  formatScanDay,
   formatScanTime,
+  groupingCounts,
+  groupingPage,
   kindLabel,
   progressPercent,
   progressText,
@@ -20,15 +27,104 @@ describe('formatScanTime', () => {
   });
 });
 
-describe('describeLastScan', () => {
-  it('says Never before the first scan', () => {
-    expect(describeLastScan(null)).toBe('Never');
+describe('formatScanDay', () => {
+  it('writes the day without a leading zero, in London', () => {
+    expect(formatScanDay('2026-11-09T05:35:00Z')).toBe('9 Nov');
+    expect(formatScanDay('2026-07-01T23:30:00Z')).toBe('2 Jul');
+  });
+});
+
+describe('formatDuration', () => {
+  const at = (seconds) =>
+    formatDuration(
+      '2026-11-08T12:00:00Z',
+      new Date(Date.parse('2026-11-08T12:00:00Z') + seconds * 1000),
+    );
+
+  it.each([
+    [0, '0s'],
+    [48, '48s'],
+    [59, '59s'],
+    [60, '1m 0s'],
+    [108, '1m 48s'],
+    [3599, '59m 59s'],
+    [3600, '1h 0m'],
+    [3900, '1h 5m'],
+  ])('writes %i seconds as %s', (seconds, text) => {
+    expect(at(seconds)).toBe(text);
   });
 
-  it('reads like the comp: time, new and missing', () => {
-    expect(
-      describeLastScan({ finishedAt: '2026-11-08T12:41:10Z', newFiles: 2, missingFiles: 0 }),
-    ).toBe('08 Nov 12:41 · 2 new, 0 missing');
+  it('reads a finish before the start as 0s', () => {
+    expect(formatDuration('2026-11-08T12:00:10Z', '2026-11-08T12:00:00Z')).toBe('0s');
+  });
+});
+
+describe('describeScanHeader', () => {
+  const lastScan = { startedAt: '2026-11-08T12:40:02Z', finishedAt: '2026-11-08T12:41:50Z' };
+
+  it('says when the last scan finished and how long it took', () => {
+    expect(describeScanHeader(lastScan, Date.parse('2026-11-08T12:53:50Z'))).toBe(
+      'Last scan 12 min ago · took 1m 48s',
+    );
+  });
+
+  it('says not scanned yet before the first scan', () => {
+    expect(describeScanHeader(null, Date.now())).toBe('Not scanned yet');
+  });
+});
+
+describe('grouping report helpers', () => {
+  const change = (kind, i = 0) => ({ kind, happenedAt: `2026-11-08T12:41:0${i}Z`, summary: kind });
+  const many = (n) => Array.from({ length: n }, (_, i) => change('join', i % 10));
+
+  it('counts changes by kind and ignores a kind it does not know', () => {
+    const items = [change('split'), change('split'), change('join'), change('flag'), change('odd')];
+    expect(groupingCounts(items)).toEqual({ split: 2, join: 1, flag: 1 });
+    expect(describeGroupingCounts(items)).toBe('2 split, 1 joined, 1 flagged');
+    expect(describeGroupingCounts([])).toBe('0 split, 0 joined, 0 flagged');
+  });
+
+  it('pages at 25: 24 and 25 show everything, 26 offers one more', () => {
+    expect(GROUPING_PAGE_SIZE).toBe(25);
+    expect(groupingPage(many(24), 25)).toMatchObject({ moreLabel: null });
+    expect(groupingPage(many(24), 25).visible).toHaveLength(24);
+    expect(groupingPage(many(25), 25)).toMatchObject({ moreLabel: null });
+    expect(groupingPage(many(25), 25).visible).toHaveLength(25);
+    const page = groupingPage(many(26), 25);
+    expect(page.visible).toHaveLength(25);
+    expect(page.moreLabel).toBe('Show 1 more');
+  });
+
+  it('offers at most 25 more, and stops at the end', () => {
+    expect(groupingPage(many(80), 25).moreLabel).toBe('Show 25 more');
+    expect(groupingPage(many(80), 50).moreLabel).toBe('Show 25 more');
+    expect(groupingPage(many(80), 75).moreLabel).toBe('Show 5 more');
+    expect(groupingPage(many(80), 100)).toMatchObject({ moreLabel: null });
+    expect(groupingPage(many(80), 100).visible).toHaveLength(80);
+  });
+});
+
+describe('describeCreditsCount', () => {
+  it('reads "{n} of {total} films have credits"', () => {
+    expect(describeCreditsCount({ films: 538, filmsWithCredits: 530 })).toBe(
+      '530 of 538 films have credits',
+    );
+  });
+
+  it('keeps a zero count', () => {
+    expect(describeCreditsCount({ films: 12, filmsWithCredits: 0 })).toBe(
+      '0 of 12 films have credits',
+    );
+  });
+
+  it('says there are no films when the library is empty', () => {
+    expect(describeCreditsCount({ films: 0, filmsWithCredits: 0 })).toBe(
+      'No films in the library yet',
+    );
+  });
+
+  it('uses the singular for one film', () => {
+    expect(describeCreditsCount({ films: 1, filmsWithCredits: 1 })).toBe('1 of 1 film has credits');
   });
 });
 
@@ -48,8 +144,18 @@ describe('countTiles', () => {
       { key: 'films', label: 'Films', value: 538 },
       { key: 'newFiles', label: 'New', value: 2 },
       { key: 'missing', label: 'Missing', value: 1 },
-      { key: 'protectedFiles', label: 'Protected', value: 3 },
-      { key: 'needsConversion', label: 'Needs conversion', value: 4 },
+      {
+        key: 'protectedFiles',
+        label: 'Can’t play (protected)',
+        value: 3,
+        to: '/admin/library/files/protected',
+      },
+      {
+        key: 'needsConversion',
+        label: 'Needs conversion',
+        value: 4,
+        to: '/admin/library/files/needs-conversion',
+      },
       { key: 'needsMatch', label: 'Need a match', value: 5 },
     ]);
   });
@@ -59,6 +165,7 @@ describe('countTiles', () => {
       key: 'unreadable',
       label: 'Unreadable',
       value: 1,
+      to: '/admin/library/files/unreadable',
     });
     expect(countTiles(counts).some((t) => t.key === 'unreadable')).toBe(false);
   });

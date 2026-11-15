@@ -57,3 +57,21 @@ export const fixRemoveLabels = {
   tryAgain: 'Try again',
   keep: 'Keep it',
 };
+
+/**
+ * The player's subtitle timing ("Earlier" / "Later" / "Reset timing", 8b-1). A block of its own so the 8b-2 edits to
+ * this file merge cleanly. The spoken names of Earlier and Later are Admin's own nudge words (`NUDGES`); the readout
+ * of an offset is Admin's `formatOffset` ("+0.25 s", "No timing change"). Everything else is "planner, 8b-1".
+ */
+export const subtitleTiming = {
+  group: 'Subtitle timing', // planner, 8b-1
+  earlier: 'Earlier', // the handover's word for the nudge
+  later: 'Later', // the handover's word for the nudge
+  reset: 'Reset timing', // Admin's existing word
+  readout: (offset) => `Timing: ${offset}`, // planner, 8b-1
+  differs: 'differs by part', // planner, 8b-1: the parts of one film's subtitle do not share an offset
+  busy: 'Saving…', // planner, 8b-1
+  changed: 'This subtitle has changed since the film started. Reload to see the new one.', // as subtitlesWrong.changed
+  swapFailed: 'Couldn’t load the new timing. The old timing stays.', // planner, 8b-1
+  failed: 'Couldn’t change the timing. Try again.', // planner, 8b-1
+};

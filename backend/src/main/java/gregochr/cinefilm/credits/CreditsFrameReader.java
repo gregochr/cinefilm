@@ -23,7 +23,8 @@ import org.springframework.stereotype.Component;
  * {@code StillCommand} does). Nothing binary is read from standard output. Every call is an argument list with
  * {@code -nostdin}, {@code -protocol_whitelist file}, one thread, the absolute path last before the output, under
  * {@code nice}, and has a timeout after which the process is killed. A job abandons the whole file on the first
- * failure or timeout, and its directory is always deleted when the job is closed.
+ * failure or timeout, with one exception: a coarse seek in the file's last {@link #TAIL_GRACE_MS} that exits 0 and
+ * writes no frame ends the coarse pass there instead. Its directory is always deleted when the job is closed.
  *
  * <p>Three kinds of read, all single-frame input seeks except the last (a seek reads about one group of pictures, so
  * the window costs a little over SMB instead of a sequential decode of the whole ending): five frames for the active
@@ -59,6 +60,12 @@ public class CreditsFrameReader {
     static final long DENSE_FRAME_MS = 1000 / DENSE_FPS;
     /** A seek never goes closer than this to the end of the file, where there may be no frame left to decode. */
     static final long END_MARGIN_MS = 1_000;
+    /**
+     * Some files have no decodable picture in their last few seconds (measured: a 7,261.8 s file wrote no frame for
+     * seeks from 7,259 s on), so a coarse seek in this last stretch that exits 0 and writes no file ends the coarse
+     * pass instead of failing the file. A seek at exactly this long before the end counts as inside it (inclusive).
+     */
+    static final long TAIL_GRACE_MS = 10_000;
 
     /** The ffmpeg filter every frame goes through: un-squeeze a non-square pixel aspect, then scale to the width. */
     public static final String FILTER = "scale='trunc(iw*sar/2)*2':ih,setsar=1,scale=" + OUTPUT_WIDTH + ":-2";
@@ -299,11 +306,27 @@ public class CreditsFrameReader {
             return frames;
         }
 
-        /** One frame every 5 seconds across the window; each frame's offset is its seek time. */
+        /**
+         * One frame every 5 seconds across the window; each frame's offset is its seek time. A seek within the last
+         * {@link #TAIL_GRACE_MS} that exits 0 and writes no file ends the pass there (the frames so far are returned);
+         * any other failure, anywhere, abandons the file.
+         *
+         * @throws ReadException when a read fails, or when no coarse frame could be read at all
+         */
         public List<TimedFrame> coarseFrames() {
             List<TimedFrame> frames = new ArrayList<>();
             for (long offset : coarseOffsets(durationMs)) {
-                frames.add(new TimedFrame(offset, grab(offset)));
+                GreyFrame frame = grab(offset, offset >= durationMs - TAIL_GRACE_MS);
+                if (frame == null) {
+                    if (frames.isEmpty()) {
+                        throw new ReadException("ffmpeg wrote no frame at " + seekTime(offset)
+                            + " and no coarse frame was read before it");
+                    }
+                    LOG.info("Credits: the coarse pass of {} ended early at {} ms: the end of the file has no picture",
+                        source.getFileName(), offset);
+                    break;
+                }
+                frames.add(new TimedFrame(offset, frame));
             }
             return frames;
         }
@@ -432,12 +455,24 @@ public class CreditsFrameReader {
             return dir.resolve(DENSE_PATTERN.formatted(index));
         }
 
-        /** One frame. Every seek writes the same file name and {@link #read} removes it, so none is ever stale. */
+        /** One frame. Every seek deletes any old file first and {@link #read} removes it, so none is ever stale. */
         private GreyFrame grab(long offsetMs) {
+            return grab(offsetMs, false);
+        }
+
+        /**
+         * As {@link #grab(long)}; when {@code noFrameIsEnd}, a successful run that wrote no file returns null instead
+         * of failing. Any stale file is removed first so that a missing output can never be read as this seek's.
+         */
+        private GreyFrame grab(long offsetMs, boolean noFrameIsEnd) {
             checkpoint.run();
             Path output = dir.resolve(FRAME_FILE);
+            deleteFile(output);
             run(frameCommand(niceness, ffmpeg, source, offsetMs, output), SEEK_TIMEOUT,
                 "the frame at " + seekTime(offsetMs));
+            if (noFrameIsEnd && !Files.exists(output)) {
+                return null;
+            }
             return read(output);
         }
 

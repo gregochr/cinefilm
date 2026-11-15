@@ -1,5 +1,6 @@
 package gregochr.cinefilm.library;
 
+import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -12,6 +13,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import gregochr.cinefilm.ApiTestBase;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.GroupingChange;
+import gregochr.cinefilm.film.GroupingChangeRepository;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.film.Playability;
@@ -57,6 +60,12 @@ class ScanApiTest extends ApiTestBase {
 
     @Autowired
     private EntityManager em;
+
+    @Autowired
+    private ScanRunRepository runs;
+
+    @Autowired
+    private GroupingChangeRepository changes;
 
     @MockitoBean(name = "scanExecutor")
     private Executor executor;
@@ -157,6 +166,7 @@ class ScanApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.counts.protectedFiles").value(0))
             .andExpect(jsonPath("$.counts.needsConversion").value(0))
             .andExpect(jsonPath("$.counts.needsMatch").value(0))
+            .andExpect(jsonPath("$.counts.filmsWithCredits").value(0))
             .andExpect(jsonPath("$.progress").doesNotExist());
 
         mvc.perform(get("/api/films"))
@@ -398,5 +408,21 @@ class ScanApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.counts.films").value(0))
             .andExpect(jsonPath("$.counts.newFiles").value(0));
         mvc.perform(get("/api/admin/attention")).andExpect(jsonPath("$.items.length()").value(0));
+    }
+
+    @Test
+    void theGroupingReportAnswersOnlyTheLinesOfTheLastFinishedScan() throws Exception {
+        ScanRun run = new ScanRun();
+        run.setStartedAt(NOW.minusSeconds(600));
+        run.setFinishedAt(NOW.minusSeconds(500));
+        run.setTrigger("nightly");
+        runs.save(run);
+        changes.save(new GroupingChange(NOW.minusSeconds(550), GroupingChange.JOIN, "in the scan"));
+        changes.save(new GroupingChange(NOW.minusSeconds(100), GroupingChange.SPLIT, "owner edit later"));
+
+        mvc.perform(get("/api/admin/grouping-report"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].summary").value("in the scan"));
     }
 }

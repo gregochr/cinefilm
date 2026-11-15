@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { SESSION_EXPIRED_EVENT, SIGNED_IN_EVENT } from '../api/client.js';
 import { editionsApi } from '../api/resources.js';
@@ -59,11 +59,26 @@ import { operatorName } from '../state/healthFormat.js';
 import { useFilmToPlay } from '../state/useFilms.js';
 import { usePageExitReport } from '../player/exitReport.js';
 import { usePlayback } from '../state/usePlayback.js';
-import { shownDownloadKind } from '../state/subtitleFix.js';
+import { shownDownloadKind, shownFileKind } from '../state/subtitleFix.js';
 import { subtitlesWrong } from '../state/subtitleFixCopy.js';
+import { inSync, trackVersion } from '../state/subtitleTiming.js';
+import { NO_SWAPS, fileTrackKey, swapTracks, trackModes } from '../state/subtitleTrackSwap.js';
+import { useSubtitleTiming } from '../state/useSubtitleTiming.js';
 import { useSubtitleWrong } from '../state/useSubtitleWrong.js';
 import { useHealthReport } from '../player/useHealthReport.js';
 import { useEnvironment } from '../player/useEnvironment.js';
+
+/** `HTMLTrackElement.readyState`: the cues are in, or the fetch failed. */
+const TRACK_LOADED = 2;
+const TRACK_ERROR = 3;
+
+/** How long a pending subtitle track may take to load or fail before the old timing is kept. */
+const SWAP_TIMEOUT_MS = 20_000;
+
+/** The tokens of a kind's mounted file tracks: the current one, then the one still loading, if any. */
+function fileTokens({ current, pending }) {
+  return pending === null ? [current] : [current, pending];
+}
 
 function bufferedEnd(video) {
   const { buffered, currentTime } = video;
@@ -166,6 +181,10 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
   // Downloads the viewer reported with "Subtitles are wrong" in this viewing. The server has deleted and blocked them;
   // the film is not read again under a playing viewing, so they are left out here instead.
   const [removed, setRemoved] = useState({ FORCED: false, FULL: false });
+  // A changed timing (the Earlier / Later buttons) mounts a second <track> of that kind beside the showing one, hidden,
+  // with a new address. It takes over once it has loaded; until then (or if it fails) the old one keeps showing.
+  // Only <track> elements are involved: nothing about the video.
+  const [swaps, dispatchSwaps] = useReducer(swapTracks, NO_SWAPS);
   const forcedSubtitle = removed.FORCED ? null : edition.forcedSubtitle;
   const fullSubtitle = removed.FULL ? null : edition.fullSubtitle;
 
@@ -266,11 +285,15 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
       forcedSubtitle,
       fullSubtitle,
     );
+    const shownKind = showing === FORCED_KEY ? 'FORCED' : showing === FULL_KEY ? 'FULL' : null;
+    const modes = trackModes([...trackRefs.current.keys()], { showing, shownKind, swaps });
     trackRefs.current.forEach((element, key) => {
-      if (element.track) element.track.mode = key === showing ? 'showing' : 'disabled';
+      if (element.track) element.track.mode = modes.get(key);
     });
-  }, [edition.subtitleStreams, forcedSubtitle, fullSubtitle, subtitle]);
-  useEffect(applySubtitleModes, [applySubtitleModes]);
+  }, [edition.subtitleStreams, forcedSubtitle, fullSubtitle, subtitle, swaps]);
+  // Again when a changed timing mounted a new <track> (its mode starts out disabled) or swapped one in. A layout effect,
+  // so the swap never shows a frame without lines.
+  useLayoutEffect(applySubtitleModes, [applySubtitleModes]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -369,6 +392,58 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
     editionId: edition.id,
     kind: downloadKind,
   });
+  // The subtitle file on screen, owner's or downloaded: it is the one the timing buttons change. Its rows are the ids
+  // the film showed for it (one per part).
+  const fileKind = shownFileKind({
+    choice: subtitle,
+    streams: edition.subtitleStreams,
+    forcedSubtitle,
+    fullSubtitle,
+  });
+  const shownFile =
+    fileKind === 'FULL' ? fullSubtitle : fileKind === 'FORCED' ? forcedSubtitle : null;
+  // What the timing buttons describe is the timing on screen: the offsets of the track that shows (the film's own until
+  // a swap), "Saving…" while the new one loads. The next press still works from the server's offsets.
+  const swapsOfFile = fileKind ? swaps[fileKind] : null;
+  const shownOffsets = swapsOfFile?.currentOffsets ?? shownFile?.offsetsMs ?? null;
+  const timing = useSubtitleTiming({
+    kind: fileKind,
+    ids: shownFile?.sidecarIds,
+    offsets: shownFile?.offsetsMs,
+    onScreen: shownOffsets,
+    onApplied: (kind, token, offsets) => dispatchSwaps({ type: 'begin', kind, token, offsets }),
+    onReplaced: (kind) => dispatchSwaps({ type: 'cancel', kind }),
+  });
+  // The new timing's track loaded: it takes over. It failed, or neither loaded nor failed within SWAP_TIMEOUT_MS: it is
+  // dropped, the old one stays and the viewer is told. Only the kind that shows is watched (and timed: the 20 s start
+  // when it shows with a pending track). A kind that is not showing keeps both its tracks mounted, `disabled`; its
+  // pending one loads hidden once the kind shows again, or finishes a fetch it had already started, and is read from
+  // `readyState` when the kind shows again. Depends on this kind's pending token only, so a change for the other kind
+  // does not restart the timer.
+  const { swapFailed } = timing;
+  const pending = swaps[fileKind]?.pending ?? null;
+  useEffect(() => {
+    const stops = [];
+    const element = pending ? trackRefs.current.get(fileTrackKey(fileKind, pending)) : null;
+    if (element) {
+      const loaded = () => dispatchSwaps({ type: 'commit', kind: fileKind, token: pending });
+      const failed = () => {
+        dispatchSwaps({ type: 'fail', kind: fileKind, token: pending });
+        swapFailed(fileKind);
+      };
+      if (element.readyState === TRACK_LOADED) loaded();
+      else if (element.readyState === TRACK_ERROR) failed();
+      element.addEventListener('load', loaded);
+      element.addEventListener('error', failed);
+      const timer = setTimeout(failed, SWAP_TIMEOUT_MS);
+      stops.push(() => {
+        element.removeEventListener('load', loaded);
+        element.removeEventListener('error', failed);
+        clearTimeout(timer);
+      });
+    }
+    return () => stops.forEach((stop) => stop());
+  }, [pending, fileKind, swapFailed]);
   // Deletes and blocks the download, then stops showing it: a full one falls back to Off (the forced lines still show
   // when there are any), a forced one to what the player would otherwise show. Playback itself is not touched.
   const reportWrong = async () => {
@@ -609,34 +684,46 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
             src={editionsApi.subtitleUrl(edition.id, stream.index)}
           />
         ))}
-        {forcedSubtitle ? (
-          <track
-            key={FORCED_KEY}
-            ref={(element) => {
-              if (element) trackRefs.current.set(FORCED_KEY, element);
-              else trackRefs.current.delete(FORCED_KEY);
-            }}
-            kind="subtitles"
-            srcLang="en"
-            data-testid="forced-subtitle-track"
-            label="English (forced)"
-            src={editionsApi.forcedSubtitleUrl(edition.id, forcedSubtitle.version)}
-          />
-        ) : null}
-        {fullSubtitle ? (
-          <track
-            key={FULL_KEY}
-            ref={(element) => {
-              if (element) trackRefs.current.set(FULL_KEY, element);
-              else trackRefs.current.delete(FULL_KEY);
-            }}
-            kind="subtitles"
-            srcLang="en"
-            data-testid="full-subtitle-track"
-            label="English (full)"
-            src={editionsApi.fullSubtitleUrl(edition.id, fullSubtitle.version)}
-          />
-        ) : null}
+        {forcedSubtitle
+          ? fileTokens(swaps.FORCED).map((token) => (
+              <track
+                key={fileTrackKey('FORCED', token)}
+                ref={(element) => {
+                  const key = fileTrackKey('FORCED', token);
+                  if (element) trackRefs.current.set(key, element);
+                  else trackRefs.current.delete(key);
+                }}
+                kind="subtitles"
+                srcLang="en"
+                data-testid={`forced-subtitle-track${token === swaps.FORCED.current ? '' : '-pending'}`}
+                label="English (forced)"
+                src={editionsApi.forcedSubtitleUrl(
+                  edition.id,
+                  trackVersion(forcedSubtitle.version, token),
+                )}
+              />
+            ))
+          : null}
+        {fullSubtitle
+          ? fileTokens(swaps.FULL).map((token) => (
+              <track
+                key={fileTrackKey('FULL', token)}
+                ref={(element) => {
+                  const key = fileTrackKey('FULL', token);
+                  if (element) trackRefs.current.set(key, element);
+                  else trackRefs.current.delete(key);
+                }}
+                kind="subtitles"
+                srcLang="en"
+                data-testid={`full-subtitle-track${token === swaps.FULL.current ? '' : '-pending'}`}
+                label="English (full)"
+                src={editionsApi.fullSubtitleUrl(
+                  edition.id,
+                  trackVersion(fullSubtitle.version, token),
+                )}
+              />
+            ))
+          : null}
       </video>
       {stillRendered(still) ? (
         <img
@@ -722,6 +809,18 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
               subtitleValue={subtitle}
               onAudio={chooseAudio}
               onSubtitle={chooseSubtitle}
+              timing={{
+                available: timing.available,
+                offsets: shownOffsets,
+                atZero: inSync(shownOffsets) && inSync(timing.offsets),
+                busy: timing.busy,
+                loading: swapsOfFile?.pending != null,
+                frozen: timing.frozen,
+                problem: timing.problem,
+                onEarlier: timing.earlier,
+                onLater: timing.later,
+                onReset: timing.reset,
+              }}
               wrong={{
                 available: downloadKind !== null,
                 busy: wrongSubtitles.busy,

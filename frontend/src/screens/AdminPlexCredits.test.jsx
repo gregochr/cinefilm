@@ -10,33 +10,25 @@ afterEach(() => {
 const plexRoute = (plex) => (m, url) => (url === '/api/admin/plex' ? respond(plex) : null);
 
 describe('Admin: Import credits from Plex', () => {
-  it('is not asked for or shown when Plex is not configured', async () => {
-    const fetchMock = installFetch();
-    renderApp('/admin/library');
-    await screen.findByRole('region', { name: 'Library scan' });
-
-    expect(screen.queryByRole('group', { name: 'Credits from Plex' })).not.toBeInTheDocument();
-    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/admin/plex/credits')).toHaveLength(
-      0,
-    );
-  });
-
-  it('sits inside the Plex import card beside Import from Plex', async () => {
+  it('sits inside the Import from Plex card beside Import from Plex, not under Cast & crew', async () => {
     installFetch(plexRoute(fixtures.adminPlex));
     renderApp('/admin/library');
-    const panel = await screen.findByRole('region', { name: 'Plex import' });
+    const panel = await screen.findByRole('region', { name: 'Import from Plex' });
 
     const group = await within(panel).findByRole('group', { name: 'Credits from Plex' });
     await waitFor(() =>
       expect(within(group).getByRole('button', { name: 'Import credits from Plex' })).toBeEnabled(),
     );
     expect(within(panel).getByRole('button', { name: 'Import from Plex again' })).toBeEnabled();
+    const cast = await screen.findByRole('region', { name: 'Cast & crew' });
+    expect(within(cast).queryByRole('group')).toBeNull();
+    expect(within(cast).queryByRole('button')).toBeNull();
   });
 
   it('is disabled while Plex is not reachable', async () => {
     installFetch(plexRoute({ ...fixtures.adminPlex, reachable: false }));
     renderApp('/admin/library');
-    const panel = await screen.findByRole('region', { name: 'Plex import' });
+    const panel = await screen.findByRole('region', { name: 'Import from Plex' });
 
     const button = await within(panel).findByRole('button', { name: 'Import credits from Plex' });
     expect(button).toBeDisabled();
@@ -45,7 +37,7 @@ describe('Admin: Import credits from Plex', () => {
   it('starts the credits import without touching the Plex import', async () => {
     const fetchMock = installFetch(plexRoute(fixtures.adminPlex));
     renderApp('/admin/library');
-    const panel = await screen.findByRole('region', { name: 'Plex import' });
+    const panel = await screen.findByRole('region', { name: 'Import from Plex' });
 
     const button = await within(panel).findByRole('button', { name: 'Import credits from Plex' });
     await waitFor(() => expect(button).toBeEnabled());

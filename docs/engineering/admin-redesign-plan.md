@@ -487,6 +487,23 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
   to Plex" when unreachable, "Last report" behind a quiet button.
 - Cast & crew card: "{n} of {total} films have credits" (new backend count), "Import credits from Plex" when Plex is
   configured. The credits-dataset control only per Q1.
+- **6 decision (built):** `AdminLibrary.jsx` composes four cards in order (`LibraryScanCard` `#scan`,
+  `LibraryRatingsCard`, `LibraryPlexCard` `#plex-import`, `LibraryCastCard` `#cast-crew`, the count only); the grouping report is
+  `LibraryChanges`, a `<details>` inside the scan card, 25 per page ("Show {n} more"). The Running/Idle pill is gone
+  (the header line and the progress take its place). The three tile links go to `/admin/library/files/{protected,
+  needs-conversion,unreadable}` (`AdminLibraryFiles`, `FILE_LISTS` in `state/adminRoutes.js`, also bare on phone):
+  the existing `GET /api/admin/attention` filtered by `kind`, so no new list route. The new backend count is
+  `counts.filmsWithCredits` on `GET /api/admin/scan` (`FilmRepository.findIdsWithCredits`, intersected with the
+  browsable films, so it never exceeds `counts.films`). **Departures:** (0) "Import credits from Plex" stays in the Import from Plex card, below the import: it imports end-credits START markers, not cast and crew, so under "Cast & crew · 530 of 538" it would read as the way to raise the count (the same false premise as Q1). (0b) "What the last scan changed" is the grouping lines logged from the last finished scan's start to its finish, uncapped (`GET /api/admin/grouping-report` no longer returns the newest 20 of every writer), so the label is true and the 25-row paging is real. (0c) A failed first read of the Plex status shows the card with an inline error and Try again. (0d) The dev mock serves Plex through `?plex=unreachable|importing|none`. (1) no "Download TMDB credits" (Q1). (2) The
+  board's hints for Ratings, Import from Plex and Import credits are replaced by 07's and the component's own:
+  Plex's credits markers say where the end credits start, not who acted, so "Fills in actors and directors from Plex"
+  would be false. (3) The board's server name ("dockermacmini · reachable") is not shown: `GET /api/admin/plex`
+  carries no host, so the line is "Plex server: Reachable". (4) The header shows only the last scan's time and
+  duration; "2 new, 0 missing" were already tiles. Invented copy ("planner, 6" in `adminCopy.js`): "Not scanned yet",
+  "Couldn’t load what the last scan changed.", "Show {n} more", "IMDb and Rotten Tomatoes · not fetched yet", "Not
+  imported yet", "Nothing yet", "Not reachable", "Importing", "No films in the library yet", "{n} of 1 film has
+  credits", "‹ Library", "Nothing here.", "Couldn’t load these files.", "The last scan changed nothing.", and the list titles "Protected files", "Files
+  that need converting", "Files that could not be read" (`FILE_LISTS`).
 
 ### 7 · Settings
 
@@ -594,6 +611,67 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
     `subtitleCheck.done` "Marked as checked.", `subtitleCheck.undone` "The check is taken away." (in
     `subtitleFixCopy.js`, its own block), and "Timing shifted {offset}" (`subtitlesPage.files.offset`). "Looks right",
     "Undo" and "You checked this: the lines look right." are Admin's existing words.
+
+- **8b-1 decision (built):** player "Earlier" / "Later" / "Reset timing"; Admin keeps its own nudges until 8b-2 removes
+  them. One small backend change (review fix): `ForcedSubtitleDto` and `FullSubtitleDto` gain `offsetsMs` (the offset
+  of each row in `sidecarIds`, same order), built beside `sidecarIds` from the same pick, so the player needs no
+  `GET /api/admin/subtitles` (every row of every film: too heavy for a weak link).
+  - **Where.** In the subtitle column of the Audio and subtitles panel, a `role="group"` "Subtitle timing" of three
+    `menuitem` buttons (quiet, never amber, `aria-disabled` while saving so focus stays) between the choices and
+    "Subtitles are wrong", with a `role="status"` readout (always rendered, empty while unknown) and a `menu__problem`
+    alert line. Offered while `shownFileKind` (`state/subtitleFix.js`) says a subtitle *file* shows (owner file or
+    download, forced or full: `activeSubtitleKey` decides, never an embedded stream or Off-with-nothing). The rows and
+    their offsets are the film DTO's `sidecarIds` / `offsetsMs` for that kind.
+  - **Step and words.** One step, Admin's finer nudge: `NUDGES` "earlier-025" / "later-025" (0.25 s), reused with its
+    spoken names; the clamp is Admin's `nudgedOffset` and the readout its `formatOffset`. The rest is `subtitleTiming`
+    in `subtitleFixCopy.js`, all "planner, 8b-1": "Subtitle timing", "Timing: …", "differs by part", "Saving…",
+    "Couldn't change the timing. Try again.", "Couldn't load the new timing. The old timing stays."; "This subtitle has
+    changed since the film started. Reload to see the new one." repeats 8a's line.
+  - **State.** `state/useSubtitleTiming.js` (lives in `PlayerView`, so an answer outlives the panel) over the pure
+    `state/subtitleTiming.js`. It reads nothing: the readout and the next press work from the film's `offsetsMs` and
+    from each PUT answer's `offsetMs` (kept per file). A press sends one absolute
+    `PUT /api/admin/subtitles/{id}/offset` per row that moves, one after the other. **Departure from the brief's "the
+    same new offset for each row":** each row moves by the step from *its own* offset (a multi-part film's rows can
+    differ, the timing check sets them per file) and Reset sets every row to 0; the readout says "differs by part".
+  - **Async.** One press per file at a time (a ref): the buttons are `aria-disabled` with the readout "Saving…". An
+    answer belongs to the file it was for: its problem is dropped when another file shows, forgotten when the shown file
+    changes, and nothing is set or told after the player unmounts. A press that fails half way still loads the new
+    timing (rows did change) and shows the offsets that did.
+  - **A nudge can change what is served (found in review).** `SubtitleAdminService.changed()` clears the owner's
+    "Looks right" on any offset change, deliberately (`forced-subtitles-plan.md` "A nudge, an attach, and any change to a
+    file on disk clear the owner's check"; `SubtitleSidecar.clearVerification` "it changed, moved or was nudged"), and
+    the offset is part of the served `version`; a proven file can drop to unchecked and `ForcedChoice` may then serve a
+    proven download or the embedded track instead. **Not changed on the backend (owner decision needed).** The player
+    guards instead: the PUT answer's `served` is computed after the change; if any changed row is no longer served the
+    track is not touched, and the viewer is told the subtitle changed.
+  - **Loading the new timing without touching playback (chosen).** The PUT answers a `SidecarDto` whose `version` is
+    when the row last changed; the token is each answered row's `version_offsetMs`. The player mounts a second
+    `<track>` of that kind beside the showing one, `hidden`, with `?v=<film version>.<token>` (the server ignores `v`),
+    and swaps once its `load` event fires: the new one becomes the only `showing` track and the old element unmounts. On
+    `error` the new one is dropped, the old one keeps showing and the viewer is told. A newer change replaces a pending
+    one. A kind that stops showing (the viewer chose another subtitle) keeps both its tracks mounted, both
+    `disabled`: its pending one loads hidden once the kind shows again, or finishes a fetch it had already started, so its
+    load or error may arrive while nobody listens. The 20 s timer runs only while the kind shows. A press with nothing to
+    send (Reset at 0) while the screen shows other timing than the server (a failed swap) retries the last token's track
+    and leaves the failed-load line alone otherwise. When the kind shows
+    again the old one is `showing` and the pending one `hidden` again, and the listener reads the pending element's
+    `readyState` on attaching (2 loaded: it takes over; 3 error: dropped with the line), else waits for its events. A
+    pending track that neither loads nor errors within 20 s is dropped (old timing stays, line shown). The mode effect
+    is a layout effect, so a swap never shows a frame without lines. (`state/subtitleTrackSwap.js`: the reducer and the
+    track modes.) **The readout describes the timing on screen:** the offsets of the track that shows (the film's own
+    until a swap; kept in the swap state with each token), "Saving…" while the new one loads; the next press still works
+    from the server's offsets. After a `served: false` answer the row loop stops at that row, no later row is sent, and
+    that file's timing buttons stay `aria-disabled` for the rest of the viewing, the subtitle-changed line saying why.
+    A change clears the owner's "Looks right" by design, so another file may play after the next film load. Only
+    `<track>` elements change: no session, seek, `load()`, video `src`, `useStream` or hls code; the film is not read
+    again. Elements are replaced rather than their `src` changed because a `src` change on a live track is unreliable in
+    Safari. A load that never fires or errors leaves the pending track hidden until the next change replaces it.
+  - **Tests.** `subtitleTiming.test.js`, `subtitleTrackSwap.test.js`, `useSubtitleTiming.test.jsx`,
+    `PlayerMenus.test.jsx` (also the arrow keys from a disabled item), `subtitleFix.test.js`, `fixtureServer.test.js`,
+    `screens/PlayerSubtitleTiming.test.jsx` (no list read, absolute offsets per row, gating, the hidden-then-swap load
+    with `load`/`error` events dispatched, the video's `src`, `currentTime`, `load()`, `pause()` and `play()`
+    untouched, `served: false`, double click, closed panel, late answer after switching, error then recovery), and the
+    backend DTO unit and API tests for `offsetsMs`.
 
 ## Owner answers (2026-11-14)
 
