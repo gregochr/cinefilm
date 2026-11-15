@@ -13,8 +13,8 @@ Mac's own Wi-Fi link, once: reading it can make the Mac look for other networks,
 repeated. When no film will be playing it can also time a download of the first 256 KB of CineFilm's own page
 code (it asks at the start, and assumes a film if nobody answers within a minute; --film and --no-film answer
 in advance). Each round is one line of JSON in ~/train-feed-logger/logs, written at once, so nothing is lost if
-the window closes. The log holds where the train went, so it is never written beside this file: a run from a
-git checkout must not put it in the repository.
+the window closes. The log holds where the train went, so its place is fixed and no option moves it: always
+~/train-feed-logger/logs, never beside this file, so a run from a checkout cannot put it in the repository.
 
 It only reads: it sends nothing but those requests, changes nothing, and stops when its window is closed (or
 with Ctrl-C). While it runs it keeps the Mac from idling to sleep. Feed data is untrusted: what is printed has
@@ -614,9 +614,6 @@ def main():
     parser.add_argument("--retry-every", type=int, default=DEFAULT_RETRY_EVERY,
                         help="rounds between full checks of every address and of parts that keep failing "
                              "(default %d, at least 1)" % DEFAULT_RETRY_EVERY)
-    # Never beside the script: the log holds where the train went and must not land in a checkout.
-    parser.add_argument("--log-dir", default=os.path.expanduser("~/train-feed-logger/logs"),
-                        help="where the log goes (default ~/train-feed-logger/logs)")
     parser.add_argument("--no-wifi", action="store_true", help="do not read this Mac's own Wi-Fi link")
     parser.add_argument("--no-awake", action="store_true", help="do not keep the Mac from idling to sleep")
     parser.add_argument("--speed-site", help="a site root to time a download from, when no film is playing")
@@ -631,7 +628,7 @@ def main():
     problem = curl_problem(curl)
     if problem:
         sys.stderr.write(problem + "\n")
-        return 2
+        sys.exit(2)
 
     bases = [base if base.endswith("/") else base + "/" for base in (args.base or DEFAULT_BASES)]
     probe_url = None if args.probe == "off" else args.probe
@@ -642,7 +639,7 @@ def main():
                                  sys.stdin.isatty() and sys.stdout.isatty(),
                                  limited_asker(ANSWER_WAIT_S, time.monotonic, read_answer))
     except KeyboardInterrupt:
-        return 0
+        return
 
     # As soon as the question is settled, so a stop request before the log exists ends the run cleanly.
     stop = Stop()
@@ -650,8 +647,10 @@ def main():
         signal.signal(getattr(signal, name), stop.request)
 
     # The log holds where the train went: readable by the owner alone.
-    os.makedirs(args.log_dir, mode=0o700, exist_ok=True)
-    path = os.path.join(args.log_dir, "train-feed-%s.jsonl" % datetime.now().strftime("%Y%m%d-%H%M%S"))
+    # Always under HOME and never from the command line: a run from a checkout cannot put it in the repository.
+    log_dir = os.path.expanduser("~/train-feed-logger/logs")
+    os.makedirs(log_dir, mode=0o700, exist_ok=True)
+    path = os.path.join(log_dir, "train-feed-%s.jsonl" % datetime.now().strftime("%Y%m%d-%H%M%S"))
     log = os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a", encoding="utf-8")
 
     def write(record):
@@ -728,8 +727,7 @@ def main():
     log.close()
     say("")
     say("Stopped after %d rounds. The log is at %s" % (n, path))
-    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

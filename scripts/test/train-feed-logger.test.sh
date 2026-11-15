@@ -36,10 +36,17 @@ serve() {
     PORT=$(<"$file")
 }
 
-# run_logger ARGS: runs the logger with no terminal. Sets OUT, RC, LOG (its log file) and LOGDIR.
+# fresh_home: a new empty HOME for one run (the log's place is fixed under HOME, so this is how a run gets its own).
+# Sets RUN_HOME and LOGDIR, where the logger will put its log.
+fresh_home() {
+    RUN_HOME=$(mktemp -d "$TMP/home.XXXXXX")
+    LOGDIR="$RUN_HOME/train-feed-logger/logs"
+}
+
+# run_logger ARGS: runs the logger with no terminal. Sets OUT, RC, LOG (its log file), LOGDIR and RUN_HOME.
 run_logger() {
-    LOGDIR=$(mktemp -d "$TMP/logs.XXXXXX")
-    OUT=$("$LOGGER" --no-wifi --no-awake --log-dir "$LOGDIR" "$@" </dev/null 2>&1)
+    fresh_home
+    OUT=$(HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-awake "$@" </dev/null 2>&1)
     RC=$?
     LOG=""
     for LOG in "$LOGDIR"/*.jsonl; do break; done
@@ -50,9 +57,9 @@ run_logger() {
 start_bg() {
     local name="$1"
     shift
-    mkdir -p "$TMP/$name.logs"
+    mkdir -p "$TMP/$name.home"
     (
-        "$LOGGER" --no-wifi --no-awake --log-dir "$TMP/$name.logs" "$@" </dev/null >"$TMP/$name.out" 2>&1
+        HOME="$TMP/$name.home" "$LOGGER" --no-wifi --no-awake "$@" </dev/null >"$TMP/$name.out" 2>&1
         echo $? >"$TMP/$name.rc"
     ) &
     PIDS+=("$!")
@@ -67,7 +74,7 @@ collect() {
     done
     OUT=$(<"$TMP/$name.out")
     RC=$(cat "$TMP/$name.rc" 2>/dev/null || echo "never finished")
-    LOGDIR="$TMP/$name.logs"
+    LOGDIR="$TMP/$name.home/train-feed-logger/logs"
     for LOG in "$LOGDIR"/*.jsonl; do break; done
 }
 
@@ -186,10 +193,34 @@ assert_file_missing "no logs directory beside the script" "$HERE/../logs"
 assert_file_missing "no logs directory beside the test" "$HERE/logs"
 assert_eq "the folder it made is for the owner alone" 700 "$(mode_of "$HOME_DIR/train-feed-logger/logs")"
 assert_eq "the log is for the owner alone" 600 "$(mode_of "$HOME_LOG")"
-mkdir "$TMP/existing"
-chmod 755 "$TMP/existing"
-"$LOGGER" --no-wifi --no-awake --log-dir "$TMP/existing" --base "$BASE" --probe off --rounds 1 >/dev/null 2>&1 </dev/null
-assert_eq "an existing folder keeps its mode" 755 "$(mode_of "$TMP/existing")"
+fresh_home
+mkdir -p "$LOGDIR"
+chmod 755 "$LOGDIR"
+HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-awake --base "$BASE" --probe off --rounds 1 >/dev/null 2>&1 </dev/null
+assert_eq "an existing folder keeps its mode" 755 "$(mode_of "$LOGDIR")"
+assert_eq "and the log went into it" 1 "$(count_files "$LOGDIR")"
+
+echo "the log's place cannot be chosen, and a run from the repository stays out of it"
+fresh_home
+OUT=$(HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-awake --log-dir "$TMP/elsewhere" --base "$BASE" --probe off \
+    --rounds 1 </dev/null 2>&1)
+assert_eq "--log-dir is refused" 2 "$?"
+assert_contains "and named" "$OUT" "--log-dir"
+assert_file_missing "nothing was made where it pointed" "$TMP/elsewhere"
+assert_eq "nor under HOME" 0 "$(count_files "$RUN_HOME")"
+REPO="$(cd "$HERE/../.." && pwd)"
+if git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
+    BEFORE=$(git -C "$REPO" status --porcelain)
+    fresh_home
+    OUT=$(cd "$REPO" && HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-awake --base "$BASE" --probe off --rounds 1 \
+        </dev/null 2>&1)
+    assert_eq "a run started inside the repository exits 0" 0 "$?"
+    assert_eq "its log is under HOME" 1 "$(count_files "$LOGDIR")"
+    assert_eq "and the repository's status is unchanged" "$BEFORE" "$(git -C "$REPO" status --porcelain)"
+    assert_file_missing "no logs folder in the repository root" "$REPO/train-feed-logger"
+else
+    echo "  SKIP the repository case: this is not a checkout"
+fi
 
 echo "an answer without the function's name"
 run_logger --base "http://127.0.0.1:$P/anon/api/jsonp/" --probe off --rounds 1
@@ -259,13 +290,13 @@ assert_contains "could not connect" "$OUT" "feed not answering (http: could not 
 echo "limits on the options"
 # refuse OPTION VALUE: exits 2, names the option, and writes no log.
 refuse() {
-    LOGDIR=$(mktemp -d "$TMP/logs.XXXXXX")
-    OUT=$("$LOGGER" --no-wifi --no-awake --log-dir "$LOGDIR" --base "$BASE" --probe off --rounds 1 "$1" "$2" \
+    fresh_home
+    OUT=$(HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-awake --base "$BASE" --probe off --rounds 1 "$1" "$2" \
         </dev/null 2>&1)
     RC=$?
     assert_eq "$1 $2 is refused" 2 "$RC"
     assert_contains "$1 $2: the message names the option" "$OUT" "$1 must"
-    assert_eq "$1 $2: no log was started" 0 "$(count_files "$LOGDIR")"
+    assert_eq "$1 $2: nothing was created, no log folder either" 0 "$(count_files "$RUN_HOME")"
 }
 refuse --timeout 0
 refuse --timeout -1
@@ -342,8 +373,8 @@ STOP_WITHIN=5
 stop_with() {
     local sig="$1" pid watchdog tries=0
     shift
-    LOGDIR=$(mktemp -d "$TMP/logs.XXXXXX")
-    "$LOGGER" --no-wifi --no-awake --log-dir "$LOGDIR" --base "$BASE" --probe off --interval 1 "$@" \
+    fresh_home
+    HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-awake --base "$BASE" --probe off --interval 1 "$@" \
         </dev/null >"$TMP/stop.out" 2>&1 &
     pid=$!
     while ! grep -qs '"round":1' "$LOGDIR"/*.jsonl && [ "$tries" -lt 100 ]; do
@@ -385,8 +416,8 @@ assert_eq "it ends within 3 s of the signal, not after the 30 s interval" 0 "$RC
 assert_eq "and writes the stop line" '"stop"' "$(jv "$LOG" 'L[-1]["event"]')"
 
 echo "the window going away"
-LOGDIR=$(mktemp -d "$TMP/logs.XXXXXX")
-"$LOGGER" --no-wifi --no-awake --log-dir "$LOGDIR" --base "$BASE" --probe off --interval 1 --rounds 3 \
+fresh_home
+HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-awake --base "$BASE" --probe off --interval 1 --rounds 3 \
     </dev/null 2>"$TMP/pipe.err" | head -n 1 >/dev/null
 assert_eq "it still exits 0" 0 "${PIPESTATUS[0]}"
 for LOG in "$LOGDIR"/*.jsonl; do break; done
@@ -396,8 +427,8 @@ assert_eq "nothing was written to stderr" "" "$(<"$TMP/pipe.err")"
 
 echo "a machine without system_profiler or caffeinate"
 if [ "$(uname)" = Linux ]; then
-    LOGDIR=$(mktemp -d "$TMP/logs.XXXXXX")
-    OUT=$("$LOGGER" --log-dir "$LOGDIR" --base "$BASE" --probe off --rounds 1 </dev/null 2>&1)
+    fresh_home
+    OUT=$(HOME="$RUN_HOME" "$LOGGER" --base "$BASE" --probe off --rounds 1 </dev/null 2>&1)
     RC=$?
     for LOG in "$LOGDIR"/*.jsonl; do break; done
     assert_eq "exits 0" 0 "$RC"
