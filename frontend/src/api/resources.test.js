@@ -186,13 +186,18 @@ describe('image URLs', () => {
     });
   });
 
-  it('reads the playback health list and builds the link to one full record', async () => {
+  it('reads a page of the playback log with the filter parameters it is given', async () => {
     const last = stubFetch();
-    await adminApi.playbackHealth();
-    expect(last()).toMatchObject({ path: '/api/admin/playback-health', method: 'GET' });
-    expect(adminApi.playbackHealthUrl('3f6c1d2e-8a4b-4c7e-9b15-2d0e6f7a1c34')).toBe(
-      '/api/admin/playback-health/3f6c1d2e-8a4b-4c7e-9b15-2d0e6f7a1c34',
-    );
+    await adminApi.playbackLog({ minWatchedMs: 180_000, page: 1, size: 50 });
+    expect(last()).toMatchObject({
+      path: '/api/admin/playback-health?minWatchedMs=180000&page=1&size=50',
+      method: 'GET',
+    });
+    await adminApi.playbackLog({ problems: true, page: 0, size: 50 });
+    expect(last()).toMatchObject({
+      path: '/api/admin/playback-health?problems=true&page=0&size=50',
+      method: 'GET',
+    });
   });
 
   it('reads the settings with GET and saves the minimum watch time with PUT', async () => {

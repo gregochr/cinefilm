@@ -9,8 +9,16 @@ const ENCODERS = {
 /** The encoder's name; an unknown value shows as is. */
 export const encoderLabel = (encoder) => ENCODERS[encoder] ?? encoder;
 
-/** "12 of 40 films indexed". */
-export const indexText = ({ indexed, total }) => `${indexed} of ${total} films indexed`;
+/**
+ * "ready" with the encoder's name; "Unavailable" alone when the server found no encoder. The server reports no
+ * further status, so "ready" means an encoder was found.
+ */
+export const encoderStatus = (encoder) =>
+  encoder === 'unavailable' ? encoderLabel(encoder) : `${encoderLabel(encoder)} · ready`;
+
+/** "1,409 of 1,412 films": how many films have their keyframe (seek) index. */
+export const seekIndexText = ({ indexed, total }) =>
+  `${indexed.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')} films`;
 
 const UNITS = ['B', 'KB', 'MB', 'GB', 'TB'];
 
@@ -21,11 +29,3 @@ export function formatBytes(bytes) {
   if (exponent === 0) return `${Math.round(bytes)} B`;
   return `${(bytes / 1024 ** exponent).toFixed(1)} ${UNITS[exponent]}`;
 }
-
-/** The encoder's speed as "2.4×" (times real time), or "—" before it has reported one. */
-export const formatSpeed = (speed) =>
-  typeof speed === 'number' && Number.isFinite(speed) ? `${speed.toFixed(1)}×` : '—';
-
-/** "3 segments ahead", "1 segment ahead". */
-export const aheadText = (segments) =>
-  `${segments} ${segments === 1 ? 'segment' : 'segments'} ahead`;

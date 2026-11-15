@@ -73,6 +73,7 @@ export function useAdminShell(visible, pathname = '') {
       openEditEditions,
       markChanged,
       takeFocusFallback,
+      showToast: toast.show,
     },
     fixing,
     editing,

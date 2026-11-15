@@ -1,0 +1,3 @@
+### Changed — Admin's Playback page gains a playback log, a Conversion card and remembered networks
+
+Under "How films played", Playback now has a log of every time play was pressed, newest first, 50 at a time with "Show 50 more". Switch between All, "Films only (3 min+)" and "With problems"; plays under three minutes carry a "browsing" tag, and any stalls show in red. "Details" opens a play in plain words (player, network, quality, interruptions) and "Copy raw report" puts the full report on the clipboard. Conversion shows the encoder and how many films have their seek index, and Remembered networks lists the networks this browser remembers, each with Forget. This replaces the old Transcoding and Playback health cards.
