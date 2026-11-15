@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { forcedRow, fullRow, unlabelledRow } from '../../test/needRoutes.js';
@@ -14,7 +14,14 @@ const need = (over = {}) => ({
 });
 
 function renderPanel({ kind = 'foreign', rows, active = true, ...rest }) {
-  const props = { kind, rows, active, need: need(rest.need), onChanged: vi.fn() };
+  const props = {
+    kind,
+    rows,
+    active,
+    need: need(rest.need),
+    onChanged: vi.fn(),
+    onFind: rest.onFind ?? vi.fn(),
+  };
   const view = render(<SubtitleNeedPanel {...props} />);
   const rerender = (next) =>
     view.rerender(<SubtitleNeedPanel {...props} {...next} need={next.need ?? props.need} />);
@@ -183,5 +190,45 @@ describe('SubtitleNeedPanel', () => {
 
     expect(screen.getByRole('tabpanel')).not.toHaveFocus();
     expect(button).toHaveFocus();
+  });
+
+  it('moves focus to the panel when a picked file takes the row away, even if the rows were read again while the picker was open', async () => {
+    const row = fullRow();
+    const onFind = vi.fn();
+    const { rerender } = renderPanel({ rows: [row], onFind });
+    const search = screen.getByRole('button', { name: 'Search for English subtitles…' });
+    await userEvent.click(search);
+    expect(onFind).toHaveBeenCalledTimes(1);
+    const [, , { onPicked }] = onFind.mock.calls[0];
+    // The picker is open and a scan or subtitle job finishes: the same row comes back in a new list.
+    rerender({ rows: [structuredClone(row)] });
+    expect(
+      screen.getByRole('button', { name: 'Search for English subtitles…' }),
+    ).toBeInTheDocument();
+
+    // The download succeeds, the picker closes and gives focus back to its (still listed) opener...
+    search.focus();
+    act(() => onPicked());
+    // ...and then the row leaves, which drops focus to the page.
+    document.activeElement.blur();
+    rerender({ rows: [] });
+
+    await waitFor(() => expect(screen.getByRole('tabpanel')).toHaveFocus());
+  });
+
+  it('leaves focus alone when a picked file takes the row away but focus is on something real', async () => {
+    const row = fullRow();
+    const onFind = vi.fn();
+    const other = document.createElement('button');
+    document.body.append(other);
+    const { rerender } = renderPanel({ rows: [row], onFind });
+    await userEvent.click(screen.getByRole('button', { name: 'Search for English subtitles…' }));
+    act(() => onFind.mock.calls[0][2].onPicked());
+    other.focus();
+
+    rerender({ rows: [] });
+
+    expect(other).toHaveFocus();
+    other.remove();
   });
 });

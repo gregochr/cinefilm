@@ -13,7 +13,8 @@ const LABELS = { foreign: 'the foreign-language films', forced: 'the forced subt
  * read). A list that has not answered is a static skeleton, or an inline banner with its own retry when its first
  * read failed; a re-read that fails keeps the rows and says so above them. `active` shows the panel (the other is
  * hidden, still in the page so the tab's `aria-controls` is true). `onChanged` runs after a file is attached;
- * `onFind(target, opener)` opens the OpenSubtitles picker for a row (`target` is what `pickerTarget` builds).
+ * `onFind(target, opener, { onPicked })` opens the OpenSubtitles picker for a row (`target` is what `pickerTarget` builds;
+ * `onPicked` runs when a file was downloaded for it).
  *
  * A choice is one request per film: a click on a row that is saving does nothing. When a saved choice or an attached
  * file makes the row leave and focus fell to the page with it, focus moves to this panel (the tab's content), where
@@ -42,10 +43,14 @@ export default function SubtitleNeedPanel({ kind, active, need, rows, onChanged,
     leaving.current = row.filmId;
     need.choose(row.filmId, 'NOT_NEEDED').finally(() => sent.current.delete(row.filmId));
   };
-  // The picked file settles the row, so the focus rule above covers it too (a cancelled picker leaves the row alone).
+  // The picked file settles the row, so the focus rule above covers it too, once the download succeeded: the marker is
+  // set then (not when the picker opens, a re-read while it is open would clear it), also if the picker was closed.
   const find = (row, opener) => {
-    leaving.current = row.filmId;
-    onFind(pickerTarget(row, kind === 'foreign' ? 'full' : 'forced'), opener);
+    onFind(pickerTarget(row, kind === 'foreign' ? 'full' : 'forced'), opener, {
+      onPicked: () => {
+        leaving.current = row.filmId;
+      },
+    });
   };
   const attached = (row) => {
     leaving.current = row.filmId;
