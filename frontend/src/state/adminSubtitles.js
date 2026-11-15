@@ -58,12 +58,12 @@ export function foreignActions(row) {
 /**
  * The figures of "Everything else", as the server sent them: `haveSubtitles` and `inEnglish` are the full-need list's
  * `counts.subtitled` and `counts.inEnglish` (browsable films, over the whole library) and `beingChecked` adds the two
- * lists' `counts.beingChecked`. `films` are the full-need rows that play a full subtitle (what "Show the {n} films"
- * lists). Each is null until what it needs has been read; `beingChecked` waits for both lists.
+ * lists' `counts.beingChecked`. `films` are the rows the server flagged `subtitled` (what "Show the {n} films" lists, so its
+ * count is the number of rows it opens). Each is null until what it needs has been read; `beingChecked` waits for both lists.
  */
 export function everythingElse({ fullRows, fullCounts, forcedCounts }) {
   return {
-    films: fullRows ? fullRows.filter((row) => row.need === 'NEEDED' && row.fullSubtitle) : null,
+    films: fullRows ? fullRows.filter((row) => row.subtitled) : null,
     haveSubtitles: fullCounts ? fullCounts.subtitled : null,
     inEnglish: fullCounts ? fullCounts.inEnglish : null,
     beingChecked:

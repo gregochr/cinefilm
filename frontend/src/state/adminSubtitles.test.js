@@ -111,9 +111,10 @@ describe('foreignActions', () => {
 
 describe('everythingElse', () => {
   const rows = [
-    full({ filmId: 1, fullSubtitle: { source: 'SIDECAR' }, unresolved: false }),
-    full({ filmId: 2, fullSubtitle: { source: 'DOWNLOAD' }, unresolved: false }),
-    full({ filmId: 3, need: 'NOT_NEEDED', fullSubtitle: { source: 'SIDECAR' }, unresolved: false }),
+    full({ filmId: 1, fullSubtitle: { source: 'SIDECAR' }, unresolved: false, subtitled: true }),
+    full({ filmId: 2, fullSubtitle: { source: 'DOWNLOAD' }, unresolved: false, subtitled: true }),
+    // A hidden film that plays a file: the server does not flag it, so it is not listed.
+    full({ filmId: 3, fullSubtitle: { source: 'SIDECAR' }, unresolved: false, subtitled: false }),
     full({ filmId: 4 }),
   ];
   const fullCounts = { beingChecked: 1, subtitled: 70, inEnglish: 1341 };
@@ -126,7 +127,7 @@ describe('everythingElse', () => {
     expect(figures.haveSubtitles).toBe(70);
     expect(figures.inEnglish).toBe(1341);
     expect(figures.beingChecked).toBe(3);
-    // The read-only list is the rows that play a subtitle.
+    // The read-only list is the rows the server flagged.
     expect(figures.films.map((r) => r.filmId)).toEqual([1, 2]);
   });
 

@@ -35,7 +35,7 @@ const fullCounts = (rows, english) => ({
   notNeeded: needCount(rows, 'NOT_NEEDED'),
   unresolved: rows.filter((r) => r.unresolved).length,
   beingChecked: rows.filter((r) => r.beingChecked).length,
-  subtitled: rows.filter((r) => r.need === 'NEEDED' && r.fullSubtitle).length,
+  subtitled: rows.filter((r) => r.subtitled).length,
   inEnglish: english + needCount(rows, 'NOT_NEEDED'),
 });
 
@@ -59,6 +59,8 @@ const forcedCounts = (rows) => ({
  */
 export function serveNeeds({ full = [], forced = [], english = 0, fail = () => null, gate } = {}) {
   const lists = { full: structuredClone(full), forced: structuredClone(forced) };
+  // The rows as the server first sent them: giving a choice back restores what the automatic rule said.
+  const original = { full: structuredClone(full), forced: structuredClone(forced) };
   const calls = [];
   const reads = { full: 0, forced: 0 };
   const route = (method, url, init) => {
@@ -83,10 +85,10 @@ export function serveNeeds({ full = [], forced = [], english = 0, fail = () => n
       if (failure) return failure;
       const rows = lists[kind];
       const at = rows.findIndex((r) => r.filmId === Number(id));
-      // Giving the choice back (`null`) leaves the film as it was, with no owner's choice.
+      // Giving the choice back (`null`) restores the row as first sent (its need, reason and flags), with no choice.
       rows[at] =
         body.choice === null
-          ? { ...rows[at], ownerChoice: null }
+          ? { ...original[kind][at], ownerChoice: null }
           : {
               ...rows[at],
               need: body.choice,
@@ -94,6 +96,9 @@ export function serveNeeds({ full = [], forced = [], english = 0, fail = () => n
               ownerChoice: body.choice,
               unresolved: false,
               beingChecked: false,
+              ...(kind === 'full'
+                ? { subtitled: body.choice === 'NEEDED' && Boolean(rows[at].fullSubtitle) }
+                : {}),
             };
       return respond(rows[at]);
     })();

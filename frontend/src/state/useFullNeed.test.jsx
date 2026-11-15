@@ -124,4 +124,41 @@ describe('useFullNeed', () => {
     expect(onSaved).not.toHaveBeenCalled();
     expect(puts).toEqual([{ choice: 'NEEDED' }]);
   });
+
+  it('still calls onSaved once when an earlier write was saved and a queued one fails after the owner left', async () => {
+    let releaseFirst;
+    let releaseSecond;
+    const first = new Promise((resolve) => {
+      releaseFirst = resolve;
+    });
+    const second = new Promise((resolve) => {
+      releaseSecond = resolve;
+    });
+    const onSaved = vi.fn();
+    let writes = 0;
+    installFetch((method, url) => {
+      if (!FULL.test(url)) return null;
+      writes += 1;
+      return writes === 1
+        ? first.then(() => respond({ ...LIST.films[1], need: 'NEEDED' }))
+        : second.then(() => respond({ error: 'x' }, 500));
+    });
+    const { result, unmount } = renderHook(() => useFullNeed('a', { onSaved }));
+    await waitFor(() => expect(result.current.rows).toEqual(LIST.films));
+    let choosing;
+    act(() => {
+      choosing = result.current.choose(4, 'NEEDED');
+      // Queued behind the first write, sent when it settles.
+      result.current.choose(4, 'NOT_NEEDED');
+    });
+
+    releaseFirst();
+    await waitFor(() => expect(writes).toBe(2));
+    unmount();
+    releaseSecond();
+    await choosing;
+
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(onSaved).toHaveBeenCalledWith({ ...LIST.films[1], need: 'NEEDED' });
+  });
 });

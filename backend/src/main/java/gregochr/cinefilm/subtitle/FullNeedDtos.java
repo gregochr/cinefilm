@@ -43,11 +43,13 @@ public final class FullNeedDtos {
      *     come: the owner has to act (see {@code AdminTodoRules})
      * @param beingChecked true when the need is {@code NEEDED}, no full subtitle plays and an automatic search or
      *     download is still to come
+     * @param subtitled true when the film shows in browse, its need is {@code NEEDED} and a full subtitle plays (the
+     *     rows {@code AdminTodoRules} calls settled)
      */
     public record FullNeedFilmDto(Long filmId, String title, Integer year, String need, String reason,
                                   String ownerChoice, List<EditionAudioDto> editions,
                                   FullSubtitleStateDto fullSubtitle, String originalLanguage, boolean unresolved,
-                                  boolean beingChecked) {
+                                  boolean beingChecked, boolean subtitled) {
     }
 
     /**
@@ -59,8 +61,7 @@ public final class FullNeedDtos {
      * @param notNeeded films that are {@code NOT_NEEDED}
      * @param unresolved films whose row is {@code unresolved}
      * @param beingChecked films whose row is {@code beingChecked}
-     * @param subtitled browsable films whose need is {@code NEEDED} and that play a full English subtitle (the rows
-     *     {@code AdminTodoRules} calls settled)
+     * @param subtitled films whose row is {@code subtitled}
      * @param inEnglish browsable films whose full need is {@code NOT_NEEDED}, in or out of this list's scope: English
      *     originals, English dubs and the owner's "not needed". A film with no TMDB language ({@code UNKNOWN}) is not
      *     counted

@@ -60,4 +60,18 @@ class FilmBrowsableTest {
 
         assertThat(edition.hiddenFromBrowse()).isFalse();
     }
+
+    @Test
+    void theRuleOverTheEditionsAloneAgreesWithTheFilmAndCountsAnEditionWithNoFileAsShown() {
+        MediaFile gone = file(edition(film, 10L, "Original", 100 * MIN, null), "heat.m4v");
+        gone.setPresence(Presence.MISSING);
+        assertThat(Film.browsable(film.getEditions())).isFalse();
+
+        // An edition with no file row at all is not hidden, so the film shows (as it does through browsable()).
+        edition(film, 11L, "Bare", 100 * MIN, null);
+
+        assertThat(Film.browsable(film.getEditions())).isTrue();
+        assertThat(film.browsable()).isTrue();
+        assertThat(Film.browsable(java.util.List.of())).isTrue();
+    }
 }

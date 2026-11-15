@@ -33,7 +33,7 @@ class FullNeedControllerTest {
 
     private static final FullNeedFilmDto AMELIE = new FullNeedFilmDto(7L, "Amelie", 2001, "NEEDED", "OWNER",
         "NEEDED", List.of(new EditionAudioDto("Original", "French"), new EditionAudioDto("Dub", null)),
-        new FullSubtitleStateDto("DOWNLOAD"), "fr", false, true);
+        new FullSubtitleStateDto("DOWNLOAD"), "fr", false, true, true);
 
     @Autowired
     private MockMvc mvc;
@@ -69,6 +69,7 @@ class FullNeedControllerTest {
             .andExpect(jsonPath("$.films[0].originalLanguage").value("fr"))
             .andExpect(jsonPath("$.films[0].unresolved").value(false))
             .andExpect(jsonPath("$.films[0].beingChecked").value(true))
+            .andExpect(jsonPath("$.films[0].subtitled").value(true))
             .andExpect(jsonPath("$.counts.notNeeded").value(4))
             .andExpect(jsonPath("$.counts.unresolved").value(5))
             .andExpect(jsonPath("$.counts.beingChecked").value(6))
@@ -87,7 +88,8 @@ class FullNeedControllerTest {
             .andExpect(jsonPath("$.need").value("NEEDED"))
             .andExpect(jsonPath("$.originalLanguage").value("fr"))
             .andExpect(jsonPath("$.unresolved").value(false))
-            .andExpect(jsonPath("$.beingChecked").value(true));
+            .andExpect(jsonPath("$.beingChecked").value(true))
+            .andExpect(jsonPath("$.subtitled").value(true));
         mvc.perform(signedIn(put("/api/admin/films/7/full-need")).content("{\"choice\":null}"))
             .andExpect(status().isOk());
         verify(service).choose(7L, new ChoiceRequest("NEEDED"));

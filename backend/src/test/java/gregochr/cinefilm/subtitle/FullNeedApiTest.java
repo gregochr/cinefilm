@@ -103,8 +103,10 @@ class FullNeedApiTest extends SubtitleTestBase {
     @Test
     void eachFilmSaysWhatItPlaysAsFullSubtitlesTheOwnersFileBeforeADownload() throws Exception {
         Film mine = withLanguages("A Mine", "fr");
+        audioOf(mine, 1, "*French");
         fullSidecar("A Mine.en.srt", fileId(mine, 1), false);
         Film fetched = withLanguages("B Fetched", "fr");
+        audioOf(fetched, 1, "*French");
         fetched.setImdbId("tt0000002");
         films.saveAndFlush(fetched);
         SubtitleSidecar download = sidecar("opensubtitles:" + fetched.getEditions().get(0).getId() + ":77",
@@ -120,7 +122,12 @@ class FullNeedApiTest extends SubtitleTestBase {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.films[0].fullSubtitle.source").value("SIDECAR"))
             .andExpect(jsonPath("$.films[1].fullSubtitle.source").value("DOWNLOAD"))
-            .andExpect(jsonPath("$.films[2].fullSubtitle").value((Object) null));
+            .andExpect(jsonPath("$.films[2].fullSubtitle").value((Object) null))
+            // Settled rows are flagged, the one with nothing playing is not, and the count is the rows flagged.
+            .andExpect(jsonPath("$.films[0].subtitled").value(true))
+            .andExpect(jsonPath("$.films[1].subtitled").value(true))
+            .andExpect(jsonPath("$.films[2].subtitled").value(false))
+            .andExpect(jsonPath("$.counts.subtitled").value(2));
     }
 
     @Test

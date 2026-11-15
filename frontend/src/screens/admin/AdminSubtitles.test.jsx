@@ -22,6 +22,7 @@ const dasBoot = () =>
     year: 1981,
     unresolved: false,
     fullSubtitle: { source: 'SIDECAR' },
+    subtitled: true,
     originalLanguage: 'de',
     ownerChoice: null,
     reason: 'FOREIGN_AUDIO',
@@ -567,6 +568,26 @@ describe('Admin Subtitles section: Everything else', () => {
     expect(
       screen.queryByRole('list', { name: 'Foreign films with English subtitles' }),
     ).not.toBeInTheDocument();
+  });
+
+  it('counts and lists the same rows: a film that plays a file but is not flagged subtitled is in neither', async () => {
+    const hidden = fullRow({
+      filmId: 12,
+      title: 'Hidden Film',
+      year: 1999,
+      unresolved: false,
+      fullSubtitle: { source: 'SIDECAR' },
+      subtitled: false,
+    });
+    serve({ full: [rashomon(), dasBoot(), hidden] });
+    renderApp('/admin/subtitles');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Show the 1 film' }));
+
+    const list = screen.getByRole('list', { name: 'Foreign films with English subtitles' });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(list).getByText('Das Boot (1981)')).toBeInTheDocument();
+    expect(within(list).queryByText(/Hidden Film/)).not.toBeInTheDocument();
   });
 
   it('keeps every per-file tool behind "Show all subtitle files"', async () => {

@@ -349,9 +349,11 @@ const FULL_IF_NEEDED = {
 function fullRow(row) {
   const base = fullRowOfChoice(row);
   // An owner's file attached by hand plays, so the film is settled: not unresolved, not being checked.
-  return filmsWithOwnFile.has(row.filmId)
+  const settled = filmsWithOwnFile.has(row.filmId)
     ? { ...base, fullSubtitle: { source: 'SIDECAR' }, unresolved: false, beingChecked: false }
     : base;
+  // The server's `subtitled` flag: needed, and a full subtitle plays (every fixture film shows in browse).
+  return { ...settled, subtitled: settled.need === 'NEEDED' && Boolean(settled.fullSubtitle) };
 }
 
 function fullRowOfChoice(loaded) {
@@ -376,7 +378,7 @@ function fullNeedList() {
       notNeeded: count('NOT_NEEDED'),
       unresolved: rows.filter((r) => r.unresolved).length,
       beingChecked: rows.filter((r) => r.beingChecked).length,
-      subtitled: rows.filter((r) => r.need === 'NEEDED' && r.fullSubtitle).length,
+      subtitled: rows.filter((r) => r.subtitled).length,
       inEnglish: ENGLISH_OUT_OF_SCOPE + count('NOT_NEEDED'),
     },
   };

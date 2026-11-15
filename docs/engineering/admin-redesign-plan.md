@@ -278,15 +278,15 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
     only (no `SidecarTrust` and no sidecar id), so the row cannot know a download is distrusted or which row to verify.
     Needs a backend field first (not added here).
   - **Posters deferred**, as in 3c-2: the need rows carry none.
-  - **"Everything else":** the figures are the server's, none derived in the browser (AGENTS.md rule 3). `FullNeedCountsDto`
-    gains `subtitled` (browsable films whose need is NEEDED and that play a full subtitle: `AdminTodoRules.subtitledFull`,
-    the complement of `inPlayFull`) and `inEnglish` (browsable films whose full need is NOT_NEEDED, in the list's scope or
+  - **"Everything else":** the figures are the server's, none derived in the browser (AGENTS.md rule 3). `FullNeedFilmDto`
+    gains a `subtitled` flag (browsable, NEEDED and a full subtitle plays: `AdminTodoRules.subtitledFull`, the complement of
+    `inPlayFull`), `counts.subtitled` is the rows flagged (so the button's count equals the rows it opens, and the list is
+    `rows.filter(r => r.subtitled)`), and `FullNeedCountsDto` gains `inEnglish` (browsable films whose full need is NOT_NEEDED, in the list's scope or
     out of it: English or `xx` or missing originals, `ENGLISH_AUDIO` dubs, the owner's "not needed"; a film with no TMDB
-    language is UNKNOWN and not counted). "Browsable" is `Film.browsable` (one bulk read of every edition with its files).
+    language is UNKNOWN and not counted). "Browsable" is `Film.browsable` (one bulk read of every edition with its files, left-joined).
     "{n} foreign films have English subtitles" is `counts.subtitled`, "{n} films are in English" is `counts.inEnglish`,
     "{n} being checked online now" adds the two lists' `counts.beingChecked` and shows only once both lists have been
-    read; each figure shows once its list has. "Show the {n} film(s)" is a read-only list of the full-need rows that
-    play a subtitle (it can hold a film the browsable count leaves out, e.g. one with every edition missing). "Show all
+    read; each figure shows once its list has. "Show the {n} film(s)" is a read-only list of the rows the server flagged `subtitled`. "Show all
     subtitle files" mounts the old file list (card "Subtitle files", every per-file tool kept until 8b) only when asked,
     so it is read only then. It lists 50 at a time with "Show more ({n} left)": the files are grouped first and the
     first 50 taken across the groups as drawn, so an unmatched file is on page one. A per-file tool that changes

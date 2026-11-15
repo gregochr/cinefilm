@@ -186,4 +186,20 @@ describe('SubtitleYourChoices', () => {
     expect(reset).toHaveFocus();
     expect(screen.getByRole('heading', { name: 'Everything else' })).not.toHaveFocus();
   });
+
+  it('starts closed again when a new choice appears after the last one was given back', async () => {
+    const { rerender } = renderChoices({ full: state([chosenFull()]) });
+    await userEvent.click(screen.getByRole('button', { name: 'Your choices (1)' }));
+    expect(screen.getByRole('list', { name: 'Your choices' })).toBeInTheDocument();
+
+    rerender({ full: state([chosenFull({ ownerChoice: null })]) });
+    expect(screen.queryByRole('button', { name: /Your choices/ })).not.toBeInTheDocument();
+    rerender({ full: state([chosenFull()]) });
+
+    expect(screen.getByRole('button', { name: 'Your choices (1)' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.queryByRole('list', { name: 'Your choices' })).not.toBeInTheDocument();
+  });
 });

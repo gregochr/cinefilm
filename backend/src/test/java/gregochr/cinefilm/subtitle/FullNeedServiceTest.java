@@ -138,7 +138,7 @@ class FullNeedServiceTest {
 
         assertThat(list.films()).extracting(FullNeedFilmDto::filmId).containsExactly(1L, 5L);
         assertThat(list.films().get(0)).isEqualTo(new FullNeedFilmDto(1L, "Amelie", 2000, "NEEDED", "FOREIGN_AUDIO",
-            null, List.of(new EditionAudioDto("Original", "French")), null, "fr", true, false));
+            null, List.of(new EditionAudioDto("Original", "French")), null, "fr", true, false, false));
         assertThat(list.films().get(1).reason()).isEqualTo("OWNER");
         assertThat(list.films().get(1).ownerChoice()).isEqualTo("NEEDED");
         assertThat(list.counts().needed()).isEqualTo(2);
@@ -276,7 +276,7 @@ class FullNeedServiceTest {
 
         assertThat(amelie.getFullNeedOwner()).isEqualTo(FullNeedChoice.NOT_NEEDED);
         assertThat(dto).isEqualTo(new FullNeedFilmDto(7L, "Amelie", 2001, "NOT_NEEDED", "OWNER", "NOT_NEEDED",
-            List.of(new EditionAudioDto("Original", "French")), null, "fr", false, false));
+            List.of(new EditionAudioDto("Original", "French")), null, "fr", false, false, false));
         assertThat(events).containsExactly("begin, lock subtitle", "commit, lock subtitle");
         assertThat(lock.holder()).isNull();
     }

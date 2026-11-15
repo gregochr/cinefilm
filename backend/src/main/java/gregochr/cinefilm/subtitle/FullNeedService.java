@@ -109,13 +109,12 @@ public class FullNeedService {
         Pending due = pendingFor(evals);
         List<FullNeedFilmDto> dtos = new ArrayList<>();
         Set<Long> hidden = hiddenFromBrowse();
-        int subtitled = 0;
         int inEnglish = 0;
         for (Eval eval : evals) {
-            dtos.add(dto(eval, due));
-            if (!hidden.contains(eval.row().id())) {
-                subtitled += AdminTodoRules.subtitledFull(facts(eval, due)) ? 1 : 0;
-                inEnglish += eval.decision().need() == Need.NOT_NEEDED ? 1 : 0;
+            boolean browsable = !hidden.contains(eval.row().id());
+            dtos.add(dto(eval, due, browsable));
+            if (browsable && eval.decision().need() == Need.NOT_NEEDED) {
+                inEnglish++;
             }
         }
         // Films out of scope are never listed, but an English original (or `xx`) is not needed either: they count as
@@ -127,21 +126,21 @@ public class FullNeedService {
                 inEnglish++;
             }
         }
-        return new FullNeedListDto(dtos, counts(dtos, subtitled, inEnglish));
+        return new FullNeedListDto(dtos, counts(dtos, inEnglish));
     }
 
     /**
-     * The films that do not show in browse: every one of their editions is missing or cannot be played
-     * ({@code Film#browsable}). A film with no edition shows, so it is never here.
+     * The films that do not show in browse ({@link Film#browsable(Collection)}: every one of their editions is missing
+     * or cannot be played), from one read of every edition. A film with no edition shows, so it is never here.
      */
     private Set<Long> hiddenFromBrowse() {
-        Map<Long, Boolean> shows = new HashMap<>();
-        for (Edition edition : editions.findAllWithFiles()) {
-            shows.merge(edition.getFilm().getId(), !edition.hiddenFromBrowse(), Boolean::logicalOr);
+        Map<Long, List<Edition>> byFilm = new HashMap<>();
+        for (Edition edition : editions.findAllWithFilesIncludingEmpty()) {
+            byFilm.computeIfAbsent(edition.getFilm().getId(), id -> new ArrayList<>()).add(edition);
         }
         Set<Long> hidden = new HashSet<>();
-        shows.forEach((id, visible) -> {
-            if (!visible) {
+        byFilm.forEach((id, all) -> {
+            if (!Film.browsable(all)) {
                 hidden.add(id);
             }
         });
@@ -227,7 +226,7 @@ public class FullNeedService {
             film.getOsFullCandidates() != null);
         Eval eval = eval(row, editionAudio(files.findAudioRows(List.of(filmId))).getOrDefault(filmId, List.of()),
             playing(List.of(filmId)).get(filmId), state);
-        return dto(eval, pendingFor(List.of(eval)));
+        return dto(eval, pendingFor(List.of(eval)), film.browsable());
     }
 
     /**
@@ -361,19 +360,21 @@ public class FullNeedService {
             due.due().contains(eval.row().id()), api.enabled(), api.downloadsEnabled());
     }
 
-    private FullNeedFilmDto dto(Eval eval, Pending due) {
+    private FullNeedFilmDto dto(Eval eval, Pending due, boolean browsable) {
         FullNeedRow row = eval.row();
         FullFacts facts = facts(eval, due);
         return new FullNeedFilmDto(row.id(), row.title(), row.year(), eval.decision().need().name(),
             eval.decision().reason().name(), row.owner() == null ? null : row.owner().name(),
             eval.editions().stream().map(e -> new EditionAudioDto(e.name(), e.label())).toList(), eval.playing(),
-            row.originalLanguage(), AdminTodoRules.unresolvedFull(facts), AdminTodoRules.beingCheckedFull(facts));
+            row.originalLanguage(), AdminTodoRules.unresolvedFull(facts), AdminTodoRules.beingCheckedFull(facts),
+            browsable && AdminTodoRules.subtitledFull(facts));
     }
 
-    private static FullNeedCountsDto counts(List<FullNeedFilmDto> rows, int subtitled, int inEnglish) {
+    private static FullNeedCountsDto counts(List<FullNeedFilmDto> rows, int inEnglish) {
         return new FullNeedCountsDto(count(rows, Need.NEEDED), count(rows, Need.UNSURE), count(rows, Need.UNKNOWN),
             count(rows, Need.NOT_NEEDED), (int) rows.stream().filter(FullNeedFilmDto::unresolved).count(),
-            (int) rows.stream().filter(FullNeedFilmDto::beingChecked).count(), subtitled, inEnglish);
+            (int) rows.stream().filter(FullNeedFilmDto::beingChecked).count(),
+            (int) rows.stream().filter(FullNeedFilmDto::subtitled).count(), inEnglish);
     }
 
     private static int count(List<FullNeedFilmDto> rows, Need need) {

@@ -11,7 +11,8 @@
       "fullSubtitle": null,
       "originalLanguage": "ja",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "subtitled": false
     },
     {
       "filmId": 301,
@@ -24,7 +25,8 @@
       "fullSubtitle": null,
       "originalLanguage": "ja",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "subtitled": false
     },
     {
       "filmId": 302,
@@ -37,7 +39,8 @@
       "fullSubtitle": null,
       "originalLanguage": "ja",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "subtitled": false
     },
     {
       "filmId": 303,
@@ -50,7 +53,8 @@
       "fullSubtitle": null,
       "originalLanguage": "ja",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "subtitled": false
     },
     {
       "filmId": 304,
@@ -63,7 +67,8 @@
       "fullSubtitle": null,
       "originalLanguage": "ja",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "subtitled": false
     },
     {
       "filmId": 305,
@@ -76,7 +81,8 @@
       "fullSubtitle": null,
       "originalLanguage": "ja",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "subtitled": false
     },
     {
       "filmId": 306,
@@ -89,7 +95,8 @@
       "fullSubtitle": null,
       "originalLanguage": "ja",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "subtitled": false
     },
     {
       "filmId": 310,
@@ -102,7 +109,8 @@
       "fullSubtitle": { "source": "SIDECAR" },
       "originalLanguage": "de",
       "unresolved": false,
-      "beingChecked": false
+      "beingChecked": false,
+      "subtitled": true
     }
   ],
   "counts": {

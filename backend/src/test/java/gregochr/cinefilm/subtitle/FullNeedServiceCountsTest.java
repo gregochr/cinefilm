@@ -19,6 +19,9 @@ import gregochr.cinefilm.film.MediaFileRepository.AudioRow;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedCountsDto;
+import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedFilmDto;
+import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedListDto;
+import gregochr.cinefilm.subtitle.FullNeedDtos.FullSubtitleStateDto;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -93,12 +96,55 @@ class FullNeedServiceCountsTest {
         Edition shown = editionOf(1, 10, Presence.PRESENT);
         when(editions.findWithFilesByFilmIdIn(List.of(1L))).thenReturn(List.of(shown));
         when(fullSubtitles.forEditions(List.of(shown))).thenReturn(Map.of(10L, new FullSubtitleDto("SIDECAR", 1)));
-        when(editions.findAllWithFiles()).thenReturn(List.of(shown));
+        when(editions.findAllWithFilesIncludingEmpty()).thenReturn(List.of(shown));
 
         FullNeedCountsDto counts = counts();
 
         assertThat(counts.subtitled()).isEqualTo(1);
         assertThat(counts.inEnglish()).isZero();
+    }
+
+    @Test
+    void theSubtitledCountIsTheRowsFlaggedAndABrowsableFilmThatPlaysASubtitleIsFlagged() {
+        when(films.findFullNeedRows()).thenReturn(List.of(row(1, "fr", null), row(2, "fr", null)));
+        when(files.findAudioRows(List.of(1L, 2L))).thenReturn(List.of());
+        Edition plays = editionOf(1, 10, Presence.PRESENT);
+        Edition waits = editionOf(2, 20, Presence.PRESENT);
+        when(editions.findWithFilesByFilmIdIn(List.of(1L, 2L))).thenReturn(List.of(plays, waits));
+        when(fullSubtitles.forEditions(List.of(plays, waits)))
+            .thenReturn(Map.of(10L, new FullSubtitleDto("SIDECAR", 1)));
+        when(editions.findAllWithFilesIncludingEmpty()).thenReturn(List.of(plays, waits));
+
+        FullNeedListDto list = service.list();
+
+        assertThat(list.films()).extracting(FullNeedFilmDto::subtitled).containsExactly(true, false);
+        assertThat(list.counts().subtitled()).isEqualTo(1);
+    }
+
+    @Test
+    void aHiddenFilmThatPlaysASidecarIsNotFlaggedSubtitledAndIsNotCounted() {
+        when(films.findFullNeedRows()).thenReturn(List.of(row(1, "fr", null)));
+        when(files.findAudioRows(List.of(1L))).thenReturn(List.of());
+        Edition hidden = editionOf(1, 10, Presence.MISSING);
+        when(editions.findWithFilesByFilmIdIn(List.of(1L))).thenReturn(List.of(hidden));
+        when(fullSubtitles.forEditions(List.of(hidden))).thenReturn(Map.of(10L, new FullSubtitleDto("SIDECAR", 1)));
+        when(editions.findAllWithFilesIncludingEmpty()).thenReturn(List.of(hidden));
+
+        FullNeedListDto list = service.list();
+
+        assertThat(list.films().get(0).subtitled()).isFalse();
+        assertThat(list.films().get(0).fullSubtitle()).isEqualTo(new FullSubtitleStateDto("SIDECAR"));
+        assertThat(list.counts().subtitled()).isZero();
+    }
+
+    @Test
+    void aFilmWithOneMissingEditionAndOneEditionWithNoFileRowStillShows() {
+        when(films.findFullNeedRows()).thenReturn(List.of(row(1, "en", null)));
+        Edition missing = editionOf(1, 10, Presence.MISSING);
+        Edition noFiles = edition(film(1L, "Film 1", 2000, NOW), 11L, "Bare", 100, null);
+        when(editions.findAllWithFilesIncludingEmpty()).thenReturn(List.of(missing, noFiles));
+
+        assertThat(counts().inEnglish()).isEqualTo(1);
     }
 
     @Test
@@ -181,7 +227,7 @@ class FullNeedServiceCountsTest {
         when(editions.findWithFilesByFilmIdIn(List.of(2L))).thenReturn(List.of(hiddenSubtitled));
         when(fullSubtitles.forEditions(List.of(hiddenSubtitled)))
             .thenReturn(Map.of(20L, new FullSubtitleDto("SIDECAR", 1)));
-        when(editions.findAllWithFiles()).thenReturn(List.of(hiddenEnglish, hiddenSubtitled, shown));
+        when(editions.findAllWithFilesIncludingEmpty()).thenReturn(List.of(hiddenEnglish, hiddenSubtitled, shown));
 
         FullNeedCountsDto counts = counts();
 
@@ -197,7 +243,7 @@ class FullNeedServiceCountsTest {
         Edition missing = editionOf(1, 10, Presence.MISSING);
         Edition present = editionOf(1, 11, Presence.PRESENT);
         Edition onlyMissing = editionOf(2, 20, Presence.MISSING);
-        when(editions.findAllWithFiles()).thenReturn(List.of(missing, present, onlyMissing));
+        when(editions.findAllWithFilesIncludingEmpty()).thenReturn(List.of(missing, present, onlyMissing));
 
         assertThat(counts().inEnglish()).isEqualTo(2);
     }
@@ -209,7 +255,7 @@ class FullNeedServiceCountsTest {
         Edition shown = editionOf(1, 10, Presence.PRESENT);
         when(editions.findWithFilesByFilmIdIn(List.of(1L))).thenReturn(List.of(shown));
         when(fullSubtitles.forEditions(List.of(shown))).thenReturn(Map.of(10L, new FullSubtitleDto("DOWNLOAD", 1)));
-        when(editions.findAllWithFiles()).thenReturn(List.of(shown));
+        when(editions.findAllWithFilesIncludingEmpty()).thenReturn(List.of(shown));
 
         FullNeedCountsDto counts = counts();
 

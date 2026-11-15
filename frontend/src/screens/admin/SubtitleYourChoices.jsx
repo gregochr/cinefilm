@@ -48,6 +48,8 @@ export default function SubtitleYourChoices({ full, forced }) {
     else document.getElementById(ELSE_HEADING_ID)?.focus();
   }, [items, full, forced]);
 
+  // With no choice left there is nothing to show: the next choice starts closed, not reopened expanded.
+  if (items.length === 0 && open) setOpen(false);
   if (items.length === 0) return null;
 
   const reset = ({ kind, row }) => {
