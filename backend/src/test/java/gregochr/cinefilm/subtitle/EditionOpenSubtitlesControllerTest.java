@@ -226,6 +226,21 @@ class EditionOpenSubtitlesControllerTest {
     }
 
     @Test
+    void anEditionWithNoOriginalFileIs409OnBothRoutes() throws Exception {
+        when(service.search(40L, "forced"))
+            .thenThrow(new ConflictException("This edition has no original file to attach subtitles to."));
+        when(service.download(40L, REQUEST))
+            .thenThrow(new ConflictException("This edition has no original file to attach subtitles to."));
+
+        mvc.perform(get(SEARCH).param("kind", "forced").with(user("owner")))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.error").value("This edition has no original file to attach subtitles to."));
+        mvc.perform(signedIn(post(DOWNLOAD)).content(BODY))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.error").value("This edition has no original file to attach subtitles to."));
+    }
+
+    @Test
     void theDailyLimitIs429WithTheExactText() throws Exception {
         when(service.download(40L, REQUEST)).thenThrow(new OpenSubtitlesQuotaException(Instant.parse(
             "2024-04-01T00:00:00Z")));

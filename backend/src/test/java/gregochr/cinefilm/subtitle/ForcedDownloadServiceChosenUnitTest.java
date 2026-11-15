@@ -198,6 +198,29 @@ class ForcedDownloadServiceChosenUnitTest {
     }
 
     @Test
+    void anEditionWithNoOriginalFileTakesNoDownloadAndSaysSoBeforeAnythingElseIsRead() {
+        edition.getMediaFiles().clear();
+        editionLoads();
+
+        assertThat(service.hasOriginalFile(1L, 40L)).isFalse();
+        assertThat(service.refusal(1L, 40L, SubtitleKind.FORCED, IMDB, 5011)).contains(ChosenOutcome.NO_FILE);
+        assertThat(service.refusal(1L, 40L, SubtitleKind.FULL, IMDB, 6011)).contains(ChosenOutcome.NO_FILE);
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
+            .isEqualTo(ChosenOutcome.NO_FILE);
+        assertThat(savedRows()).isEmpty();
+        assertThat(ledgerRows()).isEmpty();
+        assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    void anEditionWithAnOriginalFileHasOneAndAGoneEditionHasNone() {
+        editionLoads();
+        assertThat(service.hasOriginalFile(1L, 40L)).isTrue();
+
+        assertThat(service.hasOriginalFile(1L, 99L)).isFalse();
+    }
+
+    @Test
     void aFileRemovedWhileTheFilmHadAnotherImdbIdIsNotBlockedForTheCurrentOne() {
         editionLoads();
         ForcedDownloadBlock old = block(5011, SubtitleKind.FORCED);

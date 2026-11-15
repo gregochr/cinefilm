@@ -57,6 +57,7 @@ public class EditionOpenSubtitlesService {
     private static final String NO_IMDB = "This film has no IMDb id, so OpenSubtitles cannot be searched. "
         + "Fix its match first.";
     private static final String SCAN = "A scan is running";
+    private static final String NO_FILE = "This edition has no original file to attach subtitles to.";
 
     private static final Map<ChosenOutcome, String> REFUSALS = Map.of(
         ChosenOutcome.BUSY, SCAN,
@@ -65,6 +66,7 @@ public class EditionOpenSubtitlesService {
         ChosenOutcome.BLOCKED, "You removed that file from this edition earlier, so it is never downloaded for it "
             + "again.",
         ChosenOutcome.ALREADY_DOWNLOADED, "That file is already this edition's download.",
+        ChosenOutcome.NO_FILE, NO_FILE,
         ChosenOutcome.CAP_REACHED, "This edition has already used its " + DownloadPlan.MAX_DOWNLOADS
             + " OpenSubtitles files (removed ones count), so no more can be downloaded for it.");
 
@@ -116,6 +118,9 @@ public class EditionOpenSubtitlesService {
         String imdbId = edition.getFilm().getImdbId();
         if (imdbId == null || imdbId.isBlank()) {
             throw new BadRequestException(NO_IMDB);
+        }
+        if (!downloads.hasOriginalFile(edition.getFilm().getId(), editionId)) {
+            throw new ConflictException(NO_FILE);
         }
         if (!api.enabled()) {
             throw new ServiceUnavailableException("OpenSubtitles is not set up");

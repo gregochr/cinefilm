@@ -83,7 +83,9 @@ public class ForcedDownloadService {
         /** The edition already has a download made from this file. */
         ALREADY_DOWNLOADED,
         /** The edition already has {@value DownloadPlan#MAX_DOWNLOADS} files used (downloads and removed ones). */
-        CAP_REACHED
+        CAP_REACHED,
+        /** The edition has no original file (only premade renditions): a download has nothing to be attached to. */
+        NO_FILE
     }
 
     private final FilmRepository films;
@@ -479,6 +481,20 @@ public class ForcedDownloadService {
     }
 
     /**
+     * Whether an edition has an original file for a download to be attached to (an edition with only premade
+     * renditions has none).
+     *
+     * @param filmId the edition's film
+     * @param editionId the edition
+     * @return true when it has at least one original part
+     */
+    @Transactional(readOnly = true)
+    public boolean hasOriginalFile(Long filmId, Long editionId) {
+        Edition edition = loadEdition(filmId, editionId);
+        return edition != null && !edition.originalParts().isEmpty();
+    }
+
+    /**
      * How many more files the edition may be given of a kind: {@value DownloadPlan#MAX_DOWNLOADS} less the downloads
      * and removed files it has for the IMDb id.
      *
@@ -583,6 +599,9 @@ public class ForcedDownloadService {
     }
 
     private Optional<ChosenOutcome> refusalFor(Edition edition, SubtitleKind kind, String imdbId, long fileId) {
+        if (edition.originalParts().isEmpty()) {
+            return Optional.of(ChosenOutcome.NO_FILE);
+        }
         if (imdbId == null || !imdbId.equals(edition.getFilm().getImdbId())) {
             return Optional.of(ChosenOutcome.CHANGED);
         }

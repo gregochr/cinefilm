@@ -151,10 +151,15 @@ class EditionOpenSubtitlesServiceTest {
         when(editions.findWithFilmById(40L)).thenReturn(Optional.of(edition));
     }
 
+    private void theEditionHasAFile() {
+        when(downloads.hasOriginalFile(1L, 40L)).thenReturn(true);
+    }
+
     /** A forced search that has offered these results to edition 40. */
     private void searchedForced(OpenSubtitlesResult... results) {
         editionLoads();
         when(api.enabled()).thenReturn(true);
+        theEditionHasAFile();
         when(api.searchForced(IMDB)).thenReturn(new OpenSubtitlesSearch(results.length, null, List.of(),
             List.of(results)));
         when(downloads.downloadsLeft(1L, 40L, SubtitleKind.FORCED, IMDB)).thenReturn(3);
@@ -189,6 +194,7 @@ class EditionOpenSubtitlesServiceTest {
     void aForcedSearchIsRankedForTheEditionsNameAndShowsEveryField() {
         editionLoads();
         when(api.enabled()).thenReturn(true);
+        theEditionHasAFile();
         OpenSubtitlesResult theatrical = result(5011, "Taken.2008.BluRay", 23.976, false, 1);
         OpenSubtitlesResult extended = result(5012, "Taken.2008.Extended.BluRay", 25.0, false, 1);
         when(api.searchForced(IMDB)).thenReturn(new OpenSubtitlesSearch(2, theatrical, List.of(theatrical),
@@ -215,6 +221,7 @@ class EditionOpenSubtitlesServiceTest {
     void aFullSearchUsesTheFullSearchAndTheFullRankingSoAHearingImpairedFileComesLast() {
         editionLoads();
         when(api.enabled()).thenReturn(true);
+        theEditionHasAFile();
         edition.setName("Original");
         OpenSubtitlesResult impaired = result(6011, "Taken.HI", 23.976, true, 1);
         OpenSubtitlesResult plain = result(6012, "Taken.Plain", 25.0, false, 1);
@@ -232,6 +239,7 @@ class EditionOpenSubtitlesServiceTest {
     void aForcedSearchRanksAHearingImpairedFileByTheFilmLevelOrderNotLast() {
         editionLoads();
         when(api.enabled()).thenReturn(true);
+        theEditionHasAFile();
         edition.setName("Original");
         OpenSubtitlesResult impaired = result(5011, "Taken.HI", 23.976, true, 1);
         OpenSubtitlesResult plain = result(5012, "Taken.Plain", 25.0, false, 1);
@@ -247,6 +255,7 @@ class EditionOpenSubtitlesServiceTest {
     void aFileSplitOverSeveralDiscsIsNotOffered() {
         editionLoads();
         when(api.enabled()).thenReturn(true);
+        theEditionHasAFile();
         OpenSubtitlesResult single = plain(5011);
         OpenSubtitlesResult split = result(5012, "Taken.CD1", 23.976, false, 2);
         OpenSubtitlesResult another = result(5013, "Taken.Old", 23.976, false, 1);
@@ -264,6 +273,7 @@ class EditionOpenSubtitlesServiceTest {
     void aSearchWithNoResultsAnswersAnEmptyList() {
         editionLoads();
         when(api.enabled()).thenReturn(true);
+        theEditionHasAFile();
         when(api.searchForced(IMDB)).thenReturn(new OpenSubtitlesSearch(0, null));
         when(downloads.downloadsLeft(1L, 40L, SubtitleKind.FORCED, IMDB)).thenReturn(3);
 
@@ -303,6 +313,7 @@ class EditionOpenSubtitlesServiceTest {
     void anImdbIdTheClientRejectsIs400LikeAMissingOne() {
         editionLoads();
         when(api.enabled()).thenReturn(true);
+        theEditionHasAFile();
         when(api.searchForced(IMDB)).thenThrow(new IllegalArgumentException("Not an IMDb id"));
 
         assertThatThrownBy(() -> service.search(40L, "forced")).isInstanceOf(BadRequestException.class)
@@ -310,9 +321,46 @@ class EditionOpenSubtitlesServiceTest {
     }
 
     @Test
+    void anEditionWithNoOriginalFileIs409OnASearchAndNothingIsAskedOfOpenSubtitles() {
+        editionLoads();
+        when(downloads.hasOriginalFile(1L, 40L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.search(40L, "forced")).isInstanceOf(ConflictException.class)
+            .hasMessage("This edition has no original file to attach subtitles to.");
+        verifyNoInteractions(api);
+    }
+
+    @Test
+    void anEditionWithNoOriginalFileIs409OnADownloadBeforeAnyDownloadIsSpent() {
+        searchedForced(plain(5011));
+        when(api.downloadsEnabled()).thenReturn(true);
+        when(downloads.refusal(1L, 40L, SubtitleKind.FORCED, IMDB, 5011L)).thenReturn(
+            Optional.of(ChosenOutcome.NO_FILE));
+
+        assertThat(refusedWith(forced(5011))).isEqualTo("This edition has no original file to attach subtitles to.");
+
+        verifyNoInteractions(budget);
+        verifyNoInteractions(limits);
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    void anEditionWhoseFileGoesBetweenTheCheckAndTheLockIs409AfterTheFetchAndAnnouncesNothing() {
+        searchedForced(plain(5011));
+        readyToDownload(5011);
+        OpenSubtitlesReference reference = storedReferenceExists(5011, 12);
+        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, NOW)).thenReturn(ChosenOutcome.NO_FILE);
+
+        assertThat(refusedWith(forced(5011))).isEqualTo("This edition has no original file to attach subtitles to.");
+
+        verifyNoInteractions(events);
+    }
+
+    @Test
     void aSearchWithNoApiKeyIs503() {
         editionLoads();
         when(api.enabled()).thenReturn(false);
+        theEditionHasAFile();
 
         assertThatThrownBy(() -> service.search(40L, "full")).isInstanceOf(ServiceUnavailableException.class)
             .hasMessage("OpenSubtitles is not set up");
@@ -324,6 +372,7 @@ class EditionOpenSubtitlesServiceTest {
     void anOutageDuringTheSearchReachesTheCaller() {
         editionLoads();
         when(api.enabled()).thenReturn(true);
+        theEditionHasAFile();
         OpenSubtitlesUnavailableException outage = new OpenSubtitlesUnavailableException("down");
         when(api.searchForced(IMDB)).thenThrow(outage);
 
@@ -350,6 +399,7 @@ class EditionOpenSubtitlesServiceTest {
     void aFullPickGoesThroughTheFullKind() {
         editionLoads();
         when(api.enabled()).thenReturn(true);
+        theEditionHasAFile();
         when(api.searchFull(IMDB)).thenReturn(new OpenSubtitlesSearch(1, null, List.of(), List.of(plain(6011))));
         when(downloads.downloadsLeft(1L, 40L, SubtitleKind.FULL, IMDB)).thenReturn(3, 2);
         service.search(40L, "full");
@@ -573,6 +623,7 @@ class EditionOpenSubtitlesServiceTest {
     void aFullPickTooShortToBeAFullSubtitleIs422() {
         editionLoads();
         when(api.enabled()).thenReturn(true);
+        theEditionHasAFile();
         when(api.searchFull(IMDB)).thenReturn(new OpenSubtitlesSearch(1, null, List.of(), List.of(plain(6011))));
         when(downloads.downloadsLeft(1L, 40L, SubtitleKind.FULL, IMDB)).thenReturn(3);
         service.search(40L, "full");
