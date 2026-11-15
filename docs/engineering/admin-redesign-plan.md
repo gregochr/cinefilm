@@ -317,8 +317,9 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
     CineFilm decide" (07's words), which sends choice `null` through that list's own PUT. One request per film (the
     button is `aria-disabled` while saving); a failure keeps the row with the list's words; the row leaves at once and
     the page reads again; focus moves to the toggle, or to the section heading after the last one. Copy is "planner, 4a".
-  - **A save that finishes after the owner left the page** still calls `onSaved` once (`markChanged` lives in the layout,
-    so the rail counts and To do read again), and sets no state of the page.
+  - **`onSaved` runs once per chain that saved anything**, with the last saved row, even when a later queued write failed
+    (that failure still shows on the row), and also when the owner left the page before the save came back
+    (`markChanged` lives in the layout, so the rail counts and To do read again); the page then sets no state.
   - **Add my own file:** hint "Picks one of your subtitle files for this film" (planner, 4a; 07's names no fixed film).
     Cancel is `aria-disabled` while the attach is in flight; a loading line shows while the editions load and "This film
     has no edition a subtitle file can be added to." when it has none.

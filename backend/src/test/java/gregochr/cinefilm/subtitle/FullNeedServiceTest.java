@@ -2,6 +2,7 @@ package gregochr.cinefilm.subtitle;
 
 import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.edition;
+import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -177,8 +178,26 @@ class FullNeedServiceTest {
         when(editions.findWithFilesByFilmIdIn(List.of(7L))).thenReturn(List.of(original));
         when(fullSubtitles.forEditions(List.of(original))).thenReturn(Map.of(70L, new FullSubtitleDto("DOWNLOAD", 1)));
 
-        assertThat(service.choose(7L, new ChoiceRequest("NEEDED")).fullSubtitle())
-            .isEqualTo(new FullSubtitleStateDto("DOWNLOAD"));
+        FullNeedFilmDto answer = service.choose(7L, new ChoiceRequest("NEEDED"));
+
+        assertThat(answer.fullSubtitle()).isEqualTo(new FullSubtitleStateDto("DOWNLOAD"));
+        assertThat(answer.subtitled()).isTrue();
+    }
+
+    @Test
+    void choosingAnswersNotSubtitledWhenTheFilmDoesNotShowInBrowseEvenThoughASubtitlePlays() {
+        Film amelie = stored(7L, "fr", null);
+        when(films.findByIdForUpdate(7L)).thenReturn(Optional.of(amelie));
+        when(files.findAudioRows(List.of(7L))).thenReturn(List.of());
+        Edition original = edition(amelie, 70L, "Original", 100, null);
+        file(original, "amelie.mp4").setPresence(Presence.MISSING);
+        when(editions.findWithFilesByFilmIdIn(List.of(7L))).thenReturn(List.of(original));
+        when(fullSubtitles.forEditions(List.of(original))).thenReturn(Map.of(70L, new FullSubtitleDto("DOWNLOAD", 1)));
+
+        FullNeedFilmDto answer = service.choose(7L, new ChoiceRequest("NEEDED"));
+
+        assertThat(answer.fullSubtitle()).isEqualTo(new FullSubtitleStateDto("DOWNLOAD"));
+        assertThat(answer.subtitled()).isFalse();
     }
 
     @Test

@@ -20,6 +20,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -226,7 +227,7 @@ public class Film {
      * @param allEditions the film's editions (all of them)
      * @return whether the film shows in browse
      */
-    public static boolean browsable(java.util.Collection<Edition> allEditions) {
+    public static boolean browsable(Collection<Edition> allEditions) {
         return allEditions.isEmpty() || allEditions.stream().anyMatch(e -> !e.hiddenFromBrowse());
     }
 

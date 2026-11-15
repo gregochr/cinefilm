@@ -161,4 +161,36 @@ describe('useFullNeed', () => {
     expect(onSaved).toHaveBeenCalledTimes(1);
     expect(onSaved).toHaveBeenCalledWith({ ...LIST.films[1], need: 'NEEDED' });
   });
+
+  it('calls onSaved once with the first row when a queued write fails while the page is still there', async () => {
+    let releaseFirst;
+    const first = new Promise((resolve) => {
+      releaseFirst = resolve;
+    });
+    const onSaved = vi.fn();
+    let writes = 0;
+    installFetch((method, url) => {
+      if (!FULL.test(url)) return null;
+      writes += 1;
+      return writes === 1
+        ? first.then(() => respond({ ...LIST.films[1], need: 'NEEDED' }))
+        : respond({ error: 'x' }, 500);
+    });
+    const { result } = renderHook(() => useFullNeed('a', { onSaved }));
+    await waitFor(() => expect(result.current.rows).toEqual(LIST.films));
+
+    await act(async () => {
+      const choosing = result.current.choose(4, 'NEEDED');
+      // Queued behind the first write, sent when it settles, and refused.
+      result.current.choose(4, 'NOT_NEEDED');
+      releaseFirst();
+      await choosing;
+    });
+
+    expect(writes).toBe(2);
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(onSaved).toHaveBeenCalledWith({ ...LIST.films[1], need: 'NEEDED' });
+    // The failure of the last write is still shown, on the row as the first save left it.
+    expect(result.current.problems).toEqual({ 4: "Couldn't save: try again" });
+  });
 });

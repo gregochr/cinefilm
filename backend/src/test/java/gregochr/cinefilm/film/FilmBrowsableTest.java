@@ -7,6 +7,7 @@ import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /** When a film is shown in browse: while at least one edition has a file that is there and can be played. */
@@ -62,16 +63,26 @@ class FilmBrowsableTest {
     }
 
     @Test
-    void theRuleOverTheEditionsAloneAgreesWithTheFilmAndCountsAnEditionWithNoFileAsShown() {
+    void theRuleOverNoEditionsAtAllIsShown() {
+        assertThat(Film.browsable(List.of())).isTrue();
+    }
+
+    @Test
+    void theRuleOverTheEditionsAloneHidesAFilmWhoseOnlyEditionIsMissing() {
         MediaFile gone = file(edition(film, 10L, "Original", 100 * MIN, null), "heat.m4v");
         gone.setPresence(Presence.MISSING);
-        assertThat(Film.browsable(film.getEditions())).isFalse();
 
-        // An edition with no file row at all is not hidden, so the film shows (as it does through browsable()).
+        assertThat(Film.browsable(film.getEditions())).isFalse();
+        assertThat(film.browsable()).isFalse();
+    }
+
+    @Test
+    void theRuleCountsAnEditionWithNoFileRowAsShownBesideAMissingOne() {
+        MediaFile gone = file(edition(film, 10L, "Original", 100 * MIN, null), "heat.m4v");
+        gone.setPresence(Presence.MISSING);
         edition(film, 11L, "Bare", 100 * MIN, null);
 
         assertThat(Film.browsable(film.getEditions())).isTrue();
         assertThat(film.browsable()).isTrue();
-        assertThat(Film.browsable(java.util.List.of())).isTrue();
     }
 }
