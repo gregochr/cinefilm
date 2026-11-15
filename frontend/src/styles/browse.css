@@ -708,14 +708,55 @@
   margin: 0;
   color: var(--cf-text-muted);
 }
-.admin__setting {
+.admin__settings {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 20px;
 }
-.admin__setting-label {
-  font-size: var(--cf-size-ui);
+.admin__card--rows {
+  padding: 0;
+}
+/* AR5: label and description on the left, the control on the right; one column on a phone. */
+.admin__set {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: center;
+  padding: 18px 22px;
+}
+.admin__set-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.admin__set-label {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
   color: var(--cf-text);
+}
+.admin__set-hint {
+  margin: 0;
+  max-width: 620px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--cf-text-muted);
+}
+.admin__set-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+@media (max-width: 600px) {
+  .admin__set {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px;
+  }
+  .admin__set-control {
+    align-items: flex-start;
+  }
 }
 .admin__setting-row {
   display: flex;

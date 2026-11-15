@@ -1,17 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { settingsApi } from '../api/resources.js';
+import { settingsPage } from './adminCopy.js';
 import { useResource } from './useResource.js';
 
 export const MIN_MINUTES = 0;
 export const MAX_MINUTES = 30;
 export const RANGE_ERROR = `Enter a whole number of minutes from ${MIN_MINUTES} to ${MAX_MINUTES}.`;
-const SAVE_ERROR = 'Could not save the setting.';
 
 /** The minutes a typed value stands for, or null when it is not a whole number from 0 to 30. */
 export function parseMinutes(text) {
   if (!/^\d{1,3}$/.test(text.trim())) return null;
   const minutes = Number(text);
   return minutes >= MIN_MINUTES && minutes <= MAX_MINUTES ? minutes : null;
+}
+
+/** What a failed save says: the server's own `error` text when it sent one, else the generic line. */
+export function saveMessage(failure) {
+  const text = failure?.body?.error;
+  return typeof text === 'string' && text.trim() ? text : settingsPage.saveError;
 }
 
 /** "1 film currently in progress", "12 films currently in progress". */
@@ -92,12 +98,12 @@ export function useSettings() {
         intended.current = response.continueWatchingMinMinutes;
         setSaved(response);
         if (draftRev.current === rev) setDraft(null); // typing since then stays
-        setStatus('Saved');
-      } catch {
+        setStatus(settingsPage.saved);
+      } catch (failure) {
         if (mine !== latest.current) return;
         intended.current = lastSaved;
         if (draftRev.current === rev) setDraft(null);
-        setError(SAVE_ERROR);
+        setError(saveMessage(failure));
         reload();
       } finally {
         inFlight.current -= 1;
