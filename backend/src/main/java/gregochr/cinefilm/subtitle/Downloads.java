@@ -39,7 +39,8 @@ final class Downloads {
     }
 
     /**
-     * The downloads that count for an edition, lowest id first.
+     * The downloads that count for an edition: the one the owner picked in the OpenSubtitles picker first (if any),
+     * then the lowest id.
      *
      * @param edition the edition (its film loaded)
      * @param partIds the ids of its part files
@@ -58,7 +59,8 @@ final class Downloads {
                 && s.getCueCount() > 0
                 && partIds.contains(s.getMediaFileId()) && madeFor(edition, s) && imdbId != null
                 && imdbId.equals(s.getImdbId()))
-            .sorted(Comparator.comparing(SubtitleSidecar::getId)).toList();
+            .sorted(Comparator.comparing((SubtitleSidecar s) -> !s.isOwnerChosen())
+                .thenComparing(SubtitleSidecar::getId)).toList();
     }
 
     /** True when the owner marked the edition's film as not needing forced subtitles. */

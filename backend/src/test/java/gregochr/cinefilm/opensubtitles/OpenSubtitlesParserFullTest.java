@@ -93,4 +93,13 @@ class OpenSubtitlesParserFullTest {
         assertThatThrownBy(() -> OpenSubtitlesParser.parseFull("{\"x\":1}", TAKEN))
             .isInstanceOf(OpenSubtitlesUnavailableException.class);
     }
+
+    @Test
+    void theFullResultsListEveryFullResultMultiFileAndHearingImpairedOnesIncluded() {
+        OpenSubtitlesSearch search = parse(full(1), full(2).set("nb_cd", "2"), full(3).set("hearing_impaired", "true"),
+            item(4));
+
+        assertThat(search.results()).extracting(OpenSubtitlesResult::id).containsExactly(1L, 2L, 3L);
+        assertThat(search.candidates()).extracting(OpenSubtitlesResult::id).containsExactly(1L, 3L);
+    }
 }

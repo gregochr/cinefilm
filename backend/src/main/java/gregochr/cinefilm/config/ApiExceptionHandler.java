@@ -34,6 +34,11 @@ public class ApiExceptionHandler {
         return error(HttpStatus.CONFLICT, e.getMessage());
     }
 
+    @ExceptionHandler(UnprocessableException.class)
+    ResponseEntity<Map<String, String>> unprocessable(UnprocessableException e) {
+        return error(HttpStatus.UNPROCESSABLE_CONTENT, e.getMessage());
+    }
+
     @ExceptionHandler(ServiceUnavailableException.class)
     ResponseEntity<Map<String, String>> unavailable(ServiceUnavailableException e) {
         return error(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage());

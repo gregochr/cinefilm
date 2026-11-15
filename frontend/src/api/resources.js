@@ -151,6 +151,21 @@ export const adminApi = {
    */
   setFullNeed: (filmId, choice, options) =>
     put(`/api/admin/films/${filmId}/full-need`, { choice }, options),
+  /**
+   * Searches OpenSubtitles for an edition's film (`kind` is `'full'` or `'forced'`): `{ editionId, kind, imdbId,
+   * downloadsLeft, results: [{ fileId, release, fileName, fps, downloadCount, fromTrusted, hearingImpaired,
+   * uploadDate }] }`, ranked for the edition. A 400 means no IMDb id (or a bad kind); a 503 an outage or no API key.
+   */
+  searchOpenSubtitles: (editionId, kind, options) =>
+    get(`/api/admin/editions/${editionId}/opensubtitles?${new URLSearchParams({ kind })}`, options),
+  /**
+   * Downloads one file a search of that edition and kind returned in the last 15 minutes and makes it the
+   * edition's download: `{ editionId, kind, fileId, release, downloadsLeft }`. A 400 means the file was not in such
+   * a search, a 409 a scan is running or the edition cannot take the file, a 429 the day's limit is used up, a 502 a
+   * charged download that could not be delivered, a 503 an outage or no credentials.
+   */
+  downloadOpenSubtitles: (editionId, { fileId, kind }) =>
+    post(`/api/admin/editions/${editionId}/opensubtitles/download`, { fileId, kind }),
 };
 
 /** Server settings (Admin). `update` takes the minimum watch time in whole minutes, 0 to 30. */
