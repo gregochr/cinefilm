@@ -31,7 +31,7 @@ first round reads the laptop's own Wi-Fi link once (signal, noise, rate); readin
 other networks, so it is not repeated.
 
 Each request names a function for the answer (`callback=cb`) and carries a time stamp, so nothing on the way can
-answer from a cache. An answer over 200 KB is refused.
+answer from a cache. An answer over 200,000 bytes is refused.
 
 Each round is one line of JSON in `~/train-feed-logger/logs/train-feed-<date>-<time>.jsonl`, written at once. The
 `logs` folder, when the script is the one to create it, and every log are readable by the owner alone. **The log
@@ -63,7 +63,8 @@ between them holds:
 | `speed`, `speed_from` | the speed sample: `bytes`, `ms`, `first_byte_ms` and `kbps` (null when too fast to measure or nothing arrived), with `why` when it failed (alone, when the page could not be read or names no script); and the script's address, in the round it is found and again whenever a 4xx answer makes it be looked up again |
 
 A part that fails three rounds running is then asked only every tenth round (`--retry-every`), and so is every
-address but the one in use. A round that fails as a whole is a line with only `t`, `round` and `error`.
+address but the one in use. A certificate that was refused is tried again at each of those full checks, so
+`untrusted` is never carried from memory for longer than that. A round that fails as a whole is a line with only `t`, `round` and `error`.
 
 ## Running it
 

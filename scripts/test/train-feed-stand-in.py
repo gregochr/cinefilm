@@ -7,12 +7,16 @@ It is not a test file itself (its name does not end in .test.sh, so run-all.sh d
 
     train-feed-stand-in.py PORT_FILE [--cert C --key K] [--die-after N] [--escape]
                            [--missing PART] [--html-part PART]
-                           [--site normal|noscript|trickle|brokenscript] [--request-log FILE]
+                           [--site normal|noscript|trickle|brokenscript|bigpage]
+                           [--request-log FILE] [--connection-log FILE]
 
 Feed:  GET /api/jsonp/<part>/?callback=cb  ->  cb({...});   (with no callback: ({...});)
        Path prefixes pick a behaviour: /anon/... ignores the callback name, /html/... answers a web page as a
        sign-in portal would, /slow/... answers after three seconds, /big/... pads each answer to 150,000 bytes
-       (valid), /huge/... to over 250,000 bytes with a Content-Length, /chunked/... the same without one.
+       (valid), /huge/... to over 250,000 bytes with a Content-Length, /chunked/... the same without one,
+       /bigindex/... answers the parts normally but its index (/api/jsonp/) with 250,000 bytes.
+       --connection-log writes one line for every connection accepted, including ones whose TLS handshake a
+       client then refuses (those never reach a request, so --request-log cannot see them).
 Site:  / is a page naming /assets/index-test.js (300,000 bytes, which honours a Range header and sends slowly
        enough for a speed to be measurable); /generate_204 is an empty 204 and /generate_200 a page that answers 200.
 """
@@ -31,6 +35,7 @@ PAGE = (b'<!doctype html><html><head>'
         b'<script type="module" crossorigin src="/assets/index-test.js"></script>'
         b'</head><body></body></html>')
 PAGE_GONE = PAGE.replace(b"index-test.js", b"index-gone.js")  # a release changed the script's hashed name
+PAGE_BIG = b"<!doctype html><html><body>" + b"x" * 250000 + b"</body></html>"
 PAGE_NO_SCRIPT = b"<!doctype html><html><head></head><body>nothing to download here</body></html>"
 SIGN_IN = b"<html><body>Sign in to the train Wi-Fi</body></html>"
 PADDING = {"big": 150000, "huge": 250000, "chunked": 250000}
@@ -89,12 +94,13 @@ class Handler(BaseHTTPRequestHandler):
                 log.write("GET %s\n" % path)
         segments = [s for s in path.split("/") if s]
         mode = ""
-        if segments and segments[0] in ("anon", "html", "slow", "big", "huge", "chunked"):
+        if segments and segments[0] in ("anon", "html", "slow", "big", "huge", "chunked", "bigindex"):
             mode = segments.pop(0)
         if segments[:2] == ["api", "jsonp"]:
             self.feed_request(mode, segments[2] if len(segments) > 2 else "", query)
         elif path == "/":
-            page = {"noscript": PAGE_NO_SCRIPT, "brokenscript": PAGE_GONE}.get(OPTIONS.site, PAGE)
+            pages = {"noscript": PAGE_NO_SCRIPT, "brokenscript": PAGE_GONE, "bigpage": PAGE_BIG}
+            page = pages.get(OPTIONS.site, PAGE)
             self.reply(200, "text/html", page)
         elif path == "/assets/index-test.js":
             self.script()
@@ -125,7 +131,8 @@ class Handler(BaseHTTPRequestHandler):
         if mode == "slow":
             time.sleep(3)
         if part == "":
-            self.reply(200, "text/plain", ("parts: " + " ".join(PARTS)).encode())
+            text = "parts: " + " ".join(PARTS)
+            self.reply(200, "text/plain", (text + " " * 250000 if mode == "bigindex" else text).encode())
             return
         data = feed(part)
         if data is None:
@@ -175,6 +182,9 @@ class Server(ThreadingHTTPServer):
 
     def get_request(self):
         request, address = super().get_request()
+        if OPTIONS.connection_log:
+            with LOCK, open(OPTIONS.connection_log, "a", encoding="utf-8") as log:
+                log.write("connection\n")
         if OPTIONS.cert:
             # The handshake happens on first read, in the connection's own thread, so a refused one cannot block accept.
             request = self.context.wrap_socket(request, server_side=True, do_handshake_on_connect=False)
@@ -194,8 +204,10 @@ def main():
     parser.add_argument("--escape", action="store_true", help="put an escape sequence in the latitude")
     parser.add_argument("--missing", help="this part of the feed answers 404")
     parser.add_argument("--html-part", help="this part of the feed answers a web page")
-    parser.add_argument("--site", choices=("normal", "noscript", "trickle", "brokenscript"), default="normal")
+    parser.add_argument("--site", default="normal",
+                        choices=("normal", "noscript", "trickle", "brokenscript", "bigpage"))
     parser.add_argument("--request-log")
+    parser.add_argument("--connection-log")
     OPTIONS = parser.parse_args()
     server = Server(("127.0.0.1", 0), Handler)
     if OPTIONS.cert:

@@ -229,6 +229,19 @@ assert_contains "over the limit, with a Content-Length" "$OUT" "feed not answeri
 run_logger --base "http://127.0.0.1:$P/chunked/api/jsonp/" --probe off --rounds 1 --timeout 5
 assert_contains "over the limit, without a Content-Length" "$OUT" "feed not answering (http: answer too large)"
 
+echo "an index too big to read"
+run_logger --base "http://127.0.0.1:$P/bigindex/api/jsonp/" --probe off --rounds 1 --timeout 5
+assert_contains "the parts answered" "$OUT" "feed answering (http)"
+assert_eq "the index is refused, and says why" '"answer too large"' "$(jv "$LOG" 'L[1]["index"]')"
+
+echo "a site page too big to read"
+serve bigpage --site bigpage --request-log "$TMP/bigpage.log"
+SITE_B="http://127.0.0.1:$PORT"
+run_logger --base "http://127.0.0.1:$PORT/api/jsonp/" --probe off --speed-site "$SITE_B" --rounds 1 --timeout 5
+assert_eq "the sample says why, and nothing else" '{"why": "answer too large"}' "$(jv "$LOG" 'L[1]["speed"]')"
+assert_eq "the page was asked for" 1 "$(grep -cx 'GET /' "$TMP/bigpage.log")"
+assert_file_lacks "no download was attempted" "$TMP/bigpage.log" "/assets/"
+
 echo "a slow feed with a short --timeout"
 run_logger --base "http://127.0.0.1:$P/slow/api/jsonp/" --probe off --rounds 1 --timeout 1
 assert_eq "exits 0" 0 "$RC"
@@ -266,13 +279,20 @@ echo "an untrusted certificate"
 if command -v openssl >/dev/null 2>&1 \
     && openssl req -x509 -newkey rsa:2048 -nodes -keyout "$TMP/key.pem" -out "$TMP/cert.pem" -days 1 \
         -subj "/CN=127.0.0.1" >/dev/null 2>&1; then
-    serve tls --cert "$TMP/cert.pem" --key "$TMP/key.pem" --request-log "$TMP/tls.log"
-    run_logger --base "https://127.0.0.1:$PORT/api/jsonp/" --probe off --rounds 1 --timeout 5
+    serve tls --cert "$TMP/cert.pem" --key "$TMP/key.pem" --request-log "$TMP/tls.log" \
+        --connection-log "$TMP/tls.conn"
+    run_logger --base "https://127.0.0.1:$PORT/api/jsonp/" --probe off --interval 1 --rounds 2 --timeout 5
     assert_eq "exits 0" 0 "$RC"
     assert_contains "answering, with the certificate named" "$OUT" "feed answering (https, certificate not trusted)"
-    assert_eq "tls untrusted in the round" '"untrusted"' "$(jv "$LOG" 'L[1]["tls"]')"
+    assert_eq "tls untrusted in both rounds" '["untrusted", "untrusted"]' "$(jv "$LOG" '[x["tls"] for x in L[1:3]]')"
     assert_eq "the data was read" true "$(jv "$LOG" '"latitude" in L[1]["feed"]["position"]')"
-    assert_eq "the other parts went straight to the retry (position, four parts, the index)" 6 \
+    # Connections, counted at the stand-in (a refused handshake never reaches a request, so GET lines miss it):
+    #   round 1 is a full check: position is asked without -k and refused (1 connection), then read with -k (1);
+    #     the four other parts follow the mark, so go straight to -k (4); the index too (1)  = 7
+    #   round 2 is not: position, the four other parts, all with -k, nothing refused        = 5
+    # Without the mark each of the four parts would be refused first: 2 + 8 + 1 in round 1, and 10 in round 2.
+    assert_eq "connections: 7 in round 1 and 5 in round 2" 12 "$(grep -c '' "$TMP/tls.conn")"
+    assert_eq "and every one of those but the first reached a request (7 + 5 - 1 refused)" 11 \
         "$(grep -c '^GET' "$TMP/tls.log")"
 else
     echo "  SKIP the certificate case: openssl is missing or could not make a certificate"
@@ -310,7 +330,8 @@ run_logger --base "$BASE" --base "http://127.0.0.1:$P/anon/api/jsonp/" --probe o
 assert_eq "--retry-every 1 makes every round a full check" true "$(jv "$LOG" 'all(len(x["asked"]) == 2 for x in L[1:3])')"
 
 # stop_with SIGNAL [logger options]: runs the logger until its first round, sends the signal and waits at most
-# 5 s for it to end (then kills it, which fails the case). Sets RC, OUT and LOG.
+# STOP_WITHIN seconds (5) for it to end (then kills it, which fails the case). Sets RC, OUT and LOG.
+STOP_WITHIN=5
 stop_with() {
     local sig="$1" pid watchdog tries=0
     shift
@@ -324,7 +345,7 @@ stop_with() {
     done
     kill "-$sig" "$pid"
     (
-        sleep 5
+        sleep "$STOP_WITHIN"
         kill -9 "$pid"
     ) >/dev/null 2>&1 &
     watchdog=$!
@@ -348,6 +369,13 @@ for sig in INT HUP TERM; do
     assert_eq "SIG$sig: it counted the round" true "$(jv "$LOG" 'L[-1]["rounds"] >= 1')"
     assert_contains "SIG$sig: says it stopped" "$OUT" "Stopped after"
 done
+
+echo "stopping in the middle of a long wait"
+STOP_WITHIN=3
+stop_with TERM --interval 30
+STOP_WITHIN=5
+assert_eq "it ends within 3 s of the signal, not after the 30 s interval" 0 "$RC"
+assert_eq "and writes the stop line" '"stop"' "$(jv "$LOG" 'L[-1]["event"]')"
 
 echo "the window going away"
 LOGDIR=$(mktemp -d "$TMP/logs.XXXXXX")
@@ -631,7 +659,7 @@ def refusing(url, timeout, insecure=False, max_size=None):
     calls.append((url, insecure))
     if not insecure:
         return {"ok": False, "why": "certificate not trusted", "ms": 1, "curl": 60}
-    return GOOD
+    return dict(GOOD)  # a copy: ask_part adds keys to what it gets
 
 
 def two_rounds():
@@ -650,6 +678,68 @@ check("untrusted: none in the second", 0, sum(1 for _, i in calls[after_first:] 
 check("untrusted: the second round asked every part once", 5, len(calls) - after_first)
 check("untrusted: every part was still read", sorted(m.PARTS), sorted(second["feed"]))
 
+accepting = {"now": False}
+trust_calls = []
+
+
+def clearing(url, timeout, insecure=False, max_size=None):
+    trust_calls.append((url, insecure))
+    if not insecure and not accepting["now"]:
+        return {"ok": False, "why": "certificate not trusted", "ms": 1, "curl": 60}
+    return dict(GOOD)  # a copy: ask_part adds keys to what it gets
+
+
+def trust_journey():
+    logger = m.Logger(["https://x.test/api/jsonp/"], None, False, retry_every=3)
+    rounds, sizes = {}, []
+    for n in range(1, 6):
+        accepting["now"] = n >= 4  # refused in rounds 1 to 3, accepted from round 4 (a full check)
+        before = len(trust_calls)
+        rounds[n] = logger.round(n)
+        refused = sum(1 for _, insecure in trust_calls[before:] if not insecure and not accepting["now"])
+        sizes.append((len(trust_calls) - before, refused))
+    return rounds, sizes
+
+
+rounds, sizes = with_fetch(clearing, trust_journey)
+check("trust: untrusted in rounds 1 to 3, absent from round 4", ["untrusted"] * 3 + [None] * 2,
+      [rounds[n].get("tls") for n in range(1, 6)])
+check("trust: rounds 2 and 3 make no refused request", [0, 0], [sizes[1][1], sizes[2][1]])
+check("trust: round 4 makes one request per part, none refused", (5, 0), sizes[3])
+check("trust: round 5 is not a full check and stays unmarked", (5, 0), sizes[4])
+
+clock = {"now": 0.0}
+
+
+def reading(answers):
+    given = []
+
+    def reader(question, timeout):
+        given.append(timeout)
+        clock["now"] += answers[len(given) - 1][0]
+        return answers[len(given) - 1][1]
+
+    return reader, given
+
+
+reader, given = reading([(45, "x"), (10, "x"), (20, "x")])
+ask = m.limited_asker(60, lambda: clock["now"], reader)
+check("limited_asker: three askings share one allowance", (None, [60, 15, 5]), (
+    m.wants_speed(False, False, None, True, ask), given))
+clock["now"] = 0.0
+reader, given = reading([(45, "x"), (30, "x"), (0, None)])
+ask = m.limited_asker(60, lambda: clock["now"], reader)
+check("limited_asker: with nothing left the reader gets 0 and the answer is assumed", (None, [60, 15, 0]), (
+    m.wants_speed(False, False, None, True, ask), given))
+clock["now"] = 0.0
+reader, given = reading([(1, "n")])
+check("limited_asker: a prompt answer is used", (m.SPEED_SITE, [60]), (
+    m.wants_speed(False, False, None, True, m.limited_asker(60, lambda: clock["now"], reader)), given))
+
+check("failed_line: an escape sequence is made printable", "round failed: ?[31mboom",
+      m.failed_line("\x1b[31mboom"))
+check("failed_line: the text is cut at 200 characters", "round failed: " + "x" * 200, m.failed_line("x" * 300))
+
 a_down = {"now": False}
 
 
@@ -660,7 +750,7 @@ def two_addresses(url, timeout, insecure=False, max_size=None):
         return {"ok": False, "why": "answered 404", "ms": 1, "code": 404}
     if host == "a.test" and part == "position" and a_down["now"]:
         return {"ok": False, "why": "empty answer", "ms": 1, "curl": 52}
-    return GOOD
+    return dict(GOOD)  # a copy: ask_part adds keys to what it gets
 
 
 def journey():
@@ -687,7 +777,7 @@ while IFS= read -r line; do
         "FAIL "*) bad "${line#FAIL }"; PURE=$((PURE + 1)) ;;
     esac
 done <<< "$RESULTS"
-assert_eq "all 83 pure checks reported" 83 "$PURE"
+assert_eq "all 92 pure checks reported" 92 "$PURE"
 
 echo "compiles"
 PYTHONPYCACHEPREFIX="$TMP/pyc" python3 -m py_compile "$LOGGER" "$STAND_IN"

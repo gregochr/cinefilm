@@ -43,7 +43,8 @@ CURL = "/usr/bin/curl"
 MARK = "\n@@train-feed-logger@@ "
 DEFAULT_TIMEOUT_S = 8
 DEFAULT_SPEED_TIMEOUT_S = 12
-SPEED_SITE = "https://cinefilm.chrisjgregory.dev"  # the owner's own server; its page shell is served without a session
+# The owner's own server; its page shell is served without a session.
+SPEED_SITE = "https://cinefilm.chrisjgregory.dev"
 SPEED_BYTES = 262144
 FEED_MAX_BYTES = 200000  # a hostile or broken feed must not make us hold a huge body
 PRINT_MAX = 40
@@ -100,7 +101,8 @@ def fetch(url, timeout, insecure=False, max_size=None):
         why = CURL_ERRORS.get(done.returncode, "curl error %d" % done.returncode)
         return {"ok": False, "why": why, "ms": ms, "curl": done.returncode}
     if max_size and len(raw_body) > max_size:
-        # curl stops a body with a length at the limit; one without a length gets here.
+        # What --max-filesize is backed up by: a curl older than 8.4 does not stop a body that has no length at
+        # the limit (newer curl stops it first, so on those both checks overlap).
         return {"ok": False, "why": CURL_ERRORS[63], "ms": ms, "curl": 63}
     try:
         code = int(fields[0])
@@ -138,14 +140,14 @@ def parse_feed(body):
 
 
 def ask_part(base, part, timeout, untrusted=False):
-    """Asks one part of the feed. Adds data when the answer is feed data, and tls when the certificate was refused.
+    """Asks one part of the feed. Adds data when the answer is feed data, and tls when the certificate was refused
+    and the answer was read anyway.
 
-    untrusted: this address's certificate was refused before, so go straight to reading it anyway."""
+    untrusted: the address is marked as one whose certificate is refused, so read it anyway at once. Such a read
+    says nothing about the certificate, so it never carries tls: the mark is the Logger's alone."""
     url = "%s%s/?callback=cb&_=%d" % (base, part, int(time.time() * 1000))
     result = fetch(url, timeout, insecure=untrusted, max_size=FEED_MAX_BYTES)
-    if untrusted and result["ok"]:
-        result["tls"] = "untrusted"
-    elif not untrusted and not result["ok"] and result.get("curl") in UNTRUSTED:
+    if not untrusted and not result["ok"] and result.get("curl") in UNTRUSTED:
         # It answers over https, but with a certificate a browser would refuse. Read it anyway: it is only the
         # train's own status, and knowing this is half the point.
         retry = fetch(url, timeout, insecure=True, max_size=FEED_MAX_BYTES)
@@ -236,6 +238,17 @@ def read_answer(question, timeout, stdin=None, select_fn=None):
     return line
 
 
+def limited_asker(allowance, clock, reader):
+    """The ask to give wants_speed: all its askings share one allowance of seconds, so a few unclear answers
+    cannot hold the start for longer than that."""
+    deadline = clock() + allowance
+
+    def ask(question):
+        return reader(question, max(0, deadline - clock()))
+
+    return ask
+
+
 def wants_speed(film, no_film, speed_site, is_tty, ask):
     """The site to take the speed sample from, or None. Asks only on a terminal, and only when not told."""
     if film:
@@ -247,7 +260,7 @@ def wants_speed(film, no_film, speed_site, is_tty, ask):
     if not is_tty:
         return None
     for _ in range(3):
-        answer = ask(QUESTION)
+        answer = ask(QUESTION)  # None: nobody answered in time, or no input
         if answer is None:  # nobody answered in time, or no input: assume a film
             return None
         answer = answer.strip().lower()
@@ -311,9 +324,9 @@ class Stop:
 
     def sleep(self, seconds):
         """Sleeps in steps of at most 0.2 s, so a stop request is seen within that."""
-        end = time.time() + seconds
+        end = time.monotonic() + seconds  # monotonic: the wall clock can jump (a time sync, the Mac waking)
         while not self.now:
-            left = end - time.time()
+            left = end - time.monotonic()
             if left <= 0:
                 return
             time.sleep(min(0.2, left))
@@ -335,7 +348,8 @@ class Logger:
         self.active = None
         self.failures = {}  # per part, for the address in use: they belong to the address
         self.failures_for = None
-        self.untrusted = set()  # addresses whose certificate was refused: read with -k from then on
+        # Addresses whose certificate was refused at the last full check: read with -k until the next one.
+        self.untrusted = set()
         self.seen_first = set()
         self.indexed = set()
 
@@ -345,13 +359,17 @@ class Logger:
                 return base
         return None
 
-    def note(self, base, result):
+    def note(self, base, result, measured=False):
+        """Records what an answer says. measured: it was asked without -k, so it also says what the certificate is
+        today (a read with -k says nothing, and a failure with no answer says nothing either)."""
         self.state[base] = "ok" if result["ok"] else result["why"]
         if result.get("tls"):
             self.untrusted.add(base)
+        elif measured and "code" in result:
+            self.untrusted.discard(base)
 
-    def ask(self, base, part):
-        return ask_part(base, part, self.timeout, base in self.untrusted)
+    def ask(self, base, part, measured=False):
+        return ask_part(base, part, self.timeout, base in self.untrusted and not measured)
 
     def round(self, n):
         now = time.time()
@@ -363,7 +381,8 @@ class Logger:
         side = {}
         side_threads = []
         if self.probe_url:
-            side_threads.append(threading.Thread(target=lambda: side.update(probe=probe(self.probe_url)), daemon=True))
+            side_threads.append(threading.Thread(
+                target=lambda: side.update(probe=probe(self.probe_url)), daemon=True))
         if self.read_wifi and n == 1:
             side_threads.append(threading.Thread(target=lambda: side.update(wifi=wifi_link()), daemon=True))
         for thread in side_threads:
@@ -373,9 +392,10 @@ class Logger:
         retry_round = (n - 1) % self.retry_every == 0
         ask_all = self.active is None or retry_round
         asked = self.bases if ask_all else [self.active]
-        positions = in_threads({base: (lambda base=base: self.ask(base, "position")) for base in asked})
+        # A full check also asks without -k, so a certificate that is accepted again is noticed.
+        positions = in_threads({base: (lambda base=base: self.ask(base, "position", ask_all)) for base in asked})
         for base, result in positions.items():
-            self.note(base, result)
+            self.note(base, result, ask_all)
         self.active = self.first_up()
         # An address that answered at the last full check but was not asked this time: ask it before relying on it.
         while self.active is not None and self.active not in positions:
@@ -525,6 +545,11 @@ def status_line(record, state):
     return "  |  ".join(parts)
 
 
+def failed_line(error):
+    """The line printed when a round failed as a whole. The text may carry feed data, so it is made printable."""
+    return "round failed: %s" % printable(error, 200)
+
+
 def check_arguments(parser, args):
     """Refuses values that would silently do the wrong thing (no time limit, a stop after one round)."""
     if not args.timeout > 0:
@@ -559,7 +584,8 @@ def main():
     parser.add_argument("--no-wifi", action="store_true", help="do not read this Mac's own Wi-Fi link")
     parser.add_argument("--no-awake", action="store_true", help="do not keep the Mac from idling to sleep")
     parser.add_argument("--speed-site", help="a site root to time a download from, when no film is playing")
-    parser.add_argument("--no-film", action="store_true", help="no film will play: time a download from %s" % SPEED_SITE)
+    parser.add_argument("--no-film", action="store_true",
+                        help="no film will play: time a download from %s" % SPEED_SITE)
     parser.add_argument("--film", action="store_true", help="a film will play: take no speed sample and do not ask")
     parser.add_argument("--speed-timeout", type=float, default=DEFAULT_SPEED_TIMEOUT_S,
                         help="seconds allowed for the speed sample (default %g)" % DEFAULT_SPEED_TIMEOUT_S)
@@ -573,9 +599,14 @@ def main():
     try:
         speed_site = wants_speed(args.film, args.no_film, args.speed_site,
                                  sys.stdin.isatty() and sys.stdout.isatty(),
-                                 lambda question: read_answer(question, ANSWER_WAIT_S))
+                                 limited_asker(ANSWER_WAIT_S, time.monotonic, read_answer))
     except KeyboardInterrupt:
         return 0
+
+    # As soon as the question is settled, so a stop request before the log exists ends the run cleanly.
+    stop = Stop()
+    for name in ("SIGINT", "SIGTERM", "SIGHUP"):
+        signal.signal(getattr(signal, name), stop.request)
 
     # The log holds where the train went: readable by the owner alone.
     os.makedirs(args.log_dir, mode=0o700, exist_ok=True)
@@ -605,10 +636,6 @@ def main():
             except (OSError, ValueError):
                 pass
 
-    stop = Stop()
-    for name in ("SIGINT", "SIGTERM", "SIGHUP"):
-        signal.signal(getattr(signal, name), stop.request)
-
     if not args.no_awake:
         try:
             # Ends by itself when this script does.
@@ -636,7 +663,7 @@ def main():
 
     logger = Logger(bases, probe_url, not args.no_wifi, args.timeout, speed_site, args.speed_timeout,
                     args.retry_every)
-    next_at = time.time()
+    next_at = time.monotonic()  # the schedule is not the wall clock; the records keep that
     n = 0
     while not stop.now:
         n += 1
@@ -647,12 +674,11 @@ def main():
         if stop.now:
             break
         write(record)
-        say(status_line(record, logger.state) if "error" not in record
-            else "round failed: %s" % printable(record["error"], 200))
+        say(status_line(record, logger.state) if "error" not in record else failed_line(record["error"]))
         if args.rounds and n >= args.rounds:
             break
         next_at += interval
-        now = time.time()
+        now = time.monotonic()
         if next_at < now:
             next_at = now  # fell behind: the Mac slept, or a round ran long
         stop.sleep(next_at - now)
