@@ -30,6 +30,7 @@ export default function SubtitleNeedRow({
   onFind,
 }) {
   const [adding, setAdding] = useState(false);
+  const [attachBusy, setAttachBusy] = useState(false);
   const addRef = useRef(null);
   const busy = { 'aria-disabled': saving || undefined };
   const choose = () => {
@@ -55,7 +56,12 @@ export default function SubtitleNeedRow({
                 ref={addRef}
                 hint={buttons.addFileToFilm.hint}
                 aria-expanded={adding}
-                onClick={() => setAdding(!adding)}
+                // Not while an attach is in flight: closing the form then would reset its one-request guard on
+                // reopening, and a second attach could start beside the first.
+                aria-disabled={attachBusy || undefined}
+                onClick={() => {
+                  if (!attachBusy) setAdding(!adding);
+                }}
               >
                 {buttons.addFileToFilm.label}
               </ActionWithHint>
@@ -94,6 +100,7 @@ export default function SubtitleNeedRow({
           title={filmTitle(row)}
           onAttached={() => onAttached(row)}
           onCancel={closeForm}
+          onBusyChange={setAttachBusy}
         />
       ) : null}
     </li>

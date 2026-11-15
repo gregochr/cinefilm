@@ -1,7 +1,7 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { installFetch, respond } from '../../test/mockApi.jsx';
+import { fixtures, installFetch, respond } from '../../test/mockApi.jsx';
 import { forcedRow, fullRow, unlabelledRow } from '../../test/needRoutes.js';
 import SubtitleNeedRow from './SubtitleNeedRow.jsx';
 
@@ -126,6 +126,47 @@ describe('SubtitleNeedRow: a foreign-language film', () => {
     await userEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('form')).not.toBeInTheDocument();
     expect(add).toHaveFocus();
+  });
+
+  it('keeps the form open and the toggle disabled while an attach is in flight, so only one request is sent', async () => {
+    let release;
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    const file = {
+      ...fixtures.adminSubtitles[0],
+      id: 21,
+      kind: 'FULL',
+      filmId: null,
+      state: 'unmatched',
+    };
+    const attaches = [];
+    installFetch((method, url) => {
+      if (url === '/api/admin/subtitles') return respond([file]);
+      if (url === '/api/films/6')
+        return respond({ id: 6, editions: [{ id: 60, name: 'Original', parts: 1 }] });
+      if (method === 'POST' && url === '/api/admin/subtitles/21/attach') {
+        attaches.push(url);
+        return held.then(() => respond(file));
+      }
+      return null;
+    });
+    const { onAttached } = renderRow({ row: fullRow(), kind: 'foreign' });
+    const add = screen.getByRole('button', { name: 'Add my own file…' });
+    await userEvent.click(add);
+    await userEvent.click(await screen.findByRole('radio', { name: /\.srt/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Attach' }));
+    await screen.findByRole('button', { name: 'Attaching…' });
+
+    expect(add).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(add);
+    expect(add).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('form')).toBeInTheDocument();
+    expect(attaches).toHaveLength(1);
+
+    release();
+    await waitFor(() => expect(onAttached).toHaveBeenCalledTimes(1));
+    expect(attaches).toHaveLength(1);
   });
 });
 
