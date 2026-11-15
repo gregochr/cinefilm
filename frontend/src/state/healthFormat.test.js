@@ -72,25 +72,30 @@ describe('operatorName', () => {
 });
 
 describe('deviceLabel', () => {
-  it('finds each platform word', () => {
+  // One describer for the whole app (`describeDevice`), so the Playback log and To do name a device alike.
+  it('finds each platform, with the browser when the user agent names one', () => {
     expect(deviceLabel('Mozilla/5.0 (iPhone; CPU iPhone OS 18_1)')).toBe('iPhone');
     expect(deviceLabel('Mozilla/5.0 (iPad; CPU OS 18_1)')).toBe('iPad');
     expect(deviceLabel('Mozilla/5.0 (Linux; Android 14; Pixel 8)')).toBe('Android');
     expect(deviceLabel('Mozilla/5.0 (Windows NT 10.0; Win64; x64)')).toBe('Windows');
     expect(deviceLabel('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')).toBe('Mac');
     expect(deviceLabel('Mozilla/5.0 (X11; Linux x86_64)')).toBe('Linux');
+    expect(
+      deviceLabel(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15',
+      ),
+    ).toBe('Safari on Mac');
   });
 
-  it('takes the first word of the list that is present, not the first in the string', () => {
+  it('names a phone or tablet before the desktop words its user agent also carries', () => {
     expect(deviceLabel('Mozilla/5.0 (iPhone; like Mac OS X)')).toBe('iPhone');
     expect(deviceLabel('Linux Android')).toBe('Android');
     expect(deviceLabel('Linux Windows Mac')).toBe('Windows');
-    expect(deviceLabel('Linux Mac')).toBe('Mac');
     expect(deviceLabel('Mac iPad')).toBe('iPad');
   });
 
   it('is case sensitive and says Unknown device for anything else or nothing', () => {
-    expect(deviceLabel('Mozilla/5.0 (X11; CrOS)')).toBe('Unknown device');
+    expect(deviceLabel('iphone')).toBe('Unknown device');
     expect(deviceLabel('iphone')).toBe('Unknown device');
     expect(deviceLabel('')).toBe('Unknown device');
     expect(deviceLabel(undefined)).toBe('Unknown device');

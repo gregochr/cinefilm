@@ -268,6 +268,7 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
 ### 5a · Playback: now playing, chart, per-minute view
 
 - Now playing from the summary's `playingNow`, "Stop this stream" + hint where an HLS session exists.
+- The player reports a touch hint (`maxTouchPoints > 1` with a Macintosh UA) so an iPad isn't named a Mac.
 - `state/playbackChart.js` (pure): environment filter, rung shares from `rungMs` (Original, 1080p, 720p, ≤480p),
   stall-dot size from `stallMs`, tiles (sessions watched, without a stall, stalled + "all on the {env}" when every
   stalled session shares one environment, median `startupMs`, % at Original or 1080p), column `aria-label`, chart

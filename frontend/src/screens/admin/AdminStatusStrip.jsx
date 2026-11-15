@@ -23,7 +23,7 @@ function Card({ eyebrow, text, failed = false, to, link, phone = false }) {
  * `now` (epoch ms) is the moment "scanned {ago}" counts from.
  */
 export default function AdminStatusStrip({ summary, error, onRetry, now = Date.now() }) {
-  if (error) {
+  if (error && !summary) {
     return (
       <div className="admin__strip-error" role="alert">
         <p className="admin__strip-error-text">{statusStrip.loadError}</p>

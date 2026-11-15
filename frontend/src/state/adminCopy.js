@@ -192,6 +192,9 @@ export const statusStrip = {
   scanned: (films, ago) => `${films} · scanned ${ago}`, // AR1
   neverScanned: (films) => `${films} · not scanned yet`, // planner, 3c-1
   scanFailed: (films, ago) => `${films} · last scan failed ${ago}`, // planner, 3c-1
+  scanFailedUndated: (films) => `${films} · last scan failed`, // planner, 3c-1
+  film: { one: 'film', other: 'films' }, // planner, 3c-1
+  unknownDevice: 'Unknown device', // planner, 3c-1 (the Playback log said it first)
   // AR1 says "films played smoothly"; the planner's brief counts film sessions (3 minutes or more).
   playbackSome: (smooth, films) =>
     `Last 30 days: ${smooth} of ${films} film ${films === 1 ? 'session' : 'sessions'} played smoothly`,

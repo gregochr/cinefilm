@@ -1270,6 +1270,10 @@
   border-radius: 999px;
   padding: 1px 8px;
 }
+/* "1 live" is brighter than the other counts (AR1 .cnt.live). */
+.admin__count-pill--live {
+  color: var(--cf-text);
+}
 /* To do: heading with its muted count, the intro line and the status strip (AR1) */
 .admin__ttl {
   display: flex;

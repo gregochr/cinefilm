@@ -1,5 +1,6 @@
 // A human name for a user agent, for the Admin "Playing now" card. Pure; no DOM. The client words its own user
 // agent, so every field may be missing: the fallback is "Unknown device".
+import { statusStrip } from './adminCopy.js';
 
 /** The browser, from the tokens that tell Chrome-family browsers apart (Edge and Opera also say "Chrome"). */
 function browserOf(ua) {
@@ -23,7 +24,10 @@ function systemOf(ua) {
 /**
  * "Safari on Mac", "Chrome on Windows"; an iPhone, an iPad and an Android device are named on their own, without a
  * browser. The platform alone when the browser is unknown, the browser alone when the platform is, else
- * "Unknown device".
+ * "Unknown device". The one describer for the whole app (the Playback log uses it too).
+ *
+ * Limitation: iPadOS Safari sends a desktop Macintosh user agent by default, so an iPad reads as a Mac here; the
+ * user agent alone cannot tell (the player's touch hint, planned in the Admin plan's 5a, will).
  */
 export function describeDevice(userAgent) {
   const ua = typeof userAgent === 'string' ? userAgent : '';
@@ -33,5 +37,5 @@ export function describeDevice(userAgent) {
   const system = systemOf(ua);
   const browser = browserOf(ua);
   if (browser && system) return `${browser} on ${system}`;
-  return system ?? browser ?? 'Unknown device';
+  return system ?? browser ?? statusStrip.unknownDevice;
 }

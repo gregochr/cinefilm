@@ -154,16 +154,55 @@ describe('useAdminSummary: the poll', () => {
     expect(summaryCalls(fetchMock)).toBe(1);
   });
 
-  it('does not start a poll while the first read is still out', async () => {
-    const first = deferred();
-    const fetchMock = installFetch((method, url) =>
-      url === '/api/admin/summary' ? first.promise : null,
-    );
+  it('keeps polling when a poll never answers: one more read at 30 s, not at 29,999 ms', async () => {
+    const hung = deferred();
+    let calls = 0;
+    const fetchMock = installFetch((method, url) => {
+      if (url !== '/api/admin/summary') return null;
+      calls += 1;
+      return calls === 1 ? respond(fixtures.adminSummary) : hung.promise;
+    });
     vi.useFakeTimers();
     mount();
-    await settle(SUMMARY_POLL_MS * 2);
+    await settle();
+    await settle(SUMMARY_POLL_MS); // the second read is out and never answers
+    expect(summaryCalls(fetchMock)).toBe(2);
+
+    await settle(SUMMARY_POLL_MS - 1);
+    expect(summaryCalls(fetchMock)).toBe(2);
+    await settle(1);
+    expect(summaryCalls(fetchMock)).toBe(3);
+  });
+
+  it('stops the poll when the hook unmounts', async () => {
+    const fetchMock = installFetch();
+    vi.useFakeTimers();
+    const { unmount } = mount();
+    await settle();
+
+    unmount();
+    await settle(SUMMARY_POLL_MS * 3);
 
     expect(summaryCalls(fetchMock)).toBe(1);
+  });
+});
+
+describe('useAdminSummary: holding the first read', () => {
+  const notReady = { ...STAMPS, ready: false };
+
+  it('makes no request until ready, then exactly one', async () => {
+    const fetchMock = installFetch();
+    vi.useFakeTimers();
+    const { rerender, result } = mount({ visible: true, stamps: notReady });
+    await settle(SUMMARY_POLL_MS * 2);
+    expect(summaryCalls(fetchMock)).toBe(0);
+    expect(result.current.summary).toBeNull();
+
+    rerender({ visible: true, stamps: { ...STAMPS, ready: true } });
+    await settle();
+
+    expect(summaryCalls(fetchMock)).toBe(1);
+    expect(result.current.summary).toEqual(fixtures.adminSummary);
   });
 });
 
@@ -216,6 +255,22 @@ describe('useAdminSummary: a late older answer', () => {
 });
 
 describe('useAdminSummary: errors', () => {
+  it('keeps the last good figures when a later read fails', async () => {
+    let fail = false;
+    installFetch((method, url) =>
+      url === '/api/admin/summary' && fail ? respond({ error: 'boom' }, 500) : null,
+    );
+    vi.useFakeTimers();
+    const { result } = mount();
+    await settle();
+
+    fail = true;
+    await settle(SUMMARY_POLL_MS);
+
+    expect(result.current.error).toBeInstanceOf(ApiError);
+    expect(result.current.summary).toEqual(fixtures.adminSummary);
+  });
+
   it('reports a failed read, and reload reads again and clears it', async () => {
     let fail = true;
     const fetchMock = installFetch((method, url) =>

@@ -16,8 +16,8 @@ function returnFocus(opener) {
 /** The rail on desktop, "Home" and a scrollable row of links on phone: one `nav`, restyled by CSS. */
 function AdminNav() {
   const { adminSummary } = useAdminContext();
-  // No counts while the summary loads or when it failed: a stale figure is worse than none.
-  const counts = railCounts(adminSummary.error ? null : adminSummary.summary);
+  // No counts until a summary has been read; a later failed read leaves the last good ones on screen.
+  const counts = railCounts(adminSummary.summary);
   return (
     <div className="admin__rail">
       <Link to="/" className="admin__home" aria-label="Back to Home">
@@ -35,7 +35,11 @@ function AdminNav() {
           >
             {section.label}
             {counts[section.key] ? (
-              <span className="admin__count-pill">{counts[section.key].badge}</span>
+              <span
+                className={`admin__count-pill${section.key === 'playback' ? ' admin__count-pill--live' : ''}`}
+              >
+                {counts[section.key].badge}
+              </span>
             ) : null}
           </NavLink>
         ))}

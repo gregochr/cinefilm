@@ -43,7 +43,7 @@ export function railCounts(summary) {
 
 function filmsText(films) {
   const n = num(films);
-  return `${n.toLocaleString('en-GB')} ${n === 1 ? 'film' : 'films'}`;
+  return `${n.toLocaleString('en-GB')} ${n === 1 ? statusStrip.film.one : statusStrip.film.other}`;
 }
 
 /**
@@ -57,7 +57,7 @@ export function libraryCard(library, now) {
   if (library.lastScanError) {
     const text = finished
       ? statusStrip.scanFailed(films, timeAgo(finished, now))
-      : `${films} · last scan failed`;
+      : statusStrip.scanFailedUndated(films);
     return { text, failed: true };
   }
   if (!finished) return { text: statusStrip.neverScanned(films), failed: false };

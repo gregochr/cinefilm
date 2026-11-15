@@ -91,19 +91,91 @@ describe('Admin To do: heading, intro and status strip', () => {
     expect(screen.queryByText('Couldn’t load the status.')).not.toBeInTheDocument();
   });
 
-  it('shares one read between the rail and the page: moving to another section does not read again', async () => {
+  it('reads the summary exactly once on a normal load, shared by the rail and the page', async () => {
     const fetchMock = installFetch();
     renderApp('/admin');
     await within(rail()).findByRole('link', { name: 'To do, 6 things' });
-    // The first read starts before the scan status has answered; its finish time then makes a second.
+    await screen.findByRole('region', { name: 'Films needing attention' });
     const reads = () => fetchMock.mock.calls.filter(([url]) => url === '/api/admin/summary').length;
-    await waitFor(() => expect(reads()).toBe(2));
+    expect(reads()).toBe(1);
 
     await userEvent.click(within(rail()).getByRole('link', { name: 'Library' }));
     await screen.findByRole('heading', { level: 1, name: 'Library' });
 
-    expect(reads()).toBe(2);
+    expect(reads()).toBe(1);
     expect(within(rail()).getByRole('link', { name: 'To do, 6 things' })).toBeInTheDocument();
+  });
+
+  it('waits for the scan status before reading the summary', async () => {
+    let releaseScan;
+    const scanHeld = new Promise((resolve) => {
+      releaseScan = resolve;
+    });
+    const fetchMock = installFetch((method, url) =>
+      url === '/api/admin/scan' ? scanHeld.then(() => respond(fixtures.adminScan)) : null,
+    );
+    renderApp('/admin');
+    await screen.findByRole('region', { name: 'Films needing attention' });
+    const reads = () => fetchMock.mock.calls.filter(([url]) => url === '/api/admin/summary').length;
+    expect(reads()).toBe(0);
+
+    releaseScan();
+
+    await within(rail()).findByRole('link', { name: 'To do, 6 things' });
+    expect(reads()).toBe(1);
+  });
+
+  it('reads the summary again after a Fix match is applied: the To do count drops by one', async () => {
+    let reads = 0;
+    installFetch((method, url) => {
+      if (url !== '/api/admin/summary') return null;
+      reads += 1;
+      const todo = { ...fixtures.adminSummary.todo };
+      if (reads > 1) todo.pickFilm -= 1;
+      return respond({ ...fixtures.adminSummary, todo });
+    });
+    renderApp('/admin');
+    await within(rail()).findByRole('link', { name: 'To do, 6 things' });
+    const attention = await screen.findByRole('region', { name: 'Films needing attention' });
+    await userEvent.click(
+      (await within(attention).findAllByRole('button', { name: 'Find the film…' }))[0],
+    );
+    const panel = await screen.findByRole('region', { name: 'Fix match' });
+    await userEvent.click((await within(panel).findAllByRole('radio'))[0]);
+
+    await userEvent.click(within(panel).getByRole('button', { name: 'Use this match' }));
+
+    expect(
+      await within(rail()).findByRole('link', { name: 'To do, 5 things' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('5 things need you')).toBeInTheDocument();
+  });
+
+  it('keeps the counts, the heading count and the cards when a re-read fails, with no alert', async () => {
+    let reads = 0;
+    installFetch((method, url) => {
+      if (url !== '/api/admin/summary') return null;
+      reads += 1;
+      return reads === 1 ? respond(fixtures.adminSummary) : respond({ error: 'boom' }, 500);
+    });
+    renderApp('/admin');
+    await within(rail()).findByRole('link', { name: 'To do, 6 things' });
+    const attention = await screen.findByRole('region', { name: 'Films needing attention' });
+    await userEvent.click(
+      (await within(attention).findAllByRole('button', { name: 'Find the film…' }))[0],
+    );
+    const panel = await screen.findByRole('region', { name: 'Fix match' });
+    await userEvent.click((await within(panel).findAllByRole('radio'))[0]);
+    await userEvent.click(within(panel).getByRole('button', { name: 'Use this match' }));
+    await waitFor(() => expect(reads).toBe(2));
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Fix match' })).not.toBeInTheDocument(),
+    );
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(within(rail()).getByRole('link', { name: 'To do, 6 things' })).toBeInTheDocument();
+    expect(screen.getByText('6 things need you')).toBeInTheDocument();
+    expect(screen.getByText('538 films · scanned 12 min ago')).toBeInTheDocument();
   });
 
   it('follows each card to its section', async () => {
@@ -142,7 +214,7 @@ describe('Admin rail counts', () => {
     }
   });
 
-  it('shows no counts when the summary fails', async () => {
+  it('shows no counts when the first read fails', async () => {
     installFetch((method, url) =>
       url === '/api/admin/summary' ? respond({ error: 'boom' }, 500) : null,
     );

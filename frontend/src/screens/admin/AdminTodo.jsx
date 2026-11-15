@@ -92,8 +92,8 @@ function AttentionPanel({ attention, loading, error, onRetry, onFixMatch, onEdit
 /** To do: the films needing attention. Fix match and Edit editions open from here, hosted by the layout. */
 export default function AdminTodo() {
   const { settledAt, changed, openFixMatch, openEditEditions, adminSummary } = useAdminContext();
-  // The count is only drawn from a summary that read cleanly; the heading never waits for it.
-  const countText = adminSummary.error ? null : todoHeadingCount(adminSummary.summary);
+  // The heading never waits for the summary, and a failed re-read leaves the last good count.
+  const countText = todoHeadingCount(adminSummary.summary);
   const attention = useAttention(`${settledAt}|${changed}`);
   useFallbackFocus(attention.data);
   return (

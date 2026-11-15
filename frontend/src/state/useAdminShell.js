@@ -35,7 +35,15 @@ export function useAdminShell(visible, pathname = '') {
   const subtitlesVersion = `${settledAt}|${scan?.openSubtitlesLastSearchedAt ?? 'never'}|${scan?.subtitleChecksLastFinishedAt ?? 'never'}`;
 
   // The rail and the To do page share this one read of the summary.
-  const adminSummary = useAdminSummary(visible, { settledAt, subtitlesVersion, changed });
+  const adminSummary = useAdminSummary(visible, {
+    settledAt,
+    subtitlesVersion,
+    changed,
+    // Held until both statuses have answered (or failed) once, so the stamps are final and the first read is the only one.
+    ready:
+      (scan !== null || scanState.error !== null) &&
+      (plexImport.plex !== null || plexImport.error !== null),
+  });
 
   const markChanged = useCallback(() => {
     setChanged((n) => n + 1);

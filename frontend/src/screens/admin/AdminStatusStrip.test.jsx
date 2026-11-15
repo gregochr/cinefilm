@@ -105,6 +105,13 @@ describe('AdminStatusStrip', () => {
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 
+  it('keeps the cards and shows no banner when a re-read failed but figures are on screen', () => {
+    renderStrip({ summary: fixture, error: new Error('boom') });
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('538 films · scanned 12 min ago')).toBeInTheDocument();
+  });
+
   it('shows an error banner with a retry that calls onRetry', async () => {
     const onRetry = vi.fn();
     renderStrip({ summary: null, error: new Error('boom'), onRetry });

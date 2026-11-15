@@ -170,6 +170,9 @@ describe('the To do count, rail names and status strip copy', () => {
     expect(statusStrip.scanFailed('538 films', '2 hours ago')).toBe(
       '538 films · last scan failed 2 hours ago',
     );
+    expect(statusStrip.scanFailedUndated('538 films')).toBe('538 films · last scan failed');
+    expect(statusStrip.film).toEqual({ one: 'film', other: 'films' });
+    expect(statusStrip.unknownDevice).toBe('Unknown device');
     expect(statusStrip.playbackSome(27, 28)).toBe(
       'Last 30 days: 27 of 28 film sessions played smoothly',
     );

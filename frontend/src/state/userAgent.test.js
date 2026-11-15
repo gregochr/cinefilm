@@ -46,6 +46,12 @@ describe('describeDevice', () => {
     expect(describeDevice(userAgent)).toBe(label);
   });
 
+  // Pins today's behaviour: iPadOS Safari sends a desktop Mac user agent, which the user agent alone cannot tell
+  // from a Mac. The player's touch hint (admin-redesign-plan 5a) is what will.
+  it('reads an iPad that sends the desktop user agent as a Mac', () => {
+    expect(describeDevice(SAFARI_MAC)).toBe('Safari on Mac');
+  });
+
   it('gives the platform alone when the browser is not recognised (the fixture)', () => {
     expect(describeDevice('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')).toBe('Mac');
   });

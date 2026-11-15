@@ -8,24 +8,29 @@ export const SUMMARY_POLL_MS = 30000;
 /**
  * The Admin summary (rail counts, the To do heading and the status strip), read once for the whole layout. It is
  * read again when `settledAt`, `subtitlesVersion` or `changed` changes (a scan, import, subtitle job or applied
- * change finished), every 30 s while `visible`, and once at once when a hidden tab is shown again.
+ * change finished), every 30 s while `visible`, and once at once when a hidden tab is shown again. `ready` holds the
+ * first read until the stamps are known.
  *
  * Each read has its own request: a newer one (a new key, a poll or `reload`) aborts the one before it, so an older
  * answer that arrives late is dropped and never overwrites a newer one (`useResource`). The poll is a quiet
- * `refresh`, so the figures stay on screen while it runs; each answer (or failure) arms the next look, so requests
- * never pile up. A failed read leaves `error` set until one answers; `reload` is the retry.
+ * `refresh`, so the figures stay on screen while it runs. A failed read leaves `error` set (the data stays) until one
+ * answers; `reload` is the retry.
  */
-export function useAdminSummary(visible, { settledAt, subtitlesVersion, changed }) {
+export function useAdminSummary(visible, { settledAt, subtitlesVersion, changed, ready = true }) {
+  // Until `ready` (the scan and Plex statuses have each answered once, which settles the stamps) the read is held:
+  // the fetcher never answers and no request is made, so a normal load reads the summary once.
   const { data, error, loading, reload, refresh } = useResource(
-    `admin-summary:${settledAt}|${subtitlesVersion}|${changed}`,
-    (options) => adminApi.summary(options),
+    `admin-summary:${ready}|${settledAt}|${subtitlesVersion}|${changed}`,
+    (options) => (ready ? adminApi.summary(options) : new Promise(() => {})),
   );
 
+  // Every 30 s whatever the last request is doing: `refresh` aborts one still in flight, so a request that never
+  // answers cannot stop the poll and requests never pile up.
   useEffect(() => {
-    if (!visible || loading) return undefined;
-    const id = setTimeout(refresh, SUMMARY_POLL_MS);
-    return () => clearTimeout(id);
-  }, [visible, loading, data, error, refresh]);
+    if (!visible || !ready) return undefined;
+    const id = setInterval(refresh, SUMMARY_POLL_MS);
+    return () => clearInterval(id);
+  }, [visible, ready, refresh]);
 
   // Coming back to a hidden tab reads once at once: the figures may be long out of date.
   const wasHidden = useRef(false);
