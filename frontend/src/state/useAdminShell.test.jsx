@@ -34,6 +34,16 @@ describe('useAdminShell', () => {
     await waitFor(() => expect(reads()).toBe(before + 1));
   });
 
+  it('hands sections the change action: it bumps `changed`', () => {
+    installFetch();
+    const { result } = renderHook(() => useAdminShell(true));
+    expect(result.current.value.changed).toBe(0);
+
+    act(() => result.current.value.markChanged());
+
+    expect(result.current.value.changed).toBe(1);
+  });
+
   it('remembers what opened each dialog, and closes them', () => {
     installFetch();
     const { result } = renderHook(() => useAdminShell(true));

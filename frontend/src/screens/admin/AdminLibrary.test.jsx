@@ -34,7 +34,7 @@ describe('Admin Library section', () => {
     for (const name of ['Library scan', 'Grouping report', 'Plex import']) {
       expect(await screen.findByRole('region', { name })).toBeInTheDocument();
     }
-    expect(screen.queryByRole('region', { name: 'Films needing attention' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Pick the right film' })).toBeNull();
   });
 
   it('shows one skeleton per loading card: the scan and the grouping report', () => {

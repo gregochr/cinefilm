@@ -1,0 +1,3 @@
+### Changed — Admin's To do page lists four groups of things only you can settle
+
+Under the status strip, To do now shows up to five rows each of: films CineFilm could not match ("Yes, it's Heat (1995)" when it is confident, otherwise "Find the film…"), films with several files ("Sort out editions…"), foreign-language films missing English subtitles, and English films whose forced subtitles were not found, the last two linking to Subtitles. Groups with more than five rows expand in place with "Show all"; empty groups are hidden, and when nothing is left it says "Nothing to do." Each list loads on its own, so one failing shows its own error with Try again while the rest still show.

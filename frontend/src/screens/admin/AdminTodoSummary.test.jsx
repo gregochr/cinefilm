@@ -57,13 +57,11 @@ describe('Admin To do: heading, intro and status strip', () => {
     expect(screen.queryByText(/things? needs? you/)).not.toBeInTheDocument();
   });
 
-  it('keeps Films needing attention below the strip', async () => {
+  it('shows the groups below the strip', async () => {
     installFetch();
     renderApp('/admin');
 
-    expect(
-      await screen.findByRole('region', { name: 'Films needing attention' }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Pick the right film' })).toBeInTheDocument();
   });
 
   it('shows a static skeleton of the strip and no count while the summary loads', () => {
@@ -95,7 +93,7 @@ describe('Admin To do: heading, intro and status strip', () => {
     const fetchMock = installFetch();
     renderApp('/admin');
     await within(rail()).findByRole('link', { name: 'To do, 6 things' });
-    await screen.findByRole('region', { name: 'Films needing attention' });
+    await screen.findByRole('region', { name: 'Pick the right film' });
     const reads = () => fetchMock.mock.calls.filter(([url]) => url === '/api/admin/summary').length;
     expect(reads()).toBe(1);
 
@@ -115,7 +113,7 @@ describe('Admin To do: heading, intro and status strip', () => {
       url === '/api/admin/scan' ? scanHeld.then(() => respond(fixtures.adminScan)) : null,
     );
     renderApp('/admin');
-    await screen.findByRole('region', { name: 'Films needing attention' });
+    await screen.findByRole('region', { name: 'Pick the right film' });
     const reads = () => fetchMock.mock.calls.filter(([url]) => url === '/api/admin/summary').length;
     expect(reads()).toBe(0);
 
@@ -132,7 +130,7 @@ describe('Admin To do: heading, intro and status strip', () => {
     renderApp('/admin');
 
     await within(rail()).findByRole('link', { name: 'To do, 6 things' });
-    await screen.findByRole('region', { name: 'Films needing attention' });
+    await screen.findByRole('region', { name: 'Pick the right film' });
     const reads = fetchMock.mock.calls.filter(([url]) => url === '/api/admin/summary').length;
     expect(reads).toBe(1);
   });
@@ -153,7 +151,7 @@ describe('Admin To do: heading, intro and status strip', () => {
     releasePlex();
 
     await waitFor(() => expect(reads()).toBe(2));
-    await screen.findByRole('region', { name: 'Films needing attention' });
+    await screen.findByRole('region', { name: 'Pick the right film' });
     expect(reads()).toBe(2);
   });
 
@@ -164,7 +162,7 @@ describe('Admin To do: heading, intro and status strip', () => {
     renderApp('/admin');
 
     await within(rail()).findByRole('link', { name: 'To do, 6 things' });
-    await screen.findByRole('region', { name: 'Films needing attention' });
+    await screen.findByRole('region', { name: 'Pick the right film' });
     const reads = fetchMock.mock.calls.filter(([url]) => url === '/api/admin/summary').length;
     expect(reads).toBe(1);
   });
@@ -176,7 +174,7 @@ describe('Admin To do: heading, intro and status strip', () => {
     renderApp('/admin');
     await within(rail()).findByRole('link', { name: 'To do, 6 things' });
     const reads = () => fetchMock.mock.calls.filter(([url]) => url === '/api/admin/summary').length;
-    const attention = await screen.findByRole('region', { name: 'Films needing attention' });
+    const attention = await screen.findByRole('region', { name: 'Pick the right film' });
     await userEvent.click(
       (await within(attention).findAllByRole('button', { name: 'Find the film…' }))[0],
     );
@@ -204,7 +202,7 @@ describe('Admin To do: heading, intro and status strip', () => {
     });
     renderApp('/admin');
     await within(rail()).findByRole('link', { name: 'To do, 6 things' });
-    const attention = await screen.findByRole('region', { name: 'Films needing attention' });
+    const attention = await screen.findByRole('region', { name: 'Pick the right film' });
     await userEvent.click(
       (await within(attention).findAllByRole('button', { name: 'Find the film…' }))[0],
     );
@@ -228,7 +226,7 @@ describe('Admin To do: heading, intro and status strip', () => {
     });
     renderApp('/admin');
     await within(rail()).findByRole('link', { name: 'To do, 6 things' });
-    const attention = await screen.findByRole('region', { name: 'Films needing attention' });
+    const attention = await screen.findByRole('region', { name: 'Pick the right film' });
     await userEvent.click(
       (await within(attention).findAllByRole('button', { name: 'Find the film…' }))[0],
     );

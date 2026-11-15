@@ -10,6 +10,9 @@ import bladeRunner from './fixtures/film-blade-runner.json';
 import heat from './fixtures/film-heat.json';
 import wickerMan from './fixtures/film-wicker-man.json';
 import adminAttention from './fixtures/admin-attention.json';
+import adminAttentionMany from './fixtures/admin-attention-many.json';
+import adminFullNeedMany from './fixtures/admin-full-need-many.json';
+import adminForcedNeedMany from './fixtures/admin-forced-need-many.json';
 import adminSummary from './fixtures/admin-summary.json';
 import adminScan from './fixtures/admin-scan.json';
 import adminGrouping from './fixtures/admin-grouping.json';
@@ -38,6 +41,9 @@ export const fixtures = {
   collections,
   adminScan,
   adminAttention,
+  adminAttentionMany,
+  adminFullNeedMany,
+  adminForcedNeedMany,
   adminSummary,
   adminGrouping,
   adminEditions,
