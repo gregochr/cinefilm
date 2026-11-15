@@ -53,7 +53,8 @@ public class FullSubtitleService {
             if (!pick.slots().isEmpty() && ServedSubtitles.version(edition, pick) != null) {
                 String source = choice.download() ? DOWNLOAD : SIDECAR;
                 long version = ForcedSubtitleService.version(source, pick);
-                byEdition.put(edition.getId(), new FullSubtitleDto(source, version));
+                byEdition.put(edition.getId(),
+                    new FullSubtitleDto(source, version, ForcedSubtitleService.sidecarIds(pick)));
             }
         }
         return byEdition;

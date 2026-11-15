@@ -336,6 +336,23 @@
   font-size: 13px;
   color: var(--cf-text-muted);
 }
+/* "Subtitles are wrong": a quiet action under the subtitle choices, set apart by a hairline, never amber. */
+.menu__item--action {
+  width: 100%;
+  margin-top: 6px;
+  border-top: 1px solid var(--cf-line);
+  border-radius: 0 0 8px 8px;
+  color: var(--cf-text-muted);
+}
+.menu__item--action[aria-disabled='true'] {
+  color: var(--cf-text-disabled);
+  cursor: progress;
+}
+.menu__problem {
+  margin: 4px 12px 0;
+  font-size: 13px;
+  color: #f0876a;
+}
 .menu__empty {
   padding: 12px;
   color: var(--cf-text-muted);

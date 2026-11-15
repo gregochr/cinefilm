@@ -3,7 +3,10 @@ import { ApiError } from './client.js';
 import { handle } from './fixtureServer.js';
 
 beforeEach(() => vi.useFakeTimers());
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  window.history.replaceState(null, '', '/');
+});
 
 // The server answers after an 80 ms pretend latency, so every call is settled on the fake clock.
 async function call(method, path, body) {
@@ -863,5 +866,108 @@ describe('fixture server: Admin settings', () => {
     expect((await failure(1, {})).status).toBe(400);
     expect((await failure(1, { editionId: 999 })).status).toBe(404);
     expect((await failure(999, { editionId: 11 })).status).toBe(404);
+  });
+
+  describe('the Plex import', () => {
+    const at = (query) => window.history.replaceState(null, '', `/admin/library${query}`);
+
+    it('is reachable with its last import by default', async () => {
+      const plex = await call('GET', '/api/admin/plex');
+      expect(plex).toMatchObject({ configured: true, reachable: true, running: false });
+      expect(plex.lastImport.report.paired).toBe(1037);
+    });
+
+    it('is unreachable, importing or not configured when the page asks (?plex=)', async () => {
+      at('?plex=unreachable');
+      expect(await call('GET', '/api/admin/plex')).toMatchObject({
+        configured: true,
+        reachable: false,
+      });
+      at('?plex=importing');
+      expect(await call('GET', '/api/admin/plex')).toMatchObject({
+        running: true,
+        progress: { processed: 12, total: 40 },
+      });
+      at('?plex=none');
+      expect(await call('GET', '/api/admin/plex')).toMatchObject({
+        configured: false,
+        lastImport: null,
+      });
+    });
+
+    it('starts an import that advances ten films a read and then ends', async () => {
+      expect(await call('POST', '/api/admin/plex/import')).toMatchObject({
+        running: true,
+        progress: { processed: 0 },
+      });
+      expect((await call('GET', '/api/admin/plex')).progress.processed).toBe(10);
+      expect((await call('GET', '/api/admin/plex')).progress.processed).toBe(20);
+      expect((await call('GET', '/api/admin/plex')).progress.processed).toBe(30);
+      expect(await call('GET', '/api/admin/plex')).toMatchObject({
+        running: false,
+        progress: null,
+      });
+      expect(await call('GET', '/api/admin/plex')).toMatchObject({ running: false });
+    });
+
+    it('serves the credits status, and a started credits import as running', async () => {
+      expect((await call('GET', '/api/admin/plex/credits')).lastImport.report.imported).toBe(860);
+      expect(await call('POST', '/api/admin/plex/credits/import')).toMatchObject({
+        running: true,
+        lastImport: null,
+      });
+    });
+  });
+
+  // After the attach test: it works on row 1, which that test attached by hand.
+  describe('the per-file tools of Film detail', () => {
+    const failure = async (method, path) => {
+      const pending = handle(method, path).catch((e) => e);
+      await vi.advanceTimersByTimeAsync(80);
+      return pending;
+    };
+
+    it('gives a hand-attached file back to automatic matching, and refuses a file that was not', async () => {
+      const answer = await call('POST', '/api/admin/subtitles/1/detach');
+      expect(answer).toMatchObject({
+        id: 1,
+        state: 'unmatched',
+        ownerAttached: false,
+        filmId: null,
+        editionId: null,
+      });
+      expect((await call('GET', '/api/admin/subtitles')).find((f) => f.id === 1)).toEqual(answer);
+
+      const again = await failure('POST', '/api/admin/subtitles/1/detach');
+      expect([again.status, again.body]).toEqual([
+        400,
+        { error: 'That file was not attached by hand' },
+      ]);
+      expect((await failure('POST', '/api/admin/subtitles/999/detach')).status).toBe(404);
+    });
+
+    it('marks a file as checked on POST verify and unmarks it on DELETE', async () => {
+      const checked = await call('POST', '/api/admin/subtitles/7/verify');
+      expect(checked).toMatchObject({ id: 7, verified: true });
+      expect((await call('GET', '/api/admin/subtitles')).find((f) => f.id === 7).verified).toBe(
+        true,
+      );
+
+      const undone = await call('DELETE', '/api/admin/subtitles/7/verify');
+      expect(undone).toMatchObject({ id: 7, verified: false });
+      expect((await failure('POST', '/api/admin/subtitles/999/verify')).status).toBe(404);
+    });
+
+    it('serves a few lines of a file on its timeline, and 404s a file that is gone', async () => {
+      const cues = await call('GET', '/api/admin/subtitles/3/cues');
+      expect(cues.offsetMs).toBe(0);
+      expect(cues.cues).toHaveLength(3);
+      expect(cues.cues[0]).toEqual({
+        startMs: 60000,
+        endMs: 62500,
+        text: 'Line 1 of Taken (2008)/Taken.en.forced.srt',
+      });
+      expect((await failure('GET', '/api/admin/subtitles/999/cues')).status).toBe(404);
+    });
   });
 });

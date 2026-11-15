@@ -7,12 +7,17 @@ import {
   subtitleOptions,
 } from '../player/tracks.js';
 import { workerOffline } from '../player/ladder.js';
+import { subtitlesWrong } from '../state/subtitleFixCopy.js';
 import { CheckIcon } from './icons.jsx';
 
 /** Moves focus between enabled menu items with the arrow keys. */
 function onMenuKeyDown(event) {
   if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-  const items = [...event.currentTarget.querySelectorAll('[role="menuitemradio"]:not(:disabled)')];
+  const items = [
+    ...event.currentTarget.querySelectorAll(
+      '[role="menuitemradio"]:not(:disabled), [role="menuitem"]:not([aria-disabled="true"])',
+    ),
+  ];
   if (!items.length) return;
   event.preventDefault();
   const at = items.indexOf(document.activeElement);
@@ -84,6 +89,35 @@ export function QualityMenu({ qualities, value, width, activeRung, onSelect }) {
   );
 }
 
+/**
+ * "Subtitles are wrong": offered only while a downloaded subtitle shows (`wrong.available`). It never
+ * leaves the menu: the player decides what happens once the download is gone. `aria-disabled`, not `disabled`, while
+ * the request runs, so the button keeps focus.
+ */
+function WrongSubtitles({ busy, problem, onWrong }) {
+  return (
+    <>
+      <button
+        type="button"
+        role="menuitem"
+        className="menu__item menu__item--action"
+        aria-disabled={busy || undefined}
+        onClick={() => {
+          if (!busy) onWrong();
+        }}
+      >
+        <span className="menu__tick" aria-hidden="true" />
+        <span className="menu__name">{busy ? subtitlesWrong.busy : subtitlesWrong.label}</span>
+      </button>
+      {problem ? (
+        <p className="menu__problem" role="alert">
+          {problem}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 export function AudioSubtitlesPanel({
   audioStreams,
   audioValue,
@@ -93,9 +127,27 @@ export function AudioSubtitlesPanel({
   subtitleValue,
   onAudio,
   onSubtitle,
+  wrong = null,
 }) {
   const ref = useRef(null);
+  const subtitlesRef = useRef(null);
   useFocusChecked(ref);
+  // The button leaves once the download is gone. If it took focus with it (focus fell to the page), land on the checked
+  // subtitle instead; when the viewer's focus is anywhere else, in the panel or outside it, it stays where it is.
+  const hadWrong = useRef(Boolean(wrong?.available));
+  useEffect(() => {
+    const has = Boolean(wrong?.available);
+    const lost = !document.activeElement || document.activeElement === document.body;
+    if (hadWrong.current && !has && lost) {
+      const root = subtitlesRef.current;
+      (
+        root?.querySelector('[role="menuitemradio"][aria-checked="true"]') ??
+        root?.querySelector('[role="menuitemradio"]') ??
+        root
+      )?.focus();
+    }
+    hadWrong.current = has;
+  }, [wrong?.available]);
   const options = subtitleOptions(subtitleStreams, hasFullSubtitle);
   return (
     <div className="menu menu--panel" role="group" aria-label="Audio and subtitles" ref={ref}>
@@ -126,6 +178,7 @@ export function AudioSubtitlesPanel({
         role="menu"
         tabIndex={-1}
         aria-label="Subtitles"
+        ref={subtitlesRef}
         onKeyDown={onMenuKeyDown}
       >
         <div className="menu__heading">Subtitles</div>
@@ -143,6 +196,9 @@ export function AudioSubtitlesPanel({
             </Item>
           ))
         )}
+        {wrong?.available ? (
+          <WrongSubtitles busy={wrong.busy} problem={wrong.problem} onWrong={wrong.onWrong} />
+        ) : null}
       </div>
     </div>
   );

@@ -2,14 +2,17 @@ package gregochr.cinefilm.library;
 
 import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
+import static gregochr.cinefilm.TestData.credit;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
+import static gregochr.cinefilm.TestData.person;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.ApiTestBase;
+import gregochr.cinefilm.film.CreditRole;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.GroupingChange;
 import gregochr.cinefilm.film.GroupingChangeRepository;
@@ -22,6 +25,7 @@ import gregochr.cinefilm.library.AdminDtos.Attention;
 import gregochr.cinefilm.library.AdminDtos.AttentionItem;
 import gregochr.cinefilm.library.AdminDtos.ScanStatusDto;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesRefresher;
+import gregochr.cinefilm.person.Person;
 import gregochr.cinefilm.subtitle.SidecarCheckRefresher;
 import gregochr.cinefilm.ratings.RatingsRefresher;
 import java.time.Duration;
@@ -178,7 +182,7 @@ class AdminServiceTest extends ApiTestBase {
         assertThat(status.running()).isFalse();
         assertThat(status.progress()).isNull();
         assertThat(status.lastScan()).isNull();
-        assertThat(status.counts()).isEqualTo(new AdminDtos.CountsDto(0, 0, 0, 0, 0, 0, 0));
+        assertThat(status.counts()).isEqualTo(new AdminDtos.CountsDto(0, 0, 0, 0, 0, 0, 0, 0));
     }
 
     @Test
@@ -193,7 +197,27 @@ class AdminServiceTest extends ApiTestBase {
         saved("Gone", 2005, "g.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.MISSING);
         saved("Gone Drm", 2006, "h.m4v", MatchStatus.PENDING, Playability.PROTECTED, Presence.MISSING);
 
-        assertThat(admin.status().counts()).isEqualTo(new AdminDtos.CountsDto(2, 4, 2, 1, 2, 1, 1));
+        assertThat(admin.status().counts()).isEqualTo(new AdminDtos.CountsDto(2, 4, 2, 1, 2, 1, 1, 0));
+    }
+
+    @Test
+    void theCountsSayHowManyBrowsableFilmsHaveCredits() {
+        Film credited = saved("Credited", 2000, "a.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.PRESENT);
+        Film twice = saved("Twice", 2001, "b.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.PRESENT);
+        saved("Bare", 2002, "c.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.PRESENT);
+        Film hidden = saved("Hidden", 2003, "d.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.MISSING);
+        Person person = people.save(person(null, "Ana"));
+        credit(credited, person, CreditRole.DIRECTOR, null, 1);
+        credit(twice, person, CreditRole.DIRECTOR, null, 1);
+        credit(twice, person, CreditRole.CAST, "Lead", 2);
+        credit(hidden, person, CreditRole.CAST, "Ghost", 1);
+        films.saveAll(List.of(credited, twice, hidden));
+        films.flush();
+
+        AdminDtos.CountsDto counts = admin.status().counts();
+
+        assertThat(counts.films()).isEqualTo(3);
+        assertThat(counts.filmsWithCredits()).isEqualTo(2);
     }
 
     @Test
@@ -237,6 +261,22 @@ class AdminServiceTest extends ApiTestBase {
     }
 
     @Test
+    void anAttentionItemSaysWhetherTheFilmHasADetailPage() {
+        saved("Only Drm", 2002, "Only Drm.m4v", MatchStatus.PENDING, Playability.PROTECTED, Presence.PRESENT);
+        Film both = film(null, "Both", 2003, NOW);
+        both.setMatchStatus(MatchStatus.PENDING);
+        file(edition(both, null, "Original", 100 * MIN, null), "Both.m4v").setPlayability(Playability.PROTECTED);
+        file(edition(both, null, "Extended", 100 * MIN, null), "Both Extended.m4v");
+        save(both);
+
+        assertThat(admin.attention().items()).extracting(AttentionItem::title, AttentionItem::kind,
+                AttentionItem::browsable)
+            .containsExactlyInAnyOrder(
+                org.assertj.core.api.Assertions.tuple("Only Drm", "protected", false),
+                org.assertj.core.api.Assertions.tuple("Both", "protected", true));
+    }
+
+    @Test
     void protectedConversionAndUnreadableFilesAreListedWithTheirFileNameOnly() {
         saved("Drm Film", 2002, "Sub/Drm Film.m4v", MatchStatus.PENDING, Playability.PROTECTED, Presence.PRESENT);
         saved("Old", 1999, "Old.avi", MatchStatus.PENDING, Playability.NEEDS_CONVERSION, Presence.PRESENT);
@@ -258,17 +298,36 @@ class AdminServiceTest extends ApiTestBase {
     }
 
     @Test
-    void theGroupingReportIsTheNewest20LinesNewestFirst() {
-        for (int i = 0; i < 25; i++) {
-            groupingChanges.save(new GroupingChange(NOW.minusSeconds(1000 - i), GroupingChange.JOIN, "line " + i));
+    void theGroupingReportIsEveryLineOfTheLastFinishedScanNewestFirstWithNoCap() {
+        Instant start = NOW.minusSeconds(600);
+        Instant finish = NOW.minusSeconds(500);
+        run(NOW.minusSeconds(5000), NOW.minusSeconds(4900), 1, 0, 0, null);
+        run(start, finish, 1, 0, 0, null);
+        run(NOW.minusSeconds(10), null, 0, 0, 0, null);
+        groupingChanges.save(new GroupingChange(start.minusMillis(1), GroupingChange.FLAG, "before"));
+        groupingChanges.save(new GroupingChange(finish.plusMillis(1), GroupingChange.SPLIT, "after"));
+        groupingChanges.save(new GroupingChange(start, GroupingChange.JOIN, "at start"));
+        groupingChanges.save(new GroupingChange(finish, GroupingChange.SPLIT, "at finish"));
+        for (int i = 0; i < 30; i++) {
+            groupingChanges.save(new GroupingChange(start.plusSeconds(1 + i), GroupingChange.JOIN, "line " + i));
         }
 
         AdminDtos.GroupingReport report = admin.groupingReport();
 
-        assertThat(report.items()).hasSize(20);
-        assertThat(report.items().get(0)).isEqualTo(new AdminDtos.GroupingChangeDto(NOW.minusSeconds(976), "join",
-            "line 24"));
-        assertThat(report.items().get(19).summary()).isEqualTo("line 5");
+        assertThat(report.items()).hasSize(32);
+        assertThat(report.items().get(0)).isEqualTo(new AdminDtos.GroupingChangeDto(finish, "split", "at finish"));
+        assertThat(report.items().get(1).summary()).isEqualTo("line 29");
+        assertThat(report.items().get(31)).isEqualTo(new AdminDtos.GroupingChangeDto(start, "join", "at start"));
+        assertThat(report.items()).extracting(AdminDtos.GroupingChangeDto::summary)
+            .doesNotContain("before", "after");
+    }
+
+    @Test
+    void theGroupingReportIsEmptyBeforeAnyScanHasFinishedWhateverWasLogged() {
+        run(NOW.minusSeconds(10), null, 0, 0, 0, null);
+        groupingChanges.save(new GroupingChange(NOW.minusSeconds(5), GroupingChange.JOIN, "owner edit"));
+
+        assertThat(admin.groupingReport().items()).isEmpty();
     }
 
     @Test

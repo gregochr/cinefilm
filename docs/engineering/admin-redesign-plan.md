@@ -487,6 +487,23 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
   to Plex" when unreachable, "Last report" behind a quiet button.
 - Cast & crew card: "{n} of {total} films have credits" (new backend count), "Import credits from Plex" when Plex is
   configured. The credits-dataset control only per Q1.
+- **6 decision (built):** `AdminLibrary.jsx` composes four cards in order (`LibraryScanCard` `#scan`,
+  `LibraryRatingsCard`, `LibraryPlexCard` `#plex-import`, `LibraryCastCard` `#cast-crew`, the count only); the grouping report is
+  `LibraryChanges`, a `<details>` inside the scan card, 25 per page ("Show {n} more"). The Running/Idle pill is gone
+  (the header line and the progress take its place). The three tile links go to `/admin/library/files/{protected,
+  needs-conversion,unreadable}` (`AdminLibraryFiles`, `FILE_LISTS` in `state/adminRoutes.js`, also bare on phone):
+  the existing `GET /api/admin/attention` filtered by `kind`, so no new list route. The new backend count is
+  `counts.filmsWithCredits` on `GET /api/admin/scan` (`FilmRepository.findIdsWithCredits`, intersected with the
+  browsable films, so it never exceeds `counts.films`). **Departures:** (0) "Import credits from Plex" stays in the Import from Plex card, below the import: it imports end-credits START markers, not cast and crew, so under "Cast & crew · 530 of 538" it would read as the way to raise the count (the same false premise as Q1). (0b) "What the last scan changed" is the grouping lines logged from the last finished scan's start to its finish, uncapped (`GET /api/admin/grouping-report` no longer returns the newest 20 of every writer), so the label is true and the 25-row paging is real. (0c) A failed first read of the Plex status shows the card with an inline error and Try again. (0d) The dev mock serves Plex through `?plex=unreachable|importing|none`. (1) no "Download TMDB credits" (Q1). (2) The
+  board's hints for Ratings, Import from Plex and Import credits are replaced by 07's and the component's own:
+  Plex's credits markers say where the end credits start, not who acted, so "Fills in actors and directors from Plex"
+  would be false. (3) The board's server name ("dockermacmini · reachable") is not shown: `GET /api/admin/plex`
+  carries no host, so the line is "Plex server: Reachable". (4) The header shows only the last scan's time and
+  duration; "2 new, 0 missing" were already tiles. Invented copy ("planner, 6" in `adminCopy.js`): "Not scanned yet",
+  "Couldn’t load what the last scan changed.", "Show {n} more", "IMDb and Rotten Tomatoes · not fetched yet", "Not
+  imported yet", "Nothing yet", "Not reachable", "Importing", "No films in the library yet", "{n} of 1 film has
+  credits", "‹ Library", "Nothing here.", "Couldn’t load these files.", "The last scan changed nothing.", and the list titles "Protected files", "Files
+  that need converting", "Files that could not be read" (`FILE_LISTS`).
 
 ### 7 · Settings
 
@@ -507,6 +524,47 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
   `DELETE /api/admin/subtitles/{id}` + `ForcedDownloadBlock`), so a bad download can still be reported.
 - 8b: player "Earlier" / "Later" (and reset) on the existing offset route; Admin's "Show all subtitle files" becomes
   read-only. "Looks right" goes only here, after 8a.
+- **8a decision (built):** one small backend change (review fix): `ForcedSubtitleDto` and `FullSubtitleDto` gain
+  `sidecarIds` (the ids of the subtitle rows they are made of, the same ids the Admin list gives), because their
+  `version` is a hash and does not identify a row. "Subtitles are wrong" deletes only rows whose id the film showed; if
+  another download plays by now it deletes nothing and says so. The rest needed no backend change. `SubtitleAdminService.remove` already writes the `ForcedDownloadBlock`
+  (edition, IMDb id, OpenSubtitles file id, kind) before it deletes the row, so `DELETE /api/admin/subtitles/{id}` is
+  the whole of "Subtitles are wrong" (and answers 400 for an owner's file).
+  - **Film detail.** A quiet "Fix…" (`aria-label` "Fix subtitles…") sits under the Subtitles field, also for a film
+    with no subtitles. It opens `components/FilmSubtitlesFix.jsx`, a `useDialog` dialog (the Edit editions classes:
+    focus trap, Escape, focus back on the opener, full-screen sheet on a phone). It reads `GET /api/admin/subtitles`
+    through Admin's own `useSubtitles` (one copy of the rules and of the one-request guard) and lists the film's rows
+    (`state/subtitleFix.js` `filmFiles`, over `filterSidecars`). Per file, `fileTools` decides: "Use my file instead"
+    (an owner file a download replaced, not yet chosen; the `verify` route), "Let CineFilm decide" (`ownerAttached`;
+    `detach`), "Preview lines" (`cues`, via the shared `SubtitleCueList`), "Delete this download" (downloads only;
+    `RemoveDownload` with an inline confirm and the 4a focus rules). Panel level: "Add my own file…" is 4a's
+    `AddOwnFile` scoped to the film. Each tool has its 07 hint under it (`ActionWithHint`). A change calls the page's
+    reload, even if it finishes after the dialog was closed. **Departures:** "Attach to… / Move to…" is not a per-file
+    button here ("Add my own file…" is the film-scoped attach, as AR7 says); "Looks right" and timing are not here
+    (the plan says "Looks right" goes nowhere; timing is 8b's). Admin keeps its own words ("Show cues", "Remove
+    download") until 8b; `SubtitleCueList` and `RemoveDownload` were lifted out of `SubtitlesPanel` with those words as
+    the default so both screens share one copy.
+  - **Player.** In the subtitle column of the Audio and subtitles panel, a "Subtitles are wrong" `menuitem` (a quiet
+    action under a hairline, never amber) while `shownDownloadKind` says a download is on screen: the player's own
+    `activeSubtitleKey` picks what shows, and the edition's `source` (`DOWNLOAD`) says it is a download, so the owner's
+    files, embedded streams and Off-with-nothing never get it. On click `useSubtitleWrong` reads the list (so the row
+    id is never stale), takes the rows of this film, edition and kind that are `served` downloads, and deletes them.
+    **What the player does after (chosen):** the removed kind is left out of the viewing locally (its `<track>`
+    unmounts; the film is not read again under a playing viewing); a removed full subtitle falls back to Off, where
+    the forced lines show as they would on their own; a removed forced one lets the embedded forced stream (if any) show.
+    A toast says "Subtitle download removed. CineFilm won't use it again." Nothing about the playback is touched (no
+    session, seek, reload or source change), and the saved subtitle preference is left alone. Not built: if the owner's
+    own file had been beaten by the download, it only plays after the next film load.
+  - **Copy** is `state/subtitleFixCopy.js` (the Film and player words; `adminCopy.js` is Admin's and stays out of the
+    other phases' way). The five renamed buttons and their hints are 07's. Planner, 8a: "Fix…"'s spoken name "Fix
+    subtitles…", the dialog eyebrow "Fix subtitles", its lead "The subtitle files CineFilm has for this film. Timing is
+    changed while you watch.", "Loading the subtitle files", "Couldn't load this film's subtitle files.", "Couldn't
+    refresh the subtitle files.", "CineFilm has no subtitle file for this film yet.", "Subtitle files for this film",
+    "Hide lines", "Delete download", "Your file", "Forced", "Subtitles are wrong", "Removing…", "Subtitle download
+    removed. CineFilm won't use it again.", "Couldn't find that download to remove.", "Couldn't remove the download.
+    Try again.", "This subtitle has changed since the film started. Reload to see the new one."
+  - **Dev mock:** `detach`, `verify` (POST and DELETE) and `cues` routes added to `fixtureServer.js` and the default
+    `mockApi.jsx` answers; fixture refusals carry `{ error }` in the body.
 
 ## Owner answers (2026-11-14)
 

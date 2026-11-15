@@ -71,13 +71,15 @@ describe('ratingItems', () => {
 });
 
 describe('describeRatingsRefresh', () => {
-  it('says when ratings were last refreshed, using the given formatter', () => {
+  it('says when ratings were last updated, using the given formatter', () => {
     expect(describeRatingsRefresh('2026-11-08T12:41:10Z', (iso) => `at ${iso}`)).toBe(
-      'Ratings last refreshed at 2026-11-08T12:41:10Z',
+      'IMDb and Rotten Tomatoes · updated at 2026-11-08T12:41:10Z',
     );
   });
 
-  it('says never when they were not', () => {
-    expect(describeRatingsRefresh(null, () => 'unused')).toBe('Ratings never refreshed');
+  it('says not fetched yet when they never were', () => {
+    expect(describeRatingsRefresh(null, () => 'unused')).toBe(
+      'IMDb and Rotten Tomatoes · not fetched yet',
+    );
   });
 });

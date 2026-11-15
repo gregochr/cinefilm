@@ -13,6 +13,8 @@ import adminSummary from '../test/fixtures/admin-summary.json';
 import adminGrouping from '../test/fixtures/admin-grouping.json';
 import adminEditions from '../test/fixtures/admin-editions.json';
 import adminMatch from '../test/fixtures/admin-match.json';
+import adminPlex from '../test/fixtures/admin-plex.json';
+import adminPlexCredits from '../test/fixtures/admin-plex-credits.json';
 import adminTranscoding from '../test/fixtures/admin-transcoding.json';
 import adminPlaybackHealth from '../test/fixtures/admin-playback-health.json';
 import adminSubtitles from '../test/fixtures/admin-subtitles.json';
@@ -289,9 +291,9 @@ const removedSubtitleIds = new Set();
 
 function removeSubtitle(id) {
   const row = adminSubtitles.find((r) => r.id === id && !removedSubtitleIds.has(r.id));
-  if (!row) throw new ApiError(404, 'No such subtitle file');
+  if (!row) throw apiError(404, 'No such subtitle file');
   if (row.origin !== 'OPENSUBTITLES') {
-    throw new ApiError(400, 'Only a download can be removed');
+    throw apiError(400, 'Only a download can be removed');
   }
   removedSubtitleIds.add(id);
   return null;
@@ -321,10 +323,10 @@ function filmOfEdition(editionId) {
 
 function attachSubtitle(id, body) {
   const row = adminSubtitles.find((r) => r.id === id && !removedSubtitleIds.has(r.id));
-  if (!row) throw new ApiError(404, 'No such subtitle file');
-  if (!Number.isInteger(body?.editionId)) throw new ApiError(400, 'editionId is required');
+  if (!row) throw apiError(404, 'No such subtitle file');
+  if (!Number.isInteger(body?.editionId)) throw apiError(400, 'editionId is required');
   const found = filmOfEdition(body.editionId);
-  if (!found) throw new ApiError(404, 'No such edition');
+  if (!found) throw apiError(404, 'No such edition');
   const part = body.part ?? null;
   attachedSubtitles.set(id, {
     state: 'matched',
@@ -339,6 +341,52 @@ function attachSubtitle(id, body) {
   });
   filmsWithOwnFile.add(found.film.id);
   return subtitleList().find((r) => r.id === id);
+}
+
+/** The row as listed, or a 404 as the server answers for an id it does not know (or a removed download). */
+function listedSubtitle(id) {
+  const row = subtitleList().find((r) => r.id === id);
+  if (!row) throw apiError(404, 'No such subtitle file');
+  return row;
+}
+
+/** Gives a hand-attached file back to automatic matching: it is unattached again, as the server answers. */
+function detachSubtitle(id) {
+  const row = listedSubtitle(id);
+  if (!row.ownerAttached) throw apiError(400, 'That file was not attached by hand');
+  filmsWithOwnFile.delete(row.filmId);
+  attachedSubtitles.set(id, {
+    state: 'unmatched',
+    ownerAttached: false,
+    filmId: null,
+    filmTitle: null,
+    editionId: null,
+    editionName: null,
+    parts: 0,
+    part: null,
+    whole: false,
+  });
+  return listedSubtitle(id);
+}
+
+/** "Use my file instead" (verify) and its undo: the owner's file is marked as checked, or not. */
+function verifySubtitle(id, verified) {
+  listedSubtitle(id);
+  attachedSubtitles.set(id, { ...attachedSubtitles.get(id), verified });
+  return listedSubtitle(id);
+}
+
+/** The first lines of a file on its film's timeline: three made-up cues per file, enough to preview. */
+function subtitleCues(id) {
+  const row = listedSubtitle(id);
+  return {
+    offsetMs: row.offsetMs,
+    cues: [1, 2, 3].map((n) => ({
+      startMs: n * 60_000 + row.offsetMs,
+      endMs: n * 60_000 + 2_500 + row.offsetMs,
+      text: `Line ${n} of ${row.path}`,
+    })),
+  };
 }
 
 const CHOICES = new Set(['NEEDED', 'NOT_NEEDED']);
@@ -620,6 +668,49 @@ function downloadOpenSubtitles(editionId, body) {
   return { editionId, kind, fileId: body.fileId, release, downloadsLeft: filesLeft(key) };
 }
 
+const PLEX_NOT_CONFIGURED = {
+  configured: false,
+  reachable: false,
+  running: false,
+  progress: null,
+  lastImport: null,
+};
+const PLEX_IMPORT_TOTAL = 40;
+const PLEX_STEP = 10;
+// Reads of the Plex status since an import was started with POST, or null when none is running.
+let plexImportReads = null;
+
+const plexRunning = (processed) => ({
+  ...adminPlex,
+  running: true,
+  progress: { processed, total: PLEX_IMPORT_TOTAL, current: 'Heat' },
+});
+
+/**
+ * The Plex status. Open the page with `?plex=unreachable`, `?plex=importing` or `?plex=none` (not configured) to see
+ * those states; otherwise Plex is reachable with the last import of the fixture. "Import from Plex again" starts a
+ * made-up import that advances by 10 of 40 films on each read and then ends.
+ */
+function plexStatus() {
+  const variant = new URLSearchParams(globalThis.location?.search ?? '').get('plex');
+  if (variant === 'none') return PLEX_NOT_CONFIGURED;
+  if (variant === 'unreachable') return { ...adminPlex, reachable: false };
+  if (variant === 'importing') return plexRunning(12);
+  if (plexImportReads === null) return adminPlex;
+  plexImportReads += 1;
+  const processed = plexImportReads * PLEX_STEP;
+  if (processed >= PLEX_IMPORT_TOTAL) {
+    plexImportReads = null;
+    return adminPlex;
+  }
+  return plexRunning(processed);
+}
+
+function startPlexImport() {
+  plexImportReads = 0;
+  return plexRunning(0);
+}
+
 export async function handle(method, path, body) {
   await delay(80);
   const url = new URL(path, 'http://fixtures.local');
@@ -631,6 +722,12 @@ export async function handle(method, path, body) {
   if (route === '/api/admin/attention') return adminAttention;
   if (route === '/api/admin/summary') return adminSummary;
   if (route === '/api/admin/grouping-report') return adminGrouping;
+  if (route === '/api/admin/plex') return plexStatus();
+  if (route === '/api/admin/plex/import' && method === 'POST') return startPlexImport();
+  if (route === '/api/admin/plex/credits') return adminPlexCredits;
+  if (route === '/api/admin/plex/credits/import' && method === 'POST') {
+    return { running: true, progress: { processed: 0, total: 0 }, lastImport: null };
+  }
   if (/^\/api\/admin\/films\/\d+\/match$/.test(route)) {
     return method === 'POST' ? { filmId: 31, joined: false } : adminMatch;
   }
@@ -645,6 +742,12 @@ export async function handle(method, path, body) {
   }
   match = route.match(/^\/api\/admin\/subtitles\/(\d+)\/attach$/);
   if (match && method === 'POST') return attachSubtitle(Number(match[1]), body);
+  match = route.match(/^\/api\/admin\/subtitles\/(\d+)\/detach$/);
+  if (match && method === 'POST') return detachSubtitle(Number(match[1]));
+  match = route.match(/^\/api\/admin\/subtitles\/(\d+)\/verify$/);
+  if (match) return verifySubtitle(Number(match[1]), method === 'POST');
+  match = route.match(/^\/api\/admin\/subtitles\/(\d+)\/cues$/);
+  if (match) return subtitleCues(Number(match[1]));
   match = route.match(/^\/api\/admin\/subtitles\/(\d+)$/);
   if (match && method === 'DELETE') return removeSubtitle(Number(match[1]));
   if (route === '/api/admin/forced-subtitles/films') return forcedNeedList();

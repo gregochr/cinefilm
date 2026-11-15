@@ -43,6 +43,7 @@ import { formatClock, formatRemaining } from '../player/time.js';
 import {
   FORCED_KEY,
   FULL_KEY,
+  SUBTITLE_OFF,
   activeSubtitleKey,
   effectiveSubtitleChoice,
   hasSubtitleTracks,
@@ -58,6 +59,9 @@ import { operatorName } from '../state/healthFormat.js';
 import { useFilmToPlay } from '../state/useFilms.js';
 import { usePageExitReport } from '../player/exitReport.js';
 import { usePlayback } from '../state/usePlayback.js';
+import { shownDownloadKind } from '../state/subtitleFix.js';
+import { subtitlesWrong } from '../state/subtitleFixCopy.js';
+import { useSubtitleWrong } from '../state/useSubtitleWrong.js';
 import { useHealthReport } from '../player/useHealthReport.js';
 import { useEnvironment } from '../player/useEnvironment.js';
 
@@ -159,12 +163,18 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
     resolveSubtitleChoice(film.editions, edition, prefs.subtitle),
   );
 
+  // Downloads the viewer reported with "Subtitles are wrong" in this viewing. The server has deleted and blocked them;
+  // the film is not read again under a playing viewing, so they are left out here instead.
+  const [removed, setRemoved] = useState({ FORCED: false, FULL: false });
+  const forcedSubtitle = removed.FORCED ? null : edition.forcedSubtitle;
+  const fullSubtitle = removed.FULL ? null : edition.fullSubtitle;
+
   const selectedAudio = edition.audioStreams.find((s) => String(streamKey(s)) === String(audio));
   const audioStreamId = selectedAudio?.id;
   const subtitle = effectiveSubtitleChoice({
     choice: chosenSubtitle,
     fullNeed: film.fullNeed,
-    fullSubtitle: edition.fullSubtitle,
+    fullSubtitle,
     audioLanguage: selectedAudio?.language,
   });
   // Resuming (a start position above 0) also gets a still of the resume frame behind PREPARING.
@@ -197,7 +207,11 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
     stream.mode === 'hls' && quality === AUTO && indicator.measuredSlow && !questionDue,
   );
 
-  const hasSubtitles = hasSubtitleTracks(edition);
+  const hasSubtitles = hasSubtitleTracks({
+    subtitleStreams: edition.subtitleStreams,
+    forcedSubtitle,
+    fullSubtitle,
+  });
   const atEnd = hasReachedEnd(positionMs, durationMs, edition.creditsMarkerMs);
   const endOverlay = atEnd && !endDismissed;
   const { visible, poke } = useAutoHide({ playing, menuOpen: menu !== null, ended: endOverlay });
@@ -249,13 +263,13 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
     const showing = activeSubtitleKey(
       edition.subtitleStreams,
       subtitle,
-      edition.forcedSubtitle,
-      edition.fullSubtitle,
+      forcedSubtitle,
+      fullSubtitle,
     );
     trackRefs.current.forEach((element, key) => {
       if (element.track) element.track.mode = key === showing ? 'showing' : 'disabled';
     });
-  }, [edition.subtitleStreams, edition.forcedSubtitle, edition.fullSubtitle, subtitle]);
+  }, [edition.subtitleStreams, forcedSubtitle, fullSubtitle, subtitle]);
   useEffect(applySubtitleModes, [applySubtitleModes]);
 
   useEffect(() => {
@@ -334,14 +348,41 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
   const chooseSubtitle = useCallback(
     (value) => {
       setChosenSubtitle(value);
-      const label = subtitleOptions(edition.subtitleStreams, edition.fullSubtitle).find(
+      const label = subtitleOptions(edition.subtitleStreams, fullSubtitle).find(
         (o) => String(o.value) === String(value),
       )?.label;
       setToast(`Subtitles: ${label ?? 'Off'}`);
       playback.savePreferences({ subtitle: value });
     },
-    [edition.subtitleStreams, edition.fullSubtitle, playback],
+    [edition.subtitleStreams, fullSubtitle, playback],
   );
+
+  // The download on screen, if any: only a downloaded subtitle is offered "Subtitles are wrong", never the owner's file.
+  const downloadKind = shownDownloadKind({
+    choice: subtitle,
+    streams: edition.subtitleStreams,
+    forcedSubtitle,
+    fullSubtitle,
+  });
+  const wrongSubtitles = useSubtitleWrong({
+    filmId: film.id,
+    editionId: edition.id,
+    kind: downloadKind,
+  });
+  // Deletes and blocks the download, then stops showing it: a full one falls back to Off (the forced lines still show
+  // when there are any), a forced one to what the player would otherwise show. Playback itself is not touched.
+  const reportWrong = async () => {
+    const kind = downloadKind;
+    // The files the film loaded with: only these are deleted, even if another download plays by now.
+    const ids = (kind === 'FULL' ? fullSubtitle : forcedSubtitle)?.sidecarIds;
+    if (kind && (await wrongSubtitles.report(kind, ids))) {
+      setRemoved((r) => ({ ...r, [kind]: true }));
+      // Only the choice that showed the download falls back to Off: a pick made while the request ran stays.
+      if (kind === 'FULL')
+        setChosenSubtitle((c) => (c === null || c === FULL_KEY ? SUBTITLE_OFF : c));
+      setToast(subtitlesWrong.done);
+    }
+  };
 
   const chooseAudio = (key) => {
     setAudio(key);
@@ -400,7 +441,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
         toggleFullscreen(containerRef.current, videoRef.current);
         break;
       case 'cycleCaptions':
-        chooseSubtitle(nextSubtitle(edition.subtitleStreams, subtitle, edition.fullSubtitle));
+        chooseSubtitle(nextSubtitle(edition.subtitleStreams, subtitle, fullSubtitle));
         break;
       case 'openAudio':
         setMenu('audio');
@@ -568,7 +609,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
             src={editionsApi.subtitleUrl(edition.id, stream.index)}
           />
         ))}
-        {edition.forcedSubtitle ? (
+        {forcedSubtitle ? (
           <track
             key={FORCED_KEY}
             ref={(element) => {
@@ -579,10 +620,10 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
             srcLang="en"
             data-testid="forced-subtitle-track"
             label="English (forced)"
-            src={editionsApi.forcedSubtitleUrl(edition.id, edition.forcedSubtitle.version)}
+            src={editionsApi.forcedSubtitleUrl(edition.id, forcedSubtitle.version)}
           />
         ) : null}
-        {edition.fullSubtitle ? (
+        {fullSubtitle ? (
           <track
             key={FULL_KEY}
             ref={(element) => {
@@ -593,7 +634,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
             srcLang="en"
             data-testid="full-subtitle-track"
             label="English (full)"
-            src={editionsApi.fullSubtitleUrl(edition.id, edition.fullSubtitle.version)}
+            src={editionsApi.fullSubtitleUrl(edition.id, fullSubtitle.version)}
           />
         ) : null}
       </video>
@@ -676,11 +717,17 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
               audioStreams={edition.audioStreams}
               audioValue={audio}
               subtitleStreams={edition.subtitleStreams}
-              hasForcedSubtitle={Boolean(edition.forcedSubtitle)}
-              hasFullSubtitle={Boolean(edition.fullSubtitle)}
+              hasForcedSubtitle={Boolean(forcedSubtitle)}
+              hasFullSubtitle={Boolean(fullSubtitle)}
               subtitleValue={subtitle}
               onAudio={chooseAudio}
               onSubtitle={chooseSubtitle}
+              wrong={{
+                available: downloadKind !== null,
+                busy: wrongSubtitles.busy,
+                problem: wrongSubtitles.problem,
+                onWrong: reportWrong,
+              }}
             />
           ) : null}
 
@@ -750,7 +797,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
               <CaptionsIcon size={20} />
               <span>
                 {(hasSubtitles &&
-                  subtitleOptions(edition.subtitleStreams, edition.fullSubtitle).find(
+                  subtitleOptions(edition.subtitleStreams, fullSubtitle).find(
                     (o) => String(o.value) === String(subtitle),
                   )?.label) ||
                   'Off'}

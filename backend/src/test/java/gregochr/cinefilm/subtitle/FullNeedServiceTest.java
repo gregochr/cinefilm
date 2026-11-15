@@ -158,8 +158,8 @@ class FullNeedServiceTest {
         List<Edition> all = List.of(mine, fetched, cut, theatrical, silent);
         when(editions.findWithFilesByFilmIdIn(List.of(1L, 2L, 3L, 4L))).thenReturn(all);
         when(fullSubtitles.forEditions(all)).thenReturn(Map.of(
-            10L, new FullSubtitleDto("SIDECAR", 1), 20L, new FullSubtitleDto("DOWNLOAD", 2),
-            30L, new FullSubtitleDto("DOWNLOAD", 3), 31L, new FullSubtitleDto("SIDECAR", 4)));
+            10L, new FullSubtitleDto("SIDECAR", 1, List.of()), 20L, new FullSubtitleDto("DOWNLOAD", 2, List.of()),
+            30L, new FullSubtitleDto("DOWNLOAD", 3, List.of()), 31L, new FullSubtitleDto("SIDECAR", 4, List.of())));
 
         List<FullNeedFilmDto> listed = service.list().films();
 
@@ -176,7 +176,8 @@ class FullNeedServiceTest {
         when(files.findAudioRows(List.of(7L))).thenReturn(List.of());
         Edition original = edition(amelie, 70L, "Original", 100, null);
         when(editions.findWithFilesByFilmIdIn(List.of(7L))).thenReturn(List.of(original));
-        when(fullSubtitles.forEditions(List.of(original))).thenReturn(Map.of(70L, new FullSubtitleDto("DOWNLOAD", 1)));
+        when(fullSubtitles.forEditions(List.of(original)))
+            .thenReturn(Map.of(70L, new FullSubtitleDto("DOWNLOAD", 1, List.of())));
 
         FullNeedFilmDto answer = service.choose(7L, new ChoiceRequest("NEEDED"));
 
@@ -192,7 +193,8 @@ class FullNeedServiceTest {
         Edition original = edition(amelie, 70L, "Original", 100, null);
         file(original, "amelie.mp4").setPresence(Presence.MISSING);
         when(editions.findWithFilesByFilmIdIn(List.of(7L))).thenReturn(List.of(original));
-        when(fullSubtitles.forEditions(List.of(original))).thenReturn(Map.of(70L, new FullSubtitleDto("DOWNLOAD", 1)));
+        when(fullSubtitles.forEditions(List.of(original)))
+            .thenReturn(Map.of(70L, new FullSubtitleDto("DOWNLOAD", 1, List.of())));
 
         FullNeedFilmDto answer = service.choose(7L, new ChoiceRequest("NEEDED"));
 
@@ -462,7 +464,8 @@ class FullNeedServiceTest {
             new OsFullState(6L, "tt6", "tt6", true)));
         Edition playing = edition(film(5L, "Plays", 2000, NOW), 50L, "Original", 100, null);
         when(editions.findWithFilesByFilmIdIn(List.of(1L, 2L, 3L, 4L, 5L, 6L))).thenReturn(List.of(playing));
-        when(fullSubtitles.forEditions(List.of(playing))).thenReturn(Map.of(50L, new FullSubtitleDto("DOWNLOAD", 1)));
+        when(fullSubtitles.forEditions(List.of(playing)))
+            .thenReturn(Map.of(50L, new FullSubtitleDto("DOWNLOAD", 1, List.of())));
     }
 
     @Test
