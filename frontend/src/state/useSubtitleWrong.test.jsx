@@ -7,7 +7,7 @@ import { useSubtitleWrong } from './useSubtitleWrong.js';
 afterEach(() => vi.unstubAllGlobals());
 
 // Film 6 (Blade Runner) edition 61 has a played forced download, row 6 in the fixtures.
-const target = { filmId: 6, editionId: 61 };
+const target = { filmId: 6, editionId: 61, kind: 'FORCED' };
 const calls = (fetchMock) => fetchMock.mock.calls.map((c) => `${c[1]?.method ?? 'GET'} ${c[0]}`);
 
 describe('useSubtitleWrong', () => {
@@ -59,7 +59,7 @@ describe('useSubtitleWrong', () => {
 
   it('says so and deletes nothing when no download plays for that edition and kind', async () => {
     const fetchMock = installFetch();
-    const { result } = renderHook(() => useSubtitleWrong(target));
+    const { result } = renderHook(() => useSubtitleWrong({ ...target, kind: 'FULL' }));
 
     let done;
     await act(async () => {
@@ -115,7 +115,7 @@ describe('useSubtitleWrong', () => {
       if (url === '/api/admin/subtitles') return respond(rows);
       if (method !== 'DELETE') return null;
       return url === '/api/admin/subtitles/62'
-        ? respond({ error: 'No such subtitle file' }, 404)
+        ? respond({ error: 'boom' }, 500)
         : respond(null, 204);
     });
     const { result } = renderHook(() => useSubtitleWrong(target));
@@ -130,6 +130,48 @@ describe('useSubtitleWrong', () => {
       'DELETE /api/admin/subtitles/61',
       'DELETE /api/admin/subtitles/62',
     ]);
+    expect(result.current.problem).toBe(subtitlesWrong.failed);
+  });
+
+  it('counts a 404 on the delete as removed: the row was already gone between the list and the delete', async () => {
+    const rows = [
+      { ...fixtures.adminSubtitles[5], id: 61 },
+      { ...fixtures.adminSubtitles[5], id: 62 },
+    ];
+    const fetchMock = installFetch((method, url) => {
+      if (url === '/api/admin/subtitles') return respond(rows);
+      if (method !== 'DELETE') return null;
+      return url === '/api/admin/subtitles/61'
+        ? respond({ error: 'No such subtitle file' }, 404)
+        : respond(null, 204);
+    });
+    const { result } = renderHook(() => useSubtitleWrong(target));
+
+    let done;
+    await act(async () => {
+      done = await result.current.report('FORCED');
+    });
+
+    expect(done).toBe(true);
+    expect(result.current.problem).toBeNull();
+    expect(calls(fetchMock).filter((c) => c.startsWith('DELETE'))).toEqual([
+      'DELETE /api/admin/subtitles/61',
+      'DELETE /api/admin/subtitles/62',
+    ]);
+  });
+
+  it('shows a failure only while the download it was for still shows', async () => {
+    installFetch((method) => (method === 'DELETE' ? respond({ error: 'boom' }, 500) : null));
+    const { result, rerender } = renderHook((props) => useSubtitleWrong(props), {
+      initialProps: target,
+    });
+    await act(() => result.current.report('FORCED'));
+    expect(result.current.problem).toBe(subtitlesWrong.failed);
+
+    rerender({ ...target, kind: 'FULL' });
+    expect(result.current.problem).toBeNull();
+
+    rerender(target);
     expect(result.current.problem).toBe(subtitlesWrong.failed);
   });
 });

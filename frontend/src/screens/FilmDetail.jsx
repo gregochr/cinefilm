@@ -120,6 +120,7 @@ export default function FilmDetail() {
   // The quiet entry beside the Subtitles field: it opens the film's subtitle files (`FilmSubtitlesFix`).
   const fixButton = (
     <Button
+      key="fix"
       className="settings__fix"
       aria-label={subtitleFix.entry.spoken}
       aria-haspopup="dialog"
@@ -234,10 +235,14 @@ export default function FilmDetail() {
             />
             {!hasSubtitleTracks(edition) ? (
               <Picker label="Subtitles" inertText="None for this film">
-                <Link to="/admin" className="settings__link">
-                  Find subtitles in Admin
-                </Link>
-                {fixButton}
+                {/* Keyed arrays in both branches: "Fix…" is the same element when the film gains or loses its
+                    subtitles while the dialog is open, so the focus the dialog gives back is not lost. */}
+                {[
+                  <Link key="admin" to="/admin" className="settings__link">
+                    Find subtitles in Admin
+                  </Link>,
+                  fixButton,
+                ]}
               </Picker>
             ) : (
               <Picker
@@ -255,7 +260,7 @@ export default function FilmDetail() {
                   });
                 }}
               >
-                {fixButton}
+                {[fixButton]}
               </Picker>
             )}
             {edition.audioStreams.length > 1 ? (

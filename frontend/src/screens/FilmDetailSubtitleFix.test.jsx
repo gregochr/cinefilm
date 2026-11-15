@@ -98,4 +98,66 @@ describe('Film detail: Subtitles → Fix…', () => {
       expect(within(dialog).queryByText('Heat.1995.1080p')).not.toBeInTheDocument(),
     );
   });
+
+  it('gives focus back to "Fix…" after the only download is deleted and the film has no subtitles left', async () => {
+    serve((film) => {
+      film.editions[0].subtitleStreams = [];
+      film.editions[0].forcedSubtitle = { source: 'DOWNLOAD', ownerVerified: false, version: 1 };
+    });
+    renderApp('/films/1');
+    const fix = await fixButton();
+    await userEvent.click(fix);
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(
+      await within(dialog).findByRole('button', { name: /Delete this download/ }),
+    );
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete download' }));
+    // The page behind the dialog now says "None for this film": the same button stays in place.
+    await waitFor(() => expect(screen.getByText('None for this film')).toBeInTheDocument());
+
+    await userEvent.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(fix).toHaveFocus());
+  });
+
+  it('gives focus back to "Fix…" after a file is added to a film that had no subtitles', async () => {
+    const film = structuredClone(fixtures.heat);
+    film.editions[0].subtitleStreams = [];
+    film.editions[0].forcedSubtitle = null;
+    film.editions[0].fullSubtitle = null;
+    const own = {
+      ...fixtures.adminSubtitles[5],
+      id: 21,
+      kind: 'FULL',
+      origin: 'FILE',
+      path: 'Heat (1995)/Heat.en.srt',
+      filmId: null,
+      filmTitle: null,
+      state: 'unmatched',
+    };
+    installFetch((method, url) => {
+      if (url === '/api/films/1') return respond(film);
+      if (url === '/api/admin/subtitles' && method === 'GET') return respond([own]);
+      if (url === '/api/admin/subtitles/21/attach') {
+        film.editions[0].fullSubtitle = { source: 'SIDECAR', version: 1 };
+        return respond(own);
+      }
+      return null;
+    });
+    renderApp('/films/1');
+    const fix = await fixButton();
+    await userEvent.click(fix);
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Add my own file…' }));
+    await userEvent.click(await within(dialog).findByRole('radio', { name: /Heat\.en\.srt/ }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Attach' }));
+    // The page behind now has a Subtitles select instead of "None for this film".
+    await waitFor(() => expect(screen.queryByText('None for this film')).not.toBeInTheDocument());
+
+    await userEvent.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(fix).toHaveFocus());
+  });
 });

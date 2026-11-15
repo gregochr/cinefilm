@@ -178,6 +178,9 @@ describe('FilmSubtitlesFix', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: /Use my file instead/ }));
 
     await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    // The used button leaves with the re-read: focus goes to a status line, not to the page behind the dialog.
+    const notice = await within(dialog).findByText('Your file plays instead of the download.');
+    await waitFor(() => expect(notice).toHaveFocus());
     expect(requests.filter((r) => r.startsWith('POST'))).toEqual([
       'POST /api/admin/subtitles/7/verify',
     ]);
@@ -198,6 +201,9 @@ describe('FilmSubtitlesFix', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: /Let CineFilm decide/ }));
 
     await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    // The used button leaves with the re-read: focus goes to a status line, not to the page behind the dialog.
+    const notice = await within(dialog).findByText('CineFilm decides for that file again.');
+    await waitFor(() => expect(notice).toHaveFocus());
     expect(requests.filter((r) => r.startsWith('POST'))).toEqual([
       'POST /api/admin/subtitles/9/detach',
     ]);

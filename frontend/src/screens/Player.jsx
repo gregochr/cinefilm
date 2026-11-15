@@ -364,14 +364,20 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
     forcedSubtitle,
     fullSubtitle,
   });
-  const wrongSubtitles = useSubtitleWrong({ filmId: film.id, editionId: edition.id });
+  const wrongSubtitles = useSubtitleWrong({
+    filmId: film.id,
+    editionId: edition.id,
+    kind: downloadKind,
+  });
   // Deletes and blocks the download, then stops showing it: a full one falls back to Off (the forced lines still show
   // when there are any), a forced one to what the player would otherwise show. Playback itself is not touched.
   const reportWrong = async () => {
     const kind = downloadKind;
     if (kind && (await wrongSubtitles.report(kind))) {
       setRemoved((r) => ({ ...r, [kind]: true }));
-      if (kind === 'FULL') setChosenSubtitle(SUBTITLE_OFF);
+      // Only the choice that showed the download falls back to Off: a pick made while the request ran stays.
+      if (kind === 'FULL')
+        setChosenSubtitle((c) => (c === null || c === FULL_KEY ? SUBTITLE_OFF : c));
       setToast(subtitlesWrong.done);
     }
   };

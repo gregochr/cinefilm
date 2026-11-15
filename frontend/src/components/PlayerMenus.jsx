@@ -90,7 +90,7 @@ export function QualityMenu({ qualities, value, width, activeRung, onSelect }) {
 }
 
 /**
- * "Subtitles are wrong": offered only while a downloaded subtitle shows (`wrongKind` is its kind, else null). It never
+ * "Subtitles are wrong": offered only while a downloaded subtitle shows (`wrong.available`). It never
  * leaves the menu: the player decides what happens once the download is gone. `aria-disabled`, not `disabled`, while
  * the request runs, so the button keeps focus.
  */
@@ -132,11 +132,12 @@ export function AudioSubtitlesPanel({
   const ref = useRef(null);
   const subtitlesRef = useRef(null);
   useFocusChecked(ref);
-  // The button leaves once the download is gone, taking focus with it: land on the checked subtitle instead.
+  // The button leaves once the download is gone. If it took focus with it, land on the checked subtitle instead; when
+  // the viewer is elsewhere in the panel (picked another audio track, say), focus stays where it is.
   const hadWrong = useRef(Boolean(wrong?.available));
   useEffect(() => {
     const has = Boolean(wrong?.available);
-    if (hadWrong.current && !has) {
+    if (hadWrong.current && !has && !ref.current?.contains(document.activeElement)) {
       const root = subtitlesRef.current;
       (
         root?.querySelector('[role="menuitemradio"][aria-checked="true"]') ??

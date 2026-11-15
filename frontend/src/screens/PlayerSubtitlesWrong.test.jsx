@@ -309,4 +309,28 @@ describe('the player’s "Subtitles are wrong"', () => {
     expect(load.mock.calls.length).toBe(loads);
     load.mockRestore();
   });
+
+  it('keeps a subtitle the viewer picked while the delete was running', async () => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    await openPlayer({
+      mutate: (f) => fullOn(f),
+      answer: (method) => (method === 'DELETE' ? gate.then(() => respond(null, 204)) : null),
+    });
+    await openPanel();
+    await userEvent.click(wrongAction());
+    await userEvent.click(within(subtitlesMenu()).getByRole('menuitemradio', { name: 'English' }));
+
+    release();
+    await screen.findByText('Subtitle download removed. CineFilm won’t use it again.');
+
+    expect(within(subtitlesMenu()).getByRole('menuitemradio', { name: 'English' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(streamTrack('English').track.mode).toBe('showing');
+    expect(screen.queryByTestId('full-subtitle-track')).not.toBeInTheDocument();
+  });
 });

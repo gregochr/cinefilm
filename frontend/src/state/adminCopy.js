@@ -485,9 +485,9 @@ export const subtitlesPage = {
       { text: 'Subtitles look wrong on a film? Fix them from that film’s page (' },
       { text: 'Subtitles → Fix…', bold: true },
       {
-        text: ') or in the player — that’s where timing, replacing a file and “This is wrong” now live, next to the film you’re watching.',
+        text: ') or in the player — that’s where timing, replacing a file and “Subtitles are wrong” now live, next to the film you’re watching.',
       },
-    ], // AR2. Until Film detail has them, the per-file tools stay under "Show all subtitle files" (plan, 4a).
+    ], // AR2, except the player's action is “Subtitles are wrong” (AR7), not AR2's “This is wrong” (8a). Until 8b the per-file tools stay under "Show all subtitle files" (plan, 4a).
   },
   files: {
     heading: 'Subtitle files', // planner, 4a

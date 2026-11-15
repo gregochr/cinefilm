@@ -316,4 +316,16 @@ describe('AudioSubtitlesPanel: Subtitles are wrong', () => {
 
     expect(within(subs()).getAllByRole('menuitemradio')[0]).toHaveFocus();
   });
+
+  it('leaves focus alone when the action goes away while the viewer is elsewhere in the panel', () => {
+    const { rerender } = render(<AudioSubtitlesPanel {...props} wrong={wrongOf()} />);
+    const audio = screen.getByRole('menuitemradio', { name: /English 5.1/ });
+    audio.focus();
+
+    rerender(
+      <AudioSubtitlesPanel {...props} subtitleValue="off" wrong={wrongOf({ available: false })} />,
+    );
+
+    expect(audio).toHaveFocus();
+  });
 });

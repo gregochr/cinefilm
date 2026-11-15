@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { ApiError } from '../api/client.js';
 import { adminApi } from '../api/resources.js';
 import { LookupFailed, wrongProblem, wrongTargets } from './subtitleFix.js';
 
@@ -8,27 +9,35 @@ import { LookupFailed, wrongProblem, wrongTargets } from './subtitleFix.js';
  * (`GET /api/admin/subtitles`), so it is never stale, then `DELETE /api/admin/subtitles/{id}` runs on it. It touches
  * nothing of the playback: no session, no seek, no reload. `report(kind)` resolves true once the download is gone;
  * a second call while one runs does nothing (a ref, so two clicks in one frame send one request); a failure sets
- * `problem` in words and leaves everything as it was.
+ * `problem` in words (shown only while that kind of download still shows) and leaves everything as it was. A 404 on
+ * the delete counts as removed: the row was already gone.
  */
-export function useSubtitleWrong({ filmId, editionId }) {
+export function useSubtitleWrong({ filmId, editionId, kind: shownKind = null }) {
   const running = useRef(false);
   const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState(null);
+  const [failure, setFailure] = useState(null);
 
   const report = useCallback(
     async (kind) => {
       if (running.current) return false;
       running.current = true;
       setBusy(true);
-      setProblem(null);
+      setFailure(null);
       try {
         const rows = await adminApi.subtitles();
         const targets = wrongTargets(rows, { filmId, editionId, kind });
         if (targets.length === 0) throw new LookupFailed();
-        for (const target of targets) await adminApi.removeSubtitle(target.id);
+        for (const target of targets) {
+          try {
+            await adminApi.removeSubtitle(target.id);
+          } catch (gone) {
+            // Already gone between the list and the delete: that is what the viewer wanted.
+            if (!(gone instanceof ApiError && gone.status === 404)) throw gone;
+          }
+        }
         return true;
-      } catch (failure) {
-        setProblem(wrongProblem(failure));
+      } catch (error) {
+        setFailure({ kind, text: wrongProblem(error) });
         return false;
       } finally {
         running.current = false;
@@ -38,5 +47,6 @@ export function useSubtitleWrong({ filmId, editionId }) {
     [filmId, editionId],
   );
 
-  return { busy, problem, report };
+  // A failure belongs to the download it was for: another one on screen starts clean.
+  return { busy, problem: failure?.kind === shownKind ? failure.text : null, report };
 }

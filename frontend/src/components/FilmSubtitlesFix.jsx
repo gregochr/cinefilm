@@ -26,7 +26,7 @@ import SubtitleCueList from './SubtitleCueList.jsx';
 import { useDialog } from './useDialog.js';
 
 /** One subtitle file of the film with the tools that apply to it (`fileTools`). */
-function FixFile({ item, busy, problem, actions, onRemoved }) {
+function FixFile({ item, busy, problem, actions, onRemoved, onDone }) {
   const [previewing, setPreviewing] = useState(false);
   const cuesId = useId();
   const tools = fileTools(item);
@@ -72,7 +72,9 @@ function FixFile({ item, busy, problem, actions, onRemoved }) {
             hint={buttons.useMyFileInstead.hint}
             aria-label={`${buttons.useMyFileInstead.label}: ${name}`}
             disabled={busy}
-            onClick={() => actions.verify(item.id)}
+            onClick={async () => {
+              if (await actions.verify(item.id)) onDone(copy.usedMine);
+            }}
           >
             {buttons.useMyFileInstead.label}
           </ActionWithHint>
@@ -83,7 +85,9 @@ function FixFile({ item, busy, problem, actions, onRemoved }) {
             hint={buttons.letCineFilmDecide.hint}
             aria-label={`${buttons.letCineFilmDecide.label}: ${name}`}
             disabled={busy}
-            onClick={() => actions.detach(item.id)}
+            onClick={async () => {
+              if (await actions.detach(item.id)) onDone(copy.decided);
+            }}
           >
             {buttons.letCineFilmDecide.label}
           </ActionWithHint>
@@ -122,7 +126,7 @@ function FixFile({ item, busy, problem, actions, onRemoved }) {
 }
 
 /** The list of the film's files, or why there is none. */
-function Files({ subtitles, files, onRemoved }) {
+function Files({ subtitles, files, onRemoved, onDone }) {
   const { items, loading, error, reload } = subtitles;
   if (loading && !items) {
     return (
@@ -147,6 +151,7 @@ function Files({ subtitles, files, onRemoved }) {
               problem={subtitles.problem?.id === item.id ? subtitles.problem.text : null}
               actions={subtitles}
               onRemoved={onRemoved}
+              onDone={onDone}
             />
           ))}
         </ul>
@@ -170,17 +175,18 @@ export default function FilmSubtitlesFix({ film, opener, onClose, onChanged }) {
   const { dialogRef, closing, close } = dialog;
   const subtitles = useSubtitles(`film:${film.id}`, onChanged);
   const [adding, setAdding] = useState(false);
-  const [removals, setRemovals] = useState(0);
+  const [notice, setNotice] = useState({ n: 0, text: REMOVED_NOTICE });
   const closeRef = useRef(null);
   const noticeRef = useRef(null);
   const addRef = useRef(null);
   useEffect(() => {
     closeRef.current?.focus();
   }, []);
-  // The removed file's row is gone and took focus with it: the notice takes it.
+  // The button that was used is gone (the row left, or its tool no longer applies) and took focus with it: the notice takes it.
   useEffect(() => {
-    if (removals > 0) noticeRef.current?.focus();
-  }, [removals]);
+    if (notice.n > 0) noticeRef.current?.focus();
+  }, [notice]);
+  const say = (text) => setNotice((prev) => ({ n: prev.n + 1, text }));
   const files = subtitles.items ? filmFiles(subtitles.items, film.id) : [];
   const attached = () => {
     announceLibraryChanged();
@@ -230,21 +236,22 @@ export default function FilmSubtitlesFix({ film, opener, onClose, onChanged }) {
         <div className="ee__body">
           <div className="ee__stack">
             <p className="admin__text">{copy.lead}</p>
-            {removals > 0 ? (
+            {notice.n > 0 ? (
               <p
-                key={removals}
+                key={notice.n}
                 className="admin__text subs__notice"
                 role="status"
                 tabIndex={-1}
                 ref={noticeRef}
               >
-                {REMOVED_NOTICE}
+                {notice.text}
               </p>
             ) : null}
             <Files
               subtitles={subtitles}
               files={files}
-              onRemoved={() => setRemovals((n) => n + 1)}
+              onRemoved={() => say(REMOVED_NOTICE)}
+              onDone={say}
             />
             <div className="fix__add">
               <ActionWithHint

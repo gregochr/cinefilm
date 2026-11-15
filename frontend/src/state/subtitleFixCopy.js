@@ -21,6 +21,8 @@ export const subtitleFix = {
   tryAgain: 'Try again', // the existing Admin word
   playing: 'Playing', // the existing Admin tag
   yourFile: 'Your file', // planner, 8a
+  usedMine: 'Your file plays instead of the download.', // planner, 8a
+  decided: 'CineFilm decides for that file again.', // planner, 8a
   full: 'Full', // the existing Admin tag
   forced: 'Forced', // planner, 8a
 };
