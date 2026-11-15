@@ -9,6 +9,7 @@ afterEach(() => {
 });
 
 const FULL = '/api/admin/subtitles/full-need';
+const FORCED = '/api/admin/forced-subtitles/films';
 const SUMMARY = '/api/admin/summary';
 
 const rashomon = () => fullRow(); // unresolved, owner-set, nothing found
@@ -22,6 +23,8 @@ const dasBoot = () =>
     unresolved: false,
     fullSubtitle: { source: 'SIDECAR' },
     originalLanguage: 'de',
+    ownerChoice: null,
+    reason: 'FOREIGN_AUDIO',
   });
 
 /** A server with the two lists and the choice routes; every other route answers with the defaults. */
@@ -93,7 +96,9 @@ describe('Admin Subtitles section: the page', () => {
     expect(rash).toBeInTheDocument();
     expect(screen.getByText('· 1950')).toBeInTheDocument();
     expect(
-      screen.getByText('Spoken: Japanese · Set by you · none found automatically on OpenSubtitles'),
+      screen.getByText(
+        'Spoken: Japanese · Set by you · nothing found automatically on OpenSubtitles',
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -149,6 +154,7 @@ describe('Admin Subtitles section: the page', () => {
 
   it('shows the being-checked count from the server, and the other counts', async () => {
     serve({
+      english: 530,
       full: [
         rashomon(),
         dasBoot(),
@@ -162,14 +168,26 @@ describe('Admin Subtitles section: the page', () => {
     renderApp('/admin/subtitles');
 
     const figures = await screen.findByRole('list', { name: 'Everything else' });
-    // Three films in the full list, 538 in the library (the summary fixture): 535 are in English.
+    // The figures are the server's counts: one subtitled film, and 530 English films outside the list.
     expect(
       await within(figures).findByText('foreign film has English subtitles'),
     ).toBeInTheDocument();
-    expect(await within(figures).findByText('535')).toBeInTheDocument();
+    expect(await within(figures).findByText('530')).toBeInTheDocument();
     expect(within(figures).getByText('films are in English')).toBeInTheDocument();
     expect(within(figures).getByText('being checked online now')).toBeInTheDocument();
     expect(within(figures).getByText('2')).toBeInTheDocument();
+  });
+
+  it('says how many are being checked only once both lists have been read', async () => {
+    const server = serveNeeds({ full: [rashomon()], forced: [taken()], english: 5 });
+    installFetch((method, url, init) =>
+      url === FORCED ? respond(null, 500) : server.route(method, url, init),
+    );
+    renderApp('/admin/subtitles');
+
+    const figures = await screen.findByRole('list', { name: 'Everything else' });
+    expect(await within(figures).findByText('films are in English')).toBeInTheDocument();
+    expect(within(figures).queryByText('being checked online now')).not.toBeInTheDocument();
   });
 });
 
@@ -399,6 +417,67 @@ describe('Admin Subtitles section: Add my own file…', () => {
   });
 });
 
+describe('Admin Subtitles section: Your choices', () => {
+  it('gives a choice back with null, the film leaves Your choices, the page reads again, and it stays gone', async () => {
+    const server = serve();
+    const first = renderApp('/admin/subtitles');
+    // Rashomon (owner: needed) and the forced list's film are not in this fake with a choice: one choice only.
+    await userEvent.click(await screen.findByRole('button', { name: 'Your choices (1)' }));
+    const summaryBefore = server.summaryReads();
+    const fullReadsBefore = server.reads.full;
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Let CineFilm decide: Rashomon (1950), full subtitles' }),
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /^Your choices/ })).not.toBeInTheDocument(),
+    );
+    expect(server.calls).toEqual([{ filmId: 6, kind: 'full', body: { choice: null } }]);
+    expect(server.puts()[0][0]).toBe('/api/admin/films/6/full-need');
+    await waitFor(() => expect(server.summaryReads()).toBeGreaterThan(summaryBefore));
+    expect(server.reads.full).toBeGreaterThan(fullReadsBefore);
+    expect(screen.getByRole('heading', { name: 'Everything else' })).toHaveFocus();
+
+    first.unmount();
+    renderApp('/admin/subtitles');
+    await screen.findByRole('heading', { name: 'Everything else' });
+    await screen.findByText('Rashomon');
+    expect(screen.queryByRole('button', { name: /^Your choices/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps the choice and says so on its row when giving it back fails', async () => {
+    serve({ fail: () => respond({ error: 'boom' }, 500) });
+    renderApp('/admin/subtitles');
+    await userEvent.click(await screen.findByRole('button', { name: 'Your choices (1)' }));
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Let CineFilm decide: Rashomon (1950), full subtitles' }),
+    );
+
+    const choices = screen.getByRole('list', { name: 'Your choices' });
+    expect(await within(choices).findByRole('alert')).toHaveTextContent("Couldn't save: try again");
+    expect(screen.getByRole('button', { name: 'Your choices (1)' })).toBeInTheDocument();
+  });
+
+  it('lists a choice made on the page, so "It’s English" can be undone from here', async () => {
+    const server = serve();
+    renderApp('/admin/subtitles');
+    await tab('Foreign-language films 2');
+    await screen.findByText('Downfall');
+    await userEvent.click(within(rowOf('Downfall')).getByRole('button', { name: 'It’s English' }));
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Your choices (2)' }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Let CineFilm decide: Downfall (2004), full subtitles' }),
+    );
+
+    await waitFor(() => expect(server.calls).toHaveLength(2));
+    expect(server.calls[1]).toEqual({ filmId: 8, kind: 'full', body: { choice: null } });
+    await screen.findByRole('button', { name: 'Your choices (1)' });
+  });
+});
+
 describe('Admin Subtitles section: tabs by keyboard', () => {
   it('moves between the tabs with the arrows, Home and End, and keeps one tab in the tab order', async () => {
     serve();
@@ -478,13 +557,13 @@ describe('Admin Subtitles section: Everything else', () => {
     serve();
     renderApp('/admin/subtitles');
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Show the 1 films' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Show the 1 film' }));
 
     const list = screen.getByRole('list', { name: 'Foreign films with English subtitles' });
     expect(within(list).getByText('Das Boot (1981)')).toBeInTheDocument();
     expect(within(list).getByText('· Playing: your file')).toBeInTheDocument();
     expect(within(list).queryByRole('button')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Hide the 1 films' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Hide the 1 film' }));
     expect(
       screen.queryByRole('list', { name: 'Foreign films with English subtitles' }),
     ).not.toBeInTheDocument();

@@ -111,6 +111,8 @@
     "unknown": 1,
     "notNeeded": 1,
     "unresolved": 7,
-    "beingChecked": 1
+    "beingChecked": 1,
+    "subtitled": 1,
+    "inEnglish": 530
   }
 }

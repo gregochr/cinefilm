@@ -75,7 +75,7 @@ describe('Admin To do groups', () => {
     expect(within(english).getByText('Rashomon')).toBeInTheDocument();
     expect(within(english).getByText('· 1950')).toBeInTheDocument();
     expect(
-      within(english).getByText('Spoken: Japanese · none found automatically on OpenSubtitles'),
+      within(english).getByText('Spoken: Japanese · nothing found automatically on OpenSubtitles'),
     ).toBeInTheDocument();
     const forced = await group('Forced subtitles not found');
     expect(within(forced).getByText('Taken')).toBeInTheDocument();
@@ -526,10 +526,20 @@ describe('Admin To do: more than five rows', () => {
   });
 
   it('expands Show all in place, keeps focus on the same button, and Show fewer folds it back', async () => {
-    const fetchMock = installFetch(many);
+    // Plex never finishes an import, so no stamp of its lands late and reads the lists again.
+    const fetchMock = installFetch((m, url) =>
+      url === '/api/admin/plex'
+        ? respond({ ...fixtures.adminPlex, lastImport: null })
+        : many(m, url),
+    );
     renderApp('/admin');
     const pick = await group('Pick the right film');
-    const reads = () => fetchMock.mock.calls.length;
+    // Every group has answered before the count starts, so no first read is still to come.
+    await group('Sort out several files');
+    await group('English subtitles missing');
+    await group('Forced subtitles not found');
+    const LISTS = [ATTENTION, FULL, FORCED];
+    const reads = () => fetchMock.mock.calls.filter(([url]) => LISTS.includes(url)).length;
     const before = reads();
 
     await userEvent.click(within(pick).getByRole('button', { name: 'Show all 7' }));

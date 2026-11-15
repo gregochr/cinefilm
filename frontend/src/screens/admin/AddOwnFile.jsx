@@ -20,7 +20,7 @@ function Problem({ children, onRetry }) {
 /**
  * "Add my own file…" for one film: choose one of the owner's full subtitle files, the edition and (for a split
  * edition) the part, then "Attach". It is the existing attach route, scoped to the film. `onAttached` runs once the
- * server has accepted it; `onCancel` closes the form. Nothing is sent before "Attach".
+ * server has accepted it; `onCancel` closes the form (not while an attach is in flight). Nothing is sent before "Attach".
  */
 export default function AddOwnFile({ filmId, title, onAttached, onCancel }) {
   const picker = useFilmFilePicker(filmId);
@@ -57,6 +57,14 @@ export default function AddOwnFile({ filmId, title, onAttached, onCancel }) {
             </label>
           ))}
         </fieldset>
+      ) : null}
+      {picker.editionsLoading ? (
+        <p className="admin__text" role="status">
+          {copy.loadingEditions}
+        </p>
+      ) : null}
+      {!picker.editionsLoading && !picker.editionsError && picker.editions.length === 0 ? (
+        <p className="admin__text">{copy.noEdition}</p>
       ) : null}
       {picker.editionsError ? (
         <Problem onRetry={picker.retryEditions}>{copy.editionsError}</Problem>
@@ -109,7 +117,15 @@ export default function AddOwnFile({ filmId, title, onAttached, onCancel }) {
         >
           {picker.attaching ? copy.attaching : copy.attach}
         </Button>
-        <Button onClick={onCancel}>{copy.cancel}</Button>
+        {/* Not while an attach is in flight: closing the form then would let it be opened and sent again. */}
+        <Button
+          aria-disabled={picker.attaching || undefined}
+          onClick={() => {
+            if (!picker.attaching) onCancel();
+          }}
+        >
+          {copy.cancel}
+        </Button>
       </div>
     </form>
   );

@@ -72,6 +72,23 @@ export function sidecarGroups(items) {
   })).filter((group) => group.items.length > 0);
 }
 
+/**
+ * The first `limit` files across the groups, in the order they are drawn (Unmatched, Conflicts, Missing, Matched): a
+ * group is cut where the limit falls and a group left with no file is dropped, so a file that belongs under Unmatched
+ * is on the first page whatever its place in the server's list.
+ */
+export function takeFiles(groups, limit) {
+  let left = limit;
+  const taken = [];
+  for (const group of groups) {
+    if (left <= 0) break;
+    const items = group.items.slice(0, left);
+    left -= items.length;
+    taken.push({ ...group, items });
+  }
+  return taken;
+}
+
 /** Where a file belongs: "The Two Towers · Extended Edition · whole film", "… · part 2", or that it is unattached. */
 export function placement(item) {
   if (item.filmId == null) return 'Not attached to a film';

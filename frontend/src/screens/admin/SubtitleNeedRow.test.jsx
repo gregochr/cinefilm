@@ -24,7 +24,7 @@ describe('SubtitleNeedRow: a foreign-language film', () => {
     renderRow({ row: fullRow(), kind: 'foreign' });
 
     expect(screen.getByRole('button', { name: 'Add my own file…' })).toHaveAccessibleDescription(
-      'Picks which film (and part) a subtitle file belongs to.',
+      'Picks one of your subtitle files for this film',
     );
     expect(screen.queryByRole('button', { name: 'It’s English' })).not.toBeInTheDocument();
     expect(screen.getAllByRole('button')).toHaveLength(1);

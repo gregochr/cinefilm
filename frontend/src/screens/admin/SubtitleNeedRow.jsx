@@ -39,11 +39,11 @@ export default function SubtitleNeedRow({ row, kind, saving, problem, onChoose, 
               <ActionWithHint
                 key={action}
                 ref={addRef}
-                hint={buttons.addMyFile.hint}
+                hint={buttons.addFileToFilm.hint}
                 aria-expanded={adding}
                 onClick={() => setAdding(!adding)}
               >
-                {buttons.addMyFile.label}
+                {buttons.addFileToFilm.label}
               </ActionWithHint>
             );
           }

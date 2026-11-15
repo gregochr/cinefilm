@@ -23,6 +23,7 @@ import {
   reportLine,
   servedLine,
   sidecarGroups,
+  takeFiles,
   warningsFor,
 } from '../state/subtitleAdmin.js';
 import { cueResourceKey, useSubtitleCues, useSubtitles } from '../state/useSubtitles.js';
@@ -383,7 +384,8 @@ export default function SubtitlesPanel({ version, onChanged }) {
       </p>
     );
   } else {
-    const groups = sidecarGroups(shown.slice(0, limit));
+    // Grouped first, then cut: the first page holds the first files as they are drawn, not as the server listed them.
+    const groups = takeFiles(sidecarGroups(shown), limit);
     body = (
       <>
         <div className="segmented subs__segmented" role="group" aria-label="Show subtitle files">

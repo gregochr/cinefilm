@@ -59,9 +59,14 @@ public final class FullNeedDtos {
      * @param notNeeded films that are {@code NOT_NEEDED}
      * @param unresolved films whose row is {@code unresolved}
      * @param beingChecked films whose row is {@code beingChecked}
+     * @param subtitled browsable films whose need is {@code NEEDED} and that play a full English subtitle (the rows
+     *     {@code AdminTodoRules} calls settled)
+     * @param inEnglish browsable films whose full need is {@code NOT_NEEDED}, in or out of this list's scope: English
+     *     originals, English dubs and the owner's "not needed". A film with no TMDB language ({@code UNKNOWN}) is not
+     *     counted
      */
     public record FullNeedCountsDto(int needed, int unsure, int unknown, int notNeeded, int unresolved,
-                                    int beingChecked) {
+                                    int beingChecked, int subtitled, int inEnglish) {
     }
 
     /**

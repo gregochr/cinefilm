@@ -28,12 +28,21 @@ const figures = (over = {}) => ({
   ...over,
 });
 
+const needState = (rows = []) => ({
+  rows,
+  saving: {},
+  problems: {},
+  choose: vi.fn(() => Promise.resolve()),
+});
+const NEEDS = { full: needState(), forced: needState() };
+
 function renderElse(props = {}) {
   installFetch();
   return render(
     <MemoryRouter>
       <SubtitleEverythingElse
         figures={figures()}
+        needs={NEEDS}
         scan={fixtures.adminScan}
         version="v1"
         onChanged={vi.fn()}
@@ -84,7 +93,7 @@ describe('SubtitleEverythingElse', () => {
 
   it('toggles the read-only list of films with its button state', async () => {
     renderElse();
-    const toggle = screen.getByRole('button', { name: 'Show the 1 films' });
+    const toggle = screen.getByRole('button', { name: 'Show the 1 film' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(toggle).not.toHaveAttribute('aria-controls');
 
@@ -95,7 +104,7 @@ describe('SubtitleEverythingElse', () => {
     expect(toggle).toHaveAttribute('aria-controls', films.id);
     expect(within(films).getByText('Das Boot (1981)')).toBeInTheDocument();
     expect(within(films).getByText('· Playing: your file')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Hide the 1 films' })).toBe(toggle);
+    expect(screen.getByRole('button', { name: 'Hide the 1 film' })).toBe(toggle);
   });
 
   it('keeps the file list closed, and unread, until asked', async () => {
@@ -104,6 +113,7 @@ describe('SubtitleEverythingElse', () => {
       <MemoryRouter>
         <SubtitleEverythingElse
           figures={figures()}
+          needs={NEEDS}
           scan={fixtures.adminScan}
           version="v1"
           onChanged={vi.fn()}
@@ -126,6 +136,28 @@ describe('SubtitleEverythingElse', () => {
     expect(
       screen.getByText(/or in the player — that’s where timing, replacing a file/),
     ).toBeInTheDocument();
+  });
+});
+
+describe('SubtitleEverythingElse: Your choices', () => {
+  it('shows the toggle only while the lists hold a choice of the owner’s', () => {
+    const { rerender } = renderElse();
+    expect(screen.queryByRole('button', { name: /^Your choices/ })).not.toBeInTheDocument();
+
+    const chosen = fullRow({ ownerChoice: 'NOT_NEEDED' });
+    rerender(
+      <MemoryRouter>
+        <SubtitleEverythingElse
+          figures={figures()}
+          needs={{ full: needState([chosen]), forced: needState() }}
+          scan={fixtures.adminScan}
+          version="v1"
+          onChanged={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Your choices (1)' })).toBeInTheDocument();
   });
 });
 

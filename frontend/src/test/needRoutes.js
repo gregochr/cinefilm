@@ -25,7 +25,27 @@ export const unlabelledRow = (over = {}) =>
     ...over,
   });
 
-const counts = (rows) => ({
+const needCount = (rows, need) => rows.filter((r) => r.need === need).length;
+
+/** The full list's `counts`, in the API's shape; `english` is the English films outside the list (always counted). */
+const fullCounts = (rows, english) => ({
+  needed: needCount(rows, 'NEEDED'),
+  unsure: needCount(rows, 'UNSURE'),
+  unknown: needCount(rows, 'UNKNOWN'),
+  notNeeded: needCount(rows, 'NOT_NEEDED'),
+  unresolved: rows.filter((r) => r.unresolved).length,
+  beingChecked: rows.filter((r) => r.beingChecked).length,
+  subtitled: rows.filter((r) => r.need === 'NEEDED' && r.fullSubtitle).length,
+  inEnglish: english + needCount(rows, 'NOT_NEEDED'),
+});
+
+/** The forced list's `counts`, in the API's shape. */
+const forcedCounts = (rows) => ({
+  needed: needCount(rows, 'NEEDED'),
+  neededMissing: rows.filter((r) => r.need === 'NEEDED' && !r.hasForcedSubtitle).length,
+  unsure: needCount(rows, 'UNSURE'),
+  unknown: needCount(rows, 'UNKNOWN'),
+  notNeeded: needCount(rows, 'NOT_NEEDED'),
   unresolved: rows.filter((r) => r.unresolved).length,
   beingChecked: rows.filter((r) => r.beingChecked).length,
 });
@@ -34,9 +54,10 @@ const counts = (rows) => ({
  * A stateful fake of the two need lists and their owner-choice routes, for the fetch boundary (`installFetch`):
  * a choice is saved the way the server saves it (the film is `OWNER`'s and no longer unresolved or being checked),
  * recorded in `calls`, and every later read of the list shows it, so a reload keeps it. `fail` is a function
- * `(kind) => Response | null` that turns a PUT into a failure; `gate` holds PUTs until the test lets them through.
+ * `(kind) => Response | null` that turns a PUT into a failure; `english` is how many English films the full list
+ * does not hold (they count as "in English"); `gate` holds PUTs until the test lets them through.
  */
-export function serveNeeds({ full = [], forced = [], fail = () => null, gate } = {}) {
+export function serveNeeds({ full = [], forced = [], english = 0, fail = () => null, gate } = {}) {
   const lists = { full: structuredClone(full), forced: structuredClone(forced) };
   const calls = [];
   const reads = { full: 0, forced: 0 };
@@ -44,11 +65,11 @@ export function serveNeeds({ full = [], forced = [], fail = () => null, gate } =
     const path = new URL(url, 'http://test.local').pathname;
     if (path === '/api/admin/subtitles/full-need') {
       reads.full += 1;
-      return respond({ films: lists.full, counts: counts(lists.full) });
+      return respond({ films: lists.full, counts: fullCounts(lists.full, english) });
     }
     if (path === '/api/admin/forced-subtitles/films') {
       reads.forced += 1;
-      return respond({ films: lists.forced, counts: counts(lists.forced) });
+      return respond({ films: lists.forced, counts: forcedCounts(lists.forced) });
     }
     const put = path.match(/^\/api\/admin\/films\/(\d+)\/(full|forced)-need$/);
     if (!put || method !== 'PUT') return null;
@@ -62,14 +83,18 @@ export function serveNeeds({ full = [], forced = [], fail = () => null, gate } =
       if (failure) return failure;
       const rows = lists[kind];
       const at = rows.findIndex((r) => r.filmId === Number(id));
-      rows[at] = {
-        ...rows[at],
-        need: body.choice,
-        reason: 'OWNER',
-        ownerChoice: body.choice,
-        unresolved: false,
-        beingChecked: false,
-      };
+      // Giving the choice back (`null`) leaves the film as it was, with no owner's choice.
+      rows[at] =
+        body.choice === null
+          ? { ...rows[at], ownerChoice: null }
+          : {
+              ...rows[at],
+              need: body.choice,
+              reason: 'OWNER',
+              ownerChoice: body.choice,
+              unresolved: false,
+              beingChecked: false,
+            };
       return respond(rows[at]);
     })();
   };

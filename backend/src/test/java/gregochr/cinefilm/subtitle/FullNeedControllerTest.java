@@ -47,7 +47,8 @@ class FullNeedControllerTest {
 
     @Test
     void theListReturnsEachFilmWithItsShapeAndTheCounts() throws Exception {
-        when(service.list()).thenReturn(new FullNeedListDto(List.of(AMELIE), new FullNeedCountsDto(1, 2, 3, 4, 5, 6)));
+        when(service.list()).thenReturn(
+            new FullNeedListDto(List.of(AMELIE), new FullNeedCountsDto(1, 2, 3, 4, 5, 6, 7, 8)));
 
         mvc.perform(get("/api/admin/subtitles/full-need").with(user("owner")))
             .andExpect(status().isOk())
@@ -70,7 +71,9 @@ class FullNeedControllerTest {
             .andExpect(jsonPath("$.films[0].beingChecked").value(true))
             .andExpect(jsonPath("$.counts.notNeeded").value(4))
             .andExpect(jsonPath("$.counts.unresolved").value(5))
-            .andExpect(jsonPath("$.counts.beingChecked").value(6));
+            .andExpect(jsonPath("$.counts.beingChecked").value(6))
+            .andExpect(jsonPath("$.counts.subtitled").value(7))
+            .andExpect(jsonPath("$.counts.inEnglish").value(8));
     }
 
     @Test

@@ -10,6 +10,7 @@ import {
   foreignLine,
   forcedRowLine,
   isUnlabelled,
+  ownerChoices,
   tabAfterKey,
   unresolvedRows,
 } from './adminSubtitles.js';
@@ -55,7 +56,7 @@ describe('unresolvedRows', () => {
 describe('foreignLine', () => {
   it('names the language and says nothing was found', () => {
     expect(foreignLine(full())).toBe(
-      'Spoken: Japanese · none found automatically on OpenSubtitles',
+      'Spoken: Japanese · nothing found automatically on OpenSubtitles',
     );
   });
 
@@ -67,13 +68,13 @@ describe('foreignLine', () => {
 
   it('says so when the owner called the film needed', () => {
     expect(foreignLine(full({ reason: 'OWNER' }))).toBe(
-      'Spoken: Japanese · Set by you · none found automatically on OpenSubtitles',
+      'Spoken: Japanese · Set by you · nothing found automatically on OpenSubtitles',
     );
   });
 
   it('says the language is not known when TMDB gave none', () => {
     expect(foreignLine(full({ originalLanguage: null }))).toBe(
-      'Language not known yet · none found automatically on OpenSubtitles',
+      'Language not known yet · nothing found automatically on OpenSubtitles',
     );
   });
 
@@ -115,46 +116,71 @@ describe('everythingElse', () => {
     full({ filmId: 3, need: 'NOT_NEEDED', fullSubtitle: { source: 'SIDECAR' }, unresolved: false }),
     full({ filmId: 4 }),
   ];
+  const fullCounts = { beingChecked: 1, subtitled: 70, inEnglish: 1341 };
+  const forcedCounts = { beingChecked: 2 };
 
-  it('counts the foreign films whose English subtitles play, the other library films and the checks', () => {
-    const figures = everythingElse({
-      fullRows: rows,
-      fullCounts: { beingChecked: 1 },
-      forcedCounts: { beingChecked: 2 },
-      libraryFilms: 10,
-    });
-    expect(figures.haveSubtitles).toBe(2);
-    expect(figures.films.map((r) => r.filmId)).toEqual([1, 2]);
-    expect(figures.inEnglish).toBe(6);
+  it('reads the two figures from the server’s counts, never from the rows, and adds the checks', () => {
+    const figures = everythingElse({ fullRows: rows, fullCounts, forcedCounts });
+
+    // The rows would say 2 and 4: the server's counts (browsable films, the whole library) win.
+    expect(figures.haveSubtitles).toBe(70);
+    expect(figures.inEnglish).toBe(1341);
     expect(figures.beingChecked).toBe(3);
+    // The read-only list is the rows that play a subtitle.
+    expect(figures.films.map((r) => r.filmId)).toEqual([1, 2]);
   });
 
   it('is null for each figure until what it needs has been read', () => {
+    expect(everythingElse({ fullRows: null, fullCounts: null, forcedCounts: null })).toEqual({
+      films: null,
+      haveSubtitles: null,
+      inEnglish: null,
+      beingChecked: null,
+    });
+    const onlyFull = everythingElse({ fullRows: rows, fullCounts, forcedCounts: null });
+    expect(onlyFull.haveSubtitles).toBe(70);
+    expect(onlyFull.inEnglish).toBe(1341);
+  });
+
+  it('waits for both lists before it says how many are being checked', () => {
     expect(
-      everythingElse({ fullRows: null, fullCounts: null, forcedCounts: null, libraryFilms: null }),
-    ).toEqual({ films: null, haveSubtitles: null, inEnglish: null, beingChecked: null });
+      everythingElse({ fullRows: rows, fullCounts, forcedCounts: null }).beingChecked,
+    ).toBeNull();
     expect(
-      everythingElse({ fullRows: rows, fullCounts: null, forcedCounts: null, libraryFilms: null })
-        .inEnglish,
+      everythingElse({ fullRows: null, fullCounts: null, forcedCounts }).beingChecked,
     ).toBeNull();
   });
 
-  it('counts the checks of the one list that has been read, and never goes below zero', () => {
+  it('shows zero as zero', () => {
     const figures = everythingElse({
-      fullRows: rows,
-      fullCounts: null,
-      forcedCounts: { beingChecked: 2 },
-      libraryFilms: 1,
+      fullRows: [],
+      fullCounts: { beingChecked: 0, subtitled: 0, inEnglish: 0 },
+      forcedCounts: { beingChecked: 0 },
     });
-    expect(figures.beingChecked).toBe(2);
-    expect(figures.inEnglish).toBe(0);
+    expect(figures).toMatchObject({ haveSubtitles: 0, inEnglish: 0, beingChecked: 0, films: [] });
+  });
+});
+
+describe('ownerChoices', () => {
+  it('lists the films the server says the owner chose for, full first, each list in its order', () => {
+    const fullRows = [
+      full({ filmId: 1, ownerChoice: 'NOT_NEEDED' }),
+      full({ filmId: 2, ownerChoice: null }),
+      full({ filmId: 3, ownerChoice: 'NEEDED' }),
+    ];
+    const forcedRows = [{ filmId: 9, title: 'Taken', ownerChoice: 'NOT_NEEDED' }, { filmId: 8 }];
+
+    const choices = ownerChoices({ fullRows, forcedRows });
+
+    expect(choices.map((c) => [c.kind, c.row.filmId])).toEqual([
+      ['full', 1],
+      ['full', 3],
+      ['forced', 9],
+    ]);
   });
 
-  it('treats a counts object without beingChecked as none', () => {
-    expect(
-      everythingElse({ fullRows: [], fullCounts: {}, forcedCounts: null, libraryFilms: 3 })
-        .beingChecked,
-    ).toBe(0);
+  it('adds nothing for a list that has not been read', () => {
+    expect(ownerChoices({ fullRows: null, forcedRows: null })).toEqual([]);
   });
 });
 

@@ -1622,6 +1622,15 @@
   gap: 6px;
   font-size: 14px;
 }
+.admin__else-choice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+}
+.admin__else-choice .admin__todo-problem {
+  flex-basis: 100%;
+}
 .admin__else-note {
   margin: 0;
   padding: 14px 22px;

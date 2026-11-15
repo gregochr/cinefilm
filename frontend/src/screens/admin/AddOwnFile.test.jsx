@@ -51,7 +51,7 @@ describe('AddOwnFile', () => {
     serve({ files: [file(), file({ id: 22, path: 'x/Forced.en.forced.srt', kind: 'FORCED' })] });
     renderForm();
 
-    expect(screen.getByRole('status')).toHaveTextContent('Looking for subtitle files…');
+    expect(screen.getByText('Looking for subtitle files…')).toBeInTheDocument();
     expect(await screen.findByRole('radio', { name: /Rashomon\.en\.srt/ })).not.toBeChecked();
     expect(screen.getByText('· not attached to a film')).toBeInTheDocument();
     expect(screen.queryByRole('radio', { name: /Forced/ })).not.toBeInTheDocument();
@@ -187,5 +187,66 @@ describe('AddOwnFile', () => {
 
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(attaches).toEqual([]);
+  });
+
+  it('says the editions are loading while they load', async () => {
+    installFetch((method, url) => {
+      if (url === '/api/admin/subtitles') return respond([file()]);
+      if (url === '/api/films/6') return new Promise(() => {});
+      return null;
+    });
+    renderForm();
+
+    expect(await screen.findByText('Loading that film’s editions…')).toBeInTheDocument();
+    expect(
+      screen.queryByText(/no edition a subtitle file can be added to/),
+    ).not.toBeInTheDocument();
+  });
+
+  it('says so when the film has no edition a file can be added to', async () => {
+    serve({ editions: [] });
+    renderForm();
+
+    expect(
+      await screen.findByText('This film has no edition a subtitle file can be added to.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Loading that film’s editions…')).not.toBeInTheDocument();
+  });
+
+  it('does not say "no edition" when the editions could not be read', async () => {
+    installFetch((method, url) => {
+      if (url === '/api/admin/subtitles') return respond([file()]);
+      if (url === '/api/films/6') return respond(null, 500);
+      return null;
+    });
+    renderForm();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Couldn’t load that film’s editions.',
+    );
+    expect(
+      screen.queryByText(/no edition a subtitle file can be added to/),
+    ).not.toBeInTheDocument();
+  });
+
+  it('cannot be cancelled while the attach is in flight, so it cannot be reopened and sent twice', async () => {
+    let release;
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    const { attaches } = serve({ attach: () => held.then(() => respond(file())) });
+    const { onAttached, onCancel } = renderForm();
+    await userEvent.click(await screen.findByRole('radio', { name: /Rashomon\.en\.srt/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Attach' }));
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    expect(cancel).toHaveAttribute('aria-disabled', 'true');
+
+    await userEvent.click(cancel);
+    expect(onCancel).not.toHaveBeenCalled();
+
+    release();
+    await waitFor(() => expect(onAttached).toHaveBeenCalledTimes(1));
+    expect(attaches).toHaveLength(1);
+    expect(cancel).not.toHaveAttribute('aria-disabled');
   });
 });

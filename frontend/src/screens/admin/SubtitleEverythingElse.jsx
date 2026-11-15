@@ -5,6 +5,7 @@ import { subtitlesPage } from '../../state/adminCopy.js';
 import { filmTitle } from '../../state/adminSubtitles.js';
 import { fullSubtitleLine } from '../../state/fullNeed.js';
 import SubtitleSearchLine from './SubtitleSearchLine.jsx';
+import SubtitleYourChoices, { ELSE_HEADING_ID } from './SubtitleYourChoices.jsx';
 
 const copy = subtitlesPage.else;
 
@@ -29,9 +30,9 @@ function Tile({ value, label }) {
  * "Everything else": the figures of what is not on the tabs (each shown once it is known), "Show the {n} films" (a
  * read-only list), the quiet "Show all subtitle files" (the file list with every per-file tool, until they move to
  * the film page, 8b), the OpenSubtitles search status and the note pointing to the film page and the player.
- * `figures` is `everythingElse(...)`; `onChanged` runs when a file tool changed something the lists depend on.
+ * `figures` is `everythingElse(...)`; `needs` is `{ full, forced }`, the two lists' state, for "Your choices"; `onChanged` runs when a file tool changed something the lists depend on.
  */
-export default function SubtitleEverythingElse({ figures, scan, version, onChanged }) {
+export default function SubtitleEverythingElse({ figures, needs, scan, version, onChanged }) {
   const [films, setFilms] = useState(false);
   const [files, setFiles] = useState(false);
   const filmsId = useId();
@@ -39,9 +40,9 @@ export default function SubtitleEverythingElse({ figures, scan, version, onChang
   const { haveSubtitles, inEnglish, beingChecked } = figures;
   return (
     <>
-      <section className="admin__todo-group" aria-labelledby="admin-subtitles-else">
+      <section className="admin__todo-group" aria-labelledby={ELSE_HEADING_ID}>
         <div className="admin__todo-head">
-          <h2 id="admin-subtitles-else" className="admin__todo-heading">
+          <h2 id={ELSE_HEADING_ID} className="admin__todo-heading" tabIndex={-1}>
             {copy.heading}
           </h2>
         </div>
@@ -77,6 +78,7 @@ export default function SubtitleEverythingElse({ figures, scan, version, onChang
               {files ? copy.hideFiles : copy.showFiles}
             </Button>
           </div>
+          <SubtitleYourChoices full={needs.full} forced={needs.forced} />
           {films && figures.films ? (
             <ul id={filmsId} className="admin__else-films" aria-label={copy.filmsList}>
               {figures.films.map((row) => (

@@ -64,6 +64,21 @@ describe('SubtitlesPanel: pagination', () => {
     expect(screen.queryByRole('button', { name: /Show more/ })).not.toBeInTheDocument();
   });
 
+  it('groups before it cuts: file 51 of 51, unmatched, is on the first page under Unmatched', async () => {
+    const items = files(51, (i) => (i === 50 ? { state: 'unmatched', filmId: null } : {}));
+    renderPanel(items);
+    await screen.findByText('Film 051/File.en.forced.srt');
+
+    expect(listed()).toHaveLength(50);
+    const unmatched = screen.getByRole('list', { name: 'Unmatched subtitles' });
+    expect(within(unmatched).getByText('Film 051/File.en.forced.srt')).toBeInTheDocument();
+    // The 50th matched file (the 49th in server order) is the last on the page; the 50th in server order waits.
+    expect(screen.getByText('Film 049/File.en.forced.srt')).toBeInTheDocument();
+    expect(screen.queryByText('Film 050/File.en.forced.srt')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Show more (1 left)' }));
+    expect(screen.getByText('Film 050/File.en.forced.srt')).toBeInTheDocument();
+  });
+
   it('counts what is left per page, and a chip starts again from the first page', async () => {
     renderPanel(files(120, (i) => ({ kind: i % 2 === 0 ? 'FORCED' : 'FULL' })));
     await screen.findByText('Film 001/File.en.forced.srt');

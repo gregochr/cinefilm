@@ -77,6 +77,12 @@ export const buttons = {
     hint: 'Picks which film (and part) a subtitle file belongs to.',
     source: '07',
   },
+  // "Add my own file…" on a Subtitles row: the film is fixed, so 07's hint ("Picks which film…") would be wrong.
+  addFileToFilm: {
+    label: 'Add my own file…',
+    hint: 'Picks one of your subtitle files for this film',
+    source: 'planner, 4a',
+  },
   useItAnyway: {
     label: 'Use it anyway',
     hint: 'Plays that file with the film; you can adjust timing while watching',
@@ -200,7 +206,7 @@ export const todoRow = {
   // The full-subtitles line (AR1); the language-less wording is the planner's, 3c-2.
   spoken: (language) => `Spoken: ${language}`,
   languageUnknown: 'Language not known yet',
-  noneFound: 'none found automatically on OpenSubtitles',
+  noneFound: 'nothing found automatically on OpenSubtitles', // AR2 (AR1 says "none found"; one string for both pages)
   // "Yes, it's …" failures, worded for a row (the Fix match dialog's words talk about a dialog).
   confirmProblems: {
     gone: 'That film is no longer in the library. The list is being updated.',
@@ -303,7 +309,6 @@ export const subtitlesPage = {
     language
       ? `Audio isn’t labelled · CineFilm assumed ${language}, the original language TMDB lists`
       : 'Audio isn’t labelled · CineFilm assumed the original language',
-  setByYou: 'Set by you',
   addFile: {
     heading: (title) => `Add a subtitle file for ${title}`,
     file: 'Subtitle file',
@@ -312,6 +317,8 @@ export const subtitlesPage = {
     attach: 'Attach',
     attaching: 'Attaching…',
     cancel: 'Cancel',
+    loadingEditions: 'Loading that film’s editions…',
+    noEdition: 'This film has no edition a subtitle file can be added to.',
     none: 'No full subtitle files are waiting. Put the file beside the film and scan the library; it will appear here.',
     loading: 'Looking for subtitle files…',
     loadError: 'Couldn’t load the subtitle files.',
@@ -325,11 +332,19 @@ export const subtitlesPage = {
       n === 1 ? 'foreign film has English subtitles' : 'foreign films have English subtitles', // AR2
     inEnglish: (n) => (n === 1 ? 'film is in English' : 'films are in English'), // AR2
     beingCheckedLabel: 'being checked online now', // AR2
-    showFilms: (n) => `Show the ${n} films`, // AR2
-    hideFilms: (n) => `Hide the ${n} films`, // planner, 4a
+    showFilms: (n) => (n === 1 ? 'Show the 1 film' : `Show the ${n} films`), // AR2; the singular is the planner's, 4a
+    hideFilms: (n) => (n === 1 ? 'Hide the 1 film' : `Hide the ${n} films`), // planner, 4a
     showFiles: 'Show all subtitle files', // AR2
     hideFiles: 'Hide the subtitle files', // planner, 4a
     filmsList: 'Foreign films with English subtitles', // planner, 4a
+    // Undo for the owner's choices (planner, 4a): the old panels were the only way back from "It's English" and friends.
+    yourChoices: (n) => `Your choices (${n})`,
+    yourChoicesList: 'Your choices',
+    choiceLine: (kind, choice) =>
+      `${kind === 'full' ? 'Full subtitles' : 'Forced subtitles'}: you said ${choice === 'NEEDED' ? 'needed' : 'not needed'}`,
+    letDecideLabel: buttons.letCineFilmDecide.label, // 07
+    letDecide: (title, kind) =>
+      `${buttons.letCineFilmDecide.label}: ${title}, ${kind === 'full' ? 'full' : 'forced'} subtitles`,
     note: [
       { text: 'Subtitles look wrong on a film? Fix them from that film’s page (' },
       { text: 'Subtitles → Fix…', bold: true },

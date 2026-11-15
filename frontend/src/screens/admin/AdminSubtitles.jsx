@@ -15,14 +15,13 @@ import SubtitleNeedPanel from './SubtitleNeedPanel.jsx';
  * choice calls `markChanged`, so the summary, the rail counts, the To do groups and these lists read again.
  */
 export default function AdminSubtitles() {
-  const { subtitlesVersion, changed, markChanged, adminSummary, scan } = useAdminContext();
+  const { subtitlesVersion, changed, markChanged, scan } = useAdminContext();
   const [tab, setTab] = useState('foreign');
   const lists = useAdminSubtitles({ subtitlesVersion, changed, onChanged: markChanged });
   const figures = everythingElse({
     fullRows: lists.full.rows,
     fullCounts: lists.full.counts,
     forcedCounts: lists.forced.counts,
-    libraryFilms: adminSummary.summary?.library?.films ?? null,
   });
   const tabs = [
     { key: 'foreign', label: subtitlesPage.tabs.foreign, count: lists.foreign?.length ?? null },
@@ -51,6 +50,7 @@ export default function AdminSubtitles() {
       />
       <SubtitleEverythingElse
         figures={figures}
+        needs={{ full: lists.full, forced: lists.forced }}
         scan={scan}
         version={subtitlesVersion}
         onChanged={markChanged}

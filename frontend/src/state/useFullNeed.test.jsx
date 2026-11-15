@@ -72,4 +72,56 @@ describe('useFullNeed', () => {
     expect(onSaved).toHaveBeenCalledTimes(1);
     expect(onSaved).toHaveBeenCalledWith({ ...LIST.films[1], need: 'NEEDED' });
   });
+
+  it('still calls onSaved, once, when the owner left before the save came back, and sets no state', async () => {
+    let release;
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    const onSaved = vi.fn();
+    installFetch((method, url) =>
+      FULL.test(url) ? held.then(() => respond({ ...LIST.films[1], need: 'NEEDED' })) : null,
+    );
+    const { result, unmount } = renderHook(() => useFullNeed('a', { onSaved }));
+    await waitFor(() => expect(result.current.rows).toEqual(LIST.films));
+    let choosing;
+    act(() => {
+      choosing = result.current.choose(4, 'NEEDED');
+    });
+
+    unmount();
+    release();
+    await choosing;
+
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(onSaved).toHaveBeenCalledWith({ ...LIST.films[1], need: 'NEEDED' });
+  });
+
+  it('sends no waiting choice and does not call onSaved after unmount when the save failed', async () => {
+    let release;
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    const onSaved = vi.fn();
+    const puts = [];
+    installFetch((method, url, init) => {
+      if (!FULL.test(url)) return null;
+      puts.push(JSON.parse(init.body));
+      return held.then(() => respond({ error: 'x' }, 500));
+    });
+    const { result, unmount } = renderHook(() => useFullNeed('a', { onSaved }));
+    await waitFor(() => expect(result.current.rows).toEqual(LIST.films));
+    let choosing;
+    act(() => {
+      choosing = result.current.choose(4, 'NEEDED');
+      result.current.choose(4, 'NOT_NEEDED');
+    });
+
+    unmount();
+    release();
+    await choosing;
+
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(puts).toEqual([{ choice: 'NEEDED' }]);
+  });
 });

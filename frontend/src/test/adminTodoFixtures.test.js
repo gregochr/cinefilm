@@ -47,7 +47,13 @@ describe('the Admin To do fixtures', () => {
         notNeeded: rows.filter((r) => r.need === 'NOT_NEEDED').length,
         unresolved: rows.filter((r) => r.unresolved).length,
         beingChecked: rows.filter((r) => r.beingChecked).length,
+        subtitled: rows.filter((r) => r.need === 'NEEDED' && r.fullSubtitle).length,
+        // English films outside the list count too, so the figure is at least the listed not-needed rows.
+        inEnglish: fullNeed.counts.inEnglish,
       });
+      expect(fullNeed.counts.inEnglish).toBeGreaterThanOrEqual(
+        rows.filter((r) => r.need === 'NOT_NEEDED').length,
+      );
     });
 
     it('has exactly the fields of the contract', () => {
@@ -69,7 +75,16 @@ describe('the Admin To do fixtures', () => {
         );
       }
       expect(Object.keys(fullNeed.counts).sort()).toEqual(
-        ['beingChecked', 'needed', 'notNeeded', 'unknown', 'unresolved', 'unsure'].sort(),
+        [
+          'beingChecked',
+          'inEnglish',
+          'needed',
+          'notNeeded',
+          'subtitled',
+          'unknown',
+          'unresolved',
+          'unsure',
+        ].sort(),
       );
     });
   });

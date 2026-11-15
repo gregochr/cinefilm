@@ -94,7 +94,10 @@ class FullNeedApiTest extends SubtitleTestBase {
             .andExpect(jsonPath("$.counts.needed").value(3))
             .andExpect(jsonPath("$.counts.unsure").value(0))
             .andExpect(jsonPath("$.counts.notNeeded").value(1))
-            .andExpect(jsonPath("$.counts.unknown").value(0));
+            .andExpect(jsonPath("$.counts.unknown").value(0))
+            .andExpect(jsonPath("$.counts.subtitled").value(0))
+            // B Dubbed (English audio) and D English (out of the list's scope) are both not needed.
+            .andExpect(jsonPath("$.counts.inEnglish").value(2));
     }
 
     @Test

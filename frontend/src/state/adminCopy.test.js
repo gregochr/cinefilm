@@ -129,7 +129,7 @@ describe('adminCopy buttons', () => {
 
   it('gives every entry a known source', () => {
     for (const entry of Object.values(buttons)) {
-      expect(entry.source).toMatch(/^(07|AR[1-7]|README|plan)$/);
+      expect(entry.source).toMatch(/^(07|AR[1-7]|README|plan|planner, 4a)$/);
     }
   });
 });
@@ -241,6 +241,28 @@ describe('adminCopy: the Subtitles section', () => {
     expect(buttons.noForeignScenes.label).toBe('No foreign scenes');
   });
 
+  it('words "Add my own file…" on a row with a hint that fits a film that is already fixed', () => {
+    expect(buttons.addFileToFilm).toEqual({
+      label: 'Add my own file…',
+      hint: 'Picks one of your subtitle files for this film',
+      source: 'planner, 4a',
+    });
+  });
+
+  it('says AR2’s "nothing found automatically" on both pages', () => {
+    expect(todoRow.noneFound).toBe('nothing found automatically on OpenSubtitles');
+  });
+
+  it('words the owner’s choices and the way back', () => {
+    const copy = subtitlesPage.else;
+    expect(copy.choiceLine('full', 'NOT_NEEDED')).toBe('Full subtitles: you said not needed');
+    expect(copy.choiceLine('forced', 'NEEDED')).toBe('Forced subtitles: you said needed');
+    expect(copy.letDecideLabel).toBe('Let CineFilm decide');
+    expect(copy.letDecide('Heat (1995)', 'forced')).toBe(
+      'Let CineFilm decide: Heat (1995), forced subtitles',
+    );
+  });
+
   it('counts with the right singular and plural', () => {
     expect(subtitlesPage.filmsCount(1)).toBe('1 film');
     expect(subtitlesPage.filmsCount(4)).toBe('4 films');
@@ -250,6 +272,10 @@ describe('adminCopy: the Subtitles section', () => {
     expect(subtitlesPage.else.inEnglish(1341)).toBe('films are in English');
     expect(subtitlesPage.else.showFilms(63)).toBe('Show the 63 films');
     expect(subtitlesPage.else.hideFilms(63)).toBe('Hide the 63 films');
+    expect(subtitlesPage.else.showFilms(1)).toBe('Show the 1 film');
+    expect(subtitlesPage.else.hideFilms(1)).toBe('Hide the 1 film');
+    expect(subtitlesPage.else.showFilms(2)).toBe('Show the 2 films');
+    expect(subtitlesPage.else.yourChoices(2)).toBe('Your choices (2)');
     expect(subtitlesPage.files.showMore(7)).toBe('Show more (7 left)');
   });
 });

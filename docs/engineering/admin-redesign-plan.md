@@ -278,17 +278,33 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
     only (no `SidecarTrust` and no sidecar id), so the row cannot know a download is distrusted or which row to verify.
     Needs a backend field first (not added here).
   - **Posters deferred**, as in 3c-2: the need rows carry none.
-  - **"Everything else":** the figures are read from what is already loaded. "{n} foreign films have English subtitles"
-    counts full rows with `need` NEEDED and a `fullSubtitle` that plays; "{n} films are in English" is the summary's
-    `library.films` minus the full-need list's length (that list is the films not made in English or chosen by the
-    owner); "{n} being checked online now" adds the two lists' `counts.beingChecked`. Each figure shows once what it
-    needs has been read. "Show the {n} films" is a read-only list; "Show all subtitle files" mounts the old file
-    list (card "Subtitle files", every per-file tool kept until 8b) only when asked, so it is read only then, and lists
-    50 at a time with "Show more ({n} left)". A per-file tool that changes something calls `markChanged`. The
-    OpenSubtitles search status line moved here from the scan card (`SubtitleSearchLine`).
+  - **"Everything else":** the figures are the server's, none derived in the browser (AGENTS.md rule 3). `FullNeedCountsDto`
+    gains `subtitled` (browsable films whose need is NEEDED and that play a full subtitle: `AdminTodoRules.subtitledFull`,
+    the complement of `inPlayFull`) and `inEnglish` (browsable films whose full need is NOT_NEEDED, in the list's scope or
+    out of it: English or `xx` or missing originals, `ENGLISH_AUDIO` dubs, the owner's "not needed"; a film with no TMDB
+    language is UNKNOWN and not counted). "Browsable" is `Film.browsable` (one bulk read of every edition with its files).
+    "{n} foreign films have English subtitles" is `counts.subtitled`, "{n} films are in English" is `counts.inEnglish`,
+    "{n} being checked online now" adds the two lists' `counts.beingChecked` and shows only once both lists have been
+    read; each figure shows once its list has. "Show the {n} film(s)" is a read-only list of the full-need rows that
+    play a subtitle (it can hold a film the browsable count leaves out, e.g. one with every edition missing). "Show all
+    subtitle files" mounts the old file list (card "Subtitle files", every per-file tool kept until 8b) only when asked,
+    so it is read only then. It lists 50 at a time with "Show more ({n} left)": the files are grouped first and the
+    first 50 taken across the groups as drawn, so an unmatched file is on page one. A per-file tool that changes
+    something calls `markChanged`. The OpenSubtitles search status line moved here from the scan card.
+  - **"Your choices ({n})" (undo):** deleting the old panels removed every way back from "It's English", "No foreign
+    scenes" or an owner "needed", so "Everything else" has a quiet toggle, shown only while a list holds a row the server
+    says the owner chose for (`ownerChoice` not null). It lists the film, which list and what was chosen, with "Let
+    CineFilm decide" (07's words), which sends choice `null` through that list's own PUT. One request per film (the
+    button is `aria-disabled` while saving); a failure keeps the row with the list's words; the row leaves at once and
+    the page reads again; focus moves to the toggle, or to the section heading after the last one. Copy is "planner, 4a".
+  - **A save that finishes after the owner left the page** still calls `onSaved` once (`markChanged` lives in the layout,
+    so the rail counts and To do read again), and sets no state of the page.
+  - **Add my own file:** hint "Picks one of your subtitle files for this film" (planner, 4a; 07's names no fixed film).
+    Cancel is `aria-disabled` while the attach is in flight; a loading line shows while the editions load and "This film
+    has no edition a subtitle file can be added to." when it has none.
   - **Wording the planner added** (marked "planner, 4a" in `adminCopy.js`): the unlabelled-audio line says "CineFilm
     assumed {language}, the original language TMDB lists" because AR2's "CineFilm assumed English" is the reverse of
-    what the server does; the forced panel heading "Need forced subtitles"; the empty states; singulars; the
+    what the server does (To do now says AR2's "nothing found automatically" too); the forced panel heading "Need forced subtitles"; the empty states; singulars; the
     load/refresh errors; the add-a-file form's words; "Hide the {n} films" / "Hide the subtitle files".
   - Also still to do from 3c-2: the To do subtitle rows get these actions only if the owner asks (they stay read-only
     with the "All in Subtitles →" footer).

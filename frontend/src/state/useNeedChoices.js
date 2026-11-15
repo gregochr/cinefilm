@@ -18,8 +18,10 @@ const without = (record, key) => {
  * then) and only its failure is reported in `problems[filmId]`, with the row left at the last answer the server
  * gave. Other films stay free. Nothing is refetched, and a list read that started before the save arrived cannot
  * undo it. `onSaved(row)` runs once when a film's chain ends with its last write saved (the screen re-reads what depends
- * on it); `counts` is the server's `counts` of the list last read. After unmount the write in flight is never aborted, its result is ignored (no state is set) and no waiting
- * choice is sent.
+ * on it); `counts` is the server's `counts` of the list last read. After unmount the write in flight is never aborted,
+ * its result sets no state and no waiting choice is sent, but a write that was saved still calls `onSaved` (once): the
+ * owner left the page after choosing, and what depends on the choice (the layout's summary and rail counts) is not
+ * the page's.
  */
 export function useNeedChoices({ name, refreshKey, load, save, onSaved }) {
   // One counter orders everything: a list read is numbered when it starts, a saved choice when its answer arrives.
@@ -67,6 +69,10 @@ export function useNeedChoices({ name, refreshKey, load, save, onSaved }) {
         chain.pending = null;
         try {
           const row = await save(filmId, next.choice);
+          if (!mounted.current) {
+            savedHandler.current?.(row);
+            return;
+          }
           answer = { row, answeredAt: ++sequence.current };
           failure = null;
         } catch (error) {

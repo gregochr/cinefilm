@@ -26,7 +26,7 @@ describe('useAdminSubtitles', () => {
 
     expect(result.current.foreign.map((r) => r.filmId)).toEqual([6, 8]);
     expect(result.current.forcedFilms.map((r) => r.filmId)).toEqual([2]);
-    expect(result.current.full.counts).toEqual({ unresolved: 2, beingChecked: 0 });
+    expect(result.current.full.counts).toMatchObject({ unresolved: 2, beingChecked: 0 });
   });
 
   it('keeps one list on screen when the other fails', async () => {

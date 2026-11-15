@@ -31,8 +31,9 @@ const replaced = {
 // The two tabs themselves are role=tab, not buttons. Each case adds its file row's buttons.
 const SUBTITLE_TABS = [
   'Add my own file…',
-  'Show the 1 films',
+  'Show the 1 film',
   'Hide the subtitle files',
+  'Your choices (2)',
   'All (1)',
   'Forced (1)',
   'Full (0)',

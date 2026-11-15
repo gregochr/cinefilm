@@ -1,6 +1,7 @@
 // What the Admin Subtitles section lists and how it words it: the two tabs, the rows the server flagged, the
 // "Everything else" figures and the choice of a file for one film. Pure, no JSX: the Apple TV and native clients reuse
-// it. The server decides every rule (`unresolved`, `beingChecked`, `need`); nothing here re-derives one.
+// it. The server decides every rule (`unresolved`, `beingChecked`, `need`, and the `subtitled` and `inEnglish` counts);
+// nothing here re-derives one: this only picks the rows the server flagged and words what it sent.
 import { subtitlesPage, todoRow } from './adminCopy.js';
 import { fullNeedReason, fullSubtitleLine } from './fullNeed.js';
 import { languageName, reasonText } from './forcedNeed.js';
@@ -32,7 +33,7 @@ export function isUnlabelled(row) {
 }
 
 /**
- * The reason line under a foreign-language row (AR2): "Spoken: French · none found automatically on OpenSubtitles"
+ * The reason line under a foreign-language row (AR2): "Spoken: French · nothing found automatically on OpenSubtitles"
  * (or what plays instead), or the unlabelled-audio line. A film the owner called needed says so.
  */
 export function foreignLine(row) {
@@ -55,23 +56,31 @@ export function foreignActions(row) {
 }
 
 /**
- * The figures of "Everything else": `films` and `haveSubtitles` (the foreign films with English subtitles playing),
- * `inEnglish` (the library's films that are not in the full-need list) and `beingChecked` (the two lists' counts).
- * Each is null until what it needs has been read.
+ * The figures of "Everything else", as the server sent them: `haveSubtitles` and `inEnglish` are the full-need list's
+ * `counts.subtitled` and `counts.inEnglish` (browsable films, over the whole library) and `beingChecked` adds the two
+ * lists' `counts.beingChecked`. `films` are the full-need rows that play a full subtitle (what "Show the {n} films"
+ * lists). Each is null until what it needs has been read; `beingChecked` waits for both lists.
  */
-export function everythingElse({ fullRows, fullCounts, forcedCounts, libraryFilms }) {
-  const films = fullRows
-    ? fullRows.filter((row) => row.need === 'NEEDED' && row.fullSubtitle)
-    : null;
-  const checked = [fullCounts, forcedCounts].filter(Boolean);
+export function everythingElse({ fullRows, fullCounts, forcedCounts }) {
   return {
-    films,
-    haveSubtitles: films ? films.length : null,
-    inEnglish:
-      fullRows && libraryFilms != null ? Math.max(0, libraryFilms - fullRows.length) : null,
+    films: fullRows ? fullRows.filter((row) => row.need === 'NEEDED' && row.fullSubtitle) : null,
+    haveSubtitles: fullCounts ? fullCounts.subtitled : null,
+    inEnglish: fullCounts ? fullCounts.inEnglish : null,
     beingChecked:
-      checked.length > 0 ? checked.reduce((sum, c) => sum + (c.beingChecked ?? 0), 0) : null,
+      fullCounts && forcedCounts ? fullCounts.beingChecked + forcedCounts.beingChecked : null,
   };
+}
+
+/**
+ * The films the owner has made a choice for, from the two lists' rows (the server's `ownerChoice`): `{ kind, row }`,
+ * full-subtitle choices first, each list in the server's order. A list that has not been read adds none.
+ */
+export function ownerChoices({ fullRows, forcedRows }) {
+  const chosen = (rows) => (rows ?? []).filter((row) => row.ownerChoice != null);
+  return [
+    ...chosen(fullRows).map((row) => ({ kind: 'full', row })),
+    ...chosen(forcedRows).map((row) => ({ kind: 'forced', row })),
+  ];
 }
 
 /** "Das Boot (1981)". */

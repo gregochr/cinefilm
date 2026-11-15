@@ -227,18 +227,37 @@ function subtitleList() {
     .map((row) => ({ ...row, ...attachedSubtitles.get(row.id) }));
 }
 
+/** The films a file was attached to by hand: their full-subtitle row then plays the owner's file. */
+const filmsWithOwnFile = new Set();
+
+/** The film and edition a fixture edition id belongs to, or null. */
+function filmOfEdition(editionId) {
+  for (const film of Object.values(details)) {
+    const edition = film.editions.find((e) => e.id === editionId);
+    if (edition) return { film, edition };
+  }
+  return null;
+}
+
 function attachSubtitle(id, body) {
   const row = adminSubtitles.find((r) => r.id === id && !removedSubtitleIds.has(r.id));
   if (!row) throw new ApiError(404, 'No such subtitle file');
   if (!Number.isInteger(body?.editionId)) throw new ApiError(400, 'editionId is required');
+  const found = filmOfEdition(body.editionId);
+  if (!found) throw new ApiError(404, 'No such edition');
   const part = body.part ?? null;
   attachedSubtitles.set(id, {
     state: 'matched',
     ownerAttached: true,
-    editionId: body.editionId,
+    filmId: found.film.id,
+    filmTitle: found.film.title,
+    editionId: found.edition.id,
+    editionName: found.edition.name,
+    parts: found.edition.parts ?? 1,
     part,
     whole: part === null,
   });
+  filmsWithOwnFile.add(found.film.id);
   return subtitleList().find((r) => r.id === id);
 }
 
@@ -306,6 +325,9 @@ function setForcedNeed(filmId, body) {
   return forcedRow(automatic);
 }
 
+/** English-original films outside the full-need list in the fixture library (they count as "in English"). */
+const ENGLISH_OUT_OF_SCOPE = 530;
+
 /** The owner's choice per film on full subtitles, kept in memory; a film without one has the fixture's own row. */
 const fullChoices = new Map();
 
@@ -324,7 +346,15 @@ const FULL_IF_NEEDED = {
   7: { unresolved: false, beingChecked: true },
 };
 
-function fullRow(loaded) {
+function fullRow(row) {
+  const base = fullRowOfChoice(row);
+  // An owner's file attached by hand plays, so the film is settled: not unresolved, not being checked.
+  return filmsWithOwnFile.has(row.filmId)
+    ? { ...base, fullSubtitle: { source: 'SIDECAR' }, unresolved: false, beingChecked: false }
+    : base;
+}
+
+function fullRowOfChoice(loaded) {
   if (!fullChoices.has(loaded.filmId)) return loaded;
   const choice = fullChoices.get(loaded.filmId);
   if (choice) {
@@ -346,6 +376,8 @@ function fullNeedList() {
       notNeeded: count('NOT_NEEDED'),
       unresolved: rows.filter((r) => r.unresolved).length,
       beingChecked: rows.filter((r) => r.beingChecked).length,
+      subtitled: rows.filter((r) => r.need === 'NEEDED' && r.fullSubtitle).length,
+      inEnglish: ENGLISH_OUT_OF_SCOPE + count('NOT_NEEDED'),
     },
   };
 }
