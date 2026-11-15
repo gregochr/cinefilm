@@ -1,7 +1,7 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { installFetch, renderApp, respond } from '../../test/mockApi.jsx';
+import { fixtures, installFetch, renderApp, respond } from '../../test/mockApi.jsx';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -38,11 +38,33 @@ describe('Admin Library file lists', () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toHaveTextContent('Alien (1979)');
     expect(items[0]).toHaveTextContent('Alien.avi');
-    expect(within(items[0]).getByRole('link', { name: 'Alien (1979)' })).toHaveAttribute(
+    expect(screen.queryByText('Kes (1969)')).toBeNull();
+  });
+
+  const withAlien = (browsable) => {
+    const attention = structuredClone(fixtures.adminAttention);
+    attention.items.find((item) => item.kind === 'needs-conversion').browsable = browsable;
+    return (m, url) => (url === '/api/admin/attention' ? respond(attention) : null);
+  };
+
+  it('links the title to the film’s page when the server says it has one', async () => {
+    installFetch(withAlien(true));
+    renderApp('/admin/library/files/needs-conversion');
+
+    const list = await screen.findByRole('list', { name: 'Files that need converting' });
+    expect(within(list).getByRole('link', { name: 'Alien (1979)' })).toHaveAttribute(
       'href',
       '/films/33',
     );
-    expect(screen.queryByText('Kes (1969)')).toBeNull();
+  });
+
+  it('shows the title as plain text when the server says it has no page', async () => {
+    installFetch(withAlien(false));
+    renderApp('/admin/library/files/needs-conversion');
+
+    const list = await screen.findByRole('list', { name: 'Files that need converting' });
+    expect(within(list).getByText('Alien (1979)')).toBeInTheDocument();
+    expect(within(list).queryByRole('link')).toBeNull();
   });
 
   it('says there is nothing when no film is of that kind', async () => {

@@ -862,6 +862,14 @@
 .admin__item-title {
   font-weight: 500;
 }
+/* A title that links to its film: a 44px target on a touch screen (the ring is the global :focus-visible). */
+@media (any-pointer: coarse) {
+  a.admin__item-title {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
 .admin__tag {
   color: var(--cf-text-muted);
   font-size: var(--cf-size-label);
