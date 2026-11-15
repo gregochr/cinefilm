@@ -1,6 +1,7 @@
 package gregochr.cinefilm.health;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -28,9 +29,15 @@ public final class HealthDtos {
                                List<List<Long>> minutes, ClientInfo client) {
     }
 
-    /** The browser's own description of itself, part of a {@link HealthReport}. */
+    /**
+     * The browser's own description of itself, part of a {@link HealthReport}. {@code touch} is whether the device
+     * reported more than one touch point ({@code navigator.maxTouchPoints > 1}). It is null in a report from a player
+     * that predates it, and a null is left out of the stored text, so such a report is stored exactly as before. It
+     * tells an iPad that sends a desktop Mac user agent from a Mac.
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record ClientInfo(String userAgent, String screen, Long cores) {
+    public record ClientInfo(String userAgent, String screen, Long cores,
+                             @JsonInclude(JsonInclude.Include.NON_NULL) Boolean touch) {
     }
 
     /** Response of {@code GET /api/admin/playback-health}. */
@@ -77,11 +84,13 @@ public final class HealthDtos {
      * @param filmTitle the film's title, as copied at the first report
      * @param device the browser's user agent as reported, or null when the stored report cannot be read or carries
      *     none; the client words it
+     * @param touch whether the device reported more than one touch point, or null when the report predates the field
+     *     or the stored report cannot be read; with {@code device} it tells an iPad from a Mac
      * @param environment {@code home}, {@code train}, {@code away} or null when the report named none
      * @param quality the rung played in the report's last minute ({@code original}, {@code 1080p} ... {@code 240p}),
      *     else the quality the viewer chose ({@code auto} included); null when the stored report cannot be read
      */
-    public record PlayingNow(String playbackId, long editionId, String filmTitle, String device, String environment,
-                             String quality) {
+    public record PlayingNow(String playbackId, long editionId, String filmTitle, String device, Boolean touch,
+                             String environment, String quality) {
     }
 }

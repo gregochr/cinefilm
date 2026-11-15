@@ -432,12 +432,19 @@ describe('Admin: Transcoding panel', () => {
     renderApp('/admin/playback');
     expect(
       await screen.findByRole('button', { name: 'Stop this stream: Film 2' }),
-    ).toHaveAccessibleDescription('Ends playback on that device; it can resume later.');
+    ).toHaveAccessibleDescription(
+      'Stops converting this stream on the server; if it’s still playing, the player starts it again.',
+    );
+    const summaryReads = () =>
+      fetchMock.mock.calls.filter((c) => c[0] === '/api/admin/summary').length;
+    const before = summaryReads();
     await userEvent.click(await screen.findByRole('button', { name: 'Stop this stream: Film 2' }));
     const stop = fetchMock.mock.calls.find((c) => c[1]?.method === 'DELETE');
     expect(stop[0]).toBe('/api/admin/transcoding/sessions/session-2');
     expect(stop[1].headers['X-CineFilm']).toBe('1');
     expect(await screen.findByText('Nothing is being transcoded.')).toBeInTheDocument();
+    // "Now playing" agrees: the summary is read again too.
+    await waitFor(() => expect(summaryReads()).toBeGreaterThan(before));
   });
 
   it('says so when Stop fails, and keeps the session listed', async () => {

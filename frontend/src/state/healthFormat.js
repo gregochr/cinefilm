@@ -46,7 +46,7 @@ export function startedLine(row) {
   const report = row.report ?? {};
   const watchedMs = num(report.watchedMs);
   const watched = watchedMs < MINUTE_MS ? 'under 1m' : formatRuntime(watchedMs);
-  return `${formatScanTime(row.startedAt)} · ${watched} watched · ${deviceLabel(report.client?.userAgent)}`;
+  return `${formatScanTime(row.startedAt)} · ${watched} watched · ${deviceLabel(report.client?.userAgent, report.client?.touch)}`;
 }
 
 function startText(report) {

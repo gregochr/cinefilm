@@ -5,6 +5,7 @@ import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
+import static gregochr.cinefilm.health.HealthSamples.JSON;
 import static gregochr.cinefilm.health.HealthSamples.example;
 import static gregochr.cinefilm.health.HealthSamples.text;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -104,6 +106,57 @@ class PlaybackHealthApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.playbacks[0].report.client.screen").value("1512x982"))
             .andExpect(jsonPath("$.playbacks[0].report.client.cores").value(8))
             .andExpect(jsonPath("$.playbacks[0].report.minutes").doesNotExist());
+    }
+
+    @Test
+    void theTouchHintRoundTripsIntoTheLogRowAndPlayingNow() throws Exception {
+        ObjectNode body = report(finalCut, 4);
+        ((ObjectNode) body.get("client")).put("touch", true);
+        send(ID, body);
+
+        mvc.perform(get("/api/admin/playback-health"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.playbacks[0].report.client.touch").value(true));
+        mvc.perform(get("/api/admin/summary"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.playingNow[0].playbackId").value(ID))
+            .andExpect(jsonPath("$.playingNow[0].device").value("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"))
+            .andExpect(jsonPath("$.playingNow[0].touch").value(true));
+    }
+
+    @Test
+    void aTouchHintSentAsTheNumberOneIsStoredAsTrue() throws Exception {
+        ObjectNode body = report(finalCut, 4);
+        ((ObjectNode) body.get("client")).put("touch", 1);
+        send(ID, body);
+
+        mvc.perform(get("/api/admin/playback-health/{id}", ID))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.report.client.touch").value(true));
+    }
+
+    @Test
+    void aReportFromBeforeTheTouchHintReadsAsBefore() throws Exception {
+        send(ID, report(finalCut, 4));
+
+        mvc.perform(get("/api/admin/playback-health"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.playbacks[0].report.client.touch").doesNotExist());
+        mvc.perform(get("/api/admin/summary"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.playingNow[0].touch").value((Object) null));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\"maybe\"", "[]", "{}"})
+    void aTouchHintThatCannotBeReadAsABooleanIsA400AndStoresNothing(String json) throws Exception {
+        ObjectNode body = report(finalCut, 4);
+        ((ObjectNode) body.get("client")).set("touch", JSON.readTree(json));
+
+        mvc.perform(put("/api/playback-health/{id}", ID).content(text(body)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid health report"));
+        assertThat(health.count()).isZero();
     }
 
     @Test

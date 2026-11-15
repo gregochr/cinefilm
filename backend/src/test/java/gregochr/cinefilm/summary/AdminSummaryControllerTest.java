@@ -37,7 +37,7 @@ class AdminSummaryControllerTest {
         when(summaries.summary()).thenReturn(new AdminSummary(new Todo(3, 2, 7, 11), 18, 2,
             new Library(321, Instant.parse("2024-03-30T02:00:00Z"), null), new PlaybackCounts(40, 31),
             List.of(new PlayingNow("3f2b8c1e-5d4a-4e7b-9a60-1c2d3e4f5a6b", 11, "Blade Runner",
-                "Mozilla/5.0 (Macintosh)", "home", "720p"))));
+                "Mozilla/5.0 (Macintosh)", true, "home", "720p"))));
 
         mvc.perform(get("/api/admin/summary").with(user("owner")))
             .andExpect(status().isOk())
@@ -47,9 +47,22 @@ class AdminSummaryControllerTest {
                  "library":{"films":321,"lastScanFinishedAt":"2024-03-30T02:00:00Z","lastScanError":null},
                  "playback":{"films":40,"smooth":31},
                  "playingNow":[{"playbackId":"3f2b8c1e-5d4a-4e7b-9a60-1c2d3e4f5a6b","editionId":11,
-                   "filmTitle":"Blade Runner","device":"Mozilla/5.0 (Macintosh)","environment":"home",
+                   "filmTitle":"Blade Runner","device":"Mozilla/5.0 (Macintosh)","touch":true,"environment":"home",
                    "quality":"720p"}]}
                 """, true));
+    }
+
+    @Test
+    void anEntryFromAReportWithNoTouchHintSerialisesTouchAsNull() throws Exception {
+        when(summaries.summary()).thenReturn(new AdminSummary(new Todo(0, 0, 0, 0), 0, 0, new Library(0, null, null),
+            new PlaybackCounts(0, 0),
+            List.of(new PlayingNow("3f2b8c1e-5d4a-4e7b-9a60-1c2d3e4f5a6b", 11, "Blade Runner",
+                "Mozilla/5.0 (Macintosh)", null, "home", "720p"))));
+
+        mvc.perform(get("/api/admin/summary").with(user("owner")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.playingNow[0].touch").value((Object) null))
+            .andExpect(jsonPath("$.playingNow[0].device").value("Mozilla/5.0 (Macintosh)"));
     }
 
     @Test
