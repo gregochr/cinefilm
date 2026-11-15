@@ -6,6 +6,7 @@ import {
   LookupFailed,
   fileTools,
   filmFiles,
+  kindTag,
   shownDownloadKind,
   shownTargets,
   wrongProblem,
@@ -23,6 +24,13 @@ const row = (over = {}) => ({
   ownerAttached: false,
   verified: false,
   ...over,
+});
+
+describe('kindTag', () => {
+  it('says Full or Forced', () => {
+    expect(kindTag(row({ kind: 'FULL' }))).toBe('Full');
+    expect(kindTag(row({ kind: 'FORCED' }))).toBe('Forced');
+  });
 });
 
 describe('filmFiles', () => {

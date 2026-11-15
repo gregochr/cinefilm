@@ -2,8 +2,8 @@ import { useEffect, useId } from 'react';
 import { Button } from '../../components/Button.jsx';
 import { subtitlesPage } from '../../state/adminCopy.js';
 import { fileChoiceNote } from '../../state/adminSubtitles.js';
-import { subtitleFix } from '../../state/subtitleFixCopy.js';
-import { editionLabel, fileName, isFull, partOptions } from '../../state/subtitleAdmin.js';
+import { kindTag } from '../../state/subtitleFix.js';
+import { editionLabel, fileName, partOptions } from '../../state/subtitleAdmin.js';
 import { useFilmFilePicker } from '../../state/useFilmFilePicker.js';
 
 const copy = subtitlesPage.addFile;
@@ -19,9 +19,12 @@ function Problem({ children, onRetry }) {
 }
 
 /**
- * "Add my own file…" for one film: choose one of the owner's subtitle files (full ones; with `allKinds`, forced ones too, each labelled with its kind), the edition and (for a split
- * edition) the part, then "Attach". It is the existing attach route, scoped to the film. `onAttached` runs once the
- * server has accepted it; `onCancel` closes the form (not while an attach is in flight); `onBusyChange(boolean)`, when given, says when an attach starts and ends. Nothing is sent before "Attach".
+ * "Add my own file…" for one film: choose one of the owner's subtitle files, the edition and (for a split edition) the
+ * part, then "Attach". It is the existing attach route, scoped to the film. Only full files are offered, unless
+ * `allKinds` (Film detail's Fix… panel): then forced files too, each labelled with its kind, and this film's own
+ * files, to move one. `onAttached` runs once the server has accepted it; `onCancel` closes the form (not while an
+ * attach is in flight); `onBusyChange(boolean)`, when given, says when an attach starts and ends. Nothing is sent
+ * before "Attach".
  */
 export default function AddOwnFile({
   filmId,
@@ -68,8 +71,8 @@ export default function AddOwnFile({
               <span>
                 {fileName(file.path)}{' '}
                 <span className="admin__text">
-                  · {allKinds ? `${isFull(file) ? subtitleFix.full : subtitleFix.forced} · ` : ''}
-                  {fileChoiceNote(file)}
+                  · {allKinds ? `${kindTag(file)} · ` : ''}
+                  {fileChoiceNote(file, filmId)}
                 </span>
               </span>
             </label>

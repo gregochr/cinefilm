@@ -67,7 +67,15 @@ function serve({ answer = () => null } = {}) {
       return respond(null, 204);
     }
     if (match[2] === '/verify') {
+      // As the server does: a checked owner file is served, so it no longer reads as replaced by the download;
+      // taking the check away gives it back.
       row.verified = method === 'POST';
+      if (method === 'POST') {
+        row.wasReplaced = row.replacedByDownload;
+        row.replacedByDownload = false;
+      } else if (row.wasReplaced) {
+        row.replacedByDownload = true;
+      }
       return respond(row);
     }
     if (match[2] === '/detach') {
@@ -559,10 +567,12 @@ describe('FilmSubtitlesFix', () => {
         path: 'Heat (1995)/.cinefilm/os.srt',
       };
       const posts = [];
+      let moved = false;
       serve({
         answer: (method, url, init) => {
           if (url === '/api/admin/subtitles' && method === 'GET') {
-            return respond([...rows(), own, looseForced, onHeat, heatDownload]);
+            const heat = moved ? { ...onHeat, filmId: 6, filmTitle: 'Blade Runner' } : onHeat;
+            return respond([...rows(), own, looseForced, heat, heatDownload]);
           }
           if (url === '/api/films/6') {
             return respond({
@@ -573,6 +583,7 @@ describe('FilmSubtitlesFix', () => {
           }
           if (url === '/api/admin/subtitles/23/attach') {
             posts.push(JSON.parse(init.body));
+            moved = true;
             return respond({ ...onHeat, filmId: 6 });
           }
           return null;
@@ -591,12 +602,56 @@ describe('FilmSubtitlesFix', () => {
         'Blade Runner.en.srt · Full · not attached to a film',
         'Loose.en.forced.srt · Forced · not attached to a film',
         'Heat.en.forced.srt · Forced · on Heat',
+        // This film's own files can be moved to another edition or part.
+        'Blade Runner.en.forced.srt · Forced · on this film · Final Cut, whole film',
+        'Mine.en.srt · Full · on this film · Final Cut, whole film',
       ]);
       await userEvent.click(within(form).getByRole('radio', { name: /Heat\.en\.forced\.srt/ }));
       await userEvent.click(within(form).getByRole('button', { name: 'Attach' }));
 
       await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
       expect(posts).toEqual([{ editionId: 61, part: null }]);
+      // Where it lands: the film's own list now has the file, with its Forced tag.
+      await waitFor(() => {
+        const landed = within(dialog)
+          .getAllByRole('listitem')
+          .filter((li) => li.textContent.includes('Heat.en.forced.srt'));
+        expect(landed).toHaveLength(1);
+        expect(within(landed[0]).getByText('Forced')).toBeVisible();
+      });
+    });
+
+    it('moves a file of this film to another edition: it is offered with where it sits, and the attach sends the new edition', async () => {
+      const posts = [];
+      serve({
+        answer: (method, url, init) => {
+          if (url === '/api/films/6') {
+            return respond({
+              id: 6,
+              title: 'Blade Runner',
+              editions: [
+                { id: 61, name: 'Final Cut', parts: 1 },
+                { id: 62, name: 'Theatrical Cut', parts: 1 },
+              ],
+            });
+          }
+          if (url === '/api/admin/subtitles/9/attach') {
+            posts.push(JSON.parse(init.body));
+            return respond(rows()[2]);
+          }
+          return null;
+        },
+      });
+      const { dialog, onChanged } = await open();
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Add my own file…' }));
+      const form = await within(dialog).findByRole('form');
+
+      await userEvent.click(within(form).getByRole('radio', { name: /Mine\.en\.srt/ }));
+      await userEvent.click(await within(form).findByRole('radio', { name: 'Theatrical Cut' }));
+      await userEvent.click(within(form).getByRole('button', { name: 'Attach' }));
+
+      await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+      expect(posts).toEqual([{ editionId: 62, part: null }]);
     });
 
     it('keeps the form open while an attach is in flight, so only one attach request goes out', async () => {

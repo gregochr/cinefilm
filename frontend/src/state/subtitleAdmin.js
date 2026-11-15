@@ -84,8 +84,12 @@ export function takeFiles(groups, limit) {
 /** Where a file belongs: "The Two Towers · Extended Edition · whole film", "… · part 2", or that it is unattached. */
 export function placement(item) {
   if (item.filmId == null) return 'Not attached to a film';
-  const where = item.whole ? 'whole film' : item.parts > 1 ? `part ${item.part}` : null;
-  return [item.filmTitle, item.editionName, where].filter(Boolean).join(' · ');
+  return [item.filmTitle, item.editionName, partWhere(item)].filter(Boolean).join(' · ');
+}
+
+/** "whole film", "part 2", or null for a single-file edition: where in its edition a file sits. */
+export function partWhere(item) {
+  return item.whole ? 'whole film' : item.parts > 1 ? `part ${item.part}` : null;
 }
 
 /** "12 cues · No problems found", "1 cue · 3 blocks skipped". */
@@ -99,7 +103,8 @@ export function warningsFor(item) {
   if (item.presence === 'MISSING') warnings.push('The last scan did not find this file.');
   if (item.state === 'conflict') {
     warnings.push(
-      'Another file competes for the same place, so neither plays. Attach one of them elsewhere.',
+      // planner, 8b-2: names an action that is still reachable (Admin's Attach to… is gone)
+      'Another file competes for the same place, so neither plays. Move one of them with Add my own file… in the film’s Fix… panel.',
     );
   }
   if (item.endsAfterRuntime) warnings.push('Ends after the film: wrong film or cut?');

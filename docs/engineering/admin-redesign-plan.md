@@ -579,7 +579,13 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
     (existing `attachedTo`/`unattached` copy; "Full"/"Forced" are 8a's tag words). Admin's To do / full-need picker
     keeps full files only. Server: `SubtitleAdminService.attachLocked` takes any sidecar and only `retarget`s it to the
     edition's media file (and marks it owner-attached); the file's kind comes from its name and is untouched, so a
-    forced file attached from a film's Fix dialog plays as that edition's forced subtitle. The dialog's tests send the
+    forced file attached from a film's Fix dialog plays as that edition's forced subtitle unless another forced file
+    already holds that place, in which case neither plays (a conflict) until one is moved. For that, `allKinds` also
+    offers this film's own owner files, "on this film · {edition}, part {n}" (`subtitlesPage.addFile.onThisFilm`,
+    planner, 8b-2), re-targeted by the same attach route; the conflict warning now reads "Move one of them with Add my
+    own file… in the film's Fix… panel." (planner, 8b-2). The Undo notice follows the dialog's own memory of which
+    files "Use my file instead" checked (after it the server serves the file, so it no longer reads as replaced).
+    `kindTag` (`state/subtitleFix.js`) is the one Full/Forced word. The dialog's tests send the
     attach for a forced file under another film end to end through the mocks. "Undo" after "Use my file instead" says
     "The download plays again." (`subtitleCheck.undoneReplaced`). `filmLabel` was dead and is deleted; `NUDGES` stays
     out until 8b-1 lands (see the merge note below).

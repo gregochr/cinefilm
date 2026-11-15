@@ -7,14 +7,13 @@ import {
   REMOVED_NOTICE,
   fileName,
   isDownload,
-  isFull,
   originLine,
   placement,
   reportLine,
   servedLine,
   warningsFor,
 } from '../state/subtitleAdmin.js';
-import { fileTools, filmFiles } from '../state/subtitleFix.js';
+import { fileTools, filmFiles, kindTag } from '../state/subtitleFix.js';
 import { subtitleCheck as check, subtitleFix as copy } from '../state/subtitleFixCopy.js';
 import { cueResourceKey, useSubtitles } from '../state/useSubtitles.js';
 import { titleWithYear } from '../state/scanFormat.js';
@@ -27,7 +26,7 @@ import SubtitleCueList from './SubtitleCueList.jsx';
 import { useDialog } from './useDialog.js';
 
 /** One subtitle file of the film with the tools that apply to it (`fileTools`). */
-function FixFile({ item, busy, problem, actions, onRemoved, onDone }) {
+function FixFile({ item, busy, problem, actions, onRemoved, onDone, usedMine }) {
   const [previewing, setPreviewing] = useState(false);
   const cuesId = useId();
   const tools = fileTools(item);
@@ -50,7 +49,7 @@ function FixFile({ item, busy, problem, actions, onRemoved, onDone }) {
             <span className="admin__mono subs__release">{fileName(item.path)}</span>
           </>
         )}
-        <span className="admin__tag">{isFull(item) ? copy.full : copy.forced}</span>
+        <span className="admin__tag">{kindTag(item)}</span>
         {item.served ? <span className="admin__tag">{copy.playing}</span> : null}
       </div>
       {served ? <p className="subs__served">{served}</p> : null}
@@ -75,7 +74,10 @@ function FixFile({ item, busy, problem, actions, onRemoved, onDone }) {
             aria-label={`${check.label}: ${name}`}
             disabled={busy}
             onClick={async () => {
-              if (await actions.verify(item.id)) onDone(check.done);
+              if (await actions.verify(item.id)) {
+                usedMine.delete(item.id);
+                onDone(check.done);
+              }
             }}
           >
             {check.label}
@@ -87,7 +89,9 @@ function FixFile({ item, busy, problem, actions, onRemoved, onDone }) {
             disabled={busy}
             onClick={async () => {
               if (await actions.unverify(item.id)) {
-                onDone(item.replacedByDownload ? check.undoneReplaced : check.undone);
+                // "Use my file instead" made this check (the server then serves the file, so it no longer reads as
+                // replaced): undoing it hands the film back to the download.
+                onDone(usedMine.delete(item.id) ? check.undoneReplaced : check.undone);
               }
             }}
           >
@@ -101,7 +105,10 @@ function FixFile({ item, busy, problem, actions, onRemoved, onDone }) {
             aria-label={`${buttons.useMyFileInstead.label}: ${name}`}
             disabled={busy}
             onClick={async () => {
-              if (await actions.verify(item.id)) onDone(copy.usedMine);
+              if (await actions.verify(item.id)) {
+                usedMine.add(item.id);
+                onDone(copy.usedMine);
+              }
             }}
           >
             {buttons.useMyFileInstead.label}
@@ -152,7 +159,7 @@ function FixFile({ item, busy, problem, actions, onRemoved, onDone }) {
 }
 
 /** The list of the film's files, or why there is none. */
-function Files({ subtitles, files, onRemoved, onDone }) {
+function Files({ subtitles, files, onRemoved, onDone, usedMine }) {
   const { items, loading, error, reload } = subtitles;
   if (loading && !items) {
     return (
@@ -178,6 +185,7 @@ function Files({ subtitles, files, onRemoved, onDone }) {
               actions={subtitles}
               onRemoved={onRemoved}
               onDone={onDone}
+              usedMine={usedMine}
             />
           ))}
         </ul>
@@ -203,6 +211,8 @@ export default function FilmSubtitlesFix({ film, opener, onClose, onChanged }) {
   const [adding, setAdding] = useState(false);
   const [attachBusy, setAttachBusy] = useState(false);
   const [notice, setNotice] = useState({ n: 0, text: REMOVED_NOTICE });
+  // The files whose check came from "Use my file instead", for this dialog's lifetime (read only inside handlers).
+  const [usedMine] = useState(() => new Set());
   const closeRef = useRef(null);
   const noticeRef = useRef(null);
   const addRef = useRef(null);
@@ -284,6 +294,7 @@ export default function FilmSubtitlesFix({ film, opener, onClose, onChanged }) {
               files={files}
               onRemoved={() => say(REMOVED_NOTICE)}
               onDone={say}
+              usedMine={usedMine}
             />
             <div className="fix__add">
               <ActionWithHint

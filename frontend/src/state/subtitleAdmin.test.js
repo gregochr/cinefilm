@@ -193,7 +193,7 @@ describe('warningsFor', () => {
 
   it('says a conflict plays neither', () => {
     expect(warningsFor(file({ state: 'conflict' }))).toEqual([
-      'Another file competes for the same place, so neither plays. Attach one of them elsewhere.',
+      'Another file competes for the same place, so neither plays. Move one of them with Add my own file… in the film’s Fix… panel.',
     ]);
   });
 

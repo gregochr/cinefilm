@@ -460,6 +460,8 @@ export const subtitlesPage = {
     loadError: 'Couldn’t load the subtitle files.',
     editionsError: 'Couldn’t load that film’s editions.',
     attachedTo: (film) => `on ${film}`,
+    // planner, 8b-2: a file already on the film, so it can be moved to another edition or part
+    onThisFilm: (where) => (where ? `on this film · ${where}` : 'on this film'),
     unattached: 'not attached to a film',
   }, // planner, 4a
   else: {

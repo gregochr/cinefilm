@@ -2,7 +2,7 @@
 // themselves (what a file is, where it sits, how it reads) stay in `subtitleAdmin.js`; Admin and Film detail share them.
 import { ApiError } from '../api/client.js';
 import { FORCED_KEY, FULL_KEY, activeSubtitleKey } from '../player/tracks.js';
-import { subtitlesWrong } from './subtitleFixCopy.js';
+import { subtitleFix, subtitlesWrong } from './subtitleFixCopy.js';
 import { filterSidecars, isDownload, isFull, subtitleProblem } from './subtitleAdmin.js';
 
 /** Thrown when the playing download is no longer the one the film showed (another tab chose a different one). */
@@ -24,6 +24,11 @@ export class LookupFailed extends Error {
 /** The files of one film, as the server lists them (path order): the rows that sit under it, none of the unattached. */
 export function filmFiles(items, filmId) {
   return filterSidecars(items, 'all', filmId);
+}
+
+/** The word for a file's kind: "Full" or "Forced". */
+export function kindTag(item) {
+  return isFull(item) ? subtitleFix.full : subtitleFix.forced;
 }
 
 /**

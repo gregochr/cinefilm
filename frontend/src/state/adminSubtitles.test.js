@@ -290,7 +290,7 @@ describe('fileChoices', () => {
     expect(fileChoices(null, 6)).toEqual([]);
   });
 
-  it('offers forced files too with `allKinds`, still never downloads, missing files or this film’s own', () => {
+  it('with `allKinds` offers forced files and this film’s own too, still never downloads or missing files', () => {
     const files = [
       file({ id: 1, kind: 'FORCED', filmId: 9, filmTitle: 'Other' }),
       file({ id: 2, kind: 'FORCED' }),
@@ -299,7 +299,8 @@ describe('fileChoices', () => {
       file({ id: 5, kind: 'FORCED', origin: 'OPENSUBTITLES' }),
       file({ id: 6, kind: 'FORCED', presence: 'MISSING' }),
     ];
-    expect(fileChoices(files, 6, true).map((f) => f.id)).toEqual([2, 4, 1]);
+    expect(fileChoices(files, 6, true).map((f) => f.id)).toEqual([2, 4, 1, 3]);
+    // The To do path (no `allKinds`) is unchanged: full files not on this film.
     expect(fileChoices(files, 6).map((f) => f.id)).toEqual([4]);
   });
 
@@ -307,6 +308,16 @@ describe('fileChoices', () => {
     expect(fileChoiceNote(file())).toBe('not attached to a film');
     expect(fileChoiceNote(file({ filmId: 9, filmTitle: 'Other' }))).toBe('on Other');
     expect(fileChoiceNote(file({ filmId: 9 }))).toBe('on another film');
+  });
+
+  it('says where a file of this film sits: its edition and part', () => {
+    const own = { filmId: 6, editionName: 'Extended', parts: 2, part: 2, whole: false };
+    expect(fileChoiceNote(file(own), 6)).toBe('on this film · Extended, part 2');
+    expect(fileChoiceNote(file({ ...own, whole: true }), 6)).toBe(
+      'on this film · Extended, whole film',
+    );
+    expect(fileChoiceNote(file({ ...own, parts: 1, part: 1 }), 6)).toBe('on this film · Extended');
+    expect(fileChoiceNote(file({ ...own, editionName: null, parts: 1 }), 6)).toBe('on this film');
   });
 });
 
