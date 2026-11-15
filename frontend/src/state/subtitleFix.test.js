@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { ApiError } from '../api/client.js';
 import { FULL_KEY, SUBTITLE_OFF } from '../player/tracks.js';
 import {
+  Changed,
   LookupFailed,
   fileTools,
   filmFiles,
   shownDownloadKind,
+  shownTargets,
   wrongProblem,
   wrongTargets,
 } from './subtitleFix.js';
@@ -141,6 +143,10 @@ describe('wrongProblem', () => {
     expect(wrongProblem(new ApiError(400, text, { error: text }))).toBe(text);
   });
 
+  it('says the subtitle changed when another download plays now', () => {
+    expect(wrongProblem(new Changed())).toBe(subtitlesWrong.changed);
+  });
+
   it('says it could not find the download when no row matched', () => {
     expect(wrongProblem(new LookupFailed())).toBe(subtitlesWrong.lookupFailed);
   });
@@ -154,5 +160,19 @@ describe('wrongProblem', () => {
     ['a network failure', new TypeError('Failed to fetch')],
   ])('says one plain line for %s', (_name, failure) => {
     expect(wrongProblem(failure)).toBe(subtitlesWrong.failed);
+  });
+});
+
+describe('shownTargets', () => {
+  const playing = [row({ id: 70 }), row({ id: 71 })];
+
+  it('keeps only the downloads the film showed', () => {
+    expect(shownTargets(playing, [71]).map((r) => r.id)).toEqual([71]);
+  });
+
+  it('keeps nothing when the film showed none of them, or carried no ids', () => {
+    expect(shownTargets(playing, [5])).toEqual([]);
+    expect(shownTargets(playing, undefined)).toEqual([]);
+    expect(shownTargets(playing, [])).toEqual([]);
   });
 });

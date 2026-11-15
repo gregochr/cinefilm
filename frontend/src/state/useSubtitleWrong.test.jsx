@@ -17,7 +17,7 @@ describe('useSubtitleWrong', () => {
 
     let done;
     await act(async () => {
-      done = await result.current.report('FORCED');
+      done = await result.current.report('FORCED', [6]);
     });
 
     expect(done).toBe(true);
@@ -41,8 +41,8 @@ describe('useSubtitleWrong', () => {
     let first;
     let second;
     await act(async () => {
-      first = result.current.report('FORCED');
-      second = result.current.report('FORCED');
+      first = result.current.report('FORCED', [6]);
+      second = result.current.report('FORCED', [6]);
       await Promise.resolve();
     });
     expect(await second).toBe(false);
@@ -63,7 +63,7 @@ describe('useSubtitleWrong', () => {
 
     let done;
     await act(async () => {
-      done = await result.current.report('FULL');
+      done = await result.current.report('FULL', [6]);
     });
 
     expect(done).toBe(false);
@@ -80,13 +80,13 @@ describe('useSubtitleWrong', () => {
     );
     const { result } = renderHook(() => useSubtitleWrong(target));
 
-    await act(() => result.current.report('FORCED'));
+    await act(() => result.current.report('FORCED', [6]));
     expect(result.current.problem).toBe(
       'Only a subtitle downloaded from OpenSubtitles can be removed',
     );
 
     refuse = false;
-    await act(() => result.current.report('FORCED'));
+    await act(() => result.current.report('FORCED', [6]));
     expect(result.current.problem).toBeNull();
   });
 
@@ -98,7 +98,7 @@ describe('useSubtitleWrong', () => {
 
     let done;
     await act(async () => {
-      done = await result.current.report('FORCED');
+      done = await result.current.report('FORCED', [6]);
     });
 
     expect(done).toBe(false);
@@ -122,7 +122,7 @@ describe('useSubtitleWrong', () => {
 
     let done;
     await act(async () => {
-      done = await result.current.report('FORCED');
+      done = await result.current.report('FORCED', [61, 62]);
     });
 
     expect(done).toBe(false);
@@ -149,7 +149,7 @@ describe('useSubtitleWrong', () => {
 
     let done;
     await act(async () => {
-      done = await result.current.report('FORCED');
+      done = await result.current.report('FORCED', [61, 62]);
     });
 
     expect(done).toBe(true);
@@ -165,7 +165,7 @@ describe('useSubtitleWrong', () => {
     const { result, rerender } = renderHook((props) => useSubtitleWrong(props), {
       initialProps: target,
     });
-    await act(() => result.current.report('FORCED'));
+    await act(() => result.current.report('FORCED', [6]));
     expect(result.current.problem).toBe(subtitlesWrong.failed);
 
     rerender({ ...target, kind: 'FULL' });
@@ -189,7 +189,7 @@ describe('useSubtitleWrong', () => {
     });
     let pending;
     await act(async () => {
-      pending = result.current.report('FORCED');
+      pending = result.current.report('FORCED', [6]);
       await Promise.resolve();
     });
     rerender({ ...target, kind: 'FULL' });
@@ -201,5 +201,29 @@ describe('useSubtitleWrong', () => {
     rerender(target);
 
     expect(result.current.problem).toBeNull();
+  });
+
+  it('deletes nothing when the playing download is not the one the film showed, and says so', async () => {
+    const fetchMock = installFetch();
+    const { result } = renderHook(() => useSubtitleWrong(target));
+
+    let done;
+    await act(async () => {
+      done = await result.current.report('FORCED', [99]);
+    });
+
+    expect(done).toBe(false);
+    expect(result.current.problem).toBe(subtitlesWrong.changed);
+    expect(calls(fetchMock)).toEqual(['GET /api/admin/subtitles']);
+  });
+
+  it('deletes nothing when the film carried no ids', async () => {
+    const fetchMock = installFetch();
+    const { result } = renderHook(() => useSubtitleWrong(target));
+
+    await act(() => result.current.report('FORCED', undefined));
+
+    expect(result.current.problem).toBe(subtitlesWrong.changed);
+    expect(calls(fetchMock).some((c) => c.startsWith('DELETE'))).toBe(false);
   });
 });

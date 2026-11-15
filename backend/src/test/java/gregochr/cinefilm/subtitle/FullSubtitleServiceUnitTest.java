@@ -151,6 +151,7 @@ class FullSubtitleServiceUnitTest {
         FullSubtitleDto dto = service.forEditions(List.of(edition)).get(40L);
 
         assertThat(dto.source()).isEqualTo("DOWNLOAD");
+        assertThat(dto.sidecarIds()).containsExactly(5L);
         assertThat(dto.version()).isEqualTo(ForcedSubtitleService.version("DOWNLOAD",
             Downloads.pick(fullDownload(5))));
         assertThat(service.vtt(40L)).isEqualTo("WEBVTT\n\n00:00:10.000 --> 00:00:12.000\nDownloaded\n");

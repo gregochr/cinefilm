@@ -145,6 +145,7 @@ class ForcedSubtitleServiceUnitTest {
 
         assertThat(unverified.get(40L).source()).isEqualTo("SIDECAR");
         assertThat(unverified.get(40L).ownerVerified()).isFalse();
+        assertThat(unverified.get(40L).sidecarIds()).containsExactly(1L, 2L);
 
         b.setOwnerVerifiedAt(NOW);
         b.setVerifiedParts("10,20");

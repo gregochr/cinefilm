@@ -5,6 +5,14 @@ import { FORCED_KEY, FULL_KEY, activeSubtitleKey } from '../player/tracks.js';
 import { subtitlesWrong } from './subtitleFixCopy.js';
 import { filterSidecars, isDownload, subtitleProblem } from './subtitleAdmin.js';
 
+/** Thrown when the playing download is no longer the one the film showed (another tab chose a different one). */
+export class Changed extends Error {
+  constructor() {
+    super('The playing subtitle changed');
+    this.name = 'Changed';
+  }
+}
+
 /** Thrown when no download row matches what is showing (it was already removed, or the list moved on). */
 export class LookupFailed extends Error {
   constructor() {
@@ -57,11 +65,17 @@ export function wrongTargets(rows, { filmId, editionId, kind }) {
   );
 }
 
+/** Of the playing downloads, only those the film showed (`ids`: the edition's `sidecarIds`); never one it did not. */
+export function shownTargets(targets, ids) {
+  return targets.filter((row) => (ids ?? []).includes(row.id));
+}
+
 /** What the player says when "Subtitles are wrong" fails: the server's own words for a refusal, else one plain line. */
 export function wrongProblem(failure) {
   if (failure instanceof ApiError && failure.status === 400 && failure.body?.error) {
     return subtitleProblem(failure);
   }
   if (failure instanceof LookupFailed) return subtitlesWrong.lookupFailed;
+  if (failure instanceof Changed) return subtitlesWrong.changed;
   return subtitlesWrong.failed;
 }

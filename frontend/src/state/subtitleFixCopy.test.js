@@ -38,6 +38,9 @@ describe('subtitleFixCopy', () => {
     expect(subtitlesWrong.label).toBe('Subtitles are wrong');
     expect(subtitlesWrong.done).toBe('Subtitle download removed. CineFilm won’t use it again.');
     expect(subtitlesWrong.failed).toBe('Couldn’t remove the download. Try again.');
+    expect(subtitlesWrong.changed).toBe(
+      'This subtitle has changed since the film started. Reload to see the new one.',
+    );
     expect(subtitlesWrong.lookupFailed).toBe('Couldn’t find that download to remove.');
     expect(subtitlesWrong.busy).toBe('Removing…');
   });

@@ -421,6 +421,49 @@ describe('FilmSubtitlesFix', () => {
       ]);
     });
 
+    it('keeps the form open while an attach is in flight, so only one attach request goes out', async () => {
+      let release;
+      const gate = new Promise((resolve) => {
+        release = resolve;
+      });
+      const posts = [];
+      serve({
+        answer: (method, url, init) => {
+          if (url === '/api/admin/subtitles' && method === 'GET') return respond([...rows(), own]);
+          if (url === '/api/films/6') {
+            return respond({
+              id: 6,
+              title: 'Blade Runner',
+              editions: [{ id: 61, name: 'Original', parts: 1 }],
+            });
+          }
+          if (url === '/api/admin/subtitles/21/attach') {
+            posts.push(JSON.parse(init.body));
+            return gate.then(() => respond(own));
+          }
+          return null;
+        },
+      });
+      const { dialog, onChanged } = await open();
+      const add = within(dialog).getByRole('button', { name: 'Add my own file…' });
+      await userEvent.click(add);
+      await userEvent.click(
+        await within(dialog).findByRole('radio', { name: /Blade Runner\.en\.srt/ }),
+      );
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Attach' }));
+
+      await userEvent.click(add);
+
+      expect(add).toHaveAttribute('aria-disabled', 'true');
+      expect(add).toHaveAttribute('aria-expanded', 'true');
+      expect(within(dialog).getByRole('button', { name: 'Attaching…' })).toBeInTheDocument();
+      await act(async () => release());
+      await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+      expect(posts).toEqual([{ editionId: 61, part: null }]);
+      expect(add).not.toHaveAttribute('aria-disabled');
+      expect(within(dialog).queryByRole('form')).not.toBeInTheDocument();
+    });
+
     it('"Cancel" closes the form without sending anything', async () => {
       const { requests } = serve();
       const { dialog } = await open();

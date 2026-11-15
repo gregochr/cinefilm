@@ -32,6 +32,7 @@ export const subtitlesWrong = {
   label: 'Subtitles are wrong',
   busy: 'Removing…',
   done: 'Subtitle download removed. CineFilm won’t use it again.',
+  changed: 'This subtitle has changed since the film started. Reload to see the new one.',
   lookupFailed: 'Couldn’t find that download to remove.',
   failed: 'Couldn’t remove the download. Try again.',
 };

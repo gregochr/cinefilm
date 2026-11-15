@@ -373,7 +373,9 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
   // when there are any), a forced one to what the player would otherwise show. Playback itself is not touched.
   const reportWrong = async () => {
     const kind = downloadKind;
-    if (kind && (await wrongSubtitles.report(kind))) {
+    // The files the film loaded with: only these are deleted, even if another download plays by now.
+    const ids = (kind === 'FULL' ? fullSubtitle : forcedSubtitle)?.sidecarIds;
+    if (kind && (await wrongSubtitles.report(kind, ids))) {
       setRemoved((r) => ({ ...r, [kind]: true }));
       // Only the choice that showed the download falls back to Off: a pick made while the request ran stays.
       if (kind === 'FULL')

@@ -507,7 +507,10 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
   `DELETE /api/admin/subtitles/{id}` + `ForcedDownloadBlock`), so a bad download can still be reported.
 - 8b: player "Earlier" / "Later" (and reset) on the existing offset route; Admin's "Show all subtitle files" becomes
   read-only. "Looks right" goes only here, after 8a.
-- **8a decision (built):** no backend change. `SubtitleAdminService.remove` already writes the `ForcedDownloadBlock`
+- **8a decision (built):** one small backend change (review fix): `ForcedSubtitleDto` and `FullSubtitleDto` gain
+  `sidecarIds` (the ids of the subtitle rows they are made of, the same ids the Admin list gives), because their
+  `version` is a hash and does not identify a row. "Subtitles are wrong" deletes only rows whose id the film showed; if
+  another download plays by now it deletes nothing and says so. The rest needed no backend change. `SubtitleAdminService.remove` already writes the `ForcedDownloadBlock`
   (edition, IMDb id, OpenSubtitles file id, kind) before it deletes the row, so `DELETE /api/admin/subtitles/{id}` is
   the whole of "Subtitles are wrong" (and answers 400 for an owner's file).
   - **Film detail.** A quiet "Fix…" (`aria-label` "Fix subtitles…") sits under the Subtitles field, also for a film
@@ -542,7 +545,7 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
     refresh the subtitle files.", "CineFilm has no subtitle file for this film yet.", "Subtitle files for this film",
     "Hide lines", "Delete download", "Your file", "Forced", "Subtitles are wrong", "Removing…", "Subtitle download
     removed. CineFilm won't use it again.", "Couldn't find that download to remove.", "Couldn't remove the download.
-    Try again."
+    Try again.", "This subtitle has changed since the film started. Reload to see the new one."
   - **Dev mock:** `detach`, `verify` (POST and DELETE) and `cues` routes added to `fixtureServer.js` and the default
     `mockApi.jsx` answers; fixture refusals carry `{ error }` in the body.
 

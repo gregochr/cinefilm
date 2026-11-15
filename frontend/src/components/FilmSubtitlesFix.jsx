@@ -175,6 +175,7 @@ export default function FilmSubtitlesFix({ film, opener, onClose, onChanged }) {
   const { dialogRef, closing, close } = dialog;
   const subtitles = useSubtitles(`film:${film.id}`, onChanged);
   const [adding, setAdding] = useState(false);
+  const [attachBusy, setAttachBusy] = useState(false);
   const [notice, setNotice] = useState({ n: 0, text: REMOVED_NOTICE });
   const closeRef = useRef(null);
   const noticeRef = useRef(null);
@@ -264,7 +265,12 @@ export default function FilmSubtitlesFix({ film, opener, onClose, onChanged }) {
                 ref={addRef}
                 hint={buttons.addFileToFilm.hint}
                 aria-expanded={adding}
-                onClick={() => setAdding(!adding)}
+                // Not while an attach is in flight: closing the form then would let it be opened again with its
+                // one-request guard reset, and a second attach could start beside the first.
+                aria-disabled={attachBusy || undefined}
+                onClick={() => {
+                  if (!attachBusy) setAdding(!adding);
+                }}
               >
                 {buttons.addFileToFilm.label}
               </ActionWithHint>
@@ -274,6 +280,7 @@ export default function FilmSubtitlesFix({ film, opener, onClose, onChanged }) {
                   title={film.title}
                   onAttached={attached}
                   onCancel={() => setAdding(false)}
+                  onBusyChange={setAttachBusy}
                 />
               ) : null}
             </div>

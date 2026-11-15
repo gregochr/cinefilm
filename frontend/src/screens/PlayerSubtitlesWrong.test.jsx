@@ -7,7 +7,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const DOWNLOAD = { source: 'DOWNLOAD', version: 1700000000000 };
+const DOWNLOAD = { source: 'DOWNLOAD', version: 1700000000000, sidecarIds: [70] };
 const SIDECAR = { source: 'SIDECAR', version: 1700000000000 };
 
 // Heat (film 1, edition 11) has English audio and an embedded English subtitle (113) and forced one (114).
@@ -332,5 +332,37 @@ describe('the player’s "Subtitles are wrong"', () => {
     );
     expect(streamTrack('English').track.mode).toBe('showing');
     expect(screen.queryByTestId('full-subtitle-track')).not.toBeInTheDocument();
+  });
+
+  it('deletes nothing and says so when another download plays now than the one the film showed', async () => {
+    // The film loaded with download 70; since then another tab chose 71, so the list serves 71 and not 70.
+    const { requests } = await openPlayer({
+      mutate: (f) => fullOn(f),
+      list: [row({ id: 71 })],
+    });
+    await openPanel();
+
+    await userEvent.click(wrongAction());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'This subtitle has changed since the film started. Reload to see the new one.',
+    );
+    expect(requests.some((r) => r.method === 'DELETE')).toBe(false);
+    expect(screen.getByTestId('full-subtitle-track')).toBeInTheDocument();
+  });
+
+  it('deletes only the download the film showed when the list also serves another', async () => {
+    const { requests } = await openPlayer({
+      mutate: (f) => fullOn(f),
+      list: [row({ id: 71 }), row({ id: 70 })],
+    });
+    await openPanel();
+
+    await userEvent.click(wrongAction());
+
+    await screen.findByText('Subtitle download removed. CineFilm won’t use it again.');
+    expect(requests.filter((r) => r.method === 'DELETE').map(keyOf)).toEqual([
+      'DELETE /api/admin/subtitles/70',
+    ]);
   });
 });
