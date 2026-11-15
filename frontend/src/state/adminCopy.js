@@ -157,6 +157,61 @@ export const playingNow = {
     '04 and AR4 for the title, count and "converting on the fly"; the README for the empty line; planner 5a-1 for the rest',
 };
 
+/**
+ * The Playback section's "How films played" card (AR4, `screens/04-playback.png`). Strings marked "planner" are not
+ * on the board: the board says "films watched" where a film can count twice, so the tile counts sessions.
+ */
+export const playbackChart = {
+  title: 'How films played', // AR4
+  why: 'Each film you sat down to watch (3 min or more)', // AR4
+  ranges: [
+    { days: 30, label: '30 days' }, // AR4
+    { days: 90, label: '90 days' }, // AR4
+  ],
+  rangesLabel: 'How far back', // planner, 5a-2
+  environmentsLabel: 'Where it was watched', // planner, 5a-2
+  environments: [
+    { key: 'all', label: 'All' }, // AR4
+    { key: 'home', label: 'Home' }, // AR4
+    { key: 'away', label: 'Away' }, // AR4
+    { key: 'train', label: 'Train' }, // AR4
+  ],
+  tiles: {
+    watched: 'sessions watched', // planner, 5a-2 (AR4: "films watched")
+    withoutStall: 'played without a stall', // AR4
+    stalled: 'stalled', // AR4
+    typicalStart: 'typical start', // AR4
+    topRungs: 'of time at Original or 1080p', // AR4
+  },
+  // AR4 says "(all on the train)"; the other places are the planner's wording (5a-2).
+  allOn: { train: 'all on the train', home: 'all at home', away: 'all away' },
+  noStalls: 'No stalls', // planner, 5a-2
+  noQuality: 'No quality recorded', // planner, 5a-2
+  stallsAxis: 'stalls', // AR4
+  legend: {
+    stalled: 'Stalled (bigger = longer)', // AR4
+    letters: 'H Home · A Away · T Train', // AR4
+  },
+  hint: 'Hover or tap a column to see that film below. Plays under 3 minutes count as browsing and aren’t charted — they’re still in the log.', // AR4
+  chartLabel: 'Film sessions, oldest to newest', // planner, 5a-2 (AR4: "... for each of the last 28 films watched")
+  empty: 'No film sessions in this range.', // planner, 5a-2
+  summary: (count, days, where, figures) =>
+    `Quality and stalls for each of the last ${count} ${count === 1 ? 'session' : 'sessions'} in ${days} days${where}: ${figures}.`, // planner, 5a-2
+  summaryEmpty: (days, where) => `No film sessions in the last ${days} days${where}.`, // planner, 5a-2
+  loadingLabel: 'Loading how films played', // planner, 5a-2
+  loadError: 'Couldn’t load how films played.', // planner, 5a-2
+  retry: 'Try again', // planner, 5a-2
+  selectedLabel: 'Selected film session', // planner, 5a-2
+  stripLabel: (film) => `Speed and quality minute by minute for ${film}`, // AR4
+  stripAxis: 'line = speed · strip = quality', // AR4
+  stripStart: '0:00', // AR4
+  loadingStripLabel: 'Loading the minute by minute view', // planner, 5a-2
+  stripError: 'Couldn’t load that session’s minutes.', // planner, 5a-2
+  noMinutes: 'No minute by minute figures for this session.', // planner, 5a-2
+  source:
+    'AR4 and 04 for the title, filters, tiles, legend, hint and strip words; the planner for the rest (5a-2)',
+};
+
 /** The line under Remembered networks (owner's answer Q4; 07's hint is false). */
 export const rememberedNetworksNote =
   "Forget makes CineFilm ask where you're watching next time on that network.";

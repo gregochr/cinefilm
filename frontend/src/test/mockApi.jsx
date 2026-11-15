@@ -22,6 +22,8 @@ import adminPlex from './fixtures/admin-plex.json';
 import adminPlexCredits from './fixtures/admin-plex-credits.json';
 import adminTranscoding from './fixtures/admin-transcoding.json';
 import adminPlaybackHealth from './fixtures/admin-playback-health.json';
+import adminPlaybackChart from './fixtures/admin-playback-chart.json';
+import adminPlaybackRecord from './fixtures/admin-playback-record.json';
 import adminSubtitles from './fixtures/admin-subtitles.json';
 import adminForcedNeed from './fixtures/admin-forced-need.json';
 import adminFullNeed from './fixtures/admin-full-need.json';
@@ -52,6 +54,8 @@ export const fixtures = {
   adminPlexCredits,
   adminTranscoding,
   adminPlaybackHealth,
+  adminPlaybackChart,
+  adminPlaybackRecord,
   adminSubtitles,
   adminForcedNeed,
   adminFullNeed,
@@ -133,6 +137,9 @@ export function defaultRoute(method, url) {
     return json({ continueWatchingMinMinutes: 5, inProgressCount: 3 });
   }
   if (path === '/api/admin/playback-health') return json(adminPlaybackHealth);
+  // Empty on purpose: a served chart would add a column button and a record read to every Admin Playback test that
+  // lists the page's buttons; the chart's own tests serve `fixtures.adminPlaybackChart`.
+  if (path === '/api/admin/playback-health/chart') return json({ sessions: [] });
   if (path === '/api/admin/subtitles') return json(adminSubtitles);
   if (path === '/api/admin/forced-subtitles/films') return json(adminForcedNeed);
   if (path === '/api/admin/subtitles/full-need') return json(adminFullNeed);

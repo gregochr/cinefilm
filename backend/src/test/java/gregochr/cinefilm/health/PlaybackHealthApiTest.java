@@ -125,6 +125,18 @@ class PlaybackHealthApiTest extends ApiTestBase {
     }
 
     @Test
+    void theTouchHintRoundTripsIntoTheChartRow() throws Exception {
+        ObjectNode body = report(finalCut, 4);
+        body.put("watchedMs", 200_000);
+        ((ObjectNode) body.get("client")).put("touch", true);
+        send(ID, body);
+
+        mvc.perform(get("/api/admin/playback-health/chart"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sessions[0].touch").value(true));
+    }
+
+    @Test
     void aTouchHintSentAsTheNumberOneIsStoredAsTrue() throws Exception {
         ObjectNode body = report(finalCut, 4);
         ((ObjectNode) body.get("client")).put("touch", 1);
@@ -636,6 +648,7 @@ class PlaybackHealthApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.sessions[1].environment").value("train"))
             .andExpect(jsonPath("$.sessions[1].rungMs['480p']").value(58_000))
             .andExpect(jsonPath("$.sessions[1].userAgent").value("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"))
+            .andExpect(jsonPath("$.sessions[1].touch").doesNotExist())
             .andExpect(jsonPath("$.sessions[1].report").doesNotExist())
             .andExpect(jsonPath("$.sessions[1].editionId").doesNotExist());
     }

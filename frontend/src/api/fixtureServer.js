@@ -52,6 +52,7 @@ const CHART_SESSIONS = [
     environment: 'home',
     rungMs: { '1080p': 6_600_000 },
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+    touch: false,
   },
   {
     playbackId: 'c1000000-0000-4000-8000-000000000002',
@@ -65,6 +66,7 @@ const CHART_SESSIONS = [
     environment: 'home',
     rungMs: { '720p': 60_000 },
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',
+    touch: true,
   },
   {
     playbackId: 'c1000000-0000-4000-8000-000000000003',
@@ -78,6 +80,7 @@ const CHART_SESSIONS = [
     environment: 'away',
     rungMs: { '480p': 1_800_000, '360p': 2_520_000 },
     userAgent: 'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X)',
+    touch: true,
   },
   {
     playbackId: 'c1000000-0000-4000-8000-000000000004',
@@ -91,8 +94,85 @@ const CHART_SESSIONS = [
     environment: 'train',
     rungMs: { '480p': 1_468_800, '360p': 2_851_200 },
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+    touch: false,
   },
 ];
+
+/**
+ * The per-minute figures of a fixture session, as the player writes them: seven figures
+ * `[minute, median kbit/s, rung played, ms moved, ms stalled, seconds buffered ahead, rung being fetched]` (rung codes
+ * 1 original, 2 1080p, 3 720p, 4 480p, 5 360p), or the five of an older record (`seven` false) without the last two.
+ * The speed swings with the minute, and a session that stalled stalls for 4.2 s in every minute whose number is 5 more
+ * than a multiple of 17 (minutes 5, 22, 39, ...).
+ */
+function fixtureMinutes(chart, seven) {
+  const count = Math.round(chart.watchedMs / 60_000);
+  const code =
+    Object.keys(chart.rungMs).length > 1
+      ? 4
+      : ({ original: 1, '1080p': 2, '720p': 3 }[Object.keys(chart.rungMs)[0]] ?? 4);
+  return Array.from({ length: count }, (_, minute) => {
+    const stalled = chart.stallCount > 0 && minute % 17 === 5 ? 4200 : 0;
+    const row = [minute, 800 + ((minute * 37) % 9) * 150, code, 60_000 - stalled, stalled];
+    return seven ? [...row, 8 + (minute % 5), code] : row;
+  });
+}
+
+/** The whole record of one fixture session, as `GET /api/admin/playback-health/{id}` answers it. */
+function healthRecord(playbackId) {
+  const chart = CHART_SESSIONS.find((s) => s.playbackId === playbackId);
+  if (chart) {
+    const elapsedMs = chart.watchedMs + 30_000;
+    return {
+      playbackId,
+      filmId: chart.filmId,
+      filmTitle: chart.filmTitle,
+      editionId: 10 + chart.filmId,
+      startedAt: chart.startedAt,
+      updatedAt: new Date(Date.parse(chart.startedAt) + elapsedMs).toISOString(),
+      report: {
+        seq: 9,
+        editionId: 10 + chart.filmId,
+        elapsedMs,
+        environment: chart.environment,
+        operator:
+          chart.environment === 'train' ? 'AS12576 EE Limited' : 'AS5089 Virgin Media Limited',
+        latencyMs: 48,
+        engine: 'hlsjs',
+        quality: 'auto',
+        autoplayRefused: false,
+        startupMs: chart.startupMs,
+        watchedMs: chart.watchedMs,
+        stallCount: chart.stallCount,
+        stallMs: chart.stallMs,
+        longestStallMs: chart.stallCount > 0 ? Math.round(chart.stallMs / chart.stallCount) : 0,
+        seekCount: 0,
+        seekWaitMs: 0,
+        reloadCount: 0,
+        reloadMs: 0,
+        reconnectCount: 0,
+        reconnectMs: 0,
+        recoveries: 0,
+        fellBack: false,
+        stepsDown: 0,
+        stepsUp: 0,
+        netErrors: 0,
+        timeouts: 0,
+        kbpsLow: 800,
+        kbpsMedian: 1500,
+        kbpsHigh: 2000,
+        kbpsSamples: 40,
+        rungMs: chart.rungMs,
+        // The first and third keep the five-figure rows an older player wrote.
+        minutes: fixtureMinutes(chart, CHART_SESSIONS.indexOf(chart) % 2 === 1),
+        client: { userAgent: chart.userAgent, screen: '1512x982', cores: 8, touch: chart.touch },
+      },
+    };
+  }
+  const listed = adminPlaybackHealth.playbacks.find((p) => p.playbackId === playbackId);
+  if (!listed) throw new ApiError(404, 'No such playback');
+  return { ...listed, report: { ...listed.report, minutes: [] } };
+}
 
 /** The fixture records with a problem; mirrors the stored has_problem column for them (Heat stalled and reconnected). */
 const PROBLEM_PLAYBACKS = new Set(['3f6c1d2e-8a4b-4c7e-9b15-2d0e6f7a1c34']);
@@ -490,6 +570,8 @@ export async function handle(method, path, body) {
       : adminPlaybackHealth;
   }
   if (route === '/api/admin/playback-health/chart') return healthChart(url.searchParams);
+  match = route.match(/^\/api\/admin\/playback-health\/([0-9a-f-]{36})$/);
+  if (match) return healthRecord(match[1]);
   if (route === '/api/admin/transcoding') return adminTranscoding;
   if (/^\/api\/admin\/transcoding\/sessions\//.test(route)) return null;
   if (/^\/api\/editions\/\d+\/sessions$/.test(route)) return session;
