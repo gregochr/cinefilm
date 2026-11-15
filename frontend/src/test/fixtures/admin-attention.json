@@ -25,7 +25,8 @@
           "score": 58
         }
       ],
-      "confident": false
+      "confident": false,
+      "browsable": true
     },
     {
       "kind": "protected",
@@ -35,7 +36,8 @@
       "detail": "Protected by FairPlay, so it can't be played",
       "files": ["Kes.m4v"],
       "candidates": [],
-      "confident": false
+      "confident": false,
+      "browsable": false
     },
     {
       "kind": "needs-conversion",
@@ -45,7 +47,8 @@
       "detail": "Needs converting to MP4 before it can be played",
       "files": ["Alien.avi"],
       "candidates": [],
-      "confident": false
+      "confident": false,
+      "browsable": true
     },
     {
       "kind": "multiple-files",
@@ -55,7 +58,8 @@
       "detail": "2 untagged versions of one film, runtimes differ by 22%",
       "files": ["Blade Runner.m4v", "Blade Runner Final Cut.m4v"],
       "candidates": [],
-      "confident": false
+      "confident": false,
+      "browsable": true
     },
     {
       "kind": "parts-mismatch",
@@ -65,7 +69,8 @@
       "detail": "Part 2: video codec is h264, part 1 has hevc",
       "files": ["The Two Towers pt1.m4v", "The Two Towers pt2.m4v"],
       "candidates": [],
-      "confident": false
+      "confident": false,
+      "browsable": true
     },
     {
       "kind": "needs-match",
@@ -84,7 +89,8 @@
           "score": 100
         }
       ],
-      "confident": true
+      "confident": true,
+      "browsable": true
     }
   ]
 }

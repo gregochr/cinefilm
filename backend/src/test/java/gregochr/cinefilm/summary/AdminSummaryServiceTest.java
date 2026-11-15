@@ -59,11 +59,11 @@ class AdminSummaryServiceTest {
     }
 
     private static AttentionItem item(String kind) {
-        return new AttentionItem(kind, 1L, "A film", 2000, "detail", List.of(), List.of(), false);
+        return new AttentionItem(kind, 1L, "A film", 2000, "detail", List.of(), List.of(), false, true);
     }
 
     private static ScanStatusDto scan(long films, LastScanDto last) {
-        return new ScanStatusDto(false, "/media", null, last, new CountsDto(films, 0, 0, 0, 0, 0, 0), null, false,
+        return new ScanStatusDto(false, "/media", null, last, new CountsDto(films, 0, 0, 0, 0, 0, 0, 0), null, false,
             false, null, false, false, false, null);
     }
 

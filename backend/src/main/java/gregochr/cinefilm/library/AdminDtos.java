@@ -44,9 +44,11 @@ public final class AdminDtos {
      * @param needsConversion {@code .avi} and {@code .mkv} files
      * @param needsMatch films with no confident TMDB match
      * @param unreadable files ffprobe could not read
+     * @param filmsWithCredits films shown in browse that have at least one credit (cast or director); never more
+     *     than {@code films}
      */
     public record CountsDto(long films, long newFiles, long missing, long protectedFiles, long needsConversion,
-                            long needsMatch, long unreadable) {
+                            long needsMatch, long unreadable, long filmsWithCredits) {
     }
 
     /**
@@ -99,9 +101,12 @@ public final class AdminDtos {
      * @param candidates TMDB candidates (needs-match only, otherwise empty)
      * @param confident true only for a needs-match item whose best candidate is confident (see
      *     {@code AdminTodoRules.confident}); false for every other kind
+     * @param browsable true when the film has a detail page ({@code Film#browsable}, the rule
+     *     {@code FilmService.detail} uses); false for a film whose every edition is missing or unplayable
      */
     public record AttentionItem(String kind, Long filmId, String title, Integer year, String detail,
-                                List<String> files, List<CandidateDto> candidates, boolean confident) {
+                                List<String> files, List<CandidateDto> candidates, boolean confident,
+                                boolean browsable) {
     }
 
     /**

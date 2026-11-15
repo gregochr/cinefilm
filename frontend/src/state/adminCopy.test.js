@@ -4,6 +4,7 @@ import {
   footerDesktop,
   footerPhone,
   conversion,
+  libraryPage,
   networks,
   playbackLog,
   playingNow,
@@ -306,6 +307,40 @@ describe('adminCopy playingNow', () => {
   it('has the failure and load-error lines', () => {
     expect(playingNow.stopFailed).toBe('Couldn’t stop that stream. Try again.');
     expect(playingNow.loadError).toBe('Couldn’t load what is playing.');
+  });
+});
+
+describe('adminCopy libraryPage', () => {
+  it('has the scan, ratings and Plex words of the README and AR3', () => {
+    expect(libraryPage.scan.lastScan('12 min ago', '1m 48s')).toBe(
+      'Last scan 12 min ago · took 1m 48s',
+    );
+    expect(libraryPage.changes.summary).toBe('What the last scan changed');
+    expect(libraryPage.changes.empty).toBe('The last scan changed nothing.');
+    expect(libraryPage.changes.counts(2, 1, 1)).toBe('2 split, 1 joined, 1 flagged');
+    expect(libraryPage.ratings.updated('9 Nov')).toBe('IMDb and Rotten Tomatoes · updated 9 Nov');
+    expect(libraryPage.plex.title).toBe('Import from Plex');
+    expect(libraryPage.plex.lastReport).toBe('Last report');
+    expect(libraryPage.cast.title).toBe('Cast & crew');
+    expect(libraryPage.scan.openList('Needs conversion', 3)).toBe(
+      'Needs conversion: 3, open the list',
+    );
+    expect(libraryPage.plex.loadError).toBe('Couldn’t load the Plex import status.');
+  });
+
+  it('counts films with credits, with the empty library and the singular worded apart', () => {
+    expect(libraryPage.cast.count(1402, 1412)).toBe('1402 of 1412 films have credits');
+    expect(libraryPage.cast.count(0, 5)).toBe('0 of 5 films have credits');
+    expect(libraryPage.cast.count(0, 0)).toBe('No films in the library yet');
+    expect(libraryPage.cast.count(1, 1)).toBe('1 of 1 film has credits');
+  });
+
+  it('words "show more" with how many it adds', () => {
+    expect(libraryPage.changes.showMore(25)).toBe('Show 25 more');
+  });
+
+  it('does not offer the TMDB credits download (owner answer Q1)', () => {
+    expect(Object.keys(buttons).some((key) => /tmdb/i.test(key))).toBe(false);
   });
 });
 

@@ -123,7 +123,7 @@ export function useAttention(version) {
   return useResource(`admin-attention:${version}`, (options) => adminApi.attention(options));
 }
 
-/** The newest grouping changes. `version` changes when a scan or import finishes, so the report refreshes. */
+/** What the last finished scan changed. `version` changes when a scan or import finishes, so the report refreshes. */
 export function useGroupingReport(version) {
   return useResource(`admin-grouping:${version}`, (options) => adminApi.groupingReport(options));
 }

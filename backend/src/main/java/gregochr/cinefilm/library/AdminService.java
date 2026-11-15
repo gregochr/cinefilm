@@ -28,6 +28,7 @@ import gregochr.cinefilm.tmdb.MatchOutcome.Candidate;
 import gregochr.cinefilm.todo.AdminTodoRules;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -85,12 +86,14 @@ public class AdminService {
             .map(r -> new LastScanDto(r.getStartedAt(), r.getFinishedAt(), r.getTrigger(), r.getFilesSeen(),
                 r.getNewFiles(), r.getMissingFiles(), r.getError()))
             .orElse(null);
-        long browsable = films.findAll().stream().filter(Film::browsable).count();
-        CountsDto counts = new CountsDto(browsable, last == null ? 0 : last.newFiles(),
+        List<Film> browsableFilms = films.findAll().stream().filter(Film::browsable).toList();
+        Set<Long> credited = new HashSet<>(films.findIdsWithCredits());
+        long withCredits = browsableFilms.stream().filter(f -> credited.contains(f.getId())).count();
+        CountsDto counts = new CountsDto(browsableFilms.size(), last == null ? 0 : last.newFiles(),
             files.countOriginals(Presence.MISSING), files.countPresent(Playability.PROTECTED),
             files.countPresent(Playability.NEEDS_CONVERSION),
             films.findByMatchStatusOrderBySortTitle(MatchStatus.NEEDS_MATCH).size(),
-            files.countPresent(Playability.UNREADABLE));
+            files.countPresent(Playability.UNREADABLE), withCredits);
         return new ScanStatusDto(scans.isRunning(), root.root().toString(),
             progress == null ? null : new ProgressDto(progress.processed(), progress.total(), progress.current()),
             last, counts, films.findLatestRatingsFetchedAt(), ratings.isRunning(), ratings.enabled(),
@@ -132,10 +135,17 @@ public class AdminService {
         return new Attention(items);
     }
 
-    /** The newest 20 lines of the grouping report, newest first. */
+    /**
+     * What the last finished scan changed: every grouping line logged from its start to its finish (both included),
+     * newest first, with no cap. A scan holds the library lock, so no other writer logs a line inside that window.
+     * Empty before the first scan has finished.
+     */
     @Transactional(readOnly = true)
     public GroupingReport groupingReport() {
-        return new GroupingReport(changes.findTop20ByOrderByHappenedAtDescIdDesc().stream()
+        return new GroupingReport(runs.findFirstByFinishedAtNotNullOrderByIdDesc()
+            .map(run -> changes.findByHappenedAtBetweenOrderByHappenedAtDescIdDesc(run.getStartedAt(),
+                run.getFinishedAt()))
+            .orElse(List.of()).stream()
             .map(c -> new GroupingChangeDto(c.getHappenedAt(), c.getKind(), c.getSummary())).toList());
     }
 
@@ -277,7 +287,7 @@ public class AdminService {
     private static AttentionItem item(String kind, Film film, String detail, List<String> names,
                                       List<CandidateDto> candidates, boolean confident) {
         return new AttentionItem(kind, film.getId(), film.getTitle(), film.getYear(),
-            detail, names, candidates, confident);
+            detail, names, candidates, confident, film.browsable());
     }
 
     /** Names of the film's original files (every part) that are on disk. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ADMIN_SECTIONS, bareOnPhone } from './adminRoutes.js';
+import { ADMIN_SECTIONS, FILE_LISTS, bareOnPhone } from './adminRoutes.js';
 
 describe('ADMIN_SECTIONS', () => {
   it('lists the five sections in order, with `end` only on To do', () => {
@@ -23,10 +23,37 @@ describe('bareOnPhone', () => {
     '/admin/settings',
     '/Admin',
     '/ADMIN/Library/',
+    '/admin/library/files/protected',
+    '/admin/library/files/needs-conversion/',
+    '/admin/library/files/unreadable',
   ])('is true on %s', (path) => expect(bareOnPhone(path)).toBe(true));
 
-  it.each(['/', '/library', '/admin/foo', '/admin/library/x', '/films/1'])(
-    'is false on %s',
-    (path) => expect(bareOnPhone(path)).toBe(false),
-  );
+  it.each([
+    '/',
+    '/library',
+    '/admin/foo',
+    '/admin/library/x',
+    '/admin/library/files/other',
+    '/films/1',
+  ])('is false on %s', (path) => expect(bareOnPhone(path)).toBe(false));
+});
+
+describe('FILE_LISTS', () => {
+  it('names the three lists the scan tiles open, each under /admin/library/files', () => {
+    expect(FILE_LISTS.map((l) => [l.tile, l.kind, l.path, l.title])).toEqual([
+      ['protectedFiles', 'protected', '/admin/library/files/protected', 'Protected files'],
+      [
+        'needsConversion',
+        'needs-conversion',
+        '/admin/library/files/needs-conversion',
+        'Files that need converting',
+      ],
+      [
+        'unreadable',
+        'unreadable',
+        '/admin/library/files/unreadable',
+        'Files that could not be read',
+      ],
+    ]);
+  });
 });

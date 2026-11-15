@@ -17,7 +17,8 @@
           "score": 100
         }
       ],
-      "confident": true
+      "confident": true,
+      "browsable": true
     },
     {
       "kind": "needs-match",
@@ -44,7 +45,8 @@
           "score": 58
         }
       ],
-      "confident": false
+      "confident": false,
+      "browsable": true
     },
     {
       "kind": "needs-match",
@@ -71,7 +73,8 @@
           "score": 58
         }
       ],
-      "confident": false
+      "confident": false,
+      "browsable": true
     },
     {
       "kind": "needs-match",
@@ -98,7 +101,8 @@
           "score": 58
         }
       ],
-      "confident": false
+      "confident": false,
+      "browsable": true
     },
     {
       "kind": "needs-match",
@@ -125,7 +129,8 @@
           "score": 58
         }
       ],
-      "confident": false
+      "confident": false,
+      "browsable": true
     },
     {
       "kind": "needs-match",
@@ -152,7 +157,8 @@
           "score": 58
         }
       ],
-      "confident": false
+      "confident": false,
+      "browsable": true
     },
     {
       "kind": "needs-match",
@@ -179,7 +185,8 @@
           "score": 58
         }
       ],
-      "confident": false
+      "confident": false,
+      "browsable": true
     },
     {
       "kind": "multiple-files",
@@ -189,7 +196,8 @@
       "detail": "2 untagged versions of one film, runtimes differ by 22%",
       "files": ["1-Blade Runner.m4v", "1-Blade Runner Final Cut.m4v"],
       "candidates": [],
-      "confident": false
+      "confident": false,
+      "browsable": true
     },
     {
       "kind": "parts-mismatch",
@@ -199,7 +207,8 @@
       "detail": "Part 2: video codec is h264, part 1 has hevc",
       "files": ["2-The Two Towers pt1.m4v", "2-The Two Towers pt2.m4v"],
       "candidates": [],
-      "confident": false
+      "confident": false,
+      "browsable": true
     },
     {
       "kind": "multiple-files",
@@ -209,7 +218,8 @@
       "detail": "2 untagged versions of one film, runtimes differ by 22%",
       "files": ["3-Blade Runner.m4v", "3-Blade Runner Final Cut.m4v"],
       "candidates": [],
-      "confident": false
+      "confident": false,
+      "browsable": true
     },
     {
       "kind": "parts-mismatch",
@@ -219,7 +229,8 @@
       "detail": "Part 2: video codec is h264, part 1 has hevc",
       "files": ["4-The Two Towers pt1.m4v", "4-The Two Towers pt2.m4v"],
       "candidates": [],
-      "confident": false
+      "confident": false,
+      "browsable": true
     },
     {
       "kind": "multiple-files",
@@ -229,7 +240,8 @@
       "detail": "2 untagged versions of one film, runtimes differ by 22%",
       "files": ["5-Blade Runner.m4v", "5-Blade Runner Final Cut.m4v"],
       "candidates": [],
-      "confident": false
+      "confident": false,
+      "browsable": true
     },
     {
       "kind": "parts-mismatch",
@@ -239,7 +251,8 @@
       "detail": "Part 2: video codec is h264, part 1 has hevc",
       "files": ["6-The Two Towers pt1.m4v", "6-The Two Towers pt2.m4v"],
       "candidates": [],
-      "confident": false
+      "confident": false,
+      "browsable": true
     },
     {
       "kind": "protected",
@@ -249,7 +262,8 @@
       "detail": "Protected by FairPlay, so it can't be played",
       "files": ["Kes.m4v"],
       "candidates": [],
-      "confident": false
+      "confident": false,
+      "browsable": false
     }
   ]
 }
