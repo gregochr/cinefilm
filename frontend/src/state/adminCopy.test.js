@@ -3,7 +3,10 @@ import {
   buttons,
   footerDesktop,
   footerPhone,
+  conversion,
   libraryPage,
+  networks,
+  playbackLog,
   playingNow,
   rememberedNetworksNote,
   railNames,
@@ -335,5 +338,60 @@ describe('adminCopy libraryPage', () => {
 
   it('does not offer the TMDB credits download (owner answer Q1)', () => {
     expect(Object.keys(buttons).some((key) => /tmdb/i.test(key))).toBe(false);
+  });
+});
+
+describe('adminCopy: the Playback log, Conversion and Remembered networks cards', () => {
+  it('has AR4’s log title, subtitle, filters, columns and buttons', () => {
+    expect(playbackLog.title).toBe('Playback log');
+    expect(playbackLog.why).toBe(
+      'Every time play was pressed · newest first · keeps the last 2,000',
+    );
+    expect(playbackLog.filters.map((f) => f.label)).toEqual([
+      'All',
+      'Films only (3 min+)',
+      'With problems',
+    ]);
+    expect(playbackLog.columns).toEqual([
+      'Started',
+      'Film',
+      'Watched',
+      'Where',
+      'Start',
+      'Stalls',
+      'Quality',
+    ]);
+    expect([playbackLog.details, playbackLog.hideDetails, playbackLog.copyReport]).toEqual([
+      'Details',
+      'Hide details',
+      'Copy raw report',
+    ]);
+    expect(playbackLog.showing(3, 212)).toBe('Showing 3 of 212');
+    expect(playbackLog.showMore).toBe('Show 50 more');
+    expect(playbackLog.browsing).toBe('browsing');
+    expect(playbackLog.copied).toBe('Copied');
+  });
+
+  it('names a Details button after its play', () => {
+    expect(playbackLog.buttonName('Details', 'Heat', '12 Nov 20:02')).toBe(
+      'Details: Heat, 12 Nov 20:02',
+    );
+  });
+
+  it('has AR4’s Conversion title and Seek index label, and says nothing of pre-made versions', () => {
+    expect(conversion.title).toBe('Conversion');
+    expect(conversion.seekIndex).toBe('Seek index');
+    expect(JSON.stringify(conversion)).not.toMatch(/pre-made/i);
+  });
+
+  it('has the networks title and does not repeat AR4’s untrue subtitle', () => {
+    expect(networks.title).toBe('Remembered networks');
+    expect(networks.why).not.toContain('quality that worked');
+  });
+
+  it('says where each card’s words come from', () => {
+    for (const card of [playbackLog, conversion, networks]) {
+      expect(card.source).toMatch(/AR4/);
+    }
   });
 });

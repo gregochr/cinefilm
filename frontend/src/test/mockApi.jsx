@@ -136,7 +136,17 @@ export function defaultRoute(method, url) {
   if (path === '/api/admin/settings') {
     return json({ continueWatchingMinMinutes: 5, inProgressCount: 3 });
   }
-  if (path === '/api/admin/playback-health') return json(adminPlaybackHealth);
+  if (path === '/api/admin/playback-health') {
+    // Any filter or paging parameter switches on the paged answer `{ playbacks, total }`, as the server does.
+    const paged = ['since', 'minWatchedMs', 'problems', 'page', 'size'].some((name) =>
+      u.searchParams.has(name),
+    );
+    return json(
+      paged
+        ? { playbacks: adminPlaybackHealth.playbacks, total: adminPlaybackHealth.playbacks.length }
+        : adminPlaybackHealth,
+    );
+  }
   // Empty on purpose: a served chart would add a column button and a record read to every Admin Playback test that
   // lists the page's buttons; the chart's own tests serve `fixtures.adminPlaybackChart`.
   if (path === '/api/admin/playback-health/chart') return json({ sessions: [] });

@@ -1,4 +1,4 @@
-// Display helpers for the Admin "Playback health" card. No JSX, no DOM: other clients reuse them. A report from
+// Display helpers for the Admin Playback section (the playback log and the chart's selected session). No JSX, no DOM: other clients reuse them. A report from
 // an older release can lack any field, so a missing number counts as 0, a missing flag as false and a missing
 // string as unknown.
 import { rungName } from '../player/ladder.js';
@@ -70,14 +70,25 @@ export function playLine(row) {
   return line;
 }
 
-/** ["480p 34%", "360p 66%"]: rungs in ladder order holding at least 1% of the watched time. */
-export function rungShares(report) {
+/**
+ * [{ id: "480p", name: "480p", ms: 34000, percent: 34 }, ...]: rungs in ladder order holding at least 1% of the
+ * watched time; `ms` is the time on the rung, `percent` its rounded share (for display only).
+ */
+export function rungParts(report) {
   const watchedMs = num(report.watchedMs);
   if (watchedMs <= 0) return [];
   const rungMs = report.rungMs ?? {};
-  return RUNG_ORDER.filter((id) => num(rungMs[id]) * 100 >= watchedMs).map(
-    (id) => `${rungName(id)} ${Math.round((num(rungMs[id]) * 100) / watchedMs)}%`,
-  );
+  return RUNG_ORDER.filter((id) => num(rungMs[id]) * 100 >= watchedMs).map((id) => ({
+    id,
+    name: rungName(id),
+    ms: num(rungMs[id]),
+    percent: Math.round((num(rungMs[id]) * 100) / watchedMs),
+  }));
+}
+
+/** ["480p 34%", "360p 66%"]: `rungParts` as text. */
+export function rungShares(report) {
+  return rungParts(report).map(({ name, percent }) => `${name} ${percent}%`);
 }
 
 /** "0.4 to 2.4 Mbit/s, typically 0.9", or "no speed samples". */
