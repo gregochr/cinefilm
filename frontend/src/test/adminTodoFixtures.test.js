@@ -65,6 +65,7 @@ describe('the Admin To do fixtures', () => {
           [
             'beingChecked',
             'editionId',
+            'editionName',
             'editions',
             'filmId',
             'fullSubtitle',
