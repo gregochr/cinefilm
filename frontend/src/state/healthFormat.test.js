@@ -80,6 +80,7 @@ describe('deviceLabel', () => {
     expect(deviceLabel('Mozilla/5.0 (Windows NT 10.0; Win64; x64)')).toBe('Windows');
     expect(deviceLabel('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')).toBe('Mac');
     expect(deviceLabel('Mozilla/5.0 (X11; Linux x86_64)')).toBe('Linux');
+    expect(deviceLabel('Mozilla/5.0 (X11; CrOS x86_64)')).toBe('ChromeOS');
     expect(
       deviceLabel(
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15',
@@ -96,7 +97,6 @@ describe('deviceLabel', () => {
 
   it('is case sensitive and says Unknown device for anything else or nothing', () => {
     expect(deviceLabel('iphone')).toBe('Unknown device');
-    expect(deviceLabel('Mozilla/5.0 (X11; CrOS x86_64)')).toBe('ChromeOS');
     expect(deviceLabel('')).toBe('Unknown device');
     expect(deviceLabel(undefined)).toBe('Unknown device');
     expect(deviceLabel(null)).toBe('Unknown device');

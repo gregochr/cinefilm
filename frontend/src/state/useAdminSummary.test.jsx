@@ -231,8 +231,14 @@ describe('useAdminSummary: readiness latches', () => {
 });
 
 describe('useAdminSummary: the poll restarts with a changed stamp', () => {
-  it('polls 30 s after a change read, not 30 s after the start: -1 ms, exact', async () => {
-    const fetchMock = installFetch();
+  it('restarts on the start of a change read, not on its answer: -1 ms, exact, with that read never answering', async () => {
+    const hung = deferred();
+    let calls = 0;
+    const fetchMock = installFetch((method, url) => {
+      if (url !== '/api/admin/summary') return null;
+      calls += 1;
+      return calls === 2 ? hung.promise : null;
+    });
     vi.useFakeTimers();
     const { rerender } = mount();
     await settle();

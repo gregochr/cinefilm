@@ -137,6 +137,26 @@ describe('Admin To do: heading, intro and status strip', () => {
     expect(reads).toBe(1);
   });
 
+  it('reads twice, not in a loop, when Plex answers with an import after the first read', async () => {
+    let releasePlex;
+    const plexHeld = new Promise((resolve) => {
+      releasePlex = resolve;
+    });
+    const fetchMock = installFetch((method, url) =>
+      url === '/api/admin/plex' ? plexHeld.then(() => respond(fixtures.adminPlex)) : null,
+    );
+    renderApp('/admin');
+    await within(rail()).findByRole('link', { name: 'To do, 6 things' });
+    const reads = () => fetchMock.mock.calls.filter(([url]) => url === '/api/admin/summary').length;
+    expect(reads()).toBe(1);
+
+    releasePlex();
+
+    await waitFor(() => expect(reads()).toBe(2));
+    await screen.findByRole('region', { name: 'Films needing attention' });
+    expect(reads()).toBe(2);
+  });
+
   it('reads once when the scan status fails: the error settles the wait', async () => {
     const fetchMock = installFetch((method, url) =>
       url === '/api/admin/scan' ? respond({ error: 'boom' }, 500) : null,
