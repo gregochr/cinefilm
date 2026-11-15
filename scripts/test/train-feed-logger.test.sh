@@ -173,6 +173,22 @@ run_logger --base "$BASE" --probe "http://127.0.0.1:$P/generate_200" --rounds 1
 assert_eq "exits 0" 0 "$RC"
 assert_contains "the line says what answered" "$OUT" " ms (answered 200)"
 assert_eq "the record keeps the code" 200 "$(jv "$LOG" 'L[1]["probe"]["code"]')"
+assert_eq "a small body leaves no mark" false "$(jv "$LOG" '"body" in L[1]["probe"]')"
+
+echo "an internet check whose answer is big"
+for path in generate_big generate_big_nolength; do
+    run_logger --base "$BASE" --probe "http://127.0.0.1:$P/$path" --rounds 1
+    assert_eq "$path: exits 0" 0 "$RC"
+    assert_eq "$path: the status was received and the body not read" '["body", "code", "ms"]' \
+        "$(jv "$LOG" 'sorted(L[1]["probe"])')"
+    assert_eq "$path: code 200, not read" '[200, "not read"]' \
+        "$(jv "$LOG" '[L[1]["probe"]["code"], L[1]["probe"]["body"]]')"
+    assert_eq "$path: a numeric ms" true "$(jv "$LOG" 'isinstance(L[1]["probe"]["ms"], int)')"
+    assert_contains "$path: the line says what answered" "$OUT" " ms (answered 200)"
+done
+run_logger --base "$BASE" --probe "file:///etc/hostname" --rounds 1
+assert_eq "a probe address that is not http or https is not asked" \
+    '{"ms": null, "why": "only http and https are asked"}' "$(jv "$LOG" 'L[1]["probe"]')"
 
 echo "default log directory, and who may read the log"
 HOME_DIR="$TMP/home"
@@ -495,6 +511,30 @@ assert_eq "round 2: the same" '"answered 404"' "$(jv "$LOG" 'L[2]["speed"]["why"
 assert_eq "the page was read again in round 2" 2 "$(grep -cx 'GET /' "$TMP/gone.log")"
 assert_eq "and the script asked for both times" 2 "$(grep -c 'GET /assets/index-gone.js' "$TMP/gone.log")"
 assert_contains "the line says why" "$OUT" "speed: answered 404"
+
+echo "a site that ignores the range"
+serve ignores --site ignoresrange --request-log "$TMP/ignores.log"
+SITE_I="http://127.0.0.1:$PORT"
+run_logger --base "http://127.0.0.1:$PORT/api/jsonp/" --probe off --speed-site "$SITE_I" --interval 1 --rounds 2
+assert_eq "exits 0" 0 "$RC"
+assert_eq "round 1: the site ignores ranges" '"the site ignores ranges"' "$(jv "$LOG" 'L[1]["speed"]["why"]')"
+assert_eq "no more than 256 KB were fetched" true \
+    "$(jv "$LOG" 'L[1]["speed"]["bytes"] <= 262144 and L[2]["speed"]["bytes"] <= 262144')"
+assert_contains "the line says so" "$OUT" "speed: the site ignores ranges"
+assert_eq "the page was read once: the script's address was kept" 1 "$(grep -cx 'GET /' "$TMP/ignores.log")"
+assert_eq "and the script asked for in both rounds" 2 "$(grep -c 'GET /assets/index-test.js' "$TMP/ignores.log")"
+serve ignoresnl --site ignoresrange-nolength
+run_logger --base "http://127.0.0.1:$PORT/api/jsonp/" --probe off --speed-site "http://127.0.0.1:$PORT" --rounds 1
+assert_eq "without a Content-Length: the same" '"the site ignores ranges"' "$(jv "$LOG" 'L[1]["speed"]["why"]')"
+assert_eq "and no more than 256 KB were fetched" true "$(jv "$LOG" 'L[1]["speed"]["bytes"] <= 262144')"
+
+echo "a page that names a script on another origin"
+serve other --request-log "$TMP/other.log"
+OTHER_PORT=$PORT
+serve elsewhere --site otherorigin --other-port "$OTHER_PORT"
+run_logger --base "http://127.0.0.1:$PORT/api/jsonp/" --probe off --speed-site "http://127.0.0.1:$PORT" --rounds 1
+assert_eq "the sample says why" '{"why": "page names no script on its own site"}' "$(jv "$LOG" 'L[1]["speed"]')"
+assert_file_missing "nothing was fetched from the other origin" "$TMP/other.log"
 
 echo "--film wins over everything; --no-film with --speed-site uses the given site"
 serve film --request-log "$TMP/film.log"
@@ -903,6 +943,32 @@ check("main: and creates nothing", [], made)
 code, said, made = main_with(stubs + "/curl-missing")
 check("main: an unreadable curl stops the start with exit 2 too", (2, [], True), (code, made, "could not be read" in said))
 
+for name, first, second, expected in [
+    ("another port", "http://h.test/a", "http://h.test:8080/a", False),
+    ("another scheme", "https://h.test/a", "http://h.test/a", False),
+    ("the default http port", "http://h.test/a", "http://h.test:80/b", True),
+    ("the default https port", "https://h.test/a", "https://h.test:443/b", True),
+    ("the host's case", "http://H.Test/a", "http://h.test/b", True),
+    ("a port that is not one", "http://h.test:99999/a", "http://h.test/b", False),
+]:
+    check("same_origin: " + name, expected, m.same_origin(first, second))
+
+
+def script_found(page):
+    return with_fetch(lambda url, timeout, insecure=False, max_size=None: dict(GOOD, body=page),
+                      lambda: m.find_script("https://site.test", 5))
+
+
+check("find_script: a relative src is on the site", ("https://site.test/assets/a.js", None),
+      script_found('<script src="/assets/a.js"></script>'))
+check("find_script: an absolute src on the site", ("https://site.test/assets/a.js", None),
+      script_found('<script src="https://site.test/assets/a.js"></script>'))
+check("find_script: a protocol-relative src elsewhere is skipped", (None, "page names no script on its own site"),
+      script_found('<script src="//evil.test/assets/a.js"></script>'))
+check("find_script: the first one on the site is taken after one elsewhere", ("https://site.test/assets/b.js", None),
+      script_found('<script src="https://evil.test/assets/a.js"></script><script src="/assets/b.js"></script>'))
+check("find_script: no script at all", (None, "page names no script"), script_found("<html></html>"))
+
 a_down = {"now": False}
 
 
@@ -940,7 +1006,7 @@ while IFS= read -r line; do
         "FAIL "*) bad "${line#FAIL }"; PURE=$((PURE + 1)) ;;
     esac
 done <<< "$RESULTS"
-assert_eq "all 121 pure checks reported" 121 "$PURE"
+assert_eq "all 132 pure checks reported" 132 "$PURE"
 
 echo "compiles"
 PYTHONPYCACHEPREFIX="$TMP/pyc" python3 -m py_compile "$LOGGER" "$STAND_IN"

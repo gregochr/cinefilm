@@ -7,8 +7,8 @@ It is not a test file itself (its name does not end in .test.sh, so run-all.sh d
 
     train-feed-stand-in.py PORT_FILE [--cert C --key K] [--die-after N] [--escape]
                            [--missing PART] [--html-part PART]
-                           [--site normal|noscript|trickle|brokenscript|bigpage]
-                           [--request-log FILE] [--connection-log FILE]
+                           [--site normal|noscript|trickle|brokenscript|bigpage|ignoresrange|ignoresrange-nolength
+                                   |otherorigin] [--other-port N] [--request-log FILE] [--connection-log FILE]
 
 Feed:  GET /api/jsonp/<part>/?callback=cb  ->  cb({...});   (with no callback: ({...});)
        Path prefixes pick a behaviour: /anon/... ignores the callback name, /html/... answers a web page as a
@@ -18,7 +18,10 @@ Feed:  GET /api/jsonp/<part>/?callback=cb  ->  cb({...});   (with no callback: (
        --connection-log writes one line for every connection accepted, including ones whose TLS handshake a
        client then refuses (those never reach a request, so --request-log cannot see them).
 Site:  / is a page naming /assets/index-test.js (300,000 bytes, which honours a Range header and sends slowly
-       enough for a speed to be measurable); /generate_204 is an empty 204 and /generate_200 a page that answers 200.
+       enough for a speed to be measurable); /generate_204 is an empty 204 and /generate_200 a page that answers 200;
+       /generate_big answers 200 with a 1 MiB body and a Content-Length, /generate_big_nolength the same without one.
+       Site variants: ignoresrange and ignoresrange-nolength send the whole script, 200, whatever Range says (the
+       second without a Content-Length); otherorigin names a script on 127.0.0.1 port --other-port.
 """
 import argparse
 import json
@@ -99,7 +102,9 @@ class Handler(BaseHTTPRequestHandler):
         if segments[:2] == ["api", "jsonp"]:
             self.feed_request(mode, segments[2] if len(segments) > 2 else "", query)
         elif path == "/":
-            pages = {"noscript": PAGE_NO_SCRIPT, "brokenscript": PAGE_GONE, "bigpage": PAGE_BIG}
+            elsewhere = b'src="http://127.0.0.1:%d/assets' % (OPTIONS.other_port or 0)
+            pages = {"noscript": PAGE_NO_SCRIPT, "brokenscript": PAGE_GONE, "bigpage": PAGE_BIG,
+                     "otherorigin": PAGE.replace(b'src="/assets', elsewhere)}
             page = pages.get(OPTIONS.site, PAGE)
             self.reply(200, "text/html", page)
         elif path == "/assets/index-test.js":
@@ -111,6 +116,13 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
         elif path == "/generate_200":
             self.reply(200, "text/html", SIGN_IN)
+        elif path == "/generate_big":
+            self.reply(200, "text/html", b"x" * 1048576)
+        elif path == "/generate_big_nolength":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            self.wfile.write(b"x" * 1048576)
         else:
             self.reply(404, "text/plain", b"not found")
 
@@ -156,7 +168,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def script(self):
         wanted = self.headers.get("Range")
-        if wanted != "bytes=0-262143":
+        if OPTIONS.site == "ignoresrange-nolength":  # no Content-Length: the body ends when the connection does
+            self.send_response(200)
+            self.send_header("Content-Type", "application/javascript")
+            self.end_headers()
+            self.wfile.write(SCRIPT)
+            return
+        if OPTIONS.site == "ignoresrange" or wanted != "bytes=0-262143":
             self.reply(200, "application/javascript", SCRIPT)
             return
         body = SCRIPT[:262144]
@@ -205,8 +223,10 @@ def main():
     parser.add_argument("--escape", action="store_true", help="put an escape sequence in the latitude")
     parser.add_argument("--missing", help="this part of the feed answers 404")
     parser.add_argument("--html-part", help="this part of the feed answers a web page")
-    parser.add_argument("--site", default="normal",
-                        choices=("normal", "noscript", "trickle", "brokenscript", "bigpage"))
+    parser.add_argument("--site", default="normal", choices=(
+        "normal", "noscript", "trickle", "brokenscript", "bigpage", "ignoresrange", "ignoresrange-nolength",
+        "otherorigin"))
+    parser.add_argument("--other-port", type=int)
     parser.add_argument("--request-log")
     parser.add_argument("--connection-log")
     OPTIONS = parser.parse_args()

@@ -10,11 +10,12 @@ Every 30 seconds by default it asks the train's own Wi-Fi system (Icomera's loca
 name that exists only on the train) where the train is, how strong each of its mobile connections is and how
 many passengers are online, and times one tiny request to the internet. In its first round it also reads this
 Mac's own Wi-Fi link, once: reading it can make the Mac look for other networks, which would disturb the film if
-repeated. When no film will be playing it can also time a download of the first 256 KB of CineFilm's own page
-code (it asks at the start, and assumes a film if nobody answers within a minute; --film and --no-film answer
-in advance). Each round is one line of JSON in ~/train-feed-logger/logs, written at once, so nothing is lost if
-the window closes. The log holds where the train went, so its place is fixed and no option moves it: always
-~/train-feed-logger/logs, never beside this file, so a run from a checkout cannot put it in the repository.
+repeated. When no film will be playing it can also time a download of the first 256 KB, and never more, of
+CineFilm's own page code (it asks at the start, and assumes a film if nobody answers within a minute; --film and
+--no-film answer in advance). Each round is one line of JSON in ~/train-feed-logger/logs, written at once, so
+nothing is lost if the window closes. The log holds where the train went, so its place is fixed and no option
+moves it: always ~/train-feed-logger/logs, never beside this file, so a run from a checkout cannot put it in the
+repository.
 
 It only reads: it sends nothing but those requests, changes nothing, and stops when its window is closed (or
 with Ctrl-C). While it runs it keeps the Mac from idling to sleep. Feed data is untrusted: what is printed has
@@ -33,7 +34,7 @@ import sys
 import threading
 import time
 from datetime import datetime, timezone
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 VERSION = 2
 DEFAULT_BASES = ["https://www.ombord.info/api/jsonp/", "http://www.ombord.info/api/jsonp/"]
@@ -52,6 +53,8 @@ PRINT_MAX = 40
 QUESTION = "Will a film be playing on this laptop during the journey? [Y/n] "
 ANSWER_WAIT_S = 60  # the question must never hold logging up
 PROBE_TIMEOUT_S = 10
+PROBE_MAX_BYTES = 65536  # only the status and the timing are used: the body is never kept
+TYPE_KEPT = 200  # characters of a content type kept in the log
 TEXT_KEPT = 300  # characters of a non-feed answer (a sign-in page, say) kept in the log
 INDEX_KEPT = 5000
 DEFAULT_RETRY_EVERY = 10  # rounds between full checks of every address and of parts that keep failing
@@ -62,6 +65,7 @@ MAX_DEPTH = 32
 MIN_CURL = (8, 4, 0)
 WRAPPED = re.compile(r"^[\w$.]*\s*\((.*)\)\s*;?$", re.S)
 CURL_ERRORS = {
+    1: "only http and https are asked",
     6: "could not find it",
     7: "could not connect",
     28: "timed out",
@@ -76,19 +80,22 @@ UNTRUSTED = (51, 60)
 SCRIPT_SRC = re.compile(r'src="([^"]*)"')
 
 
+def curl_command(url, timeout, *options):
+    """The curl command for one GET. Only http and https, and no redirect is followed: the address asked is the
+    address the owner gave (or the page's own, for the speed sample)."""
+    return [CURL, "-sS", "--proto", "=http,https", "--max-time", str(timeout),
+            "--connect-timeout", str(min(timeout, 5)), "-A", "train-feed-logger/%d" % VERSION, *options, url]
+
+
 def fetch(url, timeout, insecure=False, max_size=None):
     """One GET with curl. Returns ok, ms, and either code, ip, type, body and headers, or why."""
-    cmd = [
-        CURL, "-sS", "--max-time", str(timeout), "--connect-timeout", str(min(timeout, 5)),
-        "-A", "train-feed-logger/%d" % VERSION, "-D", "/dev/stderr", "-o", "-",
-        "-w", MARK + "%{http_code} %{time_total} %{remote_ip} %{content_type}",
-    ]
+    options = ["-D", "/dev/stderr", "-o", "-", "-w", MARK + "%{http_code} %{time_total} %{remote_ip} %{content_type}"]
     if insecure:
-        cmd.append("-k")
+        options.append("-k")
     if max_size:
         # From curl 8.4.0 this stops a body that has no length too, which is why an older curl is refused at the start.
-        cmd += ["--max-filesize", str(max_size)]
-    cmd.append(url)
+        options += ["--max-filesize", str(max_size)]
+    cmd = curl_command(url, timeout, *options)
     started = time.time()
     try:
         done = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout + 5)
@@ -115,7 +122,7 @@ def fetch(url, timeout, insecure=False, max_size=None):
         "ms": ms,
         "code": code,
         "ip": fields[2] if len(fields) > 2 else "",
-        "type": fields[3].strip() if len(fields) > 3 else "",
+        "type": fields[3].strip()[:TYPE_KEPT] if len(fields) > 3 else "",
         "body": body,
         "headers": done.stderr.decode("utf-8", "replace")[:1500],
     }
@@ -202,13 +209,39 @@ def curl_problem(version):
     return "%s, and %s is %s." % (need, CURL, ".".join(str(part) for part in version))
 
 
+def timed_curl(url, timeout, *options):
+    """Runs curl with its body thrown away and returns what it reports (code, size, first, total, curl: the exit
+    status), or just why when it could not run or reported nothing usable."""
+    cmd = curl_command(url, timeout, "-o", "/dev/null",
+                       "-w", "%{http_code} %{size_download} %{time_starttransfer} %{time_total}", *options)
+    try:
+        done = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout + 5)
+    except subprocess.TimeoutExpired:
+        return {"why": "timed out"}
+    except OSError as error:
+        return {"why": "could not run curl (%s)" % error}
+    try:
+        code, size, first, total = done.stdout.decode("ascii", "replace").split()
+        return {"code": int(code), "size": int(size), "first": float(first), "total": float(total),
+                "curl": done.returncode}
+    except ValueError:
+        return {"why": CURL_ERRORS.get(done.returncode, "curl error %d" % done.returncode)}
+
+
 def probe(url):
-    """Times one tiny request to the internet."""
+    """Times one tiny request to the internet. Its body is never kept, and curl stops one past PROBE_MAX_BYTES."""
     joiner = "&" if "?" in url else "?"
-    result = fetch("%s%s_=%d" % (url, joiner, int(time.time() * 1000)), PROBE_TIMEOUT_S)
-    if result["ok"]:
-        return {"ms": result["ms"], "code": result["code"]}
-    return {"ms": None, "why": result["why"]}
+    got = timed_curl("%s%s_=%d" % (url, joiner, int(time.time() * 1000)), PROBE_TIMEOUT_S,
+                     "--max-filesize", str(PROBE_MAX_BYTES))
+    if "why" in got:
+        return {"ms": None, "why": got["why"]}
+    if got["curl"] == 63:  # too big: the status was still received
+        return {"ms": int(got["first"] * 1000), "code": got["code"], "body": "not read"}
+    if got["curl"] != 0:
+        return {"ms": None, "why": CURL_ERRORS.get(got["curl"], "curl error %d" % got["curl"])}
+    if not 200 <= got["code"] < 300:
+        return {"ms": None, "why": "answered %d" % got["code"]}
+    return {"ms": int(got["total"] * 1000), "code": got["code"]}
 
 
 def kbps(size, first_byte_s, total_s):
@@ -219,44 +252,51 @@ def kbps(size, first_byte_s, total_s):
     return int(round(size * 8 / 1000 / phase))
 
 
+def origin(url):
+    """(scheme, host, port) of an address, with the default port filled in; None when it cannot be read."""
+    try:
+        parts = urlsplit(url)
+        return parts.scheme, (parts.hostname or "").lower(), parts.port or {"http": 80, "https": 443}.get(parts.scheme)
+    except ValueError:
+        return None
+
+
+def same_origin(first, second):
+    return origin(first) is not None and origin(first) == origin(second)
+
+
 def find_script(site, timeout):
-    """The address of the site's first script under /assets/, read from its page. Returns (address, why)."""
+    """The address of the site's first script under /assets/ on the site's own origin, read from its page: a script
+    anywhere else is skipped, or the sample would fetch from a host nobody chose. Returns (address, why)."""
     page = fetch(site, timeout, max_size=FEED_MAX_BYTES)
     if not page["ok"]:
         return None, page["why"]
+    elsewhere = False
     for value in SCRIPT_SRC.findall(page["body"]):
         if value.endswith(".js") and "/assets/" in value:
-            return urljoin(site, value), None
-    return None, "page names no script"
+            address = urljoin(site, value)
+            if same_origin(address, site):
+                return address, None
+            elsewhere = True
+    return None, "page names no script on its own site" if elsewhere else "page names no script"
 
 
 def sample_speed(url, timeout):
-    """Downloads the first 256 KB of url to nowhere. Returns bytes, ms, first_byte_ms and kbps, and why if it failed."""
-    cmd = [
-        CURL, "-sS", "--max-time", str(timeout), "--connect-timeout", str(min(timeout, 5)),
-        "-A", "train-feed-logger/%d" % VERSION, "-r", "0-%d" % (SPEED_BYTES - 1), "-o", "/dev/null",
-        "-w", "%{http_code} %{size_download} %{time_starttransfer} %{time_total}", url,
-    ]
-    empty = {"bytes": 0, "ms": None, "first_byte_ms": None, "kbps": None}
-    try:
-        done = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout + 5)
-    except subprocess.TimeoutExpired:
-        return dict(empty, why="timed out")
-    except OSError as error:
-        return dict(empty, why="could not run curl (%s)" % error)
-    try:
-        code, size, first_byte, total = done.stdout.decode("ascii", "replace").split()
-        code, size, first_byte, total = int(code), int(size), float(first_byte), float(total)
-    except ValueError:
-        return dict(empty, why=CURL_ERRORS.get(done.returncode, "curl error %d" % done.returncode))
+    """Downloads the first 256 KB of url to nowhere, and never more: curl refuses a longer answer, which is what a
+    site that ignores the range sends. Returns bytes, ms, first_byte_ms and kbps, and why if it failed."""
+    got = timed_curl(url, timeout, "-r", "0-%d" % (SPEED_BYTES - 1), "--max-filesize", str(SPEED_BYTES))
+    if "why" in got:
+        return {"bytes": 0, "ms": None, "first_byte_ms": None, "kbps": None, "why": got["why"]}
     result = {
-        "bytes": size, "ms": int(total * 1000), "first_byte_ms": int(first_byte * 1000),
-        "kbps": kbps(size, first_byte, total),
+        "bytes": got["size"], "ms": int(got["total"] * 1000), "first_byte_ms": int(got["first"] * 1000),
+        "kbps": kbps(got["size"], got["first"], got["total"]),
     }
-    if done.returncode != 0:
-        result["why"] = CURL_ERRORS.get(done.returncode, "curl error %d" % done.returncode)
-    elif not 200 <= code < 300:
-        result["why"] = "answered %d" % code
+    if got["curl"] == 63:
+        result["why"] = "the site ignores ranges"
+    elif got["curl"] != 0:
+        result["why"] = CURL_ERRORS.get(got["curl"], "curl error %d" % got["curl"])
+    elif not 200 <= got["code"] < 300:
+        result["why"] = "answered %d" % got["code"]
     return result
 
 
@@ -607,7 +647,8 @@ def main():
     parser.add_argument("--base", action="append", help="a feed address ending in /api/jsonp/ (for trying it out)")
     parser.add_argument("--interval", type=float, default=30, help="seconds between rounds (default 30, at least 1)")
     parser.add_argument("--probe", default=DEFAULT_PROBE,
-                        help="the internet check's address, which should answer an empty 204, or off")
+                        help="the internet check's address, which should answer an empty 204 (its body is never kept), "
+                             "or off")
     parser.add_argument("--rounds", type=int, default=0, help="stop after this many rounds (default 0: run on)")
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_S,
                         help="seconds allowed for each feed request (default %g)" % DEFAULT_TIMEOUT_S)
@@ -616,7 +657,8 @@ def main():
                              "(default %d, at least 1)" % DEFAULT_RETRY_EVERY)
     parser.add_argument("--no-wifi", action="store_true", help="do not read this Mac's own Wi-Fi link")
     parser.add_argument("--no-awake", action="store_true", help="do not keep the Mac from idling to sleep")
-    parser.add_argument("--speed-site", help="a site root to time a download from, when no film is playing")
+    parser.add_argument("--speed-site", help="a site root to time a download from, when no film is playing "
+                                             "(its first script must honour a Range request)")
     parser.add_argument("--no-film", action="store_true",
                         help="no film will play: time a download from %s" % SPEED_SITE)
     parser.add_argument("--film", action="store_true", help="a film will play: take no speed sample and do not ask")
