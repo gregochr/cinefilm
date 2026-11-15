@@ -247,6 +247,31 @@ describe('useSubtitleTiming', () => {
     expect(result.current.offsets).toEqual([250, 250, 0]);
   });
 
+  it('a press with nothing to send retries the last timing when the screen differs from the server, and otherwise leaves the line alone', async () => {
+    serve({ rows: [row(1, 500)] });
+    const props = open();
+    const { result, rerender } = renderHook((p) => useSubtitleTiming(p), { initialProps: props });
+    await act(() => result.current.reset());
+    expect(props.onApplied).toHaveBeenCalledExactlyOnceWith('FULL', '101_0', [0]);
+
+    // The new track did not load: the screen still shows +0.5 s while the server is at 0. Reset has nothing to send.
+    rerender({ ...props, onScreen: [500] });
+    act(() => result.current.swapFailed('FULL'));
+    expect(result.current.problem).toBe(subtitleTiming.swapFailed);
+    await act(() => result.current.reset());
+
+    expect(props.onApplied).toHaveBeenCalledTimes(2);
+    expect(props.onApplied).toHaveBeenLastCalledWith('FULL', '101_0', [0]);
+    expect(result.current.problem).toBeNull();
+
+    // On screen and on the server the same: nothing to send, nothing to load, and the line stays.
+    rerender({ ...props, onScreen: [0] });
+    act(() => result.current.swapFailed('FULL'));
+    await act(() => result.current.reset());
+    expect(props.onApplied).toHaveBeenCalledTimes(2);
+    expect(result.current.problem).toBe(subtitleTiming.swapFailed);
+  });
+
   it('forgets a problem when another file shows, and does not bring it back', async () => {
     serve({
       rows: [row(1, 0), row(2, 0)],

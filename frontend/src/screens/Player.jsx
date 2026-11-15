@@ -402,20 +402,27 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
   });
   const shownFile =
     fileKind === 'FULL' ? fullSubtitle : fileKind === 'FORCED' ? forcedSubtitle : null;
+  // What the timing buttons describe is the timing on screen: the offsets of the track that shows (the film's own until
+  // a swap), "Saving…" while the new one loads. The next press still works from the server's offsets.
+  const swapsOfFile = fileKind ? swaps[fileKind] : null;
+  const shownOffsets = swapsOfFile?.currentOffsets ?? shownFile?.offsetsMs ?? null;
   const timing = useSubtitleTiming({
     kind: fileKind,
     ids: shownFile?.sidecarIds,
     offsets: shownFile?.offsetsMs,
+    onScreen: shownOffsets,
     onApplied: (kind, token, offsets) => dispatchSwaps({ type: 'begin', kind, token, offsets }),
   });
   // The new timing's track loaded: it takes over. It failed, or neither loaded nor failed within SWAP_TIMEOUT_MS: it is
-  // dropped, the old one stays and the viewer is told. Only the kind that shows is watched; another kind keeps both its
-  // tracks mounted (a hidden track does load, so its outcome may come while nobody listens), and is read again from
-  // `readyState` when it shows again.
+  // dropped, the old one stays and the viewer is told. Only the kind that shows is watched (and timed: the 20 s start
+  // when it shows with a pending track). A kind that is not showing keeps both its tracks mounted, `disabled`; its
+  // pending one loads hidden once the kind shows again, or finishes a fetch it had already started, and is read from
+  // `readyState` when the kind shows again. Depends on this kind's pending token only, so a change for the other kind
+  // does not restart the timer.
   const { swapFailed } = timing;
+  const pending = swaps[fileKind]?.pending ?? null;
   useEffect(() => {
     const stops = [];
-    const { pending } = swaps[fileKind] ?? {};
     const element = pending ? trackRefs.current.get(fileTrackKey(fileKind, pending)) : null;
     if (element) {
       const loaded = () => dispatchSwaps({ type: 'commit', kind: fileKind, token: pending });
@@ -435,11 +442,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
       });
     }
     return () => stops.forEach((stop) => stop());
-  }, [swaps, fileKind, swapFailed]);
-  // What the timing buttons describe is the timing on screen: the offsets of the track that shows (the film's own until
-  // a swap), "Saving…" while the new one loads. The next press still works from the server's offsets.
-  const swapsOfFile = fileKind ? swaps[fileKind] : null;
-  const shownOffsets = swapsOfFile?.currentOffsets ?? shownFile?.offsetsMs ?? null;
+  }, [pending, fileKind, swapFailed]);
   // Deletes and blocks the download, then stops showing it: a full one falls back to Off (the forced lines still show
   // when there are any), a forced one to what the player would otherwise show. Playback itself is not touched.
   const reportWrong = async () => {

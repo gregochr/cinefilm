@@ -17,8 +17,9 @@ export function fileTrackKey(kind, token) {
  * One step. `begin`: a change was saved, its token (and the offsets it carries) starts loading as the pending track (a
  * newer one replaces an older pending). `commit`: that pending track loaded, so it becomes the current one and the old
  * one goes. `fail`: it did not load, so it is dropped and the current one stays. A step for a token that is no longer
- * the pending one does nothing. There is no step for the kind no longer showing: a hidden track does load, so its
- * pending track stays mounted beside the old one until it has loaded or failed.
+ * the pending one does nothing. There is no step for the kind no longer showing: its pending track stays mounted
+ * beside the old one, both `disabled`, and is settled (loaded or failed) once the kind shows again, or when it
+ * finishes a fetch it had already started.
  */
 export function swapTracks(state, { type, kind, token, offsets }) {
   const track = state[kind];
@@ -49,7 +50,8 @@ export function swapTracks(state, { type, kind, token, offsets }) {
 /**
  * The mode of every mounted track key. Only the current track of the kind that shows is `showing`; its pending one is
  * `hidden` (it loads its cues, shows nothing); every other track is `disabled`, so the browser fetches nothing it does
- * not need (a kind that is not showing keeps both of its tracks disabled). `showing`: the player's own key (`activeSubtitleKey`), a stream key, or a file kind's key.
+ * not need (a kind that is not showing keeps both of its tracks disabled). `showing`: the player's own key
+ * (`activeSubtitleKey`), a stream key, or a file kind's key.
  */
 export function trackModes(keys, { showing, shownKind, swaps }) {
   const current = shownKind ? fileTrackKey(shownKind, swaps[shownKind].current) : null;

@@ -446,6 +446,89 @@ describe('the player’s subtitle timing', () => {
       expect(track.track.mode).toBe('showing');
     });
 
+    it('after a failed load, Reset (nothing to send) loads the same timing again and clears the line', async () => {
+      const { requests } = await openPlayer({ mutate: fullOn(SIDECAR([70], [500])) });
+      await openPanel();
+      await userEvent.click(reset());
+      const failing = await screen.findByTestId('full-subtitle-track-pending');
+      fireEvent.error(failing);
+      await screen.findByRole('alert');
+      await readout('Timing: +0.5 s');
+      expect(puts(requests)).toHaveLength(1);
+
+      await userEvent.click(reset());
+
+      const retry = await screen.findByTestId('full-subtitle-track-pending');
+      expect(retry).not.toBe(failing);
+      expect(retry.getAttribute('src')).toBe(failing.getAttribute('src'));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(puts(requests)).toHaveLength(1);
+      fireEvent.load(retry);
+      await readout('Timing: No timing change');
+    });
+
+    it('a pending track waits through another subtitle showing: the 20 seconds count only while its kind shows', async () => {
+      await openPlayer({ mutate: fullOn(SIDECAR([70])) });
+      await openPanel();
+      const track = screen.getByTestId('full-subtitle-track');
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+      await userEvent.click(later());
+      const incoming = await screen.findByTestId('full-subtitle-track-pending');
+      await userEvent.click(
+        within(subtitlesMenu()).getByRole('menuitemradio', { name: 'English' }),
+      );
+      await act(async () => vi.advanceTimersByTime(25_000));
+
+      await userEvent.click(
+        within(subtitlesMenu()).getByRole('menuitemradio', { name: 'English (full)' }),
+      );
+
+      expect(pendingFull()).toBe(incoming);
+      expect(incoming.track.mode).toBe('hidden');
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      await act(async () => vi.advanceTimersByTime(20_500));
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Couldn’t load the new timing. The old timing stays.',
+      );
+      expect(screen.getByTestId('full-subtitle-track')).toBe(track);
+      expect(track.track.mode).toBe('showing');
+    });
+
+    it('a change for the other kind does not restart the shown kind’s 20 seconds', async () => {
+      let release;
+      const gate = new Promise((resolve) => {
+        release = resolve;
+      });
+      await openPlayer({
+        mutate: (f) => {
+          f.editions[0].forcedSubtitle = SIDECAR([71]);
+          f.editions[0].fullSubtitle = SIDECAR([70]);
+        },
+        answer: (method, url) =>
+          method === 'PUT' && url.endsWith('/71/offset')
+            ? gate.then(() => respond(answerRow({ id: 71, offsetMs: 250, version: 5001 })))
+            : null,
+      });
+      await openPanel();
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+      // Off shows the forced file: a change to it is held while the viewer moves to the full one and changes that.
+      await userEvent.click(later());
+      await userEvent.click(
+        within(subtitlesMenu()).getByRole('menuitemradio', { name: 'English (full)' }),
+      );
+      await userEvent.click(later());
+      await screen.findByTestId('full-subtitle-track-pending');
+      await act(async () => vi.advanceTimersByTime(15_000));
+
+      release();
+      await screen.findByTestId('forced-subtitle-track-pending');
+      await act(async () => vi.advanceTimersByTime(6_000));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Couldn’t load the new timing. The old timing stays.',
+      );
+    });
+
     it('the 20 second wait is over once it has loaded', async () => {
       await openPlayer({ mutate: fullOn(SIDECAR([70])) });
       await openPanel();

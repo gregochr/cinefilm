@@ -604,7 +604,10 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
     and swaps once its `load` event fires: the new one becomes the only `showing` track and the old element unmounts. On
     `error` the new one is dropped, the old one keeps showing and the viewer is told. A newer change replaces a pending
     one. A kind that stops showing (the viewer chose another subtitle) keeps both its tracks mounted, both
-    `disabled`: a hidden track does load, so its load or error may arrive while nobody listens. When the kind shows
+    `disabled`: its pending one loads hidden once the kind shows again, or finishes a fetch it had already started, so its
+    load or error may arrive while nobody listens. The 20 s timer runs only while the kind shows. A press with nothing to
+    send (Reset at 0) while the screen shows other timing than the server (a failed swap) retries the last token's track
+    and leaves the failed-load line alone otherwise. When the kind shows
     again the old one is `showing` and the pending one `hidden` again, and the listener reads the pending element's
     `readyState` on attaching (2 loaded: it takes over; 3 error: dropped with the line), else waits for its events. A
     pending track that neither loads nor errors within 20 s is dropped (old timing stays, line shown). The mode effect
