@@ -19,6 +19,21 @@ describe('useAdminShell', () => {
     );
   });
 
+  it('owns the one summary read, and reads it again each time something changed', async () => {
+    const fetchMock = installFetch();
+    const { result } = renderHook(() => useAdminShell(true));
+    await waitFor(() =>
+      expect(result.current.value.adminSummary.summary).toEqual(fixtures.adminSummary),
+    );
+    const reads = () => fetchMock.mock.calls.filter(([url]) => url === '/api/admin/summary').length;
+    await waitFor(() => expect(result.current.value.settledAt).not.toBe('never|none'));
+    const before = reads();
+
+    act(() => result.current.markChanged());
+
+    await waitFor(() => expect(reads()).toBe(before + 1));
+  });
+
   it('remembers what opened each dialog, and closes them', () => {
     installFetch();
     const { result } = renderHook(() => useAdminShell(true));

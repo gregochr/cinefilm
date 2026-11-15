@@ -1,10 +1,12 @@
 import { useCallback, useRef, useState } from 'react';
 import { useToast } from './useToast.js';
 import { usePlexImport, useScan } from './useAdmin.js';
+import { useAdminSummary } from './useAdminSummary.js';
 
 /**
  * The state the Admin layout owns for every section: the one scan poller and the one Plex status poller (their
- * finish times drive each section's reloads), the Fix match and Edit editions dialogs, the toast, and `changed`,
+ * finish times drive each section's reloads), the one summary read (`adminSummary`: rail counts and the To do strip, read
+ * again on each of those stamps and every 30 s while visible), the Fix match and Edit editions dialogs, the toast, and `changed`,
  * a counter bumped after a match is applied or editions are saved. `visible` (the tab is shown) pauses polling.
  *
  * The dialogs remember the element that opened them so the layout can hand focus back on close.
@@ -32,6 +34,9 @@ export function useAdminShell(visible, pathname = '') {
   // Read again when a scan, a subtitle search or a subtitle check finishes (new checks and evidence).
   const subtitlesVersion = `${settledAt}|${scan?.openSubtitlesLastSearchedAt ?? 'never'}|${scan?.subtitleChecksLastFinishedAt ?? 'never'}`;
 
+  // The rail and the To do page share this one read of the summary.
+  const adminSummary = useAdminSummary(visible, { settledAt, subtitlesVersion, changed });
+
   const markChanged = useCallback(() => {
     setChanged((n) => n + 1);
     reloadScan();
@@ -53,6 +58,7 @@ export function useAdminShell(visible, pathname = '') {
     value: {
       ...scanState,
       plexImport,
+      adminSummary,
       settledAt,
       subtitlesVersion,
       changed,

@@ -101,7 +101,8 @@ One PR per phase, each from updated `main`, built by Sonnet, gated by CLAUDE.md 
 | 3a | `feat(health)` | Health columns + backfill, filtered/paged query, `FILM_SESSION_MIN_MS` both sides | — |
 | 3b-1 | `feat(subtitles)` | `AdminTodoRules`, unresolved/beingChecked, originalLanguage, confident+score | Q3 |
 | 3b-2 | `feat(admin)` | `GET /api/admin/summary` | 3b-1 |
-| 3c | `feat(admin)` | To do page: status strip, four bounded groups, empty state, rail counts | — |
+| 3c-1 | `feat(admin)` | summary hook, rail counts, To do heading and status strip | — |
+| 3c-2 | `feat(admin)` | the four To do groups, "Yes, it's…", empty state | 3c-1 |
 | 4a | `feat(subtitles)` | Subtitles section: two tabs, owner choices, "Everything else" | Q3 |
 | 4b | `feat(subtitles)` | Backend: edition-scoped OpenSubtitles search and download | — |
 | 4c | `feat(subtitles)` | Picker dialog, wired into both tabs and To do | — |
