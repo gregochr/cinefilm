@@ -208,6 +208,11 @@ p {
   color: var(--cf-text);
   border-color: var(--cf-text-muted);
 }
+/* Busy: the button keeps focus but is dimmed and does nothing (never amber). */
+.btn[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: default;
+}
 .btn--primary {
   background: var(--cf-amber);
   border-color: var(--cf-amber);

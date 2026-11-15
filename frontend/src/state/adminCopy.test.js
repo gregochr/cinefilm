@@ -7,6 +7,8 @@ import {
   railNames,
   statusStrip,
   todoCount,
+  todoFooter,
+  todoRow,
   showAll,
   todo,
   todoGroups,
@@ -113,6 +115,10 @@ describe('adminCopy buttons', () => {
     expect(buttons.confirmGuess.label('Heat', 1995)).toBe('Yes, it’s Heat (1995)');
   });
 
+  it('leaves the year out of the guess confirmation when TMDB lists none', () => {
+    expect(buttons.confirmGuess.label('Dune', null)).toBe('Yes, it’s Dune');
+  });
+
   it('has the subtitle answers from the boards', () => {
     expect(buttons.noForeignScenes.label).toBe('No foreign scenes');
     expect(buttons.searchEnglishSubtitles.label).toBe('Search for English subtitles…');
@@ -138,6 +144,20 @@ describe('adminCopy sections and footers', () => {
       'Forced subtitles not found',
     ]);
     for (const group of Object.values(todoGroups)) expect(group.why).not.toBe('');
+  });
+
+  it('words the group footer controls and the row lines', () => {
+    expect(todoFooter.allInSubtitles + ' ' + todoFooter.arrow).toBe('All in Subtitles →');
+    expect(todoFooter.showAll).toBe('Show all');
+    expect(todoFooter.showFewer).toBe('Show fewer');
+    expect(todoRow.bestGuess('Heat (1995)')).toBe('best guess: Heat (1995)');
+    expect(todoRow.noGuess).toBe('best guess: none');
+    expect(todoRow.files(1)).toBe('1 file');
+    expect(todoRow.files(3)).toBe('3 files');
+    expect(Object.keys(todoRow.loadErrors)).toEqual(['attention', 'full', 'forced']);
+    for (const message of Object.values(todoRow.loadErrors))
+      expect(message).toMatch(/^Couldn’t load/);
+    expect(todoRow.retry).toBe('Try again');
   });
 
   it('words the desktop and phone footers', () => {

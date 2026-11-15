@@ -138,7 +138,13 @@ const CASES = [
   {
     name: 'To do',
     path: '/admin',
-    buttons: ['Find the film…', 'Sort out editions…', 'Find the film…'],
+    buttons: [
+      'Find the film…',
+      'Yes, it’s Suspiria (1977)',
+      'Find the film…',
+      'Sort out editions…',
+      'Sort out editions…',
+    ],
   },
   {
     name: 'Subtitles, a file a download replaced',
@@ -273,7 +279,7 @@ describe('Admin: the only amber button', () => {
       });
       renderApp(c.path);
       await screen.findByRole('heading', { level: 1 });
-      // findAll: a name may repeat (two unmatched films each have "Find the film…").
+      // findAll: a name may repeat (unmatched films each have "Find the film…").
       await screen.findAllByRole('button', { name: c.buttons[0] });
       if (c.steps) await c.steps();
       for (const name of c.buttons) await screen.findAllByRole('button', { name });

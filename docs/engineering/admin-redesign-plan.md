@@ -217,6 +217,16 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
   per `06`, only the Library card shows.
 - **3c-1 decision:** a failed re-read keeps the last good figures (rail counts, heading count, strip) with no banner; the
   next 30 s poll retries. The error banner shows only when no summary has been read yet.
+- **3c-2 decision (built):** groups 3 and 4 are read-only rows (title, a reason line) with the "All in Subtitles →"
+  footer, always shown, since their actions arrive with 4a/4c. Groups 1 and 2 read the attention list; 3 and 4 the
+  two need lists, each its own request with its own skeleton and error banner. The skeleton or banner shows until a
+  source's first answer; after that a failed re-read keeps the last list with no banner, as the summary does in 3c-1.
+  "Yes, it's…" hides its row at once on success, moves focus to the section title there and then, and the lists and
+  summary re-read; "Show all" becomes "Show fewer" on the same button. On phone (`06`) the "To do" heading is visually
+  hidden and the intro dropped, the group header shows a count where the wide one shows the why-line, and the footers
+  read "k of n" with "Show all" and "All in Subtitles" (no count, no arrow). **Posters are deferred:** attention items
+  carry none, so rows have no poster column until the API gives one. Copy the planner added is marked in
+  `adminCopy.js` ("planner, 3c-2"). **3c is complete.**
 - **Groups** (copy from `AR1`), up to **5** rows, footer as in `adminCopy` with "Show all {n}" (expands in place) or
   "All in Subtitles →":
   1. Pick the right film — `needs-match`. `confident` → "Yes, it's {Title} ({year})" (the existing match `POST`) +

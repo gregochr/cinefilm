@@ -1,101 +1,81 @@
-import { ActionWithHint } from '../../components/ActionWithHint.jsx';
-import { buttons, todo } from '../../state/adminCopy.js';
+import { todo, todoRow } from '../../state/adminCopy.js';
 import { todoHeadingCount } from '../../state/adminSummaryFormat.js';
-import AdminStatusStrip from './AdminStatusStrip.jsx';
-import { SkeletonBlock } from '../../components/Skeleton.jsx';
-import { ErrorState } from '../../components/StateMessages.jsx';
-import { formatRuntime } from '../../player/time.js';
-import { useFallbackFocus } from './useFallbackFocus.js';
-import SectionTitle from './SectionTitle.jsx';
 import { useAdminContext } from '../../state/adminContext.js';
-import { useAttention } from '../../state/useAdmin.js';
-import { kindLabel, titleWithYear } from '../../state/scanFormat.js';
+import { useAdminTodo } from '../../state/useAdminTodo.js';
+import AdminStatusStrip from './AdminStatusStrip.jsx';
+import AdminTodoGroup from './AdminTodoGroup.jsx';
+import AdminTodoNotice from './AdminTodoNotice.jsx';
+import SectionTitle from './SectionTitle.jsx';
+import { useFallbackFocus } from './useFallbackFocus.js';
 
-function Candidates({ candidates }) {
-  return (
-    <ul className="admin__candidates" aria-label="Possible matches">
-      {candidates.map((c) => (
-        <li key={c.tmdbId}>
-          {titleWithYear(c.title, c.year)}
-          {c.runtimeMinutes ? (
-            <span className="admin__mono"> · {formatRuntime(c.runtimeMinutes * 60000)}</span>
-          ) : null}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function AttentionPanel({ attention, loading, error, onRetry, onFixMatch, onEditEditions }) {
-  let body;
-  if (loading && !attention) {
-    body = (
-      <div role="status" aria-label="Loading">
-        <SkeletonBlock style={{ height: 120 }} />
-      </div>
-    );
-  } else if (error && !attention) {
-    body = (
-      <ErrorState onRetry={onRetry}>Couldn&rsquo;t load the films needing attention.</ErrorState>
-    );
-  } else if (attention && attention.items.length === 0) {
-    body = <p className="admin__text">Nothing needs attention.</p>;
-  } else if (attention) {
-    body = (
-      <ul className="admin__list">
-        {attention.items.map((item) => (
-          <li key={`${item.kind}-${item.filmId}-${item.files.join('|')}`} className="admin__item">
-            <div className="admin__item-head">
-              <span className="admin__item-title">{titleWithYear(item.title, item.year)}</span>
-              <span className="admin__tag">{kindLabel(item.kind)}</span>
-            </div>
-            <div className="admin__item-detail">{item.detail}</div>
-            <div className="admin__item-files admin__mono">{item.files.join(' · ')}</div>
-            {item.candidates.length > 0 ? <Candidates candidates={item.candidates} /> : null}
-            {item.kind === 'needs-match' ? (
-              <div className="admin__actions admin__item-actions">
-                <ActionWithHint
-                  hint={buttons.findFilm.hint}
-                  onClick={(event) => onFixMatch(item, event.currentTarget)}
-                >
-                  {buttons.findFilm.label}
-                </ActionWithHint>
-              </div>
-            ) : null}
-            {item.kind === 'multiple-files' ? (
-              <div className="admin__actions admin__item-actions">
-                <ActionWithHint
-                  hint={buttons.sortEditions.hint}
-                  onClick={(event) => onEditEditions(item, event.currentTarget)}
-                >
-                  {buttons.sortEditions.label}
-                </ActionWithHint>
-              </div>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-    );
+/**
+ * Once a confirmed row is hidden, focus goes straight to the section title when it was on that row (or nowhere): the
+ * button it was on is about to leave the page, and a fallback waiting for a later list change could be spent by another.
+ */
+function leaveRow(opener) {
+  const active = document.activeElement;
+  const row = opener?.closest('li');
+  if (!active || active === document.body || row?.contains(active)) {
+    document.getElementById('admin-section-title')?.focus();
   }
-  return (
-    <section className="admin__card" aria-labelledby="admin-attention-title">
-      <div className="admin__head">
-        <h2 id="admin-attention-title" className="admin__title">
-          Films needing attention
-        </h2>
-      </div>
-      {body}
-    </section>
-  );
 }
 
-/** To do: the films needing attention. Fix match and Edit editions open from here, hosted by the layout. */
+const FILM_GROUPS = ['pickFilm', 'severalFiles'];
+
+/**
+ * To do: the status strip, then up to four groups of things only the owner can settle. Each source loads on its own
+ * (a skeleton, then rows or an inline error with its own retry), so a failing list never holds back the others. Fix
+ * match and Edit editions open from the rows, hosted by the layout.
+ */
 export default function AdminTodo() {
-  const { settledAt, changed, openFixMatch, openEditEditions, adminSummary } = useAdminContext();
+  const {
+    settledAt,
+    subtitlesVersion,
+    changed,
+    markChanged,
+    openFixMatch,
+    openEditEditions,
+    adminSummary,
+  } = useAdminContext();
   // The heading never waits for the summary, and a failed re-read leaves the last good count.
   const countText = todoHeadingCount(adminSummary.summary);
-  const attention = useAttention(`${settledAt}|${changed}`);
+  const lists = useAdminTodo({
+    settledAt,
+    subtitlesVersion,
+    changed,
+    onChanged: markChanged,
+  });
+  const { attention, full, forced } = lists;
   useFallbackFocus(attention.data);
+
+  const openEditions = (item, opener) =>
+    openEditEditions({ id: item.filmId, title: item.title, year: item.year }, opener);
+  const rowProps = {
+    confirming: lists.confirming,
+    problems: lists.problems,
+    onConfirm: (item, opener) => lists.confirm(item, { onHidden: () => leaveRow(opener) }),
+    onFindFilm: openFixMatch,
+    onSortOut: openEditions,
+  };
+  const groupFor = (key) => lists.groups.find((g) => g.key === key);
+  const group = (key) => {
+    const found = groupFor(key);
+    return found ? <AdminTodoGroup key={key} group={found} {...rowProps} /> : null;
+  };
+
+  // A source's slot is its skeleton or, when its first read failed, its banner, until it has answered once. After
+  // that a failed re-read keeps the last list on screen with no banner (as the summary does), and the next change
+  // reads it again.
+  const slot = (source, label, message, keys) => {
+    if (source.data) return keys.map(group);
+    if (source.error) {
+      return (
+        <AdminTodoNotice key={keys[0]} label={label} error={message} onRetry={source.reload} />
+      );
+    }
+    return <AdminTodoNotice key={keys[0]} label={label} />;
+  };
+
   return (
     <>
       <div className="admin__ttl">
@@ -108,18 +88,17 @@ export default function AdminTodo() {
         error={adminSummary.error}
         onRetry={adminSummary.reload}
       />
-      <div className="admin__grid">
-        <AttentionPanel
-          attention={attention.data}
-          loading={attention.loading}
-          error={attention.error}
-          onRetry={attention.reload}
-          onFixMatch={openFixMatch}
-          onEditEditions={(item, opener) =>
-            openEditEditions({ id: item.filmId, title: item.title, year: item.year }, opener)
-          }
-        />
-      </div>
+      {slot(
+        attention,
+        'the films that need sorting out',
+        todoRow.loadErrors.attention,
+        FILM_GROUPS,
+      )}
+      {slot(full, 'the films missing English subtitles', todoRow.loadErrors.full, ['fullMissing'])}
+      {slot(forced, 'the forced subtitles to find', todoRow.loadErrors.forced, ['forcedQuestion'])}
+      {lists.allRead && lists.groups.length === 0 ? (
+        <p className="admin__text">{todo.empty}</p>
+      ) : null}
     </>
   );
 }

@@ -1,0 +1,116 @@
+{
+  "films": [
+    {
+      "filmId": 300,
+      "title": "Subtitle film 1",
+      "year": 1950,
+      "need": "NEEDED",
+      "reason": "OWNER",
+      "ownerChoice": "NEEDED",
+      "editions": [],
+      "fullSubtitle": null,
+      "originalLanguage": "ja",
+      "unresolved": true,
+      "beingChecked": false
+    },
+    {
+      "filmId": 301,
+      "title": "Subtitle film 2",
+      "year": 1950,
+      "need": "NEEDED",
+      "reason": "OWNER",
+      "ownerChoice": "NEEDED",
+      "editions": [],
+      "fullSubtitle": null,
+      "originalLanguage": "ja",
+      "unresolved": true,
+      "beingChecked": false
+    },
+    {
+      "filmId": 302,
+      "title": "Subtitle film 3",
+      "year": 1950,
+      "need": "NEEDED",
+      "reason": "OWNER",
+      "ownerChoice": "NEEDED",
+      "editions": [],
+      "fullSubtitle": null,
+      "originalLanguage": "ja",
+      "unresolved": true,
+      "beingChecked": false
+    },
+    {
+      "filmId": 303,
+      "title": "Subtitle film 4",
+      "year": 1950,
+      "need": "NEEDED",
+      "reason": "OWNER",
+      "ownerChoice": "NEEDED",
+      "editions": [],
+      "fullSubtitle": null,
+      "originalLanguage": "ja",
+      "unresolved": true,
+      "beingChecked": false
+    },
+    {
+      "filmId": 304,
+      "title": "Subtitle film 5",
+      "year": 1950,
+      "need": "NEEDED",
+      "reason": "OWNER",
+      "ownerChoice": "NEEDED",
+      "editions": [],
+      "fullSubtitle": null,
+      "originalLanguage": "ja",
+      "unresolved": true,
+      "beingChecked": false
+    },
+    {
+      "filmId": 305,
+      "title": "Subtitle film 6",
+      "year": 1950,
+      "need": "NEEDED",
+      "reason": "OWNER",
+      "ownerChoice": "NEEDED",
+      "editions": [],
+      "fullSubtitle": null,
+      "originalLanguage": "ja",
+      "unresolved": true,
+      "beingChecked": false
+    },
+    {
+      "filmId": 306,
+      "title": "Subtitle film 7",
+      "year": 1950,
+      "need": "NEEDED",
+      "reason": "OWNER",
+      "ownerChoice": "NEEDED",
+      "editions": [],
+      "fullSubtitle": null,
+      "originalLanguage": "ja",
+      "unresolved": true,
+      "beingChecked": false
+    },
+    {
+      "filmId": 310,
+      "title": "Das Boot",
+      "year": 1981,
+      "need": "NEEDED",
+      "reason": "FOREIGN_AUDIO",
+      "ownerChoice": null,
+      "editions": [{ "name": "Original", "audio": "German" }],
+      "fullSubtitle": { "source": "SIDECAR" },
+      "originalLanguage": "de",
+      "unresolved": false,
+      "beingChecked": false
+    }
+  ],
+  "counts": {
+    "needed": 3,
+    "unsure": 0,
+    "unknown": 1,
+    "notNeeded": 1,
+    "unresolved": 7,
+    "beingChecked": 1
+  }
+}
