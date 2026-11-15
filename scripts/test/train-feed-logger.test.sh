@@ -276,7 +276,8 @@ assert_eq "the other parts were read" '["position", "connectivity", "users", "sy
 
 echo "an answer too big to read"
 run_logger --base "http://127.0.0.1:$P/big/api/jsonp/" --probe off --rounds 1 --timeout 5
-assert_eq "40,000 bytes of valid data, just under the limit, are read as data" 40000 "$(jv "$LOG" 'len(L[1]["feed"]["position"]["pad"])')"
+assert_eq "a body of 49,900 bytes, just under the 50,000 limit, is read as data" true \
+    "$(jv "$LOG" 'len(L[1]["feed"]["position"]["pad"]) > 49500')"
 assert_contains "and the feed answers" "$OUT" "feed answering (http)"
 run_logger --base "http://127.0.0.1:$P/huge/api/jsonp/" --probe off --rounds 1 --timeout 5
 assert_contains "over the limit, with a Content-Length" "$OUT" "feed not answering (http: answer too large)"
@@ -515,6 +516,20 @@ assert_eq "round 2: the same" '"answered 404"' "$(jv "$LOG" 'L[2]["speed"]["why"
 assert_eq "the page was read again in round 2" 2 "$(grep -cx 'GET /' "$TMP/gone.log")"
 assert_eq "and the script asked for both times" 2 "$(grep -c 'GET /assets/index-gone.js' "$TMP/gone.log")"
 assert_contains "the line says why" "$OUT" "speed: answered 404"
+
+echo "a content type that is very long"
+run_logger --base "http://127.0.0.1:$P/longtype/api/jsonp/" --probe off --rounds 1
+assert_eq "the log keeps exactly 200 characters of it" 200 "$(jv "$LOG" 'len(L[1]["first"]["position"]["type"])')"
+assert_eq "and they are the start of it" true \
+    "$(jv "$LOG" 'L[1]["first"]["position"]["type"].startswith("application/javascript; x=aaa")')"
+
+echo "a script that answers 404 with a big body"
+serve goneb --site gone-big --request-log "$TMP/goneb.log"
+SITE_GB="http://127.0.0.1:$PORT"
+run_logger --base "http://127.0.0.1:$PORT/api/jsonp/" --probe off --speed-site "$SITE_GB" --interval 1 --rounds 2
+assert_eq "it is a 404, not a site that ignores ranges, in both rounds" '["answered 404", "answered 404"]' \
+    "$(jv "$LOG" '[L[1]["speed"]["why"], L[2]["speed"]["why"]]')"
+assert_eq "the page was read again in round 2: the stale address was forgotten" 2 "$(grep -cx 'GET /' "$TMP/goneb.log")"
 
 echo "a site that ignores the range"
 serve ignores --site ignoresrange --request-log "$TMP/ignores.log"
@@ -972,6 +987,28 @@ check("find_script: a protocol-relative src elsewhere is skipped", (None, "page 
 check("find_script: the first one on the site is taken after one elsewhere", ("https://site.test/assets/b.js", None),
       script_found('<script src="https://evil.test/assets/a.js"></script><script src="/assets/b.js"></script>'))
 check("find_script: no script at all", (None, "page names no script"), script_found("<html></html>"))
+check("find_script: a src urljoin cannot join is skipped, the next good one is taken",
+      ("https://site.test/assets/b.js", None),
+      script_found('<script src="http://[/assets/a.js"></script><script src="/assets/b.js"></script>'))
+check("find_script: a src with a NUL is skipped, the next good one is taken", ("https://site.test/assets/b.js", None),
+      script_found('<script src="/assets/a\x00.js"></script><script src="/assets/b.js"></script>'))
+check("find_script: a src with a non-ASCII character is skipped", ("https://site.test/assets/b.js", None),
+      script_found('<script src="/assets/\u00e9.js"></script><script src="/assets/b.js"></script>'))
+check("find_script: with only broken ones the reason is the usual one", (None, "page names no script"),
+      script_found('<script src="http://[/assets/a.js"></script><script src="/assets/a\x00.js"></script>'))
+
+
+def round_with_failing_sample(logger):
+    def explode(record):
+        raise ValueError("embedded null byte")
+
+    logger.take_speed_sample = explode
+    return with_fetch(lambda url, timeout, insecure=False, max_size=None: dict(GOOD), lambda: logger.round(1))
+
+
+record = round_with_failing_sample(m.Logger(["http://a.test/api/jsonp/"], None, False, speed_site="http://site.test"))
+check("a speed sample that raises leaves the round its feed", sorted(m.PARTS), sorted(record.get("feed", {})))
+check("and records why", {"why": "failed (embedded null byte)"}, record.get("speed"))
 
 a_down = {"now": False}
 
@@ -1010,7 +1047,7 @@ while IFS= read -r line; do
         "FAIL "*) bad "${line#FAIL }"; PURE=$((PURE + 1)) ;;
     esac
 done <<< "$RESULTS"
-assert_eq "all 132 pure checks reported" 132 "$PURE"
+assert_eq "all 138 pure checks reported" 138 "$PURE"
 
 echo "compiles"
 PYTHONPYCACHEPREFIX="$TMP/pyc" python3 -m py_compile "$LOGGER" "$STAND_IN"

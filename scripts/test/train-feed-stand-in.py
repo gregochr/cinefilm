@@ -12,9 +12,10 @@ It is not a test file itself (its name does not end in .test.sh, so run-all.sh d
 
 Feed:  GET /api/jsonp/<part>/?callback=cb  ->  cb({...});   (with no callback: ({...});)
        Path prefixes pick a behaviour: /anon/... ignores the callback name, /html/... answers a web page as a
-       sign-in portal would, /slow/... answers after three seconds, /big/... pads each answer to 40,000 bytes
-       (valid), /huge/... to 60,000 bytes with a Content-Length, /chunked/... the same without one,
-       /bigindex/... answers the parts normally but its index (/api/jsonp/) with 60,000 bytes.
+       sign-in portal would, /slow/... answers after three seconds, /big/... pads each answer to 49,900 bytes
+       in all (valid, and just under the logger's 50,000-byte limit), /huge/... to 50,100 bytes (just over it) with a
+       Content-Length, /chunked/... the same without one, /bigindex/... answers the parts normally but its index
+       (/api/jsonp/) with 50,100 bytes, /longtype/... gives every answer a 300-character Content-Type.
        --connection-log writes one line for every connection accepted, including ones whose TLS handshake a
        client then refuses (those never reach a request, so --request-log cannot see them).
 Site:  / is a page naming /assets/index-test.js (300,000 bytes, which honours a Range header and sends slowly
@@ -22,7 +23,8 @@ Site:  / is a page naming /assets/index-test.js (300,000 bytes, which honours a 
        /generate_big answers 200 with a 1 MiB body and a Content-Length, /generate_big_nolength the same without one,
        /generate_404_big a 404 with a 1 MiB body.
        Site variants: ignoresrange and ignoresrange-nolength send the whole script, 200, whatever Range says (the
-       second without a Content-Length); otherorigin names a script on 127.0.0.1 port --other-port.
+       second without a Content-Length); otherorigin names a script on 127.0.0.1 port --other-port; gone-big
+       answers the script with a 404 and a 1 MiB body.
 """
 import argparse
 import json
@@ -39,10 +41,10 @@ PAGE = (b'<!doctype html><html><head>'
         b'<script type="module" crossorigin src="/assets/index-test.js"></script>'
         b'</head><body></body></html>')
 PAGE_GONE = PAGE.replace(b"index-test.js", b"index-gone.js")  # a release changed the script's hashed name
-PAGE_BIG = b"<!doctype html><html><body>" + b"x" * 60000 + b"</body></html>"
+PAGE_BIG = b"<!doctype html><html><body>" + b"x" * 50059 + b"</body></html>"  # 50,100 bytes in all
 PAGE_NO_SCRIPT = b"<!doctype html><html><head></head><body>nothing to download here</body></html>"
 SIGN_IN = b"<html><body>Sign in to the train Wi-Fi</body></html>"
-PADDING = {"big": 40000, "huge": 60000, "chunked": 60000}
+TOTAL = {"big": 49900, "huge": 50100, "chunked": 50100}  # body sizes either side of 50,000
 PARTS = ("position", "connectivity", "users", "user", "system")
 OPTIONS = None
 STATE = {"positions": 0}
@@ -98,7 +100,8 @@ class Handler(BaseHTTPRequestHandler):
                 log.write("GET %s\n" % path)
         segments = [s for s in path.split("/") if s]
         mode = ""
-        if segments and segments[0] in ("anon", "html", "slow", "big", "huge", "chunked", "bigindex"):
+        if segments and segments[0] in ("anon", "html", "slow", "big", "huge", "chunked", "bigindex",
+                                         "longtype"):
             mode = segments.pop(0)
         if segments[:2] == ["api", "jsonp"]:
             self.feed_request(mode, segments[2] if len(segments) > 2 else "", query)
@@ -147,7 +150,7 @@ class Handler(BaseHTTPRequestHandler):
             time.sleep(3)
         if part == "":
             text = "parts: " + " ".join(PARTS)
-            self.reply(200, "text/plain", (text + " " * 60000 if mode == "bigindex" else text).encode())
+            self.reply(200, "text/plain", (text.ljust(50100) if mode == "bigindex" else text).encode())
             return
         data = feed(part)
         if data is None:
@@ -158,19 +161,26 @@ class Handler(BaseHTTPRequestHandler):
             if pair.startswith("callback="):
                 callback = pair[len("callback="):]
         name = "" if mode == "anon" else callback
-        if mode in PADDING:
-            data = dict(data, pad="x" * PADDING[mode])
-        body = ("%s(%s);" % (name, json.dumps(data))).encode()
+        if mode in TOTAL:  # padded so that the whole body is exactly TOTAL[mode] bytes
+            def wrapped(pad):
+                return ("%s(%s);" % (name, json.dumps(dict(data, pad=pad)))).encode()
+            body = wrapped("x" * (TOTAL[mode] - len(wrapped(""))))
+        else:
+            body = ("%s(%s);" % (name, json.dumps(data))).encode()
         if mode == "chunked":  # no Content-Length: the body ends when the connection does
             self.send_response(200)
             self.send_header("Content-Type", "application/javascript")
             self.end_headers()
             self.wfile.write(body)
             return
-        self.reply(200, "application/javascript", body)
+        kind = "application/javascript; x=" + "a" * 274 if mode == "longtype" else "application/javascript"
+        self.reply(200, kind, body)
 
     def script(self):
         wanted = self.headers.get("Range")
+        if OPTIONS.site == "gone-big":
+            self.reply(404, "text/plain", b"x" * 1048576)
+            return
         if OPTIONS.site == "ignoresrange-nolength":  # no Content-Length: the body ends when the connection does
             self.send_response(200)
             self.send_header("Content-Type", "application/javascript")
@@ -228,7 +238,7 @@ def main():
     parser.add_argument("--html-part", help="this part of the feed answers a web page")
     parser.add_argument("--site", default="normal", choices=(
         "normal", "noscript", "trickle", "brokenscript", "bigpage", "ignoresrange", "ignoresrange-nolength",
-        "otherorigin"))
+        "otherorigin", "gone-big"))
     parser.add_argument("--other-port", type=int)
     parser.add_argument("--request-log")
     parser.add_argument("--connection-log")

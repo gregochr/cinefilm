@@ -101,7 +101,7 @@ def fetch(url, timeout, insecure=False, max_size=None):
         done = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout + 5)
     except subprocess.TimeoutExpired:
         return {"ok": False, "why": "timed out", "ms": int((time.time() - started) * 1000)}
-    except OSError as error:
+    except (OSError, ValueError) as error:  # ValueError: a NUL in the address
         return {"ok": False, "why": "could not run curl (%s)" % error, "ms": 0}
     raw_body, _, raw_tail = done.stdout.rpartition(MARK.encode())
     body, tail = raw_body.decode("utf-8", "replace"), raw_tail.decode("utf-8", "replace")
@@ -218,7 +218,7 @@ def timed_curl(url, timeout, *options):
         done = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout + 5)
     except subprocess.TimeoutExpired:
         return {"why": "timed out"}
-    except OSError as error:
+    except (OSError, ValueError) as error:  # ValueError: a NUL in the address
         return {"why": "could not run curl (%s)" % error}
     try:
         code, size, first, total = done.stdout.decode("ascii", "replace").split()
@@ -273,8 +273,11 @@ def find_script(site, timeout):
         return None, page["why"]
     elsewhere = False
     for value in SCRIPT_SRC.findall(page["body"]):
-        if value.endswith(".js") and "/assets/" in value:
-            address = urljoin(site, value)
+        if value.endswith(".js") and "/assets/" in value and all(" " <= c <= "~" for c in value):
+            try:
+                address = urljoin(site, value)
+            except ValueError:  # such as an invalid IPv6 address: a broken page must not stop the sample for good
+                continue
             if same_origin(address, site):
                 return address, None
             elsewhere = True
@@ -291,12 +294,12 @@ def sample_speed(url, timeout):
         "bytes": got["size"], "ms": int(got["total"] * 1000), "first_byte_ms": int(got["first"] * 1000),
         "kbps": kbps(got["size"], got["first"], got["total"]),
     }
-    if got["curl"] == 63:
-        result["why"] = "the site ignores ranges"
-    elif got["curl"] != 0:
+    if got["curl"] not in (0, 63):
         result["why"] = CURL_ERRORS.get(got["curl"], "curl error %d" % got["curl"])
-    elif not 200 <= got["code"] < 300:
+    elif not 200 <= got["code"] < 300:  # whatever the body: a 404 is not a site that ignores ranges
         result["why"] = "answered %d" % got["code"]
+    elif got["curl"] == 63:  # a 2xx that curl stopped at the limit
+        result["why"] = "the site ignores ranges"
     return result
 
 
@@ -540,8 +543,12 @@ class Logger:
         if side.get("wifi"):
             record["wifi"] = side["wifi"]
         if self.speed_site:
-            # Last, so it cannot disturb the timings above.
-            self.take_speed_sample(record)
+            # Last, so it cannot disturb the timings above. And it fails closed: it is an extra, and the feed is what
+            # the journey is for, so nothing that goes wrong in it may throw the rest of the record away.
+            try:
+                self.take_speed_sample(record)
+            except Exception as error:  # pylint: disable=broad-except
+                record["speed"] = {"why": "failed (%s)" % str(error)[:100]}
         return record
 
     def take_speed_sample(self, record):

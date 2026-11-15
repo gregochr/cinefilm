@@ -22,7 +22,7 @@ Every 30 seconds (`--interval` changes it) it asks, with `curl`:
 |---|---|
 | `https://www.ombord.info/api/jsonp/` and the same over `http` (the `https` one is used when both answer): the parts `position`, `connectivity`, `users`, `user` and `system`, and once the feed's own index | each answer as data, how long it took, the address that answered and whether its certificate was trusted |
 | `https://www.gstatic.com/generate_204` | how long one tiny request to the internet took and the status it got, or why it failed. The printed line notes any status but 204: a sign-in page answers 200 there. Its body is not kept, and is cut off past 64 KB. |
-| only when no film is playing: the first 256 KB of CineFilm's own page code, and never more (a server that ignores the range gives no sample) | bytes received, the time, and the speed over the transfer |
+| only when no film is playing: the first 256 KB of CineFilm's own page code, and never more (a server that ignores the range and sends more is stopped there and reported as such) | bytes received, the time, and the speed over the transfer |
 
 `www.ombord.info` is a name that resolves only on the train, so anywhere else the feed is reported as not answering
 and the other checks still run. The first good answer of each part also keeps its response headers and whether the
