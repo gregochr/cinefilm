@@ -131,6 +131,7 @@ export function serveNeeds({
       const rows = lists[kind];
       const at = rows.findIndex((r) => r.filmId === Number(id));
       // Giving the choice back (`null`) restores the row as first sent (its need, reason and flags), with no choice.
+      // A row that began as OWNER's therefore comes back with `reason: 'OWNER'` and a `null` choice.
       rows[at] =
         body.choice === null
           ? { ...original[kind][at], ownerChoice: null }

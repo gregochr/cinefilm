@@ -296,7 +296,30 @@ function removeSubtitle(id) {
     throw apiError(400, 'Only a download can be removed');
   }
   removedSubtitleIds.add(id);
+  // Like the server (it recomputes the film's rows): with no download left, the owner's file plays again.
+  for (const other of adminSubtitles) {
+    if (other.filmId === row.filmId && other.replacedByDownload === true) {
+      const stillReplaced = subtitleList().some(
+        (r) => r.origin === 'OPENSUBTITLES' && r.filmId === row.filmId,
+      );
+      attachedSubtitles.set(other.id, {
+        ...attachedSubtitles.get(other.id),
+        ...playingFields(stillReplaced),
+      });
+    }
+  }
   return null;
+}
+
+/** What a hand-attached file that was replaced by a download says about itself: replaced, or playing again. */
+function playingFields(replaced) {
+  return replaced
+    ? {
+        served: false,
+        replacedByDownload: true,
+        servedReason: 'Not playing: an OpenSubtitles download replaced it',
+      }
+    : { served: true, replacedByDownload: false, servedReason: 'Playing: your file' };
 }
 
 /** Files attached by hand so far, by row id, kept in memory: the list shows them attached, as the server would. */
@@ -386,7 +409,7 @@ function verifySubtitle(id, verified) {
   attachedSubtitles.set(id, {
     ...attachedSubtitles.get(id),
     verified,
-    replacedByDownload: verified ? false : replaced,
+    ...(verified || replaced ? playingFields(!verified && replaced) : {}),
   });
   return listedSubtitle(id);
 }
@@ -447,7 +470,7 @@ const FORCED_IF_NEEDED = {
   2: { unresolved: true, beingChecked: false, editionId: 101 },
   3: { unresolved: false, beingChecked: true, editionId: 31 },
   4: NOT_IN_PLAY,
-  5: { unresolved: false, beingChecked: true, editionId: 51 },
+  5: { unresolved: false, beingChecked: true, editionId: 52 },
   6: { unresolved: true, beingChecked: false, editionId: 61 },
   7: { unresolved: true, beingChecked: false, editionId: 71 },
 };

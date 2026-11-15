@@ -191,7 +191,12 @@ export function defaultRoute(method, url, init = {}) {
         ownerAttached: false,
         state: 'unmatched',
         filmId: null,
+        filmTitle: null,
         editionId: null,
+        editionName: null,
+        parts: 0,
+        part: null,
+        whole: false,
       });
     }
   }

@@ -24,7 +24,13 @@ describe('the many-rows To do fixtures', () => {
   });
 
   it('shape every need row and the counts like the need fixtures', () => {
-    for (const row of fullNeedMany.films) expect(keys(row)).toEqual(keys(fullNeed.films[0]));
+    const editionKeys = keys(fullNeed.films[0].editions[0]);
+    const subtitleKeys = keys(fullNeed.films.find((row) => row.fullSubtitle).fullSubtitle);
+    for (const row of fullNeedMany.films) {
+      expect(keys(row)).toEqual(keys(fullNeed.films[0]));
+      for (const edition of row.editions) expect(keys(edition)).toEqual(editionKeys);
+      if (row.fullSubtitle) expect(keys(row.fullSubtitle)).toEqual(subtitleKeys);
+    }
     for (const row of forcedNeedMany.films) expect(keys(row)).toEqual(keys(forcedNeed.films[0]));
     expect(keys(fullNeedMany.counts)).toEqual(keys(fullNeed.counts));
     expect(keys(forcedNeedMany.counts)).toEqual(keys(forcedNeed.counts));

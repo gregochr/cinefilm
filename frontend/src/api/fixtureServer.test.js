@@ -954,9 +954,9 @@ describe('fixture server: Admin settings', () => {
       expect(before.replacedByDownload).toBe(true);
 
       const checked = await call('POST', '/api/admin/subtitles/7/verify');
-      expect(checked).toMatchObject({ verified: true, replacedByDownload: false });
+      expect(checked).toMatchObject({ verified: true, replacedByDownload: false, served: true });
       const undone = await call('DELETE', '/api/admin/subtitles/7/verify');
-      expect(undone).toMatchObject({ verified: false, replacedByDownload: true });
+      expect(undone).toMatchObject({ verified: false, replacedByDownload: true, served: false });
     });
 
     it('marks a file as checked on POST verify and unmarks it on DELETE', async () => {
@@ -1008,6 +1008,24 @@ describe('fixture server: Admin settings', () => {
         text: 'Line 1 of Taken (2008)/Taken.en.forced.srt',
       });
       expect((await failure('GET', '/api/admin/subtitles/999/cues')).status).toBe(404);
+    });
+
+    it('lets the owner’s file play again when the download that replaced it is removed', async () => {
+      const before = (await call('GET', '/api/admin/subtitles')).find((f) => f.id === 7);
+      expect(before).toMatchObject({
+        served: false,
+        replacedByDownload: true,
+        servedReason: 'Not playing: an OpenSubtitles download replaced it',
+      });
+
+      await call('DELETE', '/api/admin/subtitles/6');
+
+      const after = (await call('GET', '/api/admin/subtitles')).find((f) => f.id === 7);
+      expect(after).toMatchObject({
+        served: true,
+        replacedByDownload: false,
+        servedReason: 'Playing: your file',
+      });
     });
   });
 });
