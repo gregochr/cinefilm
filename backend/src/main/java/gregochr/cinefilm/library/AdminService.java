@@ -287,7 +287,7 @@ public class AdminService {
     private static AttentionItem item(String kind, Film film, String detail, List<String> names,
                                       List<CandidateDto> candidates, boolean confident) {
         return new AttentionItem(kind, film.getId(), film.getTitle(), film.getYear(),
-            detail, names, candidates, confident);
+            detail, names, candidates, confident, film.browsable());
     }
 
     /** Names of the film's original files (every part) that are on disk. */

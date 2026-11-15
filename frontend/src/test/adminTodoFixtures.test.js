@@ -154,6 +154,11 @@ describe('the Admin To do fixtures', () => {
   describe('attention items', () => {
     const items = attention.items;
 
+    it('every item has a boolean browsable, false only for a film with nothing playable', () => {
+      for (const item of items) expect(typeof item.browsable).toBe('boolean');
+      expect(items.filter((i) => !i.browsable).map((i) => i.kind)).toEqual(['protected']);
+    });
+
     it('every item has a boolean confident, true only for a needs-match item', () => {
       for (const item of items) {
         expect(typeof item.confident).toBe('boolean');

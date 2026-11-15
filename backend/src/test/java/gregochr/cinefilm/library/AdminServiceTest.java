@@ -261,6 +261,22 @@ class AdminServiceTest extends ApiTestBase {
     }
 
     @Test
+    void anAttentionItemSaysWhetherTheFilmHasADetailPage() {
+        saved("Only Drm", 2002, "Only Drm.m4v", MatchStatus.PENDING, Playability.PROTECTED, Presence.PRESENT);
+        Film both = film(null, "Both", 2003, NOW);
+        both.setMatchStatus(MatchStatus.PENDING);
+        file(edition(both, null, "Original", 100 * MIN, null), "Both.m4v").setPlayability(Playability.PROTECTED);
+        file(edition(both, null, "Extended", 100 * MIN, null), "Both Extended.m4v");
+        save(both);
+
+        assertThat(admin.attention().items()).extracting(AttentionItem::title, AttentionItem::kind,
+                AttentionItem::browsable)
+            .containsExactlyInAnyOrder(
+                org.assertj.core.api.Assertions.tuple("Only Drm", "protected", false),
+                org.assertj.core.api.Assertions.tuple("Both", "protected", true));
+    }
+
+    @Test
     void protectedConversionAndUnreadableFilesAreListedWithTheirFileNameOnly() {
         saved("Drm Film", 2002, "Sub/Drm Film.m4v", MatchStatus.PENDING, Playability.PROTECTED, Presence.PRESENT);
         saved("Old", 1999, "Old.avi", MatchStatus.PENDING, Playability.NEEDS_CONVERSION, Presence.PRESENT);

@@ -101,9 +101,12 @@ public final class AdminDtos {
      * @param candidates TMDB candidates (needs-match only, otherwise empty)
      * @param confident true only for a needs-match item whose best candidate is confident (see
      *     {@code AdminTodoRules.confident}); false for every other kind
+     * @param browsable true when the film has a detail page ({@code Film#browsable}, the rule
+     *     {@code FilmService.detail} uses); false for a film whose every edition is missing or unplayable
      */
     public record AttentionItem(String kind, Long filmId, String title, Integer year, String detail,
-                                List<String> files, List<CandidateDto> candidates, boolean confident) {
+                                List<String> files, List<CandidateDto> candidates, boolean confident,
+                                boolean browsable) {
     }
 
     /**

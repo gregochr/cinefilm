@@ -10,7 +10,8 @@ import SectionTitle from './SectionTitle.jsx';
 /**
  * A plain list of the films the last scan could not make playable, opened from a Library count tile: the films of
  * one attention kind (protected, needs conversion or unreadable), each with the server's reason and its file names.
- * `list` is one entry of `FILE_LISTS`.
+ * A title links to the film's page only when the server says the film has one (`browsable`: a film whose every
+ * edition is unplayable has none). `list` is one entry of `FILE_LISTS`.
  */
 export default function AdminLibraryFiles({ list }) {
   const { settledAt, changed } = useAdminContext();
@@ -33,9 +34,13 @@ export default function AdminLibraryFiles({ list }) {
         {items.map((item, i) => (
           <li key={`${item.filmId}-${i}-${item.files.join('|')}`} className="admin__item">
             <div className="admin__item-head">
-              <Link to={`/films/${item.filmId}`} className="admin__item-title">
-                {titleWithYear(item.title, item.year)}
-              </Link>
+              {item.browsable ? (
+                <Link to={`/films/${item.filmId}`} className="admin__item-title">
+                  {titleWithYear(item.title, item.year)}
+                </Link>
+              ) : (
+                <span className="admin__item-title">{titleWithYear(item.title, item.year)}</span>
+              )}
               <span className="admin__tag">{kindLabel(item.kind)}</span>
             </div>
             <div className="admin__item-detail">{item.detail}</div>

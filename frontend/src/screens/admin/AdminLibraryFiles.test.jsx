@@ -25,10 +25,8 @@ describe('Admin Library file lists', () => {
     expect(items[0]).toHaveTextContent('Kes (1969)');
     expect(items[0]).toHaveTextContent("Protected by FairPlay, so it can't be played");
     expect(items[0]).toHaveTextContent('Kes.m4v');
-    expect(within(items[0]).getByRole('link', { name: 'Kes (1969)' })).toHaveAttribute(
-      'href',
-      '/films/32',
-    );
+    // Kes has no playable edition, so no film page: its title is plain text, not a link.
+    expect(within(items[0]).queryByRole('link')).toBeNull();
   });
 
   it('lists only the films of its own kind', async () => {
@@ -40,6 +38,10 @@ describe('Admin Library file lists', () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toHaveTextContent('Alien (1979)');
     expect(items[0]).toHaveTextContent('Alien.avi');
+    expect(within(items[0]).getByRole('link', { name: 'Alien (1979)' })).toHaveAttribute(
+      'href',
+      '/films/33',
+    );
     expect(screen.queryByText('Kes (1969)')).toBeNull();
   });
 

@@ -199,12 +199,13 @@ class AdminControllerTest {
     void getAttentionReturnsTheItemsWithTheirCandidates() throws Exception {
         when(admin.attention()).thenReturn(new Attention(List.of(new AttentionItem("needs-match", 9L, "Dune", null,
             "2 possible matches", List.of("Dune.m4v"),
-            List.of(new CandidateDto(841, "Dune", 1984, 136, "/p.jpg", 72)), true))));
+            List.of(new CandidateDto(841, "Dune", 1984, 136, "/p.jpg", 72)), true, false))));
 
         mvc.perform(get("/api/admin/attention").with(user("owner")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.items[0].kind").value("needs-match"))
             .andExpect(jsonPath("$.items[0].filmId").value(9))
+            .andExpect(jsonPath("$.items[0].browsable").value(false))
             .andExpect(jsonPath("$.items[0].title").value("Dune"))
             .andExpect(jsonPath("$.items[0].year").doesNotExist())
             .andExpect(jsonPath("$.items[0].detail").value("2 possible matches"))
