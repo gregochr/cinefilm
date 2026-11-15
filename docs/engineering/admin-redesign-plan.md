@@ -548,6 +548,33 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
     Try again.", "This subtitle has changed since the film started. Reload to see the new one."
   - **Dev mock:** `detach`, `verify` (POST and DELETE) and `cues` routes added to `fixtureServer.js` and the default
     `mockApi.jsx` answers; fixture refusals carry `{ error }` in the body.
+- **8b-2 decision (built):** Admin's file list is read-only and "Looks right" is in the Fix… panel. No backend change.
+  - **"Looks right" rule** (`state/subtitleFix.js` `fileTools`, moved from Admin's `SubtitlesPanel`, where it lived in
+    the cue details): a **forced** file (`!isFull`) that sits under a film (`filmId != null`), is not yet checked and is
+    not an owner's file a download replaced offers `looksRight` (the `verify` route, `adminApi.verifySubtitle`); once
+    checked it offers `undoCheck` ("You checked this: the lines look right." and "Undo", `unverifySubtitle`), as Admin
+    did. A full subtitle never has either (it has no checks); an unattached file is not in the film's list anyway.
+    **Split with "Use my file instead":** a replaced, unchecked owner file has `useMine` and never `looksRight`
+    (Admin hid its own "Looks right" there for the same reason); once chosen it reads as checked, with the Undo, and
+    undoing brings "Use my file instead" back. A download (forced, unchecked) does get "Looks right", as in Admin. The
+    README puts it in the panel; AR7 says "gone"; the README and the plan line were followed. It uses `ActionWithHint`,
+    the dialog's notice (focus there only when focus was lost) and `useSubtitles`' one-request guard.
+  - **Read-only list** (`SubtitlesPanel`): reads `GET /api/admin/subtitles` with `useResource` (`version` still makes it
+    read again), paginated at 50 with the same chips, grouping and states. Each file shows what it was: title or
+    release, the Full / Checked / Playing tags, the served line, where it sits, the parse report, the new "Timing
+    shifted +0.25 s" line (a file under a film whose offset is not 0; the old row showed the offset only inside the cue
+    details), the OpenSubtitles check, the timing fit and the warnings. No button but the chips and "Show more". The
+    note ("Subtitles → Fix… … or in the player") still fits and is unchanged.
+  - **Deleted:** `AttachPicker.jsx`, `useAttachPicker.js`, the `Timing`/`Check`/attach/cues/remove parts of
+    `SubtitlesPanel`, `NUDGES`, `useSubtitles`' `attach`, `nudge` and `resetTiming`, `adminRemoveLabels`, `RemoveDownload`'s
+    `labels` and `hint` props (one wording now: `fixRemoveLabels` and `buttons.deleteDownload.hint`), the CSS only they
+    used (`.subs__actions`, `.subs__timing`, `.subs__attach`, `.admin__item-actions`) and their tests. Kept:
+    `nudgedOffset`/`MAX_OFFSET_MS`/`formatOffset` (shared with the player), `adminApi.setSubtitleOffset` and
+    `attachSubtitle` (the player and `AddOwnFile` use them), the fixture routes.
+  - **Invented copy (planner, 8b-2):** `subtitleCheck.hint` "Marks the lines as checked: you’ve seen they’re right.",
+    `subtitleCheck.done` "Marked as checked.", `subtitleCheck.undone` "The check is taken away." (in
+    `subtitleFixCopy.js`, its own block), and "Timing shifted {offset}" (`subtitlesPage.files.offset`). "Looks right",
+    "Undo" and "You checked this: the lines look right." are Admin's existing words.
 
 ## Owner answers (2026-11-14)
 

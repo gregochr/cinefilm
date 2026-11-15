@@ -15,10 +15,11 @@ import {
   warningsFor,
 } from '../state/subtitleAdmin.js';
 import { fileTools, filmFiles } from '../state/subtitleFix.js';
-import { fixRemoveLabels, subtitleFix as copy } from '../state/subtitleFixCopy.js';
+import { subtitleCheck as check, subtitleFix as copy } from '../state/subtitleFixCopy.js';
 import { cueResourceKey, useSubtitles } from '../state/useSubtitles.js';
 import { titleWithYear } from '../state/scanFormat.js';
 import { ActionWithHint } from './ActionWithHint.jsx';
+import { Button } from './Button.jsx';
 import RemoveDownload from './RemoveDownload.jsx';
 import { SkeletonBlock } from './Skeleton.jsx';
 import { ErrorState } from './StateMessages.jsx';
@@ -65,7 +66,32 @@ function FixFile({ item, busy, problem, actions, onRemoved, onDone }) {
           {problem}
         </p>
       ) : null}
+      {tools.undoCheck ? <p className="admin__text">{check.checked}</p> : null}
       <div className="fix__actions">
+        {tools.looksRight ? (
+          <ActionWithHint
+            layout="line"
+            hint={check.hint}
+            aria-label={`${check.label}: ${name}`}
+            disabled={busy}
+            onClick={async () => {
+              if (await actions.verify(item.id)) onDone(check.done);
+            }}
+          >
+            {check.label}
+          </ActionWithHint>
+        ) : null}
+        {tools.undoCheck ? (
+          <Button
+            aria-label={`${check.undo}: ${check.label}, ${name}`}
+            disabled={busy}
+            onClick={async () => {
+              if (await actions.unverify(item.id)) onDone(check.undone);
+            }}
+          >
+            {check.undo}
+          </Button>
+        ) : null}
         {tools.useMine ? (
           <ActionWithHint
             layout="line"
@@ -110,8 +136,6 @@ function FixFile({ item, busy, problem, actions, onRemoved, onDone }) {
             failed={problem !== null}
             actions={actions}
             onRemoved={onRemoved}
-            labels={fixRemoveLabels}
-            hint={buttons.deleteDownload.hint}
           />
         ) : null}
       </div>
@@ -162,11 +186,11 @@ function Files({ subtitles, files, onRemoved, onDone }) {
 
 /**
  * Film detail's "Subtitles → Fix…": a dialog over the film's subtitle files with the per-file tools that moved out of
- * Admin ("Use my file instead", "Preview lines", "Delete this download", "Let CineFilm decide") and "Add my own file…",
+ * Admin ("Looks right", "Use my file instead", "Preview lines", "Delete this download", "Let CineFilm decide") and "Add my own file…",
  * the existing attach route scoped to this film. It reuses Admin's `useSubtitles` (one copy of the rules and the
  * one-request-at-a-time guard). `onChanged` runs after every change that succeeded, even one that finishes after the
- * dialog was closed, so the film page reads again. `opener` is where focus goes back to on close. "Looks right" is not
- * here: it lives only in the player's panel (8b).
+ * dialog was closed, so the film page reads again. `opener` is where focus goes back to on close. Timing is not here:
+ * it is changed in the player (8b-1).
  */
 export default function FilmSubtitlesFix({ film, opener, onClose, onChanged }) {
   const base = useId();

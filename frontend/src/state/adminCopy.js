@@ -487,11 +487,12 @@ export const subtitlesPage = {
       {
         text: ') or in the player — that’s where timing, replacing a file and “Subtitles are wrong” now live, next to the film you’re watching.',
       },
-    ], // AR2, except the player's action is “Subtitles are wrong” (AR7), not AR2's “This is wrong” (8a). Until 8b the per-file tools stay under "Show all subtitle files" (plan, 4a).
+    ], // AR2, except the player's action is “Subtitles are wrong” (AR7), not AR2's “This is wrong” (8a).
   },
   files: {
     heading: 'Subtitle files', // planner, 4a
     showMore: (left) => `Show more (${left} left)`, // planner, 4a
+    offset: (shift) => `Timing shifted ${shift}`, // planner, 8b-2: the offset the old per-file Timing row showed (only when not 0)
   },
   source: 'AR2; Q3 for the forced tab; planner 4a for the rest (see comments)',
 };

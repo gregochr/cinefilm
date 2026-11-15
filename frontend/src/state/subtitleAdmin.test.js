@@ -3,7 +3,6 @@ import { ApiError } from '../api/client.js';
 import {
   FILE_FILTERS,
   MAX_OFFSET_MS,
-  NUDGES,
   PLAY_LEAD_MS,
   REMOVED_NOTICE,
   REMOVE_CONFIRM,
@@ -70,15 +69,6 @@ describe('nudgedOffset', () => {
     expect(nudgedOffset(MAX_OFFSET_MS - 249, 250)).toBe(MAX_OFFSET_MS);
     expect(nudgedOffset(-MAX_OFFSET_MS + 249, -250)).toBe(-MAX_OFFSET_MS);
     expect(nudgedOffset(-MAX_OFFSET_MS, -1000)).toBe(-MAX_OFFSET_MS);
-  });
-
-  it('the four nudges are ±0.25 s and ±1 s, earliest first', () => {
-    expect(NUDGES.map((n) => [n.label, n.delta])).toEqual([
-      ['−1 s', -1000],
-      ['−0.25 s', -250],
-      ['+0.25 s', 250],
-      ['+1 s', 1000],
-    ]);
   });
 });
 

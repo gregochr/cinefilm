@@ -57,7 +57,6 @@ export default function AdminSubtitles() {
         scan={scan}
         // Any change markChanged signals (a choice, an attached file) re-reads an open file list too.
         version={`${subtitlesVersion}|${changed}`}
-        onChanged={markChanged}
       />
     </>
   );

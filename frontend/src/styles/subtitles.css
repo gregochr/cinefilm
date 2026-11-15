@@ -3,25 +3,11 @@
 .subs__group + .subs__group {
   margin-top: 24px;
 }
-.subs__actions {
-  flex-wrap: wrap;
-  gap: 8px 12px;
-}
 .subs__details {
   display: flex;
   flex-direction: column;
   gap: 12px;
   margin-top: 14px;
-}
-.subs__timing {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.subs__timing > output {
-  min-width: 112px;
-  color: var(--cf-text-2);
 }
 .subs__cues {
   margin: 0;
@@ -50,14 +36,6 @@
 .subs__text {
   white-space: pre-line;
   overflow-wrap: anywhere;
-}
-.subs__attach {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--cf-line);
 }
 .subs__choices {
   display: flex;

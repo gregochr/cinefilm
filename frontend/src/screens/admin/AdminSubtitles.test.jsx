@@ -628,7 +628,7 @@ describe('Admin Subtitles section: Everything else', () => {
     expect(within(list).queryByText(/Hidden Film/)).not.toBeInTheDocument();
   });
 
-  it('keeps every per-file tool behind "Show all subtitle files"', async () => {
+  it('keeps the read-only file list behind "Show all subtitle files"', async () => {
     serve();
     renderApp('/admin/subtitles');
 
@@ -639,7 +639,9 @@ describe('Admin Subtitles section: Everything else', () => {
 
     const files = await screen.findByRole('region', { name: 'Subtitle files' });
     expect(await within(files).findByText('Heat (1995)/Heat.en.forced.srt')).toBeInTheDocument();
-    expect(within(files).getAllByRole('button', { name: /Show the cues of/ })).not.toHaveLength(0);
+    expect(
+      within(files).queryByRole('button', { name: /cues|Looks right/ }),
+    ).not.toBeInTheDocument();
     expect(toggle).toHaveTextContent('Hide the subtitle files');
     await userEvent.click(toggle);
     expect(screen.queryByRole('region', { name: 'Subtitle files' })).not.toBeInTheDocument();

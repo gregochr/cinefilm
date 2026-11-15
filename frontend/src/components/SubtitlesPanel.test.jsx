@@ -1,6 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
 import SubtitlesPanel, { FILES_PAGE } from './SubtitlesPanel.jsx';
@@ -17,16 +16,13 @@ const files = (n, over = () => ({})) =>
     ...over(i),
   }));
 
-function renderPanel(items, props = {}) {
+function renderPanel(items) {
   installFetch((method, url) => (url === '/api/admin/subtitles' ? respond(items) : null));
-  return render(
-    <MemoryRouter>
-      <SubtitlesPanel version="v" onChanged={vi.fn()} {...props} />
-    </MemoryRouter>,
-  );
+  return render(<SubtitlesPanel version="v" />);
 }
 
-const listed = () => screen.queryAllByRole('button', { name: /Show the cues of/ });
+// Each file is listed once, by its path.
+const listed = () => screen.queryAllByText(/File\.en\.forced\.srt$/);
 
 describe('SubtitlesPanel: pagination', () => {
   it('pages at 50', () => {
@@ -95,17 +91,14 @@ describe('SubtitlesPanel: pagination', () => {
 });
 
 describe('SubtitlesPanel: the card', () => {
-  it('is the "Subtitle files" region, and holds the file chips and the per-file tools', async () => {
+  it('is the "Subtitle files" region, and holds the file chips and no per-file tool', async () => {
     renderPanel(files(1));
 
     const region = await screen.findByRole('region', { name: 'Subtitle files' });
     expect(within(region).getByRole('group', { name: 'Show subtitle files' })).toBeInTheDocument();
-    expect(
-      await within(region).findByRole('button', { name: /Looks right|Show the cues/ }),
-    ).toBeInTheDocument();
-    expect(
-      within(region).getByRole('button', { name: /^Attach .* to a film|^Move .*/ }),
-    ).toBeInTheDocument();
+    const list = await within(region).findByRole('list', { name: 'Matched subtitles' });
+    expect(within(list).queryAllByRole('button')).toHaveLength(0);
+    expect(within(list).queryAllByRole('link')).toHaveLength(0);
   });
 
   it('no longer holds the need lists or the filter chips of the old section', async () => {
@@ -118,26 +111,5 @@ describe('SubtitlesPanel: the card', () => {
       screen.queryByRole('heading', { name: 'Which films need them' }),
     ).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Show full subtitles' })).not.toBeInTheDocument();
-  });
-
-  it('calls onChanged after a file tool saved something', async () => {
-    const onChanged = vi.fn();
-    installFetch((method, url) => {
-      if (url === '/api/admin/subtitles') return respond(files(1));
-      if (url === '/api/admin/subtitles/1/verify') {
-        return respond({ ...files(1)[0], verified: true });
-      }
-      return null;
-    });
-    render(
-      <MemoryRouter>
-        <SubtitlesPanel version="v" onChanged={onChanged} />
-      </MemoryRouter>,
-    );
-    await userEvent.click(await screen.findByRole('button', { name: /Show the cues of/ }));
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Looks right' }));
-
-    await vi.waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
   });
 });

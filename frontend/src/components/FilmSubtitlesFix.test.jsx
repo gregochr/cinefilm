@@ -67,7 +67,7 @@ function serve({ answer = () => null } = {}) {
       return respond(null, 204);
     }
     if (match[2] === '/verify') {
-      row.verified = true;
+      row.verified = method === 'POST';
       return respond(row);
     }
     if (match[2] === '/detach') {
@@ -131,6 +131,7 @@ describe('FilmSubtitlesFix', () => {
     const items = within(dialog).getAllByRole('listitem');
     expect(items).toHaveLength(3);
     expect(names(items[0])).toEqual([
+      'Looks right: Blade.Runner.1982.1080p',
       'Preview lines: Blade.Runner.1982.1080p',
       'Delete this download: Blade.Runner.1982.1080p',
     ]);
@@ -147,11 +148,11 @@ describe('FilmSubtitlesFix', () => {
     expect(within(dialog).queryByText('Loose.en.forced.srt')).not.toBeInTheDocument();
   });
 
-  it('keeps the old Admin names and "Looks right" out of the panel', async () => {
+  it('keeps the old Admin names out of the panel', async () => {
     serve();
     const { dialog } = await open();
 
-    for (const old of [/Looks right/, /Show cues/, /Remove download/, /Back to automatic/]) {
+    for (const old of [/Show cues/, /Remove download/, /Back to automatic/]) {
       expect(within(dialog).queryByRole('button', { name: old })).not.toBeInTheDocument();
     }
   });
@@ -169,6 +170,106 @@ describe('FilmSubtitlesFix', () => {
     expect(
       within(dialog).getByRole('button', { name: 'Add my own file…' }),
     ).toHaveAccessibleDescription('Picks one of your subtitle files for this film');
+  });
+
+  describe('Looks right', () => {
+    const looksRight = (scope) => within(scope).queryAllByRole('button', { name: /^Looks right/ });
+
+    it('is offered on a forced file that is not checked, and on no other: not the replaced file, not a full one', async () => {
+      serve();
+      const { dialog } = await open();
+
+      const items = within(dialog).getAllByRole('listitem');
+      expect(looksRight(items[0])).toHaveLength(1);
+      // The replaced owner file has "Use my file instead" in its place, never both.
+      expect(within(items[1]).getByRole('button', { name: /^Use my file instead/ })).toBeVisible();
+      expect(looksRight(items[1])).toHaveLength(0);
+      // A full file has no checks.
+      expect(looksRight(items[2])).toHaveLength(0);
+      expect(looksRight(dialog)).toHaveLength(1);
+    });
+
+    it('shows its hint under it', async () => {
+      serve();
+      const { dialog } = await open();
+
+      expect(looksRight(dialog)[0]).toHaveAccessibleDescription(
+        'Marks the lines as checked: you’ve seen they’re right.',
+      );
+    });
+
+    it('posts verify once, says so in a status that takes focus, and the file reads as checked with an Undo', async () => {
+      const { requests } = serve();
+      const { dialog, onChanged } = await open();
+
+      await userEvent.click(looksRight(dialog)[0]);
+
+      await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+      const notice = await within(dialog).findByText('Marked as checked.');
+      await waitFor(() => expect(notice).toHaveFocus());
+      expect(requests.filter((r) => r.startsWith('POST'))).toEqual([
+        'POST /api/admin/subtitles/6/verify',
+      ]);
+      expect(
+        await within(dialog).findByText('You checked this: the lines look right.'),
+      ).toBeVisible();
+      expect(within(dialog).getByRole('button', { name: /^Undo/ })).toBeVisible();
+      expect(looksRight(dialog)).toHaveLength(0);
+    });
+
+    it('Undo sends DELETE on verify and brings Looks right back', async () => {
+      const { requests } = serve();
+      const { dialog } = await open();
+      await userEvent.click(looksRight(dialog)[0]);
+      await userEvent.click(await within(dialog).findByRole('button', { name: /^Undo/ }));
+
+      const notice = await within(dialog).findByText('The check is taken away.');
+      await waitFor(() => expect(notice).toHaveFocus());
+      expect(requests.filter((r) => r.startsWith('DELETE'))).toEqual([
+        'DELETE /api/admin/subtitles/6/verify',
+      ]);
+      await waitFor(() => expect(looksRight(dialog)).toHaveLength(1));
+    });
+
+    it('sends one request on a double click', async () => {
+      let release;
+      const gate = new Promise((resolve) => {
+        release = resolve;
+      });
+      const { requests } = serve({
+        answer: (method, url) =>
+          url === '/api/admin/subtitles/6/verify' ? gate.then(() => respond(rows()[0])) : null,
+      });
+      const { dialog, onChanged } = await open();
+
+      await userEvent.dblClick(looksRight(dialog)[0]);
+      expect(requests.filter((r) => r.startsWith('POST'))).toEqual([
+        'POST /api/admin/subtitles/6/verify',
+      ]);
+      expect(onChanged).not.toHaveBeenCalled();
+      await act(async () => release());
+
+      await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+      expect(requests.filter((r) => r.startsWith('POST'))).toHaveLength(1);
+    });
+
+    it('shows the server’s exact words when it is refused, on that file, and does not tell the page', async () => {
+      serve({
+        answer: (method, url) =>
+          url === '/api/admin/subtitles/6/verify'
+            ? respond({ error: 'That file cannot be checked' }, 400)
+            : null,
+      });
+      const { dialog, onChanged } = await open();
+
+      await userEvent.click(looksRight(dialog)[0]);
+
+      const alert = await within(dialog).findByRole('alert');
+      expect(alert).toHaveTextContent('That file cannot be checked');
+      expect(within(within(dialog).getAllByRole('listitem')[0]).getByRole('alert')).toBe(alert);
+      expect(onChanged).not.toHaveBeenCalled();
+      expect(looksRight(dialog)).toHaveLength(1);
+    });
   });
 
   it('"Use my file instead" posts verify, tells the page, and reads the list again', async () => {
