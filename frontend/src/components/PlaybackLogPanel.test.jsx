@@ -150,6 +150,31 @@ describe('PlaybackLogPanel', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
+  it('offers Show 50 more, not the empty line, when a page had no readable report but the total says more', async () => {
+    const fetchMock = installFetch((m, url) => {
+      if (url === ALL_0) return respond({ playbacks: [], total: 120 });
+      if (url === ALL_1) return respond({ playbacks: manyRows('b', 50), total: 120 });
+      return null;
+    });
+    renderLog();
+    expect(await screen.findByText('Showing 0 of 120')).toBeInTheDocument();
+    expect(screen.queryByText('No playbacks recorded yet.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show 50 more' }));
+    await waitFor(() => expect(dataRows()).toHaveLength(50));
+    expect(screen.getByText('Showing 50 of 120')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([ALL_0, ALL_1]);
+  });
+
+  it('says the filter has nothing, with no footer, when the total is 0', async () => {
+    installFetch((m, url) => (url === ALL_0 ? respond({ playbacks: [], total: 0 }) : null));
+    renderLog();
+    expect(await screen.findByText('No playbacks recorded yet.')).toBeInTheDocument();
+    expect(screen.queryByText(/^Showing/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show 50 more' })).not.toBeInTheDocument();
+  });
+
   it('shows 50, then appends the next page on Show 50 more, and stops at the total', async () => {
     let releaseSecond;
     const fetchMock = installFetch((m, url) => {

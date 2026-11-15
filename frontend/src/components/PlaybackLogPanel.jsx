@@ -57,12 +57,13 @@ export default function PlaybackLogPanel() {
     );
   } else if (log.error) {
     body = <ErrorState onRetry={log.reload}>{copy.loadError}</ErrorState>;
-  } else if (log.rows.length === 0) {
+  } else if (log.rows.length === 0 && !log.hasMore) {
     body = <p className="admin__text">{copy.empty[log.filter]}</p>;
   } else {
+    // With no rows but more pages (a page whose stored reports were all unreadable), the footer still offers them.
     body = (
       <>
-        <Table rows={log.rows} open={open} onToggle={toggle} />
+        {log.rows.length > 0 ? <Table rows={log.rows} open={open} onToggle={toggle} /> : null}
         <div className="plog__more">
           <span className="admin__text">{copy.showing(log.rows.length, log.total)}</span>
           {log.moreError ? (
