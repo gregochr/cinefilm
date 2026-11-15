@@ -160,7 +160,7 @@ assert_eq "no speed sample without a terminal" false "$(jv "$LOG" '"speed" in L[
 assert_eq "start record: version 2" 2 "$(jv "$LOG" 'L[0]["version"]')"
 assert_eq "start record: no speed site" null "$(jv "$LOG" 'L[0]["speed_site"]')"
 assert_eq "start record: the timeout" 3.0 "$(jv "$LOG" 'L[0]["timeout"]')"
-REAL_CURL=$(/usr/bin/curl --version | head -n 1 | cut -d ' ' -f 2)
+REAL_CURL=$(/usr/bin/curl --version | head -n 1 | cut -d ' ' -f 2 | grep -o '^[0-9.]*')  # not a suffix such as -DEV
 assert_eq "start record: the curl version, as this machine's curl reports it" "\"$REAL_CURL\"" "$(jv "$LOG" 'L[0]["curl"]')"
 assert_contains "the line shows users" "$OUT" "38 of 93 online"
 assert_contains "the line shows each link" "$OUT" "links: lte -62, disconnected 0, lte -35"
@@ -210,13 +210,14 @@ assert_file_missing "nothing was made where it pointed" "$TMP/elsewhere"
 assert_eq "nor under HOME" 0 "$(count_files "$RUN_HOME")"
 REPO="$(cd "$HERE/../.." && pwd)"
 if git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
-    BEFORE=$(git -C "$REPO" status --porcelain)
+    # --ignored, because .gitignore hides train-feed-*.jsonl: a log written into the checkout would not show otherwise.
+    BEFORE=$(git -C "$REPO" status --porcelain --ignored)
     fresh_home
     OUT=$(cd "$REPO" && HOME="$RUN_HOME" "$LOGGER" --no-wifi --no-awake --base "$BASE" --probe off --rounds 1 \
         </dev/null 2>&1)
     assert_eq "a run started inside the repository exits 0" 0 "$?"
     assert_eq "its log is under HOME" 1 "$(count_files "$LOGDIR")"
-    assert_eq "and the repository's status is unchanged" "$BEFORE" "$(git -C "$REPO" status --porcelain)"
+    assert_eq "and the repository's status is unchanged" "$BEFORE" "$(git -C "$REPO" status --porcelain --ignored)"
     assert_file_missing "no logs folder in the repository root" "$REPO/train-feed-logger"
 else
     echo "  SKIP the repository case: this is not a checkout"
@@ -517,7 +518,7 @@ for stub in "8.3.0:curl 8.3.0 (x86_64-pc-linux-gnu) libcurl/8.3.0" "8.4.0:curl 8
     printf '#!/bin/sh\necho "%s"\n' "${stub#*:}" > "$TMP/curl-${stub%%:*}"
     chmod +x "$TMP/curl-${stub%%:*}"
 done
-RESULTS=$(python3 -B - "$LOGGER" "$TMP" 2>&1 <<'PY'
+RESULTS=$(python3 -B - "$LOGGER" "$TMP" "$FREE" 2>&1 <<'PY'
 import contextlib, importlib.util, io, json, os, shutil, sys, tempfile, types
 
 spec = importlib.util.spec_from_file_location("train_feed_logger", sys.argv[1])
@@ -870,10 +871,13 @@ check("curl: the real one on this machine is new enough", None, m.curl_problem(m
 
 
 def main_with(curl_path):
-    """Runs main() with a stand-in curl and an empty HOME: what it exits with, what it said, what it created."""
-    home = tempfile.mkdtemp()
+    """Runs main() with a stand-in curl and an empty HOME: what it exits with, what it said, what it created.
+    The only feed address is a loopback port with nothing listening: no real address is ever asked."""
+    home = tempfile.mkdtemp(dir=stubs)  # under the test's own temporary directory, removed with it
     saved = (m.CURL, sys.argv, os.environ.get("HOME"))
-    m.CURL, sys.argv = curl_path, ["train-feed-logger.py", "--no-wifi", "--no-awake", "--probe", "off", "--rounds", "1"]
+    m.CURL = curl_path
+    sys.argv = ["train-feed-logger.py", "--no-wifi", "--no-awake", "--probe", "off", "--rounds", "1",
+                "--base", "http://127.0.0.1:%s/api/jsonp/" % sys.argv[3]]
     os.environ["HOME"] = home
     said = io.StringIO()
     try:
@@ -883,7 +887,10 @@ def main_with(curl_path):
         code = stopped.code
     finally:
         m.CURL, sys.argv = saved[0], saved[1]
-        os.environ["HOME"] = saved[2]
+        if saved[2] is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = saved[2]
     made = os.listdir(home)
     shutil.rmtree(home)
     return code, said.getvalue(), made
