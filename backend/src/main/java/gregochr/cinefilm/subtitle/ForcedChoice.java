@@ -14,7 +14,8 @@ import java.util.Map;
  * subtitle out. In order:
  * <ol>
  *   <li>a proven owner file;</li>
- *   <li>a proven download (the lowest id when several are);</li>
+ *   <li>a proven download (one the owner verified, as a pick from the OpenSubtitles picker is, before any other; then
+ *       the lowest id when several are);</li>
  *   <li>an embedded forced text track (it ships with the rip, so it counts as proven);</li>
  *   <li>an owner file that is not proven but has not failed (unchecked);</li>
  *   <li>an owner file that failed is replaced by a download that has not failed (unchecked, as a proven one won at 2);
@@ -165,10 +166,11 @@ public final class ForcedChoice {
             Map.copyOf(reasons), !live.isEmpty(), fileTrust == Trust.FAILED && source == Source.DOWNLOAD);
     }
 
-    /** The best download of a trust level: the lowest id. */
+    /** The best download of a trust level: one the owner verified first, then the lowest id. */
     private static DownloadSide first(List<DownloadSide> downloads, Trust trust) {
         return downloads.stream().filter(d -> d.assessment().trust() == trust)
-            .min(Comparator.comparing(DownloadSide::id)).orElse(null);
+            .min(Comparator.comparing((DownloadSide d) -> d.assessment().proof() != Proof.VERIFIED)
+                .thenComparing(DownloadSide::id)).orElse(null);
     }
 
     private static String proofText(Proof proof) {

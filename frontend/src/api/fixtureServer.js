@@ -18,6 +18,7 @@ import adminPlaybackHealth from '../test/fixtures/admin-playback-health.json';
 import adminSubtitles from '../test/fixtures/admin-subtitles.json';
 import adminForcedNeed from '../test/fixtures/admin-forced-need.json';
 import adminFullNeed from '../test/fixtures/admin-full-need.json';
+import adminOpenSubtitles from '../test/fixtures/admin-opensubtitles.json';
 import collection from '../test/fixtures/collection.json';
 import collections from '../test/fixtures/collections.json';
 import session from '../test/fixtures/session.json';
@@ -334,6 +335,57 @@ function setFullNeed(filmId, body) {
   return fullRow(loaded);
 }
 
+const OS_KINDS = new Set(['full', 'forced']);
+const OS_MAX_FILES = 3;
+const KNOWN_EDITION_IDS = new Set([
+  ...adminSubtitles.map((row) => row.editionId),
+  ...adminEditions.editions.map((edition) => edition.id),
+  ...Object.values(details).flatMap((film) => film.editions.map((edition) => edition.id)),
+]);
+/** The files a picker search offered, and the ones downloaded since, per edition and kind, kept in memory. */
+const offeredFiles = new Map();
+const downloadedFiles = new Map();
+
+function openSubtitlesKind(kind) {
+  if (!OS_KINDS.has(kind)) throw new ApiError(400, 'The kind must be full or forced');
+  return kind;
+}
+
+function openSubtitlesEdition(editionId) {
+  if (!KNOWN_EDITION_IDS.has(editionId)) throw new ApiError(404, 'No such edition');
+}
+
+function filesLeft(key) {
+  return OS_MAX_FILES - (downloadedFiles.get(key)?.size ?? 0);
+}
+
+function searchOpenSubtitles(editionId, kind) {
+  openSubtitlesKind(kind);
+  openSubtitlesEdition(editionId);
+  const key = `${editionId}:${kind}`;
+  const found = adminOpenSubtitles[kind];
+  offeredFiles.set(key, new Set(found.results.map((result) => result.fileId)));
+  return { ...found, editionId, downloadsLeft: filesLeft(key) };
+}
+
+function downloadOpenSubtitles(editionId, body) {
+  const kind = openSubtitlesKind(body?.kind);
+  if (!Number.isInteger(body?.fileId) || body.fileId <= 0) {
+    throw new ApiError(400, 'A file id is required');
+  }
+  openSubtitlesEdition(editionId);
+  const key = `${editionId}:${kind}`;
+  if (!offeredFiles.get(key)?.has(body.fileId)) {
+    throw new ApiError(400, 'That file was not in a recent search for this edition. Search again.');
+  }
+  const taken = downloadedFiles.get(key) ?? new Set();
+  if (taken.has(body.fileId))
+    throw new ApiError(409, "That file is already this edition's download.");
+  downloadedFiles.set(key, taken.add(body.fileId));
+  const { release } = adminOpenSubtitles[kind].results.find((r) => r.fileId === body.fileId);
+  return { editionId, kind, fileId: body.fileId, release, downloadsLeft: filesLeft(key) };
+}
+
 export async function handle(method, path, body) {
   await delay(80);
   const url = new URL(path, 'http://fixtures.local');
@@ -365,6 +417,12 @@ export async function handle(method, path, body) {
   if (route === '/api/admin/subtitles/full-need') return fullNeedList();
   match = route.match(/^\/api\/admin\/films\/(\d+)\/full-need$/);
   if (match && method === 'PUT') return setFullNeed(Number(match[1]), body);
+  match = route.match(/^\/api\/admin\/editions\/(\d+)\/opensubtitles$/);
+  if (match && method === 'GET') {
+    return searchOpenSubtitles(Number(match[1]), url.searchParams.get('kind'));
+  }
+  match = route.match(/^\/api\/admin\/editions\/(\d+)\/opensubtitles\/download$/);
+  if (match && method === 'POST') return downloadOpenSubtitles(Number(match[1]), body);
   if (route === '/api/admin/playback-health') {
     return HEALTH_PARAMS.some((name) => url.searchParams.has(name))
       ? healthPage(url.searchParams)

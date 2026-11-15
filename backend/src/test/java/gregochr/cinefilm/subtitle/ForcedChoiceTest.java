@@ -241,12 +241,28 @@ class ForcedChoiceTest {
 
     @Test
     void tiesBetweenDownloadsOfOneTrustLevelGoToTheLowestId() {
-        Decision proven = decide(null, false, download(8, AGREES), download(4, ALIGNED), download(6, VERIFIED));
+        Decision proven = decide(null, false, download(8, AGREES), download(4, ALIGNED), download(6, AGREES));
         Decision unchecked = decide(null, false, download(8, UNCHECKED), download(5, UNCHECKED));
 
         assertThat(proven.downloadId()).isEqualTo(4L);
         assertThat(unchecked.downloadId()).isEqualTo(5L);
         assertThat(unchecked.downloadReasons().get(8L)).isEqualTo("Not used: another OpenSubtitles download plays");
+    }
+
+    @Test
+    void aDownloadTheOwnerVerifiedPlaysBeforeAnyOtherProvenDownloadWhateverItsId() {
+        Decision decision = decide(null, false, download(4, AGREES), download(9, VERIFIED), download(6, ALIGNED));
+
+        assertThat(decision.step()).isEqualTo(Step.PROVEN_DOWNLOAD);
+        assertThat(decision.downloadId()).isEqualTo(9L);
+        assertThat(decision.downloadReasons().get(4L)).isEqualTo("Not used: another OpenSubtitles download plays");
+    }
+
+    @Test
+    void twoDownloadsTheOwnerVerifiedGoToTheLowestId() {
+        Decision decision = decide(null, false, download(9, VERIFIED), download(7, VERIFIED), download(2, AGREES));
+
+        assertThat(decision.downloadId()).isEqualTo(7L);
     }
 
     @Test

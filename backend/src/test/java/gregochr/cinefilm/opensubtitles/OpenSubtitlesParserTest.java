@@ -6,6 +6,7 @@ import static gregochr.cinefilm.opensubtitles.OsFixtures.page;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /** Reading a search reply: the filters, the fields and every way the untrusted reply can be wrong. */
@@ -288,5 +289,21 @@ class OpenSubtitlesParserTest {
     void aSearchWithNoResultsHasNoCandidates() {
         assertThat(parse().candidates()).isEmpty();
         assertThat(parse(item(1).set("files", "[{\"file_id\":11},{\"file_id\":22}]")).candidates()).isEmpty();
+    }
+
+    @Test
+    void theResultsListEveryResultThatRemainsMultiFileOnesIncludedAndTheCandidatesOnlyTheSingleFileOnes() {
+        OpenSubtitlesSearch search = parse(item(1), item(2).set("nb_cd", "2"), item(3).set("ai_translated", "true"));
+
+        assertThat(search.results()).extracting(OpenSubtitlesResult::id).containsExactly(1L, 2L);
+        assertThat(search.candidates()).extracting(OpenSubtitlesResult::id).containsExactly(1L);
+    }
+
+    @Test
+    void aSearchBuiltWithoutResultsTakesItsCandidatesAsItsResultsAndOneWithNoCandidatesHasNone() {
+        OpenSubtitlesResult result = new OpenSubtitlesResult(1, 2, "r", 23.976, 1, false, false, null, null);
+
+        assertThat(new OpenSubtitlesSearch(1, result, List.of(result)).results()).containsExactly(result);
+        assertThat(new OpenSubtitlesSearch(1, result).results()).isEmpty();
     }
 }

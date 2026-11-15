@@ -66,6 +66,26 @@ public class ForcedDownloadService {
         BUSY
     }
 
+    /** What {@link #addChosen} and {@link #refusal} said about a file the owner picked for an edition. */
+    public enum ChosenOutcome {
+        /** The download was added and pinned. */
+        ADDED,
+        /** A scan or an Admin edit holds the library lock: nothing was added, try again later. */
+        BUSY,
+        /** The edition is gone, or its film's IMDb id is no longer the one that was searched. */
+        CHANGED,
+        /** The owner marked the film as not needing subtitles of this kind. */
+        NOT_WANTED,
+        /** The file is not a usable download of this kind (unreadable, full for forced, too short for full). */
+        UNUSABLE,
+        /** The owner removed this file from the edition earlier: it is never downloaded for it again. */
+        BLOCKED,
+        /** The edition already has a download made from this file. */
+        ALREADY_DOWNLOADED,
+        /** The edition already has {@value DownloadPlan#MAX_DOWNLOADS} files used (downloads and removed ones). */
+        CAP_REACHED
+    }
+
     private final FilmRepository films;
     private final EditionRepository editions;
     private final SubtitleSidecarRepository sidecars;
@@ -438,5 +458,137 @@ public class ForcedDownloadService {
         row.setDownloadedAt(now);
         row.setUpdatedAt(now);
         return row;
+    }
+
+    /**
+     * Why a file the owner picked in the picker cannot become the edition's download, from what is stored now (no
+     * download is made and nothing is locked, so it is cheap to ask before a download is spent).
+     *
+     * @param filmId the edition's film
+     * @param editionId the edition
+     * @param kind forced or full
+     * @param imdbId the IMDb id the search was made for
+     * @param fileId the OpenSubtitles file id
+     * @return the reason, or empty when nothing stops it
+     */
+    @Transactional(readOnly = true)
+    public Optional<ChosenOutcome> refusal(Long filmId, Long editionId, SubtitleKind kind, String imdbId,
+                                           long fileId) {
+        Edition edition = loadEdition(filmId, editionId);
+        return edition == null ? Optional.of(ChosenOutcome.CHANGED) : refusalFor(edition, kind, imdbId, fileId);
+    }
+
+    /**
+     * How many more files the edition may be given of a kind: {@value DownloadPlan#MAX_DOWNLOADS} less the downloads
+     * and removed files it has for the IMDb id.
+     *
+     * @param filmId the edition's film
+     * @param editionId the edition
+     * @param kind forced or full
+     * @param imdbId the film's IMDb id
+     * @return the number left, 0 when the edition is gone
+     */
+    @Transactional(readOnly = true)
+    public int downloadsLeft(Long filmId, Long editionId, SubtitleKind kind, String imdbId) {
+        Edition edition = loadEdition(filmId, editionId);
+        return edition == null ? 0 : DownloadPlan.remaining(skipped(edition, kind, imdbId));
+    }
+
+    /**
+     * Makes a file the owner picked the edition's download, and pins it: the row carries the owner's check
+     * ({@code ownerVerifiedAt}, the same as "Looks right"), so it is proven, never judged failed (the nightly plan
+     * finds a live download and adds none), and plays before another download. Under the library lock, in one
+     * transaction, after revalidating everything that can have changed since the picker looked: the film's IMDb id,
+     * that the owner has not marked the film as not needing this kind, that the file was not removed or already
+     * downloaded, and that the cap has room. The film's stored candidates and its need are not consulted: the owner
+     * chose this file.
+     *
+     * @param filmId the edition's film
+     * @param editionId the edition
+     * @param kind forced or full
+     * @param reference the stored reference of the picked file
+     * @param now the time to stamp
+     * @return what happened
+     */
+    public ChosenOutcome addChosen(Long filmId, Long editionId, SubtitleKind kind, OpenSubtitlesReference reference,
+                                   Instant now) {
+        if (!lock.tryAcquire(LibraryLock.SUBTITLE)) {
+            return ChosenOutcome.BUSY;
+        }
+        try {
+            return tx.execute(status -> addChosenLocked(filmId, editionId, kind, reference, now));
+        } catch (DataIntegrityViolationException e) {
+            // Another writer made the same download first.
+            return ChosenOutcome.ALREADY_DOWNLOADED;
+        } finally {
+            lock.release();
+        }
+    }
+
+    private ChosenOutcome addChosenLocked(Long filmId, Long editionId, SubtitleKind kind,
+                                          OpenSubtitlesReference reference, Instant now) {
+        Edition edition = loadEdition(filmId, editionId);
+        if (edition == null) {
+            return ChosenOutcome.CHANGED;
+        }
+        Optional<ChosenOutcome> refusal = refusalFor(edition, kind, reference.getImdbId(), reference.getOsFileId());
+        if (refusal.isPresent()) {
+            return refusal.get();
+        }
+        if (!DownloadPlan.promotable(reference, kind)) {
+            return ChosenOutcome.UNUSABLE;
+        }
+        SubtitleSidecar row = download(edition, reference, now, kind);
+        row.setOwnerVerifiedAt(now);
+        row.setVerifiedParts(SubtitleSidecar.partsKey(partIdsOf(edition)));
+        sidecars.save(row);
+        if (!ledger.existsByEditionIdAndImdbIdAndOsFileIdAndKind(edition.getId(), reference.getImdbId(),
+            reference.getOsFileId(), kind)) {
+            ForcedCheckCandidate entry = new ForcedCheckCandidate();
+            entry.setEditionId(edition.getId());
+            entry.setImdbId(reference.getImdbId());
+            entry.setKind(kind);
+            entry.setOsFileId(reference.getOsFileId());
+            entry.setTriedAt(now);
+            ledger.save(entry);
+        }
+        return ChosenOutcome.ADDED;
+    }
+
+    private Edition loadEdition(Long filmId, Long editionId) {
+        return editions.findWithFilesByFilmIdIn(List.of(filmId)).stream()
+            .filter(e -> e.getId().equals(editionId)).findFirst().orElse(null);
+    }
+
+    private Set<Long> skipped(Edition edition, SubtitleKind kind, String imdbId) {
+        return skippedFileIds(edition, imdbId, kind, blocksOf(edition, kind), downloadsOf(edition, kind));
+    }
+
+    private List<ForcedDownloadBlock> blocksOf(Edition edition, SubtitleKind kind) {
+        return blocks.findByEditionIdInAndKind(List.of(edition.getId()), kind);
+    }
+
+    private List<SubtitleSidecar> downloadsOf(Edition edition, SubtitleKind kind) {
+        return sidecars.findByMediaFileIdInAndKind(partIdsOf(edition), kind).stream()
+            .filter(SubtitleSidecar::isDownload).toList();
+    }
+
+    private Optional<ChosenOutcome> refusalFor(Edition edition, SubtitleKind kind, String imdbId, long fileId) {
+        if (imdbId == null || !imdbId.equals(edition.getFilm().getImdbId())) {
+            return Optional.of(ChosenOutcome.CHANGED);
+        }
+        if (Downloads.isNotNeeded(edition, kind)) {
+            return Optional.of(ChosenOutcome.NOT_WANTED);
+        }
+        List<ForcedDownloadBlock> editionBlocks = blocksOf(edition, kind);
+        if (editionBlocks.stream().anyMatch(b -> b.getKind() == kind && b.getImdbId().equals(imdbId)
+            && b.getOsFileId() == fileId)) {
+            return Optional.of(ChosenOutcome.BLOCKED);
+        }
+        Set<Long> skipped = skippedFileIds(edition, imdbId, kind, editionBlocks, downloadsOf(edition, kind));
+        if (skipped.contains(fileId)) {
+            return Optional.of(ChosenOutcome.ALREADY_DOWNLOADED);
+        }
+        return DownloadPlan.remaining(skipped) == 0 ? Optional.of(ChosenOutcome.CAP_REACHED) : Optional.empty();
     }
 }
