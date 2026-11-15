@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installFetch, renderApp } from '../../test/mockApi.jsx';
 
@@ -7,24 +7,37 @@ afterEach(() => {
 });
 
 describe('Admin Settings section', () => {
-  it('is named Settings and holds Continue watching and Session, with the TMDB credit last', async () => {
+  it('is named Settings and holds Continue watching and Signed in, with the TMDB credit last', async () => {
     installFetch();
     renderApp('/admin/settings');
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
     await screen.findByRole('region', { name: 'Continue watching' });
-    expect(screen.getByRole('region', { name: 'Session' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Signed in on this browser' })).toBeInTheDocument();
     expect(screen.getAllByRole('region')).toHaveLength(2);
     const credit = screen.getByText(
       'This product uses the TMDB API but is not endorsed or certified by TMDB.',
     );
-    const session = screen.getByRole('region', { name: 'Session' });
+    const session = screen.getByRole('region', { name: 'Signed in on this browser' });
     expect(session.compareDocumentPosition(credit)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(screen.getByRole('img', { name: 'TMDB' })).toBeInTheDocument();
+  });
+
+  it('has no switches, and its one setting and Sign out are described by their hints', async () => {
+    installFetch();
+    renderApp('/admin/settings');
+    await screen.findByRole('spinbutton', { name: 'Continue watching starts after' });
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    const signedIn = screen.getByRole('region', { name: 'Signed in on this browser' });
+    expect(within(signedIn).getByText('Signed in on this browser')).toBeInTheDocument();
+    expect(within(signedIn).getByRole('button', { name: 'Sign out' })).toHaveAccessibleDescription(
+      "Signing out here doesn't affect other devices.",
+    );
   });
 
   it('shows one skeleton while the setting loads', () => {
     installFetch(() => new Promise(() => {}));
     renderApp('/admin/settings');
-    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(1);
+    expect(screen.getAllByRole('status', { name: 'Loading the settings' })).toHaveLength(1);
   });
 });

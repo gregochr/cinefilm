@@ -1,9 +1,8 @@
 import { useId } from 'react';
-import { ActionWithHint } from '../../components/ActionWithHint.jsx';
-import { buttons } from '../../state/adminCopy.js';
+import { Button } from '../../components/Button.jsx';
+import { buttons, settingsPage } from '../../state/adminCopy.js';
+import AdminTodoNotice from './AdminTodoNotice.jsx';
 import SectionTitle from './SectionTitle.jsx';
-import { SkeletonBlock } from '../../components/Skeleton.jsx';
-import { ErrorState } from '../../components/StateMessages.jsx';
 import {
   MAX_MINUTES,
   MIN_MINUTES,
@@ -46,29 +45,30 @@ function TmdbMark() {
 }
 
 /** The minimum watch time for Continue watching. It saves on blur or Enter: there is nothing to batch. */
-function ContinueWatchingPanel() {
+function ContinueWatchingCard() {
   const { settings, loadError, loading, reload, draft, edit, commit, error, status } =
     useSettings();
   const inputId = useId();
   const helpId = useId();
   const errorId = useId();
+  const rangeError = error === RANGE_ERROR;
   let body;
-  if (loading && !settings) {
-    body = (
-      <div role="status" aria-label="Loading">
-        <SkeletonBlock style={{ height: 120 }} />
-      </div>
-    );
-  } else if (loadError && !settings) {
-    body = <ErrorState onRetry={reload}>Couldn&rsquo;t load the settings.</ErrorState>;
-  } else if (settings) {
+  if (settings) {
     const value = draft ?? String(settings.continueWatchingMinMinutes);
     body = (
-      <>
-        <div className="admin__setting">
-          <label htmlFor={inputId} className="admin__setting-label">
-            Minimum watched before a film counts as in progress
+      <div className="admin__set">
+        <div className="admin__set-text">
+          <label htmlFor={inputId} className="admin__set-label">
+            {settingsPage.continueLabel}
           </label>
+          <p id={helpId} className="admin__set-hint">
+            {settingsPage.continueHint}
+          </p>
+          <p className="admin__mono admin__ratings-line">
+            {describeInProgress(settings.inProgressCount)}
+          </p>
+        </div>
+        <div className="admin__set-control">
           <div className="admin__setting-row">
             <input
               id={inputId}
@@ -79,8 +79,8 @@ function ContinueWatchingPanel() {
               max={MAX_MINUTES}
               step={1}
               value={value}
-              aria-invalid={error === RANGE_ERROR ? 'true' : undefined}
-              aria-describedby={error === RANGE_ERROR ? `${helpId} ${errorId}` : helpId}
+              aria-invalid={rangeError ? 'true' : undefined}
+              aria-describedby={rangeError ? `${helpId} ${errorId}` : helpId}
               onChange={(event) => edit(event.target.value)}
               onBlur={() => commit(draft)}
               onKeyDown={(event) => {
@@ -91,81 +91,75 @@ function ContinueWatchingPanel() {
               }}
             />
             <span className="admin__suffix" aria-hidden="true">
-              minutes
+              {settingsPage.continueUnit}
             </span>
           </div>
-          <p id={helpId} className="admin__text">
-            Films you&rsquo;ve watched for less than this stay out of Continue watching. Their place
-            is still saved.
-          </p>
-          {error === RANGE_ERROR ? (
+          {rangeError ? (
             <p id={errorId} className="admin__field-error">
               {error}
             </p>
           ) : null}
+          <span className="admin__notice" role="status">
+            {status ?? (rangeError ? null : error)}
+          </span>
         </div>
-        <p className="admin__mono admin__ratings-line">
-          {describeInProgress(settings.inProgressCount)}
-        </p>
-      </>
+      </div>
+    );
+  } else {
+    body = (
+      <AdminTodoNotice
+        label={settingsPage.loadingLabel}
+        error={loadError && !loading ? settingsPage.loadError : null}
+        onRetry={reload}
+      />
     );
   }
   return (
-    <section className="admin__card" aria-labelledby="admin-continue-title">
-      <div className="admin__head">
-        <h2 id="admin-continue-title" className="admin__title">
-          Continue watching
-        </h2>
-        <span className="admin__notice" role="status">
-          {status ?? (error === RANGE_ERROR ? null : error)}
-        </span>
-      </div>
+    <section className="admin__card admin__card--rows" aria-label={settingsPage.continueCardLabel}>
       {body}
     </section>
   );
 }
 
-function SessionPanel() {
+function SignedInCard() {
   const { signingOut, error, signOut } = useSignOut();
+  const hintId = useId();
   return (
-    <section className="admin__card" aria-labelledby="admin-session-title">
-      <div className="admin__head">
-        <h2 id="admin-session-title" className="admin__title">
-          Session
-        </h2>
-      </div>
-      <p className="admin__text">Signed in to this browser.</p>
-      <div className="admin__actions">
-        <ActionWithHint
-          layout="line"
-          hint={buttons.signOut.hint}
-          disabled={signingOut}
-          onClick={signOut}
-        >
-          {signingOut ? buttons.signOut.busyLabel : buttons.signOut.label}
-        </ActionWithHint>
-        {error ? (
-          <span className="admin__notice" role="status">
-            {error}
-          </span>
-        ) : null}
+    <section className="admin__card admin__card--rows" aria-label={settingsPage.signedInLabel}>
+      <div className="admin__set">
+        <div className="admin__set-text">
+          <p className="admin__set-label">{settingsPage.signedInLabel}</p>
+          <p id={hintId} className="admin__set-hint">
+            {buttons.signOut.hint}
+          </p>
+        </div>
+        <div className="admin__set-control">
+          <Button aria-describedby={hintId} disabled={signingOut} onClick={signOut}>
+            {signingOut ? buttons.signOut.busyLabel : buttons.signOut.label}
+          </Button>
+          {error ? (
+            <span className="admin__notice" role="status">
+              {error}
+            </span>
+          ) : null}
+        </div>
       </div>
     </section>
   );
 }
 
-/** Settings: Continue watching and the session, with the TMDB credit at the bottom. */
+/** Settings: the Continue watching minimum and the session, with the TMDB credit at the bottom. */
 export default function AdminSettings() {
   return (
     <>
       <SectionTitle>Settings</SectionTitle>
-      <div className="admin__grid">
-        <ContinueWatchingPanel />
-        <SessionPanel />
+      <div className="admin__settings">
+        <ContinueWatchingCard />
+        <SignedInCard />
       </div>
       <p className="admin__credit">
         <TmdbMark />
-        <span>This product uses the TMDB API but is not endorsed or certified by TMDB.</span>
+        <span>{settingsPage.credit}</span>
       </p>
     </>
   );
