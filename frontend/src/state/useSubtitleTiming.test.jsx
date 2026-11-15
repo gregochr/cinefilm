@@ -75,7 +75,7 @@ describe('useSubtitleTiming', () => {
     await act(() => result.current.later());
 
     expect(calls).toEqual(['PUT /api/admin/subtitles/1/offset {"offsetMs":750}']);
-    expect(props.onApplied).toHaveBeenCalledExactlyOnceWith('FULL', '101_750');
+    expect(props.onApplied).toHaveBeenCalledExactlyOnceWith('FULL', '101_750', [750]);
     expect(result.current.offsets).toEqual([750]);
     expect(result.current.busy).toBe(false);
     expect(result.current.problem).toBeNull();
@@ -109,7 +109,7 @@ describe('useSubtitleTiming', () => {
       'PUT /api/admin/subtitles/1/offset {"offsetMs":1250}',
       'PUT /api/admin/subtitles/2/offset {"offsetMs":-250}',
     ]);
-    expect(props.onApplied).toHaveBeenCalledWith('FULL', '101_1250-101_-250');
+    expect(props.onApplied).toHaveBeenCalledWith('FULL', '101_1250-101_-250', [1250, -250]);
     expect(result.current.offsets).toEqual([1250, -250]);
   });
 
@@ -194,12 +194,12 @@ describe('useSubtitleTiming', () => {
 
     await act(() => result.current.later());
 
-    expect(props.onApplied).toHaveBeenCalledExactlyOnceWith('FULL', '101_250');
+    expect(props.onApplied).toHaveBeenCalledExactlyOnceWith('FULL', '101_250', [250, 0]);
     expect(result.current.problem).toBe(subtitleTiming.failed);
     expect(result.current.offsets).toEqual([250, 0]);
   });
 
-  it('does not reload the track when the server no longer serves the changed file, and says the subtitle changed', async () => {
+  it('does not reload the track when the server no longer serves the changed file, and freezes that file’s timing', async () => {
     const rows = [row(1, 0)];
     serve({
       rows,
@@ -207,13 +207,44 @@ describe('useSubtitleTiming', () => {
         method === 'PUT' ? respond({ ...rows[0], offsetMs: 250, served: false }) : null,
     });
     const props = open({ offsets: [0] });
-    const { result } = renderHook(() => useSubtitleTiming(props));
+    const { result, rerender } = renderHook((p) => useSubtitleTiming(p), { initialProps: props });
 
     await act(() => result.current.later());
 
     expect(props.onApplied).not.toHaveBeenCalled();
     expect(result.current.problem).toBe(subtitleTiming.changed);
+    expect(result.current.frozen).toBe(true);
     expect(result.current.offsets).toEqual([250]);
+    // The freeze and its line belong to that file: another file has neither, and it is back when that file shows again.
+    rerender(open({ kind: 'FORCED', ids: [2], offsets: [0], onApplied: props.onApplied }));
+    expect(result.current.frozen).toBe(false);
+    expect(result.current.problem).toBeNull();
+    rerender(props);
+    expect(result.current.frozen).toBe(true);
+    expect(result.current.problem).toBe(subtitleTiming.changed);
+  });
+
+  it('stops at the first row the server no longer serves: later rows are not sent and nothing reloads', async () => {
+    const rows = [row(1, 0), row(2, 0), row(3, 0)];
+    const { calls } = serve({
+      rows,
+      answer: (method, url) =>
+        method === 'PUT' && url.endsWith('/2/offset')
+          ? respond({ ...rows[1], offsetMs: 250, served: false })
+          : null,
+    });
+    const props = open({ ids: [1, 2, 3], offsets: [0, 0, 0] });
+    const { result } = renderHook(() => useSubtitleTiming(props));
+
+    await act(() => result.current.later());
+
+    expect(calls).toEqual([
+      'PUT /api/admin/subtitles/1/offset {"offsetMs":250}',
+      'PUT /api/admin/subtitles/2/offset {"offsetMs":250}',
+    ]);
+    expect(props.onApplied).not.toHaveBeenCalled();
+    expect(result.current.frozen).toBe(true);
+    expect(result.current.offsets).toEqual([250, 250, 0]);
   });
 
   it('forgets a problem when another file shows, and does not bring it back', async () => {
@@ -269,7 +300,7 @@ describe('useSubtitleTiming', () => {
 
     rerender(open({ kind: 'FORCED', ids: [2], offsets: [4000], onApplied: props.onApplied }));
     release();
-    await waitFor(() => expect(props.onApplied).toHaveBeenCalledWith('FULL', '101_250'));
+    await waitFor(() => expect(props.onApplied).toHaveBeenCalledWith('FULL', '101_250', [250]));
 
     expect(result.current.offsets).toEqual([4000]);
     expect(result.current.busy).toBe(false);

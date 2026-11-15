@@ -359,7 +359,10 @@ describe('AudioSubtitlesPanel: subtitle timing', () => {
   const timingOf = (over = {}) => ({
     available: true,
     offsets: [500],
+    atZero: false,
     busy: false,
+    loading: false,
+    frozen: false,
     problem: null,
     onEarlier: vi.fn(),
     onLater: vi.fn(),
@@ -436,7 +439,7 @@ describe('AudioSubtitlesPanel: subtitle timing', () => {
   });
 
   it('has nothing to reset when the timing is already 0, but Earlier and Later still work', async () => {
-    const timing = timingOf({ offsets: [0] });
+    const timing = timingOf({ offsets: [0], atZero: true });
     render(<AudioSubtitlesPanel {...props} timing={timing} />);
 
     await userEvent.click(reset());
@@ -445,6 +448,33 @@ describe('AudioSubtitlesPanel: subtitle timing', () => {
     expect(reset()).toHaveAttribute('aria-disabled', 'true');
     expect(timing.onReset).not.toHaveBeenCalled();
     expect(timing.onLater).toHaveBeenCalledTimes(1);
+  });
+
+  it('says Saving… while the new timing loads, but the buttons still work', async () => {
+    const timing = timingOf({ loading: true });
+    render(<AudioSubtitlesPanel {...props} timing={timing} />);
+
+    expect(within(subs()).getByRole('status')).toHaveTextContent('Saving…');
+    await userEvent.click(later());
+
+    expect(timing.onLater).toHaveBeenCalledTimes(1);
+  });
+
+  it('is disabled for good once the file has changed under the viewer (frozen)', async () => {
+    const timing = timingOf({ frozen: true, offsets: [250] });
+    render(<AudioSubtitlesPanel {...props} timing={timing} />);
+
+    await userEvent.click(earlier());
+    await userEvent.click(later());
+    await userEvent.click(reset());
+
+    for (const button of [earlier(), later(), reset()]) {
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+    }
+    expect(within(subs()).getByRole('status')).toHaveTextContent('Timing: +0.25 s');
+    expect(timing.onEarlier).not.toHaveBeenCalled();
+    expect(timing.onLater).not.toHaveBeenCalled();
+    expect(timing.onReset).not.toHaveBeenCalled();
   });
 
   it('shows a problem as an alert line', () => {
@@ -474,7 +504,7 @@ describe('AudioSubtitlesPanel: subtitle timing', () => {
   });
 
   it('goes on from the position of a focused disabled item, in the middle of the menu', async () => {
-    render(<AudioSubtitlesPanel {...props} timing={timingOf({ offsets: [0] })} />);
+    render(<AudioSubtitlesPanel {...props} timing={timingOf({ offsets: [0], atZero: true })} />);
     const choices = within(subs()).getAllByRole('menuitemradio');
     reset().focus();
 

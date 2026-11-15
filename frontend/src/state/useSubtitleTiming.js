@@ -8,14 +8,16 @@ import { EARLIER, LATER, nextOffsets, timingProblem, trackToken } from './subtit
  * `ids`: the sidecar ids the film showed for it, one row per part; `offsets`: their offsets in the same order, both from
  * the film). It never touches the playback and reads nothing: the offsets come from the film and, after a change, from
  * each answer of `PUT /api/admin/subtitles/{id}/offset`, which is all it sends. The answers go to `onApplied(kind,
- * token)` so the player can load the new timing into that one `<track>`.
+ * token, offsets)` so the player can load the new timing into that one `<track>`; `offsets` is what each row is at now
+ * (this hook's `offsets` are the server's: what the next press works from, not what is on screen).
  *
  * - Each row moves by the step from its own offset (rows of different parts may differ); Reset sets every row to 0. One
  *   absolute offset per row that moves goes out, one request at a time; the first refusal stops the rest.
  * - One press per file at a time (a ref, so two clicks in one frame send one request); the buttons stay focusable and
  *   `busy` says why they do nothing.
  * - If the server no longer serves a changed row (it answers `served: false`: the owner's check was cleared and another
- *   subtitle plays now), the track is not reloaded and the viewer is told the subtitle changed.
+ *   subtitle plays now), the rows after it are not sent, the track is not reloaded, and the timing of that file stays
+ *   `frozen` for the rest of the viewing, with the subtitle-changed line saying why.
  * - What an answer says (offsets, a problem) belongs to the file it was for: a problem is forgotten when the shown file
  *   changes. The offsets learned here are kept for each file, so switching away and back shows them. The `<track>` of a
  *   file that changed is still told (`onApplied`), whatever shows now; nothing is said after the player is gone.
@@ -34,6 +36,7 @@ export function useSubtitleTiming({ kind, ids, offsets, onApplied }) {
   const [known, setKnown] = useState({});
   const [problemOf, setProblemOf] = useState({ key: fileKey, text: null });
   const [inFlight, setInFlight] = useState([]);
+  const [frozen, setFrozen] = useState([]);
 
   useEffect(() => {
     alive.current = true;
@@ -64,9 +67,12 @@ export function useSubtitleTiming({ kind, ids, offsets, onApplied }) {
       const answers = [];
       let problem = null;
       try {
-        // One absolute offset per row that actually moves, in the film's order; the first refusal stops the rest.
+        // One absolute offset per row that actually moves, in the film's order; the first refusal, or the first row the
+        // server no longer serves, stops the rest.
         for (const move of nextOffsets(rows, delta).filter((m) => m.offsetMs !== m.was)) {
-          answers.push(await adminApi.setSubtitleOffset(move.id, move.offsetMs));
+          const answer = await adminApi.setSubtitleOffset(move.id, move.offsetMs);
+          answers.push(answer);
+          if (answer.served === false) break;
         }
       } catch (error) {
         problem = timingProblem(error);
@@ -74,20 +80,19 @@ export function useSubtitleTiming({ kind, ids, offsets, onApplied }) {
         flying.current.delete(key);
         setInFlight((keys) => keys.filter((k) => k !== key));
       }
+      const now = rows.map((r) => answers.find((a) => a.id === r.id)?.offsetMs ?? r.offsetMs);
       if (answers.length > 0) {
-        // Rows that changed show their new offset, even when a later one was refused.
-        learned.current = {
-          ...learned.current,
-          [key]: rows.map((r) => answers.find((a) => a.id === r.id)?.offsetMs ?? r.offsetMs),
-        };
+        // Rows that changed are at their new offset on the server, even when a later one was refused.
+        learned.current = { ...learned.current, [key]: now };
         if (alive.current) setKnown(learned.current);
       }
       // The answers say whether each row is still the one served. If not, another subtitle plays now.
       const replaced = answers.some((a) => a.served === false);
+      if (replaced && alive.current) setFrozen((keys) => [...keys, key]);
       say(key, problem ?? (replaced ? subtitleTiming.changed : null));
       // Whatever shows now, the file that was changed has new timing: its track is told, unless it is no longer served.
       if (answers.length > 0 && !replaced && alive.current)
-        callback.current(fileKind, trackToken(answers));
+        callback.current(fileKind, trackToken(answers), now);
     },
     [say],
   );
@@ -104,8 +109,12 @@ export function useSubtitleTiming({ kind, ids, offsets, onApplied }) {
   return {
     available: fileKey !== null,
     offsets: fileKey === null ? null : (known[fileKey] ?? offsets),
-    problem: problemOf.key === fileKey ? problemOf.text : null,
+    problem:
+      problemOf.key === fileKey
+        ? (problemOf.text ?? (frozen.includes(fileKey) ? subtitleTiming.changed : null))
+        : null,
     busy: fileKey !== null && inFlight.includes(fileKey),
+    frozen: fileKey !== null && frozen.includes(fileKey),
     earlier: () => press(EARLIER.delta),
     later: () => press(LATER.delta),
     reset: () => press(null),

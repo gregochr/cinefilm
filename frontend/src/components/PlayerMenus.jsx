@@ -8,7 +8,7 @@ import {
 } from '../player/tracks.js';
 import { workerOffline } from '../player/ladder.js';
 import { subtitleTiming, subtitlesWrong } from '../state/subtitleFixCopy.js';
-import { EARLIER, LATER, inSync, timingReadout } from '../state/subtitleTiming.js';
+import { EARLIER, LATER, timingReadout } from '../state/subtitleTiming.js';
 import { CheckIcon } from './icons.jsx';
 
 /**
@@ -132,7 +132,9 @@ function WrongSubtitles({ busy, problem, onWrong }) {
  * there is nothing to reset, so the pressed button keeps focus. The readout says the offset, or that it is being saved.
  */
 function TimingControls({ timing }) {
-  const readout = timing.busy ? subtitleTiming.busy : timingReadout(timing.offsets);
+  const saving = timing.busy || timing.loading;
+  const blocked = timing.busy || timing.frozen;
+  const readout = saving ? subtitleTiming.busy : timingReadout(timing.offsets);
   const action = (label, spoken, detail, onPress, blocked) => (
     <button
       type="button"
@@ -154,19 +156,19 @@ function TimingControls({ timing }) {
       className="menu__timing"
       role="group"
       aria-label={subtitleTiming.group}
-      aria-busy={timing.busy || undefined}
+      aria-busy={saving || undefined}
     >
       <div className="menu__readout" role="status">
-        {readout ? (timing.busy ? readout : subtitleTiming.readout(readout)) : null}
+        {readout ? (saving ? readout : subtitleTiming.readout(readout)) : null}
       </div>
-      {action(subtitleTiming.earlier, EARLIER.spoken, EARLIER.label, timing.onEarlier, timing.busy)}
-      {action(subtitleTiming.later, LATER.spoken, LATER.label, timing.onLater, timing.busy)}
+      {action(subtitleTiming.earlier, EARLIER.spoken, EARLIER.label, timing.onEarlier, blocked)}
+      {action(subtitleTiming.later, LATER.spoken, LATER.label, timing.onLater, blocked)}
       {action(
         subtitleTiming.reset,
         subtitleTiming.reset,
         null,
         timing.onReset,
-        timing.busy || inSync(timing.offsets),
+        blocked || timing.atZero,
       )}
       {timing.problem ? (
         <p className="menu__problem" role="alert">

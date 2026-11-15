@@ -603,8 +603,17 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
     `<track>` of that kind beside the showing one, `hidden`, with `?v=<film version>.<token>` (the server ignores `v`),
     and swaps once its `load` event fires: the new one becomes the only `showing` track and the old element unmounts. On
     `error` the new one is dropped, the old one keeps showing and the viewer is told. A newer change replaces a pending
-    one; a kind that stops showing (the viewer chose another subtitle) takes its pending track over at once, since a
-    track that is not showing fetches nothing. (`state/subtitleTrackSwap.js`: the reducer and the track modes.) Only
+    one. A kind that stops showing (the viewer chose another subtitle) keeps both its tracks mounted, both
+    `disabled`: a hidden track does load, so its load or error may arrive while nobody listens. When the kind shows
+    again the old one is `showing` and the pending one `hidden` again, and the listener reads the pending element's
+    `readyState` on attaching (2 loaded: it takes over; 3 error: dropped with the line), else waits for its events. A
+    pending track that neither loads nor errors within 20 s is dropped (old timing stays, line shown). The mode effect
+    is a layout effect, so a swap never shows a frame without lines. (`state/subtitleTrackSwap.js`: the reducer and the
+    track modes.) **The readout describes the timing on screen:** the offsets of the track that shows (the film's own
+    until a swap; kept in the swap state with each token), "Saving…" while the new one loads; the next press still works
+    from the server's offsets. After a `served: false` answer the row loop stops at that row, no later row is sent, and
+    that file's timing buttons stay `aria-disabled` for the rest of the viewing, the subtitle-changed line saying why.
+    A change clears the owner's "Looks right" by design, so another file may play after the next film load. Only
     `<track>` elements change: no session, seek, `load()`, video `src`, `useStream` or hls code; the film is not read
     again. Elements are replaced rather than their `src` changed because a `src` change on a live track is unreliable in
     Safari. A load that never fires or errors leaves the pending track hidden until the next change replaces it.

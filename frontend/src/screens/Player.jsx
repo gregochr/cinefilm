@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { SESSION_EXPIRED_EVENT, SIGNED_IN_EVENT } from '../api/client.js';
 import { editionsApi } from '../api/resources.js';
@@ -61,12 +61,19 @@ import { usePageExitReport } from '../player/exitReport.js';
 import { usePlayback } from '../state/usePlayback.js';
 import { shownDownloadKind, shownFileKind } from '../state/subtitleFix.js';
 import { subtitlesWrong } from '../state/subtitleFixCopy.js';
-import { trackVersion } from '../state/subtitleTiming.js';
+import { inSync, trackVersion } from '../state/subtitleTiming.js';
 import { NO_SWAPS, fileTrackKey, swapTracks, trackModes } from '../state/subtitleTrackSwap.js';
 import { useSubtitleTiming } from '../state/useSubtitleTiming.js';
 import { useSubtitleWrong } from '../state/useSubtitleWrong.js';
 import { useHealthReport } from '../player/useHealthReport.js';
 import { useEnvironment } from '../player/useEnvironment.js';
+
+/** `HTMLTrackElement.readyState`: the cues are in, or the fetch failed. */
+const TRACK_LOADED = 2;
+const TRACK_ERROR = 3;
+
+/** How long a pending subtitle track may take to load or fail before the old timing is kept. */
+const SWAP_TIMEOUT_MS = 20_000;
 
 /** The tokens of a kind's mounted file tracks: the current one, then the one still loading, if any. */
 function fileTokens({ current, pending }) {
@@ -284,8 +291,9 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
       if (element.track) element.track.mode = modes.get(key);
     });
   }, [edition.subtitleStreams, forcedSubtitle, fullSubtitle, subtitle, swaps]);
-  // Again when a changed timing mounted a new <track> (its mode starts out disabled) or swapped one in.
-  useEffect(applySubtitleModes, [applySubtitleModes]);
+  // Again when a changed timing mounted a new <track> (its mode starts out disabled) or swapped one in. A layout effect,
+  // so the swap never shows a frame without lines.
+  useLayoutEffect(applySubtitleModes, [applySubtitleModes]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -398,36 +406,40 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
     kind: fileKind,
     ids: shownFile?.sidecarIds,
     offsets: shownFile?.offsetsMs,
-    onApplied: (kind, token) => dispatchSwaps({ type: 'begin', kind, token }),
+    onApplied: (kind, token, offsets) => dispatchSwaps({ type: 'begin', kind, token, offsets }),
   });
-  // The new timing's track loaded: it takes over. It failed: the old one stays and the viewer is told. A kind that is
-  // not showing waits for nothing (a track that is not showing loads nothing), so its pending one just takes over.
+  // The new timing's track loaded: it takes over. It failed, or neither loaded nor failed within SWAP_TIMEOUT_MS: it is
+  // dropped, the old one stays and the viewer is told. Only the kind that shows is watched; another kind keeps both its
+  // tracks mounted (a hidden track does load, so its outcome may come while nobody listens), and is read again from
+  // `readyState` when it shows again.
   const { swapFailed } = timing;
   useEffect(() => {
     const stops = [];
-    for (const kind of ['FORCED', 'FULL']) {
-      const { pending } = swaps[kind];
-      if (pending === null) continue;
-      if (kind !== fileKind) {
-        dispatchSwaps({ type: 'settle', kind });
-        continue;
-      }
-      const element = trackRefs.current.get(fileTrackKey(kind, pending));
-      if (!element) continue;
-      const loaded = () => dispatchSwaps({ type: 'commit', kind, token: pending });
+    const { pending } = swaps[fileKind] ?? {};
+    const element = pending ? trackRefs.current.get(fileTrackKey(fileKind, pending)) : null;
+    if (element) {
+      const loaded = () => dispatchSwaps({ type: 'commit', kind: fileKind, token: pending });
       const failed = () => {
-        dispatchSwaps({ type: 'fail', kind, token: pending });
-        swapFailed(kind);
+        dispatchSwaps({ type: 'fail', kind: fileKind, token: pending });
+        swapFailed(fileKind);
       };
+      if (element.readyState === TRACK_LOADED) loaded();
+      else if (element.readyState === TRACK_ERROR) failed();
       element.addEventListener('load', loaded);
       element.addEventListener('error', failed);
+      const timer = setTimeout(failed, SWAP_TIMEOUT_MS);
       stops.push(() => {
         element.removeEventListener('load', loaded);
         element.removeEventListener('error', failed);
+        clearTimeout(timer);
       });
     }
     return () => stops.forEach((stop) => stop());
   }, [swaps, fileKind, swapFailed]);
+  // What the timing buttons describe is the timing on screen: the offsets of the track that shows (the film's own until
+  // a swap), "Saving…" while the new one loads. The next press still works from the server's offsets.
+  const swapsOfFile = fileKind ? swaps[fileKind] : null;
+  const shownOffsets = swapsOfFile?.currentOffsets ?? shownFile?.offsetsMs ?? null;
   // Deletes and blocks the download, then stops showing it: a full one falls back to Off (the forced lines still show
   // when there are any), a forced one to what the player would otherwise show. Playback itself is not touched.
   const reportWrong = async () => {
@@ -795,8 +807,11 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
               onSubtitle={chooseSubtitle}
               timing={{
                 available: timing.available,
-                offsets: timing.offsets,
+                offsets: shownOffsets,
+                atZero: inSync(shownOffsets) && inSync(timing.offsets),
                 busy: timing.busy,
+                loading: swapsOfFile?.pending != null,
+                frozen: timing.frozen,
                 problem: timing.problem,
                 onEarlier: timing.earlier,
                 onLater: timing.later,

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { NO_SWAPS, fileTrackKey, swapTracks, trackModes } from './subtitleTrackSwap.js';
 
-const pending = (token, current = null) => ({
+const pending = (token, current = null, pendingOffsets = null, currentOffsets = null) => ({
   ...NO_SWAPS,
-  FULL: { current, pending: token },
+  FULL: { current, pending: token, currentOffsets, pendingOffsets },
 });
 
 describe('fileTrackKey', () => {
@@ -14,22 +14,33 @@ describe('fileTrackKey', () => {
 });
 
 describe('swapTracks', () => {
-  it('begin makes the token pending and leaves the current track alone', () => {
+  it('begin makes the token pending with its offsets and leaves the current track alone', () => {
     expect(
-      swapTracks(pending(null, 'a'), { type: 'begin', kind: 'FULL', token: 'b' }).FULL,
-    ).toEqual({ current: 'a', pending: 'b' });
+      swapTracks(pending(null, 'a', null, [0]), {
+        type: 'begin',
+        kind: 'FULL',
+        token: 'b',
+        offsets: [250],
+      }).FULL,
+    ).toEqual({ current: 'a', pending: 'b', currentOffsets: [0], pendingOffsets: [250] });
   });
 
   it('a newer begin replaces an older pending one', () => {
-    expect(swapTracks(pending('b'), { type: 'begin', kind: 'FULL', token: 'c' }).FULL.pending).toBe(
-      'c',
-    );
+    const next = swapTracks(pending('b', null, [250]), {
+      type: 'begin',
+      kind: 'FULL',
+      token: 'c',
+      offsets: [500],
+    }).FULL;
+
+    expect(next.pending).toBe('c');
+    expect(next.pendingOffsets).toEqual([500]);
   });
 
-  it('commit makes the pending track current, and the old one goes', () => {
+  it('commit makes the pending track current with its offsets, and the old one goes', () => {
     expect(
-      swapTracks(pending('b', 'a'), { type: 'commit', kind: 'FULL', token: 'b' }).FULL,
-    ).toEqual({ current: 'b', pending: null });
+      swapTracks(pending('b', 'a', [250], [0]), { type: 'commit', kind: 'FULL', token: 'b' }).FULL,
+    ).toEqual({ current: 'b', pending: null, currentOffsets: [250], pendingOffsets: null });
   });
 
   it('commit and fail for a token that is no longer pending do nothing', () => {
@@ -39,23 +50,20 @@ describe('swapTracks', () => {
     expect(swapTracks(state, { type: 'fail', kind: 'FULL', token: 'b' })).toBe(state);
   });
 
-  it('fail drops the pending track and keeps the current one', () => {
-    expect(swapTracks(pending('b', 'a'), { type: 'fail', kind: 'FULL', token: 'b' }).FULL).toEqual({
-      current: 'a',
-      pending: null,
-    });
+  it('fail drops the pending track and keeps the current one and its offsets', () => {
+    expect(
+      swapTracks(pending('b', 'a', [250], [0]), { type: 'fail', kind: 'FULL', token: 'b' }).FULL,
+    ).toEqual({ current: 'a', pending: null, currentOffsets: [0], pendingOffsets: null });
   });
 
-  it('settle takes the pending track over without waiting, and does nothing when nothing is pending', () => {
-    expect(swapTracks(pending('b', 'a'), { type: 'settle', kind: 'FULL' }).FULL).toEqual({
-      current: 'b',
-      pending: null,
-    });
-    expect(swapTracks(NO_SWAPS, { type: 'settle', kind: 'FULL' })).toBe(NO_SWAPS);
+  it('has no step for the kind no longer showing: a pending track stays pending', () => {
+    const state = pending('b', 'a');
+
+    expect(swapTracks(state, { type: 'settle', kind: 'FULL' })).toBe(state);
   });
 
   it('leaves the other kind alone and ignores an unknown step', () => {
-    const next = swapTracks(NO_SWAPS, { type: 'begin', kind: 'FORCED', token: 'x' });
+    const next = swapTracks(NO_SWAPS, { type: 'begin', kind: 'FORCED', token: 'x', offsets: [1] });
 
     expect(next.FULL).toBe(NO_SWAPS.FULL);
     expect(swapTracks(next, { type: 'nope', kind: 'FORCED' })).toBe(next);
@@ -77,7 +85,7 @@ describe('trackModes', () => {
     ]);
   });
 
-  it('keeps a pending track disabled when its kind is not the one showing', () => {
+  it('keeps both tracks of a kind disabled while another kind shows', () => {
     const modes = trackModes(keys, { showing: 'forced', shownKind: 'FORCED', swaps });
 
     expect(modes.get('FORCED:')).toBe('showing');
