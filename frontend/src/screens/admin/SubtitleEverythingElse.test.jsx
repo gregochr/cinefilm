@@ -45,7 +45,6 @@ function renderElse(props = {}) {
         needs={NEEDS}
         scan={fixtures.adminScan}
         version="v1"
-        onChanged={vi.fn()}
         {...props}
       />
     </MemoryRouter>,
@@ -116,7 +115,6 @@ describe('SubtitleEverythingElse', () => {
           needs={NEEDS}
           scan={fixtures.adminScan}
           version="v1"
-          onChanged={vi.fn()}
         />
       </MemoryRouter>,
     );
@@ -152,7 +150,6 @@ describe('SubtitleEverythingElse: Your choices', () => {
           needs={{ full: needState([chosen]), forced: needState() }}
           scan={fixtures.adminScan}
           version="v1"
-          onChanged={vi.fn()}
         />
       </MemoryRouter>,
     );

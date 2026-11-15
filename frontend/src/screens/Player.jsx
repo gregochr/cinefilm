@@ -134,7 +134,7 @@ export const LEAVE_REPORT_CAP_MS = 1500;
 function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
   const navigate = useNavigate();
   // Computed once: the clock, remaining time and scrubber show the start point from the first render. A time in
-  // the address (`at`, "Play from here" in Admin) beats the resume point.
+  // the address (`at`, "Play from here" in Film detail's Fix… panel) beats the resume point.
   const [initialSeekMs] = useState(() =>
     startPosition({
       at: startAtMs,

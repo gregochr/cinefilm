@@ -5,7 +5,7 @@
 import { buttons, subtitlesPage, todoRow } from './adminCopy.js';
 import { fullNeedReason, fullSubtitleLine } from './fullNeed.js';
 import { languageName, reasonText } from './forcedNeed.js';
-import { isFull, partOptions } from './subtitleAdmin.js';
+import { isDownload, isFull, partOptions, partWhere } from './subtitleAdmin.js';
 import { titleWithYear } from './scanFormat.js';
 
 /** The tabs in the order they are drawn. */
@@ -135,24 +135,46 @@ export function filmTitle(row) {
 
 /**
  * The files a film's "Add my own file…" offers: the owner's own full subtitle files that are present and not already
- * on this film, unattached ones first. Downloads are not offered (they are the server's, not the owner's).
+ * on this film, unattached ones first. Downloads are not offered (they are the server's, not the owner's). With
+ * `allKinds` (Film detail's Fix… panel, where Admin's old "Attach to… / Move to…" now lives) forced files are offered
+ * too (the attach route takes any file and keeps its kind), and so are this film's own files, so one can be moved to
+ * another edition or part. Order: unattached, then other films', then this film's.
  */
-export function fileChoices(files, filmId) {
+export function fileChoices(files, filmId, allKinds = false) {
   const own = (files ?? []).filter(
     (file) =>
-      isFull(file) &&
-      file.origin !== 'OPENSUBTITLES' &&
+      (allKinds || isFull(file)) &&
+      !isDownload(file) &&
       file.presence !== 'MISSING' &&
-      file.filmId !== filmId,
+      (allKinds || file.filmId !== filmId),
   );
-  return [...own.filter((f) => f.filmId == null), ...own.filter((f) => f.filmId != null)];
+  return [
+    ...own.filter((f) => f.filmId == null),
+    ...own.filter((f) => f.filmId != null && f.filmId !== filmId),
+    ...own.filter((f) => f.filmId === filmId),
+  ];
 }
 
-/** What a file choice says beside its path: where it sits now. */
-export function fileChoiceNote(file) {
-  return file.filmId == null
-    ? subtitlesPage.addFile.unattached
-    : subtitlesPage.addFile.attachedTo(file.filmTitle ?? 'another film');
+/** What a file choice says beside its path: where it sits now (for this film's own file, its edition and part). */
+export function fileChoiceNote(file, filmId) {
+  if (file.filmId == null) return subtitlesPage.addFile.unattached;
+  if (file.filmId === filmId) {
+    return subtitlesPage.addFile.onThisFilm(
+      [file.editionName, partWhere(file)].filter(Boolean).join(', '),
+    );
+  }
+  return subtitlesPage.addFile.attachedTo(file.filmTitle ?? 'another film');
+}
+
+/**
+ * True when attaching `file` to `target` (`attachTarget`'s answer) would put it where it already is: the same film and
+ * edition, and the same place in it. In a split edition a `null` part is the whole film; in a one-part edition it is
+ * part 1 (the server stores such a file on part 1, not as the whole film, so a row may read either way).
+ */
+export function isCurrentTarget(file, filmId, target) {
+  if (!file || file.filmId !== filmId || file.editionId !== target.editionId) return false;
+  if (file.parts > 1) return file.whole ? target.part === null : target.part === file.part;
+  return (target.part ?? 1) === 1 && (file.whole === true || file.part === 1);
 }
 
 /** The body of the attach request once an edition and (for a split edition) a part are chosen, else null. */

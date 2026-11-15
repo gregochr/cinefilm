@@ -5,6 +5,7 @@ import {
   everythingElse,
   fileChoiceNote,
   fileChoices,
+  isCurrentTarget,
   filmTitle,
   foreignActions,
   foreignLine,
@@ -290,10 +291,70 @@ describe('fileChoices', () => {
     expect(fileChoices(null, 6)).toEqual([]);
   });
 
+  it('with `allKinds` offers forced files and this film’s own too, still never downloads or missing files', () => {
+    const files = [
+      file({ id: 1, kind: 'FORCED', filmId: 9, filmTitle: 'Other' }),
+      file({ id: 2, kind: 'FORCED' }),
+      file({ id: 3, kind: 'FORCED', filmId: 6 }),
+      file({ id: 4 }),
+      file({ id: 5, kind: 'FORCED', origin: 'OPENSUBTITLES' }),
+      file({ id: 6, kind: 'FORCED', presence: 'MISSING' }),
+    ];
+    expect(fileChoices(files, 6, true).map((f) => f.id)).toEqual([2, 4, 1, 3]);
+    // The To do path (no `allKinds`) is unchanged: full files not on this film.
+    expect(fileChoices(files, 6).map((f) => f.id)).toEqual([4]);
+  });
+
   it('says where a file sits now', () => {
     expect(fileChoiceNote(file())).toBe('not attached to a film');
     expect(fileChoiceNote(file({ filmId: 9, filmTitle: 'Other' }))).toBe('on Other');
     expect(fileChoiceNote(file({ filmId: 9 }))).toBe('on another film');
+  });
+
+  it('says where a file of this film sits: its edition and part', () => {
+    const own = { filmId: 6, editionName: 'Extended', parts: 2, part: 2, whole: false };
+    expect(fileChoiceNote(file(own), 6)).toBe('on this film · Extended, part 2');
+    expect(fileChoiceNote(file({ ...own, whole: true }), 6)).toBe(
+      'on this film · Extended, whole film',
+    );
+    expect(fileChoiceNote(file({ ...own, parts: 1, part: 1 }), 6)).toBe('on this film · Extended');
+    expect(fileChoiceNote(file({ ...own, editionName: null, parts: 1 }), 6)).toBe('on this film');
+  });
+});
+
+describe('isCurrentTarget', () => {
+  const placed = { filmId: 6, editionId: 60, parts: 2, whole: true, part: null };
+
+  it('is true for the same film and edition when the file is the whole film', () => {
+    expect(isCurrentTarget(placed, 6, { editionId: 60, part: null })).toBe(true);
+  });
+
+  it('is false for another edition, another film or no file', () => {
+    expect(isCurrentTarget(placed, 6, { editionId: 61, part: null })).toBe(false);
+    expect(isCurrentTarget(placed, 7, { editionId: 60, part: null })).toBe(false);
+    expect(isCurrentTarget({ ...placed, filmId: null }, 6, { editionId: 60, part: null })).toBe(
+      false,
+    );
+    expect(isCurrentTarget(undefined, 6, { editionId: 60, part: null })).toBe(false);
+  });
+
+  it('compares the part for a file that sits on one part', () => {
+    const onPart = { filmId: 6, editionId: 60, parts: 2, whole: false, part: 2 };
+    expect(isCurrentTarget(onPart, 6, { editionId: 60, part: 2 })).toBe(true);
+    expect(isCurrentTarget(onPart, 6, { editionId: 60, part: 1 })).toBe(false);
+    expect(isCurrentTarget(onPart, 6, { editionId: 60, part: null })).toBe(false);
+    expect(isCurrentTarget(placed, 6, { editionId: 60, part: 1 })).toBe(false);
+  });
+});
+
+describe('isCurrentTarget, a one-part edition', () => {
+  // As the server lists it: stored on part 1, not as the whole film.
+  const single = { filmId: 6, editionId: 60, parts: 1, whole: false, part: 1 };
+
+  it('reads the target’s null part as part 1, so attaching the file where it is changes nothing', () => {
+    expect(isCurrentTarget(single, 6, { editionId: 60, part: null })).toBe(true);
+    expect(isCurrentTarget(single, 6, { editionId: 61, part: null })).toBe(false);
+    expect(isCurrentTarget(single, 7, { editionId: 60, part: null })).toBe(false);
   });
 });
 

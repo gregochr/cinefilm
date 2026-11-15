@@ -1,21 +1,21 @@
 import { useCallback, useRef, useState } from 'react';
 import { announceLibraryChanged } from '../api/client.js';
 import { adminApi } from '../api/resources.js';
-import { nudgedOffset, subtitleProblem } from './subtitleAdmin.js';
+import { subtitleProblem } from './subtitleAdmin.js';
 import { useResource } from './useResource.js';
 
 /**
- * The Admin "Subtitles" panel: every forced subtitle file and the owner's actions on them. Each action is one
- * request on a row id; afterwards the list is read again and the browse cache is emptied, so the player and the
- * film page see the new timing. `busy` is the id of the file an action is running on, `problem` the last failure
+ * The subtitle files and the owner's per-file actions on them (Film detail's Fix… panel; timing is changed in the
+ * player, `useSubtitleTiming`). Each action is one request on a row id; afterwards the list is read again and the
+ * browse cache is emptied, so the player and the film page see the change. `busy` is the id of the file an action is running on, `problem` the last failure
  * as `{ id, text }`. `onChanged` runs after each action that succeeded, so views that depend on the files read again.
  */
 export function useSubtitles(version, onChanged) {
   const { data, error, loading, reload } = useResource(`admin-subtitles:${version}`, (options) =>
     adminApi.subtitles(options),
   );
-  // What an action answered for its file, shown until the list read again arrives: a second nudge in the
-  // meantime must start from the new offset, not the one the old list still holds.
+  // What an action answered for its file, shown until the list read again arrives, so a file that was
+  // just checked is not drawn as unchecked in the meantime.
   const [answers, setAnswers] = useState({ base: null, rows: {} });
   const running = useRef(false);
   const changedHandler = useRef(onChanged);
@@ -27,8 +27,6 @@ export function useSubtitles(version, onChanged) {
   // Removed downloads stay out of the list at once: row ids are never reused, and a refresh that was already in
   // flight when the removal finished must not bring the row back.
   const [removedIds, setRemovedIds] = useState(() => new Set());
-  // How many actions succeeded: views that depend on the files (which films have a forced subtitle) read again.
-  const [changes, setChanges] = useState(0);
 
   const act = useCallback(
     async (id, call) => {
@@ -46,7 +44,6 @@ export function useSubtitles(version, onChanged) {
           }));
         }
         announceLibraryChanged();
-        setChanges((n) => n + 1);
         changedHandler.current?.();
         reload();
         return true;
@@ -72,14 +69,17 @@ export function useSubtitles(version, onChanged) {
     reload,
     busy,
     problem,
-    changes,
-    attach: (id, target) => act(id, () => adminApi.attachSubtitle(id, target)),
     detach: (id) => act(id, () => adminApi.detachSubtitle(id)),
-    nudge: (item, delta) =>
-      act(item.id, () => adminApi.setSubtitleOffset(item.id, nudgedOffset(item.offsetMs, delta))),
-    resetTiming: (id) => act(id, () => adminApi.setSubtitleOffset(id, 0)),
     verify: (id) => act(id, () => adminApi.verifySubtitle(id)),
-    unverify: (id) => act(id, () => adminApi.unverifySubtitle(id)),
+    /** Takes the check away; resolves the row as the server recomputed it (false on a failure). */
+    unverify: async (id) => {
+      let row = null;
+      const done = await act(id, async () => {
+        row = await adminApi.unverifySubtitle(id);
+        return row;
+      });
+      return done ? (row ?? true) : false;
+    },
     /** Removes an OpenSubtitles download; resolves true once it is gone. */
     remove: async (id) => {
       const removed = await act(id, () => adminApi.removeSubtitle(id));

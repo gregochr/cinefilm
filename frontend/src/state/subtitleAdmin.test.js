@@ -14,7 +14,6 @@ import {
   fileFilterCounts,
   fileName,
   filterSidecars,
-  filmLabel,
   formatOffset,
   groupKey,
   isDownload,
@@ -71,8 +70,10 @@ describe('nudgedOffset', () => {
     expect(nudgedOffset(-MAX_OFFSET_MS + 249, -250)).toBe(-MAX_OFFSET_MS);
     expect(nudgedOffset(-MAX_OFFSET_MS, -1000)).toBe(-MAX_OFFSET_MS);
   });
+});
 
-  it('the four nudges are ±0.25 s and ±1 s, earliest first', () => {
+describe('NUDGES', () => {
+  it('the four steps are ±0.25 s and ±1 s, earliest first', () => {
     expect(NUDGES.map((n) => [n.label, n.delta])).toEqual([
       ['−1 s', -1000],
       ['−0.25 s', -250],
@@ -204,7 +205,7 @@ describe('warningsFor', () => {
 
   it('says a conflict plays neither', () => {
     expect(warningsFor(file({ state: 'conflict' }))).toEqual([
-      'Another file competes for the same place, so neither plays. Attach one of them elsewhere.',
+      'Another file competes for the same place, so neither plays. Move one of them with Add my own file… in the film’s Fix… panel.',
     ]);
   });
 
@@ -237,11 +238,6 @@ describe('where in an edition a file can go', () => {
   it('labels an edition with its file count only when it is split', () => {
     expect(editionLabel({ name: 'Theatrical Cut', parts: 1 })).toBe('Theatrical Cut');
     expect(editionLabel({ name: 'Extended Edition', parts: 2 })).toBe('Extended Edition · 2 files');
-  });
-
-  it('labels a film with its year when it has one', () => {
-    expect(filmLabel({ title: 'Heat', year: 1995 })).toBe('Heat (1995)');
-    expect(filmLabel({ title: 'Heat', year: null })).toBe('Heat');
   });
 });
 

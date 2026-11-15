@@ -6,7 +6,7 @@ import { ErrorState } from './StateMessages.jsx';
 
 /**
  * The cues of one file with "Play from here" (the player opens 3 s before the cue). Cue text is untrusted and is only
- * ever rendered as text. Shared by Admin's file list and Film detail's Fix… panel, so there is one copy of the rule.
+ * ever rendered as text. Used by Film detail's Fix… panel ("Preview lines").
  */
 export default function SubtitleCueList({ item, id }) {
   const { data, error, loading, reload } = useSubtitleCues(item);
