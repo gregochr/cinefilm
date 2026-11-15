@@ -64,7 +64,8 @@ between them holds:
 
 A part that fails three rounds running is then asked only every tenth round (`--retry-every`), and so is every
 address but the one in use. A certificate that was refused is tried again at each of those full checks, so
-`untrusted` is never carried from memory for longer than that. A round that fails as a whole is a line with only `t`, `round` and `error`.
+`untrusted` is never carried from memory for longer than that. A round that fails as a whole is a line with only
+`t`, `round` and `error`.
 
 ## Running it
 

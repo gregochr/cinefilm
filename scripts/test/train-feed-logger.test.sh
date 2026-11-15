@@ -281,19 +281,24 @@ if command -v openssl >/dev/null 2>&1 \
         -subj "/CN=127.0.0.1" >/dev/null 2>&1; then
     serve tls --cert "$TMP/cert.pem" --key "$TMP/key.pem" --request-log "$TMP/tls.log" \
         --connection-log "$TMP/tls.conn"
-    run_logger --base "https://127.0.0.1:$PORT/api/jsonp/" --probe off --interval 1 --rounds 2 --timeout 5
+    run_logger --base "https://127.0.0.1:$PORT/api/jsonp/" --probe off --interval 1 --rounds 3 --retry-every 2 \
+        --timeout 5
     assert_eq "exits 0" 0 "$RC"
     assert_contains "answering, with the certificate named" "$OUT" "feed answering (https, certificate not trusted)"
-    assert_eq "tls untrusted in both rounds" '["untrusted", "untrusted"]' "$(jv "$LOG" '[x["tls"] for x in L[1:3]]')"
+    assert_eq "tls untrusted in all three rounds, the full check in round 3 included" \
+        '["untrusted", "untrusted", "untrusted"]' "$(jv "$LOG" '[x["tls"] for x in L[1:4]]')"
     assert_eq "the data was read" true "$(jv "$LOG" '"latitude" in L[1]["feed"]["position"]')"
-    # Connections, counted at the stand-in (a refused handshake never reaches a request, so GET lines miss it):
-    #   round 1 is a full check: position is asked without -k and refused (1 connection), then read with -k (1);
-    #     the four other parts follow the mark, so go straight to -k (4); the index too (1)  = 7
-    #   round 2 is not: position, the four other parts, all with -k, nothing refused        = 5
-    # Without the mark each of the four parts would be refused first: 2 + 8 + 1 in round 1, and 10 in round 2.
-    assert_eq "connections: 7 in round 1 and 5 in round 2" 12 "$(grep -c '' "$TMP/tls.conn")"
-    assert_eq "and every one of those but the first reached a request (7 + 5 - 1 refused)" 11 \
-        "$(grep -c '^GET' "$TMP/tls.log")"
+    # Connections, counted at the stand-in (a refused handshake never reaches a request, so GET lines miss it).
+    # With --retry-every 2 the full checks are rounds 1 and 3, each asking position without -k first:
+    #   round 1: position refused (1), then read with -k (1); the four other parts follow the mark (4);
+    #            the index, once (1)                                                                   = 7
+    #   round 2: not a full check: position and the four other parts, all with -k                       = 5
+    #   round 3: a full check: position refused again (1), read with -k (1), the four parts (4);
+    #            no index, it was read in round 1                                                       = 6
+    # 18 in all. If a full check asked a marked address with -k, the mark would be dropped on that read, round 3
+    # would lose its tls and count 9 (position, then each part refused and read again).
+    assert_eq "connections: 7, 5 and 6" 18 "$(grep -c '' "$TMP/tls.conn")"
+    assert_eq "and all but the two refused ones (rounds 1 and 3) reached a request" 16 "$(grep -c '^GET' "$TMP/tls.log")"
 else
     echo "  SKIP the certificate case: openssl is missing or could not make a certificate"
 fi
@@ -680,6 +685,7 @@ check("untrusted: every part was still read", sorted(m.PARTS), sorted(second["fe
 
 accepting = {"now": False}
 trust_calls = []
+firsts = []
 
 
 def clearing(url, timeout, insecure=False, max_size=None):
@@ -696,6 +702,7 @@ def trust_journey():
         accepting["now"] = n >= 4  # refused in rounds 1 to 3, accepted from round 4 (a full check)
         before = len(trust_calls)
         rounds[n] = logger.round(n)
+        firsts.append(trust_calls[before][1])  # the position request goes first: the parts wait for it
         refused = sum(1 for _, insecure in trust_calls[before:] if not insecure and not accepting["now"])
         sizes.append((len(trust_calls) - before, refused))
     return rounds, sizes
@@ -707,6 +714,42 @@ check("trust: untrusted in rounds 1 to 3, absent from round 4", ["untrusted"] * 
 check("trust: rounds 2 and 3 make no refused request", [0, 0], [sizes[1][1], sizes[2][1]])
 check("trust: round 4 makes one request per part, none refused", (5, 0), sizes[3])
 check("trust: round 5 is not a full check and stays unmarked", (5, 0), sizes[4])
+check("trust: position is read with -k in rounds 2 and 3 (marked, not full checks)", [True, True], firsts[1:3])
+check("trust: a full check asks the marked address without -k", False, firsts[3])
+
+
+def timing_out_at_full_check(url, timeout, insecure=False, max_size=None):
+    trust_calls.append((url, insecure))
+    if not insecure and phase["now"] == "timeout":
+        return {"ok": False, "why": "timed out", "ms": 1, "curl": 28}
+    if not insecure:
+        return {"ok": False, "why": "certificate not trusted", "ms": 1, "curl": 60}
+    return dict(GOOD)
+
+
+phase = {"now": "refuse"}
+
+
+def no_answer_journey():
+    logger = m.Logger(["https://x.test/api/jsonp/"], None, False, retry_every=2)
+    out = {}
+    for n, now in ((1, "refuse"), (2, "refuse"), (3, "timeout"), (4, "refuse")):
+        phase["now"] = now
+        before = len(trust_calls)
+        out[n] = logger.round(n)
+        out[n, "first"] = trust_calls[before][1]
+        out[n, "marked"] = "https://x.test/api/jsonp/" in logger.untrusted
+    return out
+
+
+seen = with_fetch(timing_out_at_full_check, no_answer_journey)
+check("no answer: round 3 is a full check whose position request timed out, so it has no feed",
+      False, "feed" in seen[3])
+check("no answer: the address is still marked afterwards", True, seen[3, "marked"])
+# With one address and no feed in round 3 nothing is in use, so round 4 is a full check too (although
+# (4 - 1) % 2 is not 0): it asks position without -k first, and the mark survives that refusal.
+check("no answer: so round 4 asks position without -k, and is marked again", (False, True, "untrusted"),
+      (seen[4, "first"], seen[4, "marked"], seen[4].get("tls")))
 
 clock = {"now": 0.0}
 
@@ -777,7 +820,7 @@ while IFS= read -r line; do
         "FAIL "*) bad "${line#FAIL }"; PURE=$((PURE + 1)) ;;
     esac
 done <<< "$RESULTS"
-assert_eq "all 92 pure checks reported" 92 "$PURE"
+assert_eq "all 97 pure checks reported" 97 "$PURE"
 
 echo "compiles"
 PYTHONPYCACHEPREFIX="$TMP/pyc" python3 -m py_compile "$LOGGER" "$STAND_IN"

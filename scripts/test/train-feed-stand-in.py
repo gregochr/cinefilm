@@ -186,7 +186,8 @@ class Server(ThreadingHTTPServer):
             with LOCK, open(OPTIONS.connection_log, "a", encoding="utf-8") as log:
                 log.write("connection\n")
         if OPTIONS.cert:
-            # The handshake happens on first read, in the connection's own thread, so a refused one cannot block accept.
+            # The handshake happens on first read, in the connection's own thread, so a refused one cannot
+            # block accept.
             request = self.context.wrap_socket(request, server_side=True, do_handshake_on_connect=False)
         return request, address
 

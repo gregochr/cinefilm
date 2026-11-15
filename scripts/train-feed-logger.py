@@ -260,7 +260,7 @@ def wants_speed(film, no_film, speed_site, is_tty, ask):
     if not is_tty:
         return None
     for _ in range(3):
-        answer = ask(QUESTION)  # None: nobody answered in time, or no input
+        answer = ask(QUESTION)
         if answer is None:  # nobody answered in time, or no input: assume a film
             return None
         answer = answer.strip().lower()
@@ -680,7 +680,7 @@ def main():
         next_at += interval
         now = time.monotonic()
         if next_at < now:
-            next_at = now  # fell behind: the Mac slept, or a round ran long
+            next_at = now  # fell behind: a round ran long (the monotonic clock stands still while the Mac sleeps)
         stop.sleep(next_at - now)
 
     write({"t": int(time.time() * 1000), "event": "stop", "rounds": n})
