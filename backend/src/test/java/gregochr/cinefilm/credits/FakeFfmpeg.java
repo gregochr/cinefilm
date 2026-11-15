@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.LongFunction;
+import java.util.function.LongPredicate;
 
 /**
  * A stand-in for ffmpeg: records every command and its timeout, and writes the PGM files the command asks for, the
@@ -30,6 +31,14 @@ public final class FakeFfmpeg implements CommandRunner {
     public Result failure = new Result(1, "", false);
     /** When set, the files are not written. */
     public boolean writeNothing;
+    /** Single-frame seeks at these offsets (ms) exit 0 and write no file. */
+    public LongPredicate writesNothingAt = ms -> false;
+    /** Single-frame seeks at these offsets (ms) write an empty file. */
+    public LongPredicate writesEmptyAt = ms -> false;
+    /** Single-frame seeks at these offsets (ms) write bytes that are not a picture. */
+    public LongPredicate writesGarbageAt = ms -> false;
+    /** Single-frame seeks at these offsets (ms) return {@link #failure}. */
+    public LongPredicate failsAt = ms -> false;
     /** When set, this is written instead of a picture. */
     public byte[] garbage;
     /** How many dense frames to write; -1 for as many as were asked for. */
@@ -97,7 +106,19 @@ public final class FakeFfmpeg implements CommandRunner {
             return failure;
         }
         lastDirectory = Path.of(command.getLast()).getParent();
-        if (!writeNothing) {
+        long at = Math.round(Double.parseDouble(command.get(command.indexOf("-ss") + 1)) * 1000);
+        if (failsAt.test(at)) {
+            return failure;
+        }
+        if (writesEmptyAt.test(at)) {
+            Files.write(Path.of(command.getLast()), new byte[0]);
+            return new Result(0, "", false);
+        }
+        if (writesGarbageAt.test(at)) {
+            Files.write(Path.of(command.getLast()), "not a picture".getBytes(StandardCharsets.US_ASCII));
+            return new Result(0, "", false);
+        }
+        if (!writeNothing && !writesNothingAt.test(at)) {
             writeFrames(command);
         }
         return new Result(0, "", false);
