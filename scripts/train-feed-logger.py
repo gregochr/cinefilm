@@ -6,15 +6,15 @@ A measuring script, not part of the CineFilm app (see docs/engineering/train-fee
 train's Wi-Fi (double-click a copy named train-feed-logger.command, or `python3 train-feed-logger.py`) and leave
 its window open for the journey.
 
-Every 30 seconds it asks the train's own Wi-Fi system (Icomera's local feed at www.ombord.info, a name that
-exists only on the train) where the train is, how strong each of its mobile connections is and how many
-passengers are online, and times one tiny request to the internet. In its first round it also reads this Mac's
-own Wi-Fi link, once: reading it can make the Mac look for other networks, which would disturb the film if
+Every 30 seconds by default it asks the train's own Wi-Fi system (Icomera's local feed at www.ombord.info, a
+name that exists only on the train) where the train is, how strong each of its mobile connections is and how
+many passengers are online, and times one tiny request to the internet. In its first round it also reads this
+Mac's own Wi-Fi link, once: reading it can make the Mac look for other networks, which would disturb the film if
 repeated. When no film will be playing it can also time a download of the first 256 KB of CineFilm's own page
-code (it asks at the start, and assumes a film if nobody answers within a minute; --film and --no-film answer in
-advance). Each round is one line of JSON in
-~/train-feed-logger/logs, written at once, so nothing is lost if the window closes. The log holds where the train
-went, so it is never written beside this file: a run from a git checkout must not put it in the repository.
+code (it asks at the start, and assumes a film if nobody answers within a minute; --film and --no-film answer
+in advance). Each round is one line of JSON in ~/train-feed-logger/logs, written at once, so nothing is lost if
+the window closes. The log holds where the train went, so it is never written beside this file: a run from a
+git checkout must not put it in the repository.
 
 It only reads: it sends nothing but those requests, changes nothing, and stops when its window is closed (or
 with Ctrl-C). While it runs it keeps the Mac from idling to sleep. Feed data is untrusted: what is printed has

@@ -16,12 +16,12 @@ things the playback record cannot:
 
 ## What it does
 
-Every 30 seconds it asks, with `curl`:
+Every 30 seconds (`--interval` changes it) it asks, with `curl`:
 
 | Asked | Recorded |
 |---|---|
 | `https://www.ombord.info/api/jsonp/` and the same over `http` (the `https` one is used when both answer): the parts `position`, `connectivity`, `users`, `user` and `system`, and once the feed's own index | each answer as data, how long it took, the address that answered and whether its certificate was trusted |
-| `https://www.gstatic.com/generate_204` | how long one tiny request to the internet took, or why it failed |
+| `https://www.gstatic.com/generate_204` | how long one tiny request to the internet took and the status it got, or why it failed. The printed line notes any status but 204: a sign-in page answers 200 there |
 | only when no film is playing: the first 256 KB of CineFilm's own page code | bytes received, the time, and the speed over the transfer |
 
 `www.ombord.info` is a name that resolves only on the train, so anywhere else the feed is reported as not answering
@@ -34,12 +34,36 @@ Each request names a function for the answer (`callback=cb`) and carries a time 
 answer from a cache. An answer over 200 KB is refused.
 
 Each round is one line of JSON in `~/train-feed-logger/logs/train-feed-<date>-<time>.jsonl`, written at once. The
-folder and the logs are readable by the owner alone. **The log holds where the train went**, so it is kept outside any checkout and is never committed (`SECURITY.md`).
+`logs` folder, when the script is the one to create it, and every log are readable by the owner alone. **The log
+holds where the train went**, so it is kept outside any checkout and is never committed (`SECURITY.md`).
 
 The speed sample would compete with a film, so the script asks at the start whether one will be playing and takes
 the sample only when the answer is no. If nobody answers within a minute it assumes a film and starts. Run without
 a terminal it takes none. `--film` and `--no-film` answer the question in advance; `--speed-site` samples from
 another site. When a release changes the script's name, it reads the page again.
+
+## What the log holds
+
+The first line is a `start` event (the addresses and parts, the internet check's address, the interval, the timeout
+and speed site in force, and the versions) and the last a `stop` event with the number of rounds. Each round
+between them holds:
+
+| Key | What it is |
+|---|---|
+| `t`, `at`, `round` | the time (milliseconds since 1970, and as UTC text) and the round's number |
+| `asked`, `bases` | the feed addresses asked this round, and each address's state: `ok`, why not, or null when never asked |
+| `bases_text` | what an address said when it answered with something that is not the feed (a sign-in page, say) |
+| `base`, `ip`, `tls` | when the feed answers: the address in use, the machine that answered, and `untrusted` when its certificate was refused and it was read anyway |
+| `feed`, `ms` | each part's answer as data, and how long each took |
+| `errs`, `skipped` | why a part failed (with `<part>_text` when it answered something that is not data), and the parts not asked because they keep failing |
+| `first` | once for each part: its response headers, its content type and whether the feed used the function name it was given |
+| `index` | once for each address: the feed's own index, or why it could not be read |
+| `probe` | the internet check: `ms` and the status `code`, or `ms` null and `why` |
+| `wifi` | first round only, on a Mac: the laptop's own Wi-Fi link |
+| `speed`, `speed_from` | the speed sample: `bytes`, `ms`, `first_byte_ms` and `kbps` (null when too fast to measure or nothing arrived), with `why` when it failed (alone, when the page could not be read or names no script); and the script's address, in the round it is found and again whenever a 4xx answer makes it be looked up again |
+
+A part that fails three rounds running is then asked only every tenth round (`--retry-every`), and so is every
+address but the one in use. A round that fails as a whole is a line with only `t`, `round` and `error`.
 
 ## Running it
 
