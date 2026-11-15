@@ -10,7 +10,7 @@ import { useAdminSummary } from './useAdminSummary.js';
  * a counter bumped after a match is applied or editions are saved. `visible` (the tab is shown) pauses polling.
  *
  * The OpenSubtitles picker is a dialog of the layout too: `openSubtitlePicker({ film, editionId, kind }, opener,
- * { onPicked })` opens it (`onPicked` runs when a file was downloaded and the dialog is still the open one), and
+ * { onPicked })` opens it (`onPicked` runs when a file was downloaded, also if the dialog was closed meanwhile), and
  * `pickerDone(picking)` is what the picker calls once a download went through: the lists are read again whether or
  * not the dialog is still open (the server saved the file), and the dialog closes only if it is still that one.
  *
@@ -69,10 +69,10 @@ export function useAdminShell(visible, pathname = '') {
     (done) => {
       // Whichever picker it was, the server holds the file now: read the lists again.
       markChanged();
-      // Only the dialog that is still open is closed, and only it runs its caller's follow-up.
-      if (openPicker.current !== done) return;
-      setPicking(null);
+      // The caller's follow-up runs whether or not its dialog is still open (the row it opened from leaves either
+      // way); only the dialog that is still the open one is closed.
       done.onPicked?.();
+      if (openPicker.current === done) setPicking(null);
     },
     [markChanged],
   );

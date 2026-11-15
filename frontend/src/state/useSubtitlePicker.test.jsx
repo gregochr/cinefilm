@@ -149,11 +149,11 @@ describe('useSubtitlePicker: choosing a file', () => {
   it.each([
     [400, 'That file was not in a recent search for this edition. Search again.'],
     [409, 'A scan is running'],
-    [422, 'That file has no usable cues'],
+    [422, 'That subtitle file could not be read.'],
     [429, 'OpenSubtitles daily limit reached — try again tomorrow.'],
     [
       502,
-      "OpenSubtitles counted this download against today's limit but could not deliver the file.",
+      "OpenSubtitles counted this download against today's limit but could not deliver the file. Try again.",
     ],
     [503, 'OpenSubtitles is not answering. Try again in a few minutes.'],
   ])(
@@ -188,12 +188,11 @@ describe('useSubtitlePicker: choosing a file', () => {
     expect(result.current.problem).toBe('Couldn’t download that file. Try again.');
   });
 
-  it('sets no state when the picker was closed first, and still tells the caller the file was saved', async () => {
+  it('still tells the caller the file was saved, marked as not open, when the picker was closed first', async () => {
     const held = deferred();
     const { result, unmount, onDownloaded } = await readyHook((m, url) =>
       isDownload(m, url) ? held.promise : null,
     );
-    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     act(() => {
       result.current.choose(forcedResults[0]);
@@ -207,15 +206,13 @@ describe('useSubtitlePicker: choosing a file', () => {
 
     expect(onDownloaded).toHaveBeenCalledTimes(1);
     expect(onDownloaded.mock.calls[0][1]).toEqual({ open: false });
-    expect(errors).not.toHaveBeenCalled();
   });
 
-  it('does not show a late failure after the picker was closed', async () => {
+  it('does not report a download that failed after the picker was closed', async () => {
     const held = deferred();
     const { result, unmount, onDownloaded } = await readyHook((m, url) =>
       isDownload(m, url) ? held.promise : null,
     );
-    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     act(() => {
       result.current.choose(forcedResults[0]);
@@ -224,7 +221,6 @@ describe('useSubtitlePicker: choosing a file', () => {
     await act(async () => held.resolve(respond({ error: 'A scan is running' }, 409)));
 
     expect(onDownloaded).not.toHaveBeenCalled();
-    expect(errors).not.toHaveBeenCalled();
   });
 
   it('calls the latest onDownloaded, not the one the picker was opened with', async () => {

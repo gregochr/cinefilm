@@ -14,7 +14,8 @@
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
       "beingChecked": false,
-      "editionId": 3000
+      "editionId": 3000,
+      "editionName": null
     },
     {
       "filmId": 301,
@@ -30,7 +31,8 @@
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
       "beingChecked": false,
-      "editionId": 3010
+      "editionId": 3010,
+      "editionName": null
     },
     {
       "filmId": 302,
@@ -46,7 +48,8 @@
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
       "beingChecked": false,
-      "editionId": 3020
+      "editionId": 3020,
+      "editionName": null
     },
     {
       "filmId": 303,
@@ -62,7 +65,8 @@
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
       "beingChecked": false,
-      "editionId": 3030
+      "editionId": 3030,
+      "editionName": null
     },
     {
       "filmId": 304,
@@ -78,7 +82,8 @@
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
       "beingChecked": false,
-      "editionId": 3040
+      "editionId": 3040,
+      "editionName": null
     },
     {
       "filmId": 305,
@@ -94,7 +99,8 @@
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
       "beingChecked": false,
-      "editionId": 3050
+      "editionId": 3050,
+      "editionName": null
     },
     {
       "filmId": 306,
@@ -110,7 +116,8 @@
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
       "beingChecked": false,
-      "editionId": 3060
+      "editionId": 3060,
+      "editionName": null
     },
     {
       "filmId": 310,
@@ -126,7 +133,8 @@
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": false,
       "beingChecked": false,
-      "editionId": null
+      "editionId": null,
+      "editionName": null
     }
   ],
   "counts": {

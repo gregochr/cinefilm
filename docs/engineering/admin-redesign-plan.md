@@ -357,16 +357,21 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
   older and its late answer is ignored); the wording of a result and of a failure is `state/subtitlePicker.js`
   (the server's `$.error` text for every refusal, else the 429 words, else one plain line per phase).
   - **Edition: a backend shape change.** Neither need list had an edition id. `FullNeedFilmDto` and `FilmNeedDto` gain
-    `editionId`: the film's first present edition (lowest id, part 1 present). Full rows always carry it (it is the first
-    of `editions`); forced rows carry it only while `NEEDED` with no forced subtitle served (one `findAudioRows` query for
-    those films), else null. A null `editionId` means nothing to search, and the button is left out. Foundation plan,
-    contract tests and fixtures updated.
+    `editionId` and `editionName`. Full rows: the edition that makes the film needed, by `FullNeed.pickerIndex` (the first
+    present edition whose audio label is not English, else the first with no label, else the first; one rule with
+    `FullNeed.isForeign`, which `decide` uses too), so a film with an English theatrical cut and a French director's cut
+    is searched for the French cut. Forced rows: the film's first present edition (lowest id, part 1 present), only while
+    `NEEDED` with no forced subtitle served (one `findAudioRows` query for those films), else null. `editionName` is
+    that edition's name only when the film has more than one present edition (the dialog title then reads "Rashomon
+    (1950) · Director's Cut"), else null. A null `editionId` means nothing to search and the button is left out.
+    Foundation plan, contract tests and fixtures updated.
   - **Buttons.** Foreign rows: "Search for English subtitles…" (AR1's hint) or, for unlabelled audio with a known
     language, "It's in {language} — find subtitles", then "Add my own file…" and "It's English". Forced rows:
     "Find forced subtitles…" then "No foreign scenes". To do's English-subtitles and forced rows get the picker button
-    only (the other choices stay in Subtitles). **Departure from the README:** the forced button does not save `NEEDED`
-    first (the README's "Yes, find forced subtitles…"): Q3's tab lists only films that are already `NEEDED`, so the
-    save would change nothing; the button keeps Q3's name "Find forced subtitles…".
+    only (the other choices stay in Subtitles). **Departure from the README and AR1, stated plainly:** the forced button
+    is "Find forced subtitles…", not "Yes, find forced subtitles…", and it does not save `NEEDED` first. Q3's tab and
+    To do group list only films that are already `NEEDED`, so there is no question to answer yes to and the save would
+    change nothing.
   - **Not built: "Search again…" / "Use it anyway"** for a distrusted download: still no trust in the API (see 4a).
   - **A result row** shows what the DTO has: the release name (else the file name, else "File {id}"; long names wrap),
     downloads, fps, "Trusted uploader", "Hearing impaired", the upload year; the footer says how many more files the
@@ -376,8 +381,10 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
   - **Closing mid-request (decided):** the POST is not aborted (the server may still save the file). The late answer sets
     no state in the dialog; a late success still calls `onDownloaded(answer, { open: false })`, which the layout turns
     into `markChanged`, so the lists read again and show the server's truth (a row leaves only because the server's list
-    says so). A late failure is dropped. The layout closes only the picker that is still the open one and runs its
-    follow-up (`onPicked`, which To do uses to arm the focus fallback) only then.
+    says so). A late failure is dropped (nothing reports it). The layout closes only the picker that is still the open
+    one; the follow-up (`onPicked`, which To do uses to arm the focus fallback) runs either way, since the row leaves
+    either way. A file that arrives during the 150 ms fade-out is reported at once (the dialog remembers it was
+    dismissed), so the unmount that ends the fade cannot swallow it.
   - **Row leaving and focus.** A success closes the dialog, calls `markChanged` (summary, rail, both Subtitles lists
     and the To do lists read again) and the row leaves with the re-read, not before. Focus returns to the opener when the
     dialog closes; when the opener then leaves with its row, the Subtitles panel takes focus (its existing rule, now

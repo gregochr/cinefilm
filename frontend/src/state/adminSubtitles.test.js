@@ -142,8 +142,15 @@ describe('pickerTarget', () => {
     expect(pickerTarget(full(), 'full')).toEqual({
       film: { id: 6, title: 'Rashomon', year: 1950 },
       editionId: 102,
+      editionName: null,
       kind: 'full',
     });
+  });
+
+  it('carries the edition name the server sent for a film with several editions', () => {
+    expect(pickerTarget(full({ editionName: 'Director’s Cut' }), 'full').editionName).toBe(
+      'Director’s Cut',
+    );
   });
 });
 

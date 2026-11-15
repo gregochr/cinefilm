@@ -265,6 +265,39 @@ describe('To do: the picker from the subtitle groups', () => {
     );
   });
 
+  it('moves focus to the section title when the picker was closed mid-download and the row then leaves', async () => {
+    const held = deferred();
+    const needs = serveNeeds({ full: [rashomon(), downfall()], forced: [taken()] });
+    installFetch((m, url, init) =>
+      m === 'POST' && url.endsWith('/opensubtitles/download')
+        ? held.promise.then(() => needs.route(m, url, init))
+        : needs.route(m, url, init),
+    );
+    renderApp('/admin');
+    const forced = await screen.findByRole('region', { name: 'Forced subtitles not found' });
+    await userEvent.click(within(forced).getByRole('button', { name: 'Find forced subtitles…' }));
+    const dialog = await picker();
+    await within(dialog).findByRole('list', { name: 'OpenSubtitles results' });
+    await userEvent.click(
+      within(dialog).getByRole('button', {
+        name: 'Use this file: Heat.1995.Directors.Cut.BluRay.x264',
+      }),
+    );
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    await act(async () => held.resolve());
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('region', { name: 'Forced subtitles not found' }),
+      ).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1, name: 'To do' })).toHaveFocus(),
+    );
+  });
+
   it('Cancel returns focus to the To do row’s button', async () => {
     serve();
     renderApp('/admin');

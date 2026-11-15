@@ -20,7 +20,8 @@
       "unresolved": false,
       "beingChecked": false,
       "subtitled": true,
-      "editionId": 31
+      "editionId": 31,
+      "editionName": null
     },
     {
       "filmId": 4,
@@ -40,7 +41,8 @@
       "unresolved": false,
       "beingChecked": false,
       "subtitled": false,
-      "editionId": 41
+      "editionId": 41,
+      "editionName": null
     },
     {
       "filmId": 5,
@@ -66,7 +68,8 @@
       "unresolved": false,
       "beingChecked": false,
       "subtitled": false,
-      "editionId": 51
+      "editionId": 51,
+      "editionName": "Director's Cut"
     },
     {
       "filmId": 6,
@@ -86,7 +89,8 @@
       "unresolved": true,
       "beingChecked": false,
       "subtitled": false,
-      "editionId": 102
+      "editionId": 102,
+      "editionName": null
     },
     {
       "filmId": 7,
@@ -106,7 +110,8 @@
       "unresolved": false,
       "beingChecked": true,
       "subtitled": false,
-      "editionId": 71
+      "editionId": 71,
+      "editionName": null
     }
   ],
   "counts": {

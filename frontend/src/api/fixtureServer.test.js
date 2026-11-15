@@ -567,8 +567,8 @@ describe('fixture server: Admin settings', () => {
       expect(fileIds(forced)).toEqual([5012, 5011, 5013]);
       expect(forced.results[0]).toEqual({
         fileId: 5012,
-        release: 'Heat.1995.Directors.Cut.BluRay.x264',
-        fileName: 'Heat.1995.Directors.Cut.BluRay.x264.srt',
+        release: 'Taken.2008.Directors.Cut.BluRay.x264',
+        fileName: 'Taken.2008.Directors.Cut.BluRay.x264.srt',
         fps: 23.976,
         downloadCount: 4210,
         fromTrusted: true,
@@ -584,6 +584,14 @@ describe('fixture server: Admin settings', () => {
       const full = await call('GET', '/api/admin/editions/102/opensubtitles?kind=full');
       expect(full).toMatchObject({ editionId: 102, kind: 'full' });
       expect(fileIds(full)).toEqual([6012, 6011]);
+      // The names are made for the edition's own film, whatever the fixture file calls them.
+      expect(full.results.map((r) => r.release)).toEqual([
+        'Rashomon.1950.Directors.Cut.BluRay.x264',
+        'Rashomon.1950.BluRay.SDH',
+      ]);
+      expect(forced.results[1].fileName).toBeNull();
+      const unknownFilm = await call('GET', '/api/admin/editions/103/opensubtitles?kind=full');
+      expect(unknownFilm.results[0].release).toBe('Heat.1995.Directors.Cut.BluRay.x264');
     });
 
     it('downloads only a file the last search offered, once, and counts what is left', async () => {

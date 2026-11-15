@@ -142,7 +142,7 @@ describe('useAdminShell', () => {
       expect(onPicked).toHaveBeenCalledTimes(1);
     });
 
-    it('still reads the lists again for a picker that was closed, without closing another or running its follow-up', () => {
+    it('still reads the lists again and runs the follow-up for a picker that was closed, without closing another', () => {
       installFetch();
       const { result } = renderHook(() => useAdminShell(true));
       const oldFollowUp = vi.fn();
@@ -156,7 +156,7 @@ describe('useAdminShell', () => {
 
       expect(result.current.value.changed).toBe(1);
       expect(result.current.picking).toBe(current);
-      expect(oldFollowUp).not.toHaveBeenCalled();
+      expect(oldFollowUp).toHaveBeenCalledTimes(1);
     });
 
     it('opens with no follow-up when none is given, and runs nothing on done', () => {

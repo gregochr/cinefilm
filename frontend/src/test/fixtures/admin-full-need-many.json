@@ -18,7 +18,8 @@
       "unresolved": true,
       "beingChecked": false,
       "subtitled": false,
-      "editionId": 3000
+      "editionId": 3000,
+      "editionName": null
     },
     {
       "filmId": 301,
@@ -38,7 +39,8 @@
       "unresolved": true,
       "beingChecked": false,
       "subtitled": false,
-      "editionId": 3010
+      "editionId": 3010,
+      "editionName": null
     },
     {
       "filmId": 302,
@@ -58,7 +60,8 @@
       "unresolved": true,
       "beingChecked": false,
       "subtitled": false,
-      "editionId": 3020
+      "editionId": 3020,
+      "editionName": null
     },
     {
       "filmId": 303,
@@ -78,7 +81,8 @@
       "unresolved": true,
       "beingChecked": false,
       "subtitled": false,
-      "editionId": 3030
+      "editionId": 3030,
+      "editionName": null
     },
     {
       "filmId": 304,
@@ -98,7 +102,8 @@
       "unresolved": true,
       "beingChecked": false,
       "subtitled": false,
-      "editionId": 3040
+      "editionId": 3040,
+      "editionName": null
     },
     {
       "filmId": 305,
@@ -118,7 +123,8 @@
       "unresolved": true,
       "beingChecked": false,
       "subtitled": false,
-      "editionId": 3050
+      "editionId": 3050,
+      "editionName": null
     },
     {
       "filmId": 306,
@@ -138,7 +144,8 @@
       "unresolved": true,
       "beingChecked": false,
       "subtitled": false,
-      "editionId": 3060
+      "editionId": 3060,
+      "editionName": null
     },
     {
       "filmId": 310,
@@ -160,7 +167,8 @@
       "unresolved": false,
       "beingChecked": false,
       "subtitled": true,
-      "editionId": 3100
+      "editionId": 3100,
+      "editionName": null
     }
   ],
   "counts": {

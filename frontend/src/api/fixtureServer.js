@@ -460,13 +460,44 @@ function filesLeft(key) {
   return OS_MAX_FILES - (downloadedFiles.get(key)?.size ?? 0);
 }
 
+/** The film an edition belongs to, as far as the fixtures say: `{ title, year }`, or Heat when they say nothing. */
+function pickerFilm(editionId) {
+  const row = [...adminFullNeed.films, ...adminForcedNeed.films].find(
+    (r) => r.editionId === editionId,
+  );
+  if (row) return { title: row.title, year: row.year };
+  const file = adminSubtitles.find((f) => f.editionId === editionId && f.filmTitle);
+  if (file) return { title: file.filmTitle, year: null };
+  const film = Object.values(details).find((d) => d.editions.some((e) => e.id === editionId));
+  return film ? { title: film.title, year: film.year } : { title: 'Heat', year: 1995 };
+}
+
+/** The fixture results for a kind, with the release and file names made for the edition's own film. */
+function openSubtitlesResults(editionId, kind) {
+  const { title, year } = pickerFilm(editionId);
+  const stem = [title.replace(/[^A-Za-z0-9]+/g, '.').replace(/^\.|\.$/g, ''), year]
+    .filter(Boolean)
+    .join('.');
+  const rename = (name) => name && name.replace(/^Heat\.1995/, stem);
+  return adminOpenSubtitles[kind].results.map((result) => ({
+    ...result,
+    release: rename(result.release),
+    fileName: rename(result.fileName),
+  }));
+}
+
 function searchOpenSubtitles(editionId, kind) {
   openSubtitlesKind(kind);
   openSubtitlesEdition(editionId);
   const key = `${editionId}:${kind}`;
   const found = adminOpenSubtitles[kind];
   offeredFiles.set(key, new Set(found.results.map((result) => result.fileId)));
-  return { ...found, editionId, downloadsLeft: filesLeft(key) };
+  return {
+    ...found,
+    editionId,
+    results: openSubtitlesResults(editionId, kind),
+    downloadsLeft: filesLeft(key),
+  };
 }
 
 /**
@@ -505,7 +536,7 @@ function downloadOpenSubtitles(editionId, body) {
   if (taken.has(body.fileId)) throw apiError(409, "That file is already this edition's download.");
   downloadedFiles.set(key, taken.add(body.fileId));
   settleFilm(kind, editionId);
-  const { release } = adminOpenSubtitles[kind].results.find((r) => r.fileId === body.fileId);
+  const { release } = openSubtitlesResults(editionId, kind).find((r) => r.fileId === body.fileId);
   return { editionId, kind, fileId: body.fileId, release, downloadsLeft: filesLeft(key) };
 }
 

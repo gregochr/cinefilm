@@ -1,4 +1,4 @@
-import { useEffect, useId } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { subtitlePicker as copy } from '../state/adminCopy.js';
 import { resultDetails, resultName } from '../state/subtitlePicker.js';
@@ -68,21 +68,37 @@ function ResultRow({ result, downloading, onChoose }) {
 
 /**
  * The OpenSubtitles picker: a dialog (a full-screen sheet on phones) listing the files OpenSubtitles has for one
- * edition, best match first as the server ranks them. Choosing one downloads it; `onPicked(answer)` runs once that went
+ * edition (`editionName` says which cut when the film has several), best match first as the server ranks them. Choosing one downloads it; `onPicked(answer)` runs once that went
  * through (the layout closes the dialog and reads the lists again). A failed search or download says so in the dialog,
  * in the server's own words. `onClose` runs on Cancel, the close button or Esc, also while a download is running (its
  * late answer is then ignored here, see `useSubtitlePicker`). `opener` is the element focus goes back to on close.
  */
-export default function SubtitlePicker({ film, editionId, kind, opener, onClose, onPicked }) {
+export default function SubtitlePicker({
+  film,
+  editionId,
+  editionName,
+  kind,
+  opener,
+  onClose,
+  onPicked,
+}) {
   const base = useId();
   const titleId = `${base}-title`;
   const subId = `${base}-sub`;
-  const dialog = useDialog({ onEscape: () => dialog.close(onClose), opener });
+  // Set when Cancel, Close or Esc starts the fade-out: a file that arrives in that window is reported at once, because
+  // the unmount that ends the fade would cancel a second fade's timer and the lists would never read again.
+  const dismissed = useRef(false);
+  const dismiss = () => {
+    dismissed.current = true;
+    dialog.close(onClose);
+  };
+  const dialog = useDialog({ onEscape: dismiss, opener });
   const { dialogRef, closing, close } = dialog;
   const picker = useSubtitlePicker({
     editionId,
     kind,
-    onDownloaded: (answer, { open }) => (open ? close(() => onPicked(answer)) : onPicked(answer)),
+    onDownloaded: (answer, { open }) =>
+      open && !dismissed.current ? close(() => onPicked(answer)) : onPicked(answer),
   });
 
   useEffect(() => {
@@ -108,14 +124,15 @@ export default function SubtitlePicker({ film, editionId, kind, opener, onClose,
             </span>
             <h2 id={titleId} className="ee__title">
               {titleWithYear(film.title, film.year)}
+              {editionName ? (
+                <>
+                  {' '}
+                  <span className="ee__year">{copy.editionSuffix(editionName)}</span>
+                </>
+              ) : null}
             </h2>
           </div>
-          <button
-            type="button"
-            className="ee__close"
-            aria-label={copy.close}
-            onClick={() => close(onClose)}
-          >
+          <button type="button" className="ee__close" aria-label={copy.close} onClick={dismiss}>
             <svg
               width="16"
               height="16"
@@ -164,7 +181,7 @@ export default function SubtitlePicker({ film, editionId, kind, opener, onClose,
             {ready && picker.downloadsLeft != null ? copy.left(picker.downloadsLeft) : ''}
           </span>
           <div className="ee__foot-buttons">
-            <Button className="ee__cancel" onClick={() => close(onClose)}>
+            <Button className="ee__cancel" onClick={dismiss}>
               {copy.cancel}
             </Button>
           </div>

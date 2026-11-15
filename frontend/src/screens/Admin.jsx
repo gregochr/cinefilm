@@ -99,6 +99,7 @@ function AdminShell() {
               key={`${picking.editionId}:${picking.kind}`}
               film={picking.film}
               editionId={picking.editionId}
+              editionName={picking.editionName}
               kind={picking.kind}
               opener={picking.opener}
               onClose={shell.closeSubtitlePicker}

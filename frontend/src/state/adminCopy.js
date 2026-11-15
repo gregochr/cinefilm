@@ -391,6 +391,7 @@ export const subtitlePicker = {
     forced:
       'Only files that hold the foreign lines. Choosing one downloads it and it plays with the film.',
   }, // planner, 4c
+  editionSuffix: (name) => `· ${name}`, // planner, 4c: which cut, for a film with several
   loading: 'Searching OpenSubtitles…', // planner, 4c
   searchError: 'Couldn’t search OpenSubtitles. Try again.', // planner, 4c
   downloadError: 'Couldn’t download that file. Try again.', // planner, 4c

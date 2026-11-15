@@ -59,11 +59,11 @@ describe('pickerProblem', () => {
   it.each([
     [400, 'That file was not in a recent search for this edition. Search again.'],
     [409, 'A scan is running'],
-    [422, 'That file has no usable cues'],
+    [422, 'That subtitle file could not be read.'],
     [429, 'OpenSubtitles daily limit reached — try again tomorrow.'],
     [
       502,
-      "OpenSubtitles counted this download against today's limit but could not deliver the file.",
+      "OpenSubtitles counted this download against today's limit but could not deliver the file. Try again.",
     ],
     [503, 'OpenSubtitles is not answering. Try again in a few minutes.'],
   ])("is the server's exact text for a %i", (status, text) => {

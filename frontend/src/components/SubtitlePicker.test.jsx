@@ -33,7 +33,7 @@ const answer = (fileId = 5012) => ({
 });
 
 /** The picker, opened from a real button so focus has somewhere to come back to. */
-function Harness({ onPicked = () => {}, kind = 'forced', film = FILM }) {
+function Harness({ onPicked = () => {}, kind = 'forced', film = FILM, editionName = null }) {
   const [open, setOpen] = useState(false);
   const [opener, setOpener] = useState(null);
   return (
@@ -51,6 +51,7 @@ function Harness({ onPicked = () => {}, kind = 'forced', film = FILM }) {
         <SubtitlePicker
           film={film}
           editionId={101}
+          editionName={editionName}
           kind={kind}
           opener={opener}
           onClose={() => setOpen(false)}
@@ -95,6 +96,14 @@ describe('SubtitlePicker: opening and searching', () => {
     expect(screen.queryByRole('list', { name: 'OpenSubtitles results' })).not.toBeInTheDocument();
   });
 
+  it('says which cut it searches when the film has several, and says nothing of it otherwise', async () => {
+    await open({ editionName: 'Director’s Cut' });
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Taken (2008) · Director’s Cut' }),
+    ).toBeVisible();
+  });
+
   it('words a full search for English subtitles and leaves the year out for a film with none', async () => {
     await open({ kind: 'full', film: { id: 2, title: 'Taken', year: null } });
 
@@ -135,13 +144,19 @@ describe('SubtitlePicker: opening and searching', () => {
 
   it('shows a failed search in the server’s words, in the error banner, and searches again on Try again', async () => {
     const answers = [
-      respond({ error: 'The film has no IMDb id, so OpenSubtitles cannot be searched.' }, 400),
+      respond(
+        {
+          error:
+            'This film has no IMDb id, so OpenSubtitles cannot be searched. Fix its match first.',
+        },
+        400,
+      ),
     ];
     const { user } = await open({}, (m, url) => (isSearch(m, url) ? answers.shift() : null));
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(
-      'The film has no IMDb id, so OpenSubtitles cannot be searched.',
+      'This film has no IMDb id, so OpenSubtitles cannot be searched. Fix its match first.',
     );
     expect(alert).toHaveClass('ee__banner');
 
@@ -194,7 +209,7 @@ describe('SubtitlePicker: choosing a file', () => {
   it.each([
     [400, 'That file was not in a recent search for this edition. Search again.'],
     [409, 'A scan is running'],
-    [422, 'That file has no usable cues'],
+    [422, 'That subtitle file could not be read.'],
     [429, 'OpenSubtitles daily limit reached — try again tomorrow.'],
     [
       502,
@@ -255,14 +270,13 @@ describe('SubtitlePicker: closing', () => {
     expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
   });
 
-  it('ignores the answer to a download that was still running when it was closed', async () => {
+  it('tells the layout a download that was still running when it was closed was saved, once', async () => {
     const held = deferred();
     const { user, onPicked, opener } = await open({}, (m, url) =>
       isDownload(m, url) ? held.promise : null,
     );
     await screen.findByRole('list', { name: 'OpenSubtitles results' });
     await user.click(choose('Heat.1995.HDTV'));
-    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     await user.keyboard('{Escape}');
     await act(async () => held.resolve(respond(answer(5013))));
@@ -270,7 +284,30 @@ describe('SubtitlePicker: closing', () => {
     // The picker is gone and set no state; the harness's own onPicked (the layout's) still hears the file was saved.
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(onPicked).toHaveBeenCalledTimes(1);
-    expect(errors).not.toHaveBeenCalled();
     expect(opener).toHaveFocus();
+  });
+
+  it('reports a file that arrives while the fade-out runs, which the end of the fade must not lose', async () => {
+    const held = deferred();
+    const { onPicked } = await open({}, (m, url) => (isDownload(m, url) ? held.promise : null));
+    await screen.findByRole('list', { name: 'OpenSubtitles results' });
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(choose('Heat.1995.HDTV'));
+
+      await user.keyboard('{Escape}');
+      // The fade has begun (the dialog is still there) and the answer comes inside it.
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      await act(async () => held.resolve(respond(answer(5013))));
+      await act(async () => vi.advanceTimersByTime(200));
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(onPicked).toHaveBeenCalledTimes(1);
+      expect(onPicked.mock.calls[0][0]).toMatchObject({ fileId: 5013 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

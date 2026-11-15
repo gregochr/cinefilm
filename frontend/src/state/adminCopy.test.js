@@ -328,6 +328,7 @@ describe('the OpenSubtitles picker copy', () => {
     expect(subtitlePicker.choose).toEqual({ label: 'Use this file', busyLabel: 'Downloading…' });
     expect(subtitlePicker.chooseName('A.srt')).toBe('Use this file: A.srt');
     expect(subtitlePicker.unnamed(7)).toBe('File 7');
+    expect(subtitlePicker.editionSuffix('Director’s Cut')).toBe('· Director’s Cut');
     expect(subtitlePicker.source).toContain('planner, 4c');
   });
 

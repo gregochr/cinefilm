@@ -71,11 +71,15 @@ export function pickerButton(action, row) {
   return { label: entry.label, hint: entry.hint };
 }
 
-/** What the layout opens the picker with: the film (for the title), the edition to search and the kind. */
+/**
+ * What the layout opens the picker with: the film (for the title), the edition to search, its name when the film has
+ * several (the server sends it only then) and the kind.
+ */
 export function pickerTarget(row, kind) {
   return {
     film: { id: row.filmId, title: row.title, year: row.year },
     editionId: row.editionId,
+    editionName: row.editionName ?? null,
     kind,
   };
 }

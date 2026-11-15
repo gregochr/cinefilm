@@ -15,8 +15,8 @@ import { useResource } from './useResource.js';
  * after one succeeded, does nothing (a ref, so two clicks in one frame cannot both pass). `downloading` is the file id
  * being fetched. A failure frees the picker for another choice and sets `problem` to the server's own words. On
  * success `onDownloaded(answer, { open })` runs once; `open` is false when the picker was closed before the answer
- * came (the download is not aborted, the server may still have saved it): then no state is set here, and the
- * caller still hears about it so what depends on the download can be read again.
+ * came (the download is not aborted, the server may still have saved it): the caller hears about it either way, so
+ * what depends on the download is read again. A failure after the picker was closed has nobody to show it to.
  */
 export function useSubtitlePicker({ editionId, kind, onDownloaded }) {
   const search = useResource(`subtitle-picker:${editionId}:${kind}`, (options) =>
@@ -46,8 +46,7 @@ export function useSubtitlePicker({ editionId, kind, onDownloaded }) {
         answer = await adminApi.downloadOpenSubtitles(editionId, { fileId: result.fileId, kind });
       } catch (failure) {
         busy.current = false;
-        if (open.current)
-          setDownload({ fileId: null, problem: pickerProblem(failure, 'download') });
+        setDownload({ fileId: null, problem: pickerProblem(failure, 'download') });
         return;
       }
       // Success keeps the picker busy: whatever closes it must not be followed by a second download.

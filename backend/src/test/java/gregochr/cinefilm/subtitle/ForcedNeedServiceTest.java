@@ -6,6 +6,7 @@ import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -174,7 +175,7 @@ class ForcedNeedServiceTest {
         FilmNeedDto dto = service.list().films().get(0);
 
         assertThat(dto).isEqualTo(new FilmNeedDto(1L, "Taken", 2000, "NOT_NEEDED", "OWNER", "NOT_NEEDED", "en",
-            List.of("en", "fr", "sq"), true, null, null, false, false, null));
+            List.of("en", "fr", "sq"), true, null, null, false, false, null, null));
     }
 
     @Test
@@ -554,7 +555,7 @@ class ForcedNeedServiceTest {
 
         assertThat(taken.getForcedNeedOwner()).isEqualTo(ForcedNeedChoice.NOT_NEEDED);
         assertThat(dto).isEqualTo(new FilmNeedDto(7L, "Taken", 2008, "NOT_NEEDED", "OWNER", "NOT_NEEDED", "en",
-            List.of("en", "fr"), true, null, null, false, false, null));
+            List.of("en", "fr"), true, null, null, false, false, null, null));
         assertThat(events).containsExactly("begin, lock subtitle", "commit, lock subtitle");
         assertThat(lock.holder()).isNull();
     }
@@ -738,6 +739,8 @@ class ForcedNeedServiceTest {
         List<FilmNeedDto> list = service.list().films();
 
         assertThat(list).extracting(FilmNeedDto::editionId).containsExactly(12L, null, null, null);
+        // Film 1 has two present editions, so the dialog is told which cut; the others have none to name.
+        assertThat(list).extracting(FilmNeedDto::editionName).containsExactly("Original", null, null, null);
         verify(files).findAudioRows(List.of(1L, 2L));
     }
 
@@ -754,6 +757,41 @@ class ForcedNeedServiceTest {
 
         assertThat(dto.need()).isEqualTo("NEEDED");
         assertThat(dto.editionId()).isEqualTo(70L);
+        assertThat(dto.editionName()).isNull();
+    }
+
+    @Test
+    void noPickerEditionIsLookedUpWhenNoRowIsNeededWithNoSubtitleServed() {
+        when(films.findNeedRows()).thenReturn(List.of(english(1, "A"), english(2, "B")));
+        when(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED)).thenReturn(List.of());
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of());
+        when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of());
+
+        List<FilmNeedDto> list = service.list().films();
+
+        assertThat(list).extracting(FilmNeedDto::need).doesNotContain("NEEDED");
+        assertThat(list).extracting(FilmNeedDto::editionId).containsOnlyNulls();
+        assertThat(audioReads()).isZero();
+    }
+
+    @Test
+    void choosingNotNeededLooksUpNoPickerEdition() {
+        Film taken = withEdition(stored(7L, "en", "en", null));
+        when(films.findByIdForUpdate(7L)).thenReturn(Optional.of(taken));
+        when(sidecars.countPresentForFilm(7L, SubtitleKind.FORCED)).thenReturn(0L);
+        when(files.countEmbeddedForcedForFilm(7L)).thenReturn(0L);
+
+        FilmNeedDto dto = service.choose(7L, new ChoiceRequest("NOT_NEEDED"));
+
+        assertThat(dto.need()).isEqualTo("NOT_NEEDED");
+        assertThat(dto.editionId()).isNull();
+        assertThat(audioReads()).isZero();
+    }
+
+    /** How many times the audio rows were read (the picker's one query), counted without a verify on the repository. */
+    private long audioReads() {
+        return mockingDetails(files).getInvocations().stream()
+            .filter(call -> "findAudioRows".equals(call.getMethod().getName())).count();
     }
 
     @Test

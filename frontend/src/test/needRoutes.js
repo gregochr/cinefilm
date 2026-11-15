@@ -109,7 +109,7 @@ export function serveNeeds({
             { unresolved: false, beingChecked: false },
             body.kind === 'full'
               ? { fullSubtitle: { source: 'DOWNLOAD' }, subtitled: true }
-              : { hasForcedSubtitle: true },
+              : { hasForcedSubtitle: true, editionId: null },
           );
         }
         const { release } = fixtures.adminOpenSubtitles[body.kind].results.find(
