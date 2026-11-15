@@ -1,4 +1,5 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
 
@@ -7,36 +8,39 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-async function openScanCard(over) {
+// The line sits in Everything else on the Subtitles page (it left the Library scan card in 4a).
+async function openElse(over) {
   installFetch((method, url) =>
     url === '/api/admin/scan' ? respond({ ...fixtures.adminScan, ...over }) : null,
   );
-  renderApp('/admin/library');
-  return screen.findByRole('region', { name: 'Library scan' });
+  renderApp('/admin/subtitles');
+  return screen.findByRole('region', { name: 'Everything else' });
 }
 
-describe('Admin: the subtitle search line in the Library scan card', () => {
+// With fake timers that advance by themselves, a click has to advance them too.
+const clicker = () => userEvent.setup({ advanceTimers: (ms) => vi.advanceTimersByTime(ms) });
+
+describe('Admin: the subtitle search line in Everything else', () => {
   it('says when subtitles were last searched', async () => {
-    const card = await openScanCard({});
+    const card = await openElse({});
     expect(await within(card).findByText('Subtitles searched 12 Nov 06:00')).toBeVisible();
-    expect(within(card).getByText('Ratings last refreshed 08 Nov 12:41')).toBeVisible();
   });
 
   it('says searching while a search runs', async () => {
-    const card = await openScanCard({ openSubtitlesRunning: true });
+    const card = await openElse({ openSubtitlesRunning: true });
     expect(await within(card).findByText('Searching for subtitles…')).toBeVisible();
     expect(within(card).queryByText(/Subtitles searched/)).not.toBeInTheDocument();
   });
 
   it('says subtitles were not searched yet before the first search', async () => {
-    const card = await openScanCard({ openSubtitlesLastSearchedAt: null });
+    const card = await openElse({ openSubtitlesLastSearchedAt: null });
     expect(await within(card).findByText('Subtitles not searched yet')).toBeVisible();
   });
 
   it('hides the line when the search is off', async () => {
-    const card = await openScanCard({ openSubtitlesEnabled: false });
-    await within(card).findByText(/Ratings last refreshed/);
-    expect(within(card).queryByText(/ubtitles/)).not.toBeInTheDocument();
+    const card = await openElse({ openSubtitlesEnabled: false });
+    await within(card).findByRole('button', { name: 'Show all subtitle files' });
+    expect(within(card).queryByText(/Subtitles (searched|not searched)/)).not.toBeInTheDocument();
     expect(within(card).queryByText(/Searching/)).not.toBeInTheDocument();
   });
 
@@ -52,8 +56,8 @@ describe('Admin: the subtitle search line in the Library scan card', () => {
       );
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    renderApp('/admin/library');
-    const card = await screen.findByRole('region', { name: 'Library scan' });
+    renderApp('/admin/subtitles');
+    const card = await screen.findByRole('region', { name: 'Everything else' });
     expect(await within(card).findByText('Searching for subtitles…')).toBeVisible();
 
     await act(() => vi.advanceTimersByTimeAsync(1500));
@@ -81,7 +85,8 @@ describe('Admin: the subtitle search line in the Library scan card', () => {
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
     renderApp('/admin/subtitles');
-    await screen.findByRole('region', { name: 'Subtitles' });
+    await clicker().click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+    await screen.findByRole('region', { name: 'Subtitle files' });
     const before = fileReads;
 
     await act(() => vi.advanceTimersByTimeAsync(1500));
@@ -112,7 +117,8 @@ describe('Admin: the subtitle search line in the Library scan card', () => {
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
     renderApp('/admin/subtitles');
-    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    await clicker().click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+    const panel = await screen.findByRole('region', { name: 'Subtitle files' });
     expect(await within(panel).findByText('Unchecked')).toBeVisible();
 
     await act(() => vi.advanceTimersByTimeAsync(1500));

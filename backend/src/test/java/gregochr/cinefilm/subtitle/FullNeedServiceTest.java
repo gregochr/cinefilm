@@ -2,6 +2,7 @@ package gregochr.cinefilm.subtitle;
 
 import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.edition;
+import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -138,7 +139,7 @@ class FullNeedServiceTest {
 
         assertThat(list.films()).extracting(FullNeedFilmDto::filmId).containsExactly(1L, 5L);
         assertThat(list.films().get(0)).isEqualTo(new FullNeedFilmDto(1L, "Amelie", 2000, "NEEDED", "FOREIGN_AUDIO",
-            null, List.of(new EditionAudioDto("Original", "French")), null, "fr", true, false));
+            null, List.of(new EditionAudioDto("Original", "French")), null, "fr", true, false, false));
         assertThat(list.films().get(1).reason()).isEqualTo("OWNER");
         assertThat(list.films().get(1).ownerChoice()).isEqualTo("NEEDED");
         assertThat(list.counts().needed()).isEqualTo(2);
@@ -177,8 +178,26 @@ class FullNeedServiceTest {
         when(editions.findWithFilesByFilmIdIn(List.of(7L))).thenReturn(List.of(original));
         when(fullSubtitles.forEditions(List.of(original))).thenReturn(Map.of(70L, new FullSubtitleDto("DOWNLOAD", 1)));
 
-        assertThat(service.choose(7L, new ChoiceRequest("NEEDED")).fullSubtitle())
-            .isEqualTo(new FullSubtitleStateDto("DOWNLOAD"));
+        FullNeedFilmDto answer = service.choose(7L, new ChoiceRequest("NEEDED"));
+
+        assertThat(answer.fullSubtitle()).isEqualTo(new FullSubtitleStateDto("DOWNLOAD"));
+        assertThat(answer.subtitled()).isTrue();
+    }
+
+    @Test
+    void choosingAnswersNotSubtitledWhenTheFilmDoesNotShowInBrowseEvenThoughASubtitlePlays() {
+        Film amelie = stored(7L, "fr", null);
+        when(films.findByIdForUpdate(7L)).thenReturn(Optional.of(amelie));
+        when(files.findAudioRows(List.of(7L))).thenReturn(List.of());
+        Edition original = edition(amelie, 70L, "Original", 100, null);
+        file(original, "amelie.mp4").setPresence(Presence.MISSING);
+        when(editions.findWithFilesByFilmIdIn(List.of(7L))).thenReturn(List.of(original));
+        when(fullSubtitles.forEditions(List.of(original))).thenReturn(Map.of(70L, new FullSubtitleDto("DOWNLOAD", 1)));
+
+        FullNeedFilmDto answer = service.choose(7L, new ChoiceRequest("NEEDED"));
+
+        assertThat(answer.fullSubtitle()).isEqualTo(new FullSubtitleStateDto("DOWNLOAD"));
+        assertThat(answer.subtitled()).isFalse();
     }
 
     @Test
@@ -276,7 +295,7 @@ class FullNeedServiceTest {
 
         assertThat(amelie.getFullNeedOwner()).isEqualTo(FullNeedChoice.NOT_NEEDED);
         assertThat(dto).isEqualTo(new FullNeedFilmDto(7L, "Amelie", 2001, "NOT_NEEDED", "OWNER", "NOT_NEEDED",
-            List.of(new EditionAudioDto("Original", "French")), null, "fr", false, false));
+            List.of(new EditionAudioDto("Original", "French")), null, "fr", false, false, false));
         assertThat(events).containsExactly("begin, lock subtitle", "commit, lock subtitle");
         assertThat(lock.holder()).isNull();
     }

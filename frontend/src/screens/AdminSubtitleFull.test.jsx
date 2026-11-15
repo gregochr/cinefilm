@@ -86,15 +86,6 @@ const rowOf = async (panel, text) => {
     .find((li) => within(li).queryByText(text) !== null);
 };
 
-/** A film's row in the full-need list: the list item holding its choice buttons. */
-const needRow = async (panel, title) => {
-  const name = `Full subtitles for ${title}`;
-  await within(panel).findByRole('group', { name });
-  return within(panel)
-    .getAllByRole('listitem')
-    .find((li) => within(li).queryByRole('group', { name }) !== null);
-};
-
 const chip = (panel, name) =>
   within(within(panel).getByRole('group', { name: 'Show subtitle files' })).getByRole('button', {
     name,
@@ -104,7 +95,8 @@ async function openPanel(items) {
   const served = serve(items);
   installFetch(served.route);
   renderApp('/admin/subtitles');
-  const panel = await screen.findByRole('region', { name: 'Subtitles' });
+  await userEvent.click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+  const panel = await screen.findByRole('region', { name: 'Subtitle files' });
   return { ...served, panel };
 }
 
@@ -183,11 +175,8 @@ describe('Admin: Subtitles panel, full downloads', () => {
     expect(within(row).queryByText('Playing')).not.toBeInTheDocument();
   });
 
-  it('removes a full download after the confirmation, and the film’s line says none yet', async () => {
+  it('removes a full download after the confirmation, and the download is gone from the list', async () => {
     const { panel, state } = await openPanel([download()]);
-    const heat = await needRow(panel, 'Heat (1995)');
-    expect(within(heat).getByText('Playing: download (not checked yet)')).toBeVisible();
-
     const row = await rowOf(panel, 'Downloaded from OpenSubtitles');
     await userEvent.click(
       within(row).getByRole('button', {
@@ -204,9 +193,6 @@ describe('Admin: Subtitles panel, full downloads', () => {
     expect(state.calls).toEqual([{ method: 'DELETE', id: 20, action: 'remove' }]);
     await waitFor(() =>
       expect(within(panel).queryByText('Downloaded from OpenSubtitles')).not.toBeInTheDocument(),
-    );
-    await waitFor(async () =>
-      expect(within(await needRow(panel, 'Heat (1995)')).getByText('None yet')).toBeVisible(),
     );
   });
 
@@ -273,52 +259,5 @@ describe('Admin: Subtitles panel, the Forced and Full chips', () => {
     expect(chip(panel, /^Full/)).toHaveAttribute('aria-pressed', 'true');
     expect(chip(panel, /^Unchecked/)).toHaveTextContent('Unchecked (1)');
     expect(chip(panel, /^Downloads/)).toHaveTextContent('Downloads (0)');
-  });
-});
-
-describe('Admin: Subtitles panel, from the full-need list to a film’s files', () => {
-  const otherFull = () =>
-    full({
-      id: 10,
-      path: 'Rashomon (1950)/Rashomon.en.srt',
-      filmId: 2,
-      filmTitle: 'Rashomon',
-      editionId: 21,
-    });
-
-  it('shows only that film’s full files, says so, and gives the list back on All', async () => {
-    const { panel } = await openPanel([forced({ id: 1 }), full(), download(), otherFull()]);
-    const heat = await needRow(panel, 'Heat (1995)');
-    expect(within(heat).getByText('Playing: your file')).toBeVisible();
-    await userEvent.click(
-      within(heat).getByRole('button', { name: 'Show the full subtitle files of Heat (1995)' }),
-    );
-
-    expect(chip(panel, /^Full/)).toHaveAttribute('aria-pressed', 'true');
-    const status = within(panel).getByText('Showing the full subtitle files of Heat (1995).');
-    expect(status).toHaveFocus();
-    expect(within(panel).getByText('Heat (1995)/Heat.en.srt')).toBeVisible();
-    expect(within(panel).getByText('Downloaded from OpenSubtitles')).toBeVisible();
-    expect(within(panel).queryByText('Rashomon (1950)/Rashomon.en.srt')).not.toBeInTheDocument();
-    expect(within(panel).queryByText('Heat (1995)/Heat.en.forced.srt')).not.toBeInTheDocument();
-
-    await userEvent.click(chip(panel, /^All/));
-    expect(within(panel).queryByText(/Showing the full subtitle files/)).not.toBeInTheDocument();
-    expect(within(panel).getByText('Rashomon (1950)/Rashomon.en.srt')).toBeVisible();
-    expect(within(panel).getByText('Heat (1995)/Heat.en.forced.srt')).toBeVisible();
-  });
-
-  it('shows that nothing is there for a film with no full files, and Show all files ends it', async () => {
-    const { panel } = await openPanel([forced({ id: 1 }), otherFull()]);
-    const heat = await needRow(panel, 'Heat (1995)');
-    expect(within(heat).getByText('None yet')).toBeVisible();
-    await userEvent.click(
-      within(heat).getByRole('button', { name: 'Show the full subtitle files of Heat (1995)' }),
-    );
-
-    expect(within(panel).getByText('No files here.')).toBeVisible();
-    await userEvent.click(within(panel).getByRole('button', { name: 'Show all files' }));
-    expect(within(panel).queryByText('No files here.')).not.toBeInTheDocument();
-    expect(within(panel).getByText('Heat (1995)/Heat.en.forced.srt')).toBeVisible();
   });
 });

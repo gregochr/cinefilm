@@ -47,7 +47,16 @@ describe('the Admin To do fixtures', () => {
         notNeeded: rows.filter((r) => r.need === 'NOT_NEEDED').length,
         unresolved: rows.filter((r) => r.unresolved).length,
         beingChecked: rows.filter((r) => r.beingChecked).length,
+        subtitled: rows.filter((r) => r.subtitled).length,
+        // The listed not-needed film (Léon: English audio) plus the 530 English originals the list does not hold.
+        inEnglish: 1 + 530,
       });
+    });
+
+    it('flags a row subtitled when it is needed and a full subtitle plays', () => {
+      for (const row of rows) {
+        expect(row.subtitled).toBe(row.need === 'NEEDED' && row.fullSubtitle !== null);
+      }
     });
 
     it('has exactly the fields of the contract', () => {
@@ -62,6 +71,7 @@ describe('the Admin To do fixtures', () => {
             'originalLanguage',
             'ownerChoice',
             'reason',
+            'subtitled',
             'title',
             'unresolved',
             'year',
@@ -69,7 +79,16 @@ describe('the Admin To do fixtures', () => {
         );
       }
       expect(Object.keys(fullNeed.counts).sort()).toEqual(
-        ['beingChecked', 'needed', 'notNeeded', 'unknown', 'unresolved', 'unsure'].sort(),
+        [
+          'beingChecked',
+          'inEnglish',
+          'needed',
+          'notNeeded',
+          'subtitled',
+          'unknown',
+          'unresolved',
+          'unsure',
+        ].sort(),
       );
     });
   });

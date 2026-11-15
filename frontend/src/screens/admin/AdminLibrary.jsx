@@ -21,28 +21,10 @@ import {
   changeLabel,
   countTiles,
   describeLastScan,
-  describeSubtitleSearch,
   formatScanTime,
   progressPercent,
   progressText,
 } from '../../state/scanFormat.js';
-
-function SubtitleSearchLine({ scan }) {
-  const text = describeSubtitleSearch(
-    {
-      enabled: Boolean(scan.openSubtitlesEnabled),
-      running: Boolean(scan.openSubtitlesRunning),
-      lastSearchedAt: scan.openSubtitlesLastSearchedAt,
-    },
-    formatScanTime,
-  );
-  if (!text) return null;
-  return (
-    <p className="admin__mono admin__ratings-line" role="status">
-      {text}
-    </p>
-  );
-}
 
 function RatingsLine({ scan, starting, notice, onRefresh }) {
   const running = Boolean(scan.ratingsRunning);
@@ -163,7 +145,6 @@ function ScanPanel({
           notice={ratingsNotice}
           onRefresh={onRefreshRatings}
         />
-        <SubtitleSearchLine scan={scan} />
       </>
     );
   }

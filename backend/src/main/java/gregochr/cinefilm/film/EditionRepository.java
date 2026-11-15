@@ -18,6 +18,14 @@ public interface EditionRepository extends JpaRepository<Edition, Long> {
     @Query("select distinct e from Edition e join fetch e.mediaFiles join fetch e.film where e.film.id in :filmIds")
     List<Edition> findWithFilesByFilmIdIn(Collection<Long> filmIds);
 
+    /**
+     * Every edition with its files (an edition with no file row too: a left join) and its film loaded in one statement,
+     * for the Admin counts that apply the browse rule ({@code Film#browsable}) to the whole library. A film with no
+     * edition at all is absent.
+     */
+    @Query("select distinct e from Edition e left join fetch e.mediaFiles join fetch e.film")
+    List<Edition> findAllWithFilesIncludingEmpty();
+
     /** One edition with its film loaded (and no files), for code that needs the film's id, title or IMDb id. */
     @Query("select e from Edition e join fetch e.film where e.id = :id")
     Optional<Edition> findWithFilmById(Long id);

@@ -20,6 +20,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -216,7 +217,18 @@ public class Film {
 
     /** A film shows in browse unless every one of its editions is missing from disk or cannot be played. */
     public boolean browsable() {
-        return editions.isEmpty() || editions.stream().anyMatch(e -> !e.hiddenFromBrowse());
+        return browsable(editions);
+    }
+
+    /**
+     * The browse rule over a film's editions, for code that has them without the film: a film with no edition shows,
+     * and otherwise it shows unless every edition is hidden ({@link Edition#hiddenFromBrowse()}).
+     *
+     * @param allEditions the film's editions (all of them)
+     * @return whether the film shows in browse
+     */
+    public static boolean browsable(Collection<Edition> allEditions) {
+        return allEditions.isEmpty() || allEditions.stream().anyMatch(e -> !e.hiddenFromBrowse());
     }
 
     /**

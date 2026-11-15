@@ -296,6 +296,8 @@ describe('Admin: Subtitles refresh', () => {
   it('reads the subtitle files again when a scan finishes, so new files show without reopening Admin', async () => {
     let scans = 0;
     const fetchMock = installFetch((method, url) => {
+      // Plex never finishes an import, so its stamp never changes and causes no read of its own.
+      if (url === '/api/admin/plex') return respond({ ...fixtures.adminPlex, lastImport: null });
       if (url === '/api/admin/scan') {
         scans += 1;
         return respond(
@@ -312,13 +314,21 @@ describe('Admin: Subtitles refresh', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     renderApp('/admin/subtitles');
     const reads = () => fetchMock.mock.calls.filter((c) => c[0] === '/api/admin/subtitles').length;
-    // The first read, then the one the first scan answer's stamp triggers: nothing else is in flight after that.
-    await waitFor(() => expect(reads()).toBe(2));
-    await screen.findByRole('region', { name: 'Subtitles' });
+    // The first scan answer has landed before the file list is opened, so its stamp is the one the list starts with.
+    await waitFor(() => expect(scans).toBe(1));
+    // Each click advances the fake timers, as they run by themselves.
+    await userEvent
+      .setup({ advanceTimers: (ms) => vi.advanceTimersByTime(ms) })
+      .click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+    await screen.findByRole('region', { name: 'Subtitle files' });
+    await waitFor(() => expect(reads()).toBe(1));
 
     await act(() => vi.advanceTimersByTimeAsync(1500));
 
-    await waitFor(() => expect(reads()).toBe(3));
+    // The second answer finished the scan: exactly one more read.
+    await waitFor(() => expect(reads()).toBe(2));
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    expect(reads()).toBe(2);
   });
 });
 

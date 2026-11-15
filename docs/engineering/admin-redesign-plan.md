@@ -300,6 +300,60 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
   paginated at 50, **keeping every per-file tool until 8b**), and the note pointing to the film page and player. The
   subtitle search status line moves here from the scan card.
 - **Tests:** each owner choice round-trips (saved, row leaves, still gone after a reload from the mock API); counts.
+- **4a decision (built):** the section is `screens/admin/AdminSubtitles.jsx`: lead (AR2), a real `tablist`
+  ("Foreign-language films {n}", "Forced subtitles not found {n}": Q3; automatic activation, roving tabindex, arrows
+  wrap, Home/End), the two panels, "Everything else". Rows are the server's `unresolved` rows only and the filter chips
+  are gone (`FullNeedSection`/`ForcedNeedSection` deleted; their chip helpers in `fullNeed.js`/`forcedNeed.js` stay
+  until the cleanup in 8b). Each list loads on its own: a skeleton until its first answer, an inline banner (never
+  amber) with its own retry if that read failed, and a banner above the kept rows if a re-read fails; the other tab and
+  "Everything else" never wait. Both panels are in the page (the inactive one `hidden`), so `aria-controls` is true.
+  - **Actions built:** foreign tab "Add my own file…" (the existing attach route scoped to the film: it lists the
+    owner's own full subtitle files not already on that film, then the edition and part; `AddOwnFile`,
+    `useFilmFilePicker`) and, for unlabelled audio (`ORIGINAL_AUDIO_ASSUMED`), "It's English" (`NOT_NEEDED` through
+    `PUT /api/admin/films/{id}/full-need`); forced tab "No foreign scenes" (`NOT_NEEDED` through the forced route).
+    One request per film: a click on a row that is saving does nothing (the button is `aria-disabled`, still
+    focusable). A saved choice calls `markChanged` (`onSaved` of `useNeedChoices`), so the summary, rail counts, To do
+    groups and both lists re-read; the row leaves at once from the saved row. A failure keeps the row with the existing
+    `needProblem` words. When the row that had focus leaves, focus moves to the tab panel (focus that is somewhere
+    real is left alone, and a failed save keeps its focus).
+  - **Deferred, hidden until 4c (the picker):** "Search for English subtitles…", "Find forced subtitles…" and
+    "It's in {language} — find subtitles" (the last two open the picker too, so a button that does not find anything
+    would lie). Their copy is already in `adminCopy.js`.
+  - **Deferred, API:** "Use it anyway" / "Search again…". The API exposes no trust: `FullSubtitleStateDto` is `source`
+    only (no `SidecarTrust` and no sidecar id), so the row cannot know a download is distrusted or which row to verify.
+    Needs a backend field first (not added here).
+  - **Posters deferred**, as in 3c-2: the need rows carry none.
+  - **"Everything else":** the figures are the server's, none derived in the browser (AGENTS.md rule 3). `FullNeedFilmDto`
+    gains a `subtitled` flag (browsable, NEEDED and a full subtitle plays: `AdminTodoRules.subtitledFull`, the complement of
+    `inPlayFull`), `counts.subtitled` is the rows flagged (so the button's count equals the rows it opens, and the list is
+    `rows.filter(r => r.subtitled)`), and `FullNeedCountsDto` gains `inEnglish` (browsable films whose full need is NOT_NEEDED, in the list's scope or
+    out of it: English or `xx` or missing originals, `ENGLISH_AUDIO` dubs, the owner's "not needed"; a film with no TMDB
+    language is UNKNOWN and not counted). "Browsable" is `Film.browsable` (one bulk read of every edition with its files, left-joined).
+    "{n} foreign films have English subtitles" is `counts.subtitled`, "{n} films are in English" is `counts.inEnglish`,
+    "{n} being checked online now" adds the two lists' `counts.beingChecked` and shows only once both lists have been
+    read; each figure shows once its list has. "Show the {n} film(s)" is a read-only list of the rows the server flagged `subtitled`. "Show all
+    subtitle files" mounts the old file list (card "Subtitle files", every per-file tool kept until 8b) only when asked,
+    so it is read only then. It lists 50 at a time with "Show more ({n} left)": the files are grouped first and the
+    first 50 taken across the groups as drawn, so an unmatched file is on page one. A per-file tool that changes
+    something calls `markChanged`. The OpenSubtitles search status line moved here from the scan card.
+  - **"Your choices ({n})" (undo):** deleting the old panels removed every way back from "It's English", "No foreign
+    scenes" or an owner "needed", so "Everything else" has a quiet toggle, shown only while a list holds a row the server
+    says the owner chose for (`ownerChoice` not null). It lists the film, which list and what was chosen, with "Let
+    CineFilm decide" (07's words), which sends choice `null` through that list's own PUT. One request per film (the
+    button is `aria-disabled` while saving); a failure keeps the row with the list's words; the row leaves at once and
+    the page reads again; focus moves to the toggle, or to the section heading after the last one. Copy is "planner, 4a".
+  - **`onSaved` runs once per chain that saved anything**, with the last saved row, even when a later queued write failed
+    (that failure still shows on the row), and also when the owner left the page before the save came back
+    (`markChanged` lives in the layout, so the rail counts and To do read again); the page then sets no state.
+  - **Add my own file:** hint "Picks one of your subtitle files for this film" (planner, 4a; 07's names no fixed film).
+    Cancel is `aria-disabled` while the attach is in flight; a loading line shows while the editions load and "This film
+    has no edition a subtitle file can be added to." when it has none.
+  - **Wording the planner added** (marked "planner, 4a" in `adminCopy.js`): the unlabelled-audio line says "CineFilm
+    assumed {language}, the original language TMDB lists" because AR2's "CineFilm assumed English" is the reverse of
+    what the server does (To do now says AR2's "nothing found automatically" too); the forced panel heading "Need forced subtitles"; the empty states; singulars; the
+    load/refresh errors; the add-a-file form's words; "Hide the {n} films" / "Hide the subtitle files".
+  - Also still to do from 3c-2: the To do subtitle rows get these actions only if the owner asks (they stay read-only
+    with the "All in Subtitles →" footer).
 
 ### 4b · Edition-scoped OpenSubtitles search and download (backend)
 
