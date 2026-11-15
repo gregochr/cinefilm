@@ -70,14 +70,21 @@ export function playLine(row) {
   return line;
 }
 
-/** ["480p 34%", "360p 66%"]: rungs in ladder order holding at least 1% of the watched time. */
-export function rungShares(report) {
+/** [{ id: "480p", name: "480p", percent: 34 }, ...]: rungs in ladder order holding at least 1% of the watched time. */
+export function rungParts(report) {
   const watchedMs = num(report.watchedMs);
   if (watchedMs <= 0) return [];
   const rungMs = report.rungMs ?? {};
-  return RUNG_ORDER.filter((id) => num(rungMs[id]) * 100 >= watchedMs).map(
-    (id) => `${rungName(id)} ${Math.round((num(rungMs[id]) * 100) / watchedMs)}%`,
-  );
+  return RUNG_ORDER.filter((id) => num(rungMs[id]) * 100 >= watchedMs).map((id) => ({
+    id,
+    name: rungName(id),
+    percent: Math.round((num(rungMs[id]) * 100) / watchedMs),
+  }));
+}
+
+/** ["480p 34%", "360p 66%"]: `rungParts` as text. */
+export function rungShares(report) {
+  return rungParts(report).map(({ name, percent }) => `${name} ${percent}%`);
 }
 
 /** "0.4 to 2.4 Mbit/s, typically 0.9", or "no speed samples". */

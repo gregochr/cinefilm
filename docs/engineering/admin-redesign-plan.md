@@ -402,6 +402,32 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
 - Conversion: encoder and status, seek index coverage, HLS storage. Remembered networks: operator and Train/Away,
   "Forget", and the line under them per Q4.
 - **Tests:** filters, the pill at the boundary, copy (clipboard mock + toast), Details never rendering JSON.
+- **5b decision (built):** no backend change. Playback is now Now playing, How films played, Playback log, Conversion,
+  Remembered networks, each once; the old "Transcoding" card (its live-session list duplicated Now playing's Stop) and
+  "Playback health" card (and `usePlaybackHealth`, `adminApi.playbackHealth`, the "Full record" link) are gone.
+  **Log:** `usePlaybackLog` reads `GET /api/admin/playback-health?…&page=n&size=50` and nothing else; "Films only" sends
+  `minWatchedMs=180000` (`FILM_SESSION_MIN_MS`), "With problems" `problems=true`, All only the paging. The browser never
+  filters; a filter switch aborts the older request and ignores a late answer; "Show 50 more" reads page `pages` and
+  appends, skipping a row id already shown (a new play pushes rows down a page); it stops when rows shown reach `total`. The
+  "browsing" pill is `watchedMs < FILM_SESSION_MIN_MS` (the one rule, `isBrowsing`). Details are four lines of words from
+  `state/playbackLog.js` (`reportDetails`: Player, Network, Quality, Interruptions, reusing `healthFormat`'s
+  `speedText`, `rungParts`, `stallDuration`); "Copy raw report" copies the **list route's** report (it has no
+  `minutes`, which only the one-record route returns) as indented JSON, and a toast ("Copied", or an honest failure
+  line) comes from the layout's existing toast (`showToast` in the Admin context). The table is a real `<table>`; at 600px
+  and below CSS stacks each row into a card (film and date on top, the labelled cells under it, the button full width).
+  **Conversion** shows the encoder with "ready" (server found an encoder; "Unavailable" otherwise; the server reports
+  no other status), "Seek index" ("412 of 538 films") and "Stream cache" (the old card's figure). **Omitted, no source
+  in the API:** "Pre-made versions" (14 films · 38 GB of 100 GB) and the "VideoToolbox" encoder name (the server knows
+  only `vaapi`, `software` and `unavailable`). **Remembered networks** are this browser's `localStorage`
+  (`state/networks.js`), not an API: there is no route, so "Forget" calls `forgetNetwork`. They hold the operator and
+  the answer (Home is never stored), so each row reads "Train · Example Rail", **without** AR4's "starts at {quality} ·
+  seen {ago}" (not stored; the start quality is measured each time). A failed forget (storage refused) keeps the row
+  and says so inline in the stall colour; success moves focus to the card's heading. The owner's Q4 line is shown
+  under the list only while there are rows. **Invented copy (planner, 5b):** the networks subtitle "This browser
+  remembers where you said you were watching" (AR4's "starts at the quality that worked last time" is untrue), "No
+  networks remembered yet.", "Couldn’t forget that network. Try again.", the empty lines per filter, the load, "show
+  more" and copy-failure messages, "Stream cache", "ready", the table and filter group labels, and the Details
+  button's accessible name ("Details: Heat, 10 Nov 19:43").
 
 ### 6 · Library tidy-up
 
