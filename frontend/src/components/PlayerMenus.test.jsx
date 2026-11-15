@@ -221,3 +221,99 @@ describe('AudioSubtitlesPanel', () => {
     expect(screen.getByRole('menuitemradio', { name: /English 5.1/ })).toHaveFocus();
   });
 });
+
+describe('AudioSubtitlesPanel: Subtitles are wrong', () => {
+  const props = {
+    audioStreams: [{ id: 1, language: 'English', channels: '5.1', codec: 'DTS' }],
+    audioValue: 1,
+    subtitleStreams: [{ id: 5, language: 'English' }],
+    hasFullSubtitle: true,
+    subtitleValue: 'full',
+    onAudio: vi.fn(),
+    onSubtitle: vi.fn(),
+  };
+  const wrongOf = (over = {}) => ({
+    available: true,
+    busy: false,
+    problem: null,
+    onWrong: vi.fn(),
+    ...over,
+  });
+  const subs = () => screen.getByRole('menu', { name: 'Subtitles' });
+  const action = () => within(subs()).getByRole('menuitem', { name: 'Subtitles are wrong' });
+
+  it('is not there unless a downloaded subtitle shows', () => {
+    const { rerender } = render(<AudioSubtitlesPanel {...props} />);
+    expect(screen.queryByRole('menuitem', { name: 'Subtitles are wrong' })).not.toBeInTheDocument();
+
+    rerender(<AudioSubtitlesPanel {...props} wrong={wrongOf({ available: false })} />);
+    expect(screen.queryByRole('menuitem', { name: 'Subtitles are wrong' })).not.toBeInTheDocument();
+  });
+
+  it('is a plain action under the subtitle choices, not a choice, and asks once per click', async () => {
+    const wrong = wrongOf();
+    render(<AudioSubtitlesPanel {...props} wrong={wrong} />);
+
+    expect(within(subs()).getAllByRole('menuitemradio')).toHaveLength(3);
+    await userEvent.click(action());
+
+    expect(wrong.onWrong).toHaveBeenCalledTimes(1);
+  });
+
+  it('says it is removing and ignores clicks while the request runs, keeping focus on it', async () => {
+    const wrong = wrongOf({ busy: true });
+    render(<AudioSubtitlesPanel {...props} wrong={wrong} />);
+
+    const busy = within(subs()).getByRole('menuitem', { name: 'Removing…' });
+    expect(busy).toHaveAttribute('aria-disabled', 'true');
+    busy.focus();
+    await userEvent.click(busy);
+
+    expect(wrong.onWrong).not.toHaveBeenCalled();
+    expect(busy).toHaveFocus();
+  });
+
+  it('shows why it failed', () => {
+    const problem = 'Couldn’t remove the download. Try again.';
+    render(<AudioSubtitlesPanel {...props} wrong={wrongOf({ problem })} />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(problem);
+  });
+
+  it('arrow keys reach it from the last subtitle choice', async () => {
+    render(<AudioSubtitlesPanel {...props} wrong={wrongOf()} />);
+    within(subs()).getAllByRole('menuitemradio')[2].focus();
+
+    await userEvent.keyboard('{ArrowDown}');
+
+    expect(action()).toHaveFocus();
+  });
+
+  it('moves focus to the checked subtitle when the action goes away', () => {
+    const { rerender } = render(<AudioSubtitlesPanel {...props} wrong={wrongOf()} />);
+    action().focus();
+
+    rerender(
+      <AudioSubtitlesPanel {...props} subtitleValue="off" wrong={wrongOf({ available: false })} />,
+    );
+
+    expect(within(subs()).getByRole('menuitemradio', { name: /^Off/ })).toHaveFocus();
+  });
+
+  it('lands on the first subtitle choice when none is checked', () => {
+    const { rerender } = render(
+      <AudioSubtitlesPanel {...props} subtitleValue="nothing" wrong={wrongOf()} />,
+    );
+    action().focus();
+
+    rerender(
+      <AudioSubtitlesPanel
+        {...props}
+        subtitleValue="nothing"
+        wrong={wrongOf({ available: false })}
+      />,
+    );
+
+    expect(within(subs()).getAllByRole('menuitemradio')[0]).toHaveFocus();
+  });
+});

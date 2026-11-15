@@ -156,3 +156,23 @@
   outline: none;
   box-shadow: var(--cf-focus-ring);
 }
+
+/* Film detail "Fix…": each tool with its hint under it, in a wrapping row; one column on a phone. */
+.fix__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px 20px;
+  margin-top: 12px;
+}
+.fix__add {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+@media (max-width: 600px) {
+  .fix__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

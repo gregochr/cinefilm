@@ -153,6 +153,29 @@ export function defaultRoute(method, url, init = {}) {
   // lists the page's buttons; the chart's own tests serve `fixtures.adminPlaybackChart`.
   if (path === '/api/admin/playback-health/chart') return json({ sessions: [] });
   if (path === '/api/admin/subtitles') return json(adminSubtitles);
+  // The per-file routes of an Admin or Film detail subtitle row, shaped as the server answers them.
+  const subtitleRoute = path.match(/^\/api\/admin\/subtitles\/(\d+)(\/\w+)?$/);
+  if (subtitleRoute) {
+    const row = adminSubtitles.find((r) => r.id === Number(subtitleRoute[1]));
+    if (!row) return json({ error: 'No such subtitle file' }, 404);
+    if (method === 'DELETE' && !subtitleRoute[2]) return json(null, 204);
+    if (subtitleRoute[2] === '/cues') {
+      return json({
+        offsetMs: row.offsetMs,
+        cues: [{ startMs: 60000, endMs: 62500, text: `A line of ${row.path}` }],
+      });
+    }
+    if (subtitleRoute[2] === '/verify') return json({ ...row, verified: method === 'POST' });
+    if (subtitleRoute[2] === '/detach') {
+      return json({
+        ...row,
+        ownerAttached: false,
+        state: 'unmatched',
+        filmId: null,
+        editionId: null,
+      });
+    }
+  }
   const openSubtitles = path.match(/^\/api\/admin\/editions\/(\d+)\/opensubtitles(\/download)?$/);
   if (openSubtitles) {
     const editionId = Number(openSubtitles[1]);

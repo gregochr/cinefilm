@@ -181,6 +181,16 @@ a.ratings__link:hover .ratings__label {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+/* The quiet "Fix…" beside the Subtitles field: a small secondary button under it, a full touch target on touch. */
+.settings__fix {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+@media (any-pointer: coarse) {
+  .settings__fix {
+    min-height: 44px;
+  }
+}
 
 /* Edition picker */
 .editions {

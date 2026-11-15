@@ -500,6 +500,44 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
   `DELETE /api/admin/subtitles/{id}` + `ForcedDownloadBlock`), so a bad download can still be reported.
 - 8b: player "Earlier" / "Later" (and reset) on the existing offset route; Admin's "Show all subtitle files" becomes
   read-only. "Looks right" goes only here, after 8a.
+- **8a decision (built):** no backend change. `SubtitleAdminService.remove` already writes the `ForcedDownloadBlock`
+  (edition, IMDb id, OpenSubtitles file id, kind) before it deletes the row, so `DELETE /api/admin/subtitles/{id}` is
+  the whole of "Subtitles are wrong" (and answers 400 for an owner's file).
+  - **Film detail.** A quiet "Fix…" (`aria-label` "Fix subtitles…") sits under the Subtitles field, also for a film
+    with no subtitles. It opens `components/FilmSubtitlesFix.jsx`, a `useDialog` dialog (the Edit editions classes:
+    focus trap, Escape, focus back on the opener, full-screen sheet on a phone). It reads `GET /api/admin/subtitles`
+    through Admin's own `useSubtitles` (one copy of the rules and of the one-request guard) and lists the film's rows
+    (`state/subtitleFix.js` `filmFiles`, over `filterSidecars`). Per file, `fileTools` decides: "Use my file instead"
+    (an owner file a download replaced, not yet chosen; the `verify` route), "Let CineFilm decide" (`ownerAttached`;
+    `detach`), "Preview lines" (`cues`, via the shared `SubtitleCueList`), "Delete this download" (downloads only;
+    `RemoveDownload` with an inline confirm and the 4a focus rules). Panel level: "Add my own file…" is 4a's
+    `AddOwnFile` scoped to the film. Each tool has its 07 hint under it (`ActionWithHint`). A change calls the page's
+    reload, even if it finishes after the dialog was closed. **Departures:** "Attach to… / Move to…" is not a per-file
+    button here ("Add my own file…" is the film-scoped attach, as AR7 says); "Looks right" and timing are not here
+    (the plan says "Looks right" goes nowhere; timing is 8b's). Admin keeps its own words ("Show cues", "Remove
+    download") until 8b; `SubtitleCueList` and `RemoveDownload` were lifted out of `SubtitlesPanel` with those words as
+    the default so both screens share one copy.
+  - **Player.** In the subtitle column of the Audio and subtitles panel, a "Subtitles are wrong" `menuitem` (a quiet
+    action under a hairline, never amber) while `shownDownloadKind` says a download is on screen: the player's own
+    `activeSubtitleKey` picks what shows, and the edition's `source` (`DOWNLOAD`) says it is a download, so the owner's
+    files, embedded streams and Off-with-nothing never get it. On click `useSubtitleWrong` reads the list (so the row
+    id is never stale), takes the rows of this film, edition and kind that are `served` downloads, and deletes them.
+    **What the player does after (chosen):** the removed kind is left out of the viewing locally (its `<track>`
+    unmounts; the film is not read again under a playing viewing); a removed full subtitle falls back to Off, where
+    the forced lines show as they would on their own; a removed forced one lets the embedded forced stream (if any) show.
+    A toast says "Subtitle download removed. CineFilm won't use it again." Nothing about the playback is touched (no
+    session, seek, reload or source change), and the saved subtitle preference is left alone. Not built: if the owner's
+    own file had been beaten by the download, it only plays after the next film load.
+  - **Copy** is `state/subtitleFixCopy.js` (the Film and player words; `adminCopy.js` is Admin's and stays out of the
+    other phases' way). The five renamed buttons and their hints are 07's. Planner, 8a: "Fix…"'s spoken name "Fix
+    subtitles…", the dialog eyebrow "Fix subtitles", its lead "The subtitle files CineFilm has for this film. Timing is
+    changed while you watch.", "Loading the subtitle files", "Couldn't load this film's subtitle files.", "Couldn't
+    refresh the subtitle files.", "CineFilm has no subtitle file for this film yet.", "Subtitle files for this film",
+    "Hide lines", "Delete download", "Your file", "Forced", "Subtitles are wrong", "Removing…", "Subtitle download
+    removed. CineFilm won't use it again.", "Couldn't find that download to remove.", "Couldn't remove the download.
+    Try again."
+  - **Dev mock:** `detach`, `verify` (POST and DELETE) and `cues` routes added to `fixtureServer.js` and the default
+    `mockApi.jsx` answers; fixture refusals carry `{ error }` in the body.
 
 ## Owner answers (2026-11-14)
 

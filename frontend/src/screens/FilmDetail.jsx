@@ -9,6 +9,7 @@ import { Picker, Switch } from '../components/Controls.jsx';
 import { CheckIcon, PlayIcon, RestartIcon } from '../components/icons.jsx';
 import RatingsRow from '../components/RatingsRow.jsx';
 import EditEditions from '../components/EditEditions.jsx';
+import FilmSubtitlesFix from '../components/FilmSubtitlesFix.jsx';
 import { DetailSkeleton } from '../components/Skeleton.jsx';
 import Toast from '../components/Toast.jsx';
 import { ErrorState } from '../components/StateMessages.jsx';
@@ -27,6 +28,7 @@ import {
 } from '../player/tracks.js';
 import { displayName } from '../state/collections.js';
 import { useFilm, useFilmActions } from '../state/useFilms.js';
+import { subtitleFix } from '../state/subtitleFixCopy.js';
 import { useToast } from '../state/useToast.js';
 
 function qualityOptions(edition) {
@@ -75,6 +77,7 @@ export default function FilmDetail() {
   const [audio, setAudio] = useState(null);
   const [subtitle, setSubtitle] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [fixing, setFixing] = useState(null);
   const toast = useToast();
 
   if (loading && !film) return <DetailSkeleton />;
@@ -112,6 +115,18 @@ export default function FilmDetail() {
       audioLanguage: edition.audioStreams.find((s) => String(streamKey(s)) === audioValue)
         ?.language,
     }),
+  );
+
+  // The quiet entry beside the Subtitles field: it opens the film's subtitle files (`FilmSubtitlesFix`).
+  const fixButton = (
+    <Button
+      className="settings__fix"
+      aria-label={subtitleFix.entry.spoken}
+      aria-haspopup="dialog"
+      onClick={(event) => setFixing({ opener: event.currentTarget })}
+    >
+      {subtitleFix.entry.label}
+    </Button>
   );
 
   const pickEdition = (editionId) => {
@@ -222,6 +237,7 @@ export default function FilmDetail() {
                 <Link to="/admin" className="settings__link">
                   Find subtitles in Admin
                 </Link>
+                {fixButton}
               </Picker>
             ) : (
               <Picker
@@ -238,7 +254,9 @@ export default function FilmDetail() {
                     subtitle: v === SUBTITLE_OFF || v === FULL_KEY ? v : Number(v),
                   });
                 }}
-              />
+              >
+                {fixButton}
+              </Picker>
             )}
             {edition.audioStreams.length > 1 ? (
               <Picker
@@ -310,6 +328,14 @@ export default function FilmDetail() {
             actions.clearOverrides();
             reload();
           }}
+        />
+      ) : null}
+      {fixing ? (
+        <FilmSubtitlesFix
+          film={{ id: film.id, title: film.title, year: film.year }}
+          opener={fixing.opener}
+          onClose={() => setFixing(null)}
+          onChanged={reload}
         />
       ) : null}
       <Toast message={toast.message} />
