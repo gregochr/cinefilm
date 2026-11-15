@@ -67,9 +67,12 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    the browser needs a note in the PR.
    **The train feed logger** (`scripts/train-feed-logger.py`) is not the app: the owner runs it by hand on the
    laptop on a train, and it is in no image. It only reads: the train's own Wi-Fi system, one public address to
-   time the internet and, when no film is playing, CineFilm's own page code to time a download. Its log holds where
-   the train went, so it is written under `~/train-feed-logger/logs`, never inside a checkout, and is never
-   committed. "No location is requested or stored" above still holds for the browser and the server.
+   time the internet and, when no film is playing, CineFilm's own page code to time a download. It asks the
+   train's system over `https` and, as that system is reported to use it, plain `http`, and it reads an `https`
+   answer whose certificate is refused, marking it untrusted: what the feed says is only logged, never acted on,
+   and is limited in size and depth and printed as printable ASCII. Its log holds where the train went, so it is
+   written under `~/train-feed-logger/logs`, never inside a checkout, and is never committed. "No location is
+   requested or stored" above still holds for the browser and the server.
 8. **Dependencies and CI.** No new dependency without a reason in the PR. OWASP/`npm audit` findings at High or above
    block. Workflows declare least-privilege `permissions:`, pin third-party actions, and never print secrets.
 9. **Data.** The watch history is the owner's only irreplaceable data: migrations follow expand-then-contract, and
