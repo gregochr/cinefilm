@@ -542,4 +542,125 @@ describe('fixture server: Admin settings', () => {
       status: 400,
     });
   });
+
+  describe('the OpenSubtitles picker', () => {
+    const refused = async (method, path, body) => {
+      const pending = handle(method, path, body).catch((error) => error);
+      await vi.advanceTimersByTimeAsync(80);
+      return pending;
+    };
+    const fileIds = (search) => search.results.map((r) => r.fileId);
+
+    it('searches by kind and answers the shape the API does, for the edition asked about', async () => {
+      const forced = await call('GET', '/api/admin/editions/101/opensubtitles?kind=forced');
+      expect(forced).toMatchObject({
+        editionId: 101,
+        kind: 'forced',
+        imdbId: 'tt0113277',
+        downloadsLeft: 3,
+      });
+      expect(fileIds(forced)).toEqual([5012, 5011, 5013]);
+      expect(forced.results[0]).toEqual({
+        fileId: 5012,
+        release: 'Heat.1995.Directors.Cut.BluRay.x264',
+        fileName: 'Heat.1995.Directors.Cut.BluRay.x264.srt',
+        fps: 23.976,
+        downloadCount: 4210,
+        fromTrusted: true,
+        hearingImpaired: false,
+        uploadDate: '2019-05-14T09:12:00Z',
+      });
+      expect(forced.results[1].fileName).toBeNull();
+      expect(forced.results[2]).toMatchObject({
+        fps: null,
+        uploadDate: null,
+        hearingImpaired: true,
+      });
+      const full = await call('GET', '/api/admin/editions/102/opensubtitles?kind=full');
+      expect(full).toMatchObject({ editionId: 102, kind: 'full' });
+      expect(fileIds(full)).toEqual([6012, 6011]);
+    });
+
+    it('downloads only a file the last search offered, once, and counts what is left', async () => {
+      const download = (editionId, body) =>
+        call('POST', `/api/admin/editions/${editionId}/opensubtitles/download`, body);
+      await call('GET', '/api/admin/editions/103/opensubtitles?kind=forced');
+
+      expect(await download(103, { fileId: 5012, kind: 'forced' })).toEqual({
+        editionId: 103,
+        kind: 'forced',
+        fileId: 5012,
+        release: 'Heat.1995.Directors.Cut.BluRay.x264',
+        downloadsLeft: 2,
+      });
+      expect(await download(103, { fileId: 5011, kind: 'forced' })).toMatchObject({
+        downloadsLeft: 1,
+      });
+      expect(await call('GET', '/api/admin/editions/103/opensubtitles?kind=forced')).toMatchObject({
+        downloadsLeft: 1,
+      });
+      expect(
+        await refused('POST', '/api/admin/editions/103/opensubtitles/download', {
+          fileId: 5012,
+          kind: 'forced',
+        }),
+      ).toMatchObject({ status: 409, message: "That file is already this edition's download." });
+    });
+
+    it('refuses a file the search did not offer for that edition and kind (400)', async () => {
+      await call('GET', '/api/admin/editions/101/opensubtitles?kind=forced');
+      const notOffered = {
+        status: 400,
+        message: 'That file was not in a recent search for this edition. Search again.',
+      };
+      const url = '/api/admin/editions/101/opensubtitles/download';
+      expect(await refused('POST', url, { fileId: 6012, kind: 'forced' })).toMatchObject(
+        notOffered,
+      );
+      expect(await refused('POST', url, { fileId: 5012, kind: 'full' })).toMatchObject(notOffered);
+      expect(
+        await refused('POST', '/api/admin/editions/102/opensubtitles/download', {
+          fileId: 5013,
+          kind: 'forced',
+        }),
+      ).toMatchObject(notOffered);
+    });
+
+    it('refuses a bad kind or file id (400) and an unknown edition (404)', async () => {
+      expect(await refused('GET', '/api/admin/editions/101/opensubtitles')).toMatchObject({
+        status: 400,
+        message: 'The kind must be full or forced',
+      });
+      expect(await refused('GET', '/api/admin/editions/101/opensubtitles?kind=FULL')).toMatchObject(
+        {
+          status: 400,
+        },
+      );
+      expect(await refused('GET', '/api/admin/editions/999/opensubtitles?kind=full')).toMatchObject(
+        {
+          status: 404,
+          message: 'No such edition',
+        },
+      );
+      const url = '/api/admin/editions/101/opensubtitles/download';
+      expect(await refused('POST', url, { fileId: 5012, kind: 'both' })).toMatchObject({
+        status: 400,
+        message: 'The kind must be full or forced',
+      });
+      expect(await refused('POST', url)).toMatchObject({ status: 400 });
+      expect(await refused('POST', url, { kind: 'forced' })).toMatchObject({
+        status: 400,
+        message: 'A file id is required',
+      });
+      expect(await refused('POST', url, { fileId: 0, kind: 'forced' })).toMatchObject({
+        status: 400,
+      });
+      expect(
+        await refused('POST', '/api/admin/editions/999/opensubtitles/download', {
+          fileId: 5012,
+          kind: 'forced',
+        }),
+      ).toMatchObject({ status: 404, message: 'No such edition' });
+    });
+  });
 });

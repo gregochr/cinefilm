@@ -1,0 +1,68 @@
+{
+  "forced": {
+    "editionId": 101,
+    "kind": "forced",
+    "imdbId": "tt0113277",
+    "downloadsLeft": 3,
+    "results": [
+      {
+        "fileId": 5012,
+        "release": "Heat.1995.Directors.Cut.BluRay.x264",
+        "fileName": "Heat.1995.Directors.Cut.BluRay.x264.srt",
+        "fps": 23.976,
+        "downloadCount": 4210,
+        "fromTrusted": true,
+        "hearingImpaired": false,
+        "uploadDate": "2019-05-14T09:12:00Z"
+      },
+      {
+        "fileId": 5011,
+        "release": "Heat.1995.1080p.BluRay",
+        "fileName": null,
+        "fps": 25,
+        "downloadCount": 380,
+        "fromTrusted": false,
+        "hearingImpaired": false,
+        "uploadDate": "2016-02-03T18:40:00Z"
+      },
+      {
+        "fileId": 5013,
+        "release": "Heat.1995.HDTV",
+        "fileName": "Heat.1995.HDTV.srt",
+        "fps": null,
+        "downloadCount": 12,
+        "fromTrusted": false,
+        "hearingImpaired": true,
+        "uploadDate": null
+      }
+    ]
+  },
+  "full": {
+    "editionId": 101,
+    "kind": "full",
+    "imdbId": "tt0113277",
+    "downloadsLeft": 3,
+    "results": [
+      {
+        "fileId": 6012,
+        "release": "Heat.1995.Directors.Cut.BluRay.x264",
+        "fileName": "Heat.1995.Directors.Cut.BluRay.x264.srt",
+        "fps": 23.976,
+        "downloadCount": 52100,
+        "fromTrusted": true,
+        "hearingImpaired": false,
+        "uploadDate": "2019-05-14T09:12:00Z"
+      },
+      {
+        "fileId": 6011,
+        "release": "Heat.1995.BluRay.SDH",
+        "fileName": "Heat.1995.BluRay.SDH.srt",
+        "fps": 23.976,
+        "downloadCount": 18800,
+        "fromTrusted": false,
+        "hearingImpaired": true,
+        "uploadDate": "2017-09-30T07:00:00Z"
+      }
+    ]
+  }
+}
