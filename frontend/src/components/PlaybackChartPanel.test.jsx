@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
@@ -56,8 +56,16 @@ const recordOf = (row, minutes) => {
 };
 
 /** A server for the chart and the records; `sessions` and `records` can be changed by the test. */
-function server({ sessions = SESSIONS, records = {}, chartStatus = 200, recordStatus = 200 } = {}) {
+function server({
+  sessions = SESSIONS,
+  records = {},
+  chartStatus = 200,
+  recordStatus = 200,
+  hold = false,
+} = {}) {
   const state = { sessions, records, chartStatus, recordStatus };
+  // With `hold`, a record's answer waits for `release()`, so a test can look at the state before it arrives.
+  const held = [];
   const mock = installFetch((method, url) => {
     if (url.startsWith('/api/admin/playback-health/chart')) {
       return state.chartStatus === 200
@@ -68,13 +76,16 @@ function server({ sessions = SESSIONS, records = {}, chartStatus = 200, recordSt
     if (match) {
       if (state.recordStatus !== 200) return respond({ error: 'x' }, state.recordStatus);
       const row = state.sessions.find((s) => s.playbackId === match[1]);
-      return respond(recordOf(row, state.records[match[1]] ?? minutes7));
+      const answer = () => respond(recordOf(row, state.records[match[1]] ?? minutes7));
+      if (hold) return new Promise((resolve) => held.push(() => resolve(answer())));
+      return answer();
     }
     return null;
   });
   const urls = (prefix) => mock.mock.calls.map((c) => c[0]).filter((u) => u.startsWith(prefix));
   return {
     state,
+    release: () => held.splice(0).forEach((answer) => answer()),
     charts: () => urls('/api/admin/playback-health/chart'),
     records: () => urls('/api/admin/playback-health/').filter((u) => !u.includes('/chart')),
   };
@@ -122,10 +133,17 @@ describe('PlaybackChartPanel', () => {
   });
 
   it('shows the selected session at once and its minutes once the record arrives', async () => {
-    const api = server();
+    const api = server({ hold: true });
     await ready();
     const selected = screen.getByRole('region', { name: 'Selected film session' });
-    expect(selected).toHaveTextContent('Gamma · 03 Nov 20:00 · Mac · Away · 1h 12m watched');
+    // The record has not answered: the heading comes from the chart's row alone, and the strip is a skeleton.
+    expect(selected).toHaveTextContent(/^Gamma · 03 Nov 20:00 · Mac · Away · 1h 12m watched$/);
+    expect(
+      within(selected).getByRole('status', { name: 'Loading the minute by minute view' }),
+    ).toBeInTheDocument();
+    expect(within(selected).queryByRole('img')).not.toBeInTheDocument();
+    await waitFor(() => expect(api.records()).toHaveLength(1)); // asked, and held
+    act(() => api.release());
     expect(
       await within(selected).findByRole('img', {
         name: 'Speed and quality minute by minute for Gamma',
