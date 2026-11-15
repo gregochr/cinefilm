@@ -5,6 +5,7 @@ import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
+import static gregochr.cinefilm.health.HealthSamples.JSON;
 import static gregochr.cinefilm.health.HealthSamples.example;
 import static gregochr.cinefilm.health.HealthSamples.text;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -134,10 +136,11 @@ class PlaybackHealthApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.playingNow[0].touch").value((Object) null));
     }
 
-    @Test
-    void aTouchHintThatIsNotABooleanIsA400AndStoresNothing() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"\"maybe\"", "[]", "{}"})
+    void aTouchHintThatCannotBeReadAsABooleanIsA400AndStoresNothing(String json) throws Exception {
         ObjectNode body = report(finalCut, 4);
-        ((ObjectNode) body.get("client")).put("touch", "maybe");
+        ((ObjectNode) body.get("client")).set("touch", JSON.readTree(json));
 
         mvc.perform(put("/api/playback-health/{id}", ID).content(text(body)))
             .andExpect(status().isBadRequest())

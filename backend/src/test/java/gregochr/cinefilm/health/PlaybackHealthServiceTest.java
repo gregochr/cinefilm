@@ -171,10 +171,10 @@ class PlaybackHealthServiceTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"maybe"})
-    void aTouchHintThatCannotBeReadAsABooleanIsRefused(String value) {
+    @ValueSource(strings = {"\"maybe\"", "[]", "{}"})
+    void aTouchHintThatCannotBeReadAsABooleanIsRefused(String json) {
         ObjectNode body = example();
-        client(body).put("touch", value);
+        client(body).set("touch", JSON.readTree(json));
 
         assertThatThrownBy(() -> service.report(ID, text(body)))
             .isExactlyInstanceOf(BadRequestException.class)

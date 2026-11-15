@@ -1,10 +1,11 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)';
@@ -242,6 +243,7 @@ describe('Admin Playback: Now playing', () => {
         return null;
       },
     });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     renderApp('/admin/playback');
     const panel = await card();
     const stop = await within(panel).findByRole('button', {
@@ -257,15 +259,12 @@ describe('Admin Playback: Now playing', () => {
 
     // The player recovers under the same playback id with a new session: the row returns, with Stop.
     state.sessions = [live(1, { id: 'session-new', startedAt: '2026-11-09T19:09:00Z' })];
+    await act(() => vi.advanceTimersByTimeAsync(5000));
     expect(
-      await within(panel).findByRole(
-        'button',
-        { name: 'Stop this stream: Film 1 (Mac)' },
-        { timeout: 8000 },
-      ),
+      await within(panel).findByRole('button', { name: 'Stop this stream: Film 1 (Mac)' }),
     ).toBeInTheDocument();
     expect(within(panel).getByText('Film 1')).toBeInTheDocument();
-  }, 15000);
+  });
 
   it('stops the newest session of the edition when there are two', async () => {
     const { deletes } = server({
