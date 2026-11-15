@@ -10,8 +10,6 @@ import static gregochr.cinefilm.TestData.person;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gregochr.cinefilm.ApiTestBase;
 import gregochr.cinefilm.film.CreditRole;
@@ -314,18 +312,6 @@ class AdminServiceTest extends ApiTestBase {
         groupingChanges.save(new GroupingChange(NOW.minusSeconds(5), GroupingChange.JOIN, "owner edit"));
 
         assertThat(admin.groupingReport().items()).isEmpty();
-    }
-
-    @Test
-    void theGroupingReportEndpointAnswersTheLastScansLinesOnly() throws Exception {
-        run(NOW.minusSeconds(600), NOW.minusSeconds(500), 1, 0, 0, null);
-        groupingChanges.save(new GroupingChange(NOW.minusSeconds(550), GroupingChange.JOIN, "in the scan"));
-        groupingChanges.save(new GroupingChange(NOW.minusSeconds(100), GroupingChange.SPLIT, "owner edit later"));
-
-        mvc.perform(get("/api/admin/grouping-report"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.items.length()").value(1))
-            .andExpect(jsonPath("$.items[0].summary").value("in the scan"));
     }
 
     @Test

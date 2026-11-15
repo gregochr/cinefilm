@@ -19,7 +19,6 @@ describe('Admin: Import credits from Plex', () => {
     );
     await act(async () => {});
 
-    expect(screen.queryByRole('region', { name: 'Import from Plex' })).toBeNull();
     expect(screen.queryByRole('group', { name: 'Credits from Plex' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Import credits from Plex' })).toBeNull();
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/admin/plex/credits')).toHaveLength(

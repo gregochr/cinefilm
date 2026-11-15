@@ -315,6 +315,7 @@ describe('adminCopy libraryPage', () => {
       'Last scan 12 min ago · took 1m 48s',
     );
     expect(libraryPage.changes.summary).toBe('What the last scan changed');
+    expect(libraryPage.changes.empty).toBe('The last scan changed nothing.');
     expect(libraryPage.changes.counts(2, 1, 1)).toBe('2 split, 1 joined, 1 flagged');
     expect(libraryPage.ratings.updated('9 Nov')).toBe('IMDb and Rotten Tomatoes · updated 9 Nov');
     expect(libraryPage.plex.title).toBe('Import from Plex');

@@ -200,6 +200,33 @@ describe('LibraryPlexCard', () => {
     expect(onRecheck).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the error card, with a busy Try again that keeps focus, while the retry loads', async () => {
+    const onRecheck = vi.fn();
+    const failed = { plex: undefined, error: new Error('x'), loading: false, onRecheck };
+    const { rerender } = render(
+      <LibraryPlexCard starting={false} notice={null} onImport={() => {}} {...failed} />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(onRecheck).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <LibraryPlexCard
+        starting={false}
+        notice={null}
+        onImport={() => {}}
+        {...failed}
+        error={null}
+        loading
+      />,
+    );
+
+    const retry = screen.getByRole('button', { name: 'Try again' });
+    expect(retry).toHaveAttribute('aria-busy', 'true');
+    expect(retry).toHaveFocus();
+    await userEvent.click(retry);
+    expect(onRecheck).toHaveBeenCalledTimes(1);
+  });
+
   it('draws nothing while the first read is still running, and keeps the card when a later read fails', () => {
     installFetch();
     const { container, unmount } = renderCard({ plex: undefined, error: null });

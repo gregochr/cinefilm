@@ -80,10 +80,21 @@ describe('LibraryChanges', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Show 25 more' }));
     expect(listed()).toHaveLength(50);
 
-    rerender(<LibraryChanges report={reportOf(60)} />);
+    const another = reportOf(60);
+    another.items[0].summary = 'A newer scan';
+    rerender(<LibraryChanges report={another} />);
 
     expect(listed()).toHaveLength(25);
     expect(screen.getByRole('button', { name: 'Show 25 more' })).toBeInTheDocument();
+  });
+
+  it('keeps the pages already shown when a refetch returns the same lines', async () => {
+    const { rerender } = render(<LibraryChanges report={reportOf(60)} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Show 25 more' }));
+
+    rerender(<LibraryChanges report={reportOf(60)} />);
+
+    expect(listed()).toHaveLength(50);
   });
 
   it('keeps the pages already shown when the same report renders again', async () => {
@@ -98,8 +109,14 @@ describe('LibraryChanges', () => {
 
   it('says so when nothing has been grouped, with zero counts in the summary', () => {
     render(<LibraryChanges report={{ items: [] }} />);
-    expect(screen.getByText('Nothing has been grouped or split yet.')).toBeInTheDocument();
+    expect(screen.getByText('The last scan changed nothing.')).toBeInTheDocument();
     expect(screen.getByText(/0 split, 0 joined, 0 flagged/)).toBeInTheDocument();
+  });
+
+  it('says not scanned yet, not "changed nothing", before any scan has finished', () => {
+    render(<LibraryChanges report={{ items: [] }} scanned={false} />);
+    expect(screen.getByText('Not scanned yet')).toBeInTheDocument();
+    expect(screen.queryByText('The last scan changed nothing.')).toBeNull();
   });
 
   it('shows a skeleton while the first read runs, with only the title in the summary', () => {

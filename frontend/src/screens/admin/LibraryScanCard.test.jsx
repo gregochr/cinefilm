@@ -133,6 +133,15 @@ describe('LibraryScanCard', () => {
     );
   });
 
+  it('says not scanned yet, not that the last scan changed nothing, before any scan has finished', () => {
+    renderCard({
+      scan: { ...fixtures.adminScan, lastScan: null },
+      changes: { ...CHANGES, data: { items: [] } },
+    });
+    expect(screen.getAllByText('Not scanned yet')).toHaveLength(2);
+    expect(screen.queryByText('The last scan changed nothing.')).toBeNull();
+  });
+
   it('has no subtitle search line: it lives in Subtitles', () => {
     renderCard();
     expect(screen.queryByText(/Subtitles searched|Searching for subtitles/)).toBeNull();

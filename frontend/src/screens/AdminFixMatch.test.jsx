@@ -242,7 +242,7 @@ describe('Admin: grouping report', () => {
       url === '/api/admin/grouping-report' ? respond({ items: [] }) : null,
     );
     renderApp('/admin/library');
-    expect(await screen.findByText('Nothing has been grouped or split yet.')).toBeInTheDocument();
+    expect(await screen.findByText('The last scan changed nothing.')).toBeInTheDocument();
   });
 
   it('offers a retry when the report cannot load', async () => {

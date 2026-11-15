@@ -2,7 +2,6 @@ import { useId, useState } from 'react';
 import { ActionWithHint } from '../../components/ActionWithHint.jsx';
 import { Button } from '../../components/Button.jsx';
 import PlexCreditsImport from '../../components/PlexCreditsImport.jsx';
-import { ErrorState } from '../../components/StateMessages.jsx';
 import { buttons, libraryPage } from '../../state/adminCopy.js';
 import {
   broughtAcross,
@@ -45,15 +44,28 @@ function ImportReport({ report, id }) {
 /**
  * The "Import from Plex" card, drawn only when Plex is configured on the server (nothing renders until the status
  * says so). When the very first read of the status fails the card is still drawn, with an inline error and Try
- * again (`onRecheck`), so a failure is not mistaken for Plex not being set up. A key-value block says whether Plex answers and what the last import brought across; "Import from Plex
- * again" copies again, "Try connecting to Plex" shows only while Plex is unreachable, and the last report is behind a
+ * again (`onRecheck`; the button stays, busy, while the retry loads), so a failure is not mistaken for Plex not
+ * being set up. A key-value block says whether Plex answers and what the last import brought across; "Import from
+ * Plex again" copies again, "Try connecting to Plex" shows only while Plex is unreachable, and the last report is behind a
  * quiet "Last report" button that opens and closes it. Below sits "Import credits from Plex", which copies Plex's
  * end-credits start markers (not cast and crew), so it belongs with the import and not with Cast & crew.
  */
-export default function LibraryPlexCard({ plex, error, starting, notice, onImport, onRecheck }) {
+export default function LibraryPlexCard({
+  plex,
+  error,
+  loading = false,
+  starting,
+  notice,
+  onImport,
+  onRecheck,
+}) {
   const [reportOpen, setReportOpen] = useState(false);
+  const [failed, setFailed] = useState(false);
   const reportId = useId();
-  if (!plex && error) {
+  // Once the first read has failed the error card stays drawn while Try again loads, so the button keeps focus.
+  if (!plex && error && !failed) setFailed(true);
+  if (plex && failed) setFailed(false);
+  if (!plex && (error || (failed && loading))) {
     return (
       <section id="plex-import" className="admin__card" aria-labelledby="admin-plex-title">
         <div className="admin__head">
@@ -61,7 +73,14 @@ export default function LibraryPlexCard({ plex, error, starting, notice, onImpor
             {libraryPage.plex.title}
           </h2>
         </div>
-        <ErrorState onRetry={onRecheck}>{libraryPage.plex.loadError}</ErrorState>
+        <p className="admin__notice" role="alert">
+          {libraryPage.plex.loadError}
+        </p>
+        <div className="admin__actions">
+          <Button aria-busy={loading} onClick={loading ? undefined : onRecheck}>
+            {libraryPage.plex.tryAgain}
+          </Button>
+        </div>
       </section>
     );
   }

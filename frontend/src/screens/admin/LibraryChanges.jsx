@@ -13,13 +13,16 @@ import {
 
 /**
  * "What the last scan changed · 2 split, 1 joined, 1 flagged": the grouping report in a `<details>` that starts
- * closed, inside the scan card. The list shows 25 changes at a time, with a button for the next page.
+ * closed, inside the scan card. The list shows 25 changes at a time, with a button for the next page. `scanned`
+ * is false before any scan has finished: an empty report then says so, instead of "changed nothing".
  */
-export default function LibraryChanges({ report, loading, error, onRetry }) {
-  // The page count belongs to one report: a new report (after another scan) starts at the first page again.
-  const [paging, setPaging] = useState({ report, shown: GROUPING_PAGE_SIZE });
-  const shown = paging.report === report ? paging.shown : GROUPING_PAGE_SIZE;
+export default function LibraryChanges({ report, loading, error, onRetry, scanned = true }) {
   const items = report?.items ?? [];
+  // The page count belongs to one report's content: a refetch that returns the same lines keeps the page, and a
+  // different report (another scan) starts at the first page again.
+  const content = `${items.length}|${items[0]?.happenedAt}|${items[0]?.summary}`;
+  const [paging, setPaging] = useState({ content, shown: GROUPING_PAGE_SIZE });
+  const shown = paging.content === content ? paging.shown : GROUPING_PAGE_SIZE;
   const copy = libraryPage.changes;
   let body;
   if (loading && !report) {
@@ -31,7 +34,7 @@ export default function LibraryChanges({ report, loading, error, onRetry }) {
   } else if (error && !report) {
     body = <ErrorState onRetry={onRetry}>{copy.loadError}</ErrorState>;
   } else if (items.length === 0) {
-    body = <p className="admin__text">{copy.empty}</p>;
+    body = <p className="admin__text">{scanned ? copy.empty : libraryPage.scan.neverScanned}</p>;
   } else {
     const page = groupingPage(items, shown);
     body = (
@@ -50,7 +53,7 @@ export default function LibraryChanges({ report, loading, error, onRetry }) {
         {page.moreLabel ? (
           <Button
             className="admin__more"
-            onClick={() => setPaging({ report, shown: shown + GROUPING_PAGE_SIZE })}
+            onClick={() => setPaging({ content, shown: shown + GROUPING_PAGE_SIZE })}
           >
             {page.moreLabel}
           </Button>

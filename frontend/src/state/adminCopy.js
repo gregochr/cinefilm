@@ -422,7 +422,7 @@ export const libraryPage = {
     summary: 'What the last scan changed', // AR3
     counts: (split, joined, flagged) => `${split} split, ${joined} joined, ${flagged} flagged`, // README
     listLabel: 'Grouping changes', // existing
-    empty: 'Nothing has been grouped or split yet.', // existing
+    empty: 'The last scan changed nothing.', // planner, 6
     loadError: 'Couldn’t load what the last scan changed.', // planner, 6
     showMore: (n) => `Show ${n} more`, // planner, 6
   },
@@ -444,6 +444,7 @@ export const libraryPage = {
     importing: 'Importing', // planner, 6
     lastReport: 'Last report', // AR3
     loadError: 'Couldn’t load the Plex import status.', // planner, 6
+    tryAgain: 'Try again', // planner, 6
   },
   cast: {
     title: 'Cast & crew', // AR3

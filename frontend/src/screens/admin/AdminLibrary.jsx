@@ -68,6 +68,7 @@ export default function AdminLibrary() {
         <LibraryPlexCard
           plex={plexImport.plex}
           error={plexImport.error}
+          loading={plexImport.loading}
           starting={plexImport.starting}
           notice={plexImport.notice}
           onImport={plexImport.startImport}

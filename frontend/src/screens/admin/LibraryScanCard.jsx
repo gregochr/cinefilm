@@ -140,6 +140,7 @@ export default function LibraryScanCard({
         report={changes.data}
         loading={changes.loading}
         error={changes.error}
+        scanned={Boolean(scan?.lastScan)}
         onRetry={changes.reload}
       />
     </section>

@@ -634,17 +634,17 @@ const PLEX_STEP = 10;
 // Reads of the Plex status since an import was started with POST, or null when none is running.
 let plexImportReads = null;
 
-/**
- * The Plex status. Open the page with `?plex=unreachable`, `?plex=importing` or `?plex=none` (not configured) to see
- * those states; otherwise Plex is reachable with the last import of the fixture. "Import from Plex again" starts a
- * made-up import that advances by 10 of 40 films on each read and then ends.
- */
 const plexRunning = (processed) => ({
   ...adminPlex,
   running: true,
   progress: { processed, total: PLEX_IMPORT_TOTAL, current: 'Heat' },
 });
 
+/**
+ * The Plex status. Open the page with `?plex=unreachable`, `?plex=importing` or `?plex=none` (not configured) to see
+ * those states; otherwise Plex is reachable with the last import of the fixture. "Import from Plex again" starts a
+ * made-up import that advances by 10 of 40 films on each read and then ends.
+ */
 function plexStatus() {
   const variant = new URLSearchParams(globalThis.location?.search ?? '').get('plex');
   if (variant === 'none') return PLEX_NOT_CONFIGURED;
