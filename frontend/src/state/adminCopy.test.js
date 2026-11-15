@@ -10,6 +10,7 @@ import {
   playingNow,
   rememberedNetworksNote,
   railNames,
+  settingsPage,
   statusStrip,
   subtitlePicker,
   subtitlesPage,
@@ -432,5 +433,24 @@ describe('adminCopy: the Playback log, Conversion and Remembered networks cards'
     for (const card of [playbackLog, conversion, networks]) {
       expect(card.source).toMatch(/AR4/);
     }
+  });
+});
+
+describe('settingsPage (AR5, the switches left out by Q2)', () => {
+  it('uses the board wording and the shared sign-out hint', () => {
+    expect(settingsPage.continueLabel).toBe('Continue watching starts after');
+    expect(settingsPage.continueHint).toBe(
+      'Films watched for less than this don’t appear in Continue watching, so trying a film doesn’t clutter it. 0–30 minutes.',
+    );
+    expect(settingsPage.continueUnit).toBe('min');
+    expect(settingsPage.signedInLabel).toBe('Signed in on this browser');
+    expect(settingsPage.credit).toBe(
+      'This product uses the TMDB API but is not endorsed or certified by TMDB.',
+    );
+    expect(buttons.signOut.hint).toBe("Signing out here doesn't affect other devices.");
+  });
+
+  it('carries no wording for the dropped switches', () => {
+    expect(JSON.stringify(settingsPage)).not.toMatch(/Prepare films|missing films|automatically/i);
   });
 });

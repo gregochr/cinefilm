@@ -23,8 +23,7 @@ const puts = (fetchMock) =>
   fetchMock.mock.calls.filter((c) => c[0] === PATH && c[1]?.method === 'PUT');
 const bodies = (fetchMock) => puts(fetchMock).map((c) => JSON.parse(c[1].body));
 const card = () => screen.findByRole('region', { name: 'Continue watching' });
-const input = () =>
-  screen.findByRole('spinbutton', { name: 'Minimum watched before a film counts as in progress' });
+const input = () => screen.findByRole('spinbutton', { name: 'Continue watching starts after' });
 
 async function open(options) {
   const fetchMock = admin(options);
@@ -41,9 +40,9 @@ describe('Admin: Continue watching card', () => {
     expect(field).toHaveAttribute('min', '0');
     expect(field).toHaveAttribute('max', '30');
     expect(field).toHaveAttribute('step', '1');
-    expect(within(region).getByText('minutes')).toBeInTheDocument();
+    expect(within(region).getByText('min')).toBeInTheDocument();
     expect(field).toHaveAccessibleDescription(
-      'Films you’ve watched for less than this stay out of Continue watching. Their place is still saved.',
+      'Films watched for less than this don’t appear in Continue watching, so trying a film doesn’t clutter it. 0–30 minutes.',
     );
     expect(within(region).getByText('12 films currently in progress')).toBeInTheDocument();
     expect(within(region).queryByRole('button')).not.toBeInTheDocument();
@@ -118,6 +117,27 @@ describe('Admin: Continue watching card', () => {
       'Could not save the setting.',
     );
     expect(bodies(fetchMock)).toEqual([{ continueWatchingMinMinutes: 12 }]);
+  });
+
+  it("a failed save shows the server's own error text when it sent one", async () => {
+    const { field } = await open({
+      onPut: () => respond({ error: 'Minimum watched must be 30 or less.' }, 400),
+    });
+    await userEvent.clear(field);
+    await userEvent.type(field, '12{Enter}');
+
+    expect(await screen.findByText('Minimum watched must be 30 or less.')).toBeInTheDocument();
+    expect(within(await card()).getByRole('status')).toHaveTextContent(
+      'Minimum watched must be 30 or less.',
+    );
+    expect(field).toHaveValue(5);
+  });
+
+  it('a blank server error falls back to the generic message', async () => {
+    const { field } = await open({ onPut: () => respond({ error: '  ' }, 500) });
+    await userEvent.clear(field);
+    await userEvent.type(field, '12{Enter}');
+    expect(await screen.findByText('Could not save the setting.')).toBeInTheDocument();
   });
 
   it('after a failed save the same value can be tried again', async () => {
@@ -258,7 +278,8 @@ describe('Admin: Continue watching card', () => {
     renderApp('/admin/settings');
     const region = await card();
     expect(await within(region).findByText('Couldn’t load the settings.')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Session' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Signed in on this browser' })).toBeInTheDocument();
+    expect(within(region).getByRole('alert')).toHaveTextContent('Couldn’t load the settings.');
     expect(within(region).queryByRole('spinbutton')).not.toBeInTheDocument();
   });
 
@@ -276,6 +297,8 @@ describe('Admin: Continue watching card', () => {
   it('shows a loading placeholder until the settings arrive', async () => {
     admin({ get: () => new Promise(() => {}) });
     renderApp('/admin/settings');
-    expect(within(await card()).getByRole('status', { name: 'Loading' })).toBeInTheDocument();
+    expect(
+      within(await card()).getByRole('status', { name: 'Loading the settings' }),
+    ).toBeInTheDocument();
   });
 });

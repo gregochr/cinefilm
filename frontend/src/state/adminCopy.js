@@ -554,6 +554,21 @@ export const subtitlesPage = {
   source: 'AR2; Q3 for the forced tab; planner 4a for the rest (see comments)',
 };
 
+/** The Settings section (AR5, with the two switches dropped by the owner's answer Q2 left out). */
+export const settingsPage = {
+  continueLabel: 'Continue watching starts after', // AR5
+  continueHint:
+    'Films watched for less than this don’t appear in Continue watching, so trying a film doesn’t clutter it. 0–30 minutes.', // AR5
+  continueUnit: 'min', // AR5
+  continueCardLabel: 'Continue watching', // planner, 7 (AR5's card has no heading; this names its region)
+  signedInLabel: 'Signed in on this browser', // AR5 (AR5's "Since 2 Nov." is left out: no sign-in date is kept)
+  loadingLabel: 'the settings', // planner, 7 (read after "Loading ")
+  loadError: 'Couldn’t load the settings.', // planner, 7 (from the existing Settings card)
+  saveError: 'Could not save the setting.', // planner, 7 (existing; used when the server sent no message)
+  saved: 'Saved', // planner, 7 (existing)
+  credit: 'This product uses the TMDB API but is not endorsed or certified by TMDB.', // AR5
+};
+
 /**
  * The OpenSubtitles picker (4c). AR1, AR2 and the README give the buttons that open it (in `buttons`) and say "a picker
  * of OpenSubtitles results"; no board draws the dialog, so every string here is "planner, 4c" except the 429 text,

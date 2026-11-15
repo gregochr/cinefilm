@@ -509,6 +509,13 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
 
 - "Continue watching starts after" (existing, 0–30, blur or Enter); switches per Q2. Second card "Signed in on this
   browser" + "Sign out" + "Signing out here doesn't affect other devices." TMDB credit at the bottom.
+- **7 decision (built):** the section already existed from phase 1, so 7 restyles it to AR5 (label and description on the
+  left, control on the right, one column on a phone) and moves its copy to `settingsPage`. Left out of AR5: "Prepare
+  films in Continue watching" and "Show missing films in collections" (Q2, not settings) and "Download subtitles
+  automatically" (the README allows it only when the scheduler has an on/off, and none exists), and "Since 2 Nov." in
+  the sign-out description (no sign-in date is kept). Kept beyond AR5: the "N films currently in progress" line, and the
+  TMDB wordmark beside the credit. A failed save now shows the server's own `error` text when it sent one. Invented copy
+  ("planner, 7"): the Continue watching region name, "Loading the settings", "Couldn’t load the settings.".
 
 ### 8a / 8b · Per-file tools leave Admin
 

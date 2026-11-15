@@ -334,7 +334,7 @@ describe('Admin: Subtitles refresh', () => {
 });
 
 describe('Admin: page', () => {
-  it('has Continue watching, Session and the TMDB credit on Settings', async () => {
+  it('has Continue watching, Signed in and the TMDB credit on Settings', async () => {
     installFetch();
     renderApp('/admin/settings');
     expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
@@ -423,8 +423,8 @@ describe('Admin: Session panel', () => {
       m === 'DELETE' && url === '/api/session' ? respond(null, 204) : null,
     );
     renderApp('/admin/settings');
-    const panel = await screen.findByRole('region', { name: 'Session' });
-    expect(within(panel).getByText('Signed in to this browser.')).toBeInTheDocument();
+    const panel = await screen.findByRole('region', { name: 'Signed in on this browser' });
+    expect(within(panel).getAllByText('Signed in on this browser')[0]).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: 'Sign out' })).toHaveAccessibleDescription(
       "Signing out here doesn't affect other devices.",
     );
