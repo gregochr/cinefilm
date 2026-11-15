@@ -403,10 +403,9 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
     edition may be given. Results keep the server's order; nothing is ranked or filtered in the browser.
   - **One download at a time.** The buttons are `aria-disabled` (still focusable) while one runs and after one
     succeeded; the hook guards with a ref, so two clicks in one frame send one POST. A failure frees the picker.
-  - **Closing mid-request (decided):** the POST is not aborted (the server may still save the file). The late answer sets
-    no state in the dialog; a late success still calls `onDownloaded(answer, { open: false })`, which the layout turns
+  - **Closing mid-request (decided):** the POST is not aborted (the server may still save the file). A late failure is not shown (nobody is looking); a late success still calls `onDownloaded(answer, { open: false })`, which the layout turns
     into `markChanged`, so the lists read again and show the server's truth (a row leaves only because the server's list
-    says so). A late failure is dropped (nothing reports it). The layout closes only the picker that is still the open
+    says so). The layout closes only the picker that is still the open
     one; the follow-up (`onPicked`, which To do uses to arm the focus fallback) runs either way, since the row leaves
     either way. A file that arrives during the 150 ms fade-out is reported at once (the dialog remembers it was
     dismissed), so the unmount that ends the fade cannot swallow it.

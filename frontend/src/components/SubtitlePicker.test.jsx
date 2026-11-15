@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
@@ -102,6 +102,13 @@ describe('SubtitlePicker: opening and searching', () => {
     expect(
       await screen.findByRole('dialog', { name: 'Taken (2008) · Director’s Cut' }),
     ).toBeVisible();
+  });
+
+  it('puts no cut in the title of a film with a single edition', async () => {
+    await open();
+
+    expect(await screen.findByRole('dialog', { name: 'Taken (2008)' })).toBeVisible();
+    expect(screen.getByRole('dialog')).not.toHaveAccessibleName(/ · /);
   });
 
   it('words a full search for English subtitles and leaves the year out for a film with none', async () => {
@@ -281,7 +288,7 @@ describe('SubtitlePicker: closing', () => {
     await user.keyboard('{Escape}');
     await act(async () => held.resolve(respond(answer(5013))));
 
-    // The picker is gone and set no state; the harness's own onPicked (the layout's) still hears the file was saved.
+    // The picker is gone; the harness's own onPicked (the layout's) still hears the file was saved.
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(onPicked).toHaveBeenCalledTimes(1);
     expect(opener).toHaveFocus();
@@ -292,12 +299,13 @@ describe('SubtitlePicker: closing', () => {
     const { onPicked } = await open({}, (m, url) => (isDownload(m, url) ? held.promise : null));
     await screen.findByRole('list', { name: 'OpenSubtitles results' });
     vi.stubGlobal('matchMedia', () => ({ matches: false }));
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.useFakeTimers();
     try {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      await user.click(choose('Heat.1995.HDTV'));
-
-      await user.keyboard('{Escape}');
+      // userEvent waits on timers of its own, which a frozen clock does not give it: a native click and a keydown.
+      await act(async () => choose('Heat.1995.HDTV').click());
+      act(() => {
+        fireEvent.keyDown(document.activeElement, { key: 'Escape' });
+      });
       // The fade has begun (the dialog is still there) and the answer comes inside it.
       expect(screen.getByRole('dialog')).toBeInTheDocument();
       await act(async () => held.resolve(respond(answer(5013))));

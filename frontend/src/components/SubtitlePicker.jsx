@@ -68,10 +68,12 @@ function ResultRow({ result, downloading, onChoose }) {
 
 /**
  * The OpenSubtitles picker: a dialog (a full-screen sheet on phones) listing the files OpenSubtitles has for one
- * edition (`editionName` says which cut when the film has several), best match first as the server ranks them. Choosing one downloads it; `onPicked(answer)` runs once that went
- * through (the layout closes the dialog and reads the lists again). A failed search or download says so in the dialog,
- * in the server's own words. `onClose` runs on Cancel, the close button or Esc, also while a download is running (its
- * late answer is then ignored here, see `useSubtitlePicker`). `opener` is the element focus goes back to on close.
+ * edition (`editionName` says which cut when the film has several), best match first as the server ranks them.
+ * Choosing one downloads it; `onPicked(answer)` runs once that went through (the layout closes the dialog and reads
+ * the lists again). A failed search or download says so in the dialog, in the server's own words. `onClose` runs on
+ * Cancel, the close button or Esc, also while a download is running: a file that then arrives is still reported to
+ * `onPicked` (at once if it lands during the fade-out, see `dismissed`), a failure is not shown (nobody is looking).
+ * `opener` is the element focus goes back to on close.
  */
 export default function SubtitlePicker({
   film,
