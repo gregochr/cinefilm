@@ -115,8 +115,8 @@ class AdminSummaryServiceTest {
 
     @Test
     void everyFieldIsReadFromItsOwnSource() {
-        PlayingNow playing = new PlayingNow("3f2b8c1e-5d4a-4e7b-9a60-1c2d3e4f5a6b", 11, "Blade Runner", "Mac", "home",
-            "720p");
+        PlayingNow playing = new PlayingNow("3f2b8c1e-5d4a-4e7b-9a60-1c2d3e4f5a6b", 11, "Blade Runner", "Mac", true,
+            "home", "720p");
         when(admin.attention()).thenReturn(new Attention(List.of(item("needs-match"), item("needs-match"),
             item("needs-match"), item("multiple-files"), item("parts-mismatch"))));
         when(admin.status()).thenReturn(scan(321, finishedAt(FINISHED)));

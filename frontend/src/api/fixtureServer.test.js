@@ -162,6 +162,7 @@ describe('fixture server', () => {
     });
     expect(summary.subtitlesUnresolved).toBe(2);
     expect(summary.playingNow.map((p) => p.filmTitle)).toEqual(['Heat']);
+    expect(summary.playingNow[0].touch).toBe(false);
   });
 
   it('serves the Admin transcoding state and stops a session', async () => {

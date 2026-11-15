@@ -63,6 +63,8 @@ const browserClient = () => ({
   userAgent: globalThis.navigator?.userAgent ?? '',
   screen: globalThis.screen ? `${globalThis.screen.width}x${globalThis.screen.height}` : '',
   cores: globalThis.navigator?.hardwareConcurrency ?? null,
+  // More than one touch point: tells an iPad that sends a desktop Mac user agent from a Mac.
+  touch: (globalThis.navigator?.maxTouchPoints ?? 0) > 1,
 });
 
 const defaultNow = () => performance.now();

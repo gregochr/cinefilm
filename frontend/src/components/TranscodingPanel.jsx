@@ -1,4 +1,3 @@
-import { useTranscoding } from '../state/useTranscoding.js';
 import { formatScanTime } from '../state/scanFormat.js';
 import {
   aheadText,
@@ -42,9 +41,12 @@ function Sessions({ sessions, onStop }) {
   );
 }
 
-/** Admin: the live encoder state and the playback sessions (plan: Admin, Transcoding panel). */
-export default function TranscodingPanel() {
-  const { transcoding, error, loading, notice, stop, reload } = useTranscoding();
+/**
+ * Admin: the live encoder state and the playback sessions (plan: Admin, Transcoding panel). `state` is
+ * `useTranscoding()`, read by the Playback section so "Now playing" shares it.
+ */
+export default function TranscodingPanel({ state }) {
+  const { transcoding, error, loading, notice, stop, reload } = state;
   let body;
   if (loading && !transcoding) {
     body = (

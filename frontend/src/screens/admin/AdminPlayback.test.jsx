@@ -7,18 +7,19 @@ afterEach(() => {
 });
 
 describe('Admin Playback section', () => {
-  it('is named Playback and holds Transcoding then Playback health', async () => {
+  it('is named Playback and holds Now playing, Transcoding, then Playback health', async () => {
     installFetch();
     renderApp('/admin/playback');
     expect(screen.getByRole('heading', { level: 1, name: 'Playback' })).toBeInTheDocument();
+    await screen.findByRole('region', { name: 'Now playing' });
     await screen.findByRole('region', { name: 'Transcoding' });
     await screen.findByRole('region', { name: 'Playback health' });
-    expect(screen.getAllByRole('region')).toHaveLength(2);
+    expect(screen.getAllByRole('region')).toHaveLength(3);
   });
 
   it('shows one skeleton per card while they load', () => {
     installFetch(() => new Promise(() => {}));
     renderApp('/admin/playback');
-    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(2);
+    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(3);
   });
 });

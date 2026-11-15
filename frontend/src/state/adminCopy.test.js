@@ -3,6 +3,7 @@ import {
   buttons,
   footerDesktop,
   footerPhone,
+  playingNow,
   rememberedNetworksNote,
   railNames,
   statusStrip,
@@ -61,7 +62,6 @@ const SEVEN = [
     'Delete this download',
     'Deletes the downloaded file; CineFilm won’t fetch it again.',
   ],
-  ['stopStream', 'Stop this stream', 'Ends playback on that device; it can resume later.'],
 ];
 
 // reference/AR1-ToDo.dc.html: the hints under the row buttons, with no trailing full stop.
@@ -277,5 +277,29 @@ describe('adminCopy: the Subtitles section', () => {
     expect(subtitlesPage.else.showFilms(2)).toBe('Show the 2 films');
     expect(subtitlesPage.else.yourChoices(2)).toBe('Your choices (2)');
     expect(subtitlesPage.files.showMore(7)).toBe('Show more (7 left)');
+  });
+});
+
+describe('adminCopy playingNow', () => {
+  it('has the title, count, empty line and converting words of 04 and AR4', () => {
+    expect(playingNow.title).toBe('Now playing');
+    expect(playingNow.streams(1)).toBe('1 stream');
+    expect(playingNow.streams(3)).toBe('3 streams');
+    expect(playingNow.empty).toBe('Nothing playing.');
+    expect(playingNow.converting).toBe('converting on the fly');
+  });
+
+  it('words the Stop hint honestly: it ends the conversion, not the playback', () => {
+    expect(buttons.stopStream).toEqual({
+      label: 'Stop this stream',
+      hint: 'Stops converting this stream on the server; if it’s still playing, the player starts it again.',
+      source: 'plan',
+    });
+    expect(playingNow.stopHint()).toBe(buttons.stopStream.hint);
+  });
+
+  it('has the failure and load-error lines', () => {
+    expect(playingNow.stopFailed).toBe('Couldn’t stop that stream. Try again.');
+    expect(playingNow.loadError).toBe('Couldn’t load what is playing.');
   });
 });

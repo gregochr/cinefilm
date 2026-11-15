@@ -115,7 +115,7 @@ One record per viewing: one mount of the player on one edition. The browser make
 | `kbpsLow`, `kbpsMedian`, `kbpsHigh`, `kbpsSamples` | 10th, 50th and 90th percentile (nearest rank) of the segment download speeds and how many there were; null, null, null and 0 with no samples (always so on iPhone) |
 | `rungMs` | time the picture was moving on each rung, by rung id |
 | `minutes` | one entry per minute in which something happened, at most 360, in order: `[minute number since the player opened, median kbit/s of that minute's samples (0 for none), the rung played, ms the picture moved, ms stalled, seconds buffered ahead, the rung being fetched]`. The rung played is the one on screen when time was last counted in that minute (moving or stalled), as a code: 0 none (nothing moved or stalled in it, or no rung known yet), 1 `original`, 2 `1080p`, 3 `720p`, 4 `480p`, 5 `360p`, 6 `240p`. Seconds buffered ahead (since `train-link-plan.md`) is the film buffered beyond the playhead at the minute's last heartbeat, in whole seconds (a hole of up to half a second between buffered ranges counts as continuous, as the player plays across one), and 0 for a minute without one: the film did not move in it, so read it beside the moved and stalled figures. The rung being fetched uses the same codes: the one hls.js was loading when time was last counted or a speed was last sampled in that minute, which runs ahead of the rung played by as much as is buffered; 0 on the iPhone and in direct play, which do not say. Records made before these two figures have rows of five. The current, unfinished minute is included |
-| `client` | the browser's own description: user agent, screen size, logical cores (null where the browser has none) |
+| `client` | the browser's own description: user agent, screen size, logical cores (null where the browser has none), and optionally `touch` (`navigator.maxTouchPoints > 1`, so an iPad sending a desktop Mac user agent is not read as a Mac; absent in older reports) |
 
 The per-minute track is what later steps need: a minute with the picture moving and no speed sample is a gap the
 buffer covered, a minute with stalled time is one it did not, and the run lengths of both say how much to bank.
@@ -261,7 +261,7 @@ All behind the session cookie; the `PUT` needs `X-CineFilm`.
 `^\d{1,5}x\d{1,5}$`; `rungMs` keys only rung ids (`Ladder.QUALITY_IDS` without `auto`) with non-null values;
 `minutes` at most 360 entries of exactly five or exactly seven non-null numbers (five from a tab still running a
 player older than `train-link-plan.md`), each rung code from 0 to 6; nullable only `operator`,
-`latencyMs`, `engine`, `startupMs`, the three `kbps` figures and `client.cores`; and the stored serialisation at
+`latencyMs`, `engine`, `startupMs`, the three `kbps` figures and `client.cores`; `client.touch` is optional (absent in older reports) and nullable, coerced as a boolean, and left out of the stored text when null; and the stored serialisation at
 most 16,000 characters. Unknown fields are ignored. A field added in a later release is nullable on the server.
 
 The body is read as text and its length checked before it is parsed, so a malformed body on this route answers

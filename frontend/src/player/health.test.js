@@ -81,7 +81,7 @@ describe('the report', () => {
       kbpsSamples: 0,
       rungMs: {},
       minutes: [],
-      client: { userAgent: 'UA', screen: '1512x982', cores: 8 },
+      client: { userAgent: 'UA', screen: '1512x982', cores: 8, touch: false },
     });
   });
 
@@ -153,9 +153,14 @@ describe('normalising', () => {
 
   it('turns a missing user agent into an empty string and a bad screen into 0x0', () => {
     const m = make({ client: { screen: 'wide', cores: 4 } });
-    expect(m.report().client).toEqual({ userAgent: '', screen: '0x0', cores: 4 });
+    expect(m.report().client).toEqual({ userAgent: '', screen: '0x0', cores: 4, touch: false });
     const none = make({ client: undefined });
-    expect(none.report().client).toEqual({ userAgent: '', screen: '0x0', cores: null });
+    expect(none.report().client).toEqual({
+      userAgent: '',
+      screen: '0x0',
+      cores: null,
+      touch: false,
+    });
   });
 
   it('keeps a screen of one to five digits either side and rejects six', () => {
@@ -174,6 +179,17 @@ describe('normalising', () => {
     expect(
       make({ client: { userAgent: '', screen: '1x1a', cores: 1 } }).report().client.screen,
     ).toBe('0x0');
+  });
+
+  it('sends touch true only when the client says exactly true, else false', () => {
+    const touch = (value) =>
+      make({ client: { userAgent: '', screen: '1x1', cores: 1, touch: value } }).report().client
+        .touch;
+    expect(touch(true)).toBe(true);
+    expect(touch(false)).toBe(false);
+    expect(touch(undefined)).toBe(false);
+    expect(touch('yes')).toBe(false);
+    expect(touch(1)).toBe(false);
   });
 
   it('rounds the cores and sends null where the browser has none', () => {

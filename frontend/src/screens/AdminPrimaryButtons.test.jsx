@@ -211,7 +211,7 @@ const CASES = [
     name: 'Playback, with a remembered network',
     path: '/admin/playback',
     network: true,
-    buttons: ['Stop this stream: Heat', 'Forget AS1 Example'],
+    buttons: ['Stop this stream: Heat (Mac)', 'Stop this stream: Heat', 'Forget AS1 Example'],
   },
   { name: 'Settings', path: '/admin/settings', buttons: ['Sign out'] },
 ];

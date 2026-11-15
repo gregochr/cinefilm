@@ -147,6 +147,53 @@ class PlaybackHealthServiceTest {
         assertThat(saved().getStartedAt()).isEqualTo(NOW);
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void theTouchHintOfTheClientIsKeptInTheStoredSummary(boolean touch) {
+        knownEdition();
+        when(repository.count()).thenReturn(1L);
+        ObjectNode body = example();
+        client(body).put("touch", touch);
+
+        service.report(ID, text(body));
+
+        assertThat(JSON.readTree(saved().getSummary()).get("client").get("touch").asBoolean()).isEqualTo(touch);
+    }
+
+    @Test
+    void aReportWithoutTheTouchHintIsStoredAsBeforeAndIsStillValid() {
+        knownEdition();
+        when(repository.count()).thenReturn(1L);
+
+        service.report(ID, compactExample());
+
+        assertThat(JSON.readTree(saved().getSummary()).get("client").has("touch")).isFalse();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\"maybe\"", "[]", "{}"})
+    void aTouchHintThatCannotBeReadAsABooleanIsRefused(String json) {
+        ObjectNode body = example();
+        client(body).set("touch", JSON.readTree(json));
+
+        assertThatThrownBy(() -> service.report(ID, text(body)))
+            .isExactlyInstanceOf(BadRequestException.class)
+            .hasMessage("Invalid health report");
+    }
+
+    @Test
+    void aTouchHintSentAsTheTextTrueIsCoercedAndStoredAsABoolean() {
+        knownEdition();
+        when(repository.count()).thenReturn(1L);
+        ObjectNode body = example();
+        client(body).put("touch", "true");
+
+        service.report(ID, text(body));
+
+        assertThat(JSON.readTree(saved().getSummary()).get("client").get("touch").isBoolean()).isTrue();
+        assertThat(JSON.readTree(saved().getSummary()).get("client").get("touch").asBoolean()).isTrue();
+    }
+
     @Test
     void theStoredSummaryIsTheServersOwnSerialisationNotTheClientsText() {
         knownEdition();
