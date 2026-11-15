@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { announceLibraryChanged } from '../api/client.js';
 import { adminApi } from '../api/resources.js';
 import { bestGuess, buildTodoGroups, confirmProblem } from './adminTodo.js';
 import { useAttention } from './useAdmin.js';
@@ -70,6 +71,8 @@ export function useAdminTodo({ settledAt, subtitlesVersion, changed, onChanged }
         inFlight.current.delete(filmId);
         if (mounted.current) setConfirming((ids) => ids.filter((id) => id !== filmId));
       }
+      // Global search keeps its pre-match index otherwise, and the layout outlives this page.
+      announceLibraryChanged();
       if (mounted.current) {
         const list = latestAttention.current;
         setHidden((h) => ({ list, ids: h.list === list ? [...h.ids, filmId] : [filmId] }));

@@ -1497,9 +1497,16 @@
     align-items: stretch;
     max-width: none;
   }
-  .admin__todo-actions .btn {
+  /* A long dynamic label ("Yes, it's The Lord of the Rings: The Two Towers (2002)") wraps and the button grows, never
+     shorter than the 44px target. The three-class selector beats `.action-hint .btn` further down. */
+  .admin__todo-actions .btn,
+  .admin__todo-actions .action-hint .btn {
     width: 100%;
-    height: 44px;
+    height: auto;
+    min-height: 44px;
+    padding-block: 8px;
+    white-space: normal;
+    text-align: center;
   }
   .admin__todo-foot {
     padding: 0 16px;

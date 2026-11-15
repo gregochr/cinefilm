@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { LIBRARY_CHANGED_EVENT } from '../api/client.js';
 import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
 import { useAdminTodo } from './useAdminTodo.js';
 
@@ -97,6 +98,52 @@ describe('useAdminTodo: confirm', () => {
     expect(onChanged).toHaveBeenCalledTimes(1);
     expect(result.current.confirming).toEqual([]);
     expect(result.current.problems[34]).toBeNull();
+  });
+
+  it('announces a library change once when a match was confirmed, and not when the post fails', async () => {
+    let fail = true;
+    installFetch((m, url) => {
+      if (m !== 'POST' || url !== MATCH) return null;
+      return fail ? respond({}, 500) : respond({ filmId: 34, joined: false });
+    });
+    const changed = vi.fn();
+    window.addEventListener(LIBRARY_CHANGED_EVENT, changed);
+    const { result } = mount();
+    await waitFor(() => expect(result.current.allRead).toBe(true));
+
+    await act(() => result.current.confirm(SUSPIRIA));
+    expect(changed).not.toHaveBeenCalled();
+    fail = false;
+    await act(() => result.current.confirm(SUSPIRIA));
+
+    expect(changed).toHaveBeenCalledTimes(1);
+    window.removeEventListener(LIBRARY_CHANGED_EVENT, changed);
+  });
+
+  it('announces the library change even when the page has gone before the post finished', async () => {
+    let release;
+    installFetch((m, url) =>
+      m === 'POST' && url === MATCH
+        ? new Promise((resolve) => {
+            release = () => resolve(respond({ filmId: 34, joined: false }));
+          })
+        : null,
+    );
+    const changed = vi.fn();
+    window.addEventListener(LIBRARY_CHANGED_EVENT, changed);
+    const { result, unmount } = mount();
+    await waitFor(() => expect(result.current.allRead).toBe(true));
+    let pending;
+    act(() => {
+      pending = result.current.confirm(SUSPIRIA);
+    });
+
+    unmount();
+    release();
+    await pending;
+
+    expect(changed).toHaveBeenCalledTimes(1);
+    window.removeEventListener(LIBRARY_CHANGED_EVENT, changed);
   });
 
   it('shows a row again if the re-read still lists it', async () => {

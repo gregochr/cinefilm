@@ -284,11 +284,18 @@ describe('Admin To do: Yes, it’s …', () => {
 
   it('does nothing on a second click while the post is in flight', async () => {
     let release;
+    let matched = false;
     const fetchMock = installFetch((m, url) => {
       if (m === 'POST' && url === SUSPIRIA_MATCH) {
         return new Promise((resolve) => {
-          release = () => resolve(respond({ filmId: 34, joined: false }));
+          release = () => {
+            matched = true;
+            resolve(respond({ filmId: 34, joined: false }));
+          };
         });
+      }
+      if (url === ATTENTION && matched) {
+        return respond({ items: fixtures.adminAttention.items.filter((i) => i.filmId !== 34) });
       }
       return null;
     });
@@ -307,9 +314,16 @@ describe('Admin To do: Yes, it’s …', () => {
 
   it('shows an inline error and keeps the row when the post fails, and the next click tries again', async () => {
     let fail = true;
+    let matched = false;
     const fetchMock = installFetch((m, url) => {
       if (m === 'POST' && url === SUSPIRIA_MATCH) {
-        return fail ? respond({ error: 'boom' }, 500) : respond({ filmId: 34, joined: false });
+        if (fail) return respond({ error: 'boom' }, 500);
+        matched = true;
+        return respond({ filmId: 34, joined: false });
+      }
+      // Once matched the server no longer lists the film, so the re-read agrees with the hiding.
+      if (url === ATTENTION && matched) {
+        return respond({ items: fixtures.adminAttention.items.filter((i) => i.filmId !== 34) });
       }
       return null;
     });
