@@ -583,7 +583,7 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
     details), the OpenSubtitles check, the timing fit and the warnings. No button but the chips and "Show more". The
     note ("Subtitles → Fix… … or in the player") still fits and is unchanged.
   - **Deleted:** `AttachPicker.jsx`, `useAttachPicker.js`, the `Timing`/`Check`/attach/cues/remove parts of
-    `SubtitlesPanel`, `NUDGES`, `useSubtitles`' `attach`, `nudge` and `resetTiming`, `adminRemoveLabels`, `RemoveDownload`'s
+    `SubtitlesPanel`, `useSubtitles`' `attach`, `nudge` and `resetTiming`, `adminRemoveLabels`, `RemoveDownload`'s
     `labels` and `hint` props (one wording now: `fixRemoveLabels` and `buttons.deleteDownload.hint`), the CSS only they
     used (`.subs__actions`, `.subs__timing`, `.subs__attach`, `.admin__item-actions`) and their tests. Kept:
     `nudgedOffset`/`MAX_OFFSET_MS`/`formatOffset` (shared with the player), `adminApi.setSubtitleOffset` and
@@ -604,8 +604,8 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
     files "Use my file instead" checked (after it the server serves the file, so it no longer reads as replaced).
     `kindTag` (`state/subtitleFix.js`) is the one Full/Forced word. The dialog's tests send the
     attach for a forced file under another film end to end through the mocks. "Undo" after "Use my file instead" says
-    "The download plays again." (`subtitleCheck.undoneReplaced`). `filmLabel` was dead and is deleted; `NUDGES` stays
-    out until 8b-1 lands (see the merge note below).
+    "The download plays again." (`subtitleCheck.undoneReplaced`). `filmLabel` was dead and is deleted. `NUDGES` was deleted and then restored on the merge with 8b-1, which
+    uses it (with `nudgedOffset`, `formatOffset`, `MAX_OFFSET_MS` and `adminApi.setSubtitleOffset`).
   - **Invented copy (planner, 8b-2):** `subtitleCheck.undoneReplaced` "The download plays again.",
     `subtitleCheck.hint` "Marks the lines as checked: you’ve seen they’re right.",
     `subtitleCheck.done` "Marked as checked.", `subtitleCheck.undone` "The check is taken away." (in

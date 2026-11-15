@@ -9,6 +9,14 @@ export const MAX_OFFSET_MS = 600000;
 /** "Play from here" opens the player this long before a cue, so the viewer hears the line arrive. */
 export const PLAY_LEAD_MS = 3000;
 
+/** The nudge steps, in the order they were shown; the player's Earlier and Later use the ±0.25 s ones (8b-1). */
+export const NUDGES = [
+  { key: 'earlier-1', label: '−1 s', delta: -1000, spoken: 'Show lines 1 second earlier' },
+  { key: 'earlier-025', label: '−0.25 s', delta: -250, spoken: 'Show lines 0.25 seconds earlier' },
+  { key: 'later-025', label: '+0.25 s', delta: 250, spoken: 'Show lines 0.25 seconds later' },
+  { key: 'later-1', label: '+1 s', delta: 1000, spoken: 'Show lines 1 second later' },
+];
+
 /** The offset after a nudge, kept within what the server allows. */
 export function nudgedOffset(current, delta) {
   return Math.max(-MAX_OFFSET_MS, Math.min(MAX_OFFSET_MS, current + delta));
