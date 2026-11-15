@@ -506,6 +506,28 @@ for name, text, expected in [
 ]:
     check("parse_feed: " + name, expected, m.parse_feed(text))
 
+
+def lists(levels):
+    return "[" * levels + "]" * levels
+
+
+def alternating(levels):
+    value = None
+    for level in range(levels, 0, -1):
+        value = [value] if level % 2 else {"a": value}
+    return json.dumps(value)
+
+
+wide = json.dumps([{"a": i} for i in range(10000)])
+check("parse_feed: the depth limit is 32", 32, m.MAX_DEPTH)
+check("parse_feed: 32 levels of lists are data", json.loads(lists(32)), m.parse_feed(lists(32)))
+check("parse_feed: 33 levels of lists are not", None, m.parse_feed(lists(33)))
+check("parse_feed: 32 levels of dicts and lists are data", json.loads(alternating(32)), m.parse_feed(alternating(32)))
+check("parse_feed: 33 are not", None, m.parse_feed(alternating(33)))
+check("parse_feed: 5,000 levels are not (by the interpreter or by the depth check)", None, m.parse_feed(lists(5000)))
+check("parse_feed: 100,000 levels are not", None, m.parse_feed(lists(100000)))
+check("parse_feed: a wide, shallow answer is data", json.loads(wide), m.parse_feed(wide))
+
 check("printable: an escape sequence", "?[31mred", m.printable("\x1b[31mred"))
 check("printable: a non-ASCII character", "caf?", m.printable("café"))
 check("printable: a tab and DEL", "a?b?", m.printable("a\tb\x7f"))
@@ -820,7 +842,7 @@ while IFS= read -r line; do
         "FAIL "*) bad "${line#FAIL }"; PURE=$((PURE + 1)) ;;
     esac
 done <<< "$RESULTS"
-assert_eq "all 97 pure checks reported" 97 "$PURE"
+assert_eq "all 105 pure checks reported" 105 "$PURE"
 
 echo "compiles"
 PYTHONPYCACHEPREFIX="$TMP/pyc" python3 -m py_compile "$LOGGER" "$STAND_IN"

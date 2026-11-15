@@ -55,6 +55,9 @@ TEXT_KEPT = 300  # characters of a non-feed answer (a sign-in page, say) kept in
 INDEX_KEPT = 5000
 DEFAULT_RETRY_EVERY = 10  # rounds between full checks of every address and of parts that keep failing
 GIVE_UP_AFTER = 3  # failures in a row before a part of the feed is only tried every --retry-every rounds
+# Deeper than this is not feed data: the real feed is four levels deep, the interpreter's own limit differs between
+# Python versions, and a structure it accepts could still be too deep to write back out as JSON.
+MAX_DEPTH = 32
 WRAPPED = re.compile(r"^[\w$.]*\s*\((.*)\)\s*;?$", re.S)
 CURL_ERRORS = {
     6: "could not find it",
@@ -132,11 +135,24 @@ def parse_feed(body):
     for candidate in candidates:
         try:
             data = json.loads(candidate)
-        except (ValueError, RecursionError):  # deep nesting raises the second
+        except (ValueError, RecursionError):  # nesting the interpreter itself refuses raises the second
             continue
-        if isinstance(data, (dict, list)):
+        if isinstance(data, (dict, list)) and not too_deep(data):
             return data
     return None
+
+
+def too_deep(data):
+    """Whether dicts and lists are nested more than MAX_DEPTH levels (each one counts as a level).
+    A loop with its own stack: no recursion, and it stops as soon as the limit is passed."""
+    stack = [(data, 1)]
+    while stack:
+        value, depth = stack.pop()
+        if depth > MAX_DEPTH:
+            return True
+        children = value.values() if isinstance(value, dict) else value
+        stack.extend((child, depth + 1) for child in children if isinstance(child, (dict, list)))
+    return False
 
 
 def ask_part(base, part, timeout, untrusted=False):

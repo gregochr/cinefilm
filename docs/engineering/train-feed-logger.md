@@ -31,7 +31,8 @@ first round reads the laptop's own Wi-Fi link once (signal, noise, rate); readin
 other networks, so it is not repeated.
 
 Each request names a function for the answer (`callback=cb`) and carries a time stamp, so nothing on the way can
-answer from a cache. An answer over 200,000 bytes is refused.
+answer from a cache. An answer over 200,000 bytes is refused, and one nested more than 32 levels deep is not taken
+as data.
 
 Each round is one line of JSON in `~/train-feed-logger/logs/train-feed-<date>-<time>.jsonl`, written at once. The
 `logs` folder, when the script is the one to create it, and every log are readable by the owner alone. **The log
