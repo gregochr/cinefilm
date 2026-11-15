@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  broughtAcross,
   describeLastImport,
   moreText,
-  plexPillLabel,
+  plexHeaderLine,
   plexProgressText,
+  plexServerState,
   reportLists,
   reportTiles,
 } from './plexFormat.js';
@@ -30,11 +32,41 @@ const report = {
   collectionsTotal: 0,
 };
 
-describe('plexPillLabel', () => {
+describe('plexServerState', () => {
   it('says Importing while running, otherwise whether Plex answers', () => {
-    expect(plexPillLabel({ running: true, reachable: true })).toBe('Importing');
-    expect(plexPillLabel({ running: false, reachable: true })).toBe('Reachable');
-    expect(plexPillLabel({ running: false, reachable: false })).toBe('Not reachable');
+    expect(plexServerState({ running: true, reachable: true })).toBe('Importing');
+    expect(plexServerState({ running: true, reachable: false })).toBe('Importing');
+    expect(plexServerState({ running: false, reachable: true })).toBe('Reachable');
+    expect(plexServerState({ running: false, reachable: false })).toBe('Not reachable');
+  });
+});
+
+describe('plexHeaderLine', () => {
+  it('says when the last import ran and how many films it paired', () => {
+    expect(
+      plexHeaderLine({ finishedAt: '2026-11-08T14:09:30Z', error: null, report: { paired: 1037 } }),
+    ).toBe('Last import 08 Nov 14:09 · 1037 films paired');
+  });
+
+  it('gives the error of an import that stopped', () => {
+    expect(
+      plexHeaderLine({ finishedAt: '2026-11-08T14:09:30Z', error: 'Plex is not reachable' }),
+    ).toBe('Last import 08 Nov 14:09 · Plex is not reachable');
+  });
+
+  it('says not imported yet before the first import', () => {
+    expect(plexHeaderLine(null)).toBe('Not imported yet');
+  });
+});
+
+describe('broughtAcross', () => {
+  it('lists paired, watched, resume points and posters from the report', () => {
+    expect(broughtAcross({ report })).toBe('10 paired · 6 watched · 5 resume points · 8 posters');
+  });
+
+  it('says nothing yet with no import, or an import that stopped before it could report', () => {
+    expect(broughtAcross(null)).toBe('Nothing yet');
+    expect(broughtAcross({ error: 'stopped', report: null })).toBe('Nothing yet');
   });
 });
 

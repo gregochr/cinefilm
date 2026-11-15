@@ -1,3 +1,5 @@
+import { libraryPage } from './adminCopy.js';
+
 // Display rules for a film's IMDb and Rotten Tomatoes ratings. No JSX: the Apple TV and native clients reuse them.
 
 const OPENS = '(opens in a new tab)';
@@ -49,7 +51,7 @@ export function ratingItems(ratings) {
   return items;
 }
 
-/** "Ratings last refreshed 08 Nov 12:41", or "Ratings never refreshed". `format` formats the ISO time. */
-export function describeRatingsRefresh(iso, format) {
-  return iso ? `Ratings last refreshed ${format(iso)}` : 'Ratings never refreshed';
+/** "IMDb and Rotten Tomatoes · updated 9 Nov", or "… not fetched yet". `formatDay` formats the ISO time. */
+export function describeRatingsRefresh(iso, formatDay) {
+  return iso ? libraryPage.ratings.updated(formatDay(iso)) : libraryPage.ratings.neverUpdated;
 }

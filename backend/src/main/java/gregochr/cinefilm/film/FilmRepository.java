@@ -331,4 +331,8 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
     /** When ratings were last fetched for any film, or null when never. */
     @org.springframework.data.jpa.repository.Query("select max(f.ratingsFetchedAt) from Film f")
     java.time.Instant findLatestRatingsFetchedAt();
+
+    /** The id of every film that has at least one credit (cast or director), each once. */
+    @org.springframework.data.jpa.repository.Query("select distinct c.film.id from Credit c")
+    List<Long> findIdsWithCredits();
 }

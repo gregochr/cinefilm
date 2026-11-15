@@ -610,22 +610,6 @@
   font-family: var(--cf-font-mono);
   font-size: 13px;
 }
-.admin__pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--cf-size-ui);
-  color: var(--cf-text-muted);
-}
-.admin__pill--running {
-  color: var(--cf-amber);
-}
-.admin__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: currentColor;
-}
 .admin__rows {
   display: grid;
   grid-template-columns: 120px 1fr;
@@ -696,17 +680,78 @@
   align-items: center;
   gap: 16px;
 }
-.admin__ratings {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--cf-line);
-}
 .admin__ratings-line {
   margin: 0;
   color: var(--cf-text-muted);
+}
+/* Library: the line right after a card's title ("Last scan 12 min ago"), muted, in the body font. On a narrow screen
+   it wraps under the title, left-aligned. */
+.admin__why {
+  color: var(--cf-text-muted);
+  font-size: var(--cf-size-ui);
+  overflow-wrap: anywhere;
+}
+.admin__head:has(> .admin__why) {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 4px 14px;
+}
+/* A count tile that opens a list: a block, at least 44px tall, the ring comes from the global :focus-visible. */
+.admin__count-link {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 44px;
+  color: inherit;
+  text-decoration: none;
+}
+.admin__count-link:hover .admin__count-label {
+  color: var(--cf-text);
+  text-decoration: underline;
+}
+.admin__rows--wide {
+  grid-template-columns: minmax(96px, 140px) 1fr;
+  margin-bottom: 16px;
+}
+.admin__actions--wrap {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.admin__quiet {
+  margin-left: auto;
+  color: var(--cf-text-muted);
+}
+.admin__back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--cf-text-muted);
+  text-decoration: none;
+}
+.admin__back:hover {
+  color: var(--cf-text);
+}
+/* "What the last scan changed": the grouping report, collapsed in the scan card. */
+.admin__changes {
+  margin-top: 20px;
+  padding-top: 4px;
+  border-top: 1px solid var(--cf-line);
+  font-size: var(--cf-size-ui);
+}
+.admin__changes > summary {
+  display: list-item;
+  min-height: 44px;
+  padding: 12px 0;
+  color: var(--cf-text-muted);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.admin__changes-title {
+  color: var(--cf-text);
+  font-weight: 500;
+}
+.admin__more {
+  margin-top: 12px;
 }
 .admin__settings {
   display: flex;
@@ -816,6 +861,14 @@
 }
 .admin__item-title {
   font-weight: 500;
+}
+/* A title that links to its film: a 44px target on a touch screen (the ring is the global :focus-visible). */
+@media (any-pointer: coarse) {
+  a.admin__item-title {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
 }
 .admin__tag {
   color: var(--cf-text-muted);

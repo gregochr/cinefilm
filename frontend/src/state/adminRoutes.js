@@ -7,6 +7,31 @@ export const ADMIN_SECTIONS = [
   { key: 'settings', to: '/admin/settings', label: 'Settings', end: false },
 ];
 
+/**
+ * The plain lists the Library scan tiles link to: the files the scan could not make playable. `tile` is the
+ * `countTiles` key, `kind` the attention kind the list shows (`GET /api/admin/attention`), `path` the address.
+ */
+export const FILE_LISTS = [
+  {
+    tile: 'protectedFiles',
+    kind: 'protected',
+    path: '/admin/library/files/protected',
+    title: 'Protected files',
+  },
+  {
+    tile: 'needsConversion',
+    kind: 'needs-conversion',
+    path: '/admin/library/files/needs-conversion',
+    title: 'Files that need converting',
+  },
+  {
+    tile: 'unreadable',
+    kind: 'unreadable',
+    path: '/admin/library/files/unreadable',
+    title: 'Files that could not be read',
+  },
+];
+
 /** The old address of the Library scan card, before Admin had sections. */
 export const OLD_SCAN_HASH = '#library-scan';
 
@@ -20,9 +45,14 @@ export function normalisePath(pathname) {
 }
 
 /**
- * True on the five Admin pages, where the phone replaces the app header and tab bar with Admin's own "Home" link
- * and section row. An unknown address under /admin is the "Nothing here" page and keeps the app chrome.
+ * True on the five Admin pages and the three file lists under Library (`FILE_LISTS`), where the phone replaces the
+ * app header and tab bar with Admin's own "Home" link and section row. An unknown address under /admin is the
+ * "Nothing here" page and keeps the app chrome.
  */
 export function bareOnPhone(pathname) {
-  return ADMIN_SECTIONS.some((section) => section.to === normalisePath(pathname));
+  const path = normalisePath(pathname);
+  return (
+    ADMIN_SECTIONS.some((section) => section.to === path) ||
+    FILE_LISTS.some((list) => list.path === path)
+  );
 }

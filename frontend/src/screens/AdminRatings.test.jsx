@@ -8,14 +8,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const panelOf = () => screen.findByRole('region', { name: 'Library scan' });
+const panelOf = () => screen.findByRole('region', { name: 'Ratings' });
 
-describe('Admin: ratings in the Library scan card', () => {
-  it('says when ratings were last refreshed, with Refresh ratings ready', async () => {
+describe('Admin: the Ratings card', () => {
+  it('says when ratings were last updated, with Refresh all ratings ready', async () => {
     installFetch();
     renderApp('/admin/library');
     const panel = await panelOf();
-    expect(within(panel).getByText('Ratings last refreshed 08 Nov 12:41')).toBeInTheDocument();
+    expect(within(panel).getByText('IMDb and Rotten Tomatoes · updated 8 Nov')).toBeInTheDocument();
     const refresh = within(panel).getByRole('button', { name: 'Refresh all ratings' });
     expect(refresh).toBeEnabled();
     expect(refresh).toHaveAccessibleDescription(
@@ -23,14 +23,16 @@ describe('Admin: ratings in the Library scan card', () => {
     );
   });
 
-  it('says ratings were never refreshed', async () => {
+  it('says ratings were not fetched yet', async () => {
     installFetch((m, url) =>
       url === '/api/admin/scan'
         ? respond({ ...fixtures.adminScan, ratingsLastRefreshedAt: null })
         : null,
     );
     renderApp('/admin/library');
-    expect(await screen.findByText('Ratings never refreshed')).toBeInTheDocument();
+    expect(
+      await screen.findByText('IMDb and Rotten Tomatoes · not fetched yet'),
+    ).toBeInTheDocument();
   });
 
   it('asks for an OMDb key and disables the button when ratings are off', async () => {
@@ -40,7 +42,7 @@ describe('Admin: ratings in the Library scan card', () => {
     renderApp('/admin/library');
     const panel = await panelOf();
     expect(within(panel).getByText('Ratings need an OMDb API key')).toBeInTheDocument();
-    expect(within(panel).queryByText(/Ratings last refreshed/)).not.toBeInTheDocument();
+    expect(within(panel).queryByText(/updated/)).not.toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: 'Refresh all ratings' })).toBeDisabled();
   });
 
@@ -74,7 +76,7 @@ describe('Admin: ratings in the Library scan card', () => {
     await act(() => vi.advanceTimersByTimeAsync(1500));
     await act(() => vi.advanceTimersByTimeAsync(1500));
     expect(
-      await within(panel).findByText('Ratings last refreshed 09 Nov 05:35'),
+      await within(panel).findByText('IMDb and Rotten Tomatoes · updated 9 Nov'),
     ).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: 'Refresh all ratings' })).toBeEnabled();
   });

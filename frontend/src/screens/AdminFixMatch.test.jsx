@@ -223,8 +223,8 @@ describe('Admin: grouping report', () => {
   it('lists the newest changes with a label, a time and what happened', async () => {
     installFetch();
     renderApp('/admin/library');
-    const panel = await screen.findByRole('region', { name: 'Grouping report' });
-    const list = await within(panel).findByRole('list', { name: 'Grouping changes' });
+    const card = await screen.findByRole('region', { name: 'Library scan' });
+    const list = await within(card).findByRole('list', { name: 'Grouping changes' });
 
     const items = within(list).getAllByRole('listitem');
     expect(items).toHaveLength(3);
@@ -242,15 +242,17 @@ describe('Admin: grouping report', () => {
       url === '/api/admin/grouping-report' ? respond({ items: [] }) : null,
     );
     renderApp('/admin/library');
-    expect(await screen.findByText('Nothing has been grouped or split yet.')).toBeInTheDocument();
+    expect(await screen.findByText('The last scan changed nothing.')).toBeInTheDocument();
   });
 
   it('offers a retry when the report cannot load', async () => {
     installFetch((m, url) => (url === '/api/admin/grouping-report' ? respond(null, 500) : null));
     renderApp('/admin/library');
-    const panel = await screen.findByRole('region', { name: 'Grouping report' });
-    expect(await within(panel).findByText(/Couldn.t load the grouping report/)).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    const card = await screen.findByRole('region', { name: 'Library scan' });
+    expect(
+      await within(card).findByText('Couldn’t load what the last scan changed.'),
+    ).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
 });
 
