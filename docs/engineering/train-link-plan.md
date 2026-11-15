@@ -194,6 +194,11 @@ every spell, with eight minutes in hand that could have paid for 360p. D spends 
 - **Rules that read the train tag** (a quality ceiling on a train, starting low on a remembered train network): A
   to D are driven by the link and do nothing at home, and the tag arrives seconds after the film starts. Decide from
   a journey recorded with A to D in place.
+- **Rules that read where the train is.** Laid over the train's actual running times, the first record puts every
+  bad spell in open country between towns (Stevenage to Hitchin, Arlesey to St Neots, Huntingdon to Peterborough,
+  Essendine to Grantham, either side of Retford, Doncaster to York). One journey cannot tell place from chance, and
+  the player has no way yet to know where it is. `train-feed-logger.md` describes the measuring script for the next
+  journeys.
 - **Waiting longer before resuming after a stall:** it changes how the player behaves; the owner's call.
 - **Fetching banked film again at a better quality:** hls.js can only do it by throwing the whole buffer away.
 - **Keeping segments on the server for longer behind the player**, and counting media-error recoveries in the

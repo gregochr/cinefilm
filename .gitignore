@@ -27,3 +27,6 @@ frontend/.stryker-tmp/
 
 # The SPA build copied in by the Dockerfile at package time
 backend/src/main/resources/static/
+
+# The train feed logger's logs hold where a train went and are never committed
+train-feed-*.jsonl
