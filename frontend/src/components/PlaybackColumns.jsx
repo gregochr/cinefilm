@@ -32,15 +32,19 @@ function Axis() {
   );
 }
 
+/** The padding of the row, kept clear so a selected or focused column's ring at an edge is not clipped. */
+const EDGE = 4;
+
 /**
- * Moves only `box` (the row that scrolls sideways) so that `button` is inside it: nothing happens when it already is,
- * and the nearer edge is used when it is not. `scrollIntoView` and `focus()` would scroll every ancestor too, the page
- * included, which is why neither is used here.
+ * Moves only `box` (the row that scrolls sideways) so that `button`, with its `EDGE` margin, is inside it: nothing
+ * happens when it already is, and the nearer edge is used when it is not. `scrollIntoView` would scroll every ancestor
+ * too, the page included, so it is not used; for the same reason `move()` focuses with `preventScroll`, since a plain
+ * `focus()` scrolls ancestors as well.
  */
 function reveal(box, button) {
   if (!box || !button) return;
-  const left = button.offsetLeft;
-  const right = left + button.offsetWidth;
+  const left = Math.max(button.offsetLeft - EDGE, 0);
+  const right = button.offsetLeft + button.offsetWidth + EDGE;
   if (left < box.scrollLeft) box.scrollLeft = left;
   else if (right > box.scrollLeft + box.clientWidth) box.scrollLeft = right - box.clientWidth;
 }
