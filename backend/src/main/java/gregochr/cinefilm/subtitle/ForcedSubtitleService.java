@@ -57,10 +57,15 @@ public class ForcedSubtitleService {
                 boolean verified = pick.slots().stream().allMatch(s -> s.sidecar().isVerifiedFor(resolution.partIds()));
                 String source = resolution.decision().source() == Source.DOWNLOAD ? DOWNLOAD : SIDECAR;
                 long version = version(source, pick);
-                byEdition.put(editionId, new ForcedSubtitleDto(source, verified, version));
+                byEdition.put(editionId, new ForcedSubtitleDto(source, verified, version, sidecarIds(pick)));
             }
         });
         return byEdition;
+    }
+
+    /** The ids of the subtitle rows a pick is made of, in slot order: which files play, for a client to tell. */
+    static List<Long> sidecarIds(Pick pick) {
+        return pick.slots().stream().map(slot -> slot.sidecar().getId()).toList();
     }
 
     /**

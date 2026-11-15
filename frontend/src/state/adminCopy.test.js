@@ -225,7 +225,7 @@ describe('adminCopy: the Subtitles section', () => {
       'forced subtitles',
     ]);
     expect(joined(subtitlesPage.else.note)).toBe(
-      'Subtitles look wrong on a film? Fix them from that film’s page (Subtitles → Fix…) or in the player — that’s where timing, replacing a file and “This is wrong” now live, next to the film you’re watching.',
+      'Subtitles look wrong on a film? Fix them from that film’s page (Subtitles → Fix…) or in the player — that’s where timing, replacing a file and “Subtitles are wrong” now live, next to the film you’re watching.',
     );
   });
 

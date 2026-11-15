@@ -82,8 +82,10 @@ public final class FilmDtos {
      * @param ownerVerified true while the owner has checked it and the edition's parts have not changed since
      * @param version the latest change time of the files it is made from, in epoch milliseconds: it goes on the
      *     subtitle URL so a nudge in Admin is fetched again
+     * @param sidecarIds the ids of the subtitle rows it is made of (one for a whole-edition file, one per part for
+     *     per-part files), the same ids the Admin subtitle list gives, so a client can tell which file is playing
      */
-    public record ForcedSubtitleDto(String source, boolean ownerVerified, long version) {
+    public record ForcedSubtitleDto(String source, boolean ownerVerified, long version, List<Long> sidecarIds) {
     }
 
     /**
@@ -94,8 +96,9 @@ public final class FilmDtos {
      *     for now
      * @param version a stable number from which files it is made of, their offsets and last changes: it goes on the
      *     subtitle URL so a nudge in Admin is fetched again
+     * @param sidecarIds the ids of the subtitle rows it is made of, as for {@link ForcedSubtitleDto}
      */
-    public record FullSubtitleDto(String source, long version) {
+    public record FullSubtitleDto(String source, long version, List<Long> sidecarIds) {
     }
 
     /** A selectable quality. */

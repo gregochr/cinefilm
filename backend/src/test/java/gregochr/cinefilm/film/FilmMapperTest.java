@@ -134,7 +134,7 @@ class FilmMapperTest {
         Edition other = edition(film, 11L, "Director's Cut", 100 * MIN, null);
         file(edition, "heat.mp4");
         file(other, "heat-dc.mp4");
-        var forced = new FilmDtos.ForcedSubtitleDto("SIDECAR", true, 1_700_000_000_000L);
+        var forced = new FilmDtos.ForcedSubtitleDto("SIDECAR", true, 1_700_000_000_000L, List.of(5L));
 
         var editions = FilmMapper.detail(view(film), null, false, EncoderMode.SOFTWARE, f -> null,
             e -> e.getId().equals(other.getId()) ? forced : null).editions();

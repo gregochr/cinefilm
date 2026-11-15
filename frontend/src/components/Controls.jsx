@@ -42,6 +42,8 @@ export function Segmented({ label, options, value, onChange }) {
 }
 
 /** A labelled <select>. When `inertText` is set it renders the dashed inert state instead. */
+// `{children}` stays in the same slot (after the control) in both branches: FilmDetail's "Fix…" button relies on
+// React keeping it mounted when the Subtitles field flips between them, so the focus its dialog returns is not lost.
 export function Picker({ label, value, onChange, options, inertText, children }) {
   const id = useId();
   if (inertText) {
