@@ -63,7 +63,7 @@ class AdminSummaryServiceTest {
     }
 
     private static ScanStatusDto scan(long films, LastScanDto last) {
-        return new ScanStatusDto(false, "/media", null, last, new CountsDto(films, 0, 0, 0, 0, 0, 0), null, false,
+        return new ScanStatusDto(false, "/media", null, last, new CountsDto(films, 0, 0, 0, 0, 0, 0, 0), null, false,
             false, null, false, false, false, null);
     }
 

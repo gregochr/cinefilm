@@ -21,8 +21,7 @@ describe('Admin: Library scan panel', () => {
     const panel = await screen.findByRole('region', { name: 'Library scan' });
 
     expect(await within(panel).findByText('/media')).toBeInTheDocument();
-    expect(within(panel).getByText('08 Nov 12:41 · 2 new, 0 missing')).toBeInTheDocument();
-    expect(within(panel).getByText('Idle')).toBeInTheDocument();
+    expect(within(panel).getByText(/^Last scan .+ · took 1m 8s$/)).toBeInTheDocument();
     const counts = within(panel).getByRole('list', { name: 'Library counts' });
     const tiles = within(counts)
       .getAllByRole('listitem')
@@ -47,12 +46,12 @@ describe('Admin: Library scan panel', () => {
     }
   });
 
-  it('says Never before the first scan', async () => {
+  it('says Not scanned yet before the first scan', async () => {
     installFetch((m, url) =>
       url === '/api/admin/scan' ? respond({ ...fixtures.adminScan, lastScan: null }) : null,
     );
     renderApp('/admin/library');
-    expect(await screen.findByText('Never')).toBeInTheDocument();
+    expect(await screen.findByText('Not scanned yet')).toBeInTheDocument();
   });
 
   it('shows a note from the last scan, such as files refused for leaving the folder', async () => {
@@ -87,7 +86,7 @@ describe('Admin: Library scan panel', () => {
     expect(within(counts).getAllByRole('listitem').at(-1)).toHaveTextContent('Unreadable4');
   });
 
-  it('Scan now starts a scan, and the panel shows live progress with the button disabled', async () => {
+  it('Scan now starts a scan, and the panel shows live progress in the button’s place', async () => {
     let started = false;
     installFetch((method, url) => {
       if (url === '/api/admin/scan' && method === 'POST') {
@@ -102,16 +101,15 @@ describe('Admin: Library scan panel', () => {
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Scan library now' }));
 
-    expect(await within(panel).findByText('Running')).toBeInTheDocument();
-    const bar = within(panel).getByRole('progressbar', { name: 'Scan progress' });
+    const bar = await within(panel).findByRole('progressbar', { name: 'Scan progress' });
     expect(bar).toHaveAttribute('aria-valuenow', '30');
     expect(bar).toHaveAttribute('aria-valuetext', '12 / 40 files');
     expect(within(panel).getByText('12 / 40 files')).toBeInTheDocument();
     expect(within(panel).getByText('Now: Heat.m4v')).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: 'Scanning…' })).toBeDisabled();
+    expect(within(panel).queryByRole('button', { name: /Scan library now|Scanning/ })).toBeNull();
   });
 
-  it('polls for progress while running and returns to Idle when the scan finishes', async () => {
+  it('polls for progress while running and brings the button back when the scan finishes', async () => {
     let polls = 0;
     installFetch((method, url) => {
       if (url !== '/api/admin/scan') return null;
@@ -120,7 +118,7 @@ describe('Admin: Library scan panel', () => {
       if (polls === 2) return respond(running(30));
       return respond({
         ...fixtures.adminScan,
-        lastScan: { ...fixtures.adminScan.lastScan, newFiles: 7 },
+        counts: { ...fixtures.adminScan.counts, newFiles: 7 },
       });
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -131,9 +129,10 @@ describe('Admin: Library scan panel', () => {
     expect(await screen.findByText('30 / 40 files')).toBeInTheDocument();
     await act(() => vi.advanceTimersByTimeAsync(1500));
 
-    expect(await screen.findByText('Idle')).toBeInTheDocument();
-    expect(screen.getByText('08 Nov 12:41 · 7 new, 0 missing')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Scan library now' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: 'Scan library now' })).toBeEnabled();
+    expect(screen.queryByRole('progressbar', { name: 'Scan progress' })).toBeNull();
+    const counts = screen.getByRole('list', { name: 'Library counts' });
+    expect(within(counts).getByText('New').nextSibling).toHaveTextContent('7');
   });
 
   it('shows a neutral line while the folder is still being walked', async () => {
@@ -143,10 +142,11 @@ describe('Admin: Library scan panel', () => {
     expect(screen.queryByText(/^Now:/)).not.toBeInTheDocument();
   });
 
-  it('keeps Scan now disabled for a scan already running when the page opens', async () => {
+  it('shows progress, not Scan now, for a scan already running when the page opens', async () => {
     installFetch((m, url) => (url === '/api/admin/scan' ? respond(running(5)) : null));
     renderApp('/admin/library');
-    expect(await screen.findByRole('button', { name: 'Scanning…' })).toBeDisabled();
+    expect(await screen.findByRole('progressbar', { name: 'Scan progress' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Scan library now|Scanning/ })).toBeNull();
   });
 
   it('handles a 409 from Scan now by saying a scan is already running', async () => {
@@ -188,7 +188,8 @@ describe('Admin: Library scan panel', () => {
   it('shows a loading skeleton while the status loads', () => {
     installFetch(() => new Promise(() => {}));
     renderApp('/admin/library');
-    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(2);
+    // The scan card, what it changed, and the Cast & crew count.
+    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(3);
   });
 
   it('redirects the old /admin#library-scan address to the scan, scrolls once and never loads To do', async () => {

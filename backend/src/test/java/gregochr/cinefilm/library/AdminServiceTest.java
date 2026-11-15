@@ -2,14 +2,17 @@ package gregochr.cinefilm.library;
 
 import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
+import static gregochr.cinefilm.TestData.credit;
 import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
+import static gregochr.cinefilm.TestData.person;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.ApiTestBase;
+import gregochr.cinefilm.film.CreditRole;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.GroupingChange;
 import gregochr.cinefilm.film.GroupingChangeRepository;
@@ -22,6 +25,7 @@ import gregochr.cinefilm.library.AdminDtos.Attention;
 import gregochr.cinefilm.library.AdminDtos.AttentionItem;
 import gregochr.cinefilm.library.AdminDtos.ScanStatusDto;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesRefresher;
+import gregochr.cinefilm.person.Person;
 import gregochr.cinefilm.subtitle.SidecarCheckRefresher;
 import gregochr.cinefilm.ratings.RatingsRefresher;
 import java.time.Duration;
@@ -178,7 +182,7 @@ class AdminServiceTest extends ApiTestBase {
         assertThat(status.running()).isFalse();
         assertThat(status.progress()).isNull();
         assertThat(status.lastScan()).isNull();
-        assertThat(status.counts()).isEqualTo(new AdminDtos.CountsDto(0, 0, 0, 0, 0, 0, 0));
+        assertThat(status.counts()).isEqualTo(new AdminDtos.CountsDto(0, 0, 0, 0, 0, 0, 0, 0));
     }
 
     @Test
@@ -193,7 +197,27 @@ class AdminServiceTest extends ApiTestBase {
         saved("Gone", 2005, "g.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.MISSING);
         saved("Gone Drm", 2006, "h.m4v", MatchStatus.PENDING, Playability.PROTECTED, Presence.MISSING);
 
-        assertThat(admin.status().counts()).isEqualTo(new AdminDtos.CountsDto(2, 4, 2, 1, 2, 1, 1));
+        assertThat(admin.status().counts()).isEqualTo(new AdminDtos.CountsDto(2, 4, 2, 1, 2, 1, 1, 0));
+    }
+
+    @Test
+    void theCountsSayHowManyBrowsableFilmsHaveCredits() {
+        Film credited = saved("Credited", 2000, "a.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.PRESENT);
+        Film twice = saved("Twice", 2001, "b.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.PRESENT);
+        saved("Bare", 2002, "c.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.PRESENT);
+        Film hidden = saved("Hidden", 2003, "d.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.MISSING);
+        Person person = people.save(person(null, "Ana"));
+        credit(credited, person, CreditRole.DIRECTOR, null, 1);
+        credit(twice, person, CreditRole.DIRECTOR, null, 1);
+        credit(twice, person, CreditRole.CAST, "Lead", 2);
+        credit(hidden, person, CreditRole.CAST, "Ghost", 1);
+        films.saveAll(List.of(credited, twice, hidden));
+        films.flush();
+
+        AdminDtos.CountsDto counts = admin.status().counts();
+
+        assertThat(counts.films()).isEqualTo(3);
+        assertThat(counts.filmsWithCredits()).isEqualTo(2);
     }
 
     @Test

@@ -27,20 +27,34 @@ function held(url) {
 }
 
 describe('Admin Library section', () => {
-  it('is named Library and holds the scan, grouping report and Plex import cards', async () => {
+  it('is named Library and holds the scan, ratings, Plex import and Cast & crew cards in order', async () => {
     installFetch((m, url) => (url === '/api/admin/plex' ? respond(PLEX) : null));
     renderApp('/admin/library');
     expect(screen.getByRole('heading', { level: 1, name: 'Library' })).toBeInTheDocument();
-    for (const name of ['Library scan', 'Grouping report', 'Plex import']) {
-      expect(await screen.findByRole('region', { name })).toBeInTheDocument();
-    }
+    await screen.findByRole('region', { name: 'Import from Plex' });
+    await screen.findByRole('region', { name: 'Ratings' });
+    expect(screen.getAllByRole('region').map((r) => r.getAttribute('id'))).toEqual([
+      'scan',
+      'ratings',
+      'plex-import',
+      'cast-crew',
+    ]);
+    expect(screen.queryByRole('region', { name: 'Grouping report' })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Pick the right film' })).toBeNull();
   });
 
-  it('shows one skeleton per loading card: the scan and the grouping report', () => {
+  it('has no TMDB credits download and no subtitle search line', async () => {
+    installFetch((m, url) => (url === '/api/admin/plex' ? respond(PLEX) : null));
+    renderApp('/admin/library');
+    await screen.findByRole('region', { name: 'Import from Plex' });
+    expect(screen.queryByRole('button', { name: /TMDB/i })).toBeNull();
+    expect(screen.queryByText(/Subtitles searched/)).toBeNull();
+  });
+
+  it('shows one skeleton per loading card: the scan, what it changed and the Cast & crew count', () => {
     installFetch(() => new Promise(() => {}));
     renderApp('/admin/library');
-    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(2);
+    expect(screen.getAllByRole('status', { name: 'Loading' })).toHaveLength(3);
   });
 
   it('shows the scan error with Try again, and the grouping report error on its own', async () => {
@@ -49,16 +63,16 @@ describe('Admin Library section', () => {
     );
     renderApp('/admin/library');
     expect(await screen.findByText('Couldn’t load the library scan.')).toBeInTheDocument();
-    expect(await screen.findByText('Couldn’t load the grouping report.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Couldn’t load what the last scan changed.'),
+    ).toBeInTheDocument();
   });
 
   it('lists the grouping changes from the report', async () => {
     installFetch();
     renderApp('/admin/library');
-    const report = await screen.findByRole('region', { name: 'Grouping report' });
-    expect(
-      await within(report).findByRole('list', { name: 'Grouping changes' }),
-    ).toBeInTheDocument();
+    const card = await screen.findByRole('region', { name: 'Library scan' });
+    expect(await within(card).findByRole('list', { name: 'Grouping changes' })).toBeInTheDocument();
   });
 
   it('reads the grouping report again when a match applies while Library is open', async () => {
@@ -110,7 +124,7 @@ describe('Admin Library section: scrolling to an anchor', () => {
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
 
     await act(async () => plex.release(respond(PLEX)));
-    await screen.findByRole('region', { name: 'Plex import' });
+    await screen.findByRole('region', { name: 'Import from Plex' });
     await act(async () => {});
 
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
@@ -126,7 +140,7 @@ describe('Admin Library section: scrolling to an anchor', () => {
       return url === '/api/admin/plex' ? respond(PLEX) : null;
     });
     renderApp('/admin/library#plex-import');
-    const card = await screen.findByRole('region', { name: 'Plex import' });
+    const card = await screen.findByRole('region', { name: 'Import from Plex' });
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
 
     await act(async () => scan.release(respond(fixtures.adminScan)));
@@ -168,7 +182,7 @@ describe('Admin Library section: scrolling to an anchor', () => {
     Element.prototype.scrollIntoView = scrollIntoView;
     installFetch((m, url) => (url === '/api/admin/plex' ? respond(PLEX) : null));
     renderApp('/admin/library');
-    await screen.findByRole('region', { name: 'Plex import' });
+    await screen.findByRole('region', { name: 'Import from Plex' });
     await act(async () => {});
     expect(scrollIntoView).not.toHaveBeenCalled();
   });

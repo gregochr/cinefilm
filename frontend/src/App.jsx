@@ -4,6 +4,8 @@ import LogoMark from './components/LogoMark.jsx';
 import SignInCard from './components/SignInCard.jsx';
 import AdminLayout from './screens/Admin.jsx';
 import AdminLibrary from './screens/admin/AdminLibrary.jsx';
+import AdminLibraryFiles from './screens/admin/AdminLibraryFiles.jsx';
+import { FILE_LISTS } from './state/adminRoutes.js';
 import AdminPlayback from './screens/admin/AdminPlayback.jsx';
 import AdminSettings from './screens/admin/AdminSettings.jsx';
 import AdminSubtitles from './screens/admin/AdminSubtitles.jsx';
@@ -53,6 +55,13 @@ export default function App() {
             <Route index element={<AdminTodo />} />
             <Route path="subtitles" element={<AdminSubtitles />} />
             <Route path="library" element={<AdminLibrary />} />
+            {FILE_LISTS.map((list) => (
+              <Route
+                key={list.kind}
+                path={list.path.replace('/admin/', '')}
+                element={<AdminLibraryFiles list={list} />}
+              />
+            ))}
             <Route path="playback" element={<AdminPlayback />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>

@@ -412,6 +412,23 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
   to Plex" when unreachable, "Last report" behind a quiet button.
 - Cast & crew card: "{n} of {total} films have credits" (new backend count), "Import credits from Plex" when Plex is
   configured. The credits-dataset control only per Q1.
+- **6 decision (built):** `AdminLibrary.jsx` composes four cards in order (`LibraryScanCard` `#scan`,
+  `LibraryRatingsCard`, `LibraryPlexCard` `#plex-import`, `LibraryCastCard` `#cast-crew`); the grouping report is
+  `LibraryChanges`, a `<details>` inside the scan card, 25 per page ("Show {n} more"). The Running/Idle pill is gone
+  (the header line and the progress take its place). The three tile links go to `/admin/library/files/{protected,
+  needs-conversion,unreadable}` (`AdminLibraryFiles`, `FILE_LISTS` in `state/adminRoutes.js`, also bare on phone):
+  the existing `GET /api/admin/attention` filtered by `kind`, so no new list route. The new backend count is
+  `counts.filmsWithCredits` on `GET /api/admin/scan` (`FilmRepository.findIdsWithCredits`, intersected with the
+  browsable films, so it never exceeds `counts.films`). **Departures:** (1) no "Download TMDB credits" (Q1). (2) The
+  board's hints for Ratings, Import from Plex and Import credits are replaced by 07's and the component's own:
+  Plex's credits markers say where the end credits start, not who acted, so "Fills in actors and directors from Plex"
+  would be false. (3) The board's server name ("dockermacmini · reachable") is not shown: `GET /api/admin/plex`
+  carries no host, so the line is "Plex server: Reachable". (4) The header shows only the last scan's time and
+  duration; "2 new, 0 missing" were already tiles. Invented copy ("planner, 6" in `adminCopy.js`): "Not scanned yet",
+  "Couldn’t load what the last scan changed.", "Show {n} more", "IMDb and Rotten Tomatoes · not fetched yet", "Not
+  imported yet", "Nothing yet", "Not reachable", "Importing", "No films in the library yet", "{n} of 1 film has
+  credits", "‹ Library", "Nothing here.", "Couldn’t load these files.", and the list titles "Protected files", "Files
+  that need converting", "Files that could not be read" (`FILE_LISTS`).
 
 ### 7 · Settings
 

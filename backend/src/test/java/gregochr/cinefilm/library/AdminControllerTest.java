@@ -34,7 +34,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class AdminControllerTest {
 
     private static final ScanStatusDto IDLE = new ScanStatusDto(false, "/media", null, null,
-        new CountsDto(5, 1, 2, 3, 4, 6, 7), null, false, false, null, false, false, false, null);
+        new CountsDto(5, 1, 2, 3, 4, 6, 7, 8), null, false, false, null, false, false, false, null);
 
     @Autowired
     private MockMvc mvc;
@@ -109,7 +109,7 @@ class AdminControllerTest {
     @Test
     void getScanReturnsTheStatusThePollingPanelReads() throws Exception {
         when(admin.status()).thenReturn(new ScanStatusDto(true, "/media", new ProgressDto(3, 10, "Heat.m4v"), null,
-            new CountsDto(5, 1, 2, 3, 4, 6, 7), NOW, true, true, NOW.minusSeconds(60), true, true, true,
+            new CountsDto(5, 1, 2, 3, 4, 6, 7, 8), NOW, true, true, NOW.minusSeconds(60), true, true, true,
             NOW.minusSeconds(30)));
 
         mvc.perform(get("/api/admin/scan").with(user("owner")))
@@ -133,6 +133,7 @@ class AdminControllerTest {
             .andExpect(jsonPath("$.counts.protectedFiles").value(3))
             .andExpect(jsonPath("$.counts.needsConversion").value(4))
             .andExpect(jsonPath("$.counts.needsMatch").value(6))
+            .andExpect(jsonPath("$.counts.filmsWithCredits").value(8))
             .andExpect(jsonPath("$.counts.unreadable").value(7));
     }
 

@@ -112,7 +112,7 @@ class LibraryScanIntegrationTest extends IntegrationTestBase {
         assertThat(ingest.known()).containsOnlyKeys("Heat.m4v", "Dune.m4v", "Drm.m4v", "Old.avi");
         assertThat(ingest.known().get("Heat.m4v").modifiedAt()).isEqualTo(CREATED);
         assertThat(admin.status().counts()).isEqualTo(new gregochr.cinefilm.library.AdminDtos.CountsDto(2, 0, 0, 1,
-            1, 1, 0));
+            1, 1, 0, 0));
         assertThat(admin.attention().items()).extracting(AttentionItem::kind)
             .containsExactly("needs-match", "protected", "needs-conversion");
         assertThat(admin.attention().items().get(0).candidates()).singleElement()

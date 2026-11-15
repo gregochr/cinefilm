@@ -100,6 +100,7 @@ const LIBRARY_BUTTONS = [
   'Scan library now',
   'Refresh all ratings',
   'Import from Plex again',
+  'Last report',
   'Import credits from Plex',
 ];
 
@@ -204,6 +205,7 @@ const CASES = [
       'Refresh all ratings',
       'Import from Plex again',
       'Try connecting to Plex',
+      'Last report',
       'Import credits from Plex',
     ],
   },

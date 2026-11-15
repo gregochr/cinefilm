@@ -28,6 +28,7 @@ import gregochr.cinefilm.tmdb.MatchOutcome.Candidate;
 import gregochr.cinefilm.todo.AdminTodoRules;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -85,12 +86,14 @@ public class AdminService {
             .map(r -> new LastScanDto(r.getStartedAt(), r.getFinishedAt(), r.getTrigger(), r.getFilesSeen(),
                 r.getNewFiles(), r.getMissingFiles(), r.getError()))
             .orElse(null);
-        long browsable = films.findAll().stream().filter(Film::browsable).count();
-        CountsDto counts = new CountsDto(browsable, last == null ? 0 : last.newFiles(),
+        List<Film> browsableFilms = films.findAll().stream().filter(Film::browsable).toList();
+        Set<Long> credited = new HashSet<>(films.findIdsWithCredits());
+        long withCredits = browsableFilms.stream().filter(f -> credited.contains(f.getId())).count();
+        CountsDto counts = new CountsDto(browsableFilms.size(), last == null ? 0 : last.newFiles(),
             files.countOriginals(Presence.MISSING), files.countPresent(Playability.PROTECTED),
             files.countPresent(Playability.NEEDS_CONVERSION),
             films.findByMatchStatusOrderBySortTitle(MatchStatus.NEEDS_MATCH).size(),
-            files.countPresent(Playability.UNREADABLE));
+            files.countPresent(Playability.UNREADABLE), withCredits);
         return new ScanStatusDto(scans.isRunning(), root.root().toString(),
             progress == null ? null : new ProgressDto(progress.processed(), progress.total(), progress.current()),
             last, counts, films.findLatestRatingsFetchedAt(), ratings.isRunning(), ratings.enabled(),
