@@ -16,6 +16,8 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesSearch;
 import gregochr.cinefilm.subtitle.ForcedChoice.Step;
 import gregochr.cinefilm.subtitle.TimingFit.Verdict;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +36,9 @@ class EditionOpenSubtitlesApiTest extends ForcedDownloadTestBase {
 
     @Autowired
     private ForcedDownloadService downloadService;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     private Film taken;
     private String search;
@@ -105,32 +110,97 @@ class EditionOpenSubtitlesApiTest extends ForcedDownloadTestBase {
     }
 
     @Test
-    void aPickStaysThePlayingDownloadAfterANudgeAndAFailedCheckStillGetsItsTimingFittedAndIsNeverDueAgain()
-        throws Exception {
+    void aPickStillGetsItsTimingFittedAndKeepsItsMarkAfterANudge() throws Exception {
         searchFindsBothFiles();
         theFileDownloads(5012);
-        assertThat(downloadService.due()).extracting(DueDownload::editionId).containsExactly(edition(taken).getId());
         mvc.perform(get(search + "?kind=forced")).andExpect(status().isOk());
         mvc.perform(post(download).content(body(5012, "forced"))).andExpect(status().isOk());
-        SubtitleSidecar row = sidecars.findAll().stream().filter(SubtitleSidecar::isDownload).findFirst()
-            .orElseThrow();
+        SubtitleSidecar row = onlyDownload();
 
         // The owner has not said "looks right", so the timing check still sets the offset for the pick.
         fitted(taken, row, Verdict.ALIGNED, 750);
         assertThat(row.getOffsetMs()).isEqualTo(750);
         assertThat(row.getOffsetSource()).isEqualTo(SubtitleSidecar.OffsetSource.AUTO);
 
-        // The owner nudges it (which clears an owner's check) and a comparison then says CHECK.
+        // A nudge clears an owner's check but not the pick.
         mvc.perform(put("/api/admin/subtitles/{id}/offset", row.getId()).content("{\"offsetMs\":500}"))
             .andExpect(status().isOk());
-        downloadCheck(taken, row, "CHECK", reference(taken, 5011));
 
         assertThat(row.getOffsetMs()).isEqualTo(500);
         assertThat(row.getOwnerChosenAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void aPickNothingElseProvesStillPlaysAndIsNeverDueAgainWhereWithoutTheMarkItWouldFailAndBeReplaced()
+        throws Exception {
+        searchFindsBothFiles();
+        theFileDownloads(5012);
+        assertThat(downloadService.due()).extracting(DueDownload::editionId).containsExactly(edition(taken).getId());
+        mvc.perform(get(search + "?kind=forced")).andExpect(status().isOk());
+        mvc.perform(post(download).content(body(5012, "forced"))).andExpect(status().isOk());
+        SubtitleSidecar row = onlyDownload();
+        mvc.perform(put("/api/admin/subtitles/{id}/offset", row.getId()).content("{\"offsetMs\":500}"))
+            .andExpect(status().isOk());
+
+        // Nothing proves it: its timing does not line up and a comparison with another file says CHECK.
+        fitted(taken, row, Verdict.CHECK, 0);
+        downloadCheck(taken, row, "CHECK", reference(taken, 5011));
+
         assertThat(resolve(taken).decision().step()).isEqualTo(Step.PROVEN_DOWNLOAD);
         assertThat(resolve(taken).decision().downloadId()).isEqualTo(row.getId());
-        // The nightly plan finds a live download: nothing is due, no replacement is fetched.
+        assertThat(resolve(taken).decision().downloadReasons().get(row.getId())).isEqualTo("Plays: you picked it");
         assertThat(downloadService.due()).isEmpty();
+
+        // The same fixture without the marker: the download has failed and the edition is due a replacement.
+        row.setOwnerChosenAt(null);
+        sidecars.saveAndFlush(row);
+        assertThat(resolve(taken).decision().step()).isNotEqualTo(Step.PROVEN_DOWNLOAD);
+        assertThat(resolve(taken).decision().hasLiveDownload()).isFalse();
+        assertThat(downloadService.due()).extracting(DueDownload::editionId).containsExactly(edition(taken).getId());
+    }
+
+    @Test
+    void aNewerPickTakesTheMarkFromTheEarlierOneInTheDatabaseAndAPickOfTheOtherKindKeepsItsOwn() throws Exception {
+        searchFindsBothFiles();
+        OpenSubtitlesResult full = result(6011, "Taken.2008.Full");
+        when(api.searchFull(IMDB)).thenReturn(new OpenSubtitlesSearch(1, full, List.of(full), List.of(full)));
+        theFileDownloads(5011);
+        theFileDownloads(5012);
+        StringBuilder fullSrt = new StringBuilder();
+        for (int i = 1; i <= SubtitleComparison.FULL_LINES; i++) {
+            fullSrt.append(i).append("\n00:00:").append(String.format("%02d", i % 60)).append(",000 --> 00:00:")
+                .append(String.format("%02d", i % 60)).append(",500\nLine ").append(i).append("\n\n");
+        }
+        when(api.download(6011L)).thenReturn(new OpenSubtitlesDownload(
+            SrtParser.parse(fullSrt.toString().getBytes(StandardCharsets.UTF_8)), 19, null));
+
+        mvc.perform(get(search + "?kind=forced")).andExpect(status().isOk());
+        mvc.perform(post(download).content(body(5011, "forced"))).andExpect(status().isOk());
+        mvc.perform(get(search + "?kind=full")).andExpect(status().isOk());
+        mvc.perform(post(download).content(body(6011, "full"))).andExpect(status().isOk());
+        mvc.perform(get(search + "?kind=forced")).andExpect(status().isOk());
+        mvc.perform(post(download).content(body(5012, "forced"))).andExpect(status().isOk());
+        entityManager.flush();
+        entityManager.clear();
+
+        List<SubtitleSidecar> stored = sidecars.findAll();
+        SubtitleSidecar first = stored.stream().filter(s -> s.getOpenSubtitlesFileId() == 5011L).findFirst()
+            .orElseThrow();
+        SubtitleSidecar second = stored.stream().filter(s -> s.getOpenSubtitlesFileId() == 5012L).findFirst()
+            .orElseThrow();
+        SubtitleSidecar fullRow = stored.stream().filter(s -> s.getOpenSubtitlesFileId() == 6011L).findFirst()
+            .orElseThrow();
+        assertThat(first.getOwnerChosenAt()).isNull();
+        assertThat(second.getOwnerChosenAt()).isEqualTo(NOW);
+        assertThat(fullRow.getKind()).isEqualTo(SubtitleKind.FULL);
+        assertThat(fullRow.getOwnerChosenAt()).isEqualTo(NOW);
+        var reloaded = editionRepository.findWithFilesByFilmIdIn(List.of(taken.getId()));
+        var resolution = resolver.resolve(reloaded).get(edition(taken).getId());
+        assertThat(resolution.decision().downloadId()).isEqualTo(second.getId());
+    }
+
+    private SubtitleSidecar onlyDownload() {
+        return sidecars.findAll().stream().filter(SubtitleSidecar::isDownload).findFirst().orElseThrow();
     }
 
     @Test

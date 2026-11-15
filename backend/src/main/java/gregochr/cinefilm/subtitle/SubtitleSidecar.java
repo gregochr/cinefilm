@@ -95,7 +95,8 @@ public class SubtitleSidecar {
 
     /**
      * When the owner picked this download in the Admin picker; null for every other row. Unlike the owner's check it
-     * is never cleared by a nudge, a reset, an undo or a change of the edition's parts: a pick stays the pick.
+     * is never cleared by a nudge, a reset, an undo or a change of the edition's parts: a pick stays the pick until a
+     * later pick for the same edition and kind takes the mark.
      */
     private Instant ownerChosenAt;
 

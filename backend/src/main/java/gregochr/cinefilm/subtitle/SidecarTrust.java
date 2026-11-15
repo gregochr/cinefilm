@@ -7,7 +7,8 @@ import gregochr.cinefilm.subtitle.SubtitleDtos.SidecarDto;
 /**
  * Whether a forced subtitle is "proven" (owner decision, 2026-11-12: trust only proven subtitles): the owner said it
  * looks right, or the comparison with OpenSubtitles agrees (phase 2d), or its timing is aligned to the film's own
- * English track (phase 3a). One that is none of these and has a current {@code CHECK} verdict has failed; one that is
+ * English track (phase 3a); a download the owner picked in the Admin picker ({@link Proof#CHOSEN}) is proven whatever
+ * a comparison says. One that is none of these and has a current {@code CHECK} verdict has failed; one that is
  * none of these with no such verdict is unchecked (nothing says it is wrong, or it could not be checked). Playback uses
  * this to choose between an owner's file, a download and the film's own track ({@link ForcedChoice}). Pure.
  */
@@ -18,7 +19,7 @@ public final class SidecarTrust {
 
     /** How far a subtitle can be trusted. */
     public enum Trust {
-        /** The owner verified it, or an automatic check agrees. */
+        /** The owner picked it or verified it, or an automatic check agrees. */
         PROVEN,
         /** Nothing proves it and nothing says it is wrong: no current comparison, or the checks could not be made. */
         UNCHECKED,
@@ -50,7 +51,8 @@ public final class SidecarTrust {
     }
 
     /**
-     * Where a subtitle stands.
+     * Where a subtitle stands, for the owner's own files: it ignores the owner's pick marker, which only a download
+     * can carry (use {@link #assess(boolean, boolean, String, boolean)} for a download).
      *
      * @param ownerVerified true while the owner's check counts (see {@link SubtitleSidecar#isVerifiedFor})
      * @param checkVerdict the comparison with OpenSubtitles ({@code AGREES} or {@code CHECK}), or null when there is

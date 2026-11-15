@@ -317,7 +317,26 @@ class ForcedDownloadServiceChosenUnitTest {
 
         assertThat(earlier.isOwnerChosen()).isFalse();
         assertThat(ordinary.isOwnerChosen()).isFalse();
-        assertThat(savedRows()).singleElement().satisfies(row -> assertThat(row.isOwnerChosen()).isTrue());
+        // The cleared row is saved explicitly (not left to dirty checking), then the new pick.
+        assertThat(savedRows()).hasSize(2).first().isSameAs(earlier);
+        assertThat(savedRows().get(1).getOpenSubtitlesFileId()).isEqualTo(5011L);
+        assertThat(savedRows().get(1).isOwnerChosen()).isTrue();
+    }
+
+    @Test
+    void aPickMadeForAnotherEditionThatSharesAPartFileKeepsItsMark() {
+        editionLoads();
+        SubtitleSidecar otherEditions = download(7501, SubtitleKind.FORCED);
+        otherEditions.setPath("opensubtitles:99:7501");
+        otherEditions.setOwnerChosenAt(NOW.minusSeconds(60));
+        rows(SubtitleKind.FORCED, List.of(), List.of(otherEditions));
+
+        assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
+            .isEqualTo(ChosenOutcome.ADDED);
+
+        assertThat(otherEditions.getOwnerChosenAt()).isEqualTo(NOW.minusSeconds(60));
+        assertThat(savedRows()).singleElement().satisfies(row -> assertThat(row.getOpenSubtitlesFileId())
+            .isEqualTo(5011L));
     }
 
     @Test

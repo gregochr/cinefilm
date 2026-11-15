@@ -261,6 +261,13 @@ class ForcedChoiceTest {
     }
 
     @Test
+    void twoPickedDownloadsGoToTheLowestId() {
+        Decision decision = decide(null, false, download(9, CHOSEN), download(7, CHOSEN), download(2, AGREES));
+
+        assertThat(decision.downloadId()).isEqualTo(7L);
+    }
+
+    @Test
     void aPickedDownloadReplacesAFailedOwnerFileAndSaysSoInTheFilesReason() {
         Decision decision = decide(file(FAILED), false, download(9, CHOSEN));
 
