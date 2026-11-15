@@ -4,20 +4,31 @@ import { buttons } from '../../state/adminCopy.js';
 import {
   foreignActions,
   foreignLine,
+  forcedActions,
   forcedRowLine,
   filmTitle,
+  pickerButton,
 } from '../../state/adminSubtitles.js';
 import AddOwnFile from './AddOwnFile.jsx';
 import RowText from './AdminRowText.jsx';
 
 /**
- * One film the server could not settle. The foreign tab offers "Add my own file…" (the attach flow for this film)
- * and, for unlabelled audio, "It's English"; the forced tab offers "No foreign scenes". "Search for English
- * subtitles…", "It's in {language} — find subtitles" and "Find forced subtitles…" open the OpenSubtitles picker and
- * arrive with it (4c). Both owner choices save `NOT_NEEDED` through `onChoose(row)`; while a row's choice is saving
+ * One film the server could not settle. The foreign tab offers "Search for English subtitles…" (or, for unlabelled
+ * audio, "It's in {language} — find subtitles"), "Add my own file…" (the attach flow for this film) and, for unlabelled
+ * audio, "It's English"; the forced tab offers "Find forced subtitles…" and "No foreign scenes". The search buttons
+ * open the OpenSubtitles picker through `onFind(row, opener)` and are left out when the row has no `editionId` (no
+ * edition to search for). Both owner choices save `NOT_NEEDED` through `onChoose(row)`; while a row's choice is saving
  * its buttons are `aria-disabled` (still focusable) and a click does nothing. `problem` is what a failed save says.
  */
-export default function SubtitleNeedRow({ row, kind, saving, problem, onChoose, onAttached }) {
+export default function SubtitleNeedRow({
+  row,
+  kind,
+  saving,
+  problem,
+  onChoose,
+  onAttached,
+  onFind,
+}) {
   const [adding, setAdding] = useState(false);
   const addRef = useRef(null);
   const busy = { 'aria-disabled': saving || undefined };
@@ -28,7 +39,10 @@ export default function SubtitleNeedRow({ row, kind, saving, problem, onChoose, 
     setAdding(false);
     addRef.current?.focus();
   };
-  const actions = kind === 'foreign' ? foreignActions(row) : ['noForeignScenes'];
+  const find = (event) => {
+    if (!saving) onFind(row, event.currentTarget);
+  };
+  const actions = kind === 'foreign' ? foreignActions(row) : forcedActions(row);
   return (
     <li className="admin__todo-row">
       <RowText row={row} line={kind === 'foreign' ? foreignLine(row) : forcedRowLine(row)} />
@@ -44,6 +58,20 @@ export default function SubtitleNeedRow({ row, kind, saving, problem, onChoose, 
                 onClick={() => setAdding(!adding)}
               >
                 {buttons.addFileToFilm.label}
+              </ActionWithHint>
+            );
+          }
+          if (action !== 'itsEnglish' && action !== 'noForeignScenes') {
+            const { label, hint } = pickerButton(action, row);
+            return (
+              <ActionWithHint
+                key={action}
+                hint={hint}
+                {...busy}
+                aria-haspopup="dialog"
+                onClick={find}
+              >
+                {label}
               </ActionWithHint>
             );
           }

@@ -12,10 +12,11 @@ import SubtitleNeedPanel from './SubtitleNeedPanel.jsx';
  * Subtitles: two tabs (the foreign-language films with no English subtitles, the English films with foreign scenes
  * and no forced subtitle found), each listing only the films the server flagged `unresolved`, and "Everything else".
  * Each list loads on its own, so one failing leaves the other tab and the rest of the page on screen. Every owner
- * choice calls `markChanged`, so the summary, the rail counts, the To do groups and these lists read again.
+ * choice calls `markChanged`, so the summary, the rail counts, the To do groups and these lists read again; so does
+ * a file picked in the OpenSubtitles picker, which the layout hosts (`openSubtitlePicker`).
  */
 export default function AdminSubtitles() {
-  const { subtitlesVersion, changed, markChanged, scan } = useAdminContext();
+  const { subtitlesVersion, changed, markChanged, scan, openSubtitlePicker } = useAdminContext();
   const [tab, setTab] = useState('foreign');
   const lists = useAdminSubtitles({ subtitlesVersion, changed, onChanged: markChanged });
   const figures = everythingElse({
@@ -40,6 +41,7 @@ export default function AdminSubtitles() {
         need={lists.full}
         rows={lists.foreign}
         onChanged={markChanged}
+        onFind={openSubtitlePicker}
       />
       <SubtitleNeedPanel
         kind="forced"
@@ -47,6 +49,7 @@ export default function AdminSubtitles() {
         need={lists.forced}
         rows={lists.forcedFilms}
         onChanged={markChanged}
+        onFind={openSubtitlePicker}
       />
       <SubtitleEverythingElse
         figures={figures}

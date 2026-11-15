@@ -11,6 +11,7 @@ import {
   todoGroups,
   todoRow,
 } from '../../state/adminCopy.js';
+import { pickerAction, pickerButton } from '../../state/adminSubtitles.js';
 import {
   bestGuess,
   filesLine,
@@ -88,11 +89,28 @@ function FilesRow({ item, onSortOut }) {
   );
 }
 
-/** A subtitle row, read-only here: the group's footer leads to Subtitles, where the fixing happens. */
-function SubtitleRow({ row, line }) {
+/**
+ * A subtitle row: the group's footer leads to Subtitles, where the other fixing happens, but the search button is
+ * here too (the same one the Subtitles tab shows) and opens the OpenSubtitles picker for the row's film. A row with
+ * no `editionId` has nothing to search for and no button.
+ */
+function SubtitleRow({ row, line, kind, onFindSubtitles }) {
+  const action = pickerAction(row, kind);
+  const button = action ? pickerButton(action, row) : null;
   return (
     <li className="admin__todo-row">
       <RowText row={row} line={line} />
+      {button ? (
+        <div className="admin__actions admin__todo-actions">
+          <ActionWithHint
+            hint={button.hint}
+            aria-haspopup="dialog"
+            onClick={(event) => onFindSubtitles(row, kind, event.currentTarget)}
+          >
+            {button.label}
+          </ActionWithHint>
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -119,16 +137,33 @@ function renderRow(group, row, props) {
         />
       );
     case 'fullMissing':
-      return <SubtitleRow key={row.filmId} row={row} line={fullLine(row)} />;
+      return (
+        <SubtitleRow
+          key={row.filmId}
+          row={row}
+          line={fullLine(row)}
+          kind="full"
+          onFindSubtitles={props.onFindSubtitles}
+        />
+      );
     default:
-      return <SubtitleRow key={row.filmId} row={row} line={forcedLine(row)} />;
+      return (
+        <SubtitleRow
+          key={row.filmId}
+          row={row}
+          line={forcedLine(row)}
+          kind="forced"
+          onFindSubtitles={props.onFindSubtitles}
+        />
+      );
   }
 }
 
 /**
  * One To do group: a card with its heading and why-line, up to five rows and a footer. The two film groups expand in
  * place ("Show all {n}", then "Show fewer", on the same button so focus stays put); the two subtitle groups link to
- * Subtitles. `group` is `{ key, rows, total }` from `buildTodoGroups`.
+ * Subtitles. `group` is `{ key, rows, total }` from `buildTodoGroups`. `onFindSubtitles(row, kind, opener)` opens the
+ * OpenSubtitles picker from a subtitle row (`kind` is `full` or `forced`).
  */
 export default function AdminTodoGroup({
   group,
@@ -137,6 +172,7 @@ export default function AdminTodoGroup({
   onConfirm,
   onFindFilm,
   onSortOut,
+  onFindSubtitles,
 }) {
   const [open, setOpen] = useState(false);
   // A group that has shrunk to the cap or below has nothing to fold: the next time it grows it starts folded.
@@ -160,7 +196,14 @@ export default function AdminTodoGroup({
       </div>
       <ul className="admin__todo-rows">
         {visibleRows(group, expanded).map((row) =>
-          renderRow(group, row, { confirming, problems, onConfirm, onFindFilm, onSortOut }),
+          renderRow(group, row, {
+            confirming,
+            problems,
+            onConfirm,
+            onFindFilm,
+            onSortOut,
+            onFindSubtitles,
+          }),
         )}
       </ul>
       {footer ? (

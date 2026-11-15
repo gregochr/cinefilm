@@ -359,21 +359,40 @@ const NOT_IN_PLAY = { unresolved: false, beingChecked: false };
  * assumes OpenSubtitles search and downloads are enabled, the usual dev setup.
  */
 const FORCED_IF_NEEDED = {
-  1: { unresolved: true, beingChecked: false },
-  2: { unresolved: true, beingChecked: false },
-  3: { unresolved: false, beingChecked: true },
+  1: { unresolved: true, beingChecked: false, editionId: 11 },
+  2: { unresolved: true, beingChecked: false, editionId: 101 },
+  3: { unresolved: false, beingChecked: true, editionId: 31 },
   4: NOT_IN_PLAY,
-  5: { unresolved: false, beingChecked: true },
-  6: { unresolved: true, beingChecked: false },
-  7: { unresolved: true, beingChecked: false },
+  5: { unresolved: false, beingChecked: true, editionId: 51 },
+  6: { unresolved: true, beingChecked: false, editionId: 61 },
+  7: { unresolved: true, beingChecked: false, editionId: 71 },
 };
 
+/** The films whose forced subtitle a picker download gave them, kept in memory: a subtitle now plays. */
+const filmsWithForcedDownload = new Set();
+
 function forcedRow(loaded) {
+  const row = forcedRowOfChoice(loaded);
+  // A downloaded forced subtitle plays, so the film is settled: not unresolved, not being checked.
+  return filmsWithForcedDownload.has(row.filmId)
+    ? { ...row, hasForcedSubtitle: true, unresolved: false, beingChecked: false, editionId: null }
+    : row;
+}
+
+function forcedRowOfChoice(loaded) {
   if (!forcedChoices.has(loaded.filmId)) return loaded;
   const choice = forcedChoices.get(loaded.filmId);
   if (choice) {
     const flags = choice === 'NEEDED' ? FORCED_IF_NEEDED[loaded.filmId] : NOT_IN_PLAY;
-    return { ...loaded, need: choice, reason: 'OWNER', ownerChoice: choice, ...flags };
+    // A row that is not unresolved or being checked has no picker edition, as the server leaves it.
+    return {
+      ...loaded,
+      need: choice,
+      reason: 'OWNER',
+      ownerChoice: choice,
+      editionId: null,
+      ...flags,
+    };
   }
   return { ...loaded, ...AUTOMATIC_BASELINE[loaded.filmId], ownerChoice: null };
 }
@@ -426,12 +445,30 @@ const FULL_IF_NEEDED = {
   7: { unresolved: false, beingChecked: true },
 };
 
+/** The films a picker download gave a full subtitle, kept in memory: it plays now. */
+const filmsWithFullDownload = new Set();
+
 function fullRow(row) {
   const base = fullRowOfChoice(row);
-  // An owner's file attached by hand plays, so the film is settled: not unresolved, not being checked.
-  const settled = filmsWithOwnFile.has(row.filmId)
-    ? { ...base, fullSubtitle: { source: 'SIDECAR' }, unresolved: false, beingChecked: false }
-    : base;
+  // A file attached by hand or picked from OpenSubtitles plays, so the film is settled: not unresolved, not being
+  // checked.
+  let settled = base;
+  if (filmsWithFullDownload.has(row.filmId)) {
+    settled = {
+      ...base,
+      fullSubtitle: { source: 'DOWNLOAD' },
+      unresolved: false,
+      beingChecked: false,
+    };
+  }
+  if (filmsWithOwnFile.has(row.filmId)) {
+    settled = {
+      ...base,
+      fullSubtitle: { source: 'SIDECAR' },
+      unresolved: false,
+      beingChecked: false,
+    };
+  }
   // The server's `subtitled` flag: needed, and a full subtitle plays (every fixture film shows in browse).
   return { ...settled, subtitled: settled.need === 'NEEDED' && Boolean(settled.fullSubtitle) };
 }
@@ -474,6 +511,11 @@ function setFullNeed(filmId, body) {
   return fullRow(loaded);
 }
 
+/** An error the way the API answers one: the message and a JSON body `{ error }` (the client reads the body). */
+function apiError(status, message) {
+  return new ApiError(status, message, { error: message });
+}
+
 const OS_KINDS = new Set(['full', 'forced']);
 const OS_MAX_FILES = 3;
 const KNOWN_EDITION_IDS = new Set([
@@ -486,16 +528,42 @@ const offeredFiles = new Map();
 const downloadedFiles = new Map();
 
 function openSubtitlesKind(kind) {
-  if (!OS_KINDS.has(kind)) throw new ApiError(400, 'The kind must be full or forced');
+  if (!OS_KINDS.has(kind)) throw apiError(400, 'The kind must be full or forced');
   return kind;
 }
 
 function openSubtitlesEdition(editionId) {
-  if (!KNOWN_EDITION_IDS.has(editionId)) throw new ApiError(404, 'No such edition');
+  if (!KNOWN_EDITION_IDS.has(editionId)) throw apiError(404, 'No such edition');
 }
 
 function filesLeft(key) {
   return OS_MAX_FILES - (downloadedFiles.get(key)?.size ?? 0);
+}
+
+/** The film an edition belongs to, as far as the fixtures say: `{ title, year }`, or Heat when they say nothing. */
+function pickerFilm(editionId) {
+  const row = [...adminFullNeed.films, ...adminForcedNeed.films].find(
+    (r) => r.editionId === editionId,
+  );
+  if (row) return { title: row.title, year: row.year };
+  const file = adminSubtitles.find((f) => f.editionId === editionId && f.filmTitle);
+  if (file) return { title: file.filmTitle, year: null };
+  const film = Object.values(details).find((d) => d.editions.some((e) => e.id === editionId));
+  return film ? { title: film.title, year: film.year } : { title: 'Heat', year: 1995 };
+}
+
+/** The fixture results for a kind, with the release and file names made for the edition's own film. */
+function openSubtitlesResults(editionId, kind) {
+  const { title, year } = pickerFilm(editionId);
+  const stem = [title.replace(/[^A-Za-z0-9]+/g, '.').replace(/^\.|\.$/g, ''), year]
+    .filter(Boolean)
+    .join('.');
+  const rename = (name) => name && name.replace(/^Heat\.1995/, stem);
+  return adminOpenSubtitles[kind].results.map((result) => ({
+    ...result,
+    release: rename(result.release),
+    fileName: rename(result.fileName),
+  }));
 }
 
 function searchOpenSubtitles(editionId, kind) {
@@ -504,24 +572,51 @@ function searchOpenSubtitles(editionId, kind) {
   const key = `${editionId}:${kind}`;
   const found = adminOpenSubtitles[kind];
   offeredFiles.set(key, new Set(found.results.map((result) => result.fileId)));
-  return { ...found, editionId, downloadsLeft: filesLeft(key) };
+  return {
+    ...found,
+    editionId,
+    results: openSubtitlesResults(editionId, kind),
+    downloadsLeft: filesLeft(key),
+  };
+}
+
+/**
+ * Two files of the dev mock answer with the errors the real server gives, so the picker's failure states can be tried
+ * by hand: the lowest-ranked forced file (5013) hits the daily limit (429) and the second full file (6011) is one
+ * OpenSubtitles charged for but could not deliver (502).
+ */
+const OS_FAILING_FILES = {
+  5013: [429, 'OpenSubtitles daily limit reached — try again tomorrow.'],
+  6011: [
+    502,
+    "OpenSubtitles counted this download against today's limit but could not deliver the file. Try again.",
+  ],
+};
+
+/** The film whose row names this edition for the picker (as the list shows it now), settled by a picked file. */
+function settleFilm(kind, editionId) {
+  const full = kind === 'full';
+  const rows = (full ? adminFullNeed.films : adminForcedNeed.films).map(full ? fullRow : forcedRow);
+  const filmId = rows.find((row) => row.editionId === editionId)?.filmId;
+  if (filmId !== undefined) (full ? filmsWithFullDownload : filmsWithForcedDownload).add(filmId);
 }
 
 function downloadOpenSubtitles(editionId, body) {
   const kind = openSubtitlesKind(body?.kind);
   if (!Number.isInteger(body?.fileId) || body.fileId <= 0) {
-    throw new ApiError(400, 'A file id is required');
+    throw apiError(400, 'A file id is required');
   }
   openSubtitlesEdition(editionId);
   const key = `${editionId}:${kind}`;
   if (!offeredFiles.get(key)?.has(body.fileId)) {
-    throw new ApiError(400, 'That file was not in a recent search for this edition. Search again.');
+    throw apiError(400, 'That file was not in a recent search for this edition. Search again.');
   }
+  if (OS_FAILING_FILES[body.fileId]) throw apiError(...OS_FAILING_FILES[body.fileId]);
   const taken = downloadedFiles.get(key) ?? new Set();
-  if (taken.has(body.fileId))
-    throw new ApiError(409, "That file is already this edition's download.");
+  if (taken.has(body.fileId)) throw apiError(409, "That file is already this edition's download.");
   downloadedFiles.set(key, taken.add(body.fileId));
-  const { release } = adminOpenSubtitles[kind].results.find((r) => r.fileId === body.fileId);
+  settleFilm(kind, editionId);
+  const { release } = openSubtitlesResults(editionId, kind).find((r) => r.fileId === body.fileId);
   return { editionId, kind, fileId: body.fileId, release, downloadsLeft: filesLeft(key) };
 }
 

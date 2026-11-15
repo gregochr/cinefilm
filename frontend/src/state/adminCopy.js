@@ -90,7 +90,7 @@ export const buttons = {
     source: 'AR1',
   },
   searchAgain: { label: 'Search again…', source: 'AR1' },
-  // Unlabelled audio (AR2, row "Downfall"). "find subtitles" opens the picker, so it arrives with 4c.
+  // Unlabelled audio (AR2, row "Downfall"). "find subtitles" opens the picker (4c); AR2 shows no hint under it.
   itsInLanguage: {
     label: (language) => `It’s in ${language} — find subtitles`,
     source: 'AR2',
@@ -509,4 +509,43 @@ export const settingsPage = {
   saveError: 'Could not save the setting.', // planner, 7 (existing; used when the server sent no message)
   saved: 'Saved', // planner, 7 (existing)
   credit: 'This product uses the TMDB API but is not endorsed or certified by TMDB.', // AR5
+};
+
+/**
+ * The OpenSubtitles picker (4c). AR1, AR2 and the README give the buttons that open it (in `buttons`) and say "a picker
+ * of OpenSubtitles results"; no board draws the dialog, so every string here is "planner, 4c" except the 429 text,
+ * which is the server's own (`EditionOpenSubtitlesController.QUOTA`) and is the answer when a 429 carries none.
+ */
+export const subtitlePicker = {
+  eyebrow: {
+    full: 'English subtitles from OpenSubtitles',
+    forced: 'Forced subtitles from OpenSubtitles',
+  }, // planner, 4c
+  lead: {
+    full: 'Best matches for this cut come first. Choosing one downloads it and it plays with the film.',
+    forced:
+      'Only files that hold the foreign lines. Choosing one downloads it and it plays with the film.',
+  }, // planner, 4c
+  editionSuffix: (name) => `· ${name}`, // planner, 4c: which cut, for a film with several
+  loading: 'Searching OpenSubtitles…', // planner, 4c
+  searchError: 'Couldn’t search OpenSubtitles. Try again.', // planner, 4c
+  downloadError: 'Couldn’t download that file. Try again.', // planner, 4c
+  quota: 'OpenSubtitles daily limit reached — try again tomorrow.', // the server's text
+  retry: 'Try again', // planner, 4c (the same words as the Subtitles lists)
+  empty: 'OpenSubtitles has no files for this film yet.', // planner, 4c
+  resultsLabel: 'OpenSubtitles results', // planner, 4c
+  choose: { label: 'Use this file', busyLabel: 'Downloading…' }, // planner, 4c
+  chooseName: (name) => `Use this file: ${name}`, // planner, 4c
+  cancel: 'Cancel', // planner, 4c
+  close: 'Close', // planner, 4c
+  unnamed: (fileId) => `File ${fileId}`, // planner, 4c
+  detail: {
+    downloads: (n) => `${n.toLocaleString('en-GB')} ${n === 1 ? 'download' : 'downloads'}`,
+    fps: (fps) => `${fps} fps`,
+    trusted: 'Trusted uploader',
+    hearingImpaired: 'Hearing impaired',
+    uploaded: (year) => `Uploaded ${year}`,
+  }, // planner, 4c
+  left: (n) => `${n} more ${n === 1 ? 'file' : 'files'} can be added for this edition`, // planner, 4c
+  source: 'planner, 4c (the 429 text is the server’s)',
 };

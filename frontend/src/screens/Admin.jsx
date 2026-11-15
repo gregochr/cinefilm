@@ -1,6 +1,7 @@
 import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router-dom';
 import EditEditions from '../components/EditEditions.jsx';
 import FixMatchPanel from '../components/FixMatchPanel.jsx';
+import SubtitlePicker from '../components/SubtitlePicker.jsx';
 import Toast from '../components/Toast.jsx';
 import { useDocumentVisible } from '../components/useDocumentVisible.js';
 import { AdminContext, useAdminContext } from '../state/adminContext.js';
@@ -56,7 +57,7 @@ function AdminShell() {
   const visible = useDocumentVisible();
   const { pathname } = useLocation();
   const shell = useAdminShell(visible, pathname);
-  const { fixing, editing, toast } = shell;
+  const { fixing, editing, picking, toast } = shell;
 
   const closeFixMatch = () => {
     returnFocus(fixing?.opener);
@@ -91,6 +92,18 @@ function AdminShell() {
               item={fixing.item}
               onApplied={applied}
               onCancel={closeFixMatch}
+            />
+          ) : null}
+          {picking ? (
+            <SubtitlePicker
+              key={`${picking.editionId}:${picking.kind}`}
+              film={picking.film}
+              editionId={picking.editionId}
+              editionName={picking.editionName}
+              kind={picking.kind}
+              opener={picking.opener}
+              onClose={shell.closeSubtitlePicker}
+              onPicked={() => shell.pickerDone(picking)}
             />
           ) : null}
           {editing ? (

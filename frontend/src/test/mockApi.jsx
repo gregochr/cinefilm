@@ -22,6 +22,7 @@ import adminPlex from './fixtures/admin-plex.json';
 import adminPlexCredits from './fixtures/admin-plex-credits.json';
 import adminTranscoding from './fixtures/admin-transcoding.json';
 import adminPlaybackHealth from './fixtures/admin-playback-health.json';
+import adminOpenSubtitles from './fixtures/admin-opensubtitles.json';
 import adminPlaybackChart from './fixtures/admin-playback-chart.json';
 import adminPlaybackRecord from './fixtures/admin-playback-record.json';
 import adminSubtitles from './fixtures/admin-subtitles.json';
@@ -57,6 +58,7 @@ export const fixtures = {
   adminPlaybackChart,
   adminPlaybackRecord,
   adminSubtitles,
+  adminOpenSubtitles,
   adminForcedNeed,
   adminFullNeed,
   session,
@@ -69,7 +71,7 @@ const json = (data, status = 200) =>
   });
 
 /** Default contract-shaped responses for every endpoint the app calls. */
-export function defaultRoute(method, url) {
+export function defaultRoute(method, url, init = {}) {
   const u = new URL(url, 'http://test.local');
   const path = u.pathname;
   if (path === '/api/home') return json(home);
@@ -151,6 +153,16 @@ export function defaultRoute(method, url) {
   // lists the page's buttons; the chart's own tests serve `fixtures.adminPlaybackChart`.
   if (path === '/api/admin/playback-health/chart') return json({ sessions: [] });
   if (path === '/api/admin/subtitles') return json(adminSubtitles);
+  const openSubtitles = path.match(/^\/api\/admin\/editions\/(\d+)\/opensubtitles(\/download)?$/);
+  if (openSubtitles) {
+    const editionId = Number(openSubtitles[1]);
+    if (openSubtitles[2]) {
+      const { fileId, kind } = JSON.parse(init.body);
+      const { release } = adminOpenSubtitles[kind].results.find((r) => r.fileId === fileId);
+      return json({ editionId, kind, fileId, release, downloadsLeft: 2 });
+    }
+    return json({ ...adminOpenSubtitles[u.searchParams.get('kind')], editionId });
+  }
   if (path === '/api/admin/forced-subtitles/films') return json(adminForcedNeed);
   if (path === '/api/admin/subtitles/full-need') return json(adminFullNeed);
   if (path === '/api/admin/transcoding') return json(adminTranscoding);
@@ -164,7 +176,7 @@ export function defaultRoute(method, url) {
 export function installFetch(route) {
   const mock = vi.fn(async (url, init = {}) => {
     const method = init.method || 'GET';
-    return (route && route(method, url, init)) || defaultRoute(method, url);
+    return (route && route(method, url, init)) || defaultRoute(method, url, init);
   });
   vi.stubGlobal('fetch', mock);
   return mock;

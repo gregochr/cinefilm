@@ -13,7 +13,9 @@
       "openSubtitlesForcedCount": 2,
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "editionId": 3000,
+      "editionName": null
     },
     {
       "filmId": 301,
@@ -28,7 +30,9 @@
       "openSubtitlesForcedCount": 2,
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "editionId": 3010,
+      "editionName": null
     },
     {
       "filmId": 302,
@@ -43,7 +47,9 @@
       "openSubtitlesForcedCount": 2,
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "editionId": 3020,
+      "editionName": null
     },
     {
       "filmId": 303,
@@ -58,7 +64,9 @@
       "openSubtitlesForcedCount": 2,
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "editionId": 3030,
+      "editionName": null
     },
     {
       "filmId": 304,
@@ -73,7 +81,9 @@
       "openSubtitlesForcedCount": 2,
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "editionId": 3040,
+      "editionName": null
     },
     {
       "filmId": 305,
@@ -88,7 +98,9 @@
       "openSubtitlesForcedCount": 2,
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "editionId": 3050,
+      "editionName": null
     },
     {
       "filmId": 306,
@@ -103,7 +115,9 @@
       "openSubtitlesForcedCount": 2,
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": true,
-      "beingChecked": false
+      "beingChecked": false,
+      "editionId": 3060,
+      "editionName": null
     },
     {
       "filmId": 310,
@@ -118,7 +132,9 @@
       "openSubtitlesForcedCount": 0,
       "openSubtitlesSearchedAt": "2026-11-12T06:00:00Z",
       "unresolved": false,
-      "beingChecked": false
+      "beingChecked": false,
+      "editionId": null,
+      "editionName": null
     }
   ],
   "counts": {

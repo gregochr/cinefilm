@@ -105,4 +105,23 @@ class FullNeedTest {
         assertThat(FullNeed.audioLanguage(List.of(new Track(null, true), new Track("English", false)))).isNull();
         assertThat(FullNeed.audioLanguage(List.of())).isNull();
     }
+
+    @Test
+    void aLabelIsForeignOnlyWhenItIsLabelledAndNotEnglish() {
+        assertThat(FullNeed.isForeign("French")).isTrue();
+        assertThat(FullNeed.isForeign(" German ")).isTrue();
+        assertThat(FullNeed.isForeign("English")).isFalse();
+        assertThat(FullNeed.isForeign("ENG")).isFalse();
+        assertThat(FullNeed.isForeign(null)).isFalse();
+        assertThat(FullNeed.isForeign("  ")).isFalse();
+    }
+
+    @Test
+    void thePickerEditionIsTheFirstForeignThenTheFirstUnlabelledThenTheFirst() {
+        assertThat(FullNeed.pickerIndex(Arrays.asList("English", null, "French", "German"))).isEqualTo(2);
+        assertThat(FullNeed.pickerIndex(Arrays.asList("English", "", null))).isEqualTo(1);
+        assertThat(FullNeed.pickerIndex(Arrays.asList("en", "English"))).isZero();
+        assertThat(FullNeed.pickerIndex(List.of("French"))).isZero();
+        assertThat(FullNeed.pickerIndex(List.of())).isEqualTo(-1);
+    }
 }

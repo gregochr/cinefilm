@@ -9,6 +9,11 @@ import { useAdminSummary } from './useAdminSummary.js';
  * again on each of those stamps and every 30 s while visible), the Fix match and Edit editions dialogs, the toast, and `changed`,
  * a counter bumped after a match is applied or editions are saved. `visible` (the tab is shown) pauses polling.
  *
+ * The OpenSubtitles picker is a dialog of the layout too: `openSubtitlePicker({ film, editionId, kind }, opener,
+ * { onPicked })` opens it (`onPicked` runs when a file was downloaded, also if the dialog was closed meanwhile), and
+ * `pickerDone(picking)` is what the picker calls once a download went through: the lists are read again whether or
+ * not the dialog is still open (the server saved the file), and the dialog closes only if it is still that one.
+ *
  * The dialogs remember the element that opened them so the layout can hand focus back on close.
  */
 export function useAdminShell(visible, pathname = '') {
@@ -18,6 +23,10 @@ export function useAdminShell(visible, pathname = '') {
   const [changed, setChanged] = useState(0);
   const [fixing, setFixing] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [picking, setPicking] = useState(null);
+  // The picker that is open now, for a download that finishes after the owner closed it or opened another.
+  const openPicker = useRef(null);
+  openPicker.current = picking;
   const toast = useToast();
   const fallback = useRef(false);
 
@@ -27,6 +36,7 @@ export function useAdminShell(visible, pathname = '') {
     setSeenPath(pathname);
     setFixing(null);
     setEditing(null);
+    setPicking(null);
   }
 
   // The lists refresh when a scan or a Plex import finishes: both settle matches.
@@ -50,6 +60,22 @@ export function useAdminShell(visible, pathname = '') {
   }, [reloadScan]);
   const openFixMatch = useCallback((item, opener) => setFixing({ item, opener }), []);
   const openEditEditions = useCallback((film, opener) => setEditing({ film, opener }), []);
+  const openSubtitlePicker = useCallback(
+    (target, opener, { onPicked } = {}) => setPicking({ ...target, opener, onPicked }),
+    [],
+  );
+  const closeSubtitlePicker = useCallback(() => setPicking(null), []);
+  const pickerDone = useCallback(
+    (done) => {
+      // Whichever picker it was, the server holds the file now: read the lists again.
+      markChanged();
+      // The caller's follow-up runs whether or not its dialog is still open (the row it opened from leaves either
+      // way); only the dialog that is still the open one is closed.
+      done.onPicked?.();
+      if (openPicker.current === done) setPicking(null);
+    },
+    [markChanged],
+  );
   const armFocusFallback = useCallback(() => {
     fallback.current = true;
   }, []);
@@ -71,14 +97,19 @@ export function useAdminShell(visible, pathname = '') {
       changed,
       openFixMatch,
       openEditEditions,
+      openSubtitlePicker,
       markChanged,
+      armFocusFallback,
       takeFocusFallback,
       showToast: toast.show,
     },
     fixing,
     editing,
+    picking,
     closeFixMatch,
     closeEditEditions,
+    closeSubtitlePicker,
+    pickerDone,
     markChanged,
     armFocusFallback,
     toast,
