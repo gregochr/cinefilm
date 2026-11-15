@@ -1,11 +1,113 @@
-# Admin redesign: nits for the cleanup PR
+# Admin redesign: nits left for cleanup B
 
-These are small and deliberately left alone; they are fixed together in one PR after 8b.
+Cleanup A (the Admin and Film detail frontend, the fixtures and mocks, the admin CSS and the plan docs) is done. What
+is left is below: the items that touch the player, the backend or the Playing now panel (cleanup B), and the Admin
+items A deliberately did not do, each with the reason. Owner questions and "record only" notes are kept as they were.
 
-## 3c-2
+## Cleanup B: backend
 
-- `adminTodo.js` `bestGuess` re-derives the ranking. Document "candidates ranked, best first" in the `AttentionItem`
-  contract, use `candidates[0]`, and drop the reverse-order test.
-- The hint is under "Yes" only; AR1 right-aligns it under both buttons.
-- `adminTodoManyFixtures.test.js` checks top-level keys only. Deep-compare `editions[]` and `fullSubtitle`.
-- `footerFor`'s comment says "group of 1 or 2". Name the group keys instead.
+### 4b / 4b Codex fix round
+
+- The 409 "A scan is running" is answered for any library-lock holder, including the timing and check passes a pick
+  itself triggers; give it a holder-specific message.
+- `ForcedChoiceTest` `aPickedDownloadIsNeverFailedBecauseTheAssessmentSaysSo` belongs in `SidecarTrustTest`.
+- Decision 45: say that "Looks right" on another download can't beat a pick (so the 4c copy doesn't promise it), and
+  split its nested parentheses into two sentences.
+- `ForcedChoice.fileReason`: "a download you picked plays instead" for an unchecked owner file beaten by a pick.
+- `ForcedDownloadServiceChosenUnitTest`: the empty-saves checks (`atLeast(0)` captor) are `verify(never())` in
+  disguise; drop them, the outcome enum covers it. Around lines 229-230 add a `PREMADE_720` file after clearing, to
+  test the ORIGINAL filter, and rename the test (it doesn't prove "before anything else is read").
+- `SidecarTrust.isProven(SidecarDto)` is test-only and ignores the marker; document or remove.
+- Javadoc: `EditionOpenSubtitlesService.search()`/`download()` `@throws ConflictException` and the
+  `ForcedDownloadService.addChosen` revalidation list should mention the no-original-file refusal.
+- `search` loads the edition twice (`findWithFilmById` + `hasOriginalFile`); fine at this scale, note only.
+
+### 4a performance
+
+- `FullNeedService` loads every Edition/MediaFile/Film on each full-need list read, and the summary polls it every
+  30 s: a projection query, or skip the two figures on the summary path.
+- `EditionRepository.findAllWithFilesIncludingEmpty` `distinct` makes Postgres sort the whole library on each
+  `list()`; Hibernate 6 dedupes without it.
+
+### 6 and 7
+
+- No index on `grouping_change.happened_at` (the range query scans; fine at this size).
+- `ServerSettingsService` range 400 text is developer wording ("continueWatchingMinMinutes must be…") and is shown
+  verbatim (unreachable through the UI).
+
+## Cleanup B: player, menus and Playing now
+
+### 8a / 8b-1 (player, `PlayerMenus`, subtitle hooks)
+
+- `role=alert` `<p>` and a heading `div` inside `role=menu` (`PlayerMenus`); the timing status/alert inside the
+  `role=menu` group has the same ARIA-required-children problem: move them outside the menu.
+- `.menu__problem` hard-codes `#f0876a` (no token; `styles/player.css`).
+- `PlayerSubtitlesWrong.test.jsx` ~210-230: set `sidecarIds` [70..75] so the `wrongTargets` filters are proven at
+  player level. `useSubtitleWrong`: a partial-overlap test (shows [61,62], serves [61,63] -> DELETE 61 only); line 32
+  should throw `Changed` (not `LookupFailed`) when no download is served and the ids are absent. Plan doc 8a: one long
+  line; changelog clause.
+- 8b-1: a press at +/-10 minutes is a silent no-op.
+- `subtitleTrackSwap.js`: the cancel doc comment line is overlong.
+- Record only (8b-1 edge): the owner clears the check in Admin while a pending track loads, so the swapped track may be
+  the replacement file under the old readout.
+- OWNER QUESTION (8b-1): a timing nudge clears the owner's "Looks right" check by documented design
+  (`forced-subtitles-plan.md:508`). Nudging a proven forced file in the player can demote it so another file serves
+  on the next film load; the player now keeps the old track and says "changed since the film started". Should a nudge
+  from the player keep the check?
+- MERGE NOTE: 8b-1 imports `NUDGES`/`nudgedOffset`/`formatOffset`; 8b-2 deleted `NUDGES` and `useSubtitles`'
+  `nudge`/`resetTiming`. When 8b-2 merged main after 8b-1, `NUDGES` had to stay (check it did).
+
+### 5a-1 (Playing now)
+
+- `PlayingNowPanel.test.jsx` `live()`, `playingNowFormat.test.js` `session()` and `admin-transcoding.json` lack
+  `unavailable` (`SessionRow` serialises it).
+- `PlayingNowPanel.jsx:68` `useCallback(leaveRow, [])` is redundant.
+- Add a 16,000/16,001 summary-size boundary case with `touch` present.
+- `usePlayingNow.js` JSDoc line over 120 chars.
+- Open owner item: Admin Stop only ends the server session (see the Stop-ends-playback work).
+
+### Sign-out and 401
+
+- `useSignOut.test.jsx:40`: `finish` may be undefined if the client awaits before fetch; add `waitFor`. The 204 branch
+  is better pinned in the client tests.
+- Product: a 401 on `DELETE /api/session` shows "Couldn't sign out" instead of the sign-in card (`client.js:114` skips
+  the expiry event).
+
+### 5a-2 (needs `player/health.js`)
+
+- `RUNG_OF_CODE` in `state/playbackChart.js` copies `player/health.js` `RUNG_CODES`: export that one and reuse it.
+
+## Left in Admin on purpose (not done in A)
+
+- **5a-2 per-column record cache or hover delay** (`usePlaybackRecord`): a cache by id would show a stale record for a
+  session that is still playing, and a 150 ms delay slows every selection and flashes the skeleton; needs a decision
+  on live sessions first.
+- **5a-2 `SelectedSession`**: the operator is shown in the heading and again in the network line, and AR4 joins the mono
+  lines with " · " on one line. A layout call against the AR4 screen; left.
+- **5a-2 `chartSummary` literals**: the tile strings are repeated as literals in the summary; harmless, left (the
+  column label now reuses `healthFormat.stallText`).
+- **4a `AdminTabList` tab panels** use `tabIndex={-1}`; APG says 0 when the first content isn't focusable. Every panel
+  starts with a heading or a button, so accepted.
+- **4a `adminSubtitles.js` `foreignLine`**: the `fullSubtitle` branch looks unreachable for an unresolved row, but
+  `adminTodo.fullLine` documents the case (a subtitle plays and the row is still unresolved); the server rule has to be
+  confirmed before removing it.
+- **4a `useFilmFilePicker`**: no `announceLibraryChanged()` after an attach; the hosts re-read through `onAttached`
+  and the POST already cleared the cache. Accepted.
+- **4a per-film "Show files" filter** (dropped; paging at 50): accepted, a film filter is a feature, not a nit.
+- **4a dev mock `fixtureServer.js`**: `filmsWithOwnFile.add` also runs for a forced attach, but every file in the
+  fixture is forced, so limiting it to FULL would remove the only dev path that settles a film. Do it when the fixture
+  gets a full file.
+- **`resources.js` `downloadOpenSubtitles`** takes no `options`, unlike `searchOpenSubtitles`: on purpose, a charged
+  download must never be aborted (its POST neighbours take none either).
+- **4a copy**: `noneFound` "nothing found automatically on OpenSubtitles" blends AR2 and AR1; mention it in a PR body
+  when the copy is next touched.
+- **3c-2 hint under both buttons**: the To do hint is under "Yes" only; AR1 right-aligns it under both. A layout
+  change in `ActionWithHint`'s row; left.
+- **6 `LibraryScanCard`**: "12 min ago" is computed at render and goes stale while the card is open (needs a ticking
+  hook); thousands separators ("1318" vs the board's "1,318") and the Plex "Last import 10 Nov" date format; the scan
+  409/start notice unmounts with the actions row when the status flips to running; `AdminLibraryFiles` keys include the
+  index and the tile link's name reverses the visible order (label-in-name is fine).
+- **6 owner note**: the Plex import's own split/join changes are no longer shown anywhere (documented in the
+  foundation plan).
+- **7 Settings**: the "min" unit sits outside the input; AR5 draws it inside.
+- **8a Fix dialog**: toggling "Preview lines" to "Hide lines" drops that button's hint (a layout shift); accepted.

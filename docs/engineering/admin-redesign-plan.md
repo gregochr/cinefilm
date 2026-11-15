@@ -252,8 +252,8 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
   at 22 px with a mouse and 44 px when any pointer is coarse (`any-pointer: coarse`, which also lifts the range and
   environment pills to 44 px), left-aligned, the row scrolling sideways when 90 days will not fit; the selected column
   is scrolled into view, since the newest is at the far end. **The 22 px mouse columns are an explicit exception to
-  the 44 px rule** (WCAG 2.5.8: the 6 px gaps give each target 28 px of spacing, and the arrow keys are the other
-  way in). The 100% / 50% / 0% and "stalls" labels of the board sit left of the columns. A column's stack is the
+  the 44 px rule** (WCAG 2.5.8: a 22 px column and its 6 px gap are a 28 px pitch, so a 24 px circle centred on any
+  column meets no other column; the arrow keys are the other way in). The 100% / 50% / 0% and "stalls" labels of the board sit left of the columns. A column's stack is the
   share of the time **on known rungs** (`bucketShares`), while the mono line under the heading is the share of the
   **watched** time (`healthFormat.rungShares`); the two can differ by the few seconds that no rung covers. The stall
   dot and the "stalled" tile both key on `stallCount` > 0 (the dot sized by `stallMs`, never smaller than the small
@@ -366,7 +366,9 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
   409 during a scan as the choice routes do.
 - Errors: `OpenSubtitlesQuotaException` → 429 `OpenSubtitles daily limit reached — try again tomorrow.`;
   `OpenSubtitlesChargedException` and `OpenSubtitlesUnavailableException` their own statuses and messages;
-  unconfigured → 503.
+  unconfigured → 503. A file that was fetched but cannot be a download of its kind (unreadable, a full file for a forced
+  pick, too short for a full one) → 422; an edition with only premade renditions → 409. The full list is the HTTP
+  contract in `foundation-plan.md`.
 - Tests: service unit tests with mocked collaborators; slice tests incl. 401, missing header, foreign `fileId`,
   quota; fixture entries; contract.
 
@@ -586,8 +588,8 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
     `SubtitlesPanel`, `useSubtitles`' `attach`, `nudge` and `resetTiming`, `adminRemoveLabels`, `RemoveDownload`'s
     `labels` and `hint` props (one wording now: `fixRemoveLabels` and `buttons.deleteDownload.hint`), the CSS only they
     used (`.subs__actions`, `.subs__timing`, `.subs__attach`, `.admin__item-actions`) and their tests. Kept:
-    `nudgedOffset`/`MAX_OFFSET_MS`/`formatOffset` (shared with the player), `adminApi.setSubtitleOffset` and
-    `attachSubtitle` (the player and `AddOwnFile` use them), the fixture routes.
+    `nudgedOffset`/`MAX_OFFSET_MS`/`formatOffset` (shared with the player), `adminApi.setSubtitleOffset` (the
+    player's timing uses it) and `attachSubtitle` (only `AddOwnFile` uses it), the fixture routes.
   - **Attaching an owner's forced file (review fix):** Admin's "Attach to… / Move to…" worked on every owner file,
     forced ones included, but "Add my own file…" listed only full files, so a loose or wrongly placed forced file had
     nowhere to go. In the Fix dialog only (`AddOwnFile allKinds` → `useFilmFilePicker(filmId, { allKinds })` →
