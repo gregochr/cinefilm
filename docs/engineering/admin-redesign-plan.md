@@ -502,7 +502,7 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
   duration; "2 new, 0 missing" were already tiles. Invented copy ("planner, 6" in `adminCopy.js`): "Not scanned yet",
   "Couldn’t load what the last scan changed.", "Show {n} more", "IMDb and Rotten Tomatoes · not fetched yet", "Not
   imported yet", "Nothing yet", "Not reachable", "Importing", "No films in the library yet", "{n} of 1 film has
-  credits", "‹ Library", "Nothing here.", "Couldn’t load these files.", and the list titles "Protected files", "Files
+  credits", "‹ Library", "Nothing here.", "Couldn’t load these files.", "The last scan changed nothing.", and the list titles "Protected files", "Files
   that need converting", "Files that could not be read" (`FILE_LISTS`).
 
 ### 7 · Settings

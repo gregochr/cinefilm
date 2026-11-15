@@ -61,10 +61,13 @@ export default function LibraryPlexCard({
 }) {
   const [reportOpen, setReportOpen] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState({ error: null, count: 0 });
   const reportId = useId();
   // Once the first read has failed the error card stays drawn while Try again loads, so the button keeps focus.
   if (!plex && error && !failed) setFailed(true);
   if (plex && failed) setFailed(false);
+  // Each new failure is a new alert node, so a screen reader announces a second failure again.
+  if (error && error !== failure.error) setFailure({ error, count: failure.count + 1 });
   if (!plex && (error || (failed && loading))) {
     return (
       <section id="plex-import" className="admin__card" aria-labelledby="admin-plex-title">
@@ -73,11 +76,15 @@ export default function LibraryPlexCard({
             {libraryPage.plex.title}
           </h2>
         </div>
-        <p className="admin__notice" role="alert">
+        <p key={failure.count} className="admin__notice" role="alert">
           {libraryPage.plex.loadError}
         </p>
         <div className="admin__actions">
-          <Button aria-busy={loading} onClick={loading ? undefined : onRecheck}>
+          <Button
+            aria-busy={loading}
+            aria-disabled={loading || undefined}
+            onClick={loading ? undefined : onRecheck}
+          >
             {libraryPage.plex.tryAgain}
           </Button>
         </div>

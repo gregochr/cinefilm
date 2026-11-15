@@ -222,9 +222,26 @@ describe('LibraryPlexCard', () => {
 
     const retry = screen.getByRole('button', { name: 'Try again' });
     expect(retry).toHaveAttribute('aria-busy', 'true');
+    expect(retry).toHaveAttribute('aria-disabled', 'true');
     expect(retry).toHaveFocus();
     await userEvent.click(retry);
     expect(onRecheck).toHaveBeenCalledTimes(1);
+  });
+
+  it('announces a second failure again with a new alert', () => {
+    const base = { starting: false, notice: null, onImport: () => {}, onRecheck: () => {} };
+    const { rerender } = render(
+      <LibraryPlexCard {...base} plex={undefined} error={new Error('1')} loading={false} />,
+    );
+    const first = screen.getByRole('alert');
+    expect(screen.getByRole('button', { name: 'Try again' })).not.toHaveAttribute('aria-disabled');
+
+    rerender(<LibraryPlexCard {...base} plex={undefined} error={null} loading />);
+    expect(screen.getByRole('alert')).toBe(first);
+
+    rerender(<LibraryPlexCard {...base} plex={undefined} error={new Error('2')} loading={false} />);
+    expect(screen.getByRole('alert')).not.toBe(first);
+    expect(first).not.toBeInTheDocument();
   });
 
   it('draws nothing while the first read is still running, and keeps the card when a later read fails', () => {

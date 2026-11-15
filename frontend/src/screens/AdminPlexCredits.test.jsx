@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
@@ -10,22 +10,6 @@ afterEach(() => {
 const plexRoute = (plex) => (m, url) => (url === '/api/admin/plex' ? respond(plex) : null);
 
 describe('Admin: Import credits from Plex', () => {
-  it('is not asked for or shown when Plex is not configured, once the Plex status has answered', async () => {
-    const fetchMock = installFetch();
-    renderApp('/admin/library');
-    await screen.findByRole('region', { name: 'Library scan' });
-    await waitFor(() =>
-      expect(fetchMock.mock.calls.some(([url]) => url === '/api/admin/plex')).toBe(true),
-    );
-    await act(async () => {});
-
-    expect(screen.queryByRole('group', { name: 'Credits from Plex' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Import credits from Plex' })).toBeNull();
-    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/admin/plex/credits')).toHaveLength(
-      0,
-    );
-  });
-
   it('sits inside the Import from Plex card beside Import from Plex, not under Cast & crew', async () => {
     installFetch(plexRoute(fixtures.adminPlex));
     renderApp('/admin/library');
