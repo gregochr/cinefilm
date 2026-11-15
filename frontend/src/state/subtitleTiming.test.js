@@ -5,13 +5,10 @@ import { subtitleTiming } from './subtitleFixCopy.js';
 import {
   EARLIER,
   LATER,
-  TimingChanged,
-  TimingLookupFailed,
   inSync,
   nextOffsets,
   timingProblem,
   timingReadout,
-  timingRows,
   trackToken,
   trackVersion,
 } from './subtitleTiming.js';
@@ -23,15 +20,6 @@ describe('the step', () => {
     expect(EARLIER).toBe(NUDGES.find((n) => n.delta === -250));
     expect(LATER).toBe(NUDGES.find((n) => n.delta === 250));
     expect(EARLIER.spoken).toBe('Show lines 0.25 seconds earlier');
-  });
-});
-
-describe('timingRows', () => {
-  it('returns the listed rows for the ids, in the film’s order, and leaves missing ones out', () => {
-    const list = [row(3, 0), row(1, 100), row(2, 200)];
-
-    expect(timingRows(list, [2, 9, 1]).map((r) => r.id)).toEqual([2, 1]);
-    expect(timingRows(list, undefined)).toEqual([]);
   });
 });
 
@@ -104,8 +92,6 @@ describe('timingProblem', () => {
   });
 
   it.each([
-    [new TimingLookupFailed(), subtitleTiming.lookupFailed],
-    [new TimingChanged(), subtitleTiming.changed],
     [new ApiError(500, 'Boom'), subtitleTiming.failed],
     [new Error('offline'), subtitleTiming.failed],
   ])('says one plain line for %s', (failure, text) => {

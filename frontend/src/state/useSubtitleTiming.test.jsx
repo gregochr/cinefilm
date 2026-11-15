@@ -11,17 +11,17 @@ const row = (id, offsetMs, over = {}) => ({
   id,
   offsetMs,
   version: 100,
+  served: true,
   ...over,
 });
 
-/** Serves the list `rows` (mutated by an offset PUT, as the server would) and records every call. */
+/** Serves the offset route over `rows` (changed as the server would) and records every call. */
 function serve({ rows, answer = () => null }) {
   const calls = [];
-  const fetchMock = installFetch((method, url, init) => {
+  installFetch((method, url, init) => {
     calls.push(`${method} ${url}${init?.body ? ` ${init.body}` : ''}`);
     const override = answer(method, url);
     if (override) return override;
-    if (url === '/api/admin/subtitles') return respond(rows.map((r) => ({ ...r })));
     const put = url.match(/^\/api\/admin\/subtitles\/(\d+)\/offset$/);
     if (method === 'PUT' && put) {
       const target = rows.find((r) => r.id === Number(put[1]));
@@ -31,81 +31,81 @@ function serve({ rows, answer = () => null }) {
     }
     return null;
   });
-  return { fetchMock, calls };
+  return { calls };
 }
 
 const open = (over = {}) => ({
   kind: 'FULL',
   ids: [1],
-  enabled: true,
+  offsets: [500],
   onApplied: vi.fn(),
   ...over,
 });
 
 describe('useSubtitleTiming', () => {
-  it('reads the offsets while enabled, and not before the panel is open', async () => {
+  it('knows the offsets from the film and sends nothing until a press', () => {
     const { calls } = serve({ rows: [row(1, 500)] });
-    const { result, rerender } = renderHook((props) => useSubtitleTiming(props), {
-      initialProps: open({ enabled: false }),
-    });
+    const { result } = renderHook(() => useSubtitleTiming(open()));
 
     expect(result.current.available).toBe(true);
+    expect(result.current.offsets).toEqual([500]);
     expect(calls).toEqual([]);
-    rerender(open({ enabled: true }));
-
-    await waitFor(() => expect(result.current.offsets).toEqual([500]));
-    expect(calls).toEqual(['GET /api/admin/subtitles']);
   });
 
-  it('is not available, and asks for nothing, when no file shows', async () => {
+  it.each([
+    ['no file shows', { kind: null, ids: undefined, offsets: undefined }],
+    ['the film gave no offsets', { offsets: undefined }],
+    ['the offsets do not match the rows', { ids: [1, 2], offsets: [0] }],
+  ])('is not available, and asks for nothing, when %s', async (_name, over) => {
     const { calls } = serve({ rows: [row(1, 500)] });
-    const { result } = renderHook(() => useSubtitleTiming(open({ kind: null, ids: undefined })));
+    const { result } = renderHook(() => useSubtitleTiming(open(over)));
 
     await act(() => result.current.later());
 
     expect(result.current.available).toBe(false);
+    expect(result.current.offsets).toBeNull();
     expect(calls).toEqual([]);
   });
 
-  it('Later sends the nudged absolute offset for the row, tells the player with the server’s answer, and reads the new offset', async () => {
+  it('Later sends only the nudged absolute offset, tells the player with the server’s answer, and shows the new offset', async () => {
     const { calls } = serve({ rows: [row(1, 500)] });
     const props = open();
     const { result } = renderHook(() => useSubtitleTiming(props));
-    await waitFor(() => expect(result.current.offsets).toEqual([500]));
 
     await act(() => result.current.later());
 
-    expect(calls.slice(1)).toEqual([
-      'GET /api/admin/subtitles',
-      'PUT /api/admin/subtitles/1/offset {"offsetMs":750}',
-    ]);
+    expect(calls).toEqual(['PUT /api/admin/subtitles/1/offset {"offsetMs":750}']);
     expect(props.onApplied).toHaveBeenCalledExactlyOnceWith('FULL', '101_750');
     expect(result.current.offsets).toEqual([750]);
     expect(result.current.busy).toBe(false);
     expect(result.current.problem).toBeNull();
   });
 
-  it('Earlier sends a quarter second less, and Reset sends 0', async () => {
+  it('a second press works from the answer of the first, not from the film’s offsets', async () => {
     const { calls } = serve({ rows: [row(1, 500)] });
     const { result } = renderHook(() => useSubtitleTiming(open()));
 
+    await act(() => result.current.later());
+    await act(() => result.current.later());
     await act(() => result.current.earlier());
     await act(() => result.current.reset());
 
-    expect(calls.filter((c) => c.startsWith('PUT'))).toEqual([
-      'PUT /api/admin/subtitles/1/offset {"offsetMs":250}',
+    expect(calls).toEqual([
+      'PUT /api/admin/subtitles/1/offset {"offsetMs":750}',
+      'PUT /api/admin/subtitles/1/offset {"offsetMs":1000}',
+      'PUT /api/admin/subtitles/1/offset {"offsetMs":750}',
       'PUT /api/admin/subtitles/1/offset {"offsetMs":0}',
     ]);
   });
 
   it('moves every part of a split film from its own offset, one request after the other', async () => {
     const { calls } = serve({ rows: [row(1, 1000), row(2, -500)] });
-    const props = open({ ids: [1, 2] });
+    const props = open({ ids: [1, 2], offsets: [1000, -500] });
     const { result } = renderHook(() => useSubtitleTiming(props));
 
     await act(() => result.current.later());
 
-    expect(calls.filter((c) => c.startsWith('PUT'))).toEqual([
+    expect(calls).toEqual([
       'PUT /api/admin/subtitles/1/offset {"offsetMs":1250}',
       'PUT /api/admin/subtitles/2/offset {"offsetMs":-250}',
     ]);
@@ -115,12 +115,12 @@ describe('useSubtitleTiming', () => {
 
   it('sends nothing when no row would move (a reset at 0)', async () => {
     const { calls } = serve({ rows: [row(1, 0)] });
-    const props = open();
+    const props = open({ offsets: [0] });
     const { result } = renderHook(() => useSubtitleTiming(props));
 
     await act(() => result.current.reset());
 
-    expect(calls.some((c) => c.startsWith('PUT'))).toBe(false);
+    expect(calls).toEqual([]);
     expect(props.onApplied).not.toHaveBeenCalled();
   });
 
@@ -134,7 +134,7 @@ describe('useSubtitleTiming', () => {
       rows,
       answer: (method) => (method === 'PUT' ? gate.then(() => respond({ ...rows[0] })) : null),
     });
-    const { result } = renderHook(() => useSubtitleTiming(open({ enabled: false })));
+    const { result } = renderHook(() => useSubtitleTiming(open({ offsets: [0] })));
 
     await act(async () => {
       result.current.later();
@@ -145,8 +145,7 @@ describe('useSubtitleTiming', () => {
     release();
     await waitFor(() => expect(result.current.busy).toBe(false));
 
-    expect(calls.filter((c) => c.startsWith('PUT'))).toHaveLength(1);
-    expect(calls.filter((c) => c === 'GET /api/admin/subtitles')).toHaveLength(1);
+    expect(calls).toHaveLength(1);
   });
 
   it('says one plain line when the change fails, leaves the track alone, and clears it on the next try', async () => {
@@ -155,18 +154,19 @@ describe('useSubtitleTiming', () => {
       rows: [row(1, 0)],
       answer: (method) => (method === 'PUT' && refuse ? respond({ error: 'x' }, 500) : null),
     });
-    const props = open();
+    const props = open({ offsets: [0] });
     const { result } = renderHook(() => useSubtitleTiming(props));
 
     await act(() => result.current.later());
 
     expect(result.current.problem).toBe(subtitleTiming.failed);
+    expect(result.current.offsets).toEqual([0]);
     expect(props.onApplied).not.toHaveBeenCalled();
     refuse = false;
     await act(() => result.current.later());
     expect(result.current.problem).toBeNull();
     expect(props.onApplied).toHaveBeenCalledTimes(1);
-    expect(calls.filter((c) => c.startsWith('PUT'))).toHaveLength(2);
+    expect(calls).toHaveLength(2);
   });
 
   it('shows the server’s own words for a refusal', async () => {
@@ -175,7 +175,7 @@ describe('useSubtitleTiming', () => {
       answer: (method) =>
         method === 'PUT' ? respond({ error: 'The offset must be within 10 minutes' }, 400) : null,
     });
-    const { result } = renderHook(() => useSubtitleTiming(open()));
+    const { result } = renderHook(() => useSubtitleTiming(open({ offsets: [0] })));
 
     await act(() => result.current.later());
 
@@ -189,7 +189,7 @@ describe('useSubtitleTiming', () => {
       answer: (method, url) =>
         method === 'PUT' && url.endsWith('/2/offset') ? respond({ error: 'x' }, 500) : null,
     });
-    const props = open({ ids: [1, 2] });
+    const props = open({ ids: [1, 2], offsets: [0, 0] });
     const { result } = renderHook(() => useSubtitleTiming(props));
 
     await act(() => result.current.later());
@@ -199,31 +199,21 @@ describe('useSubtitleTiming', () => {
     expect(result.current.offsets).toEqual([250, 0]);
   });
 
-  it('says so, and changes nothing, when the list no longer has the shown file or only some of its parts', async () => {
-    const { calls } = serve({ rows: [row(1, 0)] });
-    const { result, rerender } = renderHook((props) => useSubtitleTiming(props), {
-      initialProps: open({ ids: [9], enabled: false }),
-    });
-
-    await act(() => result.current.later());
-    expect(result.current.problem).toBe(subtitleTiming.lookupFailed);
-
-    rerender(open({ ids: [1, 9], enabled: false }));
-    await act(() => result.current.later());
-    expect(result.current.problem).toBe(subtitleTiming.changed);
-    expect(calls.some((c) => c.startsWith('PUT'))).toBe(false);
-  });
-
-  it('says one plain line when the list cannot be read', async () => {
+  it('does not reload the track when the server no longer serves the changed file, and says the subtitle changed', async () => {
+    const rows = [row(1, 0)];
     serve({
-      rows: [],
-      answer: (m, url) => (url === '/api/admin/subtitles' ? respond({}, 500) : null),
+      rows,
+      answer: (method) =>
+        method === 'PUT' ? respond({ ...rows[0], offsetMs: 250, served: false }) : null,
     });
-    const { result } = renderHook(() => useSubtitleTiming(open({ enabled: false })));
+    const props = open({ offsets: [0] });
+    const { result } = renderHook(() => useSubtitleTiming(props));
 
     await act(() => result.current.later());
 
-    expect(result.current.problem).toBe(subtitleTiming.failed);
+    expect(props.onApplied).not.toHaveBeenCalled();
+    expect(result.current.problem).toBe(subtitleTiming.changed);
+    expect(result.current.offsets).toEqual([250]);
   });
 
   it('forgets a problem when another file shows, and does not bring it back', async () => {
@@ -232,15 +222,29 @@ describe('useSubtitleTiming', () => {
       answer: (method) => (method === 'PUT' ? respond({ error: 'x' }, 500) : null),
     });
     const { result, rerender } = renderHook((props) => useSubtitleTiming(props), {
-      initialProps: open({ enabled: false }),
+      initialProps: open({ offsets: [0] }),
     });
     await act(() => result.current.later());
     expect(result.current.problem).toBe(subtitleTiming.failed);
 
-    rerender(open({ kind: 'FORCED', ids: [2], enabled: false }));
+    rerender(open({ kind: 'FORCED', ids: [2], offsets: [0] }));
     expect(result.current.problem).toBeNull();
-    rerender(open({ enabled: false }));
+    rerender(open({ offsets: [0] }));
     expect(result.current.problem).toBeNull();
+  });
+
+  it('keeps the offsets it learned for a file while another one shows', async () => {
+    serve({ rows: [row(1, 0), row(2, 4000)] });
+    const { result, rerender } = renderHook((props) => useSubtitleTiming(props), {
+      initialProps: open({ offsets: [0] }),
+    });
+    await act(() => result.current.later());
+
+    rerender(open({ kind: 'FORCED', ids: [2], offsets: [4000] }));
+    expect(result.current.offsets).toEqual([4000]);
+    rerender(open({ offsets: [0] }));
+
+    expect(result.current.offsets).toEqual([250]);
   });
 
   it('a late answer after another file shows is not applied to it, but the changed file’s track is still told', async () => {
@@ -256,47 +260,20 @@ describe('useSubtitleTiming', () => {
           ? gate.then(() => respond({ ...rows[0], offsetMs: 250, version: 101 }))
           : null,
     });
-    const props = open({ enabled: false });
+    const props = open({ offsets: [0] });
     const { result, rerender } = renderHook((p) => useSubtitleTiming(p), { initialProps: props });
     await act(async () => {
       result.current.later();
       await Promise.resolve();
     });
 
-    rerender(open({ kind: 'FORCED', ids: [2], enabled: false, onApplied: props.onApplied }));
+    rerender(open({ kind: 'FORCED', ids: [2], offsets: [4000], onApplied: props.onApplied }));
     release();
     await waitFor(() => expect(props.onApplied).toHaveBeenCalledWith('FULL', '101_250'));
 
-    expect(result.current.offsets).toBeNull();
+    expect(result.current.offsets).toEqual([4000]);
     expect(result.current.busy).toBe(false);
     expect(result.current.problem).toBeNull();
-  });
-
-  it('a read that started before a change does not overwrite the new offsets', async () => {
-    let release;
-    const gate = new Promise((resolve) => {
-      release = resolve;
-    });
-    const rows = [row(1, 0)];
-    let reads = 0;
-    serve({
-      rows,
-      answer: (method, url) => {
-        if (url !== '/api/admin/subtitles') return null;
-        reads += 1;
-        // The first read (the panel opening) is slow and carries the old offset.
-        return reads === 1 ? gate.then(() => respond([{ ...rows[0], offsetMs: 0 }])) : null;
-      },
-    });
-    const { result } = renderHook(() => useSubtitleTiming(open()));
-
-    await act(() => result.current.later());
-    release();
-    await act(async () => {
-      await gate;
-    });
-
-    expect(result.current.offsets).toEqual([250]);
   });
 
   it('says nothing and does not tell the player after it is gone', async () => {
@@ -309,7 +286,7 @@ describe('useSubtitleTiming', () => {
       rows,
       answer: (method) => (method === 'PUT' ? gate.then(() => respond({ ...rows[0] })) : null),
     });
-    const props = open({ enabled: false });
+    const props = open({ offsets: [0] });
     const { result, unmount } = renderHook(() => useSubtitleTiming(props));
     await act(async () => {
       result.current.later();
@@ -324,5 +301,19 @@ describe('useSubtitleTiming', () => {
     });
 
     expect(props.onApplied).not.toHaveBeenCalled();
+  });
+
+  it('swapFailed tells the viewer the old timing stays, only while that kind shows', () => {
+    const { result, rerender } = renderHook((props) => useSubtitleTiming(props), {
+      initialProps: open(),
+    });
+
+    act(() => result.current.swapFailed('FORCED'));
+    expect(result.current.problem).toBeNull();
+    act(() => result.current.swapFailed('FULL'));
+    expect(result.current.problem).toBe(subtitleTiming.swapFailed);
+
+    rerender(open({ kind: 'FORCED', ids: [2], offsets: [0] }));
+    expect(result.current.problem).toBeNull();
   });
 });

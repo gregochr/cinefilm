@@ -11,19 +11,26 @@ import { subtitleTiming, subtitlesWrong } from '../state/subtitleFixCopy.js';
 import { EARLIER, LATER, inSync, timingReadout } from '../state/subtitleTiming.js';
 import { CheckIcon } from './icons.jsx';
 
-/** Moves focus between enabled menu items with the arrow keys. */
+/**
+ * Moves focus between enabled menu items with the arrow keys. The position comes from every item, so the focused one
+ * counts even when it is disabled for now (`aria-disabled`, e.g. while saving): the arrows go on from where it is.
+ */
 function onMenuKeyDown(event) {
   if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-  const items = [
-    ...event.currentTarget.querySelectorAll(
-      '[role="menuitemradio"]:not(:disabled), [role="menuitem"]:not([aria-disabled="true"])',
-    ),
+  const all = [
+    ...event.currentTarget.querySelectorAll('[role="menuitemradio"], [role="menuitem"]'),
   ];
-  if (!items.length) return;
+  const usable = (item) => !item.disabled && item.getAttribute('aria-disabled') !== 'true';
+  if (!all.some(usable)) return;
   event.preventDefault();
-  const at = items.indexOf(document.activeElement);
   const step = event.key === 'ArrowDown' ? 1 : -1;
-  items[(at + step + items.length) % items.length].focus();
+  const at = all.indexOf(document.activeElement);
+  // From outside the items, ArrowDown starts at the first and ArrowUp at the last.
+  let index = at === -1 ? (step === 1 ? -1 : all.length) : at;
+  do {
+    index = (index + step + all.length) % all.length;
+  } while (!usable(all[index]));
+  all[index].focus();
 }
 
 function useFocusChecked(ref) {
@@ -149,11 +156,9 @@ function TimingControls({ timing }) {
       aria-label={subtitleTiming.group}
       aria-busy={timing.busy || undefined}
     >
-      {readout ? (
-        <div className="menu__readout" role="status">
-          {timing.busy ? readout : subtitleTiming.readout(readout)}
-        </div>
-      ) : null}
+      <div className="menu__readout" role="status">
+        {readout ? (timing.busy ? readout : subtitleTiming.readout(readout)) : null}
+      </div>
       {action(subtitleTiming.earlier, EARLIER.spoken, EARLIER.label, timing.onEarlier, timing.busy)}
       {action(subtitleTiming.later, LATER.spoken, LATER.label, timing.onLater, timing.busy)}
       {action(

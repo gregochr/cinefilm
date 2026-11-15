@@ -1,43 +1,38 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { adminApi } from '../api/resources.js';
-import {
-  EARLIER,
-  LATER,
-  TimingChanged,
-  TimingLookupFailed,
-  nextOffsets,
-  timingProblem,
-  timingRows,
-  trackToken,
-} from './subtitleTiming.js';
-
-const NOTHING = { offsets: null, problem: null };
+import { subtitleTiming } from './subtitleFixCopy.js';
+import { EARLIER, LATER, nextOffsets, timingProblem, trackToken } from './subtitleTiming.js';
 
 /**
  * The player's "Earlier" / "Later" / "Reset timing" for the subtitle *file* that shows (`kind`: `'FORCED'` or `'FULL'`;
- * `ids`: the sidecar ids the film showed for it, one row per part). It never touches the playback: it only calls
- * `PUT /api/admin/subtitles/{id}/offset` and hands the answer to `onApplied(kind, token)`, so the player can reload that
- * one `<track>`.
+ * `ids`: the sidecar ids the film showed for it, one row per part; `offsets`: their offsets in the same order, both from
+ * the film). It never touches the playback and reads nothing: the offsets come from the film and, after a change, from
+ * each answer of `PUT /api/admin/subtitles/{id}/offset`, which is all it sends. The answers go to `onApplied(kind,
+ * token)` so the player can load the new timing into that one `<track>`.
  *
- * - The current offsets are read from `GET /api/admin/subtitles` while `enabled` (the panel is open) and again at each
- *   press, so a press never works from a stale number. Each row moves by the step from its own offset (rows of
- *   different parts may differ); Reset sets every row to 0. One absolute offset per row goes out, one request at a time.
+ * - Each row moves by the step from its own offset (rows of different parts may differ); Reset sets every row to 0. One
+ *   absolute offset per row that moves goes out, one request at a time; the first refusal stops the rest.
  * - One press per file at a time (a ref, so two clicks in one frame send one request); the buttons stay focusable and
  *   `busy` says why they do nothing.
- * - What an answer says (offsets, a problem) belongs to the file it was for: once another file shows, it is dropped,
- *   and a problem is forgotten when the shown file changes. The `<track>` of a file that changed is still told
- *   (`onApplied`), whatever shows now, because its timing did change; nothing is said after the player is gone.
+ * - If the server no longer serves a changed row (it answers `served: false`: the owner's check was cleared and another
+ *   subtitle plays now), the track is not reloaded and the viewer is told the subtitle changed.
+ * - What an answer says (offsets, a problem) belongs to the file it was for: a problem is forgotten when the shown file
+ *   changes. The offsets learned here are kept for each file, so switching away and back shows them. The `<track>` of a
+ *   file that changed is still told (`onApplied`), whatever shows now; nothing is said after the player is gone.
  */
-export function useSubtitleTiming({ kind, ids, enabled, onApplied }) {
-  const fileKey = kind && ids?.length ? `${kind}:${ids.join(',')}` : null;
-  const shown = useRef({ fileKey, kind, ids });
-  shown.current = { fileKey, kind, ids };
+export function useSubtitleTiming({ kind, ids, offsets, onApplied }) {
+  const fileKey =
+    kind && ids?.length && offsets?.length === ids.length ? `${kind}:${ids.join(',')}` : null;
+  const shown = useRef({ fileKey, kind, ids, offsets });
+  shown.current = { fileKey, kind, ids, offsets };
   const callback = useRef(onApplied);
   callback.current = onApplied;
   const alive = useRef(true);
   const flying = useRef(new Set());
-  const writes = useRef(0);
-  const [state, setState] = useState({ key: fileKey, ...NOTHING });
+  // Offsets learned from answers, by file; the ref is what a press reads, the state is what renders.
+  const learned = useRef({});
+  const [known, setKnown] = useState({});
+  const [problemOf, setProblemOf] = useState({ key: fileKey, text: null });
   const [inFlight, setInFlight] = useState([]);
 
   useEffect(() => {
@@ -47,81 +42,73 @@ export function useSubtitleTiming({ kind, ids, enabled, onApplied }) {
     };
   }, []);
 
-  // A new file starts with nothing known and no problem: another file's words never carry over.
+  // A new file starts with no problem: another file's words never carry over.
   useEffect(() => {
-    setState((s) => (s.key === fileKey ? s : { key: fileKey, ...NOTHING }));
+    setProblemOf((p) => (p.key === fileKey ? p : { key: fileKey, text: null }));
   }, [fileKey]);
 
-  // What the answer is for: it is dropped when another file shows by the time it arrives.
-  const patch = useCallback((key, change) => {
-    if (alive.current) setState((s) => (s.key === key ? { ...s, ...change } : s));
+  // What the words are for: they are dropped when another file shows by the time they arrive.
+  const say = useCallback((key, text) => {
+    if (alive.current) setProblemOf((p) => (p.key === key ? { key, text } : p));
   }, []);
-
-  // The offsets for the readout, read while the panel is open. A change made since the read started wins over it.
-  useEffect(() => {
-    if (!enabled || !fileKey) return undefined;
-    let live = true;
-    const seen = writes.current;
-    adminApi
-      .subtitles()
-      .then((list) => {
-        if (!live || writes.current !== seen || flying.current.has(fileKey)) return;
-        const rows = timingRows(list, shown.current.ids);
-        if (rows.length > 0) patch(fileKey, { offsets: rows.map((r) => r.offsetMs) });
-      })
-      .catch(() => {
-        // The readout stays empty; a press reads the list itself and says what went wrong.
-      });
-    return () => {
-      live = false;
-    };
-  }, [enabled, fileKey, patch]);
 
   const press = useCallback(
     async (delta) => {
-      const { fileKey: key, kind: fileKind, ids: fileIds } = shown.current;
+      const { fileKey: key, kind: fileKind, ids: fileIds, offsets: base } = shown.current;
       if (!key || flying.current.has(key)) return;
       flying.current.add(key);
       setInFlight((keys) => [...keys, key]);
-      patch(key, { problem: null });
+      say(key, null);
+      const start = learned.current[key] ?? base;
+      const rows = fileIds.map((id, i) => ({ id, offsetMs: start[i] }));
       const answers = [];
-      let offsets = null;
       let problem = null;
       try {
-        const rows = timingRows(await adminApi.subtitles(), fileIds);
-        if (rows.length === 0) throw new TimingLookupFailed();
-        if (rows.length !== fileIds.length) throw new TimingChanged();
-        offsets = rows.map((r) => r.offsetMs);
         // One absolute offset per row that actually moves, in the film's order; the first refusal stops the rest.
         for (const move of nextOffsets(rows, delta).filter((m) => m.offsetMs !== m.was)) {
           answers.push(await adminApi.setSubtitleOffset(move.id, move.offsetMs));
         }
-        offsets = rows.map((r) => answers.find((a) => a.id === r.id)?.offsetMs ?? r.offsetMs);
       } catch (error) {
         problem = timingProblem(error);
-        // Rows that did change before the refusal show their new offset.
-        if (offsets)
-          offsets = offsets.map((o, i) => answers.find((a) => a.id === fileIds[i])?.offsetMs ?? o);
       } finally {
         flying.current.delete(key);
-        writes.current += 1;
         setInFlight((keys) => keys.filter((k) => k !== key));
       }
-      patch(key, { problem, ...(offsets ? { offsets } : {}) });
-      // Whatever shows now, the file that was changed has new timing: its track is told, and only if it changed.
-      if (answers.length > 0 && alive.current) callback.current(fileKind, trackToken(answers));
+      if (answers.length > 0) {
+        // Rows that changed show their new offset, even when a later one was refused.
+        learned.current = {
+          ...learned.current,
+          [key]: rows.map((r) => answers.find((a) => a.id === r.id)?.offsetMs ?? r.offsetMs),
+        };
+        if (alive.current) setKnown(learned.current);
+      }
+      // The answers say whether each row is still the one served. If not, another subtitle plays now.
+      const replaced = answers.some((a) => a.served === false);
+      say(key, problem ?? (replaced ? subtitleTiming.changed : null));
+      // Whatever shows now, the file that was changed has new timing: its track is told, unless it is no longer served.
+      if (answers.length > 0 && !replaced && alive.current)
+        callback.current(fileKind, trackToken(answers));
     },
-    [patch],
+    [say],
   );
 
-  const mine = state.key === fileKey ? state : { ...NOTHING };
+  // The new track did not load: the old timing stays on screen, and the viewer is told.
+  const swapFailed = useCallback(
+    (failedKind) => {
+      const { fileKey: key, kind: now } = shown.current;
+      if (key && now === failedKind) say(key, subtitleTiming.swapFailed);
+    },
+    [say],
+  );
+
   return {
     available: fileKey !== null,
-    offsets: mine.offsets,
-    problem: mine.problem,
+    offsets: fileKey === null ? null : (known[fileKey] ?? offsets),
+    problem: problemOf.key === fileKey ? problemOf.text : null,
     busy: fileKey !== null && inFlight.includes(fileKey),
     earlier: () => press(EARLIER.delta),
     later: () => press(LATER.delta),
     reset: () => press(null),
+    swapFailed,
   };
 }

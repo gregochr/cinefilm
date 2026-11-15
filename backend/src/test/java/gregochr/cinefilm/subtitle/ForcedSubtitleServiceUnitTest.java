@@ -135,8 +135,8 @@ class ForcedSubtitleServiceUnitTest {
 
     @Test
     void theDetailOffersTheLatestChangeAsTheVersionAndVerifiedOnlyWhenEveryFileIs() {
-        SubtitleSidecar a = sidecar(1, 10L, false, 0);
-        SubtitleSidecar b = sidecar(2, 20L, false, 0);
+        SubtitleSidecar a = sidecar(1, 10L, false, 1250);
+        SubtitleSidecar b = sidecar(2, 20L, false, -500);
         a.setOwnerVerifiedAt(NOW);
         a.setVerifiedParts("10,20");
         when(sidecars.findByMediaFileIdInAndKind(List.of(10L, 20L), SubtitleKind.FORCED)).thenReturn(List.of(a, b));
@@ -146,6 +146,7 @@ class ForcedSubtitleServiceUnitTest {
         assertThat(unverified.get(40L).source()).isEqualTo("SIDECAR");
         assertThat(unverified.get(40L).ownerVerified()).isFalse();
         assertThat(unverified.get(40L).sidecarIds()).containsExactly(1L, 2L);
+        assertThat(unverified.get(40L).offsetsMs()).containsExactly(1250L, -500L);
 
         b.setOwnerVerifiedAt(NOW);
         b.setVerifiedParts("10,20");

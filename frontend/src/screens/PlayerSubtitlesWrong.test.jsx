@@ -163,7 +163,6 @@ describe('the player’s "Subtitles are wrong"', () => {
       await screen.findByText('Subtitle download removed. CineFilm won’t use it again.'),
     ).toBeInTheDocument();
     expect(requests.map(keyOf).filter((k) => k.includes('/api/admin/subtitles'))).toEqual([
-      'GET /api/admin/subtitles', // the timing readout, when the panel opened (8b-1)
       'GET /api/admin/subtitles',
       'DELETE /api/admin/subtitles/70',
     ]);
@@ -293,12 +292,10 @@ describe('the player’s "Subtitles are wrong"', () => {
     const load = vi.spyOn(HTMLMediaElement.prototype, 'load');
     const { requests, video } = await openPlayer({ mutate: (f) => fullOn(f) });
     const src = video.getAttribute('src');
+    const before = requests.length;
     const loads = load.mock.calls.length;
     Object.defineProperty(video, 'currentTime', { configurable: true, writable: true, value: 12 });
     await openPanel();
-    // Opening the panel reads the list once for the timing readout (8b-1); what follows is "Subtitles are wrong" alone.
-    await screen.findByText('Timing: +1.2 s');
-    const before = requests.length;
 
     await userEvent.click(wrongAction());
     await screen.findByText('Subtitle download removed. CineFilm won’t use it again.');

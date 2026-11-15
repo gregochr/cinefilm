@@ -22,11 +22,14 @@ class ForcedSubtitleApiTest extends SubtitleTestBase {
         Film taken = filmWithParts("Taken", 1, 90);
         var row = sidecar("Taken.en.forced.srt", fileId(taken, 1), false);
         row.setUpdatedAt(NOW.plusMillis(1234));
+        row.setOffsetMs(750);
 
         mvc.perform(get("/api/films/{id}", taken.getId()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.editions[0].forcedSubtitle.sidecarIds[0]").value(row.getId().intValue()))
             .andExpect(jsonPath("$.editions[0].forcedSubtitle.sidecarIds.length()").value(1))
+            .andExpect(jsonPath("$.editions[0].forcedSubtitle.offsetsMs[0]").value(750))
+            .andExpect(jsonPath("$.editions[0].forcedSubtitle.offsetsMs.length()").value(1))
             .andExpect(jsonPath("$.editions[0].forcedSubtitle.source").value("SIDECAR"))
             .andExpect(jsonPath("$.editions[0].forcedSubtitle.ownerVerified").value(false))
             .andExpect(jsonPath("$.editions[0].forcedSubtitle.version").isNumber());

@@ -401,10 +401,10 @@ describe('AudioSubtitlesPanel: subtitle timing', () => {
     expect(within(subs()).getByRole('status')).toHaveTextContent('Timing: differs by part');
   });
 
-  it('shows no readout while the offset is not known', () => {
+  it('keeps the readout region (empty) while the offset is not known, so the first one is announced', () => {
     render(<AudioSubtitlesPanel {...props} timing={timingOf({ offsets: null })} />);
 
-    expect(within(subs()).queryByRole('status')).not.toBeInTheDocument();
+    expect(within(subs()).getByRole('status')).toBeEmptyDOMElement();
   });
 
   it('asks once per click for each action', async () => {
@@ -458,6 +458,60 @@ describe('AudioSubtitlesPanel: subtitle timing', () => {
     expect(within(subs()).getByRole('alert')).toHaveTextContent(
       'Couldn’t change the timing. Try again.',
     );
+  });
+
+  it('ArrowDown and ArrowUp go on from a focused item that is disabled for now, not back to the first', async () => {
+    render(<AudioSubtitlesPanel {...props} timing={timingOf({ busy: true })} />);
+    const choices = within(subs()).getAllByRole('menuitemradio');
+    later().focus();
+
+    await userEvent.keyboard('{ArrowDown}');
+    // Earlier, Later and Reset are all disabled while saving: the next usable item after them is the first choice.
+    expect(choices[0]).toHaveFocus();
+    later().focus();
+    await userEvent.keyboard('{ArrowUp}');
+    expect(choices[choices.length - 1]).toHaveFocus();
+  });
+
+  it('goes on from the position of a focused disabled item, in the middle of the menu', async () => {
+    render(<AudioSubtitlesPanel {...props} timing={timingOf({ offsets: [0] })} />);
+    const choices = within(subs()).getAllByRole('menuitemradio');
+    reset().focus();
+
+    await userEvent.keyboard('{ArrowUp}');
+    expect(later()).toHaveFocus();
+    reset().focus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(choices[0]).toHaveFocus();
+  });
+
+  it('from outside the items ArrowDown starts at the first and ArrowUp at the last', async () => {
+    render(<AudioSubtitlesPanel {...props} timing={timingOf()} />);
+    const choices = within(subs()).getAllByRole('menuitemradio');
+    subs().focus();
+
+    await userEvent.keyboard('{ArrowUp}');
+    expect(reset()).toHaveFocus();
+    subs().focus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(choices[0]).toHaveFocus();
+  });
+
+  it('does nothing when no item is usable', async () => {
+    render(
+      <AudioSubtitlesPanel
+        {...props}
+        audioStreams={[]}
+        subtitleStreams={[]}
+        hasFullSubtitle={false}
+        timing={timingOf({ busy: true })}
+      />,
+    );
+    later().focus();
+
+    await userEvent.keyboard('{ArrowDown}');
+
+    expect(later()).toHaveFocus();
   });
 
   it('is reachable with the arrow keys, after the subtitle choices', async () => {

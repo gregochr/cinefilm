@@ -348,6 +348,9 @@
   color: var(--cf-text-disabled);
   cursor: progress;
 }
+.menu__item--action[aria-disabled='true']:hover {
+  background: transparent;
+}
 /* Subtitle timing: quiet actions under the subtitle choices, set apart by a hairline, never amber. */
 .menu__timing {
   margin-top: 6px;
@@ -365,6 +368,12 @@
 }
 .menu__item--quiet[aria-disabled='true'] {
   color: var(--cf-text-disabled);
+  cursor: default;
+}
+.menu__item--quiet[aria-disabled='true']:hover {
+  background: transparent;
+}
+.menu__timing[aria-busy='true'] .menu__item--quiet[aria-disabled='true'] {
   cursor: progress;
 }
 .menu__problem {
