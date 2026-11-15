@@ -27,34 +27,12 @@ const replaced = {
   check: null,
 };
 
-// The tabs and filters above the file list, then each case adds its row's buttons.
+// The buttons above the file rows: the foreign-language tab's one row, Everything else, then the file filter chips.
+// The two tabs themselves are role=tab, not buttons. Each case adds its file row's buttons.
 const SUBTITLE_TABS = [
-  'Needed, none yet (2)',
-  'Checking online (1)',
-  'Unknown (1)',
-  'Not needed (2)',
-  'All (7)',
-  'Needed: Taken (2008)',
-  'Not needed: Taken (2008)',
-  'Automatic: Taken (2008)',
-  'Needed: Das Boot (1981)',
-  'Not needed: Das Boot (1981)',
-  'Automatic: Das Boot (1981)',
-  'Needed (3)',
-  'Unsure (1)',
-  'Not needed (1)',
-  'Full subtitles needed: Das Boot (1981)',
-  'Full subtitles not needed: Das Boot (1981)',
-  'Full subtitles automatic: Das Boot (1981)',
-  'Show the full subtitle files of Das Boot (1981)',
-  'Full subtitles needed: Rashomon (1950)',
-  'Full subtitles not needed: Rashomon (1950)',
-  'Full subtitles automatic: Rashomon (1950)',
-  'Show the full subtitle files of Rashomon (1950)',
-  'Full subtitles needed: Come and See (1985)',
-  'Full subtitles not needed: Come and See (1985)',
-  'Full subtitles automatic: Come and See (1985)',
-  'Show the full subtitle files of Come and See (1985)',
+  'Add my own file…',
+  'Show the 1 films',
+  'Hide the subtitle files',
   'All (1)',
   'Forced (1)',
   'Full (0)',
@@ -98,15 +76,6 @@ const dl = {
   whole: true,
   part: null,
 };
-const showDasBoot = async () => {
-  await userEvent.click(
-    await screen.findByRole('button', { name: 'Show the full subtitle files of Das Boot (1981)' }),
-  );
-  await screen.findByRole('button', { name: 'Show all files' });
-  await screen.findByText('No files here.');
-};
-// "Show all files" sits between the full-need rows and the file filter chips, which start at "All (1)".
-const FILTER_CHIPS_AT = SUBTITLE_TABS.indexOf('All (1)');
 // The same tabs, with the one download counted under Downloads.
 const DL_TABS = SUBTITLE_TABS.map((name) => (name === 'Downloads (0)' ? 'Downloads (1)' : name));
 const SHOW_DL_CUES = 'Show the cues of Heat.1995.1080p.BluRay.x264';
@@ -209,17 +178,6 @@ const CASES = [
     buttons: [...DL_TABS, SHOW_DL_CUES, 'Try again', 'Keep it'],
   },
   {
-    name: 'Subtitles, a film filter with no matches',
-    path: '/admin/subtitles',
-    items: [plain],
-    steps: showDasBoot,
-    buttons: [
-      ...SUBTITLE_TABS.slice(0, FILTER_CHIPS_AT),
-      'Show all files',
-      ...SUBTITLE_TABS.slice(FILTER_CHIPS_AT),
-    ],
-  },
-  {
     name: 'Subtitles, a failed film search in the attach form',
     path: '/admin/subtitles',
     items: [{ ...plain, ownerAttached: true }],
@@ -279,6 +237,12 @@ describe('Admin: the only amber button', () => {
       });
       renderApp(c.path);
       await screen.findByRole('heading', { level: 1 });
+      // The per-file tools sit behind "Show all subtitle files".
+      if (c.path === '/admin/subtitles') {
+        await userEvent.click(
+          await screen.findByRole('button', { name: 'Show all subtitle files' }),
+        );
+      }
       // findAll: a name may repeat (unmatched films each have "Find the film…").
       await screen.findAllByRole('button', { name: c.buttons[0] });
       if (c.steps) await c.steps();

@@ -4,6 +4,8 @@
 //   'AR1'..'AR7'  that board
 //   'README'  docs/design/admin-redesign/README.md
 //   'plan'    docs/engineering/admin-redesign-plan.md (the owner's answers, 2026-11-14)
+//   'Q3'      the owner's answer Q3 (the forced tab lists NEEDED films with no forced subtitle found)
+//   'planner, 4a'  wording the planner added for the Subtitles section, where no board shows it
 // The entries for buttons that move in later phases are here too so the copy has one home; only some are wired today.
 
 export const buttons = {
@@ -81,6 +83,16 @@ export const buttons = {
     source: 'AR1',
   },
   searchAgain: { label: 'Search again…', source: 'AR1' },
+  // Unlabelled audio (AR2, row "Downfall"). "find subtitles" opens the picker, so it arrives with 4c.
+  itsInLanguage: {
+    label: (language) => `It’s in ${language} — find subtitles`,
+    source: 'AR2',
+  },
+  itsEnglish: {
+    label: 'It’s English',
+    hint: '“It’s English” marks it done and stops asking',
+    source: 'AR2',
+  },
   // Owner's answer Q3 replaces 07's "Yes, find forced subtitles…" (the forced list now holds films with none found).
   findForced: {
     label: 'Find forced subtitles…',
@@ -248,4 +260,87 @@ export const statusStrip = {
   retry: 'Try again', // planner, 3c-1
   source:
     'AR1 for the eyebrows, links, scanned and "Nothing playing"; planner 3c-1 for the rest (see comments)',
+};
+
+/** The Subtitles section (AR2), with the wording AR2 does not show marked "planner, 4a". */
+export const subtitlesPage = {
+  // AR2's lead; `bold` parts are <b> on the board.
+  lead: [
+    { text: 'You only need two kinds, both in English: ' },
+    { text: 'full subtitles', bold: true },
+    { text: ' for films not in English, and ' },
+    { text: 'forced subtitles', bold: true },
+    {
+      text: ' (just the foreign lines) for English films with scenes in another language. CineFilm finds and downloads both by itself; this page lists only what it couldn’t.',
+    },
+  ],
+  tabsLabel: 'Subtitle lists', // planner, 4a
+  tabs: {
+    foreign: 'Foreign-language films', // AR2
+    forced: 'Forced subtitles not found', // Q3 (AR2's "English films with foreign scenes" is replaced)
+  },
+  panels: {
+    foreign: { heading: 'Need English subtitles' }, // AR2
+    forced: { heading: 'Need forced subtitles' }, // planner, 4a
+  },
+  filmsCount: (n) => `${n} ${n === 1 ? 'film' : 'films'}`, // AR2 "4 films"; the singular is the planner's, 4a
+  empty: {
+    foreign: 'Nothing here. Every foreign-language film has English subtitles or is being checked.', // planner, 4a
+    forced: 'Nothing here. No English film is waiting for forced subtitles.', // planner, 4a
+  },
+  loadErrors: {
+    foreign: 'Couldn’t load the foreign-language films.',
+    forced: 'Couldn’t load the films with forced subtitles to find.',
+  }, // planner, 4a
+  refreshErrors: {
+    foreign: 'Couldn’t refresh the foreign-language films.',
+    forced: 'Couldn’t refresh the films with forced subtitles to find.',
+  }, // planner, 4a
+  retry: 'Try again', // planner, 4a
+  // The unlabelled-audio line. AR2 says "CineFilm assumed English", which is the reverse of what the server does
+  // (it assumes the original language, so the film is needed), so the line says what actually happened.
+  unlabelled: (language) =>
+    language
+      ? `Audio isn’t labelled · CineFilm assumed ${language}, the original language TMDB lists`
+      : 'Audio isn’t labelled · CineFilm assumed the original language',
+  setByYou: 'Set by you',
+  addFile: {
+    heading: (title) => `Add a subtitle file for ${title}`,
+    file: 'Subtitle file',
+    edition: 'Edition',
+    timedFor: 'Timed for',
+    attach: 'Attach',
+    attaching: 'Attaching…',
+    cancel: 'Cancel',
+    none: 'No full subtitle files are waiting. Put the file beside the film and scan the library; it will appear here.',
+    loading: 'Looking for subtitle files…',
+    loadError: 'Couldn’t load the subtitle files.',
+    editionsError: 'Couldn’t load that film’s editions.',
+    attachedTo: (film) => `on ${film}`,
+    unattached: 'not attached to a film',
+  }, // planner, 4a
+  else: {
+    heading: 'Everything else', // AR2
+    haveSubtitles: (n) =>
+      n === 1 ? 'foreign film has English subtitles' : 'foreign films have English subtitles', // AR2
+    inEnglish: (n) => (n === 1 ? 'film is in English' : 'films are in English'), // AR2
+    beingCheckedLabel: 'being checked online now', // AR2
+    showFilms: (n) => `Show the ${n} films`, // AR2
+    hideFilms: (n) => `Hide the ${n} films`, // planner, 4a
+    showFiles: 'Show all subtitle files', // AR2
+    hideFiles: 'Hide the subtitle files', // planner, 4a
+    filmsList: 'Foreign films with English subtitles', // planner, 4a
+    note: [
+      { text: 'Subtitles look wrong on a film? Fix them from that film’s page (' },
+      { text: 'Subtitles → Fix…', bold: true },
+      {
+        text: ') or in the player — that’s where timing, replacing a file and “This is wrong” now live, next to the film you’re watching.',
+      },
+    ], // AR2. Until Film detail has them, the per-file tools stay under "Show all subtitle files" (plan, 4a).
+  },
+  files: {
+    heading: 'Subtitle files', // planner, 4a
+    showMore: (left) => `Show more (${left} left)`, // planner, 4a
+  },
+  source: 'AR2; Q3 for the forced tab; planner 4a for the rest (see comments)',
 };

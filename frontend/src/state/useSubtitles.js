@@ -8,9 +8,9 @@ import { useResource } from './useResource.js';
  * The Admin "Subtitles" panel: every forced subtitle file and the owner's actions on them. Each action is one
  * request on a row id; afterwards the list is read again and the browse cache is emptied, so the player and the
  * film page see the new timing. `busy` is the id of the file an action is running on, `problem` the last failure
- * as `{ id, text }`.
+ * as `{ id, text }`. `onChanged` runs after each action that succeeded, so views that depend on the files read again.
  */
-export function useSubtitles(version) {
+export function useSubtitles(version, onChanged) {
   const { data, error, loading, reload } = useResource(`admin-subtitles:${version}`, (options) =>
     adminApi.subtitles(options),
   );
@@ -18,6 +18,8 @@ export function useSubtitles(version) {
   // meantime must start from the new offset, not the one the old list still holds.
   const [answers, setAnswers] = useState({ base: null, rows: {} });
   const running = useRef(false);
+  const changedHandler = useRef(onChanged);
+  changedHandler.current = onChanged;
   const latest = useRef(data);
   latest.current = data;
   const [busy, setBusy] = useState(null);
@@ -45,6 +47,7 @@ export function useSubtitles(version) {
         }
         announceLibraryChanged();
         setChanges((n) => n + 1);
+        changedHandler.current?.();
         reload();
         return true;
       } catch (failure) {

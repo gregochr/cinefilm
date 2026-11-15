@@ -61,7 +61,8 @@ async function openPanel(options) {
   const served = serve(options);
   const fetchMock = installFetch(served.route);
   renderApp('/admin/subtitles');
-  const panel = await screen.findByRole('region', { name: 'Subtitles' });
+  await userEvent.click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+  const panel = await screen.findByRole('region', { name: 'Subtitle files' });
   return { ...served, fetchMock, panel };
 }
 
@@ -82,14 +83,7 @@ describe('Admin: Subtitles panel, the list', () => {
       within(panel)
         .getAllByRole('heading', { level: 3 })
         .map((h) => h.textContent),
-    ).toEqual([
-      'Which films need them',
-      'Full subtitles',
-      'Unmatched (1)',
-      'Conflicts (2)',
-      'Missing (1)',
-      'Matched (1)',
-    ]);
+    ).toEqual(['Unmatched (1)', 'Conflicts (2)', 'Missing (1)', 'Matched (1)']);
     expect(within(panel).getByRole('list', { name: 'Conflicts subtitles' })).toBeInTheDocument();
   });
 
@@ -147,7 +141,8 @@ describe('Admin: Subtitles panel, the list', () => {
   it('shows a loading status while the list loads', async () => {
     installFetch((method, url) => (url === '/api/admin/subtitles' ? new Promise(() => {}) : null));
     renderApp('/admin/subtitles');
-    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+    const panel = await screen.findByRole('region', { name: 'Subtitle files' });
     expect(within(panel).getByRole('status', { name: 'Loading' })).toBeInTheDocument();
   });
 
@@ -157,7 +152,8 @@ describe('Admin: Subtitles panel, the list', () => {
       url === '/api/admin/subtitles' && fail ? respond(null, 500) : null,
     );
     renderApp('/admin/subtitles');
-    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+    const panel = await screen.findByRole('region', { name: 'Subtitle files' });
     expect(await within(panel).findByText(/Couldn.t load the subtitle files/)).toBeInTheDocument();
 
     fail = false;
@@ -241,7 +237,8 @@ describe('Admin: Subtitles panel, the cues', () => {
       return null;
     });
     renderApp('/admin/subtitles');
-    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+    const panel = await screen.findByRole('region', { name: 'Subtitle files' });
     const li = (await within(panel).findByText('Heat (1995)/Heat.en.forced.srt')).closest('li');
     await userEvent.click(within(li).getByRole('button', { name: /Show the cues/ }));
 
@@ -387,7 +384,8 @@ describe('Admin: Subtitles panel, one request at a time', () => {
       return null;
     });
     renderApp('/admin/subtitles');
-    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+    const panel = await screen.findByRole('region', { name: 'Subtitle files' });
     const rowOne = (await within(panel).findByText('A/One.en.forced.srt')).closest('li');
     const rowTwo = within(panel).getByText('B/Two.en.forced.srt').closest('li');
     for (const row of [rowOne, rowTwo]) {
@@ -427,7 +425,8 @@ describe('Admin: Subtitles panel, quick nudges', () => {
       return null;
     });
     renderApp('/admin/subtitles');
-    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+    const panel = await screen.findByRole('region', { name: 'Subtitle files' });
     const li = (await within(panel).findByText('Heat (1995)/Heat.en.forced.srt')).closest('li');
     await userEvent.click(within(li).getByRole('button', { name: /Show the cues/ }));
     const timing = await within(li).findByRole('group', { name: 'Timing' });
@@ -472,7 +471,8 @@ describe('Admin: Subtitles panel, a list that fails to refresh', () => {
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
     renderApp('/admin/subtitles');
-    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+    const panel = await screen.findByRole('region', { name: 'Subtitle files' });
     expect(await within(panel).findByText('Heat (1995)/Heat.en.forced.srt')).toBeInTheDocument();
 
     await act(() => vi.advanceTimersByTimeAsync(1500));
@@ -511,7 +511,8 @@ describe('Admin: Subtitles panel, cues that fail to refresh', () => {
       return null;
     });
     renderApp('/admin/subtitles');
-    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+    const panel = await screen.findByRole('region', { name: 'Subtitle files' });
     const li = (await within(panel).findByText('Heat (1995)/Heat.en.forced.srt')).closest('li');
     await userEvent.click(within(li).getByRole('button', { name: /Show the cues/ }));
     expect(await within(li).findByRole('link', { name: /Play from here/ })).toBeInTheDocument();
@@ -561,7 +562,8 @@ describe('Admin: Subtitles panel, cues after a scan changes the file', () => {
     });
     vi.useFakeTimers({ shouldAdvanceTime: true });
     renderApp('/admin/subtitles');
-    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+    const panel = await screen.findByRole('region', { name: 'Subtitle files' });
     const li = (await within(panel).findByText('Heat (1995)/Heat.en.forced.srt')).closest('li');
     await userEvent.click(within(li).getByRole('button', { name: /Show the cues/ }));
     expect(await within(li).findByText('Old text')).toBeInTheDocument();
@@ -591,7 +593,8 @@ describe('Admin: Subtitles panel, cues after a re-attach', () => {
       return null;
     });
     renderApp('/admin/subtitles');
-    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+    const panel = await screen.findByRole('region', { name: 'Subtitle files' });
     const li = (await within(panel).findByText('Heat (1995)/Heat.en.forced.srt')).closest('li');
     await userEvent.click(within(li).getByRole('button', { name: /Show the cues/ }));
     expect(await within(li).findByRole('link', { name: /Play from here/ })).toHaveAttribute(
@@ -708,7 +711,8 @@ describe('Admin: Subtitles panel, attaching', () => {
     });
     installFetch(withFilms(served.route));
     renderApp('/admin/subtitles');
-    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+    const panel = await screen.findByRole('region', { name: 'Subtitle files' });
     const li = (await within(panel).findByText('T.en.forced.srt')).closest('li');
     await userEvent.click(within(li).getByRole('button', { name: /^Attach/ }));
     const form = within(li).getByRole('form');
@@ -803,7 +807,8 @@ describe('Admin: Subtitles panel, attaching', () => {
       return withFilms(route)(method, url, init);
     });
     renderApp('/admin/subtitles');
-    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+    const panel = await screen.findByRole('region', { name: 'Subtitle files' });
     const li = (await within(panel).findByText('T.en.forced.srt')).closest('li');
     await userEvent.click(within(li).getByRole('button', { name: /^Attach/ }));
     const form = within(li).getByRole('form');
@@ -827,7 +832,8 @@ describe('Admin: Subtitles panel, attaching', () => {
     });
     installFetch(withFilms(route));
     renderApp('/admin/subtitles');
-    const panel = await screen.findByRole('region', { name: 'Subtitles' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+    const panel = await screen.findByRole('region', { name: 'Subtitle files' });
     const li = (await within(panel).findByText('T.en.forced.srt')).closest('li');
     await userEvent.click(within(li).getByRole('button', { name: /^Attach/ }));
     const form = within(li).getByRole('form');

@@ -6,6 +6,7 @@ import {
   rememberedNetworksNote,
   railNames,
   statusStrip,
+  subtitlesPage,
   todoCount,
   todoFooter,
   todoRow,
@@ -204,5 +205,51 @@ describe('the To do count, rail names and status strip copy', () => {
     expect(statusStrip.moreStreams(2)).toBe('+2 more');
     expect(statusStrip.loadError).toBe('Couldn’t load the status.');
     expect(statusStrip.retry).toBe('Try again');
+  });
+});
+
+describe('adminCopy: the Subtitles section', () => {
+  const joined = (parts) => parts.map((p) => p.text).join('');
+
+  it("keeps AR2's lead and note word for word, with the bold parts marked", () => {
+    expect(joined(subtitlesPage.lead)).toBe(
+      'You only need two kinds, both in English: full subtitles for films not in English, and forced subtitles (just the foreign lines) for English films with scenes in another language. CineFilm finds and downloads both by itself; this page lists only what it couldn’t.',
+    );
+    expect(subtitlesPage.lead.filter((p) => p.bold).map((p) => p.text)).toEqual([
+      'full subtitles',
+      'forced subtitles',
+    ]);
+    expect(joined(subtitlesPage.else.note)).toBe(
+      'Subtitles look wrong on a film? Fix them from that film’s page (Subtitles → Fix…) or in the player — that’s where timing, replacing a file and “This is wrong” now live, next to the film you’re watching.',
+    );
+  });
+
+  it('names the tabs as AR2 and Q3 say', () => {
+    expect(subtitlesPage.tabs).toEqual({
+      foreign: 'Foreign-language films',
+      forced: 'Forced subtitles not found',
+    });
+  });
+
+  it("words AR2's two unlabelled-audio buttons and the owner's Q3 button", () => {
+    expect(buttons.itsInLanguage.label('German')).toBe('It’s in German — find subtitles');
+    expect(buttons.itsEnglish).toMatchObject({
+      label: 'It’s English',
+      hint: '“It’s English” marks it done and stops asking',
+      source: 'AR2',
+    });
+    expect(buttons.noForeignScenes.label).toBe('No foreign scenes');
+  });
+
+  it('counts with the right singular and plural', () => {
+    expect(subtitlesPage.filmsCount(1)).toBe('1 film');
+    expect(subtitlesPage.filmsCount(4)).toBe('4 films');
+    expect(subtitlesPage.else.haveSubtitles(1)).toBe('foreign film has English subtitles');
+    expect(subtitlesPage.else.haveSubtitles(63)).toBe('foreign films have English subtitles');
+    expect(subtitlesPage.else.inEnglish(1)).toBe('film is in English');
+    expect(subtitlesPage.else.inEnglish(1341)).toBe('films are in English');
+    expect(subtitlesPage.else.showFilms(63)).toBe('Show the 63 films');
+    expect(subtitlesPage.else.hideFilms(63)).toBe('Hide the 63 films');
+    expect(subtitlesPage.files.showMore(7)).toBe('Show more (7 left)');
   });
 });

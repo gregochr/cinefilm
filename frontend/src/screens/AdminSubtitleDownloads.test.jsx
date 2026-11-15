@@ -79,7 +79,8 @@ async function openPanel(options) {
   const served = serve(options);
   installFetch(served.route);
   const view = renderApp('/admin/subtitles');
-  const panel = await screen.findByRole('region', { name: 'Subtitles' });
+  await userEvent.click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+  const panel = await screen.findByRole('region', { name: 'Subtitle files' });
   return { ...served, panel, view };
 }
 

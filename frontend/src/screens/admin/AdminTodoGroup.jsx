@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import RowText from './AdminRowText.jsx';
 import { ActionWithHint } from '../../components/ActionWithHint.jsx';
 import { Button } from '../../components/Button.jsx';
 import {
@@ -17,7 +18,6 @@ import {
   forcedLine,
   fullLine,
   matchLine,
-  rowTitle,
   TODO_ROW_CAP,
   visibleRows,
 } from '../../state/adminTodo.js';
@@ -29,20 +29,6 @@ const COPY_KEY = {
   fullMissing: 'englishSubtitlesMissing',
   forcedQuestion: 'forcedNotFound',
 };
-
-/** "Heat · 1995": the title with its year muted (AR1); a year that is only a guess carries a question mark. */
-function RowText({ row, line }) {
-  const { title, year } = rowTitle(row);
-  return (
-    <div className="admin__todo-text">
-      <p className="admin__todo-title">
-        {title}
-        {year ? <span className="admin__todo-year"> · {year}</span> : null}
-      </p>
-      <p className="admin__todo-line">{line}</p>
-    </div>
-  );
-}
 
 /** A film the scanner could not match: "Yes, it's …" when the server is confident, and always "Find the film…". */
 function MatchRow({ item, busy, problem, onConfirm, onFindFilm }) {

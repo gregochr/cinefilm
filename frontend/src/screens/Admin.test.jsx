@@ -312,13 +312,17 @@ describe('Admin: Subtitles refresh', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     renderApp('/admin/subtitles');
     const reads = () => fetchMock.mock.calls.filter((c) => c[0] === '/api/admin/subtitles').length;
-    // The first read, then the one the first scan answer's stamp triggers: nothing else is in flight after that.
-    await waitFor(() => expect(reads()).toBe(2));
-    await screen.findByRole('region', { name: 'Subtitles' });
+    // The file list is read when it is opened (each click advances the fake timers, as they run by themselves).
+    await userEvent
+      .setup({ advanceTimers: (ms) => vi.advanceTimersByTime(ms) })
+      .click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+    await screen.findByRole('region', { name: 'Subtitle files' });
+    await waitFor(() => expect(reads()).toBeGreaterThanOrEqual(1));
+    const before = reads();
 
     await act(() => vi.advanceTimersByTimeAsync(1500));
 
-    await waitFor(() => expect(reads()).toBe(3));
+    await waitFor(() => expect(reads()).toBeGreaterThan(before));
   });
 });
 

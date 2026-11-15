@@ -17,10 +17,11 @@ const without = (record, key) => {
  * even if that write failed. Only the last write's answer is applied to the row (`saving[filmId]` is set until
  * then) and only its failure is reported in `problems[filmId]`, with the row left at the last answer the server
  * gave. Other films stay free. Nothing is refetched, and a list read that started before the save arrived cannot
- * undo it. After unmount the write in flight is never aborted, its result is ignored (no state is set) and no waiting
+ * undo it. `onSaved(row)` runs once when a film's chain ends with its last write saved (the screen re-reads what depends
+ * on it); `counts` is the server's `counts` of the list last read. After unmount the write in flight is never aborted, its result is ignored (no state is set) and no waiting
  * choice is sent.
  */
-export function useNeedChoices({ name, refreshKey, load, save }) {
+export function useNeedChoices({ name, refreshKey, load, save, onSaved }) {
   // One counter orders everything: a list read is numbered when it starts, a saved choice when its answer arrives.
   const sequence = useRef(0);
   const { data, error, loading, reload } = useResource(`${name}:${refreshKey}`, async (options) => {
@@ -35,6 +36,9 @@ export function useNeedChoices({ name, refreshKey, load, save }) {
   // The write each film is waiting on, with the choice a newer click wants sent next: `{ pending: null | { choice } }`.
   const chains = useRef(new Map());
   const mounted = useRef(true);
+  // `onSaved` is read when a chain ends, so the latest one runs without making `choose` change.
+  const savedHandler = useRef(onSaved);
+  savedHandler.current = onSaved;
 
   useEffect(() => {
     mounted.current = true;
@@ -76,6 +80,7 @@ export function useNeedChoices({ name, refreshKey, load, save }) {
       if (answer) setSaved((prev) => ({ ...prev, [filmId]: answer }));
       if (failure) setProblems((prev) => ({ ...prev, [filmId]: needProblem(failure) }));
       setSaving((prev) => without(prev, filmId));
+      if (answer && !failure) savedHandler.current?.(answer.row);
     },
     [save],
   );
@@ -87,5 +92,5 @@ export function useNeedChoices({ name, refreshKey, load, save }) {
       .reduce((list, entry) => applyRow(list, entry.row), data.films);
   }, [data, saved]);
 
-  return { rows, error, loading, reload, problems, saving, choose };
+  return { rows, counts: data?.counts ?? null, error, loading, reload, problems, saving, choose };
 }

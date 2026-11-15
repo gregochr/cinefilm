@@ -30,4 +30,22 @@ describe('useSubtitles', () => {
     const calls = fetchMock.mock.calls.filter((c) => c[0] === '/api/admin/subtitles/1/verify');
     expect(calls.map((c) => c[1].method)).toEqual(['POST']);
   });
+
+  it('calls onChanged after an action that succeeded, and not after one that failed', async () => {
+    const onChanged = vi.fn();
+    let fail = true;
+    installFetch((method, url) => {
+      if (url !== '/api/admin/subtitles/1/verify') return null;
+      return fail ? respond({ error: 'x' }, 500) : respond({ id: 1 });
+    });
+    const { result } = renderHook(() => useSubtitles('v', onChanged));
+    await waitFor(() => expect(result.current.items).toEqual(fixtures.adminSubtitles));
+
+    await act(() => result.current.verify(1));
+    expect(onChanged).not.toHaveBeenCalled();
+
+    fail = false;
+    await act(() => result.current.verify(1));
+    expect(onChanged).toHaveBeenCalledTimes(1);
+  });
 });

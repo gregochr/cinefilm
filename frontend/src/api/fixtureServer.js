@@ -216,6 +216,31 @@ function removeSubtitle(id) {
   return null;
 }
 
+/** Files attached by hand so far, by row id, kept in memory: the list shows them attached, as the server would. */
+const attachedSubtitles = new Map();
+
+/** The list as it stands: removed downloads left out, hand attachments laid over their rows. */
+function subtitleList() {
+  return adminSubtitles
+    .filter((row) => !removedSubtitleIds.has(row.id))
+    .map((row) => ({ ...row, ...attachedSubtitles.get(row.id) }));
+}
+
+function attachSubtitle(id, body) {
+  const row = adminSubtitles.find((r) => r.id === id && !removedSubtitleIds.has(r.id));
+  if (!row) throw new ApiError(404, 'No such subtitle file');
+  if (!Number.isInteger(body?.editionId)) throw new ApiError(400, 'editionId is required');
+  const part = body.part ?? null;
+  attachedSubtitles.set(id, {
+    state: 'matched',
+    ownerAttached: true,
+    editionId: body.editionId,
+    part,
+    whole: part === null,
+  });
+  return subtitleList().find((r) => r.id === id);
+}
+
 const CHOICES = new Set(['NEEDED', 'NOT_NEEDED']);
 /**
  * The owner's choice per film, kept in memory: absent means the fixture as loaded, NEEDED or NOT_NEEDED an explicit
@@ -355,8 +380,10 @@ export async function handle(method, path, body) {
     return method === 'PUT' ? updateSettings(body) : settingsView();
   }
   if (route === '/api/admin/subtitles') {
-    return adminSubtitles.filter((row) => !removedSubtitleIds.has(row.id));
+    return subtitleList();
   }
+  match = route.match(/^\/api\/admin\/subtitles\/(\d+)\/attach$/);
+  if (match && method === 'POST') return attachSubtitle(Number(match[1]), body);
   match = route.match(/^\/api\/admin\/subtitles\/(\d+)$/);
   if (match && method === 'DELETE') return removeSubtitle(Number(match[1]));
   if (route === '/api/admin/forced-subtitles/films') return forcedNeedList();

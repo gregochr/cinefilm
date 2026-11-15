@@ -46,4 +46,30 @@ describe('useFullNeed', () => {
     expect(result.current.problems).toEqual({ 4: 'A scan is running: try again when it finishes' });
     expect(result.current.rows).toEqual(LIST.films);
   });
+
+  it('exposes the server counts of the list it read', async () => {
+    installFetch();
+    const { result } = renderHook(() => useFullNeed('a'));
+
+    await waitFor(() => expect(result.current.counts).toEqual(LIST.counts));
+  });
+
+  it('calls onSaved with the saved row once a choice is saved, and not for a failed one', async () => {
+    const onSaved = vi.fn();
+    let fail = true;
+    installFetch((method, url) => {
+      if (!FULL.test(url)) return null;
+      return fail ? respond({ error: 'x' }, 500) : respond({ ...LIST.films[1], need: 'NEEDED' });
+    });
+    const { result } = renderHook(() => useFullNeed('a', { onSaved }));
+    await waitFor(() => expect(result.current.rows).toEqual(LIST.films));
+
+    await act(() => result.current.choose(4, 'NEEDED'));
+    expect(onSaved).not.toHaveBeenCalled();
+
+    fail = false;
+    await act(() => result.current.choose(4, 'NEEDED'));
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(onSaved).toHaveBeenCalledWith({ ...LIST.films[1], need: 'NEEDED' });
+  });
 });

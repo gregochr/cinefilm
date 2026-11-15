@@ -382,6 +382,34 @@ describe('fixture server: Admin settings', () => {
     expect((await failure(999)).status).toBe(404);
   });
 
+  it('attaches a file by hand on POST, shows it attached in the list, and refuses a bad body or a missing row', async () => {
+    const failure = async (id, body) => {
+      const pending = handle('POST', `/api/admin/subtitles/${id}/attach`, body).catch((e) => e);
+      await vi.advanceTimersByTimeAsync(80);
+      return pending;
+    };
+    const answer = await call('POST', '/api/admin/subtitles/1/attach', { editionId: 12, part: 2 });
+    expect(answer).toMatchObject({
+      id: 1,
+      state: 'matched',
+      ownerAttached: true,
+      editionId: 12,
+      part: 2,
+      whole: false,
+    });
+
+    const listed = (await call('GET', '/api/admin/subtitles')).find((f) => f.id === 1);
+    expect(listed).toEqual(answer);
+    const whole = await call('POST', '/api/admin/subtitles/1/attach', {
+      editionId: 11,
+      part: null,
+    });
+    expect(whole).toMatchObject({ editionId: 11, part: null, whole: true });
+
+    expect((await failure(1, {})).status).toBe(400);
+    expect((await failure(999, { editionId: 1 })).status).toBe(404);
+  });
+
   it('serves the forced-subtitle list, and a PUT applies the owner’s choice and Automatic restores the rule', async () => {
     const before = await call('GET', '/api/admin/forced-subtitles/films');
     expect(before.films).toHaveLength(7);

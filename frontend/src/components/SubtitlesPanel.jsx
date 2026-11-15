@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { subtitlesPage } from '../state/adminCopy.js';
 import {
   FILE_FILTERS,
   NUDGES,
@@ -28,9 +29,10 @@ import { cueResourceKey, useSubtitleCues, useSubtitles } from '../state/useSubti
 import AttachPicker from './AttachPicker.jsx';
 import { Button } from './Button.jsx';
 import { SkeletonBlock } from './Skeleton.jsx';
-import ForcedNeedSection from './ForcedNeedSection.jsx';
-import FullNeedSection from './FullNeedSection.jsx';
 import { ErrorState } from './StateMessages.jsx';
+
+/** How many files are listed before "Show more". */
+export const FILES_PAGE = 50;
 
 /** The cues of one file with "Play from here" (the player opens 3 s before the cue). Cue text is rendered as text. */
 function CueList({ item, id }) {
@@ -333,17 +335,17 @@ function Item({ item, busy, problem, actions, onRemoved }) {
  * Admin: the English subtitle files beside the films, forced (checked and played as the forced subtitle) and full
  * (labelled "Full": found and served, with no checks). They are grouped (Unmatched, Conflicts, Missing,
  * Matched); each shows how it was read, can be attached to a film by hand, its cues read, its timing nudged and its
- * lines marked as checked. The cue text is untrusted: it is only ever rendered as text.
+ * lines marked as checked. The cue text is untrusted: it is only ever rendered as text. At most {@link FILES_PAGE}
+ * files are listed until "Show more". Every per-file tool stays here until they move to the film page (8b); a tool
+ * that changes something calls `onChanged` so the lists that depend on the files read again.
  */
-export default function SubtitlesPanel({ version }) {
-  const subtitles = useSubtitles(version);
+export default function SubtitlesPanel({ version, onChanged }) {
+  const subtitles = useSubtitles(version, onChanged);
   const { items, loading, error, reload } = subtitles;
   const [filter, setFilter] = useState('all');
-  // The film whose full files the full-need list asked to see; any chip the owner taps afterwards clears it.
-  const [film, setFilm] = useState(null);
+  const [limit, setLimit] = useState(FILES_PAGE);
   const [removals, setRemovals] = useState(0);
   const noticeRef = useRef(null);
-  const filmRef = useRef(null);
   const mounted = useRef(true);
   useEffect(() => {
     // Set on every setup: Strict Mode runs setup, cleanup, setup again.
@@ -355,27 +357,15 @@ export default function SubtitlesPanel({ version }) {
   useEffect(() => {
     if (removals > 0) noticeRef.current?.focus();
   }, [removals]);
-  useEffect(() => {
-    // Keyboard and screen reader users land on the line that says which files are listed.
-    if (film) filmRef.current?.focus();
-  }, [film]);
-  const showFilmFiles = (target) => {
-    setFilter('full');
-    setFilm(target);
-  };
   const chooseFilter = (key) => {
     setFilter(key);
-    setFilm(null);
+    setLimit(FILES_PAGE);
   };
   const onRemoved = () => {
     if (mounted.current) setRemovals((n) => n + 1);
   };
   const counts = useMemo(() => (items ? fileFilterCounts(items) : null), [items]);
-  const filmId = film ? film.filmId : null;
-  const shown = useMemo(
-    () => (items ? filterSidecars(items, filter, filmId) : []),
-    [items, filter, filmId],
-  );
+  const shown = useMemo(() => (items ? filterSidecars(items, filter) : []), [items, filter]);
   let body;
   if (loading && !items) {
     body = (
@@ -393,7 +383,7 @@ export default function SubtitlesPanel({ version }) {
       </p>
     );
   } else {
-    const groups = sidecarGroups(shown);
+    const groups = sidecarGroups(shown.slice(0, limit));
     body = (
       <>
         <div className="segmented subs__segmented" role="group" aria-label="Show subtitle files">
@@ -429,6 +419,13 @@ export default function SubtitlesPanel({ version }) {
             </ul>
           </div>
         ))}
+        {shown.length > limit ? (
+          <div className="admin__actions">
+            <Button onClick={() => setLimit(limit + FILES_PAGE)}>
+              {subtitlesPage.files.showMore(shown.length - limit)}
+            </Button>
+          </div>
+        ) : null}
       </>
     );
   }
@@ -441,21 +438,9 @@ export default function SubtitlesPanel({ version }) {
     <section className="admin__card" aria-labelledby="admin-subtitles-title">
       <div className="admin__head">
         <h2 id="admin-subtitles-title" className="admin__title">
-          Subtitles
+          {subtitlesPage.files.heading}
         </h2>
       </div>
-      <ForcedNeedSection refreshKey={`${version}:${subtitles.changes}`} />
-      <FullNeedSection refreshKey={`${version}:${subtitles.changes}`} onShowFiles={showFilmFiles} />
-      {film ? (
-        <div className="subs__film-filter">
-          <p className="admin__text" role="status" tabIndex={-1} ref={filmRef}>
-            Showing the full subtitle files of {film.title}.
-          </p>
-          <div className="admin__actions">
-            <Button onClick={() => chooseFilter('all')}>Show all files</Button>
-          </div>
-        </div>
-      ) : null}
       {removals > 0 ? (
         <p
           key={removals}
