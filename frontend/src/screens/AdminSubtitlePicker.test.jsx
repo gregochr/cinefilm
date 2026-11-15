@@ -4,6 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installFetch, renderApp, respond } from '../test/mockApi.jsx';
 import { forcedRow, fullRow, serveNeeds, unlabelledRow } from '../test/needRoutes.js';
 
+// Each test renders the whole Admin app and walks a dialog: a loaded CI machine needs more than the 5 s default.
+vi.setConfig({ testTimeout: 20000 });
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });

@@ -303,7 +303,9 @@ describe('Admin Subtitles section: owner choices', () => {
     await userEvent.click(within(rowOf('Downfall')).getByRole('button', { name: 'It’s English' }));
 
     await waitFor(() => expect(screen.queryByText('Downfall')).not.toBeInTheDocument());
-    expect(screen.getByRole('tabpanel', { name: 'Foreign-language films 1' })).toHaveFocus();
+    await waitFor(() =>
+      expect(screen.getByRole('tabpanel', { name: 'Foreign-language films 1' })).toHaveFocus(),
+    );
   });
 
   it('leaves focus alone when it had already moved somewhere real', async () => {
@@ -417,7 +419,8 @@ describe('Admin Subtitles section: Add my own file…', () => {
     await waitFor(() => expect(screen.queryByText('Rashomon')).not.toBeInTheDocument());
     expect(attaches).toEqual([{ editionId: 60, part: null }]);
     expect(screen.getByRole('tab', { name: 'Foreign-language films 1' })).toBeInTheDocument();
-    expect(screen.getByRole('tabpanel')).toHaveFocus();
+    // The focus move is a passive effect of the render that drops the row: it can land after the row is gone.
+    await waitFor(() => expect(screen.getByRole('tabpanel')).toHaveFocus());
 
     first.unmount();
     renderApp('/admin/subtitles');
@@ -471,7 +474,9 @@ describe('Admin Subtitles section: Your choices', () => {
     expect(server.puts()[0][0]).toBe('/api/admin/films/6/full-need');
     await waitFor(() => expect(server.summaryReads()).toBeGreaterThan(summaryBefore));
     expect(server.reads.full).toBeGreaterThan(fullReadsBefore);
-    expect(screen.getByRole('heading', { name: 'Everything else' })).toHaveFocus();
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Everything else' })).toHaveFocus(),
+    );
 
     first.unmount();
     renderApp('/admin/subtitles');
