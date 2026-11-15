@@ -4,10 +4,10 @@
 import { rungName } from '../player/ladder.js';
 import { formatRuntime } from '../player/time.js';
 import { formatScanTime } from './scanFormat.js';
+import { describeDevice } from './userAgent.js';
 
 const MINUTE_MS = 60_000;
 const RUNG_ORDER = ['original', '1080p', '720p', '480p', '360p', '240p'];
-const DEVICE_WORDS = ['iPhone', 'iPad', 'Android', 'Windows', 'Mac', 'Linux'];
 /**
  * The shortest watched time that counts as a film session (three minutes): shorter ones are tests, skips and
  * misclicks. The same figure as `PlaybackHealthService.FILM_SESSION_MIN_MS` on the server.
@@ -31,11 +31,8 @@ export function operatorName(operator) {
   return name === '' ? null : name;
 }
 
-/** The first platform word found in a user agent (an iPhone's also says "Mac OS X"), else "Unknown device". */
-export function deviceLabel(userAgent) {
-  const text = typeof userAgent === 'string' ? userAgent : '';
-  return DEVICE_WORDS.find((word) => text.includes(word)) ?? 'Unknown device';
-}
+/** How a device is named: the same words as Admin's To do "Playing now" card (`describeDevice`). */
+export const deviceLabel = describeDevice;
 
 /** "9 s" under a minute, "2m 5s" from there, in whole rounded seconds. */
 export function stallDuration(ms) {

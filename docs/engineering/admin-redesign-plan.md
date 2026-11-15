@@ -101,7 +101,8 @@ One PR per phase, each from updated `main`, built by Sonnet, gated by CLAUDE.md 
 | 3a | `feat(health)` | Health columns + backfill, filtered/paged query, `FILM_SESSION_MIN_MS` both sides | — |
 | 3b-1 | `feat(subtitles)` | `AdminTodoRules`, unresolved/beingChecked, originalLanguage, confident+score | Q3 |
 | 3b-2 | `feat(admin)` | `GET /api/admin/summary` | 3b-1 |
-| 3c | `feat(admin)` | To do page: status strip, four bounded groups, empty state, rail counts | — |
+| 3c-1 | `feat(admin)` | summary hook, rail counts, To do heading and status strip | — |
+| 3c-2 | `feat(admin)` | the four To do groups, "Yes, it's…", empty state | 3c-1 |
 | 4a | `feat(subtitles)` | Subtitles section: two tabs, owner choices, "Everything else" | Q3 |
 | 4b | `feat(subtitles)` | Backend: edition-scoped OpenSubtitles search and download | — |
 | 4c | `feat(subtitles)` | Picker dialog, wired into both tabs and To do | — |
@@ -214,6 +215,8 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
 - **Status strip:** Library "{n} films · scanned {ago}"; Playback "Last 30 days: {smooth} of {n} film sessions played
   smoothly"; Playing now "{film} · {device} · {quality}" or "Nothing playing". Each links to its section. On phone,
   per `06`, only the Library card shows.
+- **3c-1 decision:** a failed re-read keeps the last good figures (rail counts, heading count, strip) with no banner; the
+  next 30 s poll retries. The error banner shows only when no summary has been read yet.
 - **Groups** (copy from `AR1`), up to **5** rows, footer as in `adminCopy` with "Show all {n}" (expands in place) or
   "All in Subtitles →":
   1. Pick the right film — `needs-match`. `confident` → "Yes, it's {Title} ({year})" (the existing match `POST`) +
@@ -267,6 +270,7 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
 ### 5a · Playback: now playing, chart, per-minute view
 
 - Now playing from the summary's `playingNow`, "Stop this stream" + hint where an HLS session exists.
+- The player reports a touch hint (`maxTouchPoints > 1` with a Macintosh UA) so an iPad isn't named a Mac.
 - `state/playbackChart.js` (pure): environment filter, rung shares from `rungMs` (Original, 1080p, 720p, ≤480p),
   stall-dot size from `stallMs`, tiles (sessions watched, without a stall, stalled + "all on the {env}" when every
   stalled session shares one environment, median `startupMs`, % at Original or 1080p), column `aria-label`, chart

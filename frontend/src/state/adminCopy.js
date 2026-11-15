@@ -166,3 +166,43 @@ export const footerPhone = (shown, total) => `${shown} of ${total}`;
 
 /** The link beside a desktop footer, "Show all {n}". */
 export const showAll = (total) => `Show all ${total}`;
+
+/** The muted count beside the "To do" heading (AR1: "9 things need you"; the singular is the planner's, 3c-1). */
+export const todoCount = {
+  plural: (n) => `${n} things need you`,
+  singular: '1 thing needs you',
+  source: 'AR1 (plural), planner 3c-1 (singular)',
+};
+
+/** The accessible names of the rail links that carry a count (AR1 shows only the visible pill; names are the planner's). */
+export const railNames = {
+  todo: (n) => `To do, ${n} ${n === 1 ? 'thing' : 'things'}`,
+  subtitles: (n) => `Subtitles, ${n} unresolved`,
+  playback: (n) => `Playback, ${n} live`,
+  /** The visible pill on Playback (AR1). */
+  live: (n) => `${n} live`,
+  source: 'AR1 (pill), planner 3c-1 (accessible names)',
+};
+
+/** The three status cards under the To do intro: eyebrow, link text and the lines AR1 does not show. */
+export const statusStrip = {
+  library: { eyebrow: 'Library', link: 'Library →', source: 'AR1' },
+  playback: { eyebrow: 'Playback', link: 'Playback →', source: 'AR1' },
+  playingNow: { eyebrow: 'Playing now', link: 'See stream →', source: 'AR1' },
+  scanned: (films, ago) => `${films} · scanned ${ago}`, // AR1
+  neverScanned: (films) => `${films} · not scanned yet`, // planner, 3c-1
+  scanFailed: (films, ago) => `${films} · last scan failed ${ago}`, // planner, 3c-1
+  scanFailedUndated: (films) => `${films} · last scan failed`, // planner, 3c-1
+  film: { one: 'film', other: 'films' }, // planner, 3c-1
+  unknownDevice: 'Unknown device', // planner, 3c-1 (the Playback log said it first)
+  // AR1 says "films played smoothly"; the planner's brief counts film sessions (3 minutes or more).
+  playbackSome: (smooth, films) =>
+    `Last 30 days: ${smooth} of ${films} film ${films === 1 ? 'session' : 'sessions'} played smoothly`,
+  playbackNone: 'No films watched in the last 30 days', // planner, 3c-1
+  nothingPlaying: 'Nothing playing', // AR1
+  moreStreams: (k) => `+${k} more`, // planner, 3c-1
+  loadError: 'Couldn’t load the status.', // planner, 3c-1
+  retry: 'Try again', // planner, 3c-1
+  source:
+    'AR1 for the eyebrows, links, scanned and "Nothing playing"; planner 3c-1 for the rest (see comments)',
+};

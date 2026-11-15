@@ -3,7 +3,8 @@ import EditEditions from '../components/EditEditions.jsx';
 import FixMatchPanel from '../components/FixMatchPanel.jsx';
 import Toast from '../components/Toast.jsx';
 import { useDocumentVisible } from '../components/useDocumentVisible.js';
-import { AdminContext } from '../state/adminContext.js';
+import { AdminContext, useAdminContext } from '../state/adminContext.js';
+import { railCounts } from '../state/adminSummaryFormat.js';
 import { ADMIN_SECTIONS, OLD_SCAN_HASH, SCAN_ROUTE, normalisePath } from '../state/adminRoutes.js';
 import { useAdminShell } from '../state/useAdminShell.js';
 
@@ -14,6 +15,9 @@ function returnFocus(opener) {
 
 /** The rail on desktop, "Home" and a scrollable row of links on phone: one `nav`, restyled by CSS. */
 function AdminNav() {
+  const { adminSummary } = useAdminContext();
+  // No counts until a summary has been read; a later failed read leaves the last good ones on screen.
+  const counts = railCounts(adminSummary.summary);
   return (
     <div className="admin__rail">
       <Link to="/" className="admin__home" aria-label="Back to Home">
@@ -22,8 +26,21 @@ function AdminNav() {
       <p className="admin__name">Admin</p>
       <nav className="admin__nav" aria-label="Admin sections">
         {ADMIN_SECTIONS.map((section) => (
-          <NavLink key={section.key} to={section.to} end={section.end} className="admin__link-nav">
+          <NavLink
+            key={section.key}
+            to={section.to}
+            end={section.end}
+            className="admin__link-nav"
+            aria-label={counts[section.key]?.label}
+          >
             {section.label}
+            {counts[section.key] ? (
+              <span
+                className={`admin__count-pill${section.key === 'playback' ? ' admin__count-pill--live' : ''}`}
+              >
+                {counts[section.key].badge}
+              </span>
+            ) : null}
           </NavLink>
         ))}
       </nav>

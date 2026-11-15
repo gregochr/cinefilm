@@ -9,6 +9,14 @@ afterEach(() => {
 });
 
 const SECTIONS = ['To do', 'Subtitles', 'Library', 'Playback', 'Settings'];
+// The fixture summary: 6 To do things, 2 unresolved subtitles, 1 live stream. Library and Settings carry no count.
+const NAMES = {
+  'To do': 'To do, 6 things',
+  Subtitles: 'Subtitles, 2 unresolved',
+  Library: 'Library',
+  Playback: 'Playback, 1 live',
+  Settings: 'Settings',
+};
 
 describe('Admin shell: routes and navigation', () => {
   it.each([
@@ -22,8 +30,9 @@ describe('Admin shell: routes and navigation', () => {
     renderApp(path);
     expect(await screen.findByRole('heading', { level: 1, name })).toBeInTheDocument();
     const nav = screen.getByRole('navigation', { name: 'Admin sections' });
+    expect(await within(nav).findByRole('link', { name: NAMES['To do'] })).toBeInTheDocument();
     for (const label of SECTIONS) {
-      const link = within(nav).getByRole('link', { name: label });
+      const link = within(nav).getByRole('link', { name: NAMES[label] });
       if (label === name) expect(link).toHaveAttribute('aria-current', 'page');
       else expect(link).not.toHaveAttribute('aria-current');
     }
@@ -43,6 +52,7 @@ describe('Admin shell: routes and navigation', () => {
     installFetch();
     renderApp('/admin');
     const nav = await screen.findByRole('navigation', { name: 'Admin sections' });
+    await within(nav).findByRole('link', { name: NAMES['To do'] });
     expect(
       within(nav)
         .getAllByRole('link')
@@ -55,11 +65,13 @@ describe('Admin shell: routes and navigation', () => {
       '/admin/settings',
     ]);
 
-    await userEvent.click(within(nav).getByRole('link', { name: 'Playback' }));
+    await userEvent.click(within(nav).getByRole('link', { name: NAMES.Playback }));
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Playback' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { level: 1, name: 'To do' })).not.toBeInTheDocument();
-    expect(within(nav).getByRole('link', { name: 'To do' })).not.toHaveAttribute('aria-current');
+    expect(within(nav).getByRole('link', { name: NAMES['To do'] })).not.toHaveAttribute(
+      'aria-current',
+    );
   });
 
   it('an unknown address under /admin is the Nothing here page, with the app chrome kept', async () => {

@@ -4,6 +4,9 @@ import {
   footerDesktop,
   footerPhone,
   rememberedNetworksNote,
+  railNames,
+  statusStrip,
+  todoCount,
   showAll,
   todo,
   todoGroups,
@@ -141,5 +144,45 @@ describe('adminCopy sections and footers', () => {
     expect(footerDesktop(5, 12)).toBe('Showing 5 of 12');
     expect(footerPhone(1, 3)).toBe('1 of 3');
     expect(showAll(12)).toBe('Show all 12');
+  });
+});
+
+describe('the To do count, rail names and status strip copy', () => {
+  it('words the heading count', () => {
+    expect(todoCount.plural(9)).toBe('9 things need you');
+    expect(todoCount.singular).toBe('1 thing needs you');
+  });
+
+  it('words the rail names', () => {
+    expect(railNames.todo(1)).toBe('To do, 1 thing');
+    expect(railNames.todo(7)).toBe('To do, 7 things');
+    expect(railNames.subtitles(2)).toBe('Subtitles, 2 unresolved');
+    expect(railNames.playback(1)).toBe('Playback, 1 live');
+    expect(railNames.live(1)).toBe('1 live');
+  });
+
+  it('words the status cards', () => {
+    expect(statusStrip.library).toMatchObject({ eyebrow: 'Library', link: 'Library →' });
+    expect(statusStrip.playback).toMatchObject({ eyebrow: 'Playback', link: 'Playback →' });
+    expect(statusStrip.playingNow).toMatchObject({ eyebrow: 'Playing now', link: 'See stream →' });
+    expect(statusStrip.scanned('538 films', '12 min ago')).toBe('538 films · scanned 12 min ago');
+    expect(statusStrip.neverScanned('538 films')).toBe('538 films · not scanned yet');
+    expect(statusStrip.scanFailed('538 films', '2 hours ago')).toBe(
+      '538 films · last scan failed 2 hours ago',
+    );
+    expect(statusStrip.scanFailedUndated('538 films')).toBe('538 films · last scan failed');
+    expect(statusStrip.film).toEqual({ one: 'film', other: 'films' });
+    expect(statusStrip.unknownDevice).toBe('Unknown device');
+    expect(statusStrip.playbackSome(27, 28)).toBe(
+      'Last 30 days: 27 of 28 film sessions played smoothly',
+    );
+    expect(statusStrip.playbackSome(1, 1)).toBe(
+      'Last 30 days: 1 of 1 film session played smoothly',
+    );
+    expect(statusStrip.playbackNone).toBe('No films watched in the last 30 days');
+    expect(statusStrip.nothingPlaying).toBe('Nothing playing');
+    expect(statusStrip.moreStreams(2)).toBe('+2 more');
+    expect(statusStrip.loadError).toBe('Couldn’t load the status.');
+    expect(statusStrip.retry).toBe('Try again');
   });
 });

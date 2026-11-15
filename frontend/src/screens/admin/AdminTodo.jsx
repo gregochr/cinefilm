@@ -1,5 +1,7 @@
 import { ActionWithHint } from '../../components/ActionWithHint.jsx';
-import { buttons } from '../../state/adminCopy.js';
+import { buttons, todo } from '../../state/adminCopy.js';
+import { todoHeadingCount } from '../../state/adminSummaryFormat.js';
+import AdminStatusStrip from './AdminStatusStrip.jsx';
 import { SkeletonBlock } from '../../components/Skeleton.jsx';
 import { ErrorState } from '../../components/StateMessages.jsx';
 import { formatRuntime } from '../../player/time.js';
@@ -89,12 +91,23 @@ function AttentionPanel({ attention, loading, error, onRetry, onFixMatch, onEdit
 
 /** To do: the films needing attention. Fix match and Edit editions open from here, hosted by the layout. */
 export default function AdminTodo() {
-  const { settledAt, changed, openFixMatch, openEditEditions } = useAdminContext();
+  const { settledAt, changed, openFixMatch, openEditEditions, adminSummary } = useAdminContext();
+  // The heading never waits for the summary, and a failed re-read leaves the last good count.
+  const countText = todoHeadingCount(adminSummary.summary);
   const attention = useAttention(`${settledAt}|${changed}`);
   useFallbackFocus(attention.data);
   return (
     <>
-      <SectionTitle>To do</SectionTitle>
+      <div className="admin__ttl">
+        <SectionTitle>To do</SectionTitle>
+        {countText ? <span className="admin__ttl-count">{countText}</span> : null}
+      </div>
+      <p className="admin__lead">{todo.intro}</p>
+      <AdminStatusStrip
+        summary={adminSummary.summary}
+        error={adminSummary.error}
+        onRetry={adminSummary.reload}
+      />
       <div className="admin__grid">
         <AttentionPanel
           attention={attention.data}

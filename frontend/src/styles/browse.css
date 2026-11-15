@@ -1219,6 +1219,8 @@
 .admin__link-nav {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   min-height: 44px;
   padding: 0 14px;
   border-left: 2px solid transparent;
@@ -1257,6 +1259,98 @@
   font-weight: 400;
   font-size: 40px;
   line-height: 1.1;
+}
+/* A rail count: a quiet mono pill, never amber (AR1 .cnt). */
+.admin__count-pill {
+  font-family: var(--cf-font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--cf-text-muted);
+  border: 1px solid var(--cf-line);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+/* "1 live" is brighter than the other counts (AR1 .cnt.live). */
+.admin__count-pill--live {
+  color: var(--cf-text);
+}
+/* To do: heading with its muted count, the intro line and the status strip (AR1) */
+.admin__ttl {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+.admin__ttl-count {
+  color: var(--cf-text-muted);
+}
+.admin__lead {
+  margin: -14px 0 0;
+  max-width: 720px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--cf-text-2);
+}
+.admin__strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.admin__strip-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  background: var(--cf-surface);
+  border: 1px solid var(--cf-line);
+  border-radius: 12px;
+}
+.admin__strip-skeleton {
+  min-height: 104px;
+  border-radius: 12px;
+}
+.admin__strip-eyebrow {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cf-text-muted);
+}
+.admin__strip-text {
+  margin: 0;
+  font-size: 15px;
+}
+.admin__strip-text--error {
+  color: #f0876a;
+}
+.admin__strip-link {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 44px;
+  margin-top: auto;
+  font-size: 13px;
+  color: var(--cf-text-2);
+}
+.admin__strip-link:focus-visible {
+  border-radius: 6px;
+  box-shadow: var(--cf-focus-ring);
+}
+.admin__strip-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border: 1px solid #f0876a;
+  border-radius: 12px;
+}
+.admin__strip-error-text {
+  margin: 0;
+  font-size: 14px;
+  color: #f0876a;
 }
 
 @media (max-width: 600px) {
@@ -1327,6 +1421,13 @@
   }
   .admin__section-title {
     font-size: 28px;
+  }
+  /* The phone shows only the Library card (AR6). */
+  .admin__strip {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .admin__strip-card--wide-only {
+    display: none;
   }
 }
 

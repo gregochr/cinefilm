@@ -38,6 +38,7 @@ export const fixtures = {
   collections,
   adminScan,
   adminAttention,
+  adminSummary,
   adminGrouping,
   adminEditions,
   adminMatch,
