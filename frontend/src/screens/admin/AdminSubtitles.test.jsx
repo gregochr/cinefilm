@@ -346,8 +346,23 @@ describe('Admin Subtitles section: Add my own file…', () => {
   function serveAttach() {
     const needs = serveNeeds({ full: [rashomon(), downfall()], forced: [taken()] });
     const attaches = [];
+    let fileReads = 0;
+    let attached = false;
     installFetch((method, url, init) => {
-      if (url === '/api/admin/subtitles') return respond([ownFile]);
+      if (url === '/api/admin/subtitles') {
+        fileReads += 1;
+        return respond([
+          attached
+            ? {
+                ...ownFile,
+                state: 'matched',
+                ownerAttached: true,
+                filmId: 6,
+                filmTitle: 'Rashomon',
+              }
+            : ownFile,
+        ]);
+      }
       if (url === '/api/films/6') {
         return respond({
           id: 6,
@@ -357,6 +372,7 @@ describe('Admin Subtitles section: Add my own file…', () => {
       }
       if (url === '/api/admin/subtitles/31/attach' && method === 'POST') {
         attaches.push(JSON.parse(init.body));
+        attached = true;
         needs.lists.full[0] = {
           ...needs.lists.full[0],
           unresolved: false,
@@ -366,11 +382,30 @@ describe('Admin Subtitles section: Add my own file…', () => {
       }
       return needs.route(method, url, init);
     });
-    return attaches;
+    return { attaches, reads: () => fileReads };
   }
 
+  it('re-reads an open file list after an attach, so it shows the new attachment', async () => {
+    const { reads } = serveAttach();
+    renderApp('/admin/subtitles');
+    await userEvent.click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
+    const files = await screen.findByRole('region', { name: 'Subtitle files' });
+    expect(await within(files).findByText('Not attached to a film')).toBeInTheDocument();
+    const before = reads();
+    await userEvent.click(
+      within(rowOf('Rashomon')).getByRole('button', { name: 'Add my own file…' }),
+    );
+    await userEvent.click(await screen.findByRole('radio', { name: /Rashomon\.en\.srt/ }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Attach' }));
+
+    await waitFor(() => expect(reads()).toBeGreaterThan(before));
+    expect(await within(files).findByText('Rashomon · Theatrical Cut')).toBeInTheDocument();
+    expect(within(files).queryByText('Not attached to a film')).not.toBeInTheDocument();
+  });
+
   it('attaches the chosen file to the film, the row leaves, focus goes to the panel, and it stays gone', async () => {
-    const attaches = serveAttach();
+    const { attaches } = serveAttach();
     const first = renderApp('/admin/subtitles');
     await tab('Foreign-language films 2');
     await screen.findByText('Rashomon');

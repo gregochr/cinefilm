@@ -52,7 +52,8 @@ export default function AdminSubtitles() {
         figures={figures}
         needs={{ full: lists.full, forced: lists.forced }}
         scan={scan}
-        version={subtitlesVersion}
+        // Any change markChanged signals (a choice, an attached file) re-reads an open file list too.
+        version={`${subtitlesVersion}|${changed}`}
         onChanged={markChanged}
       />
     </>
