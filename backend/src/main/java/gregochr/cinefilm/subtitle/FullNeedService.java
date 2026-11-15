@@ -83,7 +83,7 @@ public class FullNeedService {
     }
 
     /** One present edition's audio: its name and the label of part 1's default (else first) audio track. */
-    private record EditionAudio(String name, String label) {
+    private record EditionAudio(Long id, String name, String label) {
     }
 
     /**
@@ -294,7 +294,7 @@ public class FullNeedService {
     private static void flush(Map<Long, List<EditionAudio>> byFilm, AudioRow part1, List<Track> tracks) {
         if (part1 != null && part1.presence() == Presence.PRESENT) {
             byFilm.computeIfAbsent(part1.filmId(), id -> new ArrayList<>())
-                .add(new EditionAudio(part1.editionName(), FullNeed.audioLanguage(tracks)));
+                .add(new EditionAudio(part1.editionId(), part1.editionName(), FullNeed.audioLanguage(tracks)));
         }
     }
 
@@ -363,11 +363,20 @@ public class FullNeedService {
     private FullNeedFilmDto dto(Eval eval, Pending due, boolean browsable) {
         FullNeedRow row = eval.row();
         FullFacts facts = facts(eval, due);
+        EditionAudio picker = pickerEdition(eval.editions());
         return new FullNeedFilmDto(row.id(), row.title(), row.year(), eval.decision().need().name(),
             eval.decision().reason().name(), row.owner() == null ? null : row.owner().name(),
             eval.editions().stream().map(e -> new EditionAudioDto(e.name(), e.label())).toList(), eval.playing(),
             row.originalLanguage(), AdminTodoRules.unresolvedFull(facts), AdminTodoRules.beingCheckedFull(facts),
-            browsable && AdminTodoRules.subtitledFull(facts));
+            browsable && AdminTodoRules.subtitledFull(facts),
+            picker == null ? null : picker.id(),
+            picker == null || eval.editions().size() < 2 ? null : picker.name());
+    }
+
+    /** The edition the picker searches: {@link FullNeed#pickerIndex} over the editions' audio labels, or null. */
+    private static EditionAudio pickerEdition(List<EditionAudio> editions) {
+        int at = FullNeed.pickerIndex(editions.stream().map(EditionAudio::label).toList());
+        return at < 0 ? null : editions.get(at);
     }
 
     private static FullNeedCountsDto counts(List<FullNeedFilmDto> rows, int inEnglish) {

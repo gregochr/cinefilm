@@ -91,7 +91,7 @@ public final class FullNeed {
         if (original == null || ENGLISH.equals(original) || NO_LANGUAGE.equals(original)) {
             return new Decision(Need.NOT_NEEDED, Reason.ENGLISH_FILM);
         }
-        boolean anyForeign = editionsAudio.stream().anyMatch(label -> isLabelled(label) && !isEnglish(label));
+        boolean anyForeign = editionsAudio.stream().anyMatch(FullNeed::isForeign);
         if (anyForeign) {
             return new Decision(Need.NEEDED, Reason.FOREIGN_AUDIO);
         }
@@ -125,6 +125,37 @@ public final class FullNeed {
         }
         String lower = label.strip().toLowerCase(Locale.ROOT);
         return "english".equals(lower) || "eng".equals(lower) || ENGLISH.equals(lower);
+    }
+
+    /**
+     * True when the label names a language that is not English (the rule that makes a film {@code NEEDED}).
+     *
+     * @param label a stored language label, or null
+     * @return whether it is labelled and not English
+     */
+    public static boolean isForeign(String label) {
+        return isLabelled(label) && !isEnglish(label);
+    }
+
+    /**
+     * Which edition the Admin picker searches subtitles for: the first whose audio is labelled foreign (the one that
+     * makes the film needed), else the first with no label (the original language is assumed), else the first.
+     *
+     * @param editionsAudio one label per present edition, as for {@link #decide}
+     * @return the index of the chosen edition, or -1 when there is none
+     */
+    public static int pickerIndex(List<String> editionsAudio) {
+        for (int i = 0; i < editionsAudio.size(); i++) {
+            if (isForeign(editionsAudio.get(i))) {
+                return i;
+            }
+        }
+        for (int i = 0; i < editionsAudio.size(); i++) {
+            if (!isLabelled(editionsAudio.get(i))) {
+                return i;
+            }
+        }
+        return editionsAudio.isEmpty() ? -1 : 0;
     }
 
     private static boolean isLabelled(String label) {

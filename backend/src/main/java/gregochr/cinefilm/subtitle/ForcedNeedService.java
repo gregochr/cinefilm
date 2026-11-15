@@ -10,6 +10,8 @@ import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.NeedRow;
 import gregochr.cinefilm.film.ForcedNeedChoice;
 import gregochr.cinefilm.film.MediaFileRepository;
+import gregochr.cinefilm.film.MediaFileRepository.AudioRow;
+import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.film.SpokenLanguages;
 import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesApi;
@@ -26,6 +28,7 @@ import gregochr.cinefilm.todo.AdminTodoRules.ForcedFacts;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -79,9 +82,10 @@ public class ForcedNeedService {
     public NeedListDto list() {
         List<Eval> evals = evaluate(true);
         Pending due = pendingFor(evals);
+        Map<Long, PickerEdition> pickerEditions = pickerEditions(evals);
         List<FilmNeedDto> dtos = new ArrayList<>();
         for (Eval eval : evals) {
-            dtos.add(dto(eval, due));
+            dtos.add(dto(eval, due, pickerEditions.get(eval.row().id())));
         }
         return new NeedListDto(dtos, counts(dtos));
     }
@@ -184,7 +188,7 @@ public class ForcedNeedService {
         boolean served = (sidecars.countPresentSubtitlesForFilm(filmId, SubtitleKind.FORCED) > 0 || embedded)
             && !servedFilmIds(List.of(filmId)).isEmpty();
         Eval eval = eval(row, hasSidecar, served, embedded);
-        return dto(eval, pendingFor(List.of(eval)));
+        return dto(eval, pendingFor(List.of(eval)), pickerEditions(List.of(eval)).get(filmId));
     }
 
     /**
@@ -254,7 +258,40 @@ public class ForcedNeedService {
         return imdbIds.isEmpty() ? Pending.NONE : pending.forced(imdbIds);
     }
 
-    private FilmNeedDto dto(Eval eval, Pending due) {
+    /** The edition the picker searches for a film, and its name when the film has more than one present edition. */
+    private record PickerEdition(Long id, String name) {
+    }
+
+    /**
+     * The edition the picker searches for each film that is {@code NEEDED} with no forced subtitle served: its first
+     * present edition (lowest id, as the audio rows come), present meaning the edition's part 1 file is. One query for
+     * all of those films, none when there are none. A film with no present edition is absent; the name is set only
+     * when the film has more than one present edition.
+     */
+    private Map<Long, PickerEdition> pickerEditions(List<Eval> evals) {
+        List<Long> filmIds = evals.stream()
+            .filter(eval -> eval.decision().need() == Need.NEEDED && !eval.served())
+            .map(eval -> eval.row().id()).toList();
+        if (filmIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, List<AudioRow>> present = new LinkedHashMap<>();
+        Long edition = null;
+        for (AudioRow row : files.findAudioRows(filmIds)) {
+            if (!row.editionId().equals(edition)) {
+                edition = row.editionId();
+                if (row.presence() == Presence.PRESENT) {
+                    present.computeIfAbsent(row.filmId(), id -> new ArrayList<>()).add(row);
+                }
+            }
+        }
+        Map<Long, PickerEdition> first = new HashMap<>();
+        present.forEach((filmId, rows) -> first.put(filmId,
+            new PickerEdition(rows.get(0).editionId(), rows.size() > 1 ? rows.get(0).editionName() : null)));
+        return first;
+    }
+
+    private FilmNeedDto dto(Eval eval, Pending due, PickerEdition picker) {
         NeedRow row = eval.row();
         ForcedFacts facts = new ForcedFacts(eval.decision().need() == Need.NEEDED, eval.served(),
             row.imdbId() != null, eval.openSubtitles(), row.osCandidatesMissing(), due.due().contains(row.id()),
@@ -262,7 +299,8 @@ public class ForcedNeedService {
         return new FilmNeedDto(row.id(), row.title(), row.year(), eval.decision().need().name(),
             eval.decision().reason().name(), row.owner() == null ? null : row.owner().name(), row.originalLanguage(),
             eval.spoken(), eval.served(), eval.openSubtitles(), eval.openSubtitlesAt(),
-            AdminTodoRules.unresolvedForced(facts), AdminTodoRules.beingCheckedForced(facts));
+            AdminTodoRules.unresolvedForced(facts), AdminTodoRules.beingCheckedForced(facts),
+            picker == null ? null : picker.id(), picker == null ? null : picker.name());
     }
 
     private static CountsDto counts(List<FilmNeedDto> rows) {

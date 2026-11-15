@@ -13,7 +13,12 @@ const groups = (source) => buildTodoGroups(source);
 const find = (list, key) => list.find((g) => g.key === key);
 
 function renderGroup(group, props = {}) {
-  const handlers = { onConfirm: vi.fn(), onFindFilm: vi.fn(), onSortOut: vi.fn() };
+  const handlers = {
+    onConfirm: vi.fn(),
+    onFindFilm: vi.fn(),
+    onSortOut: vi.fn(),
+    onFindSubtitles: vi.fn(),
+  };
   const view = render(
     <MemoryRouter>
       <AdminTodoGroup group={group} confirming={[]} problems={{}} {...handlers} {...props} />
@@ -216,7 +221,7 @@ describe('AdminTodoGroup: Sort out several files', () => {
 describe('AdminTodoGroup: the subtitle groups', () => {
   const subtitles = groups({ attention: [], full: fullNeed.films, forced: forcedNeed.films });
 
-  it('lists the English-subtitles rows read-only, with a footer link to Subtitles and no Show all', () => {
+  it('lists the English-subtitles rows with their search button, a footer link to Subtitles and no Show all', () => {
     renderGroup(find(subtitles, 'fullMissing'));
 
     const region = screen.getByRole('region', { name: 'English subtitles missing' });
@@ -224,7 +229,12 @@ describe('AdminTodoGroup: the subtitle groups', () => {
       within(region).getByText('Foreign-language films with nothing to read'),
     ).toBeInTheDocument();
     expect(within(region).getByText('Rashomon')).toBeInTheDocument();
-    expect(within(region).queryByRole('button')).not.toBeInTheDocument();
+    expect(
+      within(region)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['Search for English subtitles…']);
+    expect(within(region).queryByRole('button', { name: /Show all/ })).not.toBeInTheDocument();
     expect(within(region).getByText('Showing 1 of 1')).toBeInTheDocument();
     expect(within(region).getByRole('link', { name: 'All in Subtitles →' })).toHaveAttribute(
       'href',
@@ -232,7 +242,7 @@ describe('AdminTodoGroup: the subtitle groups', () => {
     );
   });
 
-  it('lists the forced rows with their reason and the same footer link', () => {
+  it('lists the forced rows with their reason, their search button and the same footer link', () => {
     renderGroup(find(subtitles, 'forcedQuestion'));
 
     const region = screen.getByRole('region', { name: 'Forced subtitles not found' });
@@ -240,6 +250,38 @@ describe('AdminTodoGroup: the subtitle groups', () => {
     expect(
       within(region).getByText('OpenSubtitles has 2 foreign-parts-only files'),
     ).toBeInTheDocument();
+    expect(
+      within(region)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['Find forced subtitles…']);
     expect(within(region).getByRole('link', { name: 'All in Subtitles →' })).toBeInTheDocument();
+  });
+
+  it('opens the picker from a full row with the row, the kind and the button', async () => {
+    const { onFindSubtitles } = renderGroup(find(subtitles, 'fullMissing'));
+    const button = screen.getByRole('button', { name: 'Search for English subtitles…' });
+
+    await userEvent.click(button);
+
+    expect(onFindSubtitles).toHaveBeenCalledWith(fullNeed.films[3], 'full', button);
+  });
+
+  it('opens the picker from a forced row as a forced search', async () => {
+    const { onFindSubtitles } = renderGroup(find(subtitles, 'forcedQuestion'));
+    const button = screen.getByRole('button', { name: 'Find forced subtitles…' });
+
+    await userEvent.click(button);
+
+    expect(onFindSubtitles).toHaveBeenCalledWith(forcedNeed.films[1], 'forced', button);
+  });
+
+  it('gives a row with no edition no button', () => {
+    const rows = structuredClone(forcedNeed.films);
+    rows[1].editionId = null;
+    renderGroup(find(groups({ attention: [], full: [], forced: rows }), 'forcedQuestion'));
+
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getByText('Taken')).toBeInTheDocument();
   });
 });
