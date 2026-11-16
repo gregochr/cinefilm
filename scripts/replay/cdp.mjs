@@ -101,10 +101,12 @@ export function pageSocketUrl(targets, port) {
 
 /**
  * The port Chrome chose, from the text of the `DevToolsActivePort` file it writes into its profile: the first line,
- * a whole number from 1 to 65535. Null for anything else (an empty file, text, 0, 65536).
+ * a whole number from 1 to 65535, when the second line is there and begins `/devtools/browser/` (Chrome writes the
+ * two together, so a file with the first line alone may be half written). Null for anything else.
  */
 export function parseActivePort(text) {
-  const first = String(text).split('\n')[0].trim();
+  const [first, second] = String(text).split('\n').map((line) => line.trim());
+  if (!second?.startsWith('/devtools/browser/')) return null;
   if (!/^\d{1,5}$/.test(first)) return null;
   const port = Number(first);
   return port >= 1 && port <= 65535 ? port : null;
@@ -178,8 +180,8 @@ export async function stopChrome({ kill, exited, removeProfile, graceMs = 3000, 
  *
  * `onSpawn(kill)` is called at once, right after Chrome is spawned and before anything is awaited, with a
  * synchronous function that kills it for good and removes the profile as best it can, so that whoever starts Chrome
- * can stop it during its start-up too. The result has `page`, `close()` (stops Chrome with a grace period, see
- * `stopChrome`) and `kill()` (the same synchronous function, for a second Ctrl-C).
+ * can stop it during its start-up too, and after it. The result has `page` and `close()` (stops Chrome with a grace
+ * period, see `stopChrome`).
  */
 export async function launchChrome({ profileRoot, extraArgs = [], onSpawn }) {
   const profile = mkdtempSync(join(profileRoot, 'replay-chrome-'));
@@ -230,10 +232,6 @@ export async function launchChrome({ profileRoot, extraArgs = [], onSpawn }) {
     async close() {
       page.close();
       await stop();
-    },
-    kill() {
-      page.close();
-      hardStop();
     },
   };
 }

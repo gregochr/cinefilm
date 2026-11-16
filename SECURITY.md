@@ -57,7 +57,8 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    of the app and a film made of padding: no library, no watch history, no secret. What a request says is never used
    as a file path, nothing of it is sent back but the position a progress call reports, as a number, and the
    stand-in's log and the report it keeps hold only figures and words from fixed lists. To watch the film the rig
-   starts the installed Chrome, headless, with a throwaway profile that it removes when the run ends; that browser's
+   starts the installed Chrome, headless, with a throwaway profile that it removes when the run ends, as far as it can
+   (after a second Ctrl-C, or when the removal fails, the folder is left in the temporary folder); that browser's
    debugging port, which Chrome picks, is open on `127.0.0.1` for the length of the run, and no host name but
    `localhost` resolves in it, so the app's operator lookup fails as it would with no internet. What the rig reads
    from the page (what the screen says, an error) is kept and printed only as printable ASCII of limited length. The

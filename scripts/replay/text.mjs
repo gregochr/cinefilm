@@ -7,8 +7,8 @@ const RUN_NAME = /^[A-Za-z0-9._-]{1,60}$/;
 
 // The few signs the app's own text uses that are not ASCII, written as their plain equivalents.
 const PLAIN = new Map([
-  ['·', '-'], ['‘', "'"], ['’', "'"], ['“', '"'], ['”', '"'],
-  ['–', '-'], ['—', '-'], ['…', '...'],
+  ['\u00b7', '-'], ['\u2018', "'"], ['\u2019', "'"], ['\u201c', '"'], ['\u201d', '"'],
+  ['\u2013', '-'], ['\u2014', '-'], ['\u2026', '...'],
 ]);
 
 /**
@@ -20,7 +20,7 @@ const PLAIN = new Map([
 export function printable(value, limit) {
   return String(value)
     .replaceAll(/\r|\n/g, ' ')
-    .replaceAll(/[·‘’“”–—…]/g, (sign) => PLAIN.get(sign))
+    .replaceAll(/[\u00b7\u2018\u2019\u201c\u201d\u2013\u2014\u2026]/g, (sign) => PLAIN.get(sign))
     .replaceAll(/[^\x20-\x7e]/g, '?')
     .slice(0, limit);
 }

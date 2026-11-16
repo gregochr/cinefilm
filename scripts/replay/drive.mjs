@@ -16,8 +16,10 @@
 //               1.08, is the MPEG-TS wrapping that the trace's stalled minutes are worked out with
 //   --rebuild   build the app again first (do this after the checkout changes)
 //
-// Ctrl-C (or SIGTERM) ends the replay early and still writes its results; a second one quits at once, stops
-// Chrome as far as it can and writes nothing.
+// Ctrl-C (or SIGTERM) ends the replay early and, once the film has started, still writes its results; a second one
+// quits at once, stops Chrome as far as it can and writes nothing. During start-up (the build, the making of the
+// picture, Chrome starting) a Ctrl-C in a terminal also reaches the child process, the step fails, and the run ends
+// with an error (code 1) and no results.
 //
 // Output: scripts/replay/out/<name>/ holds health.json (the stand-in's figures of the viewing's last
 // playback-health report), samples.json (every 5 s: playhead, buffer, what the screen says), requests.json (every
@@ -432,11 +434,27 @@ function watchSignals(stop, held) {
 export function claimPort(port) {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
-    server.once('error', (error) => {
-      reject(error?.code === 'EADDRINUSE' ? new Error(`port ${port} is in use: is another replay running?`) : error);
-    });
+    server.once('error', (error) => reject(portError(port, error)));
     server.listen(port, '127.0.0.1', () => resolve(server));
   });
+}
+
+/**
+ * The error to report for a failure to listen on `port`: for EADDRINUSE, the clear message of a second replay;
+ * any other error as it is.
+ */
+export function portError(port, error) {
+  if (error?.code === 'EADDRINUSE') return new Error(`port ${port} is in use: is another replay running?`);
+  return error;
+}
+
+// The stand-in's own bind can still lose the port in the moment after the claim was let go.
+async function startOnPort(settings) {
+  try {
+    return await startStandIn(settings);
+  } catch (error) {
+    throw portError(PORT, error);
+  }
 }
 
 // ---- the build, the film's picture, the Mac ---------------------------------------------------------------------
@@ -587,8 +605,10 @@ function writeResults({ outDir, picked, standIn, run, summary }) {
   writeFileSync(join(outDir, 'summary.txt'), summary);
 }
 
-// Runs one replay and writes its results. Returns the exit code: 0 when it ran to the end or was stopped by a
-// signal, 1 when it could not run (Chrome failed, or went away part-way).
+// Runs one replay and writes its results. Returns the exit code: 0 when it ran to the end or, once the film has
+// started, was stopped by a signal; 1 when it could not run (Chrome failed, or went away part-way). During start-up
+// (the build, the making of the picture, Chrome starting) a Ctrl-C in a terminal also reaches the child process, the
+// step fails, and the run ends with an error: code 1 and no results.
 async function main(argv) {
   const opt = options(argv);
   const record = loadRecord();
@@ -602,12 +622,13 @@ async function main(argv) {
     path: TEMPLATE_PATH,
     make: () => makeTemplate({ profileRoot: opt.tmp, onSpawn: (kill) => { held.kill = kill; } }),
   });
+  held.kill = null; // the template's Chrome has gone
   const outDir = join(OUT, opt.name);
   mkdirSync(outDir, { recursive: true });
   keepAwake();
   const run = { samples: [], pageErrors: [], warnings: [], cardDismissed: false };
   await new Promise((resolve) => claim.close(resolve));
-  const standIn = await startStandIn({
+  const standIn = await startOnPort({
     port: PORT, distDir: DIST, filmPath: FILM, template, trace, startMinute: opt.start, fill: opt.fill, wire: opt.wire,
   });
   let code = 0;

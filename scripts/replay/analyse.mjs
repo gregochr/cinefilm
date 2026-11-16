@@ -206,7 +206,7 @@ function describeGap(next, previous, lastEnd, samples, link) {
  */
 export function spellFigures({ report, samples, record, start }) {
   const minutesRun = Math.ceil(samples[samples.length - 1].ms / 60000);
-  const rows = new Map(report.minutes.map((row) => [row[0], row]));
+  const rows = new Map((Array.isArray(report.minutes) ? report.minutes : []).map((row) => [row[0], row]));
   const old = rowsByMinute(record);
   const link = linkByMinute(samples);
   const figures = [];
@@ -375,6 +375,13 @@ function readJson(dir, file) {
   }
 }
 
+const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+// A file of the run must hold a list whose entries are all objects.
+function requireObjects(value, file) {
+  if (!Array.isArray(value) || !value.every(isObject)) throw new Error(`${file} is not a list of objects`);
+}
+
 function readSummary(dir) {
   try {
     return readFileSync(join(dir, 'summary.txt'), 'utf8');
@@ -398,9 +405,10 @@ export function analyseRun(name, root = join(HERE, 'out')) {
   const requests = readJson(dir, 'requests.json');
   const samples = readJson(dir, 'samples.json');
   const report = readJson(dir, 'health.json')?.final?.report;
-  if (!report) throw new Error('no health report in this run: nothing to analyse');
-  if (!Array.isArray(samples) || samples.length === 0) throw new Error('no samples in this run: nothing to analyse');
-  if (!Array.isArray(requests)) throw new Error('no requests in this run: nothing to analyse');
+  if (!isObject(report)) throw new Error('no health report in this run: nothing to analyse');
+  requireObjects(samples, 'samples.json');
+  requireObjects(requests, 'requests.json');
+  if (samples.length === 0) throw new Error('no samples in this run: nothing to analyse');
   const summary = readSummary(dir);
   const heading = summary.split('\n').find((line) => line.startsWith('Replay')) ?? '(no summary line)';
   const start = startOf(summary);

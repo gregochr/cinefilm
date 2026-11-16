@@ -62,9 +62,11 @@ resolves in that browser: the app's one outside request, the operator lookup, fa
 internet, which is why the record a replay makes says `unknown` where a train viewing says `train`. (An address
 written as numbers would still be reached; the app asks for none.)
 
-Ctrl-C ends a replay early and still writes its results. In a terminal the same Ctrl-C reaches Chrome too, so
-the player's last report may not be sent: the summary then uses the last one it sent by itself, which can be
-some seconds old. A second Ctrl-C quits at once and writes nothing. While a replay runs it keeps the Mac from
+Once the film has started, Ctrl-C ends a replay early and still writes its results. In a terminal the same
+Ctrl-C reaches Chrome too, so the player's last report may not be sent: the summary then uses the last one it
+sent by itself, which can be some seconds old. During start-up (the build, the making of the film's picture,
+Chrome starting) a Ctrl-C just stops the run, with an error and no results. A second Ctrl-C quits at once and
+writes nothing; Chrome's throwaway profile may then be left in the temporary folder. While a replay runs it keeps the Mac from
 idling to sleep; a closed lid still sleeps it, and the summary then carries a warning, because the link's clock
 is the wall clock. The first run makes the film's picture and silence with Chrome's own encoders
 (`make-template.mjs`) and keeps them in `scripts/replay/out/template.json`.
@@ -96,7 +98,8 @@ film for the wrong reason. A run is sound when the five-second samples have no l
 in hand, the playhead kept the clock outside those pauses, and what the stand-in delivered in thin minutes
 matches the trace. After that it lists the stretches when nothing was being fetched, the buffer going into each
 of the six bad spells and its lowest point in each, what the screen showed against the link, and the time at each
-quality beside 12 November.
+quality beside 12 November. It reads which record minute the run started at from the first line of the run's
+`summary.txt`; when that line is missing it says so in a warning and reads the run as starting at minute 0.
 
 ## What two replays of the whole journey showed
 
@@ -187,8 +190,9 @@ one and wait for an event (a byte arriving, an entry in the log), never for a fi
 number in the wrapper.
 
 What needs Chrome has no automated test: launching it, the socket to it, building the app, encoding the film's
-picture, and the driver's own loop. (The matching of Chrome's replies to the driver's requests is tested, with
-made-up messages.) The by-hand minute under "Running it" is their only check.
+picture, and the driver's own loop. The by-hand minute under "Running it" is their only check. What can be
+given plain values is tested without Chrome: the matching of its replies to the driver's requests, the reading
+of the port it chose, the order in which it is stopped, and the claim on the stand-in's port.
 
 ## What nobody has verified
 

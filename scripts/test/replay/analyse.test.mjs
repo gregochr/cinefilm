@@ -1,5 +1,5 @@
-// scripts/replay/analyse.mjs: each sum over a run's data at its edges, and the lines they are told in. Everything is
-// made-up figures; a run's files are not read.
+// scripts/replay/analyse.mjs: each sum over a run's data at its edges, and the lines they are told in, all from
+// made-up figures; and `analyseRun` over small runs written to a temporary folder (the last suite).
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -391,7 +391,8 @@ describe('analyseRun on a run\'s files', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'replay-'));
   after(() => rmSync(tmp, { recursive: true, force: true }));
 
-  const samples = [5, 10, 15, 20].map((s) => at(s * 1000, { t: s, ahead: 30 }));
+  // A thin link (300 kbit/s), so that the thin-minutes line names the record minute the run began at.
+  const samples = [5, 10, 15, 20].map((s) => at(s * 1000, { t: s, ahead: 30, kbps: 300 }));
   const requests = [{ kind: 'segment', rung: '480p', ms: 0, firstByteMs: 10, doneMs: 500, sent: 1000, aborted: false }];
   const report = {
     stallCount: 0, stallMs: 0, longestStallMs: 0, watchedMs: 20000, stepsDown: 0, stepsUp: 0, timeouts: 0,
@@ -423,14 +424,20 @@ describe('analyseRun on a run\'s files', () => {
     name, heading, samples, requests, report, record: loadRecord(), start,
   });
 
-  test('reads the run, and its start minute from its summary', () => {
+  const THIN = '  thin minutes (trace under 700 kbit/s), minute:trace/delivered: ';
+
+  test('reads the run, and its start minute from its summary: the thin minute is named by its record minute', () => {
     const name = writeRun(good);
-    assert.deepEqual(analyseRun(name, tmp), expected(name, HEADING, 24));
+    const lines = analyseRun(name, tmp);
+    assert.deepEqual(lines, expected(name, HEADING, 24));
+    assert.ok(lines.includes(`${THIN}24:300/0`), 'minute 24 is named');
   });
 
   test('a run with no summary file is read from record minute 0, and says so in a first line of its own', () => {
     const name = writeRun({ ...good, 'summary.txt': undefined });
-    assert.deepEqual(analyseRun(name, tmp), [NO_SUMMARY, ...expected(name, '(no summary line)', 0)]);
+    const lines = analyseRun(name, tmp);
+    assert.deepEqual(lines, [NO_SUMMARY, ...expected(name, '(no summary line)', 0)]);
+    assert.ok(lines.includes(`${THIN}0:300/0`), 'minute 0 is named');
   });
 
   test('a run whose summary has no Replay line says so too', () => {
@@ -438,6 +445,7 @@ describe('analyseRun on a run\'s files', () => {
     const lines = analyseRun(name, tmp);
     assert.equal(lines[0], NO_SUMMARY);
     assert.equal(lines[1], `${name}: (no summary line)`);
+    assert.ok(lines.includes(`${THIN}0:300/0`));
   });
 
   test('a run with a summary does not get the warning', () => {
@@ -451,15 +459,35 @@ describe('analyseRun on a run\'s files', () => {
     assert.throws(() => analyseRun(writeRun({ ...good, 'health.json': 'null' }), tmp), { message });
   });
 
-  test('a run with no samples has nothing to analyse, whether the file holds an empty list or something else', () => {
+  test('a run with no samples has nothing to analyse', () => {
     const message = 'no samples in this run: nothing to analyse';
     assert.throws(() => analyseRun(writeRun({ ...good, 'samples.json': '[]' }), tmp), { message });
-    assert.throws(() => analyseRun(writeRun({ ...good, 'samples.json': '{}' }), tmp), { message });
   });
 
-  test('a requests file that is not a list is refused', () => {
-    const name = writeRun({ ...good, 'requests.json': '{}' });
-    assert.throws(() => analyseRun(name, tmp), { message: 'no requests in this run: nothing to analyse' });
+  test('a report that is not a plain object is refused: a list, a number, text', () => {
+    const message = 'no health report in this run: nothing to analyse';
+    for (const report of ['[]', '5', '"text"', '[{"minutes":[]}]']) {
+      const health = `{"final":{"report":${report}}}`;
+      assert.throws(() => analyseRun(writeRun({ ...good, 'health.json': health }), tmp), { message }, report);
+    }
+  });
+
+  test('a report with no minute rows is read as having none', () => {
+    const bare = { ...report };
+    delete bare.minutes;
+    const name = writeRun({ ...good, 'health.json': JSON.stringify({ final: { report: bare } }) });
+    assert.deepEqual(analyseRun(name, tmp), expected(name, HEADING, 24));
+  });
+
+  test('samples.json or requests.json that is not a list, or holds entries that are not objects, is refused by name', () => {
+    const samplesMessage = 'samples.json is not a list of objects';
+    for (const bad of ['{}', '[null]', '[1, 2]', '["x"]', '[[1]]', 'null']) {
+      assert.throws(() => analyseRun(writeRun({ ...good, 'samples.json': bad }), tmp), { message: samplesMessage }, bad);
+    }
+    const requestsMessage = 'requests.json is not a list of objects';
+    for (const bad of ['{}', '[null]', '[1, 2]', '["x"]', '[[1]]']) {
+      assert.throws(() => analyseRun(writeRun({ ...good, 'requests.json': bad }), tmp), { message: requestsMessage }, bad);
+    }
   });
 
   test('a file that is not there, one that is not JSON and one that cannot be read are told apart', () => {

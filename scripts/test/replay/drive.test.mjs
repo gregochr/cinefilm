@@ -8,8 +8,8 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, describe, test } from 'node:test';
 import {
-  buildCommand, claimPort, cleanSample, consoleText, createStop, notePageError, options, pickFinal, progressLine,
-  standStillWarning, summarise, templateFor, traceFor,
+  buildCommand, claimPort, cleanSample, consoleText, createStop, notePageError, options, pickFinal, portError,
+  progressLine, standStillWarning, summarise, templateFor, traceFor,
 } from '../../replay/drive.mjs';
 import { WIRE, loadRecord, traces } from '../../replay/trace.mjs';
 
@@ -232,6 +232,7 @@ const HEADER = 'Replay of record minutes 5 to 6 (18:01:53 to 18:03:53), sampled 
 const TABLE_HEAD = 'minute clock     link   | replay: stalled played fetched ahead  asked(net) | 12 Nov: stalled played';
 
 describe('summarise: a minute past the end of the trace', () => {
+  // Pins `summarise` alone: it is exported and takes any input, although `traceFor` now refuses to start such a run.
   test('takes the trace\'s last figure, as the stand-in does', () => {
     const lines = run({ trace: [0, 0, 0, 0, 0, 640] });
     assert.equal(lines[3], '   5   18:01:53   640   |            3s    360     480   20s  2 (1 cut) 480p |          12s    360');
@@ -360,7 +361,7 @@ describe('cleanSample', () => {
 describe('notePageError', () => {
   test('keeps the text as one printable line of at most 300 characters', () => {
     const errors = [];
-    notePageError(errors, 'Error: bad\nstacké');
+    notePageError(errors, 'Error: bad\nstack\u00e9');
     notePageError(errors, 'y'.repeat(301));
     assert.deepEqual(errors, ['Error: bad stack?', 'y'.repeat(300)]);
   });
@@ -556,5 +557,24 @@ describe('claimPort', () => {
     const again = await claimPort(port);
     held.push(again);
     assert.equal(again.address().port, port);
+  });
+});
+
+describe('portError', () => {
+  test('an address already in use is reported with the clear message of a second replay', () => {
+    const error = Object.assign(new Error('listen EADDRINUSE: address already in use 127.0.0.1:5301'), {
+      code: 'EADDRINUSE',
+    });
+    const reported = portError(5301, error);
+    assert.notEqual(reported, error);
+    assert.equal(reported.message, 'port 5301 is in use: is another replay running?');
+  });
+
+  test('any other error is passed on unchanged', () => {
+    const other = Object.assign(new Error('the build holds no index.html'), { code: 'ENOENT' });
+    assert.equal(portError(5301, other), other);
+    const plain = new Error('boom');
+    assert.equal(portError(5301, plain), plain);
+    assert.equal(portError(5301, undefined), undefined);
   });
 });

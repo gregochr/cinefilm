@@ -57,8 +57,9 @@ below; what they taught for phase 2 is at the end of that phase's section.
      each rung by the ladder's own ids, and minute rows of five or seven finite numbers, at most 1,000. The
      operator and the client block are not kept. A body that is not JSON keeps only its length. A body over
      64 KB is refused.
-   - In phase 2 every line the driver prints passes one function that turns line breaks into spaces and anything
-     that is not printable ASCII into `?`, and cuts it at a limit; text read from the page (the pill, a toast,
+   - In phase 2 every line the driver prints passes one function that turns line breaks into spaces, writes a
+     few common signs (the middle dot, curly quotes, dashes, the ellipsis) as their plain equivalents and anything
+     else that is not printable ASCII as `?`, and cuts it at a limit; text read from the page (the pill, a toast,
      an error) is stored the same way.
    - Expected and accepted: CodeQL may still report, at medium severity, that data from the network is written
      to a file (the results of a run). That is the rig's purpose; the planner dismisses it with that reason and

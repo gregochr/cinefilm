@@ -1,7 +1,7 @@
 // scripts/replay/cdp.mjs: how Chrome's messages are matched to the requests and listeners waiting for them, with
 // made-up messages and no socket. Launching Chrome and the socket itself are checked by hand.
 import assert from 'node:assert/strict';
-import { describe, mock, test } from 'node:test';
+import { describe, test } from 'node:test';
 import {
   failAll, pageSocketUrl, parseActivePort, routeMessage, stopChrome, track,
 } from '../../replay/cdp.mjs';
@@ -208,17 +208,31 @@ describe('track: its timer', () => {
 });
 
 describe('parseActivePort', () => {
-  test('is the first line of the file when it is a whole number from 1 to 65535', () => {
-    assert.equal(parseActivePort('41773\n/devtools/browser/abc-123\n'), 41773);
-    assert.equal(parseActivePort('1'), 1);
-    assert.equal(parseActivePort('65535'), 65535);
+  const SECOND = '\n/devtools/browser/abc-123\n';
+
+  test('is the first line of the file when it is a whole number from 1 to 65535 and the second line is there', () => {
+    assert.equal(parseActivePort(`41773${SECOND}`), 41773);
+    assert.equal(parseActivePort(`1${SECOND}`), 1);
+    assert.equal(parseActivePort(`65535${SECOND}`), 65535);
     assert.equal(parseActivePort('41773\r\n/devtools/browser/x'), 41773);
   });
 
   test('is null for an empty file, a port of 0, 65536, text, a fraction or a sign', () => {
-    for (const bad of ['', '\n/devtools/browser/x', '0', '65536', '123456', 'abc', '12.5', '-5', '+5', '80 80', '9334abc']) {
-      assert.equal(parseActivePort(bad), null, JSON.stringify(bad));
-    }
+    const bad = ['', '0', '65536', '123456', 'abc', '12.5', '-5', '+5', '80 80', '9334abc'];
+    for (const first of bad) assert.equal(parseActivePort(`${first}${SECOND}`), null, JSON.stringify(first));
+    assert.equal(parseActivePort(SECOND.slice(0)), null);
+  });
+
+  test('is null while the file holds the first line alone: it may be half written', () => {
+    assert.equal(parseActivePort('41773'), null);
+    assert.equal(parseActivePort('41773\n'), null);
+    assert.equal(parseActivePort('41773\n/devtools/bro'), null);
+  });
+
+  test('is null when the second line is something else', () => {
+    assert.equal(parseActivePort('41773\n/devtools/page/abc'), null);
+    assert.equal(parseActivePort('41773\nhello'), null);
+    assert.equal(parseActivePort('41773\n \n/devtools/browser/x'), null);
   });
 
   test('only the first line counts: a number on the second line is not the port', () => {
@@ -255,6 +269,33 @@ describe('stopChrome', () => {
     const p = fake({ goesOn: 'SIGKILL' });
     await stopChrome({ ...p, graceMs: 1, hardMs: 600000 });
     assert.deepEqual(p.calls, ['kill SIGTERM', 'kill SIGKILL', 'remove']);
+  });
+
+  test('after SIGKILL the profile is not removed until the process has gone', async () => {
+    const calls = [];
+    let go;
+    const exited = new Promise((resolve) => {
+      go = resolve;
+    });
+    let seen;
+    const sigkillSeen = new Promise((resolve) => {
+      seen = resolve;
+    });
+    const stopping = stopChrome({
+      kill: (signal) => {
+        calls.push(`kill ${signal}`);
+        if (signal === 'SIGKILL') seen();
+      },
+      exited,
+      removeProfile: () => calls.push('remove'),
+      graceMs: 1,
+      hardMs: 600000,
+    });
+    await sigkillSeen;
+    assert.deepEqual(calls, ['kill SIGTERM', 'kill SIGKILL']);
+    go();
+    await stopping;
+    assert.deepEqual(calls, ['kill SIGTERM', 'kill SIGKILL', 'remove']);
   });
 
   test('a process that does not go even for SIGKILL is not waited for ever: the profile is still removed', async () => {
