@@ -24,8 +24,9 @@
 // asked for (a refused option, a failed build, Chrome did not start or went away part-way).
 //
 // Output (only once there is something to write): scripts/replay/out/<name>/ holds health.json (the stand-in's
-// figures of the viewing's last playback-health report), samples.json (every 5 s: playhead, buffer, what the screen says), requests.json (every
-// answer the stand-in sent) and summary.txt (the table printed at the end).
+// figures of the viewing's last playback-health report), samples.json (every 5 s: playhead, buffer, what the screen
+// says), requests.json (every answer the stand-in sent) and summary.txt (the table printed at the end). Failing to
+// write them is a failure whatever stop was asked for: one line says so, and the exit code is 1.
 //
 // The options, the choice of the final report, the summary and the small helpers are tested; `main`, which starts
 // Chrome and the build, cannot run in CI and is checked by hand (docs/engineering/home-replay.md).
@@ -549,7 +550,8 @@ function listenToPage(page, run) {
   });
 }
 
-// Looks at the page every five seconds until the time is up or a signal comes.
+// Looks at the page every five seconds until the time is up or a signal comes. Says how it ended: `finished` when
+// the time was up, `stopped` when a signal cut it short.
 async function watch({ page, standIn, record, opt, stop, run }) {
   const endAt = Date.now() + opt.minutes * 60000;
   let lastLine = 0;
@@ -569,6 +571,7 @@ async function watch({ page, standIn, record, opt, stop, run }) {
       say(progressLine(record, now));
     }
   }
+  return stop.stopped && Date.now() < endAt ? 'stopped' : 'finished';
 }
 
 // The end: let the last report through whatever the link is doing, then leave the page so the player sends it.
@@ -582,10 +585,11 @@ async function sendLastReport(page, standIn) {
   }
 }
 
+// Returns how the watching ended (`finished` or `stopped`), or null when it never began.
 async function replay({ opt, record, standIn, stop, run, held }) {
-  if (stop.stopped) return;
+  if (stop.stopped) return null;
   held.chrome = await launchChrome({ profileRoot: opt.tmp, onSpawn: (kill) => { held.kill = kill; } });
-  if (stop.stopped) return;
+  if (stop.stopped) return null;
   const { page } = held.chrome;
   await page.send('Page.enable');
   await page.send('Runtime.enable');
@@ -595,8 +599,10 @@ async function replay({ opt, record, standIn, stop, run, held }) {
     + `${clockOf(record, last)}), ${opt.trace} trace, ${opt.minutes} minutes of real time`);
   standIn.startClock();
   await page.send('Page.navigate', { url: `http://127.0.0.1:${standIn.port}/films/1/play?start=0` });
-  await watch({ page, standIn, record, opt, stop, run });
-  await sendLastReport(page, standIn);
+  const ended = await watch({ page, standIn, record, opt, stop, run });
+  // With no sample nothing will be written, so there is no last report to wait for.
+  if (shouldWriteResults(run.samples.length)) await sendLastReport(page, standIn);
+  return ended;
 }
 
 /** Whether a run has anything to write: only when the driver took at least one sample of the page. */
@@ -610,6 +616,19 @@ export function shouldWriteResults(sampleCount) {
  */
 export function exitCodeFor({ failed, stopped }) {
   return failed && !stopped ? 1 : 0;
+}
+
+/**
+ * Runs `action` (the making of the summary and the writing of the results). Returns null when it went through, or one
+ * printable line saying the results could not be written, with the reason, when it threw.
+ */
+export function writeFailure(action) {
+  try {
+    action();
+    return null;
+  } catch (error) {
+    return printable(`the results could not be written: ${error?.message ?? error}`, LINE_LIMIT);
+  }
 }
 
 // Whether a stop was asked for. The wait lets a signal that arrived while the process was blocked (the build) or
@@ -648,30 +667,40 @@ async function main(argv, stop, held) {
     port: PORT, distDir: DIST, filmPath: FILM, template, trace, startMinute: opt.start, fill: opt.fill, wire: opt.wire,
   });
   let failed = false;
+  let excused = false; // a failure is excused only by a stop that had been asked for when it happened
+  let ended = null;
   try {
-    await replay({ opt, record, standIn, stop, run, held });
+    ended = await replay({ opt, record, standIn, stop, run, held });
   } catch (error) {
     failed = true;
-    if (!(await stopAsked(stop))) {
-      console.error(printable(`the replay ended early: ${error?.message ?? error}`, LINE_LIMIT));
-    }
+    excused = await stopAsked(stop);
+    if (!excused) console.error(printable(`the replay ended early: ${error?.message ?? error}`, LINE_LIMIT));
   } finally {
     if (held.chrome) await held.chrome.close();
     await standIn.stop();
   }
-  const code = exitCodeFor({ failed, stopped: stop.stopped });
+  const code = exitCodeFor({ failed, stopped: excused });
   if (!shouldWriteResults(run.samples.length)) {
     say('nothing was written: the film had not started');
     return code;
   }
-  if (stop.stopped) run.warnings.push(`stopped early by a signal at replay second ${secondsOf(standIn.clockMs() ?? 0)}`);
-  const picked = pickFinal(standIn.healthReports);
-  const summary = summarise({
-    opt, record, trace, final: picked?.final ?? null, viewings: picked?.viewings ?? 1, samples: run.samples,
-    requests: standIn.requests, pageErrors: run.pageErrors, warnings: run.warnings,
-  });
+  if (ended === 'stopped') {
+    run.warnings.push(`stopped early by a signal at replay second ${secondsOf(standIn.clockMs() ?? 0)}`);
+  }
   const outDir = join(OUT, opt.name);
-  writeResults({ outDir, picked, standIn, run, summary });
+  let summary = '';
+  const failure = writeFailure(() => {
+    const picked = pickFinal(standIn.healthReports);
+    summary = summarise({
+      opt, record, trace, final: picked?.final ?? null, viewings: picked?.viewings ?? 1, samples: run.samples,
+      requests: standIn.requests, pageErrors: run.pageErrors, warnings: run.warnings,
+    });
+    writeResults({ outDir, picked, standIn, run, summary });
+  });
+  if (failure) {
+    console.error(failure);
+    return 1;
+  }
   for (const line of summary.split('\n')) say(line);
   say(`results: ${outDir}`);
   return code;

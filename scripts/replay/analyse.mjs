@@ -19,6 +19,10 @@ import { isRunName, printable } from './text.mjs';
 import { SPELLS, loadRecord, rowsByMinute } from './trace.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+/** Where the driver writes a run's folder, and where `analyseRun` looks by default. */
+export const RUNS_DIR = join(HERE, 'out');
+// 1e9 ms is over 11 days: a longer time is a damaged file, and would make an absurdly long array of minutes.
+const MAX_SAMPLE_MS = 1000000000;
 const RUNG = { 1: 'orig', 2: '1080p', 3: '720p', 4: '480p', 5: '360p', 6: '240p' };
 const LINE_LIMIT = 2000; // the list of thin minutes of a long run is one long line
 const LONG_GAP_MS = 6500; // a sample taken more than this after the one before means a busy or sleeping machine
@@ -131,9 +135,9 @@ export function hasUsableTimes(request) {
 export function deliveredPerMinute(requests, minutesRun) {
   const perMinute = new Array(minutesRun + 1).fill(0);
   for (const r of requests) {
-    if (!isTime(r.sent) || r.sent === 0 || !hasUsableTimes(r)) continue;
+    if (!isTime(r.sent) || !hasUsableTimes(r)) continue;
     const from = r.ms + (r.firstByteMs || 0);
-    const to = isTime(r.doneMs) ? r.ms + r.doneMs : null;
+    const to = Number.isFinite(r.doneMs) ? r.ms + r.doneMs : null;
     if (to === null || to <= from) {
       perMinute[Math.min(minutesRun, Math.floor(from / 60000))] += r.sent;
     } else {
@@ -218,7 +222,8 @@ function describeGap(next, previous, lastEnd, samples, link) {
  */
 export function spellFigures({ report, samples, record, start }) {
   const minutesRun = Math.ceil(samples[samples.length - 1].ms / 60000);
-  const rows = new Map((Array.isArray(report.minutes) ? report.minutes : []).filter(Array.isArray).map((row) => [row[0], row]));
+  const minuteRows = Array.isArray(report.minutes) ? report.minutes.filter(Array.isArray) : [];
+  const rows = new Map(minuteRows.map((row) => [row[0], row]));
   const old = rowsByMinute(record);
   const link = linkByMinute(samples);
   const figures = [];
@@ -409,7 +414,7 @@ const NO_SUMMARY = 'WARNING: no summary line in this run: it is read as starting
  * analysis. A run whose summary has no "Replay of record minutes" line is read as starting at record minute 0, and
  * its first line says so.
  */
-export function analyseRun(name, root = join(HERE, 'out')) {
+export function analyseRun(name, root = RUNS_DIR) {
   if (!isRunName(name)) {
     throw new Error('usage: node scripts/replay/analyse.mjs <run name> (letters, digits, dot, dash and underscore)');
   }
@@ -421,7 +426,9 @@ export function analyseRun(name, root = join(HERE, 'out')) {
   requireObjects(samples, 'samples.json');
   requireObjects(requests, 'requests.json');
   if (samples.length === 0) throw new Error('no samples in this run: nothing to analyse');
-  if (!samples.every((s) => Number.isFinite(s.ms))) throw new Error('samples.json holds a sample with no time');
+  if (!samples.every((s) => isTime(s.ms) && s.ms <= MAX_SAMPLE_MS)) {
+    throw new Error('samples.json holds a sample with no time');
+  }
   const summary = readSummary(dir);
   const heading = summary.split('\n').find((line) => line.startsWith('Replay')) ?? '(no summary line)';
   const start = startOf(summary);

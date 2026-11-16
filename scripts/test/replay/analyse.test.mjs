@@ -4,11 +4,12 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { after, describe, test } from 'node:test';
 import {
   aheadAt, analyseRun, deliveredPerMinute, deliveryAgainstTrace, describe as describeRun, hasUsableTimes, idleGaps,
-  linkByMinute, notPlaying, playheadLag, rungsAndBytes, samplingGaps, screenAgainstLink, soundness, spellFigures,
+  RUNS_DIR, linkByMinute, notPlaying, playheadLag, rungsAndBytes, samplingGaps, screenAgainstLink, soundness, spellFigures,
   spread, startOf, withFilmInHand,
 } from '../../replay/analyse.mjs';
 import { loadRecord } from '../../replay/trace.mjs';
@@ -139,6 +140,10 @@ describe('section 1: was the run sound', () => {
       { sent: -20, ms: 0, firstByteMs: 0, doneMs: 10 },
     ];
     assert.deepEqual(deliveredPerMinute([good, ...bad], 1), [100, 0]);
+  });
+
+  test('an answer that begins after the last place and takes time is counted in the last place', () => {
+    assert.deepEqual(deliveredPerMinute([{ sent: 10, ms: 200000, firstByteMs: 0, doneMs: 1000 }], 2), [0, 0, 10]);
   });
 
   test('a time of 0 or a missing one is usable; an answer that begins absurdly late counts in the last place', () => {
@@ -424,6 +429,10 @@ describe('analyseRun', () => {
     }
   });
 
+  test('the default folder of runs is scripts/replay/out in this checkout, a folder git ignores', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    assert.equal(RUNS_DIR, join(here, '..', '..', 'replay', 'out'));
+  });
 });
 
 describe('analyseRun on a run\'s files', () => {
@@ -523,8 +532,16 @@ describe('analyseRun on a run\'s files', () => {
     const name = writeRun({ ...good, 'health.json': JSON.stringify({ final: { report: odd } }) });
     assert.deepEqual(analyseRun(name, tmp), expected(name, HEADING, 24));
     const message = 'samples.json holds a sample with no time';
-    for (const bad of ['[{"kbps":1}]', '[{"ms":"5"}]', '[{"ms":null}]']) {
+    for (const bad of ['[{"kbps":1}]', '[{"ms":"5"}]', '[{"ms":null}]', '[{"ms":-1}]', '[{"ms":1000000001}]']) {
       assert.throws(() => analyseRun(writeRun({ ...good, 'samples.json': bad }), tmp), { message }, bad);
+    }
+  });
+
+  test('a sample at 0 ms and one at 1,000,000,000 ms are the edges of what is accepted', () => {
+    for (const ms of [0, 1000000000]) {
+      const sample = JSON.stringify([{ ms, t: 0, ahead: 0, kbps: 300 }]);
+      const name = writeRun({ ...good, 'samples.json': sample });
+      assert.doesNotThrow(() => analyseRun(name, tmp), String(ms));
     }
   });
 

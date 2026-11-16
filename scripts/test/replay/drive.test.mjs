@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { after, describe, test } from 'node:test';
 import {
   buildCommand, claimPort, cleanSample, consoleText, createStop, exitCodeFor, notePageError, options, pickFinal,
-  portError, progressLine, shouldWriteResults, standStillWarning, summarise, templateFor, traceFor,
+  portError, progressLine, shouldWriteResults, standStillWarning, summarise, templateFor, traceFor, writeFailure,
 } from '../../replay/drive.mjs';
 import { WIRE, loadRecord, traces } from '../../replay/trace.mjs';
 
@@ -607,5 +607,35 @@ describe('exitCodeFor', () => {
     assert.equal(exitCodeFor({ failed: false, stopped: false }), 0);
     assert.equal(exitCodeFor({ failed: false, stopped: true }), 0);
     assert.equal(exitCodeFor({ failed: true, stopped: true }), 0);
+  });
+});
+
+describe('writeFailure', () => {
+  test('an action that goes through gives nothing, and is run once', () => {
+    let runs = 0;
+    assert.equal(writeFailure(() => {
+      runs += 1;
+    }), null);
+    assert.equal(runs, 1);
+  });
+
+  test('an action that throws gives one line that says the results could not be written, and why', () => {
+    const line = writeFailure(() => {
+      throw new Error('ENOSPC: no space left on device');
+    });
+    assert.equal(line, 'the results could not be written: ENOSPC: no space left on device');
+  });
+
+  test('the line is printable and of limited length, and a thrown value that is not an error is told too', () => {
+    const forged = writeFailure(() => {
+      throw new Error('bad\nWARNING: forged \u00e9');
+    });
+    assert.equal(forged, 'the results could not be written: bad WARNING: forged ?');
+    assert.equal(writeFailure(() => {
+      throw new Error('x'.repeat(400));
+    }).length, 300);
+    assert.equal(writeFailure(() => {
+      throw 'plain text';
+    }), 'the results could not be written: plain text');
   });
 });
