@@ -69,11 +69,13 @@ look a Ctrl-C just stops the run and nothing is written, so an earlier run of th
 second Ctrl-C quits at once and writes nothing; Chrome's throwaway profile may then be left in the folder it was
 made in (`--tmp`, by default the system's temporary folder).
 
-The driver ends with code 0 when the run reached its end or was stopped by a Ctrl-C, 130 after a second Ctrl-C,
-and 1 when it failed: an option it refuses, a build that fails, a Chrome that does not start or goes away
-part-way, or results that could not be written. In that last case it still prints the summary, then a line that
-begins `the results could not be written`; the files it had already written stay, so the run's folder may then
-hold a mix of this run and an earlier one of the same name.
+The driver ends with code 0 when the run reached its end or was stopped by a Ctrl-C (also when Chrome went away
+with that same Ctrl-C), and 130 after a second Ctrl-C. It ends with 1 when it failed with no Ctrl-C behind it:
+an option it refuses, another replay already running, a build or a film's picture that cannot be made, a Chrome
+that does not start or that goes away part-way by itself. When Chrome goes away part-way, what was gathered up
+to then is still written. Results that could not be written also give 1, Ctrl-C or not: the driver prints the
+summary, if it could be made, then a line that begins `the results could not be written`. The files it had
+already written stay, so the run's folder may then hold a mix of this run and an earlier one of the same name.
 
 While a replay runs it keeps the Mac from idling to sleep; a closed lid still sleeps it, and the summary then
 carries a warning, because the link's clock is the wall clock. The first run makes the film's picture and

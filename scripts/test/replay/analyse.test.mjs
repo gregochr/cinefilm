@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { after, describe, test } from 'node:test';
 import {
   aheadAt, analyseRun, deliveredPerMinute, deliveryAgainstTrace, describe as describeRun, hasUsableTimes, idleGaps,
-  RUNS_DIR, linkByMinute, runDir, notPlaying, playheadLag, rungsAndBytes, samplingGaps, screenAgainstLink, soundness, spellFigures,
-  spread, startOf, withFilmInHand,
+  linkByMinute, notPlaying, playheadLag, RUNS_DIR, rungsAndBytes, runDir, samplingGaps, screenAgainstLink, soundness,
+  spellFigures, spread, startOf, withFilmInHand,
 } from '../../replay/analyse.mjs';
 import { loadRecord } from '../../replay/trace.mjs';
 
@@ -427,6 +427,12 @@ describe('analyseRun', () => {
     for (const bad of [undefined, '', '..', '../x', 'a/b', 'a b']) {
       assert.throws(() => analyseRun(bad), { message: usage }, String(bad));
     }
+  });
+
+  test('called as the program calls it, with no root, a run that has no folder is refused as a missing file', () => {
+    // A name that cannot exist: this reads no run that is there.
+    const name = `no-such-run-${process.pid}`;
+    assert.throws(() => analyseRun(name), { message: 'requests.json is not in this run\'s folder' });
   });
 
   test('the default folder of runs is scripts/replay/out in this checkout, a folder git ignores', () => {

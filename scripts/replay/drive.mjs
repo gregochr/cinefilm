@@ -37,11 +37,11 @@ import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runDir } from './analyse.mjs';
 import { launchChrome, sleep } from './cdp.mjs';
 import { rateAt } from './link.mjs';
 import { makeTemplate, TEMPLATE_PATH } from './make-template.mjs';
 import { startStandIn } from './standin.mjs';
-import { runDir } from './analyse.mjs';
 import { isRunName, printable } from './text.mjs';
 import { clockOf, loadRecord, rowsByMinute, traces, WIRE } from './trace.mjs';
 import { loadTemplate } from './ts.mjs';
@@ -709,7 +709,9 @@ async function main(argv, stop, held) {
     writeResults({ outDir, picked, standIn, run, summary });
   });
   // Before a failure's line, so a long run's table is not lost (if making it threw there is none).
-  if (summary) for (const line of summary.split('\n')) say(line);
+  if (summary) {
+    for (const line of summary.split('\n')) say(line);
+  }
   if (failure) {
     console.error(failure);
     return 1;
