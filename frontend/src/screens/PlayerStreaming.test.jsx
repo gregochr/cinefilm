@@ -754,6 +754,36 @@ describe('a playback Admin stopped (410)', () => {
     expect(new Set(log.playbackIds).size).toBe(3);
   });
 
+  it('stops reporting for the stopped viewing (the source it clears is no reload), and reports again under the new id after Play again', async () => {
+    const { video, fetchMock } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    await hlsEvent(() => fireEvent.playing(video));
+    const reports = () =>
+      fetchMock.mock.calls
+        .filter((c) => c[0].startsWith('/api/playback-health/') && c[1]?.method === 'PUT')
+        .map((c) => ({ id: c[0].split('/').pop(), body: JSON.parse(c[1].body) }));
+    await vi.waitFor(() => expect(reports().length).toBeGreaterThan(0));
+    const stoppedId = reports()[0].id;
+    await hlsEvent(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    // Clearing the source fires `emptied`: it is not a reload of the stopped viewing.
+    await hlsEvent(() => fireEvent(video, new Event('emptied')));
+    await hlsEvent(() => window.dispatchEvent(new Event('pagehide')));
+    const settled = reports().length;
+    await hlsEvent(() => window.dispatchEvent(new Event('pagehide')));
+    expect(reports().length).toBe(settled);
+    for (const r of reports().filter((x) => x.id === stoppedId)) {
+      expect(r.body.reloadCount).toBe(0);
+      expect(r.body.reloadMs).toBe(0);
+    }
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await instances(2);
+    await hlsEvent(() => fireEvent.playing(video));
+    await vi.waitFor(() => expect(reports().some((r) => r.id !== stoppedId)).toBe(true));
+  });
+
   it('two quick presses of Play again make one new session', async () => {
     const { log, video } = await open();
     await landResume(video);

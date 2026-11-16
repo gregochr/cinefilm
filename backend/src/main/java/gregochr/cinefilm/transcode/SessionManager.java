@@ -289,15 +289,25 @@ public class SessionManager {
      * viewing is untouched.
      *
      * @param playbackId the viewing's id
+     * @return the ids of the sessions that were ended, live and remembered, so the caller can say they were stopped
      */
-    public void endViewing(String playbackId) {
+    public List<String> endViewing(String playbackId) {
         synchronized (lock) {
-            remembered.values().removeIf(quiet -> playbackId.equals(quiet.spec().playbackId()));
+            List<String> ended = new ArrayList<>();
+            remembered.entrySet().removeIf(quiet -> {
+                boolean mine = playbackId.equals(quiet.getValue().spec().playbackId());
+                if (mine) {
+                    ended.add(quiet.getKey());
+                }
+                return mine;
+            });
             for (TranscodeSession session : List.copyOf(sessions.values())) {
                 if (playbackId.equals(session.spec.playbackId())) {
+                    ended.add(session.id);
                     destroy(session);
                 }
             }
+            return ended;
         }
     }
 

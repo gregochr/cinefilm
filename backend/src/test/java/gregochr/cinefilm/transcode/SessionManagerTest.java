@@ -876,8 +876,9 @@ class SessionManagerTest {
         String theirs = manager.create(new SessionSpec(8, "Alien", SOURCE, 1, CUTS, 25.0, 1920, 1080, RUNGS,
             RUNGS.get(0), null, 0, true)).id();
 
-        manager.endViewing(PLAYBACK);
+        List<String> ended = manager.endViewing(PLAYBACK);
 
+        assertThat(ended).containsExactly(mine);
         assertThat(manager.sessions()).extracting(SessionDtos.SessionRow::id).containsExactly(theirs);
         assertThat(manager.playbackId(mine)).isEmpty();
     }
@@ -885,14 +886,20 @@ class SessionManagerTest {
     @Test
     void endViewingAlsoForgetsAQuietRememberedSessionOfThatViewing() {
         String id = manager.create(specFor(PLAYBACK)).id();
+        String other = "c1000000-0000-4000-8000-000000000002";
+        List<SessionSpec.PartSource> parts = List.of(new SessionSpec.PartSource(SOURCE, 1, 25.0));
+        String otherId = manager.create(new SessionSpec(8, "Alien", parts, CUTS, 1920, 1080, RUNGS, RUNGS.get(0),
+            null, 0, true, other)).id();
         manager.start();
         clock.advance(EXPIRY);
         scheduler.task.run();
         assertThat(manager.playbackId(id)).contains(PLAYBACK);
 
-        manager.endViewing(PLAYBACK);
+        List<String> ended = manager.endViewing(PLAYBACK);
 
+        assertThat(ended).containsExactly(id);
         assertThat(manager.playbackId(id)).isEmpty();
+        assertThat(manager.playbackId(otherId)).contains(other); // another viewing's quiet session is kept
     }
 
     @Test

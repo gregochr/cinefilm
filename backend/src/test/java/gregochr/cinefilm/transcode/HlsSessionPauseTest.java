@@ -232,6 +232,21 @@ class HlsSessionPauseTest {
     }
 
     @Test
+    void aStopFromAStaleRowAlsoMakesTheReplacementSessionAnswer410() throws Exception {
+        String replacement = manager.create(spec()).id(); // the player's new session under the same viewing
+
+        mvc.perform(delete("/api/admin/transcoding/sessions/" + id).param("playbackId", PLAYBACK))
+            .andExpect(status().isNoContent());
+
+        for (String route : List.of(MASTER, MEDIA, SEGMENT)) {
+            mvc.perform(get("/api/sessions/" + replacement + route))
+                .andExpect(status().isGone())
+                .andExpect(content().string(STOPPED));
+        }
+        assertThat(manager.sessions()).isEmpty();
+    }
+
+    @Test
     void afterAdminsStopANewSessionForThatViewingIs410AndForAnotherViewingIs201() throws Exception {
         mvc.perform(delete("/api/admin/transcoding/sessions/" + id)).andExpect(status().isNoContent());
 

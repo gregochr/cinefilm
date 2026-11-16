@@ -142,7 +142,14 @@ export function useHealthReport({
       create({ editionId: edition, openedAt: clock(), now: clock, makeId: mint, sendNowRef }),
     );
   }, []);
-  const api = useMemo(() => ({ ...viewing.api, newViewing }), [viewing, newViewing]);
+  const current = useRef(viewing);
+  current.current = viewing;
+  const end = useCallback(() => {
+    const now = current.current;
+    if (now.finish) now.finish();
+    else now.ended = true;
+  }, []);
+  const api = useMemo(() => ({ ...viewing.api, newViewing, end }), [viewing, newViewing, end]);
 
   useEffect(() => {
     api.quality(quality);
@@ -192,7 +199,7 @@ export function useHealthReport({
 
     const sendExit = () => {
       try {
-        if (counter.version() === viewing.lastOk) return;
+        if (viewing.ended || counter.version() === viewing.lastOk) return;
         void post(counter.snapshot(), { keepalive: true }, null);
       } catch {
         // never throws into the player
@@ -203,6 +210,16 @@ export function useHealthReport({
       if (document.visibilityState === 'hidden') sendExit();
     };
 
+    // `end()`: this viewing is over though the page goes on (Admin stopped it). Its last report goes out, and nothing is
+    // sent for it after: no timer, no exit, so the record stops being "playing now".
+    viewing.finish = () => {
+      sendExit();
+      viewing.ended = true;
+      closed = true;
+      sendNowRef.current = null;
+      clearTimeout(graceTimer);
+      clearInterval(intervalTimer);
+    };
     sendNowRef.current = sendTimed;
     graceTimer = setTimeout(() => {
       try {

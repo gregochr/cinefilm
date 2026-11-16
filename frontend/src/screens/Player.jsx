@@ -692,7 +692,10 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
           settle();
           health.seeked();
         }}
-        onEmptied={() => health.sourceChanged()}
+        // The source taken away by a stop is not a reload.
+        onEmptied={() => {
+          if (stoppedAtRef.current === null) health.sourceChanged();
+        }}
         onEnded={() => {
           setPlaying(false);
           setPositionMs(durationMs);

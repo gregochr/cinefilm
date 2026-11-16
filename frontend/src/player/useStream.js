@@ -26,6 +26,7 @@ const NO_HEALTH = {
   engine: noop,
   fellBack: noop,
   networkError: noop,
+  end: noop,
 };
 
 const heightOf = (renditions, id) => renditions.find((r) => r.id === id)?.height ?? null;
@@ -159,6 +160,8 @@ export function useStream({
       engine = null;
       session = null;
       sessionRef.current = null;
+      // This viewing is over: its last report goes out and no more (an idle stopped card is not "playing now").
+      latest.current.health.end();
       video.pause();
       // Nothing may play on behind the card (a native player keeps its source attached otherwise).
       video.removeAttribute('src');

@@ -186,6 +186,19 @@ class SessionServiceStopTest {
     }
 
     @Test
+    void everySessionEndedForTheViewingIsRecordedAsStoppedSoItsRequestsAre410() {
+        String newer = "6b0f1c1e-6a52-4d5e-9a4c-0a7d3c1f2b11";
+        String quiet = "7b0f1c1e-6a52-4d5e-9a4c-0a7d3c1f2b11";
+        when(manager.playbackId(ID)).thenReturn(Optional.empty());
+        when(manager.endViewing(PLAYBACK)).thenReturn(List.of(newer, quiet));
+
+        service.stopFromAdmin(ID, PLAYBACK);
+
+        verify(stopped).record(newer, PLAYBACK);
+        verify(stopped).record(quiet, PLAYBACK);
+    }
+
+    @Test
     void stopFromAdminPrefersTheSessionsOwnViewingOverTheGivenOne() {
         String other = "c1000000-0000-4000-8000-000000000002";
         when(manager.playbackId(ID)).thenReturn(Optional.of(PLAYBACK));

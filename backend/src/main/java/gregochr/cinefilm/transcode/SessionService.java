@@ -240,7 +240,10 @@ public class SessionService {
         stopped.record(sessionId, playbackId);
         manager.end(sessionId);
         if (playbackId != null) {
-            manager.endViewing(playbackId);
+            // The viewing's other sessions (the player's newer one) are stopped too: they answer 410, not 404.
+            for (String ended : manager.endViewing(playbackId)) {
+                stopped.record(ended, playbackId);
+            }
         }
     }
 

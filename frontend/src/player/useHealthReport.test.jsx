@@ -64,6 +64,47 @@ describe('the viewing id', () => {
   });
 });
 
+describe('end', () => {
+  it('sends the last report once and nothing after: no timer, no exit', async () => {
+    const fetchMock = stubFetch();
+    const { result, unmount } = mount();
+    await act(async () => {
+      result.current.playing();
+      await advance(100);
+    });
+    act(() => {
+      result.current.paused();
+      result.current.end();
+    });
+    await act(async () => {
+      await advance(100);
+    });
+    const sent = fetchMock.mock.calls.length;
+    expect(sent).toBeGreaterThanOrEqual(2); // the first frame, and the last report
+    act(() => result.current.waiting());
+    await act(async () => {
+      await advance(REPORT_INTERVAL_MS * 3);
+    });
+    unmount();
+    expect(fetchMock.mock.calls.length).toBe(sent);
+  });
+
+  it('a record that is not ended still reports every interval, as before', async () => {
+    const fetchMock = stubFetch();
+    const { result } = mount();
+    await act(async () => {
+      result.current.playing();
+      await advance(100);
+    });
+    const sent = fetchMock.mock.calls.length;
+    act(() => result.current.waiting());
+    await act(async () => {
+      await advance(REPORT_INTERVAL_MS + 100);
+    });
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(sent);
+  });
+});
+
 describe('newViewing', () => {
   const NEXT = '1b9ab1a4-6d5e-4f3c-8a21-3c1f2d4e5a61';
 
@@ -555,6 +596,7 @@ describe('the object it returns', () => {
     expect(Object.keys(result.current).sort()).toEqual([
       'beat',
       'canPlay',
+      'end',
       'ended',
       'engine',
       'environment',
