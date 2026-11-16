@@ -53,7 +53,8 @@ class HlsSessionControllerTest {
 
     @Test
     void createReturns201WithTheSessionTheClientNeeds() throws Exception {
-        when(service.create(40L, new CreateRequest(3L, 120_000L, "auto", 5000L))).thenReturn(new SessionCreated(ID,
+        when(service.create(40L, TestSessions.createRequest(3L, 120_000L, "auto", 5000L)))
+            .thenReturn(new SessionCreated(ID,
             "/api/sessions/" + ID + "/master.m3u8", "720p",
             List.of(new RenditionDto("original", 1080, 24_000_000, true), new RenditionDto("720p", 720, 2_500_000,
                 false))));
@@ -74,7 +75,8 @@ class HlsSessionControllerTest {
 
     @Test
     void createOptionalFieldsMayBeOmitted() throws Exception {
-        when(service.create(40L, new CreateRequest(null, null, "original", null))).thenReturn(new SessionCreated(ID,
+        when(service.create(40L, TestSessions.createRequest(null, null, "original", null)))
+            .thenReturn(new SessionCreated(ID,
             "/api/sessions/" + ID + "/master.m3u8", "original", List.of()));
 
         mvc.perform(post("/api/editions/40/sessions").with(user("owner")).header("X-CineFilm", "1")
@@ -85,7 +87,7 @@ class HlsSessionControllerTest {
 
     @Test
     void createForASplitFilmWhoseLaterPartsAreStillBeingIndexedIs503WithRetryAfterOne() throws Exception {
-        when(service.create(41L, new CreateRequest(null, null, "auto", null)))
+        when(service.create(41L, TestSessions.createRequest(null, null, "auto", null)))
             .thenThrow(new SegmentNotReadyException("The film is still being prepared"));
 
         mvc.perform(post("/api/editions/41/sessions").with(user("owner")).header("X-CineFilm", "1")
@@ -97,11 +99,11 @@ class HlsSessionControllerTest {
 
     @Test
     void createMapsTheServiceErrorsToTheirStatusesWithTheExactMessage() throws Exception {
-        when(service.create(1L, new CreateRequest(null, null, "bogus", null)))
+        when(service.create(1L, TestSessions.createRequest(null, null, "bogus", null)))
             .thenThrow(new BadRequestException("Invalid quality"));
-        when(service.create(2L, new CreateRequest(null, null, "auto", null)))
+        when(service.create(2L, TestSessions.createRequest(null, null, "auto", null)))
             .thenThrow(new ConflictException("Transcoding is unavailable"));
-        when(service.create(3L, new CreateRequest(null, null, "auto", null)))
+        when(service.create(3L, TestSessions.createRequest(null, null, "auto", null)))
             .thenThrow(new NotFoundException("No such edition"));
 
         mvc.perform(post("/api/editions/1/sessions").with(user("owner")).header("X-CineFilm", "1")

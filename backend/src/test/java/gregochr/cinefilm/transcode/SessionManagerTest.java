@@ -52,7 +52,7 @@ class SessionManagerTest {
     }
 
     private static SessionSpec spec(long edition, int startSegment) {
-        return new SessionSpec(edition, "Heat", SOURCE, 1, CUTS, 25.0, 1920, 1080, RUNGS, RUNGS.get(0), null,
+        return TestSessions.spec(edition, "Heat", SOURCE, 1, CUTS, 25.0, 1920, 1080, RUNGS, RUNGS.get(0), null,
             startSegment, true);
     }
 
@@ -97,7 +97,7 @@ class SessionManagerTest {
         assertThat(plan.fps()).isEqualTo(25.0);
         assertThat(plan.hardwareDecode()).isTrue();
         assertThat(plan.device()).isEqualTo(DEVICE);
-        assertThat(row()).isEqualTo(new SessionDtos.SessionRow(id(1), "Heat", 7, "original", null, 0,
+        assertThat(row()).isEqualTo(TestSessions.sessionRow(id(1), "Heat", 7, "original", null, 0,
             TestData.NOW, false));
     }
 
@@ -724,7 +724,7 @@ class SessionManagerTest {
 
     @Test
     void viewDescribesThePinnedSessionForThePlaylists() {
-        SessionSpec pinned = new SessionSpec(7, "Heat", SOURCE, 0, CUTS, null, 1920, 1080,
+        SessionSpec pinned = TestSessions.spec(7, "Heat", SOURCE, 0, CUTS, null, 1920, 1080,
             List.of(RUNGS.get(1)), RUNGS.get(1), "720p", 0, false);
 
         SessionView view = manager.create(pinned);
@@ -873,7 +873,7 @@ class SessionManagerTest {
     @Test
     void endViewingEndsEverySessionOfThatViewingAndNoOther() {
         String mine = manager.create(specFor(PLAYBACK)).id();
-        String theirs = manager.create(new SessionSpec(8, "Alien", SOURCE, 1, CUTS, 25.0, 1920, 1080, RUNGS,
+        String theirs = manager.create(TestSessions.spec(8, "Alien", SOURCE, 1, CUTS, 25.0, 1920, 1080, RUNGS,
             RUNGS.get(0), null, 0, true)).id();
 
         List<String> ended = manager.endViewing(PLAYBACK);

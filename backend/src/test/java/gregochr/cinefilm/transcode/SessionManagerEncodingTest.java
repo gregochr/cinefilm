@@ -31,7 +31,7 @@ class SessionManagerEncodingTest {
         new FakeStamps(), Path.of("/cache/hls"), () -> new UUID(0, ++counter));
 
     private SessionView create() {
-        return manager.create(new SessionSpec(7, "Heat", SOURCE, 1, CUTS, 25.0, 1920, 1080, RUNGS, RUNGS.get(0),
+        return manager.create(TestSessions.spec(7, "Heat", SOURCE, 1, CUTS, 25.0, 1920, 1080, RUNGS, RUNGS.get(0),
             null, 0, true));
     }
 

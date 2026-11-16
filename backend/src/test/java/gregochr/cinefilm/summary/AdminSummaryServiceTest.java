@@ -7,18 +7,14 @@ import static org.mockito.Mockito.when;
 import gregochr.cinefilm.health.HealthDtos.PlaybackCounts;
 import gregochr.cinefilm.health.HealthDtos.PlayingNow;
 import gregochr.cinefilm.health.PlaybackHealthService;
-import gregochr.cinefilm.library.AdminDtos.Attention;
-import gregochr.cinefilm.library.AdminDtos.AttentionItem;
-import gregochr.cinefilm.library.AdminDtos.CountsDto;
 import gregochr.cinefilm.library.AdminDtos.LastScanDto;
-import gregochr.cinefilm.library.AdminDtos.ScanStatusDto;
 import gregochr.cinefilm.library.AdminService;
-import gregochr.cinefilm.subtitle.ForcedNeedDtos.NeedListDto;
+import gregochr.cinefilm.library.AdminService.SummaryFigures;
 import gregochr.cinefilm.subtitle.ForcedNeedService;
 import gregochr.cinefilm.subtitle.FullNeedService;
 import gregochr.cinefilm.summary.AdminSummaryDtos.AdminSummary;
-import gregochr.cinefilm.transcode.SessionDtos.SessionRow;
 import gregochr.cinefilm.transcode.SessionManager;
+import gregochr.cinefilm.transcode.TestSessions;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -56,13 +52,8 @@ class AdminSummaryServiceTest {
         service = new AdminSummaryService(admin, fullNeed, forcedNeed, sessions, health);
     }
 
-    private static AttentionItem item(String kind) {
-        return new AttentionItem(kind, 1L, "A film", 2000, "detail", List.of(), List.of(), false, true);
-    }
-
-    private static ScanStatusDto scan(long films, LastScanDto last) {
-        return new ScanStatusDto(false, "/media", null, last, new CountsDto(films, 0, 0, 0, 0, 0, 0, 0), null, false,
-            false, null, false, false, false, null);
+    private static SummaryFigures figures(long needsMatch, long severalFiles, long films, LastScanDto last) {
+        return new SummaryFigures(needsMatch, severalFiles, films, last);
     }
 
     private static LastScanDto finishedAt(Instant when) {
@@ -73,7 +64,7 @@ class AdminSummaryServiceTest {
     void aFailedLastScanReportsItsErrorAndFinishTime() {
         LastScanDto failed = new LastScanDto(FINISHED.minusSeconds(60), FINISHED, "nightly", 0, 0, 0,
             "Library folder is not readable");
-        stubEverything(List.of(), 0, 0, scan(12, failed));
+        stubEverything(figures(0, 0, 12, failed), 0, 0);
 
         AdminSummary summary = service.summary();
 
@@ -92,16 +83,10 @@ class AdminSummaryServiceTest {
         assertThat(transactional.isolation()).isEqualTo(Isolation.REPEATABLE_READ);
     }
 
-    private static NeedListDto forcedNeed(int unresolved) {
-        return new NeedListDto(List.of(), new gregochr.cinefilm.subtitle.ForcedNeedDtos.CountsDto(9, 8, 7, 6, 5,
-            unresolved, 4));
-    }
-
-    private void stubEverything(List<AttentionItem> items, int full, int forced, ScanStatusDto scan) {
-        when(admin.attention()).thenReturn(new Attention(items));
-        when(admin.status()).thenReturn(scan);
+    private void stubEverything(SummaryFigures library, int full, int forced) {
+        when(admin.summaryFigures()).thenReturn(library);
         when(fullNeed.unresolvedCount()).thenReturn(full);
-        when(forcedNeed.list()).thenReturn(forcedNeed(forced));
+        when(forcedNeed.unresolvedCount()).thenReturn(forced);
         when(sessions.sessions()).thenReturn(List.of());
         when(health.playbackCounts()).thenReturn(new PlaybackCounts(0, 0));
         when(health.playingNow()).thenReturn(List.of());
@@ -111,14 +96,12 @@ class AdminSummaryServiceTest {
     void everyFieldIsReadFromItsOwnSource() {
         PlayingNow playing = new PlayingNow("3f2b8c1e-5d4a-4e7b-9a60-1c2d3e4f5a6b", 11, "Blade Runner", "Mac", true,
             "home", "720p");
-        when(admin.attention()).thenReturn(new Attention(List.of(item("needs-match"), item("needs-match"),
-            item("needs-match"), item("multiple-files"), item("parts-mismatch"))));
-        when(admin.status()).thenReturn(scan(321, finishedAt(FINISHED)));
+        when(admin.summaryFigures()).thenReturn(figures(3, 2, 321, finishedAt(FINISHED)));
         when(fullNeed.unresolvedCount()).thenReturn(7);
-        when(forcedNeed.list()).thenReturn(forcedNeed(11));
+        when(forcedNeed.unresolvedCount()).thenReturn(11);
         when(sessions.sessions()).thenReturn(List.of(
-            new SessionRow("a", "Film", 1, "720p", 1.0, 2, NOW, false),
-            new SessionRow("b", "Film", 2, "480p", 1.0, 2, NOW, false)));
+            TestSessions.sessionRow("a", "Film", 1, "720p", 1.0, 2, NOW, false),
+            TestSessions.sessionRow("b", "Film", 2, "480p", 1.0, 2, NOW, false)));
         when(health.playbackCounts()).thenReturn(new PlaybackCounts(40, 31));
         when(health.playingNow()).thenReturn(List.of(playing));
 
@@ -138,26 +121,8 @@ class AdminSummaryServiceTest {
     }
 
     @Test
-    void severalFilesCountsPartsMismatchAndMultipleFilesAndNothingElse() {
-        stubEverything(List.of(item("protected"), item("needs-conversion"), item("unreadable"),
-            item("multiple-files"), item("parts-mismatch"), item("parts-mismatch")), 0, 0, scan(1, null));
-
-        AdminSummary summary = service.summary();
-
-        assertThat(summary.todo().severalFiles()).isEqualTo(3);
-        assertThat(summary.todo().pickFilm()).isZero();
-    }
-
-    @Test
-    void pickFilmCountsOnlyNeedsMatch() {
-        stubEverything(List.of(item("needs-match"), item("multiple-files"), item("protected")), 0, 0, scan(1, null));
-
-        assertThat(service.summary().todo().pickFilm()).isEqualTo(1);
-    }
-
-    @Test
     void subtitlesUnresolvedIsTheSumOfBothTabs() {
-        stubEverything(List.of(), 4, 9, scan(1, null));
+        stubEverything(figures(0, 0, 1, null), 4, 9);
 
         AdminSummary summary = service.summary();
 
@@ -168,7 +133,7 @@ class AdminSummaryServiceTest {
 
     @Test
     void anEmptyLibraryThatWasNeverScannedHasNoScanTime() {
-        stubEverything(List.of(), 0, 0, scan(0, null));
+        stubEverything(figures(0, 0, 0, null), 0, 0);
 
         AdminSummary summary = service.summary();
 

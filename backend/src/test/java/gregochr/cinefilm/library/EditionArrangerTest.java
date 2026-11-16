@@ -21,6 +21,7 @@ import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmPreference;
 import gregochr.cinefilm.film.GroupingChange;
 import gregochr.cinefilm.film.GroupingChangeRepository;
+import gregochr.cinefilm.film.GroupingChanges;
 import gregochr.cinefilm.film.GroupingSource;
 import gregochr.cinefilm.film.MatchStatus;
 import gregochr.cinefilm.film.MediaFile;
@@ -216,7 +217,7 @@ class EditionArrangerTest extends ApiTestBase {
         assertThat(preference.getDefaultEditionId()).isEqualTo(theatrical);
         assertThat(preference.isDefaultEditionChosen()).isTrue();
         assertThat(lock.holder()).isNull();
-        assertThat(groupingChanges.findTop20ByOrderByHappenedAtDescIdDesc()).singleElement().satisfies(change -> {
+        assertThat(GroupingChanges.all(groupingChanges)).singleElement().satisfies(change -> {
             assertThat(change.getKind()).isEqualTo(GroupingChange.JOIN);
             assertThat(change.getSummary())
                 .isEqualTo("You arranged \"The Two Towers\" into 2 editions with Edit editions");
@@ -281,7 +282,7 @@ class EditionArrangerTest extends ApiTestBase {
         });
         assertThat(admin.attention().items()).filteredOn(i -> i.kind().equals("needs-match"))
             .extracting(AttentionItem::filmId).containsExactly(split.getId());
-        assertThat(groupingChanges.findTop20ByOrderByHappenedAtDescIdDesc()).singleElement().satisfies(change -> {
+        assertThat(GroupingChanges.all(groupingChanges)).singleElement().satisfies(change -> {
             assertThat(change.getKind()).isEqualTo(GroupingChange.SPLIT);
             assertThat(change.getSummary()).isEqualTo(
                 "You moved 1 file out of \"Rocky IV\" and arranged it into 1 edition with Edit editions");
@@ -431,7 +432,7 @@ class EditionArrangerTest extends ApiTestBase {
             List.of(parts.get(1).getId(), parts.get(2).getId())));
 
         assertThat(result.newFilmIds()).hasSize(2);
-        assertThat(groupingChanges.findTop20ByOrderByHappenedAtDescIdDesc()).singleElement().extracting(
+        assertThat(GroupingChanges.all(groupingChanges)).singleElement().extracting(
             GroupingChange::getSummary).isEqualTo(
             "You moved 2 files out of \"Heat\" and arranged it into 1 edition with Edit editions");
         assertThat(editions.findById(editionId(film, 0)).orElseThrow().getMediaFiles()).hasSize(2);

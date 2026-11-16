@@ -91,6 +91,36 @@ public class ForcedNeedService {
     }
 
     /**
+     * How many films are {@code unresolved} in {@link #list}'s counts (the Admin summary polls this every 30 seconds).
+     * The answer is the same, but it is read more cheaply: a film that is not {@code NEEDED} can never be unresolved
+     * (and its need does not depend on what playback serves), so only the needed films are asked what playback would
+     * serve, and the edition-picker query the list's rows use is skipped.
+     */
+    @Transactional(readOnly = true)
+    public int unresolvedCount() {
+        Set<Long> withSidecar = new HashSet<>(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED));
+        Set<Long> withEmbedded = new HashSet<>(files.findFilmIdsWithEmbeddedForced());
+        List<Eval> needed = new ArrayList<>();
+        for (NeedRow row : films.findNeedRows()) {
+            Eval eval = eval(row, withSidecar.contains(row.id()), false, withEmbedded.contains(row.id()));
+            if (eval.decision().need() == Need.NEEDED) {
+                needed.add(eval);
+            }
+        }
+        if (needed.isEmpty()) {
+            return 0;
+        }
+        Set<Long> toAsk = new HashSet<>(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED));
+        toAsk.addAll(withEmbedded);
+        toAsk.retainAll(needed.stream().map(eval -> eval.row().id()).collect(java.util.stream.Collectors.toSet()));
+        Set<Long> served = toAsk.isEmpty() ? Set.of() : servedFilmIds(toAsk);
+        List<Eval> evals = needed.stream().map(eval -> new Eval(eval.row(), eval.decision(), eval.spoken(),
+            eval.openSubtitles(), eval.openSubtitlesAt(), served.contains(eval.row().id()))).toList();
+        Pending due = pendingFor(evals);
+        return (int) evals.stream().filter(eval -> AdminTodoRules.unresolvedForced(facts(eval, due))).count();
+    }
+
+    /**
      * The ids of the films whose forced-subtitle need is {@code NEEDED}, as {@link #list} would say, for the download
      * scheduler. It does not work out the unresolved and being-checked flags (nothing there uses them). The caller may
      * change the set.
@@ -291,11 +321,16 @@ public class ForcedNeedService {
         return first;
     }
 
+    private ForcedFacts facts(Eval eval, Pending due) {
+        NeedRow row = eval.row();
+        return new ForcedFacts(eval.decision().need() == Need.NEEDED, eval.served(), row.imdbId() != null,
+            eval.openSubtitles(), row.osCandidatesMissing(), due.due().contains(row.id()), api.enabled(),
+            api.downloadsEnabled());
+    }
+
     private FilmNeedDto dto(Eval eval, Pending due, PickerEdition picker) {
         NeedRow row = eval.row();
-        ForcedFacts facts = new ForcedFacts(eval.decision().need() == Need.NEEDED, eval.served(),
-            row.imdbId() != null, eval.openSubtitles(), row.osCandidatesMissing(), due.due().contains(row.id()),
-            api.enabled(), api.downloadsEnabled());
+        ForcedFacts facts = facts(eval, due);
         return new FilmNeedDto(row.id(), row.title(), row.year(), eval.decision().need().name(),
             eval.decision().reason().name(), row.owner() == null ? null : row.owner().name(), row.originalLanguage(),
             eval.spoken(), eval.served(), eval.openSubtitles(), eval.openSubtitlesAt(),

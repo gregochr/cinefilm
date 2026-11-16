@@ -20,11 +20,6 @@ public final class SessionDtos {
      */
     public record CreateRequest(Long audioStreamId, Long startMs, String quality, Long probeKbps,
                                 String playbackId) {
-
-        /** A request that names no viewing. */
-        public CreateRequest(Long audioStreamId, Long startMs, String quality, Long probeKbps) {
-            this(audioStreamId, startMs, quality, probeKbps, null);
-        }
     }
 
     /**
@@ -87,11 +82,5 @@ public final class SessionDtos {
     public record SessionRow(String id, String filmTitle, long editionId, String rung, Double speed,
                              int segmentsAhead, java.time.Instant startedAt, boolean unavailable,
                              String playbackId) {
-
-        /** A row whose viewing is not named. */
-        public SessionRow(String id, String filmTitle, long editionId, String rung, Double speed,
-                          int segmentsAhead, java.time.Instant startedAt, boolean unavailable) {
-            this(id, filmTitle, editionId, rung, speed, segmentsAhead, startedAt, unavailable, null);
-        }
     }
 }

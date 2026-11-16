@@ -56,12 +56,12 @@ class SessionManagerPartsTest {
     }
 
     private static SessionSpec spec(int startSegment) {
-        return new SessionSpec(7, "Towers", List.of(new PartSource(PART_A, 1, 25.0), new PartSource(PART_B, 0, 24.0)),
+        return TestSessions.spec(7, "Towers", List.of(new PartSource(PART_A, 1, 25.0), new PartSource(PART_B, 0, 24.0)),
             FILM, 1920, 1080, RUNGS, RUNGS.get(0), null, startSegment, true);
     }
 
     private String createThreeParts(int startSegment) {
-        return manager.create(new SessionSpec(7, "Towers", List.of(new PartSource(PART_A, 1, 25.0),
+        return manager.create(TestSessions.spec(7, "Towers", List.of(new PartSource(PART_A, 1, 25.0),
             new PartSource(PART_B, 0, 24.0), new PartSource(PART_C, 0, 24.0)), FILM_3, 1920, 1080, RUNGS,
             RUNGS.get(0), null, startSegment, true)).id();
     }

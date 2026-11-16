@@ -125,8 +125,8 @@ Scan now) and the import. A scheduled scan that finds the import running is logg
   invalid-path skips), watched imported, resume points imported, kept because CineFilm was newer, *In Plex, not on
   disk* (titles, first 200 and a total), *On disk, not in Plex* (count), Plex collections not imported (names, first
   200). **Import from Plex** with progress polling, the Scan now pattern.
-- API: `GET /api/admin/plex` → `PlexImportStatus`; `POST /api/admin/plex/import` → 202, 409 `"A scan or import is
-  already running"`, 409 `"Run a library scan first"`.
+- API: `GET /api/admin/plex` → `PlexImportStatus`; `POST /api/admin/plex/import` → 202, 409 with the lock text
+  naming the holder (`LibraryLock.busyText()`), 409 `"Run a library scan first"`.
 - Nothing runs automatically.
 
 ## Schema (V4, expand-only)
