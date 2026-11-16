@@ -1,18 +1,15 @@
 package gregochr.cinefilm.summary;
 
 import gregochr.cinefilm.health.PlaybackHealthService;
-import gregochr.cinefilm.library.AdminDtos.AttentionItem;
 import gregochr.cinefilm.library.AdminDtos.LastScanDto;
-import gregochr.cinefilm.library.AdminDtos.ScanStatusDto;
 import gregochr.cinefilm.library.AdminService;
+import gregochr.cinefilm.library.AdminService.SummaryFigures;
 import gregochr.cinefilm.subtitle.ForcedNeedService;
 import gregochr.cinefilm.subtitle.FullNeedService;
 import gregochr.cinefilm.summary.AdminSummaryDtos.AdminSummary;
 import gregochr.cinefilm.summary.AdminSummaryDtos.Library;
 import gregochr.cinefilm.summary.AdminSummaryDtos.Todo;
 import gregochr.cinefilm.transcode.SessionManager;
-import java.util.List;
-import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,9 +24,6 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class AdminSummaryService {
-
-    private static final String NEEDS_MATCH = "needs-match";
-    private static final Set<String> SEVERAL_FILES = Set.of("multiple-files", "parts-mismatch");
 
     private final AdminService admin;
     private final FullNeedService fullNeed;
@@ -54,16 +48,13 @@ public class AdminSummaryService {
      */
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public AdminSummary summary() {
-        List<AttentionItem> items = admin.attention().items();
-        long pickFilm = items.stream().filter(item -> NEEDS_MATCH.equals(item.kind())).count();
-        long severalFiles = items.stream().filter(item -> SEVERAL_FILES.contains(item.kind())).count();
+        SummaryFigures library = admin.summaryFigures();
         long fullMissing = fullNeed.unresolvedCount();
-        long forcedQuestion = forcedNeed.list().counts().unresolved();
-        ScanStatusDto scan = admin.status();
-        LastScanDto last = scan.lastScan();
-        return new AdminSummary(new Todo(pickFilm, severalFiles, fullMissing, forcedQuestion),
+        long forcedQuestion = forcedNeed.unresolvedCount();
+        LastScanDto last = library.lastScan();
+        return new AdminSummary(new Todo(library.needsMatch(), library.severalFiles(), fullMissing, forcedQuestion),
             fullMissing + forcedQuestion, sessions.sessions().size(),
-            new Library(scan.counts().films(), last == null ? null : last.finishedAt(),
+            new Library(library.browsableFilms(), last == null ? null : last.finishedAt(),
                 last == null ? null : last.error()),
             health.playbackCounts(), health.playingNow());
     }

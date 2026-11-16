@@ -1,5 +1,6 @@
 package gregochr.cinefilm.film;
 
+import gregochr.cinefilm.transcode.TestSessions;
 import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.edition;
@@ -246,7 +247,7 @@ class FilmMapperTest {
         SessionService service = new SessionService(sources, indexes, transcoder, manager,
             new gregochr.cinefilm.transcode.StoppedPlaybacks(TestData.CLOCK));
         return service.create(10L,
-            new gregochr.cinefilm.transcode.SessionDtos.CreateRequest(null, null, "auto", null)).renditions().stream()
+            TestSessions.createRequest(null, null, "auto", null)).renditions().stream()
             .map(RenditionDto::id).toList();
     }
 

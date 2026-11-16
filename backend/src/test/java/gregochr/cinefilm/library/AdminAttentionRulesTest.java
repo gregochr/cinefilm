@@ -11,6 +11,7 @@ import static org.mockito.Mockito.mock;
 import gregochr.cinefilm.ApiTestBase;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.GroupingChangeRepository;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
@@ -39,13 +40,16 @@ class AdminAttentionRulesTest extends ApiTestBase {
     @Autowired
     private GroupingChangeRepository groupingChanges;
 
+    @Autowired
+    private EditionRepository editions;
+
     private AdminService admin;
 
     @BeforeEach
     void setUp() {
         admin = new AdminService(mock(ScanService.class), runs, films, mediaFiles, new LibraryRoot("/media/films"),
             mock(RatingsRefresher.class), mock(OpenSubtitlesRefresher.class), mock(SidecarCheckRefresher.class),
-            groupingChanges);
+            groupingChanges, editions);
     }
 
     /** One film with one edition per path, each 100 minutes (or the given runtime) long. */

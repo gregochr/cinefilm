@@ -13,6 +13,8 @@ import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.ApiTestBase;
 import gregochr.cinefilm.film.CreditRole;
+import gregochr.cinefilm.film.Edition;
+import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.GroupingChange;
 import gregochr.cinefilm.film.GroupingChangeRepository;
@@ -28,6 +30,8 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesRefresher;
 import gregochr.cinefilm.person.Person;
 import gregochr.cinefilm.subtitle.SidecarCheckRefresher;
 import gregochr.cinefilm.ratings.RatingsRefresher;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Persistence;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -47,6 +51,12 @@ class AdminServiceTest extends ApiTestBase {
     @Autowired
     private GroupingChangeRepository groupingChanges;
 
+    @Autowired
+    private EditionRepository editions;
+
+    @Autowired
+    private EntityManager em;
+
     private ScanService scans;
     private RatingsRefresher ratings;
     private OpenSubtitlesRefresher subtitleSearch;
@@ -60,7 +70,7 @@ class AdminServiceTest extends ApiTestBase {
         subtitleSearch = mock(OpenSubtitlesRefresher.class);
         subtitleChecks = mock(SidecarCheckRefresher.class);
         admin = new AdminService(scans, runs, films, mediaFiles, new LibraryRoot("/media/films"), ratings,
-            subtitleSearch, subtitleChecks, groupingChanges);
+            subtitleSearch, subtitleChecks, groupingChanges, editions);
     }
 
     @Test
@@ -144,6 +154,67 @@ class AdminServiceTest extends ApiTestBase {
         file.setPlayability(playability);
         file.setPresence(presence);
         return save(film);
+    }
+
+    private Film split(String title, String secondCodec) {
+        Film film = film(null, title, 2002, NOW);
+        Edition edition = edition(film, null, "Original", 200 * MIN, null);
+        file(edition, title + " pt1.m4v").setPartNumber(1);
+        MediaFile two = file(edition, title + " pt2.m4v");
+        two.setPartNumber(2);
+        two.setVideoCodec(secondCodec);
+        return save(film);
+    }
+
+    private Film twoCopies(String title, boolean confirmed) {
+        Film film = film(null, title, 2000, NOW);
+        film.setEditionsConfirmed(confirmed);
+        file(edition(film, null, "A", 100 * MIN, null), "a/" + title + ".m4v");
+        file(edition(film, null, "B", 100 * MIN, null), "b/" + title + ".m4v");
+        return save(film);
+    }
+
+    @Test
+    void summaryFiguresMatchAttentionAndStatusOnSavedRows() {
+        Film unmatched = film(null, "Unmatched", 2000, NOW);
+        unmatched.setMatchStatus(MatchStatus.NEEDS_MATCH);
+        save(unmatched);
+        twoCopies("Heat", false);
+        twoCopies("Alien", true);
+        split("Towers", "H264");
+        saved("Gone", 1999, "gone.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.MISSING);
+        save(film(null, "Bare", 2001, NOW));
+        edition(save(film(null, "Empty edition", 2003, NOW)), null, "Original", 100 * MIN, null);
+        run(NOW.minus(Duration.ofHours(5)), NOW.minus(Duration.ofHours(5)).plusSeconds(90), 12, 3, 1, "a note");
+        em.flush();
+        em.clear();
+
+        AdminService.SummaryFigures figures = admin.summaryFigures();
+        List<AttentionItem> items = admin.attention().items();
+        ScanStatusDto status = admin.status();
+
+        assertThat(figures.needsMatch()).isEqualTo(items.stream().filter(i -> i.kind().equals("needs-match")).count())
+            .isEqualTo(1);
+        assertThat(figures.severalFiles()).isEqualTo(items.stream()
+            .filter(i -> i.kind().equals("multiple-files") || i.kind().equals("parts-mismatch")).count())
+            .isEqualTo(2);
+        assertThat(figures.browsableFilms()).isEqualTo(status.counts().films()).isEqualTo(6);
+        assertThat(figures.lastScan()).isEqualTo(status.lastScan()).isNotNull();
+    }
+
+    @Test
+    void theLazyEditionQueryLeavesTheFilmUnloadedAndKeepsAnEditionWithNoFiles() {
+        edition(save(film(null, "Empty edition", 2003, NOW)), null, "Original", 100 * MIN, null);
+        saved("Plain", 2000, "plain.m4v", MatchStatus.MATCHED, Playability.PLAYABLE, Presence.PRESENT);
+        em.flush();
+        em.clear();
+
+        List<Edition> loaded = editions.findAllWithFilesLeavingFilmLazy();
+
+        assertThat(loaded).hasSize(2);
+        assertThat(loaded).allSatisfy(e -> assertThat(Persistence.getPersistenceUtil().isLoaded(e, "film")).isFalse());
+        assertThat(loaded).extracting(e -> e.getMediaFiles().size()).containsExactlyInAnyOrder(0, 1);
+        assertThat(editions.findEditionOwners()).hasSize(2).allSatisfy(o -> assertThat(o.filmId()).isNotNull());
     }
 
     private ScanRun run(Instant started, Instant finished, int seen, int added, int missing, String error) {

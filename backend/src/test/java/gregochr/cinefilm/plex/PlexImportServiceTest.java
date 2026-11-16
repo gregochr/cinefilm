@@ -134,8 +134,26 @@ class PlexImportServiceTest {
         lock.tryAcquire(LibraryLock.SCAN);
 
         assertThatThrownBy(service::start).isInstanceOf(ConflictException.class)
-            .hasMessage("A scan or import is already running");
+            .hasMessage("A scan is running");
         assertThat(lock.heldBy(LibraryLock.SCAN)).isTrue();
+        verifyNoInteractions(runs);
+    }
+
+    @Test
+    void startingWhileAnotherImportRunsNamesTheImport() {
+        lock.tryAcquire(LibraryLock.IMPORT);
+
+        assertThatThrownBy(service::start).isInstanceOf(ConflictException.class)
+            .hasMessage("A Plex import is running");
+    }
+
+    @Test
+    void startingWhileANonScanHolderHasTheLockNamesThatHolder() {
+        lock.tryAcquire(LibraryLock.SUBTITLE);
+
+        assertThatThrownBy(service::start).isInstanceOf(ConflictException.class)
+            .hasMessage("Subtitles are being changed or checked; try again in a moment");
+        assertThat(lock.heldBy(LibraryLock.SUBTITLE)).isTrue();
         verifyNoInteractions(runs);
     }
 

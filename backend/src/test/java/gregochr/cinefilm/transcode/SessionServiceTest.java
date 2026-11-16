@@ -144,7 +144,7 @@ class SessionServiceTest {
     }
 
     private static CreateRequest request(Long audio, Long startMs, String quality, Long probe) {
-        return new CreateRequest(audio, startMs, quality, probe);
+        return TestSessions.createRequest(audio, startMs, quality, probe);
     }
 
     @Test

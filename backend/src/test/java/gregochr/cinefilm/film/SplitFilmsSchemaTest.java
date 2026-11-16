@@ -63,7 +63,7 @@ class SplitFilmsSchemaTest extends ApiTestBase {
     }
 
     @Test
-    void groupingChangesAreStoredAndTheNewestTwentyComeBackNewestFirst() {
+    void groupingChangesAreStoredAndComeBackNewestFirstTiesByNewestId() {
         for (int i = 0; i < 22; i++) {
             changes.save(new GroupingChange(NOW.plus(Duration.ofMinutes(i)), GroupingChange.JOIN, "change " + i));
         }
@@ -71,15 +71,15 @@ class SplitFilmsSchemaTest extends ApiTestBase {
         em.flush();
         em.clear();
 
-        List<GroupingChange> newest = changes.findTop20ByOrderByHappenedAtDescIdDesc();
+        List<GroupingChange> newest = GroupingChanges.all(changes);
 
-        assertThat(newest).hasSize(20);
+        assertThat(newest).hasSize(23);
         assertThat(newest.get(0).getSummary()).isEqualTo("tie");
         assertThat(newest.get(0).getKind()).isEqualTo("flag");
         assertThat(newest.get(0).getHappenedAt()).isEqualTo(NOW.plus(Duration.ofMinutes(21)));
         assertThat(newest.get(1).getSummary()).isEqualTo("change 21");
         assertThat(newest.get(1).getKind()).isEqualTo("join");
-        assertThat(newest.get(19).getSummary()).isEqualTo("change 3");
+        assertThat(newest.get(22).getSummary()).isEqualTo("change 0");
         assertThat(GroupingChange.SPLIT).isEqualTo("split");
     }
 }

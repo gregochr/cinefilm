@@ -23,6 +23,7 @@ import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.ForcedNeedChoice;
 import gregochr.cinefilm.film.GroupingChange;
 import gregochr.cinefilm.film.GroupingChangeRepository;
+import gregochr.cinefilm.film.GroupingChanges;
 import gregochr.cinefilm.film.MatchStatus;
 import gregochr.cinefilm.library.AdminDtos.MatchApplied;
 import gregochr.cinefilm.library.AdminDtos.MatchResultDto;
@@ -198,7 +199,7 @@ class FixMatchTest extends ApiTestBase {
         Film survivor = films.findById(existing.getId()).orElseThrow();
         assertThat(survivor.isEditionsConfirmed()).isTrue();
         assertThat(survivor.getEditions()).hasSize(2).extracting(e -> e.getId()).contains(otherEdition);
-        assertThat(groupingChanges.findTop20ByOrderByHappenedAtDescIdDesc()).singleElement().satisfies(change -> {
+        assertThat(GroupingChanges.all(groupingChanges)).singleElement().satisfies(change -> {
             assertThat(change.getKind()).isEqualTo(GroupingChange.JOIN);
             assertThat(change.getSummary()).isEqualTo(
                 "You joined \"Summerisle\" into \"The Wicker Man\" with Fix match");
@@ -258,7 +259,7 @@ class FixMatchTest extends ApiTestBase {
 
         fix.apply(other.getId(), 7L);
 
-        assertThat(groupingChanges.findTop20ByOrderByHappenedAtDescIdDesc().get(0).getSummary()).hasSize(500);
+        assertThat(GroupingChanges.all(groupingChanges).get(0).getSummary()).hasSize(500);
     }
 
     @Test
