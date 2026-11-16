@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
+import { REMOVED_NOTICE } from '../state/subtitleAdmin.js';
 import FilmSubtitlesFix from './FilmSubtitlesFix.jsx';
 
 afterEach(() => {
@@ -51,8 +52,8 @@ const rows = () => [
  * A server that keeps the list: a delete removes the row, "use my file" marks it, detach unattaches it, so a read
  * again shows the server's truth. `answer` may return a Response to override a route.
  */
-function serve({ answer = () => null } = {}) {
-  const list = rows();
+function serve({ answer = () => null, extraRows = [] } = {}) {
+  const list = [...rows(), ...extraRows];
   const requests = [];
   const fetchMock = installFetch((method, url, init) => {
     requests.push(`${method} ${url}`);
@@ -446,6 +447,68 @@ describe('FilmSubtitlesFix', () => {
     expect(alert).toHaveTextContent('That file was not attached by hand');
     expect(within(within(dialog).getAllByRole('listitem')[2]).getByRole('alert')).toBe(alert);
     expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it('while a tool runs every tool is aria-disabled, not disabled, and a refused one leaves focus on the pressed button', async () => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    serve({
+      answer: (method, url) =>
+        url === '/api/admin/subtitles/9/detach'
+          ? gate.then(() => respond({ error: 'That file was not attached by hand' }, 400))
+          : null,
+    });
+    const { dialog } = await open();
+    const decide = within(dialog).getByRole('button', { name: /Let CineFilm decide/ });
+    const useMine = within(dialog).getByRole('button', { name: /Use my file instead/ });
+
+    await userEvent.click(decide);
+
+    expect(decide).toHaveAttribute('aria-disabled', 'true');
+    expect(useMine).toHaveAttribute('aria-disabled', 'true');
+    expect(useMine).toBeEnabled();
+    expect(decide).toHaveFocus();
+    await act(async () => release());
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'That file was not attached by hand',
+    );
+    expect(decide).toHaveFocus();
+    expect(decide).not.toHaveAttribute('aria-disabled');
+    expect(useMine).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('keeps one status region mounted, and the same notice said twice is announced again', async () => {
+    // Two downloads of the film, so removing both says the same words twice running.
+    serve({ extraRows: [{ ...rows()[0], id: 10, release: 'Blade.Runner.1982.720p' }] });
+    const { dialog } = await open();
+    const removeAt = async () => {
+      const open = () => within(dialog).getAllByRole('button', { name: /Delete this download/ })[0];
+      await waitFor(() => expect(open()).not.toHaveAttribute('aria-disabled'));
+      await userEvent.click(open());
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Delete download' }));
+    };
+
+    await removeAt();
+    const notice = await within(dialog).findByText(REMOVED_NOTICE);
+    const changes = [];
+    const observer = new MutationObserver((records) => changes.push(...records));
+    observer.observe(notice, { childList: true, characterData: true, subtree: true });
+
+    await removeAt();
+    await waitFor(() => expect(changes.length).toBeGreaterThanOrEqual(2));
+    observer.disconnect();
+
+    // The same region (never remounted), emptied and filled again.
+    expect(within(dialog).getByText(REMOVED_NOTICE)).toBe(notice);
+    const texts = changes.flatMap((record) => [
+      ...[...record.removedNodes].map((n) => `-${n.textContent}`),
+      ...[...record.addedNodes].map((n) => `+${n.textContent}`),
+    ]);
+    expect(texts).toContain(`-${REMOVED_NOTICE}`);
+    expect(texts).toContain(`+${REMOVED_NOTICE}`);
   });
 
   describe('Delete this download', () => {

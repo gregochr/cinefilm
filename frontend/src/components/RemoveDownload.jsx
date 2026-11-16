@@ -22,10 +22,14 @@ export default function RemoveDownload({ item, name, busy, failed, actions, onRe
       removeRef.current?.focus();
     }
   }, [confirming]);
+  // While any action runs the buttons are `aria-disabled`, not `disabled`: a real `disabled` drops the pressed button's
+  // focus to the page, and when the request fails nothing would take it. They stay focusable and a press does nothing.
   const confirm = async () => {
+    if (busy) return;
     if (await actions.remove(item.id)) onRemoved();
   };
   const cancel = () => {
+    if (busy) return;
     returnFocus.current = true;
     setConfirming(false);
   };
@@ -36,8 +40,10 @@ export default function RemoveDownload({ item, name, busy, failed, actions, onRe
         hint={buttons.deleteDownload.hint}
         ref={removeRef}
         aria-label={labels.openSpoken(name)}
-        disabled={busy}
-        onClick={() => setConfirming(true)}
+        aria-disabled={busy || undefined}
+        onClick={() => {
+          if (!busy) setConfirming(true);
+        }}
       >
         {labels.open}
       </ActionWithHint>
@@ -47,10 +53,10 @@ export default function RemoveDownload({ item, name, busy, failed, actions, onRe
     <div className="subs__confirm" role="group" aria-label={labels.group}>
       <p className="admin__text">{REMOVE_CONFIRM}</p>
       <div className="admin__actions">
-        <Button disabled={busy} onClick={confirm}>
+        <Button aria-disabled={busy || undefined} onClick={confirm}>
           {failed ? labels.tryAgain : labels.confirm}
         </Button>
-        <Button ref={keepRef} disabled={busy} onClick={cancel}>
+        <Button ref={keepRef} aria-disabled={busy || undefined} onClick={cancel}>
           {labels.keep}
         </Button>
       </div>
