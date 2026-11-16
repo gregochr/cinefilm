@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ActionWithHint } from '../../components/ActionWithHint.jsx';
 import { Button } from '../../components/Button.jsx';
@@ -10,13 +10,16 @@ import {
   todoGroups,
   todoRow,
 } from '../../state/adminCopy.js';
-import { pickerAction, pickerButton } from '../../state/adminSubtitles.js';
+import {
+  forcedRowLine,
+  foreignLine,
+  pickerAction,
+  pickerButton,
+} from '../../state/adminSubtitles.js';
 import {
   bestGuess,
   filesLine,
   footerFor,
-  forcedLine,
-  fullLine,
   matchLine,
   TODO_ROW_CAP,
   visibleRows,
@@ -39,26 +42,39 @@ function MatchRow({ item, busy, problem, onConfirm, onFindFilm }) {
     if (!busy) onFindFilm(item, event.currentTarget);
   };
   const busyProps = { 'aria-disabled': busy || undefined };
+  // The row's title describes its buttons, so each names its film while the visible label stays the start of its name.
+  const titleId = useId();
   return (
     <li className="admin__todo-row">
-      <RowText row={item} line={matchLine(item)} />
+      <RowText row={item} line={matchLine(item)} titleId={titleId} />
       <div className="admin__actions admin__todo-actions">
         {guess ? (
           <>
             {/* aria-disabled, not disabled: the button keeps focus while its request runs; the hook ignores clicks. */}
             <ActionWithHint
               hint={buttons.confirmGuess.hint}
+              describedBy={titleId}
               {...busyProps}
               onClick={(event) => onConfirm(item, event.currentTarget)}
             >
               {buttons.confirmGuess.label(guess.title, guess.year)}
             </ActionWithHint>
-            <Button className="admin__todo-quiet" {...busyProps} onClick={find}>
+            <Button
+              className="admin__todo-quiet"
+              aria-describedby={titleId}
+              {...busyProps}
+              onClick={find}
+            >
               {buttons.findFilm.label}
             </Button>
           </>
         ) : (
-          <ActionWithHint hint={buttons.findFilm.hint} {...busyProps} onClick={find}>
+          <ActionWithHint
+            hint={buttons.findFilm.hint}
+            describedBy={titleId}
+            {...busyProps}
+            onClick={find}
+          >
             {buttons.findFilm.label}
           </ActionWithHint>
         )}
@@ -74,12 +90,14 @@ function MatchRow({ item, busy, problem, onConfirm, onFindFilm }) {
 
 /** A film with several files: "Sort out editions…" with the scanner's suggestion as the line. */
 function FilesRow({ item, onSortOut }) {
+  const titleId = useId();
   return (
     <li className="admin__todo-row">
-      <RowText row={item} line={filesLine(item)} />
+      <RowText row={item} line={filesLine(item)} titleId={titleId} />
       <div className="admin__actions admin__todo-actions">
         <ActionWithHint
           hint={buttons.sortEditions.hint}
+          describedBy={titleId}
           onClick={(event) => onSortOut(item, event.currentTarget)}
         >
           {buttons.sortEditions.label}
@@ -97,13 +115,15 @@ function FilesRow({ item, onSortOut }) {
 function SubtitleRow({ row, line, kind, onFindSubtitles }) {
   const action = pickerAction(row, kind);
   const button = action ? pickerButton(action, row) : null;
+  const titleId = useId();
   return (
     <li className="admin__todo-row">
-      <RowText row={row} line={line} />
+      <RowText row={row} line={line} titleId={titleId} />
       {button ? (
         <div className="admin__actions admin__todo-actions">
           <ActionWithHint
             hint={button.hint}
+            describedBy={titleId}
             aria-haspopup="dialog"
             onClick={(event) => onFindSubtitles(row, kind, event.currentTarget)}
           >
@@ -141,7 +161,7 @@ function renderRow(group, row, props) {
         <SubtitleRow
           key={row.filmId}
           row={row}
-          line={fullLine(row)}
+          line={foreignLine(row)}
           kind="full"
           onFindSubtitles={props.onFindSubtitles}
         />
@@ -151,7 +171,7 @@ function renderRow(group, row, props) {
         <SubtitleRow
           key={row.filmId}
           row={row}
-          line={forcedLine(row)}
+          line={forcedRowLine(row)}
           kind="forced"
           onFindSubtitles={props.onFindSubtitles}
         />
@@ -180,6 +200,7 @@ export default function AdminTodoGroup({
   if (open && !expanded) setOpen(false);
   const copy = todoGroups[COPY_KEY[group.key]];
   const headingId = `admin-todo-${group.key}`;
+  const listId = `admin-todo-rows-${group.key}`;
   const footer = footerFor(group, expanded);
   return (
     <section className="admin__todo-group" aria-labelledby={headingId}>
@@ -194,7 +215,7 @@ export default function AdminTodoGroup({
           )}
         </p>
       </div>
-      <ul className="admin__todo-rows">
+      <ul id={listId} className="admin__todo-rows">
         {visibleRows(group, expanded).map((row) =>
           renderRow(group, row, {
             confirming,
@@ -215,12 +236,21 @@ export default function AdminTodoGroup({
             {footerPhone(footer.shown, footer.total)}
           </span>
           {footer.control === 'subtitles' ? (
-            <Link to="/admin/subtitles" className="admin__todo-more">
+            <Link
+              to={group.key === 'forcedQuestion' ? '/admin/subtitles#forced' : '/admin/subtitles'}
+              className="admin__todo-more"
+            >
               {todoFooter.allInSubtitles}{' '}
               <span className="admin__todo-wide">{todoFooter.arrow}</span>
             </Link>
           ) : (
-            <button type="button" className="admin__todo-more" onClick={() => setOpen(!expanded)}>
+            <button
+              type="button"
+              className="admin__todo-more"
+              aria-expanded={expanded}
+              aria-controls={listId}
+              onClick={() => setOpen(!expanded)}
+            >
               {expanded ? (
                 todoFooter.showFewer
               ) : (

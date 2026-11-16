@@ -33,6 +33,8 @@ export default function SubtitleNeedRow({
   const [attachBusy, setAttachBusy] = useState(false);
   const addRef = useRef(null);
   const formId = useId();
+  // The row's title describes every button, so each names its film (the visible label stays the start of the name).
+  const titleId = useId();
   const busy = { 'aria-disabled': saving || undefined };
   const choose = () => {
     if (!saving) onChoose(row);
@@ -47,7 +49,11 @@ export default function SubtitleNeedRow({
   const actions = kind === 'foreign' ? foreignActions(row) : forcedActions(row);
   return (
     <li className="admin__todo-row">
-      <RowText row={row} line={kind === 'foreign' ? foreignLine(row) : forcedRowLine(row)} />
+      <RowText
+        row={row}
+        line={kind === 'foreign' ? foreignLine(row) : forcedRowLine(row)}
+        titleId={titleId}
+      />
       <div className="admin__actions admin__todo-actions">
         {actions.map((action) => {
           if (action === 'addFile') {
@@ -56,6 +62,7 @@ export default function SubtitleNeedRow({
                 key={action}
                 ref={addRef}
                 hint={buttons.addFileToFilm.hint}
+                describedBy={titleId}
                 aria-expanded={adding}
                 aria-controls={adding ? formId : undefined}
                 // Not while an attach is in flight: closing the form then would reset its one-request guard on
@@ -75,6 +82,7 @@ export default function SubtitleNeedRow({
               <ActionWithHint
                 key={action}
                 hint={hint}
+                describedBy={titleId}
                 {...busy}
                 aria-haspopup="dialog"
                 onClick={find}
@@ -85,7 +93,13 @@ export default function SubtitleNeedRow({
           }
           const entry = action === 'itsEnglish' ? buttons.itsEnglish : buttons.noForeignScenes;
           return (
-            <ActionWithHint key={action} hint={entry.hint} {...busy} onClick={choose}>
+            <ActionWithHint
+              key={action}
+              hint={entry.hint}
+              describedBy={titleId}
+              {...busy}
+              onClick={choose}
+            >
               {entry.label}
             </ActionWithHint>
           );

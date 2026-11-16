@@ -8,7 +8,7 @@ import {
   startupText,
 } from '../state/playbackChart.js';
 import { usePlaybackChart } from '../state/usePlaybackChart.js';
-import { Button } from './Button.jsx';
+import AdminErrorBanner from './AdminErrorBanner.jsx';
 import PlaybackColumns from './PlaybackColumns.jsx';
 import SelectedSession from './SelectedSession.jsx';
 import { SkeletonBlock } from './Skeleton.jsx';
@@ -79,10 +79,9 @@ function Legend() {
 
 function Failed({ onRetry }) {
   return (
-    <div className="admin__todo-error" role="alert">
-      <p className="admin__todo-error-text">{copy.loadError}</p>
-      <Button onClick={onRetry}>{copy.retry}</Button>
-    </div>
+    <AdminErrorBanner onRetry={onRetry} retryLabel={copy.retry}>
+      {copy.loadError}
+    </AdminErrorBanner>
   );
 }
 

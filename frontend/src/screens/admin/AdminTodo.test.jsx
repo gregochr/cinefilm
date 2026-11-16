@@ -75,7 +75,9 @@ describe('Admin To do groups', () => {
     expect(within(english).getByText('Rashomon')).toBeInTheDocument();
     expect(within(english).getByText('· 1950')).toBeInTheDocument();
     expect(
-      within(english).getByText('Spoken: Japanese · nothing found automatically on OpenSubtitles'),
+      within(english).getByText(
+        'Spoken: Japanese · Set by you · nothing found automatically on OpenSubtitles',
+      ),
     ).toBeInTheDocument();
     const forced = await group('Forced subtitles not found');
     expect(within(forced).getByText('Taken')).toBeInTheDocument();
@@ -94,8 +96,9 @@ describe('Admin To do groups', () => {
     expect(within(wicker).queryByRole('button', { name: /^Yes/ })).not.toBeInTheDocument();
     expect(within(wicker).getByRole('button', { name: 'Find the film…' })).toBeInTheDocument();
     const yes = within(suspiria).getByRole('button', { name: 'Yes, it’s Suspiria (1977)' });
+    // The hint first, then the film the button is about.
     expect(yes).toHaveAccessibleDescription(
-      'Confirms the guess and fetches its poster and details',
+      /^Confirms the guess and fetches its poster and details Suspiria\W+1977$/,
     );
     expect(within(suspiria).getByRole('button', { name: 'Find the film…' })).toBeInTheDocument();
   });
@@ -507,11 +510,14 @@ describe('Admin To do: more than five rows', () => {
     expect(within(pick).getByRole('button', { name: 'Show all 7' })).toBeInTheDocument();
     expect(within(several).getByText('Showing 5 of 6')).toBeInTheDocument();
     expect(within(several).getByRole('button', { name: 'Show all 6' })).toBeInTheDocument();
-    for (const region of [english, forced]) {
+    for (const [region, href] of [
+      [english, '/admin/subtitles'],
+      [forced, '/admin/subtitles#forced'],
+    ]) {
       expect(within(region).getByText('Showing 5 of 7')).toBeInTheDocument();
       expect(within(region).getByRole('link', { name: 'All in Subtitles →' })).toHaveAttribute(
         'href',
-        '/admin/subtitles',
+        href,
       );
       expect(within(region).queryByRole('button', { name: /^Show/ })).not.toBeInTheDocument();
     }

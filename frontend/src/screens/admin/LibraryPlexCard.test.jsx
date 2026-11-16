@@ -147,7 +147,10 @@ describe('LibraryPlexCard', () => {
     expect(bar).toHaveAttribute('aria-valuenow', '30');
     expect(bar).toHaveAttribute('aria-valuetext', '12 / 40 films');
     expect(screen.getByText('Now: Heat')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Importing…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Importing…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
     expect(screen.queryByRole('button', { name: 'Try connecting to Plex' })).toBeNull();
   });
 
@@ -166,7 +169,10 @@ describe('LibraryPlexCard', () => {
   it('shows a notice beside the buttons, and disables the import while the start request runs', () => {
     renderCard({ notice: 'Could not start the import.', starting: true });
     expect(screen.getByText('Could not start the import.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Import from Plex again' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Import from Plex again' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 
   it('holds Import credits from Plex, which copies end-credits markers, below the import', async () => {
@@ -233,15 +239,20 @@ describe('LibraryPlexCard', () => {
     const { rerender } = render(
       <LibraryPlexCard {...base} plex={undefined} error={new Error('1')} loading={false} />,
     );
-    const first = screen.getByRole('alert');
-    expect(screen.getByRole('button', { name: 'Try again' })).not.toHaveAttribute('aria-disabled');
+    const alert = screen.getByRole('alert');
+    const first = screen.getByText('Couldn’t load the Plex import status.');
+    const retry = screen.getByRole('button', { name: 'Try again' });
+    expect(retry).not.toHaveAttribute('aria-disabled');
 
     rerender(<LibraryPlexCard {...base} plex={undefined} error={null} loading />);
-    expect(screen.getByRole('alert')).toBe(first);
+    expect(screen.getByText('Couldn’t load the Plex import status.')).toBe(first);
 
     rerender(<LibraryPlexCard {...base} plex={undefined} error={new Error('2')} loading={false} />);
-    expect(screen.getByRole('alert')).not.toBe(first);
+    // The words are announced again (a new node in the same alert), and the button is the same one, keeping focus.
+    expect(screen.getByRole('alert')).toBe(alert);
+    expect(screen.getByText('Couldn’t load the Plex import status.')).not.toBe(first);
     expect(first).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBe(retry);
   });
 
   it('draws nothing while the first read is still running, and keeps the card when a later read fails', () => {
@@ -253,5 +264,27 @@ describe('LibraryPlexCard', () => {
     renderCard({ error: new Error('x') });
     expect(screen.queryByText('Couldn’t load the Plex import status.')).toBeNull();
     expect(screen.getByText('Plex server').nextSibling).toHaveTextContent('Reachable');
+  });
+
+  it('keeps focus on Import from Plex again while the request runs, and a press then does nothing', async () => {
+    const onImport = vi.fn();
+    const { rerender } = renderCard({ onImport });
+    await userEvent.click(screen.getByRole('button', { name: 'Import from Plex again' }));
+    expect(onImport).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <LibraryPlexCard
+        plex={fixtures.adminPlex}
+        starting
+        notice={null}
+        onImport={onImport}
+        onRecheck={() => {}}
+      />,
+    );
+    const busy = screen.getByRole('button', { name: 'Import from Plex again' });
+    expect(busy).toHaveFocus();
+    await userEvent.click(busy);
+
+    expect(onImport).toHaveBeenCalledTimes(1);
   });
 });

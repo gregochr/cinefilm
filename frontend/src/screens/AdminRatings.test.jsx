@@ -72,7 +72,7 @@ describe('Admin: the Ratings card', () => {
     expect(posted).toBe(1);
     expect(
       await within(panel).findByRole('button', { name: 'Refreshing ratings…' }),
-    ).toBeDisabled();
+    ).toHaveAttribute('aria-disabled', 'true');
     await act(() => vi.advanceTimersByTimeAsync(1500));
     await act(() => vi.advanceTimersByTimeAsync(1500));
     expect(
@@ -86,7 +86,10 @@ describe('Admin: the Ratings card', () => {
       url === '/api/admin/scan' ? respond({ ...fixtures.adminScan, ratingsRunning: true }) : null,
     );
     renderApp('/admin/library');
-    expect(await screen.findByRole('button', { name: 'Refreshing ratings…' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Refreshing ratings…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 
   it('shows why when the refresh could not start', async () => {

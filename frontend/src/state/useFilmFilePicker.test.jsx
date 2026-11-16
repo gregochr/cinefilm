@@ -120,4 +120,69 @@ describe('useFilmFilePicker', () => {
     expect(result.current.filesLoading).toBe(false);
     expect(result.current.editionsLoading).toBe(false);
   });
+
+  it('shares one read of the library’s files between forms for different films', async () => {
+    const fetchMock = installFetch((method, url) => {
+      if (url === '/api/admin/subtitles') return respond([FILE]);
+      if (url === '/api/films/6') return respond({ id: 6, editions: [edition(60)] });
+      if (url === '/api/films/7') return respond({ id: 7, editions: [edition(70)] });
+      return null;
+    });
+    const files = () =>
+      fetchMock.mock.calls.filter(([url]) => url === '/api/admin/subtitles').length;
+    const first = renderHook(() => useFilmFilePicker(6));
+    await waitFor(() => expect(first.result.current.files).toHaveLength(1));
+
+    const second = renderHook(() => useFilmFilePicker(7));
+
+    // The second form has the list at once (no loading state) and sent no read for it.
+    expect(second.result.current.files).toHaveLength(1);
+    expect(second.result.current.filesLoading).toBe(false);
+    await waitFor(() => expect(second.result.current.edition?.id).toBe(70));
+    expect(files()).toBe(1);
+  });
+
+  it('reads the files again for a form opened after an attach', async () => {
+    const attaches = [];
+    const fetchMock = installFetch((method, url, init) => {
+      if (url === '/api/admin/subtitles') return respond([FILE]);
+      if (url === '/api/films/6') return respond({ id: 6, editions: [edition(60)] });
+      if (url === '/api/admin/subtitles/21/attach') {
+        attaches.push(init.body);
+        return respond(FILE);
+      }
+      return null;
+    });
+    const files = () =>
+      fetchMock.mock.calls.filter(([url]) => url === '/api/admin/subtitles').length;
+    const first = renderHook(() => useFilmFilePicker(6));
+    await waitFor(() => expect(first.result.current.edition?.id).toBe(60));
+    act(() => first.result.current.pickFile(21));
+    await act(() => first.result.current.attach());
+    expect(attaches).toHaveLength(1);
+
+    const second = renderHook(() => useFilmFilePicker(6));
+    await waitFor(() => expect(second.result.current.files).toHaveLength(1));
+
+    expect(files()).toBe(2);
+  });
+
+  it('reads the files again when the version changes, without a change made here', async () => {
+    const fetchMock = installFetch((method, url) => {
+      if (url === '/api/admin/subtitles') return respond([FILE]);
+      if (url === '/api/films/6') return respond({ id: 6, editions: [edition(60)] });
+      return null;
+    });
+    const files = () =>
+      fetchMock.mock.calls.filter(([url]) => url === '/api/admin/subtitles').length;
+    const { result, rerender } = renderHook(({ version }) => useFilmFilePicker(6, { version }), {
+      initialProps: { version: 'a' },
+    });
+    await waitFor(() => expect(result.current.files).toHaveLength(1));
+
+    rerender({ version: 'a' });
+    expect(files()).toBe(1);
+    rerender({ version: 'b' });
+    await waitFor(() => expect(files()).toBe(2));
+  });
 });

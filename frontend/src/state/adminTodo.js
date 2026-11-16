@@ -4,8 +4,6 @@
 import { ApiError } from '../api/client.js';
 import { lockText } from './lockText.js';
 import { todoRow } from './adminCopy.js';
-import { fullSubtitleLine } from './fullNeed.js';
-import { languageName, reasonText } from './forcedNeed.js';
 import { titleWithYear } from './scanFormat.js';
 
 /** The most rows a group shows until "Show all {n}". */
@@ -87,23 +85,6 @@ export function matchLine(item) {
 /** The small line under a several-files row: "3 files · {the scanner's suggestion}". */
 export function filesLine(item) {
   return `${todoRow.files(item.files.length)} · ${item.detail}`;
-}
-
-/**
- * The small line under a full-subtitles row (AR1): "Spoken: Japanese · nothing found automatically on OpenSubtitles".
- * The language is the film's `originalLanguage`; a film with a subtitle that plays but is unresolved says what plays
- * instead of "none found".
- */
-export function fullLine(row) {
-  const spoken = row.originalLanguage
-    ? todoRow.spoken(languageName(row.originalLanguage))
-    : todoRow.languageUnknown;
-  return `${spoken} · ${row.fullSubtitle ? fullSubtitleLine(row) : todoRow.noneFound}`;
-}
-
-/** The small line under a forced-subtitles row: the server's reason in words. */
-export function forcedLine(row) {
-  return reasonText(row);
 }
 
 /**

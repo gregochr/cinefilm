@@ -127,6 +127,48 @@ describe('AdminTodoGroup: Pick the right film', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(5);
     expect(screen.getByRole('button', { name: 'Show all 7' })).toHaveFocus();
   });
+
+  it('tells a screen reader whether the list is expanded, and which list the button controls', async () => {
+    renderGroup(find(manyFilm, 'pickFilm'));
+    const showAll = screen.getByRole('button', { name: 'Show all 7' });
+    expect(showAll).toHaveAttribute('aria-expanded', 'false');
+    expect(showAll).toHaveAttribute('aria-controls', screen.getByRole('list').id);
+
+    await userEvent.click(showAll);
+
+    const fewer = screen.getByRole('button', { name: 'Show fewer' });
+    expect(fewer).toHaveAttribute('aria-expanded', 'true');
+    expect(fewer).toHaveAttribute('aria-controls', screen.getByRole('list').id);
+  });
+});
+
+describe('AdminTodoGroup: buttons name their film', () => {
+  it('describes each match and editions button with the row title, keeping the label as the name', () => {
+    renderGroup(find(film, 'pickFilm'));
+    const [wicker] = screen.getAllByRole('listitem');
+
+    expect(
+      within(wicker).getByRole('button', { name: 'Find the film…' }),
+    ).toHaveAccessibleDescription(/The Wicker Man/);
+  });
+
+  it('names the film on "Yes, it\u2019s …" and its quiet "Find the film…" too', () => {
+    renderGroup(find(film, 'pickFilm'));
+    const suspiria = screen.getAllByRole('listitem')[1];
+
+    expect(within(suspiria).getByRole('button', { name: /^Yes, it/ })).toHaveAccessibleDescription(
+      /Suspiria/,
+    );
+    expect(
+      within(suspiria).getByRole('button', { name: 'Find the film…' }),
+    ).toHaveAccessibleDescription(/Suspiria/);
+  });
+
+  it('names the film on "Sort out editions…" and on the subtitle search buttons, with the hint kept', () => {
+    renderGroup(find(film, 'severalFiles'));
+    const button = screen.getAllByRole('button', { name: 'Sort out editions…' })[1];
+    expect(button).toHaveAccessibleDescription(/Choose which file is which cut.*The Two Towers/);
+  });
 });
 
 describe('AdminTodoGroup: titles, counts and busy rows', () => {
@@ -203,7 +245,7 @@ describe('AdminTodoGroup: Sort out several files', () => {
     expect(within(region).getByText('The Two Towers')).toBeInTheDocument();
     const buttons = within(region).getAllByRole('button', { name: 'Sort out editions…' });
     expect(buttons[1]).toHaveAccessibleDescription(
-      'Choose which file is which cut, the part order and the default.',
+      /^Choose which file is which cut, the part order and the default\. The Two Towers/,
     );
     await userEvent.click(buttons[1]);
 
@@ -242,7 +284,14 @@ describe('AdminTodoGroup: the subtitle groups', () => {
     );
   });
 
-  it('lists the forced rows with their reason, their search button and the same footer link', () => {
+  it('names the film on a subtitle row\u2019s search button', () => {
+    renderGroup(find(subtitles, 'forcedQuestion'));
+    expect(
+      screen.getByRole('button', { name: 'Find forced subtitles…' }),
+    ).toHaveAccessibleDescription(/Taken/);
+  });
+
+  it('lists the forced rows with their reason, their search button and a footer link that opens the forced tab', () => {
     renderGroup(find(subtitles, 'forcedQuestion'));
 
     const region = screen.getByRole('region', { name: 'Forced subtitles not found' });
@@ -255,7 +304,10 @@ describe('AdminTodoGroup: the subtitle groups', () => {
         .getAllByRole('button')
         .map((b) => b.textContent),
     ).toEqual(['Find forced subtitles…']);
-    expect(within(region).getByRole('link', { name: 'All in Subtitles →' })).toBeInTheDocument();
+    expect(within(region).getByRole('link', { name: 'All in Subtitles →' })).toHaveAttribute(
+      'href',
+      '/admin/subtitles#forced',
+    );
   });
 
   it('opens the picker from a full row with the row, the kind and the button', async () => {

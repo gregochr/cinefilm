@@ -149,7 +149,10 @@ describe('LibraryChanges', () => {
     const onRetry = vi.fn();
     render(<LibraryChanges report={undefined} error={new Error('x')} onRetry={onRetry} />);
 
-    expect(screen.getByText('Couldn’t load what the last scan changed.')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Couldn’t load what the last scan changed.',
+    );
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });

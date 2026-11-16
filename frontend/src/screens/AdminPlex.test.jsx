@@ -189,20 +189,38 @@ describe('Admin: Import from Plex card', () => {
 
     expect(await within(panel).findByText('Importing')).toBeInTheDocument();
     expect(within(panel).getByText('12 / 40 films')).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: 'Importing…' })).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: 'Importing…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 
-  it('says why when the import is refused with a 409', async () => {
+  const refused = (body) => {
     installFetch((method, url) =>
       url === '/api/admin/plex/import'
-        ? respond({ error: 'Run a library scan first' }, 409)
+        ? respond(body, 409)
         : plexRoute(fixtures.adminPlex)(method, url),
     );
     renderApp('/admin/library');
+  };
+  const BUSY = 'A scan or import is already running, or no scan has finished yet.';
+
+  it('shows the server’s own words when the import is refused with a 409', async () => {
+    refused({ error: 'Run a library scan first' });
     await userEvent.click(await screen.findByRole('button', { name: 'Import from Plex again' }));
-    expect(
-      await screen.findByText('A scan or import is already running, or no scan has finished yet.'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('Run a library scan first.')).toBeInTheDocument();
+  });
+
+  it('keeps its own words for the bare scan line and for a 409 with no text', async () => {
+    refused({ error: 'A scan is running' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Import from Plex again' }));
+    expect(await screen.findByText(BUSY)).toBeInTheDocument();
+  });
+
+  it('keeps its own words for a 409 with no body', async () => {
+    refused(null);
+    await userEvent.click(await screen.findByRole('button', { name: 'Import from Plex again' }));
+    expect(await screen.findByText(BUSY)).toBeInTheDocument();
   });
 
   it('reports an import that could not be started', async () => {
@@ -226,7 +244,10 @@ describe('Admin: Import from Plex card', () => {
     expect(bar).toHaveAttribute('aria-valuenow', '30');
     expect(bar).toHaveAttribute('aria-valuetext', '12 / 40 films');
     expect(within(panel).getByText('Now: Heat')).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: 'Importing…' })).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: 'Importing…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 
   it('shows a neutral line and no current film while Plex is first read', async () => {

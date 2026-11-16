@@ -27,7 +27,7 @@ describe('Admin: Fix match', () => {
     const buttons = await within(attention).findAllByRole('button', { name: 'Find the film…' });
     expect(buttons).toHaveLength(2);
     expect(buttons[0]).toHaveAccessibleDescription(
-      'Search TMDB and choose which film this file is.',
+      expect.stringContaining('Search TMDB and choose which film this file is.'),
     );
   });
 

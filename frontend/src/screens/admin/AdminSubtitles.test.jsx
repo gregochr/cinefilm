@@ -120,7 +120,9 @@ describe('Admin Subtitles section: the page', () => {
     ).toEqual(['It’s in German — find subtitles', 'Add my own file…', 'It’s English']);
     expect(
       within(downfallRow).getByRole('button', { name: 'It’s English' }),
-    ).toHaveAccessibleDescription('“It’s English” marks it done and stops asking');
+    ).toHaveAccessibleDescription(
+      expect.stringContaining('“It’s English” marks it done and stops asking'),
+    );
     // No distrusted-download buttons: the API has no trust.
     for (const name of ['Use it anyway', 'Search again…']) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
@@ -141,7 +143,9 @@ describe('Admin Subtitles section: the page', () => {
     ).toBeInTheDocument();
     expect(
       within(panel).getByRole('button', { name: 'No foreign scenes' }),
-    ).toHaveAccessibleDescription('“No foreign scenes” marks it done and stops asking');
+    ).toHaveAccessibleDescription(
+      expect.stringContaining('“No foreign scenes” marks it done and stops asking'),
+    );
     expect(
       within(panel).getByRole('button', { name: 'Find forced subtitles…' }),
     ).toBeInTheDocument();
@@ -542,6 +546,56 @@ describe('Admin Subtitles section: tabs by keyboard', () => {
     expect(foreign).toHaveFocus();
     await userEvent.keyboard('{ArrowLeft}');
     expect(forced).toHaveFocus();
+  });
+});
+
+describe('Admin Subtitles section: the tab lives in the address', () => {
+  it('opens on the foreign tab with no hash, and on the forced tab for #forced', async () => {
+    serve();
+    const { unmount } = renderApp('/admin/subtitles');
+    expect(await tab('Foreign-language films 2')).toHaveAttribute('aria-selected', 'true');
+    unmount();
+
+    renderApp('/admin/subtitles#forced');
+    expect(await tab('Forced subtitles not found 1')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel')).toHaveAccessibleName('Forced subtitles not found 1');
+  });
+
+  it('opens on the foreign tab for #foreign and for a hash it does not know', async () => {
+    serve();
+    const { unmount } = renderApp('/admin/subtitles#foreign');
+    expect(await tab('Foreign-language films 2')).toHaveAttribute('aria-selected', 'true');
+    unmount();
+
+    renderApp('/admin/subtitles#nonsense');
+    expect(await tab('Foreign-language films 2')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('writes the chosen tab into the address, by click and by arrow key', async () => {
+    serve();
+    renderApp('/admin/subtitles', { showLocation: true });
+    const foreign = await tab('Foreign-language films 2');
+    const forced = screen.getByRole('tab', { name: 'Forced subtitles not found 1' });
+
+    await userEvent.click(forced);
+    expect(screen.getByTestId('location')).toHaveTextContent('/admin/subtitles#forced');
+    expect(forced).toHaveAttribute('aria-selected', 'true');
+
+    foreign.focus();
+    await userEvent.keyboard('{ArrowLeft}');
+    expect(screen.getByTestId('location')).toHaveTextContent('/admin/subtitles#foreign');
+    expect(foreign).toHaveFocus();
+    expect(foreign).toHaveAttribute('aria-selected', 'true');
+  });
+});
+
+describe('Admin Subtitles section: the address keeps its query', () => {
+  it('keeps the query string when a tab change writes the hash', async () => {
+    serve();
+    renderApp('/admin/subtitles?from=todo', { showLocation: true });
+    await userEvent.click(await tab('Forced subtitles not found 1'));
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/admin/subtitles?from=todo#forced');
   });
 });
 

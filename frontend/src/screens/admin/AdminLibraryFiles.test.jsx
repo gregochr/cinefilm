@@ -108,7 +108,8 @@ describe('Admin Library file lists', () => {
     let fail = true;
     installFetch((m, url) => (url === '/api/admin/attention' && fail ? respond(null, 500) : null));
     renderApp('/admin/library/files/protected');
-    expect(await screen.findByText('Couldn’t load these files.')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t load these files.');
+    expect(screen.queryByRole('heading', { name: 'The projector jammed' })).not.toBeInTheDocument();
 
     fail = false;
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));

@@ -299,6 +299,7 @@ describe('Admin rail counts', () => {
           todo: { pickFilm: 0, severalFiles: 0, fullMissing: 0, forcedQuestion: 0 },
           subtitlesUnresolved: 0,
           live: 0,
+          playingNow: [],
         }),
       ),
     );

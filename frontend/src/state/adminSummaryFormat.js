@@ -25,7 +25,7 @@ export function todoHeadingCount(summary) {
 /**
  * What each rail link shows, by section key: `{ badge, label }` (the visible pill and the link's accessible name), or
  * nothing for a section with no count. No summary (loading, or an error) means no counts at all; a count of 0 is not
- * shown, and Playback shows "{n} live" only while something is live.
+ * shown, and Playback shows "{n} live" only while the Playing now list has an entry.
  */
 export function railCounts(summary) {
   if (!summary) return {};
@@ -36,7 +36,9 @@ export function railCounts(summary) {
   if (unresolved > 0) {
     counts.subtitles = { badge: String(unresolved), label: railNames.subtitles(unresolved) };
   }
-  const live = num(summary.live);
+  // Playing now (direct play included, lingering two minutes), not the HLS-only `live` count, so the pill agrees
+  // with the list it points at.
+  const live = Array.isArray(summary.playingNow) ? summary.playingNow.length : 0;
   if (live > 0) counts.playback = { badge: railNames.live(live), label: railNames.playback(live) };
   return counts;
 }

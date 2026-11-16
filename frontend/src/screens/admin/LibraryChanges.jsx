@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '../../components/Button.jsx';
 import { SkeletonBlock } from '../../components/Skeleton.jsx';
-import { ErrorState } from '../../components/StateMessages.jsx';
+import AdminErrorBanner from '../../components/AdminErrorBanner.jsx';
 import { libraryPage } from '../../state/adminCopy.js';
 import {
   GROUPING_PAGE_SIZE,
@@ -33,7 +33,7 @@ export default function LibraryChanges({ report, loading, error, onRetry, scanne
       </div>
     );
   } else if (error && !report) {
-    body = <ErrorState onRetry={onRetry}>{copy.loadError}</ErrorState>;
+    body = <AdminErrorBanner onRetry={onRetry}>{copy.loadError}</AdminErrorBanner>;
   } else if (items.length === 0) {
     if (scanned !== null) {
       body = <p className="admin__text">{scanned ? copy.empty : libraryPage.scan.neverScanned}</p>;

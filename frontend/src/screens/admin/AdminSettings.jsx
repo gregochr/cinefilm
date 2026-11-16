@@ -136,7 +136,12 @@ function SignedInCard() {
           </p>
         </div>
         <div className="admin__set-control">
-          <Button aria-describedby={hintId} disabled={signingOut} onClick={signOut}>
+          {/* aria-disabled, not disabled: the button keeps focus while the request runs; the hook ignores a second press. */}
+          <Button
+            aria-describedby={hintId}
+            aria-disabled={signingOut || undefined}
+            onClick={signingOut ? undefined : signOut}
+          >
             {signingOut ? buttons.signOut.busyLabel : buttons.signOut.label}
           </Button>
           {error ? (

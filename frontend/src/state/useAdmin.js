@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, announceLibraryChanged } from '../api/client.js';
 import { adminApi } from '../api/resources.js';
+import { isBareScanLock, lockText } from './lockText.js';
 import { creditsFinishedText } from './plexCreditsFormat.js';
 import { useResource } from './useResource.js';
 
@@ -70,7 +71,14 @@ export function useScan(visible = true) {
     }
   }, [visible, refresh]);
 
+  // One request at a time per button: a second press while one is in flight does nothing (the buttons stay focusable,
+  // `aria-disabled`, so the guard here is what stops the request).
+  const ratingsInFlight = useRef(false);
+  const scanInFlight = useRef(false);
+
   const refreshRatings = useCallback(async () => {
+    if (ratingsInFlight.current) return;
+    ratingsInFlight.current = true;
     setRatingsStarting(true);
     setRatingsNotice(null);
     try {
@@ -82,26 +90,39 @@ export function useScan(visible = true) {
           : 'Could not start the ratings refresh.',
       );
     } finally {
+      ratingsInFlight.current = false;
       setRatingsStarting(false);
       reload();
     }
   }, [reload]);
 
+  // Resolves true when a scan is running because of this press (started, or already running: a bare 409), false when it could
+  // not be started, and undefined when a press was ignored because one is already in flight.
   const startScan = useCallback(async () => {
+    if (scanInFlight.current) return undefined;
+    scanInFlight.current = true;
     setStarting(true);
     setNotice(null);
+    let running = true;
     try {
       await adminApi.startScan();
     } catch (failure) {
-      setNotice(
-        failure instanceof ApiError && failure.status === 409
-          ? 'A scan is already running.'
-          : 'Could not start the scan.',
-      );
+      const refused = failure instanceof ApiError && failure.status === 409;
+      // A 409 is "a scan is already running" only when the server says no more than that; any other lock text (an
+      // import, a subtitle change...) means this scan was refused, and says so.
+      const already = refused && isBareScanLock(failure);
+      running = already;
+      if (already) setNotice('A scan is already running.');
+      else
+        setNotice(
+          refused ? lockText(failure, 'Could not start the scan.') : 'Could not start the scan.',
+        );
     } finally {
+      scanInFlight.current = false;
       setStarting(false);
       reload();
     }
+    return running;
   }, [reload]);
 
   return {
@@ -128,6 +149,9 @@ export function useGroupingReport(version) {
   return useResource(`admin-grouping:${version}`, (options) => adminApi.groupingReport(options));
 }
 
+/** What a refused Plex import says when the server names nothing (or only the bare scan line). */
+const PLEX_BUSY = 'A scan or import is already running, or no scan has finished yet.';
+
 /**
  * The Plex import panel: status, polled while an import runs, plus "Import from Plex". Starting while a scan or
  * import already runs (409) is not an error: the notice says why, and the panel shows whichever is running.
@@ -149,7 +173,10 @@ export function usePlexImport() {
     return () => clearTimeout(id);
   }, [running, unreachable, data, error, reload]);
 
+  const importInFlight = useRef(false);
   const startImport = useCallback(async () => {
+    if (importInFlight.current) return;
+    importInFlight.current = true;
     setStarting(true);
     setNotice(null);
     try {
@@ -157,10 +184,11 @@ export function usePlexImport() {
     } catch (failure) {
       setNotice(
         failure instanceof ApiError && failure.status === 409
-          ? 'A scan or import is already running, or no scan has finished yet.'
+          ? lockText(failure, PLEX_BUSY)
           : 'Could not start the import.',
       );
     } finally {
+      importInFlight.current = false;
       setStarting(false);
       reload();
     }

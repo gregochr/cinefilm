@@ -4,7 +4,7 @@ import { usePlaybackLog } from '../state/usePlaybackLog.js';
 import { Button } from './Button.jsx';
 import PlaybackLogRow from './PlaybackLogRow.jsx';
 import { SkeletonBlock } from './Skeleton.jsx';
-import { ErrorState } from './StateMessages.jsx';
+import AdminErrorBanner from './AdminErrorBanner.jsx';
 
 function Table({ rows, open, onToggle }) {
   return (
@@ -56,7 +56,7 @@ export default function PlaybackLogPanel() {
       </div>
     );
   } else if (log.error) {
-    body = <ErrorState onRetry={log.reload}>{copy.loadError}</ErrorState>;
+    body = <AdminErrorBanner onRetry={log.reload}>{copy.loadError}</AdminErrorBanner>;
   } else if (log.rows.length === 0 && !log.hasMore) {
     body = <p className="admin__text">{copy.empty[log.filter]}</p>;
   } else {

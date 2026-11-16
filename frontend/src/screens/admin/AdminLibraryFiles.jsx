@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { SkeletonBlock } from '../../components/Skeleton.jsx';
-import { ErrorState } from '../../components/StateMessages.jsx';
+import AdminErrorBanner from '../../components/AdminErrorBanner.jsx';
 import { libraryPage } from '../../state/adminCopy.js';
 import { useAdminContext } from '../../state/adminContext.js';
 import { kindLabel, titleWithYear } from '../../state/scanFormat.js';
@@ -25,7 +25,9 @@ export default function AdminLibraryFiles({ list }) {
       </div>
     );
   } else if (!attention.data) {
-    body = <ErrorState onRetry={attention.reload}>{libraryPage.files.loadError}</ErrorState>;
+    body = (
+      <AdminErrorBanner onRetry={attention.reload}>{libraryPage.files.loadError}</AdminErrorBanner>
+    );
   } else if (items.length === 0) {
     body = <p className="admin__text">{libraryPage.files.empty}</p>;
   } else {

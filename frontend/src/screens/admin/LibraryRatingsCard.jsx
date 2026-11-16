@@ -28,8 +28,11 @@ export default function LibraryRatingsCard({ scan, starting, notice, onRefresh }
         <ActionWithHint
           layout="line"
           hint={buttons.refreshRatings.hint}
-          disabled={!enabled || running || starting}
-          onClick={onRefresh}
+          // Busy is aria-disabled so the button keeps focus while the request runs; the hook ignores a second press.
+          // Without an OMDb key it is a real `disabled` (nothing to wait for).
+          disabled={!enabled}
+          aria-disabled={running || starting || undefined}
+          onClick={running || starting ? undefined : onRefresh}
         >
           {running ? buttons.refreshRatings.busyLabel : buttons.refreshRatings.label}
         </ActionWithHint>

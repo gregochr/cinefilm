@@ -117,7 +117,10 @@ describe('Admin: Subtitles panel, the list', () => {
     renderApp('/admin/subtitles');
     await userEvent.click(await screen.findByRole('button', { name: 'Show all subtitle files' }));
     const panel = await screen.findByRole('region', { name: 'Subtitle files' });
-    expect(await within(panel).findByText(/Couldn.t load the subtitle files/)).toBeInTheDocument();
+    expect(await within(panel).findByRole('alert')).toHaveTextContent(
+      /Couldn.t load the subtitle files/,
+    );
+    expect(within(panel).getAllByRole('heading')).toHaveLength(1);
 
     fail = false;
     await userEvent.click(within(panel).getByRole('button', { name: 'Try again' }));
@@ -160,9 +163,9 @@ describe('Admin: Subtitles panel, a list that fails to refresh', () => {
 
     await act(() => vi.advanceTimersByTimeAsync(1500));
 
-    expect(
-      await within(panel).findByText(/Couldn.t refresh the subtitle files/),
-    ).toBeInTheDocument();
+    expect(await within(panel).findByRole('alert')).toHaveTextContent(
+      /Couldn.t refresh the subtitle files/,
+    );
     expect(within(panel).getByText('Heat (1995)/Heat.en.forced.srt')).toBeInTheDocument();
     fail = false;
     scans = 0;

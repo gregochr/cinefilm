@@ -256,6 +256,7 @@ describe('PlaybackLogPanel', () => {
     renderLog();
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Couldn’t load the playback log.');
+    expect(screen.queryByRole('heading', { name: 'The projector jammed' })).not.toBeInTheDocument();
     fail = false;
     await userEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
     expect(await screen.findByRole('table')).toBeInTheDocument();
