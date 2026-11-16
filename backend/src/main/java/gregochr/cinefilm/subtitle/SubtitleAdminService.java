@@ -205,7 +205,9 @@ public class SubtitleAdminService {
         sidecar.setOffsetMs(request.offsetMs());
         // The owner's word, even a reset to 0: the timing check never changes this file's offset again.
         sidecar.setOffsetSource(SubtitleSidecar.OffsetSource.OWNER);
-        changed(sidecar);
+        // A nudge keeps the owner's "Looks right" (owner decision 2026-11-16): it is the same file with the same
+        // lines, so what proves it and serves it is unchanged. Only the version moves, so the player reloads it.
+        sidecar.setUpdatedAt(clock.instant());
         return one(id);
     }
 

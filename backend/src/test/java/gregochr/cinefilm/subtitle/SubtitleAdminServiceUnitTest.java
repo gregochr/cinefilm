@@ -185,6 +185,51 @@ class SubtitleAdminServiceUnitTest {
     }
 
     @Test
+    void aNudgeKeepsTheOwnersCheckAndAProvenFileStaysProvenAndServed() {
+        listAndFind();
+        row.setMediaFileId(10L);
+        row.setOwnerVerifiedAt(NOW.minusSeconds(500));
+        row.setVerifiedParts("10,20");
+        List<Long> parts = List.of(10L, 20L);
+        ForcedChoice.Decision before = decideFor(parts);
+
+        service.offset(5L, new OffsetRequest(-1250));
+        service.offset(5L, new OffsetRequest(0));
+
+        assertThat(row.getOwnerVerifiedAt()).isEqualTo(NOW.minusSeconds(500));
+        assertThat(row.isVerifiedFor(parts)).isTrue();
+        assertThat(row.getUpdatedAt()).isEqualTo(NOW);
+        assertThat(row.getOffsetSource()).isEqualTo(SubtitleSidecar.OffsetSource.OWNER);
+        ForcedChoice.Decision after = decideFor(parts);
+        assertThat(before.step()).isEqualTo(ForcedChoice.Step.PROVEN_FILE);
+        assertThat(after.step()).isEqualTo(ForcedChoice.Step.PROVEN_FILE);
+        assertThat(after.source()).isEqualTo(ForcedChoice.Source.FILE);
+        assertThat(after.downloadId()).isNull();
+    }
+
+    /** What the edition plays for this file, with a proven download and the embedded track also on offer. */
+    private ForcedChoice.Decision decideFor(List<Long> parts) {
+        SidecarTrust.Assessment assessment = SidecarTrust.assess(row.isVerifiedFor(parts), null, false);
+        return ForcedChoice.decide(new ForcedChoice.Input(new ForcedChoice.FileSide(assessment, 20),
+            List.of(new ForcedChoice.DownloadSide(1L, new SidecarTrust.Assessment(SidecarTrust.Trust.PROVEN,
+                SidecarTrust.Proof.AGREES))), true));
+    }
+
+    @Test
+    void anAttachStillTakesTheOwnersCheckAway() {
+        listAndFind();
+        when(editions.findById(40L)).thenReturn(Optional.of(split));
+        when(files.findAllById(java.util.Set.of(20L))).thenReturn(List.of(split.originalParts().get(1)));
+        row.setOwnerVerifiedAt(NOW);
+        row.setVerifiedParts("10,20");
+
+        service.attach(5L, new AttachRequest(40L, 2));
+
+        assertThat(row.getOwnerVerifiedAt()).isNull();
+        assertThat(row.getVerifiedParts()).isNull();
+    }
+
+    @Test
     void detachClearsTheAttachmentAndMatchesByNameAgain() {
         listAndFind();
         row.setOwnerAttached(true);

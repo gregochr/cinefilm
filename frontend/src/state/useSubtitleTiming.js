@@ -25,8 +25,9 @@ import { EARLIER, LATER, nextOffsets, timingProblem, trackToken } from './subtit
  *   does the same by itself for the file that shows. Only the press after that moves the offset again.
  * - One press per file at a time (a ref, so two clicks in one frame send one request); the buttons stay focusable and
  *   `busy` says why they do nothing.
- * - If the server no longer serves a changed row (it answers `served: false`: the owner's check was cleared and another
- *   subtitle plays now), the rows after it are not sent, the track is not reloaded, a change still loading is cancelled
+ * - If the server no longer serves a changed row (it answers `served: false`: since 2026-11-16 a nudge itself keeps the
+ *   owner's check, so this is a guard for what changes the served file meanwhile: an attach, detach, rescan or
+ *   download removed in Admin or another tab; another subtitle plays now), the rows after it are not sent, the track is not reloaded, a change still loading is cancelled
  *   (`onReplaced(kind)`), and the timing of that file stays
  *   `frozen` for the rest of the viewing, with the subtitle-changed line saying why.
  * - What an answer says (offsets, a problem) belongs to the file it was for: a problem is forgotten when the shown file

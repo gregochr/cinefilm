@@ -505,8 +505,9 @@ on its own; after it ships, measure (how many films are still unsure or missing)
 - **A conflict in a whole-edition slot stops the edition playing any sidecar** (a whole-edition file is meant to beat
   per-part ones, so falling through would hide the conflict). A conflict in one part's slot leaves only that part with
   none; the other parts still play.
-- **A nudge, an attach, and any change to a file on disk clear the owner's check** (the lines or timing the owner
-  looked at are no longer the ones that play). `offset_ms` is kept when a file changes on disk.
+- **An attach, a detach, and any change to a file on disk clear the owner's check** (the lines the owner looked at
+  are no longer the ones that play). **A timing nudge keeps it** (owner decision, 2026-11-16, reversing the earlier
+  rule): the file is the same, so what proves and serves it is unchanged; only the version moves. `offset_ms` is kept when a file changes on disk.
 - **Stitching** reuses `VttShifter.join` on one WebVTT per part (`VttWriter` applies the offset); a first part with no
   file is replaced by an empty header so the later part is still shifted.
 - **A cue with no duration** is kept and counted, and shown for one second in the WebVTT (a browser drops a cue that

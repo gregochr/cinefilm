@@ -981,11 +981,11 @@ describe('fixture server: Admin settings', () => {
       expect((await failure('POST', '/api/admin/subtitles/999/verify')).status).toBe(404);
     });
 
-    it('clears a file’s check when its timing is set, as the server’s change does', async () => {
+    it('keeps a file’s check when its timing is set, as the server does', async () => {
       await call('POST', '/api/admin/subtitles/3/verify');
       const answer = await call('PUT', '/api/admin/subtitles/3/offset', { offsetMs: 0 });
 
-      expect(answer.verified).toBe(false);
+      expect(answer.verified).toBe(true);
     });
 
     it('sets a file’s timing as the owner’s word, moves its version on, and refuses what the server refuses', async () => {
