@@ -778,7 +778,7 @@ describe('a playback Admin stopped (410)', () => {
     expect(screen.getByTestId('player-video')).toBe(video);
   });
 
-  it('a stop before anything played (position 0) plays again from the film’s resume point', async () => {
+  it('a stop at position 0 plays again from 0: where it stopped, always', async () => {
     const srv = serve();
     installFetch(srv.route);
     renderApp('/films/1/play?edition=11&start=0');
@@ -790,8 +790,29 @@ describe('a playback Admin stopped (410)', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
     await vi.waitFor(() => expect(srv.log.posted).toHaveLength(2));
-    // Heat is saved at 3,871,000 ms and resumes 10 s earlier.
-    expect(srv.log.posted[1].startMs).toBe(3861000);
+    expect(srv.log.posted[1].startMs).toBe(0);
+  });
+
+  it('hands focus back to the player after Play again, so the keys work, and reads PREPARING until it plays', async () => {
+    const { video } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    await hlsEvent(() => video.play());
+    await hlsEvent(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await instances(2);
+    expect(screen.getByRole('region', { name: 'Video player' })).toHaveFocus();
+    expect(await screen.findByText('PREPARING')).toBeInTheDocument();
+    await hlsEvent(() => fireEvent.playing(video));
+    expect(screen.queryByText('PREPARING')).not.toBeInTheDocument();
+    await hlsEvent(() => fireEvent.loadedMetadata(video));
+    await userEvent.keyboard('{ArrowRight}');
+    expect(screen.getByRole('slider', { name: 'Seek' })).toHaveAttribute(
+      'aria-valuetext',
+      '16 minutes 50 seconds',
+    );
   });
 
   it('ignores the scrubber, arrow keys and quality choices while stopped', async () => {

@@ -404,7 +404,7 @@ export function useStream({
   // Play again after a stop: a new session from `atMs`, as a fresh start that plays. Leaves 'stopped' at once.
   const resume = useCallback(
     (atMs) => {
-      if (atMs > 0) pendingSeekRef.current = atMs;
+      pendingSeekRef.current = atMs > 0 ? atMs : null;
       stoppedAtRef.current = null;
       recoveriesRef.current = [];
       resumeRef.current = { play: true, held: true };

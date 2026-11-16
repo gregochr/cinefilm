@@ -36,13 +36,7 @@ import { QUESTION, questionText } from '../player/environment.js';
 import { clampVolume, keyToAction, resolveEscape } from '../player/keymap.js';
 import { indicatorModel } from '../player/indicator.js';
 import { AUTO, ORIGINAL, resolveQuality, rungName, topRung } from '../player/ladder.js';
-import {
-  hasReachedEnd,
-  parseStartAt,
-  resumePosition,
-  seekLanded,
-  startPosition,
-} from '../player/resume.js';
+import { hasReachedEnd, parseStartAt, seekLanded, startPosition } from '../player/resume.js';
 import { STILL_FADE_MS, initialStill, stillReducer, stillRendered } from '../player/resumeStill.js';
 import { useSlowCard } from '../player/slowCard.js';
 import { useStream } from '../player/useStream.js';
@@ -628,15 +622,18 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
   const director = film.directors?.[0]?.name || film.director;
   // "Play again" after Admin stopped the playback: nothing is remounted. The same player, video and hooks go on; the
   // health record starts a new viewing (a new playback id, the clock at zero) and the stream starts again from where
-  // the stop caught it (the resume point when it caught nothing). Progress writes stay in the one queue, in order.
+  // the stop caught it (0 is a position too). It reads PREPARING like a fresh start, and focus goes back to the player (the
+  // card that held it is gone). Progress writes stay in the one queue, in order.
   const playAgain = () => {
     if (stoppedAtRef.current === null) return; // already starting again (a double click)
-    const caught = Math.round(stoppedAtRef.current);
-    const start = caught > 0 ? caught : resumePosition(edition.positionMs);
+    const start = Math.max(0, Math.round(stoppedAtRef.current));
     positionRef.current = start;
     setPositionMs(start);
+    setBuffering(true);
+    setStarted(false);
     health.newViewing();
     stream.resume(start);
+    containerRef.current?.focus();
   };
 
   const hidden = !visible && !endOverlay;
