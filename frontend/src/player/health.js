@@ -49,6 +49,8 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
   let reconnectingNow = false;
   let lastBeatAt = openedAt; // moving is only ever true after playing(), which sets it
   let lastPosition = null;
+  let startPositionMs = null; // the first finite position a beat saw
+  let endPositionMs = null; // the latest one
   let waitingForViewer = false; // the browser refused to start the film: waiting for the viewer to press play
   let startingMs = 0; // time before the first frame, less the wait for the viewer and any sleep
   let stallCurrentMs = 0;
@@ -220,6 +222,8 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
       kbpsMedian: wholeOrNull(percentile(sorted, 50)),
       kbpsHigh: wholeOrNull(percentile(sorted, 90)),
       kbpsSamples: whole(samples.length),
+      startPositionMs,
+      endPositionMs,
       rungMs: rungs,
       minutes: minuteRows(),
       client: {
@@ -325,6 +329,11 @@ export function createHealth({ now, openedAt, editionId, client = {} }) {
       if (Number.isFinite(aheadS) && aheadS >= 0) {
         const entry = minuteEntry(minuteOf(t));
         if (entry) entry.ahead = aheadS;
+      }
+      if (Number.isFinite(positionMs)) {
+        // Whole ms; the server joins viewings by where this one picked up (a 400 for a negative figure).
+        endPositionMs = whole(positionMs);
+        if (startPositionMs === null) startPositionMs = endPositionMs;
       }
       if (!Number.isFinite(positionMs) || positionMs === lastPosition) return;
       lastPosition = positionMs;

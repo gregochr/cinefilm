@@ -41,7 +41,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const HEALTH_PARAMS = ['since', 'minWatchedMs', 'problems', 'page', 'size'];
 const DEFAULT_HEALTH_SIZE = 20;
-const CHART_SESSIONS = [
+const CHART_ROWS = [
   {
     playbackId: 'c1000000-0000-4000-8000-000000000001',
     filmId: 6,
@@ -100,6 +100,79 @@ const CHART_SESSIONS = [
   },
 ];
 
+const MAC_CHROME = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/130.0 Safari/537.36';
+/**
+ * The 12 Nov pair on the train: one viewing of The Rock whose player reloaded after 6 s, so it is two playbacks.
+ * Each has its own record; the chart shows them as one row with two parts.
+ */
+const ROCK_PARTS = [
+  {
+    playbackId: 'fb22ac5e-0000-4000-8000-000000000001',
+    filmId: 9,
+    filmTitle: 'The Rock',
+    startedAt: '2026-11-12T17:23:30.519Z',
+    endedAt: '2026-11-12T17:56:47.761Z',
+    watchedMs: 1_920_000,
+    stallCount: 4,
+    stallMs: 9000,
+    startupMs: 4800,
+    environment: 'train',
+    rungMs: { '480p': 1_000_000, '360p': 920_000 },
+    userAgent: MAC_CHROME,
+    touch: false,
+  },
+  {
+    playbackId: '323111c2-0000-4000-8000-000000000002',
+    filmId: 9,
+    filmTitle: 'The Rock',
+    startedAt: '2026-11-12T17:56:53.956Z',
+    endedAt: '2026-11-12T20:33:53.080Z',
+    watchedMs: 6_360_000,
+    stallCount: 155,
+    stallMs: 2_011_000,
+    startupMs: 6300,
+    environment: 'train',
+    rungMs: { '480p': 4_000_000, '360p': 2_360_000 },
+    userAgent: MAC_CHROME,
+    touch: false,
+  },
+];
+
+const partOf = (s) => ({
+  playbackId: s.playbackId,
+  startedAt: s.startedAt,
+  endedAt: s.endedAt,
+  watchedMs: s.watchedMs,
+  environment: s.environment,
+});
+
+/** A chart row from a viewing's playbacks, oldest first: the sums, the first part's other figures. */
+function joinedRow(playbacks) {
+  const [first] = playbacks;
+  const sum = (key) => playbacks.reduce((total, p) => total + p[key], 0);
+  const rungMs = {};
+  for (const p of playbacks) {
+    for (const [rung, ms] of Object.entries(p.rungMs)) rungMs[rung] = (rungMs[rung] ?? 0) + ms;
+  }
+  return {
+    ...first,
+    endedAt: playbacks.at(-1).endedAt,
+    watchedMs: sum('watchedMs'),
+    stallCount: sum('stallCount'),
+    stallMs: sum('stallMs'),
+    rungMs,
+    parts: playbacks.map(partOf),
+  };
+}
+
+const CHART_SESSIONS = [
+  ...CHART_ROWS.map((s) => {
+    const endedAt = new Date(Date.parse(s.startedAt) + s.watchedMs + 30_000).toISOString();
+    return joinedRow([{ ...s, endedAt }]);
+  }),
+  joinedRow(ROCK_PARTS),
+];
+
 /**
  * The per-minute figures of a fixture session, as the player writes them: seven figures
  * `[minute, median kbit/s, rung played, ms moved, ms stalled, seconds buffered ahead, rung being fetched]` (rung codes
@@ -122,7 +195,9 @@ function fixtureMinutes(chart, seven) {
 
 /** The whole record of one fixture session, as `GET /api/admin/playback-health/{id}` answers it. */
 function healthRecord(playbackId) {
-  const chart = CHART_SESSIONS.find((s) => s.playbackId === playbackId);
+  // A part's own record first: the first part of a joined viewing shares its id with the row.
+  const part = ROCK_PARTS.find((s) => s.playbackId === playbackId);
+  const chart = part ?? CHART_SESSIONS.find((s) => s.playbackId === playbackId);
   if (chart) {
     const elapsedMs = chart.watchedMs + 30_000;
     return {
@@ -131,7 +206,9 @@ function healthRecord(playbackId) {
       filmTitle: chart.filmTitle,
       editionId: 10 + chart.filmId,
       startedAt: chart.startedAt,
-      updatedAt: new Date(Date.parse(chart.startedAt) + elapsedMs).toISOString(),
+      updatedAt: part
+        ? part.endedAt
+        : new Date(Date.parse(chart.startedAt) + elapsedMs).toISOString(),
       report: {
         seq: 9,
         editionId: 10 + chart.filmId,
@@ -166,7 +243,7 @@ function healthRecord(playbackId) {
         kbpsSamples: 40,
         rungMs: chart.rungMs,
         // The first and third keep the five-figure rows an older player wrote.
-        minutes: fixtureMinutes(chart, CHART_SESSIONS.indexOf(chart) % 2 === 1),
+        minutes: fixtureMinutes(chart, part ? true : CHART_SESSIONS.indexOf(chart) % 2 === 1),
         client: { userAgent: chart.userAgent, screen: '1512x982', cores: 8, touch: chart.touch },
       },
     };

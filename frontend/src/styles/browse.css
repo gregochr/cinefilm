@@ -2084,6 +2084,11 @@
   font-size: 11px;
   color: var(--cf-text-disabled);
 }
+.pchart__gap {
+  margin: 0;
+  font-size: 12px;
+  color: var(--cf-text-disabled);
+}
 .pchart__line {
   margin: 0;
   color: var(--cf-text-2);

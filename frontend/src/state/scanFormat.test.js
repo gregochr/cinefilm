@@ -7,6 +7,7 @@ import {
   describeScanHeader,
   describeSubtitleSearch,
   formatDuration,
+  formatScanClock,
   formatScanDay,
   formatScanTime,
   groupingCounts,
@@ -24,6 +25,14 @@ describe('formatScanTime', () => {
 
   it('uses London time in summer, an hour ahead of UTC', () => {
     expect(formatScanTime('2026-07-01T23:30:00Z')).toBe('02 Jul 00:30');
+  });
+});
+
+describe('formatScanClock', () => {
+  it('reads the time of day in London, in 24 hours', () => {
+    expect(formatScanClock('2026-11-12T17:56:47Z')).toBe('17:56');
+    expect(formatScanClock('2026-07-01T23:30:00Z')).toBe('00:30');
+    expect(formatScanClock('2026-11-12T00:05:00Z')).toBe('00:05');
   });
 });
 

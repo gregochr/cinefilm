@@ -7,7 +7,7 @@ import { playbackChart as copy } from './adminCopy.js';
 import { environmentLabel, stallText } from './healthFormat.js';
 import { RUNG_CODES } from '../player/health.js';
 import { formatRuntime } from '../player/time.js';
-import { formatScanTime } from './scanFormat.js';
+import { formatScanClock, formatScanDay, formatScanTime } from './scanFormat.js';
 import { describeDevice } from './userAgent.js';
 
 const num = (value) => (Number.isFinite(value) ? value : 0);
@@ -204,12 +204,69 @@ export function chartSummary(sessions, { days, environment }) {
  */
 export function sessionHeading(session, operator) {
   const place = environmentLabel(session.environment);
+  const count = sessionParts(session).length;
   return [
     formatScanTime(session.startedAt),
     describeDevice(session.userAgent, session.touch),
     operator ? `${place} (${operator})` : place,
-    `${formatRuntime(num(session.watchedMs))} watched`,
+    `${formatRuntime(num(session.watchedMs))} watched${count > 1 ? ` in ${count} parts` : ''}`,
   ];
+}
+
+/**
+ * The parts of a viewing, oldest first: `[{ playbackId, startedAt, endedAt, watchedMs, environment }]`. A row from a
+ * server that does not send `parts` is one part made from the row itself; `endedAt` is null when it is not known.
+ */
+export function sessionParts(session) {
+  if (Array.isArray(session.parts) && session.parts.length > 0) return session.parts;
+  return [
+    {
+      playbackId: session.playbackId,
+      startedAt: session.startedAt,
+      endedAt: session.endedAt ?? null,
+      watchedMs: session.watchedMs,
+      environment: session.environment,
+    },
+  ];
+}
+
+/**
+ * "17:56–20:33" for a part, the end carrying its date when it falls on a later day ("23:40–12 Nov 01:10"); just the
+ * start ("17:56") when the end is not known.
+ */
+export function partTimes(part) {
+  const start = formatScanClock(part.startedAt);
+  if (!part.endedAt) return start;
+  const end = formatScanClock(part.endedAt);
+  const later = formatScanDay(part.endedAt) !== formatScanDay(part.startedAt);
+  return `${start}–${later ? `${formatScanDay(part.endedAt)} ` : ''}${end}`;
+}
+
+/**
+ * The place of a later part when it differs from the first part's, "Train (Icomera US, Inc.)", else null. The
+ * operators are compared only once both are known.
+ */
+export function differentPlace(part, operator, first) {
+  const sameEnvironment = environmentKey(part.environment) === environmentKey(first.environment);
+  const sameOperator = !operator || !first.operator || operator === first.operator;
+  if (sameEnvironment && sameOperator) return null;
+  const place = environmentLabel(part.environment);
+  return operator ? `${place} (${operator})` : place;
+}
+
+/** The longest gap between two parts that still reads "Picked up again": under a minute. */
+export const PICKED_UP_BELOW_MS = 60_000;
+
+/**
+ * The quiet line between two parts: "Picked up again after 6 s" under a minute, else "Paused 1h 20m". Null when
+ * either time is missing.
+ */
+export function partGap(previous, next) {
+  if (!previous.endedAt || !next.startedAt) return null;
+  const gap = Math.max(0, Date.parse(next.startedAt) - Date.parse(previous.endedAt));
+  if (!Number.isFinite(gap)) return null;
+  if (gap < PICKED_UP_BELOW_MS) return copy.pickedUp(Math.floor(gap / 1000));
+  return copy.paused(formatRuntime(gap));
 }
 
 // The per-minute strip, drawn in a 1000 x 124 box: stall dots on top, the speed line, then the quality band.

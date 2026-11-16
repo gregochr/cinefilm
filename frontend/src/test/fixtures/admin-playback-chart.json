@@ -12,7 +12,17 @@
       "environment": "home",
       "rungMs": { "1080p": 6600000 },
       "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
-      "touch": false
+      "touch": false,
+      "endedAt": "2026-11-01T21:50:30Z",
+      "parts": [
+        {
+          "playbackId": "c1000000-0000-4000-8000-000000000001",
+          "startedAt": "2026-11-01T20:00:00Z",
+          "endedAt": "2026-11-01T21:50:30Z",
+          "watchedMs": 6600000,
+          "environment": "home"
+        }
+      ]
     },
     {
       "playbackId": "c1000000-0000-4000-8000-000000000002",
@@ -26,7 +36,17 @@
       "environment": "away",
       "rungMs": { "480p": 1800000, "360p": 2520000 },
       "userAgent": "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X)",
-      "touch": true
+      "touch": true,
+      "endedAt": "2026-11-03T13:22:30Z",
+      "parts": [
+        {
+          "playbackId": "c1000000-0000-4000-8000-000000000002",
+          "startedAt": "2026-11-03T12:10:00Z",
+          "endedAt": "2026-11-03T13:22:30Z",
+          "watchedMs": 4320000,
+          "environment": "away"
+        }
+      ]
     },
     {
       "playbackId": "c1000000-0000-4000-8000-000000000003",
@@ -40,7 +60,17 @@
       "environment": "home",
       "rungMs": { "original": 3960000, "720p": 1320000 },
       "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)",
-      "touch": true
+      "touch": true,
+      "endedAt": "2026-11-07T19:58:30Z",
+      "parts": [
+        {
+          "playbackId": "c1000000-0000-4000-8000-000000000003",
+          "startedAt": "2026-11-07T18:30:00Z",
+          "endedAt": "2026-11-07T19:58:30Z",
+          "watchedMs": 5280000,
+          "environment": "home"
+        }
+      ]
     },
     {
       "playbackId": "c1000000-0000-4000-8000-000000000004",
@@ -53,7 +83,17 @@
       "startupMs": 2380,
       "environment": "train",
       "rungMs": { "480p": 1468800, "360p": 2851200 },
-      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+      "endedAt": "2026-11-10T20:55:35Z",
+      "parts": [
+        {
+          "playbackId": "c1000000-0000-4000-8000-000000000004",
+          "startedAt": "2026-11-10T19:43:05Z",
+          "endedAt": "2026-11-10T20:55:35Z",
+          "watchedMs": 4320000,
+          "environment": "train"
+        }
+      ]
     }
   ]
 }

@@ -79,6 +79,8 @@ describe('the report', () => {
       kbpsMedian: null,
       kbpsHigh: null,
       kbpsSamples: 0,
+      startPositionMs: null,
+      endPositionMs: null,
       rungMs: {},
       minutes: [],
       client: { userAgent: 'UA', screen: '1512x982', cores: 8, touch: false },
@@ -425,6 +427,28 @@ describe('moving', () => {
     m.h.beat(Number.NaN);
     m.at(3000);
     expect(m.report().watchedMs).toBe(1500);
+  });
+
+  it('keeps the first finite position a beat saw as the start and the latest as the end', () => {
+    const m = started(0);
+    expect(m.report()).toMatchObject({ startPositionMs: null, endPositionMs: null });
+    m.at(1000);
+    m.h.beat(Number.NaN);
+    expect(m.report()).toMatchObject({ startPositionMs: null, endPositionMs: null });
+    m.at(2000);
+    m.h.beat(61234.6);
+    m.at(3000);
+    m.h.beat(62300);
+    m.at(4000);
+    m.h.beat(62300);
+    expect(m.report()).toMatchObject({ startPositionMs: 61235, endPositionMs: 62300 });
+  });
+
+  it('never reports a negative position', () => {
+    const m = started(0);
+    m.at(1000);
+    m.h.beat(-5);
+    expect(m.report()).toMatchObject({ startPositionMs: 0, endPositionMs: 0 });
   });
 
   it('stops counting at pause and at ended', () => {

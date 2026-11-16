@@ -1,57 +1,45 @@
+import { Fragment, useCallback, useState } from 'react';
 import { playbackChart as copy } from '../state/adminCopy.js';
-import { describePlayback, operatorName } from '../state/healthFormat.js';
-import { sessionHeading } from '../state/playbackChart.js';
-import { usePlaybackRecord } from '../state/usePlaybackRecord.js';
-import { Button } from './Button.jsx';
-import PlaybackMinuteStrip from './PlaybackMinuteStrip.jsx';
-import { SkeletonBlock } from './Skeleton.jsx';
+import { operatorName } from '../state/healthFormat.js';
+import { partGap, sessionHeading, sessionParts } from '../state/playbackChart.js';
+import SelectedPart from './SelectedPart.jsx';
 
 /**
- * The session picked in the chart: its film and facts at once (they are in the chart's rows), then the per-minute
- * strip and the figures line from the full record, which load on their own with their own skeleton and error.
+ * The viewing picked in the chart: its film and facts at once (they are in the chart's rows), then each part in
+ * order, with the quiet line between two parts. Every part reads its own record.
  */
 export default function SelectedSession({ session }) {
-  const { record, error, loading, reload } = usePlaybackRecord(session.playbackId);
-  const heading = sessionHeading(session, operatorName(record?.report.operator));
-  let detail = null;
-  if (loading) {
-    detail = (
-      <div role="status" aria-label={copy.loadingStripLabel}>
-        <SkeletonBlock className="pchart__strip-skeleton" />
-      </div>
-    );
-  } else if (error?.status === 404) {
-    // The record is gone (the table keeps the last 2,000): trying again cannot bring it back.
-    detail = <p className="admin__text">{copy.noMinutes}</p>;
-  } else if (error) {
-    detail = (
-      <div className="admin__todo-error" role="alert">
-        <p className="admin__todo-error-text">{copy.stripError}</p>
-        <Button onClick={reload}>{copy.retry}</Button>
-      </div>
-    );
-  } else {
-    detail = (
-      <>
-        <PlaybackMinuteStrip minutes={record.report.minutes} film={session.filmTitle} />
-        {/* The record's first line (when, how long, on what) is the heading above. */}
-        {describePlayback(record)
-          .slice(1)
-          .map((line) => (
-            <p key={line} className="admin__mono pchart__line">
-              {line}
-            </p>
-          ))}
-      </>
-    );
-  }
+  const parts = sessionParts(session);
+  const id = session.playbackId;
+  // The operator is the first part's record's; it is only used while it belongs to the viewing on show.
+  const [heard, setHeard] = useState({ id: null, operator: null });
+  const operator = heard.id === id ? heard.operator : null;
+  const onFirstRecord = useCallback(
+    (record) => setHeard({ id, operator: operatorName(record.report.operator) }),
+    [id],
+  );
+  const heading = sessionHeading(session, operator);
   return (
     <section className="pchart__selected" aria-label={copy.selectedLabel}>
       <p className="pchart__heading">
         <strong className="pchart__film">{session.filmTitle}</strong>
         {heading.map((part) => ` · ${part}`).join('')}
       </p>
-      {detail}
+      {parts.map((part, at) => {
+        const gap = at > 0 ? partGap(parts[at - 1], part) : null;
+        return (
+          <Fragment key={part.playbackId}>
+            {gap && <p className="admin__text pchart__gap">{gap}</p>}
+            <SelectedPart
+              part={part}
+              film={session.filmTitle}
+              onRecord={at === 0 ? onFirstRecord : undefined}
+              named={parts.length > 1}
+              first={at === 0 ? null : { environment: parts[0].environment, operator }}
+            />
+          </Fragment>
+        );
+      })}
     </section>
   );
 }
