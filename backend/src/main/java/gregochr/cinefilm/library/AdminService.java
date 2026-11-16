@@ -1,6 +1,8 @@
 package gregochr.cinefilm.library;
 
 import gregochr.cinefilm.film.Edition;
+import gregochr.cinefilm.film.EditionRepository;
+import gregochr.cinefilm.film.EditionRepository.EditionOwner;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.GroupingChangeRepository;
@@ -27,7 +29,9 @@ import gregochr.cinefilm.ratings.RatingsRefresher;
 import gregochr.cinefilm.tmdb.MatchOutcome.Candidate;
 import gregochr.cinefilm.todo.AdminTodoRules;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -58,6 +62,7 @@ public class AdminService {
     private final OpenSubtitlesRefresher subtitleSearch;
     private final SidecarCheckRefresher subtitleChecks;
     private final GroupingChangeRepository changes;
+    private final EditionRepository editions;
 
     /**
      * Creates the service over the scan service, the repositories, the library root and the ratings and subtitle
@@ -66,7 +71,8 @@ public class AdminService {
     public AdminService(ScanService scans, ScanRunRepository runs, FilmRepository films,
                         MediaFileRepository files, LibraryRoot root, RatingsRefresher ratings,
                         OpenSubtitlesRefresher subtitleSearch, SidecarCheckRefresher subtitleChecks,
-                        GroupingChangeRepository changes) {
+                        GroupingChangeRepository changes, EditionRepository editions) {
+        this.editions = editions;
         this.ratings = ratings;
         this.subtitleSearch = subtitleSearch;
         this.subtitleChecks = subtitleChecks;
@@ -82,10 +88,7 @@ public class AdminService {
     @Transactional(readOnly = true)
     public ScanStatusDto status() {
         ScanService.Progress progress = scans.progress();
-        LastScanDto last = runs.findFirstByFinishedAtNotNullOrderByIdDesc()
-            .map(r -> new LastScanDto(r.getStartedAt(), r.getFinishedAt(), r.getTrigger(), r.getFilesSeen(),
-                r.getNewFiles(), r.getMissingFiles(), r.getError()))
-            .orElse(null);
+        LastScanDto last = lastScan();
         List<Film> browsableFilms = films.findAll().stream().filter(Film::browsable).toList();
         Set<Long> credited = new HashSet<>(films.findIdsWithCredits());
         long withCredits = browsableFilms.stream().filter(f -> credited.contains(f.getId())).count();
@@ -99,6 +102,63 @@ public class AdminService {
             last, counts, films.findLatestRatingsFetchedAt(), ratings.isRunning(), ratings.enabled(),
             films.findLatestOpenSubtitlesSearchedAt(), subtitleSearch.isRunning(), subtitleSearch.enabled(),
             subtitleChecks.isRunning(), subtitleChecks.lastFinishedAt());
+    }
+
+    private LastScanDto lastScan() {
+        return runs.findFirstByFinishedAtNotNullOrderByIdDesc()
+            .map(r -> new LastScanDto(r.getStartedAt(), r.getFinishedAt(), r.getTrigger(), r.getFilesSeen(),
+                r.getNewFiles(), r.getMissingFiles(), r.getError()))
+            .orElse(null);
+    }
+
+    /**
+     * The figures of Admin's summary that come from the library, read cheaply (it is polled every 30 seconds). Each
+     * answers what {@link #attention()} and {@link #status()} would give: the unmatched films, the "multiple-files" and
+     * "parts-mismatch" items, the browsable films and the last finished scan. It loads no Film entity or large text
+     * column: two counts, the last finished scan, a projection of each edition's film id and editions-confirmed flag,
+     * and one read of the editions with their files; the same rules decide.
+     *
+     * @param needsMatch the films waiting for a match ({@code needs-match} items)
+     * @param severalFiles the {@code multiple-files} and {@code parts-mismatch} items together
+     * @param browsableFilms the films that show in browse ({@code counts.films})
+     * @param lastScan the last finished scan, or null
+     */
+    public record SummaryFigures(long needsMatch, long severalFiles, long browsableFilms, LastScanDto lastScan) {
+    }
+
+    /** The library figures of Admin's summary, as {@link SummaryFigures} says. */
+    @Transactional(readOnly = true)
+    public SummaryFigures summaryFigures() {
+        Map<Long, EditionOwner> owners = new HashMap<>();
+        editions.findEditionOwners().forEach(owner -> owners.put(owner.editionId(), owner));
+        Map<Long, List<Edition>> byFilm = new LinkedHashMap<>();
+        Set<Long> confirmed = new HashSet<>();
+        for (Edition edition : editions.findAllWithFilesLeavingFilmLazy()) {
+            EditionOwner owner = owners.get(edition.getId());
+            if (owner != null) {
+                byFilm.computeIfAbsent(owner.filmId(), id -> new ArrayList<>()).add(edition);
+                if (owner.editionsConfirmed()) {
+                    confirmed.add(owner.filmId());
+                }
+            }
+        }
+        long hidden = 0;
+        long severalFiles = 0;
+        for (Map.Entry<Long, List<Edition>> film : byFilm.entrySet()) {
+            if (!Film.browsable(film.getValue())) {
+                hidden++;
+            }
+            if (!confirmed.contains(film.getKey()) && ambiguity(film.getValue()) != null) {
+                severalFiles++;
+            }
+            for (Edition edition : film.getValue()) {
+                if (partsMismatch(presentParts(edition)) != null) {
+                    severalFiles++;
+                }
+            }
+        }
+        return new SummaryFigures(films.countByMatchStatus(MatchStatus.NEEDS_MATCH), severalFiles,
+            films.count() - hidden, lastScan());
     }
 
     /**
@@ -122,7 +182,7 @@ public class AdminService {
             "ffprobe could not read this file; it is tried again at the next scan");
         List<Film> all = films.findAll();
         for (Film film : all) {
-            String why = film.isEditionsConfirmed() ? null : ambiguity(film);
+            String why = film.isEditionsConfirmed() ? null : ambiguity(film.getEditions());
             if (why != null) {
                 items.add(item("multiple-files", film, why, fileNames(film), List.of()));
             }
@@ -151,13 +211,9 @@ public class AdminService {
 
     /** Parts of one edition that cannot be joined without re-encoding play by transcoding: say so. */
     private static void addPartsMismatch(List<AttentionItem> items, Film film, Edition edition) {
-        List<MediaFile> parts = edition.originalParts().stream()
-            .filter(p -> p.getPresence() == Presence.PRESENT).toList();
-        if (parts.size() < 2) {
-            return;
-        }
-        PartsMatch.Result result = PartsMatch.check(parts);
-        if (result.matches()) {
+        List<MediaFile> parts = presentParts(edition);
+        PartsMatch.Result result = partsMismatch(parts);
+        if (result == null) {
             return;
         }
         int more = result.differences().size() - 1;
@@ -166,14 +222,27 @@ public class AdminService {
             List.of()));
     }
 
+    private static List<MediaFile> presentParts(Edition edition) {
+        return edition.originalParts().stream().filter(p -> p.getPresence() == Presence.PRESENT).toList();
+    }
+
+    /** What differs between an edition's present parts, or null when there are fewer than two or they match. */
+    private static PartsMatch.Result partsMismatch(List<MediaFile> parts) {
+        if (parts.size() < 2) {
+            return null;
+        }
+        PartsMatch.Result result = PartsMatch.check(parts);
+        return result.matches() ? null : result;
+    }
+
     /**
      * Why a film the owner has not settled has files that cannot be told apart, or null when it is fine. Only genuine
      * ambiguity counts: a film with differently tagged cuts (Gladiator) or properly numbered parts (Two Towers) is not
      * listed. Several reasons are joined into one line.
      */
-    private static String ambiguity(Film film) {
+    private static String ambiguity(Collection<Edition> filmEditions) {
         List<MediaFile> originals = new ArrayList<>();
-        for (Edition edition : film.getEditions()) {
+        for (Edition edition : filmEditions) {
             edition.originalParts().stream().filter(f -> f.getPresence() == Presence.PRESENT)
                 .forEach(originals::add);
         }
@@ -189,7 +258,7 @@ public class AdminService {
             reasons.add("The edition tags in a file name and its folder disagree");
         }
         reasons.addAll(partProblems(parsed.values()));
-        String untagged = untaggedCopies(film, parsed);
+        String untagged = untaggedCopies(filmEditions, parsed);
         if (untagged != null) {
             reasons.add(untagged);
         }
@@ -240,10 +309,10 @@ public class AdminService {
      * Two or more editions with no edition tag, no plain edition word and no part number: nothing says which is which.
      * States the runtime difference when it is over 15%.
      */
-    private static String untaggedCopies(Film film, Map<Long, ParsedName> parsed) {
+    private static String untaggedCopies(Collection<Edition> filmEditions, Map<Long, ParsedName> parsed) {
         List<Long> runtimes = new ArrayList<>();
         int count = 0;
-        for (Edition edition : film.getEditions()) {
+        for (Edition edition : filmEditions) {
             List<ParsedName> names = edition.originalParts().stream().map(f -> parsed.get(f.getId()))
                 .filter(Objects::nonNull).toList();
             if (!names.isEmpty() && names.stream().allMatch(p -> p.editionTag() == null && p.plainEdition() == null

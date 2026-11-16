@@ -157,7 +157,7 @@ class SessionServiceStopTest {
     @Test
     void aMalformedSessionIdIsStill404NotAskedAboutAtAll() {
         assertThatThrownBy(() -> service.master("x")).isInstanceOf(NotFoundException.class);
-        assertThatThrownBy(() -> service.stopFromAdmin("x")).isInstanceOf(NotFoundException.class);
+        assertThatThrownBy(() -> service.stopFromAdmin("x", null)).isInstanceOf(NotFoundException.class);
 
         verifyNoInteractions(stopped, manager);
     }
@@ -166,7 +166,7 @@ class SessionServiceStopTest {
     void stopFromAdminRemembersTheSessionAndItsViewingThenEndsTheSession() {
         when(manager.playbackId(ID)).thenReturn(Optional.of(PLAYBACK));
 
-        service.stopFromAdmin(ID);
+        service.stopFromAdmin(ID, null);
 
         InOrder order = inOrder(stopped, manager);
         order.verify(stopped).record(ID, PLAYBACK);
@@ -221,7 +221,7 @@ class SessionServiceStopTest {
     void stopFromAdminOfASessionThatNamedNoViewingRemembersOnlyTheSession() {
         when(manager.playbackId(ID)).thenReturn(Optional.empty());
 
-        service.stopFromAdmin(ID);
+        service.stopFromAdmin(ID, null);
 
         verify(stopped).record(ID, null);
         verify(manager).end(ID);

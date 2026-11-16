@@ -92,7 +92,7 @@ class IndexDurationAgreementTest {
             List.of(), null, null, null, 1, 1));
         SessionService sessions = new SessionService(new SessionSources(editions, new LibraryRoot(library.toString())),
             indexes, transcoder, manager, new StoppedPlaybacks(CLOCK));
-        List<String> ladder = sessions.create(10L, new SessionDtos.CreateRequest(null, null, "auto", null))
+        List<String> ladder = sessions.create(10L, TestSessions.createRequest(null, null, "auto", null))
             .renditions().stream().map(SessionDtos.RenditionDto::id).toList();
 
         assertThat(ladder).containsExactly("original", "720p", "480p", "360p", "240p");

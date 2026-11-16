@@ -136,14 +136,14 @@ public class PlexImportService {
      * Starts an import in the background.
      *
      * @throws NotFoundException when Plex is not configured
-     * @throws ConflictException when a scan or import is running, or no scan has completed yet
+     * @throws ConflictException when the library lock is held (the text names the holder), or no scan has completed yet
      */
     public void start() {
         if (!plex.configured()) {
             throw new NotFoundException("Plex is not configured");
         }
         if (!lock.tryAcquire(LibraryLock.IMPORT)) {
-            throw new ConflictException("A scan or import is already running");
+            throw new ConflictException(lock.busyText());
         }
         try {
             if (!scans.existsByFinishedAtNotNullAndErrorIsNull()) {

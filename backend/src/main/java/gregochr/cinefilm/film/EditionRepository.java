@@ -62,4 +62,27 @@ public interface EditionRepository extends JpaRepository<Edition, Long> {
 
     /** How many editions a film has. */
     long countByFilmId(Long filmId);
+
+    /**
+     * Every edition with its files (an edition with no file row too) and nothing else loaded: the film stays a lazy
+     * reference that is never touched, so no film row (and none of its large text columns) is read. Pair it with
+     * {@link #findEditionOwners()} for the film's id. For the Admin summary's polling.
+     */
+    @Query("select e from Edition e left join fetch e.mediaFiles")
+    List<Edition> findAllWithFilesLeavingFilmLazy();
+
+    /**
+     * An edition and the film it belongs to.
+     *
+     * @param editionId the edition
+     * @param filmId its film
+     * @param editionsConfirmed true when the owner has settled the film's editions
+     */
+    record EditionOwner(Long editionId, Long filmId, boolean editionsConfirmed) {
+    }
+
+    /** Every edition's film id and that film's editions-confirmed flag, as columns (no entity is loaded). */
+    @Query("select new gregochr.cinefilm.film.EditionRepository$EditionOwner(e.id, e.film.id, "
+        + "e.film.editionsConfirmed) from Edition e")
+    List<EditionOwner> findEditionOwners();
 }

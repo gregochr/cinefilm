@@ -52,7 +52,7 @@ class TranscodingAdminControllerTest {
         when(manager.sessions()).thenReturn(List.of(
             new SessionRow(ID, "Heat", 11, "720p", 3.4, 12, Instant.parse("2026-11-09T19:02:11Z"), false,
                 "c1000000-0000-4000-8000-000000000001"),
-            new SessionRow("6b0f1c1e-6a52-4d5e-9a4c-0a7d3c1f2b11", "Alien", 12, "original", null, 0,
+            TestSessions.sessionRow("6b0f1c1e-6a52-4d5e-9a4c-0a7d3c1f2b11", "Alien", 12, "original", null, 0,
                 Instant.parse("2026-11-09T19:05:00Z"), true)));
 
         mvc.perform(get("/api/admin/transcoding").with(user("owner")))

@@ -10,10 +10,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import gregochr.cinefilm.TestData;
+import gregochr.cinefilm.film.Edition;
+import gregochr.cinefilm.film.EditionRepository;
+import gregochr.cinefilm.film.EditionRepository.EditionOwner;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmView;
 import gregochr.cinefilm.film.LibraryLoader;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Persistence;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +48,12 @@ class LibraryQueriesIntegrationTest extends IntegrationTestBase {
     @Autowired
     private LibraryLoader loader;
 
+    @Autowired
+    private EditionRepository editions;
+
+    @Autowired
+    private EntityManager em;
+
     private ResultActions get(String url, String... params) throws Exception {
         MockHttpServletRequestBuilder request = MockMvcRequestBuilders.get(url)
             .with(user("owner").roles("OWNER")).header("X-CineFilm", "1");
@@ -53,6 +65,27 @@ class LibraryQueriesIntegrationTest extends IntegrationTestBase {
 
     private Film film(String title) {
         return films.findAll().stream().filter(f -> f.getTitle().equals(title)).findFirst().orElseThrow();
+    }
+
+    @Test
+    @Transactional
+    void theAdminSummaryEditionReadsKeepAnEditionWithNoFilesAndLeaveItsFilmUnloaded() {
+        Film bare = TestData.film(null, "Edition without files", 2003, TestData.NOW);
+        TestData.edition(bare, null, "Original", 100 * TestData.MIN, null);
+        Film saved = films.saveAndFlush(bare);
+        long total = editions.count();
+        em.clear();
+
+        List<Edition> loaded = editions.findAllWithFilesLeavingFilmLazy();
+        List<EditionOwner> owners = editions.findEditionOwners();
+
+        assertThat(loaded).hasSize((int) total);
+        assertThat(loaded).anySatisfy(e -> assertThat(e.getMediaFiles()).isEmpty());
+        assertThat(loaded).allSatisfy(e -> assertThat(Persistence.getPersistenceUtil().isLoaded(e, "film")).isFalse());
+        assertThat(owners).hasSize((int) total);
+        Edition empty = loaded.stream().filter(e -> e.getMediaFiles().isEmpty()).findFirst().orElseThrow();
+        assertThat(owners).filteredOn(o -> o.editionId().equals(empty.getId())).singleElement()
+            .satisfies(o -> assertThat(o.filmId()).isEqualTo(saved.getId()));
     }
 
     @Test

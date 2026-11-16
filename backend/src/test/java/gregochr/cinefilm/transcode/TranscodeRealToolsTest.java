@@ -133,7 +133,7 @@ class TranscodeRealToolsTest {
     }
 
     private SessionView session(long edition, int startSegment) {
-        SessionSpec spec = new SessionSpec(edition, "Clip", source, 0, index.cuts(), index.fps(), 640, 480, rungs,
+        SessionSpec spec = TestSessions.spec(edition, "Clip", source, 0, index.cuts(), index.fps(), 640, 480, rungs,
             rungs.get(0), null, startSegment, true);
         return manager.create(spec);
     }
