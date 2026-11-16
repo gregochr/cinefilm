@@ -1169,13 +1169,13 @@ proof. Built in 5d-1:
   next candidate.
 - **The measurement.** `SidecarCheckRefresher` calls `FullFitProbe` before its checks (and so also starts on
   `SubtitleDownloadsFinished`). It runs first because, measured 2026-11-15/16, the forced checks and the downloads of
-  missing subtitles used the whole day's budget, so the probe that ran last never got a download. For each live FULL download not yet measured by this process it takes a second FULL
-  reference (a stored one, else the first other candidate for the edition's cut, fetched through `ReferenceFetcher` with
-  the comparison ceiling `DownloadShares.forChecks`; at most one fetch per download per process), fits `TimingFit` both
-  ways and writes one INFO line: both verdicts, offsets and matched shares, each file's cue count and last-cue time, the
-  edition runtime, and `credits_detection`'s credits start when FOUND. **Nothing is stored and nothing acts on it**; the
-  second reference the fetcher keeps is a normal stored reference. A download with no second file is noted once per
-  process.
+  missing subtitles used the whole day's budget, so the probe that ran last never got a download. For each live FULL
+  download not yet measured by this process it takes a second FULL reference (a stored one, else the first other
+  candidate for the edition's cut, fetched through `ReferenceFetcher` with the comparison ceiling
+  `DownloadShares.forChecks`; at most one fetch per download per process), fits `TimingFit` both ways and writes one INFO
+  line: both verdicts, offsets and matched shares, each file's cue count and last-cue time, the edition runtime, and
+  `credits_detection`'s credits start when FOUND. **Nothing is stored and nothing acts on it**; the second reference the
+  fetcher keeps is a normal stored reference. A download with no second file is noted once per process.
 
 **5d-2 (next)** reads those lines for the first ten or so films, fixes the thresholds (both fits ALIGNED within ±1 s,
 the cut check against runtime and credits), then builds the acting part: promotion to proven, and a rejection that tries

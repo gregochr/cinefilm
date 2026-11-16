@@ -47,8 +47,9 @@ import org.springframework.stereotype.Service;
  * download with its fit against a second OpenSubtitles full file, both ways. It runs before the checks, so the few
  * full downloads waiting for their one measurement are not starved by the forced checks' backlog. It stores nothing
  * and acts on nothing, and its fetches go through the same {@link ReferenceFetcher} lock and the comparison ceiling.
- * It stays bounded: at most one fetch per download, and stored references are reused at no cost. A download that was
- * added starts the run through {@link SubtitleDownloadsFinished}.
+ * It stays bounded: at most one fetch per download per process (a charged transient failure is retried), and stored
+ * references are reused at no cost. A download that was added starts the run through
+ * {@link SubtitleDownloadsFinished}.
  */
 @Service
 public class SidecarCheckRefresher {
