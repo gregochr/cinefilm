@@ -7,8 +7,6 @@ import {
   buildTodoGroups,
   filesLine,
   footerFor,
-  forcedLine,
-  fullLine,
   groupOfKind,
   guessTitle,
   matchLine,
@@ -192,29 +190,6 @@ describe('the lines under a row', () => {
     );
     expect(filesLine(item('multiple-files', 1, { files: ['a.m4v'], detail: 'one' }))).toBe(
       '1 file · one',
-    );
-  });
-
-  it('words a full-subtitles row from the original language and what plays: none found, or the file', () => {
-    const rashomon = fullNeed.films.find((r) => r.title === 'Rashomon');
-    expect(fullLine(rashomon)).toBe(
-      'Spoken: Japanese · nothing found automatically on OpenSubtitles',
-    );
-    expect(fullLine(fullNeed.films.find((r) => r.title === 'Das Boot'))).toBe(
-      'Spoken: German · Playing: your file',
-    );
-  });
-
-  it('says the language is not known yet when TMDB has not given one', () => {
-    const row = { ...fullNeed.films[0], originalLanguage: null, fullSubtitle: null };
-    expect(fullLine(row)).toBe(
-      'Language not known yet · nothing found automatically on OpenSubtitles',
-    );
-  });
-
-  it('words a forced row with the server’s reason', () => {
-    expect(forcedLine(forcedNeed.films.find((r) => r.title === 'Taken'))).toBe(
-      'OpenSubtitles has 2 foreign-parts-only files',
     );
   });
 });

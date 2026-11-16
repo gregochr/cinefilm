@@ -4,6 +4,7 @@ import PlaybackLogPanel from '../../components/PlaybackLogPanel.jsx';
 import PlayingNowPanel from '../../components/PlayingNowPanel.jsx';
 import RememberedNetworksPanel from '../../components/RememberedNetworksPanel.jsx';
 import SectionTitle from './SectionTitle.jsx';
+import { useDocumentVisible } from '../../components/useDocumentVisible.js';
 import { useTranscoding } from '../../state/useTranscoding.js';
 
 /**
@@ -12,7 +13,7 @@ import { useTranscoding } from '../../state/useTranscoding.js';
  * (which matches the sessions to a stream by edition, to offer Stop) and Conversion.
  */
 export default function AdminPlayback() {
-  const transcoding = useTranscoding();
+  const transcoding = useTranscoding(useDocumentVisible());
   return (
     <>
       <SectionTitle>Playback</SectionTitle>

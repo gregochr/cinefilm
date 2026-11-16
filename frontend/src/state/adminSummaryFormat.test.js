@@ -59,9 +59,21 @@ describe('railCounts', () => {
   });
 
   it('leaves out a count of 0, and shows live only from 1', () => {
-    expect(railCounts(summary({ todo: todo(), subtitlesUnresolved: 0, live: 0 }))).toEqual({});
-    expect(railCounts(summary({ live: 1 })).playback.badge).toBe('1 live');
-    expect(railCounts(summary({ live: 3 })).playback.label).toBe('Playback, 3 live');
+    expect(
+      railCounts(summary({ todo: todo(), subtitlesUnresolved: 0, live: 0, playingNow: [] })),
+    ).toEqual({});
+    expect(railCounts(summary({ playingNow: [stream()] })).playback.badge).toBe('1 live');
+    const three = [stream(), stream(), stream()];
+    expect(railCounts(summary({ playingNow: three })).playback.label).toBe('Playback, 3 live');
+  });
+
+  it('counts a direct-play entry even with no HLS session (live: 0)', () => {
+    expect(railCounts(summary({ live: 0, playingNow: [stream()] })).playback.badge).toBe('1 live');
+  });
+
+  it('shows no pill for an HLS session with nothing in Playing now', () => {
+    expect(railCounts(summary({ live: 1, playingNow: [] })).playback).toBeUndefined();
+    expect(railCounts(summary({ live: 1, playingNow: undefined })).playback).toBeUndefined();
   });
 
   it('shows nothing without a summary', () => {

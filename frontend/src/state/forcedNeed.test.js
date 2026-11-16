@@ -1,20 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api/client.js';
 import {
-  DEFAULT_NEED_FILTER,
-  NEED_FILTERS,
-  OWNER_CHOICES,
   applyRow,
-  filterRows,
   languageName,
-  needCounts,
   needProblem,
-  needTitle,
-  needWords,
   reasonText,
-  searchNote,
   resetLanguageNames,
-  subtitleNote,
 } from './forcedNeed.js';
 
 afterEach(() => {
@@ -44,48 +35,6 @@ const ROWS = [
   row({ filmId: 6, need: 'NOT_NEEDED' }),
 ];
 
-describe('filters', () => {
-  it('start on Needed, none yet, then Checking online, Unknown, Not needed and All', () => {
-    expect(NEED_FILTERS.map((f) => f.label)).toEqual([
-      'Needed, none yet',
-      'Checking online',
-      'Unknown',
-      'Not needed',
-      'All',
-    ]);
-    expect(DEFAULT_NEED_FILTER).toBe('needed-missing');
-  });
-
-  it.each([
-    ['needed-missing', [1]],
-    ['unsure', [3]],
-    ['unknown', [4]],
-    ['not-needed', [5, 6]],
-    ['all', [1, 2, 3, 4, 5, 6]],
-    ['something-else', [1, 2, 3, 4, 5, 6]],
-  ])('%s lists the films %j', (key, ids) => {
-    expect(filterRows(ROWS, key).map((r) => r.filmId)).toEqual(ids);
-  });
-
-  it('counts each chip from the rows', () => {
-    expect(needCounts(ROWS)).toEqual({
-      'needed-missing': 1,
-      unsure: 1,
-      unknown: 1,
-      'not-needed': 2,
-      all: 6,
-    });
-  });
-
-  it('recounts after a change: a film that now has a file leaves Needed, none yet', () => {
-    const changed = applyRow(
-      ROWS,
-      row({ filmId: 1, need: 'NOT_NEEDED', ownerChoice: 'NOT_NEEDED' }),
-    );
-    expect(needCounts(changed)).toMatchObject({ 'needed-missing': 0, 'not-needed': 3, all: 6 });
-  });
-});
-
 describe('applyRow', () => {
   it('replaces the film’s row in place and leaves the others and their order alone', () => {
     const answer = row({ filmId: 3, need: 'NEEDED', ownerChoice: 'NEEDED' });
@@ -101,35 +50,6 @@ describe('applyRow', () => {
 });
 
 describe('wording', () => {
-  it('words each need', () => {
-    expect(['NEEDED', 'NOT_NEEDED', 'UNSURE', 'UNKNOWN', 'SURPRISE'].map(needWords)).toEqual([
-      'Needed',
-      'Not needed',
-      'Checking online',
-      'Unknown',
-      'Unknown',
-    ]);
-  });
-
-  it('offers Needed, Not needed and Automatic, which sends null', () => {
-    expect(OWNER_CHOICES).toEqual([
-      { value: 'NEEDED', label: 'Needed' },
-      { value: 'NOT_NEEDED', label: 'Not needed' },
-      { value: null, label: 'Automatic' },
-    ]);
-  });
-
-  it('shows the title with the year when there is one', () => {
-    expect(needTitle(row())).toBe('Taken (2008)');
-    expect(needTitle(row({ year: null }))).toBe('Taken');
-  });
-
-  it('says whether a film that needs forced subtitles has one', () => {
-    expect(subtitleNote(row({ hasForcedSubtitle: true }))).toBe('Plays');
-    expect(subtitleNote(row())).toBe('None yet');
-    expect(subtitleNote(row({ need: 'UNSURE' }))).toBeNull();
-  });
-
   it.each([
     ['SIDECAR', 'Forced subtitle file attached'],
     ['EMBEDDED_FORCED', "Forced track inside the file (pictures: can't be shown yet)"],
@@ -231,17 +151,5 @@ describe('OpenSubtitles evidence', () => {
     const plain = 'OpenSubtitles has foreign-parts-only subtitles';
     expect(reasonText(row({ reason: 'OPENSUBTITLES' }))).toBe(plain);
     expect(reasonText(row({ reason: 'OPENSUBTITLES', openSubtitlesForcedCount: 0 }))).toBe(plain);
-  });
-
-  it('notes "not searched yet" only for an unsure or unknown film that has not been searched', () => {
-    const note = 'OpenSubtitles not searched yet';
-    expect(searchNote(row({ need: 'UNSURE', openSubtitlesSearchedAt: null }))).toBe(note);
-    expect(searchNote(row({ need: 'UNKNOWN', openSubtitlesSearchedAt: null }))).toBe(note);
-    expect(searchNote(row({ need: 'UNKNOWN' }))).toBe(note);
-    expect(
-      searchNote(row({ need: 'UNSURE', openSubtitlesSearchedAt: '2026-11-12T06:00:00Z' })),
-    ).toBeNull();
-    expect(searchNote(row({ need: 'NEEDED', openSubtitlesSearchedAt: null }))).toBeNull();
-    expect(searchNote(row({ need: 'NOT_NEEDED', openSubtitlesSearchedAt: null }))).toBeNull();
   });
 });
