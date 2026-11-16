@@ -14,11 +14,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 
-/** The Admin summary's playback queries on PostgreSQL, where timestamps compare as the production database does. */
+/** The Admin summary's "playing now" query on PostgreSQL, where timestamps compare as the production database does. */
 class PlaybackHealthSummaryIntegrationTest extends IntegrationTestBase {
 
-    private static final long MIN_WATCHED = 180_000;
-    private static final Instant THIRTY_DAYS_AGO = NOW.minus(Duration.ofDays(30));
     private static final Instant TWO_MINUTES_AGO = NOW.minus(Duration.ofMinutes(2));
 
     @Autowired
@@ -44,19 +42,6 @@ class PlaybackHealthSummaryIntegrationTest extends IntegrationTestBase {
         row.setSummary("{}");
         row.setFigures(new HealthFigures(watchedMs, problem ? 1 : 0, 0, 1_000L, problem, "home"));
         return health.saveAndFlush(row);
-    }
-
-    @Test
-    void theCountsKeepTheThirtyDayAndThreeMinuteLinesAndSplitOutTheSmoothOnes() {
-        row(THIRTY_DAYS_AGO, NOW, 180_000, false);
-        row(THIRTY_DAYS_AGO.minusMillis(1), NOW, 200_000, false);
-        row(THIRTY_DAYS_AGO.plusMillis(1), NOW, 200_000, false);
-        row(NOW.minusSeconds(100), NOW, 179_999, false);
-        row(NOW.minusSeconds(100), NOW, 180_001, false);
-        row(NOW.minusSeconds(100), NOW, 200_000, true);
-
-        assertThat(health.countFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isEqualTo(4);
-        assertThat(health.countSmoothFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isEqualTo(3);
     }
 
     @Test

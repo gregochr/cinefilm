@@ -16,6 +16,7 @@ import gregochr.cinefilm.auth.SecurityConfig;
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.health.HealthDtos.ChartList;
+import gregochr.cinefilm.health.HealthDtos.ChartPart;
 import gregochr.cinefilm.health.HealthDtos.ChartRow;
 import gregochr.cinefilm.health.HealthDtos.PlaybackList;
 import gregochr.cinefilm.health.HealthDtos.PlaybackPage;
@@ -40,6 +41,7 @@ class PlaybackHealthControllerTest {
 
     private static final String JSON = "application/json";
     private static final String ID = "3f2b8c1e-5d4a-4e7b-9a60-1c2d3e4f5a6b";
+    private static final String OTHER_ID = "0a1b2c3d-0000-4000-8000-0123456789ab";
     private static final String BODY = "{\"seq\":4,\"editionId\":11}";
 
     @Autowired
@@ -355,7 +357,12 @@ class PlaybackHealthControllerTest {
     @Test
     void theChartRouteAnswersTheSessionsAndIsNotTakenForAPlaybackId() throws Exception {
         ChartRow session = new ChartRow(ID, 7L, "Blade Runner", Instant.parse("2024-03-31T23:00:00Z"), 200_000, 2,
-            9_400, 2_380L, "train", Map.of("480p", 58_000L), "Mozilla/5.0", true);
+            9_400, 2_380L, "train", Map.of("480p", 58_000L), "Mozilla/5.0", true,
+            Instant.parse("2024-03-31T23:50:00Z"), List.of(
+                new ChartPart(ID, Instant.parse("2024-03-31T23:00:00Z"), Instant.parse("2024-03-31T23:20:00Z"),
+                    120_000, "train"),
+                new ChartPart(OTHER_ID, Instant.parse("2024-03-31T23:21:00Z"), Instant.parse("2024-03-31T23:50:00Z"),
+                    80_000, "home")));
         when(health.chart(Instant.parse("2024-03-01T00:00:00Z"))).thenReturn(new ChartList(List.of(session)));
 
         mvc.perform(signedIn(get("/api/admin/playback-health/chart")).param("since", "2024-03-01T00:00:00Z"))
@@ -368,13 +375,24 @@ class PlaybackHealthControllerTest {
             .andExpect(jsonPath("$.sessions[0].environment").value("train"))
             .andExpect(jsonPath("$.sessions[0].rungMs['480p']").value(58000))
             .andExpect(jsonPath("$.sessions[0].userAgent").value("Mozilla/5.0"))
-            .andExpect(jsonPath("$.sessions[0].touch").value(true));
+            .andExpect(jsonPath("$.sessions[0].touch").value(true))
+            .andExpect(jsonPath("$.sessions[0].endedAt").value("2024-03-31T23:50:00Z"))
+            .andExpect(jsonPath("$.sessions[0].parts.length()").value(2))
+            .andExpect(jsonPath("$.sessions[0].parts[0].playbackId").value(ID))
+            .andExpect(jsonPath("$.sessions[0].parts[0].startedAt").value("2024-03-31T23:00:00Z"))
+            .andExpect(jsonPath("$.sessions[0].parts[0].endedAt").value("2024-03-31T23:20:00Z"))
+            .andExpect(jsonPath("$.sessions[0].parts[0].watchedMs").value(120000))
+            .andExpect(jsonPath("$.sessions[0].parts[0].environment").value("train"))
+            .andExpect(jsonPath("$.sessions[0].parts[1].playbackId").value(OTHER_ID))
+            .andExpect(jsonPath("$.sessions[0].parts[1].environment").value("home"));
     }
 
     @Test
     void aChartRowWithNoTouchHintLeavesTheFieldOut() throws Exception {
         ChartRow session = new ChartRow(ID, 7L, "Blade Runner", Instant.parse("2024-03-31T23:00:00Z"), 200_000, 0,
-            0, 900L, "home", Map.of("original", 200_000L), "Mozilla/5.0", null);
+            0, 900L, "home", Map.of("original", 200_000L), "Mozilla/5.0", null,
+            Instant.parse("2024-03-31T23:50:00Z"), List.of(new ChartPart(ID, Instant.parse("2024-03-31T23:00:00Z"),
+                Instant.parse("2024-03-31T23:50:00Z"), 200_000, "home")));
         when(health.chart(null)).thenReturn(new ChartList(List.of(session)));
 
         mvc.perform(signedIn(get("/api/admin/playback-health/chart")))

@@ -25,12 +25,14 @@ import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.health.HealthDtos.ChartPart;
 import gregochr.cinefilm.health.HealthDtos.ChartRow;
 import gregochr.cinefilm.health.HealthDtos.PlaybackList;
 import gregochr.cinefilm.health.HealthDtos.PlaybackPage;
 import gregochr.cinefilm.health.HealthDtos.PlaybackRow;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -630,10 +632,18 @@ class PlaybackHealthServiceTest {
         when(repository.findAll(any(Specification.class), eq(oldestFirst))).thenReturn(rows);
     }
 
+    private static PlaybackHealth longRow(long rowId, String playbackId, String summary) {
+        PlaybackHealth row = stored(rowId, playbackId, summary);
+        row.setWatchedMs(200_000);
+        return row;
+    }
+
     @Test
     void chartCarriesTheStoredFiguresTheRungTimesAndTheUserAgent() {
-        PlaybackHealth row = stored(1, ID, compactExample());
-        row.setFigures(HealthFigures.of(HealthSamples.report(example())));
+        ObjectNode report = example();
+        report.put("watchedMs", 200_000);
+        PlaybackHealth row = stored(1, ID, text(report));
+        row.setFigures(HealthFigures.of(HealthSamples.report(report)));
         chartRows(List.of(row));
 
         ChartRow chart = service.chart(NOW).sessions().get(0);
@@ -642,7 +652,7 @@ class PlaybackHealthServiceTest {
         assertThat(chart.filmId()).isEqualTo(FILM_ID);
         assertThat(chart.filmTitle()).isEqualTo("Blade Runner");
         assertThat(chart.startedAt()).isEqualTo(NOW.minusSeconds(600));
-        assertThat(chart.watchedMs()).isEqualTo(171_000);
+        assertThat(chart.watchedMs()).isEqualTo(200_000);
         assertThat(chart.stallCount()).isEqualTo(2);
         assertThat(chart.stallMs()).isEqualTo(9_400);
         assertThat(chart.startupMs()).isEqualTo(2_380);
@@ -650,6 +660,9 @@ class PlaybackHealthServiceTest {
         assertThat(chart.rungMs()).containsEntry("480p", 58_000L).containsEntry("360p", 113_000L);
         assertThat(chart.userAgent()).startsWith("Mozilla/5.0");
         assertThat(chart.touch()).isNull();
+        assertThat(chart.endedAt()).isEqualTo(NOW.minusSeconds(60));
+        assertThat(chart.parts()).containsExactly(new ChartPart(ID, NOW.minusSeconds(600), NOW.minusSeconds(60),
+            200_000, "train"));
     }
 
     @ParameterizedTest
@@ -657,14 +670,14 @@ class PlaybackHealthServiceTest {
     void chartCarriesTheTouchHintAsTheReportStatesIt(boolean touch) {
         ObjectNode report = example();
         client(report).put("touch", touch);
-        chartRows(List.of(stored(1, ID, text(report))));
+        chartRows(List.of(longRow(1, ID, text(report))));
 
         assertThat(service.chart(null).sessions().get(0).touch()).isEqualTo(touch);
     }
 
     @Test
     void chartKeepsARowWhoseSummaryCannotBeReadWithoutRungsOrUserAgent() {
-        chartRows(List.of(stored(1, ID, "not json")));
+        chartRows(List.of(longRow(1, ID, "not json")));
 
         ChartRow chart = service.chart(null).sessions().get(0);
 
@@ -676,11 +689,75 @@ class PlaybackHealthServiceTest {
 
     @Test
     void chartKeepsARowWhoseReportHasNoClient() {
-        chartRows(List.of(stored(1, ID, "{\"seq\":1}")));
+        chartRows(List.of(longRow(1, ID, "{\"seq\":1}")));
 
         ChartRow chart = service.chart(null).sessions().get(0);
         assertThat(chart.userAgent()).isNull();
         assertThat(chart.touch()).isNull();
+    }
+
+    private static PlaybackHealth part(long rowId, String playbackId, Instant startedAt, Instant updatedAt,
+                                       long watchedMs, long stalls, ObjectNode report) {
+        PlaybackHealth row = stored(rowId, playbackId, text(report));
+        row.setStartedAt(startedAt);
+        row.setUpdatedAt(updatedAt);
+        row.setFigures(new HealthFigures(watchedMs, stalls, stalls * 1_000, startedAt.equals(NOW) ? 500L : 900L,
+            stalls > 0, "train"));
+        return row;
+    }
+
+    @Test
+    void chartJoinsTheTwoPartsOfOneViewingAndSumsTheirFigures() {
+        ObjectNode first = example();
+        first.set("rungMs", JSON.createObjectNode().put("480p", 1_000L).put("360p", 2_000L));
+        ObjectNode second = example();
+        second.set("rungMs", JSON.createObjectNode().put("480p", 10_000L).put("720p", 5_000L));
+        Instant start = NOW.minusSeconds(7_200);
+        chartRows(List.of(
+            part(1, ID, start, start.plusSeconds(600), 100_000, 1, first),
+            part(2, OTHER_ID, start.plusSeconds(606), start.plusSeconds(1_200), 90_000, 2, second)));
+
+        List<ChartRow> sessions = service.chart(null).sessions();
+
+        assertThat(sessions).hasSize(1);
+        ChartRow viewing = sessions.get(0);
+        assertThat(viewing.playbackId()).isEqualTo(ID);
+        assertThat(viewing.startedAt()).isEqualTo(start);
+        assertThat(viewing.endedAt()).isEqualTo(start.plusSeconds(1_200));
+        assertThat(viewing.watchedMs()).isEqualTo(190_000);
+        assertThat(viewing.stallCount()).isEqualTo(3);
+        assertThat(viewing.stallMs()).isEqualTo(3_000);
+        assertThat(viewing.startupMs()).isEqualTo(900);
+        assertThat(viewing.rungMs()).containsOnly(Map.entry("480p", 11_000L), Map.entry("360p", 2_000L),
+            Map.entry("720p", 5_000L));
+        assertThat(viewing.parts()).extracting(ChartPart::playbackId).containsExactly(ID, OTHER_ID);
+        assertThat(viewing.parts()).extracting(ChartPart::watchedMs).containsExactly(100_000L, 90_000L);
+    }
+
+    @Test
+    void chartDropsAViewingWhoseJoinedTotalIsUnderThreeMinutes() {
+        Instant start = NOW.minusSeconds(7_200);
+        chartRows(List.of(
+            part(1, ID, start, start.plusSeconds(600), 90_000, 0, example()),
+            part(2, OTHER_ID, start.plusSeconds(606), start.plusSeconds(1_200), 89_999, 0, example())));
+
+        assertThat(service.chart(null).sessions()).isEmpty();
+    }
+
+    @Test
+    void aPartWithAnUnreadableSummaryNeverJoinsAViewing() {
+        Instant start = NOW.minusSeconds(7_200);
+        PlaybackHealth broken = part(2, OTHER_ID, start.plusSeconds(606), start.plusSeconds(1_200), 90_000, 0,
+            example());
+        broken.setSummary("not json");
+        chartRows(List.of(part(1, ID, start, start.plusSeconds(600), 200_000, 0, example()), broken));
+
+        List<ChartRow> sessions = service.chart(null).sessions();
+        ChartRow only = sessions.get(0);
+
+        assertThat(sessions).hasSize(1);
+        assertThat(only.parts()).hasSize(1);
+        assertThat(only.rungMs()).containsEntry("480p", 58_000L);
     }
 
     @Test

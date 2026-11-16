@@ -5,7 +5,9 @@ import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.health.HealthDtos.ChartList;
+import gregochr.cinefilm.health.HealthDtos.ChartPart;
 import gregochr.cinefilm.health.HealthDtos.ChartRow;
+import gregochr.cinefilm.health.HealthDtos.ClientInfo;
 import gregochr.cinefilm.health.HealthDtos.HealthReport;
 import gregochr.cinefilm.health.HealthDtos.PlaybackList;
 import gregochr.cinefilm.health.HealthDtos.PlaybackPage;
@@ -13,13 +15,17 @@ import gregochr.cinefilm.health.HealthDtos.PlaybackRow;
 import jakarta.persistence.criteria.Predicate;
 import gregochr.cinefilm.health.HealthDtos.PlaybackCounts;
 import gregochr.cinefilm.health.HealthDtos.PlayingNow;
+import gregochr.cinefilm.health.ViewingJoiner.Part;
+import gregochr.cinefilm.health.ViewingJoiner.Viewing;
 import gregochr.cinefilm.transcode.Ladder;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -177,34 +183,81 @@ public class PlaybackHealthService {
     }
 
     /**
-     * Every film session ({@code watchedMs} at least {@link #FILM_SESSION_MIN_MS}) that started at or after
-     * {@code since} (all of them when null), oldest first so the newest comes last, with only the figures the chart
-     * draws. The table is capped, so the answer is small and is not paged.
+     * Every viewing that started at or after {@code since} (all when null) and watched at least
+     * {@link #FILM_SESSION_MIN_MS} in all, oldest first so the newest comes last, with only the figures the chart
+     * draws. The playbacks of one viewing are joined by {@link ViewingJoiner}; the join reads every row of the window,
+     * the short ones included, and the 3-minute line applies to the joined total. The table is capped, so the answer
+     * is small and is not paged.
      */
     @Transactional(readOnly = true)
     public ChartList chart(Instant since) {
-        Sort oldestFirst = Sort.by(Sort.Direction.ASC, "startedAt").and(Sort.by(Sort.Direction.ASC, "id"));
         List<ChartRow> rows = new ArrayList<>();
-        for (PlaybackHealth stored : repository.findAll(matching(since, FILM_SESSION_MIN_MS, null), oldestFirst)) {
-            HealthReport report = typed(stored);
-            rows.add(new ChartRow(stored.getPlaybackId(), stored.getFilmId(), stored.getFilmTitle(),
-                stored.getStartedAt(), stored.getWatchedMs(), stored.getStallCount(), stored.getStallMs(),
-                stored.getStartupMs(), stored.getEnvironment(), report == null ? null : report.rungMs(),
-                report == null || report.client() == null ? null : report.client().userAgent(),
-                report == null || report.client() == null ? null : report.client().touch()));
+        for (Viewing viewing : viewings(since)) {
+            if (viewing.watchedMs() >= FILM_SESSION_MIN_MS) {
+                rows.add(chartRow(viewing));
+            }
         }
         return new ChartList(rows);
     }
 
     /**
-     * The film sessions of the last 30 days (by {@code startedAt}, the boundary included): those that watched at least
-     * {@link #FILM_SESSION_MIN_MS}, and how many of them had no problem. Two COUNT queries, no rows loaded.
+     * The viewings of the last 30 days (by the first part's {@code startedAt}, the boundary included): those that
+     * watched at least {@link #FILM_SESSION_MIN_MS} in all, and how many of them had no problem in any part. The rows
+     * of the window are loaded and joined, so the counts agree with {@link #chart}.
      */
     @Transactional(readOnly = true)
     public PlaybackCounts playbackCounts() {
-        Instant since = clock.instant().minus(SUMMARY_WINDOW);
-        return new PlaybackCounts(repository.countFilmSessions(since, FILM_SESSION_MIN_MS),
-            repository.countSmoothFilmSessions(since, FILM_SESSION_MIN_MS));
+        long films = 0;
+        long smooth = 0;
+        for (Viewing viewing : viewings(clock.instant().minus(SUMMARY_WINDOW))) {
+            if (viewing.watchedMs() >= FILM_SESSION_MIN_MS) {
+                films++;
+                if (!viewing.hasProblem()) {
+                    smooth++;
+                }
+            }
+        }
+        return new PlaybackCounts(films, smooth);
+    }
+
+    /** The rows that started at or after {@code since}, oldest first, joined into viewings. */
+    private List<Viewing> viewings(Instant since) {
+        Sort oldestFirst = Sort.by(Sort.Direction.ASC, "startedAt").and(Sort.by(Sort.Direction.ASC, "id"));
+        List<Part> parts = new ArrayList<>();
+        for (PlaybackHealth stored : repository.findAll(matching(since, null, null), oldestFirst)) {
+            HealthReport report = typed(stored);
+            ClientInfo client = report == null ? null : report.client();
+            parts.add(new Part(stored.getPlaybackId(), stored.getFilmId(), stored.getFilmTitle(),
+                stored.getStartedAt(), stored.getUpdatedAt(), stored.getWatchedMs(), stored.getStallCount(),
+                stored.getStallMs(), stored.getStartupMs(), stored.isHasProblem(), stored.getEnvironment(),
+                report == null ? null : report.operator(), client == null ? null : client.userAgent(),
+                client == null ? null : client.touch(), report == null ? null : report.startPositionMs(),
+                report == null ? null : report.endPositionMs(), report == null ? null : report.rungMs()));
+        }
+        return ViewingJoiner.join(parts);
+    }
+
+    private static ChartRow chartRow(Viewing viewing) {
+        Part first = viewing.first();
+        long stallCount = 0;
+        long stallMs = 0;
+        Map<String, Long> rungMs = null;
+        List<ChartPart> chartParts = new ArrayList<>();
+        for (Part part : viewing.parts()) {
+            stallCount += part.stallCount();
+            stallMs += part.stallMs();
+            if (part.rungMs() != null) {
+                rungMs = rungMs == null ? new LinkedHashMap<>() : rungMs;
+                for (Map.Entry<String, Long> rung : part.rungMs().entrySet()) {
+                    rungMs.merge(rung.getKey(), rung.getValue(), Long::sum);
+                }
+            }
+            chartParts.add(new ChartPart(part.playbackId(), part.startedAt(), part.updatedAt(), part.watchedMs(),
+                part.environment()));
+        }
+        return new ChartRow(first.playbackId(), first.filmId(), first.filmTitle(), first.startedAt(),
+            viewing.watchedMs(), stallCount, stallMs, first.startupMs(), first.environment(), rungMs,
+            first.userAgent(), first.touch(), viewing.last().updatedAt(), List.copyOf(chartParts));
     }
 
     /**

@@ -8,12 +8,13 @@ import static gregochr.cinefilm.health.HealthSamples.example;
 import static gregochr.cinefilm.health.HealthSamples.minutes;
 import static gregochr.cinefilm.health.HealthSamples.text;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.health.HealthDtos.PlaybackCounts;
 import gregochr.cinefilm.health.HealthDtos.PlayingNow;
-import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +26,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import tools.jackson.databind.node.ObjectNode;
 
 /** The summary reads of {@link PlaybackHealthService}: the window arguments and the shaping of "playing now". */
@@ -63,12 +66,43 @@ class PlaybackHealthSummaryTest {
         when(repository.updatedSince(NOW.minusSeconds(120), PageRequest.ofSize(200))).thenReturn(List.of(rows));
     }
 
-    @Test
-    void theCountsAskForThirtyDaysBackAndThreeMinutesWatched() {
-        when(repository.countFilmSessions(NOW.minus(Duration.ofDays(30)), 180_000L)).thenReturn(40L);
-        when(repository.countSmoothFilmSessions(NOW.minus(Duration.ofDays(30)), 180_000L)).thenReturn(31L);
+    @SuppressWarnings("unchecked")
+    private void windowRows(PlaybackHealth... rows) {
+        Sort oldestFirst = Sort.by(Sort.Direction.ASC, "startedAt").and(Sort.by(Sort.Direction.ASC, "id"));
+        when(repository.findAll(any(Specification.class), eq(oldestFirst))).thenReturn(List.of(rows));
+    }
 
-        assertThat(service.playbackCounts()).isEqualTo(new PlaybackCounts(40, 31));
+    private static PlaybackHealth film(String playbackId, long filmId, long watchedMs, boolean problem) {
+        PlaybackHealth row = stored(playbackId, text(example()), "home");
+        row.setFilmId(filmId);
+        row.setFigures(new HealthFigures(watchedMs, problem ? 1 : 0, 0, 1_000L, problem, "home"));
+        return row;
+    }
+
+    @Test
+    void theCountsReadTheThirtyDayWindowAndCountViewingsOfThreeMinutesAndTheSmoothOnes() {
+        windowRows(film(new UUID(0, 1).toString(), 1, 180_000, false), film(new UUID(0, 2).toString(), 2, 179_999,
+            false), film(new UUID(0, 3).toString(), 3, 200_000, true));
+
+        assertThat(service.playbackCounts()).isEqualTo(new PlaybackCounts(2, 1));
+    }
+
+    @Test
+    void thePartsOfOneViewingCountOnceAndAProblemInAnyPartIsNotSmooth() {
+        PlaybackHealth first = film(new UUID(0, 1).toString(), 1, 100_000, false);
+        PlaybackHealth second = film(new UUID(0, 2).toString(), 1, 100_000, true);
+        first.setUpdatedAt(NOW.minusSeconds(500));
+        second.setStartedAt(NOW.minusSeconds(490));
+        windowRows(first, second);
+
+        assertThat(service.playbackCounts()).isEqualTo(new PlaybackCounts(1, 0));
+    }
+
+    @Test
+    void anEmptyWindowCountsZero() {
+        windowRows();
+
+        assertThat(service.playbackCounts()).isEqualTo(new PlaybackCounts(0, 0));
     }
 
     @Test

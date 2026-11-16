@@ -45,15 +45,6 @@ public interface PlaybackHealthRepository
     @Query("select h.id from PlaybackHealth h order by h.updatedAt asc, h.id asc")
     List<Long> oldestIds(Pageable page);
 
-    /** How many viewings started at or after {@code since} and played at least {@code minWatchedMs}. */
-    @Query("select count(h) from PlaybackHealth h where h.startedAt >= :since and h.watchedMs >= :minWatchedMs")
-    long countFilmSessions(Instant since, long minWatchedMs);
-
-    /** {@link #countFilmSessions} limited to the viewings without a problem. */
-    @Query("select count(h) from PlaybackHealth h where h.startedAt >= :since and h.watchedMs >= :minWatchedMs "
-        + "and h.hasProblem = false")
-    long countSmoothFilmSessions(Instant since, long minWatchedMs);
-
     /**
      * The records updated at or after {@code since}, newest update first (the higher id first on a tie), at most
      * the page's size.
