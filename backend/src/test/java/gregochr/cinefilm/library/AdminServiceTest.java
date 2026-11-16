@@ -15,6 +15,7 @@ import gregochr.cinefilm.ApiTestBase;
 import gregochr.cinefilm.film.CreditRole;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.GroupingChange;
+import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.GroupingChangeRepository;
 import gregochr.cinefilm.film.MatchStatus;
 import gregochr.cinefilm.film.MediaFile;
@@ -47,6 +48,9 @@ class AdminServiceTest extends ApiTestBase {
     @Autowired
     private GroupingChangeRepository groupingChanges;
 
+    @Autowired
+    private EditionRepository editions;
+
     private ScanService scans;
     private RatingsRefresher ratings;
     private OpenSubtitlesRefresher subtitleSearch;
@@ -60,7 +64,7 @@ class AdminServiceTest extends ApiTestBase {
         subtitleSearch = mock(OpenSubtitlesRefresher.class);
         subtitleChecks = mock(SidecarCheckRefresher.class);
         admin = new AdminService(scans, runs, films, mediaFiles, new LibraryRoot("/media/films"), ratings,
-            subtitleSearch, subtitleChecks, groupingChanges);
+            subtitleSearch, subtitleChecks, groupingChanges, editions);
     }
 
     @Test
