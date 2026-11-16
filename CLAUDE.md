@@ -35,10 +35,11 @@ files or workflows itself. Docs (this file, `docs/`, `AGENTS.md`) may be written
    the gates pass; the planner's test-class check prints nothing; then a **fresh read-only Claude reviewer**
    (Agent tool, Opus or Fable) given `AGENTS.md`, `test-standards.md`, the plan and the diff, never the planner's
    conclusions, finds what Codex would flag. Repeat until it reports no findings: the whole branch before the first
-   push, then only the fix; a round with nothing but nits is fixed and pushed without another review (owner,
-   2026-11-15). **Codex runs only on the PR**: no routine local `codex review` (it draws on the same quota).
-   **Keep PRs small: 1,500 changed lines or fewer, tests included** (owner, 2026-11-16); a plan splits a phase
-   that would be bigger and says how many PRs it needs.
+   push, then only the fix; a round with nothing but nits (no bug, no weak test, no rule broken;
+   `dev-and-testing.md`) is fixed and pushed without another review (owner, 2026-11-15), except on a docs-only PR,
+   whose head the reviewer must pass. **Codex runs only on the PR**: no routine local `codex review` (it draws on
+   the same quota). **Keep PRs small: 1,500 changed lines or fewer, tests included** (owner, 2026-11-16): a plan
+   splits a phase that would be bigger.
 3. **Sonnet's commits are on a feature branch** (conventional commit, changelog entry).
 4. **Push and open a ready PR** (not a draft) against `main`.
 5. **Wait for CI and Codex, fix what they find** through Sonnet, push again. Codex reviews a PR when it opens and
@@ -57,8 +58,9 @@ files or workflows itself. Docs (this file, `docs/`, `AGENTS.md`) may be written
    `docs/`, `*.md` or `changelog.d/` and none of the PR's files, merge as it is (an update makes a new head that
    needs a new Codex review; it cost #129 a round). **The owner does not review PRs** (owner, 2026-11-08): the
    planner merges each phase itself once these gates pass, without asking.
-7. Multi-phase plans repeat 2–6 per phase, each branched from the updated `main`; a phase that touches different
-   files may be built while the one before waits on CI or Codex (owner, 2026-11-15).
+7. Multi-phase plans repeat 2–6 per phase, each branched from the updated `main`. A phase that touches none of the
+   files of the phase still waiting on CI or Codex may be branched from the current `main` and built meanwhile, in
+   its own worktree (owner, 2026-11-15); step 6 still says when it must be updated from `main` before it merges.
 
 Never done by a session: creating or deleting tags, pushing to `main`, force-pushing a shared branch.
 
