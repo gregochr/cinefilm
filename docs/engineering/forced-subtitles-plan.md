@@ -1167,8 +1167,9 @@ proof. Built in 5d-1:
   subtitles hides a download (the forced choice does not). Admin lists it as FULL from OPENSUBTITLES, "Ready to play as
   English (full)"; Remove blocks the file with kind FULL and the existing `SubtitleDownloadRemoved` event looks for the
   next candidate.
-- **The measurement.** `SidecarCheckRefresher` calls `FullFitProbe` after its checks (and so also starts on
-  `SubtitleDownloadsFinished`). For each live FULL download not yet measured by this process it takes a second FULL
+- **The measurement.** `SidecarCheckRefresher` calls `FullFitProbe` before its checks (and so also starts on
+  `SubtitleDownloadsFinished`). It runs first because, measured 2026-11-15/16, the forced checks and the downloads of
+  missing subtitles used the whole day's budget, so the probe that ran last never got a download. For each live FULL download not yet measured by this process it takes a second FULL
   reference (a stored one, else the first other candidate for the edition's cut, fetched through `ReferenceFetcher` with
   the comparison ceiling `DownloadShares.forChecks`; at most one fetch per download per process), fits `TimingFit` both
   ways and writes one INFO line: both verdicts, offsets and matched shares, each file's cue count and last-cue time, the
