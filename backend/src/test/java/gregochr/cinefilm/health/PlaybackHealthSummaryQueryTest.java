@@ -12,11 +12,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 
-/** The summary's COUNT and "updated since" queries on H2: where the 30-day, 3-minute and 2-minute lines fall. */
+/** The summary's "updated since" query on H2: where the 2-minute line falls, the order and the cap. */
 class PlaybackHealthSummaryQueryTest extends ApiTestBase {
 
-    private static final long MIN_WATCHED = 180_000;
-    private static final Instant THIRTY_DAYS_AGO = NOW.minus(Duration.ofDays(30));
     private static final Instant TWO_MINUTES_AGO = NOW.minus(Duration.ofMinutes(2));
 
     @Autowired
@@ -38,71 +36,8 @@ class PlaybackHealthSummaryQueryTest extends ApiTestBase {
         return health.saveAndFlush(row);
     }
 
-    private PlaybackHealth session(Instant startedAt, long watchedMs, boolean problem) {
-        return row(startedAt, NOW, watchedMs, problem);
-    }
-
     private PlaybackHealth updated(Instant updatedAt) {
         return row(NOW.minusSeconds(3_600), updatedAt, 200_000, false);
-    }
-
-    // the counts
-
-    @Test
-    void aSessionThatStartedExactlyThirtyDaysAgoCountsAndOneMillisecondEarlierDoesNot() {
-        session(THIRTY_DAYS_AGO, 200_000, false);
-        session(THIRTY_DAYS_AGO.minusMillis(1), 200_000, false);
-
-        assertThat(health.countFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isEqualTo(1);
-        assertThat(health.countSmoothFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isEqualTo(1);
-    }
-
-    @Test
-    void aSessionThatStartedOneMillisecondAfterTheLineCounts() {
-        session(THIRTY_DAYS_AGO.plusMillis(1), 200_000, false);
-
-        assertThat(health.countFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isEqualTo(1);
-    }
-
-    @Test
-    void threeMinutesExactlyAndOneMillisecondOverCountAndOneMillisecondShortDoesNot() {
-        session(NOW.minusSeconds(100), 179_999, false);
-        session(NOW.minusSeconds(100), 180_000, false);
-        session(NOW.minusSeconds(100), 180_001, false);
-
-        assertThat(health.countFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isEqualTo(2);
-        assertThat(health.countSmoothFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isEqualTo(2);
-    }
-
-    @Test
-    void smoothCountsOnlyTheSessionsWithoutAProblemWhileTheFilmCountHasBoth() {
-        session(NOW.minusSeconds(100), 200_000, false);
-        session(NOW.minusSeconds(100), 200_000, false);
-        session(NOW.minusSeconds(100), 200_000, true);
-
-        assertThat(health.countFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isEqualTo(3);
-        assertThat(health.countSmoothFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isEqualTo(2);
-    }
-
-    @Test
-    void aShortSessionWithoutAProblemIsNeitherAFilmNorSmooth() {
-        session(NOW.minusSeconds(100), 60_000, false);
-
-        assertThat(health.countFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isZero();
-        assertThat(health.countSmoothFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isZero();
-    }
-
-    @Test
-    void theWindowIsByStartedAtNotByUpdatedAt() {
-        row(THIRTY_DAYS_AGO.minusSeconds(1), NOW, 200_000, false);
-
-        assertThat(health.countFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isZero();
-    }
-
-    @Test
-    void anEmptyTableCountsZero() {
-        assertThat(health.countFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isZero();
-        assertThat(health.countSmoothFilmSessions(THIRTY_DAYS_AGO, MIN_WATCHED)).isZero();
     }
 
     // playing now

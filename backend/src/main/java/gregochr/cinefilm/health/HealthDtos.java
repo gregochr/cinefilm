@@ -17,7 +17,12 @@ public final class HealthDtos {
     private HealthDtos() {
     }
 
-    /** The body of {@code PUT /api/playback-health/{playbackId}}: the totals of one viewing so far. */
+    /**
+     * The body of {@code PUT /api/playback-health/{playbackId}}: the totals of one playback so far.
+     * {@code startPositionMs} and {@code endPositionMs} are the film position of the first and the latest beat; both
+     * are optional (a report from a player that predates them has none, and a null is left out of the stored text, so
+     * such a report is stored exactly as before) and, when present, from 0 to 2,000,000,000.
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record HealthReport(Long seq, Long editionId, Long elapsedMs, String environment, String operator,
                                Long latencyMs, String engine, String quality, Boolean autoplayRefused,
@@ -26,7 +31,9 @@ public final class HealthDtos {
                                Long reconnectCount, Long reconnectMs, Long recoveries, Boolean fellBack,
                                Long stepsDown, Long stepsUp, Long netErrors, Long timeouts, Long kbpsLow,
                                Long kbpsMedian, Long kbpsHigh, Long kbpsSamples, Map<String, Long> rungMs,
-                               List<List<Long>> minutes, ClientInfo client) {
+                               List<List<Long>> minutes, ClientInfo client,
+                               @JsonInclude(JsonInclude.Include.NON_NULL) Long startPositionMs,
+                               @JsonInclude(JsonInclude.Include.NON_NULL) Long endPositionMs) {
     }
 
     /**
@@ -54,27 +61,37 @@ public final class HealthDtos {
     }
 
     /**
-     * One film-length session as the chart needs it: the stored figures, the time on each rung and the browser's own
-     * description of itself. {@code rungMs} and {@code userAgent} are null when the stored report cannot be read.
+     * One viewing as the chart needs it: the stored figures of one or more playbacks of one film on one device (see
+     * {@code ViewingJoiner}), the time on each rung and the browser's own description of itself. {@code playbackId} is
+     * the first part's; {@code watchedMs}, {@code stallCount} and {@code stallMs} are sums; {@code rungMs} is summed
+     * per rung (null when no part's stored report can be read); {@code startupMs}, {@code environment},
+     * {@code userAgent} and {@code touch} are the first part's. {@code startedAt} is the first part's start and
+     * {@code endedAt} the last part's last report. {@code parts} lists the playbacks, oldest first, never empty.
      * {@code touch} is the client's touch hint ({@link ClientInfo}); it is left out of the answer when the report has
-     * none (a report from before it, or one that cannot be read), so an old row reads as it did.
+     * none, so an old row reads as it did.
      */
     public record ChartRow(String playbackId, Long filmId, String filmTitle, Instant startedAt, long watchedMs,
                            long stallCount, long stallMs, Long startupMs, String environment,
                            Map<String, Long> rungMs, String userAgent,
-                           @JsonInclude(JsonInclude.Include.NON_NULL) Boolean touch) {
+                           @JsonInclude(JsonInclude.Include.NON_NULL) Boolean touch, Instant endedAt,
+                           List<ChartPart> parts) {
     }
 
-    /** Response of {@code GET /api/admin/playback-health/chart}: the sessions, the newest last. */
+    /** One playback of a {@link ChartRow}: its id, when it started and last reported, what it played, where. */
+    public record ChartPart(String playbackId, Instant startedAt, Instant endedAt, long watchedMs,
+                            String environment) {
+    }
+
+    /** Response of {@code GET /api/admin/playback-health/chart}: the viewings, the newest last. */
     public record ChartList(List<ChartRow> sessions) {
     }
 
     /**
      * Film sessions of the last 30 days, for the Admin summary.
      *
-     * @param films sessions that started in the window and watched at least
-     *     {@link PlaybackHealthService#FILM_SESSION_MIN_MS}
-     * @param smooth those of them without a problem
+     * @param films viewings (playbacks joined by {@code ViewingJoiner}) that started in the window and watched at
+     *     least {@link PlaybackHealthService#FILM_SESSION_MIN_MS} in all
+     * @param smooth those of them in which no part had a problem
      */
     public record PlaybackCounts(long films, long smooth) {
     }
