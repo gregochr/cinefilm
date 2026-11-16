@@ -208,6 +208,13 @@ What phase 1's reviews taught, and phase 2 starts with:
 - A test that waits on the machine being quick will fail on a slow one: wait for an event, with a wide margin
   where a real delay cannot be avoided.
 
+What Codex's review of #186 changed (three findings, all in the analysis). Two figures the analysis used to work
+out from each answer's start and end are now measured where they happen: the stand-in counts the bytes it lets
+through in each minute of the replay (spreading an answer's bytes evenly over its time put too many in a slow
+minute that a fast one followed), and notes when the player cut an answer short (a slow segment that was cut
+counted as time with nothing being fetched). And a bad spell is compared with the day only when the run covered
+all of it. The stand-in, merged in phase 1, changed for the first two.
+
 ## What nobody will have verified when both are merged
 
 - The rig on any machine but the owner's Mac, or with any browser but its installed Chrome.

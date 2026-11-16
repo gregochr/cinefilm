@@ -98,7 +98,9 @@ In `scripts/replay/out/<name>/`, which git ignores:
   printable ASCII (a few common signs, such as the dot between the parts of the quality pill, are written as
   their plain equivalents; anything else outside ASCII becomes `?`).
 - `requests.json`: every answer the stand-in sent, with its kind, size and timing, and whether the player cut it
-  short.
+  short and when.
+- `delivered.json`: the bytes the stand-in let through its link in each minute of the replay, counted as they
+  were sent.
 
 ## Reading a run
 
@@ -106,11 +108,14 @@ In `scripts/replay/out/<name>/`, which git ignores:
 
 Read its first section before believing anything else. A replay runs in real time, so a busy Mac can stall the
 film for the wrong reason. A run is sound when the five-second samples have no long gap, no pause came with film
-in hand, the playhead kept the clock outside those pauses, and what the stand-in delivered in thin minutes
-matches the trace. After that it lists the stretches when nothing was being fetched, the buffer going into each
-of the six bad spells and its lowest point in each, what the screen showed against the link, and the time at each
-quality beside 12 November. It reads which record minute the run started at from the first line of the run's
-`summary.txt`; when that line is missing it says so in a warning and reads the run as starting at minute 0.
+in hand, the playhead kept the clock outside those pauses, and what the stand-in let through in each minute,
+which it counts itself, matches the trace. After that it lists the stretches when nothing was being fetched (a
+segment the player cut short counts as being fetched until it was cut), the buffer going into each of the six
+bad spells and its lowest point in each, for the spells the run covered from their first minute to the end of
+their last, what the screen showed against the link, and the time at each quality beside 12 November.
+
+It reads which record minute the run started at from the first line of the run's `summary.txt`; when that line
+is missing it says so in a warning and reads the run as starting at minute 0.
 
 ## What two replays of the whole journey showed
 

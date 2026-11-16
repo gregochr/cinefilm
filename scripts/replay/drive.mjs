@@ -26,8 +26,9 @@
 //
 // Output (only once there is something to write): scripts/replay/out/<name>/ holds health.json (the stand-in's
 // figures of the viewing's last playback-health report), samples.json (every 5 s: playhead, buffer, what the screen
-// says), requests.json (every answer the stand-in sent) and summary.txt (the table printed at the end). Failing to
-// write them is a failure whatever stop was asked for: one line says so, and the exit code is 1.
+// says), requests.json (every answer the stand-in sent, with when the player cut one short), delivered.json (the bytes
+// the stand-in let through the link in each replay minute, as it counted them) and summary.txt (the table printed at
+// the end). Failing to write them is a failure whatever stop was asked for: one line says so, and the exit code is 1.
 //
 // The options, the choice of the final report, the summary and the small helpers are tested; `main`, which starts
 // Chrome and the build, cannot run in CI and is checked by hand (docs/engineering/home-replay.md).
@@ -653,6 +654,7 @@ function writeResults({ outDir, picked, standIn, run, summary }) {
   writeFileSync(join(outDir, 'health.json'), JSON.stringify(health, null, 1));
   writeFileSync(join(outDir, 'samples.json'), JSON.stringify(run.samples));
   writeFileSync(join(outDir, 'requests.json'), JSON.stringify(standIn.requests));
+  writeFileSync(join(outDir, 'delivered.json'), JSON.stringify(standIn.delivered));
   writeFileSync(join(outDir, 'summary.txt'), summary);
 }
 

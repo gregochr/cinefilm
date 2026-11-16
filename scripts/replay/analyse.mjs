@@ -11,7 +11,8 @@
 //
 // The sums are exported functions over a run's data (what the driver wrote to scripts/replay/out/<name>/); the
 // lines they give are made by `describe` and printed only when this runs as a program. From the request log it reads
-// only `kind`, `rung`, `ms`, `sent`, `firstByteMs`, `doneMs` and `aborted`.
+// only `kind`, `rung`, `ms`, `sent`, `doneMs`, `cutMs` and `aborted`; what was delivered each minute it takes from
+// `delivered.json`, which the stand-in counted as it let bytes through the link (nothing is estimated).
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -103,53 +104,13 @@ export function playheadLag(samples) {
   return { behind, behindWithFilm, moved: last.t - samples[2].t, wall: (last.ms - samples[2].ms) / 1000 };
 }
 
-// Adds `sent` bytes to the minutes from `from` to `to` (ms), in proportion to the time spent in each.
-// The walk never goes past the last place: what is left of the answer from there on is added to it in one step.
-export function spread(perMinute, from, to, sent) {
-  const last = perMinute.length - 1;
-  let t = from;
-  while (t < to) {
-    const m = Math.floor(t / 60000);
-    const end = m >= last ? to : Math.min(to, (m + 1) * 60000);
-    perMinute[Math.min(last, m)] += (sent * (end - t)) / (to - from);
-    t = end;
-  }
-}
-
 const isTime = (value) => Number.isFinite(value) && value >= 0;
-
-/**
- * Whether a request's times can be used: `ms` is a time (finite, 0 or more), and `firstByteMs` and `doneMs` are
- * each absent or one.
- */
-export function hasUsableTimes(request) {
-  const optional = (value) => value === null || value === undefined || isTime(value);
-  return isTime(request.ms) && optional(request.firstByteMs) && optional(request.doneMs);
-}
-
-/**
- * Bytes delivered in each replay minute (`minutesRun` + 1 of them; the last holds anything later). A request counts
- * from its first byte to its end, in proportion to the time in each minute; one with no end (the player cut it
- * short) or no time between its first byte and its end counts in the minute of its first byte.
- */
-export function deliveredPerMinute(requests, minutesRun) {
-  const perMinute = new Array(minutesRun + 1).fill(0);
-  for (const r of requests) {
-    if (!isTime(r.sent) || !hasUsableTimes(r)) continue;
-    const from = r.ms + (r.firstByteMs || 0);
-    const to = Number.isFinite(r.doneMs) ? r.ms + r.doneMs : null;
-    if (to === null || to <= from) {
-      perMinute[Math.min(minutesRun, Math.floor(from / 60000))] += r.sent;
-    } else {
-      spread(perMinute, from, to, r.sent);
-    }
-  }
-  return perMinute;
-}
 
 /**
  * What the stand-in delivered against what the trace allowed: bytes both ways, the minutes delivered more than 5%
  * and 60 kbit/s above the trace (`over`), and the thin ones (trace under 700 kbit/s) as `{ minute, rate, got }`.
+ * `perMinute` is what the stand-in counted as it let bytes through, by replay minute (`delivered.json`); a minute it
+ * has no place for counts as 0.
  */
 export function deliveryAgainstTrace(perMinute, link, start, minutesRun) {
   let over = 0;
@@ -157,9 +118,10 @@ export function deliveryAgainstTrace(perMinute, link, start, minutesRun) {
   let allowed = 0;
   const thin = [];
   for (let m = 0; m < minutesRun; m += 1) {
-    const got = (perMinute[m] * 8) / 60 / 1000;
+    const bytes = perMinute[m] ?? 0;
+    const got = (bytes * 8) / 60 / 1000;
     const rate = link.get(m) ?? 0;
-    delivered += perMinute[m];
+    delivered += bytes;
     allowed += (rate * 60 * 1000) / 8;
     if (got > rate * 1.05 + 60) over += 1;
     if (rate < THIN_KBPS) thin.push({ minute: m + start, rate, got: Math.round(got) });
@@ -168,16 +130,15 @@ export function deliveryAgainstTrace(perMinute, link, start, minutesRun) {
 }
 
 /** The whole of section 1. */
-export function soundness({ samples, requests, start }) {
+export function soundness({ samples, delivered, start }) {
   const minutesRun = Math.ceil(samples[samples.length - 1].ms / 60000);
   const paused = notPlaying(samples);
-  const perMinute = deliveredPerMinute(requests, minutesRun);
   return {
     gaps: samplingGaps(samples),
     notPlaying: paused,
     withFilm: withFilmInHand(paused),
     lag: playheadLag(samples),
-    delivery: deliveryAgainstTrace(perMinute, linkByMinute(samples), start, minutesRun),
+    delivery: deliveryAgainstTrace(delivered, linkByMinute(samples), start, minutesRun),
   };
 }
 
@@ -185,9 +146,17 @@ export function soundness({ samples, requests, start }) {
 
 /**
  * The stretches of over 30 s in which no segment was being fetched, taking each segment from its request to its
- * end. Each is `{ gap, first, last, before, after, aheadBefore, aheadAfter, rates }`: its length in ms, the replay
+ * end: when it finished (`doneMs`), else when the player cut it (`cutMs`), else, when neither is known, at its start.
+ * Each is `{ gap, first, last, before, after, aheadBefore, aheadAfter, rates }`: its length in ms, the replay
  * minutes it spans, the rungs fetched either side, the film buffered then and the link in each minute.
  */
+// When a segment's fetching ended, in ms on the replay clock.
+function segmentEnd(request) {
+  if (Number.isFinite(request.doneMs)) return request.ms + request.doneMs;
+  if (isTime(request.cutMs)) return request.ms + request.cutMs;
+  return request.ms;
+}
+
 export function idleGaps(requests, samples, link) {
   const segments = requests.filter((r) => r.kind === 'segment' && Number.isFinite(r.ms)).sort((a, b) => a.ms - b.ms);
   if (segments.length === 0) return [];
@@ -196,7 +165,7 @@ export function idleGaps(requests, samples, link) {
   let previous = segments[0];
   for (const r of segments) {
     if (r.ms - lastEnd > IDLE_GAP_MS) gaps.push(describeGap(r, previous, lastEnd, samples, link));
-    const end = Number.isFinite(r.doneMs) ? r.ms + r.doneMs : r.ms;
+    const end = segmentEnd(r);
     if (end > lastEnd) lastEnd = end;
     previous = r;
   }
@@ -221,7 +190,8 @@ function describeGap(next, previous, lastEnd, samples, link) {
  * link, the seconds banked going in, the lowest figure, the ms stalled now and on 12 November, and the rungs fetched.
  */
 export function spellFigures({ report, samples, record, start }) {
-  const minutesRun = Math.ceil(samples[samples.length - 1].ms / 60000);
+  // The minutes completed: a spell counts only when the run covered every minute of it.
+  const minutesRun = Math.floor(samples[samples.length - 1].ms / 60000);
   const minuteRows = Array.isArray(report.minutes) ? report.minutes.filter(Array.isArray) : [];
   const rows = new Map(minuteRows.map((row) => [row[0], row]));
   const old = rowsByMinute(record);
@@ -341,7 +311,7 @@ function totalsLine(label, r) {
     + `${secs(r.watchedMs)} s watched, steps down ${r.stepsDown}, up ${r.stepsUp}, timeouts ${r.timeouts}`;
 }
 
-function screenLines({ screen, fetched, report, then }) {
+function screenLines({ screen, fetched, report, before }) {
   const toasts = screen.toasts.map(([text, n]) => `${n} x "${text}"`).join('; ') || 'none';
   const bytes = fetched.bytes.map(([rung, b]) => `${rung} ${(b / 1e6).toFixed(0)} MB`).join(', ');
   return [
@@ -351,8 +321,8 @@ function screenLines({ screen, fetched, report, then }) {
     `  toasts caught by the five-second samples: ${toasts}`,
     `  ${totalsLine('replay', report)}`,
     `          seconds on each rung: ${listRungs(report.rungMs)}`,
-    `  ${totalsLine('12 Nov', then)}`,
-    `          seconds on each rung: ${listRungs(then.rungMs)}`,
+    `  ${totalsLine('12 Nov', before)}`,
+    `          seconds on each rung: ${listRungs(before.rungMs)}`,
     `  fetched: ${bytes}; ${fetched.count} segments, ${fetched.cut} cut short by the player `
       + `(${(fetched.cutBytes / 1e6).toFixed(1)} MB thrown away)`,
   ];
@@ -362,15 +332,15 @@ function screenLines({ screen, fetched, report, then }) {
  * The lines of the whole analysis of one run: `{ name, heading, samples, requests, report, record, start }`, where
  * `heading` is the first line of its summary.
  */
-export function describe({ name, heading, samples, requests, report, record, start }) {
+export function describe({ name, heading, samples, requests, delivered, report, record, start }) {
   const link = linkByMinute(samples);
   return [
     `${name}: ${heading}`,
-    ...soundLines(soundness({ samples, requests, start })),
+    ...soundLines(soundness({ samples, delivered, start })),
     ...idleLines(idleGaps(requests, samples, link), start),
     ...spellLines(spellFigures({ report, samples, record, start })),
     ...screenLines({
-      screen: screenAgainstLink(samples), fetched: rungsAndBytes(requests), report, then: record.report,
+      screen: screenAgainstLink(samples), fetched: rungsAndBytes(requests), report, before: record.report,
     }),
   ];
 }
@@ -426,6 +396,7 @@ export function analyseRun(name, root) {
   const dir = runDir(name, root);
   const requests = readJson(dir, 'requests.json');
   const samples = readJson(dir, 'samples.json');
+  const delivered = readJson(dir, 'delivered.json');
   const report = readJson(dir, 'health.json')?.final?.report;
   if (!isObject(report)) throw new Error('no health report in this run: nothing to analyse');
   requireObjects(samples, 'samples.json');
@@ -434,10 +405,13 @@ export function analyseRun(name, root) {
   if (!samples.every((s) => isTime(s.ms) && s.ms <= MAX_SAMPLE_MS)) {
     throw new Error('samples.json holds a sample with no time, or one out of range');
   }
+  if (!Array.isArray(delivered) || !delivered.every(isTime)) throw new Error('delivered.json is not a list of byte counts');
   const summary = readSummary(dir);
   const heading = summary.split('\n').find((line) => line.startsWith('Replay')) ?? '(no summary line)';
   const start = startOf(summary);
-  const lines = describe({ name, heading, samples, requests, report, record: loadRecord(), start: start ?? 0 });
+  const lines = describe({
+    name, heading, samples, requests, delivered, report, record: loadRecord(), start: start ?? 0,
+  });
   return start === null ? [NO_SUMMARY, ...lines] : lines;
 }
 

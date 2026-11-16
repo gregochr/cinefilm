@@ -8,8 +8,9 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, describe, test } from 'node:test';
 import {
-  buildCommand, claimPort, cleanSample, consoleText, createStop, cutShort, exitCodeFor, notePageError, options, pickFinal,
-  portError, progressLine, shouldWriteResults, standStillWarning, summarise, templateFor, traceFor, writeFailure,
+  buildCommand, claimPort, cleanSample, consoleText, createStop, cutShort, exitCodeFor, notePageError, options,
+  pickFinal, portError, progressLine, shouldWriteResults, standStillWarning, summarise, templateFor, traceFor,
+  writeFailure,
 } from '../../replay/drive.mjs';
 import { WIRE, loadRecord, traces } from '../../replay/trace.mjs';
 
@@ -17,8 +18,6 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..', '..', '..');
 const tmp = mkdtempSync(join(tmpdir(), 'replay-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
-
-const refused = (argv, message) => assert.throws(() => options(argv), { message });
 
 describe('options: what is given', () => {
   test('with nothing given: from minute 0 for 15 minutes on the sampled trace, media padding, the trace\'s own weight', () => {
@@ -64,60 +63,66 @@ describe('options: what is given', () => {
 describe('options: each refusal, with its exact message', () => {
   test('--start is a whole number from 0', () => {
     const message = '--start must be a whole number, 0 or more';
-    for (const bad of ['-1', '1.5', 'abc', '', '1e3', ' 2', '0x10', '1234567890']) refused(['--start', bad], message);
+    for (const bad of ['-1', '1.5', 'abc', '', '1e3', ' 2', '0x10', '1234567890']) {
+      assert.throws(() => options(['--start', bad]), { message });
+    }
   });
 
   test('--minutes is a whole number from 1', () => {
     const message = '--minutes must be a whole number, 1 or more';
-    for (const bad of ['0', '-5', '2.5', 'x', '']) refused(['--minutes', bad], message);
+    for (const bad of ['0', '-5', '2.5', 'x', '']) {
+      assert.throws(() => options(['--minutes', bad]), { message });
+    }
   });
 
   test('--trace is sampled, cautious or flat: and a whole number of kbit/s', () => {
     const message = '--trace must be sampled, cautious or flat:<whole kbit/s>';
     for (const bad of ['Sampled', 'flat', 'flat:', 'flat:1.5', 'flat:-3', 'flat:12345678', 'steady', '']) {
-      refused(['--trace', bad], message);
+      assert.throws(() => options(['--trace', bad]), { message });
     }
   });
 
   test('--fill is media or null', () => {
-    refused(['--fill', 'zero'], '--fill must be media or null');
-    refused(['--fill', 'Media'], '--fill must be media or null');
+    assert.throws(() => options(['--fill', 'zero']), { message: '--fill must be media or null' });
+    assert.throws(() => options(['--fill', 'Media']), { message: '--fill must be media or null' });
   });
 
   test('--wire is a number from 1 to 1.5', () => {
     const message = '--wire must be a number from 1 to 1.5';
-    for (const bad of ['0.99', '1.51', '2', '0', 'abc', '1e0', '', '1.', '-1', ' 1']) refused(['--wire', bad], message);
+    for (const bad of ['0.99', '1.51', '2', '0', 'abc', '1e0', '', '1.', '-1', ' 1']) {
+      assert.throws(() => options(['--wire', bad]), { message });
+    }
   });
 
   test('--name is 1 to 60 of letters, digits, dot, dash and underscore, and not . or ..', () => {
     const message = '--name must be 1 to 60 characters: letters, digits, dot, dash and underscore, and not . or ..';
     for (const bad of ['', '.', '..', 'a'.repeat(61), 'a/b', '../x', 'a b', 'a\nb', 'a\\b']) {
-      refused(['--name', bad], message);
+      assert.throws(() => options(['--name', bad]), { message });
     }
   });
 
   test('--tmp is a folder: not empty, no null character', () => {
-    refused(['--tmp', ''], '--tmp must be a folder');
-    refused(['--tmp', 'a\0b'], '--tmp must be a folder');
+    assert.throws(() => options(['--tmp', '']), { message: '--tmp must be a folder' });
+    assert.throws(() => options(['--tmp', 'a\0b']), { message: '--tmp must be a folder' });
   });
 
   test('an option that is not known is refused by name, cut and on one line; so is a bare word', () => {
-    refused(['--bogus'], 'unknown option --bogus');
-    refused(['--start', '3', 'extra'], 'unknown option extra');
-    refused([`--${'x'.repeat(100)}`], `unknown option --${'x'.repeat(38)}`);
-    refused(['--a\nb'], 'unknown option --a b');
-    refused(['-s', '3'], 'unknown option -s');
+    assert.throws(() => options(['--bogus']), { message: 'unknown option --bogus' });
+    assert.throws(() => options(['--start', '3', 'extra']), { message: 'unknown option extra' });
+    assert.throws(() => options([`--${'x'.repeat(100)}`]), { message: `unknown option --${'x'.repeat(38)}` });
+    assert.throws(() => options(['--a\nb']), { message: 'unknown option --a b' });
+    assert.throws(() => options(['-s', '3']), { message: 'unknown option -s' });
   });
 
   test('an option without its value is refused, also when the next argument is another option', () => {
-    refused(['--start'], '--start needs a value');
-    refused(['--start', '--minutes', '3'], '--start needs a value');
-    refused(['--minutes', '3', '--name'], '--name needs a value');
+    assert.throws(() => options(['--start']), { message: '--start needs a value' });
+    assert.throws(() => options(['--start', '--minutes', '3']), { message: '--start needs a value' });
+    assert.throws(() => options(['--minutes', '3', '--name']), { message: '--name needs a value' });
   });
 
   test('an option given twice is refused, not read as the last one', () => {
-    refused(['--start', '1', '--start', '2'], '--start was given twice');
-    refused(['--rebuild', '--rebuild'], '--rebuild was given twice');
+    assert.throws(() => options(['--start', '1', '--start', '2']), { message: '--start was given twice' });
+    assert.throws(() => options(['--rebuild', '--rebuild']), { message: '--rebuild was given twice' });
   });
 });
 
@@ -417,6 +422,7 @@ describe('createStop', () => {
     const stop = createStop();
     stop.trigger();
     await soon(stop.wait(600000));
+    assert.equal(stop.stopped, true);
   });
 
   test('a wait ends by itself when its time is up, and that is not a stop', async (t) => {

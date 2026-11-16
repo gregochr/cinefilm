@@ -1092,6 +1092,60 @@ describe('the link', () => {
     assert.equal(entry.sent, entry.bytes);
     assert.equal(entry.aborted, false);
     assert.ok(entry.doneMs >= entry.firstByteMs);
+    assert.equal('cutMs' in entry, false);
+  });
+
+  test('an answer the player cuts has a time it was cut at, from the start of the request, and no end', async () => {
+    const standIn = await start({ trace: [800] });
+    const { sessionId } = await newSession(standIn, { quality: '360p' });
+    standIn.startClock();
+    const seen = open(standIn.port, { path: `/api/sessions/${sessionId}/360p/seg-0.ts` });
+    await waitFor(() => seen.bytes >= 3000, 'the first bytes');
+    seen.req.destroy();
+    const entry = entryOf(standIn, 'segment');
+    await waitFor(() => entry.aborted, 'the log to say aborted');
+    assert.equal(typeof entry.cutMs, 'number');
+    assert.ok(entry.cutMs >= entry.firstByteMs, `cut at ${entry.cutMs}, first byte at ${entry.firstByteMs}`);
+    assert.equal(entry.doneMs, null);
+  });
+
+  test('the bytes the link let through are counted by replay minute: exactly what the answers sent', async () => {
+    const standIn = await start();
+    assert.deepEqual(standIn.delivered, []);
+    const { sessionId } = await newSession(standIn);
+    standIn.startClock();
+    await request(standIn.port, { path: '/api/films/1' });
+    await request(standIn.port, { path: `/api/sessions/${sessionId}/360p/seg-0.ts` });
+    await request(standIn.port, { path: `/api/sessions/${sessionId}/360p/seg-1.ts` });
+    const after = standIn.requests.filter((r) => r.ms !== null);
+    assert.equal(after.length, 3);
+    const total = after.reduce((sum, r) => sum + r.sent, 0);
+    assert.ok(total > 700_000, `sent ${total}`);
+    assert.deepEqual(standIn.delivered, [total]);
+  });
+
+  test('bytes sent before the replay clock started are not counted', async () => {
+    const standIn = await start();
+    await newSession(standIn);
+    await request(standIn.port, { path: '/api/films/1' });
+    assert.ok(standIn.requests.every((r) => r.ms === null && r.sent > 0));
+    assert.deepEqual(standIn.delivered, []);
+    standIn.startClock();
+    await request(standIn.port, { path: '/api/session' });
+    const [counted] = standIn.requests.filter((r) => r.ms !== null);
+    assert.deepEqual(standIn.delivered, [counted.sent]);
+  });
+
+  test('an API answer released at once after finish() is not counted', async () => {
+    const standIn = await start();
+    standIn.startClock();
+    await request(standIn.port, { path: '/api/films/1' });
+    const [counted] = standIn.requests;
+    standIn.finish();
+    const answer = await post(standIn.port, '/api/films/1/progress', { positionMs: 7 });
+    assert.equal(answer.status, 200);
+    assert.deepEqual(standIn.delivered, [counted.sent]);
+    assert.equal(entryOf(standIn, 'progress').sent > 0, true);
   });
 });
 

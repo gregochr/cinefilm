@@ -10,7 +10,8 @@
 // that is refilled at the trace's rate for the current replay minute (nothing at all when it is 0). Not even an
 // answer's headers leave before the allowance lets its first bytes go, and each answer waits the round-trip time
 // first. The app's own files (the page, its scripts and fonts) are served at once: loading the app is not under
-// test.
+// test. As bytes pass through the link they are counted by replay minute (`delivered`), from the moment the clock
+// starts; an answer that is released at once after `finish()` is not counted.
 //
 // What a request says is never a file path, nothing of it is sent back but the position a progress call reports (as
 // a number), and its log and its results hold only figures and words from fixed lists: the build is a table read at
@@ -21,7 +22,7 @@ import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { extname, join, relative, sep } from 'node:path';
-import { createLink, minuteAt, rateAt } from './link.mjs';
+import { createByteCounter, createLink, minuteAt, rateAt } from './link.mjs';
 import { WIRE } from './trace.mjs';
 import { buildSegment } from './ts.mjs';
 
@@ -149,6 +150,7 @@ class Answer {
   send(n) {
     this.head();
     this.res.write(this.spec.chunk(this.offset, n));
+    this.env.counter.add(clockMs(this.env), n); // the clock's time is null before it starts: nothing is counted then
     this.offset += n;
     this.record.sent = this.offset;
     if (this.offset >= this.size) this.complete();
@@ -161,7 +163,10 @@ class Answer {
 
   // The player went away, or the stand-in stopped: the job leaves the link and the log says whether it was cut.
   close() {
-    if (this.offset < this.size || (this.size === 0 && !this.headed)) this.record.aborted = true;
+    if (this.offset < this.size || (this.size === 0 && !this.headed)) {
+      this.record.aborted = true;
+      this.record.cutMs = Math.round(performance.now() - this.began); // like doneMs, from the start of the request
+    }
     this.closed = true;
     this.env.link.remove(this);
     if (this.cancelAlive) this.cancelAlive();
@@ -610,7 +615,7 @@ export async function startStandIn({
   const env = {
     rungs, segmentMs, segmentCount: Math.floor(film.editions[0].runtimeMs / segmentMs), film, template, trace,
     startMinute, rttMs, fill, wire, files, index, t0: null, open: false, link: null,
-    sessions: new Map(), viewings: new Map(), requests: [], healthReports: [],
+    sessions: new Map(), viewings: new Map(), requests: [], healthReports: [], counter: createByteCounter(),
   };
   env.link = createLink(() => rateBps(env));
   let lastTick = performance.now();
@@ -640,6 +645,10 @@ export async function startStandIn({
     startClock() {
       env.t0 = Date.now();
       env.link.advance(0);
+    },
+    /** Bytes the link let through in each replay minute so far (see `createByteCounter`). */
+    get delivered() {
+      return env.counter.list();
     },
     clockMs: () => clockMs(env),
     minute: () => minuteNow(env),

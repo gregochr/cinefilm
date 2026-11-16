@@ -1,7 +1,7 @@
 // scripts/replay/link.mjs: the shared allowance, driven with made-up milliseconds and no clock.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { createLink, minuteAt, rateAt } from '../../replay/link.mjs';
+import { createByteCounter, createLink, minuteAt, rateAt } from '../../replay/link.mjs';
 
 // A job of `size` bytes that records every send.
 function job(size) {
@@ -252,5 +252,47 @@ describe('rateAt', () => {
     assert.equal(rateAt([100, undefined, 300], 1), 0);
     assert.equal(rateAt([], 0), 0);
     assert.equal(rateAt(trace, -1), 0);
+  });
+});
+
+describe('createByteCounter', () => {
+  test('nothing counted is an empty list', () => {
+    assert.deepEqual(createByteCounter().list(), []);
+  });
+
+  test('59,999 ms is in minute 0 and 60,000 ms is in minute 1', () => {
+    const counter = createByteCounter();
+    counter.add(59999, 5);
+    counter.add(60000, 7);
+    assert.deepEqual(counter.list(), [5, 7]);
+  });
+
+  test('bytes in the same minute add up, and 0 ms is the start of minute 0', () => {
+    const counter = createByteCounter();
+    counter.add(0, 100);
+    counter.add(30000, 200);
+    counter.add(59999, 1);
+    assert.deepEqual(counter.list(), [301]);
+  });
+
+  test('minutes in between with nothing sent are 0, not missing', () => {
+    const counter = createByteCounter();
+    counter.add(10, 5);
+    counter.add(4 * 60000 + 1, 9);
+    assert.deepEqual(counter.list(), [5, 0, 0, 0, 9]);
+  });
+
+  test('a time that is not usable, or bytes that are not above 0, are ignored', () => {
+    const counter = createByteCounter();
+    for (const ms of [null, undefined, NaN, Infinity, -1, '5']) counter.add(ms, 10);
+    for (const bytes of [0, -5, NaN, undefined]) counter.add(0, bytes);
+    assert.deepEqual(counter.list(), []);
+  });
+
+  test('list() is a copy: changing it does not change what is counted', () => {
+    const counter = createByteCounter();
+    counter.add(0, 5);
+    counter.list()[0] = 99;
+    assert.deepEqual(counter.list(), [5]);
   });
 });

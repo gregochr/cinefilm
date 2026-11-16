@@ -8,9 +8,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, describe, test } from 'node:test';
 import {
-  aheadAt, analyseRun, deliveredPerMinute, deliveryAgainstTrace, describe as describeRun, hasUsableTimes, idleGaps,
-  linkByMinute, notPlaying, playheadLag, RUNS_DIR, rungsAndBytes, runDir, samplingGaps, screenAgainstLink, soundness,
-  spellFigures, spread, startOf, withFilmInHand,
+  aheadAt, analyseRun, deliveryAgainstTrace, describe as describeRun, idleGaps, linkByMinute, notPlaying,
+  playheadLag, RUNS_DIR, rungsAndBytes, runDir, samplingGaps, screenAgainstLink, soundness, spellFigures, startOf,
+  withFilmInHand,
 } from '../../replay/analyse.mjs';
 import { loadRecord } from '../../replay/trace.mjs';
 
@@ -110,81 +110,6 @@ describe('section 1: was the run sound', () => {
     assert.deepEqual(playheadLag([at(0), at(5000)]), { behind: 0, behindWithFilm: 0, moved: 0, wall: 0 });
   });
 
-  test('an answer that spans two minutes is shared between them by the time spent in each', () => {
-    // First byte at 55 s (50 s + 5 s), done at 70 s: 5 s of 15 in minute 0 and 10 s in minute 1.
-    const requests = [{ sent: 3000, ms: 50000, firstByteMs: 5000, doneMs: 20000 }];
-    assert.deepEqual(deliveredPerMinute(requests, 2), [1000, 2000, 0]);
-  });
-
-  test('an answer the player cut short, or with no time between first byte and end, counts in its first byte\'s minute', () => {
-    const requests = [
-      { sent: 500, ms: 61000, firstByteMs: 100, doneMs: null },
-      { sent: 40, ms: 59800, firstByteMs: 100, doneMs: 100 },
-      { sent: 7, ms: 100, firstByteMs: null, doneMs: 0 },
-    ];
-    assert.deepEqual(deliveredPerMinute(requests, 2), [47, 500, 0]);
-  });
-
-  test('a request whose times cannot be used is left out: negative, not finite, or not a number', () => {
-    const good = { sent: 100, ms: 0, firstByteMs: 0, doneMs: 1000 };
-    const bad = [
-      { sent: 50, ms: -1, firstByteMs: 0, doneMs: 10 },
-      { sent: 50, ms: Infinity, firstByteMs: 0, doneMs: 10 },
-      { sent: 50, ms: '0', firstByteMs: 0, doneMs: 10 },
-      { sent: 50, ms: 0, firstByteMs: -5, doneMs: 10 },
-      { sent: 50, ms: 0, firstByteMs: Infinity, doneMs: 10 },
-      { sent: 50, ms: 0, firstByteMs: 0, doneMs: -10 },
-      { sent: 50, ms: 0, firstByteMs: 0, doneMs: 'abc' },
-      { sent: 50, ms: 0, firstByteMs: 0, doneMs: NaN },
-      { sent: '50', ms: 0, firstByteMs: 0, doneMs: 10 },
-      { sent: -20, ms: 0, firstByteMs: 0, doneMs: 10 },
-    ];
-    assert.deepEqual(deliveredPerMinute([good, ...bad], 1), [100, 0]);
-  });
-
-  test('an answer that begins after the last place and takes time is counted in the last place', () => {
-    assert.deepEqual(deliveredPerMinute([{ sent: 10, ms: 200000, firstByteMs: 0, doneMs: 1000 }], 2), [0, 0, 10]);
-  });
-
-  test('a time of 0 or a missing one is usable; an answer that begins absurdly late counts in the last place', () => {
-    assert.equal(hasUsableTimes({ ms: 0, firstByteMs: 0, doneMs: 0 }), true);
-    assert.equal(hasUsableTimes({ ms: 5, firstByteMs: null }), true);
-    assert.equal(hasUsableTimes({ ms: 5, firstByteMs: undefined, doneMs: null }), true);
-    assert.equal(hasUsableTimes({ ms: 5, doneMs: -1 }), false);
-    assert.equal(hasUsableTimes({ firstByteMs: 1 }), false);
-    assert.deepEqual(deliveredPerMinute([{ sent: 10, ms: 1e300, firstByteMs: 0, doneMs: 5 }], 2), [0, 0, 10]);
-  });
-
-  test('the walk over the minutes never goes past the last place: what is left is added to it in one step', () => {
-    // 50 minutes long, into three places: the first two minutes, then the remaining 48 in the last place.
-    const writes = [];
-    const places = new Proxy([0, 0, 0], {
-      set(target, key, value) {
-        writes.push(key);
-        target[key] = value;
-        return true;
-      },
-    });
-    spread(places, 0, 50 * 60000, 5000);
-    assert.deepEqual([...places], [100, 100, 4800]);
-    assert.equal(writes.length, 3, 'one write for each place, not one for each minute');
-  });
-
-  test('an answer with nothing sent, or from before the clock started, counts for nothing', () => {
-    const requests = [
-      { sent: 0, ms: 1000, firstByteMs: 1, doneMs: 5 },
-      { sent: 100, ms: null, firstByteMs: 1, doneMs: 5 },
-      { kind: 'api' },
-    ];
-    assert.deepEqual(deliveredPerMinute(requests, 1), [0, 0]);
-  });
-
-  test('what comes after the last minute run is gathered in the last place', () => {
-    const requests = [{ sent: 90, ms: 119000, firstByteMs: 0, doneMs: 71000 }];
-    // 119,000 to 190,000: 1 s in minute 1, 60 s in minute 2, 10 s in minute 3, which is the last place.
-    assert.deepEqual(deliveredPerMinute(requests, 2).map(Math.round), [0, 1, 89]);
-  });
-
   test('a minute is "well above the trace" above 5% and 60 kbit/s over it: 8,325,000 bytes is level, one more is over', () => {
     const link = new Map([[0, 1000], [1, 1000]]);
     const result = deliveryAgainstTrace([8325000, 8325001, 0], link, 0, 2);
@@ -200,6 +125,14 @@ describe('section 1: was the run sound', () => {
     assert.deepEqual(result.thin, [{ minute: 24, rate: 699, got: 699 }, { minute: 26, rate: 0, got: 0 }]);
   });
 
+  test('a minute the list of counts has no place for counts as 0 bytes', () => {
+    const link = new Map([[0, 1000], [1, 1000]]);
+    const result = deliveryAgainstTrace([5000], link, 0, 2);
+    assert.equal(result.delivered, 5000);
+    assert.equal(result.over, 0);
+    assert.equal(deliveryAgainstTrace([], link, 0, 2).delivered, 0);
+  });
+
   test('a minute with no sample has a trace of 0', () => {
     const result = deliveryAgainstTrace([1000000, 0], new Map(), 0, 1);
     assert.equal(result.over, 1);
@@ -210,8 +143,8 @@ describe('section 1: was the run sound', () => {
     const samples = [
       at(5000, { t: 5, kbps: 1000 }), at(10000, { t: 10 }), at(15000, { t: 15 }), at(70000, { t: 70, kbps: 800 }),
     ];
-    const requests = [{ sent: 60000, ms: 0, firstByteMs: 0, doneMs: 60000 }];
-    const result = soundness({ samples, requests, start: 0 });
+    // What the stand-in counted: 60,000 bytes in minute 0 and no place for minute 1, which counts as 0.
+    const result = soundness({ samples, delivered: [60000], start: 0 });
     assert.deepEqual(result.gaps, { samples: 4, longest: 55000, long: 1 });
     assert.deepEqual(result.notPlaying, []);
     assert.equal(result.withFilm, 0);
@@ -247,9 +180,27 @@ describe('section 2: gaps with nothing fetched', () => {
     assert.equal(late[0].after, 'd');
   });
 
-  test('a segment the player cut short has no end: it ends where it began', () => {
+  test('a segment with neither an end nor a cut time is read as ending where it began', () => {
     const gaps = idleGaps([seg(0, undefined), seg(30001, 1)], samples, link);
     assert.equal(gaps[0].gap, 30001);
+    // One fetched for 40 s with no cut time recorded, asked for again at 41 s: the gap is all of those 41 s.
+    assert.equal(idleGaps([seg(0, undefined), seg(41000, 1)], samples, link)[0].gap, 41000);
+  });
+
+  test('a segment the player cut ends when it was cut: one fetched for 40 s and asked again at 41 s is no gap', () => {
+    const cut = { kind: 'segment', ms: 0, cutMs: 40000, rung: '480p' };
+    assert.deepEqual(idleGaps([cut, seg(41000, 500)], samples, link), []);
+  });
+
+  test('the end of a cut segment counts to the millisecond: a gap of 30,000 ms after it is none, 30,001 is one', () => {
+    const cut = { kind: 'segment', ms: 10000, cutMs: 40000, rung: '480p' }; // cut at 50,000 ms on the replay clock
+    assert.deepEqual(idleGaps([cut, seg(80000, 500)], samples, link), []);
+    assert.equal(idleGaps([cut, seg(80001, 500)], samples, link)[0].gap, 30001);
+  });
+
+  test('a segment that finished ends at its end, whatever a cut time says', () => {
+    const odd = { kind: 'segment', ms: 0, doneMs: 1000, cutMs: 90000, rung: '480p' };
+    assert.equal(idleGaps([odd, seg(41000, 500)], samples, link)[0].gap, 40000);
   });
 
   test('a segment with no time among timed ones is left out: it neither hides a gap nor makes one', () => {
@@ -274,7 +225,10 @@ describe('section 3: the six bad spells', () => {
     [4 - start, 0, 4, 0, 0, 90, 4], [5 - start, 0, 5, 0, 500, 60, 5], [6 - start, 0, 5, 0, 700, 20, 6],
     [7 - start, 0, 5, 0, 0, 40, 5],
   ];
-  const samplesTo = (minutes) => Array.from({ length: minutes * 2 }, (_, i) => at(i * 30000 + 1000, { kbps: 100 * (Math.floor(i / 2) + 1) }));
+  // Samples every 30 s from 1 s in to `minutes` whole minutes (and 1 s) in: that many minutes completed.
+  const samplesTo = (minutes) => Array.from({ length: minutes * 2 + 1 }, (_, i) => (
+    at(i * 30000 + 1000, { kbps: 100 * (Math.floor(i / 2) + 1) })
+  ));
 
   test('a spell is described by its mean link, the bank going in, the lowest figure, the stalls now and then', () => {
     const report = { minutes: rows(0) };
@@ -302,9 +256,24 @@ describe('section 3: the six bad spells', () => {
     // Samples in minutes 4, 6 and 7 only: minute 5 has none.
     const samples = [
       at(4 * 60000 + 1000, { kbps: 100 }), at(6 * 60000 + 1000, { kbps: 700 }), at(7 * 60000 + 1000, { kbps: 800 }),
+      at(8 * 60000 + 1000, { kbps: 900 }),
     ];
     const [spell] = spellFigures({ report: { minutes: rows(0) }, samples, record, start: 0 });
     assert.equal(spell.meanLink, 500);
+  });
+
+  test('a spell is compared only when the run covered every minute of it: 479,999 ms is short of minutes 5 to 7', () => {
+    const report = { minutes: rows(0) };
+    const upTo = (ms) => [at(1000), at(ms)];
+    assert.deepEqual(spellFigures({ report, samples: upTo(479999), record, start: 0 }), []);
+    assert.equal(spellFigures({ report, samples: upTo(480000), record, start: 0 }).length, 1);
+  });
+
+  test('the same edge for a run that began at another record minute: minutes 5 to 7 from 4 need 240,000 ms', () => {
+    const report = { minutes: rows(4) };
+    const upTo = (ms) => [at(1000), at(ms)];
+    assert.deepEqual(spellFigures({ report, samples: upTo(239999), record, start: 4 }), []);
+    assert.equal(spellFigures({ report, samples: upTo(240000), record, start: 4 }).length, 1);
   });
 
   test('a spell is left out when the run ended before its last minute was over', () => {
@@ -390,7 +359,10 @@ describe('describe: the lines of an analysis', () => {
   ];
 
   test('every line, in order', () => {
-    const lines = describeRun({ name: 'demo', heading: 'Replay of record minutes 0 to 7', samples, requests, report, record, start: 0 });
+    const delivered = [600000, 300000]; // as the stand-in counted them: 600,000 bytes in minute 0, 300,000 in minute 1
+    const lines = describeRun({
+      name: 'demo', heading: 'Replay of record minutes 0 to 7', samples, requests, delivered, report, record, start: 0,
+    });
     assert.deepEqual(lines, [
       'demo: Replay of record minutes 0 to 7',
       '',
@@ -475,12 +447,13 @@ describe('analyseRun on a run\'s files', () => {
 
   const good = {
     'requests.json': JSON.stringify(requests),
+    'delivered.json': JSON.stringify([1000]),
     'samples.json': JSON.stringify(samples),
     'health.json': JSON.stringify({ final: { report } }),
     'summary.txt': `${HEADING}\nrest\n`,
   };
   const expected = (name, heading, start) => describeRun({
-    name, heading, samples, requests, report, record: loadRecord(), start,
+    name, heading, samples, requests, delivered: [1000], report, record: loadRecord(), start,
   });
 
   const THIN = '  thin minutes (trace under 700 kbit/s), minute:trace/delivered: ';
@@ -567,6 +540,27 @@ describe('analyseRun on a run\'s files', () => {
       const name = writeRun({ ...good, 'requests.json': bad });
       assert.throws(() => analyseRun(name, tmp), { message: requestsMessage }, bad);
     }
+  });
+
+  test('the delivery line is made from delivered.json: what it holds is what is delivered', () => {
+    const name = writeRun({ ...good, 'delivered.json': '[999999999999]' });
+    const lines = analyseRun(name, tmp);
+    assert.ok(lines.includes('  delivered 1000000 MB of the 2 MB the trace allowed; minutes delivered well above the trace: 1'));
+  });
+
+  test('a run with no delivered.json is refused as a missing file', () => {
+    const name = writeRun({ ...good, 'delivered.json': undefined });
+    assert.throws(() => analyseRun(name, tmp), { message: 'delivered.json is not in this run\'s folder' });
+  });
+
+  test('a delivered.json that is not a list of byte counts of 0 or more is refused', () => {
+    const message = 'delivered.json is not a list of byte counts';
+    for (const bad of ['{}', 'null', '5', '[-1]', '["5"]', '[null]', '[1, "x"]', '[[1]]']) {
+      const name = writeRun({ ...good, 'delivered.json': bad });
+      assert.throws(() => analyseRun(name, tmp), { message }, bad);
+    }
+    const name = writeRun({ ...good, 'delivered.json': '[0, 5]' });
+    assert.doesNotThrow(() => analyseRun(name, tmp));
   });
 
   test('a file that is not there, one that is not JSON and one that cannot be read are told apart', () => {
