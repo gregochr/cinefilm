@@ -177,13 +177,13 @@
 .ee__group-error {
   padding: 8px 16px;
   font-size: 13px;
-  color: #f0876a;
+  color: var(--cf-problem);
   border-bottom: 1px solid var(--cf-line);
 }
 .ee__error {
   margin: 0;
   font-size: 13px;
-  color: #f0876a;
+  color: var(--cf-problem);
 }
 .ee__row {
   display: grid;

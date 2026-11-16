@@ -1421,7 +1421,7 @@
   font-size: 15px;
 }
 .admin__strip-text--error {
-  color: #f0876a;
+  color: var(--cf-problem);
 }
 .admin__strip-link {
   display: inline-flex;
@@ -1442,13 +1442,13 @@
   justify-content: space-between;
   gap: 16px;
   padding: 14px 18px;
-  border: 1px solid #f0876a;
+  border: 1px solid var(--cf-problem);
   border-radius: 12px;
 }
 .admin__strip-error-text {
   margin: 0;
   font-size: 14px;
-  color: #f0876a;
+  color: var(--cf-problem);
 }
 
 /* To do groups (AR1): a card per group with a heading, rows and a footer */
@@ -1520,7 +1520,7 @@
   grid-column: 1 / -1;
   margin: 0;
   font-size: 13px;
-  color: #f0876a;
+  color: var(--cf-problem);
 }
 .admin__todo-foot {
   display: flex;
@@ -1574,13 +1574,13 @@
   justify-content: space-between;
   gap: 16px;
   padding: 14px 18px;
-  border: 1px solid #f0876a;
+  border: 1px solid var(--cf-problem);
   border-radius: 12px;
 }
 .admin__todo-error-text {
   margin: 0;
   font-size: 14px;
-  color: #f0876a;
+  color: var(--cf-problem);
 }
 @media (max-width: 600px) {
   .admin__todo-row {
@@ -1934,7 +1934,7 @@
   color: #9dbf8e;
 }
 .pchart__tile-n--err {
-  color: #f0876a;
+  color: var(--cf-problem);
 }
 .pchart__tile-t {
   font-size: 12px;
@@ -2157,7 +2157,7 @@
   color: var(--cf-text-muted);
 }
 .plog__stalls--err {
-  color: #f0876a;
+  color: var(--cf-problem);
 }
 .plog__table .plog__details td {
   padding: 12px 16px 16px;
@@ -2190,7 +2190,7 @@
 .plog-error {
   margin: 0;
   font-size: var(--cf-size-ui);
-  color: #f0876a;
+  color: var(--cf-problem);
 }
 .plog-network {
   display: flex;

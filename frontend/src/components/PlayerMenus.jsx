@@ -67,26 +67,29 @@ export function QualityMenu({ qualities, value, width, activeRung, onSelect }) {
   const ref = useRef(null);
   useFocusChecked(ref);
   return (
-    <div
-      className="menu menu--quality"
-      role="menu"
-      tabIndex={-1}
-      aria-label="Quality"
-      ref={ref}
-      onKeyDown={onMenuKeyDown}
-    >
-      <div className="menu__heading">Quality</div>
-      {qualities.map((q) => (
-        <Item
-          key={q.id}
-          checked={value === q.id}
-          disabled={!q.available}
-          onSelect={() => onSelect(q.id)}
-          detail={qualityDetail(q, { width, activeRung })}
-        >
-          {qualityName(q.id)}
-        </Item>
-      ))}
+    <div className="menu menu--quality" ref={ref}>
+      <div className="menu__heading" aria-hidden="true">
+        Quality
+      </div>
+      <div
+        className="menu__list"
+        role="menu"
+        tabIndex={-1}
+        aria-label="Quality"
+        onKeyDown={onMenuKeyDown}
+      >
+        {qualities.map((q) => (
+          <Item
+            key={q.id}
+            checked={value === q.id}
+            disabled={!q.available}
+            onSelect={() => onSelect(q.id)}
+            detail={qualityDetail(q, { width, activeRung })}
+          >
+            {qualityName(q.id)}
+          </Item>
+        ))}
+      </div>
       {workerOffline(qualities) ? (
         <div className="menu__footer">
           Lower qualities unavailable right now &mdash; the transcode worker is offline. Pre-made
@@ -102,39 +105,33 @@ export function QualityMenu({ qualities, value, width, activeRung, onSelect }) {
  * leaves the menu: the player decides what happens once the download is gone. `aria-disabled`, not `disabled`, while
  * the request runs, so the button keeps focus.
  */
-function WrongSubtitles({ busy, problem, onWrong }) {
+function WrongSubtitles({ busy, onWrong }) {
   return (
-    <>
-      <button
-        type="button"
-        role="menuitem"
-        className="menu__item menu__item--action"
-        aria-disabled={busy || undefined}
-        onClick={() => {
-          if (!busy) onWrong();
-        }}
-      >
-        <span className="menu__tick" aria-hidden="true" />
-        <span className="menu__name">{busy ? subtitlesWrong.busy : subtitlesWrong.label}</span>
-      </button>
-      {problem ? (
-        <p className="menu__problem" role="alert">
-          {problem}
-        </p>
-      ) : null}
-    </>
+    <button
+      type="button"
+      role="menuitem"
+      className="menu__item menu__item--action"
+      aria-disabled={busy || undefined}
+      onClick={() => {
+        if (!busy) onWrong();
+      }}
+    >
+      <span className="menu__tick" aria-hidden="true" />
+      <span className="menu__name">{busy ? subtitlesWrong.busy : subtitlesWrong.label}</span>
+    </button>
   );
 }
 
 /**
  * "Earlier", "Later" and "Reset timing" for the subtitle file that shows (`timing.available`). Three plain actions, not
  * choices (`menuitem`), under a hairline, never amber. `aria-disabled`, not `disabled`, while a change is saved or when
- * there is nothing to reset, so the pressed button keeps focus. The readout says the offset, or that it is being saved.
+ * there is nothing to reset or the offset is at the 10-minute limit that way, so the pressed button keeps focus. The
+ * readout and any problem are not part of the menu
+ * (a menu holds only items): `SubtitleNotes` shows them under it.
  */
 function TimingControls({ timing }) {
   const saving = timing.busy || timing.loading;
   const blocked = timing.busy || timing.frozen;
-  const readout = saving ? subtitleTiming.busy : timingReadout(timing.offsets);
   const action = (label, spoken, detail, onPress, blocked) => (
     <button
       type="button"
@@ -158,11 +155,20 @@ function TimingControls({ timing }) {
       aria-label={subtitleTiming.group}
       aria-busy={saving || undefined}
     >
-      <div className="menu__readout" role="status">
-        {readout ? (saving ? readout : subtitleTiming.readout(readout)) : null}
-      </div>
-      {action(subtitleTiming.earlier, EARLIER.spoken, EARLIER.label, timing.onEarlier, blocked)}
-      {action(subtitleTiming.later, LATER.spoken, LATER.label, timing.onLater, blocked)}
+      {action(
+        subtitleTiming.earlier,
+        EARLIER.spoken,
+        EARLIER.label,
+        timing.onEarlier,
+        blocked || timing.atEarliest,
+      )}
+      {action(
+        subtitleTiming.later,
+        LATER.spoken,
+        LATER.label,
+        timing.onLater,
+        blocked || timing.atLatest,
+      )}
       {action(
         subtitleTiming.reset,
         subtitleTiming.reset,
@@ -170,7 +176,31 @@ function TimingControls({ timing }) {
         timing.onReset,
         blocked || timing.atZero,
       )}
-      {timing.problem ? (
+    </div>
+  );
+}
+
+/**
+ * What the Subtitles menu says about itself, kept outside the `role="menu"` so the menu holds only items: the timing
+ * readout (a status region that stays mounted while timing is offered, so the first offset is announced) and the
+ * problems of "Subtitles are wrong" and of a timing change (alerts).
+ */
+function SubtitleNotes({ wrong, timing }) {
+  const saving = timing?.busy || timing?.loading;
+  const readout = saving ? subtitleTiming.busy : timingReadout(timing?.offsets);
+  return (
+    <div className="menu__notes">
+      {timing?.available ? (
+        <div className="menu__readout" role="status">
+          {readout ? (saving ? readout : subtitleTiming.readout(readout)) : null}
+        </div>
+      ) : null}
+      {wrong?.available && wrong.problem ? (
+        <p className="menu__problem" role="alert">
+          {wrong.problem}
+        </p>
+      ) : null}
+      {timing?.available && timing.problem ? (
         <p className="menu__problem" role="alert">
           {timing.problem}
         </p>
@@ -213,55 +243,62 @@ export function AudioSubtitlesPanel({
   const options = subtitleOptions(subtitleStreams, hasFullSubtitle);
   return (
     <div className="menu menu--panel" role="group" aria-label="Audio and subtitles" ref={ref}>
-      <div
-        className="menu__col"
-        role="menu"
-        tabIndex={-1}
-        aria-label="Audio"
-        onKeyDown={onMenuKeyDown}
-      >
-        <div className="menu__heading">Audio</div>
-        {audioStreams.map((s) => {
-          const { name, detail } = audioLabel(s);
-          return (
-            <Item
-              key={streamKey(s)}
-              checked={String(streamKey(s)) === String(audioValue)}
-              onSelect={() => onAudio(streamKey(s))}
-              detail={detail}
-            >
-              {name}
-            </Item>
-          );
-        })}
+      <div className="menu__col">
+        <div className="menu__heading" aria-hidden="true">
+          Audio
+        </div>
+        <div
+          className="menu__list"
+          role="menu"
+          tabIndex={-1}
+          aria-label="Audio"
+          onKeyDown={onMenuKeyDown}
+        >
+          {audioStreams.map((s) => {
+            const { name, detail } = audioLabel(s);
+            return (
+              <Item
+                key={streamKey(s)}
+                checked={String(streamKey(s)) === String(audioValue)}
+                onSelect={() => onAudio(streamKey(s))}
+                detail={detail}
+              >
+                {name}
+              </Item>
+            );
+          })}
+        </div>
       </div>
-      <div
-        className="menu__col"
-        role="menu"
-        tabIndex={-1}
-        aria-label="Subtitles"
-        ref={subtitlesRef}
-        onKeyDown={onMenuKeyDown}
-      >
-        <div className="menu__heading">Subtitles</div>
-        {subtitleStreams.length === 0 && !hasForcedSubtitle && !hasFullSubtitle ? (
-          <div className="menu__empty">None for this film</div>
-        ) : (
-          options.map((o) => (
-            <Item
-              key={String(o.value)}
-              checked={String(o.value) === String(subtitleValue)}
-              onSelect={() => onSubtitle(o.value)}
-              detail={o.note}
-            >
-              {o.label}
-            </Item>
-          ))
-        )}
-        {timing?.available ? <TimingControls timing={timing} /> : null}
-        {wrong?.available ? (
-          <WrongSubtitles busy={wrong.busy} problem={wrong.problem} onWrong={wrong.onWrong} />
-        ) : null}
+      <div className="menu__col">
+        <div className="menu__heading" aria-hidden="true">
+          Subtitles
+        </div>
+        <div
+          className="menu__list"
+          role="menu"
+          tabIndex={-1}
+          aria-label="Subtitles"
+          ref={subtitlesRef}
+          onKeyDown={onMenuKeyDown}
+        >
+          {subtitleStreams.length === 0 && !hasForcedSubtitle && !hasFullSubtitle ? (
+            <div className="menu__empty">None for this film</div>
+          ) : (
+            options.map((o) => (
+              <Item
+                key={String(o.value)}
+                checked={String(o.value) === String(subtitleValue)}
+                onSelect={() => onSubtitle(o.value)}
+                detail={o.note}
+              >
+                {o.label}
+              </Item>
+            ))
+          )}
+          {timing?.available ? <TimingControls timing={timing} /> : null}
+          {wrong?.available ? <WrongSubtitles busy={wrong.busy} onWrong={wrong.onWrong} /> : null}
+        </div>
+        <SubtitleNotes wrong={wrong} timing={timing} />
       </div>
     </div>
   );

@@ -40,9 +40,10 @@ describe('QualityMenu: transcoding', () => {
     expect(screen.getByRole('menuitemradio', { name: /Auto/ })).toBeDisabled();
     expect(screen.getByRole('menuitemradio', { name: /360p/ })).toBeDisabled();
     expect(screen.getByRole('menuitemradio', { name: /^Original/ })).toBeEnabled();
-    expect(screen.getByRole('menu', { name: 'Quality' })).toHaveTextContent(
+    expect(screen.getByText(/Lower qualities unavailable right now/)).toHaveTextContent(
       'Lower qualities unavailable right now — the transcode worker is offline. Pre-made versions still play.',
     );
+    expect(screen.getByRole('menu', { name: 'Quality' })).not.toHaveTextContent('offline');
   });
 
   it('has no offline footer while Auto is available, even with some rungs missing', () => {
@@ -278,6 +279,7 @@ describe('AudioSubtitlesPanel: Subtitles are wrong', () => {
     render(<AudioSubtitlesPanel {...props} wrong={wrongOf({ problem })} />);
 
     expect(screen.getByRole('alert')).toHaveTextContent(problem);
+    expect(within(subs()).queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('arrow keys reach it from the last subtitle choice', async () => {
@@ -389,25 +391,44 @@ describe('AudioSubtitlesPanel: subtitle timing', () => {
 
     expect(within(subs()).getAllByRole('menuitemradio')).toHaveLength(3);
     expect(within(subs()).getByRole('group', { name: 'Subtitle timing' })).toBeInTheDocument();
-    expect(within(subs()).getByRole('status')).toHaveTextContent('Timing: +0.5 s');
+    expect(screen.getByRole('status')).toHaveTextContent('Timing: +0.5 s');
     expect(earlier()).toHaveTextContent('Earlier');
     expect(later()).toHaveTextContent('Later');
+  });
+
+  it('keeps the readout and the problem outside the menus, so a menu holds only items', () => {
+    render(
+      <AudioSubtitlesPanel
+        {...props}
+        timing={timingOf({ problem: 'Couldn’t change the timing. Try again.' })}
+        wrong={{ available: true, busy: false, problem: 'Couldn’t remove.', onWrong: vi.fn() }}
+      />,
+    );
+
+    expect(screen.getAllByRole('alert')).toHaveLength(2);
+    expect(screen.getByRole('status')).toHaveTextContent('Timing: +0.5 s');
+    for (const menu of screen.getAllByRole('menu')) {
+      expect(within(menu).queryByRole('status')).not.toBeInTheDocument();
+      expect(within(menu).queryByRole('alert')).not.toBeInTheDocument();
+      expect(within(menu).queryByRole('heading')).not.toBeInTheDocument();
+      expect(menu).not.toHaveTextContent(/Timing:|Couldn’t/);
+    }
   });
 
   it('says No timing change at 0, and that parts differ when they do', () => {
     const { rerender } = render(
       <AudioSubtitlesPanel {...props} timing={timingOf({ offsets: [0] })} />,
     );
-    expect(within(subs()).getByRole('status')).toHaveTextContent('Timing: No timing change');
+    expect(screen.getByRole('status')).toHaveTextContent('Timing: No timing change');
 
     rerender(<AudioSubtitlesPanel {...props} timing={timingOf({ offsets: [250, 500] })} />);
-    expect(within(subs()).getByRole('status')).toHaveTextContent('Timing: differs by part');
+    expect(screen.getByRole('status')).toHaveTextContent('Timing: differs by part');
   });
 
   it('keeps the readout region (empty) while the offset is not known, so the first one is announced', () => {
     render(<AudioSubtitlesPanel {...props} timing={timingOf({ offsets: null })} />);
 
-    expect(within(subs()).getByRole('status')).toBeEmptyDOMElement();
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
   });
 
   it('asks once per click for each action', async () => {
@@ -433,9 +454,29 @@ describe('AudioSubtitlesPanel: subtitle timing', () => {
     expect(later()).toHaveAttribute('aria-disabled', 'true');
     expect(earlier()).toHaveAttribute('aria-disabled', 'true');
     expect(reset()).toHaveAttribute('aria-disabled', 'true');
-    expect(within(subs()).getByRole('status')).toHaveTextContent('Saving…');
+    expect(screen.getByRole('status')).toHaveTextContent('Saving…');
     expect(later()).toHaveFocus();
     expect(timing.onLater).not.toHaveBeenCalled();
+  });
+
+  it('disables Later at the +10 minute limit and Earlier at -10, each only that way, and still focusable', async () => {
+    const top = timingOf({ offsets: [600000], atLatest: true });
+    const { unmount } = render(<AudioSubtitlesPanel {...props} timing={top} />);
+
+    later().focus();
+    await userEvent.click(later());
+    expect(later()).toHaveAttribute('aria-disabled', 'true');
+    expect(later()).toHaveFocus();
+    expect(earlier()).not.toHaveAttribute('aria-disabled');
+    expect(top.onLater).not.toHaveBeenCalled();
+    unmount();
+
+    const bottom = timingOf({ offsets: [-600000], atEarliest: true });
+    render(<AudioSubtitlesPanel {...props} timing={bottom} />);
+    await userEvent.click(earlier());
+    expect(earlier()).toHaveAttribute('aria-disabled', 'true');
+    expect(later()).not.toHaveAttribute('aria-disabled');
+    expect(bottom.onEarlier).not.toHaveBeenCalled();
   });
 
   it('has nothing to reset when the timing is already 0, but Earlier and Later still work', async () => {
@@ -454,7 +495,7 @@ describe('AudioSubtitlesPanel: subtitle timing', () => {
     const timing = timingOf({ loading: true });
     render(<AudioSubtitlesPanel {...props} timing={timing} />);
 
-    expect(within(subs()).getByRole('status')).toHaveTextContent('Saving…');
+    expect(screen.getByRole('status')).toHaveTextContent('Saving…');
     await userEvent.click(later());
 
     expect(timing.onLater).toHaveBeenCalledTimes(1);
@@ -471,7 +512,7 @@ describe('AudioSubtitlesPanel: subtitle timing', () => {
     for (const button of [earlier(), later(), reset()]) {
       expect(button).toHaveAttribute('aria-disabled', 'true');
     }
-    expect(within(subs()).getByRole('status')).toHaveTextContent('Timing: +0.25 s');
+    expect(screen.getByRole('status')).toHaveTextContent('Timing: +0.25 s');
     expect(timing.onEarlier).not.toHaveBeenCalled();
     expect(timing.onLater).not.toHaveBeenCalled();
     expect(timing.onReset).not.toHaveBeenCalled();
@@ -485,9 +526,7 @@ describe('AudioSubtitlesPanel: subtitle timing', () => {
       />,
     );
 
-    expect(within(subs()).getByRole('alert')).toHaveTextContent(
-      'Couldn’t change the timing. Try again.',
-    );
+    expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t change the timing. Try again.');
   });
 
   it('ArrowDown and ArrowUp go on from a focused item that is disabled for now, not back to the first', async () => {
