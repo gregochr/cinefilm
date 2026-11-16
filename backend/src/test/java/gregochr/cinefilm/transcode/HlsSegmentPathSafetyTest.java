@@ -64,7 +64,7 @@ class HlsSegmentPathSafetyTest {
         SessionManager manager = new SessionManager(transcoder, files, new ScriptedWaiter(), new FakeScheduler(),
             new MutableClock(), new SessionSettings(Duration.ofMinutes(2), Duration.ofMinutes(10), 1000, 2, "dev"),
             new FakeStamps(), hls, () -> new UUID(0, 1));
-        id = manager.create(new SessionSpec(7, "Heat", Path.of("/library/Heat.m4v"), 1, CUTS, 25.0, 1920, 1080,
+        id = manager.create(TestSessions.spec(7, "Heat", Path.of("/library/Heat.m4v"), 1, CUTS, 25.0, 1920, 1080,
             RUNGS, RUNGS.get(0), null, 0, true)).id();
         Path rungDir = Files.createDirectories(hls.resolve(id).resolve("original"));
         Files.write(rungDir.resolve("seg-0.ts"), new byte[] {0x47, 1, 2});

@@ -61,7 +61,7 @@ class SessionManagerPauseTest {
     }
 
     private static SessionSpec spec(long edition) {
-        return new SessionSpec(edition, "Heat", SOURCE, 1, CUTS, 25.0, 1920, 1080, RUNGS, RUNGS.get(0), null, 0,
+        return TestSessions.spec(edition, "Heat", SOURCE, 1, CUTS, 25.0, 1920, 1080, RUNGS, RUNGS.get(0), null, 0,
             true);
     }
 
@@ -141,7 +141,7 @@ class SessionManagerPauseTest {
         assertThat(transcoder.lastPlan().outputDir()).isEqualTo(HLS.resolve(id(1)));
         assertThat(transcoder.lastPlan().source()).isEqualTo(SOURCE);
         assertThat(waiter.timeouts).containsExactly(Duration.ofSeconds(6));
-        assertThat(row()).isEqualTo(new SessionDtos.SessionRow(id(1), "Heat", 7, "original", null, 1, TestData.NOW,
+        assertThat(row()).isEqualTo(TestSessions.sessionRow(id(1), "Heat", 7, "original", null, 1, TestData.NOW,
             false));
         assertThat(files.deletedTrees).containsExactly(HLS.resolve(id(1)), HLS.resolve(id(1)));
     }
@@ -178,7 +178,7 @@ class SessionManagerPauseTest {
         manager.view(id);
 
         assertThat(transcoder.plans).hasSize(1);
-        assertThat(row()).isEqualTo(new SessionDtos.SessionRow(id(1), "Heat", 7, "720p", null, 0, TestData.NOW,
+        assertThat(row()).isEqualTo(TestSessions.sessionRow(id(1), "Heat", 7, "720p", null, 0, TestData.NOW,
             false));
 
         assertThatThrownBy(() -> manager.segment(id, "original", 3)).isInstanceOf(SegmentNotReadyException.class);

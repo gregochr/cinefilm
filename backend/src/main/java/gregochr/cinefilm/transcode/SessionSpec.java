@@ -27,14 +27,6 @@ public record SessionSpec(long editionId, String filmTitle, List<PartSource> par
                           int height, List<Rung> rungs, Rung startRung, String pinned, int startSegment,
                           boolean hardwareDecode, String playbackId) {
 
-    /** A session whose viewing is not named. */
-    public SessionSpec(long editionId, String filmTitle, List<PartSource> parts, CutList cuts, int width,
-                       int height, List<Rung> rungs, Rung startRung, String pinned, int startSegment,
-                       boolean hardwareDecode) {
-        this(editionId, filmTitle, parts, cuts, width, height, rungs, startRung, pinned, startSegment,
-            hardwareDecode, null);
-    }
-
     /**
      * One file of the film.
      *
@@ -43,13 +35,5 @@ public record SessionSpec(long editionId, String filmTitle, List<PartSource> par
      * @param fps the file's frame rate, or null when unknown
      */
     public record PartSource(Path source, int audioIndex, Double fps) {
-    }
-
-    /** A film in one piece. */
-    public SessionSpec(long editionId, String filmTitle, Path source, int audioIndex, CutList cuts, Double fps,
-                       int width, int height, List<Rung> rungs, Rung startRung, String pinned, int startSegment,
-                       boolean hardwareDecode) {
-        this(editionId, filmTitle, List.of(new PartSource(source, audioIndex, fps)), cuts, width, height, rungs,
-            startRung, pinned, startSegment, hardwareDecode, null);
     }
 }

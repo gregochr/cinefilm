@@ -216,16 +216,9 @@ public class SessionService {
      * Ends a session because Admin pressed Stop: as {@link #end}, and the session and the viewing it served are
      * remembered for a day, so their requests answer 410 (not the 404 of an expired session, and no new session
      * for that viewing). The stop is recorded before the session ends, so a request that arrives meanwhile is
-     * already refused.
-     */
-    public void stopFromAdmin(String id) {
-        stopFromAdmin(id, null);
-    }
-
-    /**
-     * As {@link #stopFromAdmin(String)}, for a row that names its viewing: the session's own viewing is recorded when
-     * it is known, else the one given (the session may already have been replaced by the player's new one under the
-     * same viewing), and every live session of that viewing is ended too.
+     * already refused. The session's own viewing is recorded when it is known, else the one given (the session may
+     * already have been replaced by the player's new one under the same viewing), and every live session of that
+     * viewing is ended too.
      *
      * @param id the session id
      * @param viewing the row's playback id, or null
