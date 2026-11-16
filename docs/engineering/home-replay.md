@@ -109,7 +109,9 @@ In `scripts/replay/out/<name>/`, which git ignores:
 Read its first section before believing anything else. A replay runs in real time, so a busy Mac can stall the
 film for the wrong reason. A run is sound when the five-second samples have no long gap, no pause came with film
 in hand, the playhead kept the clock outside those pauses, and what the stand-in let through in each minute,
-which it counts itself, matches the trace. After that it lists the stretches when nothing was being fetched (a
+which it counts itself, matches the trace. Only whole minutes are compared, so a run stopped before its first
+minute is up compares nothing, and that line reads `delivered 0 MB of the 0 MB the trace allowed`. After that it
+lists the stretches when nothing was being fetched (a
 segment the player cut short counts as being fetched until it was cut), the buffer going into each of the six
 bad spells and its lowest point in each, for the spells the run covered from their first minute to the end of
 their last, what the screen showed against the link, and the time at each quality beside 12 November.
@@ -202,8 +204,10 @@ any was skipped, or when a file has not ended after two minutes). They need Node
 browser and no network beyond this machine. The link's arithmetic is tested with made-up times. The server's
 tests run over real HTTP on a free port, most with the link left open. Those about the link use a dead or a slow
 one and wait for an event (a byte arriving, an entry in the log), never for a fixed time, except one that waits
-40 ms to show that an answer waits for the round trip. CI runs them on Node 24. When a test is added, raise the
-number in the wrapper.
+40 ms to show that an answer waits for the round trip. No test runs the server across the end of a minute: the
+counting by minute is tested as arithmetic with made-up times, and that the server puts its bytes in the right
+minute was checked once by hand, on record minutes 33 to 36. CI runs them on Node 24. When a test is added,
+raise the number in the wrapper.
 
 What needs Chrome has no automated test: launching it, the socket to it, building the app, encoding the film's
 picture, and the driver's own loop. The by-hand minute under "Running it" is their only check. What can be

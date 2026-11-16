@@ -1099,13 +1099,21 @@ describe('the link', () => {
     const standIn = await start({ trace: [800] });
     const { sessionId } = await newSession(standIn, { quality: '360p' });
     standIn.startClock();
+    const asked = performance.now();
     const seen = open(standIn.port, { path: `/api/sessions/${sessionId}/360p/seg-0.ts` });
-    await waitFor(() => seen.bytes >= 3000, 'the first bytes');
+    // 30,000 bytes at 100,000 a second is about 0.3 s in; the 375,812-byte segment is nowhere near finished.
+    await waitFor(() => seen.bytes >= 30000, 'well past the first bytes');
     seen.req.destroy();
     const entry = entryOf(standIn, 'segment');
     await waitFor(() => entry.aborted, 'the log to say aborted');
-    assert.equal(typeof entry.cutMs, 'number');
-    assert.ok(entry.cutMs >= entry.firstByteMs, `cut at ${entry.cutMs}, first byte at ${entry.firstByteMs}`);
+    const now = Math.round(performance.now() - asked);
+    const figures = `cut at ${entry.cutMs}, first byte at ${entry.firstByteMs}, ${now} ms since it was asked for`;
+    assert.equal(typeof entry.cutMs, 'number', figures);
+    assert.ok(Number.isInteger(entry.cutMs), figures);
+    // Counted from the start of the request: it cannot be later than the time that has passed since it was asked for.
+    assert.ok(entry.cutMs <= now + 1, `not from the start of the request: ${figures}`);
+    // And it is the time of the cut, not of the first byte: 30,000 bytes take about 300 ms after the first byte.
+    assert.ok(entry.cutMs >= entry.firstByteMs + 200, `not the time of the cut: ${figures}`);
     assert.equal(entry.doneMs, null);
   });
 
