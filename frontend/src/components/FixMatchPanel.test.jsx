@@ -61,6 +61,10 @@ describe('FixMatchPanel reports once', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     await user.keyboard('{Escape}');
     await act(async () => release(respond(applied)));
+    // Reported at once, still mounted so not stale; the Cancel waits for the end of the fade.
+    expect(onApplied).toHaveBeenCalledTimes(1);
+    expect(onApplied).toHaveBeenCalledWith(applied, false);
+    expect(onCancel).not.toHaveBeenCalled();
     await settle();
 
     expect(onCancel).toHaveBeenCalledTimes(1);

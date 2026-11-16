@@ -88,9 +88,9 @@ export default function FixMatchPanel({ item, opener, onApplied, onCancel }) {
   const subId = `${base}-sub`;
   const searchRef = useRef(null);
   // `useDialog.close` runs only its first `after`, so Cancel, ×, Esc and a successful apply close once, and the
-  // buttons are disabled while `closing`. `dismissed` only decides how an apply that finishes is reported: once
-  // the dialog is on its way out the unmount that ends the fade would drop a second fade's timer, so the result is
-  // reported at once (the lists must still be read again); otherwise it fades first.
+  // buttons are disabled while `closing`. `dismissed` is set by Cancel, × and Esc only and decides how an apply that
+  // finishes is reported: after a dismissal the unmount that ends the fade would drop a second fade's timer, so the
+  // result is reported at once (the lists must still be read again); otherwise it fades first.
   const dismissed = useRef(false);
   const dismiss = () => {
     dismissed.current = true;
@@ -103,7 +103,6 @@ export default function FixMatchPanel({ item, opener, onApplied, onCancel }) {
       onApplied(result, stale);
       return;
     }
-    dismissed.current = true;
     close(() => onApplied(result, false));
   });
   const { search } = fix;
