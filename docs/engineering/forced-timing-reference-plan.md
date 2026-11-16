@@ -32,6 +32,9 @@ step 2 exists, a fit against a downloaded file never changes trust or playback.*
 
 ### 3c-1 — find and fetch a full reference; measure only
 
+Built as two PRs (owner's 1,500-line limit): **3c-1a** finds the editions and widens the full search; **3c-1b**
+fetches and measures. Changes made while building (2026-11-16) are in "Build notes" at the end of this section.
+
 Shaped like 5d-1's `FullFitProbe`. **Stores no fit and acts on nothing.** The only rows written are the stored
 references, the search columns, and new reference metadata.
 
@@ -93,6 +96,22 @@ references, the search columns, and new reference metadata.
     trying the next candidate, a spent budget or an outage ending the pass, and the order and limit after the 2d loop.
   - The search scope, and that a timing-reference film gets no FULL download and no `FullFitProbe` measurement.
   - Integration (Testcontainers): the migration.
+
+#### Build notes (2026-11-16)
+
+- **No chosen reference in 3c-1.** Each forced file is measured against **every** usable stored reference of its
+  edition (at most 3 per film), one line per (file, reference). Measuring only the top-ranked one threw away the better
+  file fetched after a low share. 3c-2 picks the rule from these lines.
+- **Frame rate:** a candidate whose known fps is more than 0.01 from 23.976 is left out (24.000 drifts about 7 s over
+  two hours). The measurement line carries the reference's fps.
+- **Hearing-impaired strictly last** for the timing reference, ahead of cut affinity: a hearing-impaired file is
+  fetched only when no other single-file candidate is left.
+- **The walk moves on** when the best share is under 30% (integer arithmetic, `matched * 100 < served * 30`, as decision
+  38) **or** the fitted offset is more than 30 s either way (another cut).
+- **At most 2 timing fetches per UTC day** (counted in memory, so a restart can allow 2 more), as well as 2 per run,
+  so 2d keeps most of the comparison share on every day. One map of stored references per film is shared across a
+  run's editions, so two editions of one film never exceed the cap or count a free reuse as a fetch.
+- A failure finding timing-reference films never stops the full search of films that need full subtitles.
 
 ### 3c-2 — store the fit and show it (trust decided from 3c-1's lines)
 
