@@ -242,6 +242,18 @@ export function partTimes(part) {
   return `${start}–${later ? `${formatScanDay(part.endedAt)} ` : ''}${end}`;
 }
 
+/**
+ * The place of a later part when it differs from the first part's, "Train (Icomera US, Inc.)", else null. The
+ * operators are compared only once both are known.
+ */
+export function differentPlace(part, operator, first) {
+  const sameEnvironment = environmentKey(part.environment) === environmentKey(first.environment);
+  const sameOperator = !operator || !first.operator || operator === first.operator;
+  if (sameEnvironment && sameOperator) return null;
+  const place = environmentLabel(part.environment);
+  return operator ? `${place} (${operator})` : place;
+}
+
 /** The longest gap between two parts that still reads "Picked up again": under a minute. */
 export const PICKED_UP_BELOW_MS = 60_000;
 

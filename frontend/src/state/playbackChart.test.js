@@ -3,6 +3,7 @@ import {
   bucketColour,
   bucketShares,
   chartSummary,
+  differentPlace,
   chartTiles,
   columnLabel,
   environmentKey,
@@ -499,5 +500,22 @@ describe('minuteStrip', () => {
     const strip = minuteStrip([seven(0, 5000, 1, 30_000), seven(1, 100, 2)]);
     expect(strip.bands.every((b) => b.x + b.width <= STRIP.width)).toBe(true);
     expect(strip.line).toContain('L');
+  });
+});
+
+describe('differentPlace', () => {
+  const first = { environment: 'train', operator: 'Icomera US, Inc.' };
+
+  it('is null for the same environment and operator, or when an operator is not yet known', () => {
+    expect(differentPlace({ environment: 'train' }, 'Icomera US, Inc.', first)).toBeNull();
+    expect(differentPlace({ environment: 'train' }, null, first)).toBeNull();
+    expect(differentPlace({ environment: 'train' }, 'EE', { ...first, operator: null })).toBeNull();
+  });
+
+  it('names the place when the environment or the operator differs', () => {
+    expect(differentPlace({ environment: 'home' }, null, first)).toBe('Home');
+    expect(differentPlace({ environment: 'train' }, 'EE Limited', first)).toBe(
+      'Train (EE Limited)',
+    );
   });
 });

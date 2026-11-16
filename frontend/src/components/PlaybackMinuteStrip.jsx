@@ -5,7 +5,7 @@ import { playbackChart as copy } from '../state/adminCopy.js';
  * The per-minute view of one record's `minutes`: stall dots on top at the minute they happened, the median speed as
  * a line, and under it a band of the rung played in each minute. A record without a readable row says so instead.
  */
-export default function PlaybackMinuteStrip({ minutes, film }) {
+export default function PlaybackMinuteStrip({ minutes, film, times = null }) {
   const strip = minuteStrip(minutes);
   if (!strip) return <p className="admin__text">{copy.noMinutes}</p>;
   return (
@@ -14,7 +14,7 @@ export default function PlaybackMinuteStrip({ minutes, film }) {
         viewBox={`0 0 ${STRIP.width} ${STRIP.height}`}
         width="100%"
         role="img"
-        aria-label={copy.stripLabel(film)}
+        aria-label={copy.stripLabel(film, times)}
       >
         {strip.bands.map((band) => (
           <rect

@@ -250,15 +250,54 @@ describe('SelectedSession', () => {
       render(<SelectedSession session={two()} />);
       const alert = await screen.findByRole('alert');
       expect(
-        screen.getByRole('status', { name: 'Loading the minute by minute view' }),
+        screen.getByRole('status', { name: 'Loading the minute by minute view, 17:56–20:33' }),
       ).toBeInTheDocument();
-      await user.click(within(alert).getByRole('button', { name: 'Try again' }));
+      await user.click(within(alert).getByRole('button', { name: /Try again.*17:23/ }));
       expect(
         await screen.findByText('17:23–17:56 · Start 4.8 s · 4 stalls, 9 s'),
       ).toBeInTheDocument();
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       expect(
-        screen.getByRole('status', { name: 'Loading the minute by minute view' }),
+        screen.getByRole('status', { name: 'Loading the minute by minute view, 17:56–20:33' }),
+      ).toBeInTheDocument();
+    });
+
+    it('tells two failing parts apart: one retry button each, re-reading only its own part', async () => {
+      const user = userEvent.setup();
+      const reads = [];
+      installFetch((m, url) => {
+        reads.push(url.split('/').pop());
+        return respond({ error: 'x' }, 500);
+      });
+      render(<SelectedSession session={two()} />);
+      const retry = await screen.findByRole('button', { name: /Try again.*17:23/ });
+      expect(screen.getByRole('button', { name: /Try again, 17:56/ })).toBeInTheDocument();
+      expect(screen.getAllByRole('alert')).toHaveLength(2);
+      reads.length = 0;
+      await user.click(retry);
+      await screen.findByRole('button', { name: /Try again.*17:23/ });
+      expect(reads).toEqual([ID1]);
+    });
+
+    it('shows the place on a later part only when it differs from the first part’s', async () => {
+      installFetch((m, url) => {
+        const id = url.split('/').pop();
+        const full = partRecord(id, '2026-11-12T17:56:53.956Z', 6300, 155, 2_011_000);
+        full.report.operator = id === ID1 ? 'AS5089 Virgin Media Limited' : 'AS12576 EE Limited';
+        return respond(full);
+      });
+      render(<SelectedSession session={two()} />);
+      expect(
+        await screen.findByText(/^Train \(EE Limited\) · 17:56–20:33 · Start 6\.3 s/),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/^17:23–17:56 · Start/)).toBeInTheDocument();
+    });
+
+    it('shows no place on a later part that is on the same network as the first', async () => {
+      serve();
+      render(<SelectedSession session={two()} />);
+      expect(
+        await screen.findByText('17:56–20:33 · Start 6.3 s · 155 stalls, 33m 31s'),
       ).toBeInTheDocument();
     });
 

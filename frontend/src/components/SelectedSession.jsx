@@ -34,6 +34,8 @@ export default function SelectedSession({ session }) {
               part={part}
               film={session.filmTitle}
               onRecord={at === 0 ? onFirstRecord : undefined}
+              named={parts.length > 1}
+              first={at === 0 ? null : { environment: parts[0].environment, operator }}
             />
           </Fragment>
         );

@@ -10,9 +10,7 @@
       "stallMs": 0,
       "startupMs": 1200,
       "environment": "home",
-      "rungMs": {
-        "1080p": 6600000
-      },
+      "rungMs": { "1080p": 6600000 },
       "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
       "touch": false,
       "endedAt": "2026-11-01T21:50:30Z",
@@ -36,10 +34,7 @@
       "stallMs": 21000,
       "startupMs": 3100,
       "environment": "away",
-      "rungMs": {
-        "480p": 1800000,
-        "360p": 2520000
-      },
+      "rungMs": { "480p": 1800000, "360p": 2520000 },
       "userAgent": "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X)",
       "touch": true,
       "endedAt": "2026-11-03T13:22:30Z",
@@ -63,10 +58,7 @@
       "stallMs": 0,
       "startupMs": 900,
       "environment": "home",
-      "rungMs": {
-        "original": 3960000,
-        "720p": 1320000
-      },
+      "rungMs": { "original": 3960000, "720p": 1320000 },
       "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)",
       "touch": true,
       "endedAt": "2026-11-07T19:58:30Z",
@@ -90,10 +82,7 @@
       "stallMs": 9400,
       "startupMs": 2380,
       "environment": "train",
-      "rungMs": {
-        "480p": 1468800,
-        "360p": 2851200
-      },
+      "rungMs": { "480p": 1468800, "360p": 2851200 },
       "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
       "endedAt": "2026-11-10T20:55:35Z",
       "parts": [
