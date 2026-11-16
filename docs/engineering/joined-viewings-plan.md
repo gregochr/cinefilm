@@ -76,7 +76,7 @@ chart.
 - Load the rows of the 30-day window and join them.
 - Count the viewings of at least 3 minutes, and those where no part `hasProblem`.
 
-The table is capped at 2,000 rows and one user makes a few a day, so loading them is cheap. The two `count`
+The table is capped at 2,000 rows and one user makes a few a day, so loading them is cheap: the counts parse the window's rows on each Admin summary poll (every 30 s), which is fine at that size. An unreadable row warns once per playback id per process, not on every poll. The two `count`
 repository methods go if nothing else uses them.
 
 The log (`GET /api/admin/playback-health`) and one record (`/{playbackId}`) are unchanged: each playback stays its

@@ -5,7 +5,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import gregochr.cinefilm.health.HealthFigures;
 import gregochr.cinefilm.health.PlaybackHealth;
+import gregochr.cinefilm.health.HealthDtos.PlaybackCounts;
 import gregochr.cinefilm.health.PlaybackHealthRepository;
+import gregochr.cinefilm.health.PlaybackHealthService;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
@@ -21,6 +23,9 @@ class PlaybackHealthSummaryIntegrationTest extends IntegrationTestBase {
 
     @Autowired
     private PlaybackHealthRepository health;
+
+    @Autowired
+    private PlaybackHealthService service;
 
     private long next;
 
@@ -42,6 +47,19 @@ class PlaybackHealthSummaryIntegrationTest extends IntegrationTestBase {
         row.setSummary("{}");
         row.setFigures(new HealthFigures(watchedMs, problem ? 1 : 0, 0, 1_000L, problem, "home"));
         return health.saveAndFlush(row);
+    }
+
+    @Test
+    void theCountsKeepTheThirtyDayLineAndTheThreeMinuteLineAndSplitOutTheSmoothOnes() {
+        Instant line = NOW.minus(Duration.ofDays(30));
+        row(line, NOW, 180_000, false);
+        row(line.minusMillis(1), NOW, 200_000, false);
+        row(line.plusMillis(1), NOW, 200_000, false);
+        row(NOW.minusSeconds(100), NOW, 179_999, false);
+        row(NOW.minusSeconds(100), NOW, 180_001, false);
+        row(NOW.minusSeconds(100), NOW, 200_000, true);
+
+        assertThat(service.playbackCounts()).isEqualTo(new PlaybackCounts(4, 3));
     }
 
     @Test

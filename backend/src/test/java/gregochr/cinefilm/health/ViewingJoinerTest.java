@@ -214,6 +214,14 @@ class ViewingJoinerTest {
     }
 
     @Test
+    void twoBlankUserAgentsDoNotJoin() {
+        Part a = with(first(), 1, "train", OPERATOR, " ");
+        Part b = with(after(Duration.ofSeconds(6)), 1, "train", OPERATOR, " ");
+
+        assertThat(ids(ViewingJoiner.join(List.of(a, b)))).containsExactly(List.of("a"), List.of("b"));
+    }
+
+    @Test
     void twoMissingUserAgentsDoNotJoin() {
         Part a = with(first(), 1, "train", OPERATOR, null);
         Part b = with(after(Duration.ofSeconds(6)), 1, "train", OPERATOR, null);

@@ -21,7 +21,7 @@ public final class HealthDtos {
      * The body of {@code PUT /api/playback-health/{playbackId}}: the totals of one playback so far.
      * {@code startPositionMs} and {@code endPositionMs} are the film position of the first and the latest beat; both
      * are optional (a report from a player that predates them has none, and a null is left out of the stored text, so
-     * such a report is stored exactly as before) and, when present, at least 0.
+     * such a report is stored exactly as before) and, when present, from 0 to 2,000,000,000.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record HealthReport(Long seq, Long editionId, Long elapsedMs, String environment, String operator,

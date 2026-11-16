@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,6 +102,7 @@ public class PlaybackHealthService {
     private final EditionRepository editions;
     private final JsonMapper mapper;
     private final Clock clock;
+    private final Set<String> warned = ConcurrentHashMap.newKeySet();
 
     /** Creates the service over its repositories, the application's JSON mapper and the application clock. */
     public PlaybackHealthService(PlaybackHealthRepository repository, EditionRepository editions, JsonMapper mapper,
@@ -379,8 +381,20 @@ public class PlaybackHealthService {
         try {
             return mapper.readValue(stored.getSummary(), HealthReport.class);
         } catch (JacksonException e) {
-            LOG.warn("Playback health row {} has an unreadable summary", stored.getId());
+            warnOnce(stored);
             return null;
+        }
+    }
+
+    /**
+     * Warns about an unreadable summary once per playback id for the life of the process (the set is capped at
+     * {@link #MAX_ROWS}); the counts read the window's rows on every poll, so a bad row must not warn each time.
+     */
+    private void warnOnce(PlaybackHealth stored) {
+        if (warned.size() < MAX_ROWS && warned.add(stored.getPlaybackId())) {
+            LOG.warn("Playback health row {} has an unreadable summary", stored.getId());
+        } else {
+            LOG.debug("Playback health row {} still has an unreadable summary", stored.getId());
         }
     }
 

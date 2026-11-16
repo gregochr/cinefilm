@@ -761,6 +761,52 @@ class PlaybackHealthServiceTest {
     }
 
     @Test
+    void anUnreadableRowWarnsOnceHoweverOftenTheWindowIsRead() {
+        ch.qos.logback.classic.Logger logger =
+            (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(PlaybackHealthService.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
+            new ch.qos.logback.core.read.ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            chartRows(List.of(longRow(1, ID, "not json")));
+
+            service.chart(null);
+            service.chart(null);
+            service.playbackCounts();
+
+            assertThat(appender.list).filteredOn(e -> e.getLevel() == ch.qos.logback.classic.Level.WARN)
+                .hasSize(1);
+        } finally {
+            logger.detachAppender(appender);
+        }
+    }
+
+    @Test
+    void theSetOfRowsAlreadyWarnedAboutIsCappedAtTheTableSize() {
+        ch.qos.logback.classic.Logger logger =
+            (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(PlaybackHealthService.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
+            new ch.qos.logback.core.read.ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            List<PlaybackHealth> rows = new java.util.ArrayList<>();
+            for (int i = 0; i < PlaybackHealthService.MAX_ROWS + 1; i++) {
+                rows.add(longRow(i, new java.util.UUID(0, i).toString(), "not json"));
+            }
+            chartRows(rows);
+
+            service.chart(null);
+
+            assertThat(appender.list).filteredOn(e -> e.getLevel() == ch.qos.logback.classic.Level.WARN)
+                .hasSize(PlaybackHealthService.MAX_ROWS);
+        } finally {
+            logger.detachAppender(appender);
+        }
+    }
+
+    @Test
     void aFilmSessionIsThreeMinutes() {
         assertThat(PlaybackHealthService.FILM_SESSION_MIN_MS).isEqualTo(180_000L);
     }

@@ -10,11 +10,19 @@ import static gregochr.cinefilm.health.HealthSamples.text;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.health.HealthDtos.PlaybackCounts;
 import gregochr.cinefilm.health.HealthDtos.PlayingNow;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Root;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +31,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
@@ -85,6 +94,24 @@ class PlaybackHealthSummaryTest {
             false), film(new UUID(0, 3).toString(), 3, 200_000, true));
 
         assertThat(service.playbackCounts()).isEqualTo(new PlaybackCounts(2, 1));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void theCountsSelectRowsThatStartedAtOrAfterThirtyDaysBack() {
+        windowRows();
+        service.playbackCounts();
+        ArgumentCaptor<Specification<PlaybackHealth>> spec = ArgumentCaptor.captor();
+        verify(repository).findAll(spec.capture(),
+            eq(Sort.by(Sort.Direction.ASC, "startedAt").and(Sort.by(Sort.Direction.ASC, "id"))));
+        Root<PlaybackHealth> root = mock(Root.class);
+        Path<Instant> startedAt = mock(Path.class);
+        CriteriaBuilder builder = mock(CriteriaBuilder.class);
+        when(root.<Instant>get("startedAt")).thenReturn(startedAt);
+
+        spec.getValue().toPredicate(root, mock(CriteriaQuery.class), builder);
+
+        verify(builder).greaterThanOrEqualTo(startedAt, NOW.minus(Duration.ofDays(30)));
     }
 
     @Test

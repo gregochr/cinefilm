@@ -166,7 +166,7 @@ class PlaybackHealthViewingsTest extends ApiTestBase {
 
         assertThat(sessions).hasSize(1);
         assertThat(sessions.get(0).playbackId()).isEqualTo(inWindow.getPlaybackId());
-        assertThat(later.getStartedAt()).isBefore(boundary);
+        assertThat(sessions).extracting(ChartRow::playbackId).doesNotContain(later.getPlaybackId());
     }
 
     @Test
@@ -198,14 +198,14 @@ class PlaybackHealthViewingsTest extends ApiTestBase {
     void theCountsJoinPartsKeepTheThirtyDayLineAndSplitOutTheSmoothOnes() {
         playback(1, THIRTY_DAYS_AGO, THIRTY_DAYS_AGO.plusSeconds(600), 180_000, false);
         playback(2, THIRTY_DAYS_AGO.minusMillis(1), THIRTY_DAYS_AGO.plusSeconds(600), 200_000, false);
-        playback(3, THIRTY_DAYS_AGO.plusMillis(1), THIRTY_DAYS_AGO.plusSeconds(600), 179_999, false);
+        playback(3, THIRTY_DAYS_AGO.plusMillis(1), THIRTY_DAYS_AGO.plusSeconds(600), 200_000, false);
         // film 4: two parts of 100 s with a problem in the second: one film, not smooth
         playback(4, NOW.minusSeconds(5_000), NOW.minusSeconds(4_000), 100_000, false);
         playback(4, NOW.minusSeconds(3_990), NOW.minusSeconds(3_000), 100_000, true);
         // film 5: smooth
         playback(5, NOW.minusSeconds(2_000), NOW.minusSeconds(1_000), 180_001, false);
 
-        assertThat(service.playbackCounts()).isEqualTo(new PlaybackCounts(3, 2));
+        assertThat(service.playbackCounts()).isEqualTo(new PlaybackCounts(4, 3));
     }
 
     @Test

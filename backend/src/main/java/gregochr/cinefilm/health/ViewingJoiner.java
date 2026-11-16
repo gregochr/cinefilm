@@ -15,7 +15,7 @@ import java.util.Objects;
  *
  * <ol>
  *   <li>the same film;</li>
- *   <li>the same device: the same user agent, and not empty;</li>
+ *   <li>the same device: the same user agent, and not blank;</li>
  *   <li>it started 0 to 6 hours after A's last report ({@link #MAX_GAP});</li>
  *   <li>it picks up where A stopped: when both carry positions, the new part's start position is within
  *       {@link #MAX_POSITION_DRIFT_MS} of A's end position; when either lacks them, the same environment and the same
@@ -72,7 +72,7 @@ final class ViewingJoiner {
         List<Viewing> viewings = new ArrayList<>();
         Map<String, Viewing> newest = new HashMap<>();
         for (Part row : rows) {
-            if (row.userAgent() == null || row.userAgent().isEmpty()) {
+            if (row.userAgent() == null || row.userAgent().isBlank()) {
                 viewings.add(new Viewing(new ArrayList<>(List.of(row))));
                 continue;
             }
