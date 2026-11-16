@@ -47,7 +47,8 @@ the core count were left out. `train-link-plan.md` already describes the viewing
 
 ## What the stand-in keeps of what the player sends
 
-Figures, and words from its own fixed lists; never the text of a request. Its log of requests holds the kind of
+Figures, and words from its own fixed lists; never the text of a request. The one thing it sends back from a
+request is the position a progress call reports, as a number. Its log of requests holds the kind of
 route, the method, the quality and segment asked for, sizes and timings, and no address. A playback-health report
 is read field by field from the list of names in `standin.mjs`: a figure the player adds to its report later is
 not kept until it is added to that list. The operator's name and the browser's details are not kept at all.
@@ -67,11 +68,13 @@ not kept until it is added to that list. The operator's name and the browser's d
 ## Tests
 
 `bash scripts/test/run-all.sh` runs them with every other script test (`scripts/test/replay-rig.test.sh`, which
-runs `node --test` over the files in `scripts/test/replay/` and fails when fewer tests ran than it expects, or
-when any was skipped). They need Node 22 or newer and nothing else: no browser and no network beyond this
-machine. The link's arithmetic is tested with made-up times; the server's tests run over real HTTP on a free
-port with the link left open, so nothing in them waits on a clock for longer than the link's 10 ms tick. CI runs
-them on Node 24. When a test is added, raise the number in the wrapper.
+runs `node --test` on each file in `scripts/test/replay/` and fails when fewer tests ran than it expects, when
+any was skipped, or when a file has not ended after two minutes). They need Node 22 or newer and nothing else: no
+browser and no network beyond this machine. The link's arithmetic is tested with made-up times. The server's
+tests run over real HTTP on a free port, most with the link left open. Those about the link use a dead or a slow
+one and wait for an event (a byte arriving, an entry in the log), never for a fixed time, except one that waits
+40 ms to show that an answer waits for the round trip. CI runs them on Node 24. When a test is added, raise the
+number in the wrapper.
 
 What needs Chrome has no automated test (phase 2): after any change to the rig or to the player, run one minute
 on a steady link and read the summary.

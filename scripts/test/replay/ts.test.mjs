@@ -164,7 +164,8 @@ describe('time stamps', () => {
     assert.equal(stamps[0], 4294980000);
     assert.equal(stamps[7], 4294980000 + 7 * 45000);
     assert.ok(stamps[0] > 2 ** 32);
-    assert.equal(videoPts(buildSegment(template, index - 1, 50000, 'media'))[0], 4294620000); // the segment before, still under
+    // the segment before is still under
+    assert.equal(videoPts(buildSegment(template, index - 1, 50000, 'media'))[0], 4294620000);
   });
 
   test('the silence runs on its own unbroken clock across segments', () => {

@@ -1,6 +1,7 @@
 // Builds the stand-in film's segments: MPEG-TS, as CineFilm serves (H.264 and AAC in TS under plain variants),
-// each one the same four-second group of pictures and the same silence (the template, made on first use into
-// scripts/replay/out/template.json) with their own time stamps, padded to the size its rung's average bitrate implies. Two ways to pad:
+// each one the same four-second group of pictures and the same silence (the template: a helper that arrives with
+// the driver makes it from Chrome's encoder; the tests build their own) with their own time stamps, padded to the
+// size its rung's average bitrate implies. Two ways to pad:
 //   'media' (the default): filler inside the picture's own stream (an H.264 SEI filler payload in every frame),
 //           which the player's demuxer keeps, so the browser's media buffer weighs what a real rung would;
 //   'null':  null packets after the frames, which the demuxer drops: the browser's buffer then holds only the

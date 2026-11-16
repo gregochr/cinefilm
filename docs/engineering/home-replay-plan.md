@@ -31,8 +31,9 @@ Nothing in the app, its image or its tests depends on it, and that stays so: `sc
    8% added for the MPEG-TS wrapping. The first full replay ran with segments at the bare average bitrate, so its
    thin minutes delivered about 8% too much film (found on 2026-11-16). The factor becomes one exported constant,
    `WIRE = 1.08` in `trace.mjs`, and is the default weight of a segment; `--wire 1` reproduces the first run.
-5. **What a request says is never a file path and never a response body, and it is kept only as figures and
-   words from fixed lists.** CodeQL scans every JavaScript file here, tests included, and a new alert of high
+5. **What a request says is never a file path, nothing of it is sent back but one number, and it is kept only
+   as figures and words from fixed lists.** (The number is the position a progress call reports, which the real
+   server answers with too.) CodeQL scans every JavaScript file here, tests included, and a new alert of high
    severity blocks the merge. So:
    - The built app is served from a table of its files read once at start-up. No request text reaches the file
      system. (This is for that reason alone: the scratch version's join-and-check could not be climbed out of
@@ -40,8 +41,11 @@ Nothing in the app, its image or its tests depends on it, and that stays so: `sc
    - Nothing is echoed. An unknown write answers a fixed `null`; an internal error answers a fixed text.
    - The request log keeps the kind of route that matched, the method from a fixed set, the rung and segment
      from the stand-in's own ladder, and numbers. It does not keep the address.
-   - A session request is refused as the real server refuses it (`SessionService.java`): a quality that is not
-     `auto` or a rung of the ladder, and a probe that is not a whole number of 0 or more.
+   - A session request is refused, in the real server's words where `SessionService.java` gives them: `Invalid
+     quality` when the quality is missing or is no quality CineFilm knows, `Quality not available for this film`
+     for one it knows that this ladder lacks (1080p), `Invalid probe` for a negative probe. Anything the stand-in
+     cannot read (no body, a body that is not a JSON object, a quality that is not text, a probe that is not a
+     number) is `Invalid request`; how the real server's JSON reader treats each of those was not checked.
    - A health report is read into a fresh object field by field from the stand-in's own list of names: finite
      numbers, booleans, `engine`, `environment` and `quality` each mapped to a fixed set (else `other`), time on
      each rung by the ladder's own ids, and minute rows of five or seven finite numbers, at most 1,000. The
@@ -58,6 +62,8 @@ Nothing in the app, its image or its tests depends on it, and that stays so: `sc
    times and no waiting. The server only wires it to a timer. Its behaviour is unchanged, so the two finished
    replays still describe it: a job that is added is served at once from what is saved, and an answer with no
    body waits for a live link through the same module (the scratch version polled for that on its own timer).
+   One tightening, which no replay with a round-trip delay could have met: when the replay clock starts, what
+   the open link had saved is dropped at once, not at the next tick.
 7. **Tests are `node --test`, run by a wrapper in `scripts/test/`** (`replay-rig.test.sh`), so
    `bash scripts/test/run-all.sh` and the Shell job run them like every other script test. `node --test` passes
    with nothing tested (no files, an empty file, a skipped test) and never ends when a test leaves a timer
@@ -103,7 +109,7 @@ Branch `feat/home-replay-film-and-link`. Source: the scratch files `trace.mjs`, 
 | `scripts/replay/trace.mjs` | `RECORD_PATH` points at the cut-down record. `TS_OVERHEAD` becomes the exported `WIRE`. Run as a program it prints both traces and writes nothing. |
 | `scripts/replay/record/train-2026-11-12.json` | New: `about` (one sentence on what it is and what was dropped), `startedAt`, and `report` with `watchedMs`, `stallCount`, `stallMs`, `longestStallMs`, `stepsDown`, `stepsUp`, `timeouts`, `rungMs` and `minutes`, copied unchanged from the record. |
 | `scripts/replay/ts.mjs` | The same bytes for the same inputs; `buildSegment` is split into smaller functions for decision 8. |
-| `scripts/replay/link.mjs` | New, taken out of `standin.mjs`: `createLink(rate)` gives `add(job)`, `remove(job)`, `whenAlive(callback)`, `advance(ms)` and `size()`; `rate()` is bits a second now and `ms` is the time since the last advance. The arithmetic is unchanged: nothing is saved while the rate is 0, never more than a twentieth of a second (or 3,000 bytes) is saved, jobs share equally with an odd byte to the first, one send is at most 64 KB. Also `minuteAt(startMinute, elapsedMs)` and `rateAt(trace, minute)` (past the end: the last figure; a missing one: 0). |
+| `scripts/replay/link.mjs` | New, taken out of `standin.mjs`: `createLink(rate)` gives `add(job)`, `remove(job)`, `whenAlive(callback)` (which returns a function that cancels it), `advance(ms)` and `size()`; `rate()` is bits a second now and `ms` is the time since the last advance. The arithmetic is unchanged: nothing is saved while the rate is 0, never more than a twentieth of a second (or 3,000 bytes) is saved, jobs share equally with an odd byte to the first, one send is at most 64 KB, and a job with nothing left leaves. Also `minuteAt(startMinute, elapsedMs)` and `rateAt(trace, minute)`, the trace's own kbit/s (past the end: the last figure; a missing one: 0). |
 | `scripts/replay/standin.mjs` | Decision 5, as a table of routes. `wire` defaults to `WIRE` and must be a number from 1 to 1.5. `port: 0` takes any free port; the returned object gains `port` and `address`. The base for parsing a request's address is `http://localhost`. The progress answer's `positionMs` is the body's when that is a finite number, else 0. A request for a file with an extension that the build does not hold answers 404; any other address is still the app's page. It still listens on `127.0.0.1` only. |
 | `scripts/test/replay/*.test.mjs`, `scripts/test/replay-rig.test.sh` | New (below). |
 | `.github/workflows/ci.yml` | The Shell job sets up Node 24 before the script tests, under the same docs-only condition as its other steps; its header comment no longer says "no network". |
@@ -140,9 +146,9 @@ Tests, each named for the rule it pins, with exact values:
   `masterPlaylist` with the start rung first, and pinned; `mediaPlaylist(3, 4000)` exactly, and from the server
   the playlist's first lines, its count of segments and its last two lines. The film it serves is the app's own
   fixture (`frontend/src/test/fixtures/film-heat.json`, on purpose: the rig reads that file, so a change to it
-  should fail here) with one edition, nothing to resume, no subtitles and Auto. A session's answer; a quality
-  that is no rung and a probe that is a string or negative are refused in the server's words; a probe of 0
-  starts on the floor. A segment's type and exact size at weights 1 and 1.08; the last segment answers and the
+  should fail here) with one edition, nothing to resume, no subtitles and Auto. A session's answer; no quality, an
+  unknown quality, 1080p, a negative probe, and each thing it cannot read are refused with the words decision 5
+  gives; a probe of 0 starts on the floor. A segment's type and exact size at weights 1 and 1.08; the last segment answers and the
   one after it does not; an unknown session's 404 text; ending a session. The probe answers 206 with its range
   headers. A health report keeps its known figures, maps an unknown engine to `other`, drops the operator and
   any other key, keeps only well-formed minute rows, and one that is not JSON keeps only its length; one over
@@ -152,7 +158,9 @@ Tests, each named for the rule it pins, with exact values:
   that climbs out (plain, percent-encoded, and into a sibling folder whose name starts like the build's) never
   return a file from outside it. Each answer is in the request log with its kind, status and bytes, and no entry
   holds an address. With a dead link and the clock started, a segment that was asked for has received nothing
-  when, after `finish()`, an API answer arrives. A weight outside 1 to 1.5 is refused. It listens on `127.0.0.1`.
+  when, after `finish()`, an API answer arrives. A request whose body is cut off part-way is logged as cut short
+  with nothing sent, and leaves nothing on the link. An answer with no body that is waiting for a dead link is
+  never sent once the player has gone. A weight outside 1 to 1.5 is refused. It listens on `127.0.0.1`.
 
 Before the pull request the refactored stand-in is also proved by hand: the scratch driver, pointed at it and
 not committed, plays one minute on a steady link with every request answered.

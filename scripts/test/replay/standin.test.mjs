@@ -276,7 +276,7 @@ describe('what it plays', () => {
   });
 });
 
-// ---- sessions --------------------------------------------------------------------------------------------------------
+// ---- sessions -------------------------------------------------------------------------------------------------------
 
 describe('a session', () => {
   test('answers with its id, its master address, its start rung and every rung', async () => {
@@ -303,8 +303,14 @@ describe('a session', () => {
     assert.equal((await newSession(standIn, { quality: 'auto', probeKbps: 1019 })).startRung, '240p');
     assert.equal((await newSession(standIn, { quality: 'auto', probeKbps: null })).startRung, 'original');
     assert.equal((await newSession(standIn, { quality: 'auto' })).startRung, 'original');
-    assert.equal((await newSession(standIn, {})).startRung, 'original');
-    assert.equal((await post(standIn.port, '/api/editions/11/sessions', '')).status, 200); // an empty body is no options
+  });
+
+  test('takes any other number as a probe as it is: a fraction, or a very large one', async () => {
+    const standIn = await start();
+    assert.equal((await newSession(standIn, { quality: 'auto', probeKbps: 1019.9 })).startRung, '240p');
+    assert.equal((await newSession(standIn, { quality: 'auto', probeKbps: 1020.5 })).startRung, '360p');
+    assert.equal((await newSession(standIn, { quality: 'auto', probeKbps: 1e300 })).startRung, 'original');
+    assert.equal(standIn.requests[0].probeKbps, 1019.9);
   });
 
   test('a pinned quality starts there and lists that rung alone', async () => {
@@ -316,33 +322,59 @@ describe('a session', () => {
     assert.equal(master.headers['content-type'], 'application/vnd.apple.mpegurl');
   });
 
-  test('refuses a quality that is no rung, in the real server\'s words', async () => {
+  // The refusals. Three messages are SessionService.create's own ("Invalid quality", "Invalid probe", "Quality not
+  // available for this film"); "Invalid request" is the stand-in's for what it cannot read.
+  const refused = async (body, error) => {
     const standIn = await start();
-    for (const quality of ['bogus', '1080p', 'AUTO', '', 7, true, {}, []]) {
-      const answer = await post(standIn.port, '/api/editions/11/sessions', { quality });
-      assert.equal(answer.status, 400, JSON.stringify(quality));
-      assert.equal(answer.body.toString(), '{"error":"Invalid quality"}');
-      assert.equal(answer.headers['content-type'], 'application/json');
+    const answer = await post(standIn.port, '/api/editions/11/sessions', body);
+    assert.equal(answer.status, 400, String(body));
+    assert.equal(answer.body.toString(), JSON.stringify({ error }), String(body));
+    assert.equal(answer.headers['content-type'], 'application/json');
+    return standIn;
+  };
+
+  test('a quality that is missing or null is refused: Invalid quality', async () => {
+    await refused({}, 'Invalid quality');
+    await refused({ probeKbps: 5000 }, 'Invalid quality');
+    await refused({ quality: null }, 'Invalid quality');
+  });
+
+  test('a quality that is not text is refused: Invalid request', async () => {
+    for (const quality of [7, true, {}, [], ['auto']]) await refused({ quality }, 'Invalid request');
+  });
+
+  test('a text that is no quality id CineFilm knows is refused: Invalid quality', async () => {
+    for (const quality of ['bogus', 'AUTO', '', ' auto', '2160p', '720P']) await refused({ quality }, 'Invalid quality');
+  });
+
+  test('a known id that this ladder lacks, 1080p, is refused as the real server does for it', async () => {
+    await refused({ quality: '1080p' }, 'Quality not available for this film');
+  });
+
+  test('a probe that is not a number is refused: Invalid request', async () => {
+    for (const probeKbps of ['5000', true, [], {}, [5]]) await refused({ quality: 'auto', probeKbps }, 'Invalid request');
+  });
+
+  test('a negative probe is refused: Invalid probe', async () => {
+    for (const probeKbps of [-1, -0.5, -1e300]) await refused({ quality: 'auto', probeKbps }, 'Invalid probe');
+  });
+
+  test('a quality is judged before a probe', async () => {
+    await refused({ quality: 'bogus', probeKbps: -1 }, 'Invalid quality');
+    await refused({ quality: 7, probeKbps: -1 }, 'Invalid request');
+  });
+
+  test('no body, or a body that is not a JSON object, is refused: Invalid request', async () => {
+    for (const body of ['', '{"quality":', 'not json', '[]', '7', 'null', '"auto"']) {
+      await refused(body, 'Invalid request');
     }
   });
 
-  test('refuses a probe that is not a whole number of 0 or more, in the real server\'s words', async () => {
-    const standIn = await start();
-    for (const probeKbps of ['5000', -1, 1.5, true, [], {}, 1e300]) {
-      const answer = await post(standIn.port, '/api/editions/11/sessions', { quality: 'auto', probeKbps });
-      assert.equal(answer.status, 400, JSON.stringify(probeKbps));
-      assert.equal(answer.body.toString(), '{"error":"Invalid probe"}');
-    }
-  });
-
-  test('refuses a body that is not a JSON object with the real server\'s unreadable-request error', async () => {
-    const standIn = await start();
-    for (const body of ['{"quality":', 'not json', '[]', '7', 'null', '"auto"']) {
-      const answer = await post(standIn.port, '/api/editions/11/sessions', body);
-      assert.equal(answer.status, 400, body);
-      assert.equal(answer.body.toString(), '{"error":"Invalid request"}');
-    }
-    assert.equal(standIn.healthReports.length, 0);
+  test('a refusal makes no session', async () => {
+    const standIn = await refused({ quality: 'bogus' }, 'Invalid quality');
+    assert.equal(standIn.requests.length, 1);
+    assert.equal(standIn.requests[0].status, 400);
+    assert.equal(standIn.requests[0].startRung, undefined);
   });
 
   test('refuses a body over 64 KB, and accepts one of exactly 64 KB', async () => {
@@ -408,7 +440,7 @@ describe('a session', () => {
   });
 });
 
-// ---- segments ----------------------------------------------------------------------------------------------------------
+// ---- segments -------------------------------------------------------------------------------------------------------
 
 describe('a segment', () => {
   test('is video/mp2t of its rung\'s average bitrate times 1.08 by default, to whole packets', async () => {
@@ -483,10 +515,14 @@ describe('the speed probe', () => {
         seen.nonZero += part.filter((b) => b !== 0).length;
         if (seen.bytes >= 100_000) req.destroy();
       });
-      res.on('error', () => {});
+      res.on('error', () => {
+        // the player cuts it on purpose
+      });
     });
     pending.add(req);
-    req.on('error', () => {});
+    req.on('error', () => {
+      // the player cuts it on purpose
+    });
     req.end();
     await waitFor(() => entryOf(standIn, 'probe')?.aborted, 'the probe to be cut');
     assert.equal(seen.status, 206);
@@ -913,7 +949,7 @@ describe('the request log', () => {
   });
 });
 
-// ---- the link ------------------------------------------------------------------------------------------------------------
+// ---- the link -------------------------------------------------------------------------------------------------------
 
 describe('the link', () => {
   test('each answer waits the round-trip time before its first byte', async () => {
@@ -1048,6 +1084,62 @@ describe('the link', () => {
   });
 });
 
+describe('a request that is cut off', () => {
+  // Says it will send 1,000 bytes, sends 8 and goes.
+  const cutOff = (standIn, method, path) => {
+    const req = http.request({
+      host: '127.0.0.1', port: standIn.port, method, path, agent: false, headers: { 'Content-Length': 1000 },
+    });
+    req.on('error', () => {
+      // destroyed on purpose
+    });
+    pending.add(req);
+    req.write('12345678', () => req.destroy());
+  };
+
+  const cases = [
+    ['a health report', 'PUT', '/api/playback-health/22222222-2222-2222-2222-222222222222', 'health'],
+    ['a progress report', 'PUT', '/api/films/1/progress', 'progress'],
+    ['a session request', 'POST', '/api/editions/11/sessions', 'refused'],
+  ];
+  for (const [what, method, path, kind] of cases) {
+    test(`${what} cut off in its body is logged once, as aborted with nothing sent, and leaves nothing on the link`, async () => {
+      const standIn = await start();
+      cutOff(standIn, method, path);
+      await waitFor(() => standIn.requests.length === 1 && standIn.requests[0].aborted, 'the cut request to be logged');
+      assert.equal(standIn.requests.length, 1);
+      assert.equal(standIn.requests[0].kind, kind);
+      assert.equal(standIn.requests[0].aborted, true);
+      assert.equal(standIn.requests[0].sent, 0);
+      assert.equal((await stateOf(standIn)).active, 0);
+      assert.equal(standIn.requests.length, 1);
+    });
+  }
+
+  test('an answer with no body that waited for a live link is dropped when its player goes, and never sent', async () => {
+    const trace = [0];
+    const standIn = await start({ trace });
+    const { sessionId } = await newSession(standIn);
+    standIn.startClock();
+    const seen = open(standIn.port, { method: 'DELETE', path: `/api/sessions/${sessionId}` });
+    await waitFor(() => entryOf(standIn, 'session-end'), 'the request to be logged');
+    // A second answer, asked for after the first, joins the link only after the first has finished waiting for a
+    // live one (their round-trip timers run in the order they were set).
+    open(standIn.port, { method: 'POST', path: '/api/films/1/progress', body: '{}' });
+    await waitFor(async () => (await stateOf(standIn)).active === 1, 'the second answer to join the link');
+    seen.req.destroy();
+    const entry = entryOf(standIn, 'session-end');
+    await waitFor(() => entry.aborted, 'the log to say it was cut');
+    trace[0] = 800; // the link comes back: the stand-in reads the array at every tick
+    const answer = await request(standIn.port, { path: '/api/session' });
+    assert.equal(answer.status, 200);
+    assert.equal(entry.aborted, true);
+    assert.equal(entry.firstByteMs, null);
+    assert.equal(entry.doneMs, null);
+    assert.equal(entry.sent, 0);
+  });
+});
+
 describe('the replay clock', () => {
   test('before it starts the link is open at 400 Mbit/s and there is no minute', async () => {
     const standIn = await start({ trace: [100, 200], startMinute: 1 });
@@ -1106,7 +1198,7 @@ describe('the replay clock', () => {
   });
 });
 
-// ---- starting it -------------------------------------------------------------------------------------------------------
+// ---- starting it ----------------------------------------------------------------------------------------------------
 
 describe('starting', () => {
   test('listens on 127.0.0.1 only, on the free port it was given, and says which', async () => {

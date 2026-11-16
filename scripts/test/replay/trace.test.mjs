@@ -191,7 +191,6 @@ describe('run as a program', () => {
     assert.equal(run.stderr, '');
     assert.equal(lines.length, 156); // header, 152 minutes, two summaries and the end of the last line
     assert.deepEqual(readdirSync(tmp), []);
-    assert.throws(() => readFileSync(join(HERE, '..', '..', 'replay', 'out', 'traces.json')), { code: 'ENOENT' });
   });
 
   test('prints the header, a minute\'s line and the two summaries', () => {

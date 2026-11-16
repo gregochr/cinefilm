@@ -12,10 +12,11 @@
 // first. The app's own files (the page, its scripts and fonts) are served at once: loading the app is not under
 // test.
 //
-// What a request says is never a file path and never a response body, and it is kept only as figures and words
-// from fixed lists: the build is a table read at start-up, nothing is echoed, the request log holds the kind of
-// route that matched and never an address, and a health report is copied field by field from lists of names
-// written here (docs/engineering/home-replay.md, "What the stand-in keeps of what the player sends").
+// What a request says is never a file path, nothing of it is sent back but the position a progress call reports (as
+// a number), and it is kept only as figures and words from fixed lists: the build is a table read at start-up, the
+// request log holds the kind of route that matched and never an address, and a health report is copied field by
+// field from lists of names written here (docs/engineering/home-replay.md, "What the stand-in keeps of what the
+// player sends").
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -130,7 +131,6 @@ class Answer {
     this.headed = false;
     this.closed = false;
     this.began = performance.now();
-    this.timer = null;
     this.cancelAlive = null;
   }
 
@@ -163,7 +163,6 @@ class Answer {
     if (this.offset < this.size || (this.size === 0 && !this.headed)) this.record.aborted = true;
     this.closed = true;
     this.env.link.remove(this);
-    clearTimeout(this.timer);
     if (this.cancelAlive) this.cancelAlive();
   }
 
@@ -210,7 +209,7 @@ function startAnswer({ env, req, res }, spec) {
   if (env.open && !MEDIA_KINDS.has(spec.kind)) {
     answer.releaseAtOnce();
   } else {
-    answer.timer = setTimeout(() => answer.afterRoundTrip(), env.rttMs);
+    setTimeout(() => answer.afterRoundTrip(), env.rttMs);
   }
 }
 
@@ -253,16 +252,16 @@ function readBody(req) {
       else parts.push(part);
     });
     req.on('end', () => finish(false));
-    req.on('error', () => finish(false));
+    // A player that goes mid-body ends the request with a close (and an error nobody needs to hear).
     req.on('close', () => finish(false));
   });
 }
 
-// The parsed body: `value` is undefined when it is not JSON, and {} when it is empty.
+// The parsed body: `value` is undefined when there is none or it is not JSON.
 async function readJson(req) {
   const body = await readBody(req);
   if (body.tooLarge) return { tooLarge: true, value: undefined };
-  return { tooLarge: false, value: body.text === '' ? {} : parseJson(body.text) };
+  return { tooLarge: false, value: parseJson(body.text) };
 }
 
 function parseJson(text) {
@@ -275,7 +274,6 @@ function parseJson(text) {
 
 const isObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
 const isNumber = (value) => typeof value === 'number' && Number.isFinite(value);
-const isWholeNumber = (value) => Number.isSafeInteger(value) && value >= 0;
 const validWire = (value) => typeof value === 'number' && value >= 1 && value <= 1.5;
 const oneOf = (list, value) => list.find((word) => word === value) ?? 'other';
 
@@ -302,14 +300,29 @@ function apiFilm(ctx) {
   sendJson(ctx, ctx.env.film);
 }
 
-// The real server's refusals (SessionService.create): a quality that is not auto or a rung, a probe that is not a
-// whole number of 0 or more. No quality means auto, no probe means none.
-function sessionRefusal(body, rungs) {
-  const quality = body.quality ?? 'auto';
-  if (quality !== 'auto' && !rungs.some((r) => r.id === quality)) return 'Invalid quality';
-  const probe = body.probeKbps ?? null;
-  if (probe !== null && !isWholeNumber(probe)) return 'Invalid probe';
+// The quality ids CineFilm knows (Ladder.QUALITY_IDS).
+const QUALITY_IDS = ['auto', 'original', '1080p', '720p', '480p', '360p', '240p'];
+
+// SessionService.create's three messages are used as they are: "Invalid quality" for a quality that is missing or
+// is no id CineFilm knows, "Quality not available for this film" (a 400 there too) for a known id this ladder lacks,
+// "Invalid probe" for a negative probe. What the stand-in cannot read (a quality that is not text, a probe that is
+// not a number) is "Invalid request"; how the real server's JSON reader treats those was not checked.
+function qualityRefusal(quality, rungs) {
+  if (quality === undefined || quality === null) return 'Invalid quality';
+  if (typeof quality !== 'string') return INVALID_REQUEST.error;
+  if (!QUALITY_IDS.includes(quality)) return 'Invalid quality';
+  if (quality !== 'auto' && !rungs.some((r) => r.id === quality)) return 'Quality not available for this film';
   return null;
+}
+
+function probeRefusal(probe) {
+  if (probe === undefined || probe === null) return null;
+  if (typeof probe !== 'number') return INVALID_REQUEST.error;
+  return probe < 0 ? 'Invalid probe' : null;
+}
+
+function sessionRefusal(body, rungs) {
+  return qualityRefusal(body.quality, rungs) ?? probeRefusal(body.probeKbps);
 }
 
 async function createSession(ctx) {
@@ -344,13 +357,13 @@ function probe(ctx) {
   });
 }
 
-function sessionMaster(ctx, session) {
+function sessionMaster(ctx, { session }) {
   const body = Buffer.from(masterPlaylist(ctx.env.rungs, session.start, session.pinned));
   sendBuffer(ctx, body, { headers: { 'Content-Type': 'application/vnd.apple.mpegurl' }, kind: 'master' });
   return true;
 }
 
-function sessionPlaylist(ctx, session, match) {
+function sessionPlaylist(ctx, { match }) {
   const rung = ctx.env.rungs.find((r) => r.id === match[1]);
   if (!rung) return false;
   const body = Buffer.from(mediaPlaylist(ctx.env.segmentCount, ctx.env.segmentMs));
@@ -358,7 +371,7 @@ function sessionPlaylist(ctx, session, match) {
   return true;
 }
 
-function sessionSegment(ctx, session, match) {
+function sessionSegment(ctx, { match }) {
   const { env } = ctx;
   const rung = env.rungs.find((r) => r.id === match[1]);
   const n = Number(match[2]);
@@ -391,7 +404,7 @@ function sessionRoute(ctx, match) {
   for (const route of SESSION_ROUTES) {
     const found = route.pattern.exec(rest);
     // A route returns false when the address named something it does not have (a rung, a segment).
-    if (found && route.handle(ctx, session, found)) return;
+    if (found && route.handle(ctx, { session, match: found })) return;
   }
   sendJson(ctx, { error: 'Not found' }, { status: 404 });
 }

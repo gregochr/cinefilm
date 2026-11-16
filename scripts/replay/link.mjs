@@ -39,23 +39,24 @@ export function createLink(rate) {
   let waiting = [];
   let saved = 0;
 
+  // Serves one job its share of what is saved and returns the bytes moved. A job with nothing left leaves.
+  function serve(job, share) {
+    const n = Math.min(share, job.left(), Math.floor(saved), SEND_LIMIT);
+    if (n > 0) {
+      job.send(n);
+      saved -= n;
+    }
+    if (job.left() <= 0) jobs.delete(job);
+    return Math.max(n, 0);
+  }
+
   // Hands out what is saved, round after round, until it is gone or nobody can take any.
   function pump() {
     while (saved >= 1 && jobs.size > 0) {
       const share = Math.max(1, Math.floor(saved / jobs.size));
-      let moved = false;
-      for (const job of [...jobs]) {
-        const n = Math.min(share, job.left(), Math.floor(saved), SEND_LIMIT);
-        if (n <= 0) {
-          if (job.left() <= 0) jobs.delete(job);
-          continue;
-        }
-        job.send(n);
-        saved -= n;
-        moved = true;
-        if (job.left() === 0) jobs.delete(job);
-      }
-      if (!moved) break;
+      let moved = 0;
+      for (const job of [...jobs]) moved += serve(job, share);
+      if (moved === 0) break;
     }
   }
 
@@ -88,7 +89,9 @@ export function createLink(rate) {
     whenAlive(callback) {
       if (rate() > 0) {
         callback();
-        return () => {};
+        return () => {
+          // nothing was waiting, so there is nothing to cancel
+        };
       }
       const entry = () => callback();
       waiting.push(entry);

@@ -55,8 +55,9 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    **The home replay rig** (`scripts/replay/`) is not the app: the owner runs it by hand on the laptop, and it is in
    no image. While a replay runs, its stand-in server listens on `127.0.0.1` only, with no sign-in, and serves a
    build of the app and a film made of padding: no library, no watch history, no secret. What a request says is
-   never used as a file path or sent back, and is kept only as figures and words from fixed lists
-   (`docs/engineering/home-replay.md`). The train record it replays is in the repository cut down to its timings.
+   never used as a file path, nothing of it is sent back but the position a progress call reports, as a number, and
+   it is kept only as figures and words from fixed lists (`docs/engineering/home-replay.md`). The train record it
+   replays is in the repository cut down to its timings.
 7. **Untrusted data in the UI.** TMDB, Plex and file metadata (titles, overviews, track names) are rendered as text,
    never with `dangerouslySetInnerHTML`. Image URLs come from the `imageUrl` helper only.
    **The operator lookup** is the browser's one request to a host other than CineFilm and TMDB's images: when the
