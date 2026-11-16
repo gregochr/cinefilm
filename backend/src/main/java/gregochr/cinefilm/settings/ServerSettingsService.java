@@ -52,7 +52,7 @@ public class ServerSettingsService {
     public Settings update(Integer minutes) {
         if (minutes == null || minutes < MIN_MINUTES || minutes > MAX_MINUTES) {
             throw new BadRequestException(
-                "continueWatchingMinMinutes must be a whole number from " + MIN_MINUTES + " to " + MAX_MINUTES);
+                "Continue watching needs at least " + MIN_MINUTES + " and at most " + MAX_MINUTES + " minutes");
         }
         ServerSetting row = row();
         row.setContinueWatchingMinMinutes(minutes);

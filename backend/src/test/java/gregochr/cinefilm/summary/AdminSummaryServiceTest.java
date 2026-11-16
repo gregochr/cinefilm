@@ -15,8 +15,6 @@ import gregochr.cinefilm.library.AdminDtos.ScanStatusDto;
 import gregochr.cinefilm.library.AdminService;
 import gregochr.cinefilm.subtitle.ForcedNeedDtos.NeedListDto;
 import gregochr.cinefilm.subtitle.ForcedNeedService;
-import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedCountsDto;
-import gregochr.cinefilm.subtitle.FullNeedDtos.FullNeedListDto;
 import gregochr.cinefilm.subtitle.FullNeedService;
 import gregochr.cinefilm.summary.AdminSummaryDtos.AdminSummary;
 import gregochr.cinefilm.transcode.SessionDtos.SessionRow;
@@ -94,10 +92,6 @@ class AdminSummaryServiceTest {
         assertThat(transactional.isolation()).isEqualTo(Isolation.REPEATABLE_READ);
     }
 
-    private static FullNeedListDto fullNeed(int unresolved) {
-        return new FullNeedListDto(List.of(), new FullNeedCountsDto(9, 8, 7, 6, unresolved, 5, 4, 3));
-    }
-
     private static NeedListDto forcedNeed(int unresolved) {
         return new NeedListDto(List.of(), new gregochr.cinefilm.subtitle.ForcedNeedDtos.CountsDto(9, 8, 7, 6, 5,
             unresolved, 4));
@@ -106,7 +100,7 @@ class AdminSummaryServiceTest {
     private void stubEverything(List<AttentionItem> items, int full, int forced, ScanStatusDto scan) {
         when(admin.attention()).thenReturn(new Attention(items));
         when(admin.status()).thenReturn(scan);
-        when(fullNeed.list()).thenReturn(fullNeed(full));
+        when(fullNeed.unresolvedCount()).thenReturn(full);
         when(forcedNeed.list()).thenReturn(forcedNeed(forced));
         when(sessions.sessions()).thenReturn(List.of());
         when(health.playbackCounts()).thenReturn(new PlaybackCounts(0, 0));
@@ -120,7 +114,7 @@ class AdminSummaryServiceTest {
         when(admin.attention()).thenReturn(new Attention(List.of(item("needs-match"), item("needs-match"),
             item("needs-match"), item("multiple-files"), item("parts-mismatch"))));
         when(admin.status()).thenReturn(scan(321, finishedAt(FINISHED)));
-        when(fullNeed.list()).thenReturn(fullNeed(7));
+        when(fullNeed.unresolvedCount()).thenReturn(7);
         when(forcedNeed.list()).thenReturn(forcedNeed(11));
         when(sessions.sessions()).thenReturn(List.of(
             new SessionRow("a", "Film", 1, "720p", 1.0, 2, NOW, false),

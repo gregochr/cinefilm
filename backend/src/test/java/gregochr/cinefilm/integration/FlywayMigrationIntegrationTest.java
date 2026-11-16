@@ -36,6 +36,14 @@ class FlywayMigrationIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void theGroupingChangeLogIsIndexedByWhenItHappened() {
+        List<String> indexes = jdbc.queryForList(
+            "SELECT indexname FROM pg_indexes WHERE tablename = 'grouping_change'", String.class);
+
+        assertThat(indexes).contains("idx_grouping_change_happened_at");
+    }
+
+    @Test
     void everyTableExists() {
         List<String> tables = jdbc.queryForList(
             "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'", String.class);

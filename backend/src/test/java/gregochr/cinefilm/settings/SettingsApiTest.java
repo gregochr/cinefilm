@@ -68,7 +68,7 @@ class SettingsApiTest extends ApiTestBase {
             "{\"continueWatchingMinMinutes\":31}", "{\"continueWatchingMinMinutes\":null}", "{}"}) {
             mvc.perform(put("/api/admin/settings").content(json))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("continueWatchingMinMinutes must be a whole number from 0 to 30"));
+                .andExpect(jsonPath("$.error").value("Continue watching needs at least 0 and at most 30 minutes"));
         }
 
         mvc.perform(get("/api/admin/settings"))
@@ -81,7 +81,7 @@ class SettingsApiTest extends ApiTestBase {
             mvc.perform(put("/api/admin/settings").content("{\"continueWatchingMinMinutes\":" + value + "}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error")
-                    .value("continueWatchingMinMinutes must be a whole number from 0 to 30"));
+                    .value("Continue watching needs at least 0 and at most 30 minutes"));
         }
 
         mvc.perform(get("/api/admin/settings")).andExpect(jsonPath("$.continueWatchingMinMinutes").value(5));
@@ -100,7 +100,7 @@ class SettingsApiTest extends ApiTestBase {
     void aBodyOfJsonNullIs400WithTheValidationMessage() throws Exception {
         mvc.perform(put("/api/admin/settings").content("null"))
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.error").value("continueWatchingMinMinutes must be a whole number from 0 to 30"));
+            .andExpect(jsonPath("$.error").value("Continue watching needs at least 0 and at most 30 minutes"));
     }
 
     @Test

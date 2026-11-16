@@ -57,7 +57,7 @@ public class AdminSummaryService {
         List<AttentionItem> items = admin.attention().items();
         long pickFilm = items.stream().filter(item -> NEEDS_MATCH.equals(item.kind())).count();
         long severalFiles = items.stream().filter(item -> SEVERAL_FILES.contains(item.kind())).count();
-        long fullMissing = fullNeed.list().counts().unresolved();
+        long fullMissing = fullNeed.unresolvedCount();
         long forcedQuestion = forcedNeed.list().counts().unresolved();
         ScanStatusDto scan = admin.status();
         LastScanDto last = scan.lastScan();

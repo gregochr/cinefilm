@@ -130,6 +130,36 @@ public class FullNeedService {
     }
 
     /**
+     * How many films are {@code unresolved} in {@link #list}'s counts (the Admin summary polls this every 30 seconds).
+     * The answer is the same, but it is read more cheaply: a film that is not {@code NEEDED} can never be unresolved,
+     * so only the needed films' editions are loaded, and the whole-library edition read that only the {@code subtitled}
+     * and {@code inEnglish} figures use is skipped.
+     */
+    @Transactional(readOnly = true)
+    public int unresolvedCount() {
+        List<FullNeedRow> inScope = films.findFullNeedRows().stream().filter(FullNeedService::inScope).toList();
+        if (inScope.isEmpty()) {
+            return 0;
+        }
+        Map<Long, List<EditionAudio>> audio = editionAudio(
+            files.findAudioRows(inScope.stream().map(FullNeedRow::id).toList()));
+        List<FullNeedRow> needed = inScope.stream()
+            .filter(row -> decide(row, audio.getOrDefault(row.id(), List.of())).need() == Need.NEEDED).toList();
+        if (needed.isEmpty()) {
+            return 0;
+        }
+        Map<Long, FullSubtitleStateDto> playing = playing(needed.stream().map(FullNeedRow::id).toList());
+        Map<Long, OsFullState> search = new HashMap<>();
+        films.findOpenSubtitlesFullStates().forEach(state -> search.put(state.id(), state));
+        List<Eval> evals = new ArrayList<>();
+        for (FullNeedRow row : needed) {
+            evals.add(eval(row, audio.getOrDefault(row.id(), List.of()), playing.get(row.id()), search.get(row.id())));
+        }
+        Pending due = pendingFor(evals);
+        return (int) evals.stream().filter(eval -> AdminTodoRules.unresolvedFull(facts(eval, due))).count();
+    }
+
+    /**
      * The films that do not show in browse ({@link Film#browsable(Collection)}: every one of their editions is missing
      * or cannot be played), from one read of every edition. A film with no edition shows, so it is never here.
      */
