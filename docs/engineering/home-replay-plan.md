@@ -45,7 +45,10 @@ Nothing in the app, its image or its tests depends on it, and that stays so: `sc
      quality` when the quality is missing or is no quality CineFilm knows, `Quality not available for this film`
      for one it knows that this ladder lacks (1080p), `Invalid probe` for a negative probe. Anything the stand-in
      cannot read (no body, a body that is not a JSON object, a quality that is not text, a probe that is not a
-     number) is `Invalid request`; how the real server's JSON reader treats each of those was not checked.
+     number or is too large to be an exact whole number) is `Invalid request`. How the real server's JSON reader
+     treats each of those, and a probe with a fraction (taken here as it is), was not checked.
+   - A request whose body is cut off part-way changes nothing: no session is made and no report is kept. It is
+     only logged, as cut short.
    - A health report is read into a fresh object field by field from the stand-in's own list of names: finite
      numbers, booleans, `engine`, `environment` and `quality` each mapped to a fixed set (else `other`), time on
      each rung by the ladder's own ids, and minute rows of five or seven finite numbers, at most 1,000. The
@@ -63,7 +66,8 @@ Nothing in the app, its image or its tests depends on it, and that stays so: `sc
    replays still describe it: a job that is added is served at once from what is saved, and an answer with no
    body waits for a live link through the same module (the scratch version polled for that on its own timer).
    One tightening, which no replay with a round-trip delay could have met: when the replay clock starts, what
-   the open link had saved is dropped at once, not at the next tick.
+   the open link had saved is cut at once to what the trace's rate may save (nothing, when that rate is 0), not
+   at the next tick.
 7. **Tests are `node --test`, run by a wrapper in `scripts/test/`** (`replay-rig.test.sh`), so
    `bash scripts/test/run-all.sh` and the Shell job run them like every other script test. `node --test` passes
    with nothing tested (no files, an empty file, a skipped test) and never ends when a test leaves a timer
@@ -159,8 +163,8 @@ Tests, each named for the rule it pins, with exact values:
   return a file from outside it. Each answer is in the request log with its kind, status and bytes, and no entry
   holds an address. With a dead link and the clock started, a segment that was asked for has received nothing
   when, after `finish()`, an API answer arrives. A request whose body is cut off part-way is logged as cut short
-  with nothing sent, and leaves nothing on the link. An answer with no body that is waiting for a dead link is
-  never sent once the player has gone. A weight outside 1 to 1.5 is refused. It listens on `127.0.0.1`.
+  with nothing sent, leaves nothing on the link, makes no session and keeps no report. An answer with no body
+  whose player goes during the round trip, or while it waits for a dead link, is never sent. A weight outside 1 to 1.5 is refused. It listens on `127.0.0.1`.
 
 Before the pull request the refactored stand-in is also proved by hand: the scratch driver, pointed at it and
 not committed, plays one minute on a steady link with every request answered.

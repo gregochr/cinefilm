@@ -305,12 +305,14 @@ describe('a session', () => {
     assert.equal((await newSession(standIn, { quality: 'auto' })).startRung, 'original');
   });
 
-  test('takes any other number as a probe as it is: a fraction, or a very large one', async () => {
+  test('takes any other number as a probe as it is: a fraction, or the largest safe integer', async () => {
     const standIn = await start();
     assert.equal((await newSession(standIn, { quality: 'auto', probeKbps: 1019.9 })).startRung, '240p');
     assert.equal((await newSession(standIn, { quality: 'auto', probeKbps: 1020.5 })).startRung, '360p');
-    assert.equal((await newSession(standIn, { quality: 'auto', probeKbps: 1e300 })).startRung, 'original');
+    const largest = await newSession(standIn, { quality: 'auto', probeKbps: Number.MAX_SAFE_INTEGER });
+    assert.equal(largest.startRung, 'original');
     assert.equal(standIn.requests[0].probeKbps, 1019.9);
+    assert.equal(standIn.requests[2].probeKbps, 9007199254740991);
   });
 
   test('a pinned quality starts there and lists that rung alone', async () => {
@@ -356,7 +358,16 @@ describe('a session', () => {
   });
 
   test('a negative probe is refused: Invalid probe', async () => {
-    for (const probeKbps of [-1, -0.5, -1e300]) await refused({ quality: 'auto', probeKbps }, 'Invalid probe');
+    for (const probeKbps of [-1, -0.5, -Number.MAX_SAFE_INTEGER]) {
+      await refused({ quality: 'auto', probeKbps }, 'Invalid probe');
+    }
+  });
+
+  test('a probe that is not finite or is outside the safe-integer range is refused: Invalid request', async () => {
+    // written as JSON numbers: 1e999 reads as Infinity
+    for (const probe of ['1e300', '-1e300', '1e999', '-1e999', '9007199254740992', '-9007199254740992']) {
+      await refused(`{"quality":"auto","probeKbps":${probe}}`, 'Invalid request');
+    }
   });
 
   test('a quality is judged before a probe', async () => {
@@ -557,7 +568,7 @@ const FULL_REPORT = {
   engine: 'hlsjs', quality: 'auto', autoplayRefused: false, startupMs: 900, watchedMs: 590_000, stallCount: 2,
   stallMs: 4000, longestStallMs: 3000, seekCount: 1, seekWaitMs: 500, reloadCount: 0, reloadMs: 0, reconnectCount: 0,
   reconnectMs: 0, recoveries: 0, fellBack: false, stepsDown: 3, stepsUp: 2, netErrors: 1, timeouts: 1, kbpsLow: 100,
-  kbpsMedian: 900, kbpsHigh: 5000, kbpsSamples: 40, rungMs: { '720p': 1000, '360p': 2000 },
+  kbpsMedian: 900, kbpsHigh: 5000, kbpsSamples: 40, startPositionMs: 12_000, endPositionMs: 600_000, rungMs: { '720p': 1000, '360p': 2000 },
   minutes: [[0, 900, 4, 50_000, 1000], [1, 800, 3, 40_000, 0, 12, 3]],
   client: { userAgent: 'Mozilla/5.0 (A Test Browser)', screen: '1920x1080', cores: 8, touch: false },
 };
@@ -1085,8 +1096,8 @@ describe('the link', () => {
 });
 
 describe('a request that is cut off', () => {
-  // Says it will send 1,000 bytes, sends 8 and goes.
-  const cutOff = (standIn, method, path) => {
+  // Says it will send 1,000 bytes, sends `bytes` and goes.
+  const cutOff = (standIn, method, path, bytes) => {
     const req = http.request({
       host: '127.0.0.1', port: standIn.port, method, path, agent: false, headers: { 'Content-Length': 1000 },
     });
@@ -1094,26 +1105,32 @@ describe('a request that is cut off', () => {
       // destroyed on purpose
     });
     pending.add(req);
-    req.write('12345678', () => req.destroy());
+    req.write(bytes, () => req.destroy());
   };
 
   const cases = [
-    ['a health report', 'PUT', '/api/playback-health/22222222-2222-2222-2222-222222222222', 'health'],
-    ['a progress report', 'PUT', '/api/films/1/progress', 'progress'],
-    ['a session request', 'POST', '/api/editions/11/sessions', 'refused'],
+    ['a health report', 'PUT', '/api/playback-health/22222222-2222-2222-2222-222222222222', 'health', '{"seq":1}'],
+    ['a progress report', 'PUT', '/api/films/1/progress', 'progress', '{"positionMs":5}'],
+    ['a session request', 'POST', '/api/editions/11/sessions', 'refused', '{"quality":"auto","probeKbps":5000}'],
   ];
-  for (const [what, method, path, kind] of cases) {
-    test(`${what} cut off in its body is logged once, as aborted with nothing sent, and leaves nothing on the link`, async () => {
-      const standIn = await start();
-      cutOff(standIn, method, path);
-      await waitFor(() => standIn.requests.length === 1 && standIn.requests[0].aborted, 'the cut request to be logged');
-      assert.equal(standIn.requests.length, 1);
-      assert.equal(standIn.requests[0].kind, kind);
-      assert.equal(standIn.requests[0].aborted, true);
-      assert.equal(standIn.requests[0].sent, 0);
-      assert.equal((await stateOf(standIn)).active, 0);
-      assert.equal(standIn.requests.length, 1);
-    });
+  for (const [what, method, path, kind, whole] of cases) {
+    for (const [how, bytes] of [['8 bytes', '12345678'], ['a whole JSON object that would be accepted', whole]]) {
+      test(`${what} cut off after ${how} changes nothing and is logged once, as aborted`, async () => {
+        const standIn = await start();
+        cutOff(standIn, method, path, bytes);
+        await waitFor(() => standIn.requests.length === 1 && standIn.requests[0].aborted, 'the cut request to be logged');
+        assert.equal(standIn.requests.length, 1);
+        assert.equal(standIn.requests[0].kind, kind); // never 'session': no session was made
+        assert.equal(standIn.requests[0].aborted, true);
+        assert.equal(standIn.requests[0].sent, 0);
+        assert.equal(standIn.requests[0].positionMs, kind === 'progress' ? null : undefined);
+        assert.equal(standIn.healthReports.length, 0);
+        assert.equal((await stateOf(standIn)).active, 0);
+        // no viewing was numbered: the next report is the first
+        const next = await report(standIn, { seq: 1 }, OTHER_VIEWING);
+        assert.equal(next.entry.viewing, 0);
+      });
+    }
   }
 
   test('an answer with no body that waited for a live link is dropped when its player goes, and never sent', async () => {
@@ -1131,6 +1148,24 @@ describe('a request that is cut off', () => {
     const entry = entryOf(standIn, 'session-end');
     await waitFor(() => entry.aborted, 'the log to say it was cut');
     trace[0] = 800; // the link comes back: the stand-in reads the array at every tick
+    const answer = await request(standIn.port, { path: '/api/session' });
+    assert.equal(answer.status, 200);
+    assert.equal(entry.aborted, true);
+    assert.equal(entry.firstByteMs, null);
+    assert.equal(entry.doneMs, null);
+    assert.equal(entry.sent, 0);
+  });
+
+  test('an answer whose player goes during its round trip is never written, and is logged as cut', async () => {
+    const standIn = await start({ rttMs: 120 });
+    const { sessionId } = await newSession(standIn, { quality: '360p' });
+    standIn.startClock();
+    const seen = open(standIn.port, { method: 'DELETE', path: `/api/sessions/${sessionId}` });
+    await waitFor(() => entryOf(standIn, 'session-end'), 'the request to be logged');
+    seen.req.destroy();
+    const entry = entryOf(standIn, 'session-end');
+    await waitFor(() => entry.aborted, 'the log to say it was cut');
+    // The round trip ends before a request made now has finished its own (timers run in the order they were set).
     const answer = await request(standIn.port, { path: '/api/session' });
     assert.equal(answer.status, 200);
     assert.equal(entry.aborted, true);

@@ -52,6 +52,8 @@ request is the position a progress call reports, as a number. Its log of request
 route, the method, the quality and segment asked for, sizes and timings, and no address. A playback-health report
 is read field by field from the list of names in `standin.mjs`: a figure the player adds to its report later is
 not kept until it is added to that list. The operator's name and the browser's details are not kept at all.
+While a replay runs the stand-in also holds, in memory only, the playback ids it has seen, to number the viewings
+in what it keeps; the ids themselves go nowhere.
 
 ## What is approximate
 

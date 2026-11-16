@@ -13,10 +13,10 @@
 // test.
 //
 // What a request says is never a file path, nothing of it is sent back but the position a progress call reports (as
-// a number), and it is kept only as figures and words from fixed lists: the build is a table read at start-up, the
-// request log holds the kind of route that matched and never an address, and a health report is copied field by
-// field from lists of names written here (docs/engineering/home-replay.md, "What the stand-in keeps of what the
-// player sends").
+// a number), and its log and its results hold only figures and words from fixed lists: the build is a table read at
+// start-up, the request log holds the kind of route that matched and never an address, and a health report is
+// copied field by field from lists of names written here (docs/engineering/home-replay.md, "What the stand-in keeps
+// of what the player sends").
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -46,6 +46,7 @@ const REPORT_NUMBERS = [
   'seq', 'editionId', 'elapsedMs', 'latencyMs', 'startupMs', 'watchedMs', 'stallCount', 'stallMs', 'longestStallMs',
   'seekCount', 'seekWaitMs', 'reloadCount', 'reloadMs', 'reconnectCount', 'reconnectMs', 'recoveries', 'stepsDown',
   'stepsUp', 'netErrors', 'timeouts', 'kbpsLow', 'kbpsMedian', 'kbpsHigh', 'kbpsSamples',
+  'startPositionMs', 'endPositionMs',
 ];
 const REPORT_FLAGS = ['autoplayRefused', 'fellBack'];
 const REPORT_WORDS = [
@@ -234,7 +235,8 @@ function refuse(ctx) {
 
 // ---- reading what a request sends ---------------------------------------------------------------------------
 
-// The body, up to 64 KB: `text` and the `bytes` it had, or `tooLarge` (nothing is kept past the limit).
+// The body, up to 64 KB: `text` and the `bytes` it had, or `tooLarge` (nothing is kept past the limit), or `cut`
+// when the player went before all of it arrived: what came is then not a body and nothing acts on it.
 function readBody(req) {
   return new Promise((resolve) => {
     const parts = [];
@@ -243,7 +245,9 @@ function readBody(req) {
     const finish = (tooLarge) => {
       if (finished) return;
       finished = true;
-      resolve({ text: tooLarge ? '' : Buffer.concat(parts).toString('utf8'), bytes, tooLarge });
+      resolve({
+        text: tooLarge ? '' : Buffer.concat(parts).toString('utf8'), bytes, tooLarge, cut: !tooLarge && !req.complete,
+      });
     };
     req.on('data', (part) => {
       if (finished) return;
@@ -260,8 +264,8 @@ function readBody(req) {
 // The parsed body: `value` is undefined when there is none or it is not JSON.
 async function readJson(req) {
   const body = await readBody(req);
-  if (body.tooLarge) return { tooLarge: true, value: undefined };
-  return { tooLarge: false, value: parseJson(body.text) };
+  if (body.tooLarge) return { tooLarge: true, cut: false, value: undefined };
+  return { tooLarge: false, cut: body.cut, value: parseJson(body.text) };
 }
 
 function parseJson(text) {
@@ -306,7 +310,8 @@ const QUALITY_IDS = ['auto', 'original', '1080p', '720p', '480p', '360p', '240p'
 // SessionService.create's three messages are used as they are: "Invalid quality" for a quality that is missing or
 // is no id CineFilm knows, "Quality not available for this film" (a 400 there too) for a known id this ladder lacks,
 // "Invalid probe" for a negative probe. What the stand-in cannot read (a quality that is not text, a probe that is
-// not a number) is "Invalid request"; how the real server's JSON reader treats those was not checked.
+// not a number, one that is not finite or is outside the safe-integer range) is "Invalid request"; how the real
+// server's JSON reader treats those, and a fraction (taken as it is here), was not checked.
 function qualityRefusal(quality, rungs) {
   if (quality === undefined || quality === null) return 'Invalid quality';
   if (typeof quality !== 'string') return INVALID_REQUEST.error;
@@ -317,7 +322,9 @@ function qualityRefusal(quality, rungs) {
 
 function probeRefusal(probe) {
   if (probe === undefined || probe === null) return null;
-  if (typeof probe !== 'number') return INVALID_REQUEST.error;
+  if (typeof probe !== 'number' || Math.abs(probe) > Number.MAX_SAFE_INTEGER) { // Infinity is beyond it too
+    return INVALID_REQUEST.error;
+  }
   return probe < 0 ? 'Invalid probe' : null;
 }
 
@@ -328,7 +335,8 @@ function sessionRefusal(body, rungs) {
 async function createSession(ctx) {
   const { env } = ctx;
   const body = await readJson(ctx.req);
-  if (body.tooLarge || !isObject(body.value)) {
+  // A body that was cut off makes no session, whatever its first bytes said.
+  if (body.tooLarge || body.cut || !isObject(body.value)) {
     refuse(ctx);
     return;
   }
@@ -409,7 +417,8 @@ function sessionRoute(ctx, match) {
   sendJson(ctx, { error: 'Not found' }, { status: 404 });
 }
 
-// A playback id is a number in the order the stand-in met them: the id itself is request text and is not kept.
+// A playback id is a number in the order the stand-in met them. The id is held only in this table, to number the
+// viewings, for the length of the run; it never reaches the log, the results or a response.
 function viewingOf(env, id) {
   if (!env.viewings.has(id)) env.viewings.set(id, env.viewings.size);
   return env.viewings.get(id);
@@ -453,6 +462,11 @@ async function healthReport(ctx, match) {
     refuse(ctx);
     return;
   }
+  if (body.cut) {
+    // The player went mid-body: the request is only logged, as cut short. No report is kept, no viewing numbered.
+    noContent(ctx, 'health');
+    return;
+  }
   const at = Date.now();
   const viewing = viewingOf(env, match[1]);
   const value = parseJson(body.text);
@@ -468,7 +482,7 @@ async function progress(ctx) {
     refuse(ctx);
     return;
   }
-  const sent = body.value?.positionMs;
+  const sent = body.cut ? undefined : body.value?.positionMs;
   const position = typeof sent === 'number' && Number.isFinite(sent) ? sent : null;
   sendJson(ctx, { positionMs: position ?? 0, watched: false }, { kind: 'progress', detail: { positionMs: position } });
 }
@@ -620,7 +634,8 @@ export async function startStandIn({
   return {
     rungs, segmentMs, segmentCount: env.segmentCount, requests: env.requests, healthReports: env.healthReports,
     port: bound.port, address: bound.address,
-    // The link takes the trace's rate at once: what the open link had saved is gone, not spent on the first answers.
+    // The link takes the trace's rate at once: what the open link had saved is cut to what that rate may save (a
+    // twentieth of a second of it, or 3,000 bytes; nothing at all when the rate is 0), not spent on the first answers.
     startClock() {
       env.t0 = Date.now();
       env.link.advance(0);
