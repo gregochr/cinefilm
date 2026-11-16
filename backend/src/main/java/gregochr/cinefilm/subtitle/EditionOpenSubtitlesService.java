@@ -56,11 +56,9 @@ public class EditionOpenSubtitlesService {
     private static final String BAD_KIND = "The kind must be full or forced";
     private static final String NO_IMDB = "This film has no IMDb id, so OpenSubtitles cannot be searched. "
         + "Fix its match first.";
-    private static final String SCAN = "A scan is running";
     private static final String NO_FILE = "This edition has no original file to attach subtitles to.";
 
     private static final Map<ChosenOutcome, String> REFUSALS = Map.of(
-        ChosenOutcome.BUSY, SCAN,
         ChosenOutcome.CHANGED, "This film or edition changed while you were choosing. Search again.",
         ChosenOutcome.NOT_WANTED, "You marked this film as not needing these subtitles. Change that first.",
         ChosenOutcome.BLOCKED, "You removed that file from this edition earlier, so it is never downloaded for it "
@@ -109,6 +107,7 @@ public class EditionOpenSubtitlesService {
      * @return the ranked results and how many more files the edition may be given
      * @throws BadRequestException when {@code kind} is missing or neither, or the film has no usable IMDb id
      * @throws NotFoundException when there is no such edition
+     * @throws ConflictException when the edition has no original file (only premade renditions) to attach subtitles to
      * @throws ServiceUnavailableException when OpenSubtitles is not configured
      * @throws gregochr.cinefilm.opensubtitles.OpenSubtitlesUnavailableException when OpenSubtitles cannot answer
      */
@@ -154,8 +153,9 @@ public class EditionOpenSubtitlesService {
      *     copy is reused free) but is not a usable subtitle of the kind
      * @throws NotFoundException when there is no such edition
      * @throws ConflictException when a scan or an Admin change is running, another download for the edition and kind
-     *     is, the film changed, the owner marked it as not needing this kind, the file was removed or is already the
-     *     edition's, or the edition has used its {@value DownloadPlan#MAX_DOWNLOADS} files
+     *     is, the film changed, the edition has no original file, the owner marked it as not needing this kind, the
+     *     file was removed or is already the edition's, or the edition has used its
+     *     {@value DownloadPlan#MAX_DOWNLOADS} files
      * @throws ServiceUnavailableException when OpenSubtitles downloads are not configured
      * @throws OpenSubtitlesQuotaException when the day's allowance is used up
      * @throws gregochr.cinefilm.opensubtitles.OpenSubtitlesChargedException when the download was charged but the file
@@ -196,10 +196,10 @@ public class EditionOpenSubtitlesService {
         // A scan or an Admin change that holds the lock would refuse the add at the end: say so before a download is
         // spent. The add checks again under the lock.
         if (lock.holder() != null) {
-            throw new ConflictException(SCAN);
+            throw new ConflictException(lock.busyText());
         }
         downloads.refusal(filmId, editionId, kind, imdbId, result.fileId())
-            .ifPresent(EditionOpenSubtitlesService::refuse);
+            .ifPresent(this::refuse);
         OpenSubtitlesReference reference;
         try {
             reference = fetcher.fetch(filmId, imdbId, result, DownloadShares.forMissing(limits.today()));
@@ -220,8 +220,8 @@ public class EditionOpenSubtitlesService {
     }
 
     /** Throws the error that says why a pick cannot be made; only refusals come here. */
-    private static void refuse(ChosenOutcome outcome) {
-        throw new ConflictException(REFUSALS.get(outcome));
+    private void refuse(ChosenOutcome outcome) {
+        throw new ConflictException(outcome == ChosenOutcome.BUSY ? lock.busyText() : REFUSALS.get(outcome));
     }
 
     private static String unusable(OpenSubtitlesReference reference, SubtitleKind kind) {

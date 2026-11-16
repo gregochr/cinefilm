@@ -90,7 +90,7 @@ class EditionArrangerUnitTest {
         lock.tryAcquire(LibraryLock.MATCH);
 
         assertThatThrownBy(() -> arranger.save(FILM_ID, rename("Cut"))).isInstanceOf(ConflictException.class)
-            .hasMessage("A scan is running");
+            .hasMessage("A film match is being fixed; try again in a moment");
 
         assertThat(lock.holder()).as("the other holder keeps it").isEqualTo(LibraryLock.MATCH);
         verifyNoInteractions(films, editions, files, states, preferences, changes, join, events);

@@ -1,8 +1,6 @@
 package gregochr.cinefilm.subtitle;
 
 import gregochr.cinefilm.subtitle.SubtitleDtos.AlignmentDto;
-import gregochr.cinefilm.subtitle.SubtitleDtos.CheckDto;
-import gregochr.cinefilm.subtitle.SubtitleDtos.SidecarDto;
 
 /**
  * Whether a forced subtitle is "proven" (owner decision, 2026-11-12: trust only proven subtitles): the owner said it
@@ -91,27 +89,6 @@ public final class SidecarTrust {
             return new Assessment(Trust.PROVEN, Proof.ALIGNED);
         }
         return new Assessment("CHECK".equals(checkVerdict) ? Trust.FAILED : Trust.UNCHECKED, Proof.NONE);
-    }
-
-    /**
-     * True when any one proof holds.
-     *
-     * @param ownerVerified true while the owner's check counts (see {@link SubtitleSidecar#isVerifiedFor})
-     * @param check the file's comparison with OpenSubtitles, or null when it has none <em>or it is stale</em> (a
-     *     stale check proves nothing)
-     * @param alignment the file's fit to the film's own English track, or null when it has none or it is stale
-     */
-    public static boolean isProven(boolean ownerVerified, CheckDto check, AlignmentDto alignment) {
-        return assess(ownerVerified, check == null ? null : check.verdict(), isAligned(alignment))
-            .trust() == Trust.PROVEN;
-    }
-
-    /**
-     * True when any one proof holds for a file as Admin lists it (its check and alignment are present only while
-     * current).
-     */
-    public static boolean isProven(SidecarDto sidecar) {
-        return isProven(sidecar.verified(), sidecar.check(), sidecar.alignment());
     }
 
     /** True when the alignment is present (current) and {@code ALIGNED}. */

@@ -101,7 +101,6 @@ class SubtitleAdminDownloadsTest extends ForcedDownloadTestBase {
         SidecarDto dto = listed(download);
 
         assertThat(dto.check().verdict()).isEqualTo("AGREES");
-        assertThat(SidecarTrust.isProven(dto)).isTrue();
         assertThat(dto.servedReason()).isEqualTo("Plays: it agrees with OpenSubtitles");
     }
 

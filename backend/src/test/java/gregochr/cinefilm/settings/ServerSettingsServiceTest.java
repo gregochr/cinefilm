@@ -101,7 +101,7 @@ class ServerSettingsServiceTest {
     @NullSource
     void aMinimumOutsideZeroToThirtyOrMissingIsABadRequestAndChangesNothing(Integer minutes) {
         assertThatThrownBy(() -> service.update(minutes)).isInstanceOf(BadRequestException.class)
-            .hasMessage("continueWatchingMinMinutes must be a whole number from 0 to 30");
+            .hasMessage("Continue watching needs at least 0 and at most 30 minutes");
 
         assertThat(row.getContinueWatchingMinMinutes()).isEqualTo(5);
     }

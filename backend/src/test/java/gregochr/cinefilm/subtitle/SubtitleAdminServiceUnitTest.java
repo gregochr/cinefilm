@@ -337,6 +337,14 @@ class SubtitleAdminServiceUnitTest {
     }
 
     @Test
+    void aChangeWhileATimingOrCheckPassHoldsTheLockIsNotCalledAScan() {
+        lock.tryAcquire(LibraryLock.SUBTITLE);
+
+        assertThatThrownBy(() -> service.remove(8L)).isInstanceOf(ConflictException.class)
+            .hasMessage("Subtitles are being changed or checked; try again in a moment");
+    }
+
+    @Test
     void everyChangeIsRefusedWithAConflictWhileTheLibraryLockIsHeld() {
         lock.tryAcquire(LibraryLock.SCAN);
 

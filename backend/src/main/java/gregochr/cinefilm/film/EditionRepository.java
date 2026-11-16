@@ -21,9 +21,11 @@ public interface EditionRepository extends JpaRepository<Edition, Long> {
     /**
      * Every edition with its files (an edition with no file row too: a left join) and its film loaded in one statement,
      * for the Admin counts that apply the browse rule ({@code Film#browsable}) to the whole library. A film with no
-     * edition at all is absent.
+     * edition at all is absent. There is no {@code distinct}: Hibernate 6 returns each root entity once from a
+     * fetch join (proved by {@code EditionListIntegrationTest}), and {@code distinct} made PostgreSQL sort the whole
+     * library on each read.
      */
-    @Query("select distinct e from Edition e left join fetch e.mediaFiles join fetch e.film")
+    @Query("select e from Edition e left join fetch e.mediaFiles join fetch e.film")
     List<Edition> findAllWithFilesIncludingEmpty();
 
     /** One edition with its film loaded (and no files), for code that needs the film's id, title or IMDb id. */

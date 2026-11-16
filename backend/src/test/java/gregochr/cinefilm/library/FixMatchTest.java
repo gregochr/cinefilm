@@ -229,7 +229,7 @@ class FixMatchTest extends ApiTestBase {
     @Test
     void applyWhileAScanRunsIsA409AndChangesNothing() {
         Film film = unmatched("Dune", "Dune.m4v");
-        lock.tryAcquire(LibraryLock.IMPORT);
+        lock.tryAcquire(LibraryLock.SCAN);
 
         assertThatThrownBy(() -> fix.apply(film.getId(), 5L)).isInstanceOf(ConflictException.class)
             .hasMessage("A scan is running");
