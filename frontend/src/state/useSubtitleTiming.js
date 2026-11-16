@@ -140,9 +140,16 @@ export function useSubtitleTiming({ kind, ids, offsets, onScreen = null, onAppli
         setInFlight((keys) => keys.filter((k) => k !== key));
       }
       const now = rows.map((r) => answers.find((a) => a.id === r.id)?.offsetMs ?? r.offsetMs);
-      if (timedOut) uncertain.current[key] = moves;
+      // The server state is unknown after no answer, and stays unknown after a failed retry of it: the targets are kept
+      // until every row has answered (or the file is replaced).
+      const unsure =
+        timedOut ||
+        (retried !== undefined &&
+          answers.length < moves.length &&
+          !answers.some((a) => a.served === false));
+      if (unsure) uncertain.current[key] = moves;
       else delete uncertain.current[key];
-      if (answers.length > 0 && !timedOut) {
+      if (answers.length > 0 && !unsure) {
         // Rows that changed are at their new offset on the server, even when a later one was refused.
         learned.current = { ...learned.current, [key]: now };
         if (alive.current) setKnown(learned.current);
@@ -160,7 +167,7 @@ export function useSubtitleTiming({ kind, ids, offsets, onScreen = null, onAppli
       }
       say(key, problem ?? (replaced ? subtitleTiming.changed : null));
       // Whatever shows now, the file that was changed has new timing: its track is told, unless it is no longer served.
-      if (answers.length > 0 && !timedOut && !replaced && alive.current) {
+      if (answers.length > 0 && !unsure && !replaced && alive.current) {
         tokens.current[key] = trackToken(answers);
         callback.current(fileKind, tokens.current[key], now);
       }

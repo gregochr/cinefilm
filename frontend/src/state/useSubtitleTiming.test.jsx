@@ -557,5 +557,47 @@ describe('useSubtitleTiming', () => {
       expect(result.current.problem).toBeNull();
       expect(props.onApplied).toHaveBeenCalledTimes(1);
     });
+
+    it('a failed retry keeps the targets: the next press finishes them before anything moves', async () => {
+      vi.useFakeTimers();
+      const rows = [row(1, 0), row(2, 0)];
+      let mode = 'hang';
+      const { calls } = serve({
+        rows,
+        answer: (method, url) => {
+          if (method !== 'PUT') return null;
+          if (mode === 'hang' && url.endsWith('/1/offset')) {
+            rows[0].offsetMs = 250;
+            rows[1].offsetMs = 250; // the server saved both; the answer never arrived
+            return new Promise(() => {});
+          }
+          return mode === 'refuse' ? respond({ error: 'boom' }, 500) : null;
+        },
+      });
+      const props = open({ ids: [1, 2], offsets: [0, 0] });
+      const { result } = renderHook(() => useSubtitleTiming(props));
+      await act(async () => {
+        void result.current.later();
+        await vi.advanceTimersByTimeAsync(ADMIN_TIMEOUT_MS);
+      });
+      mode = 'refuse';
+      await act(() => result.current.later());
+      expect(result.current.problem).toBe(subtitleTiming.failed);
+
+      mode = 'ok';
+      await act(() => result.current.earlier());
+
+      // Earlier did not move from the stale [0, 0]: the saved [250, 250] was finished first.
+      expect(calls.slice(2)).toEqual([
+        'PUT /api/admin/subtitles/1/offset {"offsetMs":250}',
+        'PUT /api/admin/subtitles/2/offset {"offsetMs":250}',
+      ]);
+      expect(result.current.offsets).toEqual([250, 250]);
+      await act(() => result.current.earlier());
+      expect(calls.slice(4)).toEqual([
+        'PUT /api/admin/subtitles/1/offset {"offsetMs":0}',
+        'PUT /api/admin/subtitles/2/offset {"offsetMs":0}',
+      ]);
+    });
   });
 });
