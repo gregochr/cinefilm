@@ -154,6 +154,7 @@ final class ReferenceFetcher {
         OpenSubtitlesReference reference = blank(filmId, imdbId, candidate, stored, now);
         reference.setCuesText("");
         reference.setCueCount(0);
+        reference.setLastCueEndMs(null);
         reference.setFailedDownloads(permanent ? OpenSubtitlesReference.MAX_FAILED_DOWNLOADS
             : Math.min(OpenSubtitlesReference.MAX_FAILED_DOWNLOADS, reference.getFailedDownloads() + 1));
         return save(filmId, imdbId, candidate, reference);
@@ -180,6 +181,7 @@ final class ReferenceFetcher {
         OpenSubtitlesReference reference = blank(filmId, imdbId, candidate, stored, now);
         reference.setCuesText(usable ? text : "");
         reference.setCueCount(usable ? cues.size() : 0);
+        reference.setLastCueEndMs(usable ? cues.stream().mapToLong(SubtitleCue::endMs).max().orElse(0) : null);
         if (!usable) {
             reference.setFailedDownloads(OpenSubtitlesReference.MAX_FAILED_DOWNLOADS);
         }

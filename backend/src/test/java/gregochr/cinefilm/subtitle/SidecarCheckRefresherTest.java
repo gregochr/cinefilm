@@ -682,6 +682,25 @@ class SidecarCheckRefresherTest {
     }
 
     @Test
+    void aFetchedReferenceKeepsTheLatestCueEndNotTheLastCuesEnd() {
+        DueCheck due = due(1, 10, 5011);
+        when(service.due()).thenReturn(List.of(due));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
+        when(api.download(5011)).thenReturn(downloaded(List.of(new SubtitleCue(10_000, 90_000, "a"),
+            new SubtitleCue(20_000, 21_000, "b")), 50, null));
+        storingReferences();
+        savingEverything();
+        ArgumentCaptor<OpenSubtitlesReference> saved = ArgumentCaptor.forClass(OpenSubtitlesReference.class);
+
+        startAndRun();
+
+        verify(references).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getCueCount()).isEqualTo(2);
+        assertThat(saved.getValue().getLastCueEndMs()).isEqualTo(90_000L);
+    }
+
+    @Test
     void aDownloadThatHasNoCuesIsStoredAsUnusableAndNothingIsComparedOrSaved() {
         DueCheck due = due(1, 10, 5011);
         when(service.due()).thenReturn(List.of(due));
@@ -696,6 +715,7 @@ class SidecarCheckRefresherTest {
         verify(references).saveAndFlush(saved.capture());
         assertThat(saved.getValue().isUsable()).isFalse();
         assertThat(saved.getValue().getCueCount()).isZero();
+        assertThat(saved.getValue().getLastCueEndMs()).isNull();
         assertThat(saved.getValue().getCuesText()).isEmpty();
         assertThat(saved.getValue().getOsFileId()).isEqualTo(5011L);
         verifyNoMoreInteractions(service);
@@ -740,6 +760,7 @@ class SidecarCheckRefresherTest {
         startAndRun();
 
         verify(references).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getLastCueEndMs()).isNull();
         assertThat(saved.getValue().isUsable()).isFalse();
         assertThat(saved.getValue().getCuesText()).isEmpty();
         assertThat(SidecarCheckRefresher.MAX_REFERENCE_CHARS).isEqualTo(1024 * 1024);
@@ -962,6 +983,7 @@ class SidecarCheckRefresherTest {
         verify(references).saveAndFlush(saved.capture());
         assertThat(saved.getValue().getOsFileId()).isEqualTo(5011L);
         assertThat(saved.getValue().getCueCount()).isZero();
+        assertThat(saved.getValue().getLastCueEndMs()).isNull();
         assertThat(saved.getValue().getCuesText()).isEmpty();
         assertThat(saved.getValue().getFailedDownloads()).isEqualTo(3);
         assertThat(saved.getValue().isFinal()).isTrue();
@@ -977,6 +999,7 @@ class SidecarCheckRefresherTest {
         assertThat(saved.getValue().getFailedDownloads()).isEqualTo(1);
         assertThat(saved.getValue().isFinal()).isFalse();
         assertThat(saved.getValue().getCueCount()).isZero();
+        assertThat(saved.getValue().getLastCueEndMs()).isNull();
         assertThat(messages()).containsExactly("Subtitle file checks stopped: OpenSubtitles file refused",
             NOTHING_DONE);
     }

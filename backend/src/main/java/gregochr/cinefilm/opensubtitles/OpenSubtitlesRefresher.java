@@ -5,8 +5,10 @@ import gregochr.cinefilm.film.FilmRepository.ImdbRef;
 import gregochr.cinefilm.library.ScanFinished;
 import gregochr.cinefilm.plex.PlexImportFinished;
 import gregochr.cinefilm.subtitle.FullNeedService;
+import gregochr.cinefilm.subtitle.TimingReferenceService;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executor;
@@ -33,10 +35,11 @@ import org.springframework.stereotype.Service;
  * listens). Nothing here throws to its caller.
  *
  * <p>The same run also searches for <em>full</em> English subtitles ({@link OpenSubtitlesApi#searchFull}), but only for
- * films whose full-subtitle need is {@code NEEDED} ({@link FullNeedService}), on the same rules: due when never
- * searched, searched under another IMDb id, or searched with no result more than 30 days ago. The result is saved with
- * one statement that only matches while the film still has the IMDb id it was searched for. An outage stops the whole
- * run. Searches are not charged; only downloads are.
+ * films whose full-subtitle need is {@code NEEDED} ({@link FullNeedService}) and for films with an edition whose
+ * forced subtitles are timed against a full English file ({@link TimingReferenceService}), on the same rules: due
+ * when never searched, searched under another IMDb id, or searched with no result more than 30 days ago. The result
+ * is saved with one statement that only matches while the film still has the IMDb id it was searched for. An outage
+ * stops the whole run. Searches are not charged; only downloads are.
  */
 @Service
 public class OpenSubtitlesRefresher {
@@ -49,6 +52,7 @@ public class OpenSubtitlesRefresher {
     private final OpenSubtitlesApi api;
     private final FilmRepository films;
     private final FullNeedService fullNeed;
+    private final TimingReferenceService timingReference;
     private final Clock clock;
     private final Executor executor;
     private final ApplicationEventPublisher events;
@@ -56,12 +60,14 @@ public class OpenSubtitlesRefresher {
     private final AtomicBoolean pending = new AtomicBoolean();
 
     /** Creates the service; the executor is {@code openSubtitlesExecutor}. */
-    public OpenSubtitlesRefresher(OpenSubtitlesApi api, FilmRepository films, FullNeedService fullNeed, Clock clock,
+    public OpenSubtitlesRefresher(OpenSubtitlesApi api, FilmRepository films, FullNeedService fullNeed,
+                                  TimingReferenceService timingReference, Clock clock,
                                   @Qualifier("openSubtitlesExecutor") Executor executor,
                                   ApplicationEventPublisher events) {
         this.api = api;
         this.films = films;
         this.fullNeed = fullNeed;
+        this.timingReference = timingReference;
         this.clock = clock;
         this.executor = executor;
         this.events = events;
@@ -179,7 +185,8 @@ public class OpenSubtitlesRefresher {
     }
 
     /**
-     * One pass over the films that need full subtitles and are due a search.
+     * One pass over the films that need full subtitles, or have an edition that wants a full English reference to
+     * time its forced subtitles against, and are due a search.
      *
      * @return how many were saved and how many failed
      */
@@ -187,7 +194,8 @@ public class OpenSubtitlesRefresher {
         int saved = 0;
         int failed = 0;
         try {
-            Set<Long> needed = fullNeed.neededFilmIds();
+            Set<Long> needed = new HashSet<>(fullNeed.neededFilmIds());
+            needed.addAll(timingReferenceFilms());
             if (needed.isEmpty()) {
                 return new int[] {0, 0};
             }
@@ -214,6 +222,19 @@ public class OpenSubtitlesRefresher {
             LOG.error("Full subtitle search failed", e);
         }
         return new int[] {saved, failed};
+    }
+
+    /**
+     * The films with a timing-reference edition (phase 3c-1), searched too on the same rules. A failure finding them
+     * never stops the search of the films that need full subtitles.
+     */
+    private Set<Long> timingReferenceFilms() {
+        try {
+            return timingReference.filmIds();
+        } catch (RuntimeException e) {
+            LOG.warn("Could not find the films that want a timing reference: {}", e.getClass().getSimpleName());
+            return Set.of();
+        }
     }
 
     /** Says the pass has ended, so the best results can be used; a listener's failure does not touch the run. */

@@ -1,11 +1,8 @@
 package gregochr.cinefilm.subtitle;
 
-import gregochr.cinefilm.credits.CreditsDetection;
 import gregochr.cinefilm.credits.CreditsDetectionRepository;
-import gregochr.cinefilm.credits.CreditsVerdict;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
-import gregochr.cinefilm.film.EditionTimeline;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.OsFullRef;
 import gregochr.cinefilm.film.MediaFile;
@@ -24,7 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * The database side of the full-subtitle measurement ({@link FullFitProbe}, phase 5d-1): which full downloads are
- * worth measuring, with the facts that go in the log line. Nothing is stored and nothing here changes what plays.
+ * worth measuring (those of films whose full need is {@code NEEDED}), with the facts that go in the log line. Nothing
+ * is stored and nothing here changes what plays.
  */
 @Service
 public class FullFitService {
@@ -34,15 +32,18 @@ public class FullFitService {
     private final EditionRepository editions;
     private final OpenSubtitlesReferenceRepository references;
     private final CreditsDetectionRepository credits;
+    private final FullNeedService fullNeed;
 
     /** Creates the service. */
     public FullFitService(FilmRepository films, SubtitleSidecarRepository sidecars, EditionRepository editions,
-                          OpenSubtitlesReferenceRepository references, CreditsDetectionRepository credits) {
+                          OpenSubtitlesReferenceRepository references, CreditsDetectionRepository credits,
+                          FullNeedService fullNeed) {
         this.films = films;
         this.sidecars = sidecars;
         this.editions = editions;
         this.references = references;
         this.credits = credits;
+        this.fullNeed = fullNeed;
     }
 
     /**
@@ -83,6 +84,11 @@ public class FullFitService {
         if (filmIds.isEmpty()) {
             return List.of();
         }
+        // Films searched only for the timing check (phase 3c-1) have full candidates too: they are not measured here.
+        filmIds.retainAll(fullNeed.neededFilmIds());
+        if (filmIds.isEmpty()) {
+            return List.of();
+        }
         List<Edition> fetched = editions.findWithFilesByFilmIdIn(filmIds);
         List<Long> allParts = fetched.stream().flatMap(e -> e.originalParts().stream()).map(MediaFile::getId).toList();
         List<SubtitleSidecar> found = sidecars.findByMediaFileIdInAndKind(allParts, SubtitleKind.FULL);
@@ -111,25 +117,7 @@ public class FullFitService {
                 .filter(c -> c.isSingleFile() && c.fileId() != download.getOpenSubtitlesFileId()).toList(),
             edition.getName());
         return new Job(ref.id(), edition.getId(), ref.imdbId(), download.getId(), download.getOpenSubtitlesFileId(),
-            SrtParser.cues(download.getCuesText()), edition.getRuntimeMs(), creditsStart(edition), others, stored);
-    }
-
-    /** Where credits detection found the credits start on the edition's timeline; null when it found none. */
-    private Long creditsStart(Edition edition) {
-        List<MediaFile> parts = edition.originalParts();
-        int last = parts.size() - 1;
-        CreditsDetection detection = credits.findById(parts.get(last).getId()).orElse(null);
-        if (detection == null || detection.getVerdict() != CreditsVerdict.FOUND || detection.getOffsetMs() == null) {
-            return null;
-        }
-        if (last == 0) {
-            return detection.getOffsetMs();
-        }
-        try {
-            return EditionTimeline.of(edition).partStartMs(last) + detection.getOffsetMs();
-        } catch (IllegalArgumentException e) {
-            // A part's length is not known: the credits start cannot be placed on the edition's timeline.
-            return null;
-        }
+            SrtParser.cues(download.getCuesText()), edition.getRuntimeMs(), CreditsStarts.of(edition, credits), others,
+            stored);
     }
 }
