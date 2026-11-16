@@ -204,12 +204,13 @@ any was skipped, or when a file has not ended after two minutes). They need Node
 browser and no network beyond this machine. The link's arithmetic is tested with made-up times. The server's
 tests run over real HTTP on a free port, most with the link left open. Those about the link use a dead or a slow
 one and wait for an event (a byte arriving, an entry in the log), never for a fixed time, except one that waits
-40 ms to show that an answer waits for the round trip. One test sets the clock the server reads (`Date`) two
-minutes on, leaving the link's own timer alone, to show that each byte is counted in the minute it was let
-through. No test cuts an answer on a link that has gone dead, which would need a fixed wait: that such a cut is
-timed at the cut and not at the last byte sent was checked by hand on record minutes 33 to 36, where six answers
-the player gave up on after 10 s without a byte were each logged as cut at 10 s. CI runs them on Node 24. When
-a test is added, raise the number in the wrapper.
+40 ms to show that an answer waits for the round trip. Two tests set the clock the server reads (`Date`)
+forward, leaving the link's own timer alone: one between two answers, and one in the middle of an answer, which
+shows that each byte is counted in the minute it was let through and not the minute its answer was asked for.
+No test cuts an answer on a link that has gone dead, which would need a fixed wait: that such a cut is timed at
+the cut and not at the last byte sent was checked by hand on record minutes 33 to 36, where six answers the
+player gave up on after 10 s without a byte were each logged as cut at 10 s. CI runs them on Node 24. When a
+test is added, raise the number in the wrapper.
 
 What needs Chrome has no automated test: launching it, the socket to it, building the app, encoding the film's
 picture, and the driver's own loop. The by-hand minute under "Running it" is their only check. What can be

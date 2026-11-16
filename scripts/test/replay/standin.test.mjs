@@ -100,11 +100,12 @@ function open(port, { method = 'GET', path = '/', body } = {}) {
   return seen;
 }
 
-// Lets the server and the client run, turn by turn, until `check` says so (no fixed wait).
+// Lets the server and the client run, turn by turn, until `check` says so (no fixed wait). The deadline is read from
+// performance.now(), not Date: a test may freeze Date (the replay clock reads it), and the deadline must still pass.
 async function waitFor(check, what) {
-  const deadline = Date.now() + 8000;
+  const deadline = performance.now() + 8000;
   while (!(await check())) {
-    if (Date.now() > deadline) throw new Error(`gave up waiting for ${what}`);
+    if (performance.now() > deadline) throw new Error(`gave up waiting for ${what}`);
     await nextTurn();
   }
 }
@@ -1096,33 +1097,34 @@ describe('the link', () => {
   });
 
   test('an answer the player cuts has a time it was cut at, from the start of the request, and no end', async () => {
-    // A round trip of 150 ms, so that the time of the first byte and the start of the request are far apart.
-    const standIn = await start({ trace: [800], rttMs: 150 });
+    // A round trip of 300 ms, so that the time of the first byte and the start of the request are far apart.
+    const standIn = await start({ trace: [800], rttMs: 300 });
     const { sessionId } = await newSession(standIn, { quality: '360p' });
     standIn.startClock();
     const asked = performance.now();
     const seen = open(standIn.port, { path: `/api/sessions/${sessionId}/360p/seg-0.ts` });
-    // 5,000 bytes may be sent with the first byte, the other 25,000 at 100,000 a second: at least 250 ms later. The
-    // 375,812-byte segment is nowhere near finished.
+    // The link keeps at most 5,000 bytes for later and sends them with the first byte; the other 25,000 go at 100,000 a
+    // second. So the 30,000th byte comes usually about 250 ms after the first and never under 200 ms (a late tick can
+    // let a second 5,000 out with it). The 375,812-byte segment is nowhere near finished.
     await waitFor(() => seen.bytes >= 30000, 'well past the first bytes');
     seen.req.destroy();
     const entry = entryOf(standIn, 'segment');
     await waitFor(() => entry.aborted, 'the log to say aborted');
     const now = Math.round(performance.now() - asked);
     const figures = `cut at ${entry.cutMs}, first byte at ${entry.firstByteMs}, ${now} ms since it was asked for`;
-    assert.ok(entry.firstByteMs >= 140, `the first byte did not wait for the round trip: ${figures}`);
+    assert.ok(entry.firstByteMs >= 290, `the first byte did not wait for the round trip: ${figures}`);
     assert.equal(typeof entry.cutMs, 'number', figures);
     assert.ok(Number.isInteger(entry.cutMs), figures);
     // Counted from the start of the request: it cannot be later than the time that has passed since it was asked for.
     assert.ok(entry.cutMs <= now + 1, `not from the start of the request: ${figures}`);
-    // And it is the time of the cut, not of the first byte: at least 250 ms after it (see above).
-    assert.ok(entry.cutMs >= entry.firstByteMs + 200, `not the time of the cut: ${figures}`);
+    // And it is the time of the cut, not of the first byte: never under 200 ms after it, so 150 leaves room, while a
+    // time counted from the first byte (about 250 ms) stays well under firstByteMs + 150 (about 450).
+    assert.ok(entry.cutMs >= entry.firstByteMs + 150, `not the time of the cut: ${figures}`);
     assert.equal(entry.doneMs, null);
   });
 
   test('bytes sent after the replay clock has passed into a later minute are counted in that minute', async (t) => {
     // Only Date is mocked: it is what the replay clock reads. The link's own timer reads performance.now().
-    // No waitFor in here: its deadline reads Date.now(), which would never pass, and a failure would hang.
     t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
     const standIn = await start();
     standIn.startClock();
@@ -1131,9 +1133,32 @@ describe('the link', () => {
     await request(standIn.port, { path: '/api/session' });
     const [first, second] = standIn.requests;
     assert.ok(first.sent > 0 && second.sent > 0, `sent ${first.sent} and ${second.sent}`);
-    assert.ok(second.ms >= 120000, `the second answer was asked for at ${second.ms} ms`);
+    assert.equal(first.ms, 0); // Date is frozen, so the clock reads exactly what it was set to
+    assert.equal(second.ms, 120000);
     assert.equal(second.minute - first.minute, 2);
     assert.deepEqual(standIn.delivered, [first.sent, 0, second.sent]);
+  });
+
+  test('a byte is counted in the minute it was let through, not the minute its answer was asked for', async (t) => {
+    // Only Date is mocked: it is what the replay clock reads. The link's own timer reads performance.now().
+    t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+    const standIn = await start({ trace: [800] }); // 100,000 bytes a second in every minute
+    const { sessionId } = await newSession(standIn, { quality: '360p' });
+    standIn.startClock();
+    const seen = open(standIn.port, { path: `/api/sessions/${sessionId}/360p/seg-0.ts` });
+    await waitFor(() => seen.bytes > 0, 'the first bytes');
+    const entry = entryOf(standIn, 'segment');
+    // The clock passes into the next minute while the answer is being sent. Nothing is awaited between the next two
+    // lines, so nothing can be sent between them: atJump is exactly what was let through in minute 0.
+    t.mock.timers.setTime(Date.now() + 60_000);
+    const atJump = entry.sent;
+    await waitFor(() => entry.sent >= atJump + 10_000, 'bytes let through in the next minute');
+    seen.req.destroy();
+    await waitFor(() => entry.aborted, 'the log to say aborted');
+    assert.equal(entry.minute, 0); // asked for in the first minute
+    assert.equal(entry.ms, 0);
+    assert.ok(atJump > 0, `nothing was sent before the clock moved: ${atJump}`);
+    assert.deepEqual(standIn.delivered, [atJump, entry.sent - atJump]);
   });
 
   test('the bytes the link let through are counted by replay minute: exactly what the answers sent', async () => {

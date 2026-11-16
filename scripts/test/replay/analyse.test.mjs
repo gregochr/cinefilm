@@ -213,13 +213,14 @@ describe('section 2: gaps with nothing fetched', () => {
   test('a cut time that is not a time is ignored: the segment is read as ending where it began', () => {
     const finished = (ms) => ({ kind: 'segment', ms, doneMs: 1000, rung: '480p' });
     const cutAt = (cutMs) => ({ kind: 'segment', ms: 20000, aborted: true, doneMs: null, cutMs, rung: '480p' });
-    // Damaged (-15,000): the second ends at its start, 20,000 ms, and the third starts 25 s later: no gap. Taken at
-    // its face it would end at 5,000 ms and a gap of 40 s would be made up.
-    assert.deepEqual(idleGaps([finished(0), cutAt(-15000), finished(45000)], samples, link), []);
-    // A real cut time: it ends at 35,000 ms and the third starts 10 s later.
-    assert.deepEqual(idleGaps([finished(0), cutAt(15000), finished(45000)], samples, link), []);
-    // No cut time at all: read as ending where it began.
-    assert.deepEqual(idleGaps([finished(0), cutAt(undefined), finished(45000)], samples, link), []);
+    const gapsWith = (cutMs) => idleGaps([finished(0), cutAt(cutMs), finished(51000)], samples, link).map((g) => g.gap);
+    // Damaged (-15,000): the second ends at its start, 20,000 ms, and the third starts 31 s later. (Taken at its face
+    // it would end at 5,000 ms and the gap would be 46,000; read as its size, 35,000 ms, there would be none.)
+    assert.deepEqual(gapsWith(-15000), [31000]);
+    // No cut time at all: the same.
+    assert.deepEqual(gapsWith(undefined), [31000]);
+    // A real cut time: it ends at 35,000 ms and the third starts 16 s later, which is no gap.
+    assert.deepEqual(gapsWith(15000), []);
   });
 
   test('a segment that finished ends at its end, whatever a cut time says', () => {
