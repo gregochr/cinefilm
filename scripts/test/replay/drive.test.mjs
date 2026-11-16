@@ -8,7 +8,7 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, describe, test } from 'node:test';
 import {
-  buildCommand, claimPort, cleanSample, consoleText, createStop, exitCodeFor, notePageError, options, pickFinal,
+  buildCommand, claimPort, cleanSample, consoleText, createStop, cutShort, exitCodeFor, notePageError, options, pickFinal,
   portError, progressLine, shouldWriteResults, standStillWarning, summarise, templateFor, traceFor, writeFailure,
 } from '../../replay/drive.mjs';
 import { WIRE, loadRecord, traces } from '../../replay/trace.mjs';
@@ -637,5 +637,27 @@ describe('writeFailure', () => {
     assert.equal(writeFailure(() => {
       throw 'plain text';
     }), 'the results could not be written: plain text');
+  });
+});
+
+describe('cutShort', () => {
+  test('a run that finished and did not fail was not cut short', () => {
+    assert.equal(cutShort({ ended: 'finished', failed: false, excused: false }), false);
+  });
+
+  test('a run whose watching was stopped was cut short', () => {
+    assert.equal(cutShort({ ended: 'stopped', failed: false, excused: false }), true);
+  });
+
+  test('a run that failed with a stop asked for (Chrome died of the same Ctrl-C) was cut short, with no ending', () => {
+    assert.equal(cutShort({ ended: null, failed: true, excused: true }), true);
+  });
+
+  test('a run that failed with no stop asked for was not cut short by a signal', () => {
+    assert.equal(cutShort({ ended: null, failed: true, excused: false }), false);
+  });
+
+  test('an excuse without a failure changes nothing', () => {
+    assert.equal(cutShort({ ended: 'finished', failed: false, excused: true }), false);
   });
 });

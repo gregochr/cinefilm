@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { after, describe, test } from 'node:test';
 import {
   aheadAt, analyseRun, deliveredPerMinute, deliveryAgainstTrace, describe as describeRun, hasUsableTimes, idleGaps,
-  RUNS_DIR, linkByMinute, notPlaying, playheadLag, rungsAndBytes, samplingGaps, screenAgainstLink, soundness, spellFigures,
+  RUNS_DIR, linkByMinute, runDir, notPlaying, playheadLag, rungsAndBytes, samplingGaps, screenAgainstLink, soundness, spellFigures,
   spread, startOf, withFilmInHand,
 } from '../../replay/analyse.mjs';
 import { loadRecord } from '../../replay/trace.mjs';
@@ -433,6 +433,11 @@ describe('analyseRun', () => {
     const here = dirname(fileURLToPath(import.meta.url));
     assert.equal(RUNS_DIR, join(here, '..', '..', 'replay', 'out'));
   });
+
+  test('a run\'s folder is under the runs folder unless another root is given: the one place the driver also uses', () => {
+    assert.equal(runDir('smoke'), join(RUNS_DIR, 'smoke'));
+    assert.equal(runDir('smoke', '/some/root'), join('/some/root', 'smoke'));
+  });
 });
 
 describe('analyseRun on a run\'s files', () => {
@@ -531,7 +536,7 @@ describe('analyseRun on a run\'s files', () => {
     const odd = { ...report, minutes: [null, 5, 'x', { 0: 1 }] };
     const name = writeRun({ ...good, 'health.json': JSON.stringify({ final: { report: odd } }) });
     assert.deepEqual(analyseRun(name, tmp), expected(name, HEADING, 24));
-    const message = 'samples.json holds a sample with no time';
+    const message = 'samples.json holds a sample with no time, or one out of range';
     for (const bad of ['[{"kbps":1}]', '[{"ms":"5"}]', '[{"ms":null}]', '[{"ms":-1}]', '[{"ms":1000000001}]']) {
       assert.throws(() => analyseRun(writeRun({ ...good, 'samples.json': bad }), tmp), { message }, bad);
     }

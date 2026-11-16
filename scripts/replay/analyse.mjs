@@ -409,16 +409,21 @@ function readSummary(dir) {
 
 const NO_SUMMARY = 'WARNING: no summary line in this run: it is read as starting at record minute 0';
 
+/** The folder of the run called `name` under `root` (by default `RUNS_DIR`, where the driver writes it). */
+export function runDir(name, root = RUNS_DIR) {
+  return join(root, name);
+}
+
 /**
  * Reads the run called `name` from the folder `root` (default scripts/replay/out) and returns the lines of its
  * analysis. A run whose summary has no "Replay of record minutes" line is read as starting at record minute 0, and
  * its first line says so.
  */
-export function analyseRun(name, root = RUNS_DIR) {
+export function analyseRun(name, root) {
   if (!isRunName(name)) {
     throw new Error('usage: node scripts/replay/analyse.mjs <run name> (letters, digits, dot, dash and underscore)');
   }
-  const dir = join(root, name);
+  const dir = runDir(name, root);
   const requests = readJson(dir, 'requests.json');
   const samples = readJson(dir, 'samples.json');
   const report = readJson(dir, 'health.json')?.final?.report;
@@ -427,7 +432,7 @@ export function analyseRun(name, root = RUNS_DIR) {
   requireObjects(requests, 'requests.json');
   if (samples.length === 0) throw new Error('no samples in this run: nothing to analyse');
   if (!samples.every((s) => isTime(s.ms) && s.ms <= MAX_SAMPLE_MS)) {
-    throw new Error('samples.json holds a sample with no time');
+    throw new Error('samples.json holds a sample with no time, or one out of range');
   }
   const summary = readSummary(dir);
   const heading = summary.split('\n').find((line) => line.startsWith('Replay')) ?? '(no summary line)';

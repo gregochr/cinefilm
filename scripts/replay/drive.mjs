@@ -20,8 +20,9 @@
 // first time (five seconds in); before that nothing is written, the run's folder is not made, and an earlier run of
 // the same name stays as it was. A second Ctrl-C quits at once (code 130), stops Chrome as far as it can and writes
 // nothing. The exit code is 0 when the run ran to its end or a stop was asked for, even when the build, the making of
-// the picture or Chrome died of the same Ctrl-C (in a terminal it reaches them too); 1 when it failed with no stop
-// asked for (a refused option, a failed build, Chrome did not start or went away part-way).
+// the picture or Chrome died of the same Ctrl-C (in a terminal it reaches them too); 1 when it failed and no stop
+// had been asked for before the failure or within the short wait that follows it (a stop asked for later, during the
+// clean-up, does not excuse it): a refused option, a failed build, Chrome not starting or going away part-way.
 //
 // Output (only once there is something to write): scripts/replay/out/<name>/ holds health.json (the stand-in's
 // figures of the viewing's last playback-health report), samples.json (every 5 s: playhead, buffer, what the screen
@@ -40,6 +41,7 @@ import { launchChrome, sleep } from './cdp.mjs';
 import { rateAt } from './link.mjs';
 import { makeTemplate, TEMPLATE_PATH } from './make-template.mjs';
 import { startStandIn } from './standin.mjs';
+import { runDir } from './analyse.mjs';
 import { isRunName, printable } from './text.mjs';
 import { clockOf, loadRecord, rowsByMinute, traces, WIRE } from './trace.mjs';
 import { loadTemplate } from './ts.mjs';
@@ -48,7 +50,6 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const FRONTEND = join(HERE, '..', '..', 'frontend');
 const VITE = join(FRONTEND, 'node_modules', 'vite', 'bin', 'vite.js');
 const DIST = join(HERE, 'dist');
-const OUT = join(HERE, 'out');
 const FILM = join(FRONTEND, 'src', 'test', 'fixtures', 'film-heat.json');
 const PORT = 5301;
 const SAMPLE_MS = 5000;
@@ -551,7 +552,7 @@ function listenToPage(page, run) {
 }
 
 // Looks at the page every five seconds until the time is up or a signal comes. Says how it ended: `finished` when
-// the time was up, `stopped` when a signal cut it short.
+// the time was up, `stopped` when a signal cut it short. It throws when Chrome goes away.
 async function watch({ page, standIn, record, opt, stop, run }) {
   const endAt = Date.now() + opt.minutes * 60000;
   let lastLine = 0;
@@ -619,6 +620,14 @@ export function exitCodeFor({ failed, stopped }) {
 }
 
 /**
+ * Whether the run was cut short by a signal, so that its summary says so: the watching was stopped (`ended` is
+ * `stopped`), or the replay failed and that failure was excused by a stop (Chrome dying of the same Ctrl-C).
+ */
+export function cutShort({ ended, failed, excused }) {
+  return ended === 'stopped' || (failed && excused);
+}
+
+/**
  * Runs `action` (the making of the summary and the writing of the results). Returns null when it went through, or one
  * printable line saying the results could not be written, with the reason, when it threw.
  */
@@ -667,7 +676,9 @@ async function main(argv, stop, held) {
     port: PORT, distDir: DIST, filmPath: FILM, template, trace, startMinute: opt.start, fill: opt.fill, wire: opt.wire,
   });
   let failed = false;
-  let excused = false; // a failure is excused only by a stop that had been asked for when it happened
+  // A failure is excused by a stop asked for before it, or within the short wait that follows it (see `stopAsked`);
+  // a stop asked for later, during the clean-up, does not excuse it.
+  let excused = false;
   let ended = null;
   try {
     ended = await replay({ opt, record, standIn, stop, run, held });
@@ -684,10 +695,10 @@ async function main(argv, stop, held) {
     say('nothing was written: the film had not started');
     return code;
   }
-  if (ended === 'stopped') {
+  if (cutShort({ ended, failed, excused })) {
     run.warnings.push(`stopped early by a signal at replay second ${secondsOf(standIn.clockMs() ?? 0)}`);
   }
-  const outDir = join(OUT, opt.name);
+  const outDir = runDir(opt.name);
   let summary = '';
   const failure = writeFailure(() => {
     const picked = pickFinal(standIn.healthReports);
@@ -697,11 +708,12 @@ async function main(argv, stop, held) {
     });
     writeResults({ outDir, picked, standIn, run, summary });
   });
+  // Before a failure's line, so a long run's table is not lost (if making it threw there is none).
+  if (summary) for (const line of summary.split('\n')) say(line);
   if (failure) {
     console.error(failure);
     return 1;
   }
-  for (const line of summary.split('\n')) say(line);
   say(`results: ${outDir}`);
   return code;
 }
