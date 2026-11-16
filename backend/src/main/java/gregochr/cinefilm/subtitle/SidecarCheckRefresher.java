@@ -43,10 +43,13 @@ import org.springframework.stereotype.Service;
  * is counted and the run goes on. A request that arrives while a run is going makes it go round once more. Nothing
  * here throws to its caller.
  *
- * <p>The same run also measures the <em>full</em> downloads ({@link FullFitProbe}, phase 5d-1): one log line per
- * download with its fit against a second OpenSubtitles full file, both ways. It stores nothing and acts on nothing, and
- * its fetches go through the same {@link ReferenceFetcher} lock and the comparison ceiling. A download that was added
- * starts the run through {@link SubtitleDownloadsFinished}.
+ * <p>The same run first measures the <em>full</em> downloads ({@link FullFitProbe}, phase 5d-1): one log line per
+ * download with its fit against a second OpenSubtitles full file, both ways. It runs before the checks, so the few
+ * full downloads waiting for their one measurement are not starved by the forced checks' backlog. It stores nothing
+ * and acts on nothing, and its fetches go through the same {@link ReferenceFetcher} lock and the comparison ceiling.
+ * It stays bounded: at most one fetch per download per process (a charged transient failure is retried), and stored
+ * references are reused at no cost. A download that was added starts the run through
+ * {@link SubtitleDownloadsFinished}.
  */
 @Service
 public class SidecarCheckRefresher {
@@ -203,6 +206,7 @@ public class SidecarCheckRefresher {
             }
             // The comparisons may bring the day's total only to their share; the limit follows the account.
             checkLimit = DownloadShares.forChecks(limits.today());
+            measureFullDownloads();
             for (DueCheck due : service.due()) {
                 try {
                     if (due.candidates().isEmpty()) {
@@ -231,7 +235,6 @@ public class SidecarCheckRefresher {
                         e.getClass().getSimpleName());
                 }
             }
-            measureFullDownloads();
             LOG.info("Subtitle file checks finished: {} saved, {} changed meanwhile, {} unusable references, "
                 + "{} failed", saved, dropped, unusable, failed);
             if (saved > 0) {
@@ -243,8 +246,10 @@ public class SidecarCheckRefresher {
     }
 
     /**
-     * The measurement of the full downloads (phase 5d-1): one log line each, nothing stored. It uses the same fetcher
-     * and the same ceiling as the checks, so it cannot take the budget from downloads.
+     * The measurement of the full downloads (phase 5d-1): one log line each, nothing stored. It runs first, before the
+     * checks, so the few downloads waiting for their one measurement are not starved by the forced checks' backlog.
+     * It uses the same fetcher and the same ceiling as the checks, so it cannot take the budget from downloads, and a
+     * share it finds spent does not stop the checks.
      */
     private void measureFullDownloads() {
         try {
