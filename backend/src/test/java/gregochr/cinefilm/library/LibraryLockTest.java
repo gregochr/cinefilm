@@ -180,9 +180,9 @@ class LibraryLockTest {
     }
 
     @Test
-    void aLockReleasedBeforeTheTextIsReadFallsBackToAScanAndSoDoesAnUnknownHolder() {
-        assertThat(new LibraryLock().busyText()).isEqualTo("A scan is running");
-        assertThat(busyTextWhenHeldBy("something else")).isEqualTo("A scan is running");
+    void aLockReleasedBeforeTheTextIsReadAndAnUnknownHolderGetANeutralLine() {
+        assertThat(new LibraryLock().busyText()).isEqualTo("The library is busy; try again in a moment");
+        assertThat(busyTextWhenHeldBy("something else")).isEqualTo("The library is busy; try again in a moment");
     }
 
     private static String busyTextWhenHeldBy(String who) {

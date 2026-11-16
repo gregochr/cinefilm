@@ -7,8 +7,9 @@ import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.film.Edition;
@@ -369,6 +370,8 @@ class ForcedDownloadServiceChosenUnitTest {
 
         assertThat(savedRows()).singleElement().satisfies(row -> assertThat(row.getOpenSubtitlesFileId())
             .isEqualTo(5011L));
+        // Only the existence check was made on the ledger: the file is not put there a second time.
+        verifyNoMoreInteractions(ledger);
     }
 
     @Test
@@ -397,6 +400,7 @@ class ForcedDownloadServiceChosenUnitTest {
         assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 0), NOW))
             .isEqualTo(ChosenOutcome.UNUSABLE);
 
+        verifyNoMoreInteractions(sidecars, ledger);
     }
 
     @Test
@@ -407,6 +411,7 @@ class ForcedDownloadServiceChosenUnitTest {
         assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
             .isEqualTo(ChosenOutcome.CAP_REACHED);
 
+        verifyNoMoreInteractions(sidecars, ledger);
         assertThat(lock.holder()).isNull();
     }
 

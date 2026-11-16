@@ -31,6 +31,8 @@ public class LibraryLock {
     /** Holder name of the credits import writing its rows (taken only for that short write). */
     public static final String PLEX_CREDITS = "plex-credits";
 
+    private static final String BUSY = "The library is busy; try again in a moment";
+
     private final AtomicReference<String> holder = new AtomicReference<>();
 
     /**
@@ -59,22 +61,23 @@ public class LibraryLock {
     }
 
     /**
-     * What to tell a caller the lock refused, worded for whoever holds it now. A scan (or a holder that let go
-     * between the refusal and this read) is "A scan is running".
+     * What to tell a caller the lock refused, worded for whoever holds it now. A holder that let go between the
+     * refusal and this read, or one this does not know, gets a neutral "The library is busy" line.
      */
     public String busyText() {
         String who = holder.get();
         if (who == null) {
-            return "A scan is running";
+            return BUSY;
         }
         return switch (who) {
+            case SCAN -> "A scan is running";
             case IMPORT -> "A Plex import is running";
             case MATCH -> "A film match is being fixed; try again in a moment";
             case EDIT -> "Editions are being edited; try again in a moment";
             case SUBTITLE -> "Subtitles are being changed or checked; try again in a moment";
             case CREDITS -> "Credits are being saved; try again in a moment";
             case PLEX_CREDITS -> "Plex credits are being imported; try again in a moment";
-            default -> "A scan is running";
+            default -> BUSY;
         };
     }
 }

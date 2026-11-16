@@ -541,7 +541,7 @@ class EditionOpenSubtitlesServiceTest {
             "That file is already this edition's download.",
             "This edition has already used its 3 OpenSubtitles files (removed ones count), so no more can be "
                 + "downloaded for it.",
-            "A scan is running");
+            "The library is busy; try again in a moment");
         verifyNoInteractions(budget);
         verifyNoInteractions(events);
     }
@@ -694,7 +694,10 @@ class EditionOpenSubtitlesServiceTest {
         searchedForced(plain(5011));
         readyToDownload(5011);
         OpenSubtitlesReference reference = storedReferenceExists(5011, 12);
-        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, NOW)).thenReturn(ChosenOutcome.BUSY);
+        when(downloads.addChosen(1L, 40L, SubtitleKind.FORCED, reference, NOW)).thenAnswer(call -> {
+            lock.tryAcquire(LibraryLock.SCAN);
+            return ChosenOutcome.BUSY;
+        });
 
         assertThatThrownBy(() -> service.download(40L, forced(5011))).isInstanceOf(ConflictException.class)
             .hasMessage("A scan is running");

@@ -192,7 +192,7 @@ public class FullNeedService {
     public FullNeedFilmDto choose(Long filmId, ChoiceRequest request) {
         FullNeedChoice choice = parse(request);
         if (!lock.tryAcquire(LibraryLock.SUBTITLE)) {
-            throw new ConflictException("A scan is running");
+            throw new ConflictException(lock.busyText());
         }
         try {
             return tx.execute(status -> chooseLocked(filmId, choice));

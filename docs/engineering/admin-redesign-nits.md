@@ -16,6 +16,12 @@ Done in the cleanup B backend PR. Note only:
 
 ## Cleanup B: player, menus and Playing now
 
+### Lock 409 text (frontend)
+
+- The API's 409 now names what holds the library lock, but the Fix match, Edit editions, forced need, full need and
+  Admin to do mappers (`fixMatch.js:16`, `editEditions.js:255-257`, `forcedNeed.js:127-128`, `adminTodo.js:128` /
+  `adminCopy.js:348`) still show their own scan copy: they should show `failure.body?.error` on a 409.
+
 ### 8a / 8b-1 (player, `PlayerMenus`, subtitle hooks)
 
 - `role=alert` `<p>` and a heading `div` inside `role=menu` (`PlayerMenus`); the timing status/alert inside the

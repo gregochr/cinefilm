@@ -123,7 +123,7 @@ Judgement calls made while building 2d without the owner. Each: what was chosen,
     interrupted (it is niced and capped at 20 minutes).
 27. **A failed read (ffprobe missing, an error, the timeout) is not stored; the file is left alone for 6 hours in memory.**
     Stored failures would hide a transient SMB outage for good; no backoff would re-read a broken file at every scan.
-28. **`SidecarTrust.isProven(boolean ownerVerified, CheckDto, AlignmentDto)`** takes the verified flag rather than the
+28. **`SidecarTrust.isProven(boolean ownerVerified, CheckDto, AlignmentDto)`** (removed in cleanup B; `assess` + `isAligned`) takes the verified flag rather than the
     sidecar (verification needs the edition's part ids), with a null check or alignment meaning "none, or not current"; an
     overload takes a listed `SidecarDto`. Phase 4 uses it; nothing does yet.
 29. **The test profile switches the check off** (`cinefilm.subtitles.timing-check.enabled=false`), so no Spring test context
@@ -259,8 +259,7 @@ Each: what was chosen, why, and the alternative. Numbers continue 2e's.
     proven download. The one the owner picked in the Admin OpenSubtitles picker plays first (`owner_chosen_at`, always
     proven, never failed; the latest pick of an edition holds the marker), and "Looks right" on another download cannot
     beat it. Otherwise the lowest id among several proven ones plays, a proven one before an unchecked one whatever the
-    ids; 3 the
-    embedded forced text track; 4 an owner file that has not failed; 5 a failed owner file replaced by a download that has
+    ids; 3 the embedded forced text track; 4 an owner file that has not failed; 5 a failed owner file replaced by a download that has
     not failed; with no such download it keeps playing, **except at 300 lines or more** (`SubtitleComparison.FULL_LINES`),
     where it is full subtitles and plays nothing; 6 with no owner file, an unchecked download. A failed download never
     plays. Two owner files in conflict are no file (the download steps can still apply, but nothing is downloaded because
@@ -844,7 +843,7 @@ next PR.** Package `gregochr.cinefilm.subtitle`; migration `V17__forced_timing_c
   that has no read or no current fit, owner-unverified first, then never-checked, then by film. Reads run with no lock; a
   scan or edit holding the library lock, or any encoding HLS session (`SessionManager.isEncoding()`), stops the run to be
   tried again. No owner event triggers it: an attach or nudge is picked up by the next run.
-- **API.** `SidecarDto` gains `offsetSource` and `alignment` (`foundation-plan.md` updated). `SidecarTrust.isProven` (owner
+- **API.** `SidecarDto` gains `offsetSource` and `alignment` (`foundation-plan.md` updated). `SidecarTrust.isProven` (removed in cleanup B; `assess` + `isAligned`) (owner
   verified, or 2d `AGREES`, or 3a `ALIGNED`, each only while current) is ready for phase 4; no playback change here.
 - **Tests.** Unit: `TimingFitTest` (exact, +-0.3 s, 2 s, 9.9 s, over 10 s, dense references, jitter, subsets, too few,
   split-edition parts), `EmbeddedStreamsTest`, `SubtitlePacketsTest` (PGS fixture `ffprobe/pgs-packets.txt`),

@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import gregochr.cinefilm.subtitle.SubtitleDtos.AlignmentDto;
 import gregochr.cinefilm.subtitle.SubtitleDtos.CheckDto;
-import gregochr.cinefilm.subtitle.SubtitleDtos.SidecarDto;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -47,14 +46,6 @@ class SidecarTrustTest {
         assertThat(proven(false, null, alignment("TOO_FEW"))).isFalse();
         assertThat(proven(false, null, alignment("NO_REFERENCE"))).isFalse();
         assertThat(proven(false, check("CHECK"), alignment("CHECK"))).isFalse();
-    }
-
-    @Test
-    void aListedFileIsProvenByItsOwnVerifiedCheckAndAlignmentFields() {
-        assertThat(proven(listed(true, null, null))).isTrue();
-        assertThat(proven(listed(false, check("AGREES"), null))).isTrue();
-        assertThat(proven(listed(false, null, alignment("ALIGNED")))).isTrue();
-        assertThat(proven(listed(false, null, alignment("CHECK")))).isFalse();
     }
 
     @Test
@@ -102,15 +93,5 @@ class SidecarTrustTest {
     private static boolean proven(boolean ownerVerified, CheckDto check, AlignmentDto alignment) {
         return SidecarTrust.assess(ownerVerified, check == null ? null : check.verdict(),
             SidecarTrust.isAligned(alignment)).trust() == SidecarTrust.Trust.PROVEN;
-    }
-
-    private static boolean proven(SidecarDto listed) {
-        return proven(listed.verified(), listed.check(), listed.alignment());
-    }
-
-    private static SidecarDto listed(boolean verified, CheckDto check, AlignmentDto alignment) {
-        return new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L, "Taken", 70L, "Original", 1, 1,
-            false, false, 12, "No problems found", 0, verified, false, 1L, true, check, null, alignment,
-            "FILE", null, null, null, false, "FORCED");
     }
 }

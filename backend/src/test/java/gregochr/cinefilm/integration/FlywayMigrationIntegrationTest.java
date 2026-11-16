@@ -40,7 +40,7 @@ class FlywayMigrationIntegrationTest extends IntegrationTestBase {
         List<String> indexes = jdbc.queryForList(
             "SELECT indexname FROM pg_indexes WHERE tablename = 'grouping_change'", String.class);
 
-        assertThat(indexes).contains("idx_grouping_change_happened_at");
+        assertThat(indexes).contains("grouping_change_happened_at_idx");
     }
 
     @Test

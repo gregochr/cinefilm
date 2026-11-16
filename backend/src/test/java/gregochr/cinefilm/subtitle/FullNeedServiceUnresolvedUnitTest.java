@@ -5,6 +5,7 @@ import static gregochr.cinefilm.TestData.edition;
 import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.film.Edition;
@@ -12,13 +13,16 @@ import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.FilmDtos.FullSubtitleDto;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.FullNeedRow;
+import gregochr.cinefilm.film.FilmRepository.OsFullState;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.film.MediaFileRepository.AudioRow;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.library.LibraryLock;
+import gregochr.cinefilm.subtitle.PendingDownloads.Pending;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -89,10 +93,12 @@ class FullNeedServiceUnresolvedUnitTest {
         when(files.findAudioRows(List.of(1L))).thenReturn(List.of(english(1, 10)));
 
         assertThat(service.unresolvedCount()).isZero();
+
+        verifyNoInteractions(editions, fullSubtitles, pending);
     }
 
     @Test
-    void oneNeededFilmWithNoSubtitleIsOneAndTwoAreTwo() {
+    void oneNeededFilmWithNoSubtitleOrImdbIdIsOne() {
         when(films.findFullNeedRows()).thenReturn(List.of(row(1, "fr")));
         when(files.findAudioRows(List.of(1L))).thenReturn(List.of());
         when(editions.findWithFilesByFilmIdIn(List.of(1L))).thenReturn(List.of());
@@ -101,7 +107,7 @@ class FullNeedServiceUnresolvedUnitTest {
     }
 
     @Test
-    void twoNeededFilmsWithNoSubtitleAreTwo() {
+    void twoNeededFilmsWithNoSubtitleOrImdbIdAreTwo() {
         when(films.findFullNeedRows()).thenReturn(List.of(row(1, "fr"), row(2, "de")));
         when(files.findAudioRows(List.of(1L, 2L))).thenReturn(List.of());
         when(editions.findWithFilesByFilmIdIn(List.of(1L, 2L))).thenReturn(List.of());
@@ -109,30 +115,40 @@ class FullNeedServiceUnresolvedUnitTest {
         assertThat(service.unresolvedCount()).isEqualTo(2);
     }
 
-    @Test
-    void onlyTheNeededFilmsEditionsAreLoadedAndAPlayingSubtitleSettlesAFilm() {
-        // 1 needed and plays a sidecar; 2 needed and plays none; 3 has an English dub (not needed); 4 is English.
+    /**
+     * Films 1 to 7: 1 plays a sidecar; 2 has no IMDb id (unresolved); 3 has one and is not searched yet (being
+     * checked); 4 is searched and a download is due (being checked); 5 is searched with nothing due (unresolved); 6 has
+     * an English dub (not needed); 7 is English (out of scope).
+     */
+    private Edition scenario() {
         Edition plays = editionOf(1, 10);
-        when(films.findFullNeedRows()).thenReturn(List.of(row(1, "fr"), row(2, "fr"), row(3, "fr"), row(4, "en")));
-        when(files.findAudioRows(List.of(1L, 2L, 3L))).thenReturn(List.of(english(3, 30)));
-        when(editions.findWithFilesByFilmIdIn(List.of(1L, 2L))).thenReturn(List.of(plays));
+        when(films.findFullNeedRows()).thenReturn(List.of(row(1, "fr"), row(2, "fr"), row(3, "fr"), row(4, "fr"),
+            row(5, "fr"), row(6, "fr"), row(7, "en")));
+        when(files.findAudioRows(List.of(1L, 2L, 3L, 4L, 5L, 6L))).thenReturn(List.of(english(6, 60)));
+        when(films.findOpenSubtitlesFullStates()).thenReturn(List.of(
+            new OsFullState(3L, "tt3", null, false), new OsFullState(4L, "tt4", "tt4", true),
+            new OsFullState(5L, "tt5", "tt5", true)));
+        when(pending.full(Map.of(4L, "tt4", 5L, "tt5"))).thenReturn(new Pending(Set.of(4L)));
         when(fullSubtitles.forEditions(List.of(plays)))
             .thenReturn(Map.of(10L, new FullSubtitleDto("SIDECAR", 1, List.of(), List.of())));
+        return plays;
+    }
 
-        assertThat(service.unresolvedCount()).isEqualTo(1);
+    @Test
+    void aFilmBeingCheckedBySearchOrByADueDownloadIsNotUnresolved() {
+        Edition plays = scenario();
+        when(editions.findWithFilesByFilmIdIn(List.of(1L, 2L, 3L, 4L, 5L))).thenReturn(List.of(plays));
+
+        assertThat(service.unresolvedCount()).isEqualTo(2);
     }
 
     @Test
     void itAnswersWhatTheFullListsCountSays() {
-        Edition plays = editionOf(1, 10);
-        when(films.findFullNeedRows()).thenReturn(List.of(row(1, "fr"), row(2, "fr"), row(3, "fr"), row(4, "en")));
-        when(files.findAudioRows(List.of(1L, 2L, 3L))).thenReturn(List.of(english(3, 30)));
-        when(editions.findWithFilesByFilmIdIn(List.of(1L, 2L))).thenReturn(List.of(plays));
-        when(editions.findWithFilesByFilmIdIn(List.of(1L, 2L, 3L))).thenReturn(List.of(plays));
-        when(fullSubtitles.forEditions(List.of(plays)))
-            .thenReturn(Map.of(10L, new FullSubtitleDto("SIDECAR", 1, List.of(), List.of())));
+        Edition plays = scenario();
+        when(editions.findWithFilesByFilmIdIn(List.of(1L, 2L, 3L, 4L, 5L))).thenReturn(List.of(plays));
+        when(editions.findWithFilesByFilmIdIn(List.of(1L, 2L, 3L, 4L, 5L, 6L))).thenReturn(List.of(plays));
         when(editions.findAllWithFilesIncludingEmpty()).thenReturn(List.of(plays));
 
-        assertThat(service.unresolvedCount()).isEqualTo(service.list().counts().unresolved());
+        assertThat(service.unresolvedCount()).isEqualTo(2).isEqualTo(service.list().counts().unresolved());
     }
 }
