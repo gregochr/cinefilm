@@ -193,12 +193,18 @@ export const playbackChart = {
   loadError: 'Couldn’t load how films played.', // planner, 5a-2
   retry: 'Try again', // planner, 5a-2
   selectedLabel: 'Selected film session', // planner, 5a-2
-  stripLabel: (film) => `Speed and quality minute by minute for ${film}`, // AR4
+  stripLabel: (film, times) =>
+    `Speed and quality minute by minute for ${film}${times ? `, ${times}` : ''}`, // AR4
   stripAxis: 'line = speed · strip = quality', // AR4
   stripStart: '0:00', // AR4
   loadingStripLabel: 'Loading the minute by minute view', // planner, 5a-2
   stripError: 'Couldn’t load that session’s minutes.', // planner, 5a-2
+  stripErrorFor: (times) => `Couldn’t load the minutes for ${times}.`, // planner, joined viewings
   noMinutes: 'No minute by minute figures for this session.', // planner, 5a-2
+  // The accessible names of a part's controls, told apart by its times when a viewing has more than one part.
+  named: (base, times) => (times ? `${base}, ${times}` : base), // planner, joined viewings
+  pickedUp: (seconds) => `Picked up again after ${seconds} s`, // planner, joined viewings
+  paused: (time) => `Paused ${time}`, // planner, joined viewings
   source:
     'AR4 and 04 for the title, filters, tiles, legend, hint and strip words; the planner for the rest (5a-2)',
 };
