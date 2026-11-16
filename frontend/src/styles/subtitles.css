@@ -130,6 +130,10 @@
 .subs__confirm {
   flex-basis: 100%;
 }
+/* The region is always mounted (so it is announced); empty, it takes no room: the stack's two gaps around it fold into one. */
+.subs__notice:empty {
+  margin: -10px 0;
+}
 .subs__notice:focus-visible {
   outline: none;
   box-shadow: var(--cf-focus-ring);

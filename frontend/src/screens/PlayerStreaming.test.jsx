@@ -848,15 +848,16 @@ describe('a playback Admin stopped (410)', () => {
     const { log, video, hls } = await open();
     await landResume(video);
     await moveTo(video, 1000);
-    await userEvent.click(screen.getByRole('button', { name: 'Quality' }));
     await hlsEvent(() =>
       hls().error({ fatal: true, type: 'networkError', response: { code: 410 } }),
     );
-    await userEvent.click(
-      within(screen.getByRole('menu', { name: 'Quality' })).getByRole('menuitemradio', {
-        name: /360p/,
-      }),
-    );
+    // The stop closes any open menu; Quality can still be opened, but its items do nothing.
+    await userEvent.click(screen.getByRole('button', { name: 'Quality' }));
+    const lower = within(screen.getByRole('menu', { name: 'Quality' })).getByRole('menuitemradio', {
+      name: /360p/,
+    });
+    expect(lower).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(lower);
     await userEvent.keyboard('{ArrowRight}');
     await userEvent.click(screen.getByRole('button', { name: 'Forward 10 seconds' }));
     expect(log.posted).toHaveLength(1);

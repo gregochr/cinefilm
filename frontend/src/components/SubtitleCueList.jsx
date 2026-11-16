@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { cueTime, fileName, playFromHereMs, playerPath } from '../state/subtitleAdmin.js';
+import { cueTime, displayName, playFromHereMs, playerPath } from '../state/subtitleAdmin.js';
 import { useSubtitleCues } from '../state/useSubtitles.js';
 import { SkeletonBlock } from './Skeleton.jsx';
 import { ErrorState } from './StateMessages.jsx';
@@ -32,7 +32,7 @@ export default function SubtitleCueList({ item, id }) {
   return (
     <>
       {failure}
-      <ol className="subs__cues" id={id} aria-label={`Cues in ${fileName(item.path)}`}>
+      <ol className="subs__cues" id={id} aria-label={`Cues in ${displayName(item)}`}>
         {data.cues.map((cue, i) => (
           <li key={`${i}-${cue.startMs}`} className="subs__cue">
             <span className="admin__mono subs__time">{cueTime(cue)}</span>

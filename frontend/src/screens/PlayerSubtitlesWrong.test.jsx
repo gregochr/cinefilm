@@ -1,9 +1,11 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ADMIN_TIMEOUT_MS } from '../api/timeout.js';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -17,22 +19,11 @@ const SIDECAR = { source: 'SIDECAR', version: 1700000000000 };
 
 // Heat (film 1, edition 11) has English audio and an embedded English subtitle (113) and forced one (114).
 // The player never refetches the film under a playing viewing, so everything it knows comes from this answer.
-const row = (over) => ({
-  ...fixtures.adminSubtitles[5],
-  id: 70,
-  filmId: 1,
-  editionId: 11,
-  kind: 'FULL',
-  origin: 'OPENSUBTITLES',
-  served: true,
-  ...over,
-});
-
 /**
- * Serves film 1 changed by `mutate`, the subtitle list `list` and the delete. `requests` records every call so a test
+ * Serves film 1 changed by `mutate` and the delete. `requests` records every call so a test
  * can say exactly what the player asked for.
  */
-function serve({ mutate = () => {}, list = [row({})], answer = () => null } = {}) {
+function serve({ mutate = () => {}, answer = () => null } = {}) {
   const film = structuredClone(fixtures.heat);
   mutate(film);
   const requests = [];
@@ -41,7 +32,6 @@ function serve({ mutate = () => {}, list = [row({})], answer = () => null } = {}
     const override = answer(method, url);
     if (override) return override;
     if (url === '/api/films/1') return respond(film);
-    if (url === '/api/admin/subtitles' && method === 'GET') return respond(list);
     if (method === 'DELETE' && url.startsWith('/api/admin/subtitles/')) return respond(null, 204);
     return null;
   });
@@ -168,7 +158,6 @@ describe('the player’s "Subtitles are wrong"', () => {
       await screen.findByText('Subtitle download removed. CineFilm won’t use it again.'),
     ).toBeInTheDocument();
     expect(requests.map(keyOf).filter((k) => k.includes('/api/admin/subtitles'))).toEqual([
-      'GET /api/admin/subtitles',
       'DELETE /api/admin/subtitles/70',
     ]);
     expect(screen.queryByTestId('full-subtitle-track')).not.toBeInTheDocument();
@@ -198,7 +187,6 @@ describe('the player’s "Subtitles are wrong"', () => {
   it('removing a downloaded forced subtitle drops its track and the embedded forced lines show instead', async () => {
     const { requests } = await openPlayer({
       mutate: (f) => (f.editions[0].forcedSubtitle = { ...DOWNLOAD, ownerVerified: false }),
-      list: [row({ kind: 'FORCED' })],
     });
     expect(screen.getByTestId('forced-subtitle-track').track.mode).toBe('showing');
     await openPanel();
@@ -210,32 +198,6 @@ describe('the player’s "Subtitles are wrong"', () => {
     );
     expect(streamTrack('English (forced)').track.mode).toBe('showing');
     expect(requests.map(keyOf)).toContain('DELETE /api/admin/subtitles/70');
-  });
-
-  it('deletes nothing that is not the playing download of this film, edition and kind', async () => {
-    const { requests } = await openPlayer({
-      // The film showed every one of these ids, so only the filters on the rows can keep the others out.
-      mutate: (f) => {
-        fullOn(f);
-        f.editions[0].fullSubtitle = { ...DOWNLOAD, sidecarIds: [70, 71, 72, 73, 74, 75] };
-      },
-      list: [
-        row({ id: 71, editionId: 99 }),
-        row({ id: 72, filmId: 2 }),
-        row({ id: 73, kind: 'FORCED' }),
-        row({ id: 74, origin: 'FILE' }),
-        row({ id: 75, served: false }),
-        row({ id: 70 }),
-      ],
-    });
-    await openPanel();
-
-    await userEvent.click(wrongAction());
-
-    await screen.findByText('Subtitle download removed. CineFilm won’t use it again.');
-    expect(requests.filter((r) => r.method === 'DELETE').map(keyOf)).toEqual([
-      'DELETE /api/admin/subtitles/70',
-    ]);
   });
 
   it('a double click sends one delete', async () => {
@@ -284,20 +246,7 @@ describe('the player’s "Subtitles are wrong"', () => {
     expect(requests.filter((r) => r.method === 'DELETE')).toHaveLength(2);
   });
 
-  it('says so when the playing download cannot be found in the list, and deletes nothing', async () => {
-    const { requests } = await openPlayer({ mutate: (f) => fullOn(f), list: [] });
-    await openPanel();
-
-    await userEvent.click(wrongAction());
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Couldn’t find that download to remove.',
-    );
-    expect(requests.some((r) => r.method === 'DELETE')).toBe(false);
-    expect(screen.getByTestId('full-subtitle-track')).toBeInTheDocument();
-  });
-
-  it('never touches the playback: no session, seek, reload or source change, and only the two subtitle requests', async () => {
+  it('never touches the playback: no session, seek, reload or source change, and only the one delete', async () => {
     const load = vi.spyOn(HTMLMediaElement.prototype, 'load');
     const { requests, video } = await openPlayer({ mutate: (f) => fullOn(f) });
     const src = video.getAttribute('src');
@@ -309,10 +258,7 @@ describe('the player’s "Subtitles are wrong"', () => {
     await userEvent.click(wrongAction());
     await screen.findByText('Subtitle download removed. CineFilm won’t use it again.');
 
-    expect(requests.slice(before).map(keyOf)).toEqual([
-      'GET /api/admin/subtitles',
-      'DELETE /api/admin/subtitles/70',
-    ]);
+    expect(requests.slice(before).map(keyOf)).toEqual(['DELETE /api/admin/subtitles/70']);
     expect(video).toHaveAttribute('src', src);
     expect(video.currentTime).toBe(12);
     expect(load.mock.calls.length).toBe(loads);
@@ -343,35 +289,50 @@ describe('the player’s "Subtitles are wrong"', () => {
     expect(screen.queryByTestId('full-subtitle-track')).not.toBeInTheDocument();
   });
 
-  it('deletes nothing and says so when another download plays now than the one the film showed', async () => {
-    // The film loaded with download 70; since then another tab chose 71, so the list serves 71 and not 70.
+  it('reads no list: the delete goes out by the ids the film showed, every row of a split film', async () => {
     const { requests } = await openPlayer({
-      mutate: (f) => fullOn(f),
-      list: [row({ id: 71 })],
-    });
-    await openPanel();
-
-    await userEvent.click(wrongAction());
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'This subtitle has changed since the film started. Reload to see the new one.',
-    );
-    expect(requests.some((r) => r.method === 'DELETE')).toBe(false);
-    expect(screen.getByTestId('full-subtitle-track')).toBeInTheDocument();
-  });
-
-  it('deletes only the download the film showed when the list also serves another', async () => {
-    const { requests } = await openPlayer({
-      mutate: (f) => fullOn(f),
-      list: [row({ id: 71 }), row({ id: 70 })],
+      mutate: (f) => {
+        fullOn(f);
+        f.editions[0].fullSubtitle = { ...DOWNLOAD, sidecarIds: [70, 71] };
+      },
     });
     await openPanel();
 
     await userEvent.click(wrongAction());
 
     await screen.findByText('Subtitle download removed. CineFilm won’t use it again.');
+    expect(requests.some((r) => r.method === 'GET' && r.url === '/api/admin/subtitles')).toBe(
+      false,
+    );
     expect(requests.filter((r) => r.method === 'DELETE').map(keyOf)).toEqual([
       'DELETE /api/admin/subtitles/70',
+      'DELETE /api/admin/subtitles/71',
     ]);
+  });
+
+  it('a delete that gets no answer fails after the timeout, the line shows and the next press works', async () => {
+    let hang = true;
+    const { requests } = await openPlayer({
+      mutate: (f) => fullOn(f),
+      answer: (method) => (method === 'DELETE' && hang ? new Promise(() => {}) : null),
+    });
+    await openPanel();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+
+    await userEvent.click(wrongAction());
+    expect(within(subtitlesMenu()).getByRole('menuitem', { name: 'Removing…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await act(async () => vi.advanceTimersByTime(ADMIN_TIMEOUT_MS));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Couldn’t remove the download. Try again.',
+    );
+    expect(wrongAction()).not.toHaveAttribute('aria-disabled');
+    hang = false;
+    await userEvent.click(wrongAction());
+    await screen.findByText('Subtitle download removed. CineFilm won’t use it again.');
+    expect(requests.filter((r) => r.method === 'DELETE')).toHaveLength(2);
   });
 });

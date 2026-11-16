@@ -1,4 +1,4 @@
-import { act, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { measureThroughput } from '../player/probe.js';
@@ -100,6 +100,11 @@ const earlier = () =>
   within(subtitlesMenu()).getByRole('menuitem', { name: 'Show lines 0.25 seconds earlier' });
 const reset = () => within(subtitlesMenu()).getByRole('menuitem', { name: 'Reset timing' });
 
+const stop = () =>
+  hlsEvent(() =>
+    FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+  );
+
 async function laterTwiceThenStop(log) {
   renderApp('/films/1/play?edition=11');
   await screen.findByTestId('player-video');
@@ -109,9 +114,7 @@ async function laterTwiceThenStop(log) {
   await vi.waitFor(() => expect(log.offsets).toEqual([250]));
   await userEvent.click(later());
   await vi.waitFor(() => expect(log.offsets).toEqual([250, 500]));
-  await hlsEvent(() =>
-    FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
-  );
+  await stop();
 }
 
 describe('Play again and the subtitle timing', () => {
@@ -121,9 +124,137 @@ describe('Play again and the subtitle timing', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
     await vi.waitFor(() => expect(FakeHls.instances).toHaveLength(2));
     expect(log.filmReads).toBe(1); // nothing is read again: the same player goes on
-    // The panel stays open across the stop: nothing was remounted.
+    // The stop closed the panel; opening it again shows the timing the player already holds.
+    await openPanel();
     expect(reset()).not.toHaveAttribute('aria-disabled');
     await userEvent.click(earlier());
     await vi.waitFor(() => expect(log.offsets).toEqual([250, 500, 250]));
+  });
+});
+
+describe('Admin stops the playback', () => {
+  const openPlaying = async () => {
+    const log = serve();
+    renderApp('/films/1/play?edition=11');
+    const video = await screen.findByTestId('player-video');
+    await vi.waitFor(() => expect(FakeHls.instances).toHaveLength(1));
+    return { log, video };
+  };
+  const pendingTrack = () => screen.queryByTestId('full-subtitle-track-pending');
+
+  describe('on iPhone, with Safari’s native fullscreen player up', () => {
+    let displaying;
+    let exit;
+    beforeEach(() => {
+      displaying = true;
+      exit = vi.fn();
+      Object.defineProperty(HTMLVideoElement.prototype, 'webkitDisplayingFullscreen', {
+        configurable: true,
+        get: () => displaying,
+      });
+      HTMLVideoElement.prototype.webkitExitFullscreen = exit;
+    });
+    afterEach(() => {
+      delete HTMLVideoElement.prototype.webkitDisplayingFullscreen;
+      delete HTMLVideoElement.prototype.webkitExitFullscreen;
+    });
+
+    it('leaves it, so the stopped card is not under the native player', async () => {
+      await openPlaying();
+      expect(exit).not.toHaveBeenCalled();
+
+      await stop();
+
+      expect(await screen.findByText('Playback was stopped from Admin.')).toBeInTheDocument();
+      expect(exit).toHaveBeenCalledTimes(1);
+    });
+
+    it('does nothing when the native player is not showing', async () => {
+      displaying = false;
+      await openPlaying();
+
+      await stop();
+
+      await screen.findByText('Playback was stopped from Admin.');
+      expect(exit).not.toHaveBeenCalled();
+    });
+  });
+
+  it('closes an open menu, so focus is on Play again and Escape has no menu to close', async () => {
+    await openPlaying();
+    await openPanel();
+    expect(screen.getByRole('menu', { name: 'Audio' })).toBeInTheDocument();
+
+    await stop();
+
+    expect(screen.queryByRole('menu', { name: 'Audio' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Audio and subtitles' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.getByRole('button', { name: 'Play again' })).toHaveFocus();
+  });
+
+  it('Quality is aria-disabled while stopped: a press changes nothing and starts no session', async () => {
+    const { log } = await openPlaying();
+    await stop();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Quality' }));
+    const menu = screen.getByRole('menu', { name: 'Quality' });
+    const original = within(menu).getByRole('menuitemradio', { name: /^Original/ });
+    expect(original).toHaveAttribute('aria-disabled', 'true');
+    original.focus();
+    await userEvent.click(original);
+
+    expect(original).toHaveFocus();
+    expect(within(menu).getByRole('menuitemradio', { name: /Auto/ })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(menu).toHaveAccessibleDescription('Quality can’t change while playback is stopped.');
+    expect(log.posted).toBe(1);
+    expect(FakeHls.instances).toHaveLength(1);
+  });
+
+  it('a timing change still loading when the stop comes takes over when its load arrives, and the right timing shows', async () => {
+    const log = serve();
+    renderApp('/films/1/play?edition=11');
+    await screen.findByTestId('player-video');
+    await vi.waitFor(() => expect(FakeHls.instances).toHaveLength(1));
+    await openPanel();
+    await userEvent.click(later());
+    await vi.waitFor(() => expect(log.offsets).toEqual([250]));
+    const incoming = await screen.findByTestId('full-subtitle-track-pending');
+    await stop();
+    expect(pendingTrack()).toBe(incoming);
+
+    fireEvent.load(incoming);
+
+    await vi.waitFor(() => expect(pendingTrack()).not.toBeInTheDocument());
+    expect(screen.getByTestId('full-subtitle-track')).toBe(incoming);
+    expect(screen.getByText('Playback was stopped from Admin.')).toBeInTheDocument();
+    await openPanel();
+    expect(await screen.findByText('Timing: +0.25 s')).toBeInTheDocument();
+  });
+
+  it('a timing change whose load arrives only after Play again takes over then, and nothing sends a second step', async () => {
+    const log = serve();
+    renderApp('/films/1/play?edition=11');
+    await screen.findByTestId('player-video');
+    await vi.waitFor(() => expect(FakeHls.instances).toHaveLength(1));
+    await openPanel();
+    await userEvent.click(later());
+    await vi.waitFor(() => expect(log.offsets).toEqual([250]));
+    const incoming = await screen.findByTestId('full-subtitle-track-pending');
+    await stop();
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await vi.waitFor(() => expect(FakeHls.instances).toHaveLength(2));
+
+    fireEvent.load(incoming);
+
+    await vi.waitFor(() => expect(pendingTrack()).not.toBeInTheDocument());
+    await openPanel();
+    expect(await screen.findByText('Timing: +0.25 s')).toBeInTheDocument();
+    expect(log.offsets).toEqual([250]);
   });
 });

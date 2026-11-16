@@ -208,6 +208,14 @@ export function originLine(item) {
   return { kind: 'file', title: item.path, release: null };
 }
 
+/**
+ * What a file is called where a name is needed (a button's spoken name, a list's label): the owner's file by its file
+ * name, a download by its release name ("download" when it has none), never its made-up path.
+ */
+export function displayName(item) {
+  return isDownload(item) ? (originLine(item).release ?? 'download') : fileName(item.path);
+}
+
 /** The server's own sentence on what playback does with this file, shown exactly as sent (null when it sends none). */
 export function servedLine(item) {
   return item.servedReason || null;

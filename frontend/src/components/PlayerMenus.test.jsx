@@ -49,6 +49,50 @@ describe('QualityMenu: transcoding', () => {
     );
   });
 
+  it('while playback is stopped the items are aria-disabled, stay focusable, do nothing, and the footer says why', async () => {
+    const onSelect = vi.fn();
+    render(
+      <QualityMenu
+        qualities={QUALITIES}
+        value="auto"
+        activeRung="720p"
+        stopped
+        onSelect={onSelect}
+      />,
+    );
+    const original = screen.getByRole('menuitemradio', { name: /^Original/ });
+    const auto = screen.getByRole('menuitemradio', { name: /Auto/ });
+
+    expect(original).toHaveAttribute('aria-disabled', 'true');
+    expect(original).toBeEnabled();
+    original.focus();
+    await userEvent.click(original);
+
+    expect(original).toHaveFocus();
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(auto).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('menu', { name: 'Quality' })).toHaveAccessibleDescription(
+      'Quality can’t change while playback is stopped.',
+    );
+  });
+
+  it('the arrow keys leave focus alone when every item is aria-disabled', async () => {
+    render(<QualityMenu qualities={QUALITIES} value="auto" stopped onSelect={vi.fn()} />);
+    const auto = screen.getByRole('menuitemradio', { name: /Auto/ });
+    auto.focus();
+
+    await userEvent.keyboard('{ArrowDown}');
+
+    expect(auto).toHaveFocus();
+  });
+
+  it('is not marked disabled when playback runs', () => {
+    render(<QualityMenu qualities={QUALITIES} value="auto" onSelect={vi.fn()} />);
+    expect(screen.getByRole('menuitemradio', { name: /^Original/ })).not.toHaveAttribute(
+      'aria-disabled',
+    );
+  });
+
   it('has no offline footer while Auto is available, even with some rungs missing', () => {
     render(<QualityMenu qualities={QUALITIES} value="auto" onSelect={vi.fn()} />);
     expect(screen.getByRole('menu', { name: 'Quality' })).not.toHaveTextContent('offline');
@@ -506,6 +550,8 @@ describe('AudioSubtitlesPanel: subtitle timing', () => {
     expect(earlier()).toHaveAttribute('aria-disabled', 'true');
     expect(reset()).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByRole('status')).toHaveTextContent('Saving…');
+    // The status says it: the group is not also marked busy.
+    expect(screen.getByRole('group', { name: 'Subtitle timing' })).not.toHaveAttribute('aria-busy');
     expect(later()).toHaveFocus();
     expect(timing.onLater).not.toHaveBeenCalled();
   });

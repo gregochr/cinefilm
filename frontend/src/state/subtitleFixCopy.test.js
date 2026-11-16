@@ -42,7 +42,6 @@ describe('subtitleFixCopy', () => {
     expect(subtitlesWrong.changed).toBe(
       'This subtitle has changed since the film started. Reload to see the new one.',
     );
-    expect(subtitlesWrong.lookupFailed).toBe('Couldn’t find that download to remove.');
     expect(subtitlesWrong.busy).toBe('Removing…');
   });
 });
