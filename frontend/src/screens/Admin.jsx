@@ -9,11 +9,6 @@ import { railCounts } from '../state/adminSummaryFormat.js';
 import { ADMIN_SECTIONS, OLD_SCAN_HASH, SCAN_ROUTE, normalisePath } from '../state/adminRoutes.js';
 import { useAdminShell } from '../state/useAdminShell.js';
 
-/** Hands focus back to the element a dialog was opened from, when it is still on the page. */
-function returnFocus(opener) {
-  if (opener?.isConnected) opener.focus();
-}
-
 /** The rail on desktop, "Home" and a scrollable row of links on phone: one `nav`, restyled by CSS. */
 function AdminNav() {
   const { adminSummary } = useAdminContext();
@@ -59,13 +54,10 @@ function AdminShell() {
   const shell = useAdminShell(visible, pathname);
   const { fixing, editing, picking, toast } = shell;
 
-  const closeFixMatch = () => {
-    returnFocus(fixing?.opener);
-    shell.closeFixMatch();
-  };
+  // The dialog hands focus back to its opener itself (useDialog) when it unmounts, if the opener is still there.
   const applied = (result, stale) => {
     if (!stale) {
-      closeFixMatch();
+      shell.closeFixMatch();
       shell.armFocusFallback();
     }
     shell.markChanged();
@@ -90,8 +82,9 @@ function AdminShell() {
             <FixMatchPanel
               key={fixing.item.filmId}
               item={fixing.item}
+              opener={fixing.opener}
               onApplied={applied}
-              onCancel={closeFixMatch}
+              onCancel={shell.closeFixMatch}
             />
           ) : null}
           {picking ? (

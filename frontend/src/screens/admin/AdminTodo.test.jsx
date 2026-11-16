@@ -434,7 +434,7 @@ describe('Admin To do: Yes, it’s … on the row', () => {
     await userEvent.click(find);
 
     expect(find).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.queryByRole('region', { name: 'Fix match' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument();
     release();
     await waitFor(() => expect(within(pick).queryByText('Suspiria')).not.toBeInTheDocument());
   });
@@ -588,10 +588,10 @@ describe('Admin To do: the dialogs', () => {
     });
 
     await userEvent.click(opener);
-    const panel = await screen.findByRole('region', { name: 'Fix match' });
+    const panel = await screen.findByRole('dialog', { name: 'Fix match' });
     await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }));
 
-    expect(screen.queryByRole('region', { name: 'Fix match' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument();
     expect(opener).toHaveFocus();
   });
 
@@ -618,12 +618,12 @@ describe('Admin To do: the dialogs', () => {
     await userEvent.click(
       within(rowOf(pick, 'The Wicker Man')).getByRole('button', { name: 'Find the film…' }),
     );
-    expect(await screen.findByRole('region', { name: 'Fix match' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Fix match' })).toBeInTheDocument();
 
     await userEvent.click(within(rail()).getByRole('link', { name: 'Library' }));
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Library' })).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Fix match' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument();
   });
 
   it('closes Edit editions when you move to another section', async () => {
@@ -660,7 +660,7 @@ describe('Admin To do: the dialogs', () => {
     await userEvent.click(
       within(rowOf(pick, 'The Wicker Man')).getByRole('button', { name: 'Find the film…' }),
     );
-    const panel = await screen.findByRole('region', { name: 'Fix match' });
+    const panel = await screen.findByRole('dialog', { name: 'Fix match' });
     await userEvent.click((await within(panel).findAllByRole('radio'))[0]);
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Use this match' }));

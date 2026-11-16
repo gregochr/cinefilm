@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
@@ -16,7 +16,7 @@ async function openPanel() {
   // The first unmatched film is The Wicker Man (id 31); the fixtures list a second one after the other kinds.
   const openers = await within(attention).findAllByRole('button', { name: 'Find the film…' });
   await userEvent.click(openers[0]);
-  return screen.findByRole('region', { name: 'Fix match' });
+  return screen.findByRole('dialog', { name: 'Fix match' });
 }
 
 describe('Admin: Fix match', () => {
@@ -91,7 +91,7 @@ describe('Admin: Fix match', () => {
     await userEvent.click(within(panel).getByRole('button', { name: 'Use this match' }));
 
     await waitFor(() =>
-      expect(screen.queryByRole('region', { name: 'Fix match' })).not.toBeInTheDocument(),
+      expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument(),
     );
     const post = fetchMock.mock.calls.find((c) => isApply(c[1]?.method, c[0]));
     expect(JSON.parse(post[1].body)).toEqual({ tmdbId: 16307 });
@@ -104,7 +104,7 @@ describe('Admin: Fix match', () => {
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }));
 
-    expect(screen.queryByRole('region', { name: 'Fix match' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some((c) => c[1]?.method === 'POST' && c[0].includes('/match')),
     ).toBe(false);
@@ -139,7 +139,7 @@ describe('Admin: Fix match', () => {
     expect(await within(panel).findByRole('alert')).toHaveTextContent(
       'A scan is running. Try again when it finishes.',
     );
-    expect(screen.getByRole('region', { name: 'Fix match' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Fix match' })).toBeInTheDocument();
   });
 
   it('shows a skeleton while searching', async () => {
@@ -170,6 +170,138 @@ describe('Admin: Fix match', () => {
   });
 });
 
+describe('Admin: the Fix match dialog', () => {
+  it('opens with focus in the search box and a close button', async () => {
+    installFetch();
+    const dialog = await openPanel();
+    expect(within(dialog).getByRole('searchbox', { name: 'Search TMDB' })).toHaveFocus();
+    expect(dialog).toHaveAccessibleDescription('File: The Wicker Man.m4v');
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeInTheDocument();
+  });
+
+  it('Esc closes it and focus goes back to "Find the film…"', async () => {
+    installFetch();
+    renderApp('/admin');
+    const opener = (await screen.findAllByRole('button', { name: 'Find the film…' }))[0];
+    await userEvent.click(opener);
+    await screen.findByRole('dialog', { name: 'Fix match' });
+
+    await userEvent.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+  });
+
+  it('the close button closes it without applying anything', async () => {
+    const fetchMock = installFetch();
+    const dialog = await openPanel();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.some((c) => c[1]?.method === 'POST')).toBe(false);
+  });
+
+  it('keeps Tab inside the dialog, wrapping at both ends', async () => {
+    installFetch();
+    const dialog = await openPanel();
+    await within(dialog).findAllByRole('radio');
+    const close = within(dialog).getByRole('button', { name: 'Close' });
+    const cancel = within(dialog).getByRole('button', { name: 'Cancel' });
+
+    await userEvent.tab({ shift: true }); // search box -> close button
+    expect(close).toHaveFocus();
+    await userEvent.tab({ shift: true }); // first element wraps to the last enabled one
+    expect(cancel).toHaveFocus();
+    await userEvent.tab();
+    expect(close).toHaveFocus();
+  });
+
+  it('applies once on a double click and closes with the lists refreshed', async () => {
+    let applies = 0;
+    installFetch((m, url) => {
+      if (isApply(m, url)) {
+        applies += 1;
+        return respond({ filmId: 31, joined: false });
+      }
+      return null;
+    });
+    const dialog = await openPanel();
+    await userEvent.click((await within(dialog).findAllByRole('radio'))[0]);
+
+    await userEvent.dblClick(within(dialog).getByRole('button', { name: 'Use this match' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument(),
+    );
+    expect(applies).toBe(1);
+  });
+
+  it('fades out after a match is applied when motion is allowed', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    installFetch();
+    const dialog = await openPanel();
+    await userEvent.click((await within(dialog).findAllByRole('radio'))[0]);
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Use this match' }));
+    // Esc during the fade changes nothing: it is already closing.
+    await userEvent.keyboard('{Escape}');
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('Cancel while an apply is running closes it, and the apply still refreshes the lists', async () => {
+    let release;
+    const slow = new Promise((resolve) => {
+      release = resolve;
+    });
+    let attentionCalls = 0;
+    installFetch((m, url) => {
+      if (url === '/api/admin/attention') attentionCalls += 1;
+      return isApply(m, url) ? slow : null;
+    });
+    const dialog = await openPanel();
+    await userEvent.click((await within(dialog).findAllByRole('radio'))[0]);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Use this match' }));
+    expect(within(dialog).getByRole('button', { name: 'Applying…' })).toBeDisabled();
+    const before = attentionCalls;
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument();
+    await act(async () => release(respond({ filmId: 31, joined: false })));
+
+    await waitFor(() => expect(attentionCalls).toBeGreaterThan(before));
+    expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument();
+  });
+
+  it('an apply that lands during the fade-out is still reported, once', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    let release;
+    const slow = new Promise((resolve) => {
+      release = resolve;
+    });
+    let attentionCalls = 0;
+    installFetch((m, url) => {
+      if (url === '/api/admin/attention') attentionCalls += 1;
+      return isApply(m, url) ? slow : null;
+    });
+    const dialog = await openPanel();
+    await userEvent.click((await within(dialog).findAllByRole('radio'))[0]);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Use this match' }));
+    const before = attentionCalls;
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await act(async () => release(respond({ filmId: 31, joined: false })));
+
+    await waitFor(() => expect(attentionCalls).toBeGreaterThan(before));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument(),
+    );
+  });
+});
+
 describe('Admin: a slow apply for a film that is no longer on screen', () => {
   it('refreshes the lists but leaves the newer panel open with its search and selection', async () => {
     const second = {
@@ -196,24 +328,24 @@ describe('Admin: a slow apply for a film that is no longer on screen', () => {
     const list = await screen.findByRole('region', { name: 'Pick the right film' });
     const buttons = await within(list).findAllByRole('button', { name: 'Find the film…' });
     await userEvent.click(buttons[0]);
-    const first = await screen.findByRole('region', { name: 'Fix match' });
+    const first = await screen.findByRole('dialog', { name: 'Fix match' });
     await userEvent.click((await within(first).findAllByRole('radio'))[0]);
     await userEvent.click(within(first).getByRole('button', { name: 'Use this match' }));
 
     await userEvent.click(buttons[1]);
     await waitFor(() =>
       expect(
-        within(screen.getByRole('region', { name: 'Fix match' })).getByRole('searchbox'),
+        within(screen.getByRole('dialog', { name: 'Fix match' })).getByRole('searchbox'),
       ).toHaveValue('Local Hero'),
     );
-    const open = screen.getByRole('region', { name: 'Fix match' });
+    const open = screen.getByRole('dialog', { name: 'Fix match' });
     await userEvent.click((await within(open).findAllByRole('radio'))[1]);
     const attentionBefore = attentionCalls;
 
     release(respond({ filmId: 31, joined: false }));
 
     await waitFor(() => expect(attentionCalls).toBeGreaterThan(attentionBefore));
-    const still = screen.getByRole('region', { name: 'Fix match' });
+    const still = screen.getByRole('dialog', { name: 'Fix match' });
     expect(within(still).getByRole('searchbox')).toHaveValue('Local Hero');
     expect(within(still).getAllByRole('radio')[1]).toBeChecked();
   });

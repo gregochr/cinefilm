@@ -1,8 +1,11 @@
+import { useId, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { imageUrl } from '../api/images.js';
 import { useFixMatch } from '../state/useFixMatch.js';
 import { resultPeople, resultRuntime, resultTitle } from '../state/fixMatch.js';
 import { Button } from './Button.jsx';
 import { SkeletonBlock } from './Skeleton.jsx';
+import { useDialog } from './useDialog.js';
 
 function Results({ search, picked, onPick }) {
   if (search.status === 'loading') {
@@ -56,61 +59,135 @@ function Results({ search, picked, onPick }) {
   );
 }
 
-/** The Fix match panel: search TMDB for a film that needs a match and pick the right one. */
-export default function FixMatchPanel({ item, onApplied, onCancel }) {
-  const fix = useFixMatch(item.filmId, item.title, onApplied);
+/**
+ * The Fix match dialog (a full-screen sheet on phones): search TMDB for a film that needs a match and pick the right
+ * one. Focus opens in the search box and goes back to `opener` on close. `onCancel` runs on Cancel, the close button
+ * or Esc (also while an apply is running); `onApplied(result, stale)` runs once the match is applied, after the
+ * dialog has faded out. An apply that finishes after the dialog was dismissed is still reported at once, so the
+ * lists are read again, and `stale` is then true because the film is no longer on screen.
+ */
+export default function FixMatchPanel({ item, opener, onApplied, onCancel }) {
+  const base = useId();
+  const titleId = `${base}-title`;
+  const subId = `${base}-sub`;
+  const searchRef = useRef(null);
+  // Set when Cancel, Close, Esc or a successful apply starts the fade-out: a second dismissal in that window is
+  // ignored, and an apply that lands in it is reported at once (the unmount that ends the fade cancels its timer).
+  const dismissed = useRef(false);
+  const dismiss = () => {
+    if (dismissed.current) return;
+    dismissed.current = true;
+    dialog.close(onCancel);
+  };
+  const dialog = useDialog({ onEscape: dismiss, opener });
+  const { dialogRef, closing, close } = dialog;
+  const fix = useFixMatch(item.filmId, item.title, (result, stale) => {
+    if (stale || dismissed.current) {
+      onApplied(result, stale);
+      return;
+    }
+    dismissed.current = true;
+    close(() => onApplied(result, false));
+  });
   const { search } = fix;
-  return (
-    <section className="admin__card fixmatch" aria-labelledby="fix-match-title">
-      <div className="fixmatch__head">
-        <h2 id="fix-match-title" className="fixmatch__title">
-          Fix match
-        </h2>
-        <span className="admin__mono admin__text">File: {item.files.join(' · ')}</span>
-      </div>
-      <form
-        className="fixmatch__form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          fix.submit();
-        }}
+
+  useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
+
+  return createPortal(
+    <div className={`ee${closing ? ' ee--closing' : ''}`}>
+      <div className="ee__backdrop" aria-hidden="true" />
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={subId}
+        className="ee__dialog fixmatch"
       >
-        <label className="fixmatch__field fixmatch__field--query">
-          Search TMDB
-          <input
-            type="search"
-            className="fixmatch__input"
-            value={fix.query}
-            onChange={(event) => fix.setQuery(event.target.value)}
-          />
-        </label>
-        <label className="fixmatch__field fixmatch__field--year">
-          Year (optional)
-          <input
-            type="text"
-            inputMode="numeric"
-            maxLength={4}
-            className="fixmatch__input"
-            value={fix.year}
-            onChange={(event) => fix.setYear(event.target.value)}
-          />
-        </label>
-        <Button type="submit" disabled={search.status === 'loading'}>
-          Search
-        </Button>
-      </form>
-      <Results search={search} picked={fix.picked} onPick={fix.setPicked} />
-      {fix.applyProblem ? (
-        <p className="admin__warning" role="alert">
-          {fix.applyProblem}
-        </p>
-      ) : null}
-      <div className="admin__actions">
-        <Button variant="primary" disabled={fix.picked == null || fix.applying} onClick={fix.apply}>
-          {fix.applying ? 'Applying…' : 'Use this match'}
-        </Button>
-        <Button onClick={onCancel}>Cancel</Button>
+        <header className="ee__header">
+          <div className="ee__heading">
+            <span id={subId} className="ee__eyebrow admin__mono">
+              File: {item.files.join(' · ')}
+            </span>
+            <h2 id={titleId} className="ee__title">
+              Fix match
+            </h2>
+          </div>
+          <button type="button" className="ee__close" aria-label="Close" onClick={dismiss}>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden="true"
+            >
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </header>
+        <div className="ee__body">
+          <div className="ee__stack">
+            <form
+              className="fixmatch__form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                fix.submit();
+              }}
+            >
+              <label className="fixmatch__field fixmatch__field--query">
+                Search TMDB
+                <input
+                  ref={searchRef}
+                  type="search"
+                  className="fixmatch__input"
+                  value={fix.query}
+                  onChange={(event) => fix.setQuery(event.target.value)}
+                />
+              </label>
+              <label className="fixmatch__field fixmatch__field--year">
+                Year (optional)
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={4}
+                  className="fixmatch__input"
+                  value={fix.year}
+                  onChange={(event) => fix.setYear(event.target.value)}
+                />
+              </label>
+              <Button type="submit" disabled={search.status === 'loading'}>
+                Search
+              </Button>
+            </form>
+            <Results search={search} picked={fix.picked} onPick={fix.setPicked} />
+            {fix.applyProblem ? (
+              <p className="admin__warning" role="alert">
+                {fix.applyProblem}
+              </p>
+            ) : null}
+          </div>
+        </div>
+        <footer className="ee__footer">
+          <span className="ee__foot-note" />
+          <div className="ee__foot-buttons">
+            <Button className="ee__cancel" onClick={dismiss}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              disabled={fix.picked == null || fix.applying}
+              onClick={fix.apply}
+            >
+              {fix.applying ? 'Applying…' : 'Use this match'}
+            </Button>
+          </div>
+        </footer>
       </div>
-    </section>
+    </div>,
+    document.body,
   );
 }

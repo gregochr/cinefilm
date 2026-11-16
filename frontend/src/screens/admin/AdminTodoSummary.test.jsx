@@ -178,14 +178,14 @@ describe('Admin To do: heading, intro and status strip', () => {
     await userEvent.click(
       (await within(attention).findAllByRole('button', { name: 'Find the film…' }))[0],
     );
-    const panel = await screen.findByRole('region', { name: 'Fix match' });
+    const panel = await screen.findByRole('dialog', { name: 'Fix match' });
     await userEvent.click((await within(panel).findAllByRole('radio'))[0]);
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Use this match' }));
 
     await waitFor(() => expect(reads()).toBe(2));
     await waitFor(() =>
-      expect(screen.queryByRole('region', { name: 'Fix match' })).not.toBeInTheDocument(),
+      expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument(),
     );
     expect(reads()).toBe(2);
     expect(within(rail()).getByRole('link', { name: 'To do, 6 things' })).toBeInTheDocument();
@@ -206,7 +206,7 @@ describe('Admin To do: heading, intro and status strip', () => {
     await userEvent.click(
       (await within(attention).findAllByRole('button', { name: 'Find the film…' }))[0],
     );
-    const panel = await screen.findByRole('region', { name: 'Fix match' });
+    const panel = await screen.findByRole('dialog', { name: 'Fix match' });
     await userEvent.click((await within(panel).findAllByRole('radio'))[0]);
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Use this match' }));
@@ -230,12 +230,12 @@ describe('Admin To do: heading, intro and status strip', () => {
     await userEvent.click(
       (await within(attention).findAllByRole('button', { name: 'Find the film…' }))[0],
     );
-    const panel = await screen.findByRole('region', { name: 'Fix match' });
+    const panel = await screen.findByRole('dialog', { name: 'Fix match' });
     await userEvent.click((await within(panel).findAllByRole('radio'))[0]);
     await userEvent.click(within(panel).getByRole('button', { name: 'Use this match' }));
     await waitFor(() => expect(reads).toBe(2));
     await waitFor(() =>
-      expect(screen.queryByRole('region', { name: 'Fix match' })).not.toBeInTheDocument(),
+      expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument(),
     );
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
