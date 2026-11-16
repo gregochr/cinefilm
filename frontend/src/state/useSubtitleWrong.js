@@ -7,8 +7,8 @@ import { Changed, LookupFailed, shownTargets, wrongProblem, wrongTargets } from 
  * The player's "Subtitles are wrong": deletes the OpenSubtitles download that is showing for the edition, which the
  * server also blocks (it never fetches that file for that edition again). The row id is read when the viewer asks
  * (`GET /api/admin/subtitles`), so it is never stale, then `DELETE /api/admin/subtitles/{id}` runs on it. It touches
- * nothing of the playback: no session, no seek, no reload. `report(kind, ids)` (`ids`: the sidecar ids the film showed for that kind) resolves true once the download is gone;
- * a second call while one runs does nothing (a ref, so two clicks in one frame send one request); a failure sets
+ * nothing of the playback: no session, no seek, no reload. `report(kind, ids)` (`ids`: the sidecar ids the film showed
+ * for that kind) resolves true once the download is gone; a second call while one runs does nothing (a ref, so two clicks in one frame send one request); a failure sets
  * `problem` in words (shown only while that kind of download still shows) and leaves everything as it was. A 404 on
  * the delete counts as removed: the row was already gone.
  */
@@ -29,6 +29,8 @@ export function useSubtitleWrong({ filmId, editionId, kind: shownKind = null }) 
       try {
         const rows = await adminApi.subtitles();
         const playing = wrongTargets(rows, { filmId, editionId, kind });
+        // The film did not say which download it showed: nothing can be proven to be the one on screen.
+        if (ids == null) throw new Changed();
         if (playing.length === 0) throw new LookupFailed();
         // Only the download the film showed: if another one plays now, the viewer never saw it, so nothing is deleted.
         const targets = shownTargets(playing, ids);

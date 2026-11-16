@@ -1,5 +1,6 @@
-// Which subtitle <track> of each kind is on screen and which one is still loading after a timing change (8b-1). No JSX
-// and no DOM: the player mounts the pending track beside the current one, hidden, and these steps say when it takes over.
+// Which subtitle <track> of each kind is on screen and which one is still loading after a timing change (8b-1). No
+// JSX and no DOM: the player mounts the pending track beside the current one, hidden, and these steps say when it
+// takes over.
 
 /**
  * Nothing pending, no change made yet: the track with the film's own address. `currentOffsets` are the offsets of the
@@ -18,9 +19,9 @@ export function fileTrackKey(kind, token) {
  * newer one replaces an older pending). `commit`: that pending track loaded, so it becomes the current one and the old
  * one goes. `fail`: it did not load, so it is dropped and the current one stays. A step for a token that is no longer
  * the pending one does nothing. `cancel`: the file changed under the viewer (the server no longer serves it), so any
- * pending track is dropped whatever its token, and the current one stays. There is no step for the kind no longer showing: its pending track stays mounted
- * beside the old one, both `disabled`, and is settled (loaded or failed) once the kind shows again, or when it
- * finishes a fetch it had already started.
+ * pending track is dropped whatever its token, and the current one stays. There is no step for the kind no longer
+ * showing: its pending track stays mounted beside the old one, both `disabled`, and is settled (loaded or failed) once
+ * the kind shows again, or when it finishes a fetch it had already started.
  */
 export function swapTracks(state, { type, kind, token, offsets }) {
   const track = state[kind];

@@ -374,10 +374,12 @@ class PlaybackHealthServiceTest {
             .hasMessage("Invalid health report");
     }
 
-    /** A report whose serialisation is exactly {@code length} characters, padded through the user agent. */
+    /** A report with its touch hint, exactly {@code length} characters serialised, padded through the user agent. */
     private static ObjectNode reportOfSerialisedLength(int length) {
         ObjectNode node = example();
         client(node).put("userAgent", "");
+        // The touch hint is part of the serialisation too, so the boundary is proven with it present.
+        client(node).put("touch", true);
         while (text(node).length() + 300 < length) {
             minutes(node).add(fullMinute());
         }

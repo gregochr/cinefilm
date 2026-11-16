@@ -5,6 +5,7 @@
 // watched time again; every count is a count of sessions (a film watched twice counts twice).
 import { playbackChart as copy } from './adminCopy.js';
 import { environmentLabel, stallText } from './healthFormat.js';
+import { RUNG_CODES } from '../player/health.js';
 import { formatRuntime } from '../player/time.js';
 import { formatScanTime } from './scanFormat.js';
 import { describeDevice } from './userAgent.js';
@@ -29,7 +30,9 @@ const BUCKET_OF_RUNG = {
   '240p': 'low',
 };
 /** The player's rung codes in `minutes` rows (`player/health.js`); 0 means none was known. */
-const RUNG_OF_CODE = { 1: 'original', 2: '1080p', 3: '720p', 4: '480p', 5: '360p', 6: '240p' };
+const RUNG_OF_CODE = Object.fromEntries(
+  Object.entries(RUNG_CODES).map(([rung, code]) => [code, rung]),
+);
 
 export const ENVIRONMENT_FILTERS = ['all', 'home', 'away', 'train'];
 const LETTERS = { home: 'H', away: 'A', train: 'T' };

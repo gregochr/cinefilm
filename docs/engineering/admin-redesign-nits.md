@@ -1,66 +1,31 @@
-# Admin redesign: nits left for cleanup B
+# Admin redesign: nits still open
 
-Cleanup A (the Admin and Film detail frontend, the fixtures and mocks, the admin CSS and the plan docs) is done. What
-is left is below: the items that touch the player, the backend or the Playing now panel (cleanup B), and the Admin
-items A deliberately did not do, each with the reason. Owner questions and "record only" notes are kept as they were.
+Cleanups A and B (Admin, Film detail, the player menus, Playing now, the backend and the dev mock) are done. What is
+left is below: notes kept for the record, the owner questions, and the Admin items that were deliberately not done,
+each with the reason.
 
-## Cleanup B: backend
+## Still open
 
-Done in the cleanup B backend PR. Note only:
+Record only:
 
 - `EditionOpenSubtitlesService.search` loads the edition twice (`findWithFilmById` + `hasOriginalFile`); fine at this
   scale, left.
-- The dev mock `frontend/src/api/fixtureServer.js` still returns the old developer wording for the Continue watching
-  range 400 (unreachable through the UI); change it with the next frontend PR that touches it.
 - `ScanService`'s own 409 texts for a scan that cannot start ("A subtitle is being changed") were not reworded.
+- 8b-1 edge: the owner clears the check in Admin while a pending track loads, so the swapped track may be the
+  replacement file under the old readout.
+- The player's "Subtitles are wrong" and timing failures show their own generic line on a 409 (the lock text is shown
+  by Fix match, Edit editions, the need rows, Admin to do and the subtitle picker only).
+- "None for this film" still sits inside the Subtitles `role=menu` (an empty menu has nothing else to hold it).
 
-## Cleanup B: player, menus and Playing now
+Owner questions:
 
-### Lock 409 text (frontend)
-
-- The API's 409 now names what holds the library lock, but the Fix match, Edit editions, forced need, full need and
-  Admin to do mappers (`fixMatch.js:16`, `editEditions.js:255-257`, `forcedNeed.js:127-128`, `adminTodo.js:128` /
-  `adminCopy.js:348`) still show their own scan copy: they should show `failure.body?.error` on a 409.
-
-### 8a / 8b-1 (player, `PlayerMenus`, subtitle hooks)
-
-- `role=alert` `<p>` and a heading `div` inside `role=menu` (`PlayerMenus`); the timing status/alert inside the
-  `role=menu` group has the same ARIA-required-children problem: move them outside the menu.
-- `.menu__problem` hard-codes `#f0876a` (no token; `styles/player.css`).
-- `PlayerSubtitlesWrong.test.jsx` ~210-230: set `sidecarIds` [70..75] so the `wrongTargets` filters are proven at
-  player level. `useSubtitleWrong`: a partial-overlap test (shows [61,62], serves [61,63] -> DELETE 61 only); line 32
-  should throw `Changed` (not `LookupFailed`) when no download is served and the ids are absent. Plan doc 8a: one long
-  line; changelog clause.
-- 8b-1: a press at +/-10 minutes is a silent no-op.
-- `subtitleTrackSwap.js`: the cancel doc comment line is overlong.
-- Record only (8b-1 edge): the owner clears the check in Admin while a pending track loads, so the swapped track may be
-  the replacement file under the old readout.
 - OWNER QUESTION (8b-1): a timing nudge clears the owner's "Looks right" check by documented design
   (`forced-subtitles-plan.md:508`). Nudging a proven forced file in the player can demote it so another file serves
   on the next film load; the player now keeps the old track and says "changed since the film started". Should a nudge
   from the player keep the check?
-- MERGE NOTE: 8b-1 imports `NUDGES`/`nudgedOffset`/`formatOffset`; 8b-2 deleted `NUDGES` and `useSubtitles`'
-  `nudge`/`resetTiming`. When 8b-2 merged main after 8b-1, `NUDGES` had to stay (check it did).
-
-### 5a-1 (Playing now)
-
-- `PlayingNowPanel.test.jsx` `live()`, `playingNowFormat.test.js` `session()` and `admin-transcoding.json` lack
-  `unavailable` (`SessionRow` serialises it).
-- `PlayingNowPanel.jsx:68` `useCallback(leaveRow, [])` is redundant.
-- Add a 16,000/16,001 summary-size boundary case with `touch` present.
-- `usePlayingNow.js` JSDoc line over 120 chars.
+- Product: a 401 on `DELETE /api/session` shows "Couldn't sign out" instead of the sign-in card (`client.js` skips the
+  expiry event for `/api/session`).
 - Open owner item: Admin Stop only ends the server session (see the Stop-ends-playback work).
-
-### Sign-out and 401
-
-- `useSignOut.test.jsx:40`: `finish` may be undefined if the client awaits before fetch; add `waitFor`. The 204 branch
-  is better pinned in the client tests.
-- Product: a 401 on `DELETE /api/session` shows "Couldn't sign out" instead of the sign-in card (`client.js:114` skips
-  the expiry event).
-
-### 5a-2 (needs `player/health.js`)
-
-- `RUNG_OF_CODE` in `state/playbackChart.js` copies `player/health.js` `RUNG_CODES`: export that one and reuse it.
 
 ## Left in Admin on purpose (not done in A)
 

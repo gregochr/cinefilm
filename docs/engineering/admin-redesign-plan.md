@@ -535,7 +535,8 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
 - **8a decision (built):** one small backend change (review fix): `ForcedSubtitleDto` and `FullSubtitleDto` gain
   `sidecarIds` (the ids of the subtitle rows they are made of, the same ids the Admin list gives), because their
   `version` is a hash and does not identify a row. "Subtitles are wrong" deletes only rows whose id the film showed; if
-  another download plays by now it deletes nothing and says so. The rest needed no backend change. `SubtitleAdminService.remove` already writes the `ForcedDownloadBlock`
+  another download plays by now it deletes nothing and says so. The rest needed no backend change.
+  `SubtitleAdminService.remove` already writes the `ForcedDownloadBlock`
   (edition, IMDb id, OpenSubtitles file id, kind) before it deletes the row, so `DELETE /api/admin/subtitles/{id}` is
   the whole of "Subtitles are wrong" (and answers 400 for an owner's file).
   - **Film detail.** A quiet "Fix…" (`aria-label` "Fix subtitles…") sits under the Subtitles field, also for a film
