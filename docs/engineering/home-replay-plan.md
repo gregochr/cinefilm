@@ -14,6 +14,9 @@ as of `b89cd39` (one minute on a steady link, 2026-11-16: every request the play
 
 Nothing in the app, its image or its tests depends on it, and that stays so: `scripts` is in `.dockerignore`.
 
+Phase 1 merged on 2026-11-16 as #185, after three review rounds. What they changed is folded into the decisions
+below; what they taught for phase 2 is at the end of that phase's section.
+
 ## Decisions
 
 1. **It lives in `scripts/replay/`, its tests in `scripts/test/replay/`**, beside the train feed logger: both are
@@ -183,16 +186,26 @@ Branch `feat/home-replay-driver`, from `main` after phase 1. Source: `drive.mjs`
 | File | What changes from the scratch version |
 |---|---|
 | `scripts/replay/text.mjs` | New: the one function every printed line and every text from the page passes (decision 5). |
-| `scripts/replay/drive.mjs` | `options(argv)` is exported and checks its values: whole numbers for `--start` and `--minutes`, a known trace, `--fill`, `--wire`, and a `--name` of letters, digits, dot, dash and underscore. The app is built by running Vite's own script with this Node (`process.execPath`), not by looking `npx` up on the `PATH`. The paths to `frontend/` gain a level. The template is loaded, and made only when loading says it is not there. `--wire` defaults to `WIRE`. `summarise` is split for decision 8 and prints the same lines. |
+| `scripts/replay/drive.mjs` | `options(argv)` is exported and checks its values: whole numbers for `--start` and `--minutes`, a known trace, `--fill`, `--wire`, and a `--name` of letters, digits, dot, dash and underscore. The app is built by running Vite's own script with this Node (`process.execPath`), not by looking `npx` up on the `PATH`. The paths to `frontend/` gain a level. The template is loaded, and made only when loading says it is not there. `--wire` defaults to `WIRE`. `summarise` is split for decision 8 and prints the same lines. The run's report is the last one of the last viewing the stand-in numbered (`pickFinal`, exported), and the summary warns when there was more than one viewing. Every line it prints, and every text it takes from the page, passes `printable`. |
 | `scripts/replay/cdp.mjs` | Moved (no `lib/` folder). The matching of replies to requests and of events to listeners becomes a function of its own, tested with made-up messages; the launch and the socket stay by-hand. |
 | `scripts/replay/make-template.mjs` | Moved. `silentFrame` and `nalTypes` stay exported for their tests. |
 | `scripts/replay/analyse.mjs` | Its sums become exported functions over the run's data (was the run sound, idle gaps, the six spells, screen against link, rungs and bytes) with the printing kept apart; run as a program it prints what it prints today. |
-| `scripts/test/replay/*.test.mjs` | `summarise` line by line on a two-minute run, with and without a report, and with an engine that holds a line break; every option and each refusal; each sum in `analyse.mjs` at its edges (a sampling gap of 6,500 ms, a pause with 5 s in hand, 0.5 s behind the clock, an idle gap of 30 s, a request that spans two minutes); the routing in `cdp.mjs` (a reply, an error, an event, an unknown id); `silentFrame` for a good frame and for each reason to refuse one; `nalTypes`; the printing function at and one past its limit. |
+| `scripts/test/replay/*.test.mjs` | `summarise` line by line on a two-minute run, with and without a report, with two viewings, and with a text from the page that holds a line break; `pickFinal` with one viewing, two, and none; every option and each refusal; each sum in `analyse.mjs` at its edges (a sampling gap of 6,500 ms, a pause with 5 s in hand, 0.5 s behind the clock, an idle gap of 30 s, a request that spans two minutes); the routing in `cdp.mjs` (a reply, an error, an event, an unknown id); `silentFrame` for a good frame and for each reason to refuse one; `nalTypes`; the printing function at and one past its limit. |
 | `docs/engineering/home-replay.md`, `train-link-plan.md`, `SECURITY.md`, `sonar-project.properties`, `changelog.d/` | Running it, checking a run, the two replays of 15 and 16 November and what they showed; a pointer from the train plan; decision 12; the new files' coverage entries; one changelog entry. |
 
 Before the pull request: one minute on a steady link, and the fifteen record minutes 24 to 38 on the sampled
 trace, whose scratch run stalled for 95 s at the bare weight, as a check that the moved rig behaves like the
 scratch one.
+
+What phase 1's reviews taught, and phase 2 starts with:
+
+- Every guard gets a test that fails when the guard is removed: a line that only matters when something is cut
+  off or goes away is the line a refactor drops.
+- Count SonarQube's cognitive complexity for every function before committing; the limit is 15, and a nested
+  `if` inside a loop inside a loop is most of it.
+- A sentence in a doc or a comment is a claim. "Never", "only" and "as the real server does" were each wrong once.
+- A test that waits on the machine being quick will fail on a slow one: wait for an event, with a wide margin
+  where a real delay cannot be avoided.
 
 ## What nobody will have verified when both are merged
 

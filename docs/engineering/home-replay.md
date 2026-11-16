@@ -1,8 +1,7 @@
 # The home replay
 
 Written 2026-11-16. A measuring rig the owner runs by hand on the laptop: `scripts/replay/`. It is not part of the
-app or its image, and nothing in CineFilm depends on it. `home-replay-plan.md` is the plan that put it in git, in
-two phases; this file describes what is merged so far.
+app or its image, and nothing in CineFilm depends on it. `home-replay-plan.md` is the plan that put it in git.
 
 ## Why
 
@@ -15,7 +14,7 @@ change to the player's rules can then meet a known bad journey before it meets a
 
 | | |
 |---|---|
-| **Real** | The app itself: the Player screen, the hls.js engine and its rules, the speed probe and the playback-health recorder, built for production and run in headless Chrome. The part of the rig that builds and drives it arrives in phase 2. |
+| **Real** | The app itself: the Player screen, the hls.js engine and its rules, the speed probe and the playback-health recorder, built for production from this checkout (`drive.mjs` runs Vite's build into `scripts/replay/dist/`) and run in the installed Chrome, headless, with a throwaway profile (`cdp.mjs`). The driver only looks at the page every five seconds; it clicks once, to wave away the "Where are you watching?" card. |
 | **Stand-in: the server** | `standin.mjs` answers the few API calls the Player makes (the film, the session, progress, the health report) and serves the film. No CineFilm server, no sign-in, no watch history. It listens on `127.0.0.1` only. |
 | **Stand-in: the film** | A 1080p source as `Ladder.java` and `Rung.java` ladder it: the original copied at 10 Mbit/s, then 720p, 480p, 360p and the 240p floor, with playlists written as `PlaylistWriter.java` writes them and four-second MPEG-TS segments of H.264 and AAC (`ts.mjs`). Every segment is the same four seconds of a drawn picture and of silence with its own time stamps, padded to the size its rung's average bitrate implies, times 1.08 for the wrapping. The padding sits inside the picture's stream, so the browser's media buffer weighs what a real rung would. |
 | **Stand-in: the link** | One shared allowance for everything the player asks for (`link.mjs`): API answers, playlists, segments and the speed probe. It is refilled at the trace's rate for the current replay minute, saves no more than a twentieth of a second of it for later, and gives nothing at all in a dead minute. Each answer first waits 115 ms, the round trip the record measured. The app's own files are served at once: loading the app is not under test. |
@@ -37,6 +36,106 @@ floor.
 
 `node scripts/replay/trace.mjs` prints both traces. Inside the six bad spells both average about 0.3 Mbit/s, the
 figure `train-link-plan.md` reached by hand.
+
+## Running it
+
+Once, after a fresh checkout: `npm ci` in `frontend/`. Chrome must be installed in `/Applications`, and Node must
+be 22 or newer; nothing else is installed.
+
+    node scripts/replay/drive.mjs --start 24 --minutes 15 --trace sampled --name smoke
+
+| Option | |
+|---|---|
+| `--start` | The record minute to begin at; 0 is 17:56:53 on 12 November (`node scripts/replay/trace.mjs` lists them). Default 0. |
+| `--minutes` | How long to run. A replay runs in real time: the whole viewing is `--start 0 --minutes 143`, two hours and 23 minutes. Default 15. |
+| `--trace` | `sampled`, `cautious`, or `flat:<kbit/s>` for a steady link, which is for checking the rig itself. Default `sampled`. |
+| `--name` | The folder under `scripts/replay/out/` for the results: letters, digits, dot, dash and underscore. |
+| `--wire` | How heavy a segment is, as a multiple of its quality's average bitrate. Default 1.08, the weight the trace assumes; `--wire 1` is the bare average. |
+| `--fill` | `media` (the default: padding inside the picture's stream, which the browser keeps) or `null` (padding the player's demuxer throws away, so the browser's buffer stays tiny however heavy the quality). |
+| `--tmp` | Where the browser's throwaway profile is made and removed. Default: the system's temporary folder. |
+| `--rebuild` | Build the app again first. Use it after the checkout changes. |
+
+It uses ports 5301 (the stand-in) and 9334 (Chrome's debugging port), both on `127.0.0.1` only, so one replay
+runs at a time. The browser can reach no host but this machine: the app's one outside request, the operator
+lookup, fails as it would with no internet, which is why the record a replay makes says `unknown` where a train
+viewing says `train`. Ctrl-C ends a replay early and still writes its results. While it runs it keeps the Mac
+from idling to sleep; a closed lid still sleeps it, and the summary then carries a warning, because the link's
+clock is the wall clock. The first run makes the film's picture and silence with Chrome's own encoders
+(`make-template.mjs`) and keeps them in `scripts/replay/out/template.json`.
+
+**After any change to the rig or to the player**, run `--minutes 1 --trace flat:3000 --rebuild` and read the
+summary: about 55 s watched, no stall, every request answered. Nothing else tests what needs Chrome.
+
+## What comes out
+
+In `scripts/replay/out/<name>/`, which git ignores:
+
+- `summary.txt`: for each minute, the link's rate; from the replay, seconds stalled, the quality played, the
+  quality being fetched and the seconds buffered (all from the player's own health report); what the stand-in
+  was asked for; and beside them the 12 November record's stalled seconds and quality for the same minute.
+- `health.json`: the figures the stand-in kept of the viewing's last playback-health report.
+- `samples.json`: every five seconds, the playhead, the film buffered ahead and what the screen says.
+- `requests.json`: every answer the stand-in sent, with its kind, size and timing, and whether the player cut it
+  short.
+
+## Reading a run
+
+    node scripts/replay/analyse.mjs smoke
+
+Read its first section before believing anything else. A replay runs in real time, so a busy Mac can stall the
+film for the wrong reason. A run is sound when the five-second samples have no long gap, no pause came with film
+in hand, the playhead kept the clock outside those pauses, and what the stand-in delivered in thin minutes
+matches the trace. After that it lists the stretches when nothing was being fetched, the buffer going into each
+of the six bad spells and its lowest point in each, what the screen showed against the link, and the time at each
+quality beside 12 November.
+
+## What two replays of the whole journey showed
+
+Both ran the 143 minutes of the record on 15 and 16 November, on the scratch version of this rig, against the
+player as it stood on `main` that day (the rules of `train-link-plan.md`: a 240p floor, up to eight minutes
+banked, 360p held while the bank is deep). Both were sound by the checks above. The first ran before the
+segments' weight was corrected, so its film was about 8% lighter than its trace assumes.
+
+| | 12 November, on the train | Replay, kind | Replay, harsh |
+|---|---|---|---|
+| Trace; weight of a segment | | `sampled`; bare average | `cautious`; 1.08 |
+| Stalled | 2,011 s in 155 stalls, the longest 192 s | 5 s in 2 stalls | 206 s in 47 stalls, the longest 34 s |
+| Film played in the 143 minutes | 6,331 s | 8,569 s | 8,368 s |
+| Minutes at 480p, 360p, 240p | 30, 75, none | 61, 40, 39 | 40, 57, 43 |
+| Steps down and up | 39 and 38 | 22 and 22 | 15 and 14 |
+
+Stalled seconds in each of the six bad spells, with the seconds buffered going in:
+
+| Record minutes | 12 November | Kind | Harsh |
+|---|---|---|---|
+| 5 to 7 | 122 | 0 (102 s banked) | 67 (18 s) |
+| 12 to 23 | 450 | 0 (302 s) | 73 (140 s) |
+| 27 to 37 | 478 | 5 (402 s) | 66 (202 s) |
+| 52 to 61 | 370 | 0 (427 s) | 0 (396 s) |
+| 81 to 85 | 143 | 0 (423 s) | 0 (420 s) |
+| 100 to 110 | 371 | 0 (458 s) | 0 (460 s) |
+
+So on this model the rules now live stall for somewhere between a few seconds and three and a half minutes where
+the day stalled for 33 and a half. Read it as that order of size and no finer: it is one journey, the 0.6 of the
+harsh trace is a guess, and the old rules have never been run on the rig.
+
+Four things the replays showed in the rules as they are. None has been acted on: the next real journey runs the
+same rules, and its record says how far to trust the rig.
+
+1. **The start of the film is the weak point.** On both traces the eight-minute bank was first full 41 to 42
+   minutes in, and every second of stalling in both runs came before that. The bank builds slowly at the start
+   because the player fetches the best quality the link sustains: on the harsh trace it fetched 480p for four
+   minutes on a link falling from 2.4 to 0.8 Mbit/s and had 77 s banked when the first spell came. By arithmetic,
+   not a run, 360p would have banked about 260 s in those minutes and 240p the full 480.
+2. **Film banked at 240p in a bad spell is watched after the link is back.** In the kind run 240p was on screen
+   for 39 minutes, and for 18 and a half of them the link was already at 2 Mbit/s or better.
+3. **A step up to 720p stops the fetching.** hls.js sizes its buffer from the quality it is loading, and 100 MB
+   holds about 256 s of 720p, so the player waits for the 480 s bank to run down to that. In the kind run this
+   happened five times, 955 s in all with nothing fetched, for 144 s of 720p watched; and the player takes no
+   speed samples while it waits, so once the link fell to 152 kbit/s unseen.
+4. **The 360p hold spent the bank in the worst spell.** In the kind run the player went in with 402 s banked, held
+   360p at about half the speed of play until 238 s were left, and then met two dead minutes: the one stall. The
+   same hold kept the picture at 360p or better through the short spell at minutes 81 to 85.
 
 ## The record in the repository
 
@@ -78,5 +177,13 @@ one and wait for an event (a byte arriving, an entry in the log), never for a fi
 40 ms to show that an answer waits for the round trip. CI runs them on Node 24. When a test is added, raise the
 number in the wrapper.
 
-What needs Chrome has no automated test (phase 2): after any change to the rig or to the player, run one minute
-on a steady link and read the summary.
+What needs Chrome has no automated test: launching it and talking to it, building the app, encoding the film's
+picture, and the driver's own loop. The by-hand minute under "Running it" is their only check.
+
+## What nobody has verified
+
+- The rig on any machine but the owner's Mac, or with any browser but its installed Chrome.
+- The old rules on the rig (above, under "What is approximate").
+- A replay of a record made under the rules now live. In such a record a minute's film may have been fetched
+  minutes earlier and at another quality than the one played, so "what played is what arrived", the reading
+  `trace.mjs` uses for the 12 November record, does not hold. A reading for those records has not been written.
