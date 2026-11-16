@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { adminApi } from '../api/resources.js';
-import { withTimeout } from '../api/timeout.js';
+import { RequestTimeout, withTimeout } from '../api/timeout.js';
 import { subtitleTiming } from './subtitleFixCopy.js';
 import { EARLIER, LATER, nextOffsets, timingProblem, trackToken } from './subtitleTiming.js';
 
@@ -16,6 +16,8 @@ import { EARLIER, LATER, nextOffsets, timingProblem, trackToken } from './subtit
  *   absolute offset per row that moves goes out, one request at a time; the first refusal stops the rest.
  * - Each request gives up after `ADMIN_TIMEOUT_MS` (a failure like any other, so a dead link never leaves the buttons
  *   busy). Offsets go out absolute, so asking again after no answer never adds a second step.
+ * - A request with no answer leaves the file's save uncertain (the server may hold it): nothing of that press is
+ *   recorded, and the next press re-sends the same absolute targets to every row, whichever button it is.
  * - A press with nothing to send (a reset at 0, say) while `onScreen` (the offsets of the track showing) differs from
  *   the server's retries the last timing's track instead, and leaves the problem line alone otherwise.
  * - A new track that failed to load (`swapFailed`): the server already holds the timing it was made for, so the next
@@ -49,6 +51,9 @@ export function useSubtitleTiming({ kind, ids, offsets, onScreen = null, onAppli
   const tokens = useRef({});
   // Files whose new track failed to load: their saved timing is not on screen yet, so a press reloads it.
   const failedLoads = useRef(new Set());
+  // Files whose last save got no answer from some row (the server may or may not have it): the absolute targets that
+  // were meant, re-sent whole by the next press (idempotent) before anything else moves.
+  const uncertain = useRef({});
   const [known, setKnown] = useState({});
   const [problemOf, setProblemOf] = useState({ key: fileKey, text: null });
   const [inFlight, setInFlight] = useState([]);
@@ -98,7 +103,8 @@ export function useSubtitleTiming({ kind, ids, offsets, onScreen = null, onAppli
       const start = learned.current[key] ?? base;
       const rows = fileIds.map((id, i) => ({ id, offsetMs: start[i] }));
       // One absolute offset per row that actually moves, in the film's order.
-      const moves = nextOffsets(rows, delta).filter((m) => m.offsetMs !== m.was);
+      const retried = uncertain.current[key];
+      const moves = retried ?? nextOffsets(rows, delta).filter((m) => m.offsetMs !== m.was);
       if (moves.length === 0) {
         // Nothing to send. But if the screen shows other timing than the server has (the last new track did not
         // load), the press is a retry: the same timing is loaded again. Otherwise it changes nothing, not even the line.
@@ -115,6 +121,7 @@ export function useSubtitleTiming({ kind, ids, offsets, onScreen = null, onAppli
       say(key, null);
       const answers = [];
       let problem = null;
+      let timedOut = false;
       try {
         // The first refusal, or the first row the server no longer serves, stops the rest.
         for (const move of moves) {
@@ -126,12 +133,16 @@ export function useSubtitleTiming({ kind, ids, offsets, onScreen = null, onAppli
         }
       } catch (error) {
         problem = timingProblem(error);
+        // No answer: rows answered before it are not recorded either, so the readout never says "differs by part".
+        timedOut = error instanceof RequestTimeout;
       } finally {
         flying.current.delete(key);
         setInFlight((keys) => keys.filter((k) => k !== key));
       }
       const now = rows.map((r) => answers.find((a) => a.id === r.id)?.offsetMs ?? r.offsetMs);
-      if (answers.length > 0) {
+      if (timedOut) uncertain.current[key] = moves;
+      else delete uncertain.current[key];
+      if (answers.length > 0 && !timedOut) {
         // Rows that changed are at their new offset on the server, even when a later one was refused.
         learned.current = { ...learned.current, [key]: now };
         if (alive.current) setKnown(learned.current);
@@ -149,7 +160,7 @@ export function useSubtitleTiming({ kind, ids, offsets, onScreen = null, onAppli
       }
       say(key, problem ?? (replaced ? subtitleTiming.changed : null));
       // Whatever shows now, the file that was changed has new timing: its track is told, unless it is no longer served.
-      if (answers.length > 0 && !replaced && alive.current) {
+      if (answers.length > 0 && !timedOut && !replaced && alive.current) {
         tokens.current[key] = trackToken(answers);
         callback.current(fileKind, tokens.current[key], now);
       }

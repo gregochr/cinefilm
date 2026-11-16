@@ -520,5 +520,42 @@ describe('useSubtitleTiming', () => {
       ]);
       expect(props.onApplied).toHaveBeenCalledExactlyOnceWith('FULL', '101_750', [750]);
     });
+
+    it('a split film whose second part got no answer re-sends both targets on the next press, never "differs by part"', async () => {
+      vi.useFakeTimers();
+      const rows = [row(1, 0), row(2, 0)];
+      let hang = true;
+      const { calls } = serve({
+        rows,
+        answer: (method, url) => {
+          if (method === 'PUT' && url.endsWith('/2/offset') && hang) {
+            rows[1].offsetMs = 250; // the server saved it; the answer never arrived
+            return new Promise(() => {});
+          }
+          return null;
+        },
+      });
+      const props = open({ ids: [1, 2], offsets: [0, 0] });
+      const { result } = renderHook(() => useSubtitleTiming(props));
+
+      await act(async () => {
+        void result.current.later();
+        await vi.advanceTimersByTimeAsync(ADMIN_TIMEOUT_MS);
+      });
+
+      expect(result.current.problem).toBe(subtitleTiming.failed);
+      expect(result.current.offsets).toEqual([0, 0]);
+      expect(props.onApplied).not.toHaveBeenCalled();
+      hang = false;
+      await act(() => result.current.later());
+
+      expect(calls.slice(2)).toEqual([
+        'PUT /api/admin/subtitles/1/offset {"offsetMs":250}',
+        'PUT /api/admin/subtitles/2/offset {"offsetMs":250}',
+      ]);
+      expect(result.current.offsets).toEqual([250, 250]);
+      expect(result.current.problem).toBeNull();
+      expect(props.onApplied).toHaveBeenCalledTimes(1);
+    });
   });
 });

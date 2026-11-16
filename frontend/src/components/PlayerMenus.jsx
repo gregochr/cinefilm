@@ -148,6 +148,7 @@ function WrongSubtitles({ busy, onWrong }) {
  */
 function TimingControls({ timing }) {
   const blocked = timing.busy || timing.frozen;
+  const saving = timing.busy || timing.loading;
   const action = (label, spoken, detail, onPress, blocked) => (
     <button
       type="button"
@@ -165,7 +166,11 @@ function TimingControls({ timing }) {
     </button>
   );
   return (
-    <div className="menu__timing" role="group" aria-label={subtitleTiming.group}>
+    <div
+      className={`menu__timing${saving ? ' menu__timing--busy' : ''}`}
+      role="group"
+      aria-label={subtitleTiming.group}
+    >
       {action(
         subtitleTiming.earlier,
         EARLIER.spoken,

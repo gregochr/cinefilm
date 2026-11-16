@@ -321,6 +321,14 @@
 .menu__item--on {
   background: var(--cf-surface-3);
 }
+/* aria-disabled (still focusable, a press does nothing): looks like the disabled items. */
+.menu__item[aria-disabled='true'] {
+  color: var(--cf-text-disabled);
+  cursor: default;
+}
+.menu__item[aria-disabled='true']:hover:not(.menu__item--on) {
+  background: transparent;
+}
 .menu__item:disabled {
   color: var(--cf-text-disabled);
   cursor: not-allowed;
@@ -382,7 +390,7 @@
 .menu__item--quiet[aria-disabled='true']:hover {
   background: transparent;
 }
-.menu__timing[aria-busy='true'] .menu__item--quiet[aria-disabled='true'] {
+.menu__timing--busy .menu__item--quiet[aria-disabled='true'] {
   cursor: progress;
 }
 .menu__problem {

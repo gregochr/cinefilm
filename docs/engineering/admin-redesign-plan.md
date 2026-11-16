@@ -679,6 +679,9 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
     no backend change. (4) A pending track is mounted only while its kind shows (`fileTokens`): a hidden pending track
     made system caption menus (iOS fullscreen, AirPlay, Safari) list the subtitle twice. The saved timing waits in
     `swaps` and loads, hidden and timed afresh, when its kind shows again.
+    The press is the real retry: on a connected but dead link (a train between towns) the `online` event rarely fires,
+    so it is a bonus. A request with no answer (any row of a split film) marks the file's save uncertain: nothing of
+    that press is recorded, and the next press re-sends the same absolute targets to every row before anything moves.
   - **Loading the new timing without touching playback (chosen).** The PUT answers a `SidecarDto` whose `version` is
     when the row last changed; the token is each answered row's `version_offsetMs`. The player mounts a second
     `<track>` of that kind beside the showing one, `hidden`, with `?v=<film version>.<token>` (the server ignores `v`),
