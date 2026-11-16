@@ -371,18 +371,18 @@ class SubtitleAdminServiceTest extends SubtitleTestBase {
     }
 
     @Test
-    void anOffsetIsStoredAndTakesTheCheckAwayAndTouchesTheVersion() {
+    void anOffsetIsStoredKeepsTheCheckAndTouchesTheVersion() {
         Film taken = filmWithParts("Taken", 1, 90);
         SubtitleSidecar row = sidecar("Taken.en.forced.srt", fileId(taken, 1), false);
         row.setOwnerVerifiedAt(NOW);
-        row.setVerifiedParts("1");
+        row.setVerifiedParts(String.valueOf(fileId(taken, 1)));
         row.setUpdatedAt(NOW.minusSeconds(100));
 
         SidecarDto dto = admin.offset(row.getId(), new OffsetRequest(-1250));
 
         assertThat(dto.offsetMs()).isEqualTo(-1250);
-        assertThat(dto.verified()).isFalse();
-        assertThat(row.getOwnerVerifiedAt()).isNull();
+        assertThat(dto.verified()).isTrue();
+        assertThat(row.getOwnerVerifiedAt()).isEqualTo(NOW);
         assertThat(row.getUpdatedAt()).isEqualTo(NOW);
     }
 

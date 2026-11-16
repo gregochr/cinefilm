@@ -44,8 +44,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Admin's view of the forced subtitle files and downloads and the owner's actions on them: attach a file to an edition
  * (and part), give it back to automatic matching, nudge its timing, say it looks right (which is also "use my file":
  * a verified file is proven and plays first), and remove a download (never offered again for that edition). Every
- * action takes the row id of a subtitle and, for an attach, the id of an edition: nothing takes a path. A nudge or a
- * re-attach takes the owner's check away; so does any change to the edition's parts (see
+ * action takes the row id of a subtitle and, for an attach, the id of an edition: nothing takes a path. A re-attach or
+ * a detach takes the owner's check away (a nudge keeps it); so does any change to the edition's parts (see
  * {@link SubtitleSidecar#isVerifiedFor}).
  */
 @Service
@@ -205,12 +205,15 @@ public class SubtitleAdminService {
         sidecar.setOffsetMs(request.offsetMs());
         // The owner's word, even a reset to 0: the timing check never changes this file's offset again.
         sidecar.setOffsetSource(SubtitleSidecar.OffsetSource.OWNER);
-        changed(sidecar);
+        // A nudge keeps the owner's "Looks right" (owner decision 2026-11-16): it is the same file with the same
+        // lines, so what proves it and serves it is unchanged. Only the version moves, so the player reloads it.
+        sidecar.setUpdatedAt(clock.instant());
         return one(id);
     }
 
     /**
-     * Records that the owner has checked the lines and the timing, against the edition's parts as they are now.
+     * Records that the owner has checked the lines (the timing is the owner's own from then on), against the
+     * edition's parts as they are now.
      *
      * @param id the file's row id
      * @return the file as listed afterwards

@@ -137,6 +137,35 @@ class PlaybackHealthApiTest extends ApiTestBase {
     }
 
     @Test
+    void theReportPositionsAreStoredAndReturnedAndAReportWithoutThemHasNoSuchFields() throws Exception {
+        ObjectNode withPositions = report(finalCut, 4);
+        withPositions.put("startPositionMs", 0);
+        withPositions.put("endPositionMs", 1_500_000);
+        send(ID, withPositions);
+        send(idOf(2), report(finalCut, 4));
+
+        mvc.perform(get("/api/admin/playback-health/{id}", ID))
+            .andExpect(jsonPath("$.report.startPositionMs").value(0))
+            .andExpect(jsonPath("$.report.endPositionMs").value(1_500_000));
+        mvc.perform(get("/api/admin/playback-health/{id}", idOf(2)))
+            .andExpect(jsonPath("$.report.startPositionMs").doesNotExist())
+            .andExpect(jsonPath("$.report.endPositionMs").doesNotExist());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"startPositionMs,-1", "endPositionMs,-1", "startPositionMs,2000000001", "endPositionMs,2000000001"})
+    void aPositionBelowZeroOrAboveTheLimitIsA400AndStoresNothing(String field, long value) throws Exception {
+        ObjectNode body = report(finalCut, 4);
+        body.put(field, value);
+
+        mvc.perform(put("/api/playback-health/{id}", ID).content(text(body)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("Invalid health report"));
+
+        assertThat(health.count()).isZero();
+    }
+
+    @Test
     void aTouchHintSentAsTheNumberOneIsStoredAsTrue() throws Exception {
         ObjectNode body = report(finalCut, 4);
         ((ObjectNode) body.get("client")).put("touch", 1);
@@ -651,6 +680,43 @@ class PlaybackHealthApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.sessions[1].touch").doesNotExist())
             .andExpect(jsonPath("$.sessions[1].report").doesNotExist())
             .andExpect(jsonPath("$.sessions[1].editionId").doesNotExist());
+    }
+
+    @Test
+    void twoReportsOfOneViewingBecomeOneChartRowWithEndedAtAndParts() throws Exception {
+        Instant start = NOW.minusSeconds(86_400);
+        figureRow(1, start, 100_000, false);
+        PlaybackHealth second = figureRow(2, start.plusSeconds(66), 100_000, false);
+        second.setUpdatedAt(start.plusSeconds(700));
+        health.saveAndFlush(second);
+
+        mvc.perform(get("/api/admin/playback-health/chart"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sessions.length()").value(1))
+            .andExpect(jsonPath("$.sessions[0].playbackId").value(idOf(1)))
+            .andExpect(jsonPath("$.sessions[0].watchedMs").value(200_000))
+            .andExpect(jsonPath("$.sessions[0].endedAt").value(start.plusSeconds(700).toString()))
+            .andExpect(jsonPath("$.sessions[0].parts.length()").value(2))
+            .andExpect(jsonPath("$.sessions[0].parts[0].playbackId").value(idOf(1)))
+            .andExpect(jsonPath("$.sessions[0].parts[0].startedAt").value(start.toString()))
+            .andExpect(jsonPath("$.sessions[0].parts[0].endedAt").value(start.plusSeconds(60).toString()))
+            .andExpect(jsonPath("$.sessions[0].parts[0].watchedMs").value(100_000))
+            .andExpect(jsonPath("$.sessions[0].parts[0].environment").value("home"))
+            .andExpect(jsonPath("$.sessions[0].parts[1].playbackId").value(idOf(2)))
+            .andExpect(jsonPath("$.sessions[0].parts[1].endedAt").value(start.plusSeconds(700).toString()));
+    }
+
+    @Test
+    void aSingleReportIsAOnePartChartRow() throws Exception {
+        ObjectNode filmLength = report(finalCut, 4);
+        filmLength.put("watchedMs", 200_000);
+        send(ID, filmLength);
+
+        mvc.perform(get("/api/admin/playback-health/chart"))
+            .andExpect(jsonPath("$.sessions[0].endedAt").value(NOW.toString()))
+            .andExpect(jsonPath("$.sessions[0].parts.length()").value(1))
+            .andExpect(jsonPath("$.sessions[0].parts[0].playbackId").value(ID))
+            .andExpect(jsonPath("$.sessions[0].parts[0].watchedMs").value(200_000));
     }
 
     @Test

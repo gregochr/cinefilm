@@ -28,13 +28,13 @@ class HealthRulesTest {
         "netErrors", "timeouts", "kbpsSamples", "rungMs", "minutes", "client"};
 
     private static final String[] NULLABLE_TOP_LEVEL = {"operator", "latencyMs", "engine", "startupMs", "kbpsLow",
-        "kbpsMedian", "kbpsHigh"};
+        "kbpsMedian", "kbpsHigh", "startPositionMs", "endPositionMs"};
 
     /** Every figure at the top level except seq and editionId (those start at 1), nullable or not. */
     private static final String[] FIGURES = {"elapsedMs", "latencyMs", "startupMs", "watchedMs", "stallCount",
         "stallMs", "longestStallMs", "seekCount", "seekWaitMs", "reloadCount", "reloadMs", "reconnectCount",
         "reconnectMs", "recoveries", "stepsDown", "stepsUp", "netErrors", "timeouts", "kbpsLow", "kbpsMedian",
-        "kbpsHigh", "kbpsSamples"};
+        "kbpsHigh", "kbpsSamples", "startPositionMs", "endPositionMs"};
 
     private static void assertValid(ObjectNode node) {
         assertThatCode(() -> HealthRules.validate(report(node))).doesNotThrowAnyException();

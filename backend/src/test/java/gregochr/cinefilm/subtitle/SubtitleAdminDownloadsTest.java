@@ -136,7 +136,7 @@ class SubtitleAdminDownloadsTest extends ForcedDownloadTestBase {
     }
 
     @Test
-    void theOwnerCanVerifyANudgeAndUnverifyADownloadToo() {
+    void aNudgeKeepsADownloadsCheckAndUnverifyTakesItAway() {
         Film film = film();
         SubtitleSidecar download = download(film, 5012);
 
@@ -144,7 +144,7 @@ class SubtitleAdminDownloadsTest extends ForcedDownloadTestBase {
         SidecarDto nudged = admin.offset(download.getId(), new OffsetRequest(500));
         assertThat(nudged.offsetMs()).isEqualTo(500);
         assertThat(nudged.offsetSource()).isEqualTo("OWNER");
-        assertThat(nudged.verified()).isFalse();
+        assertThat(nudged.verified()).isTrue();
         assertThat(admin.unverify(download.getId()).verified()).isFalse();
     }
 
