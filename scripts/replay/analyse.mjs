@@ -393,9 +393,10 @@ function screenLines({ screen, fetched, report, before }) {
 }
 
 /**
- * The lines of the whole analysis of one run: `{ name, heading, samples, requests, delivered, report, record,
- * start }`, where `heading` is the first line of its summary and `delivered` is the stand-in's count of the bytes it
- * let through in each replay minute (`delivered.json`).
+ * The lines of the whole analysis of one run: `{ name, heading, samples, requests, delivered, report, record, start,
+ * viewings }`, where `heading` is the first line of its summary, `delivered` is the stand-in's count of the bytes it
+ * let through in each replay minute (`delivered.json`) and `viewings` is how many viewings the player started, 1 by
+ * default.
  */
 export function describe({ name, heading, samples, requests, delivered, report, record, start, viewings = 1 }) {
   const link = linkByMinute(samples);

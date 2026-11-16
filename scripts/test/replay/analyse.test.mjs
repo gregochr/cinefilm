@@ -281,6 +281,12 @@ describe('section 3: the six bad spells', () => {
     assert.equal(figures(report, samplesTo(8))[0].lowest, 30);
   });
 
+  test('the lowest point can be well above 100 s: it starts from no figure at all', () => {
+    const high = samplesTo(8).map((s) => ({ ...s, ahead: 250 }));
+    assert.equal(figures(reportOf(0), high)[0].lowest, 250);
+    assert.equal(figures(reportOf(0), samplesTo(8).map((s) => ({ ...s, ahead: 2500 })))[0].lowest, 2500);
+  });
+
   test('the lowest point is the least sample, rounded to whole seconds', () => {
     const lowAt = (ahead) => inOrder([...samplesTo(8), at(6 * 60000 + 30000, { ahead })]);
     assert.equal(figures(reportOf(0), lowAt(1.4))[0].lowest, 1);
@@ -397,7 +403,7 @@ describe('section 3: the six bad spells', () => {
     assert.equal(leftOut(report, samplesTo(8))[0].why, 'the health report has no row for minute 4');
   });
 
-  test('a row with fewer than seven figures, or a figure that is not a finite number, is not a row', () => {
+  test('a row with fewer than seven figures, or any figure not a finite number, is not a row (each place)', () => {
     const why = (minute) => `the health report has no row for minute ${minute}`;
     const bad = [[6, 0, 5, 0, 700, 20], [6, 0, 5, 0, '700', 20, 6], [6, 0, 5, 0, null, 20, 6], [6, 0, 5, 0, NaN, 20, 6],
       [6, 0, 5, 0, 700, Infinity, 6], [6], []];
@@ -407,6 +413,23 @@ describe('section 3: the six bad spells', () => {
     }
     const before = rows(0).map((r) => (r[0] === 4 ? [4] : r));
     assert.deepEqual(leftOut({ elapsedMs: 600000, minutes: before }, samplesTo(8)), [{ ...FIRST, why: why(4) }]);
+
+    // Every one of the seven places, one bad figure at a time.
+    // [index of the one bad figure, its value]; the row is [6, 0, 5, 0, 700, 20, 6] otherwise.
+    const cases = [
+      [0, '6'], [0, null], [1, '0'], [1, NaN], [2, null], [2, undefined], [3, NaN], [3, '0'], [4, '700'], [4, null],
+      [5, Infinity], [5, '20'], [6, '6'], [6, null], [6, NaN],
+    ];
+    for (const [index, value] of cases) {
+      const row = [6, 0, 5, 0, 700, 20, 6];
+      row[index] = value;
+      const minutes = rows(0).map((r) => (r[0] === 6 ? row : r));
+      assert.deepEqual(
+        leftOut({ elapsedMs: 600000, minutes }, samplesTo(8)), [{ ...FIRST, why: why(6) }],
+        `figure ${index} is ${String(value)}`,
+      );
+    }
+    assert.equal(figures({ elapsedMs: 600000, minutes: rows(0) }, samplesTo(8)).length, 1);
   });
 
   test('a row that is not a list, and one with more than seven figures, are read for what they are', () => {
