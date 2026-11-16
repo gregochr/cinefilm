@@ -303,7 +303,9 @@ describe('section 3: the six bad spells', () => {
   });
 
   test('a spell whose only samples say nothing of the film in hand is left out, with reason 4', () => {
-    const samples = [at(1000), at(5 * 60000 + 1000, { ahead: null }), at(7 * 60000, { ahead: NaN }), at(8 * 60000 + 1000)];
+    const samples = [
+      at(1000), at(5 * 60000 + 1000, { ahead: null }), at(7 * 60000, { ahead: NaN }), at(8 * 60000 + 1000),
+    ];
     assert.deepEqual(figures(reportOf(0), samples), []);
     assert.deepEqual(leftOut(reportOf(0), samples), [{ ...FIRST, why: 'no sample was taken in it' }]);
   });
@@ -330,7 +332,7 @@ describe('section 3: the six bad spells', () => {
     assert.equal(figures(reportOf(0), samples)[0].meanLink, 500);
   });
 
-  test('a spell is in the run only when the samples covered every minute of it: 479,999 ms is short of minutes 5 to 7', () => {
+  test('a spell is in the run only when the samples covered all of it: 479,999 ms is short of minutes 5 to 7', () => {
     const upTo = (ms) => [at(1000, { ahead: 30 }), at(5 * 60000 + 1000, { ahead: 30 }), at(ms, { ahead: 30 })];
     assert.deepEqual(figures(reportOf(0), upTo(479999)), []);
     assert.deepEqual(leftOut(reportOf(0), upTo(479999)), []);
@@ -386,12 +388,38 @@ describe('section 3: the six bad spells', () => {
 
   test('a row missing is named by its record minute for a run that began at another one', () => {
     const report = { elapsedMs: 600000, minutes: rows(4).filter((row) => row[0] !== 1) };
-    assert.deepEqual(leftOut(report, samplesTo(4), 4), [{ ...FIRST, why: 'the health report has no row for minute 5' }]);
+    const why = 'the health report has no row for minute 5';
+    assert.deepEqual(leftOut(report, samplesTo(4), 4), [{ ...FIRST, why }]);
   });
 
   test('the first row missing is the one named', () => {
     const report = { elapsedMs: 600000, minutes: rows(0).filter((row) => row[0] !== 4 && row[0] !== 6) };
     assert.equal(leftOut(report, samplesTo(8))[0].why, 'the health report has no row for minute 4');
+  });
+
+  test('a row with fewer than seven figures, or a figure that is not a finite number, is not a row', () => {
+    const why = (minute) => `the health report has no row for minute ${minute}`;
+    const bad = [[6, 0, 5, 0, 700, 20], [6, 0, 5, 0, '700', 20, 6], [6, 0, 5, 0, null, 20, 6], [6, 0, 5, 0, NaN, 20, 6],
+      [6, 0, 5, 0, 700, Infinity, 6], [6], []];
+    for (const row of bad) {
+      const minutes = rows(0).map((r) => (r[0] === 6 ? row : r));
+      assert.deepEqual(leftOut({ elapsedMs: 600000, minutes }, samplesTo(8)), [{ ...FIRST, why: why(6) }], String(row));
+    }
+    const before = rows(0).map((r) => (r[0] === 4 ? [4] : r));
+    assert.deepEqual(leftOut({ elapsedMs: 600000, minutes: before }, samplesTo(8)), [{ ...FIRST, why: why(4) }]);
+  });
+
+  test('a row that is not a list, and one with more than seven figures, are read for what they are', () => {
+    const minutes = [...rows(0).map((r) => (r[0] === 7 ? [...r, 'extra'] : r)), null, 'x', { 0: 1 }];
+    assert.equal(figures({ elapsedMs: 600000, minutes }, samplesTo(8)).length, 1);
+  });
+
+  test('a rung code that is not a rung adds nothing to the rungs fetched', () => {
+    const withRungs = (codes) => rows(0).map((r, i) => (i === 0 ? r : [...r.slice(0, 6), codes[i - 1]]));
+    const fetched = (codes) => figures({ elapsedMs: 600000, minutes: withRungs(codes) }, samplesTo(8))[0].fetched;
+    assert.deepEqual(fetched([0, 99, 5]), ['360p']);
+    assert.deepEqual(fetched([6, 0, 5]), ['240p', '360p']);
+    assert.deepEqual(fetched([5, 5, 5]), ['360p']);
   });
 
   test('a spell with no sample in its minutes is left out, with reason 4', () => {
@@ -409,6 +437,31 @@ describe('section 3: the six bad spells', () => {
     assert.match(why({ elapsedMs: 600000, minutes: noRow }, noSamples), /no row for minute 6/);
     assert.match(why({ elapsedMs: 600000, minutes: rows(0) }, noSamples), /no sample was taken in it/);
     assert.match(why({ minutes: rows(0) }, noSamples), /does not say how long it covers/);
+  });
+
+  test('when the player started more than one viewing every spell in the run is left out, with that reason', () => {
+    const report = { elapsedMs: 1500000, minutes: [] };
+    const samples = samplesTo(25);
+    const why = 'the player started 2 viewings';
+    assert.deepEqual(spellsLeftOut({ report, samples, start: 0, viewings: 2 }), [
+      { ...FIRST, why }, { first: 12, last: 23, why },
+    ]);
+    assert.deepEqual(spellFigures({ report: reportOf(0), samples, record, start: 0, viewings: 2 }), []);
+    assert.equal(spellsLeftOut({ report, samples, start: 0, viewings: 3 })[0].why, 'the player started 3 viewings');
+  });
+
+  test('one viewing compares as before, with it given or not', () => {
+    const run = { report: reportOf(0), samples: samplesTo(8), record, start: 0 };
+    assert.equal(spellFigures({ ...run, viewings: 1 }).length, 1);
+    assert.equal(spellFigures(run).length, 1);
+    assert.deepEqual(spellsLeftOut({ report: reportOf(0), samples: samplesTo(8), start: 0, viewings: 1 }), []);
+  });
+
+  test('the viewings reason is checked before the other four', () => {
+    const noElapsed = { minutes: [] };
+    assert.equal(spellsLeftOut({ report: noElapsed, samples: samplesTo(8), start: 0, viewings: 2 })[0].why,
+      'the player started 2 viewings');
+    assert.match(spellsLeftOut({ report: noElapsed, samples: samplesTo(8), start: 0 })[0].why, /does not say how long/);
   });
 
   test('a spell the run did not complete is neither compared nor left out', () => {
@@ -505,7 +558,8 @@ describe('describe: the lines of an analysis', () => {
       '  in all: 69 s',
       '',
       '== 3. The six bad spells ==',
-      '  minutes 5-7: mean link 1500 kbit/s, banked going in 90 s, lowest 30 s, stalled 1 s (12 Nov 7 s), fetched 360p, 240p',
+      '  minutes 5-7: mean link 1500 kbit/s, banked going in 90 s, lowest 30 s, stalled 1 s (12 Nov 7 s), '
+        + 'fetched 360p, 240p',
       '',
       '== 4. Screen, rungs and bytes ==',
       '  240p on screen 85 s, 0 s of it with the link at 2 Mbit/s or more; 360p on screen with the link at 2 Mbit/s or more: 0 s',
@@ -537,12 +591,48 @@ describe('describe: section 3 with a spell that is compared and one that is left
     minutes: [[4, 0, 4, 0, 0, 90, 4], [5, 0, 5, 0, 500, 60, 5], [6, 0, 5, 0, 700, 20, 6], [7, 0, 5, 0, 0, 40, 5]],
   };
 
+  test('the lines follow the order of the spells even when an earlier one is left out and a later one compared', () => {
+    const later = { ...report, minutes: Array.from({ length: 13 }, (_, i) => [11 + i, 0, 5, 0, 0, 60, 5]) };
+    const lines = describeRun({
+      name: 'order', heading: 'h', samples, requests: [], delivered: [], report: later, record, start: 0,
+    });
+    const at3 = lines.indexOf('== 3. The six bad spells ==');
+    assert.deepEqual(lines.slice(at3 + 1, at3 + 3), [
+      '  minutes 5-7: not compared: the health report has no row for minute 4',
+      '  minutes 12-23: mean link 1500 kbit/s, banked going in 60 s, lowest 30 s, stalled 0 s (12 Nov 0 s), '
+        + 'fetched 360p',
+    ]);
+  });
+
+  test('with more than one viewing section 1 says so and every spell is left out; with one it does not', () => {
+    const run = { name: 'v', heading: 'h', samples, requests: [], delivered: [], report, record, start: 0 };
+    const two = describeRun({ ...run, viewings: 2 });
+    const at1 = two.indexOf('== 1. Was the run sound? ==');
+    assert.equal(
+      two[at1 + 1],
+      '  the player started 2 viewings: the report is the last one\'s alone, so no spell is compared '
+        + 'and the totals of the replay in section 4 are that viewing\'s only',
+    );
+    const at3 = two.indexOf('== 3. The six bad spells ==');
+    assert.deepEqual(two.slice(at3 + 1, at3 + 3), [
+      '  minutes 5-7: not compared: the player started 2 viewings',
+      '  minutes 12-23: not compared: the player started 2 viewings',
+    ]);
+    for (const lines of [describeRun({ ...run, viewings: 1 }), describeRun(run)]) {
+      assert.equal(lines.some((line) => line.includes('viewings: the report')), false);
+      assert.equal(lines[lines.indexOf('== 1. Was the run sound? ==') + 1].startsWith('  samples:'), true);
+    }
+  });
+
   test('each spell in the run has one line, in the order of the spells, the left-out one as specified', () => {
-    const lines = describeRun({ name: 'two', heading: 'h', samples, requests: [], delivered: [], report, record, start: 0 });
+    const lines = describeRun({
+      name: 'two', heading: 'h', samples, requests: [], delivered: [], report, record, start: 0,
+    });
     const at3 = lines.indexOf('== 3. The six bad spells ==');
     assert.deepEqual(lines.slice(at3, at3 + 3), [
       '== 3. The six bad spells ==',
-      '  minutes 5-7: mean link 1500 kbit/s, banked going in 90 s, lowest 30 s, stalled 1 s (12 Nov 7 s), fetched 360p, 240p',
+      '  minutes 5-7: mean link 1500 kbit/s, banked going in 90 s, lowest 30 s, stalled 1 s (12 Nov 7 s), '
+        + 'fetched 360p, 240p',
       '  minutes 12-23: not compared: the health report has no row for minute 11',
     ]);
     assert.equal(lines[at3 + 3], '', 'no spell beyond the two that are in the run');
@@ -605,7 +695,7 @@ describe('analyseRun on a run\'s files', () => {
     'requests.json': JSON.stringify(requests),
     'delivered.json': JSON.stringify([1000]),
     'samples.json': JSON.stringify(samples),
-    'health.json': JSON.stringify({ final: { report } }),
+    'health.json': JSON.stringify({ viewings: 1, final: { report } }),
     'summary.txt': `${HEADING}\nrest\n`,
   };
   const expected = (name, heading, start) => describeRun({
@@ -619,6 +709,22 @@ describe('analyseRun on a run\'s files', () => {
     const lines = analyseRun(name, tmp);
     assert.deepEqual(lines, expected(name, HEADING, 24));
     assert.ok(lines.includes(`${THIN}24:300/0`), 'minute 24 is named');
+  });
+
+  test('a run in which the player started more than one viewing says so in section 1', () => {
+    const name = writeRun({ ...good, 'health.json': JSON.stringify({ viewings: 2, final: { report } }) });
+    const lines = analyseRun(name, tmp);
+    assert.ok(lines.some((line) => line.startsWith('  the player started 2 viewings: the report is the last one')));
+  });
+
+  test('a health.json that does not say how many viewings is refused', () => {
+    const message = 'health.json does not say how many viewings the player started';
+    for (const viewings of [undefined, 0, 1.5, -1, '1', null, true]) {
+      const health = JSON.stringify({ viewings, final: { report } });
+      assert.throws(() => analyseRun(writeRun({ ...good, 'health.json': health }), tmp), { message }, String(viewings));
+    }
+    const name = writeRun({ ...good, 'health.json': JSON.stringify({ viewings: 3, final: { report } }) });
+    assert.doesNotThrow(() => analyseRun(name, tmp));
   });
 
   test('a run with no summary file is read from record minute 0, and says so in a first line of its own', () => {
@@ -663,13 +769,13 @@ describe('analyseRun on a run\'s files', () => {
   test('a report with no minute rows is read as having none', () => {
     const bare = { ...report };
     delete bare.minutes;
-    const name = writeRun({ ...good, 'health.json': JSON.stringify({ final: { report: bare } }) });
+    const name = writeRun({ ...good, 'health.json': JSON.stringify({ viewings: 1, final: { report: bare } }) });
     assert.deepEqual(analyseRun(name, tmp), expected(name, HEADING, 24));
   });
 
   test('minute rows that are not lists are left out, and a sample with no time is refused', () => {
     const odd = { ...report, minutes: [null, 5, 'x', { 0: 1 }] };
-    const name = writeRun({ ...good, 'health.json': JSON.stringify({ final: { report: odd } }) });
+    const name = writeRun({ ...good, 'health.json': JSON.stringify({ viewings: 1, final: { report: odd } }) });
     assert.deepEqual(analyseRun(name, tmp), expected(name, HEADING, 24));
     const message = 'samples.json holds a sample with no time, or one out of range';
     for (const bad of ['[{"kbps":1}]', '[{"ms":"5"}]', '[{"ms":null}]', '[{"ms":-1}]', '[{"ms":1000000001}]']) {

@@ -221,7 +221,9 @@ reading, so a buffer that emptied and recovered inside a minute showed as never 
 least of the driver's five-second samples in the spell. And a spell was taken as covered once the samples reached
 its end, though the last health report, where its stalled seconds come from, can stop up to a minute earlier in
 a run that was stopped: a spell now needs that report to reach its end too and to have a row for each of its
-minutes. A spell is compared whole or not at all, and one that is left out is named with the reason.
+minutes. A spell is compared whole or not at all, and one that is left out is named with the reason. The review
+of that fix added a case: when the player started a second viewing, the report is that viewing's alone and counts
+its minutes from its own start, so no spell is compared and the analysis's first section says why.
 
 ## What nobody will have verified when both are merged
 

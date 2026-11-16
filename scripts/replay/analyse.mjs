@@ -7,8 +7,8 @@
 //    falls behind the clock outside a stall, means the machine was too busy and the run proves nothing.
 // 2. Gaps of over 30 s in which no segment was being fetched (the player had as much as it wanted).
 // 3. The six bad spells: the buffer going in, its lowest point (the least of the five-second samples taken in it),
-//    seconds stalled beside 12 November. A spell is compared whole or not at all: one the health report does not cover
-//    from the minute before it to its end is listed with the reason it was left out.
+//    seconds stalled beside 12 November. A spell is compared whole or not at all: one that cannot be compared whole is
+//    listed with the reason it was left out.
 // 4. What the screen showed against the link, the rungs beside 12 November, the bytes fetched.
 //
 // The sums are exported functions over a run's data (what the driver wrote to scripts/replay/out/<name>/); the
@@ -188,10 +188,15 @@ function describeGap(next, previous, lastEnd, samples, link) {
 
 // ---- 3. the six bad spells ---------------------------------------------------------------------------------------
 
-// The report's rows by replay minute (a row is a list; its first figure is the minute).
+// The report's rows by replay minute. A row counts only when it is a list whose first seven figures are all finite
+// numbers (the first is the minute); anything else is not a row, so a spell that needs it is left out.
 function rowsOf(report) {
-  const minuteRows = Array.isArray(report.minutes) ? report.minutes.filter(Array.isArray) : [];
+  const minuteRows = Array.isArray(report.minutes) ? report.minutes.filter(isRow) : [];
   return new Map(minuteRows.map((row) => [row[0], row]));
+}
+
+function isRow(row) {
+  return Array.isArray(row) && row.length >= 7 && row.slice(0, 7).every(Number.isFinite);
 }
 
 // The samples taken in replay minutes `from` to `to` (the whole of each) that say how much film was in hand.
@@ -203,7 +208,8 @@ function samplesIn(samples, from, to) {
 }
 
 // Why a spell that is in the run cannot be compared whole, or null when it can. The first check that holds counts.
-function whyLeftOut({ first, last, rows, report, samples, start }) {
+function whyLeftOut({ first, last, rows, report, samples, start, viewings }) {
+  if (viewings > 1) return `the player started ${viewings} viewings`;
   if (!isTime(report.elapsedMs)) return 'the last health report does not say how long it covers';
   if (last - start >= Math.floor(report.elapsedMs / 60000)) {
     return `the last health report ends ${Math.floor(report.elapsedMs / 1000)} s into the run, before the spell does`;
@@ -216,42 +222,43 @@ function whyLeftOut({ first, last, rows, report, samples, start }) {
 }
 
 // Each spell that is in the run, as { first, last, why }: `why` is null when it can be compared.
-function judgeSpells({ report, samples, start }) {
-  // The minutes completed: a spell is in the run only when it began after the first minute and ended before the last.
+function judgeSpells({ report, samples, start, viewings }) {
+  // A spell is in the run when it began after the first minute and its last minute is one the samples completed.
   const sampled = Math.floor(samples[samples.length - 1].ms / 60000);
   const rows = rowsOf(report);
   const judged = [];
   for (const [first, last] of SPELLS) {
     if (first - start < 1 || last - start >= sampled) continue;
-    judged.push({ first, last, why: whyLeftOut({ first, last, rows, report, samples, start }) });
+    judged.push({ first, last, why: whyLeftOut({ first, last, rows, report, samples, start, viewings }) });
   }
   return judged;
 }
 
 /**
  * The spells of the run that are compared, in the order of the spells. A spell is in the run when it began after
- * the run's first minute and ended before the last minute the samples completed; it is compared whole or not at all
- * (see `spellsLeftOut`). Each is the mean link, the seconds banked going in (from the report's row for the minute
- * before it), the lowest point (the least of the five-second samples taken in it, rounded), the ms stalled now and on
- * 12 November, and the rungs fetched.
+ * the run's first minute and its last minute is one the samples completed; it is compared whole or not at all (see
+ * `spellsLeftOut`; `viewings` is how many the player started, 1 by default). Each is the mean link, the seconds
+ * banked going in (from the report's row for the minute before it), the lowest point (the least of the five-second
+ * samples taken in it, rounded), the ms stalled now and on 12 November, and the rungs fetched.
  */
-export function spellFigures({ report, samples, record, start }) {
+export function spellFigures({ report, samples, record, start, viewings = 1 }) {
   const rows = rowsOf(report);
   const old = rowsByMinute(record);
   const link = linkByMinute(samples);
-  return judgeSpells({ report, samples, start })
+  return judgeSpells({ report, samples, start, viewings })
     .filter((spell) => spell.why === null)
     .map(({ first, last }) => oneSpell({ first, last, rows, old, link, samples, start }));
 }
 
 /**
  * The spells that are in the run but are not compared, as `{ first, last, why }`, in the order of the spells. A spell
- * not in the run is in neither this nor `spellFigures`. The reason is the first of these that holds: the last health
- * report does not say how long it covers (`elapsedMs`); it ends before the spell does; it has no row for a minute
- * from the one before the spell to its last; no sample was taken in the spell.
+ * not in the run is in neither this nor `spellFigures`. The reason is the first of these five that holds: the
+ * player started more than one viewing (the report is the last one's alone); the last health report does not say how
+ * long it covers (`elapsedMs`); it ends before the spell does; it has no row for a minute from the one before the
+ * spell to its last; no sample was taken in the spell.
  */
-export function spellsLeftOut({ report, samples, start }) {
-  return judgeSpells({ report, samples, start })
+export function spellsLeftOut({ report, samples, start, viewings = 1 }) {
+  return judgeSpells({ report, samples, start, viewings })
     .filter((spell) => spell.why !== null)
     .map(({ first, last, why }) => ({ first, last, why }));
 }
@@ -266,9 +273,10 @@ function oneSpell({ first, last, rows, old, link, samples, start }) {
     sum += link.get(m - start) ?? 0;
     stalledThen += (old.get(m) ?? [0, 0, 0, 0, 0])[4];
     stalled += row[4];
-    fetched.add(RUNG[row[6]]);
+    if (RUNG[row[6]]) fetched.add(RUNG[row[6]]); // a code that is no rung (0: none known) adds nothing
   }
-  const lowest = Math.min(...samplesIn(samples, first - start, last - start).map((s) => s.ahead));
+  const inSpell = samplesIn(samples, first - start, last - start);
+  const lowest = inSpell.reduce((least, s) => Math.min(least, s.ahead), Infinity);
   return {
     first, last, meanLink: Math.round(sum / (last - first + 1)), goingIn: rows.get(first - start - 1)[5],
     lowest: Math.round(lowest), stalled, stalledThen, fetched: [...fetched],
@@ -316,9 +324,13 @@ export function rungsAndBytes(requests) {
 
 // ---- the words ---------------------------------------------------------------------------------------------------
 
-function soundLines(s) {
+function soundLines(s, viewings) {
   const { gaps, lag, delivery } = s;
   const lines = ['', '== 1. Was the run sound? =='];
+  if (viewings > 1) {
+    lines.push(`  the player started ${viewings} viewings: the report is the last one's alone, so no spell is compared `
+      + "and the totals of the replay in section 4 are that viewing's only");
+  }
   lines.push(`  samples: ${gaps.samples}, longest gap ${gaps.longest} ms, gaps over 6.5 s: ${gaps.long} `
     + '(a long gap is a busy or sleeping machine)');
   lines.push(`  samples not playing after the first 20 s: ${s.notPlaying.length}`);
@@ -385,14 +397,15 @@ function screenLines({ screen, fetched, report, before }) {
  * start }`, where `heading` is the first line of its summary and `delivered` is the stand-in's count of the bytes it
  * let through in each replay minute (`delivered.json`).
  */
-export function describe({ name, heading, samples, requests, delivered, report, record, start }) {
+export function describe({ name, heading, samples, requests, delivered, report, record, start, viewings = 1 }) {
   const link = linkByMinute(samples);
   return [
     `${name}: ${heading}`,
-    ...soundLines(soundness({ samples, delivered, start })),
+    ...soundLines(soundness({ samples, delivered, start }), viewings),
     ...idleLines(idleGaps(requests, samples, link), start),
     ...spellLines([
-      ...spellFigures({ report, samples, record, start }), ...spellsLeftOut({ report, samples, start }),
+      ...spellFigures({ report, samples, record, start, viewings }),
+      ...spellsLeftOut({ report, samples, start, viewings }),
     ].sort((a, b) => a.first - b.first)),
     ...screenLines({
       screen: screenAgainstLink(samples), fetched: rungsAndBytes(requests), report, before: record.report,
@@ -452,8 +465,13 @@ export function analyseRun(name, root) {
   const requests = readJson(dir, 'requests.json');
   const samples = readJson(dir, 'samples.json');
   const delivered = readJson(dir, 'delivered.json');
-  const report = readJson(dir, 'health.json')?.final?.report;
+  const health = readJson(dir, 'health.json');
+  const report = health?.final?.report;
   if (!isObject(report)) throw new Error('no health report in this run: nothing to analyse');
+  const viewings = health.viewings;
+  if (!Number.isInteger(viewings) || viewings < 1) {
+    throw new Error('health.json does not say how many viewings the player started');
+  }
   requireObjects(samples, 'samples.json');
   requireObjects(requests, 'requests.json');
   if (samples.length === 0) throw new Error('no samples in this run: nothing to analyse');
@@ -467,7 +485,7 @@ export function analyseRun(name, root) {
   const heading = summary.split('\n').find((line) => line.startsWith('Replay')) ?? '(no summary line)';
   const start = startOf(summary);
   const lines = describe({
-    name, heading, samples, requests, delivered, report, record: loadRecord(), start: start ?? 0,
+    name, heading, samples, requests, delivered, report, record: loadRecord(), start: start ?? 0, viewings,
   });
   return start === null ? [NO_SUMMARY, ...lines] : lines;
 }

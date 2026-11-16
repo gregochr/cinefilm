@@ -64,10 +64,10 @@ written as numbers would still be reached; the app asks for none.)
 
 Once the driver has looked at the film for the first time, five seconds in, Ctrl-C ends a replay early and
 still writes its results. In a terminal the same Ctrl-C reaches Chrome too, so the player's last report may not
-be sent: the summary then uses the last one it sent by itself, which can be some seconds old. Before that first
-look a Ctrl-C just stops the run and nothing is written, so an earlier run of the same name stays as it was. A
-second Ctrl-C quits at once and writes nothing; Chrome's throwaway profile may then be left in the folder it was
-made in (`--tmp`, by default the system's temporary folder).
+be sent: the summary then uses the last one it sent by itself, which can be up to about a minute old (the player
+sends one a minute). Before that first look a Ctrl-C just stops the run and nothing is written, so an earlier run
+of the same name stays as it was. A second Ctrl-C quits at once and writes nothing; Chrome's throwaway profile
+may then be left in the folder it was made in (`--tmp`, by default the system's temporary folder).
 
 The driver ends with code 0 when the run reached its end or was stopped by a Ctrl-C (also when Chrome went away
 with that same Ctrl-C), and 130 after a second Ctrl-C. It ends with 1 when it failed with no Ctrl-C behind it:
@@ -118,11 +118,13 @@ beside 12 November.
 
 A spell is compared whole or not at all. The run must cover it from the minute before it to the end of its last
 minute, by the samples and by the player's last health report, which is where its stalled seconds come from. A
-spell the samples cover is named and left out, with the reason, when that report stops short of its end or has
-no row for one of those minutes, or when no sample was taken in it. Two things follow. A run that was stopped has only
-the last report the player sent while playing, which can be a minute old. And a finished run's last report ends
-about a tenth of a second short of the run's last minute, so to compare a spell, run from the minute before it to
-the minute after it.
+spell the samples cover is named and left out, with the reason, in five cases: the player started more than one
+viewing (the report is then the last one's alone, and the first section says so too); the report does not say
+how long it covers; it stops short of the spell's end; it has no row for one of those minutes; or no sample was
+taken in the spell. Two things follow. A run that was stopped may have only the last report the player sent
+while playing, which can be up to about a minute old. And a finished run's last report ends about a tenth of a
+second short of the run's last minute, so to compare a spell, run from the minute before it to the minute after
+it.
 
 It reads which record minute the run started at from the first line of the run's `summary.txt`; when that line
 is missing it says so in a warning and reads the run as starting at minute 0.
