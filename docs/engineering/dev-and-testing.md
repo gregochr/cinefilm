@@ -341,6 +341,10 @@ Codex's review quota is small and shared by local and PR runs; it ran out twice 
    It never gets the planner's conclusions or Sonnet's report, only the code and the rules. Its findings go to Sonnet
    in one round. The reviewer runs again on that fix only, until it reports nothing.
 
+   **A round with nothing but nits** (wording, comments, naming, where a test sits: no bug, no test that would pass
+   on wrong code, no rule broken) is fixed and pushed without another review (owner, 2026-11-15). Green CI and
+   Codex's review of the PR still gate the merge.
+
 **Then:** push. Codex reviews the PR when it opens. After that:
 
 - **All of one Codex review's findings go into one fix push** (through steps 1–3 again), and `@codex review` is
@@ -357,6 +361,26 @@ Codex's review quota is small and shared by local and PR runs; it ran out twice 
 History: until 2026-11-12, local Codex ran before every push (two clean runs in a row, then one). It caught real
 issues (#128) but used up the quota. On #129 it also passed a service with no unit test that the PR's Codex then
 flagged: local Codex is not an `AGENTS.md` audit, which is why steps 2 and 3 exist.
+
+### Keeping a change short
+
+Review rounds and waiting, not coding, are most of the time a change takes, and both grow with the size of the diff:
+#186 (about 3,900 lines) went through eight review rounds over many hours. The owner asked on 2026-11-16 for later
+plans to take less time without lowering quality. None of this drops a check: the gates, the fresh reviewer and
+Codex's clean review of the exact head commit stay.
+
+- **A PR is 1,500 changed lines or fewer, tests included** (additions plus deletions, as GitHub counts them; owner,
+  2026-11-16). A plan splits a phase that would be bigger, and says at the start how many PRs it needs and roughly
+  how long they will take. The target before was half of phase 4a's size (#118, about 8,000 lines), which allowed
+  about 4,000.
+- **Each round fixes bugs and what Codex blocks on.** A nit is fixed in the same round when it is cheap, or dropped;
+  nits never start a round of their own (step 3 above).
+- **A later phase may be built while the one before waits on CI or Codex**, in its own worktree, only when the two
+  touch different files (owner, 2026-11-15). It is still updated from `main` before it merges when `main` has moved
+  (`CLAUDE.md` step 6).
+- **A by-hand check that takes real time** (a film played through, a replay) runs once, on the commit about to be
+  pushed, and again only after a fix that changes what it checks.
+- **The planner tells the owner early** when a change will take hours, not after being asked.
 
 ### Planner's test-class check (every diff review)
 
