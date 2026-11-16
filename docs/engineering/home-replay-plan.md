@@ -45,7 +45,7 @@ Nothing in the app, its image or its tests depends on it, and that stays so: `sc
      quality` when the quality is missing or is no quality CineFilm knows, `Quality not available for this film`
      for one it knows that this ladder lacks (1080p), `Invalid probe` for a negative probe. Anything the stand-in
      cannot read (no body, a body that is not a JSON object, a quality that is not text, a probe that is not a
-     number or is too large to be an exact whole number) is `Invalid request`. How the real server's JSON reader
+     number or is outside the safe-integer range) is `Invalid request`. How the real server's JSON reader
      treats each of those, and a probe with a fraction (taken here as it is), was not checked.
    - A request whose body is cut off part-way changes nothing: no session is made and no report is kept. It is
      only logged, as cut short.
@@ -152,8 +152,9 @@ Tests, each named for the rule it pins, with exact values:
   fixture (`frontend/src/test/fixtures/film-heat.json`, on purpose: the rig reads that file, so a change to it
   should fail here) with one edition, nothing to resume, no subtitles and Auto. A session's answer; no quality, an
   unknown quality, 1080p, a negative probe, and each thing it cannot read are refused with the words decision 5
-  gives; a probe of 0 starts on the floor. A segment's type and exact size at weights 1 and 1.08; the last segment answers and the
-  one after it does not; an unknown session's 404 text; ending a session. The probe answers 206 with its range
+  gives; a probe of 0 starts on the floor. A segment's type and exact size at weights 1 and 1.08; the last
+  segment answers and the one after it does not; an unknown session's 404 text; ending a session. The probe
+  answers 206 with its range
   headers. A health report keeps its known figures, maps an unknown engine to `other`, drops the operator and
   any other key, keeps only well-formed minute rows, and one that is not JSON keeps only its length; one over
   64 KB is refused. Progress answers the number sent and 0 for anything else. An unknown write answers `null`
@@ -164,7 +165,8 @@ Tests, each named for the rule it pins, with exact values:
   holds an address. With a dead link and the clock started, a segment that was asked for has received nothing
   when, after `finish()`, an API answer arrives. A request whose body is cut off part-way is logged as cut short
   with nothing sent, leaves nothing on the link, makes no session and keeps no report. An answer with no body
-  whose player goes during the round trip, or while it waits for a dead link, is never sent. A weight outside 1 to 1.5 is refused. It listens on `127.0.0.1`.
+  whose player goes during the round trip, or while it waits for a dead link, is never sent. A weight outside 1
+  to 1.5 is refused. It listens on `127.0.0.1`.
 
 Before the pull request the refactored stand-in is also proved by hand: the scratch driver, pointed at it and
 not committed, plays one minute on a steady link with every request answered.

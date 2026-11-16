@@ -635,7 +635,8 @@ export async function startStandIn({
     rungs, segmentMs, segmentCount: env.segmentCount, requests: env.requests, healthReports: env.healthReports,
     port: bound.port, address: bound.address,
     // The link takes the trace's rate at once: what the open link had saved is cut to what that rate may save (a
-    // twentieth of a second of it, or 3,000 bytes; nothing at all when the rate is 0), not spent on the first answers.
+    // twentieth of a second of it or 3,000 bytes, whichever is more; nothing at all when the rate is 0), not spent
+    // on the first answers.
     startClock() {
       env.t0 = Date.now();
       env.link.advance(0);

@@ -1157,7 +1157,7 @@ describe('a request that is cut off', () => {
   });
 
   test('an answer whose player goes during its round trip is never written, and is logged as cut', async () => {
-    const standIn = await start({ rttMs: 120 });
+    const standIn = await start({ rttMs: 600 });
     const { sessionId } = await newSession(standIn, { quality: '360p' });
     standIn.startClock();
     const seen = open(standIn.port, { method: 'DELETE', path: `/api/sessions/${sessionId}` });
