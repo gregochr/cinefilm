@@ -86,8 +86,8 @@ public class TimingReferenceService {
      * @param creditsStartMs where credits detection found the credits start on the edition's timeline, or null
      * @param ownerPick true when the owner picked one of its files
      * @param files its forced files
-     * @param candidates the film's single-file full candidates with a plausible frame rate, in the order for this
-     *     edition's cut (a hearing-impaired file last)
+     * @param candidates the film's single-file full candidates with a plausible frame rate, a hearing-impaired file
+     *     strictly last (whatever its cut), the rest in the order for this edition's cut
      * @param referencesKept how many of the film's stored references are among its current full candidates
      * @param stored the film's stored references for this IMDb id by OpenSubtitles file id
      */
@@ -149,8 +149,10 @@ public class TimingReferenceService {
         List<OpenSubtitlesResult> all = OpenSubtitlesResult.listFromJson(ref.osFullCandidates());
         Set<Long> currentIds = all.stream().map(OpenSubtitlesResult::fileId).collect(Collectors.toSet());
         int kept = (int) stored.keySet().stream().filter(currentIds::contains).count();
+        // A hearing-impaired file is fetched only when no other is left, ahead of cut affinity (a stable sort).
         List<OpenSubtitlesResult> ranked = OpenSubtitlesRanking.rankForFull(all.stream()
-            .filter(c -> c.isSingleFile() && TimingReferenceRule.plausibleFps(c)).toList(), edition.getName());
+            .filter(c -> c.isSingleFile() && TimingReferenceRule.plausibleFps(c)).toList(), edition.getName())
+            .stream().sorted(Comparator.comparing(OpenSubtitlesResult::hearingImpaired)).toList();
         return new Target(ref.id(), edition.getId(), edition.getName(), ref.imdbId(), edition.getRuntimeMs(),
             CreditsStarts.of(edition, credits), q.ownerPick(), q.files(), ranked, kept, stored);
     }

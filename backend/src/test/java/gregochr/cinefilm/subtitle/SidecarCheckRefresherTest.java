@@ -89,6 +89,9 @@ class SidecarCheckRefresherTest {
     @Mock
     private FullFitService fullFit;
 
+    @Mock
+    private TimingReferenceService timingReference;
+
     private final List<Runnable> queued = new ArrayList<>();
     private final Logger refresherLog = (Logger) LoggerFactory.getLogger(SidecarCheckRefresher.class);
     private final ListAppender<ILoggingEvent> logged = new ListAppender<>();
@@ -97,7 +100,8 @@ class SidecarCheckRefresherTest {
 
     @BeforeEach
     void setUp() {
-        refresher = new SidecarCheckRefresher(api, budget, references, service, fullFit, CLOCK, queued::add, limits,
+        refresher = new SidecarCheckRefresher(api, budget, references, service, fullFit,
+            timingReference, CLOCK, queued::add, limits,
             events);
         logged.start();
         refresherLog.addAppender(logged);
@@ -224,7 +228,8 @@ class SidecarCheckRefresherTest {
 
     @Test
     void anExecutorThatRefusesTheRunDoesNotLeaveTheServiceStuckRunning() {
-        SidecarCheckRefresher refusing = new SidecarCheckRefresher(api, budget, references, service, fullFit, CLOCK,
+        SidecarCheckRefresher refusing = new SidecarCheckRefresher(api, budget, references, service, fullFit,
+            timingReference, CLOCK,
             command -> {
                 throw new RejectedExecutionException("full");
             }, limits, events);
@@ -236,7 +241,8 @@ class SidecarCheckRefresherTest {
 
     /** The refresher on an executor that runs the work at once, so a trigger can arrive from inside a run. */
     private SidecarCheckRefresher synchronous() {
-        return new SidecarCheckRefresher(api, budget, references, service, fullFit, CLOCK, Runnable::run, limits,
+        return new SidecarCheckRefresher(api, budget, references, service, fullFit,
+            timingReference, CLOCK, Runnable::run, limits,
             events);
     }
 
@@ -528,8 +534,8 @@ class SidecarCheckRefresherTest {
             when(api.downloadsEnabled()).thenReturn(true);
             queued.clear();
 
-            SidecarCheckRefresher fresh = new SidecarCheckRefresher(api, budget, references, service, fullFit, CLOCK,
-                queued::add, limits, events);
+            SidecarCheckRefresher fresh = new SidecarCheckRefresher(api, budget, references, service, fullFit,
+                timingReference, CLOCK, queued::add, limits, events);
             fresh.startDue();
             queued.get(0).run();
 
@@ -594,8 +600,8 @@ class SidecarCheckRefresherTest {
             when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
             org.mockito.Mockito.doThrow(new OpenSubtitlesQuotaException(reset)).when(api).download(5011);
             when(api.downloadsEnabled()).thenReturn(true);
-            SidecarCheckRefresher fresh = new SidecarCheckRefresher(api, budget, references, service, fullFit, CLOCK,
-                queued::add, limits, events);
+            SidecarCheckRefresher fresh = new SidecarCheckRefresher(api, budget, references, service, fullFit,
+                timingReference, CLOCK, queued::add, limits, events);
 
             fresh.startDue();
             queued.get(0).run();

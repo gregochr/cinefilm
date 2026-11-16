@@ -118,6 +118,26 @@ class TimingReferenceRuleTest {
         assertThat(TimingReferenceRule.usable(300, 1_000, RUNTIME, null)).isTrue();
     }
 
+    private static TimingFit.Result fit(int matched, int served, int offsetMs) {
+        return new TimingFit.Result(TimingFit.Verdict.CHECK, offsetMs, 0, matched, served, 0, List.of());
+    }
+
+    @Test
+    void aReferenceMatchingThirtyPercentOfTheLinesStopsTheWalkAndTwoOfTenDoesNot() {
+        assertThat(TimingReferenceRule.matches(fit(3, 10, 0))).isTrue();
+        assertThat(TimingReferenceRule.matches(fit(2, 10, 0))).isFalse();
+        assertThat(TimingReferenceRule.matches(fit(30, 100, 0))).isTrue();
+        assertThat(TimingReferenceRule.matches(fit(29, 100, 0))).isFalse();
+    }
+
+    @Test
+    void aBestOffsetFurtherThanThirtySecondsEitherWayIsAnotherCutAndDoesNotStopTheWalk() {
+        assertThat(TimingReferenceRule.matches(fit(10, 10, 30_000))).isTrue();
+        assertThat(TimingReferenceRule.matches(fit(10, 10, -30_000))).isTrue();
+        assertThat(TimingReferenceRule.matches(fit(10, 10, 30_001))).isFalse();
+        assertThat(TimingReferenceRule.matches(fit(10, 10, -30_001))).isFalse();
+    }
+
     private static OpenSubtitlesReference reference(int cues, Long lastCueEndMs) {
         OpenSubtitlesReference reference = new OpenSubtitlesReference();
         reference.setCueCount(cues);

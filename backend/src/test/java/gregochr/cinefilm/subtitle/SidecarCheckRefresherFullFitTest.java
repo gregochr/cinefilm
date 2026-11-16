@@ -62,6 +62,9 @@ class SidecarCheckRefresherFullFitTest {
     private FullFitService fullFit;
 
     @Mock
+    private TimingReferenceService timingReference;
+
+    @Mock
     private ApplicationEventPublisher events;
 
     private final List<Runnable> queued = new ArrayList<>();
@@ -72,7 +75,8 @@ class SidecarCheckRefresherFullFitTest {
 
     @BeforeEach
     void setUp() {
-        refresher = new SidecarCheckRefresher(api, budget, references, service, fullFit, CLOCK, queued::add,
+        refresher = new SidecarCheckRefresher(api, budget, references, service, fullFit,
+            timingReference, CLOCK, queued::add,
             new FakeDailyLimit(LIMIT), events);
         logged.start();
         refresherLog.addAppender(logged);

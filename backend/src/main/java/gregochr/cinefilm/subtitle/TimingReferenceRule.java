@@ -19,12 +19,16 @@ final class TimingReferenceRule {
     static final long END_SLACK_MS = 60_000;
     /** With credits detected, a reference's last cue must end after the credits start minus this. */
     static final long CREDITS_SLACK_MS = 10 * 60_000L;
-    /** A reference matching fewer than this share of a forced file's lines is passed over for the next candidate. */
-    static final double MIN_SHARE = 0.30;
+    /** A reference matching fewer than this percentage of a forced file's lines is passed over (decision 38). */
+    static final int MIN_SHARE_PERCENT = 30;
+    /** A reference whose best fit is further out than this either way is another cut and is passed over. */
+    static final long MAX_OFFSET_MS = 30_000;
     /** Reference files kept per film and IMDb id for the timing check. */
     static final int MAX_REFERENCES = 3;
     /** Reference files fetched in one check run. */
     static final int MAX_FETCHES_PER_RUN = 2;
+    /** Reference files fetched in one UTC day, so 2d keeps most of the comparison share. */
+    static final int MAX_FETCHES_PER_DAY = 2;
     /** The frame rate of the library's films, and how far from it a stated rate may be (in thousandths). */
     static final double TARGET_FPS = 23.976;
     static final int FPS_TOLERANCE_MILLI = 10;
@@ -62,6 +66,18 @@ final class TimingReferenceRule {
             && !playsEmbedded
             && runtimeMs > 0
             && (partCount == 1 || files.stream().allMatch(FileFacts::wholeEdition));
+    }
+
+    /**
+     * Whether a reference fits a forced file well enough to stop looking: at least 30% of the file's lines matched
+     * (integer arithmetic, {@code matched * 100 >= served * 30}) and the best offset is 30 s or less either way.
+     *
+     * @param fit the file's fit against the reference
+     * @return true when the walk may stop at this reference
+     */
+    static boolean matches(TimingFit.Result fit) {
+        return fit.matchedCount() * 100 >= fit.servedCount() * MIN_SHARE_PERCENT
+            && Math.abs(fit.fittedOffsetMs()) <= MAX_OFFSET_MS;
     }
 
     /** True when the file's stated frame rate is unknown or about 23.976 (the library's rate). */

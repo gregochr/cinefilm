@@ -242,6 +242,24 @@ class TimingReferenceServiceTest {
     }
 
     @Test
+    void aQualifyingFilmWithNoFullCandidatesIsLeftOutWhileAnotherFilmsAreKept() {
+        Edition other = newEdition(2L, 41L, 11L, 90 * MIN);
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L, 2L));
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L, 2L))).thenReturn(List.of(edition, other));
+        when(reads.findAllById(List.of(10L, 11L))).thenReturn(List.of(
+            read(part, EmbeddedCueStarts.Status.NO_REFERENCE),
+            read(other.originalParts().get(0), EmbeddedCueStarts.Status.NO_REFERENCE)));
+        when(resolver.resolve(List.of(edition, other))).thenReturn(Map.of(
+            40L, resolution(edition, Source.FILE, List.of(sidecar(5, 10L, 20, false)), List.of()),
+            41L, resolution(other, Source.FILE, List.of(sidecar(8, 11L, 20, false)), List.of())));
+        when(films.findOpenSubtitlesFull()).thenReturn(List.of(
+            new OsFullRef(2L, IMDB, OpenSubtitlesResult.listToJson(List.of(result(2, null, false, 1))))));
+        when(references.findByFilmIdIn(Set.of(2L))).thenReturn(List.of());
+
+        assertThat(service.targets()).extracting(Target::filmId).containsExactly(2L);
+    }
+
+    @Test
     void theCandidatesAreSingleFilesOfAPlausibleFrameRateWithAHearingImpairedFileLast() {
         qualifying(List.of(sidecar(5, 10L, 20, false)), List.of());
         candidates(result(1, 23.976, true, 1), result(2, 25.0, false, 1), result(3, null, false, 1),
@@ -250,6 +268,18 @@ class TimingReferenceServiceTest {
 
         assertThat(service.targets()).singleElement().satisfies(target -> assertThat(target.candidates())
             .extracting(OpenSubtitlesResult::id).containsExactly(5L, 3L, 1L));
+    }
+
+    @Test
+    void aHearingImpairedFileOfTheEditionsOwnCutStillComesAfterANonImpairedFileOfAnotherCut() {
+        edition.setName("Extended Edition");
+        qualifying(List.of(sidecar(5, 10L, 20, false)), List.of());
+        candidates(new OpenSubtitlesResult(1, 1001, "Film.Extended.SDH", 23.976, 10, false, true, null, null, 1),
+            new OpenSubtitlesResult(2, 1002, "Film.Theatrical", 23.976, 10, false, false, null, null, 1));
+        when(references.findByFilmIdIn(Set.of(1L))).thenReturn(List.of());
+
+        assertThat(service.targets()).singleElement().satisfies(target -> assertThat(target.candidates())
+            .extracting(OpenSubtitlesResult::id).containsExactly(2L, 1L));
     }
 
     @Test
