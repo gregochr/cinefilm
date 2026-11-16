@@ -136,7 +136,7 @@ class SubtitleAdminDownloadsTest extends ForcedDownloadTestBase {
     }
 
     @Test
-    void theOwnerCanVerifyANudgeKeepsTheCheckAndUnverifyADownloadToo() {
+    void aNudgeKeepsADownloadsCheckAndUnverifyTakesItAway() {
         Film film = film();
         SubtitleSidecar download = download(film, 5012);
 

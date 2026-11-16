@@ -18,7 +18,8 @@ export function useSignOut() {
       await sessionApi.signOut();
       announceSignedOut();
     } catch (failure) {
-      // A 401 means the session had already ended (it expired): that is signed out, so show the sign-in card.
+      // A guard: a 401 on sign-out, from anything in front of the server, is treated as signed out (the server itself
+      // answers 200 for an expired session).
       if (failure instanceof ApiError && failure.status === 401) announceSignedOut();
       else setError("Couldn't sign out. Try again.");
     } finally {

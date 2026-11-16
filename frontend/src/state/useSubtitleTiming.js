@@ -27,8 +27,8 @@ import { EARLIER, LATER, nextOffsets, timingProblem, trackToken } from './subtit
  *   `busy` says why they do nothing.
  * - If the server no longer serves a changed row (it answers `served: false`: since 2026-11-16 a nudge itself keeps the
  *   owner's check, so this is a guard for what changes the served file meanwhile: an attach, detach, rescan or
- *   download removed in Admin or another tab; another subtitle plays now), the rows after it are not sent, the track is not reloaded, a change still loading is cancelled
- *   (`onReplaced(kind)`), and the timing of that file stays
+ *   download removed in Admin or another tab; another subtitle plays now), the rows after it are not sent, the track
+ *   is not reloaded, a change still loading is cancelled (`onReplaced(kind)`), and the timing of that file stays
  *   `frozen` for the rest of the viewing, with the subtitle-changed line saying why.
  * - What an answer says (offsets, a problem) belongs to the file it was for: a problem is forgotten when the shown file
  *   changes. The offsets learned here are kept for each file, so switching away and back shows them. The `<track>` of a

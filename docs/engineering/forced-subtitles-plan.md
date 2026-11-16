@@ -24,8 +24,8 @@ Judgement calls made while building 2d without the owner. Each: what was chosen,
 4. **Checks run per edition on the served (stitched) subtitle**, not per file: a split edition's per-part files are
    compared as the one timeline the player gets. Why: the owner's file is only right or wrong as played. Alternative: per
    file, which cannot judge a part against a whole-film reference.
-5. **Owner-verified files are still checked for completeness.** "Looks right" is about lines and timing a person saw;
-   it cannot see a missing half. They are checked after the unverified ones.
+5. **Owner-verified files are still checked for completeness.** "Looks right" vouches for the lines a person saw (the
+   timing is the owner's own from then on); it cannot see a missing half. They are checked after the unverified ones.
 6. **Best offset: the best fit, not just the smallest offset.** Equal match counts are separated by the least total
    distance before the plan's "smallest |offset|" rule, because with a 2 s window a 1.2 s shift matches at offset 0 too and
    the hint would always say 0. Alternative: the literal tie-break (hint always near 0).
@@ -507,7 +507,8 @@ on its own; after it ships, measure (how many films are still unsure or missing)
   none; the other parts still play.
 - **An attach, a detach, and any change to a file on disk clear the owner's check** (the lines the owner looked at
   are no longer the ones that play). **A timing nudge keeps it** (owner decision, 2026-11-16, reversing the earlier
-  rule): the file is the same, so what proves and serves it is unchanged; only the version moves. `offset_ms` is kept when a file changes on disk.
+  rule): the file is the same, so what proves and serves it is unchanged; only the version moves.
+  `offset_ms` is kept when a file changes on disk.
 - **Stitching** reuses `VttShifter.join` on one WebVTT per part (`VttWriter` applies the offset); a first part with no
   file is replaced by an empty header so the later part is still shifted.
 - **A cue with no duration** is kept and counted, and shown for one second in the WebVTT (a browser drops a cue that
