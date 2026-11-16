@@ -42,6 +42,7 @@ function start({ fetchImpl = ok(), playing = true, ...over } = {}) {
     onReconnecting: vi.fn(),
     onReload: vi.fn(),
     onSessionLost: vi.fn(),
+    onStopped: vi.fn(),
   };
   const engine = startNative({ video: media.video, session, handlers, fetchImpl, ...over });
   return { engine, ...media, handlers, fetchImpl };
@@ -349,6 +350,26 @@ describe('one recovery check at a time', () => {
     calls[0].resolve({ status: 200 });
     await tick(0);
     expect(handlers.onReload).toHaveBeenCalledWith(140000);
+  });
+});
+
+describe('a playback Admin stopped (410)', () => {
+  it('says so instead of reloading, and does not call it an expired session', async () => {
+    const { video, handlers } = start({ fetchImpl: ok(410) });
+    video.currentTime = 10;
+    await tick(STALL_MS);
+    expect(handlers.onStopped).toHaveBeenCalledTimes(1);
+    expect(handlers.onSessionLost).not.toHaveBeenCalled();
+    expect(handlers.onReload).not.toHaveBeenCalled();
+    expect(video.load).not.toHaveBeenCalled();
+  });
+
+  it('keeps retrying quietly on a 5xx master: only a 404 or a 410 is decisive', async () => {
+    const { video, handlers } = start({ fetchImpl: ok(503) });
+    video.currentTime = 10;
+    await tick(STALL_MS);
+    expect(handlers.onStopped).not.toHaveBeenCalled();
+    expect(handlers.onSessionLost).not.toHaveBeenCalled();
   });
 });
 

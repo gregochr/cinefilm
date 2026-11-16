@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import gregochr.cinefilm.TestData;
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.film.MediaFile;
@@ -75,7 +76,7 @@ class SessionServicePartsTest {
 
     @BeforeEach
     void setUp() {
-        service = new SessionService(sources, indexes, transcoder, manager);
+        service = new SessionService(sources, indexes, transcoder, manager, new StoppedPlaybacks(TestData.CLOCK));
         file1 = file(7, 800);
         file2 = file(8, 800);
     }
@@ -287,7 +288,7 @@ class SessionServicePartsTest {
             return null;
         }); // IndexJob holds the library executor for a whole pass
         SessionService service = new SessionService(sources, indexes, transcoder, manager, sessions,
-            Duration.ofSeconds(10));
+            Duration.ofSeconds(10), new StoppedPlaybacks(TestData.CLOCK));
         source(true);
         when(transcoder.mode()).thenReturn(EncoderMode.VAAPI);
         when(indexes.ensureIndexed(file1, PART_MS)).thenReturn(INDEX_1);
@@ -308,7 +309,7 @@ class SessionServicePartsTest {
     @Test
     void aLaterPartStillBeingIndexedWhenTheWaitEndsAnswers503ForTheClientToRetry() {
         SessionService slow = new SessionService(sources, indexes, transcoder, manager, runnable -> { },
-            Duration.ofMillis(20));
+            Duration.ofMillis(20), new StoppedPlaybacks(TestData.CLOCK));
         source(true);
         when(transcoder.mode()).thenReturn(EncoderMode.VAAPI);
         when(indexes.ensureIndexed(file1, PART_MS)).thenReturn(INDEX_1);
@@ -347,7 +348,7 @@ class SessionServicePartsTest {
     void anInterruptedWaitAnswers503AndKeepsTheInterruptFlag() {
         Executor never = runnable -> { };
         SessionService waiting = new SessionService(sources, indexes, transcoder, manager, never,
-            Duration.ofSeconds(30));
+            Duration.ofSeconds(30), new StoppedPlaybacks(TestData.CLOCK));
         source(true);
         when(transcoder.mode()).thenReturn(EncoderMode.VAAPI);
         when(indexes.ensureIndexed(file1, PART_MS)).thenReturn(INDEX_1);

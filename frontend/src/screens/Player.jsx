@@ -24,6 +24,7 @@ import {
   ReconnectingNotice,
   SlowConnectionCard,
   Toast,
+  StoppedCard,
   UnavailableCard,
 } from '../components/PlayerOverlays.jsx';
 import Scrubber from '../components/Scrubber.jsx';
@@ -101,6 +102,14 @@ export default function Player() {
   const routeKey = `${id}|${params.get('edition') ?? ''}`;
   const [opened, setOpened] = useState(() => ({ key: routeKey, at: performance.now() }));
   if (opened.key !== routeKey) setOpened({ key: routeKey, at: performance.now() });
+  // "Play again" after Admin stopped the playback: a new viewing (a new PlayerView, so a new playback id) that starts
+  // at the film position the old one had reached. Belongs to this route; another film or edition starts it afresh.
+  const [again, setAgain] = useState({ key: routeKey, count: 0, atMs: null });
+  if (again.key !== routeKey) setAgain({ key: routeKey, count: 0, atMs: null });
+  const playAgain = (atMs) => {
+    setAgain((a) => ({ ...a, count: a.count + 1, atMs }));
+    setOpened({ key: routeKey, at: performance.now() });
+  };
   if (loading && !film)
     return <div className="player player--loading" role="status" aria-label="Loading" />;
   if (error && !film) {
@@ -118,12 +127,13 @@ export default function Player() {
     film.editions[0];
   return (
     <PlayerView
-      key={edition.id}
+      key={`${edition.id}:${again.count}`}
       film={film}
       edition={edition}
-      startAtZero={params.get('start') === '0'}
-      startAtMs={parseStartAt(params.get('at'))}
+      startAtZero={again.count === 0 && params.get('start') === '0'}
+      startAtMs={again.atMs ?? parseStartAt(params.get('at'))}
       openedAt={opened.at}
+      onPlayAgain={playAgain}
     />
   );
 }
@@ -131,7 +141,7 @@ export default function Player() {
 /** Gives up waiting for the final progress report after this long, so a dead network never traps the viewer. */
 export const LEAVE_REPORT_CAP_MS = 1500;
 
-function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
+function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, onPlayAgain }) {
   const navigate = useNavigate();
   // Computed once: the clock, remaining time and scrubber show the start point from the first render. A time in
   // the address (`at`, "Play from here" in Admin) beats the resume point.
@@ -237,7 +247,12 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
   // One card at a time: the question waits for the slow-connection card, the end card and the unavailable card,
   // and hides while a menu is open (on a phone it would lie over it).
   const questionShowing =
-    questionDue && menu === null && !slowCard.open && !endOverlay && stream.mode !== 'unavailable';
+    questionDue &&
+    menu === null &&
+    !slowCard.open &&
+    !endOverlay &&
+    stream.mode !== 'unavailable' &&
+    stream.mode !== 'stopped';
   const questionName = questionDue ? operatorName(environment.question.operator) : null;
 
   // Before the source has loaded, positionRef is only the display value (the resume point, 10 s before the
@@ -252,7 +267,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
 
   // The still goes when the player has nothing to show behind it, and is removed once its fade has run.
   useEffect(() => {
-    if (stream.mode === 'unavailable') dispatchStill('unavailable');
+    if (stream.mode === 'unavailable' || stream.mode === 'stopped') dispatchStill('unavailable');
   }, [stream.mode]);
   useEffect(() => {
     if (endOverlay) dispatchStill('ended');
@@ -747,7 +762,9 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
         onDoubleClick={() => toggleFullscreen(containerRef.current, videoRef.current)}
       />
 
-      {stream.mode === 'unavailable' ? (
+      {stream.mode === 'stopped' ? (
+        <StoppedCard onPlayAgain={() => onPlayAgain(Math.round(positionRef.current))} />
+      ) : stream.mode === 'unavailable' ? (
         <UnavailableCard onRetry={stream.restart} />
       ) : stream.reconnecting ? (
         <ReconnectingNotice />

@@ -2,6 +2,7 @@ package gregochr.cinefilm.transcode;
 
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.ConflictException;
+import gregochr.cinefilm.config.GoneException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.transcode.SessionDtos.CreateRequest;
@@ -45,6 +46,9 @@ public class SessionService {
 
     private static final Pattern ID = Pattern.compile("^[0-9a-f-]{36}$");
     private static final Pattern RUNG = Pattern.compile("^(original|1080p|720p|480p|360p|240p)$");
+    private static final Pattern PLAYBACK_ID =
+        Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+    private static final String STOPPED = "Playback was stopped from Admin";
     private static final Pattern SEGMENT = Pattern.compile("^seg-(\\d{1,6})\\.ts$");
 
     private final SessionSources sources;
@@ -53,22 +57,25 @@ public class SessionService {
     private final SessionManager manager;
     private final Executor indexExecutor;
     private final Duration indexWait;
+    private final StoppedPlaybacks stopped;
 
     /** Creates the service; the later parts of a split film are indexed on the {@code sessionIndexExecutor}. */
     @Autowired
     public SessionService(SessionSources sources, KeyframeIndexService indexes, Transcoder transcoder,
-                          SessionManager manager, @Qualifier("sessionIndexExecutor") Executor indexExecutor) {
-        this(sources, indexes, transcoder, manager, indexExecutor, INDEX_WAIT);
+                          SessionManager manager, @Qualifier("sessionIndexExecutor") Executor indexExecutor,
+                          StoppedPlaybacks stopped) {
+        this(sources, indexes, transcoder, manager, indexExecutor, INDEX_WAIT, stopped);
     }
 
     /** A service that indexes later parts on the calling thread (a film in one piece never needs the executor). */
     public SessionService(SessionSources sources, KeyframeIndexService indexes, Transcoder transcoder,
-                          SessionManager manager) {
-        this(sources, indexes, transcoder, manager, Runnable::run, INDEX_WAIT);
+                          SessionManager manager, StoppedPlaybacks stopped) {
+        this(sources, indexes, transcoder, manager, Runnable::run, INDEX_WAIT, stopped);
     }
 
     SessionService(SessionSources sources, KeyframeIndexService indexes, Transcoder transcoder,
-                   SessionManager manager, Executor indexExecutor, Duration indexWait) {
+                   SessionManager manager, Executor indexExecutor, Duration indexWait, StoppedPlaybacks stopped) {
+        this.stopped = stopped;
         this.sources = sources;
         this.indexes = indexes;
         this.transcoder = transcoder;
@@ -84,12 +91,20 @@ public class SessionService {
      * @param request the request body
      * @return the session
      * @throws NotFoundException when the edition has no playable original
-     * @throws BadRequestException when the quality, audio stream, start position or probe is invalid
+     * @throws BadRequestException when the quality, audio stream, start position, probe or playback id is invalid
+     * @throws GoneException when the request's playback was stopped from Admin (410: the player does not recover)
      * @throws ConflictException when the film cannot be streamed adaptively (the client direct-plays instead; a split
      *     film cannot be direct-played, so for it the client shows that it cannot be played)
      * @throws SegmentNotReadyException when a split film's later parts are still being indexed (retry shortly)
      */
     public SessionCreated create(long editionId, CreateRequest request) {
+        String playbackId = request.playbackId();
+        if (playbackId != null && !PLAYBACK_ID.matcher(playbackId).matches()) {
+            throw new BadRequestException("Invalid playbackId");
+        }
+        if (playbackId != null && stopped.playbackStopped(playbackId)) {
+            throw new GoneException(STOPPED);
+        }
         Source source = sources.find(editionId);
         String quality = request.quality();
         if (quality == null || !Ladder.QUALITY_IDS.contains(quality)) {
@@ -150,7 +165,8 @@ public class SessionService {
             partSources.add(new SessionSpec.PartSource(parts.get(i).path(), choice.position(), indexed.get(i).fps()));
         }
         SessionSpec spec = new SessionSpec(editionId, source.filmTitle(), partSources, cuts, width,
-            smallest.getHeight(), encoded, start, pinned, cuts.segmentAt(startMs), hardwareDecode);
+            smallest.getHeight(), encoded, start, pinned, cuts.segmentAt(startMs), hardwareDecode,
+            playbackId);
         SessionView created;
         try {
             created = manager.create(spec);
@@ -163,13 +179,13 @@ public class SessionService {
 
     /** The master playlist of a session. */
     public String master(String id) {
-        SessionView view = manager.view(sessionId(id));
+        SessionView view = manager.view(liveId(id));
         return PlaylistWriter.master(view.rungs(), view.startRung(), view.pinned(), view.width(), view.height());
     }
 
     /** The media playlist of one rung of a session. */
     public String media(String id, String rung) {
-        SessionView view = manager.view(sessionId(id));
+        SessionView view = manager.view(liveId(id));
         if (!RUNG.matcher(rung).matches() || view.rungs().stream().noneMatch(r -> r.id().equals(rung))) {
             throw new NotFoundException("No such rung");
         }
@@ -178,7 +194,7 @@ public class SessionService {
 
     /** The file of a segment, once it is complete (see {@link SessionManager#segment}). */
     public Path segment(String id, String rung, String file) {
-        String sessionId = sessionId(id);
+        String sessionId = liveId(id);
         Matcher matcher = SEGMENT.matcher(file);
         if (!RUNG.matcher(rung).matches() || !matcher.matches()) {
             throw new NotFoundException("No such segment");
@@ -189,6 +205,27 @@ public class SessionService {
     /** Ends a session; ending one that is already gone is fine. */
     public void end(String id) {
         manager.end(sessionId(id));
+    }
+
+    /**
+     * Ends a session because Admin pressed Stop: as {@link #end}, and the session and the viewing it served are
+     * remembered for ten minutes, so their requests answer 410 (not the 404 of an expired session, and no new session
+     * for that viewing). The stop is recorded before the session ends, so a request that arrives meanwhile is
+     * already refused.
+     */
+    public void stopFromAdmin(String id) {
+        String sessionId = sessionId(id);
+        stopped.record(sessionId, manager.playbackId(sessionId).orElse(null));
+        manager.end(sessionId);
+    }
+
+    /** A pattern-checked session id for a playlist or segment request; 410 when Admin stopped the session. */
+    private String liveId(String id) {
+        String sessionId = sessionId(id);
+        if (stopped.sessionStopped(sessionId)) {
+            throw new GoneException(STOPPED);
+        }
+        return sessionId;
     }
 
     private static String sessionId(String id) {

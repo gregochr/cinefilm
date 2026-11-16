@@ -35,7 +35,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 /**
  * A session that went quiet for ten minutes, seen from the HTTP side: the real controllers, service and manager on
  * the fakes, with real segment bytes on disk. The playlists answer 200 with the same text, a segment waits for the
- * restarted encoder (503, then 200), a file that cannot be read just now is 503, and every final ending is a 404.
+ * restarted encoder (503, then 200), a file that cannot be read just now is 503, and every final ending is a 404
+ * except Admin's Stop, which is a 410 for ten minutes.
  */
 class HlsSessionPauseTest {
 
@@ -47,6 +48,7 @@ class HlsSessionPauseTest {
     private static final Duration DAY = Duration.ofHours(24);
     private static final byte[] BYTES = {0x47, 9, 8, 7};
     private static final String NO_SESSION = "{\"error\":\"No such session\"}";
+    private static final String STOPPED = "{\"error\":\"Playback was stopped from Admin\"}";
     private static final String UNREADABLE = "{\"error\":\"The film's file cannot be read right now\"}";
     private static final String NOT_READY = "{\"error\":\"The segment is not ready yet\"}";
     private static final String MASTER = "/master.m3u8";
@@ -75,7 +77,7 @@ class HlsSessionPauseTest {
             () -> new UUID(0, ++counter));
         id = manager.create(spec()).id();
         SessionService service = new SessionService(mock(SessionSources.class), mock(KeyframeIndexService.class),
-            transcoder, manager);
+            transcoder, manager, new StoppedPlaybacks(clock));
         mvc = MockMvcBuilders.standaloneSetup(new HlsSessionController(service),
                 new TranscodingAdminController(transcoder, mock(IndexJob.class), manager, service))
             .setControllerAdvice(new ApiExceptionHandler()).build();
@@ -107,6 +109,14 @@ class HlsSessionPauseTest {
             mvc.perform(get(path(route)))
                 .andExpect(status().isNotFound())
                 .andExpect(content().string(NO_SESSION));
+        }
+    }
+
+    private void assertAllRoutesAreGone() throws Exception {
+        for (String route : List.of(MASTER, MEDIA, SEGMENT)) {
+            mvc.perform(get(path(route)))
+                .andExpect(status().isGone())
+                .andExpect(content().string(STOPPED));
         }
     }
 
@@ -178,12 +188,25 @@ class HlsSessionPauseTest {
     }
 
     @Test
-    void afterAdminsStopEveryRouteIs404() throws Exception {
+    void afterAdminsStopOfAQuietSessionEveryRouteIs410ForTenMinutesAndThenTheOrdinary404() throws Exception {
         expire();
 
         mvc.perform(delete("/api/admin/transcoding/sessions/" + id)).andExpect(status().isNoContent());
 
+        assertAllRoutesAreGone();
+        clock.advance(Duration.ofMinutes(10).minusMillis(1));
+        assertAllRoutesAreGone();
+        clock.advance(Duration.ofMillis(1));
         assertAllRoutesAre404();
+        assertNoEncoderRestarted();
+    }
+
+    @Test
+    void afterAdminsStopOfALiveSessionEveryRouteIs410AndItsEncoderIsStopped() throws Exception {
+        mvc.perform(delete("/api/admin/transcoding/sessions/" + id)).andExpect(status().isNoContent());
+
+        assertAllRoutesAreGone();
+        assertThat(manager.sessions()).isEmpty();
         assertNoEncoderRestarted();
     }
 

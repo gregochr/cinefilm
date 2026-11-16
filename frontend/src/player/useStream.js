@@ -42,6 +42,10 @@ export const RECOVERY_WINDOW_MS = 60000;
  * piece would fall back, it reports `mode: 'unavailable'` instead, and a session the server is still preparing
  * (503) is asked for again.
  *
+ * A 410 (Admin stopped this playback, from a playlist, a segment or the session request) is not a failure: nothing
+ * is recovered, retried or direct-played. The engine is destroyed, the video pauses and `mode` becomes `'stopped'`
+ * (owner 2026-11-15). Every other failure keeps its own path: a 404 recovers, no answer and 5xx retry, and so on.
+ *
  * `pendingSeekRef` holds the film position (ms) to seek to once the new source has loaded metadata; the
  * caller applies it and clears it. Returns the active rung, its renditions, the reconnecting flag, the median
  * measured throughput and `restart()` (a new session at the current position, e.g. after an audio change).
@@ -142,6 +146,18 @@ export function useStream({
       failToDirect();
     };
 
+    // Admin stopped this playback: no new session. The session is already ended on the server, so nothing is sent.
+    const stopped = () => {
+      if (cancelled) return;
+      engine?.destroy();
+      engine = null;
+      session = null;
+      sessionRef.current = null;
+      video.pause();
+      clearReconnecting();
+      setStream({ mode: 'stopped', rung: null, renditions: [] });
+    };
+
     const recover = () => {
       const now = Date.now();
       recoveriesRef.current = [...recoveriesRef.current, now].filter(
@@ -224,6 +240,8 @@ export function useStream({
       // The body is built on each attempt, so an audio track chosen while the request retries is the one asked for.
       const buildBody = () => {
         const next = { quality, startMs };
+        // Which viewing this session serves: Admin's Stop ends it by this id (absent when no recorder is running).
+        if (latest.current.health.id) next.playbackId = latest.current.health.id;
         const audio = latest.current.audioStreamId;
         if (audio !== null && audio !== undefined) next.audioStreamId = audio;
         // A speed chosen on another network says nothing about this one: start low, Auto steps up.
@@ -232,6 +250,7 @@ export function useStream({
         }
         return next;
       };
+      let gone = false;
       const created = await createSession(
         (signal) => sessionsApi.create(editionId, buildBody(), { signal }),
         {
@@ -244,11 +263,15 @@ export function useStream({
           onNoAnswer: (error) => {
             if (!cancelled) latest.current.health.networkError(error);
           },
+          onStopped: () => {
+            gone = true;
+          },
         },
       );
       setNotice(false);
       if (!created) {
-        if (!cancelled) failToDirect(); // No encoder, no keyframe index yet, or the request failed.
+        if (gone) stopped();
+        else if (!cancelled) failToDirect(); // No encoder, no keyframe index yet, or the request failed.
         return;
       }
       if (cancelled) {
@@ -297,6 +320,7 @@ export function useStream({
             if (ms > 0) pendingSeekRef.current = ms;
           },
           onSessionLost: recover,
+          onStopped: stopped,
           onFatal: abandon,
           onNetworkError: (error) => latest.current.health.networkError(error),
         },

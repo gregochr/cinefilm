@@ -15,8 +15,16 @@ public final class SessionDtos {
      * @param startMs where playback starts in milliseconds, or null for the start
      * @param quality {@code auto}, {@code original} or a rung id
      * @param probeKbps the client's throughput probe in kilobits per second, or null
+     * @param playbackId the id of the viewing this session serves (the id its health reports carry), or null; Admin's
+     *     Stop uses it to end that viewing's playback rather than only this session
      */
-    public record CreateRequest(Long audioStreamId, Long startMs, String quality, Long probeKbps) {
+    public record CreateRequest(Long audioStreamId, Long startMs, String quality, Long probeKbps,
+                                String playbackId) {
+
+        /** A request that names no viewing. */
+        public CreateRequest(Long audioStreamId, Long startMs, String quality, Long probeKbps) {
+            this(audioStreamId, startMs, quality, probeKbps, null);
+        }
     }
 
     /**

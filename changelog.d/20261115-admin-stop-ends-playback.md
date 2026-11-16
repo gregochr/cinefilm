@@ -1,0 +1,3 @@
+### Changed — Admin's Stop now ends playback on that device
+
+Pressing "Stop this stream" in Admin's Playback section used to end only the server's conversion, and the player started a new one within seconds. Now the device stops: the player pauses and says "Playback was stopped from Admin." with a "Play again" button that starts a fresh playback from where it was. The server remembers the stop for ten minutes (in memory, so a restart forgets it) and answers 410 for that playback's session routes and for a new session under its viewing id. An expired session (404), a dropped connection, a server error and a server restart still recover exactly as before. The hint under Stop is back to the design's wording: "Ends playback on {device}; it can resume from here."

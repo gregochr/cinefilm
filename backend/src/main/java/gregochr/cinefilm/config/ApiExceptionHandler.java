@@ -29,6 +29,11 @@ public class ApiExceptionHandler {
             .body(Map.of("error", e.getMessage(), "errors", e.errors()));
     }
 
+    @ExceptionHandler(GoneException.class)
+    ResponseEntity<Map<String, String>> gone(GoneException e) {
+        return error(HttpStatus.GONE, e.getMessage());
+    }
+
     @ExceptionHandler(ConflictException.class)
     ResponseEntity<Map<String, String>> conflict(ConflictException e) {
         return error(HttpStatus.CONFLICT, e.getMessage());

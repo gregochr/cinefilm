@@ -12,6 +12,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import gregochr.cinefilm.TestData;
 import gregochr.cinefilm.transcode.CutList;
 import gregochr.cinefilm.transcode.EncoderMode;
 import gregochr.cinefilm.transcode.KeyframeIndexService;
@@ -242,7 +243,9 @@ class FilmMapperTest {
         when(indexes.ensureIndexed(original)).thenReturn(new KeyframeIndexService.Index(cuts, 25.0));
         when(manager.create(any())).thenReturn(new SessionView("5b0f1c1e-6a52-4d5e-9a4c-0a7d3c1f2b11", List.of(),
             null, null, cuts, 1, 1));
-        return new SessionService(sources, indexes, transcoder, manager).create(10L,
+        SessionService service = new SessionService(sources, indexes, transcoder, manager,
+            new gregochr.cinefilm.transcode.StoppedPlaybacks(TestData.CLOCK));
+        return service.create(10L,
             new gregochr.cinefilm.transcode.SessionDtos.CreateRequest(null, null, "auto", null)).renditions().stream()
             .map(RenditionDto::id).toList();
     }

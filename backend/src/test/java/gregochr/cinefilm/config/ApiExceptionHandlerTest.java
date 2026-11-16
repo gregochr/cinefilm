@@ -58,6 +58,14 @@ class ApiExceptionHandlerTest {
     }
 
     @Test
+    void goneIs410WithTheMessageAsTheError() {
+        ResponseEntity<Map<String, String>> response = handler.gone(new GoneException("Playback was stopped"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.GONE);
+        assertThat(response.getBody()).containsExactly(Map.entry("error", "Playback was stopped"));
+    }
+
+    @Test
     void conflictIs409WithTheMessageAsTheError() {
         ResponseEntity<Map<String, String>> response = handler.conflict(
             new ConflictException("A scan is already running"));

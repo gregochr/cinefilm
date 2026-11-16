@@ -17,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import gregochr.cinefilm.auth.SecurityConfig;
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.ConflictException;
+import gregochr.cinefilm.config.GoneException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.transcode.SessionDtos.CreateRequest;
 import gregochr.cinefilm.transcode.SessionDtos.RenditionDto;
@@ -205,6 +206,44 @@ class HlsSessionControllerTest {
             .andExpect(status().isNotFound()).andExpect(jsonPath("$.error").value("No such session"));
         mvc.perform(get("/api/sessions/" + ID + "/720p/seg-1000000.ts").with(user("owner")))
             .andExpect(status().isNotFound()).andExpect(jsonPath("$.error").value("No such segment"));
+    }
+
+    @Test
+    void createPassesTheViewingsPlaybackIdOn() throws Exception {
+        String playback = "c1000000-0000-4000-8000-000000000001";
+        when(service.create(40L, new CreateRequest(null, null, "auto", null, playback))).thenReturn(new SessionCreated(
+            ID, "/api/sessions/" + ID + "/master.m3u8", "original", List.of()));
+
+        mvc.perform(post("/api/editions/40/sessions").with(user("owner")).header("X-CineFilm", "1")
+                .contentType("application/json").content("{\"quality\":\"auto\",\"playbackId\":\"" + playback + "\"}"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.sessionId").value(ID));
+    }
+
+    @Test
+    void createForAPlaybackStoppedFromAdminIs410NotA404OrANewSession() throws Exception {
+        String playback = "c1000000-0000-4000-8000-000000000001";
+        when(service.create(40L, new CreateRequest(null, null, "auto", null, playback)))
+            .thenThrow(new GoneException("Playback was stopped from Admin"));
+
+        mvc.perform(post("/api/editions/40/sessions").with(user("owner")).header("X-CineFilm", "1")
+                .contentType("application/json").content("{\"quality\":\"auto\",\"playbackId\":\"" + playback + "\"}"))
+            .andExpect(status().isGone())
+            .andExpect(jsonPath("$.error").value("Playback was stopped from Admin"));
+    }
+
+    @Test
+    void thePlaylistsAndSegmentsOfASessionStoppedFromAdminAre410() throws Exception {
+        when(service.master(ID)).thenThrow(new GoneException("Playback was stopped from Admin"));
+        when(service.media(ID, "720p")).thenThrow(new GoneException("Playback was stopped from Admin"));
+        when(service.segment(ID, "720p", "seg-1.ts")).thenThrow(new GoneException("Playback was stopped from Admin"));
+
+        for (String url : List.of("/api/sessions/" + ID + "/master.m3u8", "/api/sessions/" + ID + "/720p/index.m3u8",
+            "/api/sessions/" + ID + "/720p/seg-1.ts")) {
+            mvc.perform(get(url).with(user("owner")))
+                .andExpect(status().isGone())
+                .andExpect(jsonPath("$.error").value("Playback was stopped from Admin"));
+        }
     }
 
     @Test

@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import gregochr.cinefilm.TestData;
 import gregochr.cinefilm.config.ApiExceptionHandler;
 import gregochr.cinefilm.transcode.SessionFakes.FakeFiles;
 import gregochr.cinefilm.transcode.SessionFakes.FakeScheduler;
@@ -72,7 +73,7 @@ class HlsSegmentPathSafetyTest {
         Files.writeString(root.resolve("secret.txt"), SECRET, StandardCharsets.UTF_8);
         Files.writeString(hls.resolve("secret.ts"), SECRET, StandardCharsets.UTF_8);
         SessionService service = new SessionService(mock(SessionSources.class), mock(KeyframeIndexService.class),
-            transcoder, manager);
+            transcoder, manager, new StoppedPlaybacks(TestData.CLOCK));
         mvc = MockMvcBuilders.standaloneSetup(new HlsSessionController(service))
             .setControllerAdvice(new ApiExceptionHandler()).build();
     }

@@ -74,7 +74,7 @@ const noop = () => {};
 const inertViewing = () => ({
   id: null,
   counter: null,
-  api: Object.fromEntries([...INPUTS, 'playing'].map((name) => [name, noop])),
+  api: { id: null, ...Object.fromEntries([...INPUTS, 'playing'].map((name) => [name, noop])) },
   lastOk: 0,
   warned: false,
 });
@@ -83,7 +83,8 @@ function build({ editionId, openedAt, now, makeId, sendNowRef }) {
   const id = makeId();
   if (!id) return inertViewing();
   const counter = createHealth({ now, openedAt, editionId, client: browserClient() });
-  const api = {};
+  // `id` is the viewing's id: the session request carries it, so Admin's Stop can end this viewing's playback.
+  const api = { id };
   for (const name of INPUTS) {
     api[name] = (...args) => {
       try {

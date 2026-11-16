@@ -587,6 +587,42 @@ describe('an expired session', () => {
   });
 });
 
+describe('a playback Admin stopped (410)', () => {
+  it.each([true, false])(
+    'says so once (fatal: %s), and neither asks for a new session nor reconnects',
+    (fatal) => {
+      const onStopped = vi.fn();
+      const { hls, handlers } = start({ handlers: { ...baseHandlers(), onStopped } });
+      hls.manifest(levels, 3);
+      hls.error({ fatal, type: 'networkError', response: { code: 410 } });
+      hls.error({ fatal, type: 'networkError', response: { code: 410 } });
+      expect(onStopped).toHaveBeenCalledTimes(1);
+      expect(handlers.onSessionLost).not.toHaveBeenCalled();
+      expect(handlers.onReconnecting).not.toHaveBeenCalled();
+      expect(handlers.onFatal).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('does not treat a 404, a 5xx, no answer or another fatal error as a stop', () => {
+    const onStopped = vi.fn();
+    const { hls } = start({ handlers: { ...baseHandlers(), onStopped } });
+    hls.manifest(levels, 3);
+    for (const code of [404, 500, 503, 502, 403]) {
+      hls.error({ fatal: false, type: 'networkError', response: { code } });
+    }
+    hls.error({ fatal: true, type: 'networkError', details: 'manifestLoadError' });
+    hls.error({ fatal: true, type: 'mediaError' });
+    expect(onStopped).not.toHaveBeenCalled();
+  });
+
+  it('is harmless for a caller that does not listen for it', () => {
+    const { hls, handlers } = start();
+    hls.error({ fatal: true, type: 'networkError', response: { code: 410 } });
+    expect(handlers.onSessionLost).not.toHaveBeenCalled();
+  });
+});
+
 describe('other fatal errors', () => {
   it('recovers a media error in place', () => {
     const { hls, handlers } = start();

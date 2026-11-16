@@ -72,8 +72,8 @@ that depend on an answer say so and are not started until it comes.
   primary style. This reads README's "In Admin, only Scan library now is primary" as the Admin pages' own buttons;
   dialogs keep their confirm button's style.
 - **Copy is exact**, and `adminCopy.js` notes each string's source (`07`, an AR board, the README, or the plan's owner answers). `07` gives no
-  hint for "Scan library now" or "Sign out"; those come from the README. "Stop this stream" uses the honest hint of the 5a-1
-  decision, not 07's or AR4's "Ends playback on …" (Stop does not end playback).
+  hint for "Scan library now" or "Sign out"; those come from the README. "Stop this stream" uses 07's and AR4's
+  "Ends playback on {device}; it can resume from here." since Stop ends playback (the "Stop ends playback" decision at 5a-1).
 - **Each section loads on its own**, static skeletons; a failed section shows an inline error banner in the Edit
   editions error colours (never amber). Deliberate exception: the scan and Plex status pollers live in the layout
   (below), because their timestamps drive every section's reloads.
@@ -225,14 +225,20 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
   so "newest" is only a defence) and uses `DELETE /api/admin/transcoding/sessions/{id}`. In flight the button is
   `aria-disabled` and a second click is ignored; a failure shows "Couldn't stop that stream. Try again." and keeps the
   entry; success moves focus to the section title if it was on that row and re-reads the live list and the summary
-  (the Transcoding card's Stop re-reads the summary too). **Stop does not end playback:** it calls
-  `SessionManager.end`, the player sees the 404 as an expired session and `recover()` creates a new one under the same
-  `playbackId`. So the hint (planner, 5a-1) is "Stops converting this stream on the server; if it's still playing, the
-  player starts it again.", on both Stop buttons, instead of 07's and AR4's "Ends playback on …". A stopped entry is
+  (the Transcoding card's Stop re-reads the summary too). **Stop ends playback (owner 2026-11-15, built after 5a-1):** 5a-1 shipped Stop as an honest "Stops converting
+  this stream on the server; if it's still playing, the player starts it again." because it only called `SessionManager.end`
+  and the player's `recover()` made a new session under the same `playbackId`. The follow-up
+  `feat(playback): Admin Stop ends playback on the device` closes that open item: the Admin stop route
+  (`SessionService.stopFromAdmin`) records the session id and the `playbackId` it was created with (the session request
+  now carries the viewing's id) in `StoppedPlaybacks` for 10 minutes, in memory (a restart forgets it, and the player then
+  recovers as after any restart); the session's master, media and segment routes and a new session for that
+  `playbackId` answer 410 (`foundation-plan.md`). The player treats a 410 as a stop, not a failure (hls.js error or
+  native master check or session request): it destroys the engine, pauses, and shows "Playback was stopped from Admin."
+  with "Play again", which remounts the player as a new viewing (new `playbackId`) at the current position. A 404, no
+  answer, a 5xx and a restart recover as before (tests pin each). The hint is therefore AR4's and 07's again:
+  "Ends playback on {device}; it can resume from here." ("that device" when the device is unknown). A stopped entry is
   hidden keyed on the stopped session id: only while its edition has no live session or still has that one; a session
-  with another id brings it back with Stop and drops the hide for good (a later end of that session does not hide it again). **Open item for the owner:** a real "end playback" needs a distinct
-  stopped-by-admin answer that the player does not recover from. It is deliberately not built here because it changes
-  player recovery. The row has no poster, no year, no "1h 12m in" (none is in `playingNow`) and no operator in "(EE)".
+  with another id brings it back with Stop and drops the hide for good (a later end of that session does not hide it again). The row has no poster, no year, no "1h 12m in" (none is in `playingNow`) and no operator in "(EE)".
   The touch hint is `client.touch` in the health report, stored in the report JSON (no migration: the report is a JSON
   text column and `ClientInfo` gained a field) and passed through to `playingNow.touch`; the log rows carry it inside
   `report.client`. `describeDevice(userAgent, touch)` reads a Macintosh user agent with `touch` as an iPad. Chart rows

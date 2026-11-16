@@ -96,7 +96,7 @@ class TranscodingAdminControllerTest {
         mvc.perform(delete("/api/admin/transcoding/sessions/" + ID).with(user("owner")).header("X-CineFilm", "1"))
             .andExpect(status().isNoContent());
 
-        verify(sessions).end(ID);
+        verify(sessions).stopFromAdmin(ID);
     }
 
     @Test
@@ -106,12 +106,12 @@ class TranscodingAdminControllerTest {
         mvc.perform(delete("/api/admin/transcoding/sessions/" + ID).with(user("owner")))
             .andExpect(status().isForbidden()).andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
 
-        verify(sessions, never()).end(ID);
+        verify(sessions, never()).stopFromAdmin(ID);
     }
 
     @Test
     void stopOfAMalformedIdIs404() throws Exception {
-        doThrow(new NotFoundException("No such session")).when(sessions).end("x");
+        doThrow(new NotFoundException("No such session")).when(sessions).stopFromAdmin("x");
 
         mvc.perform(delete("/api/admin/transcoding/sessions/x").with(user("owner")).header("X-CineFilm", "1"))
             .andExpect(status().isNotFound()).andExpect(jsonPath("$.error").value("No such session"));

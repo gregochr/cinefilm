@@ -44,12 +44,15 @@ function heat({ offline = false, quality = 'auto' } = {}) {
 
 // The API as the player sees it: Heat, session create/remove, everything else the defaults.
 function serve({ film = heat(), create } = {}) {
-  const log = { posted: [], deleted: [], progress: [] };
+  // `posted` holds each session request's body without its `playbackId` (random), which `playbackIds` keeps.
+  const log = { posted: [], playbackIds: [], deleted: [], progress: [] };
   let n = 0;
   const route = (method, url, init = {}) => {
     if (url === '/api/films/1') return respond(film);
     if (method === 'POST' && url === '/api/editions/11/sessions') {
-      log.posted.push(JSON.parse(init.body));
+      const { playbackId, ...body } = JSON.parse(init.body);
+      log.posted.push(body);
+      log.playbackIds.push(playbackId);
       if (create) return create(log.posted.length);
       n += 1;
       return respond(
@@ -532,6 +535,134 @@ describe('an expired session (404)', () => {
     );
     await vi.waitFor(() => expect(video).toHaveAttribute('src', DIRECT));
     expect(FakeHls.instances).toHaveLength(4);
+  });
+});
+
+describe('a playback Admin stopped (410)', () => {
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  const STOPPED_LINE = 'Playback was stopped from Admin.';
+  const SESSION = (n) => ({
+    ...fixtures.session,
+    sessionId: `s${n}`,
+    masterUrl: `/api/sessions/s${n}/master.m3u8`,
+  });
+  const gone = () => respond({ error: 'Playback was stopped from Admin' }, 410);
+  const stoppedCard = () => screen.queryByText(STOPPED_LINE);
+
+  it('sends the viewing id with the session request, and the same one again after a 404', async () => {
+    const { log, video, hls } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    expect(log.playbackIds[0]).toMatch(UUID);
+    await hlsEvent(() =>
+      hls().error({ fatal: true, type: 'networkError', response: { code: 404 } }),
+    );
+    await instances(2);
+    expect(log.playbackIds).toEqual([log.playbackIds[0], log.playbackIds[0]]);
+  });
+
+  it('on a 410 from hls.js pauses, says so and makes no new session and no direct play', async () => {
+    const { log, video, hls } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    const pause = vi.spyOn(video, 'pause');
+    const engine = hls();
+    await hlsEvent(() =>
+      engine.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    expect(stoppedCard()).toBeInTheDocument();
+    expect(engine.destroy).toHaveBeenCalled();
+    expect(pause).toHaveBeenCalled();
+    expect(FakeHls.instances).toHaveLength(1);
+    expect(log.posted).toHaveLength(1);
+    expect(video).not.toHaveAttribute('src', DIRECT);
+    expect(screen.queryByText('Reconnecting…')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Play again' })).toHaveFocus();
+  });
+
+  it('on a 410 for the new session that a 404 asked for, stops instead of direct-playing', async () => {
+    const { log, video, hls } = await open({
+      create: (n) => (n === 1 ? respond(SESSION(1), 201) : gone()),
+    });
+    await landResume(video);
+    await hlsEvent(() =>
+      hls().error({ fatal: true, type: 'networkError', response: { code: 404 } }),
+    );
+    expect(await screen.findByText(STOPPED_LINE)).toBeInTheDocument();
+    expect(log.posted).toHaveLength(2);
+    expect(FakeHls.instances).toHaveLength(1);
+    expect(video).not.toHaveAttribute('src', DIRECT);
+    expect(screen.queryByText('Reconnecting…')).not.toBeInTheDocument();
+  });
+
+  it('Play again starts a new viewing at the current position', async () => {
+    const { log, video, hls } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    await hlsEvent(() =>
+      hls().error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await instances(2);
+    await vi.waitFor(() => expect(log.posted).toHaveLength(2));
+    expect(log.posted[1]).toEqual({
+      quality: 'auto',
+      startMs: 1000000,
+      audioStreamId: 111,
+      probeKbps: 0,
+    });
+    expect(log.playbackIds[1]).toMatch(UUID);
+    expect(log.playbackIds[1]).not.toBe(log.playbackIds[0]);
+    expect(stoppedCard()).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Play again' })).not.toBeInTheDocument();
+  });
+
+  // Only a 410 stops. Every other failure keeps the path it had before the stop existed.
+  describe('every other failure still recovers', () => {
+    it('a 404 (an expired session, or a server restart that lost it) makes a new session under the same viewing', async () => {
+      const { log, video, hls } = await open();
+      await landResume(video);
+      await moveTo(video, 1000);
+      await hlsEvent(() =>
+        hls().error({ fatal: true, type: 'networkError', response: { code: 404 } }),
+      );
+      await instances(2);
+      expect(log.posted).toHaveLength(2);
+      expect(log.playbackIds[1]).toBe(log.playbackIds[0]);
+      expect(stoppedCard()).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Play again' })).not.toBeInTheDocument();
+    });
+
+    it.each([
+      ['a 503', { response: { code: 503 } }],
+      ['a 500', { response: { code: 500 } }],
+      ['no answer at all', { details: 'manifestLoadError' }],
+    ])(
+      '%s from hls.js shows Reconnecting… and keeps the session, with no stop',
+      async (_name, extra) => {
+        const { log, video, hls } = await open();
+        await landResume(video);
+        await hlsEvent(() => hls().error({ fatal: true, type: 'networkError', ...extra }));
+        expect(await screen.findByText('Reconnecting…')).toBeInTheDocument();
+        expect(stoppedCard()).not.toBeInTheDocument();
+        expect(log.posted).toHaveLength(1);
+        expect(FakeHls.instances).toHaveLength(1);
+      },
+    );
+
+    it('a session request answered 500 once is asked again and plays; the recovery is not a stop', async () => {
+      const srv = serve({
+        create: (n) => (n === 1 ? respond({ error: 'boom' }, 500) : respond(SESSION(2), 201)),
+      });
+      installFetch(srv.route);
+      renderApp('/films/1/play?edition=11');
+      await screen.findByTestId('player-video');
+      // The second try waits a second (backoff), longer than `waitFor`'s default.
+      await vi.waitFor(() => expect(FakeHls.instances).toHaveLength(1), { timeout: 4000 });
+      expect(srv.log.posted).toHaveLength(2);
+      expect(FakeHls.last.loadSource).toHaveBeenCalledWith('/api/sessions/s2/master.m3u8');
+      expect(stoppedCard()).not.toBeInTheDocument();
+    });
   });
 });
 

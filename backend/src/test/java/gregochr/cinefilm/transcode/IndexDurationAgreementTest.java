@@ -91,7 +91,7 @@ class IndexDurationAgreementTest {
         when(manager.create(any())).thenAnswer(call -> new SessionView("5b0f1c1e-6a52-4d5e-9a4c-0a7d3c1f2b11",
             List.of(), null, null, null, 1, 1));
         SessionService sessions = new SessionService(new SessionSources(editions, new LibraryRoot(library.toString())),
-            indexes, transcoder, manager);
+            indexes, transcoder, manager, new StoppedPlaybacks(CLOCK));
         List<String> ladder = sessions.create(10L, new SessionDtos.CreateRequest(null, null, "auto", null))
             .renditions().stream().map(SessionDtos.RenditionDto::id).toList();
 

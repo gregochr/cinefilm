@@ -51,6 +51,19 @@ const advance = (ms) => vi.advanceTimersByTimeAsync(ms);
 const hidden = (value) =>
   Object.defineProperty(document, 'visibilityState', { configurable: true, value });
 
+describe('the viewing id', () => {
+  it('is the id the reports are sent under, so the session request can name the viewing', () => {
+    const { result } = mount();
+    expect(result.current.id).toBe(ID);
+  });
+
+  it('is null when no id can be made, with every input still callable', () => {
+    const { result } = mount({ makeId: () => null });
+    expect(result.current.id).toBeNull();
+    expect(() => result.current.playing()).not.toThrow();
+  });
+});
+
 describe('the sends', () => {
   it('sends a PUT with the report at the first frame, at once', async () => {
     const fetchMock = stubFetch();
@@ -490,7 +503,7 @@ describe('the object it returns', () => {
     window.dispatchEvent(new Event('pagehide'));
   });
 
-  it('exposes only the counter’s inputs', () => {
+  it('exposes only the counter’s inputs and the viewing id', () => {
     stubFetch();
     const { result } = mount();
     expect(Object.keys(result.current).sort()).toEqual([
@@ -501,6 +514,7 @@ describe('the object it returns', () => {
       'environment',
       'fellBack',
       'fetching',
+      'id',
       'networkError',
       'paused',
       'play',

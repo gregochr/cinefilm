@@ -133,6 +133,9 @@ an unhandled exception. Caddy and `tailscale serve` answer 502 when the app is d
   status is not 502, 503 or 504 (`request()` throws an `ApiError` for every status that is not OK, a proxy's too).
 - **Recovery** goes through the same loop, so an expired session rebuilt on a weak link retries instead of falling
   back. `MAX_RECOVERIES` (more than 3 expired sessions in a minute) still abandons, unchanged.
+- **410 is not a recovery** (owner 2026-11-15): a 410 for the session routes, or for the session request of a playback
+  Admin stopped, ends the player's streaming: no new session, no retry, no direct play; it pauses and offers "Play again"
+  (a new viewing). Only 410 does this; a 404 (expired), no answer, a 5xx and a restart recover as above.
 
 ### The hls.js chunk (`streamSource.js`)
 

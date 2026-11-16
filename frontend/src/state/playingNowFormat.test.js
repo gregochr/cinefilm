@@ -56,7 +56,7 @@ describe('playingNowRow', () => {
       filmTitle: 'Heat',
       device: 'Mac',
       detail: 'Mac · Away · 720p, converting on the fly',
-      hint: 'Stops converting this stream on the server; if it’s still playing, the player starts it again.',
+      hint: 'Ends playback on Mac; it can resume from here.',
       sessionId: 's1',
     });
   });
@@ -83,14 +83,12 @@ describe('playingNowRow', () => {
     expect(playingNowRow(entry({ environment: null }), []).detail).toBe('Mac · 720p');
   });
 
-  it('says "Unknown device" for an unrecognised or missing user agent, with the same honest hint', () => {
+  it('says "Unknown device" for an unrecognised or missing user agent, with "that device" in the hint', () => {
     for (const device of [null, 'curl/8.4.0']) {
       const row = playingNowRow(entry({ device, touch: null }), [session()]);
       expect(row.device).toBe('Unknown device');
       expect(row.detail).toBe('Unknown device · Away · 720p, converting on the fly');
-      expect(row.hint).toBe(
-        'Stops converting this stream on the server; if it’s still playing, the player starts it again.',
-      );
+      expect(row.hint).toBe('Ends playback on that device; it can resume from here.');
     }
   });
 });

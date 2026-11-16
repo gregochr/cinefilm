@@ -38,6 +38,6 @@ public class TranscodingAdminController {
     @DeleteMapping("/api/admin/transcoding/sessions/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void stop(@PathVariable String id) {
-        sessions.end(id);
+        sessions.stopFromAdmin(id);
     }
 }

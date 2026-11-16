@@ -832,4 +832,42 @@ class SessionManagerTest {
 
         assertThat(files.existsCalls).isEqualTo(before);
     }
+
+    private static final String PLAYBACK = "c1000000-0000-4000-8000-000000000001";
+
+    private static SessionSpec specFor(String playbackId) {
+        SessionSpec base = spec(7, 0);
+        return new SessionSpec(base.editionId(), base.filmTitle(), base.parts(), base.cuts(), base.width(),
+            base.height(), base.rungs(), base.startRung(), base.pinned(), base.startSegment(),
+            base.hardwareDecode(), playbackId);
+    }
+
+    @Test
+    void aLiveSessionSaysWhichViewingItServes() {
+        String id = manager.create(specFor(PLAYBACK)).id();
+
+        assertThat(manager.playbackId(id)).contains(PLAYBACK);
+    }
+
+    @Test
+    void aQuietRememberedSessionStillSaysWhichViewingItServesAndAnEndedOneDoesNot() {
+        String id = manager.create(specFor(PLAYBACK)).id();
+        manager.start();
+        clock.advance(EXPIRY);
+        scheduler.task.run();
+        assertThat(manager.sessions()).isEmpty();
+
+        assertThat(manager.playbackId(id)).contains(PLAYBACK);
+
+        manager.end(id);
+        assertThat(manager.playbackId(id)).isEmpty();
+    }
+
+    @Test
+    void aSessionWhoseClientNamedNoViewingOrAnUnknownSessionHasNoPlaybackId() {
+        String id = manager.create(specFor(null)).id();
+
+        assertThat(manager.playbackId(id)).isEmpty();
+        assertThat(manager.playbackId(id(99))).isEmpty();
+    }
 }

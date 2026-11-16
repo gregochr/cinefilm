@@ -36,7 +36,7 @@ export function playingNowRow(entry, sessions) {
     filmTitle: entry.filmTitle,
     device,
     detail: [device, environment, quality].filter(Boolean).join(' · '),
-    hint: playingNow.stopHint(),
+    hint: playingNow.stopHint(device),
     sessionId: session ? session.id : null,
   };
 }

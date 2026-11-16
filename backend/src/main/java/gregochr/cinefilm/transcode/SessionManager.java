@@ -17,6 +17,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
@@ -262,6 +263,24 @@ public class SessionManager {
             if (session != null) {
                 destroy(session);
             }
+        }
+    }
+
+    /**
+     * The viewing a session serves, for a session that is live or remembered; empty when it is unknown or its client
+     * named no viewing.
+     *
+     * @param id the session id
+     * @return the playback id
+     */
+    public Optional<String> playbackId(String id) {
+        synchronized (lock) {
+            TranscodeSession live = sessions.get(id);
+            if (live != null) {
+                return Optional.ofNullable(live.spec.playbackId());
+            }
+            Remembered quiet = remembered.get(id);
+            return quiet == null ? Optional.empty() : Optional.ofNullable(quiet.spec().playbackId());
         }
     }
 
