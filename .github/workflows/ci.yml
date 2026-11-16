@@ -320,7 +320,7 @@ jobs:
   # ── Shell scripts ────────────────────────────────────────────────────────────
   # ShellCheck proves the scripts parse and are tidy; the tests (scripts/test/*.test.sh) run the real
   # scripts against stub npx/sleep on PATH and throwaway git repos, so npm-audit.sh's retry rules,
-  # ci-docs-only.sh's classification and ci-install-ffmpeg.sh's time budget are proven, not assumed. No network, a few seconds.
+  # ci-docs-only.sh's classification and ci-install-ffmpeg.sh's time budget are proven, not assumed. The tests use no network; the job downloads its pinned tools.
   # Required job name — stable string. Step-level `if:` and a skipped echo step like every job here.
   shell:
     needs: changes
@@ -345,6 +345,15 @@ jobs:
       - name: actionlint (pinned)
         if: needs.changes.outputs.docs_only != 'true'
         run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color
+
+      # PINNED like the linters above, to the frontend job's version: scripts/test/replay-rig.test.sh runs the home
+      # replay rig's tests with `node --test`, and without this step it would run on whatever Node the runner ships.
+      # No cache: the rig has no dependencies and no lockfile.
+      - name: Set up Node 24 (for the replay rig's tests)
+        if: needs.changes.outputs.docs_only != 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
 
       - name: Run scripts/test/*.test.sh
         if: needs.changes.outputs.docs_only != 'true'

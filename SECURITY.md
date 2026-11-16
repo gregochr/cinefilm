@@ -52,6 +52,11 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    and its client's errors and logs name the status, never the key, a URL or a cause. Only `health` and `info` are exposed by actuator.
 6. **Network exposure.** The app binds to `127.0.0.1` on the host and is published only through the tailnet-bound Caddy proxy (and `tailscale serve`). Caddy never binds 0.0.0.0, the LAN or port 80, and its Cloudflare token is DNS-edit scoped to one zone. The
    database publishes no host port. No Cloudflare tunnel or proxying (the DNS records are grey cloud), no `tailscale funnel`, port forward or public listener. CORS stays off.
+   **The home replay rig** (`scripts/replay/`) is not the app: the owner runs it by hand on the laptop, and it is in
+   no image. While a replay runs, its stand-in server listens on `127.0.0.1` only, with no sign-in, and serves a
+   build of the app and a film made of padding: no library, no watch history, no secret. What a request says is
+   never used as a file path or sent back, and is kept only as figures and words from fixed lists
+   (`docs/engineering/home-replay.md`). The train record it replays is in the repository cut down to its timings.
 7. **Untrusted data in the UI.** TMDB, Plex and file metadata (titles, overviews, track names) are rendered as text,
    never with `dangerouslySetInnerHTML`. Image URLs come from the `imageUrl` helper only.
    **The operator lookup** is the browser's one request to a host other than CineFilm and TMDB's images: when the
