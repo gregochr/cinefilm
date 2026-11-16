@@ -214,7 +214,11 @@ describe('the player’s "Subtitles are wrong"', () => {
 
   it('deletes nothing that is not the playing download of this film, edition and kind', async () => {
     const { requests } = await openPlayer({
-      mutate: (f) => fullOn(f),
+      // The film showed every one of these ids, so only the filters on the rows can keep the others out.
+      mutate: (f) => {
+        fullOn(f);
+        f.editions[0].fullSubtitle = { ...DOWNLOAD, sidecarIds: [70, 71, 72, 73, 74, 75] };
+      },
       list: [
         row({ id: 71, editionId: 99 }),
         row({ id: 72, filmId: 2 }),

@@ -1,5 +1,6 @@
 // Display helpers for the Fix match panel. No JSX: the Apple TV and native clients reuse them.
 import { ApiError } from '../api/client.js';
+import { lockText } from './lockText.js';
 import { formatRuntime } from '../player/time.js';
 import { titleWithYear } from './scanFormat.js';
 
@@ -13,7 +14,7 @@ export function parseYear(text) {
 export function matchProblem(failure) {
   const status = failure instanceof ApiError ? failure.status : 0;
   if (status === 503) return 'TMDB isn’t available right now. Try again in a moment.';
-  if (status === 409) return 'A scan is running. Try again when it finishes.';
+  if (status === 409) return lockText(failure, 'A scan is running. Try again when it finishes.');
   if (status === 400) return 'Type a title to search for.';
   if (status === 404) return 'That film is no longer there. Close this and look again.';
   return 'Something went wrong. Try again.';

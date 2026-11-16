@@ -262,6 +262,22 @@ describe('subtitleProblem', () => {
     );
   });
 
+  it('shows the lock text for a 409, the scan line for the bare one, and a scan line with no text', () => {
+    expect(
+      subtitleProblem(
+        new ApiError(409, undefined, {
+          error: 'Subtitles are being changed or checked; try again in a moment',
+        }),
+      ),
+    ).toBe('Subtitles are being changed or checked; try again in a moment.');
+    expect(subtitleProblem(new ApiError(409, undefined, { error: 'A scan is running' }))).toBe(
+      'A scan is running. Try again when it finishes.',
+    );
+    expect(subtitleProblem(new ApiError(409))).toBe(
+      'A scan is running. Try again when it finishes.',
+    );
+  });
+
   it('is generic for anything else, a network failure included', () => {
     expect(subtitleProblem(new ApiError(500))).toBe('Something went wrong. Try again.');
     expect(subtitleProblem(new TypeError('Failed to fetch'))).toBe(

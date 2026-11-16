@@ -1,6 +1,7 @@
 // The Edit editions panel's model: what the owner has arranged, turned into groups, a save request and errors.
 // No JSX: the Apple TV and native clients reuse it. The rules themselves are in editionRules.js.
 import { ApiError } from '../api/client.js';
+import { lockText } from './lockText.js';
 import { formatRuntime } from '../player/time.js';
 import { validateArrangement } from './editionRules.js';
 import { resolutionLabel } from './resolution.js';
@@ -253,8 +254,10 @@ export function footNote(loading, errorCount) {
 export function saveProblem(failure) {
   const status = failure instanceof ApiError ? failure.status : 0;
   if (status === 409) {
+    // The server names what holds the library lock; without its words, the scan line.
+    const held = lockText(failure, 'A library scan is running — try again when it finishes.');
     return {
-      text: 'A library scan is running — try again when it finishes. Your changes are still here.',
+      text: `${held} Your changes are still here.`,
       fieldErrors: [],
     };
   }

@@ -340,6 +340,20 @@ describe('saveProblem', () => {
     });
   });
 
+  it('shows the server’s own words on a 409, ending the sentence, and keeps the changes line', () => {
+    expect(
+      saveProblem(
+        new ApiError(409, undefined, { error: 'The library is busy; try again in a moment' }),
+      ),
+    ).toEqual({
+      text: 'The library is busy; try again in a moment. Your changes are still here.',
+      fieldErrors: [],
+    });
+    expect(saveProblem(new ApiError(409, undefined, { error: 'A scan is running' })).text).toBe(
+      'A library scan is running — try again when it finishes. Your changes are still here.',
+    );
+  });
+
   it('takes the first message and the field errors from a 400', () => {
     const errors = [
       { field: 'default', message: 'Choose a default edition.' },

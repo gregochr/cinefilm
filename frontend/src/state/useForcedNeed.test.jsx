@@ -186,7 +186,7 @@ describe('useForcedNeed', () => {
     installFetch((method, url) =>
       FORCED.test(url)
         ? status === 409
-          ? respond({ error: 'scan' }, 409)
+          ? respond(null, 409)
           : respond(answered(2, 'NOT_NEEDED'))
         : null,
     );
@@ -203,6 +203,21 @@ describe('useForcedNeed', () => {
     await act(() => result.current.choose(2, 'NOT_NEEDED'));
     expect(result.current.problems).toEqual({});
     expect(rowOf(result, 2).ownerChoice).toBe('NOT_NEEDED');
+  });
+
+  it('shows the server’s own words for a 409 when it sent some', async () => {
+    installFetch((method, url) =>
+      FORCED.test(url)
+        ? respond({ error: 'Subtitles are being changed or checked; try again in a moment' }, 409)
+        : null,
+    );
+    const { result } = await loaded();
+
+    await act(() => result.current.choose(2, 'NOT_NEEDED'));
+
+    expect(result.current.problems).toEqual({
+      2: 'Subtitles are being changed or checked; try again in a moment.',
+    });
   });
 
   it('says it could not save for any other failure', async () => {

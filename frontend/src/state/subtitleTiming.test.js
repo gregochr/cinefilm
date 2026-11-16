@@ -5,6 +5,7 @@ import { subtitleTiming } from './subtitleFixCopy.js';
 import {
   EARLIER,
   LATER,
+  atLimit,
   inSync,
   nextOffsets,
   timingProblem,
@@ -64,6 +65,23 @@ describe('inSync', () => {
     expect(inSync([0, 250])).toBe(false);
     expect(inSync(null)).toBe(false);
     expect(inSync([])).toBe(false);
+  });
+});
+
+describe('atLimit', () => {
+  it('is true only when every row is at the limit that way, and false one step short of it', () => {
+    expect(atLimit([600000], LATER.delta)).toBe(true);
+    expect(atLimit([599750], LATER.delta)).toBe(false);
+    expect(atLimit([-600000], EARLIER.delta)).toBe(true);
+    expect(atLimit([-599750], EARLIER.delta)).toBe(false);
+    expect(atLimit([600000, 599750], LATER.delta)).toBe(false);
+  });
+
+  it('is false the other way, and while the offsets are not known', () => {
+    expect(atLimit([600000], EARLIER.delta)).toBe(false);
+    expect(atLimit([-600000], LATER.delta)).toBe(false);
+    expect(atLimit(null, LATER.delta)).toBe(false);
+    expect(atLimit([], LATER.delta)).toBe(false);
   });
 });
 

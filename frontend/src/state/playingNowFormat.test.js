@@ -23,6 +23,7 @@ const session = (over = {}) => ({
   speed: 3.4,
   segmentsAhead: 12,
   startedAt: '2026-11-09T19:02:11Z',
+  unavailable: false,
   ...over,
 });
 

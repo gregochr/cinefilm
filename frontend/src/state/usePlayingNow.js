@@ -21,8 +21,8 @@ const without = (object, key) => {
  * player that is still playing starts a new one under the same playback id, and the summary keeps listing the row
  * while it reports. So a hidden row stays hidden only while its edition has no live session or still has the stopped
  * one; a session with another id brings the row back, with Stop, and the hide is dropped for good once that
- * row is seen (so a later end of that session does not hide it again, and the map stays small). A new try on a row clears its old failure. The
- * flags are looked up by playback id, and a later viewing has a new one.
+ * row is seen (so a later end of that session does not hide it again, and the map stays small). A new try on a row
+ * clears its old failure. The flags are looked up by playback id, and a later viewing has a new one.
  */
 export function usePlayingNow({ entries, sessions, reloadSessions, reloadSummary, onLeft }) {
   const [stopping, setStopping] = useState({});

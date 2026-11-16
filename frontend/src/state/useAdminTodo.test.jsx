@@ -241,6 +241,21 @@ describe('useAdminTodo: confirm', () => {
     expect(onChanged).toHaveBeenCalledTimes(1);
   });
 
+  it('shows the server’s own words for a 409 on the row', async () => {
+    installFetch((m, url) =>
+      m === 'POST' && url === MATCH
+        ? respond({ error: 'The library is busy; try again in a moment' }, 409)
+        : null,
+    );
+    const { result, onChanged } = mount();
+    await waitFor(() => expect(result.current.allRead).toBe(true));
+
+    await act(() => result.current.confirm(SUSPIRIA));
+
+    expect(result.current.problems[34]).toBe('The library is busy; try again in a moment.');
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
   it.each([
     [404, 'That film is no longer in the library. The list is being updated.', true],
     [400, 'Something went wrong. Try again.', false],
@@ -250,7 +265,9 @@ describe('useAdminTodo: confirm', () => {
     'words a %i for the row, and reads the lists again only when the film is gone',
     async (status, message, gone) => {
       installFetch((m, url) =>
-        m === 'POST' && url === MATCH ? respond({ error: 'x' }, status) : null,
+        m === 'POST' && url === MATCH
+          ? respond(status === 409 ? null : { error: 'x' }, status)
+          : null,
       );
       const { result, onChanged } = mount();
       await waitFor(() => expect(result.current.allRead).toBe(true));

@@ -10,6 +10,7 @@ import {
   post,
   put,
   request,
+  serverText,
 } from './client.js';
 import { imageUrl } from './images.js';
 import { buildFilmsQuery } from './resources.js';
@@ -66,6 +67,19 @@ describe('api client', () => {
   });
 });
 
+describe('serverText', () => {
+  it('is the trimmed `error` of a failed response, and null when there is none', () => {
+    expect(serverText(new ApiError(409, undefined, { error: ' A scan is running ' }))).toBe(
+      'A scan is running',
+    );
+    expect(serverText(new ApiError(409))).toBeNull();
+    expect(serverText(new ApiError(409, undefined, { error: '   ' }))).toBeNull();
+    expect(serverText(new ApiError(409, undefined, { error: 5 }))).toBeNull();
+    expect(serverText(new TypeError('offline'))).toBeNull();
+    expect(serverText(undefined)).toBeNull();
+  });
+});
+
 describe('api client request shape', () => {
   it('sends JSON with an Accept header, and a Content-Type only when there is a body', async () => {
     const fetchMock = reply(200, {});
@@ -82,7 +96,8 @@ describe('api client request shape', () => {
   it('marks DELETE as mutating and sends no body', async () => {
     const fetchMock = reply(204);
     vi.stubGlobal('fetch', fetchMock);
-    await del('/api/session');
+    // A 204 has no body to read: the answer is null, not a parse error.
+    expect(await del('/api/session')).toBeNull();
     const [path, init] = fetchMock.mock.calls[0];
     expect(path).toBe('/api/session');
     expect(init.method).toBe('DELETE');

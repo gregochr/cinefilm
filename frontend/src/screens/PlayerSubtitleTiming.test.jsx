@@ -100,7 +100,10 @@ describe('the player’s subtitle timing', () => {
   const later = () =>
     within(subtitlesMenu()).getByRole('menuitem', { name: 'Show lines 0.25 seconds later' });
   const reset = () => within(subtitlesMenu()).getByRole('menuitem', { name: 'Reset timing' });
-  const readout = (text) => within(subtitlesMenu()).findByText(text);
+  // The readout is a status region beside the menu, not inside it.
+  const panelStatus = () =>
+    within(screen.getByRole('group', { name: 'Audio and subtitles' })).getByRole('status');
+  const readout = (text) => screen.findByText(text);
   const fullOn = (file) => (film) => {
     film.fullNeed = 'NEEDED';
     film.preferences.subtitle = 'full';
@@ -220,6 +223,59 @@ describe('the player’s subtitle timing', () => {
     expect(reset()).toHaveAttribute('aria-disabled', 'true');
   });
 
+  it('Later is disabled at +10 minutes, and one step short of it still works', async () => {
+    const { requests } = await openPlayer({ mutate: fullOn(SIDECAR([70], [599750])) });
+    await openPanel();
+    expect(later()).not.toHaveAttribute('aria-disabled');
+
+    await userEvent.click(later());
+    await settle();
+    await readout('Timing: +600 s');
+
+    expect(later()).toHaveAttribute('aria-disabled', 'true');
+    expect(earlier()).not.toHaveAttribute('aria-disabled');
+    await userEvent.click(later());
+    expect(puts(requests)).toEqual(['/api/admin/subtitles/70/offset {"offsetMs":600000}']);
+  });
+
+  it.each([
+    ['Later', 599750, 'later', 600000],
+    ['Earlier', -599750, 'earlier', -600000],
+  ])(
+    'a swap that failed at the %s limit leaves the button enabled, and pressing it retries the load',
+    async (_name, start, which, limit) => {
+      const { requests } = await openPlayer({ mutate: fullOn(SIDECAR([70], [start])) });
+      await openPanel();
+      const button = which === 'later' ? later : earlier;
+
+      await userEvent.click(button());
+      fireEvent.error(await screen.findByTestId('full-subtitle-track-pending'));
+      await screen.findByRole('alert');
+
+      // The server is at the limit, the screen is not: the press is a retry, not a no-op.
+      expect(button()).not.toHaveAttribute('aria-disabled');
+      await userEvent.click(button());
+      const retried = await screen.findByTestId('full-subtitle-track-pending');
+      fireEvent.load(retried);
+
+      expect(puts(requests)).toEqual([`/api/admin/subtitles/70/offset {"offsetMs":${limit}}`]);
+      await waitFor(() => expect(button()).toHaveAttribute('aria-disabled', 'true'));
+    },
+  );
+
+  it('Earlier is disabled at -10 minutes, still focusable, and sends nothing', async () => {
+    const { requests } = await openPlayer({ mutate: fullOn(SIDECAR([70], [-600000])) });
+    await openPanel();
+
+    expect(earlier()).toHaveAttribute('aria-disabled', 'true');
+    expect(later()).not.toHaveAttribute('aria-disabled');
+    earlier().focus();
+    await userEvent.click(earlier());
+
+    expect(earlier()).toHaveFocus();
+    expect(puts(requests)).toEqual([]);
+  });
+
   it('changes every part of a split film’s subtitle, each from its own offset', async () => {
     const { requests } = await openPlayer({
       mutate: fullOn(SIDECAR([70, 71], [1000, -500])),
@@ -277,7 +333,7 @@ describe('the player’s subtitle timing', () => {
       expect(fullUrl()).toBe(urlBefore);
 
       // The readout says the new timing is still being loaded.
-      expect(within(subtitlesMenu()).getByRole('status')).toHaveTextContent('Saving…');
+      expect(panelStatus()).toHaveTextContent('Saving…');
       fireEvent.load(incoming);
 
       // Now it takes over: one track of the kind, showing, at the new address; the old one is gone.
@@ -728,7 +784,7 @@ describe('the player’s subtitle timing', () => {
     expect(full.track.mode).toBe('disabled');
     expect(screen.getByTestId('forced-subtitle-track')).toBe(forced);
     expect(forced.track.mode).toBe('showing');
-    expect(within(subtitlesMenu()).getByRole('status')).toHaveTextContent('Timing: +1 s');
+    expect(panelStatus()).toHaveTextContent('Timing: +1 s');
     expect(later()).not.toHaveAttribute('aria-disabled');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });

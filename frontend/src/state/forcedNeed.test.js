@@ -193,6 +193,25 @@ describe('needProblem', () => {
     expect(needProblem(new ApiError(409))).toBe('A scan is running: try again when it finishes');
   });
 
+  it('shows the server’s own words for a 409 when it sent some, and the scan line when it did not', () => {
+    expect(
+      needProblem(
+        new ApiError(409, undefined, {
+          error: 'Subtitles are being changed or checked; try again in a moment',
+        }),
+      ),
+    ).toBe('Subtitles are being changed or checked; try again in a moment.');
+    expect(needProblem(new ApiError(409, undefined, { error: '  ' }))).toBe(
+      'A scan is running: try again when it finishes',
+    );
+  });
+
+  it('keeps its own guidance for the server’s bare scan line', () => {
+    expect(needProblem(new ApiError(409, undefined, { error: 'A scan is running' }))).toBe(
+      'A scan is running: try again when it finishes',
+    );
+  });
+
   it.each([new ApiError(500), new ApiError(404), new TypeError('offline')])(
     'says it could not save for any other failure (%s)',
     (failure) => {

@@ -28,6 +28,7 @@
   --cf-amber: #e8b25a;
   --cf-dust: #fff3dc; /* dust specks in the buffering beam */
   --cf-on-amber: #1a1206;
+  --cf-problem: #f0876a; /* a failed request or a refusal: Admin and player problem lines, never a fill */
   --cf-ok: #9fd3a8; /* worker online, home network dot */
 
   /* Type */

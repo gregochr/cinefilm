@@ -535,7 +535,8 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
 - **8a decision (built):** one small backend change (review fix): `ForcedSubtitleDto` and `FullSubtitleDto` gain
   `sidecarIds` (the ids of the subtitle rows they are made of, the same ids the Admin list gives), because their
   `version` is a hash and does not identify a row. "Subtitles are wrong" deletes only rows whose id the film showed; if
-  another download plays by now it deletes nothing and says so. The rest needed no backend change. `SubtitleAdminService.remove` already writes the `ForcedDownloadBlock`
+  another download plays by now it deletes nothing and says so. The rest needed no backend change.
+  `SubtitleAdminService.remove` already writes the `ForcedDownloadBlock`
   (edition, IMDb id, OpenSubtitles file id, kind) before it deletes the row, so `DELETE /api/admin/subtitles/{id}` is
   the whole of "Subtitles are wrong" (and answers 400 for an owner's file).
   - **Film detail.** A quiet "Fix…" (`aria-label` "Fix subtitles…") sits under the Subtitles field, also for a film
@@ -634,9 +635,10 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
   of each row in `sidecarIds`, same order), built beside `sidecarIds` from the same pick, so the player needs no
   `GET /api/admin/subtitles` (every row of every film: too heavy for a weak link).
   - **Where.** In the subtitle column of the Audio and subtitles panel, a `role="group"` "Subtitle timing" of three
-    `menuitem` buttons (quiet, never amber, `aria-disabled` while saving so focus stays) between the choices and
-    "Subtitles are wrong", with a `role="status"` readout (always rendered, empty while unknown) and a `menu__problem`
-    alert line. Offered while `shownFileKind` (`state/subtitleFix.js`) says a subtitle *file* shows (owner file or
+    `menuitem` buttons (quiet, never amber, `aria-disabled` while saving or at the 10-minute limit so focus stays)
+    after "Subtitles are wrong", last in the menu, so the readout sits right under Reset. The readout (`role="status"`,
+    always rendered, empty while unknown) and the `menu__problem` alert lines are outside the `role="menu"`, under it,
+    and describe it (`aria-describedby`). Offered while `shownFileKind` (`state/subtitleFix.js`) says a subtitle *file* shows (owner file or
     download, forced or full: `activeSubtitleKey` decides, never an embedded stream or Off-with-nothing). The rows and
     their offsets are the film DTO's `sidecarIds` / `offsetsMs` for that kind.
   - **Step and words.** One step, Admin's finer nudge: `NUDGES` "earlier-025" / "later-025" (0.25 s), reused with its

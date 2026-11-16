@@ -1,4 +1,3 @@
-import { useCallback } from 'react';
 import { useAdminContext } from '../state/adminContext.js';
 import { buttons, playingNow } from '../state/adminCopy.js';
 import { usePlayingNow } from '../state/usePlayingNow.js';
@@ -65,13 +64,12 @@ function Rows({ rows, stopping, failures, onStop }) {
 export default function PlayingNowPanel({ transcoding }) {
   const { adminSummary } = useAdminContext();
   const { summary, error, reload: reloadSummary } = adminSummary;
-  const onLeft = useCallback(leaveRow, []);
   const { rows, stopping, failures, stop } = usePlayingNow({
     entries: summary?.playingNow,
     sessions: transcoding.transcoding?.sessions,
     reloadSessions: transcoding.reload,
     reloadSummary,
-    onLeft,
+    onLeft: leaveRow,
   });
   let body;
   if (!summary && !error) {

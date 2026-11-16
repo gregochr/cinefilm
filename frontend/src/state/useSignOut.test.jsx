@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SESSION_EXPIRED_EVENT } from '../api/client.js';
 import { installFetch, respond } from '../test/mockApi.jsx';
@@ -36,6 +36,8 @@ describe('useSignOut', () => {
     expect(result.current.signingOut).toBe(true);
     expect(announced).not.toHaveBeenCalled();
 
+    // The client may await before it calls fetch, so the request is not open the moment signOut is called.
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
     await act(async () => {
       finish(respond(null, 204));
       await pending;

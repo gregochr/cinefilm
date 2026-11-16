@@ -286,6 +286,15 @@
   gap: 2px;
   min-width: 0;
 }
+.menu__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.menu__notes {
+  display: flex;
+  flex-direction: column;
+}
 .menu__heading {
   font-size: var(--cf-size-label);
   letter-spacing: 0.1em;
@@ -379,7 +388,7 @@
 .menu__problem {
   margin: 4px 12px 0;
   font-size: 13px;
-  color: #f0876a;
+  color: var(--cf-problem);
 }
 .menu__empty {
   padding: 12px;

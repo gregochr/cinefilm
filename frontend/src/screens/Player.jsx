@@ -62,7 +62,7 @@ import { usePageExitReport } from '../player/exitReport.js';
 import { usePlayback } from '../state/usePlayback.js';
 import { shownDownloadKind, shownFileKind } from '../state/subtitleFix.js';
 import { subtitlesWrong } from '../state/subtitleFixCopy.js';
-import { inSync, trackVersion } from '../state/subtitleTiming.js';
+import { EARLIER, LATER, atLimit, inSync, trackVersion } from '../state/subtitleTiming.js';
 import { NO_SWAPS, fileTrackKey, swapTracks, trackModes } from '../state/subtitleTrackSwap.js';
 import { useSubtitleTiming } from '../state/useSubtitleTiming.js';
 import { useSubtitleWrong } from '../state/useSubtitleWrong.js';
@@ -846,6 +846,10 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
                 available: timing.available,
                 offsets: shownOffsets,
                 atZero: inSync(shownOffsets) && inSync(timing.offsets),
+                atEarliest:
+                  atLimit(shownOffsets, EARLIER.delta) && atLimit(timing.offsets, EARLIER.delta),
+                atLatest:
+                  atLimit(shownOffsets, LATER.delta) && atLimit(timing.offsets, LATER.delta),
                 busy: timing.busy,
                 loading: swapsOfFile?.pending != null,
                 frozen: timing.frozen,

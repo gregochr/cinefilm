@@ -71,6 +71,40 @@ describe('useSubtitleWrong', () => {
     expect(calls(fetchMock)).toEqual(['GET /api/admin/subtitles']);
   });
 
+  it('says the subtitle changed when the film gave no ids and none plays', async () => {
+    const fetchMock = installFetch();
+    const { result } = renderHook(() => useSubtitleWrong({ ...target, kind: 'FULL' }));
+
+    let done;
+    await act(async () => {
+      done = await result.current.report('FULL', undefined);
+    });
+
+    expect(done).toBe(false);
+    expect(result.current.problem).toBe(subtitlesWrong.changed);
+    expect(calls(fetchMock)).toEqual([]);
+  });
+
+  it('deletes only the playing download the film showed when its ids overlap the playing ones in part', async () => {
+    const fetchMock = installFetch((method, url) =>
+      method === 'GET' && url === '/api/admin/subtitles'
+        ? respond([
+            { ...fixtures.adminSubtitles[5], id: 61, ...target, served: true },
+            { ...fixtures.adminSubtitles[5], id: 62, ...target, served: true },
+          ])
+        : null,
+    );
+    const { result } = renderHook(() => useSubtitleWrong(target));
+
+    await act(async () => {
+      await result.current.report('FORCED', [61, 63]);
+    });
+
+    expect(calls(fetchMock).filter((c) => c.startsWith('DELETE'))).toEqual([
+      'DELETE /api/admin/subtitles/61',
+    ]);
+  });
+
   it('shows the server’s own words when it refuses the delete, then clears them on the next try', async () => {
     let refuse = true;
     installFetch((method) =>

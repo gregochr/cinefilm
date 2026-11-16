@@ -2,6 +2,7 @@
 // small lines under each row. Pure, no JSX: the Apple TV and native clients reuse it. The server decides every rule
 // (kind, `confident`, `unresolved`); nothing here re-derives one.
 import { ApiError } from '../api/client.js';
+import { lockText } from './lockText.js';
 import { todoRow } from './adminCopy.js';
 import { fullSubtitleLine } from './fullNeed.js';
 import { languageName, reasonText } from './forcedNeed.js';
@@ -125,7 +126,7 @@ export function confirmProblem(failure) {
   const status = failure instanceof ApiError ? failure.status : 0;
   const copy = todoRow.confirmProblems;
   if (status === 404) return { message: copy.gone, gone: true };
-  if (status === 409) return { message: copy.scan, gone: false };
+  if (status === 409) return { message: lockText(failure, copy.scan), gone: false };
   if (status === 503) return { message: copy.tmdb, gone: false };
   return { message: copy.other, gone: false };
 }

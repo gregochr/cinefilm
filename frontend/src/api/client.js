@@ -17,6 +17,15 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The server's own words for a refusal (the `error` of a failed response's body), or null when it sent none: the
+ * 409 for a change the library lock refused names what holds the lock, so a screen shows that before its own copy.
+ */
+export function serverText(failure) {
+  const text = failure instanceof ApiError ? failure.body?.error : null;
+  return typeof text === 'string' && text.trim() ? text.trim() : null;
+}
+
 function emit(name, detail) {
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(name, { detail }));
 }

@@ -14,7 +14,8 @@ const MAX_USER_AGENT = 300;
 const MAX_OPERATOR = 100;
 const ENVIRONMENTS = new Set(['home', 'train', 'away', 'unknown']);
 const SCREEN_PATTERN = /^\d{1,5}x\d{1,5}$/;
-const RUNG_CODES = { original: 1, '1080p': 2, '720p': 3, '480p': 4, '360p': 5, '240p': 6 };
+/** The code of each rung in a `minutes` row (0 means none was known); `state/playbackChart.js` reads it back. */
+export const RUNG_CODES = { original: 1, '1080p': 2, '720p': 3, '480p': 4, '360p': 5, '240p': 6 };
 
 /** A whole number from 0 to MAX_NUMBER; anything that is not a number is 0. */
 function whole(value) {

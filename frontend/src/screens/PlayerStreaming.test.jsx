@@ -345,7 +345,7 @@ describe('the worker-offline state', () => {
     expect(within(menu).getByRole('menuitemradio', { name: /720p/ })).toBeDisabled();
     expect(within(menu).getByRole('menuitemradio', { name: /360p/ })).toBeDisabled();
     expect(within(menu).getByRole('menuitemradio', { name: /^Original/ })).toBeEnabled();
-    expect(menu).toHaveTextContent(
+    expect(screen.getByText(/Lower qualities unavailable right now/)).toHaveTextContent(
       'Lower qualities unavailable right now — the transcode worker is offline. Pre-made versions still play.',
     );
   });
@@ -353,9 +353,8 @@ describe('the worker-offline state', () => {
   it('shows no footer when the worker is up', async () => {
     await open();
     await userEvent.click(screen.getByRole('button', { name: 'Quality' }));
-    expect(screen.getByRole('menu', { name: 'Quality' })).not.toHaveTextContent(
-      'transcode worker is offline',
-    );
+    expect(screen.getByRole('menu', { name: 'Quality' })).toBeInTheDocument();
+    expect(screen.queryByText(/transcode worker is offline/)).not.toBeInTheDocument();
   });
 });
 

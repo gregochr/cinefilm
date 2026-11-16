@@ -32,6 +32,16 @@ export function inSync(offsets) {
 }
 
 /**
+ * Whether a press of `delta` would move none of the shown rows: every one is already at the limit that way (the server
+ * allows ±10 minutes; `nudgedOffset` clamps to it). Unknown offsets are never at a limit.
+ */
+export function atLimit(offsets, delta) {
+  return (
+    Boolean(offsets) && offsets.length > 0 && offsets.every((o) => nudgedOffset(o, delta) === o)
+  );
+}
+
+/**
  * The cache-buster for the subtitle `<track>` URL after a change, from the server's own answers (`SidecarDto.version`
  * is when the row last changed, `offsetMs` its timing): it differs for every change, and the server ignores it.
  */

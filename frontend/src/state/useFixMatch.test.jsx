@@ -58,7 +58,7 @@ describe('useFixMatch', () => {
 
   it('under StrictMode the replayed mount effect keeps the answer to the search that counts', async () => {
     // The first search of the replayed pair gets a 409 (as it once did from the library lock): it must not win.
-    const answers = [respond({ error: 'A scan is running' }, 409), respond([{ tmdbId: 5 }])];
+    const answers = [respond(null, 409), respond([{ tmdbId: 5 }])];
     const fetchMock = installFetch((m, url) => (isSearch(m, url) ? answers.shift() : null));
     const { result } = renderHook(() => useFixMatch(7, 'Dune', vi.fn()), { wrapper: StrictMode });
 
@@ -91,7 +91,7 @@ describe('useFixMatch', () => {
   it('shows the apply problem and does not report success when the apply fails', async () => {
     installFetch((m, url) => {
       if (isSearch(m, url)) return respond([{ tmdbId: 5 }]);
-      if (isApply(m, url)) return respond({ error: 'A scan is running' }, 409);
+      if (isApply(m, url)) return respond(null, 409);
       return null;
     });
     const onApplied = vi.fn();
