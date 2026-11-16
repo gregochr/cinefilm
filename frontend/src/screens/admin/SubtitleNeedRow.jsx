@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { ActionWithHint } from '../../components/ActionWithHint.jsx';
 import { buttons } from '../../state/adminCopy.js';
 import {
@@ -32,6 +32,7 @@ export default function SubtitleNeedRow({
   const [adding, setAdding] = useState(false);
   const [attachBusy, setAttachBusy] = useState(false);
   const addRef = useRef(null);
+  const formId = useId();
   const busy = { 'aria-disabled': saving || undefined };
   const choose = () => {
     if (!saving) onChoose(row);
@@ -56,6 +57,7 @@ export default function SubtitleNeedRow({
                 ref={addRef}
                 hint={buttons.addFileToFilm.hint}
                 aria-expanded={adding}
+                aria-controls={adding ? formId : undefined}
                 // Not while an attach is in flight: closing the form then would reset its one-request guard on
                 // reopening, and a second attach could start beside the first.
                 aria-disabled={attachBusy || undefined}
@@ -96,6 +98,7 @@ export default function SubtitleNeedRow({
       ) : null}
       {adding ? (
         <AddOwnFile
+          id={formId}
           filmId={row.filmId}
           title={filmTitle(row)}
           onAttached={() => onAttached(row)}

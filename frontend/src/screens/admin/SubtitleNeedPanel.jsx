@@ -12,8 +12,8 @@ const LABELS = { foreign: 'the foreign-language films', forced: 'the forced subt
  * heading with their count. `need` is the list's state (`useNeedChoices`) and `rows` its unresolved rows (null until
  * read). A list that has not answered is a static skeleton, or an inline banner with its own retry when its first read
  * failed; a re-read that fails keeps the rows and says so above them. `active` shows the panel (the other is hidden,
- * still in the page so the tab's `aria-controls` is true). `onChanged` runs after a file is attached; `onFind(target,
- * opener, { onPicked })` opens the OpenSubtitles picker for a row (`target` is what `pickerTarget` builds; `onPicked`
+ * still in the page so the tab's `aria-controls` is true). `onChanged` runs after a file is attached; `onFind(target, opener, { onPicked })`
+ * opens the OpenSubtitles picker for a row (`target` is what `pickerTarget` builds; `onPicked`
  * runs when a file was downloaded for it).
  *
  * A choice is one request per film: a click on a row that is saving does nothing. When a saved choice or an attached

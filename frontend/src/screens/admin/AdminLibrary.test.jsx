@@ -162,6 +162,28 @@ describe('Admin Library section: scrolling to an anchor', () => {
     expect(scrollIntoView.mock.contexts[0]).toBe(card);
   });
 
+  it('#plex-import scrolls once, not again after each failed Try again', async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const fetchMock = installFetch((m, url) =>
+      url === '/api/admin/plex' ? respond(null, 500) : null,
+    );
+    const plexReads = () =>
+      fetchMock.mock.calls.filter(([url]) => url === '/api/admin/plex').length;
+    renderApp('/admin/library#plex-import');
+    const card = await screen.findByRole('region', { name: 'Import from Plex' });
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
+
+    for (let n = 1; n <= 2; n += 1) {
+      const reads = plexReads();
+      await userEvent.click(within(card).getByRole('button', { name: 'Try again' }));
+      await waitFor(() => expect(plexReads()).toBe(reads + 1));
+      await act(async () => {});
+    }
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+  });
+
   it('does not scroll again when a background poll brings a new scan status', async () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;

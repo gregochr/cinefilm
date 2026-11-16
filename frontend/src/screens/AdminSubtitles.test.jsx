@@ -412,9 +412,24 @@ describe('Admin: Subtitles panel, read-only', () => {
             checkedAt: '2026-11-12T06:31:00Z',
           },
         }),
+        // Applied, but the verdict is not ALIGNED: no automatic-timing note, so the offset is still told.
+        file({
+          id: 6,
+          path: 'F/Unconvinced.en.forced.srt',
+          offsetMs: 750,
+          alignment: {
+            verdict: 'CHECK',
+            reasons: [],
+            fittedOffsetMs: 750,
+            applied: true,
+            checkedAt: '2026-11-12T06:31:00Z',
+          },
+        }),
       ],
     });
 
+    const unconvinced = await itemOf(panel, 'F/Unconvinced.en.forced.srt');
+    expect(within(unconvinced).getByText('Timing shifted +0.75 s')).toBeVisible();
     const fitted = await itemOf(panel, 'E/Fitted.en.forced.srt');
     expect(within(fitted).getByText('Timing set automatically (+1.2 s)')).toBeVisible();
     expect(within(fitted).queryByText(/Timing shifted/)).not.toBeInTheDocument();

@@ -634,6 +634,13 @@ describe('fixture server: Admin settings', () => {
         'Rashomon.1950.BluRay.SDH',
       ]);
       expect(forced.results[1].fileName).toBeNull();
+      // Amélie's edition (52) and Alien's (51) are different editions of different films, both known.
+      const amelie = await call('GET', '/api/admin/editions/52/opensubtitles?kind=full');
+      expect(amelie.results[0].release).toMatch(/^Am.*lie\./);
+      const alien = await call('GET', '/api/admin/editions/51/opensubtitles?kind=full');
+      expect(alien.results[0].release).toMatch(/^Alien\./);
+      const fullRows = await call('GET', '/api/admin/subtitles/full-need');
+      expect(fullRows.films.find((f) => f.filmId === 5)).toMatchObject({ editionId: 52 });
       const unknownFilm = await call('GET', '/api/admin/editions/103/opensubtitles?kind=full');
       expect(unknownFilm.results[0].release).toBe('Heat.1995.Directors.Cut.BluRay.x264');
     });

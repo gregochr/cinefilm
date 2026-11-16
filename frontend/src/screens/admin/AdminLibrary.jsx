@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAdminContext } from '../../state/adminContext.js';
 import { useGroupingReport } from '../../state/useAdmin.js';
@@ -41,8 +41,11 @@ export default function AdminLibrary() {
   useEffect(() => {
     if (hash === '#scan' && scanShown) document.getElementById('scan')?.scrollIntoView?.();
   }, [hash, scanShown]);
+  // Once only: a failed "Try again" briefly un-shows the error card, and must not scroll the page again.
+  const plexScrolled = useRef(false);
   useEffect(() => {
-    if (hash === '#plex-import' && plexShown) {
+    if (hash === '#plex-import' && plexShown && !plexScrolled.current) {
+      plexScrolled.current = true;
       document.getElementById('plex-import')?.scrollIntoView?.();
     }
   }, [hash, plexShown]);

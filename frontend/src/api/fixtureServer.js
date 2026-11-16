@@ -297,11 +297,12 @@ function removeSubtitle(id) {
   }
   removedSubtitleIds.add(id);
   // Like the server (it recomputes the film's rows): with no download left, the owner's file plays again.
-  for (const other of adminSubtitles) {
+  const current = subtitleList();
+  const stillReplaced = current.some(
+    (r) => r.origin === 'OPENSUBTITLES' && r.filmId === row.filmId,
+  );
+  for (const other of current) {
     if (other.filmId === row.filmId && other.replacedByDownload === true) {
-      const stillReplaced = subtitleList().some(
-        (r) => r.origin === 'OPENSUBTITLES' && r.filmId === row.filmId,
-      );
       attachedSubtitles.set(other.id, {
         ...attachedSubtitles.get(other.id),
         ...playingFields(stillReplaced),
@@ -470,7 +471,7 @@ const FORCED_IF_NEEDED = {
   2: { unresolved: true, beingChecked: false, editionId: 101 },
   3: { unresolved: false, beingChecked: true, editionId: 31 },
   4: NOT_IN_PLAY,
-  5: { unresolved: false, beingChecked: true, editionId: 52 },
+  5: { unresolved: false, beingChecked: true, editionId: 51 },
   6: { unresolved: true, beingChecked: false, editionId: 61 },
   7: { unresolved: true, beingChecked: false, editionId: 71 },
 };
@@ -628,6 +629,8 @@ const OS_MAX_FILES = 3;
 const KNOWN_EDITION_IDS = new Set([
   ...adminSubtitles.map((row) => row.editionId),
   ...adminEditions.editions.map((edition) => edition.id),
+  ...adminFullNeed.films.map((row) => row.editionId),
+  ...adminForcedNeed.films.map((row) => row.editionId),
   ...Object.values(details).flatMap((film) => film.editions.map((edition) => edition.id)),
 ]);
 /** The files a picker search offered, and the ones downloaded since, per edition and kind, kept in memory. */

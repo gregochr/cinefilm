@@ -42,6 +42,12 @@ describe('tabAfterKey', () => {
     expect(tabAfterKey(SUBTITLE_TABS, 'foreign', 'ArrowLeft')).toBe('forced');
   });
 
+  it('moves nowhere from a tab that is not in the list, or in an empty list', () => {
+    expect(tabAfterKey(SUBTITLE_TABS, 'nope', 'ArrowRight')).toBeNull();
+    expect(tabAfterKey(SUBTITLE_TABS, 'nope', 'Home')).toBeNull();
+    expect(tabAfterKey([], 'foreign', 'End')).toBeNull();
+  });
+
   it('jumps with Home and End, and ignores every other key', () => {
     expect(tabAfterKey(SUBTITLE_TABS, 'forced', 'Home')).toBe('foreign');
     expect(tabAfterKey(SUBTITLE_TABS, 'foreign', 'End')).toBe('forced');

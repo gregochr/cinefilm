@@ -11,9 +11,10 @@ import { titleWithYear } from './scanFormat.js';
 /** The tabs in the order they are drawn. */
 export const SUBTITLE_TABS = ['foreign', 'forced'];
 
-/** The key of the tab (of `keys`) a key moves to: arrows step (wrapping), Home and End jump; null for any other key. */
+/** The key of the tab (of `keys`) a key moves to: arrows step (wrapping), Home and End jump; null for any other key or a `current` that is not in `keys`. */
 export function tabAfterKey(keys, current, key) {
   const at = keys.indexOf(current);
+  if (at === -1) return null;
   const last = keys.length - 1;
   if (key === 'ArrowRight') return keys[at === last ? 0 : at + 1];
   if (key === 'ArrowLeft') return keys[at === 0 ? last : at - 1];

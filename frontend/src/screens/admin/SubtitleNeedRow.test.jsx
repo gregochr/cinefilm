@@ -128,6 +128,21 @@ describe('SubtitleNeedRow: a foreign-language film', () => {
     expect(add).toHaveFocus();
   });
 
+  it('points "Add my own file…" at the form while it is open, and at nothing while it is closed', async () => {
+    installFetch((m, url) => (url === '/api/films/6' ? respond({ id: 6, editions: [] }) : null));
+    renderRow({ row: fullRow(), kind: 'foreign' });
+    const add = screen.getByRole('button', { name: 'Add my own file…' });
+    expect(add).not.toHaveAttribute('aria-controls');
+
+    await userEvent.click(add);
+    const form = await screen.findByRole('form', {
+      name: 'Add a subtitle file for Rashomon (1950)',
+    });
+
+    expect(add).toHaveAttribute('aria-controls', form.id);
+    expect(form.id).not.toBe('');
+  });
+
   it('keeps the form open and the toggle disabled while an attach is in flight, so only one request is sent', async () => {
     let release;
     const held = new Promise((resolve) => {

@@ -179,12 +179,11 @@ const WHERE_WORDS = {
   home: 'at home',
   away: 'away',
   train: 'on the train',
-  unknown: 'in an unknown place',
 };
 
 /** The text equivalent of the whole chart. */
 export function chartSummary(sessions, { days, environment }) {
-  const where = environment === 'all' ? '' : ` ${WHERE_WORDS[environmentKey(environment)]}`;
+  const where = environment === 'all' ? '' : ` ${WHERE_WORDS[environment]}`;
   if (sessions.length === 0) return copy.summaryEmpty(days, where);
   const tiles = chartTiles(sessions);
   const parts = [

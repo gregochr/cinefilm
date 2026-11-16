@@ -27,6 +27,7 @@ function Problem({ children, onRetry }) {
  * before "Attach".
  */
 export default function AddOwnFile({
+  id,
   filmId,
   title,
   onAttached,
@@ -47,7 +48,7 @@ export default function AddOwnFile({
     if (await picker.attach()) onAttached();
   };
   return (
-    <form className="admin__addfile" aria-label={copy.heading(title)} onSubmit={submit}>
+    <form id={id} className="admin__addfile" aria-label={copy.heading(title)} onSubmit={submit}>
       {picker.filesLoading ? (
         <p className="admin__text" role="status">
           {copy.loading}

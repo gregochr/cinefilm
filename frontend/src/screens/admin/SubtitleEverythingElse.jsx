@@ -29,8 +29,8 @@ function Tile({ value, label }) {
 /**
  * "Everything else": the figures of what is not on the tabs (each shown once it is known), "Show the {n} films" (a
  * read-only list), the quiet "Show all subtitle files" (a read-only list of the files), the OpenSubtitles search status
- * and the note pointing to the film page and the player. `figures` is `everythingElse(...)`; `needs` is `{ full, forced
- * }`, the two lists' state, for "Your choices"; `version` makes the file list read again.
+ * and the note pointing to the film page and the player. `figures` is `everythingElse(...)`; `needs` is `{ full, forced }`,
+ * the two lists' state, for "Your choices"; `version` makes the file list read again.
  */
 export default function SubtitleEverythingElse({ figures, needs, scan, version }) {
   const [films, setFilms] = useState(false);

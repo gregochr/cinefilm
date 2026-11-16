@@ -9,8 +9,8 @@ const without = (record, key) => {
 
 /**
  * The Admin list of which films need a kind of subtitles, and the owner's choice per film: the logic forced and full
- * subtitles share. `name` keys the list's cache, `load(options)` reads the list (`{ films }`) and `save(filmId,
- * choice)` writes one choice and returns that film's row. `refreshKey` changes whenever the subtitle files may have
+ * subtitles share. `name` keys the list's cache, `load(options)` reads the list (`{ films }`) and `save(filmId, choice)`
+ * writes one choice and returns that film's row. `refreshKey` changes whenever the subtitle files may have
  * changed (a scan, a file attached, moved or detached), and the list is read again. A choice is one write per film at a
  * time, never aborted (the server may still process it): a newer click on a film that is saving waits and replaces any
  * earlier waiting choice, and is sent when the write settles, even if that write failed. Only the last write's answer

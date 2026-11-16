@@ -1,26 +1,17 @@
 import { useRef } from 'react';
 import { tabAfterKey } from '../../state/adminSubtitles.js';
 
-const DEFAULT_PREFIX = 'admin-subtitles';
-
-/** The ids a tab and its panel use to name each other (`prefix` tells one tab list from another). */
-export const tabId = (key, prefix = DEFAULT_PREFIX) => `${prefix}-tab-${key}`;
-export const panelId = (key, prefix = DEFAULT_PREFIX) => `${prefix}-panel-${key}`;
+/** The ids a tab and its panel use to name each other. */
+export const tabId = (key) => `admin-subtitles-tab-${key}`;
+export const panelId = (key) => `admin-subtitles-panel-${key}`;
 
 /**
  * A real `tablist` for panels that switch in place (unlike the section nav, which changes address). `tabs` are
  * `{ key, label, count }` (`count` null until it is known); `selected` is the open tab's key. The selected tab alone is
  * in the tab order (roving tabindex); ArrowLeft and ArrowRight move between tabs and wrap, Home and End jump to the
- * first and last, and the tab that is moved to is selected and focused at once. `idPrefix` is the one `tabId` and
- * `panelId` are given for this list's panels.
+ * first and last, and the tab that is moved to is selected and focused at once.
  */
-export default function AdminTabList({
-  label,
-  tabs,
-  selected,
-  onSelect,
-  idPrefix = DEFAULT_PREFIX,
-}) {
+export default function AdminTabList({ label, tabs, selected, onSelect }) {
   const refs = useRef({});
   const keys = tabs.map((tab) => tab.key);
   const onKeyDown = (event) => {
@@ -40,9 +31,9 @@ export default function AdminTabList({
           }}
           type="button"
           role="tab"
-          id={tabId(tab.key, idPrefix)}
+          id={tabId(tab.key)}
           aria-selected={selected === tab.key}
-          aria-controls={panelId(tab.key, idPrefix)}
+          aria-controls={panelId(tab.key)}
           tabIndex={selected === tab.key ? 0 : -1}
           className="admin__tab"
           onClick={() => onSelect(tab.key)}
