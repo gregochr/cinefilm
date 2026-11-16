@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -37,7 +38,7 @@ public class TranscodingAdminController {
 
     @DeleteMapping("/api/admin/transcoding/sessions/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void stop(@PathVariable String id) {
-        sessions.stopFromAdmin(id);
+    void stop(@PathVariable String id, @RequestParam(required = false) String playbackId) {
+        sessions.stopFromAdmin(id, playbackId);
     }
 }

@@ -346,7 +346,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, onPlayAga
   const seekTo = useCallback(
     (ms) => {
       const video = videoRef.current;
-      if (!video) return;
+      if (!video || stoppedAtRef.current !== null) return; // stopped from Admin: the position stays where it was
       const clamped = Math.min(Math.max(0, ms), durationMs);
       positionKnownRef.current = true;
       pendingSeekRef.current = null; // the viewer chose a position: nothing is left to restore
@@ -356,7 +356,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, onPlayAga
       setPositionMs(clamped);
       health.seek();
     },
-    [durationMs, pendingSeekRef, health],
+    [durationMs, pendingSeekRef, health, stoppedAtRef],
   );
 
   const togglePlay = useCallback(() => {
@@ -483,6 +483,8 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, onPlayAga
   };
 
   const chooseQuality = (qualityId) => {
+    // Stopped from Admin: a new quality would start a new session behind the card.
+    if (stoppedAtRef.current !== null) return;
     setQuality(qualityId);
     setMenu(null);
     playback.savePreferences({ quality: qualityId });

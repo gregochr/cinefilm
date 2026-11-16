@@ -1,7 +1,7 @@
 package gregochr.cinefilm.transcode;
 
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gregochr.cinefilm.auth.SecurityConfig;
+import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.transcode.SessionDtos.SessionRow;
 import java.time.Instant;
@@ -99,7 +100,27 @@ class TranscodingAdminControllerTest {
         mvc.perform(delete("/api/admin/transcoding/sessions/" + ID).with(user("owner")).header("X-CineFilm", "1"))
             .andExpect(status().isNoContent());
 
-        verify(sessions).stopFromAdmin(ID);
+        verify(sessions).stopFromAdmin(ID, null);
+    }
+
+    @Test
+    void stopPassesTheRowsPlaybackIdOn() throws Exception {
+        String playback = "c1000000-0000-4000-8000-000000000001";
+
+        mvc.perform(delete("/api/admin/transcoding/sessions/" + ID).param("playbackId", playback)
+                .with(user("owner")).header("X-CineFilm", "1"))
+            .andExpect(status().isNoContent());
+
+        verify(sessions).stopFromAdmin(ID, playback);
+    }
+
+    @Test
+    void stopWithAPlaybackIdThatIsNotOneIs400() throws Exception {
+        doThrow(new BadRequestException("Invalid playbackId")).when(sessions).stopFromAdmin(ID, "nope");
+
+        mvc.perform(delete("/api/admin/transcoding/sessions/" + ID).param("playbackId", "nope")
+                .with(user("owner")).header("X-CineFilm", "1"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("Invalid playbackId"));
     }
 
     @Test
@@ -109,12 +130,16 @@ class TranscodingAdminControllerTest {
         mvc.perform(delete("/api/admin/transcoding/sessions/" + ID).with(user("owner")))
             .andExpect(status().isForbidden()).andExpect(jsonPath("$.error").value("Missing X-CineFilm header"));
 
-        verify(sessions, never()).stopFromAdmin(ID);
+        mvc.perform(delete("/api/admin/transcoding/sessions/" + ID)
+                .param("playbackId", "c1000000-0000-4000-8000-000000000001").header("X-CineFilm", "1"))
+            .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(sessions);
     }
 
     @Test
     void stopOfAMalformedIdIs404() throws Exception {
-        doThrow(new NotFoundException("No such session")).when(sessions).stopFromAdmin("x");
+        doThrow(new NotFoundException("No such session")).when(sessions).stopFromAdmin("x", null);
 
         mvc.perform(delete("/api/admin/transcoding/sessions/x").with(user("owner")).header("X-CineFilm", "1"))
             .andExpect(status().isNotFound()).andExpect(jsonPath("$.error").value("No such session"));

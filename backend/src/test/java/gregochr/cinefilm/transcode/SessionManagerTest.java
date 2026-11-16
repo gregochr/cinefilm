@@ -871,6 +871,31 @@ class SessionManagerTest {
     }
 
     @Test
+    void endViewingEndsEverySessionOfThatViewingAndNoOther() {
+        String mine = manager.create(specFor(PLAYBACK)).id();
+        String theirs = manager.create(new SessionSpec(8, "Alien", SOURCE, 1, CUTS, 25.0, 1920, 1080, RUNGS,
+            RUNGS.get(0), null, 0, true)).id();
+
+        manager.endViewing(PLAYBACK);
+
+        assertThat(manager.sessions()).extracting(SessionDtos.SessionRow::id).containsExactly(theirs);
+        assertThat(manager.playbackId(mine)).isEmpty();
+    }
+
+    @Test
+    void endViewingAlsoForgetsAQuietRememberedSessionOfThatViewing() {
+        String id = manager.create(specFor(PLAYBACK)).id();
+        manager.start();
+        clock.advance(EXPIRY);
+        scheduler.task.run();
+        assertThat(manager.playbackId(id)).contains(PLAYBACK);
+
+        manager.endViewing(PLAYBACK);
+
+        assertThat(manager.playbackId(id)).isEmpty();
+    }
+
+    @Test
     void aSessionWhoseClientNamedNoViewingOrAnUnknownSessionHasNoPlaybackId() {
         String id = manager.create(specFor(null)).id();
 

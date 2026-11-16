@@ -284,6 +284,23 @@ public class SessionManager {
         }
     }
 
+    /**
+     * Ends every session, live or remembered, that serves this viewing (as {@link #end}); one that serves another
+     * viewing is untouched.
+     *
+     * @param playbackId the viewing's id
+     */
+    public void endViewing(String playbackId) {
+        synchronized (lock) {
+            remembered.values().removeIf(quiet -> playbackId.equals(quiet.spec().playbackId()));
+            for (TranscodeSession session : List.copyOf(sessions.values())) {
+                if (playbackId.equals(session.spec.playbackId())) {
+                    destroy(session);
+                }
+            }
+        }
+    }
+
     /** The live sessions, in the order they were made or last rebuilt, for Admin. */
     public List<SessionDtos.SessionRow> sessions() {
         synchronized (lock) {

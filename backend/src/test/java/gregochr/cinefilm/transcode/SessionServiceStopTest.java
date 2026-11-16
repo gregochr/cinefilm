@@ -174,6 +174,37 @@ class SessionServiceStopTest {
     }
 
     @Test
+    void stopFromAdminOfASessionAlreadyReplacedRecordsTheGivenViewingAndEndsItsLiveSession() {
+        when(manager.playbackId(ID)).thenReturn(Optional.empty());
+
+        service.stopFromAdmin(ID, PLAYBACK);
+
+        InOrder order = inOrder(stopped, manager);
+        order.verify(stopped).record(ID, PLAYBACK);
+        order.verify(manager).end(ID);
+        order.verify(manager).endViewing(PLAYBACK);
+    }
+
+    @Test
+    void stopFromAdminPrefersTheSessionsOwnViewingOverTheGivenOne() {
+        String other = "c1000000-0000-4000-8000-000000000002";
+        when(manager.playbackId(ID)).thenReturn(Optional.of(PLAYBACK));
+
+        service.stopFromAdmin(ID, other);
+
+        verify(stopped).record(ID, PLAYBACK);
+        verify(manager).endViewing(PLAYBACK);
+    }
+
+    @Test
+    void stopFromAdminWithAMalformedViewingIs400AndChangesNothing() {
+        assertThatThrownBy(() -> service.stopFromAdmin(ID, "nope"))
+            .isInstanceOf(BadRequestException.class).hasMessage("Invalid playbackId");
+
+        verifyNoInteractions(stopped, manager);
+    }
+
+    @Test
     void stopFromAdminOfASessionThatNamedNoViewingRemembersOnlyTheSession() {
         when(manager.playbackId(ID)).thenReturn(Optional.empty());
 

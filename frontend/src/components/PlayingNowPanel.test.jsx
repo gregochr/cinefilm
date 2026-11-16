@@ -143,7 +143,9 @@ describe('Admin Playback: Now playing', () => {
 
     expect(await within(panel).findByText('Nothing playing.')).toBeInTheDocument();
     expect(deletes()).toHaveLength(1);
-    expect(deletes()[0][0]).toBe('/api/admin/transcoding/sessions/session-1');
+    expect(deletes()[0][0]).toBe(
+      '/api/admin/transcoding/sessions/session-1?playbackId=00000000-0000-4000-8000-000000000001',
+    );
     expect(deletes()[0][1].headers['X-CineFilm']).toBe('1');
     await waitFor(() => expect(reads('/api/admin/summary')).toBeGreaterThan(summaryReads));
     await waitFor(() => expect(reads('/api/admin/transcoding')).toBeGreaterThan(sessionReads));
@@ -277,6 +279,8 @@ describe('Admin Playback: Now playing', () => {
       await within(panel).findByRole('button', { name: 'Stop this stream: Film 1 (Mac)' }),
     );
     await waitFor(() => expect(deletes()).toHaveLength(1));
-    expect(deletes()[0][0]).toBe('/api/admin/transcoding/sessions/newer');
+    expect(deletes()[0][0]).toBe(
+      '/api/admin/transcoding/sessions/newer?playbackId=00000000-0000-4000-8000-000000000001',
+    );
   });
 });
