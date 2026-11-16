@@ -168,16 +168,35 @@ export function defaultRoute(method, url, init = {}) {
     // The answer is the changed row (`SidecarDto`): the offset is the owner's word and `version` moves on.
     if (subtitleRoute[2] === '/offset' && method === 'PUT') {
       const { offsetMs } = JSON.parse(init.body);
-      return json({ ...row, offsetMs, offsetSource: 'OWNER', version: row.version + 1 });
+      return json({
+        ...row,
+        offsetMs,
+        offsetSource: 'OWNER',
+        version: row.version + 1,
+        verified: false,
+      });
     }
-    if (subtitleRoute[2] === '/verify') return json({ ...row, verified: method === 'POST' });
+    if (subtitleRoute[2] === '/verify') {
+      // As the server answers: a checked file is served, so it no longer reads as replaced by a download.
+      const checked = method === 'POST';
+      return json({
+        ...row,
+        verified: checked,
+        replacedByDownload: checked ? false : row.replacedByDownload,
+      });
+    }
     if (subtitleRoute[2] === '/detach') {
       return json({
         ...row,
         ownerAttached: false,
         state: 'unmatched',
         filmId: null,
+        filmTitle: null,
         editionId: null,
+        editionName: null,
+        parts: 0,
+        part: null,
+        whole: false,
       });
     }
   }

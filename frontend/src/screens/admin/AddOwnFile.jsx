@@ -2,6 +2,7 @@ import { useEffect, useId } from 'react';
 import { Button } from '../../components/Button.jsx';
 import { subtitlesPage } from '../../state/adminCopy.js';
 import { fileChoiceNote } from '../../state/adminSubtitles.js';
+import { kindTag } from '../../state/subtitleFix.js';
 import { editionLabel, fileName, partOptions } from '../../state/subtitleAdmin.js';
 import { useFilmFilePicker } from '../../state/useFilmFilePicker.js';
 
@@ -18,12 +19,23 @@ function Problem({ children, onRetry }) {
 }
 
 /**
- * "Add my own file…" for one film: choose one of the owner's full subtitle files, the edition and (for a split
- * edition) the part, then "Attach". It is the existing attach route, scoped to the film. `onAttached` runs once the
- * server has accepted it; `onCancel` closes the form (not while an attach is in flight); `onBusyChange(boolean)`, when given, says when an attach starts and ends. Nothing is sent before "Attach".
+ * "Add my own file…" for one film: choose one of the owner's subtitle files, the edition and (for a split edition) the
+ * part, then "Attach". It is the existing attach route, scoped to the film. Only full files are offered, unless
+ * `allKinds` (Film detail's Fix… panel): then forced files too, each labelled with its kind, and this film's own
+ * files, to move one. `onAttached` runs once the server has accepted it; `onCancel` closes the form (not while an
+ * attach is in flight); `onBusyChange(boolean)`, when given, says when an attach starts and ends. Nothing is sent
+ * before "Attach".
  */
-export default function AddOwnFile({ filmId, title, onAttached, onCancel, onBusyChange }) {
-  const picker = useFilmFilePicker(filmId);
+export default function AddOwnFile({
+  id,
+  filmId,
+  title,
+  onAttached,
+  onCancel,
+  onBusyChange,
+  allKinds = false,
+}) {
+  const picker = useFilmFilePicker(filmId, { allKinds });
   // Tells the host while an attach is in flight, so it can keep this form open (its guard lives in this instance).
   useEffect(() => {
     onBusyChange?.(picker.attaching);
@@ -36,7 +48,7 @@ export default function AddOwnFile({ filmId, title, onAttached, onCancel, onBusy
     if (await picker.attach()) onAttached();
   };
   return (
-    <form className="admin__addfile" aria-label={copy.heading(title)} onSubmit={submit}>
+    <form id={id} className="admin__addfile" aria-label={copy.heading(title)} onSubmit={submit}>
       {picker.filesLoading ? (
         <p className="admin__text" role="status">
           {copy.loading}
@@ -44,7 +56,7 @@ export default function AddOwnFile({ filmId, title, onAttached, onCancel, onBusy
       ) : null}
       {picker.filesError ? <Problem onRetry={picker.retryFiles}>{copy.loadError}</Problem> : null}
       {picker.files && picker.files.length === 0 ? (
-        <p className="admin__text">{copy.none}</p>
+        <p className="admin__text">{allKinds ? copy.noneAny : copy.none}</p>
       ) : null}
       {picker.files && picker.files.length > 0 ? (
         <fieldset className="subs__choices">
@@ -58,7 +70,11 @@ export default function AddOwnFile({ filmId, title, onAttached, onCancel, onBusy
                 onChange={() => picker.pickFile(file.id)}
               />
               <span>
-                {fileName(file.path)} <span className="admin__text">· {fileChoiceNote(file)}</span>
+                {fileName(file.path)}{' '}
+                <span className="admin__text">
+                  · {allKinds ? `${kindTag(file)} · ` : ''}
+                  {fileChoiceNote(file, filmId)}
+                </span>
               </span>
             </label>
           ))}
@@ -107,6 +123,7 @@ export default function AddOwnFile({ filmId, title, onAttached, onCancel, onBusy
           ))}
         </fieldset>
       ) : null}
+      {picker.unchanged ? <p className="admin__text">{copy.unchanged}</p> : null}
       {picker.problem ? (
         <p className="admin__todo-problem" role="alert">
           {picker.problem}
@@ -116,9 +133,9 @@ export default function AddOwnFile({ filmId, title, onAttached, onCancel, onBusy
         {/* aria-disabled, not disabled: the button keeps focus while its request runs; the hook ignores clicks. */}
         <Button
           type="submit"
-          aria-disabled={!picker.target || picker.attaching || undefined}
+          aria-disabled={!picker.target || picker.attaching || picker.unchanged || undefined}
           onClick={(event) => {
-            if (!picker.target || picker.attaching) event.preventDefault();
+            if (!picker.target || picker.attaching || picker.unchanged) event.preventDefault();
           }}
         >
           {picker.attaching ? copy.attaching : copy.attach}

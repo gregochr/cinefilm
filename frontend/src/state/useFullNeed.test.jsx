@@ -192,5 +192,6 @@ describe('useFullNeed', () => {
     expect(onSaved).toHaveBeenCalledWith({ ...LIST.films[1], need: 'NEEDED' });
     // The failure of the last write is still shown, on the row as the first save left it.
     expect(result.current.problems).toEqual({ 4: "Couldn't save: try again" });
+    expect(result.current.rows[1]).toEqual({ ...LIST.films[1], need: 'NEEDED' });
   });
 });

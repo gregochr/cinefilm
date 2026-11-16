@@ -67,7 +67,18 @@ function serve({ answer = () => null } = {}) {
       return respond(null, 204);
     }
     if (match[2] === '/verify') {
-      row.verified = true;
+      // As the server does: a checked owner file is served, so it no longer reads as replaced by the download;
+      // taking the check away gives it back.
+      row.verified = method === 'POST';
+      if (method === 'POST') {
+        row.wasReplaced = row.replacedByDownload;
+        row.replacedByDownload = false;
+      } else {
+        // The server recomputes: it reads as replaced only while a download of the film is still there.
+        row.replacedByDownload =
+          row.wasReplaced === true &&
+          list.some((r) => r.origin === 'OPENSUBTITLES' && r.filmId === row.filmId);
+      }
       return respond(row);
     }
     if (match[2] === '/detach') {
@@ -131,6 +142,7 @@ describe('FilmSubtitlesFix', () => {
     const items = within(dialog).getAllByRole('listitem');
     expect(items).toHaveLength(3);
     expect(names(items[0])).toEqual([
+      'Looks right: Blade.Runner.1982.1080p',
       'Preview lines: Blade.Runner.1982.1080p',
       'Delete this download: Blade.Runner.1982.1080p',
     ]);
@@ -147,11 +159,11 @@ describe('FilmSubtitlesFix', () => {
     expect(within(dialog).queryByText('Loose.en.forced.srt')).not.toBeInTheDocument();
   });
 
-  it('keeps the old Admin names and "Looks right" out of the panel', async () => {
+  it('keeps the old Admin names out of the panel', async () => {
     serve();
     const { dialog } = await open();
 
-    for (const old of [/Looks right/, /Show cues/, /Remove download/, /Back to automatic/]) {
+    for (const old of [/Show cues/, /Remove download/, /Back to automatic/]) {
       expect(within(dialog).queryByRole('button', { name: old })).not.toBeInTheDocument();
     }
   });
@@ -169,6 +181,150 @@ describe('FilmSubtitlesFix', () => {
     expect(
       within(dialog).getByRole('button', { name: 'Add my own file…' }),
     ).toHaveAccessibleDescription('Picks one of your subtitle files for this film');
+  });
+
+  describe('Looks right', () => {
+    const looksRight = (scope) => within(scope).queryAllByRole('button', { name: /^Looks right/ });
+
+    it('is offered on a forced file that is not checked, and on no other: not the replaced file, not a full one', async () => {
+      serve();
+      const { dialog } = await open();
+
+      const items = within(dialog).getAllByRole('listitem');
+      expect(looksRight(items[0])).toHaveLength(1);
+      // The replaced owner file has "Use my file instead" in its place, never both.
+      expect(within(items[1]).getByRole('button', { name: /^Use my file instead/ })).toBeVisible();
+      expect(looksRight(items[1])).toHaveLength(0);
+      // A full file has no checks.
+      expect(looksRight(items[2])).toHaveLength(0);
+      expect(looksRight(dialog)).toHaveLength(1);
+    });
+
+    it('shows its hint under it', async () => {
+      serve();
+      const { dialog } = await open();
+
+      expect(looksRight(dialog)[0]).toHaveAccessibleDescription(
+        'Marks the lines as checked: you’ve seen they’re right.',
+      );
+    });
+
+    it('posts verify once, says so in a status that takes focus, and the file reads as checked with an Undo', async () => {
+      const { requests } = serve();
+      const { dialog, onChanged } = await open();
+
+      await userEvent.click(looksRight(dialog)[0]);
+
+      await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+      const notice = await within(dialog).findByText('Marked as checked.');
+      await waitFor(() => expect(notice).toHaveFocus());
+      expect(requests.filter((r) => r.startsWith('POST'))).toEqual([
+        'POST /api/admin/subtitles/6/verify',
+      ]);
+      expect(
+        await within(dialog).findByText('You checked this: the lines look right.'),
+      ).toBeVisible();
+      expect(within(dialog).getByRole('button', { name: /^Undo/ })).toBeVisible();
+      expect(looksRight(dialog)).toHaveLength(0);
+    });
+
+    it('Undo sends DELETE on verify and brings Looks right back', async () => {
+      const { requests } = serve();
+      const { dialog } = await open();
+      await userEvent.click(looksRight(dialog)[0]);
+      await userEvent.click(await within(dialog).findByRole('button', { name: /^Undo/ }));
+
+      const notice = await within(dialog).findByText('The check is taken away.');
+      await waitFor(() => expect(notice).toHaveFocus());
+      expect(requests.filter((r) => r.startsWith('DELETE'))).toEqual([
+        'DELETE /api/admin/subtitles/6/verify',
+      ]);
+      await waitFor(() => expect(looksRight(dialog)).toHaveLength(1));
+    });
+
+    it('Undo after "Use my file instead" says the download plays again, not that a check was taken away', async () => {
+      serve();
+      const { dialog } = await open();
+      await userEvent.click(within(dialog).getByRole('button', { name: /^Use my file instead/ }));
+      await userEvent.click(await within(dialog).findByRole('button', { name: /^Undo/ }));
+
+      const notice = await within(dialog).findByText('The download plays again.');
+      await waitFor(() => expect(notice).toHaveFocus());
+      expect(within(dialog).queryByText('The check is taken away.')).not.toBeInTheDocument();
+      expect(
+        await within(dialog).findByRole('button', { name: /^Use my file instead/ }),
+      ).toBeVisible();
+    });
+
+    it('Undo says the download plays again even after the dialog was closed and opened again', async () => {
+      serve();
+      const { dialog } = await open();
+      await userEvent.click(within(dialog).getByRole('button', { name: /^Use my file instead/ }));
+      await within(dialog).findByText('Your file plays instead of the download.');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+      await userEvent.click(screen.getByRole('button', { name: 'Open the fixer' }));
+      const again = await screen.findByRole('dialog', { name: 'Blade Runner (1982)' });
+      await userEvent.click(await within(again).findByRole('button', { name: /^Undo/ }));
+
+      expect(await within(again).findByText('The download plays again.')).toBeVisible();
+    });
+
+    it('Undo says the check is taken away when the download was deleted in the meantime', async () => {
+      serve();
+      const { dialog } = await open();
+      await userEvent.click(within(dialog).getByRole('button', { name: /^Use my file instead/ }));
+      await within(dialog).findByText('Your file plays instead of the download.');
+      await userEvent.click(within(dialog).getByRole('button', { name: /Delete this download/ }));
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Delete download' }));
+      await within(dialog).findByText(/Download removed/);
+
+      await userEvent.click(await within(dialog).findByRole('button', { name: /^Undo/ }));
+
+      expect(await within(dialog).findByText('The check is taken away.')).toBeVisible();
+      expect(within(dialog).queryByText('The download plays again.')).not.toBeInTheDocument();
+    });
+
+    it('sends one request on a double click', async () => {
+      let release;
+      const gate = new Promise((resolve) => {
+        release = resolve;
+      });
+      const { requests } = serve({
+        answer: (method, url) =>
+          url === '/api/admin/subtitles/6/verify' ? gate.then(() => respond(rows()[0])) : null,
+      });
+      const { dialog, onChanged } = await open();
+
+      await userEvent.dblClick(looksRight(dialog)[0]);
+      expect(requests.filter((r) => r.startsWith('POST'))).toEqual([
+        'POST /api/admin/subtitles/6/verify',
+      ]);
+      expect(onChanged).not.toHaveBeenCalled();
+      await act(async () => release());
+
+      await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+      expect(requests.filter((r) => r.startsWith('POST'))).toHaveLength(1);
+    });
+
+    it('shows the server’s exact words when it is refused, on that file, and does not tell the page', async () => {
+      serve({
+        answer: (method, url) =>
+          url === '/api/admin/subtitles/6/verify'
+            ? respond({ error: 'That file cannot be checked' }, 400)
+            : null,
+      });
+      const { dialog, onChanged } = await open();
+
+      await userEvent.click(looksRight(dialog)[0]);
+
+      const alert = await within(dialog).findByRole('alert');
+      expect(alert).toHaveTextContent('That file cannot be checked');
+      expect(within(within(dialog).getAllByRole('listitem')[0]).getByRole('alert')).toBe(alert);
+      expect(onChanged).not.toHaveBeenCalled();
+      expect(looksRight(dialog)).toHaveLength(1);
+    });
   });
 
   it('"Use my file instead" posts verify, tells the page, and reads the list again', async () => {
@@ -360,14 +516,50 @@ describe('FilmSubtitlesFix', () => {
       serve();
       const { dialog } = await open();
 
-      await userEvent.click(within(dialog).getByRole('button', { name: /^Preview lines: Mine/ }));
+      const show = within(dialog).getByRole('button', { name: /^Preview lines: Mine/ });
+      // Nothing to control while the lines are hidden: a dangling reference would name no element.
+      expect(show).not.toHaveAttribute('aria-controls');
+      await userEvent.click(show);
 
       expect(await within(dialog).findByText('<b>Tears</b> in rain')).toBeInTheDocument();
       expect(within(dialog).queryByText('Tears')).not.toBeInTheDocument();
       const hide = within(dialog).getByRole('button', { name: 'Hide lines: Mine.en.srt' });
       expect(hide).toHaveAttribute('aria-expanded', 'true');
+      expect(hide).toHaveAttribute('aria-controls');
       await userEvent.click(hide);
       expect(within(dialog).queryByText('<b>Tears</b> in rain')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Preview lines', () => {
+    it('reads the lines again when the row’s version changes, so they are never another version’s', async () => {
+      let version = 1;
+      serve({
+        answer: (method, url) => {
+          if (url === '/api/admin/subtitles' && method === 'GET') {
+            return respond([{ ...rows()[0], version }]);
+          }
+          if (url === '/api/admin/subtitles/6/cues') {
+            return respond({
+              offsetMs: 0,
+              cues: [{ startMs: 61000, endMs: 63000, text: `Lines v${version}` }],
+            });
+          }
+          if (url === '/api/admin/subtitles/6/verify') {
+            version = 2;
+            return respond({ ...rows()[0], version, verified: true });
+          }
+          return null;
+        },
+      });
+      const { dialog } = await open();
+      await userEvent.click(within(dialog).getByRole('button', { name: /^Preview lines/ }));
+      expect(await within(dialog).findByText('Lines v1')).toBeVisible();
+
+      await userEvent.click(within(dialog).getByRole('button', { name: /^Looks right/ }));
+
+      expect(await within(dialog).findByText('Lines v2')).toBeVisible();
+      expect(within(dialog).queryByText('Lines v1')).not.toBeInTheDocument();
     });
   });
 
@@ -419,6 +611,116 @@ describe('FilmSubtitlesFix', () => {
       expect(requests.filter((r) => r.startsWith('POST'))).toEqual([
         'POST /api/admin/subtitles/21/attach',
       ]);
+    });
+
+    it('offers the owner’s forced files too, each with its kind and where it sits now, and moves one from another film', async () => {
+      const looseForced = {
+        ...own,
+        id: 22,
+        kind: 'FORCED',
+        path: 'Loose/Loose.en.forced.srt',
+      };
+      const onHeat = {
+        ...own,
+        id: 23,
+        kind: 'FORCED',
+        path: 'Heat (1995)/Heat.en.forced.srt',
+        filmId: 99,
+        filmTitle: 'Heat',
+        state: 'matched',
+      };
+      const heatDownload = {
+        ...onHeat,
+        id: 24,
+        origin: 'OPENSUBTITLES',
+        path: 'Heat (1995)/.cinefilm/os.srt',
+      };
+      const posts = [];
+      let moved = false;
+      serve({
+        answer: (method, url, init) => {
+          if (url === '/api/admin/subtitles' && method === 'GET') {
+            const heat = moved ? { ...onHeat, filmId: 6, filmTitle: 'Blade Runner' } : onHeat;
+            return respond([...rows(), own, looseForced, heat, heatDownload]);
+          }
+          if (url === '/api/films/6') {
+            return respond({
+              id: 6,
+              title: 'Blade Runner',
+              editions: [{ id: 61, name: 'Original', parts: 1 }],
+            });
+          }
+          if (url === '/api/admin/subtitles/23/attach') {
+            posts.push(JSON.parse(init.body));
+            moved = true;
+            return respond({ ...onHeat, filmId: 6 });
+          }
+          return null;
+        },
+      });
+      const { dialog, onChanged } = await open();
+
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Add my own file…' }));
+
+      const form = await within(dialog).findByRole('form');
+      expect(
+        within(form)
+          .getAllByRole('radio')
+          .map((r) => r.closest('label').textContent),
+      ).toEqual([
+        'Blade Runner.en.srt · Full · not attached to a film',
+        'Loose.en.forced.srt · Forced · not attached to a film',
+        'Heat.en.forced.srt · Forced · on Heat',
+        // This film's own files can be moved to another edition or part.
+        'Blade Runner.en.forced.srt · Forced · on this film · Final Cut, whole film',
+        'Mine.en.srt · Full · on this film · Final Cut, whole film',
+      ]);
+      await userEvent.click(within(form).getByRole('radio', { name: /Heat\.en\.forced\.srt/ }));
+      await userEvent.click(within(form).getByRole('button', { name: 'Attach' }));
+
+      await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+      expect(posts).toEqual([{ editionId: 61, part: null }]);
+      // Where it lands: the film's own list now has the file, with its Forced tag.
+      await waitFor(() => {
+        const landed = within(dialog)
+          .getAllByRole('listitem')
+          .filter((li) => li.textContent.includes('Heat.en.forced.srt'));
+        expect(landed).toHaveLength(1);
+        expect(within(landed[0]).getByText('Forced')).toBeVisible();
+      });
+    });
+
+    it('moves a file of this film to another edition: it is offered with where it sits, and the attach sends the new edition', async () => {
+      const posts = [];
+      serve({
+        answer: (method, url, init) => {
+          if (url === '/api/films/6') {
+            return respond({
+              id: 6,
+              title: 'Blade Runner',
+              editions: [
+                { id: 61, name: 'Final Cut', parts: 1 },
+                { id: 62, name: 'Theatrical Cut', parts: 1 },
+              ],
+            });
+          }
+          if (url === '/api/admin/subtitles/9/attach') {
+            posts.push(JSON.parse(init.body));
+            return respond(rows()[2]);
+          }
+          return null;
+        },
+      });
+      const { dialog, onChanged } = await open();
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Add my own file…' }));
+      const form = await within(dialog).findByRole('form');
+
+      await userEvent.click(within(form).getByRole('radio', { name: /Mine\.en\.srt/ }));
+      await userEvent.click(await within(form).findByRole('radio', { name: 'Theatrical Cut' }));
+      await userEvent.click(within(form).getByRole('button', { name: 'Attach' }));
+
+      await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+      expect(posts).toEqual([{ editionId: 62, part: null }]);
     });
 
     it('keeps the form open while an attach is in flight, so only one attach request goes out', async () => {

@@ -27,6 +27,17 @@ export const subtitleFix = {
   forced: 'Forced', // planner, 8a
 };
 
+/** "Looks right" in the Fix… panel (8b-2). The button is the existing verify route's word; AR7 and 07 give no hint. */
+export const subtitleCheck = {
+  label: 'Looks right',
+  hint: 'Marks the lines as checked: you’ve seen they’re right.', // planner, 8b-2
+  checked: 'You checked this: the lines look right.', // the existing Admin line
+  undo: 'Undo', // the existing Admin word
+  done: 'Marked as checked.', // planner, 8b-2
+  undone: 'The check is taken away.', // planner, 8b-2
+  undoneReplaced: 'The download plays again.', // planner, 8b-2: undoing "Use my file instead"
+};
+
 /** The player's "Subtitles are wrong": deletes the download that is showing and blocks it. All "planner, 8a". */
 export const subtitlesWrong = {
   label: 'Subtitles are wrong',
@@ -37,17 +48,7 @@ export const subtitlesWrong = {
   failed: 'Couldn’t remove the download. Try again.',
 };
 
-/** The words of the removing flow (`RemoveDownload`): Admin's old words until 8b takes the per-file tools out of Admin. */
-export const adminRemoveLabels = {
-  open: 'Remove',
-  openSpoken: (name) => `Remove the OpenSubtitles download ${name}`,
-  group: 'Remove this download',
-  confirm: 'Remove download',
-  tryAgain: 'Try again',
-  keep: 'Keep it',
-};
-
-/** The same flow on Film detail, with AR7's name for it; the confirming steps are "planner, 8a". */
+/** The words of the removing flow (`RemoveDownload`), with AR7's name for it; the confirming steps are "planner, 8a". */
 export const fixRemoveLabels = {
   open: 'Delete this download', // 07 (`buttons.deleteDownload`)
   openSpoken: (name) => `Delete this download: ${name}`,

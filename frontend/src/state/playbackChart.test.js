@@ -264,6 +264,10 @@ describe('words', () => {
       columnLabel(session({ stallCount: 1, stallMs: 1000, environment: undefined, rungMs: null })),
     ).toBe('Heat, 10 Nov 19:43, Unknown. 1 stall, 1 s. No quality recorded.');
     expect(columnLabel(session())).toBe('Heat, 10 Nov 19:43, Home. No stalls. Original 100%.');
+    // Shares that add up to 100 even when each would round the same way: 34 / 33 / 33, not 33 / 33 / 33.
+    expect(
+      columnLabel(session({ rungMs: { original: 1000, '1080p': 1000, '720p': 1000 } })),
+    ).toContain('Original 34%, 1080p 33%, 720p 33%.');
   });
 
   it('summarises the chart, for one place or all, and when empty', () => {
@@ -272,11 +276,12 @@ describe('words', () => {
       'Quality and stalls for each of the last 2 sessions in 30 days: 1 played without a stall, 1 stalled, typical start 2.0 s, 100% of time at Original or 1080p.',
     );
     expect(chartSummary([list[0]], { days: 90, environment: 'home' })).toContain(
-      'the last 1 session in 90 days on Home:',
+      'the last 1 session in 90 days at home:',
     );
     expect(chartSummary([], { days: 30, environment: 'train' })).toBe(
-      'No film sessions in the last 30 days on Train.',
+      'No film sessions in the last 30 days on the train.',
     );
+    expect(chartSummary([list[0]], { days: 7, environment: 'away' })).toContain('in 7 days away:');
   });
 
   it('heads a session with its date, device, place and time watched', () => {
@@ -343,6 +348,21 @@ describe('minuteStrip', () => {
     expect(strip.line.match(/M/g)).toHaveLength(2);
     expect(strip.line.startsWith('M')).toBe(true);
     expect(strip.line).toMatch(/^M125 24L125 24M/);
+  });
+
+  it('skips a row whose minute is not a whole number and keeps the first of two rows for one minute', () => {
+    const strip = minuteStrip([
+      seven(0.5, 1000, 1),
+      seven(1, 1000, 1),
+      seven(1, 2000, 3),
+      seven(2, 1000, 1),
+    ]);
+
+    expect(strip.bands.map((b) => [b.x, b.bucket])).toEqual([
+      [333.3, 'original'],
+      [666.7, 'original'],
+    ]);
+    expect(strip.stalls).toEqual([]);
   });
 
   it('has no line when no minute has a speed, and no band for an unknown rung', () => {

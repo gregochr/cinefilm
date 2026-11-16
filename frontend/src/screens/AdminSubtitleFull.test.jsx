@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
@@ -45,10 +45,10 @@ function playing(items, filmId) {
   return { source: file.origin === 'OPENSUBTITLES' ? 'DOWNLOAD' : 'SIDECAR' };
 }
 
-// A stateful fake of the subtitle routes that records the actions; a DELETE removes the row.
+// The file list is read-only: the fake answers the list and the full-need list the Subtitles section also reads.
 function serve(items) {
-  const state = { items: structuredClone(items), calls: [] };
-  const route = (method, url, init) => {
+  const state = { items: structuredClone(items) };
+  const route = (method, url) => {
     const path = new URL(url, 'http://test.local').pathname;
     if (path === '/api/admin/subtitles') return respond(state.items);
     if (path === '/api/admin/subtitles/full-need') {
@@ -61,19 +61,7 @@ function serve(items) {
         counts: {},
       });
     }
-    const match = path.match(/^\/api\/admin\/subtitles\/(\d+)(?:\/(cues|offset))?$/);
-    if (!match) return null;
-    const item = state.items.find((i) => i.id === Number(match[1]));
-    if (method === 'DELETE') {
-      state.calls.push({ method, id: item.id, action: 'remove' });
-      state.items = state.items.filter((i) => i.id !== item.id);
-      return respond(null);
-    }
-    if (match[2] === 'cues') return respond({ offsetMs: item.offsetMs, cues: [] });
-    const body = JSON.parse(init.body);
-    state.calls.push({ method, id: item.id, action: match[2], body });
-    item.offsetMs = body.offsetMs;
-    return respond(item);
+    return null;
   };
   return { state, route };
 }
@@ -129,26 +117,16 @@ describe('Admin: Subtitles panel, full subtitle files', () => {
     expect(within(panel).getByRole('button', { name: 'Downloads (0)' })).toBeInTheDocument();
   });
 
-  it('can be moved and given back to matching, and nudged, but has no "Looks right"', async () => {
-    const { panel, state } = await openPanel([full({ ownerAttached: true })]);
+  it('has no tool of any kind on a hand-attached full file', async () => {
+    const { panel } = await openPanel([full({ ownerAttached: true })]);
     const item = (await within(panel).findByText('Heat (1995)/Heat.en.srt')).closest('li');
 
-    expect(within(item).getByRole('button', { name: /Move Heat.en.srt/ })).toBeInTheDocument();
-    expect(
-      within(item).getByRole('button', { name: /Give Heat.en.srt back to automatic matching/ }),
-    ).toBeInTheDocument();
-    await userEvent.click(within(item).getByRole('button', { name: /Show the cues of/ }));
-    await userEvent.click(within(item).getByRole('button', { name: 'Show lines 1 second later' }));
-
-    await waitFor(() =>
-      expect(state.calls).toContainEqual(expect.objectContaining({ action: 'offset' })),
-    );
-    expect(within(item).queryByRole('button', { name: 'Looks right' })).not.toBeInTheDocument();
+    expect(within(item).queryAllByRole('button')).toHaveLength(0);
   });
 });
 
 describe('Admin: Subtitles panel, full downloads', () => {
-  it('shows a playing download with its origin, the Playing tag and why, and no check or Looks right', async () => {
+  it('shows a playing download with its origin, the Playing tag and why, and no check', async () => {
     const { panel } = await openPanel([download()]);
 
     const row = await rowOf(panel, 'Downloaded from OpenSubtitles');
@@ -157,7 +135,6 @@ describe('Admin: Subtitles panel, full downloads', () => {
     expect(within(row).getByText('Playing')).toBeVisible();
     expect(within(row).getByText('Playing as English (full); not checked yet')).toBeVisible();
     expect(within(row).queryByText('Unchecked')).not.toBeInTheDocument();
-    expect(within(row).queryByRole('button', { name: /Looks right/ })).not.toBeInTheDocument();
     expect(within(row).queryByRole('button', { name: /Use my file/ })).not.toBeInTheDocument();
   });
 
@@ -173,41 +150,6 @@ describe('Admin: Subtitles panel, full downloads', () => {
     const row = await rowOf(panel, 'Downloaded from OpenSubtitles');
     expect(within(row).getByText('Not used: your own full file plays instead')).toBeVisible();
     expect(within(row).queryByText('Playing')).not.toBeInTheDocument();
-  });
-
-  it('removes a full download after the confirmation, and the download is gone from the list', async () => {
-    const { panel, state } = await openPanel([download()]);
-    const row = await rowOf(panel, 'Downloaded from OpenSubtitles');
-    await userEvent.click(
-      within(row).getByRole('button', {
-        name: 'Remove the OpenSubtitles download Heat.1995.1080p.BluRay.x264',
-      }),
-    );
-    expect(
-      within(row).getByText(/CineFilm won.t use this file for this edition again/),
-    ).toBeVisible();
-    expect(state.calls).toEqual([]);
-    await userEvent.click(within(row).getByRole('button', { name: 'Remove download' }));
-
-    expect(await within(panel).findByText(/Download removed/)).toBeVisible();
-    expect(state.calls).toEqual([{ method: 'DELETE', id: 20, action: 'remove' }]);
-    await waitFor(() =>
-      expect(within(panel).queryByText('Downloaded from OpenSubtitles')).not.toBeInTheDocument(),
-    );
-  });
-
-  it('nudges the timing of a full download', async () => {
-    const { panel, state } = await openPanel([download()]);
-    const row = await rowOf(panel, 'Downloaded from OpenSubtitles');
-
-    await userEvent.click(within(row).getByRole('button', { name: /Show the cues of/ }));
-    await userEvent.click(within(row).getByRole('button', { name: 'Show lines 1 second later' }));
-
-    await waitFor(() =>
-      expect(state.calls).toEqual([
-        { method: 'PUT', id: 20, action: 'offset', body: { offsetMs: 1000 } },
-      ]),
-    );
   });
 });
 
@@ -242,22 +184,5 @@ describe('Admin: Subtitles panel, the Forced and Full chips', () => {
     expect(within(panel).getByText('Heat (1995)/Heat.en.forced.srt')).toBeVisible();
     expect(within(panel).queryByText('Heat (1995)/Heat.en.srt')).not.toBeInTheDocument();
     expect(within(panel).queryByText('Downloaded from OpenSubtitles')).not.toBeInTheDocument();
-  });
-
-  it('keeps the Full chip, and the forced chips’ counts, when a download is removed', async () => {
-    const { panel } = await openPanel([unchecked(), full(), download()]);
-    await within(panel).findByText('Heat (1995)/Heat.en.forced.srt');
-    await userEvent.click(chip(panel, /^Full/));
-    const row = await rowOf(panel, 'Downloaded from OpenSubtitles');
-    await userEvent.click(
-      within(row).getByRole('button', { name: /^Remove the OpenSubtitles download/ }),
-    );
-    await userEvent.click(within(row).getByRole('button', { name: 'Remove download' }));
-
-    await within(panel).findByText(/Download removed/);
-    await waitFor(() => expect(chip(panel, /^Full/)).toHaveTextContent('Full (1)'));
-    expect(chip(panel, /^Full/)).toHaveAttribute('aria-pressed', 'true');
-    expect(chip(panel, /^Unchecked/)).toHaveTextContent('Unchecked (1)');
-    expect(chip(panel, /^Downloads/)).toHaveTextContent('Downloads (0)');
   });
 });

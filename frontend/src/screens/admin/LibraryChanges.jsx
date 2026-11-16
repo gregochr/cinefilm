@@ -14,7 +14,8 @@ import {
 /**
  * "What the last scan changed · 2 split, 1 joined, 1 flagged": the grouping report in a `<details>` that starts
  * closed, inside the scan card. The list shows 25 changes at a time, with a button for the next page. `scanned`
- * is false before any scan has finished: an empty report then says so, instead of "changed nothing".
+ * is false before any scan has finished (an empty report then says so, instead of "changed nothing") and null while
+ * that is not yet known (an empty report then says nothing).
  */
 export default function LibraryChanges({ report, loading, error, onRetry, scanned = true }) {
   const items = report?.items ?? [];
@@ -34,7 +35,9 @@ export default function LibraryChanges({ report, loading, error, onRetry, scanne
   } else if (error && !report) {
     body = <ErrorState onRetry={onRetry}>{copy.loadError}</ErrorState>;
   } else if (items.length === 0) {
-    body = <p className="admin__text">{scanned ? copy.empty : libraryPage.scan.neverScanned}</p>;
+    if (scanned !== null) {
+      body = <p className="admin__text">{scanned ? copy.empty : libraryPage.scan.neverScanned}</p>;
+    }
   } else {
     const page = groupingPage(items, shown);
     body = (

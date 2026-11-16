@@ -6,6 +6,7 @@ import {
   LookupFailed,
   fileTools,
   filmFiles,
+  kindTag,
   shownDownloadKind,
   shownFileKind,
   shownTargets,
@@ -24,6 +25,13 @@ const row = (over = {}) => ({
   ownerAttached: false,
   verified: false,
   ...over,
+});
+
+describe('kindTag', () => {
+  it('says Full or Forced', () => {
+    expect(kindTag(row({ kind: 'FULL' }))).toBe('Full');
+    expect(kindTag(row({ kind: 'FORCED' }))).toBe('Forced');
+  });
 });
 
 describe('filmFiles', () => {
@@ -57,16 +65,43 @@ describe('fileTools', () => {
     expect(fileTools(row({ origin: 'FILE' })).deleteDownload).toBe(false);
   });
 
-  it('always offers "Preview lines" and has no "Looks right"', () => {
-    const tools = fileTools(row({ origin: 'FILE' }));
+  it('always offers "Preview lines"', () => {
+    expect(fileTools(row({ origin: 'FILE' })).preview).toBe(true);
+  });
 
-    expect(tools.preview).toBe(true);
-    expect(Object.keys(tools).sort()).toEqual([
-      'deleteDownload',
-      'letDecide',
-      'preview',
-      'useMine',
-    ]);
+  describe('"Looks right" (Admin’s old rule)', () => {
+    it('is offered for a forced file under a film that is not yet checked', () => {
+      expect(fileTools(row({})).looksRight).toBe(true);
+      expect(fileTools(row({ origin: 'FILE' })).looksRight).toBe(true);
+    });
+
+    it('is not offered for a full subtitle, which has no checks', () => {
+      expect(fileTools(row({ kind: 'FULL' })).looksRight).toBe(false);
+      expect(fileTools(row({ kind: 'FULL', verified: true })).undoCheck).toBe(false);
+    });
+
+    it('is not offered for a file that sits under no film', () => {
+      expect(fileTools(row({ filmId: null })).looksRight).toBe(false);
+      expect(fileTools(row({ filmId: null, verified: true })).undoCheck).toBe(false);
+    });
+
+    it('is not offered once checked; the check can be undone instead', () => {
+      const tools = fileTools(row({ verified: true }));
+
+      expect(tools.looksRight).toBe(false);
+      expect(tools.undoCheck).toBe(true);
+    });
+
+    it('is left to "Use my file instead" for a replaced owner file, never both', () => {
+      const replaced = fileTools(row({ origin: 'FILE', replacedByDownload: true }));
+
+      expect(replaced.useMine).toBe(true);
+      expect(replaced.looksRight).toBe(false);
+      // Once chosen it reads as checked, with an undo that brings "Use my file instead" back.
+      const chosen = fileTools(row({ origin: 'FILE', replacedByDownload: true, verified: true }));
+      expect(chosen.useMine).toBe(false);
+      expect(chosen.undoCheck).toBe(true);
+    });
   });
 });
 

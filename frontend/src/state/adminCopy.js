@@ -187,7 +187,6 @@ export const playbackChart = {
   },
   // AR4 says "(all on the train)"; the other places are the planner's wording (5a-2).
   allOn: { train: 'all on the train', home: 'all at home', away: 'all away' },
-  noStalls: 'No stalls', // planner, 5a-2
   noQuality: 'No quality recorded', // planner, 5a-2
   stallsAxis: 'stalls', // AR4
   legend: {
@@ -515,11 +514,18 @@ export const subtitlesPage = {
     cancel: 'Cancel',
     loadingEditions: 'Loading that film’s editions…',
     noEdition: 'This film has no edition a subtitle file can be added to.',
+    // planner, 8b-2: the Fix panel's picker offers files of every kind
+    noneAny:
+      'None of your subtitle files are waiting. Put the file beside the film and scan the library; it will appear here.',
+    // planner, 8b-2: shown instead of sending an attach that would change nothing (and clear the file's check)
+    unchanged: 'That file is already there. Pick another edition or part.',
     none: 'No full subtitle files are waiting. Put the file beside the film and scan the library; it will appear here.',
     loading: 'Looking for subtitle files…',
     loadError: 'Couldn’t load the subtitle files.',
     editionsError: 'Couldn’t load that film’s editions.',
     attachedTo: (film) => `on ${film}`,
+    // planner, 8b-2: a file already on the film, so it can be moved to another edition or part
+    onThisFilm: (where) => (where ? `on this film · ${where}` : 'on this film'),
     unattached: 'not attached to a film',
   }, // planner, 4a
   else: {
@@ -547,11 +553,12 @@ export const subtitlesPage = {
       {
         text: ') or in the player — that’s where timing, replacing a file and “Subtitles are wrong” now live, next to the film you’re watching.',
       },
-    ], // AR2, except the player's action is “Subtitles are wrong” (AR7), not AR2's “This is wrong” (8a). Until 8b the per-file tools stay under "Show all subtitle files" (plan, 4a).
+    ], // AR2, except the player's action is “Subtitles are wrong” (AR7), not AR2's “This is wrong” (8a).
   },
   files: {
     heading: 'Subtitle files', // planner, 4a
     showMore: (left) => `Show more (${left} left)`, // planner, 4a
+    offset: (shift) => `Timing shifted ${shift}`, // planner, 8b-2: the offset the old per-file Timing row showed (only when not 0)
   },
   source: 'AR2; Q3 for the forced tab; planner 4a for the rest (see comments)',
 };

@@ -10,7 +10,7 @@ export default function RememberedNetworksPanel() {
   const heading = useRef(null);
   // The Forget button that had focus leaves with its row: focus goes to the card's own heading.
   const onForget = (operator) => {
-    if (forget(operator)) heading.current.focus();
+    if (forget(operator)) heading.current?.focus();
   };
   return (
     <section className="admin__card" aria-labelledby="admin-networks-title">

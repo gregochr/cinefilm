@@ -1,25 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
+import { buttons } from '../state/adminCopy.js';
 import { REMOVE_CONFIRM } from '../state/subtitleAdmin.js';
-import { adminRemoveLabels } from '../state/subtitleFixCopy.js';
+import { fixRemoveLabels as labels } from '../state/subtitleFixCopy.js';
 import { ActionWithHint } from './ActionWithHint.jsx';
 import { Button } from './Button.jsx';
 
 /**
- * Removing a download: an opening button, then an inline confirmation. Focus goes to the safe choice, and back on
- * cancel. The server blocks the same file for that edition, which is what the confirmation says. `labels` is the
- * wording (Admin's old words by default; Film detail's Fix… panel passes "Delete this download"); a `hint` puts the
- * visible hint line under the opening button. `onRemoved` runs once the download is gone.
+ * Removing a download ("Delete this download" in Film detail's Fix… panel): an opening button with its hint line,
+ * then an inline confirmation. Focus goes to the safe choice, and back on cancel. The server blocks the same file for
+ * that edition, which is what the confirmation says. `onRemoved` runs once the download is gone.
  */
-export default function RemoveDownload({
-  item,
-  name,
-  busy,
-  failed,
-  actions,
-  onRemoved,
-  labels = adminRemoveLabels,
-  hint,
-}) {
+export default function RemoveDownload({ item, name, busy, failed, actions, onRemoved }) {
   const [confirming, setConfirming] = useState(false);
   const removeRef = useRef(null);
   const keepRef = useRef(null);
@@ -39,18 +30,17 @@ export default function RemoveDownload({
     setConfirming(false);
   };
   if (!confirming) {
-    const open = {
-      ref: removeRef,
-      'aria-label': labels.openSpoken(name),
-      disabled: busy,
-      onClick: () => setConfirming(true),
-    };
-    return hint ? (
-      <ActionWithHint layout="line" hint={hint} {...open}>
+    return (
+      <ActionWithHint
+        layout="line"
+        hint={buttons.deleteDownload.hint}
+        ref={removeRef}
+        aria-label={labels.openSpoken(name)}
+        disabled={busy}
+        onClick={() => setConfirming(true)}
+      >
         {labels.open}
       </ActionWithHint>
-    ) : (
-      <Button {...open}>{labels.open}</Button>
     );
   }
   return (

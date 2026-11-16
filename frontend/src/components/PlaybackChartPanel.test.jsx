@@ -244,7 +244,7 @@ describe('PlaybackChartPanel', () => {
     await user.click(screen.getByRole('button', { name: 'Train' }));
     expect(screen.getAllByRole('button', { name: /^(Alpha|Beta|Gamma),/ })).toHaveLength(1);
     expect(column('Beta')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText(/in 90 days on Train/)).toBeInTheDocument();
+    expect(screen.getByText(/in 90 days on the train/)).toBeInTheDocument();
     expect(api.charts()).toHaveLength(2);
     await user.click(screen.getByRole('button', { name: 'All' }));
     expect(screen.getAllByRole('button', { name: /^(Alpha|Beta|Gamma),/ })).toHaveLength(3);

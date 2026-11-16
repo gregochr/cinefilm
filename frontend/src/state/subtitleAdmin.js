@@ -1,7 +1,7 @@
 // Display and rule helpers for the Admin "Subtitles" panel. No JSX: the Apple TV and native clients reuse them.
 import { ApiError } from '../api/client.js';
 import { formatClock } from '../player/time.js';
-import { formatScanTime, titleWithYear } from './scanFormat.js';
+import { formatScanTime } from './scanFormat.js';
 
 /** The server allows a timing offset of this many milliseconds either way. */
 export const MAX_OFFSET_MS = 600000;
@@ -9,7 +9,7 @@ export const MAX_OFFSET_MS = 600000;
 /** "Play from here" opens the player this long before a cue, so the viewer hears the line arrive. */
 export const PLAY_LEAD_MS = 3000;
 
-/** The nudge buttons, in the order they are shown. */
+/** The nudge steps, in the order they were shown; the player's Earlier and Later use the ±0.25 s ones (8b-1). */
 export const NUDGES = [
   { key: 'earlier-1', label: '−1 s', delta: -1000, spoken: 'Show lines 1 second earlier' },
   { key: 'earlier-025', label: '−0.25 s', delta: -250, spoken: 'Show lines 0.25 seconds earlier' },
@@ -92,8 +92,12 @@ export function takeFiles(groups, limit) {
 /** Where a file belongs: "The Two Towers · Extended Edition · whole film", "… · part 2", or that it is unattached. */
 export function placement(item) {
   if (item.filmId == null) return 'Not attached to a film';
-  const where = item.whole ? 'whole film' : item.parts > 1 ? `part ${item.part}` : null;
-  return [item.filmTitle, item.editionName, where].filter(Boolean).join(' · ');
+  return [item.filmTitle, item.editionName, partWhere(item)].filter(Boolean).join(' · ');
+}
+
+/** "whole film", "part 2", or null for a single-file edition: where in its edition a file sits. */
+export function partWhere(item) {
+  return item.whole ? 'whole film' : item.parts > 1 ? `part ${item.part}` : null;
 }
 
 /** "12 cues · No problems found", "1 cue · 3 blocks skipped". */
@@ -107,7 +111,8 @@ export function warningsFor(item) {
   if (item.presence === 'MISSING') warnings.push('The last scan did not find this file.');
   if (item.state === 'conflict') {
     warnings.push(
-      'Another file competes for the same place, so neither plays. Attach one of them elsewhere.',
+      // planner, 8b-2: names an action that is still reachable (Admin's Attach to… is gone)
+      'Another file competes for the same place, so neither plays. Move one of them with Add my own file… in the film’s Fix… panel.',
     );
   }
   if (item.endsAfterRuntime) warnings.push('Ends after the film: wrong film or cut?');
@@ -128,11 +133,6 @@ export function partOptions(edition) {
 /** "Extended Edition", "Extended Edition · 2 files". */
 export function editionLabel(edition) {
   return edition.parts > 1 ? `${edition.name} · ${edition.parts} files` : edition.name;
-}
-
-/** "Heat (1995)". */
-export function filmLabel(film) {
-  return titleWithYear(film.title, film.year);
 }
 
 /** What the panel says when an action fails. The server's own message is shown for a rejected request. */

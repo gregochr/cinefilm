@@ -1,0 +1,3 @@
+### Fixed — Admin To do: "Add my own file…" can no longer start a second attach
+
+On a To do row, closing and reopening "Add my own file…" while a file was still being attached could send the attach a second time. The form now stays open and the button is disabled until the first attach finishes, as it already did in the film's Fix panel. Smaller Admin tidy-ups go with it: the Subtitles list says "Hide the n films" with the number it actually lists, a file the server timed automatically no longer also says "Timing shifted", the chart's text summary reads "at home", "away" or "on the train" and its percentages add up to 100, and the Settings loading and error states have padding.

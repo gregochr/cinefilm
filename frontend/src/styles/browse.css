@@ -761,6 +761,10 @@
 .admin__card--rows {
   padding: 0;
 }
+/* The loading skeleton or error inside a rows card, which has no padding of its own. */
+.admin__card-pad {
+  padding: 18px 22px;
+}
 /* AR5: label and description on the left, the control on the right; one column on a phone. */
 .admin__set {
   display: grid;
@@ -902,6 +906,9 @@
 .admin__report-list {
   margin-bottom: 16px;
 }
+.admin__report-list--credits {
+  margin-top: 18px; /* clear of the Plex hint above it */
+}
 .admin__report-list .admin__candidates {
   margin-top: 0;
 }
@@ -917,9 +924,6 @@
 }
 
 /* Admin: Fix match */
-.admin__item-actions {
-  margin-top: 10px;
-}
 .admin__link {
   display: inline-flex;
   align-items: center;
@@ -1600,6 +1604,7 @@
     min-height: 44px;
     padding-block: 8px;
     white-space: normal;
+    overflow-wrap: anywhere;
     text-align: center;
   }
   .admin__todo-foot {

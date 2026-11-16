@@ -46,6 +46,75 @@ function renderForm(props = {}) {
   return handlers;
 }
 
+describe('AddOwnFile, the empty line', () => {
+  it('says no full files are waiting on the To do path, and that none of the files are in the Fix panel', async () => {
+    serve({ files: [] });
+    const { unmount } = render(
+      <AddOwnFile filmId={6} title="Rashomon (1950)" onAttached={vi.fn()} onCancel={vi.fn()} />,
+    );
+    expect(await screen.findByText(/^No full subtitle files are waiting/)).toBeInTheDocument();
+    unmount();
+
+    render(
+      <AddOwnFile
+        filmId={6}
+        title="Rashomon (1950)"
+        allKinds
+        onAttached={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect(await screen.findByText(/^None of your subtitle files are waiting/)).toBeInTheDocument();
+    expect(screen.queryByText(/No full subtitle files/)).not.toBeInTheDocument();
+  });
+});
+
+describe('AddOwnFile: a file already where it would go', () => {
+  const here = (over = {}) =>
+    file({
+      id: 30,
+      kind: 'FORCED',
+      path: 'Rashomon (1950)/Rashomon.en.forced.srt',
+      filmId: 6,
+      filmTitle: 'Rashomon',
+      editionId: 60,
+      editionName: 'Original',
+      // A one-part edition as the server lists it: stored on part 1, not as the whole film.
+      parts: 1,
+      part: 1,
+      whole: false,
+      state: 'matched',
+      ...over,
+    });
+
+  it('keeps Attach inert with a reason, sending nothing, until another edition is picked', async () => {
+    const { attaches } = serve({
+      files: [here()],
+      editions: [edition(60, 'Original'), edition(61, 'Director’s Cut')],
+    });
+    const { onAttached } = renderForm({ allKinds: true });
+
+    await userEvent.click(await screen.findByRole('radio', { name: /Rashomon\.en\.forced\.srt/ }));
+    await userEvent.click(await screen.findByRole('radio', { name: 'Original' }));
+
+    expect(
+      screen.getByText('That file is already there. Pick another edition or part.'),
+    ).toBeVisible();
+    const attach = screen.getByRole('button', { name: 'Attach' });
+    expect(attach).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(attach);
+    expect(attaches).toEqual([]);
+    expect(onAttached).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Director’s Cut' }));
+    expect(screen.queryByText(/already there/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Attach' })).not.toHaveAttribute('aria-disabled');
+    await userEvent.click(screen.getByRole('button', { name: 'Attach' }));
+    await waitFor(() => expect(onAttached).toHaveBeenCalledTimes(1));
+    expect(attaches).toEqual([{ id: 30, body: { editionId: 61, part: null } }]);
+  });
+});
+
 describe('AddOwnFile', () => {
   it('lists the owner’s full subtitle files, and "Attach" waits until a file is chosen', async () => {
     serve({ files: [file(), file({ id: 22, path: 'x/Forced.en.forced.srt', kind: 'FORCED' })] });

@@ -41,7 +41,8 @@ export function usePlaybackLog() {
       .then((answer) => {
         if (!current()) return;
         setState((previous) => {
-          // A play that starts while the log is open pushes later rows down a page: a row already shown is not added twice.
+          // A play that starts while the log is open pushes later rows down a page: a row already shown is not added
+          // twice.
           const shown = append ? previous.rows : [];
           const known = new Set(shown.map((row) => row.playbackId));
           const added = answer.playbacks.filter((row) => !known.has(row.playbackId));

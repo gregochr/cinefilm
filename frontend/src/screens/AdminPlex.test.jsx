@@ -19,9 +19,16 @@ const plexRoute = (body) => (m, url) => (url === '/api/admin/plex' ? respond(bod
 
 describe('Admin: Import from Plex card', () => {
   it('is hidden when Plex is not configured', async () => {
-    installFetch();
+    const fetchMock = installFetch((m, url) =>
+      url === '/api/admin/plex' ? respond({ ...fixtures.adminPlex, configured: false }) : null,
+    );
     renderApp('/admin/library');
     await screen.findByRole('region', { name: 'Library scan' });
+    // Not before the Plex status has been asked for and has answered: an unarrived answer would pass too.
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([url]) => url === '/api/admin/plex')).toBe(true),
+    );
+    await act(async () => {});
     expect(screen.queryByRole('region', { name: 'Import from Plex' })).not.toBeInTheDocument();
   });
 

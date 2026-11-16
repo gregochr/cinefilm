@@ -2,8 +2,8 @@
 // themselves (what a file is, where it sits, how it reads) stay in `subtitleAdmin.js`; Admin and Film detail share them.
 import { ApiError } from '../api/client.js';
 import { FORCED_KEY, FULL_KEY, activeSubtitleKey } from '../player/tracks.js';
-import { subtitlesWrong } from './subtitleFixCopy.js';
-import { filterSidecars, isDownload, subtitleProblem } from './subtitleAdmin.js';
+import { subtitleFix, subtitlesWrong } from './subtitleFixCopy.js';
+import { filterSidecars, isDownload, isFull, subtitleProblem } from './subtitleAdmin.js';
 
 /** Thrown when the playing download is no longer the one the film showed (another tab chose a different one). */
 export class Changed extends Error {
@@ -26,18 +26,29 @@ export function filmFiles(items, filmId) {
   return filterSidecars(items, 'all', filmId);
 }
 
+/** The word for a file's kind: "Full" or "Forced". */
+export function kindTag(item) {
+  return isFull(item) ? subtitleFix.full : subtitleFix.forced;
+}
+
 /**
  * Which per-file tools apply to a file of the film. "Use my file instead" only for an owner's file a download has
  * replaced and the owner has not yet chosen; "Let CineFilm decide" only for a file the owner attached by hand;
  * "Delete this download" only for an OpenSubtitles download (never the owner's own file); "Preview lines" for any.
- * "Looks right" is not here: it goes to the player's panel only (8b).
+ * "Looks right" is the rule Admin's file list had (moved here in 8b-2): a forced file (never a full one) that sits
+ * under a film and is not yet checked, except an owner's file a download replaced, which has "Use my file instead"
+ * (the same `verify` route) in its place; once checked, `undoCheck` takes the check away again.
  */
 export function fileTools(item) {
+  const checkable = !isFull(item) && item.filmId != null;
+  const replaced = item.replacedByDownload === true;
   return {
-    useMine: item.replacedByDownload === true && !item.verified,
+    useMine: replaced && !item.verified,
     letDecide: item.ownerAttached === true,
     preview: true,
     deleteDownload: isDownload(item),
+    looksRight: checkable && !item.verified && !replaced,
+    undoCheck: checkable && item.verified === true,
   };
 }
 

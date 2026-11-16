@@ -1,6 +1,6 @@
-// Display helpers for the Admin Playback section (the playback log and the chart's selected session). No JSX, no DOM: other clients reuse them. A report from
-// an older release can lack any field, so a missing number counts as 0, a missing flag as false and a missing
-// string as unknown.
+// Display helpers for the Admin Playback section (the playback log and the chart's selected session). No JSX, no DOM:
+// other clients reuse them. A report from an older release can lack any field, so a missing number counts as 0, a
+// missing flag as false and a missing string as unknown.
 import { rungName } from '../player/ladder.js';
 import { formatRuntime } from '../player/time.js';
 import { formatScanTime } from './scanFormat.js';
@@ -54,7 +54,8 @@ function startText(report) {
   return `Start ${(num(report.startupMs) / 1000).toFixed(1)} s`;
 }
 
-function stallText(report) {
+/** "No stalls", or "2 stalls, 9 s"; takes a report or a chart session (both carry `stallCount` and `stallMs`). */
+export function stallText(report) {
   const count = num(report.stallCount);
   if (count === 0) return 'No stalls';
   return `${count} ${count === 1 ? 'stall' : 'stalls'}, ${stallDuration(report.stallMs)}`;

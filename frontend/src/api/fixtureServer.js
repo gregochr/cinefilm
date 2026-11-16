@@ -296,7 +296,31 @@ function removeSubtitle(id) {
     throw apiError(400, 'Only a download can be removed');
   }
   removedSubtitleIds.add(id);
+  // Like the server (it recomputes the film's rows): with no download left, the owner's file plays again.
+  const current = subtitleList();
+  const stillReplaced = current.some(
+    (r) => r.origin === 'OPENSUBTITLES' && r.filmId === row.filmId,
+  );
+  for (const other of current) {
+    if (other.filmId === row.filmId && other.replacedByDownload === true) {
+      attachedSubtitles.set(other.id, {
+        ...attachedSubtitles.get(other.id),
+        ...playingFields(stillReplaced),
+      });
+    }
+  }
   return null;
+}
+
+/** What a hand-attached file that was replaced by a download says about itself: replaced, or playing again. */
+function playingFields(replaced) {
+  return replaced
+    ? {
+        served: false,
+        replacedByDownload: true,
+        servedReason: 'Not playing: an OpenSubtitles download replaced it',
+      }
+    : { served: true, replacedByDownload: false, servedReason: 'Playing: your file' };
 }
 
 /** Files attached by hand so far, by row id, kept in memory: the list shows them attached, as the server would. */
@@ -328,7 +352,10 @@ function attachSubtitle(id, body) {
   const found = filmOfEdition(body.editionId);
   if (!found) throw apiError(404, 'No such edition');
   const part = body.part ?? null;
+  // Like the server's `changed()`: a moved file's check is gone, and it reads as replaced again if it was.
   attachedSubtitles.set(id, {
+    verified: false,
+    replacedByDownload: row.replacedByDownload,
     state: 'matched',
     ownerAttached: true,
     filmId: found.film.id,
@@ -369,10 +396,22 @@ function detachSubtitle(id) {
   return listedSubtitle(id);
 }
 
-/** "Use my file instead" (verify) and its undo: the owner's file is marked as checked, or not. */
+/**
+ * "Use my file instead" (verify) and its undo: the owner's file is marked as checked, or not. As the server answers
+ * (it recomputes the row): a checked file is served, so it no longer reads as replaced by a download; undoing the
+ * check gives that back, if there is still a download.
+ */
 function verifySubtitle(id, verified) {
-  listedSubtitle(id);
-  attachedSubtitles.set(id, { ...attachedSubtitles.get(id), verified });
+  const before = listedSubtitle(id);
+  const base = adminSubtitles.find((r) => r.id === id);
+  const replaced =
+    base.replacedByDownload === true &&
+    subtitleList().some((r) => r.origin === 'OPENSUBTITLES' && r.filmId === before.filmId);
+  attachedSubtitles.set(id, {
+    ...attachedSubtitles.get(id),
+    verified,
+    ...(verified || replaced ? playingFields(!verified && replaced) : {}),
+  });
   return listedSubtitle(id);
 }
 
@@ -391,6 +430,8 @@ function setSubtitleOffset(id, body) {
     offsetMs: body.offsetMs,
     offsetSource: 'OWNER',
     version: before.version + 1,
+    // Like the server's `changed()`: a retimed file is no longer the one the owner checked.
+    verified: false,
   });
   return listedSubtitle(id);
 }
@@ -588,6 +629,8 @@ const OS_MAX_FILES = 3;
 const KNOWN_EDITION_IDS = new Set([
   ...adminSubtitles.map((row) => row.editionId),
   ...adminEditions.editions.map((edition) => edition.id),
+  ...adminFullNeed.films.map((row) => row.editionId),
+  ...adminForcedNeed.films.map((row) => row.editionId),
   ...Object.values(details).flatMap((film) => film.editions.map((edition) => edition.id)),
 ]);
 /** The files a picker search offered, and the ones downloaded since, per edition and kind, kept in memory. */

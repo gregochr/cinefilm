@@ -258,8 +258,8 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
   at 22 px with a mouse and 44 px when any pointer is coarse (`any-pointer: coarse`, which also lifts the range and
   environment pills to 44 px), left-aligned, the row scrolling sideways when 90 days will not fit; the selected column
   is scrolled into view, since the newest is at the far end. **The 22 px mouse columns are an explicit exception to
-  the 44 px rule** (WCAG 2.5.8: the 6 px gaps give each target 28 px of spacing, and the arrow keys are the other
-  way in). The 100% / 50% / 0% and "stalls" labels of the board sit left of the columns. A column's stack is the
+  the 44 px rule** (WCAG 2.5.8: a 22 px column and its 6 px gap are a 28 px pitch, so a 24 px circle centred on any
+  column meets no other column; the arrow keys are the other way in). The 100% / 50% / 0% and "stalls" labels of the board sit left of the columns. A column's stack is the
   share of the time **on known rungs** (`bucketShares`), while the mono line under the heading is the share of the
   **watched** time (`healthFormat.rungShares`); the two can differ by the few seconds that no rung covers. The stall
   dot and the "stalled" tile both key on `stallCount` > 0 (the dot sized by `stallMs`, never smaller than the small
@@ -372,7 +372,9 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
   409 during a scan as the choice routes do.
 - Errors: `OpenSubtitlesQuotaException` → 429 `OpenSubtitles daily limit reached — try again tomorrow.`;
   `OpenSubtitlesChargedException` and `OpenSubtitlesUnavailableException` their own statuses and messages;
-  unconfigured → 503.
+  unconfigured → 503. A file that was fetched but cannot be a download of its kind (unreadable, a full file for a forced
+  pick, too short for a full one) → 422; an edition with only premade renditions → 409. The full list is the HTTP
+  contract in `foundation-plan.md`.
 - Tests: service unit tests with mocked collaborators; slice tests incl. 401, missing header, foreign `fileId`,
   quota; fixture entries; contract.
 
@@ -571,6 +573,61 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
     Try again.", "This subtitle has changed since the film started. Reload to see the new one."
   - **Dev mock:** `detach`, `verify` (POST and DELETE) and `cues` routes added to `fixtureServer.js` and the default
     `mockApi.jsx` answers; fixture refusals carry `{ error }` in the body.
+- **8b-2 decision (built):** Admin's file list is read-only and "Looks right" is in the Fix… panel. No backend change.
+  - **"Looks right" rule** (`state/subtitleFix.js` `fileTools`, moved from Admin's `SubtitlesPanel`, where it lived in
+    the cue details): a **forced** file (`!isFull`) that sits under a film (`filmId != null`), is not yet checked and is
+    not an owner's file a download replaced offers `looksRight` (the `verify` route, `adminApi.verifySubtitle`); once
+    checked it offers `undoCheck` ("You checked this: the lines look right." and "Undo", `unverifySubtitle`), as Admin
+    did. A full subtitle never has either (it has no checks); an unattached file is not in the film's list anyway.
+    **Split with "Use my file instead":** a replaced, unchecked owner file has `useMine` and never `looksRight`
+    (Admin hid its own "Looks right" there for the same reason); once chosen it reads as checked, with the Undo, and
+    undoing brings "Use my file instead" back. A download (forced, unchecked) does get "Looks right", as in Admin. The
+    README puts it in the panel; AR7 says "gone"; the README and the plan line were followed. It uses `ActionWithHint`,
+    the dialog's notice (focus there only when focus was lost) and `useSubtitles`' one-request guard.
+  - **Read-only list** (`SubtitlesPanel`): reads `GET /api/admin/subtitles` with `useResource` (`version` still makes it
+    read again), paginated at 50 with the same chips, grouping and states. Each file shows what it was: title or
+    release, the Full / Checked / Playing tags, the served line, where it sits, the parse report, the new "Timing
+    shifted +0.25 s" line (a file under a film whose offset is not 0; the old row showed the offset only inside the cue
+    details), the OpenSubtitles check, the timing fit and the warnings. No button but the chips and "Show more". The
+    note ("Subtitles → Fix… … or in the player") still fits and is unchanged.
+  - **Deleted:** `AttachPicker.jsx`, `useAttachPicker.js`, the `Timing`/`Check`/attach/cues/remove parts of
+    `SubtitlesPanel`, `useSubtitles`' `attach`, `nudge` and `resetTiming`, `adminRemoveLabels`, `RemoveDownload`'s
+    `labels` and `hint` props (one wording now: `fixRemoveLabels` and `buttons.deleteDownload.hint`), the CSS only they
+    used (`.subs__actions`, `.subs__timing`, `.subs__attach`, `.admin__item-actions`) and their tests. Kept:
+    `nudgedOffset`/`MAX_OFFSET_MS`/`formatOffset` (shared with the player), `adminApi.setSubtitleOffset` (the
+    player's timing uses it) and `attachSubtitle` (only `AddOwnFile` uses it), the fixture routes.
+  - **Attaching an owner's forced file (review fix):** Admin's "Attach to… / Move to…" worked on every owner file,
+    forced ones included, but "Add my own file…" listed only full files, so a loose or wrongly placed forced file had
+    nowhere to go. In the Fix dialog only (`AddOwnFile allKinds` → `useFilmFilePicker(filmId, { allKinds })` →
+    `fileChoices(files, filmId, true)`), it now offers the owner's files of both kinds (never downloads or missing files;
+    this film's own are offered too, see below), unattached first, each as "{name} · Full|Forced · not attached to a film | on {film}"
+    (existing `attachedTo`/`unattached` copy; "Full"/"Forced" are 8a's tag words). Admin's To do / full-need picker
+    keeps full files only. Server: `SubtitleAdminService.attachLocked` takes any sidecar and only `retarget`s it to the
+    edition's media file (and marks it owner-attached); the file's kind comes from its name and is untouched, so a
+    forced file attached from a film's Fix dialog plays as that edition's forced subtitle unless another forced file
+    already holds that place, in which case neither plays (a conflict) until one is moved. For that, `allKinds` also
+    offers this film's own owner files, "on this film · {edition}, part {n}" (`subtitlesPage.addFile.onThisFilm`,
+    planner, 8b-2), re-targeted by the same attach route; the conflict warning now reads "Move one of them with Add my
+    own file… in the film's Fix… panel." (planner, 8b-2). The Undo notice follows the server's answer to the
+    undo (`DELETE …/verify` returns the row recomputed): "The download plays again." when `replacedByDownload` is true
+    in it, else "The check is taken away." (after "Use my file instead" the server serves the file, so the row no
+    longer reads as replaced, and a deleted download is not brought back). In the picker, "Attach" stays inert, with
+    "That file is already there. Pick another edition or part." (planner, 8b-2), when the target is exactly the
+    file's current film, edition and part, since the server clears a file's check on any attach. With `allKinds` an
+    empty list reads "None of your subtitle files are waiting. …" (planner, 8b-2); the To do path keeps its line.
+    **Accepted losses (spec-sanctioned):** timing of a file that is not playing (the player nudges only the file on
+    screen) and previewing the lines of an unattached file before attaching it (Preview lines is per file of the
+    film). Dev mocks (`fixtureServer.js`, `mockApi.jsx`) now answer verify as the server does (a checked file stops
+    reading as replaced; undoing gives it back) and clear `verified` on an attach or a retiming.
+    `kindTag` (`state/subtitleFix.js`) is the one Full/Forced word. The dialog's tests send the
+    attach for a forced file under another film end to end through the mocks. "Undo" after "Use my file instead" says
+    "The download plays again." (`subtitleCheck.undoneReplaced`). `filmLabel` was dead and is deleted. `NUDGES` was deleted and then restored on the merge with 8b-1, which
+    uses it (with `nudgedOffset`, `formatOffset`, `MAX_OFFSET_MS` and `adminApi.setSubtitleOffset`).
+  - **Invented copy (planner, 8b-2):** `subtitleCheck.undoneReplaced` "The download plays again.",
+    `subtitleCheck.hint` "Marks the lines as checked: you’ve seen they’re right.",
+    `subtitleCheck.done` "Marked as checked.", `subtitleCheck.undone` "The check is taken away." (in
+    `subtitleFixCopy.js`, its own block), and "Timing shifted {offset}" (`subtitlesPage.files.offset`). "Looks right",
+    "Undo" and "You checked this: the lines look right." are Admin's existing words.
 
 - **8b-1 decision (built):** player "Earlier" / "Later" / "Reset timing"; Admin keeps its own nudges until 8b-2 removes
   them. One small backend change (review fix): `ForcedSubtitleDto` and `FullSubtitleDto` gain `offsetsMs` (the offset

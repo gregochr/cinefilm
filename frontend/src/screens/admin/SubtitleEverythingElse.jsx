@@ -28,11 +28,11 @@ function Tile({ value, label }) {
 
 /**
  * "Everything else": the figures of what is not on the tabs (each shown once it is known), "Show the {n} films" (a
- * read-only list), the quiet "Show all subtitle files" (the file list with every per-file tool, until they move to
- * the film page, 8b), the OpenSubtitles search status and the note pointing to the film page and the player.
- * `figures` is `everythingElse(...)`; `needs` is `{ full, forced }`, the two lists' state, for "Your choices"; `onChanged` runs when a file tool changed something the lists depend on.
+ * read-only list), the quiet "Show all subtitle files" (a read-only list of the files), the OpenSubtitles search status
+ * and the note pointing to the film page and the player. `figures` is `everythingElse(...)`; `needs` is `{ full, forced }`,
+ * the two lists' state, for "Your choices"; `version` makes the file list read again.
  */
-export default function SubtitleEverythingElse({ figures, needs, scan, version, onChanged }) {
+export default function SubtitleEverythingElse({ figures, needs, scan, version }) {
   const [films, setFilms] = useState(false);
   const [files, setFiles] = useState(false);
   const filmsId = useId();
@@ -66,7 +66,10 @@ export default function SubtitleEverythingElse({ figures, needs, scan, version, 
                 aria-controls={films ? filmsId : undefined}
                 onClick={() => setFilms(!films)}
               >
-                {films ? copy.hideFilms(haveSubtitles) : copy.showFilms(haveSubtitles)}
+                {/* Open, the label counts the rows listed (the figure can differ by one until the re-read). */}
+                {films
+                  ? copy.hideFilms(figures.films?.length ?? haveSubtitles)
+                  : copy.showFilms(haveSubtitles)}
               </Button>
             ) : null}
             <Button
@@ -94,9 +97,7 @@ export default function SubtitleEverythingElse({ figures, needs, scan, version, 
           <Rich parts={copy.note} />
         </p>
       </section>
-      <div id={filesId}>
-        {files ? <SubtitlesPanel version={version} onChanged={onChanged} /> : null}
-      </div>
+      <div id={filesId}>{files ? <SubtitlesPanel version={version} /> : null}</div>
     </>
   );
 }
