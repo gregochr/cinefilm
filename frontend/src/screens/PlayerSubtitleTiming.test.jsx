@@ -238,6 +238,31 @@ describe('the player’s subtitle timing', () => {
     expect(puts(requests)).toEqual(['/api/admin/subtitles/70/offset {"offsetMs":600000}']);
   });
 
+  it.each([
+    ['Later', 599750, 'later', 600000],
+    ['Earlier', -599750, 'earlier', -600000],
+  ])(
+    'a swap that failed at the %s limit leaves the button enabled, and pressing it retries the load',
+    async (_name, start, which, limit) => {
+      const { requests } = await openPlayer({ mutate: fullOn(SIDECAR([70], [start])) });
+      await openPanel();
+      const button = which === 'later' ? later : earlier;
+
+      await userEvent.click(button());
+      fireEvent.error(await screen.findByTestId('full-subtitle-track-pending'));
+      await screen.findByRole('alert');
+
+      // The server is at the limit, the screen is not: the press is a retry, not a no-op.
+      expect(button()).not.toHaveAttribute('aria-disabled');
+      await userEvent.click(button());
+      const retried = await screen.findByTestId('full-subtitle-track-pending');
+      fireEvent.load(retried);
+
+      expect(puts(requests)).toEqual([`/api/admin/subtitles/70/offset {"offsetMs":${limit}}`]);
+      await waitFor(() => expect(button()).toHaveAttribute('aria-disabled', 'true'));
+    },
+  );
+
   it('Earlier is disabled at -10 minutes, still focusable, and sends nothing', async () => {
     const { requests } = await openPlayer({ mutate: fullOn(SIDECAR([70], [-600000])) });
     await openPanel();

@@ -846,8 +846,10 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
                 available: timing.available,
                 offsets: shownOffsets,
                 atZero: inSync(shownOffsets) && inSync(timing.offsets),
-                atEarliest: atLimit(timing.offsets, EARLIER.delta),
-                atLatest: atLimit(timing.offsets, LATER.delta),
+                atEarliest:
+                  atLimit(shownOffsets, EARLIER.delta) && atLimit(timing.offsets, EARLIER.delta),
+                atLatest:
+                  atLimit(shownOffsets, LATER.delta) && atLimit(timing.offsets, LATER.delta),
                 busy: timing.busy,
                 loading: swapsOfFile?.pending != null,
                 frozen: timing.frozen,
