@@ -233,6 +233,7 @@ describe('Admin To do: Yes, it’s …', () => {
         matched = true;
         return respond({ filmId: 34, joined: false });
       }
+      // Once matched the server no longer lists the film, so the re-read agrees with the hiding.
       if (url === ATTENTION && matched) {
         return respond({ items: fixtures.adminAttention.items.filter((i) => i.filmId !== 34) });
       }
@@ -266,6 +267,7 @@ describe('Admin To do: Yes, it’s …', () => {
         matched = true;
         return respond({ filmId: 34, joined: false });
       }
+      // Once matched the server no longer lists the film, so the re-read agrees with the hiding.
       if (url === ATTENTION && matched) {
         return respond({ items: fixtures.adminAttention.items.filter((i) => i.filmId !== 34) });
       }
@@ -294,6 +296,7 @@ describe('Admin To do: Yes, it’s …', () => {
           };
         });
       }
+      // Once matched the server no longer lists the film, so the re-read agrees with the hiding.
       if (url === ATTENTION && matched) {
         return respond({ items: fixtures.adminAttention.items.filter((i) => i.filmId !== 34) });
       }

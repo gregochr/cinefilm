@@ -516,12 +516,16 @@ describe('FilmSubtitlesFix', () => {
       serve();
       const { dialog } = await open();
 
-      await userEvent.click(within(dialog).getByRole('button', { name: /^Preview lines: Mine/ }));
+      const show = within(dialog).getByRole('button', { name: /^Preview lines: Mine/ });
+      // Nothing to control while the lines are hidden: a dangling reference would name no element.
+      expect(show).not.toHaveAttribute('aria-controls');
+      await userEvent.click(show);
 
       expect(await within(dialog).findByText('<b>Tears</b> in rain')).toBeInTheDocument();
       expect(within(dialog).queryByText('Tears')).not.toBeInTheDocument();
       const hide = within(dialog).getByRole('button', { name: 'Hide lines: Mine.en.srt' });
       expect(hide).toHaveAttribute('aria-expanded', 'true');
+      expect(hide).toHaveAttribute('aria-controls');
       await userEvent.click(hide);
       expect(within(dialog).queryByText('<b>Tears</b> in rain')).not.toBeInTheDocument();
     });

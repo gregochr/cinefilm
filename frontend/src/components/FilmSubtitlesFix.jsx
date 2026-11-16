@@ -125,7 +125,7 @@ function FixFile({ item, busy, problem, actions, onRemoved, onDone }) {
           hint={previewing ? undefined : buttons.previewLines.hint}
           aria-label={`${previewing ? copy.hideLines : buttons.previewLines.label}: ${name}`}
           aria-expanded={previewing}
-          aria-controls={cuesId}
+          aria-controls={previewing ? cuesId : undefined}
           onClick={() => setPreviewing(!previewing)}
         >
           {previewing ? copy.hideLines : buttons.previewLines.label}
@@ -188,11 +188,11 @@ function Files({ subtitles, files, onRemoved, onDone }) {
 
 /**
  * Film detail's "Subtitles → Fix…": a dialog over the film's subtitle files with the per-file tools that moved out of
- * Admin ("Looks right", "Use my file instead", "Preview lines", "Delete this download", "Let CineFilm decide") and "Add my own file…",
- * the existing attach route scoped to this film. It reuses Admin's `useSubtitles` (one copy of the rules and the
- * one-request-at-a-time guard). `onChanged` runs after every change that succeeded, even one that finishes after the
- * dialog was closed, so the film page reads again. `opener` is where focus goes back to on close. Timing is not here:
- * it is changed in the player (8b-1).
+ * Admin ("Looks right", "Use my file instead", "Preview lines", "Delete this download", "Let CineFilm decide") and "Add
+ * my own file…", the existing attach route scoped to this film. It reuses Admin's `useSubtitles` (one copy of the rules
+ * and the one-request-at-a-time guard). `onChanged` runs after every change that succeeded, even one that finishes
+ * after the dialog was closed, so the film page reads again. `opener` is where focus goes back to on close. Timing is
+ * not here: it is changed in the player (8b-1).
  */
 export default function FilmSubtitlesFix({ film, opener, onClose, onChanged }) {
   const base = useId();

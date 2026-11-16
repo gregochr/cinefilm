@@ -424,7 +424,7 @@ describe('Admin: Session panel', () => {
     );
     renderApp('/admin/settings');
     const panel = await screen.findByRole('region', { name: 'Signed in on this browser' });
-    expect(within(panel).getAllByText('Signed in on this browser')[0]).toBeInTheDocument();
+    expect(within(panel).getByText('Signed in on this browser')).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: 'Sign out' })).toHaveAccessibleDescription(
       "Signing out here doesn't affect other devices.",
     );

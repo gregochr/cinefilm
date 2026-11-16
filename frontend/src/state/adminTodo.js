@@ -25,13 +25,9 @@ export function groupOfKind(kind) {
   return KIND_GROUP[kind] ?? null;
 }
 
-/** The candidate with the highest score (the first of equals), or null when there is none. */
+/** The server's best candidate (`candidates` are ranked best first), or null when there is none. */
 export function bestGuess(item) {
-  let best = null;
-  for (const candidate of item.candidates ?? []) {
-    if (best === null || candidate.score > best.score) best = candidate;
-  }
-  return best;
+  return item.candidates?.[0] ?? null;
 }
 
 /**
@@ -63,8 +59,9 @@ export function visibleRows(group, expanded) {
 }
 
 /**
- * The footer under a group: `{ shown, total, control }` where `control` is "show-all" (a group of 1 or 2 with more
- * than the cap), "show-fewer" (the same, expanded), "subtitles" (a group of 3 or 4, always), or null for no footer.
+ * The footer under a group: `{ shown, total, control }` where `control` is "show-all" (a `pickFilm` or `severalFiles`
+ * group with more than the cap), "show-fewer" (the same, expanded), "subtitles" (a `fullMissing` or `forcedQuestion`
+ * group, always), or null for no footer.
  */
 export function footerFor(group, expanded) {
   const shown = visibleRows(group, expanded).length;

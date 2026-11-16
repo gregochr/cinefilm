@@ -108,16 +108,19 @@ describe('useAdminTodo: confirm', () => {
     });
     const changed = vi.fn();
     window.addEventListener(LIBRARY_CHANGED_EVENT, changed);
-    const { result } = mount();
-    await waitFor(() => expect(result.current.allRead).toBe(true));
+    try {
+      const { result } = mount();
+      await waitFor(() => expect(result.current.allRead).toBe(true));
 
-    await act(() => result.current.confirm(SUSPIRIA));
-    expect(changed).not.toHaveBeenCalled();
-    fail = false;
-    await act(() => result.current.confirm(SUSPIRIA));
+      await act(() => result.current.confirm(SUSPIRIA));
+      expect(changed).not.toHaveBeenCalled();
+      fail = false;
+      await act(() => result.current.confirm(SUSPIRIA));
 
-    expect(changed).toHaveBeenCalledTimes(1);
-    window.removeEventListener(LIBRARY_CHANGED_EVENT, changed);
+      expect(changed).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener(LIBRARY_CHANGED_EVENT, changed);
+    }
   });
 
   it('announces the library change even when the page has gone before the post finished', async () => {
@@ -131,19 +134,22 @@ describe('useAdminTodo: confirm', () => {
     );
     const changed = vi.fn();
     window.addEventListener(LIBRARY_CHANGED_EVENT, changed);
-    const { result, unmount } = mount();
-    await waitFor(() => expect(result.current.allRead).toBe(true));
-    let pending;
-    act(() => {
-      pending = result.current.confirm(SUSPIRIA);
-    });
+    try {
+      const { result, unmount } = mount();
+      await waitFor(() => expect(result.current.allRead).toBe(true));
+      let pending;
+      act(() => {
+        pending = result.current.confirm(SUSPIRIA);
+      });
 
-    unmount();
-    release();
-    await pending;
+      unmount();
+      release();
+      await pending;
 
-    expect(changed).toHaveBeenCalledTimes(1);
-    window.removeEventListener(LIBRARY_CHANGED_EVENT, changed);
+      expect(changed).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener(LIBRARY_CHANGED_EVENT, changed);
+    }
   });
 
   it('shows a row again if the re-read still lists it', async () => {

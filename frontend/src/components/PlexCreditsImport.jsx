@@ -21,7 +21,11 @@ export default function PlexCreditsImport({ reachable }) {
     usePlexCreditsImport();
   const running = Boolean(credits?.running);
   return (
-    <div className="admin__report-list" role="group" aria-labelledby={titleId}>
+    <div
+      className="admin__report-list admin__report-list--credits"
+      role="group"
+      aria-labelledby={titleId}
+    >
       <h3 id={titleId} className="admin__subtitle">
         Credits from Plex
       </h3>

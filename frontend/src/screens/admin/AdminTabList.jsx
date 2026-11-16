@@ -15,8 +15,8 @@ export default function AdminTabList({ label, tabs, selected, onSelect }) {
   const refs = useRef({});
   const keys = tabs.map((tab) => tab.key);
   const onKeyDown = (event) => {
-    const next = tabAfterKey(selected, event.key);
-    if (next === null || !keys.includes(next)) return;
+    const next = tabAfterKey(keys, selected, event.key);
+    if (next === null) return;
     event.preventDefault();
     onSelect(next);
     refs.current[next]?.focus();

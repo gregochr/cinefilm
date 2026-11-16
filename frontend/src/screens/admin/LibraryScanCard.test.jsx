@@ -41,6 +41,17 @@ describe('LibraryScanCard', () => {
     expect(screen.getByText('Not scanned yet')).toBeInTheDocument();
   });
 
+  it('says neither "Not scanned yet" nor "changed nothing" while the scan status has not answered', () => {
+    renderCard({
+      scan: undefined,
+      loading: true,
+      changes: { data: { items: [] }, loading: false, error: null, reload: () => {} },
+    });
+
+    expect(screen.queryByText('Not scanned yet')).not.toBeInTheDocument();
+    expect(screen.queryByText('The last scan changed nothing.')).not.toBeInTheDocument();
+  });
+
   it('shows the folder and the count tiles', () => {
     renderCard();
     expect(screen.getByText('/media')).toBeInTheDocument();

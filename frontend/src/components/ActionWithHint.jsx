@@ -6,8 +6,8 @@ import { Button } from './Button.jsx';
  * described by the hint (`aria-describedby`). `layout` is "row" (right-aligned, for a row of a list) or "line"
  * (left-aligned, for a card's own action). The wrapper's `action-hint--row|line` class carries the alignment. The
  * wrapper has no role or text to query (test-standards 'Queries'), so only the hint's own
- * `action-hint__text--row|line` class is tested. At 600px and below the button is full width, 44px tall, hint on
- * the left.
+ * `action-hint__text--row|line` class is tested. At 600px and below the button is full width, 44px tall (at least; a
+ * To do row grows past that when its label wraps), hint on the left.
  * `variant` is the Button's: the one amber button in Admin is "Scan library now".
  */
 export function ActionWithHint({

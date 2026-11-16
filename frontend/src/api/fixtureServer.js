@@ -296,7 +296,31 @@ function removeSubtitle(id) {
     throw apiError(400, 'Only a download can be removed');
   }
   removedSubtitleIds.add(id);
+  // Like the server (it recomputes the film's rows): with no download left, the owner's file plays again.
+  const current = subtitleList();
+  const stillReplaced = current.some(
+    (r) => r.origin === 'OPENSUBTITLES' && r.filmId === row.filmId,
+  );
+  for (const other of current) {
+    if (other.filmId === row.filmId && other.replacedByDownload === true) {
+      attachedSubtitles.set(other.id, {
+        ...attachedSubtitles.get(other.id),
+        ...playingFields(stillReplaced),
+      });
+    }
+  }
   return null;
+}
+
+/** What a hand-attached file that was replaced by a download says about itself: replaced, or playing again. */
+function playingFields(replaced) {
+  return replaced
+    ? {
+        served: false,
+        replacedByDownload: true,
+        servedReason: 'Not playing: an OpenSubtitles download replaced it',
+      }
+    : { served: true, replacedByDownload: false, servedReason: 'Playing: your file' };
 }
 
 /** Files attached by hand so far, by row id, kept in memory: the list shows them attached, as the server would. */
@@ -386,7 +410,7 @@ function verifySubtitle(id, verified) {
   attachedSubtitles.set(id, {
     ...attachedSubtitles.get(id),
     verified,
-    replacedByDownload: verified ? false : replaced,
+    ...(verified || replaced ? playingFields(!verified && replaced) : {}),
   });
   return listedSubtitle(id);
 }
@@ -605,6 +629,8 @@ const OS_MAX_FILES = 3;
 const KNOWN_EDITION_IDS = new Set([
   ...adminSubtitles.map((row) => row.editionId),
   ...adminEditions.editions.map((edition) => edition.id),
+  ...adminFullNeed.films.map((row) => row.editionId),
+  ...adminForcedNeed.films.map((row) => row.editionId),
   ...Object.values(details).flatMap((film) => film.editions.map((edition) => edition.id)),
 ]);
 /** The files a picker search offered, and the ones downloaded since, per edition and kind, kept in memory. */

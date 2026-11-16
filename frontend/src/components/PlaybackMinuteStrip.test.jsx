@@ -48,6 +48,11 @@ describe('PlaybackMinuteStrip', () => {
     ]);
   });
 
+  it('draws the speed line in the secondary text colour of the AR4 board', () => {
+    render(<PlaybackMinuteStrip film="Rocky" minutes={sevenFigures()} />);
+    expect(screen.getByTestId('strip-line')).toHaveAttribute('stroke', '#D5CCBE');
+  });
+
   it('draws no line when no minute has a speed', () => {
     const rows = sevenFigures().map((row) => [row[0], 0, ...row.slice(2)]);
     render(<PlaybackMinuteStrip film="Rocky" minutes={rows} />);

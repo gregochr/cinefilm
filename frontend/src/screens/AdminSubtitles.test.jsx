@@ -387,7 +387,7 @@ describe('Admin: Subtitles panel, read-only', () => {
     expect(within(download).getByText('Full')).toBeVisible();
   });
 
-  it('shows the timing offset of a file under a film only when it is not zero', async () => {
+  it('shows the timing offset of a file under a film only when it is not zero and was not fitted', async () => {
     const { panel } = await openPanel({
       items: [
         file({ id: 1, path: 'A/Shifted.en.forced.srt', offsetMs: 250 }),
@@ -400,9 +400,39 @@ describe('Admin: Subtitles panel, read-only', () => {
           state: 'unmatched',
           filmId: null,
         }),
+        file({
+          id: 5,
+          path: 'E/Fitted.en.forced.srt',
+          offsetMs: 1200,
+          alignment: {
+            verdict: 'ALIGNED',
+            reasons: [],
+            fittedOffsetMs: 1200,
+            applied: true,
+            checkedAt: '2026-11-12T06:31:00Z',
+          },
+        }),
+        // Applied, but the verdict is not ALIGNED: no automatic-timing note, so the offset is still told.
+        file({
+          id: 6,
+          path: 'F/Unconvinced.en.forced.srt',
+          offsetMs: 750,
+          alignment: {
+            verdict: 'CHECK',
+            reasons: [],
+            fittedOffsetMs: 750,
+            applied: true,
+            checkedAt: '2026-11-12T06:31:00Z',
+          },
+        }),
       ],
     });
 
+    const unconvinced = await itemOf(panel, 'F/Unconvinced.en.forced.srt');
+    expect(within(unconvinced).getByText('Timing shifted +0.75 s')).toBeVisible();
+    const fitted = await itemOf(panel, 'E/Fitted.en.forced.srt');
+    expect(within(fitted).getByText('Timing set automatically (+1.2 s)')).toBeVisible();
+    expect(within(fitted).queryByText(/Timing shifted/)).not.toBeInTheDocument();
     expect(
       within(await itemOf(panel, 'A/Shifted.en.forced.srt')).getByText('Timing shifted +0.25 s'),
     ).toBeVisible();

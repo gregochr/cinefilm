@@ -4,7 +4,7 @@
 // The server already keeps only film sessions (`FILM_SESSION_MIN_MS`, three minutes), so nothing here filters on
 // watched time again; every count is a count of sessions (a film watched twice counts twice).
 import { playbackChart as copy } from './adminCopy.js';
-import { environmentLabel, stallDuration } from './healthFormat.js';
+import { environmentLabel, stallText } from './healthFormat.js';
 import { formatRuntime } from '../player/time.js';
 import { formatScanTime } from './scanFormat.js';
 import { describeDevice } from './userAgent.js';
@@ -140,29 +140,50 @@ export const percentText = (percent) => (percent == null ? '–' : `${percent}%`
 /** "(all on the train)" and its like, or null when the stalled sessions do not share one place. */
 export const stalledNote = (environment) => copy.allOn[environment] ?? null;
 
-const percentOf = (share) => Math.round(share * 100);
+/**
+ * Whole percentages of the shares that hold time (largest remainder, ties to the earlier bucket), so they add up to
+ * 100 where independent rounding would say 33, 33, 33.
+ */
+function percentsOf(shares) {
+  const held = RUNG_BUCKETS.map(({ key }) => key).filter((key) => shares[key] > 0);
+  const exact = held.map((key) => shares[key] * 100);
+  const floors = exact.map(Math.floor);
+  let left = 100 - floors.reduce((sum, n) => sum + n, 0);
+  const order = exact
+    .map((value, at) => ({ at, remainder: value - floors[at] }))
+    .toSorted((a, b) => b.remainder - a.remainder || a.at - b.at);
+  for (const { at } of order) {
+    if (left <= 0) break;
+    floors[at] += 1;
+    left -= 1;
+  }
+  return Object.fromEntries(held.map((key, at) => [key, floors[at]]));
+}
 
 /** "Original 70%, 480p or lower 30%": the buckets that hold time, or "no quality recorded". */
 function qualityWords(rungMs) {
-  const shares = bucketShares(rungMs);
-  const parts = RUNG_BUCKETS.filter(({ key }) => shares[key] > 0).map(
-    ({ key, label }) => `${label} ${percentOf(shares[key])}%`,
+  const percents = percentsOf(bucketShares(rungMs));
+  const parts = RUNG_BUCKETS.filter(({ key }) => key in percents).map(
+    ({ key, label }) => `${label} ${percents[key]}%`,
   );
   return parts.length > 0 ? parts.join(', ') : copy.noQuality;
 }
 
 /** What a screen reader hears for one column: "Heat, 10 Nov 19:43, Train. 2 stalls, 9 s. Original 70%, …". */
 export function columnLabel(session) {
-  const count = num(session.stallCount);
-  let stalls = copy.noStalls;
-  if (count > 0)
-    stalls = `${count} ${count === 1 ? 'stall' : 'stalls'}, ${stallDuration(session.stallMs)}`;
-  return `${session.filmTitle}, ${formatScanTime(session.startedAt)}, ${environmentLabel(session.environment)}. ${stalls}. ${qualityWords(session.rungMs)}.`;
+  return `${session.filmTitle}, ${formatScanTime(session.startedAt)}, ${environmentLabel(session.environment)}. ${stallText(session)}. ${qualityWords(session.rungMs)}.`;
 }
+
+/** The place in the summary's sentence: "… in 30 days at home". */
+const WHERE_WORDS = {
+  home: 'at home',
+  away: 'away',
+  train: 'on the train',
+};
 
 /** The text equivalent of the whole chart. */
 export function chartSummary(sessions, { days, environment }) {
-  const where = environment === 'all' ? '' : ` on ${environmentLabel(environment)}`;
+  const where = environment === 'all' ? '' : ` ${WHERE_WORDS[environment]}`;
   if (sessions.length === 0) return copy.summaryEmpty(days, where);
   const tiles = chartTiles(sessions);
   const parts = [
@@ -206,7 +227,7 @@ export const STRIP = {
  */
 function minuteRow(row) {
   if (!Array.isArray(row) || (row.length !== 5 && row.length !== 7)) return null;
-  if (!row.every((figure) => Number.isFinite(figure))) return null;
+  if (!row.every((figure) => Number.isFinite(figure)) || !Number.isInteger(row[0])) return null;
   return { minute: row[0], kbps: row[1], rung: RUNG_OF_CODE[row[2]] ?? null, stalledMs: row[4] };
 }
 
@@ -225,7 +246,9 @@ export function minuteStrip(rows) {
   const points = (Array.isArray(rows) ? rows : [])
     .map(minuteRow)
     .filter((point) => point !== null && point.minute >= 0)
-    .toSorted((a, b) => a.minute - b.minute);
+    .toSorted((a, b) => a.minute - b.minute)
+    // Two rows for one minute would draw twice (and share a key): the first stands.
+    .filter((point, at, all) => at === 0 || point.minute !== all[at - 1].minute);
   if (points.length === 0) return null;
   const count = points.at(-1).minute + 1;
   const slot = STRIP.width / count;

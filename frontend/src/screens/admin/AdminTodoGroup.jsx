@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import RowText from './AdminRowText.jsx';
 import { ActionWithHint } from '../../components/ActionWithHint.jsx';
 import { Button } from '../../components/Button.jsx';
 import {
@@ -22,6 +21,7 @@ import {
   TODO_ROW_CAP,
   visibleRows,
 } from '../../state/adminTodo.js';
+import RowText from './AdminRowText.jsx';
 
 // The group keys of `adminTodo.js` (they follow the summary's `todo` figures) and their entries in `todoGroups`.
 const COPY_KEY = {
