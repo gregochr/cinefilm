@@ -621,6 +621,97 @@ describe('a playback Admin stopped (410)', () => {
     );
   });
 
+  it('shows only the stopped card when the slow-connection card was open', async () => {
+    const { hls } = await open();
+    await hlsEvent(() => hls().fragLoaded(SLOW_SEGMENT));
+    await hlsEvent(() => hls().switchTo(P480));
+    await screen.findByRole('dialog', { name: 'You’re on a slow connection' });
+    await hlsEvent(() =>
+      hls().error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    expect(stoppedCard()).toBeInTheDocument();
+    expect(
+      screen.queryByRole('dialog', { name: 'You’re on a slow connection' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Play again' })).toHaveFocus();
+  });
+
+  it('keeps the quality, audio and subtitle chosen so far through Play again', async () => {
+    const { log, video } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    await userEvent.click(screen.getByRole('button', { name: 'Quality' }));
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: 'Quality' })).getByRole('menuitemradio', {
+        name: /360p/,
+      }),
+    );
+    await instances(2);
+    await userEvent.click(screen.getByRole('button', { name: 'Audio and subtitles' }));
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: 'Audio' })).getByRole('menuitemradio', {
+        name: /Commentary/,
+      }),
+    );
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: 'Subtitles' })).getByRole('menuitemradio', {
+        name: /^English$/,
+      }),
+    );
+    await vi.waitFor(() => expect(log.posted.length).toBeGreaterThanOrEqual(3));
+    const before = log.posted.length;
+    await hlsEvent(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await vi.waitFor(() => expect(log.posted).toHaveLength(before + 1));
+    expect(log.posted.at(-1)).toMatchObject({ quality: '360p', audioStreamId: 112 });
+    expect(await screen.findByRole('button', { name: 'Quality' })).toHaveTextContent('360p');
+    expect(screen.getByRole('button', { name: 'Audio and subtitles' })).toHaveTextContent(
+      'English',
+    );
+  });
+
+  it('lets the old viewing’s progress write land before the new viewing starts, so writes stay in order', async () => {
+    const srv = serve();
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    let held = false;
+    installFetch((method, url, init) => {
+      const answer = srv.route(method, url, init);
+      if (method === 'PUT' && url === '/api/editions/11/progress' && !held) {
+        held = true;
+        return gate.then(() => respond({}));
+      }
+      return answer;
+    });
+    renderApp('/films/1/play?edition=11');
+    const video = await screen.findByTestId('player-video');
+    await instances(1);
+    await landResume(video);
+    await moveTo(video, 1000);
+    await hlsEvent(() => video.play());
+    await hlsEvent(() => video.pause());
+    await vi.waitFor(() => expect(srv.log.progress).toEqual([1000000]));
+    await hlsEvent(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    // The old write is still in flight: no new viewing yet, and nothing else was written.
+    expect(FakeHls.instances).toHaveLength(1);
+    expect(srv.log.progress).toEqual([1000000]);
+    await hlsEvent(() => release());
+    await instances(2);
+    const next = await screen.findByTestId('player-video');
+    await landResume(next);
+    await moveTo(next, 1001);
+    await hlsEvent(() => next.play());
+    await hlsEvent(() => next.pause());
+    await vi.waitFor(() => expect(srv.log.progress).toEqual([1000000, 1001000]));
+  });
+
   it('a stop before anything played (position 0) plays again from the film’s resume point', async () => {
     const srv = serve();
     installFetch(srv.route);

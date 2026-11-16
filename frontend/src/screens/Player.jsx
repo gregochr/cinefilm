@@ -104,11 +104,13 @@ export default function Player() {
   if (opened.key !== routeKey) setOpened({ key: routeKey, at: performance.now() });
   // "Play again" after Admin stopped the playback: a new viewing (a new PlayerView, so a new playback id) that starts
   // at the film position the old one had reached. Belongs to this route; another film or edition starts it afresh.
-  const [again, setAgain] = useState({ key: routeKey, count: 0, atMs: null });
-  if (again.key !== routeKey) setAgain({ key: routeKey, count: 0, atMs: null });
-  const playAgain = (atMs) => {
+  const [again, setAgain] = useState({ key: routeKey, count: 0, atMs: null, choices: null });
+  if (again.key !== routeKey) setAgain({ key: routeKey, count: 0, atMs: null, choices: null });
+  // `choices` are what the viewer picked in the old viewing (quality, audio, subtitle): the film was read when the page
+  // opened, so its preferences would bring back the old ones.
+  const playAgain = (atMs, choices) => {
     // A position of 0 or less is no position: the new viewing starts where a new viewing of this film would.
-    setAgain((a) => ({ ...a, count: a.count + 1, atMs: atMs > 0 ? atMs : null }));
+    setAgain((a) => ({ ...a, count: a.count + 1, atMs: atMs > 0 ? atMs : null, choices }));
     setOpened({ key: routeKey, at: performance.now() });
   };
   if (loading && !film)
@@ -134,6 +136,7 @@ export default function Player() {
       startAtZero={again.count === 0 && params.get('start') === '0'}
       startAtMs={again.atMs ?? parseStartAt(params.get('at'))}
       openedAt={opened.at}
+      choices={again.choices}
       onPlayAgain={playAgain}
     />
   );
@@ -142,7 +145,7 @@ export default function Player() {
 /** Gives up waiting for the final progress report after this long, so a dead network never traps the viewer. */
 export const LEAVE_REPORT_CAP_MS = 1500;
 
-function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, onPlayAgain }) {
+function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, choices, onPlayAgain }) {
   const navigate = useNavigate();
   // Computed once: the clock, remaining time and scrubber show the start point from the first render. A time in
   // the address (`at`, "Play from here" in Film detail's Fix… panel) beats the resume point.
@@ -175,8 +178,11 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, onPlayAga
   const [fullscreen, setFullscreen] = useState(false);
   const [endDismissed, setEndDismissed] = useState(false);
   const [toast, setToast] = useState(null);
-  const [quality, setQuality] = useState(() => resolveQuality(prefs.quality, edition.qualities));
+  const [quality, setQuality] = useState(
+    () => choices?.quality ?? resolveQuality(prefs.quality, edition.qualities),
+  );
   const [audio, setAudio] = useState(() => {
+    if (choices) return choices.audio;
     const preferredKey = resolveAudioChoice(film.editions, edition, prefs.audioStreamId);
     const preferred = edition.audioStreams.find((s) => streamKey(s) === preferredKey);
     const fallback = edition.audioStreams.find((s) => s.isDefault) || edition.audioStreams[0];
@@ -186,12 +192,14 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, onPlayAga
   // What the viewer chose, or null when nothing was ever chosen (decision 68): `subtitle` below is the choice in
   // effect, which turns the full subtitle on by itself for a film whose audio is not English.
   const [chosenSubtitle, setChosenSubtitle] = useState(() =>
-    resolveSubtitleChoice(film.editions, edition, prefs.subtitle),
+    choices
+      ? choices.chosenSubtitle
+      : resolveSubtitleChoice(film.editions, edition, prefs.subtitle),
   );
 
   // Downloads the viewer reported with "Subtitles are wrong" in this viewing. The server has deleted and blocked them;
   // the film is not read again under a playing viewing, so they are left out here instead.
-  const [removed, setRemoved] = useState({ FORCED: false, FULL: false });
+  const [removed, setRemoved] = useState(choices?.removed ?? { FORCED: false, FULL: false });
   // A changed timing (the Earlier / Later buttons) mounts a second <track> of that kind beside the showing one, hidden,
   // with a new address. It takes over once it has loaded; until then (or if it fails) the old one keeps showing.
   // Only <track> elements are involved: nothing about the video.
@@ -243,7 +251,9 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, onPlayAga
     fullSubtitle,
   });
   const atEnd = hasReachedEnd(positionMs, durationMs, edition.creditsMarkerMs);
-  const endOverlay = atEnd && !endDismissed;
+  // Stopped from Admin: the stopped card is the only card (the slow-connection card and the end card would cover it).
+  const stoppedByAdmin = stream.mode === 'stopped';
+  const endOverlay = atEnd && !endDismissed && !stoppedByAdmin;
   const { visible, poke } = useAutoHide({ playing, menuOpen: menu !== null, ended: endOverlay });
   // One card at a time: the question waits for the slow-connection card, the end card and the unavailable card,
   // and hides while a menu is open (on a phone it would lie over it).
@@ -628,6 +638,20 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, onPlayAga
 
   const remaining = formatRemaining(positionMs, durationMs);
   const director = film.directors?.[0]?.name || film.director;
+  // "Play again": the old viewing's progress write is let land first (or the cap passes), so the new viewing's
+  // reports can never be overtaken by an older one; then a new viewing mounts with the choices made so far.
+  const playingAgain = useRef(false);
+  const playAgain = async () => {
+    if (playingAgain.current) return;
+    playingAgain.current = true;
+    const at = Math.round(stoppedAtRef.current ?? positionRef.current);
+    await Promise.race([
+      playback.report(),
+      new Promise((resolve) => setTimeout(resolve, LEAVE_REPORT_CAP_MS)),
+    ]);
+    onPlayAgain(at, { quality, audio, chosenSubtitle, removed });
+  };
+
   const hidden = !visible && !endOverlay;
   const progressPct = durationMs ? Math.min(100, (positionMs / durationMs) * 100) : 0;
 
@@ -768,9 +792,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, onPlayAga
       />
 
       {stream.mode === 'stopped' ? (
-        <StoppedCard
-          onPlayAgain={() => onPlayAgain(Math.round(stoppedAtRef.current ?? positionRef.current))}
-        />
+        <StoppedCard onPlayAgain={playAgain} />
       ) : stream.mode === 'unavailable' ? (
         <UnavailableCard onRetry={stream.restart} />
       ) : stream.reconnecting ? (
@@ -962,7 +984,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, onPlayAga
         <div className="player__hairline-fill" style={{ width: `${progressPct}%` }} />
       </div>
 
-      {slowCard.open && !endOverlay ? (
+      {slowCard.open && !endOverlay && !stoppedByAdmin ? (
         <SlowConnectionCard
           rung={rungName(activeRung)}
           onOk={() => {
