@@ -343,9 +343,9 @@ Codex's review quota is small and shared by local and PR runs; it ran out twice 
 
    **A round with nothing but nits** (wording, comments, naming, which file a test sits in when `test-standards.md`
    doesn't settle it: no bug, no test that would pass on wrong code, no rule broken) is fixed and pushed without
-   another review (owner, 2026-11-15); steps 1 and 2 still run on the fix. Green CI and Codex's clean review of the
-   exact head commit still gate the merge. A docs-only PR is the exception: Codex does not review its fix pushes, so
-   the reviewer reads the nit fix too (`CLAUDE.md` step 6 needs it clean on the head).
+   another review (owner, 2026-11-15); steps 1 and 2 still run on the fix. On a code PR, green CI and Codex's clean
+   review of the exact head commit still gate the merge. A docs-only PR is the exception: Codex does not review its
+   fix pushes, so the reviewer reads the nit fix too (`CLAUDE.md` step 6 needs it clean on the head).
 
 **Then:** push. Codex reviews the PR when it opens. After that:
 
@@ -381,7 +381,7 @@ The owner's rules:
   Codex's findings are not nits in this sense: all of one review's findings go into the fix push (`CLAUDE.md`
   step 5).
 - **A later phase may be built while the one before waits on CI or Codex**, in its own worktree, only when the two
-  touch different files (owner, 2026-11-15). It is branched from the current `main` (`CLAUDE.md` step 7), and step 6
+  touch no file in common (owner, 2026-11-15). It is branched from the current `main` (`CLAUDE.md` step 7), and step 6
   there still says when it must be updated from `main` before it merges.
 
 The planner's own practice, not an owner rule:
