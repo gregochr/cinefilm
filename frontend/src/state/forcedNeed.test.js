@@ -200,8 +200,14 @@ describe('needProblem', () => {
           error: 'Subtitles are being changed or checked; try again in a moment',
         }),
       ),
-    ).toBe('Subtitles are being changed or checked; try again in a moment');
+    ).toBe('Subtitles are being changed or checked; try again in a moment.');
     expect(needProblem(new ApiError(409, undefined, { error: '  ' }))).toBe(
+      'A scan is running: try again when it finishes',
+    );
+  });
+
+  it('keeps its own guidance for the server’s bare scan line', () => {
+    expect(needProblem(new ApiError(409, undefined, { error: 'A scan is running' }))).toBe(
       'A scan is running: try again when it finishes',
     );
   });

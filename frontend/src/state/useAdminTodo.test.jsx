@@ -252,7 +252,7 @@ describe('useAdminTodo: confirm', () => {
 
     await act(() => result.current.confirm(SUSPIRIA));
 
-    expect(result.current.problems[34]).toBe('The library is busy; try again in a moment');
+    expect(result.current.problems[34]).toBe('The library is busy; try again in a moment.');
     expect(onChanged).not.toHaveBeenCalled();
   });
 

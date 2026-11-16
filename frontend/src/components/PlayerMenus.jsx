@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import {
   audioLabel,
   qualityDetail,
@@ -65,7 +65,9 @@ function Item({ checked, disabled, onSelect, children, detail }) {
 
 export function QualityMenu({ qualities, value, width, activeRung, onSelect }) {
   const ref = useRef(null);
+  const footerId = useId();
   useFocusChecked(ref);
+  const offline = workerOffline(qualities);
   return (
     <div className="menu menu--quality" ref={ref}>
       <div className="menu__heading" aria-hidden="true">
@@ -76,6 +78,7 @@ export function QualityMenu({ qualities, value, width, activeRung, onSelect }) {
         role="menu"
         tabIndex={-1}
         aria-label="Quality"
+        aria-describedby={offline ? footerId : undefined}
         onKeyDown={onMenuKeyDown}
       >
         {qualities.map((q) => (
@@ -90,8 +93,8 @@ export function QualityMenu({ qualities, value, width, activeRung, onSelect }) {
           </Item>
         ))}
       </div>
-      {workerOffline(qualities) ? (
-        <div className="menu__footer">
+      {offline ? (
+        <div className="menu__footer" id={footerId}>
           Lower qualities unavailable right now &mdash; the transcode worker is offline. Pre-made
           versions still play.
         </div>
@@ -185,11 +188,11 @@ function TimingControls({ timing }) {
  * readout (a status region that stays mounted while timing is offered, so the first offset is announced) and the
  * problems of "Subtitles are wrong" and of a timing change (alerts).
  */
-function SubtitleNotes({ wrong, timing }) {
+function SubtitleNotes({ id, wrong, timing }) {
   const saving = timing?.busy || timing?.loading;
   const readout = saving ? subtitleTiming.busy : timingReadout(timing?.offsets);
   return (
-    <div className="menu__notes">
+    <div className="menu__notes" id={id}>
       {timing?.available ? (
         <div className="menu__readout" role="status">
           {readout ? (saving ? readout : subtitleTiming.readout(readout)) : null}
@@ -223,6 +226,7 @@ export function AudioSubtitlesPanel({
 }) {
   const ref = useRef(null);
   const subtitlesRef = useRef(null);
+  const notesId = useId();
   useFocusChecked(ref);
   // The button leaves once the download is gone. If it took focus with it (focus fell to the page), land on the checked
   // subtitle instead; when the viewer's focus is anywhere else, in the panel or outside it, it stays where it is.
@@ -241,6 +245,11 @@ export function AudioSubtitlesPanel({
     hadWrong.current = has;
   }, [wrong?.available]);
   const options = subtitleOptions(subtitleStreams, hasFullSubtitle);
+  const noChoices = subtitleStreams.length === 0 && !hasForcedSubtitle && !hasFullSubtitle;
+  // Nothing to choose and nothing to act on: a plain note, not an empty menu.
+  const noSubtitles = noChoices && !timing?.available && !wrong?.available;
+  // The readout and the problem lines sit under the menu; the menu is described by them so they are read with it.
+  const hasNotes = Boolean(timing?.available || (wrong?.available && wrong.problem));
   return (
     <div className="menu menu--panel" role="group" aria-label="Audio and subtitles" ref={ref}>
       <div className="menu__col">
@@ -270,21 +279,22 @@ export function AudioSubtitlesPanel({
         </div>
       </div>
       <div className="menu__col">
-        <div className="menu__heading" aria-hidden="true">
+        <div className="menu__heading" aria-hidden={noSubtitles ? undefined : 'true'}>
           Subtitles
         </div>
-        <div
-          className="menu__list"
-          role="menu"
-          tabIndex={-1}
-          aria-label="Subtitles"
-          ref={subtitlesRef}
-          onKeyDown={onMenuKeyDown}
-        >
-          {subtitleStreams.length === 0 && !hasForcedSubtitle && !hasFullSubtitle ? (
-            <div className="menu__empty">None for this film</div>
-          ) : (
-            options.map((o) => (
+        {noSubtitles ? (
+          <div className="menu__empty">None for this film</div>
+        ) : (
+          <div
+            className="menu__list"
+            role="menu"
+            tabIndex={-1}
+            aria-label="Subtitles"
+            aria-describedby={hasNotes ? notesId : undefined}
+            ref={subtitlesRef}
+            onKeyDown={onMenuKeyDown}
+          >
+            {(noChoices ? [] : options).map((o) => (
               <Item
                 key={String(o.value)}
                 checked={String(o.value) === String(subtitleValue)}
@@ -293,12 +303,12 @@ export function AudioSubtitlesPanel({
               >
                 {o.label}
               </Item>
-            ))
-          )}
-          {timing?.available ? <TimingControls timing={timing} /> : null}
-          {wrong?.available ? <WrongSubtitles busy={wrong.busy} onWrong={wrong.onWrong} /> : null}
-        </div>
-        <SubtitleNotes wrong={wrong} timing={timing} />
+            ))}
+            {wrong?.available ? <WrongSubtitles busy={wrong.busy} onWrong={wrong.onWrong} /> : null}
+            {timing?.available ? <TimingControls timing={timing} /> : null}
+          </div>
+        )}
+        {hasNotes ? <SubtitleNotes id={notesId} wrong={wrong} timing={timing} /> : null}
       </div>
     </div>
   );

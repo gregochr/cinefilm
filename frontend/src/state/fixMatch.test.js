@@ -20,7 +20,10 @@ describe('fixMatch helpers', () => {
       matchProblem(
         new ApiError(409, undefined, { error: 'The library is busy; try again in a moment' }),
       ),
-    ).toBe('The library is busy; try again in a moment');
+    ).toBe('The library is busy; try again in a moment.');
+    expect(matchProblem(new ApiError(409, undefined, { error: 'A scan is running' }))).toBe(
+      'A scan is running. Try again when it finishes.',
+    );
     expect(matchProblem(new ApiError(400))).toBe('Type a title to search for.');
     expect(matchProblem(new ApiError(404))).toMatch(/no longer there/);
     expect(matchProblem(new ApiError(500))).toBe('Something went wrong. Try again.');

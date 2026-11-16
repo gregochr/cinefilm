@@ -104,7 +104,10 @@ export const adminApi = {
   applyMatch: (filmId, tmdbId) => post(`/api/admin/films/${filmId}/match`, { tmdbId }),
   /** A film's files, editions and the suggested arrangement, for the Edit editions panel. */
   editions: (filmId, options) => get(`/api/admin/films/${filmId}/editions`, options),
-  /** Saves the arranged editions. A 400 carries `{ error, errors: [{ field, message }] }`; a 409 means a scan. */
+  /**
+   * Saves the arranged editions. A 400 carries `{ error, errors: [{ field, message }] }`; a 409: the library lock is
+   * held (its `error` says by what).
+   */
   saveEditions: (filmId, request) => put(`/api/admin/films/${filmId}/editions`, request),
   plex: (options) => get('/api/admin/plex', options),
   startPlexImport: () => post('/api/admin/plex/import'),
@@ -152,7 +155,7 @@ export const adminApi = {
   forcedNeed: (options) => get('/api/admin/forced-subtitles/films', options),
   /**
    * Records the owner's choice for a film (`'NEEDED'`, `'NOT_NEEDED'`, or null for the automatic rule) and returns
-   * that film's row. A 409 means a scan is running; a 404 an unknown film.
+   * that film's row. A 409: the library lock is held (its `error` says by what); a 404 an unknown film.
    */
   setForcedNeed: (filmId, choice, options) =>
     put(`/api/admin/films/${filmId}/forced-need`, { choice }, options),
@@ -163,7 +166,8 @@ export const adminApi = {
   fullNeed: (options) => get('/api/admin/subtitles/full-need', options),
   /**
    * Records the owner's choice on full subtitles for a film (`'NEEDED'`, `'NOT_NEEDED'`, or null for the automatic
-   * rule) and returns that film's row. A 409 means a scan is running; a 404 an unknown film.
+   * rule) and returns that film's row. A 409: the library lock is held (its `error` says by what); a 404 an unknown
+   * film.
    */
   setFullNeed: (filmId, choice, options) =>
     put(`/api/admin/films/${filmId}/full-need`, { choice }, options),

@@ -216,7 +216,7 @@ describe('useForcedNeed', () => {
     await act(() => result.current.choose(2, 'NOT_NEEDED'));
 
     expect(result.current.problems).toEqual({
-      2: 'Subtitles are being changed or checked; try again in a moment',
+      2: 'Subtitles are being changed or checked; try again in a moment.',
     });
   });
 

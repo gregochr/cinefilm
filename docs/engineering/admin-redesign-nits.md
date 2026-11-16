@@ -13,9 +13,13 @@ Record only:
 - `ScanService`'s own 409 texts for a scan that cannot start ("A subtitle is being changed") were not reworded.
 - 8b-1 edge: the owner clears the check in Admin while a pending track loads, so the swapped track may be the
   replacement file under the old readout.
-- The player's "Subtitles are wrong" and timing failures show their own generic line on a 409 (the lock text is shown
-  by Fix match, Edit editions, the need rows, Admin to do and the subtitle picker only).
-- "None for this film" still sits inside the Subtitles `role=menu` (an empty menu has nothing else to hold it).
+- The player's "Subtitles are wrong" and timing failures still show their own generic line on a 409 (the lock text is
+  shown by Fix match, Edit editions, the need rows, Admin to do and the subtitle picker and panel only).
+
+Bugs:
+
+- A 401 on `DELETE /api/session` shows "Couldn't sign out" instead of the sign-in card (`client.js` skips the expiry
+  event for `/api/session`).
 
 Owner questions:
 
@@ -23,8 +27,6 @@ Owner questions:
   (`forced-subtitles-plan.md:508`). Nudging a proven forced file in the player can demote it so another file serves
   on the next film load; the player now keeps the old track and says "changed since the film started". Should a nudge
   from the player keep the check?
-- Product: a 401 on `DELETE /api/session` shows "Couldn't sign out" instead of the sign-in card (`client.js` skips the
-  expiry event for `/api/session`).
 - Open owner item: Admin Stop only ends the server session (see the Stop-ends-playback work).
 
 ## Left in Admin on purpose (not done in A)

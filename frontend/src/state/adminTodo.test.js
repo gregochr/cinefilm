@@ -264,7 +264,14 @@ describe('confirmProblem', () => {
       confirmProblem(
         new ApiError(409, undefined, { error: 'The library is busy; try again in a moment' }),
       ),
-    ).toEqual({ message: 'The library is busy; try again in a moment', gone: false });
+    ).toEqual({ message: 'The library is busy; try again in a moment.', gone: false });
+  });
+
+  it('keeps its own guidance for the server’s bare scan line', () => {
+    expect(confirmProblem(new ApiError(409, undefined, { error: 'A scan is running' }))).toEqual({
+      message: 'A scan is running. Try again when it finishes.',
+      gone: false,
+    });
   });
 
   it('is generic for a failure that is not an API answer', () => {

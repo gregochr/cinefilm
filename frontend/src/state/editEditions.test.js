@@ -349,8 +349,8 @@ describe('saveProblem', () => {
       text: 'The library is busy; try again in a moment. Your changes are still here.',
       fieldErrors: [],
     });
-    expect(saveProblem(new ApiError(409, undefined, { error: 'A scan is running.' })).text).toBe(
-      'A scan is running. Your changes are still here.',
+    expect(saveProblem(new ApiError(409, undefined, { error: 'A scan is running' })).text).toBe(
+      'A library scan is running — try again when it finishes. Your changes are still here.',
     );
   });
 

@@ -1,6 +1,7 @@
 // Display and rule helpers for the Admin "Subtitles" panel. No JSX: the Apple TV and native clients reuse them.
 import { ApiError } from '../api/client.js';
 import { formatClock } from '../player/time.js';
+import { lockText } from './lockText.js';
 import { formatScanTime } from './scanFormat.js';
 
 /** The server allows a timing offset of this many milliseconds either way. */
@@ -141,6 +142,7 @@ export function subtitleProblem(failure) {
   if (status === 400)
     return failure.body?.error ?? 'That was not accepted. Check it and try again.';
   if (status === 404) return 'That is no longer there. Reload the list and look again.';
+  if (status === 409) return lockText(failure, 'A scan is running. Try again when it finishes.');
   return 'Something went wrong. Try again.';
 }
 

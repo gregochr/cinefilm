@@ -82,7 +82,7 @@ describe('useSubtitleWrong', () => {
 
     expect(done).toBe(false);
     expect(result.current.problem).toBe(subtitlesWrong.changed);
-    expect(calls(fetchMock)).toEqual(['GET /api/admin/subtitles']);
+    expect(calls(fetchMock)).toEqual([]);
   });
 
   it('deletes only the playing download the film showed when its ids overlap the playing ones in part', async () => {

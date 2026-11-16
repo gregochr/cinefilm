@@ -44,6 +44,9 @@ describe('QualityMenu: transcoding', () => {
       'Lower qualities unavailable right now — the transcode worker is offline. Pre-made versions still play.',
     );
     expect(screen.getByRole('menu', { name: 'Quality' })).not.toHaveTextContent('offline');
+    expect(screen.getByRole('menu', { name: 'Quality' })).toHaveAccessibleDescription(
+      'Lower qualities unavailable right now — the transcode worker is offline. Pre-made versions still play.',
+    );
   });
 
   it('has no offline footer while Auto is available, even with some rungs missing', () => {
@@ -208,9 +211,12 @@ describe('AudioSubtitlesPanel', () => {
 
   it('says so when the film has no subtitles', () => {
     setup({ subtitleStreams: [], subtitleValue: 'off' });
-    const subs = screen.getByRole('menu', { name: 'Subtitles' });
-    expect(within(subs).getByText('None for this film')).toBeInTheDocument();
-    expect(within(subs).queryByRole('menuitemradio')).not.toBeInTheDocument();
+    expect(screen.getByText('None for this film')).toBeInTheDocument();
+    expect(screen.getByText('Subtitles')).toBeVisible();
+    expect(screen.queryByRole('menu', { name: 'Subtitles' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitemradio', { name: /Off/ })).not.toBeInTheDocument();
+    // The menu is still opened on the checked audio track.
+    expect(screen.getByRole('menuitemradio', { name: /English 5.1/ })).toHaveFocus();
   });
 
   it('opens with focus on the checked audio track and arrows stay inside one column', async () => {
@@ -410,9 +416,54 @@ describe('AudioSubtitlesPanel: subtitle timing', () => {
     for (const menu of screen.getAllByRole('menu')) {
       expect(within(menu).queryByRole('status')).not.toBeInTheDocument();
       expect(within(menu).queryByRole('alert')).not.toBeInTheDocument();
-      expect(within(menu).queryByRole('heading')).not.toBeInTheDocument();
       expect(menu).not.toHaveTextContent(/Timing:|Couldn’t/);
     }
+  });
+
+  it('keeps each heading outside its menu and hidden from the accessibility tree (the menu has its own name)', () => {
+    render(<AudioSubtitlesPanel {...props} timing={timingOf()} />);
+
+    for (const [text, name] of [
+      ['Audio', 'Audio'],
+      ['Subtitles', 'Subtitles'],
+    ]) {
+      const heading = screen.getByText(text);
+      expect(heading).toHaveAttribute('aria-hidden', 'true');
+      expect(screen.getByRole('menu', { name })).not.toContainElement(heading);
+    }
+  });
+
+  it('describes the Subtitles menu by the readout and the problem under it', () => {
+    render(
+      <AudioSubtitlesPanel
+        {...props}
+        timing={timingOf({ problem: 'Couldn’t change the timing. Try again.' })}
+      />,
+    );
+
+    expect(subs()).toHaveAccessibleDescription(
+      'Timing: +0.5 s Couldn’t change the timing. Try again.',
+    );
+  });
+
+  it('puts "Subtitles are wrong" before the timing actions, so the readout is right under Reset', async () => {
+    render(
+      <AudioSubtitlesPanel
+        {...props}
+        timing={timingOf()}
+        wrong={{ available: true, busy: false, problem: null, onWrong: vi.fn() }}
+      />,
+    );
+    const items = within(subs())
+      .getAllByRole('menuitem')
+      .map((item) => item.getAttribute('aria-label') ?? item.textContent);
+
+    expect(items).toEqual([
+      'Subtitles are wrong',
+      'Show lines 0.25 seconds earlier',
+      'Show lines 0.25 seconds later',
+      'Reset timing',
+    ]);
   });
 
   it('says No timing change at 0, and that parts differ when they do', () => {
