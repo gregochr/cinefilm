@@ -8,8 +8,8 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, describe, test } from 'node:test';
 import {
-  buildCommand, claimPort, cleanSample, consoleText, createStop, notePageError, options, pickFinal, portError,
-  progressLine, standStillWarning, summarise, templateFor, traceFor,
+  buildCommand, claimPort, cleanSample, consoleText, createStop, exitCodeFor, notePageError, options, pickFinal,
+  portError, progressLine, shouldWriteResults, standStillWarning, summarise, templateFor, traceFor,
 } from '../../replay/drive.mjs';
 import { WIRE, loadRecord, traces } from '../../replay/trace.mjs';
 
@@ -397,23 +397,34 @@ describe('createStop', () => {
     assert.equal(stop.stopped, true);
   });
 
-  test('a wait that has begun ends when it is triggered, not when its time is up', async () => {
+  // The waits are mocked timers: a wait that never ends fails (after a turn of the event loop) instead of hanging.
+  const soon = (promise) => Promise.race([
+    promise,
+    new Promise((_, reject) => setImmediate(reject, new Error('did not settle'))),
+  ]);
+
+  test('a wait that has begun ends when it is triggered, not when its time is up', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
     const stop = createStop();
     const waiting = stop.wait(600000);
     stop.trigger();
-    await waiting;
+    await soon(waiting);
     assert.equal(stop.stopped, true);
   });
 
-  test('a wait begun after it was triggered ends at once', async () => {
+  test('a wait begun after it was triggered ends at once', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
     const stop = createStop();
     stop.trigger();
-    await stop.wait(600000);
+    await soon(stop.wait(600000));
   });
 
-  test('a wait ends by itself when its time is up, and that is not a stop', async () => {
+  test('a wait ends by itself when its time is up, and that is not a stop', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
     const stop = createStop();
-    await stop.wait(1);
+    const waiting = stop.wait(1000);
+    t.mock.timers.tick(1000);
+    await soon(waiting);
     assert.equal(stop.stopped, false);
   });
 });
@@ -576,5 +587,25 @@ describe('portError', () => {
     const plain = new Error('boom');
     assert.equal(portError(5301, plain), plain);
     assert.equal(portError(5301, undefined), undefined);
+  });
+});
+
+describe('shouldWriteResults', () => {
+  test('a run writes results only when the driver took at least one sample', () => {
+    assert.equal(shouldWriteResults(0), false);
+    assert.equal(shouldWriteResults(1), true);
+    assert.equal(shouldWriteResults(60), true);
+  });
+});
+
+describe('exitCodeFor', () => {
+  test('1 only when the run failed with no stop asked for', () => {
+    assert.equal(exitCodeFor({ failed: true, stopped: false }), 1);
+  });
+
+  test('0 when it ran to its end, when a stop was asked for, and when it failed after a stop was asked for', () => {
+    assert.equal(exitCodeFor({ failed: false, stopped: false }), 0);
+    assert.equal(exitCodeFor({ failed: false, stopped: true }), 0);
+    assert.equal(exitCodeFor({ failed: true, stopped: true }), 0);
   });
 });

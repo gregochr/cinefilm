@@ -671,7 +671,7 @@ describe('a health report', () => {
     assert.deepEqual(Object.keys(entry), ['at', 'viewing', 'unreadable', 'bytes']);
     assert.equal(entry.unreadable, true);
     assert.equal(entry.bytes, 15);
-    assert.equal((await report(standIn, 'é')).entry.bytes, 2);
+    assert.equal((await report(standIn, '\u00e9')).entry.bytes, 2);
     assert.equal((await report(standIn, '')).entry.bytes, 0);
     assert.equal(JSON.stringify(standIn.healthReports).includes('not json'), false);
   });

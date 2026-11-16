@@ -91,36 +91,49 @@ describe('routeMessage', () => {
   });
 });
 
+// A promise that is rejected, after one turn of the event loop, if `promise` has not settled by then: a test that
+// waits for something that never comes fails instead of hanging.
+const soon = (promise) => Promise.race([
+  promise,
+  new Promise((_, reject) => setImmediate(reject, new Error('did not settle'))),
+]);
+const flush = () => new Promise((resolve) => setImmediate(resolve));
+
 describe('track and failAll', () => {
-  test('a request that is answered resolves, and a reply that comes after it timed out is unknown', async () => {
+  // The timeouts are mocked timers, so that nothing real is left armed whatever a test does.
+  test('a request that is answered resolves, and a reply that comes after it timed out is unknown', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
     const pending = new Map();
     const answered = track(pending, 1, 'Runtime.evaluate', 60000);
     routeMessage('{"id":1,"result":{"value":5}}', pending, new Map());
-    assert.deepEqual(await answered, { value: 5 });
+    assert.deepEqual(await soon(answered), { value: 5 });
     assert.equal(pending.size, 0);
 
     const slow = track(pending, 2, 'Page.navigate', 1);
-    await assert.rejects(slow, { message: 'Page.navigate: no reply within 1 ms' });
+    t.mock.timers.tick(1);
+    await assert.rejects(soon(slow), { message: 'Page.navigate: no reply within 1 ms' });
     assert.equal(pending.size, 0, 'a request that was given up on is no longer waiting');
     assert.equal(routeMessage('{"id":2,"result":{}}', pending, new Map()), 'unknown');
   });
 
-  test('a request is waiting from the moment it is tracked', () => {
+  test('a request is waiting from the moment it is tracked', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
     const pending = new Map();
     const waiting = track(pending, 5, 'Page.enable', 60000);
     assert.deepEqual([...pending.keys()], [5]);
     assert.equal(pending.get(5).method, 'Page.enable');
     failAll(pending, new Error('stop'));
-    return assert.rejects(waiting, { message: 'stop' });
+    await assert.rejects(soon(waiting), { message: 'stop' });
   });
 
-  test('failAll rejects every waiting request with the error and forgets them', async () => {
+  test('failAll rejects every waiting request with the error and forgets them', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
     const pending = new Map();
     const a = track(pending, 1, 'A.a', 60000);
     const b = track(pending, 2, 'B.b', 60000);
     failAll(pending, new Error('Chrome closed the connection'));
-    await assert.rejects(a, { message: 'Chrome closed the connection' });
-    await assert.rejects(b, { message: 'Chrome closed the connection' });
+    await assert.rejects(soon(a), { message: 'Chrome closed the connection' });
+    await assert.rejects(soon(b), { message: 'Chrome closed the connection' });
     assert.equal(pending.size, 0);
   });
 });
@@ -220,7 +233,7 @@ describe('parseActivePort', () => {
   test('is null for an empty file, a port of 0, 65536, text, a fraction or a sign', () => {
     const bad = ['', '0', '65536', '123456', 'abc', '12.5', '-5', '+5', '80 80', '9334abc'];
     for (const first of bad) assert.equal(parseActivePort(`${first}${SECOND}`), null, JSON.stringify(first));
-    assert.equal(parseActivePort(SECOND.slice(0)), null);
+    assert.equal(parseActivePort(''), null);
   });
 
   test('is null while the file holds the first line alone: it may be half written', () => {
@@ -233,6 +246,7 @@ describe('parseActivePort', () => {
     assert.equal(parseActivePort('41773\n/devtools/page/abc'), null);
     assert.equal(parseActivePort('41773\nhello'), null);
     assert.equal(parseActivePort('41773\n \n/devtools/browser/x'), null);
+    assert.equal(parseActivePort('41773\nx/devtools/browser/y'), null);
   });
 
   test('only the first line counts: a number on the second line is not the port', () => {
@@ -241,6 +255,10 @@ describe('parseActivePort', () => {
 });
 
 describe('stopChrome', () => {
+  // How long a wait may be when all goes well: it is never reached then, and a broken run fails in seconds.
+  const WAIT = 2000;
+  const timers = () => process.getActiveResourcesInfo().filter((name) => name === 'Timeout').length;
+
   // A process that has not gone, and a way to make it go.
   function fake({ goesOn }) {
     const calls = [];
@@ -251,6 +269,7 @@ describe('stopChrome', () => {
     return {
       calls,
       exited,
+      go,
       kill: (signal) => {
         calls.push(`kill ${signal}`);
         if (signal === goesOn) go();
@@ -259,48 +278,62 @@ describe('stopChrome', () => {
     };
   }
 
-  test('a process that goes on the first kill is waited for, not killed again, and then the profile is removed', async () => {
+  test('a process that goes on the first kill is not killed again; then the profile is removed', async () => {
     const p = fake({ goesOn: 'SIGTERM' });
-    await stopChrome({ ...p, graceMs: 600000 });
+    const before = timers();
+    await stopChrome({ ...p, graceMs: WAIT });
     assert.deepEqual(p.calls, ['kill SIGTERM', 'remove']);
+    assert.equal(timers(), before, 'the grace period\'s timer was cleared');
   });
 
-  test('a process that has not gone within the grace period is killed for good, waited for, and then the profile is removed', async () => {
+  test('a process that is slow to go is killed for good and waited for; then the profile is removed', async () => {
     const p = fake({ goesOn: 'SIGKILL' });
-    await stopChrome({ ...p, graceMs: 1, hardMs: 600000 });
+    const before = timers();
+    await stopChrome({ ...p, graceMs: 1, hardMs: WAIT });
     assert.deepEqual(p.calls, ['kill SIGTERM', 'kill SIGKILL', 'remove']);
+    assert.equal(timers(), before, 'the wait after SIGKILL\'s timer was cleared');
   });
 
-  test('after SIGKILL the profile is not removed until the process has gone', async () => {
-    const calls = [];
-    let go;
-    const exited = new Promise((resolve) => {
-      go = resolve;
-    });
+  test('after SIGKILL the profile is not removed until the process has gone, however long that takes', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const p = fake({ goesOn: 'never' });
     let seen;
     const sigkillSeen = new Promise((resolve) => {
       seen = resolve;
     });
     const stopping = stopChrome({
+      ...p,
       kill: (signal) => {
-        calls.push(`kill ${signal}`);
+        p.calls.push(`kill ${signal}`);
         if (signal === 'SIGKILL') seen();
       },
-      exited,
-      removeProfile: () => calls.push('remove'),
-      graceMs: 1,
+      graceMs: 1000,
       hardMs: 600000,
     });
-    await sigkillSeen;
-    assert.deepEqual(calls, ['kill SIGTERM', 'kill SIGKILL']);
-    go();
-    await stopping;
-    assert.deepEqual(calls, ['kill SIGTERM', 'kill SIGKILL', 'remove']);
+    try {
+      await flush(); // stopChrome has sent its first kill and is waiting out the grace period
+      t.mock.timers.tick(1000);
+      await soon(sigkillSeen);
+      await flush();
+      t.mock.timers.tick(599999); // all but the last millisecond of the wait after SIGKILL
+      await flush();
+      assert.deepEqual(p.calls, ['kill SIGTERM', 'kill SIGKILL']);
+    } finally {
+      p.go();
+    }
+    await soon(stopping);
+    assert.deepEqual(p.calls, ['kill SIGTERM', 'kill SIGKILL', 'remove']);
   });
 
-  test('a process that does not go even for SIGKILL is not waited for ever: the profile is still removed', async () => {
+  test('a process that ignores SIGKILL too is not waited for ever; the profile is still removed', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
     const p = fake({ goesOn: 'never' });
-    await stopChrome({ ...p, graceMs: 1, hardMs: 1 });
+    const stopping = stopChrome({ ...p, graceMs: 1000, hardMs: 5000 });
+    await flush();
+    t.mock.timers.tick(1000);
+    await flush();
+    t.mock.timers.tick(5000);
+    await soon(stopping);
     assert.deepEqual(p.calls, ['kill SIGTERM', 'kill SIGKILL', 'remove']);
   });
 
@@ -310,7 +343,7 @@ describe('stopChrome', () => {
       p.calls.push('remove');
       throw new Error('EBUSY');
     };
-    await stopChrome({ ...p, removeProfile: failing, graceMs: 600000 });
+    await stopChrome({ ...p, removeProfile: failing, graceMs: WAIT });
     assert.deepEqual(p.calls, ['kill SIGTERM', 'remove']);
   });
 
@@ -324,12 +357,15 @@ describe('stopChrome', () => {
       kill: () => calls.push('kill'),
       exited,
       removeProfile: () => calls.push('remove'),
-      graceMs: 600000,
+      graceMs: WAIT,
     });
-    await Promise.resolve();
-    assert.deepEqual(calls, ['kill']);
-    go();
-    await stopping;
+    try {
+      await flush();
+      assert.deepEqual(calls, ['kill']);
+    } finally {
+      go();
+    }
+    await soon(stopping);
     assert.deepEqual(calls, ['kill', 'remove']);
   });
 });

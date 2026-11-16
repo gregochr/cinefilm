@@ -16,13 +16,15 @@
 //               1.08, is the MPEG-TS wrapping that the trace's stalled minutes are worked out with
 //   --rebuild   build the app again first (do this after the checkout changes)
 //
-// Ctrl-C (or SIGTERM) ends the replay early and, once the film has started, still writes its results; a second one
-// quits at once, stops Chrome as far as it can and writes nothing. During start-up (the build, the making of the
-// picture, Chrome starting) a Ctrl-C in a terminal also reaches the child process, the step fails, and the run ends
-// with an error (code 1) and no results.
+// Ctrl-C (or SIGTERM) ends the replay early. Its results are written once the driver has looked at the film for the
+// first time (five seconds in); before that nothing is written, the run's folder is not made, and an earlier run of
+// the same name stays as it was. A second Ctrl-C quits at once (code 130), stops Chrome as far as it can and writes
+// nothing. The exit code is 0 when the run ran to its end or a stop was asked for, even when the build, the making of
+// the picture or Chrome died of the same Ctrl-C (in a terminal it reaches them too); 1 when it failed with no stop
+// asked for (a refused option, a failed build, Chrome did not start or went away part-way).
 //
-// Output: scripts/replay/out/<name>/ holds health.json (the stand-in's figures of the viewing's last
-// playback-health report), samples.json (every 5 s: playhead, buffer, what the screen says), requests.json (every
+// Output (only once there is something to write): scripts/replay/out/<name>/ holds health.json (the stand-in's
+// figures of the viewing's last playback-health report), samples.json (every 5 s: playhead, buffer, what the screen says), requests.json (every
 // answer the stand-in sent) and summary.txt (the table printed at the end).
 //
 // The options, the choice of the final report, the summary and the small helpers are tested; `main`, which starts
@@ -412,15 +414,15 @@ export function createStop() {
   };
 }
 
-// The first signal ends the replay and lets its results be written; a second one quits at once. (While the app is
-// being built the process is waiting for the build, so a signal then is seen when the build has ended.)
+// The first signal ends the replay (see the header for what is then written); a second one quits at once. (While the
+// app is being built the process is waiting for the build, so a signal then is seen when the build has ended.)
 function watchSignals(stop, held) {
   const onSignal = () => {
     if (stop.stopped) {
       if (held.kill) held.kill();
       process.exit(130);
     }
-    say('stopping: the results so far will be written (a second Ctrl-C quits at once)');
+    say('stopping (a second Ctrl-C quits at once)');
     stop.trigger();
   };
   process.on('SIGINT', onSignal);
@@ -597,7 +599,28 @@ async function replay({ opt, record, standIn, stop, run, held }) {
   await sendLastReport(page, standIn);
 }
 
+/** Whether a run has anything to write: only when the driver took at least one sample of the page. */
+export function shouldWriteResults(sampleCount) {
+  return sampleCount > 0;
+}
+
+/**
+ * The exit code: 1 only when the run failed with no stop asked for; 0 when it ran to its end, or a stop was asked
+ * for (an error after that, such as Chrome dying of the same Ctrl-C, is part of stopping).
+ */
+export function exitCodeFor({ failed, stopped }) {
+  return failed && !stopped ? 1 : 0;
+}
+
+// Whether a stop was asked for. The wait lets a signal that arrived while the process was blocked (the build) or
+// while a child died of the same Ctrl-C reach its handler first.
+async function stopAsked(stop) {
+  await sleep(100);
+  return stop.stopped;
+}
+
 function writeResults({ outDir, picked, standIn, run, summary }) {
+  mkdirSync(outDir, { recursive: true });
   const health = { sent: picked?.readable ?? 0, viewings: picked?.viewings ?? 0, final: picked?.final ?? null };
   writeFileSync(join(outDir, 'health.json'), JSON.stringify(health, null, 1));
   writeFileSync(join(outDir, 'samples.json'), JSON.stringify(run.samples));
@@ -605,17 +628,12 @@ function writeResults({ outDir, picked, standIn, run, summary }) {
   writeFileSync(join(outDir, 'summary.txt'), summary);
 }
 
-// Runs one replay and writes its results. Returns the exit code: 0 when it ran to the end or, once the film has
-// started, was stopped by a signal; 1 when it could not run (Chrome failed, or went away part-way). During start-up
-// (the build, the making of the picture, Chrome starting) a Ctrl-C in a terminal also reaches the child process, the
-// step fails, and the run ends with an error: code 1 and no results.
-async function main(argv) {
+// Runs one replay and, if the driver looked at the film at least once, writes its results. Returns the exit code
+// (see `exitCodeFor` and the header). `stop` and `held` belong to the caller, which installed the signal handlers.
+async function main(argv, stop, held) {
   const opt = options(argv);
   const record = loadRecord();
   const trace = traceFor(opt, record);
-  const stop = createStop();
-  const held = { chrome: null, kill: null };
-  watchSignals(stop, held);
   const claim = await claimPort(PORT);
   ensureBuild(opt.rebuild);
   const template = await templateFor({
@@ -623,23 +641,28 @@ async function main(argv) {
     make: () => makeTemplate({ profileRoot: opt.tmp, onSpawn: (kill) => { held.kill = kill; } }),
   });
   held.kill = null; // the template's Chrome has gone
-  const outDir = join(OUT, opt.name);
-  mkdirSync(outDir, { recursive: true });
   keepAwake();
   const run = { samples: [], pageErrors: [], warnings: [], cardDismissed: false };
   await new Promise((resolve) => claim.close(resolve));
   const standIn = await startOnPort({
     port: PORT, distDir: DIST, filmPath: FILM, template, trace, startMinute: opt.start, fill: opt.fill, wire: opt.wire,
   });
-  let code = 0;
+  let failed = false;
   try {
     await replay({ opt, record, standIn, stop, run, held });
   } catch (error) {
-    code = 1;
-    console.error(printable(`the replay ended early: ${error?.message ?? error}`, LINE_LIMIT));
+    failed = true;
+    if (!(await stopAsked(stop))) {
+      console.error(printable(`the replay ended early: ${error?.message ?? error}`, LINE_LIMIT));
+    }
   } finally {
     if (held.chrome) await held.chrome.close();
     await standIn.stop();
+  }
+  const code = exitCodeFor({ failed, stopped: stop.stopped });
+  if (!shouldWriteResults(run.samples.length)) {
+    say('nothing was written: the film had not started');
+    return code;
   }
   if (stop.stopped) run.warnings.push(`stopped early by a signal at replay second ${secondsOf(standIn.clockMs() ?? 0)}`);
   const picked = pickFinal(standIn.healthReports);
@@ -647,6 +670,7 @@ async function main(argv) {
     opt, record, trace, final: picked?.final ?? null, viewings: picked?.viewings ?? 1, samples: run.samples,
     requests: standIn.requests, pageErrors: run.pageErrors, warnings: run.warnings,
   });
+  const outDir = join(OUT, opt.name);
   writeResults({ outDir, picked, standIn, run, summary });
   for (const line of summary.split('\n')) say(line);
   say(`results: ${outDir}`);
@@ -655,11 +679,15 @@ async function main(argv) {
 
 // Leave at once when the work is done: nothing started here may hold the process open.
 async function runDriver(argv) {
+  const stop = createStop();
+  const held = { chrome: null, kill: null };
+  watchSignals(stop, held);
   try {
-    return await main(argv);
+    return await main(argv, stop, held);
   } catch (error) {
-    console.error(printable(error?.message ?? error, LINE_LIMIT));
-    return 1;
+    const stopped = await stopAsked(stop);
+    if (!stopped) console.error(printable(error?.message ?? error, LINE_LIMIT));
+    return exitCodeFor({ failed: true, stopped });
   }
 }
 

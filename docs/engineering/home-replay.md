@@ -62,14 +62,16 @@ resolves in that browser: the app's one outside request, the operator lookup, fa
 internet, which is why the record a replay makes says `unknown` where a train viewing says `train`. (An address
 written as numbers would still be reached; the app asks for none.)
 
-Once the film has started, Ctrl-C ends a replay early and still writes its results. In a terminal the same
-Ctrl-C reaches Chrome too, so the player's last report may not be sent: the summary then uses the last one it
-sent by itself, which can be some seconds old. During start-up (the build, the making of the film's picture,
-Chrome starting) a Ctrl-C just stops the run, with an error and no results. A second Ctrl-C quits at once and
-writes nothing; Chrome's throwaway profile may then be left in the temporary folder. While a replay runs it keeps the Mac from
-idling to sleep; a closed lid still sleeps it, and the summary then carries a warning, because the link's clock
-is the wall clock. The first run makes the film's picture and silence with Chrome's own encoders
-(`make-template.mjs`) and keeps them in `scripts/replay/out/template.json`.
+Once the driver has looked at the film for the first time, five seconds in, Ctrl-C ends a replay early and
+still writes its results. In a terminal the same Ctrl-C reaches Chrome too, so the player's last report may not
+be sent: the summary then uses the last one it sent by itself, which can be some seconds old. Before that first
+look a Ctrl-C just stops the run and nothing is written, so an earlier run of the same name stays as it was. A
+second Ctrl-C quits at once and writes nothing; Chrome's throwaway profile may then be left in the folder it was
+made in (`--tmp`, by default the system's temporary folder).
+
+While a replay runs it keeps the Mac from idling to sleep; a closed lid still sleeps it, and the summary then
+carries a warning, because the link's clock is the wall clock. The first run makes the film's picture and
+silence with Chrome's own encoders (`make-template.mjs`) and keeps them in `scripts/replay/out/template.json`.
 
 **After any change to the rig or to the player**, run `--minutes 1 --trace flat:3000 --rebuild` and read the
 summary: about 55 s watched, no stall, every request answered. Nothing else tests what needs Chrome.

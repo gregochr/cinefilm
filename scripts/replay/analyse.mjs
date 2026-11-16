@@ -100,15 +100,27 @@ export function playheadLag(samples) {
 }
 
 // Adds `sent` bytes to the minutes from `from` to `to` (ms), in proportion to the time spent in each.
-function spread(perMinute, from, to, sent) {
+// The walk never goes past the last place: what is left of the answer from there on is added to it in one step.
+export function spread(perMinute, from, to, sent) {
   const last = perMinute.length - 1;
   let t = from;
   while (t < to) {
     const m = Math.floor(t / 60000);
-    const end = Math.min(to, (m + 1) * 60000);
+    const end = m >= last ? to : Math.min(to, (m + 1) * 60000);
     perMinute[Math.min(last, m)] += (sent * (end - t)) / (to - from);
     t = end;
   }
+}
+
+const isTime = (value) => Number.isFinite(value) && value >= 0;
+
+/**
+ * Whether a request's times can be used: `ms` is a time (finite, 0 or more), and `firstByteMs` and `doneMs` are
+ * each absent or one.
+ */
+export function hasUsableTimes(request) {
+  const optional = (value) => value === null || value === undefined || isTime(value);
+  return isTime(request.ms) && optional(request.firstByteMs) && optional(request.doneMs);
 }
 
 /**
@@ -119,9 +131,9 @@ function spread(perMinute, from, to, sent) {
 export function deliveredPerMinute(requests, minutesRun) {
   const perMinute = new Array(minutesRun + 1).fill(0);
   for (const r of requests) {
-    if (!r.sent || !Number.isFinite(r.ms)) continue;
+    if (!isTime(r.sent) || r.sent === 0 || !hasUsableTimes(r)) continue;
     const from = r.ms + (r.firstByteMs || 0);
-    const to = Number.isFinite(r.doneMs) ? r.ms + r.doneMs : null;
+    const to = isTime(r.doneMs) ? r.ms + r.doneMs : null;
     if (to === null || to <= from) {
       perMinute[Math.min(minutesRun, Math.floor(from / 60000))] += r.sent;
     } else {
@@ -206,7 +218,7 @@ function describeGap(next, previous, lastEnd, samples, link) {
  */
 export function spellFigures({ report, samples, record, start }) {
   const minutesRun = Math.ceil(samples[samples.length - 1].ms / 60000);
-  const rows = new Map((Array.isArray(report.minutes) ? report.minutes : []).map((row) => [row[0], row]));
+  const rows = new Map((Array.isArray(report.minutes) ? report.minutes : []).filter(Array.isArray).map((row) => [row[0], row]));
   const old = rowsByMinute(record);
   const link = linkByMinute(samples);
   const figures = [];
@@ -409,6 +421,7 @@ export function analyseRun(name, root = join(HERE, 'out')) {
   requireObjects(samples, 'samples.json');
   requireObjects(requests, 'requests.json');
   if (samples.length === 0) throw new Error('no samples in this run: nothing to analyse');
+  if (!samples.every((s) => Number.isFinite(s.ms))) throw new Error('samples.json holds a sample with no time');
   const summary = readSummary(dir);
   const heading = summary.split('\n').find((line) => line.startsWith('Replay')) ?? '(no summary line)';
   const start = startOf(summary);

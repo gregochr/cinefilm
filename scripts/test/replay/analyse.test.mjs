@@ -1,14 +1,15 @@
 // scripts/replay/analyse.mjs: each sum over a run's data at its edges, and the lines they are told in, all from
-// made-up figures; and `analyseRun` over small runs written to a temporary folder (the last suite).
+// made-up figures; and `analyseRun` over small runs written to a temporary folder (no test reads what is in
+// scripts/replay/out).
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, test } from 'node:test';
 import {
-  aheadAt, analyseRun, deliveredPerMinute, deliveryAgainstTrace, describe as describeRun, idleGaps, linkByMinute,
-  notPlaying, playheadLag, rungsAndBytes, samplingGaps, screenAgainstLink, soundness, spellFigures, startOf,
-  withFilmInHand,
+  aheadAt, analyseRun, deliveredPerMinute, deliveryAgainstTrace, describe as describeRun, hasUsableTimes, idleGaps,
+  linkByMinute, notPlaying, playheadLag, rungsAndBytes, samplingGaps, screenAgainstLink, soundness, spellFigures,
+  spread, startOf, withFilmInHand,
 } from '../../replay/analyse.mjs';
 import { loadRecord } from '../../replay/trace.mjs';
 
@@ -121,6 +122,47 @@ describe('section 1: was the run sound', () => {
       { sent: 7, ms: 100, firstByteMs: null, doneMs: 0 },
     ];
     assert.deepEqual(deliveredPerMinute(requests, 2), [47, 500, 0]);
+  });
+
+  test('a request whose times cannot be used is left out: negative, not finite, or not a number', () => {
+    const good = { sent: 100, ms: 0, firstByteMs: 0, doneMs: 1000 };
+    const bad = [
+      { sent: 50, ms: -1, firstByteMs: 0, doneMs: 10 },
+      { sent: 50, ms: Infinity, firstByteMs: 0, doneMs: 10 },
+      { sent: 50, ms: '0', firstByteMs: 0, doneMs: 10 },
+      { sent: 50, ms: 0, firstByteMs: -5, doneMs: 10 },
+      { sent: 50, ms: 0, firstByteMs: Infinity, doneMs: 10 },
+      { sent: 50, ms: 0, firstByteMs: 0, doneMs: -10 },
+      { sent: 50, ms: 0, firstByteMs: 0, doneMs: 'abc' },
+      { sent: 50, ms: 0, firstByteMs: 0, doneMs: NaN },
+      { sent: '50', ms: 0, firstByteMs: 0, doneMs: 10 },
+      { sent: -20, ms: 0, firstByteMs: 0, doneMs: 10 },
+    ];
+    assert.deepEqual(deliveredPerMinute([good, ...bad], 1), [100, 0]);
+  });
+
+  test('a time of 0 or a missing one is usable; an answer that begins absurdly late counts in the last place', () => {
+    assert.equal(hasUsableTimes({ ms: 0, firstByteMs: 0, doneMs: 0 }), true);
+    assert.equal(hasUsableTimes({ ms: 5, firstByteMs: null }), true);
+    assert.equal(hasUsableTimes({ ms: 5, firstByteMs: undefined, doneMs: null }), true);
+    assert.equal(hasUsableTimes({ ms: 5, doneMs: -1 }), false);
+    assert.equal(hasUsableTimes({ firstByteMs: 1 }), false);
+    assert.deepEqual(deliveredPerMinute([{ sent: 10, ms: 1e300, firstByteMs: 0, doneMs: 5 }], 2), [0, 0, 10]);
+  });
+
+  test('the walk over the minutes never goes past the last place: what is left is added to it in one step', () => {
+    // 50 minutes long, into three places: the first two minutes, then the remaining 48 in the last place.
+    const writes = [];
+    const places = new Proxy([0, 0, 0], {
+      set(target, key, value) {
+        writes.push(key);
+        target[key] = value;
+        return true;
+      },
+    });
+    spread(places, 0, 50 * 60000, 5000);
+    assert.deepEqual([...places], [100, 100, 4800]);
+    assert.equal(writes.length, 3, 'one write for each place, not one for each minute');
   });
 
   test('an answer with nothing sent, or from before the clock started, counts for nothing', () => {
@@ -382,9 +424,6 @@ describe('analyseRun', () => {
     }
   });
 
-  test('a run that has no folder says which file is missing', () => {
-    assert.throws(() => analyseRun('no-such-run-for-the-test'), { message: 'requests.json is not in this run\'s folder' });
-  });
 });
 
 describe('analyseRun on a run\'s files', () => {
@@ -479,14 +518,26 @@ describe('analyseRun on a run\'s files', () => {
     assert.deepEqual(analyseRun(name, tmp), expected(name, HEADING, 24));
   });
 
-  test('samples.json or requests.json that is not a list, or holds entries that are not objects, is refused by name', () => {
+  test('minute rows that are not lists are left out, and a sample with no time is refused', () => {
+    const odd = { ...report, minutes: [null, 5, 'x', { 0: 1 }] };
+    const name = writeRun({ ...good, 'health.json': JSON.stringify({ final: { report: odd } }) });
+    assert.deepEqual(analyseRun(name, tmp), expected(name, HEADING, 24));
+    const message = 'samples.json holds a sample with no time';
+    for (const bad of ['[{"kbps":1}]', '[{"ms":"5"}]', '[{"ms":null}]']) {
+      assert.throws(() => analyseRun(writeRun({ ...good, 'samples.json': bad }), tmp), { message }, bad);
+    }
+  });
+
+  test('samples.json or requests.json that is not a list of objects is refused by name', () => {
     const samplesMessage = 'samples.json is not a list of objects';
     for (const bad of ['{}', '[null]', '[1, 2]', '["x"]', '[[1]]', 'null']) {
-      assert.throws(() => analyseRun(writeRun({ ...good, 'samples.json': bad }), tmp), { message: samplesMessage }, bad);
+      const name = writeRun({ ...good, 'samples.json': bad });
+      assert.throws(() => analyseRun(name, tmp), { message: samplesMessage }, bad);
     }
     const requestsMessage = 'requests.json is not a list of objects';
     for (const bad of ['{}', '[null]', '[1, 2]', '["x"]', '[[1]]']) {
-      assert.throws(() => analyseRun(writeRun({ ...good, 'requests.json': bad }), tmp), { message: requestsMessage }, bad);
+      const name = writeRun({ ...good, 'requests.json': bad });
+      assert.throws(() => analyseRun(name, tmp), { message: requestsMessage }, bad);
     }
   });
 

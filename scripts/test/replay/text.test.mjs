@@ -17,7 +17,7 @@ describe('printable', () => {
     assert.equal(printable('a\tb\u001b[31mc\u007fd\u00e9e \u263a f', 100), 'a?b?[31mc?d?e ? f');
   });
 
-  test('the few signs the app uses are written as their plain equivalents, each from its own entry of the table', () => {
+  test('the few signs the app uses are written as plain equivalents, each from its own table entry', () => {
     assert.equal(printable('Auto \u00b7 480p \u00b7 Remote \u00b7 slow', 100), 'Auto - 480p - Remote - slow');
     assert.equal(printable('You\u2019re \u2018here\u2019', 100), "You're 'here'");
     assert.equal(printable('\u201cquoted\u201d', 100), '"quoted"');
