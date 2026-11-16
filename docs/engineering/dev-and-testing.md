@@ -327,8 +327,8 @@ Codex's review quota is small and shared by local and PR runs; it ran out twice 
 1. **The gates pass** (`CLAUDE.md`), run by Sonnet until green, and **Sonnet has committed**: the check and the
    reviewer read commits, so uncommitted work would look clean (the check refuses to run on it).
 2. **The planner's test-class check prints nothing** (below).
-3. **A fresh read-only Claude reviewer finds nothing.** The planner starts a new subagent (Agent tool, Opus or
-   Fable, never the session that wrote the code) whose brief holds:
+3. **A fresh read-only Claude reviewer finds nothing, or only nits.** The planner starts a new subagent (Agent tool,
+   Opus or Fable, never the session that wrote the code) whose brief holds:
    - the worktree path and the diff to read (`git diff origin/main...HEAD` before the first push; `git diff <the head
      already pushed>..HEAD` for a fix round, or `git diff <the commit last reviewed>..HEAD` for a fix round before the
      first push);
@@ -339,7 +339,13 @@ Codex's review quota is small and shared by local and PR runs; it ran out twice 
    - findings ranked, each with file:line and the fix, or "No findings".
 
    It never gets the planner's conclusions or Sonnet's report, only the code and the rules. Its findings go to Sonnet
-   in one round. The reviewer runs again on that fix only, until it reports nothing.
+   in one round. The reviewer runs again on that fix only, until it reports nothing, or only nits (below).
+
+   **A round with nothing but nits** (wording, comments, naming, which file a test sits in when `test-standards.md`
+   doesn't settle it: no bug, no test that would pass on wrong code, no rule broken) is fixed and pushed without
+   another review (owner, 2026-11-15); steps 1 and 2 still run on the fix. On a code PR, green CI and Codex's clean
+   review of the exact head commit still gate the merge. A docs-only PR is the exception: Codex does not review its
+   fix pushes, so the reviewer reads the nit fix too (`CLAUDE.md` step 6 needs it clean on the head).
 
 **Then:** push. Codex reviews the PR when it opens. After that:
 
@@ -357,6 +363,33 @@ Codex's review quota is small and shared by local and PR runs; it ran out twice 
 History: until 2026-11-12, local Codex ran before every push (two clean runs in a row, then one). It caught real
 issues (#128) but used up the quota. On #129 it also passed a service with no unit test that the PR's Codex then
 flagged: local Codex is not an `AGENTS.md` audit, which is why steps 2 and 3 exist.
+
+### Keeping a change short
+
+Review rounds and waiting, not coding, are most of the time a change takes, and both grow with the size of the diff:
+#186 (about 3,900 lines) went through eight review rounds over many hours. The owner asked on 2026-11-16 for later
+plans to take less time without lowering quality. Nothing here drops a check: the gates, the fresh reviewer and
+Codex's review stay as they are above.
+
+The owner's rules:
+
+- **A PR is 1,500 changed lines or fewer, tests included** (additions plus deletions, as GitHub counts them; owner,
+  2026-11-16). A plan splits a phase that would be bigger. The target before was half of phase 4a's size (#118,
+  about 8,000 lines), which allowed about 4,000.
+- **Nits ride along.** The fresh reviewer's nits go to Sonnet with that round's bugs, and a round with only nits is
+  fixed and pushed without another review (owner, 2026-11-15; step 3 above, with its exception for a docs-only PR).
+  Codex's findings are not nits in this sense: all of one review's findings go into the fix push (`CLAUDE.md`
+  step 5).
+- **A later phase may be built while the one before waits on CI or Codex**, in its own worktree, only when the two
+  touch no file in common (owner, 2026-11-15). It is branched from the current `main` (`CLAUDE.md` step 7), and step 6
+  there still says when it must be updated from `main` before it merges.
+
+The planner's own practice, not an owner rule:
+
+- **A plan says at the start** how many PRs it needs and roughly how long they will take.
+- **A by-hand check that takes real time** (a film played through, a replay) runs once, on the commit about to be
+  pushed, and again only after a fix that changes what it checks.
+- **The planner tells the owner early** when a change will take hours, not after being asked.
 
 ### Planner's test-class check (every diff review)
 
