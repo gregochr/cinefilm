@@ -186,6 +186,8 @@ public final class ForcedChoice {
             case PROVEN_FILE -> "Plays: " + proofText(file.assessment().proof());
             case PROVEN_DOWNLOAD -> file.assessment().trust() == Trust.FAILED
                 ? "Replaced by an OpenSubtitles download that " + downloadProof(playing.assessment().proof())
+                : playing.assessment().proof() == Proof.CHOSEN
+                ? "Not used: a download you picked plays instead"
                 : "Not used: a proven OpenSubtitles download plays instead";
             case EMBEDDED -> "Not used: the film's own forced subtitle track plays instead";
             case REPLACED_BY_DOWNLOAD ->

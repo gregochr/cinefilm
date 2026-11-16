@@ -63,7 +63,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Service
 public class EditionArranger {
 
-    private static final String BUSY = "A scan is running";
     private static final int TITLE_MAX = 255;
     private static final int SUMMARY_MAX = 500;
     private static final String ORIGINAL = "Original";
@@ -401,7 +400,7 @@ public class EditionArranger {
 
     private <T> T locked(Supplier<T> work) {
         if (!lock.tryAcquire(LibraryLock.EDIT)) {
-            throw new ConflictException(BUSY);
+            throw new ConflictException(lock.busyText());
         }
         try {
             return work.get();

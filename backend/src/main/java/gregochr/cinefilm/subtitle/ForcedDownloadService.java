@@ -517,7 +517,8 @@ public class ForcedDownloadService {
      * owner's check ({@code ownerVerifiedAt}) is not set, so the timing fit still applies and no "you checked it" is
      * claimed.
      * Runs under the library lock, in one transaction, after revalidating everything that can have changed since the
-     * picker looked: the film's IMDb id, that the owner has not marked the film as not needing this kind, that the
+     * picker looked: the film's IMDb id, that the edition still has an original file (a premade rendition cannot be
+     * attached to), that the owner has not marked the film as not needing this kind, that the
      * file was not removed or already downloaded, and that the cap has room. The film's stored candidates and its
      * need are not consulted: the owner chose this file.
      *

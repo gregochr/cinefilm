@@ -181,7 +181,7 @@ class FixMatchUnitTest {
         lock.tryAcquire(LibraryLock.IMPORT);
 
         assertThatThrownBy(() -> fix.apply(FILM_ID, 5L)).isInstanceOf(ConflictException.class)
-            .hasMessage("A scan is running");
+            .hasMessage("A Plex import is running");
         verify(tmdb, never()).movie(5);
         assertThat(lock.holder()).isEqualTo(LibraryLock.IMPORT);
     }

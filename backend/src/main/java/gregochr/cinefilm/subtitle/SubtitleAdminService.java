@@ -306,7 +306,7 @@ public class SubtitleAdminService {
 
     private <T> T lockedRun(Supplier<T> work) {
         if (!lock.tryAcquire(LibraryLock.SUBTITLE)) {
-            throw new ConflictException("A scan is running");
+            throw new ConflictException(lock.busyText());
         }
         try {
             return tx.execute(status -> work.get());

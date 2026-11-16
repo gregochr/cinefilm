@@ -637,6 +637,17 @@ class ForcedNeedServiceTest {
     }
 
     @Test
+    void aSubtitleChangeHoldingTheLockIsNotCalledAScan() {
+        lock.tryAcquire(LibraryLock.SUBTITLE);
+
+        assertThatThrownBy(() -> service.choose(7L, new ChoiceRequest("NEEDED")))
+            .isInstanceOf(ConflictException.class)
+            .hasMessage("Subtitles are being changed or checked; try again in a moment");
+
+        assertThat(lock.holder()).isEqualTo(LibraryLock.SUBTITLE);
+    }
+
+    @Test
     void aBusyLibraryLockIsAConflictAndTheHoldersLockIsNotTakenOverOrReleased() {
         lock.tryAcquire(LibraryLock.SCAN);
 

@@ -148,7 +148,7 @@ public class ForcedNeedService {
     public FilmNeedDto choose(Long filmId, ChoiceRequest request) {
         ForcedNeedChoice choice = parse(request);
         if (!lock.tryAcquire(LibraryLock.SUBTITLE)) {
-            throw new ConflictException("A scan is running");
+            throw new ConflictException(lock.busyText());
         }
         try {
             return tx.execute(status -> chooseLocked(filmId, choice));
