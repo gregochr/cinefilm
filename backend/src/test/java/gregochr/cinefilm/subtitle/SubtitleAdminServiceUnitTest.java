@@ -26,6 +26,7 @@ import gregochr.cinefilm.subtitle.SubtitleDtos.OffsetRequest;
 import gregochr.cinefilm.subtitle.SubtitleDtos.SidecarDto;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -105,7 +106,7 @@ class SubtitleAdminServiceUnitTest {
     void attachingWholeToASplitEditionStoresItAgainstPartOneAsWholeEdition() {
         listAndFind();
         when(editions.findById(40L)).thenReturn(Optional.of(split));
-        when(files.findAllById(java.util.Set.of(10L))).thenReturn(List.of(split.originalParts().get(0)));
+        when(files.findAllById(Set.of(10L))).thenReturn(List.of(split.originalParts().get(0)));
 
         SidecarDto dto = service.attach(5L, new AttachRequest(40L, null));
 
@@ -120,7 +121,7 @@ class SubtitleAdminServiceUnitTest {
     void attachingToAPartStoresThatPartsFileAndRefusesAnotherNumber() {
         listAndFind();
         when(editions.findById(40L)).thenReturn(Optional.of(split));
-        when(files.findAllById(java.util.Set.of(20L))).thenReturn(List.of(split.originalParts().get(1)));
+        when(files.findAllById(Set.of(20L))).thenReturn(List.of(split.originalParts().get(1)));
 
         service.attach(5L, new AttachRequest(40L, 2));
 
@@ -173,13 +174,58 @@ class SubtitleAdminServiceUnitTest {
 
         row.setMediaFileId(10L);
         when(files.findById(10L)).thenReturn(Optional.of(split.originalParts().get(0)));
-        when(files.findAllById(java.util.Set.of(10L))).thenReturn(List.of(split.originalParts().get(0)));
+        when(files.findAllById(Set.of(10L))).thenReturn(List.of(split.originalParts().get(0)));
         service.verify(5L);
 
         assertThat(row.getOwnerVerifiedAt()).isEqualTo(NOW);
         assertThat(row.getVerifiedParts()).isEqualTo("10,20");
 
         service.unverify(5L);
+        assertThat(row.getOwnerVerifiedAt()).isNull();
+        assertThat(row.getVerifiedParts()).isNull();
+    }
+
+    @Test
+    void aNudgeKeepsTheOwnersCheckAndAProvenFileStaysProvenAndServed() {
+        listAndFind();
+        row.setMediaFileId(10L);
+        row.setOwnerVerifiedAt(NOW.minusSeconds(500));
+        row.setVerifiedParts("10,20");
+        List<Long> parts = List.of(10L, 20L);
+        ForcedChoice.Decision before = decideFor(parts);
+
+        service.offset(5L, new OffsetRequest(-1250));
+        service.offset(5L, new OffsetRequest(0));
+
+        assertThat(row.getOwnerVerifiedAt()).isEqualTo(NOW.minusSeconds(500));
+        assertThat(row.isVerifiedFor(parts)).isTrue();
+        assertThat(row.getUpdatedAt()).isEqualTo(NOW);
+        assertThat(row.getOffsetSource()).isEqualTo(SubtitleSidecar.OffsetSource.OWNER);
+        ForcedChoice.Decision after = decideFor(parts);
+        assertThat(before.step()).isEqualTo(ForcedChoice.Step.PROVEN_FILE);
+        assertThat(after.step()).isEqualTo(ForcedChoice.Step.PROVEN_FILE);
+        assertThat(after.source()).isEqualTo(ForcedChoice.Source.FILE);
+        assertThat(after.downloadId()).isNull();
+    }
+
+    /** What the edition plays for this file, with a proven download and the embedded track also on offer. */
+    private ForcedChoice.Decision decideFor(List<Long> parts) {
+        SidecarTrust.Assessment assessment = SidecarTrust.assess(row.isVerifiedFor(parts), null, false);
+        return ForcedChoice.decide(new ForcedChoice.Input(new ForcedChoice.FileSide(assessment, 20),
+            List.of(new ForcedChoice.DownloadSide(1L, new SidecarTrust.Assessment(SidecarTrust.Trust.PROVEN,
+                SidecarTrust.Proof.AGREES))), true));
+    }
+
+    @Test
+    void anAttachStillTakesTheOwnersCheckAway() {
+        listAndFind();
+        when(editions.findById(40L)).thenReturn(Optional.of(split));
+        when(files.findAllById(Set.of(20L))).thenReturn(List.of(split.originalParts().get(1)));
+        row.setOwnerVerifiedAt(NOW);
+        row.setVerifiedParts("10,20");
+
+        service.attach(5L, new AttachRequest(40L, 2));
+
         assertThat(row.getOwnerVerifiedAt()).isNull();
         assertThat(row.getVerifiedParts()).isNull();
     }
@@ -360,7 +406,7 @@ class SubtitleAdminServiceUnitTest {
     /** The forced side of the list is empty: the file lookup for no files is asked all the same. */
     private void noForcedRows() {
         when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FORCED)).thenReturn(List.of());
-        when(files.findAllById(java.util.Set.of())).thenReturn(List.of());
+        when(files.findAllById(Set.of())).thenReturn(List.of());
     }
 
     private SubtitleSidecar fullRow(long id, String path, Long fileId) {
@@ -382,8 +428,8 @@ class SubtitleAdminServiceUnitTest {
         SubtitleSidecar loose = fullRow(7L, "C.en.srt", null);
         when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FORCED)).thenReturn(List.of(row));
         when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FULL)).thenReturn(List.of(full, loose));
-        when(files.findAllById(java.util.Set.of())).thenReturn(List.of());
-        when(files.findAllById(java.util.Set.of(10L))).thenReturn(List.of(split.originalParts().get(0)));
+        when(files.findAllById(Set.of())).thenReturn(List.of());
+        when(files.findAllById(Set.of(10L))).thenReturn(List.of(split.originalParts().get(0)));
 
         List<SidecarDto> listed = service.list();
 
@@ -406,7 +452,7 @@ class SubtitleAdminServiceUnitTest {
         split.originalParts().get(0).setDurationMs(null);
         when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FULL)).thenReturn(List.of(onPartTwo));
         noForcedRows();
-        when(files.findAllById(java.util.Set.of(20L))).thenReturn(List.of(split.originalParts().get(1)));
+        when(files.findAllById(Set.of(20L))).thenReturn(List.of(split.originalParts().get(1)));
 
         SidecarDto dto = service.list().get(0);
 
@@ -426,7 +472,7 @@ class SubtitleAdminServiceUnitTest {
         when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FULL))
             .thenReturn(List.of(missing, empty, one, two));
         noForcedRows();
-        when(files.findAllById(java.util.Set.of(10L, 20L))).thenReturn(split.originalParts());
+        when(files.findAllById(Set.of(10L, 20L))).thenReturn(split.originalParts());
 
         List<SidecarDto> listed = service.list();
 
@@ -456,7 +502,7 @@ class SubtitleAdminServiceUnitTest {
         noForcedRows();
         when(sidecars.findAllByKindOrderByPathAscIdAsc(SubtitleKind.FULL)).thenReturn(List.of(full));
         when(editions.findById(40L)).thenReturn(Optional.of(split));
-        when(files.findAllById(java.util.Set.of(20L))).thenReturn(List.of(split.originalParts().get(1)));
+        when(files.findAllById(Set.of(20L))).thenReturn(List.of(split.originalParts().get(1)));
 
         service.attach(6L, new AttachRequest(40L, 2));
         service.offset(6L, new OffsetRequest(-250));

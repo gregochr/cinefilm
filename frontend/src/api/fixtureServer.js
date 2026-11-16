@@ -433,8 +433,7 @@ function setSubtitleOffset(id, body) {
     offsetMs: body.offsetMs,
     offsetSource: 'OWNER',
     version: before.version + 1,
-    // Like the server's `changed()`: a retimed file is no longer the one the owner checked.
-    verified: false,
+    // A nudge keeps the owner's check, as the server does.
   });
   return listedSubtitle(id);
 }

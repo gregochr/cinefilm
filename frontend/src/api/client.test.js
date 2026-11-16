@@ -56,6 +56,15 @@ describe('api client', () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
+  it('rejects a 401 on sign-out with its status and leaves the announcement to useSignOut', async () => {
+    vi.stubGlobal('fetch', reply(401));
+    const listener = vi.fn();
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener);
+    await expect(del('/api/session')).rejects.toMatchObject({ status: 401 });
+    window.removeEventListener(SESSION_EXPIRED_EVENT, listener);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it('returns null for 204 and throws on other errors', async () => {
     vi.stubGlobal(
       'fetch',

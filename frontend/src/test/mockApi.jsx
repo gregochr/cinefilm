@@ -173,7 +173,6 @@ export function defaultRoute(method, url, init = {}) {
         offsetMs,
         offsetSource: 'OWNER',
         version: row.version + 1,
-        verified: false,
       });
     }
     if (subtitleRoute[2] === '/verify') {

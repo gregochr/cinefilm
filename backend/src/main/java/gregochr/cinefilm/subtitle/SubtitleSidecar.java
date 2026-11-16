@@ -201,7 +201,7 @@ public class SubtitleSidecar {
         return ownerVerifiedAt != null && partsKey(partIds).equals(verifiedParts);
     }
 
-    /** Records that the owner has not checked the file (it changed, moved or was nudged). */
+    /** Records that the owner has not checked the file (its lines changed on disk, or it was attached or detached). */
     public void clearVerification() {
         ownerVerifiedAt = null;
         verifiedParts = null;

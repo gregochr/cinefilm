@@ -620,7 +620,7 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
     **Accepted losses (spec-sanctioned):** timing of a file that is not playing (the player nudges only the file on
     screen) and previewing the lines of an unattached file before attaching it (Preview lines is per file of the
     film). Dev mocks (`fixtureServer.js`, `mockApi.jsx`) now answer verify as the server does (a checked file stops
-    reading as replaced; undoing gives it back) and clear `verified` on an attach or a retiming.
+    reading as replaced; undoing gives it back) and clear `verified` on an attach (a retiming keeps it since 2026-11-16).
     `kindTag` (`state/subtitleFix.js`) is the one Full/Forced word. The dialog's tests send the
     attach for a forced file under another film end to end through the mocks. "Undo" after "Use my file instead" says
     "The download plays again." (`subtitleCheck.undoneReplaced`). `filmLabel` was dead and is deleted. `NUDGES` was deleted and then restored on the merge with 8b-1, which
@@ -657,13 +657,12 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
     answer belongs to the file it was for: its problem is dropped when another file shows, forgotten when the shown file
     changes, and nothing is set or told after the player unmounts. A press that fails half way still loads the new
     timing (rows did change) and shows the offsets that did.
-  - **A nudge can change what is served (found in review).** `SubtitleAdminService.changed()` clears the owner's
-    "Looks right" on any offset change, deliberately (`forced-subtitles-plan.md` "A nudge, an attach, and any change to a
-    file on disk clear the owner's check"; `SubtitleSidecar.clearVerification` "it changed, moved or was nudged"), and
-    the offset is part of the served `version`; a proven file can drop to unchecked and `ForcedChoice` may then serve a
-    proven download or the embedded track instead. **Not changed on the backend (owner decision needed).** The player
-    guards instead: the PUT answer's `served` is computed after the change; if any changed row is no longer served the
-    track is not touched, and the viewer is told the subtitle changed.
+  - **A nudge can change what is served (found in review; resolved 2026-11-16).** The nudge used to clear the owner's
+    "Looks right" (`SubtitleAdminService.changed()`), so a proven file could drop to unchecked and `ForcedChoice` could
+    serve a proven download or the embedded track instead. **Owner decision 2026-11-16: a nudge keeps the check** (an
+    offset PUT only moves the version; an attach, a detach or a change on disk still clears it). The player's guard
+    stays for what else can change the served file meanwhile: the PUT answer's `served` is computed after the change;
+    if any changed row is no longer served the track is not touched, and the viewer is told the subtitle changed.
   - **Weak link, after the final review (planner, review).** (1) A new `<track>` that fails to load (error, or 20 s)
     is never fetched again by the browser, and the server already holds its timing, so a next press that moved would be
     a second step the viewer never saw. `useSubtitleTiming` remembers the failure per file (`failedLoads`, with the
