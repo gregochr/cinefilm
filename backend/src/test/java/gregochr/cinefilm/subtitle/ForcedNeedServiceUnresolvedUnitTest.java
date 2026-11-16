@@ -91,7 +91,8 @@ class ForcedNeedServiceUnresolvedUnitTest {
     /**
      * Films 1 to 7: 1 plays a subtitle (not in play); 2 has no IMDb id (unresolved); 3 has one and was never searched
      * (being checked by the search); 4 is searched with files and a download is due (being checked); 5 is searched with
-     * files and nothing is due (unresolved); 6 is searched with none (unresolved); 7 is marked not needed.
+     * files and nothing is due (unresolved); 6 is searched with none (unresolved); 7 is marked not needed and has a
+     * served subtitle too (the list asks playback about it, the count does not).
      */
     private Edition scenario() {
         Edition plays = editionOf(1);
@@ -100,12 +101,21 @@ class ForcedNeedServiceUnresolvedUnitTest {
             needed(3, "tt3", null, null, false), needed(4, "tt4", 2, "tt4", false),
             needed(5, "tt5", 2, "tt5", false), needed(6, "tt6", 0, "tt6", false), notNeeded(7)));
         when(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED)).thenReturn(List.of());
-        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L));
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L, 7L));
         when(files.findFilmIdsWithEmbeddedForced()).thenReturn(List.of());
         when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(plays));
         when(forcedSubtitles.playableEditionIds(List.of(plays))).thenReturn(Set.of(plays.getId()));
         when(pending.forced(Map.of(4L, "tt4", 5L, "tt5"))).thenReturn(new Pending(Set.of(4L)));
         return plays;
+    }
+
+    /** What the list asks beyond the count: playback is asked about the not-needed film 7 as well. */
+    private void listAlsoAsksAboutTheNotNeededFilm(Edition plays) {
+        Edition other = editionOf(7);
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L, 7L))).thenReturn(List.of(plays, other));
+        when(forcedSubtitles.playableEditionIds(List.of(plays, other)))
+            .thenReturn(Set.of(plays.getId(), other.getId()));
+        when(files.findAudioRows(List.of(2L, 3L, 4L, 5L, 6L))).thenReturn(List.of());
     }
 
     @Test
@@ -117,8 +127,7 @@ class ForcedNeedServiceUnresolvedUnitTest {
 
     @Test
     void itAnswersWhatTheListsCountSays() {
-        scenario();
-        when(files.findAudioRows(List.of(2L, 3L, 4L, 5L, 6L))).thenReturn(List.of());
+        listAlsoAsksAboutTheNotNeededFilm(scenario());
 
         assertThat(service.unresolvedCount()).isEqualTo(3).isEqualTo(service.list().counts().unresolved());
     }
@@ -126,8 +135,7 @@ class ForcedNeedServiceUnresolvedUnitTest {
     @Test
     void aSearchThatIsOffLeavesAnUnsearchedFilmUnresolvedAsTheListSaysToo() {
         ForcedNeedService off = withSwitches(new OpenSubtitlesSwitches(false, false));
-        scenario();
-        when(files.findAudioRows(List.of(2L, 3L, 4L, 5L, 6L))).thenReturn(List.of());
+        listAlsoAsksAboutTheNotNeededFilm(scenario());
 
         assertThat(off.unresolvedCount()).isEqualTo(5).isEqualTo(off.list().counts().unresolved());
     }
@@ -171,7 +179,7 @@ class ForcedNeedServiceUnresolvedUnitTest {
     }
 
     @Test
-    void onlyTheNeededFilmsAreAskedWhatPlaybackServesAndTheFilmsFileStatementsStayAtThree() {
+    void onlyTheNeededFilmsAreAskedWhatPlaybackServesAndTheRepositoriesAreReadOnceEach() {
         when(films.findNeedRows()).thenReturn(List.of(needed(1, null, null, null, false), notNeeded(2)));
         when(sidecars.findFilmIdsWithPresentSidecar(SubtitleKind.FORCED)).thenReturn(List.of());
         when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(2L));

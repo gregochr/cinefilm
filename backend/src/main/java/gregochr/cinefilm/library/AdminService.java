@@ -114,9 +114,9 @@ public class AdminService {
     /**
      * The figures of Admin's summary that come from the library, read cheaply (it is polled every 30 seconds). Each
      * answers what {@link #attention()} and {@link #status()} would give: the unmatched films, the "multiple-files" and
-     * "parts-mismatch" items, the browsable films and the last finished scan. It reads no film row: three counts and
-     * one read of every edition with its files (the film's id and editions-confirmed flag come as columns), and the
-     * same rules decide.
+     * "parts-mismatch" items, the browsable films and the last finished scan. It loads no Film entity or large text
+     * column: two counts, the last finished scan, a projection of each edition's film id and editions-confirmed flag,
+     * and one read of the editions with their files; the same rules decide.
      *
      * @param needsMatch the films waiting for a match ({@code needs-match} items)
      * @param severalFiles the {@code multiple-files} and {@code parts-mismatch} items together
