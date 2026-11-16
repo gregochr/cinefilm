@@ -106,7 +106,7 @@ export default function Player() {
   // at the film position the old one had reached. Belongs to this route; another film or edition starts it afresh.
   const [again, setAgain] = useState({ key: routeKey, count: 0, atMs: null, choices: null });
   if (again.key !== routeKey) setAgain({ key: routeKey, count: 0, atMs: null, choices: null });
-  // `choices` are what the viewer picked in the old viewing (quality, audio, subtitle): the film was read when the page
+  // `choices` are what the viewer picked in the old viewing (quality, audio, subtitle, volume, mute): the film was read when the page
   // opened, so its preferences would bring back the old ones.
   const playAgain = (atMs, choices) => {
     // A position of 0 or less is no position: the new viewing starts where a new viewing of this film would.
@@ -172,8 +172,16 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, choices, 
   const [started, setStarted] = useState(false);
   const [durationMs, setDurationMs] = useState(edition.runtimeMs);
   const [bufferedMs, setBufferedMs] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(choices?.volume ?? 1);
+  const [muted, setMuted] = useState(choices?.muted ?? false);
+  // A new video element (a replacement viewing) starts at volume 1 and unmuted: give it the viewer's levels before it plays.
+  useLayoutEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.volume = volume;
+    video.muted = muted;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the element this viewing mounts
+  }, []);
   const [menu, setMenu] = useState(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [endDismissed, setEndDismissed] = useState(false);
@@ -649,7 +657,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, choices, 
       playback.report(),
       new Promise((resolve) => setTimeout(resolve, LEAVE_REPORT_CAP_MS)),
     ]);
-    onPlayAgain(at, { quality, audio, chosenSubtitle, removed });
+    onPlayAgain(at, { quality, audio, chosenSubtitle, removed, volume, muted });
   };
 
   const hidden = !visible && !endOverlay;

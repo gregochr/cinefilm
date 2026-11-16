@@ -672,6 +672,27 @@ describe('a playback Admin stopped (410)', () => {
     );
   });
 
+  it('keeps the volume and mute through Play again, on the new video and in the control', async () => {
+    const { video, hls } = await open();
+    await landResume(video);
+    fireEvent.change(screen.getByRole('slider', { name: 'Volume' }), { target: { value: '0.4' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Mute' }));
+    expect(video.muted).toBe(true);
+    await hlsEvent(() =>
+      hls().error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await instances(2);
+    const next = await screen.findByTestId('player-video');
+    expect(next).not.toBe(video);
+    expect(next.volume).toBeCloseTo(0.4);
+    expect(next.muted).toBe(true);
+    expect(screen.getByRole('button', { name: 'Unmute' })).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('0');
+    await userEvent.click(screen.getByRole('button', { name: 'Unmute' }));
+    expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('0.4');
+  });
+
   it('lets the old viewing’s progress write land before the new viewing starts, so writes stay in order', async () => {
     const srv = serve();
     let release;
