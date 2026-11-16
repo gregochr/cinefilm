@@ -1,17 +1,20 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
+import { ADMIN_TIMEOUT_MS } from '../api/timeout.js';
+import { installFetch, respond } from '../test/mockApi.jsx';
 import { subtitlesWrong } from './subtitleFixCopy.js';
 import { useSubtitleWrong } from './useSubtitleWrong.js';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
-// Film 6 (Blade Runner) edition 61 has a played forced download, row 6 in the fixtures.
-const target = { filmId: 6, editionId: 61, kind: 'FORCED' };
+const target = { kind: 'FORCED' };
 const calls = (fetchMock) => fetchMock.mock.calls.map((c) => `${c[1]?.method ?? 'GET'} ${c[0]}`);
 
 describe('useSubtitleWrong', () => {
-  it('reads the list, then deletes the download that plays, and nothing else', async () => {
+  it('deletes the download the film showed by its id, and reads nothing', async () => {
     const fetchMock = installFetch();
     const { result } = renderHook(() => useSubtitleWrong(target));
 
@@ -21,7 +24,7 @@ describe('useSubtitleWrong', () => {
     });
 
     expect(done).toBe(true);
-    expect(calls(fetchMock)).toEqual(['GET /api/admin/subtitles', 'DELETE /api/admin/subtitles/6']);
+    expect(calls(fetchMock)).toEqual(['DELETE /api/admin/subtitles/6']);
     expect(result.current.busy).toBe(false);
     expect(result.current.problem).toBeNull();
   });
@@ -51,58 +54,25 @@ describe('useSubtitleWrong', () => {
       expect(await first).toBe(true);
     });
 
-    expect(calls(fetchMock).filter((c) => c.startsWith('DELETE'))).toEqual([
-      'DELETE /api/admin/subtitles/6',
-    ]);
+    expect(calls(fetchMock)).toEqual(['DELETE /api/admin/subtitles/6']);
     expect(result.current.busy).toBe(false);
   });
 
-  it('says so and deletes nothing when no download plays for that edition and kind', async () => {
+  it.each([
+    ['none', undefined],
+    ['an empty list', []],
+  ])('says the subtitle changed and sends nothing when the film gave %s', async (_name, ids) => {
     const fetchMock = installFetch();
-    const { result } = renderHook(() => useSubtitleWrong({ ...target, kind: 'FULL' }));
+    const { result } = renderHook(() => useSubtitleWrong({ kind: 'FULL' }));
 
     let done;
     await act(async () => {
-      done = await result.current.report('FULL', [6]);
-    });
-
-    expect(done).toBe(false);
-    expect(result.current.problem).toBe(subtitlesWrong.lookupFailed);
-    expect(calls(fetchMock)).toEqual(['GET /api/admin/subtitles']);
-  });
-
-  it('says the subtitle changed when the film gave no ids and none plays', async () => {
-    const fetchMock = installFetch();
-    const { result } = renderHook(() => useSubtitleWrong({ ...target, kind: 'FULL' }));
-
-    let done;
-    await act(async () => {
-      done = await result.current.report('FULL', undefined);
+      done = await result.current.report('FULL', ids);
     });
 
     expect(done).toBe(false);
     expect(result.current.problem).toBe(subtitlesWrong.changed);
     expect(calls(fetchMock)).toEqual([]);
-  });
-
-  it('deletes only the playing download the film showed when its ids overlap the playing ones in part', async () => {
-    const fetchMock = installFetch((method, url) =>
-      method === 'GET' && url === '/api/admin/subtitles'
-        ? respond([
-            { ...fixtures.adminSubtitles[5], id: 61, ...target, served: true },
-            { ...fixtures.adminSubtitles[5], id: 62, ...target, served: true },
-          ])
-        : null,
-    );
-    const { result } = renderHook(() => useSubtitleWrong(target));
-
-    await act(async () => {
-      await result.current.report('FORCED', [61, 63]);
-    });
-
-    expect(calls(fetchMock).filter((c) => c.startsWith('DELETE'))).toEqual([
-      'DELETE /api/admin/subtitles/61',
-    ]);
   });
 
   it('shows the server’s own words when it refuses the delete, then clears them on the next try', async () => {
@@ -124,29 +94,8 @@ describe('useSubtitleWrong', () => {
     expect(result.current.problem).toBeNull();
   });
 
-  it('says one plain line when the list cannot be read', async () => {
-    const fetchMock = installFetch((method, url) =>
-      url === '/api/admin/subtitles' ? respond({ error: 'x' }, 500) : null,
-    );
-    const { result } = renderHook(() => useSubtitleWrong(target));
-
-    let done;
-    await act(async () => {
-      done = await result.current.report('FORCED', [6]);
-    });
-
-    expect(done).toBe(false);
-    expect(result.current.problem).toBe(subtitlesWrong.failed);
-    expect(calls(fetchMock).some((c) => c.startsWith('DELETE'))).toBe(false);
-  });
-
-  it('removes every playing download of the kind (a split film), stopping at the first failure', async () => {
-    const rows = [
-      { ...fixtures.adminSubtitles[5], id: 61 },
-      { ...fixtures.adminSubtitles[5], id: 62 },
-    ];
+  it('removes every row of the download (a split film), stopping at the first failure', async () => {
     const fetchMock = installFetch((method, url) => {
-      if (url === '/api/admin/subtitles') return respond(rows);
       if (method !== 'DELETE') return null;
       return url === '/api/admin/subtitles/62'
         ? respond({ error: 'boom' }, 500)
@@ -156,24 +105,19 @@ describe('useSubtitleWrong', () => {
 
     let done;
     await act(async () => {
-      done = await result.current.report('FORCED', [61, 62]);
+      done = await result.current.report('FORCED', [61, 62, 63]);
     });
 
     expect(done).toBe(false);
-    expect(calls(fetchMock).filter((c) => c.startsWith('DELETE'))).toEqual([
+    expect(calls(fetchMock)).toEqual([
       'DELETE /api/admin/subtitles/61',
       'DELETE /api/admin/subtitles/62',
     ]);
     expect(result.current.problem).toBe(subtitlesWrong.failed);
   });
 
-  it('counts a 404 on the delete as removed: the row was already gone between the list and the delete', async () => {
-    const rows = [
-      { ...fixtures.adminSubtitles[5], id: 61 },
-      { ...fixtures.adminSubtitles[5], id: 62 },
-    ];
+  it('counts a 404 on a delete as removed: the row was already gone', async () => {
     const fetchMock = installFetch((method, url) => {
-      if (url === '/api/admin/subtitles') return respond(rows);
       if (method !== 'DELETE') return null;
       return url === '/api/admin/subtitles/61'
         ? respond({ error: 'No such subtitle file' }, 404)
@@ -188,9 +132,44 @@ describe('useSubtitleWrong', () => {
 
     expect(done).toBe(true);
     expect(result.current.problem).toBeNull();
-    expect(calls(fetchMock).filter((c) => c.startsWith('DELETE'))).toEqual([
+    expect(calls(fetchMock)).toEqual([
       'DELETE /api/admin/subtitles/61',
       'DELETE /api/admin/subtitles/62',
+    ]);
+  });
+
+  it('a delete with no answer fails after the timeout, unblocks the button, and the next try can go out', async () => {
+    vi.useFakeTimers();
+    let hang = true;
+    const fetchMock = installFetch((method) =>
+      method === 'DELETE' && hang ? new Promise(() => {}) : null,
+    );
+    const { result } = renderHook(() => useSubtitleWrong(target));
+
+    let first;
+    await act(async () => {
+      first = result.current.report('FORCED', [6]);
+      await vi.advanceTimersByTimeAsync(ADMIN_TIMEOUT_MS - 1);
+    });
+    expect(result.current.busy).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+
+    expect(await first).toBe(false);
+    expect(result.current.busy).toBe(false);
+    expect(result.current.problem).toBe(subtitlesWrong.failed);
+
+    hang = false;
+    let again;
+    await act(async () => {
+      again = await result.current.report('FORCED', [6]);
+    });
+    expect(again).toBe(true);
+    expect(result.current.problem).toBeNull();
+    expect(calls(fetchMock)).toEqual([
+      'DELETE /api/admin/subtitles/6',
+      'DELETE /api/admin/subtitles/6',
     ]);
   });
 
@@ -202,7 +181,7 @@ describe('useSubtitleWrong', () => {
     await act(() => result.current.report('FORCED', [6]));
     expect(result.current.problem).toBe(subtitlesWrong.failed);
 
-    rerender({ ...target, kind: 'FULL' });
+    rerender({ kind: 'FULL' });
     expect(result.current.problem).toBeNull();
 
     // Switching back does not bring the old message back.
@@ -226,7 +205,7 @@ describe('useSubtitleWrong', () => {
       pending = result.current.report('FORCED', [6]);
       await Promise.resolve();
     });
-    rerender({ ...target, kind: 'FULL' });
+    rerender({ kind: 'FULL' });
 
     await act(async () => {
       release();
@@ -235,29 +214,5 @@ describe('useSubtitleWrong', () => {
     rerender(target);
 
     expect(result.current.problem).toBeNull();
-  });
-
-  it('deletes nothing when the playing download is not the one the film showed, and says so', async () => {
-    const fetchMock = installFetch();
-    const { result } = renderHook(() => useSubtitleWrong(target));
-
-    let done;
-    await act(async () => {
-      done = await result.current.report('FORCED', [99]);
-    });
-
-    expect(done).toBe(false);
-    expect(result.current.problem).toBe(subtitlesWrong.changed);
-    expect(calls(fetchMock)).toEqual(['GET /api/admin/subtitles']);
-  });
-
-  it('deletes nothing when the film carried no ids', async () => {
-    const fetchMock = installFetch();
-    const { result } = renderHook(() => useSubtitleWrong(target));
-
-    await act(() => result.current.report('FORCED', undefined));
-
-    expect(result.current.problem).toBe(subtitlesWrong.changed);
-    expect(calls(fetchMock).some((c) => c.startsWith('DELETE'))).toBe(false);
   });
 });

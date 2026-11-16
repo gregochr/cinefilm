@@ -186,6 +186,29 @@ describe('playing a film split across several files', () => {
     await vi.waitFor(() => expect(screen.queryByTestId('player-still')).not.toBeInTheDocument());
   });
 
+  it('leaves Safari’s native fullscreen when the film cannot be played, so the card is not under it', async () => {
+    const exit = vi.fn();
+    Object.defineProperty(HTMLVideoElement.prototype, 'webkitDisplayingFullscreen', {
+      configurable: true,
+      get: () => true,
+    });
+    HTMLVideoElement.prototype.webkitExitFullscreen = exit;
+    try {
+      const srv = serve({
+        create: (n) => (n === 1 ? respond({ error: 'No encoder' }, 409) : null),
+      });
+      installFetch(srv.route);
+      renderApp('/films/1/play?edition=11');
+
+      await screen.findByRole('alert');
+
+      expect(exit).toHaveBeenCalledTimes(1);
+    } finally {
+      delete HTMLVideoElement.prototype.webkitDisplayingFullscreen;
+      delete HTMLVideoElement.prototype.webkitExitFullscreen;
+    }
+  });
+
   it('never direct-plays: a refused session says so and Try again asks once more', async () => {
     const srv = serve({ create: (n) => (n === 1 ? respond({ error: 'No encoder' }, 409) : null) });
     installFetch(srv.route);

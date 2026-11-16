@@ -3,15 +3,12 @@ import { ApiError } from '../api/client.js';
 import { FULL_KEY, SUBTITLE_OFF } from '../player/tracks.js';
 import {
   Changed,
-  LookupFailed,
   fileTools,
   filmFiles,
   kindTag,
   shownDownloadKind,
   shownFileKind,
-  shownTargets,
   wrongProblem,
-  wrongTargets,
 } from './subtitleFix.js';
 import { subtitlesWrong } from './subtitleFixCopy.js';
 
@@ -193,24 +190,6 @@ describe('shownFileKind', () => {
   });
 });
 
-describe('wrongTargets', () => {
-  const want = { filmId: 6, editionId: 61, kind: 'FORCED' };
-
-  it('picks the download that plays for that edition and kind', () => {
-    expect(wrongTargets([row({ id: 6 })], want).map((r) => r.id)).toEqual([6]);
-  });
-
-  it.each([
-    ['another film', { filmId: 7 }],
-    ['another edition', { editionId: 62 }],
-    ['another kind', { kind: 'FULL' }],
-    ['a download that is not playing', { served: false }],
-    ['the owner’s file', { origin: 'FILE' }],
-  ])('leaves out %s', (_name, over) => {
-    expect(wrongTargets([row(over)], want)).toEqual([]);
-  });
-});
-
 describe('wrongProblem', () => {
   it('shows the server’s own words for a refused request', () => {
     const text = 'Only a subtitle downloaded from OpenSubtitles can be removed';
@@ -222,10 +201,6 @@ describe('wrongProblem', () => {
     expect(wrongProblem(new Changed())).toBe(subtitlesWrong.changed);
   });
 
-  it('says it could not find the download when no row matched', () => {
-    expect(wrongProblem(new LookupFailed())).toBe(subtitlesWrong.lookupFailed);
-  });
-
   it.each([
     [
       'a 409 while a scan runs',
@@ -235,19 +210,5 @@ describe('wrongProblem', () => {
     ['a network failure', new TypeError('Failed to fetch')],
   ])('says one plain line for %s', (_name, failure) => {
     expect(wrongProblem(failure)).toBe(subtitlesWrong.failed);
-  });
-});
-
-describe('shownTargets', () => {
-  const playing = [row({ id: 70 }), row({ id: 71 })];
-
-  it('keeps only the downloads the film showed', () => {
-    expect(shownTargets(playing, [71]).map((r) => r.id)).toEqual([71]);
-  });
-
-  it('keeps nothing when the film showed none of them, or carried no ids', () => {
-    expect(shownTargets(playing, [5])).toEqual([]);
-    expect(shownTargets(playing, undefined)).toEqual([]);
-    expect(shownTargets(playing, [])).toEqual([]);
   });
 });

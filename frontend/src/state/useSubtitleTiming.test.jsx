@@ -1,10 +1,14 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
+import { ADMIN_TIMEOUT_MS } from '../api/timeout.js';
 import { subtitleTiming } from './subtitleFixCopy.js';
 import { useSubtitleTiming } from './useSubtitleTiming.js';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 const row = (id, offsetMs, over = {}) => ({
   ...fixtures.adminSubtitles[5],
@@ -289,12 +293,10 @@ describe('useSubtitleTiming', () => {
     expect(props.onApplied).toHaveBeenLastCalledWith('FULL', '101_0', [0]);
     expect(result.current.problem).toBeNull();
 
-    // On screen and on the server the same: nothing to send, nothing to load, and the line stays.
+    // On screen and on the server the same: nothing to send, nothing to load.
     rerender({ ...props, onScreen: [0] });
-    act(() => result.current.swapFailed('FULL'));
     await act(() => result.current.reset());
     expect(props.onApplied).toHaveBeenCalledTimes(2);
-    expect(result.current.problem).toBe(subtitleTiming.swapFailed);
   });
 
   it('forgets a problem when another file shows, and does not bring it back', async () => {
@@ -384,7 +386,7 @@ describe('useSubtitleTiming', () => {
     expect(props.onApplied).not.toHaveBeenCalled();
   });
 
-  it('swapFailed tells the viewer the old timing stays, only while that kind shows', () => {
+  it('swapFailed tells the viewer the new timing is saved but not loaded, only while that kind shows', () => {
     const { result, rerender } = renderHook((props) => useSubtitleTiming(props), {
       initialProps: open(),
     });
@@ -396,5 +398,127 @@ describe('useSubtitleTiming', () => {
 
     rerender(open({ kind: 'FORCED', ids: [2], offsets: [0] }));
     expect(result.current.problem).toBeNull();
+  });
+
+  describe('a new track that failed to load', () => {
+    // Later was saved (+0.5 s -> +0.75 s) and its track failed: the server holds +0.75 s, the screen still +0.5 s.
+    async function failedLater() {
+      const served = serve({ rows: [row(1, 500)] });
+      const props = open();
+      const hook = renderHook((p) => useSubtitleTiming(p), { initialProps: props });
+      await act(() => hook.result.current.later());
+      hook.rerender({ ...props, onScreen: [500] });
+      act(() => hook.result.current.swapFailed('FULL'));
+      return { ...served, ...hook, props };
+    }
+
+    it.each([
+      ['Earlier', 'earlier'],
+      ['Later', 'later'],
+      ['Reset', 'reset'],
+    ])(
+      'the first %s press loads the saved timing again and sends nothing, then the next press moves',
+      async (_name, press) => {
+        const { calls, result, props } = await failedLater();
+        expect(calls).toEqual(['PUT /api/admin/subtitles/1/offset {"offsetMs":750}']);
+        expect(result.current.problem).toBe(subtitleTiming.swapFailed);
+
+        await act(() => result.current[press]());
+
+        expect(calls).toHaveLength(1);
+        expect(props.onApplied).toHaveBeenCalledTimes(2);
+        expect(props.onApplied).toHaveBeenLastCalledWith('FULL', '101_750', [750]);
+        expect(result.current.problem).toBeNull();
+
+        // The viewer has now seen the saved timing (or the retry works): the next press is a real step.
+        await act(() => result.current.earlier());
+        expect(calls).toHaveLength(2);
+        expect(calls[1]).toBe('PUT /api/admin/subtitles/1/offset {"offsetMs":500}');
+      },
+    );
+
+    it('the online event loads it again by itself, once, and sends nothing', async () => {
+      const { calls, result, props } = await failedLater();
+
+      await act(async () => {
+        window.dispatchEvent(new Event('online'));
+      });
+
+      expect(props.onApplied).toHaveBeenCalledTimes(2);
+      expect(props.onApplied).toHaveBeenLastCalledWith('FULL', '101_750', [750]);
+      expect(result.current.problem).toBeNull();
+      await act(async () => {
+        window.dispatchEvent(new Event('online'));
+      });
+      expect(props.onApplied).toHaveBeenCalledTimes(2);
+      expect(calls).toHaveLength(1);
+    });
+
+    it('a second failure keeps the retry going on the next online event', async () => {
+      const { result, props } = await failedLater();
+      await act(async () => {
+        window.dispatchEvent(new Event('online'));
+      });
+      act(() => result.current.swapFailed('FULL'));
+      expect(result.current.problem).toBe(subtitleTiming.swapFailed);
+
+      await act(async () => {
+        window.dispatchEvent(new Event('online'));
+      });
+
+      expect(props.onApplied).toHaveBeenCalledTimes(3);
+    });
+
+    it('does nothing on online when no load failed, or after the player is gone', async () => {
+      const served = serve({ rows: [row(1, 500)] });
+      const props = open();
+      const { result, unmount } = renderHook(() => useSubtitleTiming(props));
+      await act(() => result.current.later());
+
+      await act(async () => {
+        window.dispatchEvent(new Event('online'));
+      });
+      expect(props.onApplied).toHaveBeenCalledTimes(1);
+
+      act(() => result.current.swapFailed('FULL'));
+      unmount();
+      window.dispatchEvent(new Event('online'));
+      expect(props.onApplied).toHaveBeenCalledTimes(1);
+      expect(served.calls).toHaveLength(1);
+    });
+  });
+
+  describe('a request with no answer', () => {
+    it('fails after the timeout with the plain line, unblocks the buttons, and the next press can send', async () => {
+      vi.useFakeTimers();
+      let hang = true;
+      const { calls } = serve({
+        rows: [row(1, 500)],
+        answer: (method) => (method === 'PUT' && hang ? new Promise(() => {}) : null),
+      });
+      const props = open();
+      const { result } = renderHook(() => useSubtitleTiming(props));
+
+      await act(async () => {
+        void result.current.later();
+        await vi.advanceTimersByTimeAsync(ADMIN_TIMEOUT_MS - 1);
+      });
+      expect(result.current.busy).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+
+      expect(result.current.busy).toBe(false);
+      expect(result.current.problem).toBe(subtitleTiming.failed);
+      expect(props.onApplied).not.toHaveBeenCalled();
+      // Offsets are absolute: asking again sends the same value, never a second step.
+      hang = false;
+      await act(() => result.current.later());
+      expect(calls).toEqual([
+        'PUT /api/admin/subtitles/1/offset {"offsetMs":750}',
+        'PUT /api/admin/subtitles/1/offset {"offsetMs":750}',
+      ]);
+      expect(props.onApplied).toHaveBeenCalledExactlyOnceWith('FULL', '101_750', [750]);
+    });
   });
 });

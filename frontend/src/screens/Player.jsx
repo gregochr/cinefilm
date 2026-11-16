@@ -76,9 +76,13 @@ const TRACK_ERROR = 3;
 /** How long a pending subtitle track may take to load or fail before the old timing is kept. */
 const SWAP_TIMEOUT_MS = 20_000;
 
-/** The tokens of a kind's mounted file tracks: the current one, then the one still loading, if any. */
-function fileTokens({ current, pending }) {
-  return pending === null ? [current] : [current, pending];
+/**
+ * The tokens of a kind's mounted file tracks: the current one, then the one still loading, if any. A pending track is
+ * mounted only while its kind shows: one that stays mounted (disabled) beside the current one is listed twice by the
+ * system caption menus (iOS fullscreen, AirPlay, Safari). It is mounted again, and loads hidden, when its kind shows.
+ */
+function fileTokens({ current, pending }, kindShows) {
+  return pending === null || !kindShows ? [current] : [current, pending];
 }
 
 function bufferedEnd(video) {
@@ -236,6 +240,11 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
   // Stopped from Admin: the stopped card is the only card (the slow-connection card and the end card would cover it).
   const stoppedByAdmin = stream.mode === 'stopped';
   const endOverlay = atEnd && !endDismissed && !stoppedByAdmin;
+  // A menu open when Admin stops the playback goes: the stopped card takes focus, and Escape and focus must not be
+  // left to a menu behind it. (Opening one afterwards is the viewer's own act.)
+  useEffect(() => {
+    if (stoppedByAdmin) setMenu(null);
+  }, [stoppedByAdmin]);
   const { visible, poke } = useAutoHide({ playing, menuOpen: menu !== null, ended: endOverlay });
   // One card at a time: the question waits for the slow-connection card, the end card and the unavailable card,
   // and hides while a menu is open (on a phone it would lie over it).
@@ -395,11 +404,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
     forcedSubtitle,
     fullSubtitle,
   });
-  const wrongSubtitles = useSubtitleWrong({
-    filmId: film.id,
-    editionId: edition.id,
-    kind: downloadKind,
-  });
+  const wrongSubtitles = useSubtitleWrong({ kind: downloadKind });
   // The subtitle file on screen, owner's or downloaded: it is the one the timing buttons change. Its rows are the ids
   // the film showed for it (one per part).
   const fileKind = shownFileKind({
@@ -424,10 +429,9 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
   });
   // The new timing's track loaded: it takes over. It failed, or neither loaded nor failed within SWAP_TIMEOUT_MS: it is
   // dropped, the old one stays and the viewer is told. Only the kind that shows is watched (and timed: the 20 s start
-  // when it shows with a pending track). A kind that is not showing keeps both its tracks mounted, `disabled`; its
-  // pending one loads hidden once the kind shows again, or finishes a fetch it had already started, and is read from
-  // `readyState` when the kind shows again. Depends on this kind's pending token only, so a change for the other kind
-  // does not restart the timer.
+  // when it shows with a pending track). A kind that is not showing has no pending track mounted (the saved timing waits
+  // in `swaps`): it is mounted again, loads hidden and is timed afresh once the kind shows again. Depends on this
+  // kind's pending token only, so a change for the other kind does not restart the timer.
   const { swapFailed } = timing;
   const pending = swaps[fileKind]?.pending ?? null;
   useEffect(() => {
@@ -716,7 +720,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
           />
         ))}
         {forcedSubtitle
-          ? fileTokens(swaps.FORCED).map((token) => (
+          ? fileTokens(swaps.FORCED, fileKind === 'FORCED').map((token) => (
               <track
                 key={fileTrackKey('FORCED', token)}
                 ref={(element) => {
@@ -736,7 +740,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
             ))
           : null}
         {fullSubtitle
-          ? fileTokens(swaps.FULL).map((token) => (
+          ? fileTokens(swaps.FULL, fileKind === 'FULL').map((token) => (
               <track
                 key={fileTrackKey('FULL', token)}
                 ref={(element) => {
@@ -829,6 +833,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
               value={quality}
               width={edition.file?.width}
               activeRung={activeRung}
+              stopped={stoppedByAdmin}
               onSelect={chooseQuality}
             />
           ) : null}

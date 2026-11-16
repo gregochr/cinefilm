@@ -235,7 +235,7 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
   `playbackId` answer 410 (`foundation-plan.md`). The player treats a 410 as a stop, not a failure (hls.js error or
   native master check or session request): it destroys the engine, pauses, and shows "Playback was stopped from Admin."
   with "Play again", which keeps the same player, video and hooks (nothing is remounted, so volume, quality, audio, subtitles and their timing, fullscreen and the answered environment question all stay) and restarts only the stream: `useHealthReport.newViewing()` starts a new health record (a new `playbackId`, the clock at zero) and `useStream.resume(atMs)` makes a new session at the position the stop caught (0 is a position too), reads PREPARING like a fresh start and hands focus back to the player (read before the engine is destroyed, because that resets the element to 0). The transcoding session rows carry the `playbackId` and Stop on a row targets the session of that row's viewing, never another device's playback of the same edition; the source is cleared, and play, seeking and quality changes are ignored while stopped. The Stop call sends the row's `playbackId`, so the server also ends a newer session of that viewing (one made after the list was read). A 404, no
-  answer, a 5xx and a restart recover as before (tests pin each). The hint is therefore AR4's and 07's again:
+  answer, a 5xx and a restart recover as before (tests pin each). **After the final review (planner, review):** on an iPhone in Safari's native fullscreen player the card would be under the player, so a stop (and a split film that cannot play) first leaves it (`leaveNativeFullscreen`); the stopped card's button is described by its message (the card is mounted already filled and takes focus, so a live region would not be read); a menu open at the stop is closed; Quality's items are `aria-disabled` while stopped (footer "Quality can’t change while playback is stopped."). The hint is therefore AR4's and 07's again:
   "Ends playback on {device}; it can resume from here" (no full stop, as in the handover; it drops "the" because a described device reads as a name; "that device" when the device is unknown). A stopped entry is
   hidden keyed on the stopped session id: only while its edition has no live session or still has that one; a session
   with another id brings it back with Stop and drops the hide for good (a later end of that session does not hide it again). The row has no poster, no year, no "1h 12m in" (none is in `playingNow`) and no operator in "(EE)".
@@ -556,8 +556,9 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
   - **Player.** In the subtitle column of the Audio and subtitles panel, a "Subtitles are wrong" `menuitem` (a quiet
     action under a hairline, never amber) while `shownDownloadKind` says a download is on screen: the player's own
     `activeSubtitleKey` picks what shows, and the edition's `source` (`DOWNLOAD`) says it is a download, so the owner's
-    files, embedded streams and Off-with-nothing never get it. On click `useSubtitleWrong` reads the list (so the row
-    id is never stale), takes the rows of this film, edition and kind that are `served` downloads, and deletes them.
+    files, embedded streams and Off-with-nothing never get it. On click `useSubtitleWrong` deletes the rows the film showed for
+    that kind (their `sidecarIds`, one request each, 15 s limit; changed after the final review: it first read
+    `GET /api/admin/subtitles`, every row of every film, which a weak link cannot carry mid-film).
     **What the player does after (chosen):** the removed kind is left out of the viewing locally (its `<track>`
     unmounts; the film is not read again under a playing viewing); a removed full subtitle falls back to Off, where
     the forced lines show as they would on their own; a removed forced one lets the embedded forced stream (if any) show.
@@ -644,7 +645,7 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
   - **Step and words.** One step, Admin's finer nudge: `NUDGES` "earlier-025" / "later-025" (0.25 s), reused with its
     spoken names; the clamp is Admin's `nudgedOffset` and the readout its `formatOffset`. The rest is `subtitleTiming`
     in `subtitleFixCopy.js`, all "planner, 8b-1": "Subtitle timing", "Timing: …", "differs by part", "Saving…",
-    "Couldn't change the timing. Try again.", "Couldn't load the new timing. The old timing stays."; "This subtitle has
+    "Couldn't change the timing. Try again.", "The new timing is saved but hasn’t loaded. Press again to retry." (planner, review: the old text said the old timing stays, but the server already holds the new one); "This subtitle has
     changed since the film started. Reload to see the new one." repeats 8a's line.
   - **State.** `state/useSubtitleTiming.js` (lives in `PlayerView`, so an answer outlives the panel) over the pure
     `state/subtitleTiming.js`. It reads nothing: the readout and the next press work from the film's `offsetsMs` and
@@ -663,6 +664,21 @@ Split into **5a-1** (the first two bullets) and **5a-2** (the rest).
     proven download or the embedded track instead. **Not changed on the backend (owner decision needed).** The player
     guards instead: the PUT answer's `served` is computed after the change; if any changed row is no longer served the
     track is not touched, and the viewer is told the subtitle changed.
+  - **Weak link, after the final review (planner, review).** (1) A new `<track>` that fails to load (error, or 20 s)
+    is never fetched again by the browser, and the server already holds its timing, so a next press that moved would be
+    a second step the viewer never saw. `useSubtitleTiming` remembers the failure per file (`failedLoads`, with the
+    token in `tokens`): the next press, whichever button, loads that saved timing again (the same token) and moves
+    nothing; the `online` event does the same by itself, once, for the file that shows; only the press after that
+    moves. (2) Every request the player's timing and "Subtitles are wrong" send gives up after `ADMIN_TIMEOUT_MS`
+    (15 s, `api/timeout.js` `withTimeout`: an `AbortSignal` plus a race, like `reachable`'s timer) and counts as the
+    existing failure line, so a connected but dead link never leaves "Saving…" / "Removing…" and blocked presses.
+    Offsets are absolute, so asking again after no answer never adds a step. (3) "Subtitles are wrong" no longer reads
+    `GET /api/admin/subtitles`: it deletes by the film's own `sidecarIds` for that kind (`DELETE /api/admin/subtitles/{id}`,
+    404 counts as removed, the server's 400 for a file that is not a download is shown). The DELETE route does not check
+    `served`, so a download another tab replaced since the film loaded is still the one this viewer saw and reported;
+    no backend change. (4) A pending track is mounted only while its kind shows (`fileTokens`): a hidden pending track
+    made system caption menus (iOS fullscreen, AirPlay, Safari) list the subtitle twice. The saved timing waits in
+    `swaps` and loads, hidden and timed afresh, when its kind shows again.
   - **Loading the new timing without touching playback (chosen).** The PUT answers a `SidecarDto` whose `version` is
     when the row last changed; the token is each answered row's `version_offsetMs`. The player mounts a second
     `<track>` of that kind beside the showing one, `hidden`, with `?v=<film version>.<token>` (the server ignores `v`),

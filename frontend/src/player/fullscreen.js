@@ -21,3 +21,12 @@ export function toggleFullscreen(container, video) {
   if (strategy === 'native-video') video.webkitEnterFullscreen();
   else if (strategy === 'container') container.requestFullscreen();
 }
+
+/**
+ * Leaves Safari's native fullscreen player (iPhone, `toggleFullscreen`'s `webkitEnterFullscreen`) when it is showing:
+ * a card of the page (Admin stopped the playback, nothing to play) would be under it, out of sight and out of reach.
+ * Container fullscreen holds the cards inside it and needs nothing.
+ */
+export function leaveNativeFullscreen(video) {
+  if (video?.webkitDisplayingFullscreen) video.webkitExitFullscreen?.();
+}

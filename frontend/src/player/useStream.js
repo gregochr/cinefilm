@@ -3,6 +3,7 @@ import { editionsApi, sessionApi, sessionsApi } from '../api/resources.js';
 import { AUTO, ORIGINAL, levelToast, workerOffline } from './ladder.js';
 import { REACH_TIMEOUT_MS, createSession } from './createSession.js';
 import { measureThroughput } from './probe.js';
+import { leaveNativeFullscreen } from './fullscreen.js';
 import { createWaiter, reachable } from './retry.js';
 import { startStream } from './streamSource.js';
 import {
@@ -125,6 +126,8 @@ export function useStream({
     const split = (latest.current.edition.parts ?? 1) > 1;
     const toDirect = () => {
       if (split) {
+        // The card that says so must not sit under Safari's native fullscreen player.
+        leaveNativeFullscreen(video);
         setStream({ mode: 'unavailable', rung: null, renditions: [] });
         clearReconnecting();
         return;
@@ -156,6 +159,8 @@ export function useStream({
       if (cancelled) return;
       // Before anything resets the element: destroying the engine detaches the source, which sets the time to 0.
       stoppedAtRef.current = currentPosition();
+      // The stopped card must not sit under Safari's native fullscreen player (iPhone): leave it first.
+      leaveNativeFullscreen(video);
       engine?.destroy();
       engine = null;
       session = null;

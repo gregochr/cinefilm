@@ -52,6 +52,13 @@ describe('StoppedCard', () => {
     expect(screen.getByRole('button', { name: 'Play again' })).toHaveFocus();
   });
 
+  it('the focused button is described by the message, so a screen reader reads both', () => {
+    render(<StoppedCard onPlayAgain={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Play again' })).toHaveAccessibleDescription(
+      'Playback was stopped from Admin.',
+    );
+  });
+
   it('Play again calls onPlayAgain, and the button is not the amber primary', async () => {
     const onPlayAgain = vi.fn();
     render(<StoppedCard onPlayAgain={onPlayAgain} />);

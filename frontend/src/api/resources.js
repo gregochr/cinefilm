@@ -145,12 +145,13 @@ export const adminApi = {
   /** Gives a hand-attached file back to matching by name. */
   detachSubtitle: (id) => post(`/api/admin/subtitles/${id}/detach`),
   /** Sets the file's timing offset in milliseconds (the server allows ten minutes either way). */
-  setSubtitleOffset: (id, offsetMs) => put(`/api/admin/subtitles/${id}/offset`, { offsetMs }),
+  setSubtitleOffset: (id, offsetMs, options) =>
+    put(`/api/admin/subtitles/${id}/offset`, { offsetMs }, options),
   /** Says the file's lines are right and in sync ("Looks right"); `unverifySubtitle` undoes it. */
   verifySubtitle: (id) => post(`/api/admin/subtitles/${id}/verify`),
   unverifySubtitle: (id) => del(`/api/admin/subtitles/${id}/verify`),
   /** Removes an OpenSubtitles download (never the owner's own file); CineFilm will not use it for that edition again. */
-  removeSubtitle: (id) => del(`/api/admin/subtitles/${id}`),
+  removeSubtitle: (id, options) => del(`/api/admin/subtitles/${id}`, options),
   /** Every film with whether it needs forced subtitles and why: `{ films: [...], counts: {...} }`. */
   forcedNeed: (options) => get('/api/admin/forced-subtitles/films', options),
   /**
