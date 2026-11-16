@@ -128,7 +128,7 @@ describe('useScan', () => {
   it('treats a 409 as "already running", not a failure, and shows the running scan', async () => {
     installFetch((method, url) => {
       if (url === '/api/admin/scan' && method === 'POST') {
-        return respond({ error: 'A scan is already running' }, 409);
+        return respond({ error: 'A scan is running' }, 409);
       }
       if (url === '/api/admin/scan') return respond(running(7));
       return null;
@@ -140,6 +140,42 @@ describe('useScan', () => {
 
     expect(result.current.notice).toBe('A scan is already running.');
     await waitFor(() => expect(result.current.scan.running).toBe(true));
+  });
+
+  it('treats a 409 with no body as "already running" too', async () => {
+    installFetch((method, url) =>
+      method === 'POST' && url === '/api/admin/scan' ? respond(null, 409) : null,
+    );
+    const { result } = renderHook(() => useScan());
+    await waitFor(() => expect(result.current.scan).not.toBeNull());
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.startScan();
+    });
+
+    expect(outcome).toBe(true);
+    expect(result.current.notice).toBe('A scan is already running.');
+  });
+
+  it('shows the server’s lock text and resolves false for a 409 held by something other than a scan', async () => {
+    installFetch((method, url) =>
+      method === 'POST' && url === '/api/admin/scan'
+        ? respond({ error: 'Subtitles are being changed or checked; try again in a moment' }, 409)
+        : null,
+    );
+    const { result } = renderHook(() => useScan());
+    await waitFor(() => expect(result.current.scan).not.toBeNull());
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.startScan();
+    });
+
+    expect(outcome).toBe(false);
+    expect(result.current.notice).toBe(
+      'Subtitles are being changed or checked; try again in a moment.',
+    );
   });
 
   it('reports any other failure to start', async () => {
@@ -213,7 +249,9 @@ describe('one request at a time per button', () => {
   it('resolves true for a 409 (a scan is running) and false for a failure', async () => {
     let status = 409;
     installFetch((method, url) =>
-      method === 'POST' && url === '/api/admin/scan' ? respond({ error: 'x' }, status) : null,
+      method === 'POST' && url === '/api/admin/scan'
+        ? respond({ error: 'A scan is running' }, status)
+        : null,
     );
     const { result } = renderHook(() => useScan());
     await waitFor(() => expect(result.current.scan).not.toBeNull());

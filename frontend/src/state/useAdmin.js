@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, announceLibraryChanged } from '../api/client.js';
 import { adminApi } from '../api/resources.js';
-import { lockText } from './lockText.js';
+import { isBareScanLock, lockText } from './lockText.js';
 import { creditsFinishedText } from './plexCreditsFormat.js';
 import { useResource } from './useResource.js';
 
@@ -96,7 +96,7 @@ export function useScan(visible = true) {
     }
   }, [reload]);
 
-  // Resolves true when a scan is running because of this press (started, or already running: 409), false when it could
+  // Resolves true when a scan is running because of this press (started, or already running: a bare 409), false when it could
   // not be started, and undefined when a press was ignored because one is already in flight.
   const startScan = useCallback(async () => {
     if (scanInFlight.current) return undefined;
@@ -107,9 +107,16 @@ export function useScan(visible = true) {
     try {
       await adminApi.startScan();
     } catch (failure) {
-      const already = failure instanceof ApiError && failure.status === 409;
+      const refused = failure instanceof ApiError && failure.status === 409;
+      // A 409 is "a scan is already running" only when the server says no more than that; any other lock text (an
+      // import, a subtitle change...) means this scan was refused, and says so.
+      const already = refused && isBareScanLock(failure);
       running = already;
-      setNotice(already ? 'A scan is already running.' : 'Could not start the scan.');
+      if (already) setNotice('A scan is already running.');
+      else
+        setNotice(
+          refused ? lockText(failure, 'Could not start the scan.') : 'Could not start the scan.',
+        );
     } finally {
       scanInFlight.current = false;
       setStarting(false);

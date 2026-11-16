@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '../api/client.js';
-import { lockText } from './lockText.js';
+import { isBareScanLock, lockText } from './lockText.js';
 
 const FALLBACK = 'A scan is running. Try again when it finishes.';
 const refused = (error) => new ApiError(409, undefined, error === undefined ? null : { error });
+
+describe('isBareScanLock', () => {
+  it('is true for the bare scan line and for no text, false for any other holder', () => {
+    expect(isBareScanLock(refused('A scan is running'))).toBe(true);
+    expect(isBareScanLock(refused(undefined))).toBe(true);
+    expect(isBareScanLock(refused('A Plex import is running'))).toBe(false);
+  });
+});
 
 describe('lockText', () => {
   it('gives the screen’s own words for the bare scan line, with or without its full stop', () => {
