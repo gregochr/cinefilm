@@ -108,7 +108,7 @@ describe('usePlayingNow stop', () => {
     });
     expect(result.current.stopping).toEqual({ p1: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/transcoding/sessions/s1');
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/transcoding/sessions/s1?playbackId=p1');
     expect(fetchMock.mock.calls[0][1].method).toBe('DELETE');
     await act(async () => {
       release();
@@ -116,6 +116,22 @@ describe('usePlayingNow stop', () => {
     });
     expect(result.current.stopping).toEqual({});
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends the row’s viewing with the stop, and nothing for a row that has none', async () => {
+    const fetchMock = stubFetch();
+    const { result } = mount();
+    await act(async () => {
+      await result.current.stop(result.current.rows[0]);
+    });
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/transcoding/sessions/s1?playbackId=p1');
+
+    const second = stubFetch();
+    const none = mount({ entries: [entry(1, { playbackId: undefined })] });
+    await act(async () => {
+      await none.result.current.stop(none.result.current.rows[0]);
+    });
+    expect(second.mock.calls[0][0]).toBe('/api/admin/transcoding/sessions/s1');
   });
 
   it('on a failure sets the exact message, keeps the row and calls nothing else', async () => {

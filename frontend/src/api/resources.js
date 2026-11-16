@@ -112,7 +112,11 @@ export const adminApi = {
   plexCredits: (options) => get('/api/admin/plex/credits', options),
   startPlexCreditsImport: () => post('/api/admin/plex/credits/import'),
   transcoding: (options) => get('/api/admin/transcoding', options),
-  stopTranscodingSession: (id) => del(`/api/admin/transcoding/sessions/${id}`),
+  // `playbackId` is the row's viewing: the server also ends that viewing's newer session (one made after the list was read).
+  stopTranscodingSession: (id, playbackId) =>
+    del(
+      `/api/admin/transcoding/sessions/${id}${playbackId ? `?playbackId=${encodeURIComponent(playbackId)}` : ''}`,
+    ),
   /**
    * One page of the playback log, newest start first, filtered by the server: `{ playbacks, total }`. `params` are
    * the list route's own (`since`, `minWatchedMs`, `problems`, `page`, `size`); each one present switches the

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { healthApi } from '../api/resources.js';
 import { createHealth } from './health.js';
 
@@ -74,7 +74,7 @@ const noop = () => {};
 const inertViewing = () => ({
   id: null,
   counter: null,
-  api: Object.fromEntries([...INPUTS, 'playing'].map((name) => [name, noop])),
+  api: { id: null, ...Object.fromEntries([...INPUTS, 'playing'].map((name) => [name, noop])) },
   lastOk: 0,
   warned: false,
 });
@@ -83,7 +83,8 @@ function build({ editionId, openedAt, now, makeId, sendNowRef }) {
   const id = makeId();
   if (!id) return inertViewing();
   const counter = createHealth({ now, openedAt, editionId, client: browserClient() });
-  const api = {};
+  // `id` is the viewing's id: the session request carries it, so Admin's Stop can end this viewing's playback.
+  const api = { id };
   for (const name of INPUTS) {
     api[name] = (...args) => {
       try {
@@ -118,7 +119,9 @@ function create(args) {
 
 /**
  * Keeps one health record per viewing: a random id, the counter, and the sends (`PUT /api/playback-health/{id}`).
- * Returns one stable object of the counter's inputs, none of which can throw. Recording never sets state.
+ * Returns one object of the counter's inputs, none of which can throw; it stays the same until `newViewing()` (Play
+ * again after Admin stopped the playback) ends this record and starts another: a new id and a new counter whose clock
+ * begins now. Recording never sets state, except through `newViewing()`.
  */
 export function useHealthReport({
   editionId,
@@ -128,8 +131,25 @@ export function useHealthReport({
   makeId = newPlaybackId,
 }) {
   const sendNowRef = useRef(null);
-  const [viewing] = useState(() => create({ editionId, openedAt, now, makeId, sendNowRef }));
-  const { api } = viewing;
+  const [viewing, setViewing] = useState(() =>
+    create({ editionId, openedAt, now, makeId, sendNowRef }),
+  );
+  const latest = useRef({ editionId, now, makeId });
+  latest.current = { editionId, now, makeId };
+  const newViewing = useCallback(() => {
+    const { editionId: edition, now: clock, makeId: mint } = latest.current;
+    setViewing(
+      create({ editionId: edition, openedAt: clock(), now: clock, makeId: mint, sendNowRef }),
+    );
+  }, []);
+  const current = useRef(viewing);
+  current.current = viewing;
+  const end = useCallback(() => {
+    const now = current.current;
+    if (now.finish) now.finish();
+    else now.ended = true;
+  }, []);
+  const api = useMemo(() => ({ ...viewing.api, newViewing, end }), [viewing, newViewing, end]);
 
   useEffect(() => {
     api.quality(quality);
@@ -179,7 +199,7 @@ export function useHealthReport({
 
     const sendExit = () => {
       try {
-        if (counter.version() === viewing.lastOk) return;
+        if (viewing.ended || counter.version() === viewing.lastOk) return;
         void post(counter.snapshot(), { keepalive: true }, null);
       } catch {
         // never throws into the player
@@ -190,6 +210,16 @@ export function useHealthReport({
       if (document.visibilityState === 'hidden') sendExit();
     };
 
+    // `end()`: this viewing is over though the page goes on (Admin stopped it). Its last report goes out, and nothing is
+    // sent for it after: no timer, no exit, so the record stops being "playing now".
+    viewing.finish = () => {
+      sendExit();
+      viewing.ended = true;
+      closed = true;
+      sendNowRef.current = null;
+      clearTimeout(graceTimer);
+      clearInterval(intervalTimer);
+    };
     sendNowRef.current = sendTimed;
     graceTimer = setTimeout(() => {
       try {

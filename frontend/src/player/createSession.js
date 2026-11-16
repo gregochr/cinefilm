@@ -17,6 +17,8 @@ export const REACH_TIMEOUT_MS = 5000;
 const RETRY_STATUSES = new Set([502, 503, 504, 408, 429]);
 const SERVER_ERROR = 500;
 const SIGNED_OUT = 401;
+/** Admin stopped this playback: not a failure to retry or to direct-play around (owner 2026-11-15). */
+const STOPPED = 410;
 const PREPARING = 503;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -28,7 +30,8 @@ const never = () => new Promise(() => {});
  * true (then nothing is called back, and a session that arrives anyway is still returned so the caller can
  * delete it). `create` builds its request on each call. `wait(ms)` and `untilSignedIn()` end early on a
  * wake-up or cancellation; `reachable()` resolves whether the server answers; `onRetrying(on)` says "Reconnecting…"
- * on or off; `onNoAnswer({ timeout })` reports a request that got no answer.
+ * on or off; `onNoAnswer({ timeout })` reports a request that got no answer. A 410 (Admin stopped this playback) calls
+ * `onStopped()` and returns null like a refusal, so the caller can tell it from one.
  */
 export async function createSession(
   create,
@@ -42,6 +45,7 @@ export async function createSession(
     reachable = null,
     onRetrying = () => {},
     onNoAnswer = () => {},
+    onStopped = () => {},
     firstCheckMs = FIRST_CHECK_MS,
     checkMs = SESSION_CHECK_MS,
   } = {},
@@ -118,6 +122,10 @@ export async function createSession(
       say(true);
       await wait(backoffMs(failures));
       failures += 1;
+    } else if (status === STOPPED) {
+      say(false);
+      onStopped();
+      return null;
     } else {
       say(false);
       return null;

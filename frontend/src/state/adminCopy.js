@@ -1,5 +1,6 @@
 // Every word on an Admin button, hint and section header, in one place. No JSX: the Apple TV and native clients reuse it.
-// Each entry is { label, busyLabel?, hint?, source }. `source` says where the string comes from:
+// Each entry is { label, busyLabel?, hint?, source }; a `hint` is a string, or a function of the row's device name
+// where the words depend on it ("Stop this stream"). `source` says where the string comes from:
 //   '07'      docs/design/admin-redesign/screens/07-buttons-renamed.png (reference/AR7-Buttons.dc.html)
 //   'AR1'..'AR7'  that board
 //   'README'  docs/design/admin-redesign/README.md
@@ -43,13 +44,15 @@ export const buttons = {
     hint: 'Checks whether the Plex server answers now.',
     source: '07',
   },
-  // The label is 07's. 07's and AR4's hints ("Ends playback on …") are not true: Stop ends the server's converting
-  // session (`SessionManager.end`), the player sees a 404 as an expired session and starts a new one. The hint says
-  // what Stop does (planner, 5a-1). A real "end playback" is an open item in the plan (5a-1 decision).
+  // The label and the hint are 07's and AR4's ("Ends playback on the {device}; it can resume from here"). They are
+  // true since Stop ends the playback on the device (owner 2026-11-15, the server answers 410 and the player offers
+  // "Play again" from where it was). `hint(device)` takes the described device and says "that device" for an
+  // unknown one; "the" is left out because a described device ("Safari on iPad") already reads as a name.
   stopStream: {
     label: 'Stop this stream',
-    hint: 'Stops converting this stream on the server; if it’s still playing, the player starts it again.',
-    source: 'plan',
+    hint: (device) =>
+      `Ends playback on ${device && device !== statusStrip.unknownDevice ? device : 'that device'}; it can resume from here`,
+    source: '07',
   },
   // 07 says Forget "starts at a safe quality and measures again", which is not what it does: the owner's answer
   // (Q4) is the line under the list, `rememberedNetworksNote`.
@@ -148,9 +151,8 @@ export const playingNow = {
   streams: (n) => `${n} ${n === 1 ? 'stream' : 'streams'}`, // 04: "1 stream"; the plural is the planner's
   empty: 'Nothing playing.', // README
   converting: 'converting on the fly', // AR4
-  // The honest line of `buttons.stopStream.hint` (Stop ends the server's conversion, not the playback), not AR4's
-  // "Ends playback on the iPad" (see there).
-  stopHint: () => buttons.stopStream.hint,
+  // `buttons.stopStream.hint` for one row's device.
+  stopHint: (device) => buttons.stopStream.hint(device),
   stopFailed: 'Couldn’t stop that stream. Try again.', // planner, 5a-1
   loadError: 'Couldn’t load what is playing.', // planner, 5a-1
   source:

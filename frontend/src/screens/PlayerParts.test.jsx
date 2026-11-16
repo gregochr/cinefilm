@@ -49,12 +49,14 @@ function split({ position = 12_500_000, offline = false, quality = 'auto' } = {}
 }
 
 function serve({ film = split(), create } = {}) {
-  const log = { posted: [], deleted: [], progress: [] };
+  const log = { posted: [], playbackIds: [], deleted: [], progress: [] };
   let n = 0;
   const route = (method, url, init = {}) => {
     if (url === '/api/films/1') return respond(film);
     if (method === 'POST' && url === '/api/editions/11/sessions') {
-      log.posted.push(JSON.parse(init.body));
+      const { playbackId, ...body } = JSON.parse(init.body);
+      log.posted.push(body);
+      log.playbackIds.push(playbackId);
       if (create) {
         const answer = create(log.posted.length);
         if (answer) return answer;

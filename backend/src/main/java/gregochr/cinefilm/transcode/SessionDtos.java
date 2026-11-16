@@ -15,8 +15,16 @@ public final class SessionDtos {
      * @param startMs where playback starts in milliseconds, or null for the start
      * @param quality {@code auto}, {@code original} or a rung id
      * @param probeKbps the client's throughput probe in kilobits per second, or null
+     * @param playbackId the id of the viewing this session serves (the id its health reports carry), or null; Admin's
+     *     Stop uses it to end that viewing's playback rather than only this session
      */
-    public record CreateRequest(Long audioStreamId, Long startMs, String quality, Long probeKbps) {
+    public record CreateRequest(Long audioStreamId, Long startMs, String quality, Long probeKbps,
+                                String playbackId) {
+
+        /** A request that names no viewing. */
+        public CreateRequest(Long audioStreamId, Long startMs, String quality, Long probeKbps) {
+            this(audioStreamId, startMs, quality, probeKbps, null);
+        }
     }
 
     /**
@@ -73,8 +81,17 @@ public final class SessionDtos {
      * @param segmentsAhead how many segments the encoder is ahead of the player
      * @param startedAt ISO-8601 start time
      * @param unavailable true after the encoder failed twice
+     * @param playbackId the viewing the session serves (what its health reports carry), or null when the client did
+     *     not say; Admin's Stop targets the row of that viewing
      */
     public record SessionRow(String id, String filmTitle, long editionId, String rung, Double speed,
-                             int segmentsAhead, java.time.Instant startedAt, boolean unavailable) {
+                             int segmentsAhead, java.time.Instant startedAt, boolean unavailable,
+                             String playbackId) {
+
+        /** A row whose viewing is not named. */
+        public SessionRow(String id, String filmTitle, long editionId, String rung, Double speed,
+                          int segmentsAhead, java.time.Instant startedAt, boolean unavailable) {
+            this(id, filmTitle, editionId, rung, speed, segmentsAhead, startedAt, unavailable, null);
+        }
     }
 }

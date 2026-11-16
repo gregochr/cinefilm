@@ -126,7 +126,7 @@ describe('createSession: transient failures retry, refusals give up', () => {
     expect(first).not.toBe(second);
   });
 
-  it.each([400, 403, 404, 409, 410, 418])(
+  it.each([400, 403, 404, 409, 418])(
     'gives up at once on a %s: nothing asked again can change',
     async (status) => {
       const options = quick();
@@ -137,6 +137,23 @@ describe('createSession: transient failures retry, refusals give up', () => {
       expect(options.onRetrying.mock.calls).toEqual([[false]]);
     },
   );
+
+  it('tells the caller on a 410 that Admin stopped the playback: it gives up, never asks again or retries', async () => {
+    const options = { ...quick(), onStopped: vi.fn() };
+    const create = vi.fn().mockRejectedValue(new ApiError(410));
+    await expect(createSession(create, options)).resolves.toBeNull();
+    expect(options.onStopped).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(options.wait).not.toHaveBeenCalled();
+    expect(options.onRetrying.mock.calls).toEqual([[false]]);
+  });
+
+  it.each([400, 403, 404, 409, 418, 500])('does not report a stop for a %s', async (status) => {
+    const options = { ...quick(), onStopped: vi.fn() };
+    const create = vi.fn().mockRejectedValue(new ApiError(status));
+    await createSession(create, options);
+    expect(options.onStopped).not.toHaveBeenCalled();
+  });
 
   it('asks once more after a 500, a second later, without the notice', async () => {
     const options = quick();

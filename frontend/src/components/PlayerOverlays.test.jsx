@@ -6,6 +6,7 @@ import {
   EnvironmentCard,
   ReconnectingNotice,
   IndicatorPill,
+  StoppedCard,
   Toast,
   UnavailableCard,
 } from './PlayerOverlays.jsx';
@@ -40,6 +41,24 @@ describe('UnavailableCard', () => {
     render(<UnavailableCard onRetry={onRetry} />);
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('StoppedCard', () => {
+  it('says quietly that Admin stopped the playback, as a status, and focuses Play again', () => {
+    render(<StoppedCard onPlayAgain={() => {}} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Playback was stopped from Admin.');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Play again' })).toHaveFocus();
+  });
+
+  it('Play again calls onPlayAgain, and the button is not the amber primary', async () => {
+    const onPlayAgain = vi.fn();
+    render(<StoppedCard onPlayAgain={onPlayAgain} />);
+    const button = screen.getByRole('button', { name: 'Play again' });
+    expect(button).not.toHaveClass('btn--primary');
+    await userEvent.click(button);
+    expect(onPlayAgain).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -17,6 +17,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
@@ -265,6 +266,51 @@ public class SessionManager {
         }
     }
 
+    /**
+     * The viewing a session serves, for a session that is live or remembered; empty when it is unknown or its client
+     * named no viewing.
+     *
+     * @param id the session id
+     * @return the playback id
+     */
+    public Optional<String> playbackId(String id) {
+        synchronized (lock) {
+            TranscodeSession live = sessions.get(id);
+            if (live != null) {
+                return Optional.ofNullable(live.spec.playbackId());
+            }
+            Remembered quiet = remembered.get(id);
+            return quiet == null ? Optional.empty() : Optional.ofNullable(quiet.spec().playbackId());
+        }
+    }
+
+    /**
+     * Ends every session, live or remembered, that serves this viewing (as {@link #end}); one that serves another
+     * viewing is untouched.
+     *
+     * @param playbackId the viewing's id
+     * @return the ids of the sessions that were ended, live and remembered, so the caller can say they were stopped
+     */
+    public List<String> endViewing(String playbackId) {
+        synchronized (lock) {
+            List<String> ended = new ArrayList<>();
+            remembered.entrySet().removeIf(quiet -> {
+                boolean mine = playbackId.equals(quiet.getValue().spec().playbackId());
+                if (mine) {
+                    ended.add(quiet.getKey());
+                }
+                return mine;
+            });
+            for (TranscodeSession session : List.copyOf(sessions.values())) {
+                if (playbackId.equals(session.spec.playbackId())) {
+                    ended.add(session.id);
+                    destroy(session);
+                }
+            }
+            return ended;
+        }
+    }
+
     /** The live sessions, in the order they were made or last rebuilt, for Admin. */
     public List<SessionDtos.SessionRow> sessions() {
         synchronized (lock) {
@@ -354,7 +400,7 @@ public class SessionManager {
             ahead = Math.max(0, run.frontier - session.playhead);
         }
         return new SessionDtos.SessionRow(session.id, session.spec.filmTitle(), session.spec.editionId(),
-            session.lastRung, speed, ahead, session.startedAt, session.unavailable);
+            session.lastRung, speed, ahead, session.startedAt, session.unavailable, session.spec.playbackId());
     }
 
     private TranscodeSession require(String id) {

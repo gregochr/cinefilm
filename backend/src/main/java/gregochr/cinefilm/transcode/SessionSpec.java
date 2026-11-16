@@ -20,10 +20,20 @@ import java.util.List;
  * @param startSegment the (film-wide) segment the first encoder run starts at
  * @param hardwareDecode whether the source (8-bit 4:2:0 H.264, in every part) may be decoded on the GPU; otherwise
  *     the encoder decodes in software and uploads the frames
+ * @param playbackId the id of the viewing the session serves (what its health reports carry), or null when the
+ *     client did not say
  */
 public record SessionSpec(long editionId, String filmTitle, List<PartSource> parts, CutList cuts, int width,
                           int height, List<Rung> rungs, Rung startRung, String pinned, int startSegment,
-                          boolean hardwareDecode) {
+                          boolean hardwareDecode, String playbackId) {
+
+    /** A session whose viewing is not named. */
+    public SessionSpec(long editionId, String filmTitle, List<PartSource> parts, CutList cuts, int width,
+                       int height, List<Rung> rungs, Rung startRung, String pinned, int startSegment,
+                       boolean hardwareDecode) {
+        this(editionId, filmTitle, parts, cuts, width, height, rungs, startRung, pinned, startSegment,
+            hardwareDecode, null);
+    }
 
     /**
      * One file of the film.
@@ -40,6 +50,6 @@ public record SessionSpec(long editionId, String filmTitle, List<PartSource> par
                        int width, int height, List<Rung> rungs, Rung startRung, String pinned, int startSegment,
                        boolean hardwareDecode) {
         this(editionId, filmTitle, List.of(new PartSource(source, audioIndex, fps)), cuts, width, height, rungs,
-            startRung, pinned, startSegment, hardwareDecode);
+            startRung, pinned, startSegment, hardwareDecode, null);
     }
 }

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import gregochr.cinefilm.TestData;
 import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
@@ -53,7 +54,7 @@ class SessionServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new SessionService(sources, indexes, transcoder, manager);
+        service = new SessionService(sources, indexes, transcoder, manager, new StoppedPlaybacks(TestData.CLOCK));
         file = new MediaFile();
         file.setId(7L);
         file.setDurationMs(DURATION);

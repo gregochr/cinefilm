@@ -22,7 +22,8 @@ export function bufferAhead(video) {
 /**
  * Starts `session` on `video`. `handlers`: onLevel(rung, { initial }), onReconnecting(boolean),
  * onReload(positionMs) (called just before the source is reloaded, so the caller can seek back),
- * onSessionLost(). Returns { destroy }.
+ * onSessionLost(), and the optional onStopped() (a 410 for the master playlist: Admin stopped this playback).
+ * Returns { destroy }.
  */
 export function startNative({
   video,
@@ -101,6 +102,10 @@ export function startNative({
       if (controller === own) controller = null;
     }
     if (destroyed || mine !== generation || !reconnecting) return; // stale, or playback already resumed
+    if (status === 410) {
+      handlers.onStopped?.();
+      return;
+    }
     if (status === 404) {
       handlers.onSessionLost();
       return;

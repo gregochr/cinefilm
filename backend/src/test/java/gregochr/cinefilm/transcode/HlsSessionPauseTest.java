@@ -2,13 +2,17 @@ package gregochr.cinefilm.transcode;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gregochr.cinefilm.config.ApiExceptionHandler;
+import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.transcode.FileStamps.Stamp;
 import gregochr.cinefilm.transcode.SessionFakes.FakeFiles;
 import gregochr.cinefilm.transcode.SessionFakes.FakeScheduler;
@@ -16,6 +20,8 @@ import gregochr.cinefilm.transcode.SessionFakes.FakeStamps;
 import gregochr.cinefilm.transcode.SessionFakes.FakeTranscoder;
 import gregochr.cinefilm.transcode.SessionFakes.MutableClock;
 import gregochr.cinefilm.transcode.SessionFakes.ScriptedWaiter;
+import gregochr.cinefilm.transcode.SessionSources.AudioChoice;
+import gregochr.cinefilm.transcode.SessionSources.Source;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -35,7 +41,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 /**
  * A session that went quiet for ten minutes, seen from the HTTP side: the real controllers, service and manager on
  * the fakes, with real segment bytes on disk. The playlists answer 200 with the same text, a segment waits for the
- * restarted encoder (503, then 200), a file that cannot be read just now is 503, and every final ending is a 404.
+ * restarted encoder (503, then 200), a file that cannot be read just now is 503, and every final ending is a 404
+ * except Admin's Stop, which is a 410 for a day.
  */
 class HlsSessionPauseTest {
 
@@ -46,7 +53,10 @@ class HlsSessionPauseTest {
     private static final Duration EXPIRY = Duration.ofMinutes(10);
     private static final Duration DAY = Duration.ofHours(24);
     private static final byte[] BYTES = {0x47, 9, 8, 7};
+    private static final String PLAYBACK = "c1000000-0000-4000-8000-000000000001";
+    private static final String OTHER_PLAYBACK = "c1000000-0000-4000-8000-000000000002";
     private static final String NO_SESSION = "{\"error\":\"No such session\"}";
+    private static final String STOPPED = "{\"error\":\"Playback was stopped from Admin\"}";
     private static final String UNREADABLE = "{\"error\":\"The film's file cannot be read right now\"}";
     private static final String NOT_READY = "{\"error\":\"The segment is not ready yet\"}";
     private static final String MASTER = "/master.m3u8";
@@ -74,15 +84,28 @@ class HlsSessionPauseTest {
             new SessionSettings(Duration.ofMinutes(2), EXPIRY, 1000, 2, "dev"), stamps, hls,
             () -> new UUID(0, ++counter));
         id = manager.create(spec()).id();
-        SessionService service = new SessionService(mock(SessionSources.class), mock(KeyframeIndexService.class),
-            transcoder, manager);
+        MediaFile file = new MediaFile();
+        file.setId(7L);
+        file.setDurationMs(400_000L);
+        file.setHeight(1080);
+        file.setWidth(1920);
+        file.setBitrate(15_000_000L);
+        file.setVideoCodec("H.264");
+        file.setPixelFormat("yuv420p");
+        SessionSources sources = mock(SessionSources.class);
+        when(sources.find(7L)).thenReturn(new Source(7L, "Heat", file, SOURCE, List.of(new AudioChoice(100, 1, true))));
+        KeyframeIndexService indexes = mock(KeyframeIndexService.class);
+        when(indexes.ensureIndexed(file)).thenReturn(new KeyframeIndexService.Index(CUTS, 25.0));
+        SessionService service = new SessionService(sources, indexes, transcoder, manager,
+            new StoppedPlaybacks(clock));
         mvc = MockMvcBuilders.standaloneSetup(new HlsSessionController(service),
                 new TranscodingAdminController(transcoder, mock(IndexJob.class), manager, service))
             .setControllerAdvice(new ApiExceptionHandler()).build();
     }
 
     private static SessionSpec spec() {
-        return new SessionSpec(7, "Heat", SOURCE, 1, CUTS, 25.0, 1920, 1080, RUNGS, RUNGS.get(0), null, 0, true);
+        return new SessionSpec(7, "Heat", List.of(new SessionSpec.PartSource(SOURCE, 1, 25.0)), CUTS, 1920, 1080,
+            RUNGS, RUNGS.get(0), null, 0, true, PLAYBACK);
     }
 
     private String path(String route) {
@@ -107,6 +130,14 @@ class HlsSessionPauseTest {
             mvc.perform(get(path(route)))
                 .andExpect(status().isNotFound())
                 .andExpect(content().string(NO_SESSION));
+        }
+    }
+
+    private void assertAllRoutesAreGone() throws Exception {
+        for (String route : List.of(MASTER, MEDIA, SEGMENT)) {
+            mvc.perform(get(path(route)))
+                .andExpect(status().isGone())
+                .andExpect(content().string(STOPPED));
         }
     }
 
@@ -178,13 +209,56 @@ class HlsSessionPauseTest {
     }
 
     @Test
-    void afterAdminsStopEveryRouteIs404() throws Exception {
+    void afterAdminsStopOfAQuietSessionEveryRouteIs410ForADayAndThenTheOrdinary404() throws Exception {
         expire();
 
         mvc.perform(delete("/api/admin/transcoding/sessions/" + id)).andExpect(status().isNoContent());
 
+        assertAllRoutesAreGone();
+        clock.advance(DAY.minusMillis(1));
+        assertAllRoutesAreGone();
+        clock.advance(Duration.ofMillis(1));
         assertAllRoutesAre404();
         assertNoEncoderRestarted();
+    }
+
+    @Test
+    void afterAdminsStopOfALiveSessionEveryRouteIs410AndItsEncoderIsStopped() throws Exception {
+        mvc.perform(delete("/api/admin/transcoding/sessions/" + id)).andExpect(status().isNoContent());
+
+        assertAllRoutesAreGone();
+        assertThat(manager.sessions()).isEmpty();
+        assertNoEncoderRestarted();
+    }
+
+    @Test
+    void aStopFromAStaleRowAlsoMakesTheReplacementSessionAnswer410() throws Exception {
+        String replacement = manager.create(spec()).id(); // the player's new session under the same viewing
+
+        mvc.perform(delete("/api/admin/transcoding/sessions/" + id).param("playbackId", PLAYBACK))
+            .andExpect(status().isNoContent());
+
+        for (String route : List.of(MASTER, MEDIA, SEGMENT)) {
+            mvc.perform(get("/api/sessions/" + replacement + route))
+                .andExpect(status().isGone())
+                .andExpect(content().string(STOPPED));
+        }
+        assertThat(manager.sessions()).isEmpty();
+    }
+
+    @Test
+    void afterAdminsStopANewSessionForThatViewingIs410AndForAnotherViewingIs201() throws Exception {
+        mvc.perform(delete("/api/admin/transcoding/sessions/" + id)).andExpect(status().isNoContent());
+
+        mvc.perform(post("/api/editions/7/sessions").contentType("application/json")
+                .content("{\"quality\":\"auto\",\"playbackId\":\"" + PLAYBACK + "\"}"))
+            .andExpect(status().isGone())
+            .andExpect(jsonPath("$.error").value("Playback was stopped from Admin"));
+        assertThat(manager.sessions()).isEmpty();
+        mvc.perform(post("/api/editions/7/sessions").contentType("application/json")
+                .content("{\"quality\":\"auto\",\"playbackId\":\"" + OTHER_PLAYBACK + "\"}"))
+            .andExpect(status().isCreated());
+        assertThat(manager.sessions()).hasSize(1);
     }
 
     @Test

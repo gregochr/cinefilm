@@ -53,7 +53,7 @@ function server({ playing, sessions, onDelete }) {
 const card = () => screen.findByRole('region', { name: 'Now playing' });
 
 describe('Admin Playback: Now playing', () => {
-  it('lists one stream with its device, where, quality and Stop with its honest hint', async () => {
+  it('lists one stream with its device, where, quality and Stop with its hint', async () => {
     server({ playing: [stream(1)], sessions: [live(1)] });
     renderApp('/admin/playback');
     const panel = await card();
@@ -62,9 +62,7 @@ describe('Admin Playback: Now playing', () => {
     expect(within(panel).getByText('Mac · Home · 720p, converting on the fly')).toBeInTheDocument();
     expect(
       within(panel).getByRole('button', { name: 'Stop this stream: Film 1 (Mac)' }),
-    ).toHaveAccessibleDescription(
-      'Stops converting this stream on the server; if it’s still playing, the player starts it again.',
-    );
+    ).toHaveAccessibleDescription('Ends playback on Mac; it can resume from here');
   });
 
   it('names an iPad by the touch hint', async () => {
@@ -74,9 +72,7 @@ describe('Admin Playback: Now playing', () => {
     expect(await within(panel).findByText(/^iPad · Home/)).toBeInTheDocument();
     expect(
       within(panel).getByRole('button', { name: 'Stop this stream: Film 1 (iPad)' }),
-    ).toHaveAccessibleDescription(
-      'Stops converting this stream on the server; if it’s still playing, the player starts it again.',
-    );
+    ).toHaveAccessibleDescription('Ends playback on iPad; it can resume from here');
   });
 
   it('lists several streams and offers Stop only where an HLS session of that edition is live', async () => {
@@ -147,7 +143,9 @@ describe('Admin Playback: Now playing', () => {
 
     expect(await within(panel).findByText('Nothing playing.')).toBeInTheDocument();
     expect(deletes()).toHaveLength(1);
-    expect(deletes()[0][0]).toBe('/api/admin/transcoding/sessions/session-1');
+    expect(deletes()[0][0]).toBe(
+      '/api/admin/transcoding/sessions/session-1?playbackId=00000000-0000-4000-8000-000000000001',
+    );
     expect(deletes()[0][1].headers['X-CineFilm']).toBe('1');
     await waitFor(() => expect(reads('/api/admin/summary')).toBeGreaterThan(summaryReads));
     await waitFor(() => expect(reads('/api/admin/transcoding')).toBeGreaterThan(sessionReads));
@@ -281,6 +279,8 @@ describe('Admin Playback: Now playing', () => {
       await within(panel).findByRole('button', { name: 'Stop this stream: Film 1 (Mac)' }),
     );
     await waitFor(() => expect(deletes()).toHaveLength(1));
-    expect(deletes()[0][0]).toBe('/api/admin/transcoding/sessions/newer');
+    expect(deletes()[0][0]).toBe(
+      '/api/admin/transcoding/sessions/newer?playbackId=00000000-0000-4000-8000-000000000001',
+    );
   });
 });

@@ -1,5 +1,5 @@
 import { StrictMode } from 'react';
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   REPORT_INTERVAL_MS,
@@ -50,6 +50,106 @@ const mount = (props = {}, options = {}) =>
 const advance = (ms) => vi.advanceTimersByTimeAsync(ms);
 const hidden = (value) =>
   Object.defineProperty(document, 'visibilityState', { configurable: true, value });
+
+describe('the viewing id', () => {
+  it('is the id the reports are sent under, so the session request can name the viewing', () => {
+    const { result } = mount();
+    expect(result.current.id).toBe(ID);
+  });
+
+  it('is null when no id can be made, with every input still callable', () => {
+    const { result } = mount({ makeId: () => null });
+    expect(result.current.id).toBeNull();
+    expect(() => result.current.playing()).not.toThrow();
+  });
+});
+
+describe('end', () => {
+  it('sends the last report once and nothing after: no timer, no exit', async () => {
+    const fetchMock = stubFetch();
+    const { result, unmount } = mount();
+    await act(async () => {
+      result.current.playing();
+      await advance(100);
+    });
+    act(() => {
+      result.current.paused();
+      result.current.end();
+    });
+    await act(async () => {
+      await advance(100);
+    });
+    const sent = fetchMock.mock.calls.length;
+    expect(sent).toBeGreaterThanOrEqual(2); // the first frame, and the last report
+    act(() => result.current.waiting());
+    await act(async () => {
+      await advance(REPORT_INTERVAL_MS * 3);
+    });
+    unmount();
+    expect(fetchMock.mock.calls.length).toBe(sent);
+  });
+
+  it('a record that is not ended still reports every interval, as before', async () => {
+    const fetchMock = stubFetch();
+    const { result } = mount();
+    await act(async () => {
+      result.current.playing();
+      await advance(100);
+    });
+    const sent = fetchMock.mock.calls.length;
+    act(() => result.current.waiting());
+    await act(async () => {
+      await advance(REPORT_INTERVAL_MS + 100);
+    });
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(sent);
+  });
+});
+
+describe('newViewing', () => {
+  const NEXT = '1b9ab1a4-6d5e-4f3c-8a21-3c1f2d4e5a61';
+
+  it('ends the record and starts another under a new id: the new first frame is sent to it', async () => {
+    const fetchMock = stubFetch();
+    const ids = [ID, NEXT];
+    const { result } = mount({ makeId: () => ids.shift() });
+    expect(result.current.id).toBe(ID);
+    await act(async () => {
+      result.current.playing();
+      await advance(100);
+    });
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([URL]);
+
+    act(() => result.current.newViewing());
+
+    expect(result.current.id).toBe(NEXT);
+    await act(async () => {
+      result.current.playing();
+      await advance(100);
+    });
+    const urls = fetchMock.mock.calls.map(([url]) => url);
+    expect(urls).toContain(`/api/playback-health/${NEXT}`);
+    // The old record may send its last report as it ends, but nothing after the new viewing began goes to it.
+    expect(urls.at(-1)).toBe(`/api/playback-health/${NEXT}`);
+  });
+
+  it('starts the new counter at zero, with the quality it was given', async () => {
+    const fetchMock = stubFetch();
+    const ids = [ID, NEXT];
+    const { result } = mount({ makeId: () => ids.shift(), quality: '720p' });
+    await act(async () => {
+      result.current.playing();
+      await advance(100);
+    });
+    act(() => result.current.newViewing());
+    await act(async () => {
+      result.current.playing();
+      await advance(100);
+    });
+    const last = bodies(fetchMock).at(-1);
+    expect(last.quality).toBe('720p');
+    expect(last.seq).toBe(1);
+  });
+});
 
 describe('the sends', () => {
   it('sends a PUT with the report at the first frame, at once', async () => {
@@ -490,18 +590,21 @@ describe('the object it returns', () => {
     window.dispatchEvent(new Event('pagehide'));
   });
 
-  it('exposes only the counter’s inputs', () => {
+  it('exposes only the counter’s inputs and the viewing id', () => {
     stubFetch();
     const { result } = mount();
     expect(Object.keys(result.current).sort()).toEqual([
       'beat',
       'canPlay',
+      'end',
       'ended',
       'engine',
       'environment',
       'fellBack',
       'fetching',
+      'id',
       'networkError',
+      'newViewing',
       'paused',
       'play',
       'playRefused',

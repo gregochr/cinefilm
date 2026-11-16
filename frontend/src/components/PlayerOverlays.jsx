@@ -92,6 +92,29 @@ export function UnavailableCard({ onRetry }) {
   );
 }
 
+/**
+ * Admin ended this playback. A quiet status line and one plain button (never amber: it is not the film's primary
+ * action); the button takes focus, as the other cards' do, so the keyboard lands on the way forward.
+ */
+export function StoppedCard({ onPlayAgain }) {
+  const again = useRef(null);
+  useEffect(() => {
+    again.current?.focus();
+  }, []);
+  return (
+    <div className="slow-card" role="status">
+      {/* planner, stop */}
+      <p className="slow-card__text">Playback was stopped from Admin.</p>
+      <div className="slow-card__actions">
+        {/* planner, stop */}
+        <Button ref={again} onClick={onPlayAgain}>
+          Play again
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function Toast({ children }) {
   return (
     <div className="toast" role="status">

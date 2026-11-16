@@ -26,6 +26,7 @@ const NO_HEALTH = {
   engine: noop,
   fellBack: noop,
   networkError: noop,
+  end: noop,
 };
 
 const heightOf = (renditions, id) => renditions.find((r) => r.id === id)?.height ?? null;
@@ -41,6 +42,10 @@ export const RECOVERY_WINDOW_MS = 60000;
  * split across several files (`edition.parts` above 1) has no single file to direct-play: where a film in one
  * piece would fall back, it reports `mode: 'unavailable'` instead, and a session the server is still preparing
  * (503) is asked for again.
+ *
+ * A 410 (Admin stopped this playback, from a playlist, a segment or the session request) is not a failure: nothing
+ * is recovered, retried or direct-played. The engine is destroyed, the video pauses and `mode` becomes `'stopped'`
+ * (owner 2026-11-15). Every other failure keeps its own path: a 404 recovers, no answer and 5xx retry, and so on.
  *
  * `pendingSeekRef` holds the film position (ms) to seek to once the new source has loaded metadata; the
  * caller applies it and clears it. Returns the active rung, its renditions, the reconnecting flag, the median
@@ -68,6 +73,9 @@ export function useStream({
   const startedRef = useRef(false);
   const recoveriesRef = useRef([]);
   const sessionRef = useRef(null);
+  // The film position (ms) a stop caught, or null: set before the engine is destroyed (which resets the element to 0),
+  // so "Play again" and the scrubber keep it.
+  const stoppedAtRef = useRef(null);
   // Whether the new source should start playing once it has metadata: true for the first load (autoplay), and
   // after a restart or reload whatever the viewer had at that moment (a paused film stays paused).
   const resumeRef = useRef({ play: true, held: false });
@@ -99,6 +107,7 @@ export function useStream({
       latest.current.health.reconnecting(false);
     };
     clearReconnecting();
+    stoppedAtRef.current = null;
 
     const holdPlayState = () => {
       // Only the first change counts: a source swapped out before its metadata arrived reads paused, wrongly.
@@ -140,6 +149,25 @@ export function useStream({
       engine?.destroy();
       forget();
       failToDirect();
+    };
+
+    // Admin stopped this playback: no new session. The session is already ended on the server, so nothing is sent.
+    const stopped = () => {
+      if (cancelled) return;
+      // Before anything resets the element: destroying the engine detaches the source, which sets the time to 0.
+      stoppedAtRef.current = currentPosition();
+      engine?.destroy();
+      engine = null;
+      session = null;
+      sessionRef.current = null;
+      // This viewing is over: its last report goes out and no more (an idle stopped card is not "playing now").
+      latest.current.health.end();
+      video.pause();
+      // Nothing may play on behind the card (a native player keeps its source attached otherwise).
+      video.removeAttribute('src');
+      video.load();
+      clearReconnecting();
+      setStream({ mode: 'stopped', rung: null, renditions: [] });
     };
 
     const recover = () => {
@@ -224,6 +252,8 @@ export function useStream({
       // The body is built on each attempt, so an audio track chosen while the request retries is the one asked for.
       const buildBody = () => {
         const next = { quality, startMs };
+        // Which viewing this session serves: Admin's Stop ends it by this id (absent when no recorder is running).
+        if (latest.current.health.id) next.playbackId = latest.current.health.id;
         const audio = latest.current.audioStreamId;
         if (audio !== null && audio !== undefined) next.audioStreamId = audio;
         // A speed chosen on another network says nothing about this one: start low, Auto steps up.
@@ -232,6 +262,7 @@ export function useStream({
         }
         return next;
       };
+      let gone = false;
       const created = await createSession(
         (signal) => sessionsApi.create(editionId, buildBody(), { signal }),
         {
@@ -244,11 +275,15 @@ export function useStream({
           onNoAnswer: (error) => {
             if (!cancelled) latest.current.health.networkError(error);
           },
+          onStopped: () => {
+            gone = true;
+          },
         },
       );
       setNotice(false);
       if (!created) {
-        if (!cancelled) failToDirect(); // No encoder, no keyframe index yet, or the request failed.
+        if (gone) stopped();
+        else if (!cancelled) failToDirect(); // No encoder, no keyframe index yet, or the request failed.
         return;
       }
       if (cancelled) {
@@ -297,6 +332,7 @@ export function useStream({
             if (ms > 0) pendingSeekRef.current = ms;
           },
           onSessionLost: recover,
+          onStopped: stopped,
           onFatal: abandon,
           onNetworkError: (error) => latest.current.health.networkError(error),
         },
@@ -368,6 +404,19 @@ export function useStream({
 
   const restart = useCallback(() => setGeneration((g) => g + 1), []);
 
+  // Play again after a stop: a new session from `atMs`, as a fresh start that plays. Leaves 'stopped' at once.
+  const resume = useCallback(
+    (atMs) => {
+      pendingSeekRef.current = atMs > 0 ? atMs : null;
+      stoppedAtRef.current = null;
+      recoveriesRef.current = [];
+      resumeRef.current = { play: true, held: true };
+      setStream({ mode: 'loading', rung: null, renditions: [] });
+      setGeneration((g) => g + 1);
+    },
+    [pendingSeekRef],
+  );
+
   return {
     mode: stream.mode,
     rung: stream.rung,
@@ -375,7 +424,9 @@ export function useStream({
     reconnecting,
     kbps: median(samples) ?? reusedKbps,
     pendingSeekRef,
+    stoppedAtRef,
     takePlayAfterLoad,
     restart,
+    resume,
   };
 }

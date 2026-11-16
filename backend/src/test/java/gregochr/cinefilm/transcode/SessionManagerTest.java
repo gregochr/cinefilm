@@ -832,4 +832,81 @@ class SessionManagerTest {
 
         assertThat(files.existsCalls).isEqualTo(before);
     }
+
+    private static final String PLAYBACK = "c1000000-0000-4000-8000-000000000001";
+
+    private static SessionSpec specFor(String playbackId) {
+        SessionSpec base = spec(7, 0);
+        return new SessionSpec(base.editionId(), base.filmTitle(), base.parts(), base.cuts(), base.width(),
+            base.height(), base.rungs(), base.startRung(), base.pinned(), base.startSegment(),
+            base.hardwareDecode(), playbackId);
+    }
+
+    @Test
+    void aLiveSessionSaysWhichViewingItServes() {
+        String id = manager.create(specFor(PLAYBACK)).id();
+
+        assertThat(manager.playbackId(id)).contains(PLAYBACK);
+    }
+
+    @Test
+    void aQuietRememberedSessionStillSaysWhichViewingItServesAndAnEndedOneDoesNot() {
+        String id = manager.create(specFor(PLAYBACK)).id();
+        manager.start();
+        clock.advance(EXPIRY);
+        scheduler.task.run();
+        assertThat(manager.sessions()).isEmpty();
+
+        assertThat(manager.playbackId(id)).contains(PLAYBACK);
+
+        manager.end(id);
+        assertThat(manager.playbackId(id)).isEmpty();
+    }
+
+    @Test
+    void theAdminRowCarriesTheViewingTheSessionServes() {
+        manager.create(specFor(PLAYBACK));
+
+        assertThat(row().playbackId()).isEqualTo(PLAYBACK);
+    }
+
+    @Test
+    void endViewingEndsEverySessionOfThatViewingAndNoOther() {
+        String mine = manager.create(specFor(PLAYBACK)).id();
+        String theirs = manager.create(new SessionSpec(8, "Alien", SOURCE, 1, CUTS, 25.0, 1920, 1080, RUNGS,
+            RUNGS.get(0), null, 0, true)).id();
+
+        List<String> ended = manager.endViewing(PLAYBACK);
+
+        assertThat(ended).containsExactly(mine);
+        assertThat(manager.sessions()).extracting(SessionDtos.SessionRow::id).containsExactly(theirs);
+        assertThat(manager.playbackId(mine)).isEmpty();
+    }
+
+    @Test
+    void endViewingAlsoForgetsAQuietRememberedSessionOfThatViewing() {
+        String id = manager.create(specFor(PLAYBACK)).id();
+        String other = "c1000000-0000-4000-8000-000000000002";
+        List<SessionSpec.PartSource> parts = List.of(new SessionSpec.PartSource(SOURCE, 1, 25.0));
+        String otherId = manager.create(new SessionSpec(8, "Alien", parts, CUTS, 1920, 1080, RUNGS, RUNGS.get(0),
+            null, 0, true, other)).id();
+        manager.start();
+        clock.advance(EXPIRY);
+        scheduler.task.run();
+        assertThat(manager.playbackId(id)).contains(PLAYBACK);
+
+        List<String> ended = manager.endViewing(PLAYBACK);
+
+        assertThat(ended).containsExactly(id);
+        assertThat(manager.playbackId(id)).isEmpty();
+        assertThat(manager.playbackId(otherId)).contains(other); // another viewing's quiet session is kept
+    }
+
+    @Test
+    void aSessionWhoseClientNamedNoViewingOrAnUnknownSessionHasNoPlaybackId() {
+        String id = manager.create(specFor(null)).id();
+
+        assertThat(manager.playbackId(id)).isEmpty();
+        assertThat(manager.playbackId(id(99))).isEmpty();
+    }
 }

@@ -295,13 +295,21 @@ describe('adminCopy playingNow', () => {
     expect(playingNow.converting).toBe('converting on the fly');
   });
 
-  it('words the Stop hint honestly: it ends the conversion, not the playback', () => {
-    expect(buttons.stopStream).toEqual({
-      label: 'Stop this stream',
-      hint: 'Stops converting this stream on the server; if it’s still playing, the player starts it again.',
-      source: 'plan',
-    });
-    expect(playingNow.stopHint()).toBe(buttons.stopStream.hint);
+  it('words the Stop hint as 07 and AR4 do, now that Stop ends playback on the device', () => {
+    expect(buttons.stopStream.label).toBe('Stop this stream');
+    expect(buttons.stopStream.source).toBe('07');
+    expect(buttons.stopStream.hint('Safari on iPad')).toBe(
+      'Ends playback on Safari on iPad; it can resume from here',
+    );
+    expect(playingNow.stopHint('Mac')).toBe(buttons.stopStream.hint('Mac'));
+  });
+
+  it('says "that device" in the Stop hint when the device is not known', () => {
+    for (const device of ['Unknown device', null, undefined, '']) {
+      expect(buttons.stopStream.hint(device)).toBe(
+        'Ends playback on that device; it can resume from here',
+      );
+    }
   });
 
   it('has the failure and load-error lines', () => {

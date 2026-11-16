@@ -44,12 +44,19 @@ function heat({ offline = false, quality = 'auto' } = {}) {
 
 // The API as the player sees it: Heat, session create/remove, everything else the defaults.
 function serve({ film = heat(), create } = {}) {
-  const log = { posted: [], deleted: [], progress: [] };
+  // `posted` holds each session request's body without its `playbackId` (random), which `playbackIds` keeps.
+  const log = { posted: [], playbackIds: [], deleted: [], progress: [] };
   let n = 0;
   const route = (method, url, init = {}) => {
     if (url === '/api/films/1') return respond(film);
+    // The server keeps the remembered choices: a film read again carries them.
+    if (method === 'PUT' && url === '/api/films/1/preferences') {
+      Object.assign(film.preferences, JSON.parse(init.body));
+    }
     if (method === 'POST' && url === '/api/editions/11/sessions') {
-      log.posted.push(JSON.parse(init.body));
+      const { playbackId, ...body } = JSON.parse(init.body);
+      log.posted.push(body);
+      log.playbackIds.push(playbackId);
       if (create) return create(log.posted.length);
       n += 1;
       return respond(
@@ -535,6 +542,414 @@ describe('an expired session (404)', () => {
   });
 });
 
+describe('a playback Admin stopped (410)', () => {
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  const STOPPED_LINE = 'Playback was stopped from Admin.';
+  const SESSION = (n) => ({
+    ...fixtures.session,
+    sessionId: `s${n}`,
+    masterUrl: `/api/sessions/s${n}/master.m3u8`,
+  });
+  const gone = () => respond({ error: 'Playback was stopped from Admin' }, 410);
+  const stoppedCard = () => screen.queryByText(STOPPED_LINE);
+
+  it('sends the viewing id with the session request, and the same one again after a 404', async () => {
+    const { log, video, hls } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    expect(log.playbackIds[0]).toMatch(UUID);
+    await hlsEvent(() =>
+      hls().error({ fatal: true, type: 'networkError', response: { code: 404 } }),
+    );
+    await instances(2);
+    expect(log.playbackIds).toEqual([log.playbackIds[0], log.playbackIds[0]]);
+  });
+
+  it('on a 410 from hls.js pauses, says so and makes no new session and no direct play', async () => {
+    const { log, video, hls } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    const pause = vi.spyOn(video, 'pause');
+    const engine = hls();
+    await hlsEvent(() =>
+      engine.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    expect(stoppedCard()).toBeInTheDocument();
+    expect(engine.destroy).toHaveBeenCalled();
+    expect(pause).toHaveBeenCalled();
+    expect(FakeHls.instances).toHaveLength(1);
+    expect(log.posted).toHaveLength(1);
+    expect(video).not.toHaveAttribute('src', DIRECT);
+    expect(screen.queryByText('Reconnecting…')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Play again' })).toHaveFocus();
+  });
+
+  it('ignores play (the surface, Space) while stopped', async () => {
+    const { video, hls } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    await hlsEvent(() =>
+      hls().error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    const play = vi.spyOn(video, 'play');
+    for (const button of screen.getAllByRole('button', { name: 'Play' })) {
+      await userEvent.click(button);
+    }
+    await userEvent.keyboard('k');
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it('on a 410 for the new session that a 404 asked for, stops instead of direct-playing', async () => {
+    const { log, video, hls } = await open({
+      create: (n) => (n === 2 ? gone() : respond(SESSION(n), 201)),
+    });
+    await landResume(video);
+    await moveTo(video, 1000);
+    await hlsEvent(() =>
+      hls().error({ fatal: true, type: 'networkError', response: { code: 404 } }),
+    );
+    expect(await screen.findByText(STOPPED_LINE)).toBeInTheDocument();
+    expect(log.posted).toHaveLength(2);
+    expect(FakeHls.instances).toHaveLength(1);
+    expect(video).not.toHaveAttribute('src', DIRECT);
+    expect(screen.queryByText('Reconnecting…')).not.toBeInTheDocument();
+    // Play again starts where the stop caught it, and the new player follows its playhead.
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await instances(2);
+    expect(log.posted[2].startMs).toBe(1000000);
+    await moveTo(video, 1001);
+    expect(screen.getByRole('slider', { name: 'Seek' })).toHaveAttribute(
+      'aria-valuetext',
+      '16 minutes 41 seconds',
+    );
+  });
+
+  it('shows only the stopped card when the slow-connection card was open', async () => {
+    const { hls } = await open();
+    await hlsEvent(() => hls().fragLoaded(SLOW_SEGMENT));
+    await hlsEvent(() => hls().switchTo(P480));
+    await screen.findByRole('dialog', { name: 'You’re on a slow connection' });
+    await hlsEvent(() =>
+      hls().error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    expect(stoppedCard()).toBeInTheDocument();
+    expect(
+      screen.queryByRole('dialog', { name: 'You’re on a slow connection' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Play again' })).toHaveFocus();
+  });
+
+  it('keeps the quality, audio and subtitle chosen so far through Play again', async () => {
+    const { log, video } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    await userEvent.click(screen.getByRole('button', { name: 'Quality' }));
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: 'Quality' })).getByRole('menuitemradio', {
+        name: /360p/,
+      }),
+    );
+    await instances(2);
+    await userEvent.click(screen.getByRole('button', { name: 'Audio and subtitles' }));
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: 'Audio' })).getByRole('menuitemradio', {
+        name: /Commentary/,
+      }),
+    );
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: 'Subtitles' })).getByRole('menuitemradio', {
+        name: /^English$/,
+      }),
+    );
+    await vi.waitFor(() => expect(log.posted.length).toBeGreaterThanOrEqual(3));
+    const before = log.posted.length;
+    await hlsEvent(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await vi.waitFor(() => expect(log.posted).toHaveLength(before + 1));
+    expect(log.posted.at(-1)).toMatchObject({ quality: '360p', audioStreamId: 112 });
+    expect(await screen.findByRole('button', { name: 'Quality' })).toHaveTextContent('360p');
+    expect(screen.getByRole('button', { name: 'Audio and subtitles' })).toHaveTextContent(
+      'English',
+    );
+  });
+
+  it('keeps the volume and mute through Play again, on the video and in the control', async () => {
+    const { video, hls } = await open();
+    await landResume(video);
+    fireEvent.change(screen.getByRole('slider', { name: 'Volume' }), { target: { value: '0.4' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Mute' }));
+    expect(video.muted).toBe(true);
+    await hlsEvent(() =>
+      hls().error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await instances(2);
+    expect(video.volume).toBeCloseTo(0.4);
+    expect(video.muted).toBe(true);
+    expect(screen.getByRole('button', { name: 'Unmute' })).toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('0');
+    await userEvent.click(screen.getByRole('button', { name: 'Unmute' }));
+    expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('0.4');
+  });
+
+  it('keeps progress writes in order across Play again: the new viewing’s write waits for the old one', async () => {
+    const srv = serve();
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    let held = false;
+    installFetch((method, url, init) => {
+      const answer = srv.route(method, url, init);
+      if (method === 'PUT' && url === '/api/editions/11/progress' && !held) {
+        held = true;
+        return gate.then(() => respond({}));
+      }
+      return answer;
+    });
+    renderApp('/films/1/play?edition=11');
+    const video = await screen.findByTestId('player-video');
+    await instances(1);
+    await landResume(video);
+    await moveTo(video, 1000);
+    await hlsEvent(() => video.play());
+    await hlsEvent(() => video.pause());
+    await vi.waitFor(() => expect(srv.log.progress).toEqual([1000000]));
+    await hlsEvent(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    // Nothing waits for the old write: the new viewing starts at once.
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await instances(2);
+    await moveTo(video, 1001);
+    await hlsEvent(() => video.play());
+    await hlsEvent(() => video.pause());
+    // The new write is queued behind the old one, which is still in flight.
+    expect(srv.log.progress).toEqual([1000000]);
+    await hlsEvent(() => release());
+    await vi.waitFor(() => expect(srv.log.progress).toEqual([1000000, 1001000]));
+  });
+
+  it('can be stopped again after Play again, and plays again again', async () => {
+    const { log, video } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    await hlsEvent(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await instances(2);
+    expect(stoppedCard()).not.toBeInTheDocument();
+    await moveTo(video, 1001);
+    await hlsEvent(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    expect(stoppedCard()).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await instances(3);
+    await vi.waitFor(() => expect(log.posted).toHaveLength(3));
+    expect(log.posted[2].startMs).toBe(1001000);
+    expect(new Set(log.playbackIds).size).toBe(3);
+  });
+
+  it('stops reporting for the stopped viewing (the source it clears is no reload), and reports again under the new id after Play again', async () => {
+    const { video, fetchMock } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    await hlsEvent(() => fireEvent.playing(video));
+    const reports = () =>
+      fetchMock.mock.calls
+        .filter((c) => c[0].startsWith('/api/playback-health/') && c[1]?.method === 'PUT')
+        .map((c) => ({ id: c[0].split('/').pop(), body: JSON.parse(c[1].body) }));
+    await vi.waitFor(() => expect(reports().length).toBeGreaterThan(0));
+    const stoppedId = reports()[0].id;
+    await hlsEvent(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    // Clearing the source fires `emptied`: it is not a reload of the stopped viewing.
+    await hlsEvent(() => fireEvent(video, new Event('emptied')));
+    await hlsEvent(() => window.dispatchEvent(new Event('pagehide')));
+    const settled = reports().length;
+    await hlsEvent(() => window.dispatchEvent(new Event('pagehide')));
+    expect(reports().length).toBe(settled);
+    for (const r of reports().filter((x) => x.id === stoppedId)) {
+      expect(r.body.reloadCount).toBe(0);
+      expect(r.body.reloadMs).toBe(0);
+    }
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await instances(2);
+    await hlsEvent(() => fireEvent.playing(video));
+    await vi.waitFor(() => expect(reports().some((r) => r.id !== stoppedId)).toBe(true));
+  });
+
+  it('two quick presses of Play again make one new session', async () => {
+    const { log, video } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    await hlsEvent(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    await userEvent.dblClick(screen.getByRole('button', { name: 'Play again' }));
+    await instances(2);
+    expect(log.posted).toHaveLength(2);
+  });
+
+  it('keeps the same player and video through Play again, so fullscreen and the rest stay', async () => {
+    const { video } = await open();
+    const player = screen.getByRole('region', { name: 'Video player' });
+    await hlsEvent(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await instances(2);
+    expect(screen.getByRole('region', { name: 'Video player' })).toBe(player);
+    expect(screen.getByTestId('player-video')).toBe(video);
+  });
+
+  it('a stop at position 0 plays again from 0: where it stopped, always', async () => {
+    const srv = serve();
+    installFetch(srv.route);
+    renderApp('/films/1/play?edition=11&start=0');
+    await screen.findByTestId('player-video');
+    await instances(1);
+    expect(srv.log.posted[0].startMs).toBe(0);
+    await hlsEvent(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await vi.waitFor(() => expect(srv.log.posted).toHaveLength(2));
+    expect(srv.log.posted[1].startMs).toBe(0);
+  });
+
+  it('hands focus back to the player after Play again, so the keys work, and reads PREPARING until it plays', async () => {
+    const { video } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    await hlsEvent(() => video.play());
+    await hlsEvent(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await instances(2);
+    expect(screen.getByRole('region', { name: 'Video player' })).toHaveFocus();
+    expect(await screen.findByText('PREPARING')).toBeInTheDocument();
+    await hlsEvent(() => fireEvent.playing(video));
+    expect(screen.queryByText('PREPARING')).not.toBeInTheDocument();
+    await hlsEvent(() => fireEvent.loadedMetadata(video));
+    await userEvent.keyboard('{ArrowRight}');
+    expect(screen.getByRole('slider', { name: 'Seek' })).toHaveAttribute(
+      'aria-valuetext',
+      '16 minutes 50 seconds',
+    );
+  });
+
+  it('ignores the scrubber, arrow keys and quality choices while stopped', async () => {
+    const { log, video, hls } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    await userEvent.click(screen.getByRole('button', { name: 'Quality' }));
+    await hlsEvent(() =>
+      hls().error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: 'Quality' })).getByRole('menuitemradio', {
+        name: /360p/,
+      }),
+    );
+    await userEvent.keyboard('{ArrowRight}');
+    await userEvent.click(screen.getByRole('button', { name: 'Forward 10 seconds' }));
+    expect(log.posted).toHaveLength(1);
+    expect(FakeHls.instances).toHaveLength(1);
+    expect(screen.getByRole('slider', { name: 'Seek' })).toHaveAttribute(
+      'aria-valuetext',
+      '16 minutes 40 seconds',
+    );
+  });
+
+  it('Play again starts a new viewing at the position the stop caught, though destroying hls.js resets the element', async () => {
+    const { log, video, hls } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    // Real hls.js detaches the source on destroy, which sets the time to 0 and fires timeupdate.
+    hls().destroy.mockImplementation(() => {
+      video.currentTime = 0;
+      fireEvent.timeUpdate(video);
+    });
+    await hlsEvent(() =>
+      hls().error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    expect(screen.getByRole('slider', { name: 'Seek' })).toHaveAttribute(
+      'aria-valuetext',
+      '16 minutes 40 seconds',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await instances(2);
+    await vi.waitFor(() => expect(log.posted).toHaveLength(2));
+    expect(log.posted[1]).toEqual({
+      quality: 'auto',
+      startMs: 1000000,
+      audioStreamId: 111,
+      probeKbps: 0,
+    });
+    expect(log.playbackIds[1]).toMatch(UUID);
+    expect(log.playbackIds[1]).not.toBe(log.playbackIds[0]);
+    expect(stoppedCard()).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Play again' })).not.toBeInTheDocument();
+  });
+
+  // Only a 410 stops. Every other failure keeps the path it had before the stop existed.
+  describe('every other failure still recovers', () => {
+    it('a 404 (an expired session, or a server restart that lost it) makes a new session under the same viewing', async () => {
+      const { log, video, hls } = await open();
+      await landResume(video);
+      await moveTo(video, 1000);
+      await hlsEvent(() =>
+        hls().error({ fatal: true, type: 'networkError', response: { code: 404 } }),
+      );
+      await instances(2);
+      expect(log.posted).toHaveLength(2);
+      expect(log.playbackIds[1]).toBe(log.playbackIds[0]);
+      expect(stoppedCard()).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Play again' })).not.toBeInTheDocument();
+    });
+
+    it.each([
+      ['a 503', { response: { code: 503 } }],
+      ['a 500', { response: { code: 500 } }],
+      ['no answer at all', { details: 'manifestLoadError' }],
+    ])(
+      '%s from hls.js shows Reconnecting… and keeps the session, with no stop',
+      async (_name, extra) => {
+        const { log, video, hls } = await open();
+        await landResume(video);
+        await hlsEvent(() => hls().error({ fatal: true, type: 'networkError', ...extra }));
+        expect(await screen.findByText('Reconnecting…')).toBeInTheDocument();
+        expect(stoppedCard()).not.toBeInTheDocument();
+        expect(log.posted).toHaveLength(1);
+        expect(FakeHls.instances).toHaveLength(1);
+      },
+    );
+
+    it('a session request answered 500 once is asked again and plays; the recovery is not a stop', async () => {
+      const srv = serve({
+        create: (n) => (n === 1 ? respond({ error: 'boom' }, 500) : respond(SESSION(2), 201)),
+      });
+      installFetch(srv.route);
+      renderApp('/films/1/play?edition=11');
+      await screen.findByTestId('player-video');
+      await vi.waitFor(() => expect(srv.log.posted).toHaveLength(1));
+      // The second try waits out a backoff; the browser coming back online wakes it, so no test waits a second.
+      await hlsEvent(() => window.dispatchEvent(new Event('online')));
+      await instances(1);
+      expect(srv.log.posted).toHaveLength(2);
+      expect(FakeHls.last.loadSource).toHaveBeenCalledWith('/api/sessions/s2/master.m3u8');
+      expect(stoppedCard()).not.toBeInTheDocument();
+    });
+  });
+});
+
 describe('position and progress across source loads', () => {
   it('never reports 0 over the saved position while a reloaded source is at the start', async () => {
     const { log, video, hls } = await open();
@@ -698,6 +1113,22 @@ describe('iPhone Safari: native HLS', () => {
     video.currentTime = 0;
     await hlsEvent(() => fireEvent.loadedMetadata(video));
     expect(video.currentTime).toBe(1000);
+  });
+
+  it('stops, with no new session and no source left on the video, when the reload finds a 410', async () => {
+    const { video, log, master } = await nativeOpen();
+    await landResume(video);
+    await moveTo(video, 1000);
+    master.status = 410;
+    await hlsEvent(() => video.dispatchEvent(new Event('error')));
+    expect(await screen.findByText('Playback was stopped from Admin.')).toBeInTheDocument();
+    expect(log.posted).toHaveLength(1);
+    expect(video).not.toHaveAttribute('src');
+    expect(screen.queryByText('Reconnecting…')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await vi.waitFor(() => expect(log.posted).toHaveLength(2));
+    expect(log.posted[1].startMs).toBe(1000000);
+    await vi.waitFor(() => expect(video).toHaveAttribute('src', '/api/sessions/s2/master.m3u8'));
   });
 
   it('makes a new session when the reload finds the old one gone', async () => {

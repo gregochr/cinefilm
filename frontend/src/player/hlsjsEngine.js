@@ -77,7 +77,8 @@ export function hlsConfig(startSeconds) {
 
 /**
  * Starts `session` on `video`. `handlers`: onLevel(rung, { initial }), onThroughput(kbps),
- * onReconnecting(boolean), onSessionLost(), onFatal(), and the optional onNetworkError({ timeout }) and
+ * onReconnecting(boolean), onSessionLost(), onFatal(), and the optional onStopped() (a 410: Admin stopped this
+ * playback, so nothing is recovered), onNetworkError({ timeout }) and
  * onFetching(rung) (the rung hls.js has started to fetch, ahead of the one being played). In Auto, on a ladder
  * with a 240p bottom and a 360p level, a deep buffer holds Auto at 360p or above while it is fetching there
  * and has had no fragment trouble; the cap never climbs above the level being fetched by more than one.
@@ -240,6 +241,14 @@ export function startHlsJs({
       if (auto && fetched !== null) cap(gate.switched(fetched));
       troubled = true;
       reevaluateHold();
+    }
+    if (data.response?.code === 410) {
+      // Admin stopped this playback on purpose: no new session, no retry (owner 2026-11-15).
+      if (!lost) {
+        lost = true;
+        handlers.onStopped?.();
+      }
+      return;
     }
     if (data.response?.code === 404) {
       // The session expired (or was replaced): the caller makes a new one at the current position.

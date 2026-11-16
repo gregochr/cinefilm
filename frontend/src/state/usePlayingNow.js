@@ -38,7 +38,7 @@ export function usePlayingNow({ entries, sessions, reloadSessions, reloadSummary
       setStopping((s) => ({ ...s, [id]: true }));
       setFailures((f) => without(f, id));
       try {
-        await adminApi.stopTranscodingSession(row.sessionId);
+        await adminApi.stopTranscodingSession(row.sessionId, row.playbackId);
       } catch {
         setFailures((f) => ({ ...f, [id]: copy.stopFailed }));
         return;

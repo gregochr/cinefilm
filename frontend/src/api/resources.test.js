@@ -168,6 +168,12 @@ describe('image URLs', () => {
       method: 'DELETE',
       body: undefined,
     });
+    await adminApi.stopTranscodingSession('abc', 'c1000000-0000-4000-8000-000000000001');
+    expect(last()).toEqual({
+      path: '/api/admin/transcoding/sessions/abc?playbackId=c1000000-0000-4000-8000-000000000001',
+      method: 'DELETE',
+      body: undefined,
+    });
   });
 
   it('reads the chart from a given instant, or all of it, and one whole record', async () => {

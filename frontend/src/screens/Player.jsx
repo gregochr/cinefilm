@@ -24,6 +24,7 @@ import {
   ReconnectingNotice,
   SlowConnectionCard,
   Toast,
+  StoppedCard,
   UnavailableCard,
 } from '../components/PlayerOverlays.jsx';
 import Scrubber from '../components/Scrubber.jsx';
@@ -212,7 +213,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
     onToast: setToast,
     health,
   });
-  const { pendingSeekRef } = stream;
+  const { pendingSeekRef, stoppedAtRef } = stream;
   const activeRung = stream.rung ?? (quality === AUTO ? ORIGINAL : quality);
   const indicator = indicatorModel({
     quality,
@@ -232,12 +233,19 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
     fullSubtitle,
   });
   const atEnd = hasReachedEnd(positionMs, durationMs, edition.creditsMarkerMs);
-  const endOverlay = atEnd && !endDismissed;
+  // Stopped from Admin: the stopped card is the only card (the slow-connection card and the end card would cover it).
+  const stoppedByAdmin = stream.mode === 'stopped';
+  const endOverlay = atEnd && !endDismissed && !stoppedByAdmin;
   const { visible, poke } = useAutoHide({ playing, menuOpen: menu !== null, ended: endOverlay });
   // One card at a time: the question waits for the slow-connection card, the end card and the unavailable card,
   // and hides while a menu is open (on a phone it would lie over it).
   const questionShowing =
-    questionDue && menu === null && !slowCard.open && !endOverlay && stream.mode !== 'unavailable';
+    questionDue &&
+    menu === null &&
+    !slowCard.open &&
+    !endOverlay &&
+    stream.mode !== 'unavailable' &&
+    stream.mode !== 'stopped';
   const questionName = questionDue ? operatorName(environment.question.operator) : null;
 
   // Before the source has loaded, positionRef is only the display value (the resume point, 10 s before the
@@ -252,7 +260,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
 
   // The still goes when the player has nothing to show behind it, and is removed once its fade has run.
   useEffect(() => {
-    if (stream.mode === 'unavailable') dispatchStill('unavailable');
+    if (stream.mode === 'unavailable' || stream.mode === 'stopped') dispatchStill('unavailable');
   }, [stream.mode]);
   useEffect(() => {
     if (endOverlay) dispatchStill('ended');
@@ -330,7 +338,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
   const seekTo = useCallback(
     (ms) => {
       const video = videoRef.current;
-      if (!video) return;
+      if (!video || stoppedAtRef.current !== null) return; // stopped from Admin: the position stays where it was
       const clamped = Math.min(Math.max(0, ms), durationMs);
       positionKnownRef.current = true;
       pendingSeekRef.current = null; // the viewer chose a position: nothing is left to restore
@@ -340,15 +348,15 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
       setPositionMs(clamped);
       health.seek();
     },
-    [durationMs, pendingSeekRef, health],
+    [durationMs, pendingSeekRef, health, stoppedAtRef],
   );
 
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || stoppedAtRef.current !== null) return; // Admin stopped this playback: only "Play again" plays
     if (video.paused) video.play().catch(() => {});
     else video.pause();
-  }, []);
+  }, [stoppedAtRef]);
 
   const changeVolume = useCallback((next) => {
     const video = videoRef.current;
@@ -467,6 +475,8 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
   };
 
   const chooseQuality = (qualityId) => {
+    // Stopped from Admin: a new quality would start a new session behind the card.
+    if (stoppedAtRef.current !== null) return;
     setQuality(qualityId);
     setMenu(null);
     playback.savePreferences({ quality: qualityId });
@@ -578,6 +588,8 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
 
   const onTimeUpdate = () => {
     const video = videoRef.current;
+    // The element reads 0 once a stop has detached its source: keep the position the stop caught.
+    if (stoppedAtRef.current !== null) return;
     // Until the seek lands the element reads 0: do not let that overwrite the position or the progress report.
     const pending = pendingSeekRef.current;
     if (pending !== null) {
@@ -608,6 +620,22 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
 
   const remaining = formatRemaining(positionMs, durationMs);
   const director = film.directors?.[0]?.name || film.director;
+  // "Play again" after Admin stopped the playback: nothing is remounted. The same player, video and hooks go on; the
+  // health record starts a new viewing (a new playback id, the clock at zero) and the stream starts again from where
+  // the stop caught it (0 is a position too). It reads PREPARING like a fresh start, and focus goes back to the player (the
+  // card that held it is gone). Progress writes stay in the one queue, in order.
+  const playAgain = () => {
+    if (stoppedAtRef.current === null) return; // already starting again (a double click)
+    const start = Math.max(0, Math.round(stoppedAtRef.current));
+    positionRef.current = start;
+    setPositionMs(start);
+    setBuffering(true);
+    setStarted(false);
+    health.newViewing();
+    stream.resume(start);
+    containerRef.current?.focus();
+  };
+
   const hidden = !visible && !endOverlay;
   const progressPct = durationMs ? Math.min(100, (positionMs / durationMs) * 100) : 0;
 
@@ -664,7 +692,10 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
           settle();
           health.seeked();
         }}
-        onEmptied={() => health.sourceChanged()}
+        // The source taken away by a stop is not a reload.
+        onEmptied={() => {
+          if (stoppedAtRef.current === null) health.sourceChanged();
+        }}
         onEnded={() => {
           setPlaying(false);
           setPositionMs(durationMs);
@@ -747,7 +778,9 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
         onDoubleClick={() => toggleFullscreen(containerRef.current, videoRef.current)}
       />
 
-      {stream.mode === 'unavailable' ? (
+      {stream.mode === 'stopped' ? (
+        <StoppedCard onPlayAgain={playAgain} />
+      ) : stream.mode === 'unavailable' ? (
         <UnavailableCard onRetry={stream.restart} />
       ) : stream.reconnecting ? (
         <ReconnectingNotice />
@@ -938,7 +971,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
         <div className="player__hairline-fill" style={{ width: `${progressPct}%` }} />
       </div>
 
-      {slowCard.open && !endOverlay ? (
+      {slowCard.open && !endOverlay && !stoppedByAdmin ? (
         <SlowConnectionCard
           rung={rungName(activeRung)}
           onOk={() => {
