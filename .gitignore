@@ -30,3 +30,7 @@ backend/src/main/resources/static/
 
 # The train feed logger's logs hold where a train went and are never committed
 train-feed-*.jsonl
+
+# The home replay rig's build of the app and its results (scripts/replay/)
+scripts/replay/dist/
+scripts/replay/out/
