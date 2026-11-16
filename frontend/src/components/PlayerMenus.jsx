@@ -44,15 +44,18 @@ function useFocusChecked(ref) {
   }, [ref]);
 }
 
-function Item({ checked, disabled, onSelect, children, detail }) {
+function Item({ checked, disabled, locked = false, onSelect, children, detail }) {
   return (
     <button
       type="button"
       role="menuitemradio"
       aria-checked={checked}
       disabled={disabled}
+      aria-disabled={locked || undefined}
       className={`menu__item${checked ? ' menu__item--on' : ''}`}
-      onClick={onSelect}
+      onClick={() => {
+        if (!locked) onSelect();
+      }}
     >
       <span className="menu__tick" aria-hidden="true">
         {checked ? <CheckIcon size={14} /> : null}
@@ -63,11 +66,16 @@ function Item({ checked, disabled, onSelect, children, detail }) {
   );
 }
 
-export function QualityMenu({ qualities, value, width, activeRung, onSelect }) {
+/**
+ * The quality choices. `stopped` (Admin stopped the playback): a new quality would start a session behind the card, so the
+ * items are `aria-disabled` (still focusable, pressing does nothing) and the footer says why.
+ */
+export function QualityMenu({ qualities, value, width, activeRung, stopped = false, onSelect }) {
   const ref = useRef(null);
   const footerId = useId();
   useFocusChecked(ref);
   const offline = workerOffline(qualities);
+  const described = offline || stopped;
   return (
     <div className="menu menu--quality" ref={ref}>
       <div className="menu__heading" aria-hidden="true">
@@ -78,7 +86,7 @@ export function QualityMenu({ qualities, value, width, activeRung, onSelect }) {
         role="menu"
         tabIndex={-1}
         aria-label="Quality"
-        aria-describedby={offline ? footerId : undefined}
+        aria-describedby={described ? footerId : undefined}
         onKeyDown={onMenuKeyDown}
       >
         {qualities.map((q) => (
@@ -86,6 +94,7 @@ export function QualityMenu({ qualities, value, width, activeRung, onSelect }) {
             key={q.id}
             checked={value === q.id}
             disabled={!q.available}
+            locked={stopped}
             onSelect={() => onSelect(q.id)}
             detail={qualityDetail(q, { width, activeRung })}
           >
@@ -93,7 +102,12 @@ export function QualityMenu({ qualities, value, width, activeRung, onSelect }) {
           </Item>
         ))}
       </div>
-      {offline ? (
+      {stopped ? (
+        <div className="menu__footer" id={footerId}>
+          {/* planner, review */}
+          Quality can’t change while playback is stopped.
+        </div>
+      ) : offline ? (
         <div className="menu__footer" id={footerId}>
           Lower qualities unavailable right now &mdash; the transcode worker is offline. Pre-made
           versions still play.
@@ -133,8 +147,8 @@ function WrongSubtitles({ busy, onWrong }) {
  * (a menu holds only items): `SubtitleNotes` shows them under it.
  */
 function TimingControls({ timing }) {
-  const saving = timing.busy || timing.loading;
   const blocked = timing.busy || timing.frozen;
+  const saving = timing.busy || timing.loading;
   const action = (label, spoken, detail, onPress, blocked) => (
     <button
       type="button"
@@ -153,10 +167,9 @@ function TimingControls({ timing }) {
   );
   return (
     <div
-      className="menu__timing"
+      className={`menu__timing${saving ? ' menu__timing--busy' : ''}`}
       role="group"
       aria-label={subtitleTiming.group}
-      aria-busy={saving || undefined}
     >
       {action(
         subtitleTiming.earlier,

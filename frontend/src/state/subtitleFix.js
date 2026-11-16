@@ -5,19 +5,11 @@ import { FORCED_KEY, FULL_KEY, activeSubtitleKey } from '../player/tracks.js';
 import { subtitleFix, subtitlesWrong } from './subtitleFixCopy.js';
 import { filterSidecars, isDownload, isFull, subtitleProblem } from './subtitleAdmin.js';
 
-/** Thrown when the playing download is no longer the one the film showed (another tab chose a different one). */
+/** Thrown when the film did not say which download it showed: nothing can be proven to be the one on screen. */
 export class Changed extends Error {
   constructor() {
     super('The playing subtitle changed');
     this.name = 'Changed';
-  }
-}
-
-/** Thrown when no download row matches what is showing (it was already removed, or the list moved on). */
-export class LookupFailed extends Error {
-  constructor() {
-    super('No download to remove');
-    this.name = 'LookupFailed';
   }
 }
 
@@ -76,29 +68,11 @@ export function shownFileKind({ choice, streams, forcedSubtitle, fullSubtitle })
   return null;
 }
 
-/** The rows of the download that plays now for one edition and kind: what "Subtitles are wrong" deletes. */
-export function wrongTargets(rows, { filmId, editionId, kind }) {
-  return rows.filter(
-    (row) =>
-      row.filmId === filmId &&
-      row.editionId === editionId &&
-      row.kind === kind &&
-      row.served === true &&
-      isDownload(row),
-  );
-}
-
-/** Of the playing downloads, only those the film showed (`ids`: the edition's `sidecarIds`); never one it did not. */
-export function shownTargets(targets, ids) {
-  return targets.filter((row) => (ids ?? []).includes(row.id));
-}
-
 /** What the player says when "Subtitles are wrong" fails: the server's own words for a refusal, else one plain line. */
 export function wrongProblem(failure) {
   if (failure instanceof ApiError && failure.status === 400 && failure.body?.error) {
     return subtitleProblem(failure);
   }
-  if (failure instanceof LookupFailed) return subtitlesWrong.lookupFailed;
   if (failure instanceof Changed) return subtitlesWrong.changed;
   return subtitlesWrong.failed;
 }

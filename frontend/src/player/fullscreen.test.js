@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { pickFullscreenStrategy, toggleFullscreen } from './fullscreen.js';
+import { leaveNativeFullscreen, pickFullscreenStrategy, toggleFullscreen } from './fullscreen.js';
 
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)';
 const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)';
@@ -67,5 +67,29 @@ describe('toggleFullscreen', () => {
     setUserAgent(MAC);
     expect(() => toggleFullscreen({}, {})).not.toThrow();
     expect(() => toggleFullscreen(null, undefined)).not.toThrow();
+  });
+});
+
+describe('leaveNativeFullscreen', () => {
+  it('exits Safari’s native player when it is showing', () => {
+    const video = { webkitDisplayingFullscreen: true, webkitExitFullscreen: vi.fn() };
+
+    leaveNativeFullscreen(video);
+
+    expect(video.webkitExitFullscreen).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing when the native player is not showing', () => {
+    const video = { webkitDisplayingFullscreen: false, webkitExitFullscreen: vi.fn() };
+
+    leaveNativeFullscreen(video);
+
+    expect(video.webkitExitFullscreen).not.toHaveBeenCalled();
+  });
+
+  it('does not throw without the native API, or without a video', () => {
+    expect(() => leaveNativeFullscreen({ webkitDisplayingFullscreen: true })).not.toThrow();
+    expect(() => leaveNativeFullscreen({})).not.toThrow();
+    expect(() => leaveNativeFullscreen(null)).not.toThrow();
   });
 });

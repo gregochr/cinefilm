@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import BufferingIndicator from './BufferingIndicator.jsx';
 import { QUESTION, questionText } from '../player/environment.js';
 import { Button } from './Button.jsx';
@@ -98,16 +98,20 @@ export function UnavailableCard({ onRetry }) {
  */
 export function StoppedCard({ onPlayAgain }) {
   const again = useRef(null);
+  const messageId = useId();
   useEffect(() => {
     again.current?.focus();
   }, []);
   return (
     <div className="slow-card" role="status">
       {/* planner, stop */}
-      <p className="slow-card__text">Playback was stopped from Admin.</p>
+      <p className="slow-card__text" id={messageId}>
+        Playback was stopped from Admin.
+      </p>
       <div className="slow-card__actions">
-        {/* planner, stop */}
-        <Button ref={again} onClick={onPlayAgain}>
+        {/* planner, stop. The card is mounted already filled and takes focus to the button, so a live region would
+            not be read: the button carries the message as its description instead. */}
+        <Button ref={again} aria-describedby={messageId} onClick={onPlayAgain}>
           Play again
         </Button>
       </div>

@@ -44,7 +44,6 @@ export const subtitlesWrong = {
   busy: 'Removing…',
   done: 'Subtitle download removed. CineFilm won’t use it again.',
   changed: 'This subtitle has changed since the film started. Reload to see the new one.',
-  lookupFailed: 'Couldn’t find that download to remove.',
   failed: 'Couldn’t remove the download. Try again.',
 };
 
@@ -72,6 +71,6 @@ export const subtitleTiming = {
   differs: 'differs by part', // planner, 8b-1: the parts of one film's subtitle do not share an offset
   busy: 'Saving…', // planner, 8b-1
   changed: 'This subtitle has changed since the film started. Reload to see the new one.', // as subtitlesWrong.changed
-  swapFailed: 'Couldn’t load the new timing. The old timing stays.', // planner, 8b-1
+  swapFailed: 'The new timing is saved but hasn’t loaded. Press again to retry.', // planner, review
   failed: 'Couldn’t change the timing. Try again.', // planner, 8b-1
 };

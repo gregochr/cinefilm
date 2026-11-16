@@ -29,6 +29,30 @@ const cuesRoute = (answer) => (method, url) =>
   url === '/api/admin/subtitles/3/cues' ? answer() : null;
 
 describe('SubtitleCueList', () => {
+  it('names a download’s list by its release, never by its made-up path', async () => {
+    installFetch(
+      cuesRoute(() => respond({ offsetMs: 0, cues: [{ startMs: 1000, endMs: 2000, text: 'Hi' }] })),
+    );
+    show({
+      path: 'opensubtitles:12:345',
+      origin: 'OPENSUBTITLES',
+      release: 'Taken.2008.1080p.BluRay',
+    });
+
+    expect(
+      await screen.findByRole('list', { name: 'Cues in Taken.2008.1080p.BluRay' }),
+    ).toBeInTheDocument();
+  });
+
+  it('calls a download with no release name "download"', async () => {
+    installFetch(
+      cuesRoute(() => respond({ offsetMs: 0, cues: [{ startMs: 1000, endMs: 2000, text: 'Hi' }] })),
+    );
+    show({ path: 'opensubtitles:12:345', origin: 'OPENSUBTITLES', release: null });
+
+    expect(await screen.findByRole('list', { name: 'Cues in download' })).toBeInTheDocument();
+  });
+
   it('shows a skeleton while the cues load, then each cue with its clock and a Play from here link', async () => {
     let release;
     const gate = new Promise((resolve) => {

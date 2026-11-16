@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -21,6 +22,32 @@ function setup(props = {}) {
     />,
   );
   return { actions, onRemoved };
+}
+
+/** Owns what the Fix… panel owns for it: `busy` while the delete runs, `failed` after a refusal. */
+function Harness({ remove }) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const actions = {
+    remove: async (id) => {
+      setBusy(true);
+      setFailed(false);
+      const ok = await remove(id);
+      setBusy(false);
+      setFailed(!ok);
+      return ok;
+    },
+  };
+  return (
+    <RemoveDownload
+      item={item}
+      name="Alien.1979"
+      busy={busy}
+      failed={failed}
+      actions={actions}
+      onRemoved={() => {}}
+    />
+  );
 }
 
 describe('RemoveDownload', () => {
@@ -81,9 +108,45 @@ describe('RemoveDownload', () => {
     expect(actions.remove).not.toHaveBeenCalled();
   });
 
-  it('disables the opening button while another action runs', () => {
+  it('while another action runs the opening button is aria-disabled, still focusable, and a press does nothing', async () => {
     setup({ busy: true });
 
-    expect(openButton()).toBeDisabled();
+    expect(openButton()).toHaveAttribute('aria-disabled', 'true');
+    expect(openButton()).toBeEnabled();
+    openButton().focus();
+    await userEvent.click(openButton());
+
+    expect(openButton()).toHaveFocus();
+    expect(screen.queryByRole('group', { name: 'Delete this download' })).not.toBeInTheDocument();
+  });
+
+  it('while the delete runs the buttons are aria-disabled, the pressed one keeps focus, and after a failure it is still there as "Try again"', async () => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const remove = vi.fn().mockReturnValueOnce(gate).mockResolvedValue(true);
+    render(<Harness remove={remove} />);
+    await userEvent.click(openButton());
+    await userEvent.click(screen.getByRole('button', { name: 'Delete download' }));
+
+    const confirm = screen.getByRole('button', { name: 'Delete download' });
+    const keep = screen.getByRole('button', { name: 'Keep it' });
+    expect(confirm).toHaveAttribute('aria-disabled', 'true');
+    expect(keep).toHaveAttribute('aria-disabled', 'true');
+    expect(confirm).toHaveFocus();
+    await userEvent.click(keep);
+    await userEvent.click(confirm);
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('group', { name: 'Delete this download' })).toBeInTheDocument();
+
+    release(false);
+
+    const retry = await screen.findByRole('button', { name: 'Try again' });
+    expect(retry).toBe(confirm);
+    expect(retry).toHaveFocus();
+    expect(retry).not.toHaveAttribute('aria-disabled');
+    await userEvent.click(retry);
+    await waitFor(() => expect(remove).toHaveBeenCalledTimes(2));
   });
 });
