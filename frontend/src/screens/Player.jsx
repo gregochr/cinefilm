@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { SESSION_EXPIRED_EVENT, SIGNED_IN_EVENT } from '../api/client.js';
-import { editionsApi } from '../api/resources.js';
+import { editionsApi, filmsApi } from '../api/resources.js';
 import BufferingIndicator from '../components/BufferingIndicator.jsx';
 import { Button } from '../components/Button.jsx';
 import {
@@ -38,6 +38,7 @@ import { indicatorModel } from '../player/indicator.js';
 import { AUTO, ORIGINAL, resolveQuality, rungName, topRung } from '../player/ladder.js';
 import { hasReachedEnd, parseStartAt, seekLanded, startPosition } from '../player/resume.js';
 import { STILL_FADE_MS, initialStill, stillReducer, stillRendered } from '../player/resumeStill.js';
+import { REFRESH_MS, withLearnedOffsets } from '../player/playAgain.js';
 import { useSlowCard } from '../player/slowCard.js';
 import { useStream } from '../player/useStream.js';
 import { formatClock, formatRemaining } from '../player/time.js';
@@ -104,13 +105,48 @@ export default function Player() {
   if (opened.key !== routeKey) setOpened({ key: routeKey, at: performance.now() });
   // "Play again" after Admin stopped the playback: a new viewing (a new PlayerView, so a new playback id) that starts
   // at the film position the old one had reached. Belongs to this route; another film or edition starts it afresh.
-  const [again, setAgain] = useState({ key: routeKey, count: 0, atMs: null, choices: null });
-  if (again.key !== routeKey) setAgain({ key: routeKey, count: 0, atMs: null, choices: null });
-  // `choices` are what the viewer picked in the old viewing (quality, audio, subtitle, volume, mute): the film was read when the page
-  // opened, so its preferences would bring back the old ones.
-  const playAgain = (atMs, choices) => {
-    // A position of 0 or less is no position: the new viewing starts where a new viewing of this film would.
-    setAgain((a) => ({ ...a, count: a.count + 1, atMs: atMs > 0 ? atMs : null, choices }));
+  const [again, setAgain] = useState({
+    key: routeKey,
+    count: 0,
+    atMs: null,
+    choices: null,
+    film: null,
+  });
+  if (again.key !== routeKey) {
+    setAgain({ key: routeKey, count: 0, atMs: null, choices: null, film: null });
+  }
+  // The timing this page has saved, by subtitle kind: what a replacement viewing mounts with if the film cannot be
+  // read again.
+  const learnedTiming = useRef({});
+  const learnTiming = useCallback((kind, ids, offsets) => {
+    if (kind && ids) learnedTiming.current[kind] = { ids, offsets };
+  }, []);
+  const refreshing = useRef(null);
+  useEffect(() => () => refreshing.current?.abort(), []);
+  // The replacement viewing is mounted from the film read again, so what the server holds (preferences, subtitle
+  // timing and versions, the resume point) is current; only what the server does not hold is carried from the old
+  // viewing (`choices`: volume and mute always; with no fresh film also quality, audio, subtitle and the removals, and
+  // the timing this page saved). The read is given REFRESH_MS: past that, or if it fails, the viewer is never held.
+  const playAgain = async (atMs, choices) => {
+    const controller = new AbortController();
+    refreshing.current = controller;
+    const timer = setTimeout(() => controller.abort(), REFRESH_MS);
+    let fresh = null;
+    try {
+      fresh = await filmsApi.get(id, { signal: controller.signal });
+    } catch {
+      fresh = null;
+    } finally {
+      clearTimeout(timer);
+    }
+    setAgain((a) => ({
+      ...a,
+      count: a.count + 1,
+      // A position of 0 or less is no position: the new viewing starts where a new viewing of this film would.
+      atMs: atMs > 0 ? atMs : null,
+      film: fresh ?? withLearnedOffsets(film, learnedTiming.current),
+      choices: fresh ? { volume: choices.volume, muted: choices.muted } : choices,
+    }));
     setOpened({ key: routeKey, at: performance.now() });
   };
   if (loading && !film)
@@ -124,20 +160,22 @@ export default function Player() {
   }
   if (!film) return null;
   const wanted = Number(params.get('edition'));
+  const playFilm = again.film ?? film;
   const edition =
-    film.editions.find((e) => e.id === wanted) ||
-    film.editions.find((e) => e.id === film.preferences?.editionId) ||
-    film.editions[0];
+    playFilm.editions.find((e) => e.id === wanted) ||
+    playFilm.editions.find((e) => e.id === playFilm.preferences?.editionId) ||
+    playFilm.editions[0];
   return (
     <PlayerView
       key={`${edition.id}:${again.count}`}
-      film={film}
+      film={playFilm}
       edition={edition}
       startAtZero={again.count === 0 && params.get('start') === '0'}
       startAtMs={again.atMs ?? parseStartAt(params.get('at'))}
       openedAt={opened.at}
       choices={again.choices}
       onPlayAgain={playAgain}
+      onTimingSaved={learnTiming}
     />
   );
 }
@@ -145,7 +183,16 @@ export default function Player() {
 /** Gives up waiting for the final progress report after this long, so a dead network never traps the viewer. */
 export const LEAVE_REPORT_CAP_MS = 1500;
 
-function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, choices, onPlayAgain }) {
+function PlayerView({
+  film,
+  edition,
+  startAtZero,
+  startAtMs,
+  openedAt,
+  choices,
+  onPlayAgain,
+  onTimingSaved,
+}) {
   const navigate = useNavigate();
   // Computed once: the clock, remaining time and scrubber show the start point from the first render. A time in
   // the address (`at`, "Play from here" in Film detail's Fix… panel) beats the resume point.
@@ -190,7 +237,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, choices, 
     () => choices?.quality ?? resolveQuality(prefs.quality, edition.qualities),
   );
   const [audio, setAudio] = useState(() => {
-    if (choices) return choices.audio;
+    if (choices && 'audio' in choices) return choices.audio;
     const preferredKey = resolveAudioChoice(film.editions, edition, prefs.audioStreamId);
     const preferred = edition.audioStreams.find((s) => streamKey(s) === preferredKey);
     const fallback = edition.audioStreams.find((s) => s.isDefault) || edition.audioStreams[0];
@@ -200,7 +247,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, choices, 
   // What the viewer chose, or null when nothing was ever chosen (decision 68): `subtitle` below is the choice in
   // effect, which turns the full subtitle on by itself for a film whose audio is not English.
   const [chosenSubtitle, setChosenSubtitle] = useState(() =>
-    choices
+    choices && 'chosenSubtitle' in choices
       ? choices.chosenSubtitle
       : resolveSubtitleChoice(film.editions, edition, prefs.subtitle),
   );
@@ -445,7 +492,10 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, choices, 
     ids: shownFile?.sidecarIds,
     offsets: shownFile?.offsetsMs,
     onScreen: shownOffsets,
-    onApplied: (kind, token, offsets) => dispatchSwaps({ type: 'begin', kind, token, offsets }),
+    onApplied: (kind, token, offsets) => {
+      onTimingSaved?.(kind, (kind === 'FULL' ? fullSubtitle : forcedSubtitle)?.sidecarIds, offsets);
+      dispatchSwaps({ type: 'begin', kind, token, offsets });
+    },
     onReplaced: (kind) => dispatchSwaps({ type: 'cancel', kind }),
   });
   // The new timing's track loaded: it takes over. It failed, or neither loaded nor failed within SWAP_TIMEOUT_MS: it is

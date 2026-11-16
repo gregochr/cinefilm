@@ -49,6 +49,10 @@ function serve({ film = heat(), create } = {}) {
   let n = 0;
   const route = (method, url, init = {}) => {
     if (url === '/api/films/1') return respond(film);
+    // The server keeps the remembered choices: a film read again carries them.
+    if (method === 'PUT' && url === '/api/films/1/preferences') {
+      Object.assign(film.preferences, JSON.parse(init.body));
+    }
     if (method === 'POST' && url === '/api/editions/11/sessions') {
       const { playbackId, ...body } = JSON.parse(init.body);
       log.posted.push(body);
@@ -670,6 +674,32 @@ describe('a playback Admin stopped (410)', () => {
     expect(screen.getByRole('button', { name: 'Audio and subtitles' })).toHaveTextContent(
       'English',
     );
+  });
+
+  it('with the film unreadable, Play again still mounts with the choices carried from the old viewing', async () => {
+    const srv = serve();
+    let reads = 0;
+    installFetch((method, url, init) => {
+      if (url === '/api/films/1' && (reads += 1) > 1) return respond({ error: 'down' }, 500);
+      return srv.route(method, url, init);
+    });
+    renderApp('/films/1/play?edition=11');
+    await screen.findByTestId('player-video');
+    await instances(1);
+    await userEvent.click(screen.getByRole('button', { name: 'Quality' }));
+    await userEvent.click(
+      within(screen.getByRole('menu', { name: 'Quality' })).getByRole('menuitemradio', {
+        name: /360p/,
+      }),
+    );
+    await instances(2);
+    await hlsEvent(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await vi.waitFor(() => expect(srv.log.posted).toHaveLength(3));
+    expect(srv.log.posted[2].quality).toBe('360p');
+    expect(reads).toBe(2);
   });
 
   it('keeps the volume and mute through Play again, on the new video and in the control', async () => {
