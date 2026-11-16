@@ -162,4 +162,32 @@ class LibraryLockTest {
             .isEqualTo("Skipping nightly scan: a scan or import is already running"));
         verify(ingest, org.mockito.Mockito.never()).known();
     }
+
+    @Test
+    void aRefusedCallerIsToldWhoHoldsTheLockInPlainWords() {
+        assertThat(busyTextWhenHeldBy(LibraryLock.SCAN)).isEqualTo("A scan is running");
+        assertThat(busyTextWhenHeldBy(LibraryLock.IMPORT)).isEqualTo("A Plex import is running");
+        assertThat(busyTextWhenHeldBy(LibraryLock.MATCH))
+            .isEqualTo("A film match is being fixed; try again in a moment");
+        assertThat(busyTextWhenHeldBy(LibraryLock.EDIT))
+            .isEqualTo("Editions are being edited; try again in a moment");
+        assertThat(busyTextWhenHeldBy(LibraryLock.SUBTITLE))
+            .isEqualTo("Subtitles are being changed or checked; try again in a moment");
+        assertThat(busyTextWhenHeldBy(LibraryLock.CREDITS))
+            .isEqualTo("Credits are being saved; try again in a moment");
+        assertThat(busyTextWhenHeldBy(LibraryLock.PLEX_CREDITS))
+            .isEqualTo("Plex credits are being imported; try again in a moment");
+    }
+
+    @Test
+    void aLockReleasedBeforeTheTextIsReadFallsBackToAScanAndSoDoesAnUnknownHolder() {
+        assertThat(new LibraryLock().busyText()).isEqualTo("A scan is running");
+        assertThat(busyTextWhenHeldBy("something else")).isEqualTo("A scan is running");
+    }
+
+    private static String busyTextWhenHeldBy(String who) {
+        LibraryLock held = new LibraryLock();
+        assertThat(held.tryAcquire(who)).isTrue();
+        return held.busyText();
+    }
 }

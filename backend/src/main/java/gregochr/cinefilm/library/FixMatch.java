@@ -38,7 +38,6 @@ public class FixMatch {
     static final int MAX_RESULTS = 8;
     private static final int CAST_SHOWN = 4;
     private static final int SUMMARY_MAX = 500;
-    private static final String BUSY = "A scan is running";
     private static final String TMDB_DOWN = "TMDB is not available right now";
 
     private final TmdbApi tmdb;
@@ -159,7 +158,7 @@ public class FixMatch {
 
     private <T> T locked(Supplier<T> work) {
         if (!lock.tryAcquire(LibraryLock.MATCH)) {
-            throw new ConflictException(BUSY);
+            throw new ConflictException(lock.busyText());
         }
         try {
             return work.get();

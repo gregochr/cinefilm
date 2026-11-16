@@ -510,6 +510,18 @@ class EditionOpenSubtitlesServiceTest {
     }
 
     @Test
+    void aTimingOrCheckPassHoldingTheLockIsNotCalledAScan() {
+        searchedForced(plain(5011));
+        when(api.downloadsEnabled()).thenReturn(true);
+        assertThat(lock.tryAcquire(LibraryLock.SUBTITLE)).isTrue();
+
+        assertThatThrownBy(() -> service.download(40L, forced(5011))).isInstanceOf(ConflictException.class)
+            .hasMessage("Subtitles are being changed or checked; try again in a moment");
+
+        assertThat(lock.holder()).isEqualTo(LibraryLock.SUBTITLE);
+    }
+
+    @Test
     void everyReasonTheEditionCannotTakeTheFileIs409WithItsOwnTextAndNothingIsSpent() {
         searchedForced(plain(5011));
         when(api.downloadsEnabled()).thenReturn(true);

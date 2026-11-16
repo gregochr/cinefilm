@@ -24,37 +24,49 @@ class SidecarTrustTest {
 
     @Test
     void theOwnersCheckProvesItWithNoAutomaticCheck() {
-        assertThat(SidecarTrust.isProven(true, null, null)).isTrue();
+        assertThat(proven(true, null, null)).isTrue();
     }
 
     @Test
     void anAgreeingOpenSubtitlesCheckProvesIt() {
-        assertThat(SidecarTrust.isProven(false, check("AGREES"), null)).isTrue();
-        assertThat(SidecarTrust.isProven(false, check("AGREES"), alignment("CHECK"))).isTrue();
+        assertThat(proven(false, check("AGREES"), null)).isTrue();
+        assertThat(proven(false, check("AGREES"), alignment("CHECK"))).isTrue();
     }
 
     @Test
     void anAlignedTimingCheckProvesIt() {
-        assertThat(SidecarTrust.isProven(false, null, alignment("ALIGNED"))).isTrue();
-        assertThat(SidecarTrust.isProven(false, check("CHECK"), alignment("ALIGNED"))).isTrue();
+        assertThat(proven(false, null, alignment("ALIGNED"))).isTrue();
+        assertThat(proven(false, check("CHECK"), alignment("ALIGNED"))).isTrue();
     }
 
     @Test
     void nothingElseProvesIt() {
-        assertThat(SidecarTrust.isProven(false, null, null)).isFalse();
-        assertThat(SidecarTrust.isProven(false, check("CHECK"), null)).isFalse();
-        assertThat(SidecarTrust.isProven(false, null, alignment("CHECK"))).isFalse();
-        assertThat(SidecarTrust.isProven(false, null, alignment("TOO_FEW"))).isFalse();
-        assertThat(SidecarTrust.isProven(false, null, alignment("NO_REFERENCE"))).isFalse();
-        assertThat(SidecarTrust.isProven(false, check("CHECK"), alignment("CHECK"))).isFalse();
+        assertThat(proven(false, null, null)).isFalse();
+        assertThat(proven(false, check("CHECK"), null)).isFalse();
+        assertThat(proven(false, null, alignment("CHECK"))).isFalse();
+        assertThat(proven(false, null, alignment("TOO_FEW"))).isFalse();
+        assertThat(proven(false, null, alignment("NO_REFERENCE"))).isFalse();
+        assertThat(proven(false, check("CHECK"), alignment("CHECK"))).isFalse();
     }
 
     @Test
     void aListedFileIsProvenByItsOwnVerifiedCheckAndAlignmentFields() {
-        assertThat(SidecarTrust.isProven(listed(true, null, null))).isTrue();
-        assertThat(SidecarTrust.isProven(listed(false, check("AGREES"), null))).isTrue();
-        assertThat(SidecarTrust.isProven(listed(false, null, alignment("ALIGNED")))).isTrue();
-        assertThat(SidecarTrust.isProven(listed(false, null, alignment("CHECK")))).isFalse();
+        assertThat(proven(listed(true, null, null))).isTrue();
+        assertThat(proven(listed(false, check("AGREES"), null))).isTrue();
+        assertThat(proven(listed(false, null, alignment("ALIGNED")))).isTrue();
+        assertThat(proven(listed(false, null, alignment("CHECK")))).isFalse();
+    }
+
+    @Test
+    void aPickedDownloadIsNeverFailedBecauseTheAssessmentSaysSo() {
+        assertThat(SidecarTrust.assess(true, false, "CHECK", false))
+            .isEqualTo(new SidecarTrust.Assessment(SidecarTrust.Trust.PROVEN, SidecarTrust.Proof.CHOSEN));
+        assertThat(SidecarTrust.assess(true, true, "AGREES", true))
+            .isEqualTo(new SidecarTrust.Assessment(SidecarTrust.Trust.PROVEN, SidecarTrust.Proof.CHOSEN));
+        assertThat(SidecarTrust.assess(false, false, "CHECK", false))
+            .isEqualTo(new SidecarTrust.Assessment(SidecarTrust.Trust.FAILED, SidecarTrust.Proof.NONE));
+        assertThat(SidecarTrust.assess(false, true, "CHECK", false))
+            .isEqualTo(new SidecarTrust.Assessment(SidecarTrust.Trust.PROVEN, SidecarTrust.Proof.VERIFIED));
     }
 
     @Test
@@ -84,6 +96,16 @@ class SidecarTrustTest {
         assertThat(SidecarTrust.isAligned(null)).isFalse();
         assertThat(SidecarTrust.isAligned(alignment("CHECK"))).isFalse();
         assertThat(SidecarTrust.isAligned(alignment("ALIGNED"))).isTrue();
+    }
+
+    /** Whether any one proof holds, through the production {@code assess} the resolver uses. */
+    private static boolean proven(boolean ownerVerified, CheckDto check, AlignmentDto alignment) {
+        return SidecarTrust.assess(ownerVerified, check == null ? null : check.verdict(),
+            SidecarTrust.isAligned(alignment)).trust() == SidecarTrust.Trust.PROVEN;
+    }
+
+    private static boolean proven(SidecarDto listed) {
+        return proven(listed.verified(), listed.check(), listed.alignment());
     }
 
     private static SidecarDto listed(boolean verified, CheckDto check, AlignmentDto alignment) {

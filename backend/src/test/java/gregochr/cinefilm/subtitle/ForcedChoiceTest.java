@@ -96,6 +96,20 @@ class ForcedChoiceTest {
     }
 
     @Test
+    void anUncheckedOwnerFileBeatenByAPickSaysADownloadYouPickedPlaysInstead() {
+        Decision decision = decide(file(UNCHECKED), false, download(9, CHOSEN));
+
+        assertThat(decision.fileReason()).isEqualTo("Not used: a download you picked plays instead");
+    }
+
+    @Test
+    void aFailedFileReplacedByAPickSaysSo() {
+        Decision decision = decide(file(FAILED), false, download(9, CHOSEN));
+
+        assertThat(decision.fileReason()).isEqualTo("Replaced by an OpenSubtitles download that you picked");
+    }
+
+    @Test
     void aFailedFileIsReplacedByAProvenDownloadThatAgreesInTheWordsOfTheBrief() {
         Decision decision = decide(file(FAILED), false, download(7, AGREES));
 
@@ -281,15 +295,6 @@ class ForcedChoiceTest {
         assertThat(decide(file(UNCHECKED), true, download(9, CHOSEN)).step()).isEqualTo(Step.PROVEN_DOWNLOAD);
         assertThat(decide(file(UNCHECKED), false, download(9, CHOSEN)).step()).isEqualTo(Step.PROVEN_DOWNLOAD);
         assertThat(decide(file(AGREES), false, download(9, CHOSEN)).step()).isEqualTo(Step.PROVEN_FILE);
-    }
-
-    @Test
-    void aPickedDownloadIsNeverFailedBecauseTheAssessmentSaysSo() {
-        assertThat(SidecarTrust.assess(true, false, "CHECK", false)).isEqualTo(CHOSEN);
-        assertThat(SidecarTrust.assess(true, true, "AGREES", true)).isEqualTo(CHOSEN);
-        assertThat(SidecarTrust.assess(false, false, "CHECK", false))
-            .isEqualTo(new Assessment(Trust.FAILED, Proof.NONE));
-        assertThat(SidecarTrust.assess(false, true, "CHECK", false)).isEqualTo(VERIFIED);
     }
 
     @Test

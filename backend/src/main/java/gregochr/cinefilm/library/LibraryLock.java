@@ -57,4 +57,24 @@ public class LibraryLock {
     public boolean heldBy(String who) {
         return who.equals(holder.get());
     }
+
+    /**
+     * What to tell a caller the lock refused, worded for whoever holds it now. A scan (or a holder that let go
+     * between the refusal and this read) is "A scan is running".
+     */
+    public String busyText() {
+        String who = holder.get();
+        if (who == null) {
+            return "A scan is running";
+        }
+        return switch (who) {
+            case IMPORT -> "A Plex import is running";
+            case MATCH -> "A film match is being fixed; try again in a moment";
+            case EDIT -> "Editions are being edited; try again in a moment";
+            case SUBTITLE -> "Subtitles are being changed or checked; try again in a moment";
+            case CREDITS -> "Credits are being saved; try again in a moment";
+            case PLEX_CREDITS -> "Plex credits are being imported; try again in a moment";
+            default -> "A scan is running";
+        };
+    }
 }

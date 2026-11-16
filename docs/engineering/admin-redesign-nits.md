@@ -6,34 +6,13 @@ items A deliberately did not do, each with the reason. Owner questions and "reco
 
 ## Cleanup B: backend
 
-### 4b / 4b Codex fix round
+Done in the cleanup B backend PR. Note only:
 
-- The 409 "A scan is running" is answered for any library-lock holder, including the timing and check passes a pick
-  itself triggers; give it a holder-specific message.
-- `ForcedChoiceTest` `aPickedDownloadIsNeverFailedBecauseTheAssessmentSaysSo` belongs in `SidecarTrustTest`.
-- Decision 45: say that "Looks right" on another download can't beat a pick (so the 4c copy doesn't promise it), and
-  split its nested parentheses into two sentences.
-- `ForcedChoice.fileReason`: "a download you picked plays instead" for an unchecked owner file beaten by a pick.
-- `ForcedDownloadServiceChosenUnitTest`: the empty-saves checks (`atLeast(0)` captor) are `verify(never())` in
-  disguise; drop them, the outcome enum covers it. Around lines 229-230 add a `PREMADE_720` file after clearing, to
-  test the ORIGINAL filter, and rename the test (it doesn't prove "before anything else is read").
-- `SidecarTrust.isProven(SidecarDto)` is test-only and ignores the marker; document or remove.
-- Javadoc: `EditionOpenSubtitlesService.search()`/`download()` `@throws ConflictException` and the
-  `ForcedDownloadService.addChosen` revalidation list should mention the no-original-file refusal.
-- `search` loads the edition twice (`findWithFilmById` + `hasOriginalFile`); fine at this scale, note only.
-
-### 4a performance
-
-- `FullNeedService` loads every Edition/MediaFile/Film on each full-need list read, and the summary polls it every
-  30 s: a projection query, or skip the two figures on the summary path.
-- `EditionRepository.findAllWithFilesIncludingEmpty` `distinct` makes Postgres sort the whole library on each
-  `list()`; Hibernate 6 dedupes without it.
-
-### 6 and 7
-
-- No index on `grouping_change.happened_at` (the range query scans; fine at this size).
-- `ServerSettingsService` range 400 text is developer wording ("continueWatchingMinMinutes must be…") and is shown
-  verbatim (unreachable through the UI).
+- `EditionOpenSubtitlesService.search` loads the edition twice (`findWithFilmById` + `hasOriginalFile`); fine at this
+  scale, left.
+- The dev mock `frontend/src/api/fixtureServer.js` still returns the old developer wording for the Continue watching
+  range 400 (unreachable through the UI); change it with the next frontend PR that touches it.
+- `ScanService`'s own 409 texts for a scan that cannot start ("A subtitle is being changed") were not reworded.
 
 ## Cleanup B: player, menus and Playing now
 

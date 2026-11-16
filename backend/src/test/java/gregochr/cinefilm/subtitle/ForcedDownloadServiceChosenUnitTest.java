@@ -8,7 +8,7 @@ import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.film.Edition;
@@ -18,6 +18,7 @@ import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.ForcedNeedChoice;
 import gregochr.cinefilm.film.FullNeedChoice;
 import gregochr.cinefilm.film.MediaFile;
+import gregochr.cinefilm.film.MediaKind;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
@@ -99,13 +100,7 @@ class ForcedDownloadServiceChosenUnitTest {
 
     private List<SubtitleSidecar> savedRows() {
         ArgumentCaptor<SubtitleSidecar> saved = ArgumentCaptor.forClass(SubtitleSidecar.class);
-        verify(sidecars, atLeast(0)).save(saved.capture());
-        return saved.getAllValues();
-    }
-
-    private List<ForcedCheckCandidate> ledgerRows() {
-        ArgumentCaptor<ForcedCheckCandidate> saved = ArgumentCaptor.forClass(ForcedCheckCandidate.class);
-        verify(ledger, atLeast(0)).save(saved.capture());
+        verify(sidecars, atLeastOnce()).save(saved.capture());
         return saved.getAllValues();
     }
 
@@ -198,8 +193,10 @@ class ForcedDownloadServiceChosenUnitTest {
     }
 
     @Test
-    void anEditionWithNoOriginalFileTakesNoDownloadAndSaysSoBeforeAnythingElseIsRead() {
+    void anEditionWithOnlyAPremadeRenditionTakesNoDownloadAndSaysNoFile() {
         edition.getMediaFiles().clear();
+        MediaFile premade = file(edition, "Taken.720.mp4");
+        premade.setKind(MediaKind.PREMADE_720);
         editionLoads();
 
         assertThat(service.hasOriginalFile(1L, 40L)).isFalse();
@@ -207,8 +204,6 @@ class ForcedDownloadServiceChosenUnitTest {
         assertThat(service.refusal(1L, 40L, SubtitleKind.FULL, IMDB, 6011)).contains(ChosenOutcome.NO_FILE);
         assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
             .isEqualTo(ChosenOutcome.NO_FILE);
-        assertThat(savedRows()).isEmpty();
-        assertThat(ledgerRows()).isEmpty();
         assertThat(lock.holder()).isNull();
     }
 
@@ -372,7 +367,6 @@ class ForcedDownloadServiceChosenUnitTest {
         assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
             .isEqualTo(ChosenOutcome.ADDED);
 
-        assertThat(ledgerRows()).isEmpty();
         assertThat(savedRows()).singleElement().satisfies(row -> assertThat(row.getOpenSubtitlesFileId())
             .isEqualTo(5011L));
     }
@@ -403,8 +397,6 @@ class ForcedDownloadServiceChosenUnitTest {
         assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 0), NOW))
             .isEqualTo(ChosenOutcome.UNUSABLE);
 
-        assertThat(savedRows()).isEmpty();
-        assertThat(ledgerRows()).isEmpty();
     }
 
     @Test
@@ -415,8 +407,6 @@ class ForcedDownloadServiceChosenUnitTest {
         assertThat(service.addChosen(1L, 40L, SubtitleKind.FORCED, reference(5011, 12), NOW))
             .isEqualTo(ChosenOutcome.CAP_REACHED);
 
-        assertThat(savedRows()).isEmpty();
-        assertThat(ledgerRows()).isEmpty();
         assertThat(lock.holder()).isNull();
     }
 
@@ -454,7 +444,6 @@ class ForcedDownloadServiceChosenUnitTest {
             .isEqualTo(ChosenOutcome.BUSY);
 
         assertThat(lock.holder()).isEqualTo(LibraryLock.SCAN);
-        assertThat(savedRows()).isEmpty();
     }
 
     @Test
