@@ -280,7 +280,10 @@ function settingsView() {
 function updateSettings(body) {
   const minutes = body?.continueWatchingMinMinutes;
   if (!Number.isInteger(minutes) || minutes < 0 || minutes > MIN_MINUTES_LIMIT) {
-    throw new ApiError(400, 'continueWatchingMinMinutes must be a whole number from 0 to 30');
+    throw apiError(
+      400,
+      `Continue watching needs at least 0 and at most ${MIN_MINUTES_LIMIT} minutes`,
+    );
   }
   continueWatchingMinMinutes = minutes;
   return settingsView();

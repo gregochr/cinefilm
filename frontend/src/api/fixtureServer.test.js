@@ -381,6 +381,9 @@ describe('fixture server: Admin settings', () => {
     const error = await failure({ continueWatchingMinMinutes: minutes });
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(400);
+    expect(error.body).toEqual({
+      error: 'Continue watching needs at least 0 and at most 30 minutes',
+    });
   });
 
   it('refuses a missing body with a 400', async () => {

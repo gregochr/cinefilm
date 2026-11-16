@@ -259,6 +259,14 @@ describe('confirmProblem', () => {
     expect(confirmProblem(new ApiError(status))).toEqual({ message, gone: false });
   });
 
+  it('shows the server’s own words for a 409 when it sent some', () => {
+    expect(
+      confirmProblem(
+        new ApiError(409, undefined, { error: 'The library is busy; try again in a moment' }),
+      ),
+    ).toEqual({ message: 'The library is busy; try again in a moment', gone: false });
+  });
+
   it('is generic for a failure that is not an API answer', () => {
     expect(confirmProblem(new TypeError('network'))).toEqual({
       message: 'Something went wrong. Try again.',

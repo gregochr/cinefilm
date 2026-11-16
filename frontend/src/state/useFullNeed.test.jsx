@@ -37,7 +37,7 @@ describe('useFullNeed', () => {
   });
 
   it('says a scan is running for a 409 and keeps the row as it was', async () => {
-    installFetch((method, url) => (FULL.test(url) ? respond({ error: 'scan' }, 409) : null));
+    installFetch((method, url) => (FULL.test(url) ? respond(null, 409) : null));
     const { result } = renderHook(() => useFullNeed('a'));
     await waitFor(() => expect(result.current.rows).toEqual(LIST.films));
 

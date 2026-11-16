@@ -123,15 +123,15 @@ describe('Admin: Fix match', () => {
     [400, 'Type a title to search for.'],
     [500, 'Something went wrong. Try again.'],
   ])('shows the %s problem from a search in the panel', async (status, text) => {
-    installFetch((m, url) => (isSearch(m, url) ? respond({ error: 'x' }, status) : null));
+    installFetch((m, url) =>
+      isSearch(m, url) ? respond(status === 409 ? null : { error: 'x' }, status) : null,
+    );
     const panel = await openPanel();
     expect(await within(panel).findByRole('alert')).toHaveTextContent(text);
   });
 
   it('shows the problem from an apply and keeps the panel open', async () => {
-    installFetch((m, url) =>
-      isApply(m, url) ? respond({ error: 'A scan is running' }, 409) : null,
-    );
+    installFetch((m, url) => (isApply(m, url) ? respond(null, 409) : null));
     const panel = await openPanel();
     await userEvent.click((await within(panel).findAllByRole('radio'))[1]);
     await userEvent.click(within(panel).getByRole('button', { name: 'Use this match' }));

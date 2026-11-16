@@ -457,8 +457,28 @@ describe('Edit editions: saving', () => {
     expect(body.editions[0].files).toEqual([{ fileId: 11, part: null }]);
   });
 
+  it('a save the library lock refuses shows the server’s own words, and keeps every edit', async () => {
+    installFetch((m, url) =>
+      isPut(m, url) ? respond({ error: 'The library is busy; try again in a moment' }, 409) : null,
+    );
+    const { user, onSaved } = await open();
+    await user.selectOptions(editionSelect(THEATRICAL), 'New edition…');
+    await user.type(
+      within(row(THEATRICAL)).getByRole('textbox', { name: 'New edition name' }),
+      'Cinema Cut',
+    );
+    await user.click(screen.getByRole('radio', { name: /Cinema Cut/ }));
+
+    await user.click(saveButton());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Couldn’t save. The library is busy; try again in a moment. Your changes are still here.',
+    );
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
   it('a save that fails keeps every edit, says why, and can be tried again', async () => {
-    let answer = respond({ error: 'A scan is running' }, 409);
+    let answer = respond(null, 409);
     installFetch((m, url) => (isPut(m, url) ? answer : null));
     const { user, onSaved } = await open();
     await user.selectOptions(editionSelect(THEATRICAL), 'New edition…');

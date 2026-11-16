@@ -260,7 +260,7 @@ describe('Admin Subtitles section: owner choices', () => {
   });
 
   it('says a scan is running when the server refuses the choice with 409', async () => {
-    serve({ fail: () => respond({ error: 'A scan is running' }, 409) });
+    serve({ fail: () => respond(null, 409) });
     renderApp('/admin/subtitles');
     await userEvent.click(await tab('Forced subtitles not found 1'));
 

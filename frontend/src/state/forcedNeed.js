@@ -1,6 +1,6 @@
 // Display and rule helpers for Admin → Subtitles → "Which films need them". No JSX: the Apple TV and native
 // clients reuse them. The server decides each film's need; this only filters, words and counts what it sent.
-import { ApiError } from '../api/client.js';
+import { ApiError, serverText } from '../api/client.js';
 import { titleWithYear } from './scanFormat.js';
 
 /** How many rows are shown before "Show more". */
@@ -122,10 +122,13 @@ export function reasonText(row) {
   }
 }
 
-/** What is said beside a row when saving the owner's choice fails; a running scan holds the library lock. */
+/**
+ * What is said beside a row when saving the owner's choice fails. A 409 shows the server's own words (what holds the
+ * library lock), else the scan line.
+ */
 export function needProblem(failure) {
   if (failure instanceof ApiError && failure.status === 409) {
-    return 'A scan is running: try again when it finishes';
+    return serverText(failure) ?? 'A scan is running: try again when it finishes';
   }
   return "Couldn't save: try again";
 }
