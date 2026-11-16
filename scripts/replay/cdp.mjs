@@ -6,12 +6,10 @@
 // and the bookkeeping of requests that are waiting is `track` and `failAll`: all three take plain values, so they are
 // tested with made-up messages.
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-/** Chrome's debugging port. Chrome opens it on 127.0.0.1 for as long as the browser runs. */
-export const DEBUG_PORT = 9334;
 const REQUEST_TIMEOUT_MS = 30000;
 const SOCKET_OPEN = 1;
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -94,34 +92,96 @@ export function failAll(pending, error) {
 export function pageSocketUrl(targets, port) {
   if (!Array.isArray(targets)) return null;
   for (const target of targets) {
-    if (target?.type !== 'page' || typeof target.webSocketDebuggerUrl !== 'string') continue;
+    if (target?.type !== 'page') continue;
     const id = /\/devtools\/page\/([A-Za-z0-9-]+)$/.exec(target.webSocketDebuggerUrl)?.[1];
     if (id) return `ws://127.0.0.1:${port}/devtools/page/${id}`;
   }
   return null;
 }
 
-// Waits for a freshly started Chrome to open its port: 100 tries, 200 ms apart, fewer if it has already gone.
-async function waitForPage(port, chromeGone) {
+/**
+ * The port Chrome chose, from the text of the `DevToolsActivePort` file it writes into its profile: the first line,
+ * a whole number from 1 to 65535. Null for anything else (an empty file, text, 0, 65536).
+ */
+export function parseActivePort(text) {
+  const first = String(text).split('\n')[0].trim();
+  if (!/^\d{1,5}$/.test(first)) return null;
+  const port = Number(first);
+  return port >= 1 && port <= 65535 ? port : null;
+}
+
+// The port from the profile's file, or null while the file is not there yet.
+function readPort(profile) {
+  try {
+    return parseActivePort(readFileSync(join(profile, 'DevToolsActivePort'), 'utf8'));
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+// Waits for a freshly started Chrome to say which port it opened and to list its page: 100 tries, 200 ms apart,
+// fewer if it has already gone. Only the Chrome that was started with this profile writes this profile's file.
+async function waitForPage(profile, chromeGone) {
   for (let i = 0; i < 100 && !chromeGone(); i += 1) {
-    try {
-      const url = pageSocketUrl(await (await fetch(`http://127.0.0.1:${port}/json`)).json(), port);
-      if (url) return url;
-    } catch {
-      // Not up yet.
+    const port = readPort(profile);
+    if (port) {
+      try {
+        const url = pageSocketUrl(await (await fetch(`http://127.0.0.1:${port}/json`)).json(), port);
+        if (url) return url;
+      } catch {
+        // Not up yet.
+      }
     }
     await sleep(200);
   }
   return null;
 }
 
+// Whether `promise` settles within `ms`; the timer does not outlive the answer.
+async function within(promise, ms) {
+  let timer;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(resolve, ms, false);
+  });
+  try {
+    return await Promise.race([promise.then(() => true), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
- * Starts headless Chrome. `profileRoot` is where its throwaway profile is made (and removed by `close`).
- * The browser can reach nothing but this machine: every other host name is made unresolvable, so the app's one
- * outside request (the network operator lookup) fails as it would with no internet. The result has `page`, `close()`
- * (kills Chrome, removes the profile) and `kill()` (the same at once and without waiting, for a second Ctrl-C).
+ * Stops a process and removes its profile. `kill(signal)` sends a signal, `exited` is a promise that settles when
+ * the process has gone. The order: a first kill; a wait of `graceMs` for it to go; if it has not, `SIGKILL` and a
+ * wait of `hardMs`; then `removeProfile()`, whose failure is not passed on (a profile still being written to may be
+ * left behind).
  */
-export async function launchChrome({ port, profileRoot, extraArgs = [] }) {
+export async function stopChrome({ kill, exited, removeProfile, graceMs = 3000, hardMs = 3000 }) {
+  kill('SIGTERM');
+  if (!(await within(exited, graceMs))) {
+    kill('SIGKILL');
+    await within(exited, hardMs);
+  }
+  try {
+    removeProfile();
+  } catch {
+    // Left behind: the temporary folder is cleared by the system in time.
+  }
+}
+
+/**
+ * Starts headless Chrome. `profileRoot` is where its throwaway profile is made and removed. Chrome picks its own
+ * debugging port (`--remote-debugging-port=0`) and writes it into the profile, so the rig only ever talks to the
+ * Chrome it started. No host name but `localhost` resolves in it, so the app's one outside request (the network
+ * operator lookup) fails as it would with no internet; an address written as numbers is not blocked.
+ *
+ * `onSpawn(kill)` is called at once, right after Chrome is spawned and before anything is awaited, with a
+ * synchronous function that kills it for good and removes the profile as best it can, so that whoever starts Chrome
+ * can stop it during its start-up too. The result has `page`, `close()` (stops Chrome with a grace period, see
+ * `stopChrome`) and `kill()` (the same synchronous function, for a second Ctrl-C).
+ */
+export async function launchChrome({ profileRoot, extraArgs = [], onSpawn }) {
   const profile = mkdtempSync(join(profileRoot, 'replay-chrome-'));
   const removeProfile = () => rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   const proc = spawn(CHROME, [
@@ -133,9 +193,19 @@ export async function launchChrome({ port, profileRoot, extraArgs = [] }) {
     '--autoplay-policy=no-user-gesture-required',
     '--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1 , EXCLUDE localhost',
     '--window-size=1280,800',
-    `--user-data-dir=${profile}`, `--remote-debugging-port=${port}`,
+    `--user-data-dir=${profile}`, '--remote-debugging-port=0',
     ...extraArgs, 'about:blank',
   ], { stdio: 'ignore' });
+  // Chrome may still be writing to its profile after SIGKILL (its child processes), so the profile may be left.
+  const hardStop = () => {
+    proc.kill('SIGKILL');
+    try {
+      removeProfile();
+    } catch {
+      // Left behind.
+    }
+  };
+  if (onSpawn) onSpawn(hardStop);
   let gone = false;
   const exited = new Promise((resolve) => {
     const onGone = () => {
@@ -145,29 +215,25 @@ export async function launchChrome({ port, profileRoot, extraArgs = [] }) {
     proc.on('error', onGone);
     proc.on('exit', onGone);
   });
+  const stop = () => stopChrome({ kill: (signal) => proc.kill(signal), exited, removeProfile });
   let page = null;
   try {
-    const wsUrl = await waitForPage(port, () => gone);
+    const wsUrl = await waitForPage(profile, () => gone);
     if (!wsUrl) throw new Error('Chrome did not start');
     page = await connect(wsUrl);
   } catch (error) {
-    proc.kill();
-    removeProfile();
+    await stop();
     throw error;
   }
   return {
     page,
     async close() {
       page.close();
-      proc.kill();
-      // Chrome writes to its profile until it has gone: wait for that, but not for ever.
-      await Promise.race([exited, sleep(3000)]);
-      removeProfile();
+      await stop();
     },
     kill() {
       page.close();
-      proc.kill('SIGKILL');
-      removeProfile();
+      hardStop();
     },
   };
 }

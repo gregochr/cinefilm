@@ -1,12 +1,16 @@
 // scripts/replay/analyse.mjs: each sum over a run's data at its edges, and the lines they are told in. Everything is
 // made-up figures; a run's files are not read.
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { after, describe, test } from 'node:test';
 import {
   aheadAt, analyseRun, deliveredPerMinute, deliveryAgainstTrace, describe as describeRun, idleGaps, linkByMinute,
   notPlaying, playheadLag, rungsAndBytes, samplingGaps, screenAgainstLink, soundness, spellFigures, startOf,
   withFilmInHand,
 } from '../../replay/analyse.mjs';
+import { loadRecord } from '../../replay/trace.mjs';
 
 // A sample taken `ms` into the replay.
 const at = (ms, more = {}) => ({ ms, t: 0, ahead: 0, kbps: 1000, readyState: 4, paused: false, buffering: null, ...more });
@@ -16,10 +20,11 @@ describe('startOf', () => {
     assert.equal(startOf('Replay of record minutes 24 to 38 (18:20:53 to 18:35:53), sampled trace'), 24);
   });
 
-  test('is found after warning lines, and is 0 when there is no such line', () => {
+  test('is found after warning lines, and is null when there is no such line', () => {
     assert.equal(startOf('WARNING: stopped early\nReplay of record minutes 7 to 9 (a)\nrest'), 7);
-    assert.equal(startOf('nothing of the kind'), 0);
-    assert.equal(startOf(''), 0);
+    assert.equal(startOf('Replay of record minutes 0 to 9 (a)'), 0);
+    assert.equal(startOf('nothing of the kind'), null);
+    assert.equal(startOf(''), null);
   });
 });
 
@@ -200,6 +205,14 @@ describe('section 2: gaps with nothing fetched', () => {
     assert.equal(gaps[0].gap, 30001);
   });
 
+  test('a segment with no time among timed ones is left out: it neither hides a gap nor makes one', () => {
+    // Taken at its face it would run from 0 to 100,000 ms and hide the gap after the first segment.
+    const untimed = { kind: 'segment', ms: null, doneMs: 100000, rung: 'x' };
+    const gaps = idleGaps([seg(0, 1000), untimed, seg(31001, 500)], samples, link);
+    assert.equal(gaps.length, 1);
+    assert.equal(gaps[0].gap, 30001);
+  });
+
   test('requests that are not segments, or that have no time, are not looked at; none at all is no gap', () => {
     assert.deepEqual(idleGaps([{ kind: 'api', ms: 0 }, { kind: 'segment', ms: null }], samples, link), []);
     assert.deepEqual(idleGaps([], samples, link), []);
@@ -230,6 +243,21 @@ describe('section 3: the six bad spells', () => {
     const [spell] = spellFigures({ report: { minutes: rows(4) }, samples: samplesTo(5), record, start: 4 });
     assert.equal(spell.goingIn, 90);
     assert.equal(spell.first, 5);
+  });
+
+  test('a record minute with no row counts for 0 stalled seconds on 12 November, not for nothing at all', () => {
+    const partial = { report: { minutes: [[5, 0, 5, 0, 1000], [6, 0, 5, 0, 2000]] } };
+    const [spell] = spellFigures({ report: { minutes: rows(0) }, samples: samplesTo(8), record: partial, start: 0 });
+    assert.equal(spell.stalledThen, 3000);
+  });
+
+  test('a minute the samples give no link figure for counts for 0 kbit/s in the mean', () => {
+    // Samples in minutes 4, 6 and 7 only: minute 5 has none.
+    const samples = [
+      at(4 * 60000 + 1000, { kbps: 100 }), at(6 * 60000 + 1000, { kbps: 700 }), at(7 * 60000 + 1000, { kbps: 800 }),
+    ];
+    const [spell] = spellFigures({ report: { minutes: rows(0) }, samples, record, start: 0 });
+    assert.equal(spell.meanLink, 500);
   });
 
   test('a spell is left out when the run ended before its last minute was over', () => {
@@ -356,5 +384,97 @@ describe('analyseRun', () => {
 
   test('a run that has no folder says which file is missing', () => {
     assert.throws(() => analyseRun('no-such-run-for-the-test'), { message: 'requests.json is not in this run\'s folder' });
+  });
+});
+
+describe('analyseRun on a run\'s files', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'replay-'));
+  after(() => rmSync(tmp, { recursive: true, force: true }));
+
+  const samples = [5, 10, 15, 20].map((s) => at(s * 1000, { t: s, ahead: 30 }));
+  const requests = [{ kind: 'segment', rung: '480p', ms: 0, firstByteMs: 10, doneMs: 500, sent: 1000, aborted: false }];
+  const report = {
+    stallCount: 0, stallMs: 0, longestStallMs: 0, watchedMs: 20000, stepsDown: 0, stepsUp: 0, timeouts: 0,
+    rungMs: { '480p': 20000 }, minutes: [],
+  };
+  const HEADING = 'Replay of record minutes 24 to 24 (18:20:53 to 18:21:53), sampled trace';
+  const NO_SUMMARY = 'WARNING: no summary line in this run: it is read as starting at record minute 0';
+  let counter = 0;
+
+  // Writes a run's files under the temporary root, a text for each file given (a missing one is not written), and
+  // returns its name.
+  function writeRun(files) {
+    counter += 1;
+    const name = `run-${counter}`;
+    mkdirSync(join(tmp, name));
+    for (const [file, text] of Object.entries(files)) {
+      if (text !== undefined) writeFileSync(join(tmp, name, file), text);
+    }
+    return name;
+  }
+
+  const good = {
+    'requests.json': JSON.stringify(requests),
+    'samples.json': JSON.stringify(samples),
+    'health.json': JSON.stringify({ final: { report } }),
+    'summary.txt': `${HEADING}\nrest\n`,
+  };
+  const expected = (name, heading, start) => describeRun({
+    name, heading, samples, requests, report, record: loadRecord(), start,
+  });
+
+  test('reads the run, and its start minute from its summary', () => {
+    const name = writeRun(good);
+    assert.deepEqual(analyseRun(name, tmp), expected(name, HEADING, 24));
+  });
+
+  test('a run with no summary file is read from record minute 0, and says so in a first line of its own', () => {
+    const name = writeRun({ ...good, 'summary.txt': undefined });
+    assert.deepEqual(analyseRun(name, tmp), [NO_SUMMARY, ...expected(name, '(no summary line)', 0)]);
+  });
+
+  test('a run whose summary has no Replay line says so too', () => {
+    const name = writeRun({ ...good, 'summary.txt': 'WARNING: stopped early\n' });
+    const lines = analyseRun(name, tmp);
+    assert.equal(lines[0], NO_SUMMARY);
+    assert.equal(lines[1], `${name}: (no summary line)`);
+  });
+
+  test('a run with a summary does not get the warning', () => {
+    assert.notEqual(analyseRun(writeRun(good), tmp)[0], NO_SUMMARY);
+  });
+
+  test('a run with no health report, or a health file that says null, has nothing to analyse', () => {
+    const message = 'no health report in this run: nothing to analyse';
+    assert.throws(() => analyseRun(writeRun({ ...good, 'health.json': '{"final":null}' }), tmp), { message });
+    assert.throws(() => analyseRun(writeRun({ ...good, 'health.json': '{}' }), tmp), { message });
+    assert.throws(() => analyseRun(writeRun({ ...good, 'health.json': 'null' }), tmp), { message });
+  });
+
+  test('a run with no samples has nothing to analyse, whether the file holds an empty list or something else', () => {
+    const message = 'no samples in this run: nothing to analyse';
+    assert.throws(() => analyseRun(writeRun({ ...good, 'samples.json': '[]' }), tmp), { message });
+    assert.throws(() => analyseRun(writeRun({ ...good, 'samples.json': '{}' }), tmp), { message });
+  });
+
+  test('a requests file that is not a list is refused', () => {
+    const name = writeRun({ ...good, 'requests.json': '{}' });
+    assert.throws(() => analyseRun(name, tmp), { message: 'no requests in this run: nothing to analyse' });
+  });
+
+  test('a file that is not there, one that is not JSON and one that cannot be read are told apart', () => {
+    assert.throws(() => analyseRun(writeRun({ ...good, 'requests.json': undefined }), tmp), {
+      message: 'requests.json is not in this run\'s folder',
+    });
+    assert.throws(() => analyseRun(writeRun({ ...good, 'samples.json': '{ nope' }), tmp), {
+      message: 'samples.json is not JSON',
+    });
+    const name = writeRun({ ...good, 'health.json': undefined });
+    mkdirSync(join(tmp, name, 'health.json'));
+    assert.throws(() => analyseRun(name, tmp), { message: 'health.json cannot be read' });
+  });
+
+  test('a run that has no folder is a missing file', () => {
+    assert.throws(() => analyseRun('no-such-run', tmp), { message: 'requests.json is not in this run\'s folder' });
   });
 });

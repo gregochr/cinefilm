@@ -13,8 +13,26 @@ describe('printable', () => {
     assert.equal(printable('one\ntwo\r\nthree\rfour', 100), 'one two  three four');
   });
 
-  test('a character outside printable ASCII becomes a question mark: tab, escape, delete, accents, a middle dot', () => {
-    assert.equal(printable('a\tb\u001b[31mc\u007fdée · f', 100), 'a?b?[31mc?d?e ? f');
+  test('a character outside printable ASCII becomes a question mark: tab, escape, delete, accents, a smiley', () => {
+    assert.equal(printable('a\tb\u001b[31mc\u007fd\u00e9e \u263a f', 100), 'a?b?[31mc?d?e ? f');
+  });
+
+  test('the few signs the app uses are written as their plain equivalents, each from its own entry of the table', () => {
+    assert.equal(printable('Auto \u00b7 480p \u00b7 Remote \u00b7 slow', 100), 'Auto - 480p - Remote - slow');
+    assert.equal(printable('You\u2019re \u2018here\u2019', 100), "You're 'here'");
+    assert.equal(printable('\u201cquoted\u201d', 100), '"quoted"');
+    assert.equal(printable('a\u2013b\u2014c', 100), 'a-b-c');
+    assert.equal(printable('wait\u2026', 100), 'wait...');
+  });
+
+  test('the cut at the limit counts the text as written out: an ellipsis takes three places', () => {
+    assert.equal(printable('ab\u2026', 4), 'ab..');
+    assert.equal(printable('ab\u2026', 5), 'ab...');
+    assert.equal(printable('ab\u2026cd', 6), 'ab...c');
+  });
+
+  test('a line break is still a space before anything else, and a sign next to an accent keeps both rules', () => {
+    assert.equal(printable('a\n\u00b7\u00e9', 100), 'a -?');
   });
 
   test('the first and last printable characters (space and tilde) are kept', () => {

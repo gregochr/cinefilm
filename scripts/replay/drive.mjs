@@ -7,13 +7,17 @@
 //   --minutes   how long to run, in minutes of real time                            default 15
 //   --trace     sampled (clean minutes at the sampled speed) or cautious (0.6 of it)  default sampled
 //               (flat:<kbit/s> is a steady link, for checking the rig itself)
-//   --name      the folder under scripts/replay/out/ for the results        default run-<start>-<minutes>-<trace>
+//   --name      the folder under scripts/replay/out/ for the results; the default is
+//               run-<start>-<minutes>-<trace>, with the colon of a flat trace written as a dash
 //   --tmp       where the browser's throwaway profile is made                       default the system temp folder
 //   --fill      media (padding inside the picture's stream, so the browser's buffer weighs what a real rung
 //               would) or null (padding the player's demuxer drops)                 default media
 //   --wire      how heavy a segment is, as a multiple of its rung's average bitrate (1 to 1.5); the default,
 //               1.08, is the MPEG-TS wrapping that the trace's stalled minutes are worked out with
 //   --rebuild   build the app again first (do this after the checkout changes)
+//
+// Ctrl-C (or SIGTERM) ends the replay early and still writes its results; a second one quits at once, stops
+// Chrome as far as it can and writes nothing.
 //
 // Output: scripts/replay/out/<name>/ holds health.json (the stand-in's figures of the viewing's last
 // playback-health report), samples.json (every 5 s: playhead, buffer, what the screen says), requests.json (every
@@ -23,10 +27,11 @@
 // Chrome and the build, cannot run in CI and is checked by hand (docs/engineering/home-replay.md).
 import { spawn, spawnSync } from 'node:child_process';
 import { accessSync, mkdirSync, writeFileSync } from 'node:fs';
+import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEBUG_PORT, launchChrome, sleep } from './cdp.mjs';
+import { launchChrome, sleep } from './cdp.mjs';
 import { rateAt } from './link.mjs';
 import { makeTemplate, TEMPLATE_PATH } from './make-template.mjs';
 import { startStandIn } from './standin.mjs';
@@ -144,7 +149,10 @@ export function options(argv) {
   };
 }
 
-/** The trace's kbit/s for each record minute, from the options and the record. Throws when `--start` is past it. */
+/**
+ * The trace's kbit/s for each record minute, from the options and the record. Throws when `--start` is past it, or
+ * when the run would not end within it (`--start` plus `--minutes` over its length).
+ */
 export function traceFor(opt, record) {
   const flat = /^flat:(\d+)$/.exec(opt.trace);
   let trace;
@@ -155,6 +163,9 @@ export function traceFor(opt, record) {
     trace = opt.trace === 'cautious' ? both.cautious : both.sampled;
   }
   if (opt.start >= trace.length) throw new Error(`--start must be from 0 to ${trace.length - 1}`);
+  if (opt.start + opt.minutes > trace.length) {
+    throw new Error(`--start plus --minutes must be ${trace.length} or less`);
+  }
   return trace;
 }
 
@@ -357,7 +368,8 @@ export function notePageError(errors, text) {
   if (errors.length < MAX_PAGE_ERRORS) errors.push(printable(text, 300));
 }
 
-function consoleText(args) {
+/** The text of a console call's arguments: each one's value, else its description, else nothing; joined by spaces. */
+export function consoleText(args) {
   const list = Array.isArray(args) ? args : [];
   return list.map((arg) => String(arg?.value ?? arg?.description ?? '')).join(' ');
 }
@@ -403,7 +415,7 @@ export function createStop() {
 function watchSignals(stop, held) {
   const onSignal = () => {
     if (stop.stopped) {
-      if (held.chrome) held.chrome.kill();
+      if (held.kill) held.kill();
       process.exit(130);
     }
     say('stopping: the results so far will be written (a second Ctrl-C quits at once)');
@@ -411,6 +423,20 @@ function watchSignals(stop, held) {
   };
   process.on('SIGINT', onSignal);
   process.on('SIGTERM', onSignal);
+}
+
+/**
+ * Takes `port` on 127.0.0.1 and holds it until the caller closes the server it returns, so that a second replay
+ * stops here, with an error, before it builds, makes a picture or starts a browser.
+ */
+export function claimPort(port) {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', (error) => {
+      reject(error?.code === 'EADDRINUSE' ? new Error(`port ${port} is in use: is another replay running?`) : error);
+    });
+    server.listen(port, '127.0.0.1', () => resolve(server));
+  });
 }
 
 // ---- the build, the film's picture, the Mac ---------------------------------------------------------------------
@@ -485,7 +511,8 @@ async function dismissCard(page, sample, run) {
   await page.evaluate(DISMISS).catch(() => false);
 }
 
-function progressLine(record, now) {
+/** The line printed every 30 s: the clock, the link, the playhead and what the screen says. */
+export function progressLine(record, now) {
   let text = now.pill ?? '';
   if (now.buffering) text += ` | ${now.buffering}`;
   if (now.reconnecting) text += ' | Reconnecting';
@@ -537,7 +564,8 @@ async function sendLastReport(page, standIn) {
 
 async function replay({ opt, record, standIn, stop, run, held }) {
   if (stop.stopped) return;
-  held.chrome = await launchChrome({ port: DEBUG_PORT, profileRoot: opt.tmp });
+  held.chrome = await launchChrome({ profileRoot: opt.tmp, onSpawn: (kill) => { held.kill = kill; } });
+  if (stop.stopped) return;
   const { page } = held.chrome;
   await page.send('Page.enable');
   await page.send('Runtime.enable');
@@ -566,14 +594,19 @@ async function main(argv) {
   const record = loadRecord();
   const trace = traceFor(opt, record);
   const stop = createStop();
-  const held = { chrome: null };
+  const held = { chrome: null, kill: null };
   watchSignals(stop, held);
+  const claim = await claimPort(PORT);
   ensureBuild(opt.rebuild);
-  const template = await templateFor({ path: TEMPLATE_PATH, make: () => makeTemplate({ profileRoot: opt.tmp }) });
+  const template = await templateFor({
+    path: TEMPLATE_PATH,
+    make: () => makeTemplate({ profileRoot: opt.tmp, onSpawn: (kill) => { held.kill = kill; } }),
+  });
   const outDir = join(OUT, opt.name);
   mkdirSync(outDir, { recursive: true });
   keepAwake();
   const run = { samples: [], pageErrors: [], warnings: [], cardDismissed: false };
+  await new Promise((resolve) => claim.close(resolve));
   const standIn = await startStandIn({
     port: PORT, distDir: DIST, filmPath: FILM, template, trace, startMinute: opt.start, fill: opt.fill, wire: opt.wire,
   });

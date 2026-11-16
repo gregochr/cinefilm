@@ -8,8 +8,8 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, describe, test } from 'node:test';
 import {
-  buildCommand, cleanSample, createStop, notePageError, options, pickFinal, standStillWarning, summarise,
-  templateFor, traceFor,
+  buildCommand, claimPort, cleanSample, consoleText, createStop, notePageError, options, pickFinal, progressLine,
+  standStillWarning, summarise, templateFor, traceFor,
 } from '../../replay/drive.mjs';
 import { WIRE, loadRecord, traces } from '../../replay/trace.mjs';
 
@@ -136,9 +136,21 @@ describe('traceFor', () => {
     assert.notDeepEqual(traces(record).sampled, traces(record).cautious);
   });
 
-  test('a start at the last minute of the trace is allowed, one past it is refused', () => {
+  test('a run that ends exactly at the end of the trace is allowed, one minute more is refused', () => {
     assert.equal(traces(record).sampled.length, 152);
-    assert.equal(traceFor(options(['--start', '151']), record).length, 152);
+    assert.equal(traceFor(options(['--start', '0', '--minutes', '152']), record).length, 152);
+    assert.equal(traceFor(options(['--start', '151', '--minutes', '1']), record).length, 152);
+    const message = '--start plus --minutes must be 152 or less';
+    assert.throws(() => traceFor(options(['--start', '0', '--minutes', '153']), record), { message });
+    assert.throws(() => traceFor(options(['--start', '151', '--minutes', '2']), record), { message });
+    assert.throws(() => traceFor(options(['--minutes', '999999999']), record), { message });
+    assert.equal(traceFor(options(['--minutes', '400', '--trace', 'flat:5']), record).length, 400);
+    assert.throws(() => traceFor(options(['--minutes', '401', '--trace', 'flat:5']), record), {
+      message: '--start plus --minutes must be 400 or less',
+    });
+  });
+
+  test('a start past the last minute of the trace is refused first, with its own message', () => {
     assert.throws(() => traceFor(options(['--start', '152']), record), { message: '--start must be from 0 to 151' });
     assert.throws(() => traceFor(options(['--start', '400', '--trace', 'flat:5']), record), {
       message: '--start must be from 0 to 399',
@@ -219,6 +231,14 @@ const HEADER = 'Replay of record minutes 5 to 6 (18:01:53 to 18:03:53), sampled 
   + 'segments at 1.08 of their rung\'s average bitrate';
 const TABLE_HEAD = 'minute clock     link   | replay: stalled played fetched ahead  asked(net) | 12 Nov: stalled played';
 
+describe('summarise: a minute past the end of the trace', () => {
+  test('takes the trace\'s last figure, as the stand-in does', () => {
+    const lines = run({ trace: [0, 0, 0, 0, 0, 640] });
+    assert.equal(lines[3], '   5   18:01:53   640   |            3s    360     480   20s  2 (1 cut) 480p |          12s    360');
+    assert.equal(lines[4], '   6   18:02:53   640   |            0s    240     240  140s          1 240p |           0s    480');
+  });
+});
+
 describe('summarise', () => {
   test('a two-minute run with a report: every line', () => {
     assert.deepEqual(run({ pageErrors: ['first', 'second', 'third', 'fourth'], warnings: ['w1'] }), [
@@ -242,12 +262,6 @@ describe('summarise', () => {
       '  second',
       '  third',
     ]);
-  });
-
-  test('a segment asked for before the clock started is counted, but is in no minute\'s row', () => {
-    const lines = run();
-    assert.match(lines[3], / {2}2 \(1 cut\) 480p \|/);
-    assert.match(lines[4], / {10}1 240p \|/);
   });
 
   test('without a report the rows are empty and the summary says so; no session, samples or errors give no lines', () => {
@@ -280,15 +294,15 @@ describe('summarise', () => {
   });
 
   test('a text from the page with a line break stays on one line, and what is not printable becomes ?', () => {
-    const forged = 'Auto\nWARNING: forged line\u001b[0m · café';
+    const forged = 'Auto\nWARNING: forged line\u001b[0m \u00b7 caf\u00e9';
     const lines = run({
       samples: [{ ms: 1, t: 1, ahead: 2, pill: forged }],
       pageErrors: [forged],
     });
     assert.equal(lines.length, 15, 'no extra line was made');
-    assert.equal(lines.at(-3), 'at the end: playhead 1 s, 2 s buffered, the screen says "Auto WARNING: forged line?[0m ? caf?"');
+    assert.equal(lines.at(-3), 'at the end: playhead 1 s, 2 s buffered, the screen says "Auto WARNING: forged line?[0m - caf?"');
     assert.equal(lines.at(-2), 'page errors and warnings (1), first three:');
-    assert.equal(lines.at(-1), '  Auto WARNING: forged line?[0m ? caf?');
+    assert.equal(lines.at(-1), '  Auto WARNING: forged line?[0m - caf?');
     assert.equal(lines.filter((line) => line.startsWith('WARNING')).length, 0, 'the forged text did not start a line');
   });
 
@@ -468,5 +482,79 @@ describe('templateFor', () => {
       templateFor({ path, make: () => undefined, log: () => undefined }),
       { code: 'ENOENT' },
     );
+  });
+});
+
+describe('consoleText', () => {
+  test('is each argument\'s value, else its description, else nothing, joined by spaces', () => {
+    assert.equal(consoleText([{ value: 'a' }, { value: 'b' }]), 'a b');
+    assert.equal(consoleText([{ description: 'Error: x' }]), 'Error: x');
+    assert.equal(consoleText([{ value: 'v', description: 'd' }]), 'v');
+    assert.equal(consoleText([{ value: 0 }]), '0');
+    assert.equal(consoleText([{}]), '');
+    assert.equal(consoleText([null]), '');
+  });
+
+  test('arguments that are not a list give nothing', () => {
+    assert.equal(consoleText('text'), '');
+    assert.equal(consoleText(undefined), '');
+    assert.equal(consoleText({ length: 1, 0: { value: 'x' } }), '');
+  });
+});
+
+describe('progressLine', () => {
+  const now = {
+    ms: 65000, minute: 1, kbps: 800, t: 12.3, ahead: 40, pill: 'Auto - 480p', buffering: 'Buffering', reconnecting: true,
+  };
+
+  test('says the clock, the replay second, the link, the playhead and what the screen says', () => {
+    assert.equal(
+      progressLine(RECORD, now),
+      '  17:57:53 +  65s link   800 kbit/s | playhead   12.3 ahead    40s | Auto - 480p | Buffering | Reconnecting',
+    );
+  });
+
+  test('a buffering text and Reconnecting are added only when there are some', () => {
+    assert.equal(
+      progressLine(RECORD, { ...now, buffering: null, reconnecting: false }),
+      '  17:57:53 +  65s link   800 kbit/s | playhead   12.3 ahead    40s | Auto - 480p',
+    );
+    assert.equal(
+      progressLine(RECORD, { ...now, buffering: 'Buffering', reconnecting: false }),
+      '  17:57:53 +  65s link   800 kbit/s | playhead   12.3 ahead    40s | Auto - 480p | Buffering',
+    );
+    assert.equal(
+      progressLine(RECORD, { ...now, buffering: null, reconnecting: true }),
+      '  17:57:53 +  65s link   800 kbit/s | playhead   12.3 ahead    40s | Auto - 480p | Reconnecting',
+    );
+  });
+
+  test('a missing playhead, buffer or pill is a dash or nothing, not the word undefined', () => {
+    assert.equal(
+      progressLine(RECORD, { ms: 5000, minute: 0, kbps: 3000, buffering: null, reconnecting: false }),
+      '  17:56:53 +   5s link  3000 kbit/s | playhead      - ahead     -s | ',
+    );
+  });
+});
+
+describe('claimPort', () => {
+  const held = [];
+  after(() => Promise.all(held.map((server) => new Promise((resolve) => server.close(resolve)))));
+
+  test('holds a port on 127.0.0.1, and a second claim of it is refused with a clear message', async () => {
+    const first = await claimPort(0);
+    held.push(first);
+    const { port, address } = first.address();
+    assert.equal(address, '127.0.0.1');
+    await assert.rejects(claimPort(port), { message: `port ${port} is in use: is another replay running?` });
+  });
+
+  test('a port that has been let go can be claimed again', async () => {
+    const first = await claimPort(0);
+    const { port } = first.address();
+    await new Promise((resolve) => first.close(resolve));
+    const again = await claimPort(port);
+    held.push(again);
+    assert.equal(again.address().port, port);
   });
 });

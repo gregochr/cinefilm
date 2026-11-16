@@ -9,12 +9,11 @@ import http from 'node:http';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEBUG_PORT, launchChrome } from './cdp.mjs';
+import { launchChrome } from './cdp.mjs';
 import { printable } from './text.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const TEMPLATE_PATH = join(HERE, 'out', 'template.json');
-const PAGE_PORT = 5303;
 
 // Runs in the page. Returns { codec, width, height, fps, frames: [{ key, ts, b64 }] } or { error }.
 const ENCODE = `(async () => {
@@ -147,7 +146,7 @@ export function nalTypes(buffer) {
   return types;
 }
 
-export async function makeTemplate({ profileRoot }) {
+export async function makeTemplate({ profileRoot, onSpawn }) {
   const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end('<!doctype html><title>template</title>');
@@ -156,11 +155,11 @@ export async function makeTemplate({ profileRoot }) {
   try {
     await new Promise((resolve, reject) => {
       server.once('error', reject);
-      server.listen(PAGE_PORT, '127.0.0.1', resolve);
+      server.listen(0, '127.0.0.1', resolve);
     });
-    chrome = await launchChrome({ port: DEBUG_PORT, profileRoot });
+    chrome = await launchChrome({ profileRoot, onSpawn });
     await chrome.page.send('Page.enable');
-    await chrome.page.send('Page.navigate', { url: `http://127.0.0.1:${PAGE_PORT}/` });
+    await chrome.page.send('Page.navigate', { url: `http://127.0.0.1:${server.address().port}/` });
     await new Promise((resolve) => setTimeout(resolve, 800));
     const result = await chrome.page.evaluate(ENCODE);
     if (result.error) throw new Error(`template: ${printable(result.error, 300)}`);
@@ -203,10 +202,10 @@ function writeTemplate(result) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const profileRoot = process.argv[2];
   if (!profileRoot) {
-    console.error('usage: node scripts/replay/make-template.mjs <a directory for the throwaway browser profile>');
+    console.error(printable('usage: node scripts/replay/make-template.mjs <a directory for the throwaway browser profile>', 200));
     process.exit(2);
   }
   const made = await makeTemplate({ profileRoot });
   console.log(printable(JSON.stringify(made), 2000));
-  console.log(`written: ${TEMPLATE_PATH}`);
+  console.log(printable(`written: ${TEMPLATE_PATH}`, 500));
 }

@@ -33,10 +33,10 @@ const pad = (value, width) => String(value).padStart(width);
 const sumOf = (list, pick) => list.reduce((sum, item) => sum + pick(item), 0);
 const listRungs = (rungMs) => Object.entries(rungMs ?? {}).map(([id, ms]) => `${id} ${secs(ms)}`).join(', ');
 
-/** The record minute a run began at, from the first line of its summary ("Replay of record minutes 24 to ..."). */
+/** The record minute a run began at, from its summary's line "Replay of record minutes 24 to ...", or null. */
 export function startOf(summaryText) {
   const found = /^Replay of record minutes (\d+) to /m.exec(summaryText);
-  return found ? Number(found[1]) : 0;
+  return found ? Number(found[1]) : null;
 }
 
 /** The trace's kbit/s in force in each replay minute, as the samples saw it. */
@@ -361,33 +361,51 @@ export function describe({ name, heading, samples, requests, report, record, sta
 // ---- as a program ------------------------------------------------------------------------------------------------
 
 function readJson(dir, file) {
+  let text;
   try {
-    return JSON.parse(readFileSync(join(dir, file), 'utf8'));
+    text = readFileSync(join(dir, file), 'utf8');
   } catch (error) {
     if (error?.code === 'ENOENT') throw new Error(`${file} is not in this run's folder`);
-    throw new Error(`${file} cannot be read as JSON`);
+    throw new Error(`${file} cannot be read`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${file} is not JSON`);
   }
 }
 
-/** Reads the run called `name` from scripts/replay/out and returns the lines of its analysis. */
-export function analyseRun(name) {
+function readSummary(dir) {
+  try {
+    return readFileSync(join(dir, 'summary.txt'), 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+const NO_SUMMARY = 'WARNING: no summary line in this run: it is read as starting at record minute 0';
+
+/**
+ * Reads the run called `name` from the folder `root` (default scripts/replay/out) and returns the lines of its
+ * analysis. A run whose summary has no "Replay of record minutes" line is read as starting at record minute 0, and
+ * its first line says so.
+ */
+export function analyseRun(name, root = join(HERE, 'out')) {
   if (!isRunName(name)) {
     throw new Error('usage: node scripts/replay/analyse.mjs <run name> (letters, digits, dot, dash and underscore)');
   }
-  const dir = join(HERE, 'out', name);
+  const dir = join(root, name);
   const requests = readJson(dir, 'requests.json');
   const samples = readJson(dir, 'samples.json');
-  const report = readJson(dir, 'health.json').final?.report;
+  const report = readJson(dir, 'health.json')?.final?.report;
   if (!report) throw new Error('no health report in this run: nothing to analyse');
-  if (samples.length === 0) throw new Error('no samples in this run: nothing to analyse');
-  let summary = '';
-  try {
-    summary = readFileSync(join(dir, 'summary.txt'), 'utf8');
-  } catch {
-    // Without its summary the run is still analysed, from record minute 0.
-  }
+  if (!Array.isArray(samples) || samples.length === 0) throw new Error('no samples in this run: nothing to analyse');
+  if (!Array.isArray(requests)) throw new Error('no requests in this run: nothing to analyse');
+  const summary = readSummary(dir);
   const heading = summary.split('\n').find((line) => line.startsWith('Replay')) ?? '(no summary line)';
-  return describe({ name, heading, samples, requests, report, record: loadRecord(), start: startOf(summary) });
+  const start = startOf(summary);
+  const lines = describe({ name, heading, samples, requests, report, record: loadRecord(), start: start ?? 0 });
+  return start === null ? [NO_SUMMARY, ...lines] : lines;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

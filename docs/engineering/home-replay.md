@@ -47,20 +47,26 @@ be 22 or newer; nothing else is installed.
 | Option | |
 |---|---|
 | `--start` | The record minute to begin at; 0 is 17:56:53 on 12 November (`node scripts/replay/trace.mjs` lists them). Default 0. |
-| `--minutes` | How long to run. A replay runs in real time: the whole viewing is `--start 0 --minutes 143`, two hours and 23 minutes. Default 15. |
+| `--minutes` | How long to run. A replay runs in real time: the whole viewing is `--start 0 --minutes 143`, two hours and 23 minutes. Default 15. It must end within the trace (152 minutes for the record's two traces, 400 for a flat one). |
 | `--trace` | `sampled`, `cautious`, or `flat:<kbit/s>` for a steady link, which is for checking the rig itself. Default `sampled`. |
-| `--name` | The folder under `scripts/replay/out/` for the results: letters, digits, dot, dash and underscore. |
+| `--name` | The folder under `scripts/replay/out/` for the results: 1 to 60 letters, digits, dots, dashes and underscores. Default `run-<start>-<minutes>-<trace>`, with the colon of a flat trace written as a dash. |
 | `--wire` | How heavy a segment is, as a multiple of its quality's average bitrate. Default 1.08, the weight the trace assumes; `--wire 1` is the bare average. |
 | `--fill` | `media` (the default: padding inside the picture's stream, which the browser keeps) or `null` (padding the player's demuxer throws away, so the browser's buffer stays tiny however heavy the quality). |
 | `--tmp` | Where the browser's throwaway profile is made and removed. Default: the system's temporary folder. |
 | `--rebuild` | Build the app again first. Use it after the checkout changes. |
 
-It uses ports 5301 (the stand-in) and 9334 (Chrome's debugging port), both on `127.0.0.1` only, so one replay
-runs at a time. The browser can reach no host but this machine: the app's one outside request, the operator
-lookup, fails as it would with no internet, which is why the record a replay makes says `unknown` where a train
-viewing says `train`. Ctrl-C ends a replay early and still writes its results. While it runs it keeps the Mac
-from idling to sleep; a closed lid still sleeps it, and the summary then carries a warning, because the link's
-clock is the wall clock. The first run makes the film's picture and silence with Chrome's own encoders
+The stand-in uses port 5301 on `127.0.0.1`, so one replay runs at a time; a second one stops with an error
+before it starts a browser. Chrome picks its own debugging port, also on `127.0.0.1`, and the rig reads which
+from the throwaway profile, so it can only ever talk to the Chrome it started. No host name but `localhost`
+resolves in that browser: the app's one outside request, the operator lookup, fails as it would with no
+internet, which is why the record a replay makes says `unknown` where a train viewing says `train`. (An address
+written as numbers would still be reached; the app asks for none.)
+
+Ctrl-C ends a replay early and still writes its results. In a terminal the same Ctrl-C reaches Chrome too, so
+the player's last report may not be sent: the summary then uses the last one it sent by itself, which can be
+some seconds old. A second Ctrl-C quits at once and writes nothing. While a replay runs it keeps the Mac from
+idling to sleep; a closed lid still sleeps it, and the summary then carries a warning, because the link's clock
+is the wall clock. The first run makes the film's picture and silence with Chrome's own encoders
 (`make-template.mjs`) and keeps them in `scripts/replay/out/template.json`.
 
 **After any change to the rig or to the player**, run `--minutes 1 --trace flat:3000 --rebuild` and read the
@@ -73,8 +79,11 @@ In `scripts/replay/out/<name>/`, which git ignores:
 - `summary.txt`: for each minute, the link's rate; from the replay, seconds stalled, the quality played, the
   quality being fetched and the seconds buffered (all from the player's own health report); what the stand-in
   was asked for; and beside them the 12 November record's stalled seconds and quality for the same minute.
-- `health.json`: the figures the stand-in kept of the viewing's last playback-health report.
-- `samples.json`: every five seconds, the playhead, the film buffered ahead and what the screen says.
+- `health.json`: how many playback-health reports the stand-in kept and from how many viewings, and the last
+  report of the last viewing: when it arrived, and the figures kept of it.
+- `samples.json`: every five seconds, the playhead, the film buffered ahead and what the screen says, as
+  printable ASCII (a few common signs, such as the dot between the parts of the quality pill, are written as
+  their plain equivalents; anything else outside ASCII becomes `?`).
 - `requests.json`: every answer the stand-in sent, with its kind, size and timing, and whether the player cut it
   short.
 
@@ -177,8 +186,9 @@ one and wait for an event (a byte arriving, an entry in the log), never for a fi
 40 ms to show that an answer waits for the round trip. CI runs them on Node 24. When a test is added, raise the
 number in the wrapper.
 
-What needs Chrome has no automated test: launching it and talking to it, building the app, encoding the film's
-picture, and the driver's own loop. The by-hand minute under "Running it" is their only check.
+What needs Chrome has no automated test: launching it, the socket to it, building the app, encoding the film's
+picture, and the driver's own loop. (The matching of Chrome's replies to the driver's requests is tested, with
+made-up messages.) The by-hand minute under "Running it" is their only check.
 
 ## What nobody has verified
 
