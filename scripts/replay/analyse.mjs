@@ -6,7 +6,9 @@
 //    clock, and what the stand-in delivered against the trace. A stall with film in hand, or a playhead that
 //    falls behind the clock outside a stall, means the machine was too busy and the run proves nothing.
 // 2. Gaps of over 30 s in which no segment was being fetched (the player had as much as it wanted).
-// 3. The six bad spells: the buffer going in, its lowest point, seconds stalled beside 12 November.
+// 3. The six bad spells: the buffer going in, its lowest point (the least of the five-second samples taken in it),
+//    seconds stalled beside 12 November. A spell is compared whole or not at all: one the health report does not cover
+//    from the minute before it to its end is listed with the reason it was left out.
 // 4. What the screen showed against the link, the rungs beside 12 November, the bytes fetched.
 //
 // The sums are exported functions over a run's data (what the driver wrote to scripts/replay/out/<name>/); the
@@ -186,43 +188,90 @@ function describeGap(next, previous, lastEnd, samples, link) {
 
 // ---- 3. the six bad spells ---------------------------------------------------------------------------------------
 
-/**
- * For each of the six spells the run covered completely (not the first replay minute, nor one past the last): the mean
- * link, the seconds banked going in, the lowest figure, the ms stalled now and on 12 November, and the rungs fetched.
- */
-export function spellFigures({ report, samples, record, start }) {
-  // The minutes completed: a spell counts only when the run covered every minute of it.
-  const minutesRun = Math.floor(samples[samples.length - 1].ms / 60000);
+// The report's rows by replay minute (a row is a list; its first figure is the minute).
+function rowsOf(report) {
   const minuteRows = Array.isArray(report.minutes) ? report.minutes.filter(Array.isArray) : [];
-  const rows = new Map(minuteRows.map((row) => [row[0], row]));
-  const old = rowsByMinute(record);
-  const link = linkByMinute(samples);
-  const figures = [];
-  for (const [first, last] of SPELLS) {
-    if (first - start < 1 || last - start >= minutesRun) continue;
-    figures.push(oneSpell({ first, last, rows, old, link, start }));
-  }
-  return figures;
+  return new Map(minuteRows.map((row) => [row[0], row]));
 }
 
-function oneSpell({ first, last, rows, old, link, start }) {
+// The samples taken in replay minutes `from` to `to` (the whole of each) that say how much film was in hand.
+function samplesIn(samples, from, to) {
+  return samples.filter((s) => {
+    const minute = Math.floor(s.ms / 60000);
+    return Number.isFinite(s.ahead) && minute >= from && minute <= to;
+  });
+}
+
+// Why a spell that is in the run cannot be compared whole, or null when it can. The first check that holds counts.
+function whyLeftOut({ first, last, rows, report, samples, start }) {
+  if (!isTime(report.elapsedMs)) return 'the last health report does not say how long it covers';
+  if (last - start >= Math.floor(report.elapsedMs / 60000)) {
+    return `the last health report ends ${Math.floor(report.elapsedMs / 1000)} s into the run, before the spell does`;
+  }
+  for (let m = first - 1; m <= last; m += 1) {
+    if (!rows.has(m - start)) return `the health report has no row for minute ${m}`;
+  }
+  if (samplesIn(samples, first - start, last - start).length === 0) return 'no sample was taken in it';
+  return null;
+}
+
+// Each spell that is in the run, as { first, last, why }: `why` is null when it can be compared.
+function judgeSpells({ report, samples, start }) {
+  // The minutes completed: a spell is in the run only when it began after the first minute and ended before the last.
+  const sampled = Math.floor(samples[samples.length - 1].ms / 60000);
+  const rows = rowsOf(report);
+  const judged = [];
+  for (const [first, last] of SPELLS) {
+    if (first - start < 1 || last - start >= sampled) continue;
+    judged.push({ first, last, why: whyLeftOut({ first, last, rows, report, samples, start }) });
+  }
+  return judged;
+}
+
+/**
+ * The spells of the run that are compared, in the order of the spells. A spell is in the run when it began after
+ * the run's first minute and ended before the last minute the samples completed; it is compared whole or not at all
+ * (see `spellsLeftOut`). Each is the mean link, the seconds banked going in (from the report's row for the minute
+ * before it), the lowest point (the least of the five-second samples taken in it, rounded), the ms stalled now and on
+ * 12 November, and the rungs fetched.
+ */
+export function spellFigures({ report, samples, record, start }) {
+  const rows = rowsOf(report);
+  const old = rowsByMinute(record);
+  const link = linkByMinute(samples);
+  return judgeSpells({ report, samples, start })
+    .filter((spell) => spell.why === null)
+    .map(({ first, last }) => oneSpell({ first, last, rows, old, link, samples, start }));
+}
+
+/**
+ * The spells that are in the run but are not compared, as `{ first, last, why }`, in the order of the spells. A spell
+ * not in the run is in neither this nor `spellFigures`. The reason is the first of these that holds: the last health
+ * report does not say how long it covers (`elapsedMs`); it ends before the spell does; it has no row for a minute
+ * from the one before the spell to its last; no sample was taken in the spell.
+ */
+export function spellsLeftOut({ report, samples, start }) {
+  return judgeSpells({ report, samples, start })
+    .filter((spell) => spell.why !== null)
+    .map(({ first, last, why }) => ({ first, last, why }));
+}
+
+function oneSpell({ first, last, rows, old, link, samples, start }) {
   let stalled = 0;
   let stalledThen = 0;
-  let lowest = Infinity;
   let sum = 0;
   const fetched = new Set();
   for (let m = first; m <= last; m += 1) {
     const row = rows.get(m - start);
-    if (!row) continue;
     sum += link.get(m - start) ?? 0;
     stalledThen += (old.get(m) ?? [0, 0, 0, 0, 0])[4];
     stalled += row[4];
-    lowest = Math.min(lowest, row[5]);
     fetched.add(RUNG[row[6]]);
   }
+  const lowest = Math.min(...samplesIn(samples, first - start, last - start).map((s) => s.ahead));
   return {
-    first, last, meanLink: Math.round(sum / (last - first + 1)), goingIn: rows.get(first - start - 1)?.[5], lowest,
-    stalled, stalledThen, fetched: [...fetched],
+    first, last, meanLink: Math.round(sum / (last - first + 1)), goingIn: rows.get(first - start - 1)[5],
+    lowest: Math.round(lowest), stalled, stalledThen, fetched: [...fetched],
   };
 }
 
@@ -297,14 +346,16 @@ function idleLines(gaps, start) {
   return lines;
 }
 
+function spellLine(f) {
+  if (f.why) return `  minutes ${f.first}-${f.last}: not compared: ${f.why}`;
+  return `  minutes ${f.first}-${f.last}: mean link ${f.meanLink} kbit/s, banked going in ${f.goingIn} s, `
+    + `lowest ${f.lowest} s, stalled ${secs(f.stalled)} s (12 Nov ${secs(f.stalledThen)} s), `
+    + `fetched ${f.fetched.join(', ')}`;
+}
+
+// `spells` are the compared ones and the ones left out, in the order of the spells.
 function spellLines(spells) {
-  const lines = ['', '== 3. The six bad spells =='];
-  for (const f of spells) {
-    lines.push(`  minutes ${f.first}-${f.last}: mean link ${f.meanLink} kbit/s, banked going in ${f.goingIn} s, `
-      + `lowest ${f.lowest} s, stalled ${secs(f.stalled)} s (12 Nov ${secs(f.stalledThen)} s), `
-      + `fetched ${f.fetched.join(', ')}`);
-  }
-  return lines;
+  return ['', '== 3. The six bad spells ==', ...spells.map(spellLine)];
 }
 
 function totalsLine(label, r) {
@@ -340,7 +391,9 @@ export function describe({ name, heading, samples, requests, delivered, report, 
     `${name}: ${heading}`,
     ...soundLines(soundness({ samples, delivered, start })),
     ...idleLines(idleGaps(requests, samples, link), start),
-    ...spellLines(spellFigures({ report, samples, record, start })),
+    ...spellLines([
+      ...spellFigures({ report, samples, record, start }), ...spellsLeftOut({ report, samples, start }),
+    ].sort((a, b) => a.first - b.first)),
     ...screenLines({
       screen: screenAgainstLink(samples), fetched: rungsAndBytes(requests), report, before: record.report,
     }),

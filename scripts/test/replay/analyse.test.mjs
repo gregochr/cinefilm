@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { after, describe, test } from 'node:test';
 import {
   aheadAt, analyseRun, deliveryAgainstTrace, describe as describeRun, idleGaps, linkByMinute, notPlaying,
-  playheadLag, RUNS_DIR, rungsAndBytes, runDir, samplingGaps, screenAgainstLink, soundness, spellFigures, startOf,
-  withFilmInHand,
+  playheadLag, RUNS_DIR, rungsAndBytes, runDir, samplingGaps, screenAgainstLink, soundness, spellFigures,
+  spellsLeftOut, startOf, withFilmInHand,
 } from '../../replay/analyse.mjs';
 import { loadRecord } from '../../replay/trace.mjs';
 
@@ -245,75 +245,176 @@ describe('section 2: gaps with nothing fetched', () => {
 describe('section 3: the six bad spells', () => {
   // Record minutes 5 to 7 are the first spell. 12 November's stalled ms in them: 1000, 2000, 4000.
   const record = { report: { minutes: [[5, 0, 5, 0, 1000], [6, 0, 5, 0, 2000], [7, 0, 5, 0, 4000]] } };
-  // A replay row is [replay minute, kbit/s, rung played, moved, stalled ms, seconds ahead, rung fetched].
+  // A replay row is [replay minute, kbit/s, rung played, moved, stalled ms, seconds ahead at the minute's end, rung
+  // fetched]. Rows for record minutes 4 to 7 of a run that began at record minute `start`.
   const rows = (start) => [
     [4 - start, 0, 4, 0, 0, 90, 4], [5 - start, 0, 5, 0, 500, 60, 5], [6 - start, 0, 5, 0, 700, 20, 6],
     [7 - start, 0, 5, 0, 0, 40, 5],
   ];
-  // Samples every 30 s from 1 s in to `minutes` whole minutes (and 1 s) in: that many minutes completed.
+  // A report that covers `elapsedMs` of the run.
+  const reportOf = (start, elapsedMs = 600000) => ({ elapsedMs, minutes: rows(start) });
+  // Samples every 30 s from 1 s in to `minutes` whole minutes (and 1 s) in, 30 s of film in hand in each: that many
+  // minutes completed.
   const samplesTo = (minutes) => Array.from({ length: minutes * 2 + 1 }, (_, i) => (
-    at(i * 30000 + 1000, { kbps: 100 * (Math.floor(i / 2) + 1) })
+    at(i * 30000 + 1000, { kbps: 100 * (Math.floor(i / 2) + 1), ahead: 30 })
   ));
+  const figures = (report, samples, start = 0, rec = record) => spellFigures({ report, samples, record: rec, start });
+  const leftOut = (report, samples, start = 0) => spellsLeftOut({ report, samples, start });
+  const FIRST = { first: 5, last: 7 };
+  // Samples in the order of their time, as the driver takes them.
+  const inOrder = (samples) => [...samples].sort((x, y) => x.ms - y.ms);
 
   test('a spell is described by its mean link, the bank going in, the lowest figure, the stalls now and then', () => {
-    const report = { minutes: rows(0) };
-    const [spell] = spellFigures({ report, samples: samplesTo(8), record, start: 0 });
+    const [spell] = figures(reportOf(0), samplesTo(8));
     assert.deepEqual(spell, {
-      first: 5, last: 7, meanLink: 700, goingIn: 90, lowest: 20, stalled: 1200, stalledThen: 7000,
+      first: 5, last: 7, meanLink: 700, goingIn: 90, lowest: 30, stalled: 1200, stalledThen: 7000,
       fetched: ['360p', '240p'],
     });
+    assert.deepEqual(leftOut(reportOf(0), samplesTo(8)), []);
+  });
+
+  test('the lowest point comes from the samples, not from the minute-end figures of the rows', () => {
+    const rowsAt40 = [[4, 0, 4, 0, 0, 90, 4], [5, 0, 5, 0, 0, 60, 5], [6, 0, 5, 0, 0, 40, 5], [7, 0, 5, 0, 0, 50, 5]];
+    const report = { elapsedMs: 600000, minutes: rowsAt40 };
+    const samples = inOrder([...samplesTo(8), at(6 * 60000 + 30000, { ahead: 0.4 })]);
+    assert.equal(figures(report, samples)[0].lowest, 0);
+    assert.equal(figures(report, samplesTo(8))[0].lowest, 30);
+  });
+
+  test('the lowest point is the least sample, rounded to whole seconds', () => {
+    const lowAt = (ahead) => inOrder([...samplesTo(8), at(6 * 60000 + 30000, { ahead })]);
+    assert.equal(figures(reportOf(0), lowAt(1.4))[0].lowest, 1);
+    assert.equal(figures(reportOf(0), lowAt(1.6))[0].lowest, 2);
+  });
+
+  test('a sample counts for a spell from the first millisecond of its first minute to the last of its last', () => {
+    const lowAt = (ms) => inOrder([...samplesTo(9), at(ms, { ahead: 1 })]);
+    const lowest = (ms) => figures(reportOf(0), lowAt(ms))[0].lowest;
+    assert.equal(lowest(5 * 60000 - 1), 30, 'one millisecond before the spell does not count');
+    assert.equal(lowest(5 * 60000), 1, 'its first millisecond counts');
+    assert.equal(lowest(8 * 60000 - 1), 1, 'the last millisecond of its last minute counts');
+    assert.equal(lowest(8 * 60000), 30, 'one millisecond after it does not count');
+  });
+
+  test('a sample whose film in hand is not a number is ignored for the lowest point', () => {
+    const odd = [null, NaN, '0', undefined, Infinity].map((ahead, i) => at(5 * 60000 + 1000 + i, { ahead }));
+    const samples = inOrder([...samplesTo(8), ...odd]);
+    assert.equal(figures(reportOf(0), samples)[0].lowest, 30);
+  });
+
+  test('a spell whose only samples say nothing of the film in hand is left out, with reason 4', () => {
+    const samples = [at(1000), at(5 * 60000 + 1000, { ahead: null }), at(7 * 60000, { ahead: NaN }), at(8 * 60000 + 1000)];
+    assert.deepEqual(figures(reportOf(0), samples), []);
+    assert.deepEqual(leftOut(reportOf(0), samples), [{ ...FIRST, why: 'no sample was taken in it' }]);
   });
 
   test('a spell needs the minute before it: it is left out when the run began at its first minute, in when one earlier', () => {
-    assert.deepEqual(spellFigures({ report: { minutes: rows(5) }, samples: samplesTo(4), record, start: 5 }), []);
-    const [spell] = spellFigures({ report: { minutes: rows(4) }, samples: samplesTo(5), record, start: 4 });
+    assert.deepEqual(figures(reportOf(5), samplesTo(4), 5), []);
+    assert.deepEqual(leftOut(reportOf(5), samplesTo(4), 5), []);
+    const [spell] = figures(reportOf(4), samplesTo(5), 4);
     assert.equal(spell.goingIn, 90);
     assert.equal(spell.first, 5);
   });
 
   test('a record minute with no row counts for 0 stalled seconds on 12 November, not for nothing at all', () => {
     const partial = { report: { minutes: [[5, 0, 5, 0, 1000], [6, 0, 5, 0, 2000]] } };
-    const [spell] = spellFigures({ report: { minutes: rows(0) }, samples: samplesTo(8), record: partial, start: 0 });
-    assert.equal(spell.stalledThen, 3000);
+    assert.equal(figures(reportOf(0), samplesTo(8), 0, partial)[0].stalledThen, 3000);
   });
 
   test('a minute the samples give no link figure for counts for 0 kbit/s in the mean', () => {
     // Samples in minutes 4, 6 and 7 only: minute 5 has none.
     const samples = [
-      at(4 * 60000 + 1000, { kbps: 100 }), at(6 * 60000 + 1000, { kbps: 700 }), at(7 * 60000 + 1000, { kbps: 800 }),
-      at(8 * 60000 + 1000, { kbps: 900 }),
+      at(4 * 60000 + 1000, { kbps: 100, ahead: 30 }), at(6 * 60000 + 1000, { kbps: 700, ahead: 30 }),
+      at(7 * 60000 + 1000, { kbps: 800, ahead: 30 }), at(8 * 60000 + 1000, { kbps: 900, ahead: 30 }),
     ];
-    const [spell] = spellFigures({ report: { minutes: rows(0) }, samples, record, start: 0 });
-    assert.equal(spell.meanLink, 500);
+    assert.equal(figures(reportOf(0), samples)[0].meanLink, 500);
   });
 
-  test('a spell is compared only when the run covered every minute of it: 479,999 ms is short of minutes 5 to 7', () => {
-    const report = { minutes: rows(0) };
-    const upTo = (ms) => [at(1000), at(ms)];
-    assert.deepEqual(spellFigures({ report, samples: upTo(479999), record, start: 0 }), []);
-    assert.equal(spellFigures({ report, samples: upTo(480000), record, start: 0 }).length, 1);
+  test('a spell is in the run only when the samples covered every minute of it: 479,999 ms is short of minutes 5 to 7', () => {
+    const upTo = (ms) => [at(1000, { ahead: 30 }), at(5 * 60000 + 1000, { ahead: 30 }), at(ms, { ahead: 30 })];
+    assert.deepEqual(figures(reportOf(0), upTo(479999)), []);
+    assert.deepEqual(leftOut(reportOf(0), upTo(479999)), []);
+    assert.equal(figures(reportOf(0), upTo(480000)).length, 1);
   });
 
   test('the same edge for a run that began at another record minute: minutes 5 to 7 from 4 need 240,000 ms', () => {
-    const report = { minutes: rows(4) };
-    const upTo = (ms) => [at(1000), at(ms)];
-    assert.deepEqual(spellFigures({ report, samples: upTo(239999), record, start: 4 }), []);
-    assert.equal(spellFigures({ report, samples: upTo(240000), record, start: 4 }).length, 1);
+    const upTo = (ms) => [at(1000, { ahead: 30 }), at(60000, { ahead: 30 }), at(ms, { ahead: 30 })];
+    assert.deepEqual(figures(reportOf(4), upTo(239999), 4), []);
+    assert.equal(figures(reportOf(4), upTo(240000), 4).length, 1);
   });
 
-  test('a spell is left out when the run ended before its last minute was over', () => {
-    assert.deepEqual(spellFigures({ report: { minutes: rows(0) }, samples: samplesTo(7), record, start: 0 }), []);
-    assert.equal(spellFigures({ report: { minutes: rows(0) }, samples: samplesTo(8), record, start: 0 }).length, 1);
+  test('the report must cover the spell too: 479,999 ms of it leaves minutes 5 to 7 out, 480,000 compares them', () => {
+    const short = reportOf(0, 479999);
+    assert.deepEqual(figures(short, samplesTo(8)), []);
+    assert.deepEqual(leftOut(short, samplesTo(8)), [
+      { ...FIRST, why: 'the last health report ends 479 s into the run, before the spell does' },
+    ]);
+    assert.equal(figures(reportOf(0, 480000), samplesTo(8)).length, 1);
+    assert.deepEqual(leftOut(reportOf(0, 480000), samplesTo(8)), []);
   });
 
-  test('a minute with no row is left out of the figures, and a spell with no rows at all has no lowest', () => {
-    const report = { minutes: [[4, 0, 4, 0, 0, 90, 4], [5, 0, 5, 0, 500, 60, 5], [7, 0, 5, 0, 0, 40, 5]] };
-    const [spell] = spellFigures({ report, samples: samplesTo(8), record, start: 0 });
-    assert.equal(spell.stalled, 500);
-    assert.equal(spell.stalledThen, 5000);
-    const [empty] = spellFigures({ report: { minutes: [[4, 0, 4, 0, 0, 90, 4]] }, samples: samplesTo(8), record, start: 0 });
-    assert.equal(empty.lowest, Infinity);
-    assert.equal(empty.stalled, 0);
+  test('the same edge for the report of a run that began at another record minute: 239,999 and 240,000 ms', () => {
+    assert.deepEqual(leftOut(reportOf(4, 239999), samplesTo(4), 4), [
+      { ...FIRST, why: 'the last health report ends 239 s into the run, before the spell does' },
+    ]);
+    assert.deepEqual(leftOut(reportOf(4, 240000), samplesTo(4), 4), []);
+    assert.equal(figures(reportOf(4, 240000), samplesTo(4), 4).length, 1);
+  });
+
+  test('the seconds in the reason are rounded down: 479,999 ms is 479 s', () => {
+    const [left] = leftOut(reportOf(0, 479999), samplesTo(8));
+    assert.match(left.why, / 479 s /);
+  });
+
+  test('a report that does not say how long it covers leaves the spell out, with reason 1', () => {
+    const why = 'the last health report does not say how long it covers';
+    for (const elapsedMs of [undefined, null, NaN, -1, '480000', Infinity]) {
+      const report = { ...reportOf(0), elapsedMs };
+      assert.deepEqual(leftOut(report, samplesTo(8)), [{ ...FIRST, why }], String(elapsedMs));
+      assert.deepEqual(figures(report, samplesTo(8)), [], String(elapsedMs));
+    }
+  });
+
+  test('a row missing inside the spell, or for the minute before it, leaves it out naming that record minute', () => {
+    const without = (minute) => ({ elapsedMs: 600000, minutes: rows(0).filter((row) => row[0] !== minute) });
+    const why = (minute) => `the health report has no row for minute ${minute}`;
+    for (const minute of [4, 5, 6, 7]) {
+      assert.deepEqual(leftOut(without(minute), samplesTo(8)), [{ ...FIRST, why: why(minute) }], String(minute));
+      assert.deepEqual(figures(without(minute), samplesTo(8)), [], String(minute));
+    }
+  });
+
+  test('a row missing is named by its record minute for a run that began at another one', () => {
+    const report = { elapsedMs: 600000, minutes: rows(4).filter((row) => row[0] !== 1) };
+    assert.deepEqual(leftOut(report, samplesTo(4), 4), [{ ...FIRST, why: 'the health report has no row for minute 5' }]);
+  });
+
+  test('the first row missing is the one named', () => {
+    const report = { elapsedMs: 600000, minutes: rows(0).filter((row) => row[0] !== 4 && row[0] !== 6) };
+    assert.equal(leftOut(report, samplesTo(8))[0].why, 'the health report has no row for minute 4');
+  });
+
+  test('a spell with no sample in its minutes is left out, with reason 4', () => {
+    const samples = [at(1000, { ahead: 30 }), at(4 * 60000 + 1000, { ahead: 30 }), at(8 * 60000 + 1000, { ahead: 30 })];
+    assert.deepEqual(leftOut(reportOf(0), samples), [{ ...FIRST, why: 'no sample was taken in it' }]);
+    assert.deepEqual(figures(reportOf(0), samples), []);
+  });
+
+  test('the reasons are checked in order: 1 before 2 and 3, 2 before 3, 3 before 4', () => {
+    const noRow = rows(0).filter((row) => row[0] !== 6);
+    const noSamples = [at(1000, { ahead: 30 }), at(8 * 60000 + 1000, { ahead: 30 })];
+    const why = (report, samples) => leftOut(report, samples)[0].why;
+    assert.match(why({ minutes: noRow }, samplesTo(8)), /does not say how long it covers/);
+    assert.match(why({ elapsedMs: 100000, minutes: noRow }, samplesTo(8)), /ends 100 s into the run/);
+    assert.match(why({ elapsedMs: 600000, minutes: noRow }, noSamples), /no row for minute 6/);
+    assert.match(why({ elapsedMs: 600000, minutes: rows(0) }, noSamples), /no sample was taken in it/);
+    assert.match(why({ minutes: rows(0) }, noSamples), /does not say how long it covers/);
+  });
+
+  test('a spell the run did not complete is neither compared nor left out', () => {
+    assert.deepEqual(figures(reportOf(0), samplesTo(7)), []);
+    assert.deepEqual(leftOut(reportOf(0), samplesTo(7)), []);
+    assert.equal(figures(reportOf(0), samplesTo(8)).length, 1);
   });
 });
 
@@ -368,7 +469,7 @@ describe('describe: the lines of an analysis', () => {
   };
   const report = {
     stallCount: 2, stallMs: 5000, longestStallMs: 3500, watchedMs: 470000, stepsDown: 1, stepsUp: 1, timeouts: 0,
-    rungMs: { '480p': 400000, '240p': 70000 },
+    elapsedMs: 480000, rungMs: { '480p': 400000, '240p': 70000 },
     minutes: [[4, 0, 4, 0, 0, 90, 4], [5, 0, 5, 0, 500, 60, 5], [6, 0, 5, 0, 700, 20, 6], [7, 0, 5, 0, 0, 40, 5]],
   };
   const samples = [];
@@ -404,7 +505,7 @@ describe('describe: the lines of an analysis', () => {
       '  in all: 69 s',
       '',
       '== 3. The six bad spells ==',
-      '  minutes 5-7: mean link 1500 kbit/s, banked going in 90 s, lowest 20 s, stalled 1 s (12 Nov 7 s), fetched 360p, 240p',
+      '  minutes 5-7: mean link 1500 kbit/s, banked going in 90 s, lowest 30 s, stalled 1 s (12 Nov 7 s), fetched 360p, 240p',
       '',
       '== 4. Screen, rungs and bytes ==',
       '  240p on screen 85 s, 0 s of it with the link at 2 Mbit/s or more; 360p on screen with the link at 2 Mbit/s or more: 0 s',
@@ -415,6 +516,36 @@ describe('describe: the lines of an analysis', () => {
       '          seconds on each rung: 480p 1800, 360p 4500',
       '  fetched: 480p 1 MB, 240p 0 MB; 2 segments, 1 cut short by the player (0.3 MB thrown away)',
     ]);
+  });
+});
+
+describe('describe: section 3 with a spell that is compared and one that is left out', () => {
+  const record = {
+    report: {
+      stallCount: 1, stallMs: 1000, longestStallMs: 1000, watchedMs: 1000, stepsDown: 0, stepsUp: 0, timeouts: 0,
+      rungMs: {}, minutes: [[5, 0, 5, 0, 1000], [6, 0, 5, 0, 2000], [7, 0, 5, 0, 4000]],
+    },
+  };
+  // Samples every 5 s to 25 minutes, 30 s of film in hand and a link of 1,500 kbit/s; the report covers them all but
+  // has rows only for record minutes 4 to 7, so the spell at minutes 12 to 23 has none for minute 11.
+  const samples = Array.from({ length: 300 }, (_, i) => ({
+    ms: (i + 1) * 5000, t: i, ahead: 30, kbps: 1500, readyState: 4, paused: false, buffering: null,
+  }));
+  const report = {
+    stallCount: 0, stallMs: 0, longestStallMs: 0, watchedMs: 0, stepsDown: 0, stepsUp: 0, timeouts: 0, rungMs: {},
+    elapsedMs: 1500000,
+    minutes: [[4, 0, 4, 0, 0, 90, 4], [5, 0, 5, 0, 500, 60, 5], [6, 0, 5, 0, 700, 20, 6], [7, 0, 5, 0, 0, 40, 5]],
+  };
+
+  test('each spell in the run has one line, in the order of the spells, the left-out one as specified', () => {
+    const lines = describeRun({ name: 'two', heading: 'h', samples, requests: [], delivered: [], report, record, start: 0 });
+    const at3 = lines.indexOf('== 3. The six bad spells ==');
+    assert.deepEqual(lines.slice(at3, at3 + 3), [
+      '== 3. The six bad spells ==',
+      '  minutes 5-7: mean link 1500 kbit/s, banked going in 90 s, lowest 30 s, stalled 1 s (12 Nov 7 s), fetched 360p, 240p',
+      '  minutes 12-23: not compared: the health report has no row for minute 11',
+    ]);
+    assert.equal(lines[at3 + 3], '', 'no spell beyond the two that are in the run');
   });
 });
 

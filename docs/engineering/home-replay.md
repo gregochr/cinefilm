@@ -111,10 +111,18 @@ film for the wrong reason. A run is sound when the five-second samples have no l
 in hand, the playhead kept the clock outside those pauses, and what the stand-in let through in each minute,
 which it counts itself, matches the trace. Only whole minutes are compared, so a run stopped before its first
 minute is up compares nothing, and that line reads `delivered 0 MB of the 0 MB the trace allowed`. After that it
-lists the stretches when nothing was being fetched (a
-segment the player cut short counts as being fetched until it was cut), the buffer going into each of the six
-bad spells and its lowest point in each, for the spells the run covered from their first minute to the end of
-their last, what the screen showed against the link, and the time at each quality beside 12 November.
+lists the stretches when nothing was being fetched (a segment the player cut short counts as being fetched until
+it was cut), the buffer going into each of the six bad spells and its lowest point in each (the least of the
+five-second samples taken in the spell), what the screen showed against the link, and the time at each quality
+beside 12 November.
+
+A spell is compared whole or not at all. The run must cover it from the minute before it to the end of its last
+minute, by the samples and by the player's last health report, which is where its stalled seconds come from. A
+spell the samples cover is named and left out, with the reason, when that report stops short of its end or has
+no row for one of those minutes, or when no sample was taken in it. Two things follow. A run that was stopped has only
+the last report the player sent while playing, which can be a minute old. And a finished run's last report ends
+about a tenth of a second short of the run's last minute, so to compare a spell, run from the minute before it to
+the minute after it.
 
 It reads which record minute the run started at from the first line of the run's `summary.txt`; when that line
 is missing it says so in a warning and reads the run as starting at minute 0.
@@ -193,6 +201,9 @@ in what it keeps; the ids themselves go nowhere.
   matter. Every quality carries the same small picture, whatever height its playlist declares.
 - **The ladder and the playlists are copies.** They were taken from `Ladder.java`, `Rung.java`, `StartRung.java`
   and `PlaylistWriter.java` on 2026-11-15, and nothing compares them: change them here when those change.
+- **The player's minutes are not quite the replay's.** The player's clock starts when its screen opens, about a
+  fifth of a second after the replay's, so a minute of its health report and the same minute of the trace are
+  not exactly the same sixty seconds.
 - **A replay is compared with the real day, not with a replay of the old rules.** Until the player as it was on
   12 November has been replayed and stalls for about 33 minutes, the rig's own error is not known.
 

@@ -215,6 +215,14 @@ minute that a fast one followed), and notes when the player cut an answer short 
 counted as time with nothing being fetched). And a bad spell is compared with the day only when the run covered
 all of it. The stand-in, merged in phase 1, changed for the first two.
 
+Its second review, of that fix, found two more in the analysis of the bad spells, both about where a figure comes
+from. A spell's lowest buffer was the least of the health report's minute rows, and a row holds its minute's last
+reading, so a buffer that emptied and recovered inside a minute showed as never having emptied: it is now the
+least of the driver's five-second samples in the spell. And a spell was taken as covered once the samples reached
+its end, though the last health report, where its stalled seconds come from, can stop up to a minute earlier in
+a run that was stopped: a spell now needs that report to reach its end too and to have a row for each of its
+minutes. A spell is compared whole or not at all, and one that is left out is named with the reason.
+
 ## What nobody will have verified when both are merged
 
 - The rig on any machine but the owner's Mac, or with any browser but its installed Chrome.
