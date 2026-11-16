@@ -1096,25 +1096,44 @@ describe('the link', () => {
   });
 
   test('an answer the player cuts has a time it was cut at, from the start of the request, and no end', async () => {
-    const standIn = await start({ trace: [800] });
+    // A round trip of 150 ms, so that the time of the first byte and the start of the request are far apart.
+    const standIn = await start({ trace: [800], rttMs: 150 });
     const { sessionId } = await newSession(standIn, { quality: '360p' });
     standIn.startClock();
     const asked = performance.now();
     const seen = open(standIn.port, { path: `/api/sessions/${sessionId}/360p/seg-0.ts` });
-    // 30,000 bytes at 100,000 a second is about 0.3 s in; the 375,812-byte segment is nowhere near finished.
+    // 5,000 bytes may be sent with the first byte, the other 25,000 at 100,000 a second: at least 250 ms later. The
+    // 375,812-byte segment is nowhere near finished.
     await waitFor(() => seen.bytes >= 30000, 'well past the first bytes');
     seen.req.destroy();
     const entry = entryOf(standIn, 'segment');
     await waitFor(() => entry.aborted, 'the log to say aborted');
     const now = Math.round(performance.now() - asked);
     const figures = `cut at ${entry.cutMs}, first byte at ${entry.firstByteMs}, ${now} ms since it was asked for`;
+    assert.ok(entry.firstByteMs >= 140, `the first byte did not wait for the round trip: ${figures}`);
     assert.equal(typeof entry.cutMs, 'number', figures);
     assert.ok(Number.isInteger(entry.cutMs), figures);
     // Counted from the start of the request: it cannot be later than the time that has passed since it was asked for.
     assert.ok(entry.cutMs <= now + 1, `not from the start of the request: ${figures}`);
-    // And it is the time of the cut, not of the first byte: 30,000 bytes take about 300 ms after the first byte.
+    // And it is the time of the cut, not of the first byte: at least 250 ms after it (see above).
     assert.ok(entry.cutMs >= entry.firstByteMs + 200, `not the time of the cut: ${figures}`);
     assert.equal(entry.doneMs, null);
+  });
+
+  test('bytes sent after the replay clock has passed into a later minute are counted in that minute', async (t) => {
+    // Only Date is mocked: it is what the replay clock reads. The link's own timer reads performance.now().
+    // No waitFor in here: its deadline reads Date.now(), which would never pass, and a failure would hang.
+    t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+    const standIn = await start();
+    standIn.startClock();
+    await request(standIn.port, { path: '/api/films/1' });
+    t.mock.timers.setTime(Date.now() + 120_000); // two minutes on, by the clock the server reads
+    await request(standIn.port, { path: '/api/session' });
+    const [first, second] = standIn.requests;
+    assert.ok(first.sent > 0 && second.sent > 0, `sent ${first.sent} and ${second.sent}`);
+    assert.ok(second.ms >= 120000, `the second answer was asked for at ${second.ms} ms`);
+    assert.equal(second.minute - first.minute, 2);
+    assert.deepEqual(standIn.delivered, [first.sent, 0, second.sent]);
   });
 
   test('the bytes the link let through are counted by replay minute: exactly what the answers sent', async () => {
