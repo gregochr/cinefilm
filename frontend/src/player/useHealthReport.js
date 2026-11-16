@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { healthApi } from '../api/resources.js';
 import { createHealth } from './health.js';
 
@@ -119,7 +119,9 @@ function create(args) {
 
 /**
  * Keeps one health record per viewing: a random id, the counter, and the sends (`PUT /api/playback-health/{id}`).
- * Returns one stable object of the counter's inputs, none of which can throw. Recording never sets state.
+ * Returns one object of the counter's inputs, none of which can throw; it stays the same until `newViewing()` (Play
+ * again after Admin stopped the playback) ends this record and starts another: a new id and a new counter whose clock
+ * begins now. Recording never sets state, except through `newViewing()`.
  */
 export function useHealthReport({
   editionId,
@@ -129,8 +131,18 @@ export function useHealthReport({
   makeId = newPlaybackId,
 }) {
   const sendNowRef = useRef(null);
-  const [viewing] = useState(() => create({ editionId, openedAt, now, makeId, sendNowRef }));
-  const { api } = viewing;
+  const [viewing, setViewing] = useState(() =>
+    create({ editionId, openedAt, now, makeId, sendNowRef }),
+  );
+  const latest = useRef({ editionId, now, makeId });
+  latest.current = { editionId, now, makeId };
+  const newViewing = useCallback(() => {
+    const { editionId: edition, now: clock, makeId: mint } = latest.current;
+    setViewing(
+      create({ editionId: edition, openedAt: clock(), now: clock, makeId: mint, sendNowRef }),
+    );
+  }, []);
+  const api = useMemo(() => ({ ...viewing.api, newViewing }), [viewing, newViewing]);
 
   useEffect(() => {
     api.quality(quality);

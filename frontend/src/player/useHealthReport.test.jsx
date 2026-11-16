@@ -1,5 +1,5 @@
 import { StrictMode } from 'react';
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   REPORT_INTERVAL_MS,
@@ -61,6 +61,52 @@ describe('the viewing id', () => {
     const { result } = mount({ makeId: () => null });
     expect(result.current.id).toBeNull();
     expect(() => result.current.playing()).not.toThrow();
+  });
+});
+
+describe('newViewing', () => {
+  const NEXT = '1b9ab1a4-6d5e-4f3c-8a21-3c1f2d4e5a61';
+
+  it('ends the record and starts another under a new id: the new first frame is sent to it', async () => {
+    const fetchMock = stubFetch();
+    const ids = [ID, NEXT];
+    const { result } = mount({ makeId: () => ids.shift() });
+    expect(result.current.id).toBe(ID);
+    await act(async () => {
+      result.current.playing();
+      await advance(100);
+    });
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([URL]);
+
+    act(() => result.current.newViewing());
+
+    expect(result.current.id).toBe(NEXT);
+    await act(async () => {
+      result.current.playing();
+      await advance(100);
+    });
+    const urls = fetchMock.mock.calls.map(([url]) => url);
+    expect(urls).toContain(`/api/playback-health/${NEXT}`);
+    // The old record may send its last report as it ends, but nothing after the new viewing began goes to it.
+    expect(urls.at(-1)).toBe(`/api/playback-health/${NEXT}`);
+  });
+
+  it('starts the new counter at zero, with the quality it was given', async () => {
+    const fetchMock = stubFetch();
+    const ids = [ID, NEXT];
+    const { result } = mount({ makeId: () => ids.shift(), quality: '720p' });
+    await act(async () => {
+      result.current.playing();
+      await advance(100);
+    });
+    act(() => result.current.newViewing());
+    await act(async () => {
+      result.current.playing();
+      await advance(100);
+    });
+    const last = bodies(fetchMock).at(-1);
+    expect(last.quality).toBe('720p');
+    expect(last.seq).toBe(1);
   });
 });
 
@@ -516,6 +562,7 @@ describe('the object it returns', () => {
       'fetching',
       'id',
       'networkError',
+      'newViewing',
       'paused',
       'play',
       'playRefused',

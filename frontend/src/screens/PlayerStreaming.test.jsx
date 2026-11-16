@@ -617,8 +617,7 @@ describe('a playback Admin stopped (410)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
     await instances(2);
     expect(log.posted[2].startMs).toBe(1000000);
-    const next = await screen.findByTestId('player-video');
-    await moveTo(next, 1001);
+    await moveTo(video, 1001);
     expect(screen.getByRole('slider', { name: 'Seek' })).toHaveAttribute(
       'aria-valuetext',
       '16 minutes 41 seconds',
@@ -676,33 +675,7 @@ describe('a playback Admin stopped (410)', () => {
     );
   });
 
-  it('with the film unreadable, Play again still mounts with the choices carried from the old viewing', async () => {
-    const srv = serve();
-    let reads = 0;
-    installFetch((method, url, init) => {
-      if (url === '/api/films/1' && (reads += 1) > 1) return respond({ error: 'down' }, 500);
-      return srv.route(method, url, init);
-    });
-    renderApp('/films/1/play?edition=11');
-    await screen.findByTestId('player-video');
-    await instances(1);
-    await userEvent.click(screen.getByRole('button', { name: 'Quality' }));
-    await userEvent.click(
-      within(screen.getByRole('menu', { name: 'Quality' })).getByRole('menuitemradio', {
-        name: /360p/,
-      }),
-    );
-    await instances(2);
-    await hlsEvent(() =>
-      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
-    );
-    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
-    await vi.waitFor(() => expect(srv.log.posted).toHaveLength(3));
-    expect(srv.log.posted[2].quality).toBe('360p');
-    expect(reads).toBe(2);
-  });
-
-  it('keeps the volume and mute through Play again, on the new video and in the control', async () => {
+  it('keeps the volume and mute through Play again, on the video and in the control', async () => {
     const { video, hls } = await open();
     await landResume(video);
     fireEvent.change(screen.getByRole('slider', { name: 'Volume' }), { target: { value: '0.4' } });
@@ -713,17 +686,15 @@ describe('a playback Admin stopped (410)', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
     await instances(2);
-    const next = await screen.findByTestId('player-video');
-    expect(next).not.toBe(video);
-    expect(next.volume).toBeCloseTo(0.4);
-    expect(next.muted).toBe(true);
+    expect(video.volume).toBeCloseTo(0.4);
+    expect(video.muted).toBe(true);
     expect(screen.getByRole('button', { name: 'Unmute' })).toBeInTheDocument();
     expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('0');
     await userEvent.click(screen.getByRole('button', { name: 'Unmute' }));
     expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('0.4');
   });
 
-  it('lets the old viewing’s progress write land before the new viewing starts, so writes stay in order', async () => {
+  it('keeps progress writes in order across Play again: the new viewing’s write waits for the old one', async () => {
     const srv = serve();
     let release;
     const gate = new Promise((resolve) => {
@@ -749,18 +720,62 @@ describe('a playback Admin stopped (410)', () => {
     await hlsEvent(() =>
       FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
     );
+    // Nothing waits for the old write: the new viewing starts at once.
     await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
-    // The old write is still in flight: no new viewing yet, and nothing else was written.
-    expect(FakeHls.instances).toHaveLength(1);
+    await instances(2);
+    await moveTo(video, 1001);
+    await hlsEvent(() => video.play());
+    await hlsEvent(() => video.pause());
+    // The new write is queued behind the old one, which is still in flight.
     expect(srv.log.progress).toEqual([1000000]);
     await hlsEvent(() => release());
-    await instances(2);
-    const next = await screen.findByTestId('player-video');
-    await landResume(next);
-    await moveTo(next, 1001);
-    await hlsEvent(() => next.play());
-    await hlsEvent(() => next.pause());
     await vi.waitFor(() => expect(srv.log.progress).toEqual([1000000, 1001000]));
+  });
+
+  it('can be stopped again after Play again, and plays again again', async () => {
+    const { log, video } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    await hlsEvent(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await instances(2);
+    expect(stoppedCard()).not.toBeInTheDocument();
+    await moveTo(video, 1001);
+    await hlsEvent(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    expect(stoppedCard()).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await instances(3);
+    await vi.waitFor(() => expect(log.posted).toHaveLength(3));
+    expect(log.posted[2].startMs).toBe(1001000);
+    expect(new Set(log.playbackIds).size).toBe(3);
+  });
+
+  it('two quick presses of Play again make one new session', async () => {
+    const { log, video } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    await hlsEvent(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    await userEvent.dblClick(screen.getByRole('button', { name: 'Play again' }));
+    await instances(2);
+    expect(log.posted).toHaveLength(2);
+  });
+
+  it('keeps the same player and video through Play again, so fullscreen and the rest stay', async () => {
+    const { video } = await open();
+    const player = screen.getByRole('region', { name: 'Video player' });
+    await hlsEvent(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await instances(2);
+    expect(screen.getByRole('region', { name: 'Video player' })).toBe(player);
+    expect(screen.getByTestId('player-video')).toBe(video);
   });
 
   it('a stop before anything played (position 0) plays again from the film’s resume point', async () => {
@@ -1062,6 +1077,7 @@ describe('iPhone Safari: native HLS', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
     await vi.waitFor(() => expect(log.posted).toHaveLength(2));
     expect(log.posted[1].startMs).toBe(1000000);
+    await vi.waitFor(() => expect(video).toHaveAttribute('src', '/api/sessions/s2/master.m3u8'));
   });
 
   it('makes a new session when the reload finds the old one gone', async () => {

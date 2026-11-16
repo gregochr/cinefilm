@@ -401,6 +401,19 @@ export function useStream({
 
   const restart = useCallback(() => setGeneration((g) => g + 1), []);
 
+  // Play again after a stop: a new session from `atMs`, as a fresh start that plays. Leaves 'stopped' at once.
+  const resume = useCallback(
+    (atMs) => {
+      if (atMs > 0) pendingSeekRef.current = atMs;
+      stoppedAtRef.current = null;
+      recoveriesRef.current = [];
+      resumeRef.current = { play: true, held: true };
+      setStream({ mode: 'loading', rung: null, renditions: [] });
+      setGeneration((g) => g + 1);
+    },
+    [pendingSeekRef],
+  );
+
   return {
     mode: stream.mode,
     rung: stream.rung,
@@ -411,5 +424,6 @@ export function useStream({
     stoppedAtRef,
     takePlayAfterLoad,
     restart,
+    resume,
   };
 }

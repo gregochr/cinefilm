@@ -226,6 +226,24 @@ describe('the question', () => {
     });
   });
 
+  it('is not asked again after Not now once Admin stopped the playback and the viewer plays again, and the new record knows the network', async () => {
+    const { video, fetchMock } = await open({ film: heat({ direct: false }) });
+    await vi.waitFor(() => expect(FakeHls.instances).toHaveLength(1));
+    await startFilm(video);
+    await answerLookup(RAIL);
+    await userEvent.click(await screen.findByRole('button', { name: 'Not now' }));
+    await inAct(() =>
+      FakeHls.last.error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await vi.waitFor(() => expect(FakeHls.instances).toHaveLength(2));
+
+    noCard();
+    expect(player()).toBeInTheDocument();
+    await leave();
+    expect(lastReport(fetchMock)).toMatchObject({ operator: RAIL, latencyMs: 48 });
+  });
+
   it('Not now closes it, remembers nothing and returns focus to the player', async () => {
     const { video, fetchMock } = await open();
     await startFilm(video);

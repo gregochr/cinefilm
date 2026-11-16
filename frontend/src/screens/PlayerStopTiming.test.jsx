@@ -34,10 +34,10 @@ afterEach(() => {
 });
 
 /**
- * Play again after Admin stopped the playback mounts a new viewing from the film read again, so the subtitle timing the
- * server holds is the timing the new viewing works from (Later ×2, stop, Play again, Earlier sends +250).
+ * Play again after Admin stopped the playback keeps the same player, so the subtitle timing changed in it stays
+ * (Later ×2, stop, Play again, Earlier sends +250).
  */
-function serve({ filmFailsAfterFirst = false } = {}) {
+function serve() {
   const film = structuredClone(fixtures.heat);
   film.fullNeed = 'NEEDED';
   film.preferences.subtitle = 'full';
@@ -51,7 +51,6 @@ function serve({ filmFailsAfterFirst = false } = {}) {
   installFetch((method, url, init) => {
     if (url === '/api/films/1') {
       log.filmReads += 1;
-      if (filmFailsAfterFirst && log.filmReads > 1) return respond({ error: 'down' }, 500);
       return respond(film);
     }
     if (method === 'POST' && url === '/api/editions/11/sessions') {
@@ -116,36 +115,15 @@ async function laterTwiceThenStop(log) {
 }
 
 describe('Play again and the subtitle timing', () => {
-  it('works from the timing the server holds: Earlier sends +250 and Reset is enabled', async () => {
+  it('works from the timing the player already holds: Earlier sends +250 and Reset is enabled', async () => {
     const log = serve();
     await laterTwiceThenStop(log);
     await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
     await vi.waitFor(() => expect(FakeHls.instances).toHaveLength(2));
-    expect(log.filmReads).toBe(2);
-    await openPanel();
+    expect(log.filmReads).toBe(1); // nothing is read again: the same player goes on
+    // The panel stays open across the stop: nothing was remounted.
     expect(reset()).not.toHaveAttribute('aria-disabled');
     await userEvent.click(earlier());
     await vi.waitFor(() => expect(log.offsets).toEqual([250, 500, 250]));
-  });
-
-  it('with the film unreadable, mounts anyway and works from the timing this page saved', async () => {
-    const log = serve({ filmFailsAfterFirst: true });
-    await laterTwiceThenStop(log);
-    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
-    await vi.waitFor(() => expect(FakeHls.instances).toHaveLength(2));
-    await openPanel();
-    expect(reset()).not.toHaveAttribute('aria-disabled');
-    await userEvent.click(earlier());
-    await vi.waitFor(() => expect(log.offsets).toEqual([250, 500, 250]));
-  });
-
-  it('reads the film once for two quick presses of Play again', async () => {
-    const log = serve();
-    await laterTwiceThenStop(log);
-    const again = screen.getByRole('button', { name: 'Play again' });
-    await userEvent.dblClick(again);
-    await vi.waitFor(() => expect(FakeHls.instances).toHaveLength(2));
-    expect(log.filmReads).toBe(2); // the page's own read and one for Play again
-    expect(log.posted).toBe(2); // the first viewing's session and one for the new viewing
   });
 });
