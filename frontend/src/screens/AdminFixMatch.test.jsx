@@ -237,19 +237,54 @@ describe('Admin: the Fix match dialog', () => {
     expect(applies).toBe(1);
   });
 
-  it('fades out after a match is applied when motion is allowed', async () => {
+  it('during the fade after an apply it is still on screen, sends nothing more and reads the lists once', async () => {
     vi.stubGlobal('matchMedia', () => ({ matches: false }));
-    installFetch();
+    let attentionCalls = 0;
+    let applies = 0;
+    const fetchMock = installFetch((m, url) => {
+      if (url === '/api/admin/attention') attentionCalls += 1;
+      if (isApply(m, url)) {
+        applies += 1;
+        return respond({ filmId: 31, joined: false });
+      }
+      return null;
+    });
     const dialog = await openPanel();
     await userEvent.click((await within(dialog).findAllByRole('radio'))[0]);
+    const before = attentionCalls;
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Use this match' }));
-    // Esc during the fade changes nothing: it is already closing.
+    // The apply has answered, the dialog is still fading: a second click and Esc change nothing.
+    await waitFor(() => expect(applies).toBe(1));
+    expect(screen.getByRole('dialog', { name: 'Fix match' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Use this match' })).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Use this match' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Search' }));
     await userEvent.keyboard('{Escape}');
 
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument(),
     );
+    await waitFor(() => expect(attentionCalls).toBe(before + 1));
+    expect(applies).toBe(1);
+    expect(fetchMock.mock.calls.filter((c) => c[0].includes('/match?'))).toHaveLength(1);
+  });
+
+  it('Esc with motion on fades out and then focus is back on "Find the film…"', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    installFetch();
+    renderApp('/admin');
+    const opener = (await screen.findAllByRole('button', { name: 'Find the film…' }))[0];
+    await userEvent.click(opener);
+    await screen.findByRole('dialog', { name: 'Fix match' });
+
+    await userEvent.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Fix match' })).toBeInTheDocument();
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument(),
+    );
+    expect(opener).toHaveFocus();
   });
 
   it('Cancel while an apply is running closes it, and the apply still refreshes the lists', async () => {
@@ -295,9 +330,34 @@ describe('Admin: the Fix match dialog', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     await act(async () => release(respond({ filmId: 31, joined: false })));
 
-    await waitFor(() => expect(attentionCalls).toBeGreaterThan(before));
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(attentionCalls).toBe(before + 1));
+  });
+
+  it('an apply that lands after Cancel and the row going leaves focus on the section heading', async () => {
+    let release;
+    const slow = new Promise((resolve) => {
+      release = resolve;
+    });
+    let applied = false;
+    installFetch((m, url) => {
+      if (url === '/api/admin/attention' && applied) {
+        return respond({ items: fixtures.adminAttention.items.slice(1) });
+      }
+      return isApply(m, url) ? slow : null;
+    });
+    const dialog = await openPanel();
+    await userEvent.click((await within(dialog).findAllByRole('radio'))[0]);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Use this match' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    applied = true;
+
+    await act(async () => release(respond({ filmId: 31, joined: false })));
+
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1, name: 'To do' })).toHaveFocus(),
     );
   });
 });

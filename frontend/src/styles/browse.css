@@ -933,13 +933,6 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.fixmatch {
-  width: 720px;
-}
-.fixmatch .ee__eyebrow {
-  text-transform: none;
-  letter-spacing: 0;
-}
 .fixmatch__form {
   display: flex;
   flex-wrap: wrap;

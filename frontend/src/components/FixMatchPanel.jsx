@@ -7,6 +7,26 @@ import { Button } from './Button.jsx';
 import { SkeletonBlock } from './Skeleton.jsx';
 import { useDialog } from './useDialog.js';
 
+function Problem({ children }) {
+  return (
+    <div role="alert" className="ee__banner">
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        aria-hidden="true"
+      >
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v6M12 16.5v.5" />
+      </svg>
+      <span>{children}</span>
+    </div>
+  );
+}
+
 function Results({ search, picked, onPick }) {
   if (search.status === 'loading') {
     return (
@@ -16,11 +36,7 @@ function Results({ search, picked, onPick }) {
     );
   }
   if (search.status === 'error') {
-    return (
-      <p className="admin__warning" role="alert">
-        {search.problem}
-      </p>
-    );
+    return <Problem>{search.problem}</Problem>;
   }
   if (search.results.length === 0) {
     return <p className="admin__text">TMDB has nothing for that. Try another title or year.</p>;
@@ -90,6 +106,13 @@ export default function FixMatchPanel({ item, opener, onApplied, onCancel }) {
     close(() => onApplied(result, false));
   });
   const { search } = fix;
+  // Nothing new starts once the dialog is on its way out (the fade leaves the buttons on screen for a moment).
+  const apply = () => {
+    if (!dismissed.current) fix.apply();
+  };
+  const submit = () => {
+    if (!dismissed.current) fix.submit();
+  };
 
   useEffect(() => {
     searchRef.current?.focus();
@@ -135,7 +158,7 @@ export default function FixMatchPanel({ item, opener, onApplied, onCancel }) {
               className="fixmatch__form"
               onSubmit={(event) => {
                 event.preventDefault();
-                fix.submit();
+                submit();
               }}
             >
               <label className="fixmatch__field fixmatch__field--query">
@@ -159,28 +182,23 @@ export default function FixMatchPanel({ item, opener, onApplied, onCancel }) {
                   onChange={(event) => fix.setYear(event.target.value)}
                 />
               </label>
-              <Button type="submit" disabled={search.status === 'loading'}>
+              <Button type="submit" disabled={search.status === 'loading' || closing}>
                 Search
               </Button>
             </form>
             <Results search={search} picked={fix.picked} onPick={fix.setPicked} />
-            {fix.applyProblem ? (
-              <p className="admin__warning" role="alert">
-                {fix.applyProblem}
-              </p>
-            ) : null}
+            {fix.applyProblem ? <Problem>{fix.applyProblem}</Problem> : null}
           </div>
         </div>
         <footer className="ee__footer">
-          <span className="ee__foot-note" />
           <div className="ee__foot-buttons">
             <Button className="ee__cancel" onClick={dismiss}>
               Cancel
             </Button>
             <Button
               variant="primary"
-              disabled={fix.picked == null || fix.applying}
-              onClick={fix.apply}
+              disabled={fix.picked == null || fix.applying || closing}
+              onClick={apply}
             >
               {fix.applying ? 'Applying…' : 'Use this match'}
             </Button>

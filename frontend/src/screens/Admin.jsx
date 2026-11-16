@@ -56,10 +56,9 @@ function AdminShell() {
 
   // The dialog hands focus back to its opener itself (useDialog) when it unmounts, if the opener is still there.
   const applied = (result, stale) => {
-    if (!stale) {
-      shell.closeFixMatch();
-      shell.armFocusFallback();
-    }
+    if (!stale) shell.closeFixMatch();
+    // Stale or not, the row it opened from goes: focus must not be left on the body.
+    shell.armFocusFallback();
     shell.markChanged();
   };
   // A saved arrangement settles the row it was opened from, so the lists are read again.
