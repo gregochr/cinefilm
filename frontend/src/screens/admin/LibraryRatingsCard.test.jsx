@@ -52,15 +52,37 @@ describe('LibraryRatingsCard', () => {
 
   it('shows Refreshing ratings… disabled while a refresh runs, and while the start request is in flight', () => {
     const { unmount } = renderCard({ scan: { ...fixtures.adminScan, ratingsRunning: true } });
-    expect(screen.getByRole('button', { name: 'Refreshing ratings…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Refreshing ratings…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
     unmount();
 
     renderCard({ starting: true });
-    expect(screen.getByRole('button', { name: 'Refresh all ratings' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Refresh all ratings' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 
   it('shows why a refresh could not start', () => {
     renderCard({ notice: 'Could not start the ratings refresh.' });
     expect(screen.getByRole('status')).toHaveTextContent('Could not start the ratings refresh.');
+  });
+
+  it('keeps focus on the button while the request runs, and a press then does nothing', async () => {
+    const onRefresh = vi.fn();
+    const { rerender } = renderCard({ onRefresh });
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh all ratings' }));
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <LibraryRatingsCard scan={fixtures.adminScan} starting notice={null} onRefresh={onRefresh} />,
+    );
+    const busy = screen.getByRole('button', { name: 'Refresh all ratings' });
+    expect(busy).toHaveFocus();
+    await userEvent.click(busy);
+
+    expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 });

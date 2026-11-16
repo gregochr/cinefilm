@@ -1,7 +1,8 @@
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ActionWithHint } from '../../components/ActionWithHint.jsx';
 import { SkeletonBlock } from '../../components/Skeleton.jsx';
-import { ErrorState } from '../../components/StateMessages.jsx';
+import AdminErrorBanner from '../../components/AdminErrorBanner.jsx';
 import { buttons, libraryPage } from '../../state/adminCopy.js';
 import {
   countTiles,
@@ -78,6 +79,25 @@ export default function LibraryScanCard({
   changes,
   now = Date.now(),
 }) {
+  const headingRef = useRef(null);
+  const pressed = useRef(false);
+  const [announcement, setAnnouncement] = useState('');
+  const running = Boolean(scan?.running);
+  // Pressing "Scan library now" ends with the progress bar in the button's place, so the button the focus was on is
+  // gone: focus moves to the card heading (unless it has been moved somewhere else meanwhile).
+  useEffect(() => {
+    if (!running || !pressed.current) return;
+    pressed.current = false;
+    const active = document.activeElement;
+    if (!active || active === document.body) headingRef.current?.focus();
+  }, [running]);
+  const press = async () => {
+    pressed.current = true;
+    setAnnouncement('');
+    const started = await onScan();
+    if (started === false) pressed.current = false;
+    else setAnnouncement(buttons.scanLibrary.started);
+  };
   let body = null;
   if (loading && !scan) {
     body = (
@@ -86,7 +106,9 @@ export default function LibraryScanCard({
       </div>
     );
   } else if (error && !scan) {
-    body = <ErrorState onRetry={onRetry}>Couldn&rsquo;t load the library scan.</ErrorState>;
+    body = (
+      <AdminErrorBanner onRetry={onRetry}>Couldn&rsquo;t load the library scan.</AdminErrorBanner>
+    );
   } else if (scan) {
     body = (
       <>
@@ -112,8 +134,10 @@ export default function LibraryScanCard({
               layout="line"
               variant="primary"
               hint={buttons.scanLibrary.hint}
-              disabled={starting}
-              onClick={onScan}
+              // aria-disabled, not disabled: the button keeps focus while the request runs; the hook ignores a second
+              // press.
+              aria-disabled={starting || undefined}
+              onClick={starting ? undefined : press}
             >
               {starting ? buttons.scanLibrary.busyLabel : buttons.scanLibrary.label}
             </ActionWithHint>
@@ -130,12 +154,15 @@ export default function LibraryScanCard({
   return (
     <section id="scan" className="admin__card" aria-labelledby="admin-scan-title">
       <div className="admin__head">
-        <h2 id="admin-scan-title" className="admin__title">
+        <h2 id="admin-scan-title" ref={headingRef} tabIndex={-1} className="admin__title">
           {libraryPage.scan.title}
         </h2>
         {scan ? <span className="admin__why">{describeScanHeader(scan.lastScan, now)}</span> : null}
       </div>
       {body}
+      <p role="status" className="sr-only">
+        {announcement}
+      </p>
       <LibraryChanges
         report={changes.data}
         loading={changes.loading}

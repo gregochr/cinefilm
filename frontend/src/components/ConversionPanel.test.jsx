@@ -49,6 +49,8 @@ describe('ConversionPanel', () => {
       />,
     );
     expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t load the conversion state.');
+    // An inline banner: no heading of its own beside the card's.
+    expect(screen.getAllByRole('heading')).toHaveLength(1);
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(reload).toHaveBeenCalledOnce();
   });

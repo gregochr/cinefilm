@@ -70,7 +70,14 @@ export function useScan(visible = true) {
     }
   }, [visible, refresh]);
 
+  // One request at a time per button: a second press while one is in flight does nothing (the buttons stay focusable,
+  // `aria-disabled`, so the guard here is what stops the request).
+  const ratingsInFlight = useRef(false);
+  const scanInFlight = useRef(false);
+
   const refreshRatings = useCallback(async () => {
+    if (ratingsInFlight.current) return;
+    ratingsInFlight.current = true;
     setRatingsStarting(true);
     setRatingsNotice(null);
     try {
@@ -82,26 +89,32 @@ export function useScan(visible = true) {
           : 'Could not start the ratings refresh.',
       );
     } finally {
+      ratingsInFlight.current = false;
       setRatingsStarting(false);
       reload();
     }
   }, [reload]);
 
+  // Resolves true when a scan is running because of this press (started, or already running: 409), false when it could
+  // not be started, and undefined when a press was ignored because one is already in flight.
   const startScan = useCallback(async () => {
+    if (scanInFlight.current) return undefined;
+    scanInFlight.current = true;
     setStarting(true);
     setNotice(null);
+    let running = true;
     try {
       await adminApi.startScan();
     } catch (failure) {
-      setNotice(
-        failure instanceof ApiError && failure.status === 409
-          ? 'A scan is already running.'
-          : 'Could not start the scan.',
-      );
+      const already = failure instanceof ApiError && failure.status === 409;
+      running = already;
+      setNotice(already ? 'A scan is already running.' : 'Could not start the scan.');
     } finally {
+      scanInFlight.current = false;
       setStarting(false);
       reload();
     }
+    return running;
   }, [reload]);
 
   return {
@@ -149,7 +162,10 @@ export function usePlexImport() {
     return () => clearTimeout(id);
   }, [running, unreachable, data, error, reload]);
 
+  const importInFlight = useRef(false);
   const startImport = useCallback(async () => {
+    if (importInFlight.current) return;
+    importInFlight.current = true;
     setStarting(true);
     setNotice(null);
     try {
@@ -161,6 +177,7 @@ export function usePlexImport() {
           : 'Could not start the import.',
       );
     } finally {
+      importInFlight.current = false;
       setStarting(false);
       reload();
     }

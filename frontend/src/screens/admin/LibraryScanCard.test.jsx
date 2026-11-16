@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -122,7 +122,10 @@ describe('LibraryScanCard', () => {
 
   it('disables the button and says Scanning… while the start request is in flight', () => {
     renderCard({ starting: true });
-    expect(screen.getByRole('button', { name: 'Scanning…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Scanning…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 
   it('shows a notice beside the button, and the last scan’s own error as a warning', () => {
@@ -166,8 +169,88 @@ describe('LibraryScanCard', () => {
     unmount();
 
     renderCard({ scan: undefined, error: new Error('x'), onRetry });
-    expect(screen.getByText('Couldn’t load the library scan.')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t load the library scan.');
+    // An inline banner: the card's own heading is the only one.
+    expect(screen.getAllByRole('heading')).toHaveLength(1);
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  describe('while the start request runs', () => {
+    const startedFocus = async () => {
+      let finish;
+      const onScan = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const view = renderCard({ onScan });
+      const button = screen.getByRole('button', { name: 'Scan library now' });
+      await userEvent.click(button);
+      return { onScan, finish, view, button };
+    };
+
+    it('keeps focus on the button and makes a second press do nothing', async () => {
+      const { onScan, view } = await startedFocus();
+      view.rerender(
+        <MemoryRouter>
+          <LibraryScanCard
+            scan={fixtures.adminScan}
+            starting
+            notice={null}
+            onScan={onScan}
+            onRetry={() => {}}
+            changes={CHANGES}
+            now={NOW}
+          />
+        </MemoryRouter>,
+      );
+      const busy = screen.getByRole('button', { name: 'Scanning…' });
+      expect(busy).toHaveFocus();
+
+      await userEvent.click(busy);
+
+      expect(onScan).toHaveBeenCalledTimes(1);
+    });
+
+    const withScan = (scan, props) => (
+      <MemoryRouter>
+        <LibraryScanCard
+          scan={scan}
+          starting={false}
+          notice={null}
+          onScan={() => {}}
+          onRetry={() => {}}
+          changes={CHANGES}
+          now={NOW}
+          {...props}
+        />
+      </MemoryRouter>
+    );
+
+    it('moves focus to the card heading and announces the start once the progress replaces the button', async () => {
+      const { finish, view } = await startedFocus();
+      await act(async () => finish(true));
+      expect(screen.getByRole('status')).toHaveTextContent('Scan started.');
+
+      view.rerender(withScan({ ...fixtures.adminScan, running: true, progress: null }));
+
+      expect(screen.queryByRole('button', { name: /Scan library now|Scanning/ })).toBeNull();
+      expect(screen.getByRole('heading', { name: 'Library scan' })).toHaveFocus();
+    });
+
+    it('does not move focus that has gone elsewhere, nor announce a scan that could not start', async () => {
+      const { finish, view } = await startedFocus();
+      await act(async () => finish(false));
+      expect(screen.getByRole('status')).toBeEmptyDOMElement();
+      const tile = screen.getAllByRole('link', { name: /open the list/ })[0];
+      tile.focus();
+
+      view.rerender(withScan({ ...fixtures.adminScan, running: true, progress: null }));
+
+      expect(screen.getByRole('heading', { name: 'Library scan' })).not.toHaveFocus();
+      expect(tile).toHaveFocus();
+    });
   });
 });

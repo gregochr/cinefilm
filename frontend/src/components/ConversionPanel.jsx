@@ -1,7 +1,7 @@
 import { conversion as copy } from '../state/adminCopy.js';
 import { encoderStatus, formatBytes, seekIndexText } from '../state/transcodingFormat.js';
 import { SkeletonBlock } from './Skeleton.jsx';
-import { ErrorState } from './StateMessages.jsx';
+import AdminErrorBanner from './AdminErrorBanner.jsx';
 
 /**
  * Admin Playback: the encoder and the keyframe (seek) index. `state` is `useTranscoding()`, read by the Playback
@@ -17,7 +17,7 @@ export default function ConversionPanel({ state }) {
       </div>
     );
   } else if (error && !transcoding) {
-    body = <ErrorState onRetry={reload}>{copy.loadError}</ErrorState>;
+    body = <AdminErrorBanner onRetry={reload}>{copy.loadError}</AdminErrorBanner>;
   } else if (transcoding) {
     body = (
       <dl className="admin__rows">

@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import { ActionWithHint } from '../../components/ActionWithHint.jsx';
+import AdminErrorBanner from '../../components/AdminErrorBanner.jsx';
 import { Button } from '../../components/Button.jsx';
 import PlexCreditsImport from '../../components/PlexCreditsImport.jsx';
 import { buttons, libraryPage } from '../../state/adminCopy.js';
@@ -76,18 +77,14 @@ export default function LibraryPlexCard({
             {libraryPage.plex.title}
           </h2>
         </div>
-        <p key={failure.count} className="admin__notice" role="alert">
+        <AdminErrorBanner
+          announceKey={failure.count}
+          busy={loading}
+          onRetry={onRecheck}
+          retryLabel={libraryPage.plex.tryAgain}
+        >
           {libraryPage.plex.loadError}
-        </p>
-        <div className="admin__actions">
-          <Button
-            aria-busy={loading}
-            aria-disabled={loading || undefined}
-            onClick={loading ? undefined : onRecheck}
-          >
-            {libraryPage.plex.tryAgain}
-          </Button>
-        </div>
+        </AdminErrorBanner>
       </section>
     );
   }
@@ -133,8 +130,11 @@ export default function LibraryPlexCard({
         <ActionWithHint
           layout="line"
           hint={buttons.importPlex.hint}
-          disabled={running || starting || !plex.reachable}
-          onClick={onImport}
+          // Busy is aria-disabled so the button keeps focus while the request runs; the hook ignores a second press.
+          // Only a Plex that cannot be reached is a real `disabled` (there is nothing to wait for).
+          disabled={!plex.reachable}
+          aria-disabled={running || starting || undefined}
+          onClick={running || starting ? undefined : onImport}
         >
           {running ? buttons.importPlex.busyLabel : buttons.importPlex.label}
         </ActionWithHint>

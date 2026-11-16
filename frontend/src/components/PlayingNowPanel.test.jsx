@@ -116,7 +116,10 @@ describe('Admin Playback: Now playing', () => {
     );
     renderApp('/admin/playback');
     const panel = await card();
-    expect(await within(panel).findByText('Couldn’t load what is playing.')).toBeInTheDocument();
+    expect(await within(panel).findByRole('alert')).toHaveTextContent(
+      'Couldn’t load what is playing.',
+    );
+    expect(within(panel).getAllByRole('heading')).toHaveLength(1);
     fail = false;
     await userEvent.click(within(panel).getByRole('button', { name: 'Try again' }));
     expect(await within(panel).findByText('Heat')).toBeInTheDocument();
@@ -215,10 +218,9 @@ describe('Admin Playback: Now playing', () => {
       name: 'Stop this stream: Film 1 (Mac)',
     });
     await userEvent.click(stop);
-    expect(await within(panel).findByText('Couldn’t stop that stream. Try again.')).toHaveAttribute(
-      'role',
-      'status',
-    );
+    // The same failure line as a To do row's: an alert, not a polite status.
+    const failure = await within(panel).findByText('Couldn’t stop that stream. Try again.');
+    expect(failure).toHaveAttribute('role', 'alert');
     expect(within(panel).getByText('Film 1')).toBeInTheDocument();
     expect(stop).not.toHaveAttribute('aria-disabled');
     expect(stop).toHaveFocus();

@@ -22,7 +22,7 @@ import {
 import { useResource } from '../state/useResource.js';
 import { Button } from './Button.jsx';
 import { SkeletonBlock } from './Skeleton.jsx';
-import { ErrorState } from './StateMessages.jsx';
+import AdminErrorBanner from './AdminErrorBanner.jsx';
 
 /** How many files are listed before "Show more". */
 export const FILES_PAGE = 50;
@@ -143,7 +143,9 @@ export default function SubtitlesPanel({ version }) {
       </div>
     );
   } else if (error && !items) {
-    body = <ErrorState onRetry={reload}>Couldn&rsquo;t load the subtitle files.</ErrorState>;
+    body = (
+      <AdminErrorBanner onRetry={reload}>Couldn&rsquo;t load the subtitle files.</AdminErrorBanner>
+    );
   } else if (!items || items.length === 0) {
     body = (
       <p className="admin__text">
@@ -195,7 +197,9 @@ export default function SubtitlesPanel({ version }) {
   // A failed refresh keeps the list that is there and says so, with a way to try again.
   const refreshFailure =
     error && items ? (
-      <ErrorState onRetry={reload}>Couldn&rsquo;t refresh the subtitle files.</ErrorState>
+      <AdminErrorBanner onRetry={reload}>
+        Couldn&rsquo;t refresh the subtitle files.
+      </AdminErrorBanner>
     ) : null;
   return (
     <section className="admin__card" aria-labelledby="admin-subtitles-title">

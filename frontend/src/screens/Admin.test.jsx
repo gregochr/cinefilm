@@ -396,7 +396,11 @@ describe('Admin: Conversion card', () => {
     );
     renderApp('/admin/playback');
     const panel = await screen.findByRole('region', { name: 'Conversion' });
-    expect(await within(panel).findByRole('alert')).toHaveTextContent('The projector jammed');
+    expect(await within(panel).findByRole('alert')).toHaveTextContent(
+      'Couldn’t load the conversion state.',
+    );
+    // An inline banner under the card's own heading: no second, page-sized heading.
+    expect(within(panel).getAllByRole('heading')).toHaveLength(1);
     fail = false;
     await userEvent.click(within(panel).getByRole('button', { name: 'Try again' }));
     expect(await within(panel).findByText('VAAPI (hardware) · ready')).toBeInTheDocument();
@@ -451,7 +455,27 @@ describe('Admin: Session panel', () => {
     renderApp('/admin/settings');
     await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
     const busy = await screen.findByRole('button', { name: 'Signing out…' });
-    expect(busy).toBeDisabled();
+    expect(busy).toHaveAttribute('aria-disabled', 'true');
+    expect(busy).toHaveFocus();
+    await act(async () => finish(respond(null, 204)));
+  });
+
+  it('keeps focus on Sign out while it runs, and a second press sends nothing', async () => {
+    let finish;
+    const fetchMock = installFetch((m, url) =>
+      m === 'DELETE' && url === '/api/session'
+        ? new Promise((resolve) => (finish = resolve))
+        : null,
+    );
+    renderApp('/admin/settings');
+    await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+    const busy = await screen.findByRole('button', { name: 'Signing out…' });
+    expect(busy).toHaveFocus();
+
+    await userEvent.click(busy);
+
+    const deletes = fetchMock.mock.calls.filter(([, init]) => init?.method === 'DELETE');
+    expect(deletes).toHaveLength(1);
     await act(async () => finish(respond(null, 204)));
   });
 

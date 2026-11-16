@@ -8,20 +8,23 @@ import { Button } from './Button.jsx';
  * wrapper has no role or text to query (test-standards 'Queries'), so only the hint's own
  * `action-hint__text--row|line` class is tested. At 600px and below the button is full width, 44px tall (at least; a
  * To do row grows past that when its label wraps), hint on the left.
+ * `describedBy` adds more ids to the description (a row's title, so a button names its film without changing its label).
  * `variant` is the Button's: the one amber button in Admin is "Scan library now".
  */
 export function ActionWithHint({
   hint,
   layout = 'row',
   variant = 'secondary',
+  describedBy,
   className,
   children,
   ...rest
 }) {
   const hintId = useId();
+  const describedByIds = [hint ? hintId : null, describedBy].filter(Boolean).join(' ') || undefined;
   return (
     <div className={['action-hint', `action-hint--${layout}`, className].filter(Boolean).join(' ')}>
-      <Button variant={variant} aria-describedby={hint ? hintId : undefined} {...rest}>
+      <Button variant={variant} aria-describedby={describedByIds} {...rest}>
         {children}
       </Button>
       {hint ? (

@@ -47,7 +47,6 @@ const SEVEN = [
     'Forgets your choice; CineFilm decides from the film’s languages again.',
   ],
   ['useMyFileInstead', 'Use my file instead', 'Plays your own file rather than the download.'],
-  ['addMyFile', 'Add my own file…', 'Picks which film (and part) a subtitle file belongs to.'],
   [
     'previewLines',
     'Preview lines',
@@ -74,7 +73,6 @@ const SEVEN = [
 const AR1 = [
   ['confirmGuess', 'Confirms the guess and fetches its poster and details'],
   ['searchEnglishSubtitles', 'Shows OpenSubtitles results for this film so you can pick one'],
-  ['useItAnyway', 'Plays that file with the film; you can adjust timing while watching'],
   ['noForeignScenes', '“No foreign scenes” marks it done and stops asking'],
 ];
 
@@ -98,6 +96,7 @@ describe('adminCopy buttons', () => {
     expect(buttons.scanLibrary).toEqual({
       label: 'Scan library now',
       busyLabel: 'Scanning…',
+      started: 'Scan started.',
       hint: 'Looks through your movie folders for new, changed and removed files. A few minutes; you can keep watching.',
       source: 'README',
     });
@@ -129,8 +128,6 @@ describe('adminCopy buttons', () => {
   it('has the subtitle answers from the boards', () => {
     expect(buttons.noForeignScenes.label).toBe('No foreign scenes');
     expect(buttons.searchEnglishSubtitles.label).toBe('Search for English subtitles…');
-    expect(buttons.useItAnyway.label).toBe('Use it anyway');
-    expect(buttons.searchAgain.label).toBe('Search again…');
   });
 
   it('gives every entry a known source', () => {

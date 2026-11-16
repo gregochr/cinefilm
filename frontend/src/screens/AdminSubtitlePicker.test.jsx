@@ -50,7 +50,7 @@ describe('Subtitles: the picker from the foreign-language tab', () => {
     const panel = screen.getByRole('tabpanel');
     const search = within(rowOf(panel, 'Rashomon')).getByRole('button', { name: SEARCH_FULL });
     expect(search).toHaveAccessibleDescription(
-      'Shows OpenSubtitles results for this film so you can pick one',
+      expect.stringContaining('Shows OpenSubtitles results for this film so you can pick one'),
     );
 
     await userEvent.click(search);

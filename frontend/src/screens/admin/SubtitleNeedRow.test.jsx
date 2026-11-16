@@ -28,11 +28,13 @@ describe('SubtitleNeedRow: a foreign-language film', () => {
       'Add my own file…',
     ]);
     expect(screen.getByRole('button', { name: 'Add my own file…' })).toHaveAccessibleDescription(
-      'Picks one of your subtitle files for this film',
+      expect.stringContaining('Picks one of your subtitle files for this film'),
     );
     expect(
       screen.getByRole('button', { name: 'Search for English subtitles…' }),
-    ).toHaveAccessibleDescription('Shows OpenSubtitles results for this film so you can pick one');
+    ).toHaveAccessibleDescription(
+      expect.stringContaining('Shows OpenSubtitles results for this film so you can pick one'),
+    );
     expect(screen.getByRole('button', { name: 'Search for English subtitles…' })).toHaveAttribute(
       'aria-haspopup',
       'dialog',
@@ -226,5 +228,21 @@ describe('SubtitleNeedRow: an English film with foreign scenes', () => {
 
     expect(onChoose).not.toHaveBeenCalled();
     expect(onFind).not.toHaveBeenCalled();
+  });
+
+  describe('buttons name their film', () => {
+    it('describes every foreign-row button with the film, the label staying the name', async () => {
+      renderRow({ row: unlabelledRow(), kind: 'foreign' });
+      for (const name of [/find subtitles$/, 'Add my own file…', 'It’s English']) {
+        expect(screen.getByRole('button', { name })).toHaveAccessibleDescription(/Downfall/);
+      }
+    });
+
+    it('describes the forced-row buttons with the film too', () => {
+      renderRow({ row: forcedRow(), kind: 'forced' });
+      for (const name of ['Find forced subtitles…', 'No foreign scenes']) {
+        expect(screen.getByRole('button', { name })).toHaveAccessibleDescription(/Taken/);
+      }
+    });
   });
 });

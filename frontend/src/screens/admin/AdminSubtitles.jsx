@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { subtitlesPage } from '../../state/adminCopy.js';
 import { useAdminContext } from '../../state/adminContext.js';
 import { everythingElse } from '../../state/adminSubtitles.js';
@@ -17,7 +17,12 @@ import SubtitleNeedPanel from './SubtitleNeedPanel.jsx';
  */
 export default function AdminSubtitles() {
   const { subtitlesVersion, changed, markChanged, scan, openSubtitlePicker } = useAdminContext();
-  const [tab, setTab] = useState('foreign');
+  // The open tab lives in the address (`#foreign`, `#forced`), so the To do footer can link to the forced one and a
+  // reload or a shared link lands on the same tab. A tab change replaces the entry: switching tabs is not a page.
+  const { hash } = useLocation();
+  const navigate = useNavigate();
+  const tab = hash === '#forced' ? 'forced' : 'foreign';
+  const setTab = (key) => navigate({ hash: `#${key}` }, { replace: true });
   const lists = useAdminSubtitles({ subtitlesVersion, changed, onChanged: markChanged });
   const figures = everythingElse({
     fullRows: lists.full.rows,

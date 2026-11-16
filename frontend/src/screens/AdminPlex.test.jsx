@@ -189,7 +189,10 @@ describe('Admin: Import from Plex card', () => {
 
     expect(await within(panel).findByText('Importing')).toBeInTheDocument();
     expect(within(panel).getByText('12 / 40 films')).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: 'Importing…' })).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: 'Importing…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 
   it('says why when the import is refused with a 409', async () => {
@@ -226,7 +229,10 @@ describe('Admin: Import from Plex card', () => {
     expect(bar).toHaveAttribute('aria-valuenow', '30');
     expect(bar).toHaveAttribute('aria-valuetext', '12 / 40 films');
     expect(within(panel).getByText('Now: Heat')).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: 'Importing…' })).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: 'Importing…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 
   it('shows a neutral line and no current film while Plex is first read', async () => {

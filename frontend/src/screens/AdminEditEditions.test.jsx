@@ -32,7 +32,7 @@ describe('Admin: Edit editions', () => {
     const buttons = await within(group).findAllByRole('button', { name: 'Sort out editions…' });
     expect(buttons).toHaveLength(2);
     expect(buttons[0]).toHaveAccessibleDescription(
-      'Choose which file is which cut, the part order and the default.',
+      expect.stringContaining('Choose which file is which cut, the part order and the default.'),
     );
     expect(within(group).getByText('Blade Runner')).toBeInTheDocument();
     expect(within(group).getByText('The Two Towers')).toBeInTheDocument();

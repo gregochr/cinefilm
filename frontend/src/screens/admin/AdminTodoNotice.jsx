@@ -1,4 +1,4 @@
-import { Button } from '../../components/Button.jsx';
+import AdminErrorBanner from '../../components/AdminErrorBanner.jsx';
 import { SkeletonBlock } from '../../components/Skeleton.jsx';
 import { todoRow } from '../../state/adminCopy.js';
 
@@ -10,10 +10,9 @@ import { todoRow } from '../../state/adminCopy.js';
 export default function AdminTodoNotice({ label, error, onRetry }) {
   if (error) {
     return (
-      <div className="admin__todo-error" role="alert">
-        <p className="admin__todo-error-text">{error}</p>
-        <Button onClick={onRetry}>{todoRow.retry}</Button>
-      </div>
+      <AdminErrorBanner onRetry={onRetry} retryLabel={todoRow.retry}>
+        {error}
+      </AdminErrorBanner>
     );
   }
   return (

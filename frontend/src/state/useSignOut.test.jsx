@@ -70,4 +70,29 @@ describe('useSignOut', () => {
     expect(deletes(fetchMock)).toHaveLength(2);
     expect(announced).toHaveBeenCalledTimes(1);
   });
+
+  it('a second press while the request is open sends nothing', async () => {
+    let finish;
+    const fetchMock = installFetch((m, url) =>
+      isSignOut(m, url)
+        ? new Promise((resolve) => {
+            finish = resolve;
+          })
+        : null,
+    );
+    const { result } = renderHook(() => useSignOut());
+
+    let both;
+    act(() => {
+      both = Promise.all([result.current.signOut(), result.current.signOut()]);
+    });
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
+    await act(async () => {
+      finish(respond(null, 204));
+      await both;
+    });
+
+    expect(deletes(fetchMock)).toHaveLength(1);
+    expect(announced).toHaveBeenCalledTimes(1);
+  });
 });

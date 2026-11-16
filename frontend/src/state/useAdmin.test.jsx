@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
-import { SCAN_POLL_MS, useAttention, useScan } from './useAdmin.js';
+import { SCAN_POLL_MS, useAttention, usePlexImport, useScan } from './useAdmin.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -167,6 +167,118 @@ describe('useScan', () => {
     fail = false;
     await act(() => result.current.startScan());
     expect(result.current.notice).toBeNull();
+  });
+});
+
+const posts = (fetchMock, url) =>
+  fetchMock.mock.calls.filter(([u, init]) => u === url && init?.method === 'POST').length;
+
+describe('one request at a time per button', () => {
+  // Each start posts once however many presses arrive while it is in flight (the buttons stay focusable, so the hook
+  // is what ignores the extra presses).
+  it('a second Scan press while one is in flight sends nothing and resolves undefined', async () => {
+    let release;
+    let held = false;
+    const fetchMock = installFetch((method, url) => {
+      if (method !== 'POST' || url !== '/api/admin/scan') return null;
+      if (held) return respond(running(0), 202);
+      held = true;
+      return new Promise((resolve) => {
+        release = () => resolve(respond(running(0), 202));
+      });
+    });
+    const { result } = renderHook(() => useScan());
+    await waitFor(() => expect(result.current.scan).not.toBeNull());
+
+    let first;
+    let second;
+    act(() => {
+      first = result.current.startScan();
+      second = result.current.startScan();
+    });
+    await waitFor(() => expect(release).toBeTypeOf('function'));
+    await act(async () => {
+      release();
+      await Promise.all([first, second]);
+    });
+
+    expect(posts(fetchMock, '/api/admin/scan')).toBe(1);
+    expect(await first).toBe(true);
+    expect(await second).toBeUndefined();
+    // Once it has ended, a new press goes through.
+    await act(() => result.current.startScan());
+    expect(posts(fetchMock, '/api/admin/scan')).toBe(2);
+  });
+
+  it('resolves true for a 409 (a scan is running) and false for a failure', async () => {
+    let status = 409;
+    installFetch((method, url) =>
+      method === 'POST' && url === '/api/admin/scan' ? respond({ error: 'x' }, status) : null,
+    );
+    const { result } = renderHook(() => useScan());
+    await waitFor(() => expect(result.current.scan).not.toBeNull());
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.startScan();
+    });
+    expect(outcome).toBe(true);
+
+    status = 500;
+    await act(async () => {
+      outcome = await result.current.startScan();
+    });
+    expect(outcome).toBe(false);
+  });
+
+  it('a second ratings refresh press while one is in flight sends nothing', async () => {
+    let release;
+    const fetchMock = installFetch((method, url) =>
+      method === 'POST' && url === '/api/admin/ratings/refresh'
+        ? new Promise((resolve) => {
+            release = () => resolve(respond(running(0), 202));
+          })
+        : null,
+    );
+    const { result } = renderHook(() => useScan());
+    await waitFor(() => expect(result.current.scan).not.toBeNull());
+
+    let both;
+    act(() => {
+      both = Promise.all([result.current.refreshRatings(), result.current.refreshRatings()]);
+    });
+    await waitFor(() => expect(release).toBeTypeOf('function'));
+    await act(async () => {
+      release();
+      await both;
+    });
+
+    expect(posts(fetchMock, '/api/admin/ratings/refresh')).toBe(1);
+  });
+
+  it('a second Import from Plex press while one is in flight sends nothing', async () => {
+    let release;
+    const fetchMock = installFetch((method, url) =>
+      method === 'POST' && url === '/api/admin/plex/import'
+        ? new Promise((resolve) => {
+            release = () => resolve(respond(fixtures.adminPlex, 202));
+          })
+        : null,
+    );
+    const { result } = renderHook(() => usePlexImport());
+    await waitFor(() => expect(result.current.plex).not.toBeUndefined());
+
+    let both;
+    act(() => {
+      both = Promise.all([result.current.startImport(), result.current.startImport()]);
+    });
+    await waitFor(() => expect(release).toBeTypeOf('function'));
+    await act(async () => {
+      release();
+      await both;
+    });
+
+    expect(posts(fetchMock, '/api/admin/plex/import')).toBe(1);
   });
 });
 

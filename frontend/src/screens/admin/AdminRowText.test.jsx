@@ -16,4 +16,10 @@ describe('RowText', () => {
 
     expect(screen.queryByText(/·/)).not.toBeInTheDocument();
   });
+
+  it('gives the title the id it is asked for, so a button can be described by it', () => {
+    render(<RowText row={{ title: 'Heat', year: 1995 }} line="x" titleId="t-1" />);
+
+    expect(screen.getByText('Heat')).toHaveAttribute('id', 't-1');
+  });
 });

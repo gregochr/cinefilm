@@ -72,4 +72,27 @@ describe('ActionWithHint', () => {
     render(<ActionWithHint>Plain</ActionWithHint>);
     expect(screen.getByRole('button', { name: 'Plain' })).not.toHaveAttribute('aria-describedby');
   });
+
+  it('adds the ids it is given to the description, after the hint, and keeps the label as the name', () => {
+    render(
+      <>
+        <p id="row-title">Heat · 1995</p>
+        <ActionWithHint hint="Does the thing." describedBy="row-title">
+          Do it
+        </ActionWithHint>
+      </>,
+    );
+    const button = screen.getByRole('button', { name: 'Do it' });
+    expect(button).toHaveAccessibleDescription('Does the thing. Heat · 1995');
+  });
+
+  it('is described by the given id alone when there is no hint', () => {
+    render(
+      <>
+        <p id="row-title">Heat</p>
+        <ActionWithHint describedBy="row-title">Do it</ActionWithHint>
+      </>,
+    );
+    expect(screen.getByRole('button', { name: 'Do it' })).toHaveAccessibleDescription('Heat');
+  });
 });

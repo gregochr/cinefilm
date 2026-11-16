@@ -63,3 +63,14 @@ Owner questions:
   foundation plan).
 - **7 Settings**: the "min" unit sits outside the input; AR5 draws it inside.
 - **8a Fix dialog**: toggling "Preview lines" to "Hide lines" drops that button's hint (a layout shift); accepted.
+
+## After the final review
+
+Recorded, not fixed (the fixes that were made went in `fix/admin-review-admin`).
+
+- **"Played smoothly" against "without a stall"**: the status strip's "played smoothly" counts a session with no
+  problem of any kind (stalls, reconnects, fall-backs, errors, timeouts), while the Playback chart's tile "played
+  without a stall" counts only sessions with no stall. For the same 30 days they can differ, and the owner may read one
+  as the other. A wording decision (rename one, or make them count the same thing); not changed here.
+- **The 30 s summary poll runs on every section, Settings included**: `useAdminSummary` is read once by the layout, so
+  it polls wherever the owner is. Acceptable now that the server's count path is being made cheap (a separate PR).

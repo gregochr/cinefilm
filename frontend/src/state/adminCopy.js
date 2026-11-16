@@ -24,6 +24,7 @@ export const buttons = {
   scanLibrary: {
     label: 'Scan library now',
     busyLabel: 'Scanning…',
+    started: 'Scan started.', // announced (visually hidden) when a press starts a scan and the progress replaces the button
     hint: 'Looks through your movie folders for new, changed and removed files. A few minutes; you can keep watching.',
     source: 'README',
   },
@@ -76,23 +77,12 @@ export const buttons = {
     hint: 'Shows OpenSubtitles results for this film so you can pick one',
     source: 'AR1',
   },
-  addMyFile: {
-    label: 'Add my own file…',
-    hint: 'Picks which film (and part) a subtitle file belongs to.',
-    source: '07',
-  },
   // "Add my own file…" on a Subtitles row: the film is fixed, so 07's hint ("Picks which film…") would be wrong.
   addFileToFilm: {
     label: 'Add my own file…',
     hint: 'Picks one of your subtitle files for this film',
     source: 'planner, 4a',
   },
-  useItAnyway: {
-    label: 'Use it anyway',
-    hint: 'Plays that file with the film; you can adjust timing while watching',
-    source: 'AR1',
-  },
-  searchAgain: { label: 'Search again…', source: 'AR1' },
   // Unlabelled audio (AR2, row "Downfall"). "find subtitles" opens the picker (4c); AR2 shows no hint under it.
   itsInLanguage: {
     label: (language) => `It’s in ${language} — find subtitles`,

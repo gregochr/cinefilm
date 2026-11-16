@@ -3,7 +3,7 @@ import { buttons, playingNow } from '../state/adminCopy.js';
 import { usePlayingNow } from '../state/usePlayingNow.js';
 import { ActionWithHint } from './ActionWithHint.jsx';
 import { SkeletonBlock } from './Skeleton.jsx';
-import { ErrorState } from './StateMessages.jsx';
+import AdminErrorBanner from './AdminErrorBanner.jsx';
 
 const rowId = (playbackId) => `playing-${playbackId}`;
 
@@ -46,7 +46,7 @@ function Rows({ rows, stopping, failures, onStop }) {
             </div>
           ) : null}
           {failures[row.playbackId] ? (
-            <p className="admin__notice" role="status">
+            <p className="admin__todo-problem" role="alert">
               {failures[row.playbackId]}
             </p>
           ) : null}
@@ -79,7 +79,7 @@ export default function PlayingNowPanel({ transcoding }) {
       </div>
     );
   } else if (!summary) {
-    body = <ErrorState onRetry={reloadSummary}>{playingNow.loadError}</ErrorState>;
+    body = <AdminErrorBanner onRetry={reloadSummary}>{playingNow.loadError}</AdminErrorBanner>;
   } else {
     body = <Rows rows={rows} stopping={stopping} failures={failures} onStop={stop} />;
   }
