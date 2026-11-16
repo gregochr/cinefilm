@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, announceLibraryChanged } from '../api/client.js';
 import { adminApi } from '../api/resources.js';
+import { lockText } from './lockText.js';
 import { creditsFinishedText } from './plexCreditsFormat.js';
 import { useResource } from './useResource.js';
 
@@ -141,6 +142,9 @@ export function useGroupingReport(version) {
   return useResource(`admin-grouping:${version}`, (options) => adminApi.groupingReport(options));
 }
 
+/** What a refused Plex import says when the server names nothing (or only the bare scan line). */
+const PLEX_BUSY = 'A scan or import is already running, or no scan has finished yet.';
+
 /**
  * The Plex import panel: status, polled while an import runs, plus "Import from Plex". Starting while a scan or
  * import already runs (409) is not an error: the notice says why, and the panel shows whichever is running.
@@ -173,7 +177,7 @@ export function usePlexImport() {
     } catch (failure) {
       setNotice(
         failure instanceof ApiError && failure.status === 409
-          ? 'A scan or import is already running, or no scan has finished yet.'
+          ? lockText(failure, PLEX_BUSY)
           : 'Could not start the import.',
       );
     } finally {

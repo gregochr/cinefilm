@@ -19,10 +19,10 @@ export default function AdminSubtitles() {
   const { subtitlesVersion, changed, markChanged, scan, openSubtitlePicker } = useAdminContext();
   // The open tab lives in the address (`#foreign`, `#forced`), so the To do footer can link to the forced one and a
   // reload or a shared link lands on the same tab. A tab change replaces the entry: switching tabs is not a page.
-  const { hash } = useLocation();
+  const { hash, search } = useLocation();
   const navigate = useNavigate();
   const tab = hash === '#forced' ? 'forced' : 'foreign';
-  const setTab = (key) => navigate({ hash: `#${key}` }, { replace: true });
+  const setTab = (key) => navigate({ search, hash: `#${key}` }, { replace: true });
   const lists = useAdminSubtitles({ subtitlesVersion, changed, onChanged: markChanged });
   const figures = everythingElse({
     fullRows: lists.full.rows,

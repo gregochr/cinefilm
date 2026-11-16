@@ -240,6 +240,28 @@ describe('LibraryScanCard', () => {
       expect(screen.getByRole('heading', { name: 'Library scan' })).toHaveFocus();
     });
 
+    it('does not announce a start when a double press was ignored and the first start then fails', async () => {
+      let finishFirst;
+      const onScan = vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finishFirst = resolve;
+            }),
+        )
+        .mockResolvedValue(undefined);
+      renderCard({ onScan });
+      const button = screen.getByRole('button', { name: 'Scan library now' });
+
+      await userEvent.click(button);
+      await userEvent.click(button);
+      expect(onScan).toHaveBeenCalledTimes(2);
+      await act(async () => finishFirst(false));
+
+      expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    });
+
     it('does not move focus that has gone elsewhere, nor announce a scan that could not start', async () => {
       const { finish, view } = await startedFocus();
       await act(async () => finish(false));

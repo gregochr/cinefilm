@@ -1,5 +1,7 @@
-import { useEffect, useId } from 'react';
+import { useContext, useEffect, useId } from 'react';
+import AdminErrorBanner from '../../components/AdminErrorBanner.jsx';
 import { Button } from '../../components/Button.jsx';
+import { AdminContext } from '../../state/adminContext.js';
 import { subtitlesPage } from '../../state/adminCopy.js';
 import { fileChoiceNote } from '../../state/adminSubtitles.js';
 import { kindTag } from '../../state/subtitleFix.js';
@@ -11,10 +13,9 @@ const copy = subtitlesPage.addFile;
 /** A line that says something went wrong, in the error colour, with its own way to try again. */
 function Problem({ children, onRetry }) {
   return (
-    <div className="admin__todo-error" role="alert">
-      <p className="admin__todo-error-text">{children}</p>
-      {onRetry ? <Button onClick={onRetry}>{subtitlesPage.retry}</Button> : null}
-    </div>
+    <AdminErrorBanner onRetry={onRetry} retryLabel={subtitlesPage.retry}>
+      {children}
+    </AdminErrorBanner>
   );
 }
 
@@ -35,7 +36,9 @@ export default function AddOwnFile({
   onBusyChange,
   allKinds = false,
 }) {
-  const picker = useFilmFilePicker(filmId, { allKinds });
+  // Under Admin the file list is read again when the library's subtitles change (a scan, a search or a check).
+  const version = useContext(AdminContext)?.subtitlesVersion ?? '';
+  const picker = useFilmFilePicker(filmId, { allKinds, version });
   // Tells the host while an attach is in flight, so it can keep this form open (its guard lives in this instance).
   useEffect(() => {
     onBusyChange?.(picker.attaching);

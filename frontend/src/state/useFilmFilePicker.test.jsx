@@ -166,4 +166,23 @@ describe('useFilmFilePicker', () => {
 
     expect(files()).toBe(2);
   });
+
+  it('reads the files again when the version changes, without a change made here', async () => {
+    const fetchMock = installFetch((method, url) => {
+      if (url === '/api/admin/subtitles') return respond([FILE]);
+      if (url === '/api/films/6') return respond({ id: 6, editions: [edition(60)] });
+      return null;
+    });
+    const files = () =>
+      fetchMock.mock.calls.filter(([url]) => url === '/api/admin/subtitles').length;
+    const { result, rerender } = renderHook(({ version }) => useFilmFilePicker(6, { version }), {
+      initialProps: { version: 'a' },
+    });
+    await waitFor(() => expect(result.current.files).toHaveLength(1));
+
+    rerender({ version: 'a' });
+    expect(files()).toBe(1);
+    rerender({ version: 'b' });
+    await waitFor(() => expect(files()).toBe(2));
+  });
 });

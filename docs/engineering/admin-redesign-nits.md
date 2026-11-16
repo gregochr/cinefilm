@@ -74,3 +74,8 @@ Recorded, not fixed (the fixes that were made went in `fix/admin-review-admin`).
   as the other. A wording decision (rename one, or make them count the same thing); not changed here.
 - **The 30 s summary poll runs on every section, Settings included**: `useAdminSummary` is read once by the layout, so
   it polls wherever the owner is. Acceptable now that the server's count path is being made cheap (a separate PR).
+- **Retry buttons unmount on press**: the Try again button of an `AdminErrorBanner` leaves with the banner when the
+  read starts (the card shows its skeleton), so focus falls to the body. Only the Plex card keeps the banner while it
+  retries (`busy`). Accepted for now; a card heading focus on retry would fix it.
+- **Summary poll aborts at its tick**: `useAdminSummary` aborts a read still open at its 30 s tick (unlike
+  `useTranscoding`, which waits `TRANSCODING_HUNG_MS`); a summary read open that long is already hung. Left.

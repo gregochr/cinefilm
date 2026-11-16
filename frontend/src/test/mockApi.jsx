@@ -233,8 +233,8 @@ export const respond = json;
 
 /** Shows the current path and hash under `data-testid="location"`, so a test can assert a redirect. */
 function LocationProbe() {
-  const { pathname, hash } = useLocation();
-  return <p data-testid="location">{`${pathname}${hash}`}</p>;
+  const { pathname, search, hash } = useLocation();
+  return <p data-testid="location">{`${pathname}${search}${hash}`}</p>;
 }
 
 export function renderApp(path = '/', { showLocation = false } = {}) {

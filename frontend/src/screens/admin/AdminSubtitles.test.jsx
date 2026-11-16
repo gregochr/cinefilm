@@ -589,6 +589,16 @@ describe('Admin Subtitles section: the tab lives in the address', () => {
   });
 });
 
+describe('Admin Subtitles section: the address keeps its query', () => {
+  it('keeps the query string when a tab change writes the hash', async () => {
+    serve();
+    renderApp('/admin/subtitles?from=todo', { showLocation: true });
+    await userEvent.click(await tab('Forced subtitles not found 1'));
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/admin/subtitles?from=todo#forced');
+  });
+});
+
 describe('Admin Subtitles section: when a list fails', () => {
   it('shows a banner in the failed tab while the other tab and Everything else render', async () => {
     const server = serveNeeds({ full: [rashomon()], forced: [taken()] });

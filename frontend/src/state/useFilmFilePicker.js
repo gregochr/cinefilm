@@ -17,14 +17,19 @@ export const ADD_FILE_FILES_MAX_AGE_MS = 60_000;
  * resolves true once the server accepted it; a second call while one is in flight does nothing (a ref, so two clicks
  * in one frame cannot both pass), and a failure sets `problem` in words. Nothing is sent until `attach()`.
  */
-export function useFilmFilePicker(filmId, { allKinds = false } = {}) {
+export function useFilmFilePicker(filmId, { allKinds = false, version = '' } = {}) {
   // The whole-library file list is the same for every film, so every open form shares one cached read (one key, not
   // one per film); the cache is emptied by any change made in this tab, an attach included, so the next form reads
-  // the list again.
-  const filesRead = useResource(ADD_FILE_FILES_KEY, (options) => adminApi.subtitles(options), {
-    cache: 'fresh',
-    maxAgeMs: ADD_FILE_FILES_MAX_AGE_MS,
-  });
+  // the list again. `version` (Admin's `subtitlesVersion`: a scan, a search or a check finished) is part of the key, so
+  // files that appeared without a change made here are read afresh; elsewhere it is empty and the 60 s window applies.
+  const filesRead = useResource(
+    `${ADD_FILE_FILES_KEY}:${version}`,
+    (options) => adminApi.subtitles(options),
+    {
+      cache: 'fresh',
+      maxAgeMs: ADD_FILE_FILES_MAX_AGE_MS,
+    },
+  );
   const filmRead = useResource(`admin-add-file-film:${filmId}`, (options) =>
     filmsApi.get(filmId, options),
   );

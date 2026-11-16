@@ -82,21 +82,31 @@ export default function LibraryScanCard({
   const headingRef = useRef(null);
   const pressed = useRef(false);
   const [announcement, setAnnouncement] = useState('');
-  const running = Boolean(scan?.running);
   // Pressing "Scan library now" ends with the progress bar in the button's place, so the button the focus was on is
   // gone: focus moves to the card heading (unless it has been moved somewhere else meanwhile).
+  // A status that says nothing is running ends the pending press (the start failed, or was refused).
   useEffect(() => {
-    if (!running || !pressed.current) return;
+    if (!scan) return;
+    if (!scan.running) {
+      pressed.current = false;
+      return;
+    }
+    if (!pressed.current) return;
     pressed.current = false;
     const active = document.activeElement;
     if (!active || active === document.body) headingRef.current?.focus();
-  }, [running]);
+  }, [scan]);
   const press = async () => {
     pressed.current = true;
     setAnnouncement('');
     const started = await onScan();
-    if (started === false) pressed.current = false;
-    else setAnnouncement(buttons.scanLibrary.started);
+    // undefined: this press was ignored (one is in flight); that one announces its own outcome.
+    if (started === undefined) return;
+    if (started === false) {
+      pressed.current = false;
+      return;
+    }
+    setAnnouncement(buttons.scanLibrary.started);
   };
   let body = null;
   if (loading && !scan) {

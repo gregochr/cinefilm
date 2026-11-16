@@ -96,8 +96,9 @@ describe('Admin To do groups', () => {
     expect(within(wicker).queryByRole('button', { name: /^Yes/ })).not.toBeInTheDocument();
     expect(within(wicker).getByRole('button', { name: 'Find the film…' })).toBeInTheDocument();
     const yes = within(suspiria).getByRole('button', { name: 'Yes, it’s Suspiria (1977)' });
+    // The hint first, then the film the button is about.
     expect(yes).toHaveAccessibleDescription(
-      expect.stringContaining('Confirms the guess and fetches its poster and details'),
+      /^Confirms the guess and fetches its poster and details Suspiria\W+1977$/,
     );
     expect(within(suspiria).getByRole('button', { name: 'Find the film…' })).toBeInTheDocument();
   });
