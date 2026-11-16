@@ -223,17 +223,51 @@ describe('fixture server', () => {
 
   it('serves the playback health chart without the session under three minutes', async () => {
     const { sessions } = await call('GET', '/api/admin/playback-health/chart');
-    expect(sessions).toHaveLength(3);
+    expect(sessions).toHaveLength(4);
     expect(sessions.every((s) => s.watchedMs >= 180_000)).toBe(true);
-    expect(sessions.map((s) => s.environment)).toEqual(['home', 'away', 'train']);
+    expect(sessions.map((s) => s.environment)).toEqual(['home', 'away', 'train', 'train']);
     expect(sessions[2]).toMatchObject({ stallCount: 2, rungMs: { '480p': 1_468_800 } });
     const recent = await call('GET', '/api/admin/playback-health/chart?since=2026-11-01T00:00:00Z');
-    expect(recent.sessions).toHaveLength(2);
+    expect(recent.sessions).toHaveLength(3);
   });
 
   it('carries the touch hint on the chart rows', async () => {
     const { sessions } = await call('GET', '/api/admin/playback-health/chart');
-    expect(sessions.map((s) => s.touch)).toEqual([false, true, false]);
+    expect(sessions.map((s) => s.touch)).toEqual([false, true, false, false]);
+  });
+
+  it('serves the 12 Nov pair as one two-part viewing, each part with its own record', async () => {
+    const { sessions } = await call('GET', '/api/admin/playback-health/chart');
+    const rock = sessions.at(-1);
+    expect(rock).toMatchObject({
+      filmTitle: 'The Rock',
+      playbackId: 'fb22ac5e-0000-4000-8000-000000000001',
+      endedAt: '2026-11-12T20:33:53.080Z',
+      watchedMs: 8_280_000,
+      stallCount: 159,
+    });
+    expect(rock.parts.map((p) => p.playbackId)).toEqual([
+      'fb22ac5e-0000-4000-8000-000000000001',
+      '323111c2-0000-4000-8000-000000000002',
+    ]);
+    // Every other row is a one-part viewing, with the end the first part has.
+    expect(sessions[0].parts).toEqual([
+      expect.objectContaining({ playbackId: sessions[0].playbackId, endedAt: sessions[0].endedAt }),
+    ]);
+    const second = await call(
+      'GET',
+      '/api/admin/playback-health/323111c2-0000-4000-8000-000000000002',
+    );
+    expect(second).toMatchObject({
+      startedAt: '2026-11-12T17:56:53.956Z',
+      updatedAt: '2026-11-12T20:33:53.080Z',
+      report: { startupMs: 6300, stallCount: 155, watchedMs: 6_360_000 },
+    });
+    const first = await call(
+      'GET',
+      '/api/admin/playback-health/fb22ac5e-0000-4000-8000-000000000001',
+    );
+    expect(first.report).toMatchObject({ stallCount: 4, watchedMs: 1_920_000 });
   });
 
   it('serves one full record with per-minute rows of seven figures, or five in an older one', async () => {

@@ -132,6 +132,30 @@ describe('newViewing', () => {
     expect(urls.at(-1)).toBe(`/api/playback-health/${NEXT}`);
   });
 
+  it('starts the new viewing with no positions, whatever the last one saw', async () => {
+    const fetchMock = stubFetch();
+    const ids = [ID, NEXT];
+    const { result } = mount({ makeId: () => ids.shift() });
+    await act(async () => {
+      result.current.beat(90_000);
+      result.current.playing();
+      await advance(100);
+    });
+    expect(bodies(fetchMock).at(-1)).toMatchObject({
+      startPositionMs: 90_000,
+      endPositionMs: 90_000,
+    });
+    act(() => result.current.newViewing());
+    await act(async () => {
+      result.current.playing();
+      await advance(100);
+    });
+    expect(bodies(fetchMock).at(-1)).toMatchObject({
+      startPositionMs: null,
+      endPositionMs: null,
+    });
+  });
+
   it('starts the new counter at zero, with the quality it was given', async () => {
     const fetchMock = stubFetch();
     const ids = [ID, NEXT];

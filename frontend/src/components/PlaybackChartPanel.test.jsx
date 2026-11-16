@@ -12,16 +12,30 @@ afterEach(() => {
 const NOW = new Date('2026-11-14T12:00:00.000Z');
 
 /** A session from the API-shaped fixture, as another one: the identity and the figures a test needs differ. */
-const chartRow = (n, title, over = {}) => ({
-  ...structuredClone(fixtures.adminPlaybackChart.sessions[0]),
-  playbackId: `00000000-0000-4000-8000-00000000000${n}`,
-  filmTitle: title,
-  startedAt: `2026-11-0${n}T20:00:00Z`,
-  watchedMs: 4_320_000,
-  startupMs: 1000 * n,
-  rungMs: { original: 4_320_000 },
-  ...over,
-});
+const chartRow = (n, title, over = {}) => {
+  const row = {
+    ...structuredClone(fixtures.adminPlaybackChart.sessions[0]),
+    playbackId: `00000000-0000-4000-8000-00000000000${n}`,
+    filmTitle: title,
+    startedAt: `2026-11-0${n}T20:00:00Z`,
+    endedAt: `2026-11-0${n}T21:13:00Z`,
+    watchedMs: 4_320_000,
+    startupMs: 1000 * n,
+    rungMs: { original: 4_320_000 },
+    ...over,
+  };
+  // One part: the row's own playback.
+  row.parts = [
+    {
+      playbackId: row.playbackId,
+      startedAt: row.startedAt,
+      endedAt: row.endedAt,
+      watchedMs: row.watchedMs,
+      environment: row.environment,
+    },
+  ];
+  return row;
+};
 
 const SESSIONS = [
   chartRow(1, 'Alpha'),
@@ -150,7 +164,9 @@ describe('PlaybackChartPanel', () => {
       }),
     ).toBeInTheDocument();
     expect(selected).toHaveTextContent('Away (EE Limited)');
-    expect(within(selected).getByText(/^Start 3\.0 s · No stalls/)).toBeInTheDocument();
+    expect(
+      within(selected).getByText(/^20:00–21:13 · Start 3\.0 s · No stalls/),
+    ).toBeInTheDocument();
     // The record's own first line is the heading, not repeated.
     expect(within(selected).queryByText(/watched · Mac/)).not.toBeInTheDocument();
     expect(api.records()).toEqual([

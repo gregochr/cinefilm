@@ -199,6 +199,8 @@ export const playbackChart = {
   loadingStripLabel: 'Loading the minute by minute view', // planner, 5a-2
   stripError: 'Couldn’t load that session’s minutes.', // planner, 5a-2
   noMinutes: 'No minute by minute figures for this session.', // planner, 5a-2
+  pickedUp: (seconds) => `Picked up again after ${seconds} s`, // planner, joined viewings
+  paused: (time) => `Paused ${time}`, // planner, joined viewings
   source:
     'AR4 and 04 for the title, filters, tiles, legend, hint and strip words; the planner for the rest (5a-2)',
 };

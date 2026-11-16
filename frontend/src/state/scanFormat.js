@@ -30,6 +30,18 @@ export function formatScanDay(iso) {
   return `${parts.day} ${parts.month}`;
 }
 
+const CLOCK = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/London',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/** "17:56": the time of day in the application time zone (Europe/London, like the server). */
+export function formatScanClock(iso) {
+  return CLOCK.format(new Date(iso));
+}
+
 /**
  * How long a scan took, in whole seconds: "48s", "1m 48s" (the seconds stay when 0: "2m 0s"), "1h 5m" from an hour.
  * A finish before the start (clock skew) reads "0s".

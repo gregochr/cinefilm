@@ -10,9 +10,12 @@ import {
   filterByEnvironment,
   median,
   minuteStrip,
+  partGap,
+  partTimes,
   percentText,
   sessionDotSize,
   sessionHeading,
+  sessionParts,
   stalledNote,
   stallDotSize,
   startupText,
@@ -299,9 +302,96 @@ describe('words', () => {
     ]);
   });
 
+  it('says "in 2 parts" after the watched time only for a viewing of more than one part', () => {
+    const part = (id) => ({ playbackId: id, startedAt: '2026-11-10T19:43:05Z', endedAt: null });
+    expect(sessionHeading(session({ parts: [part('a')] }), null).at(-1)).toBe('1h 12m watched');
+    expect(sessionHeading(session({ parts: [part('a'), part('b')] }), null).at(-1)).toBe(
+      '1h 12m watched in 2 parts',
+    );
+    expect(sessionHeading(session({ parts: [part('a'), part('b'), part('c')] }), null).at(-1)).toBe(
+      '1h 12m watched in 3 parts',
+    );
+  });
+
   it('knows the colour of a bucket', () => {
     expect(bucketColour('original')).toBe('#EDE6DA');
     expect(bucketColour('nope')).toBeUndefined();
+  });
+});
+
+describe('sessionParts', () => {
+  it('is the row’s own parts, oldest first', () => {
+    const parts = [{ playbackId: 'a' }, { playbackId: 'b' }];
+    expect(sessionParts(session({ parts }))).toBe(parts);
+  });
+
+  it('makes one part from the row itself when an older server sends none (or an empty list)', () => {
+    const expected = [
+      {
+        playbackId: 'p',
+        startedAt: '2026-11-10T19:43:05Z',
+        endedAt: null,
+        watchedMs: 4_320_000,
+        environment: 'home',
+      },
+    ];
+    expect(sessionParts(session())).toEqual(expected);
+    expect(sessionParts(session({ parts: [] }))).toEqual(expected);
+    expect(sessionParts(session({ endedAt: '2026-11-10T21:00:00Z' }))[0].endedAt).toBe(
+      '2026-11-10T21:00:00Z',
+    );
+  });
+});
+
+describe('partTimes', () => {
+  it('writes the start and end clock times in London', () => {
+    expect(
+      partTimes({ startedAt: '2026-11-12T17:56:53.956Z', endedAt: '2026-11-12T20:33:53.080Z' }),
+    ).toBe('17:56–20:33');
+  });
+
+  it('gives the end its date when it falls on a later day', () => {
+    expect(partTimes({ startedAt: '2026-11-11T23:40:00Z', endedAt: '2026-11-12T01:10:00Z' })).toBe(
+      '23:40–12 Nov 01:10',
+    );
+  });
+
+  it('judges the day in London, not UTC (summer, 23:30 UTC is 00:30 the next day)', () => {
+    expect(partTimes({ startedAt: '2026-07-01T22:30:00Z', endedAt: '2026-07-01T23:30:00Z' })).toBe(
+      '23:30–2 Jul 00:30',
+    );
+  });
+
+  it('shows only the start when the end is not known', () => {
+    expect(partTimes({ startedAt: '2026-11-12T17:56:53Z', endedAt: null })).toBe('17:56');
+    expect(partTimes({ startedAt: '2026-11-12T17:56:53Z' })).toBe('17:56');
+  });
+});
+
+describe('partGap', () => {
+  const at = (gapMs) => [
+    { endedAt: '2026-11-12T17:56:47.761Z' },
+    { startedAt: new Date(Date.parse('2026-11-12T17:56:47.761Z') + gapMs).toISOString() },
+  ];
+
+  it('says picked up again, in whole seconds, under a minute', () => {
+    expect(partGap(...at(6_192))).toBe('Picked up again after 6 s');
+    expect(partGap(...at(0))).toBe('Picked up again after 0 s');
+    expect(partGap(...at(59_999))).toBe('Picked up again after 59 s');
+  });
+
+  it('says paused from exactly a minute', () => {
+    expect(partGap(...at(60_000))).toBe('Paused 1m');
+    expect(partGap(...at(4_800_000))).toBe('Paused 1h 20m');
+  });
+
+  it('treats an overlap as no gap', () => {
+    expect(partGap(...at(-5_000))).toBe('Picked up again after 0 s');
+  });
+
+  it('has nothing to say without the earlier part’s end', () => {
+    expect(partGap({ endedAt: null }, { startedAt: '2026-11-12T18:00:00Z' })).toBeNull();
+    expect(partGap({ endedAt: 'x' }, { startedAt: 'y' })).toBeNull();
   });
 });
 
