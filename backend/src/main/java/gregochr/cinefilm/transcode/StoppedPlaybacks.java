@@ -8,8 +8,9 @@ import java.util.Map;
 import org.springframework.stereotype.Component;
 
 /**
- * The playbacks Admin has stopped, remembered in memory for {@link #REMEMBER_FOR}: long enough for the player's next
- * requests to be answered 410 instead of being taken for an expired session. Both the session and the viewing
+ * The playbacks Admin has stopped, remembered in memory for {@link #REMEMBER_FOR} (a day, like the longest a quiet
+ * session can be rebuilt): long enough for a paused player's next requests, whenever it resumes, to be answered 410
+ * instead of being taken for an expired session. Both the session and the viewing
  * (playback id) are remembered, because the session is gone once it is ended and can no longer say which viewing it
  * served. Nothing is persisted: a restart forgets them, and the player then recovers as it does after any restart.
  * Time comes from the injected clock.
@@ -18,7 +19,7 @@ import org.springframework.stereotype.Component;
 public class StoppedPlaybacks {
 
     /** How long a stop is remembered. */
-    static final Duration REMEMBER_FOR = Duration.ofMinutes(10);
+    static final Duration REMEMBER_FOR = Duration.ofHours(24);
     /** The most of each kind kept; the eldest is dropped beyond it (Admin is one person pressing Stop). */
     static final int MAX_KEPT = 64;
 

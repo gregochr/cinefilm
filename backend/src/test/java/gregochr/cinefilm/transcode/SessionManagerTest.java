@@ -864,6 +864,13 @@ class SessionManagerTest {
     }
 
     @Test
+    void theAdminRowCarriesTheViewingTheSessionServes() {
+        manager.create(specFor(PLAYBACK));
+
+        assertThat(row().playbackId()).isEqualTo(PLAYBACK);
+    }
+
+    @Test
     void aSessionWhoseClientNamedNoViewingOrAnUnknownSessionHasNoPlaybackId() {
         String id = manager.create(specFor(null)).id();
 

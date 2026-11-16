@@ -299,7 +299,7 @@ describe('adminCopy playingNow', () => {
     expect(buttons.stopStream.label).toBe('Stop this stream');
     expect(buttons.stopStream.source).toBe('07');
     expect(buttons.stopStream.hint('Safari on iPad')).toBe(
-      'Ends playback on Safari on iPad; it can resume from here.',
+      'Ends playback on Safari on iPad; it can resume from here',
     );
     expect(playingNow.stopHint('Mac')).toBe(buttons.stopStream.hint('Mac'));
   });
@@ -307,7 +307,7 @@ describe('adminCopy playingNow', () => {
   it('says "that device" in the Stop hint when the device is not known', () => {
     for (const device of ['Unknown device', null, undefined, '']) {
       expect(buttons.stopStream.hint(device)).toBe(
-        'Ends playback on that device; it can resume from here.',
+        'Ends playback on that device; it can resume from here',
       );
     }
   });

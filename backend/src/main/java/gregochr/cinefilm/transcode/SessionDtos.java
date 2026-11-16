@@ -81,8 +81,17 @@ public final class SessionDtos {
      * @param segmentsAhead how many segments the encoder is ahead of the player
      * @param startedAt ISO-8601 start time
      * @param unavailable true after the encoder failed twice
+     * @param playbackId the viewing the session serves (what its health reports carry), or null when the client did
+     *     not say; Admin's Stop targets the row of that viewing
      */
     public record SessionRow(String id, String filmTitle, long editionId, String rung, Double speed,
-                             int segmentsAhead, java.time.Instant startedAt, boolean unavailable) {
+                             int segmentsAhead, java.time.Instant startedAt, boolean unavailable,
+                             String playbackId) {
+
+        /** A row whose viewing is not named. */
+        public SessionRow(String id, String filmTitle, long editionId, String rung, Double speed,
+                          int segmentsAhead, java.time.Instant startedAt, boolean unavailable) {
+            this(id, filmTitle, editionId, rung, speed, segmentsAhead, startedAt, unavailable, null);
+        }
     }
 }

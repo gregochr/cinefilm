@@ -49,7 +49,8 @@ class TranscodingAdminControllerTest {
         when(indexJob.progress()).thenReturn(new IndexJob.Progress(412, 538));
         when(manager.hlsBytes()).thenReturn(1_288_490_188L);
         when(manager.sessions()).thenReturn(List.of(
-            new SessionRow(ID, "Heat", 11, "720p", 3.4, 12, Instant.parse("2026-11-09T19:02:11Z"), false),
+            new SessionRow(ID, "Heat", 11, "720p", 3.4, 12, Instant.parse("2026-11-09T19:02:11Z"), false,
+                "c1000000-0000-4000-8000-000000000001"),
             new SessionRow("6b0f1c1e-6a52-4d5e-9a4c-0a7d3c1f2b11", "Alien", 12, "original", null, 0,
                 Instant.parse("2026-11-09T19:05:00Z"), true)));
 
@@ -67,6 +68,8 @@ class TranscodingAdminControllerTest {
             .andExpect(jsonPath("$.sessions[0].segmentsAhead").value(12))
             .andExpect(jsonPath("$.sessions[0].startedAt").value("2026-11-09T19:02:11Z"))
             .andExpect(jsonPath("$.sessions[0].unavailable").value(false))
+            .andExpect(jsonPath("$.sessions[0].playbackId").value("c1000000-0000-4000-8000-000000000001"))
+            .andExpect(jsonPath("$.sessions[1].playbackId").doesNotExist())
             .andExpect(jsonPath("$.sessions[1].speed").doesNotExist())
             .andExpect(jsonPath("$.sessions[1].unavailable").value(true));
     }

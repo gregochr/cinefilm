@@ -62,7 +62,7 @@ describe('Admin Playback: Now playing', () => {
     expect(within(panel).getByText('Mac · Home · 720p, converting on the fly')).toBeInTheDocument();
     expect(
       within(panel).getByRole('button', { name: 'Stop this stream: Film 1 (Mac)' }),
-    ).toHaveAccessibleDescription('Ends playback on Mac; it can resume from here.');
+    ).toHaveAccessibleDescription('Ends playback on Mac; it can resume from here');
   });
 
   it('names an iPad by the touch hint', async () => {
@@ -72,7 +72,7 @@ describe('Admin Playback: Now playing', () => {
     expect(await within(panel).findByText(/^iPad · Home/)).toBeInTheDocument();
     expect(
       within(panel).getByRole('button', { name: 'Stop this stream: Film 1 (iPad)' }),
-    ).toHaveAccessibleDescription('Ends playback on iPad; it can resume from here.');
+    ).toHaveAccessibleDescription('Ends playback on iPad; it can resume from here');
   });
 
   it('lists several streams and offers Stop only where an HLS session of that edition is live', async () => {

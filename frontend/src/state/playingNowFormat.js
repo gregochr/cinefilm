@@ -7,14 +7,18 @@ import { environmentLabel } from './healthFormat.js';
 import { describeDevice } from './userAgent.js';
 
 /**
- * The live HLS session an entry can be stopped through: the session of the entry's edition, or null (direct play has
- * no session, so nothing to stop). The server keeps at most one per edition (`SessionManager.create` replaces any
- * live one), so taking the newest started is only a defence.
+ * The live HLS session an entry can be stopped through, or null (direct play has no session, so nothing to stop).
+ * A session names the viewing it serves (`playbackId`): the entry's own session is the one with its `playbackId`, so
+ * Stop on one row never ends another device's playback of the same edition. Only a session that names no viewing (an
+ * older page) is matched by the entry's edition. The server keeps at most one session per edition
+ * (`SessionManager.create` replaces any live one), so taking the newest started is only a defence.
  */
-export function liveSessionFor(editionId, sessions) {
+export function liveSessionFor(editionId, sessions, playbackId = null) {
+  const same = (sessions ?? []).filter((session) => session.editionId === editionId);
+  const named = playbackId ? same.filter((session) => session.playbackId === playbackId) : [];
+  const candidates = named.length > 0 ? named : same.filter((session) => !session.playbackId);
   let newest = null;
-  for (const session of sessions ?? []) {
-    if (session.editionId !== editionId) continue;
+  for (const session of candidates) {
     if (!newest || Date.parse(session.startedAt) > Date.parse(newest.startedAt)) newest = session;
   }
   return newest;
@@ -26,7 +30,7 @@ export function liveSessionFor(editionId, sessions) {
  * out), the Stop hint, and the id of the session to stop (null: no Stop).
  */
 export function playingNowRow(entry, sessions) {
-  const session = liveSessionFor(entry.editionId, sessions);
+  const session = liveSessionFor(entry.editionId, sessions, entry.playbackId);
   const device = describeDevice(entry.device, entry.touch);
   let quality = entry.quality ? rungName(entry.quality) : null;
   if (quality && session) quality = `${quality}, ${playingNow.converting}`;

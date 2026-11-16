@@ -72,6 +72,9 @@ export function useStream({
   const startedRef = useRef(false);
   const recoveriesRef = useRef([]);
   const sessionRef = useRef(null);
+  // The film position (ms) a stop caught, or null: set before the engine is destroyed (which resets the element to 0),
+  // so "Play again" and the scrubber keep it.
+  const stoppedAtRef = useRef(null);
   // Whether the new source should start playing once it has metadata: true for the first load (autoplay), and
   // after a restart or reload whatever the viewer had at that moment (a paused film stays paused).
   const resumeRef = useRef({ play: true, held: false });
@@ -103,6 +106,7 @@ export function useStream({
       latest.current.health.reconnecting(false);
     };
     clearReconnecting();
+    stoppedAtRef.current = null;
 
     const holdPlayState = () => {
       // Only the first change counts: a source swapped out before its metadata arrived reads paused, wrongly.
@@ -149,11 +153,16 @@ export function useStream({
     // Admin stopped this playback: no new session. The session is already ended on the server, so nothing is sent.
     const stopped = () => {
       if (cancelled) return;
+      // Before anything resets the element: destroying the engine detaches the source, which sets the time to 0.
+      stoppedAtRef.current = currentPosition();
       engine?.destroy();
       engine = null;
       session = null;
       sessionRef.current = null;
       video.pause();
+      // Nothing may play on behind the card (a native player keeps its source attached otherwise).
+      video.removeAttribute('src');
+      video.load();
       clearReconnecting();
       setStream({ mode: 'stopped', rung: null, renditions: [] });
     };
@@ -399,6 +408,7 @@ export function useStream({
     reconnecting,
     kbps: median(samples) ?? reusedKbps,
     pendingSeekRef,
+    stoppedAtRef,
     takePlayAfterLoad,
     restart,
   };

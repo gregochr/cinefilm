@@ -230,13 +230,13 @@ the phone row renders at a phone width with Header and TabBar hidden; Fix match 
   and the player's `recover()` made a new session under the same `playbackId`. The follow-up
   `feat(playback): Admin Stop ends playback on the device` closes that open item: the Admin stop route
   (`SessionService.stopFromAdmin`) records the session id and the `playbackId` it was created with (the session request
-  now carries the viewing's id) in `StoppedPlaybacks` for 10 minutes, in memory (a restart forgets it, and the player then
+  now carries the viewing's id) in `StoppedPlaybacks` for 24 hours (the longest a quiet session is rebuilt, so a paused device resumed later still stops), in memory (a restart forgets it, and the player then
   recovers as after any restart); the session's master, media and segment routes and a new session for that
   `playbackId` answer 410 (`foundation-plan.md`). The player treats a 410 as a stop, not a failure (hls.js error or
   native master check or session request): it destroys the engine, pauses, and shows "Playback was stopped from Admin."
-  with "Play again", which remounts the player as a new viewing (new `playbackId`) at the current position. A 404, no
+  with "Play again", which remounts the player as a new viewing (new `playbackId`) at the position the stop caught (read before the engine is destroyed, because that resets the element to 0). The transcoding session rows carry the `playbackId` and Stop on a row targets the session of that row's viewing, never another device's playback of the same edition; the source is cleared and play is ignored while stopped. A 404, no
   answer, a 5xx and a restart recover as before (tests pin each). The hint is therefore AR4's and 07's again:
-  "Ends playback on {device}; it can resume from here." ("that device" when the device is unknown). A stopped entry is
+  "Ends playback on {device}; it can resume from here" (no full stop, as in the handover; it drops "the" because a described device reads as a name; "that device" when the device is unknown). A stopped entry is
   hidden keyed on the stopped session id: only while its edition has no live session or still has that one; a session
   with another id brings it back with Stop and drops the hide for good (a later end of that session does not hide it again). The row has no poster, no year, no "1h 12m in" (none is in `playingNow`) and no operator in "(EE)".
   The touch hint is `client.touch` in the health report, stored in the report JSON (no migration: the report is a JSON

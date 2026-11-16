@@ -173,6 +173,11 @@ public class SessionService {
         } catch (SessionStartException e) {
             throw new ConflictException("Transcoding could not start");
         }
+        // A stop that arrived while the session was being made: end the new session so nothing plays on.
+        if (playbackId != null && stopped.playbackStopped(playbackId)) {
+            manager.end(created.id());
+            throw new GoneException(STOPPED);
+        }
         return new SessionCreated(created.id(), "/api/sessions/" + created.id() + "/master.m3u8", start.id(),
             ladder.stream().map(r -> new RenditionDto(r.id(), r.height(), r.videoBitrate(), r.copy())).toList());
     }
@@ -209,7 +214,7 @@ public class SessionService {
 
     /**
      * Ends a session because Admin pressed Stop: as {@link #end}, and the session and the viewing it served are
-     * remembered for ten minutes, so their requests answer 410 (not the 404 of an expired session, and no new session
+     * remembered for a day, so their requests answer 410 (not the 404 of an expired session, and no new session
      * for that viewing). The stop is recorded before the session ends, so a request that arrives meanwhile is
      * already refused.
      */

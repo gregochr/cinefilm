@@ -107,7 +107,8 @@ export default function Player() {
   const [again, setAgain] = useState({ key: routeKey, count: 0, atMs: null });
   if (again.key !== routeKey) setAgain({ key: routeKey, count: 0, atMs: null });
   const playAgain = (atMs) => {
-    setAgain((a) => ({ ...a, count: a.count + 1, atMs }));
+    // A position of 0 or less is no position: the new viewing starts where a new viewing of this film would.
+    setAgain((a) => ({ ...a, count: a.count + 1, atMs: atMs > 0 ? atMs : null }));
     setOpened({ key: routeKey, at: performance.now() });
   };
   if (loading && !film)
@@ -222,7 +223,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, onPlayAga
     onToast: setToast,
     health,
   });
-  const { pendingSeekRef } = stream;
+  const { pendingSeekRef, stoppedAtRef } = stream;
   const activeRung = stream.rung ?? (quality === AUTO ? ORIGINAL : quality);
   const indicator = indicatorModel({
     quality,
@@ -360,10 +361,10 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, onPlayAga
 
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || stoppedAtRef.current !== null) return; // Admin stopped this playback: only "Play again" plays
     if (video.paused) video.play().catch(() => {});
     else video.pause();
-  }, []);
+  }, [stoppedAtRef]);
 
   const changeVolume = useCallback((next) => {
     const video = videoRef.current;
@@ -593,6 +594,8 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, onPlayAga
 
   const onTimeUpdate = () => {
     const video = videoRef.current;
+    // The element reads 0 once a stop has detached its source: keep the position the stop caught.
+    if (stoppedAtRef.current !== null) return;
     // Until the seek lands the element reads 0: do not let that overwrite the position or the progress report.
     const pending = pendingSeekRef.current;
     if (pending !== null) {
@@ -763,7 +766,9 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt, onPlayAga
       />
 
       {stream.mode === 'stopped' ? (
-        <StoppedCard onPlayAgain={() => onPlayAgain(Math.round(positionRef.current))} />
+        <StoppedCard
+          onPlayAgain={() => onPlayAgain(Math.round(stoppedAtRef.current ?? positionRef.current))}
+        />
       ) : stream.mode === 'unavailable' ? (
         <UnavailableCard onRetry={stream.restart} />
       ) : stream.reconnecting ? (

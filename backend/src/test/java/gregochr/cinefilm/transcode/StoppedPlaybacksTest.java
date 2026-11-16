@@ -40,10 +40,10 @@ class StoppedPlaybacksTest {
     }
 
     @Test
-    void aStopIsRememberedForTenMinutesAndThenForgotten() {
+    void aStopIsRememberedForADayAndThenForgotten() {
         stopped.record(SESSION, PLAYBACK);
 
-        clock.advance(Duration.ofMinutes(10).minusMillis(1));
+        clock.advance(Duration.ofHours(24).minusMillis(1));
         assertThat(stopped.sessionStopped(SESSION)).isTrue();
         assertThat(stopped.playbackStopped(PLAYBACK)).isTrue();
 
@@ -53,11 +53,11 @@ class StoppedPlaybacksTest {
     }
 
     @Test
-    void stoppingAgainRestartsTheTenMinutes() {
+    void stoppingAgainRestartsTheDay() {
         stopped.record(SESSION, PLAYBACK);
-        clock.advance(Duration.ofMinutes(6));
+        clock.advance(Duration.ofHours(13));
         stopped.record(SESSION, PLAYBACK);
-        clock.advance(Duration.ofMinutes(6));
+        clock.advance(Duration.ofHours(13));
 
         assertThat(stopped.sessionStopped(SESSION)).isTrue();
         assertThat(stopped.playbackStopped(PLAYBACK)).isTrue();

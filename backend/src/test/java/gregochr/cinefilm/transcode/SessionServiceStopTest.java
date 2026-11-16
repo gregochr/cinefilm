@@ -102,6 +102,17 @@ class SessionServiceStopTest {
     }
 
     @Test
+    void aStopThatArrivesWhileTheSessionIsBeingMadeEndsTheNewSessionAndIs410() {
+        readyToCreate();
+        when(stopped.playbackStopped(PLAYBACK)).thenReturn(false, true);
+
+        assertThatThrownBy(() -> service.create(EDITION_ID, request(PLAYBACK)))
+            .isInstanceOf(GoneException.class).hasMessage("Playback was stopped from Admin");
+
+        verify(manager).end(ID);
+    }
+
+    @Test
     void creatingASessionThatNamesNoViewingNeverAsksWhetherItWasStopped() {
         readyToCreate();
 

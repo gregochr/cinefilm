@@ -373,7 +373,7 @@ public class SessionManager {
             ahead = Math.max(0, run.frontier - session.playhead);
         }
         return new SessionDtos.SessionRow(session.id, session.spec.filmTitle(), session.spec.editionId(),
-            session.lastRung, speed, ahead, session.startedAt, session.unavailable);
+            session.lastRung, speed, ahead, session.startedAt, session.unavailable, session.spec.playbackId());
     }
 
     private TranscodeSession require(String id) {

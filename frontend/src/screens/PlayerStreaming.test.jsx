@@ -580,6 +580,22 @@ describe('a playback Admin stopped (410)', () => {
     expect(screen.getByRole('button', { name: 'Play again' })).toHaveFocus();
   });
 
+  it('leaves no source on the video and ignores play (the surface, Space) while stopped', async () => {
+    const { video, hls } = await open();
+    await landResume(video);
+    await moveTo(video, 1000);
+    await hlsEvent(() =>
+      hls().error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    expect(video).not.toHaveAttribute('src');
+    const play = vi.spyOn(video, 'play');
+    for (const button of screen.getAllByRole('button', { name: 'Play' })) {
+      await userEvent.click(button);
+    }
+    await userEvent.keyboard('k');
+    expect(play).not.toHaveBeenCalled();
+  });
+
   it('on a 410 for the new session that a 404 asked for, stops instead of direct-playing', async () => {
     const { log, video, hls } = await open({
       create: (n) => (n === 1 ? respond(SESSION(1), 201) : gone()),
@@ -595,12 +611,21 @@ describe('a playback Admin stopped (410)', () => {
     expect(screen.queryByText('Reconnecting…')).not.toBeInTheDocument();
   });
 
-  it('Play again starts a new viewing at the current position', async () => {
+  it('Play again starts a new viewing at the position the stop caught, though destroying hls.js resets the element', async () => {
     const { log, video, hls } = await open();
     await landResume(video);
     await moveTo(video, 1000);
+    // Real hls.js detaches the source on destroy, which sets the time to 0 and fires timeupdate.
+    hls().destroy.mockImplementation(() => {
+      video.currentTime = 0;
+      fireEvent.timeUpdate(video);
+    });
     await hlsEvent(() =>
       hls().error({ fatal: true, type: 'networkError', response: { code: 410 } }),
+    );
+    expect(screen.getByRole('slider', { name: 'Seek' })).toHaveAttribute(
+      'aria-valuetext',
+      '16 minutes 40 seconds',
     );
     await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
     await instances(2);
@@ -657,8 +682,10 @@ describe('a playback Admin stopped (410)', () => {
       installFetch(srv.route);
       renderApp('/films/1/play?edition=11');
       await screen.findByTestId('player-video');
-      // The second try waits a second (backoff), longer than `waitFor`'s default.
-      await vi.waitFor(() => expect(FakeHls.instances).toHaveLength(1), { timeout: 4000 });
+      await vi.waitFor(() => expect(srv.log.posted).toHaveLength(1));
+      // The second try waits out a backoff; the browser coming back online wakes it, so no test waits a second.
+      await hlsEvent(() => window.dispatchEvent(new Event('online')));
+      await instances(1);
       expect(srv.log.posted).toHaveLength(2);
       expect(FakeHls.last.loadSource).toHaveBeenCalledWith('/api/sessions/s2/master.m3u8');
       expect(stoppedCard()).not.toBeInTheDocument();
@@ -829,6 +856,21 @@ describe('iPhone Safari: native HLS', () => {
     video.currentTime = 0;
     await hlsEvent(() => fireEvent.loadedMetadata(video));
     expect(video.currentTime).toBe(1000);
+  });
+
+  it('stops, with no new session and no source left on the video, when the reload finds a 410', async () => {
+    const { video, log, master } = await nativeOpen();
+    await landResume(video);
+    await moveTo(video, 1000);
+    master.status = 410;
+    await hlsEvent(() => video.dispatchEvent(new Event('error')));
+    expect(await screen.findByText('Playback was stopped from Admin.')).toBeInTheDocument();
+    expect(log.posted).toHaveLength(1);
+    expect(video).not.toHaveAttribute('src');
+    expect(screen.queryByText('Reconnecting…')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
+    await vi.waitFor(() => expect(log.posted).toHaveLength(2));
+    expect(log.posted[1].startMs).toBe(1000000);
   });
 
   it('makes a new session when the reload finds the old one gone', async () => {

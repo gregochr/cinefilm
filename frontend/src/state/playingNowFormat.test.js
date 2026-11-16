@@ -48,6 +48,33 @@ describe('liveSessionFor', () => {
   });
 });
 
+describe('liveSessionFor with a viewing', () => {
+  const x = session({ id: 'sx', playbackId: 'px' });
+  const y = session({ id: 'sy', playbackId: 'py' });
+
+  it('picks the session of the entry’s own viewing, so Stop on one row never targets the other device', () => {
+    expect(liveSessionFor(11, [x, y], 'px').id).toBe('sx');
+    expect(liveSessionFor(11, [x, y], 'py').id).toBe('sy');
+    expect(playingNowRow(entry({ playbackId: 'py' }), [x, y]).sessionId).toBe('sy');
+    expect(playingNowRow(entry({ playbackId: 'px' }), [x, y]).sessionId).toBe('sx');
+  });
+
+  it('has no session for a viewing whose session belongs to another viewing (nothing is stopped by edition)', () => {
+    expect(liveSessionFor(11, [x], 'py')).toBeNull();
+    expect(playingNowRow(entry({ playbackId: 'py' }), [x]).sessionId).toBeNull();
+  });
+
+  it('falls back to the edition for a session that names no viewing', () => {
+    expect(liveSessionFor(11, [session({ id: 'old' })], 'px').id).toBe('old');
+    expect(liveSessionFor(11, [x, session({ id: 'old' })], 'py').id).toBe('old');
+  });
+
+  it('matches by edition when the entry names no viewing and the session names none', () => {
+    expect(liveSessionFor(11, [session()], null).id).toBe('s1');
+    expect(liveSessionFor(11, [x], null)).toBeNull();
+  });
+});
+
 describe('playingNowRow', () => {
   it('reads "{device} · {environment} · {quality}, converting on the fly" with a live session', () => {
     const row = playingNowRow(entry(), [session()]);
@@ -56,7 +83,7 @@ describe('playingNowRow', () => {
       filmTitle: 'Heat',
       device: 'Mac',
       detail: 'Mac · Away · 720p, converting on the fly',
-      hint: 'Ends playback on Mac; it can resume from here.',
+      hint: 'Ends playback on Mac; it can resume from here',
       sessionId: 's1',
     });
   });
@@ -88,7 +115,7 @@ describe('playingNowRow', () => {
       const row = playingNowRow(entry({ device, touch: null }), [session()]);
       expect(row.device).toBe('Unknown device');
       expect(row.detail).toBe('Unknown device · Away · 720p, converting on the fly');
-      expect(row.hint).toBe('Ends playback on that device; it can resume from here.');
+      expect(row.hint).toBe('Ends playback on that device; it can resume from here');
     }
   });
 });

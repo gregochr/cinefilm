@@ -1,5 +1,6 @@
 // Every word on an Admin button, hint and section header, in one place. No JSX: the Apple TV and native clients reuse it.
-// Each entry is { label, busyLabel?, hint?, source }. `source` says where the string comes from:
+// Each entry is { label, busyLabel?, hint?, source }; a `hint` is a string, or a function of the row's device name
+// where the words depend on it ("Stop this stream"). `source` says where the string comes from:
 //   '07'      docs/design/admin-redesign/screens/07-buttons-renamed.png (reference/AR7-Buttons.dc.html)
 //   'AR1'..'AR7'  that board
 //   'README'  docs/design/admin-redesign/README.md
@@ -50,7 +51,7 @@ export const buttons = {
   stopStream: {
     label: 'Stop this stream',
     hint: (device) =>
-      `Ends playback on ${device && device !== 'Unknown device' ? device : 'that device'}; it can resume from here.`,
+      `Ends playback on ${device && device !== statusStrip.unknownDevice ? device : 'that device'}; it can resume from here`,
     source: '07',
   },
   // 07 says Forget "starts at a safe quality and measures again", which is not what it does: the owner's answer
