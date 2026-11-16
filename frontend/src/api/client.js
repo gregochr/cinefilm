@@ -80,7 +80,8 @@ async function failureBody(response) {
 
 /**
  * Sends a request to the API. Returns parsed JSON (or null for 204 / empty bodies).
- * A 401 from anything except the session endpoint emits the session-expired event.
+ * A 401 from anything except the session endpoint emits the session-expired event; a 401 on sign-out
+ * (`DELETE /api/session`) is left to `useSignOut`, which treats it as signed out and announces it once.
  */
 export async function request(method, path, options = {}) {
   if (!MUTATING.has(method)) return perform(method, path, options);

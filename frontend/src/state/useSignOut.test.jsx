@@ -71,6 +71,28 @@ describe('useSignOut', () => {
     expect(announced).toHaveBeenCalledTimes(1);
   });
 
+  it('a 401 means the session already ended: it announces signed out and shows no failure', async () => {
+    installFetch((m, url) => (isSignOut(m, url) ? respond(null, 401) : null));
+    const { result } = renderHook(() => useSignOut());
+
+    await act(() => result.current.signOut());
+
+    expect(announced).toHaveBeenCalledTimes(1);
+    expect(announced).toHaveBeenCalledWith({ reason: 'signed-out' });
+    expect(result.current.error).toBeNull();
+    expect(result.current.signingOut).toBe(false);
+  });
+
+  it('a network failure still reports the failure and does not announce', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    const { result } = renderHook(() => useSignOut());
+
+    await act(() => result.current.signOut());
+
+    expect(result.current.error).toBe("Couldn't sign out. Try again.");
+    expect(announced).not.toHaveBeenCalled();
+  });
+
   it('a second press while the request is open sends nothing', async () => {
     let finish;
     const fetchMock = installFetch((m, url) =>

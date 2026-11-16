@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { installFetch, renderApp } from '../../test/mockApi.jsx';
+import { installFetch, renderApp, respond } from '../../test/mockApi.jsx';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -33,6 +34,26 @@ describe('Admin Settings section', () => {
     expect(within(signedIn).getByRole('button', { name: 'Sign out' })).toHaveAccessibleDescription(
       "Signing out here doesn't affect other devices.",
     );
+  });
+
+  it('signing out on an already-expired session ends on the sign-in card, not "Couldn\'t sign out"', async () => {
+    installFetch((method, url) =>
+      method === 'DELETE' && url === '/api/session' ? respond(null, 401) : null,
+    );
+    renderApp('/admin/settings');
+    await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+    expect(await screen.findByRole('dialog', { name: 'Signed out' })).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't sign out. Try again.")).not.toBeInTheDocument();
+  });
+
+  it('a server failure on sign out still says "Couldn\'t sign out"', async () => {
+    installFetch((method, url) =>
+      method === 'DELETE' && url === '/api/session' ? respond(null, 500) : null,
+    );
+    renderApp('/admin/settings');
+    await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+    expect(await screen.findByText("Couldn't sign out. Try again.")).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Signed out' })).not.toBeInTheDocument();
   });
 
   it('shows one skeleton while the setting loads', () => {

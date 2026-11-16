@@ -16,17 +16,8 @@ Record only:
 - The player's "Subtitles are wrong" and timing failures still show their own generic line on a 409 (the lock text is
   shown by Fix match, Edit editions, the need rows, Admin to do and the subtitle picker and panel only).
 
-Bugs:
-
-- A 401 on `DELETE /api/session` shows "Couldn't sign out" instead of the sign-in card (`client.js` skips the expiry
-  event for `/api/session`).
-
 Owner questions:
 
-- OWNER QUESTION (8b-1): a timing nudge clears the owner's "Looks right" check by documented design
-  (`forced-subtitles-plan.md:508`). Nudging a proven forced file in the player can demote it so another file serves
-  on the next film load; the player now keeps the old track and says "changed since the film started". Should a nudge
-  from the player keep the check?
 - Open owner item: Admin Stop only ends the server session (see the Stop-ends-playback work).
 
 ## Left in Admin on purpose (not done in A)
