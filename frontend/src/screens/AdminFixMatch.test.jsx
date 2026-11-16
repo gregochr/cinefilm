@@ -266,6 +266,8 @@ describe('Admin: the Fix match dialog', () => {
       expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument(),
     );
     await waitFor(() => expect(attentionCalls).toBe(before + 1));
+    await act(async () => {}); // let anything still pending land before the exact count
+    expect(attentionCalls).toBe(before + 1);
     expect(applies).toBe(1);
     expect(fetchMock.mock.calls.filter((c) => c[0].includes('/match?'))).toHaveLength(1);
   });
@@ -334,6 +336,8 @@ describe('Admin: the Fix match dialog', () => {
       expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument(),
     );
     await waitFor(() => expect(attentionCalls).toBe(before + 1));
+    await act(async () => {}); // let anything still pending land before the exact count
+    expect(attentionCalls).toBe(before + 1);
   });
 
   it('an apply that lands after Cancel and the row going leaves focus on the section heading', async () => {

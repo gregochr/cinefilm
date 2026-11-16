@@ -86,7 +86,10 @@ export function useDialog({ onEscape, opener }) {
     [returnTo],
   );
 
+  // Closing is once only: while a fade is pending a second `close` does nothing, so the first `after` runs once and
+  // no timer is left running that the unmount would not clear.
   const close = useCallback((after) => {
+    if (timer.current) return;
     if (reducedMotion()) {
       after();
       return;

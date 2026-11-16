@@ -87,11 +87,12 @@ export default function FixMatchPanel({ item, opener, onApplied, onCancel }) {
   const titleId = `${base}-title`;
   const subId = `${base}-sub`;
   const searchRef = useRef(null);
-  // Set when Cancel, Close, Esc or a successful apply starts the fade-out: a second dismissal in that window is
-  // ignored, and an apply that lands in it is reported at once (the unmount that ends the fade cancels its timer).
+  // `useDialog.close` runs only its first `after`, so Cancel, ×, Esc and a successful apply close once, and the
+  // buttons are disabled while `closing`. `dismissed` only decides how an apply that finishes is reported: once
+  // the dialog is on its way out the unmount that ends the fade would drop a second fade's timer, so the result is
+  // reported at once (the lists must still be read again); otherwise it fades first.
   const dismissed = useRef(false);
   const dismiss = () => {
-    if (dismissed.current) return;
     dismissed.current = true;
     dialog.close(onCancel);
   };
@@ -106,13 +107,6 @@ export default function FixMatchPanel({ item, opener, onApplied, onCancel }) {
     close(() => onApplied(result, false));
   });
   const { search } = fix;
-  // Nothing new starts once the dialog is on its way out (the fade leaves the buttons on screen for a moment).
-  const apply = () => {
-    if (!dismissed.current) fix.apply();
-  };
-  const submit = () => {
-    if (!dismissed.current) fix.submit();
-  };
 
   useEffect(() => {
     searchRef.current?.focus();
@@ -158,7 +152,7 @@ export default function FixMatchPanel({ item, opener, onApplied, onCancel }) {
               className="fixmatch__form"
               onSubmit={(event) => {
                 event.preventDefault();
-                submit();
+                fix.submit();
               }}
             >
               <label className="fixmatch__field fixmatch__field--query">
@@ -198,7 +192,7 @@ export default function FixMatchPanel({ item, opener, onApplied, onCancel }) {
             <Button
               variant="primary"
               disabled={fix.picked == null || fix.applying || closing}
-              onClick={apply}
+              onClick={fix.apply}
             >
               {fix.applying ? 'Applying…' : 'Use this match'}
             </Button>
