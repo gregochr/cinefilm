@@ -1,0 +1,501 @@
+// Checks a finished replay and measures what its summary does not show.
+//
+//   node scripts/replay/analyse.mjs <run name>
+//
+// 1. Was the run sound? The sampling cadence, the samples that were not playing, the playhead against the wall
+//    clock, and what the stand-in delivered against the trace. A stall with film in hand, or a playhead that
+//    falls behind the clock outside a stall, means the machine was too busy and the run proves nothing.
+// 2. Gaps of over 30 s in which no segment was being fetched (the player had as much as it wanted).
+// 3. The six bad spells: the buffer going in, its lowest point (the least of the five-second samples taken in it),
+//    seconds stalled beside 12 November. A spell is compared whole or not at all: one that cannot be compared whole is
+//    listed with the reason it was left out.
+// 4. What the screen showed against the link, the rungs beside 12 November, the bytes fetched.
+//
+// The sums are exported functions over a run's data (what the driver wrote to scripts/replay/out/<name>/); the
+// lines they give are made by `describe` and printed only when this runs as a program. From the request log it reads
+// only `kind`, `rung`, `ms`, `sent`, `doneMs`, `cutMs` and `aborted`; what was delivered each minute it takes from
+// `delivered.json`, which the stand-in counted as it let bytes through the link (nothing is estimated).
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { isRunName, printable } from './text.mjs';
+import { SPELLS, loadRecord, rowsByMinute } from './trace.mjs';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+/** Where the driver writes a run's folder, and where `analyseRun` looks by default. */
+export const RUNS_DIR = join(HERE, 'out');
+// 1e9 ms is over 11 days: a longer time is a damaged file, and would make an absurdly long array of minutes.
+const MAX_SAMPLE_MS = 1000000000;
+const RUNG = { 1: 'orig', 2: '1080p', 3: '720p', 4: '480p', 5: '360p', 6: '240p' };
+const LINE_LIMIT = 2000; // the list of thin minutes of a long run is one long line
+const LONG_GAP_MS = 6500; // a sample taken more than this after the one before means a busy or sleeping machine
+const IDLE_GAP_MS = 30000;
+const WARM_UP_MS = 20000;
+const GOOD_LINK_KBPS = 2000;
+const THIN_KBPS = 700;
+const SAMPLE_SECONDS = 5;
+
+const secs = (ms) => (ms / 1000).toFixed(0);
+const pad = (value, width) => String(value).padStart(width);
+const sumOf = (list, pick) => list.reduce((sum, item) => sum + pick(item), 0);
+const listRungs = (rungMs) => Object.entries(rungMs ?? {}).map(([id, ms]) => `${id} ${secs(ms)}`).join(', ');
+
+/** The record minute a run began at, from its summary's line "Replay of record minutes 24 to ...", or null. */
+export function startOf(summaryText) {
+  const found = /^Replay of record minutes (\d+) to /m.exec(summaryText);
+  return found ? Number(found[1]) : null;
+}
+
+/** The trace's kbit/s in force in each replay minute, as the samples saw it. */
+export function linkByMinute(samples) {
+  const link = new Map();
+  for (const s of samples) link.set(Math.floor(s.ms / 60000), s.kbps);
+  return link;
+}
+
+/** The film buffered ahead, in whole seconds, at the sample nearest to `ms` (the earlier one when two are as near). */
+export function aheadAt(samples, ms) {
+  let best = samples[0];
+  for (const s of samples) {
+    if (Math.abs(s.ms - ms) < Math.abs(best.ms - ms)) best = s;
+  }
+  return Math.round(best.ahead);
+}
+
+// ---- 1. was the run sound ----------------------------------------------------------------------------------------
+
+/** The gaps between samples: how many, the longest in ms, and how many were over 6,500 ms. */
+export function samplingGaps(samples) {
+  let longest = 0;
+  let long = 0;
+  for (let i = 1; i < samples.length; i += 1) {
+    const gap = samples[i].ms - samples[i - 1].ms;
+    longest = Math.max(longest, gap);
+    if (gap > LONG_GAP_MS) long += 1;
+  }
+  return { samples: samples.length, longest, long };
+}
+
+/** The samples after the first 20 s that were buffering, not ready to play, or paused. */
+export function notPlaying(samples) {
+  return samples.filter((s) => s.ms > WARM_UP_MS && (s.buffering || s.readyState < 3 || s.paused));
+}
+
+/** How many of those had more than 5 s of film in hand: a stall for the wrong reason. */
+export function withFilmInHand(paused) {
+  return paused.filter((s) => s.ahead > 5).length;
+}
+
+/**
+ * How far the playhead fell behind the clock between samples, from the fourth sample on: the seconds by which a
+ * step fell more than half a second short, in all and where both ends of the step had over 10 s in hand. `moved` and
+ * `wall` are the film's seconds and the clock's seconds from the third sample to the last.
+ */
+export function playheadLag(samples) {
+  if (samples.length < 3) return { behind: 0, behindWithFilm: 0, moved: 0, wall: 0 };
+  let behind = 0;
+  let behindWithFilm = 0;
+  for (let i = 3; i < samples.length; i += 1) {
+    const short = (samples[i].ms - samples[i - 1].ms) / 1000 - (samples[i].t - samples[i - 1].t);
+    if (short > 0.5) {
+      behind += short;
+      if (samples[i - 1].ahead > 10 && samples[i].ahead > 10) behindWithFilm += short;
+    }
+  }
+  const last = samples[samples.length - 1];
+  return { behind, behindWithFilm, moved: last.t - samples[2].t, wall: (last.ms - samples[2].ms) / 1000 };
+}
+
+const isTime = (value) => Number.isFinite(value) && value >= 0;
+
+/**
+ * What the stand-in delivered against what the trace allowed: bytes both ways, the minutes delivered more than 5%
+ * and 60 kbit/s above the trace (`over`), and the thin ones (trace under 700 kbit/s) as `{ minute, rate, got }`.
+ * `perMinute` is what the stand-in counted as it let bytes through, by replay minute (`delivered.json`); a minute it
+ * has no place for counts as 0.
+ */
+export function deliveryAgainstTrace(perMinute, link, start, minutesRun) {
+  let over = 0;
+  let delivered = 0;
+  let allowed = 0;
+  const thin = [];
+  for (let m = 0; m < minutesRun; m += 1) {
+    const bytes = perMinute[m] ?? 0;
+    const got = (bytes * 8) / 60 / 1000;
+    const rate = link.get(m) ?? 0;
+    delivered += bytes;
+    allowed += (rate * 60 * 1000) / 8;
+    if (got > rate * 1.05 + 60) over += 1;
+    if (rate < THIN_KBPS) thin.push({ minute: m + start, rate, got: Math.round(got) });
+  }
+  return { delivered, allowed, over, thin };
+}
+
+/** The whole of section 1. */
+export function soundness({ samples, delivered, start }) {
+  // The minutes the run completed: a place after them (the last report) is not compared with the trace.
+  const minutesRun = Math.floor(samples[samples.length - 1].ms / 60000);
+  const paused = notPlaying(samples);
+  return {
+    gaps: samplingGaps(samples),
+    notPlaying: paused,
+    withFilm: withFilmInHand(paused),
+    lag: playheadLag(samples),
+    delivery: deliveryAgainstTrace(delivered, linkByMinute(samples), start, minutesRun),
+  };
+}
+
+// ---- 2. gaps with nothing fetched --------------------------------------------------------------------------------
+
+// When a segment's fetching ended, in ms on the replay clock.
+function segmentEnd(request) {
+  if (Number.isFinite(request.doneMs)) return request.ms + request.doneMs;
+  if (isTime(request.cutMs)) return request.ms + request.cutMs;
+  return request.ms;
+}
+
+/**
+ * The stretches of over 30 s in which no segment was being fetched, taking each segment from its request to its
+ * end: when it finished (`doneMs`), else when the player cut it (`cutMs`), else, when neither is known, at its start.
+ * Each is `{ gap, first, last, before, after, aheadBefore, aheadAfter, rates }`: its length in ms, the replay
+ * minutes it spans, the rungs fetched either side, the film buffered then and the link in each minute.
+ */
+export function idleGaps(requests, samples, link) {
+  const segments = requests.filter((r) => r.kind === 'segment' && Number.isFinite(r.ms)).sort((a, b) => a.ms - b.ms);
+  if (segments.length === 0) return [];
+  const gaps = [];
+  let lastEnd = segments[0].ms;
+  let previous = segments[0];
+  for (const r of segments) {
+    if (r.ms - lastEnd > IDLE_GAP_MS) gaps.push(describeGap(r, previous, lastEnd, samples, link));
+    const end = segmentEnd(r);
+    if (end > lastEnd) lastEnd = end;
+    previous = r;
+  }
+  return gaps;
+}
+
+function describeGap(next, previous, lastEnd, samples, link) {
+  const first = Math.floor(lastEnd / 60000);
+  const last = Math.floor(next.ms / 60000);
+  const rates = [];
+  for (let m = first; m <= last; m += 1) rates.push(link.get(m));
+  return {
+    gap: next.ms - lastEnd, first, last, before: previous.rung, after: next.rung,
+    aheadBefore: aheadAt(samples, lastEnd), aheadAfter: aheadAt(samples, next.ms), rates,
+  };
+}
+
+// ---- 3. the six bad spells ---------------------------------------------------------------------------------------
+
+// The report's rows by replay minute. A row counts only when it is a list whose first seven figures are all finite
+// numbers (the first is the minute); anything else is not a row, so a spell that needs it is left out.
+function rowsOf(report) {
+  const minuteRows = Array.isArray(report.minutes) ? report.minutes.filter(isRow) : [];
+  return new Map(minuteRows.map((row) => [row[0], row]));
+}
+
+function isRow(row) {
+  return Array.isArray(row) && row.length >= 7 && row.slice(0, 7).every(Number.isFinite);
+}
+
+// The samples taken in replay minutes `from` to `to` (the whole of each) that say how much film was in hand.
+function samplesIn(samples, from, to) {
+  return samples.filter((s) => {
+    const minute = Math.floor(s.ms / 60000);
+    return Number.isFinite(s.ahead) && minute >= from && minute <= to;
+  });
+}
+
+// Why a spell that is in the run cannot be compared whole, or null when it can. The first check that holds counts.
+function whyLeftOut({ first, last, rows, report, samples, start, viewings }) {
+  if (viewings > 1) return `the player started ${viewings} viewings`;
+  if (!isTime(report.elapsedMs)) return 'the last health report does not say how long it covers';
+  if (last - start >= Math.floor(report.elapsedMs / 60000)) {
+    return `the last health report ends ${Math.floor(report.elapsedMs / 1000)} s into the run, before the spell does`;
+  }
+  for (let m = first - 1; m <= last; m += 1) {
+    if (!rows.has(m - start)) return `the health report has no row for minute ${m}`;
+  }
+  if (samplesIn(samples, first - start, last - start).length === 0) return 'no sample was taken in it';
+  return null;
+}
+
+// Each spell that is in the run, as { first, last, why }: `why` is null when it can be compared.
+function judgeSpells({ report, samples, start, viewings }) {
+  // A spell is in the run when it began after the first minute and its last minute is one the samples completed.
+  const sampled = Math.floor(samples[samples.length - 1].ms / 60000);
+  const rows = rowsOf(report);
+  const judged = [];
+  for (const [first, last] of SPELLS) {
+    if (first - start < 1 || last - start >= sampled) continue;
+    judged.push({ first, last, why: whyLeftOut({ first, last, rows, report, samples, start, viewings }) });
+  }
+  return judged;
+}
+
+/**
+ * The spells of the run that are compared, in the order of the spells. A spell is in the run when it began after
+ * the run's first minute and its last minute is one the samples completed; it is compared whole or not at all (see
+ * `spellsLeftOut`; `viewings` is how many the player started, 1 by default). Each is the mean link, the seconds
+ * banked going in (from the report's row for the minute before it), the lowest point (the least of the five-second
+ * samples taken in it, rounded), the ms stalled now and on 12 November, and the rungs fetched.
+ */
+export function spellFigures({ report, samples, record, start, viewings = 1 }) {
+  const rows = rowsOf(report);
+  const old = rowsByMinute(record);
+  const link = linkByMinute(samples);
+  return judgeSpells({ report, samples, start, viewings })
+    .filter((spell) => spell.why === null)
+    .map(({ first, last }) => oneSpell({ first, last, rows, old, link, samples, start }));
+}
+
+/**
+ * The spells that are in the run but are not compared, as `{ first, last, why }`, in the order of the spells. A spell
+ * not in the run is in neither this nor `spellFigures`. The reason is the first of these five that holds: the
+ * player started more than one viewing (the report is the last one's alone); the last health report does not say how
+ * long it covers (`elapsedMs`); it ends before the spell does; it has no row for a minute from the one before the
+ * spell to its last; no sample was taken in the spell.
+ */
+export function spellsLeftOut({ report, samples, start, viewings = 1 }) {
+  return judgeSpells({ report, samples, start, viewings })
+    .filter((spell) => spell.why !== null)
+    .map(({ first, last, why }) => ({ first, last, why }));
+}
+
+function oneSpell({ first, last, rows, old, link, samples, start }) {
+  let stalled = 0;
+  let stalledThen = 0;
+  let sum = 0;
+  const fetched = new Set();
+  for (let m = first; m <= last; m += 1) {
+    const row = rows.get(m - start);
+    sum += link.get(m - start) ?? 0;
+    stalledThen += (old.get(m) ?? [0, 0, 0, 0, 0])[4];
+    stalled += row[4];
+    if (RUNG[row[6]]) fetched.add(RUNG[row[6]]); // a code that is no rung (0: none known) adds nothing
+  }
+  const inSpell = samplesIn(samples, first - start, last - start);
+  const lowest = inSpell.reduce((least, s) => Math.min(least, s.ahead), Infinity);
+  return {
+    first, last, meanLink: Math.round(sum / (last - first + 1)), goingIn: rows.get(first - start - 1)[5],
+    lowest: Math.round(lowest), stalled, stalledThen, fetched: [...fetched],
+  };
+}
+
+// ---- 4. screen, rungs and bytes ----------------------------------------------------------------------------------
+
+/**
+ * The seconds the pill said 240p (and how many of them with the link at 2 Mbit/s or more), the seconds it said 360p
+ * with the link at 2 Mbit/s or more, and the toasts the samples caught, as `[text, count]`. Each sample counts for
+ * five seconds.
+ */
+export function screenAgainstLink(samples) {
+  let floorShown = 0;
+  let floorOnGoodLink = 0;
+  let holdOnGoodLink = 0;
+  for (const s of samples) {
+    const floor = /240p/.test(s.pill ?? '');
+    const good = s.kbps >= GOOD_LINK_KBPS;
+    if (floor) floorShown += SAMPLE_SECONDS;
+    if (floor && good) floorOnGoodLink += SAMPLE_SECONDS;
+    if (/360p/.test(s.pill ?? '') && good) holdOnGoodLink += SAMPLE_SECONDS;
+  }
+  return { floorShown, floorOnGoodLink, holdOnGoodLink, toasts: toastCounts(samples) };
+}
+
+// The toasts the samples caught, as [text, count], in the order first seen.
+function toastCounts(samples) {
+  const toasts = new Map();
+  for (const s of samples) {
+    if (s.toast) toasts.set(s.toast, (toasts.get(s.toast) ?? 0) + 1);
+  }
+  return [...toasts];
+}
+
+/** The segments fetched: bytes by rung, the count, and those the player cut short with their bytes. */
+export function rungsAndBytes(requests) {
+  const segments = requests.filter((r) => r.kind === 'segment');
+  const bytes = new Map();
+  for (const r of segments) bytes.set(r.rung, (bytes.get(r.rung) ?? 0) + r.sent);
+  const cut = segments.filter((r) => r.aborted);
+  return { bytes: [...bytes], count: segments.length, cut: cut.length, cutBytes: sumOf(cut, (r) => r.sent) };
+}
+
+// ---- the words ---------------------------------------------------------------------------------------------------
+
+function soundLines(s, viewings) {
+  const { gaps, lag, delivery } = s;
+  const lines = ['', '== 1. Was the run sound? =='];
+  if (viewings > 1) {
+    lines.push(`  the player started ${viewings} viewings: the report is the last one's alone, so no spell is compared `
+      + "and the totals of the replay in section 4 are that viewing's only");
+  }
+  lines.push(`  samples: ${gaps.samples}, longest gap ${gaps.longest} ms, gaps over 6.5 s: ${gaps.long} `
+    + '(a long gap is a busy or sleeping machine)');
+  lines.push(`  samples not playing after the first 20 s: ${s.notPlaying.length}`);
+  for (const p of s.notPlaying) {
+    lines.push(`    minute ${Math.floor(p.ms / 60000)}: playhead ${p.t}, ahead ${p.ahead} s, ${p.buffering ?? 'no label'}, `
+      + `readyState ${p.readyState}`);
+  }
+  lines.push(`  of those, with more than 5 s of film in hand: ${s.withFilm} (anything but 0 is a stall for the wrong reason)`);
+  lines.push(`  playhead: ${lag.moved.toFixed(1)} s of film in ${lag.wall.toFixed(0)} s of clock; fell behind by `
+    + `${lag.behind.toFixed(1)} s in all, ${lag.behindWithFilm.toFixed(1)} s of it with over 10 s in hand`);
+  lines.push(`  delivered ${(delivery.delivered / 1e6).toFixed(0)} MB of the ${(delivery.allowed / 1e6).toFixed(0)} MB the `
+    + `trace allowed; minutes delivered well above the trace: ${delivery.over}`);
+  const thin = delivery.thin.map((t) => `${t.minute}:${t.rate}/${t.got}`).join('  ');
+  lines.push(`  thin minutes (trace under 700 kbit/s), minute:trace/delivered: ${thin}`);
+  return lines;
+}
+
+function idleLines(gaps, start) {
+  const lines = ['', '== 2. Gaps of over 30 s with no segment being fetched =='];
+  for (const g of gaps) {
+    lines.push(`  ${pad(secs(g.gap), 4)} s, minutes ${g.first + start}-${g.last + start}: fetched ${g.before} before and `
+      + `${g.after} after, ahead ${g.aheadBefore} s -> ${g.aheadAfter} s, link ${g.rates.join(', ')}`);
+  }
+  lines.push(`  in all: ${secs(sumOf(gaps, (g) => g.gap))} s`);
+  return lines;
+}
+
+function spellLine(f) {
+  if (f.why) return `  minutes ${f.first}-${f.last}: not compared: ${f.why}`;
+  return `  minutes ${f.first}-${f.last}: mean link ${f.meanLink} kbit/s, banked going in ${f.goingIn} s, `
+    + `lowest ${f.lowest} s, stalled ${secs(f.stalled)} s (12 Nov ${secs(f.stalledThen)} s), `
+    + `fetched ${f.fetched.join(', ')}`;
+}
+
+// `spells` are the compared ones and the ones left out, in the order of the spells.
+function spellLines(spells) {
+  return ['', '== 3. The six bad spells ==', ...spells.map(spellLine)];
+}
+
+function totalsLine(label, r) {
+  return `${label}: ${r.stallCount} stalls, ${secs(r.stallMs)} s stalled, longest ${(r.longestStallMs / 1000).toFixed(1)} s, `
+    + `${secs(r.watchedMs)} s watched, steps down ${r.stepsDown}, up ${r.stepsUp}, timeouts ${r.timeouts}`;
+}
+
+function screenLines({ screen, fetched, report, before }) {
+  const toasts = screen.toasts.map(([text, n]) => `${n} x "${text}"`).join('; ') || 'none';
+  const bytes = fetched.bytes.map(([rung, b]) => `${rung} ${(b / 1e6).toFixed(0)} MB`).join(', ');
+  return [
+    '', '== 4. Screen, rungs and bytes ==',
+    `  240p on screen ${screen.floorShown} s, ${screen.floorOnGoodLink} s of it with the link at 2 Mbit/s or more; `
+      + `360p on screen with the link at 2 Mbit/s or more: ${screen.holdOnGoodLink} s`,
+    `  toasts caught by the five-second samples: ${toasts}`,
+    `  ${totalsLine('replay', report)}`,
+    `          seconds on each rung: ${listRungs(report.rungMs)}`,
+    `  ${totalsLine('12 Nov', before)}`,
+    `          seconds on each rung: ${listRungs(before.rungMs)}`,
+    `  fetched: ${bytes}; ${fetched.count} segments, ${fetched.cut} cut short by the player `
+      + `(${(fetched.cutBytes / 1e6).toFixed(1)} MB thrown away)`,
+  ];
+}
+
+/**
+ * The lines of the whole analysis of one run: `{ name, heading, samples, requests, delivered, report, record, start,
+ * viewings }`, where `heading` is the first line of its summary, `delivered` is the stand-in's count of the bytes it
+ * let through in each replay minute (`delivered.json`) and `viewings` is how many viewings the player started, 1 by
+ * default.
+ */
+export function describe({ name, heading, samples, requests, delivered, report, record, start, viewings = 1 }) {
+  const link = linkByMinute(samples);
+  return [
+    `${name}: ${heading}`,
+    ...soundLines(soundness({ samples, delivered, start }), viewings),
+    ...idleLines(idleGaps(requests, samples, link), start),
+    ...spellLines([
+      ...spellFigures({ report, samples, record, start, viewings }),
+      ...spellsLeftOut({ report, samples, start, viewings }),
+    ].sort((a, b) => a.first - b.first)),
+    ...screenLines({
+      screen: screenAgainstLink(samples), fetched: rungsAndBytes(requests), report, before: record.report,
+    }),
+  ];
+}
+
+// ---- as a program ------------------------------------------------------------------------------------------------
+
+function readJson(dir, file) {
+  let text;
+  try {
+    text = readFileSync(join(dir, file), 'utf8');
+  } catch (error) {
+    if (error?.code === 'ENOENT') throw new Error(`${file} is not in this run's folder`);
+    throw new Error(`${file} cannot be read`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${file} is not JSON`);
+  }
+}
+
+const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+// A file of the run must hold a list whose entries are all objects.
+function requireObjects(value, file) {
+  if (!Array.isArray(value) || !value.every(isObject)) throw new Error(`${file} is not a list of objects`);
+}
+
+function readSummary(dir) {
+  try {
+    return readFileSync(join(dir, 'summary.txt'), 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+const NO_SUMMARY = 'WARNING: no summary line in this run: it is read as starting at record minute 0';
+
+/** The folder of the run called `name` under `root` (by default `RUNS_DIR`, where the driver writes it). */
+export function runDir(name, root = RUNS_DIR) {
+  return join(root, name);
+}
+
+/**
+ * Reads the run called `name` from the folder `root` (default scripts/replay/out) and returns the lines of its
+ * analysis. A run whose summary has no "Replay of record minutes" line is read as starting at record minute 0, and
+ * its first line says so.
+ */
+export function analyseRun(name, root) {
+  if (!isRunName(name)) {
+    throw new Error('usage: node scripts/replay/analyse.mjs <run name> (letters, digits, dot, dash and underscore)');
+  }
+  const dir = runDir(name, root);
+  const requests = readJson(dir, 'requests.json');
+  const samples = readJson(dir, 'samples.json');
+  const delivered = readJson(dir, 'delivered.json');
+  const health = readJson(dir, 'health.json');
+  const report = health?.final?.report;
+  if (!isObject(report)) throw new Error('no health report in this run: nothing to analyse');
+  const viewings = health.viewings;
+  if (!Number.isInteger(viewings) || viewings < 1) {
+    throw new Error('health.json does not say how many viewings the player started');
+  }
+  requireObjects(samples, 'samples.json');
+  requireObjects(requests, 'requests.json');
+  if (samples.length === 0) throw new Error('no samples in this run: nothing to analyse');
+  if (!samples.every((s) => isTime(s.ms) && s.ms <= MAX_SAMPLE_MS)) {
+    throw new Error('samples.json holds a sample with no time, or one out of range');
+  }
+  if (!Array.isArray(delivered) || !delivered.every(isTime)) {
+    throw new Error('delivered.json is not a list of byte counts');
+  }
+  const summary = readSummary(dir);
+  const heading = summary.split('\n').find((line) => line.startsWith('Replay')) ?? '(no summary line)';
+  const start = startOf(summary);
+  const lines = describe({
+    name, heading, samples, requests, delivered, report, record: loadRecord(), start: start ?? 0, viewings,
+  });
+  return start === null ? [NO_SUMMARY, ...lines] : lines;
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  try {
+    for (const line of analyseRun(process.argv[2])) console.log(printable(line, LINE_LIMIT));
+  } catch (error) {
+    console.error(printable(error?.message ?? error, LINE_LIMIT));
+    process.exitCode = 1;
+  }
+}

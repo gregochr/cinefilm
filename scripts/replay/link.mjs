@@ -23,6 +23,25 @@ export function minuteAt(startMinute, elapsedMs) {
 }
 
 /**
+ * Counts bytes by replay minute: `add(ms, bytes)` puts `bytes` in the minute `Math.floor(ms / 60000)` of the replay
+ * clock, and `list()` gives a copy of the counts from minute 0 to the last minute with any, a minute in between
+ * with nothing counted being 0. A time that is not a finite number of 0 or more, or bytes that are not above 0, are
+ * ignored. Pure arithmetic: it reads no clock.
+ */
+export function createByteCounter() {
+  const places = [];
+  return {
+    add(ms, bytes) {
+      if (!Number.isFinite(ms) || ms < 0 || !(bytes > 0)) return;
+      const minute = Math.floor(ms / 60000);
+      while (places.length <= minute) places.push(0);
+      places[minute] += bytes;
+    },
+    list: () => [...places],
+  };
+}
+
+/**
  * The trace's figure in kbit/s for `minute`: the last figure when the replay has run past the end of the trace, 0
  * for a minute that has none.
  */
