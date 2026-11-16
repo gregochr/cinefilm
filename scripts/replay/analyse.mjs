@@ -131,7 +131,8 @@ export function deliveryAgainstTrace(perMinute, link, start, minutesRun) {
 
 /** The whole of section 1. */
 export function soundness({ samples, delivered, start }) {
-  const minutesRun = Math.ceil(samples[samples.length - 1].ms / 60000);
+  // The minutes the run completed: a place after them (the last report) is not compared with the trace.
+  const minutesRun = Math.floor(samples[samples.length - 1].ms / 60000);
   const paused = notPlaying(samples);
   return {
     gaps: samplingGaps(samples),
@@ -144,12 +145,6 @@ export function soundness({ samples, delivered, start }) {
 
 // ---- 2. gaps with nothing fetched --------------------------------------------------------------------------------
 
-/**
- * The stretches of over 30 s in which no segment was being fetched, taking each segment from its request to its
- * end: when it finished (`doneMs`), else when the player cut it (`cutMs`), else, when neither is known, at its start.
- * Each is `{ gap, first, last, before, after, aheadBefore, aheadAfter, rates }`: its length in ms, the replay
- * minutes it spans, the rungs fetched either side, the film buffered then and the link in each minute.
- */
 // When a segment's fetching ended, in ms on the replay clock.
 function segmentEnd(request) {
   if (Number.isFinite(request.doneMs)) return request.ms + request.doneMs;
@@ -157,6 +152,12 @@ function segmentEnd(request) {
   return request.ms;
 }
 
+/**
+ * The stretches of over 30 s in which no segment was being fetched, taking each segment from its request to its
+ * end: when it finished (`doneMs`), else when the player cut it (`cutMs`), else, when neither is known, at its start.
+ * Each is `{ gap, first, last, before, after, aheadBefore, aheadAfter, rates }`: its length in ms, the replay
+ * minutes it spans, the rungs fetched either side, the film buffered then and the link in each minute.
+ */
 export function idleGaps(requests, samples, link) {
   const segments = requests.filter((r) => r.kind === 'segment' && Number.isFinite(r.ms)).sort((a, b) => a.ms - b.ms);
   if (segments.length === 0) return [];
@@ -405,7 +406,9 @@ export function analyseRun(name, root) {
   if (!samples.every((s) => isTime(s.ms) && s.ms <= MAX_SAMPLE_MS)) {
     throw new Error('samples.json holds a sample with no time, or one out of range');
   }
-  if (!Array.isArray(delivered) || !delivered.every(isTime)) throw new Error('delivered.json is not a list of byte counts');
+  if (!Array.isArray(delivered) || !delivered.every(isTime)) {
+    throw new Error('delivered.json is not a list of byte counts');
+  }
   const summary = readSummary(dir);
   const heading = summary.split('\n').find((line) => line.startsWith('Replay')) ?? '(no summary line)';
   const start = startOf(summary);

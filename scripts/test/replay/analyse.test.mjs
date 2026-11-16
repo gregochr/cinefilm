@@ -144,12 +144,24 @@ describe('section 1: was the run sound', () => {
       at(5000, { t: 5, kbps: 1000 }), at(10000, { t: 10 }), at(15000, { t: 15 }), at(70000, { t: 70, kbps: 800 }),
     ];
     // What the stand-in counted: 60,000 bytes in minute 0 and no place for minute 1, which counts as 0.
-    const result = soundness({ samples, delivered: [60000], start: 0 });
+    const result = soundness({ samples, delivered: [60000, 0], start: 0 });
     assert.deepEqual(result.gaps, { samples: 4, longest: 55000, long: 1 });
     assert.deepEqual(result.notPlaying, []);
     assert.equal(result.withFilm, 0);
     assert.deepEqual(result.lag, { behind: 0, behindWithFilm: 0, moved: 55, wall: 55 });
-    assert.deepEqual(result.delivery, { delivered: 60000, allowed: 13500000, over: 0, thin: [] });
+    assert.deepEqual(result.delivery, { delivered: 60000, allowed: 7500000, over: 0, thin: [] });
+  });
+
+  test('delivery is compared over the minutes the run completed: 239,999 ms is three of them, 240,000 ms is four', () => {
+    // Every minute is thin (100 kbit/s), so the thin list names each minute compared.
+    const upTo = (ms) => [at(5000, { kbps: 100 }), at(ms, { kbps: 100 })];
+    const delivered = [1, 2, 3, 4, 999]; // the fifth place is what was sent after the end
+    const three = soundness({ samples: upTo(239999), delivered, start: 33 }).delivery;
+    assert.deepEqual(three.thin.map((t) => t.minute), [33, 34, 35]);
+    assert.equal(three.delivered, 6);
+    const four = soundness({ samples: upTo(240000), delivered, start: 33 }).delivery;
+    assert.deepEqual(four.thin.map((t) => t.minute), [33, 34, 35, 36]);
+    assert.equal(four.delivered, 10);
   });
 });
 
@@ -423,7 +435,7 @@ describe('analyseRun on a run\'s files', () => {
   after(() => rmSync(tmp, { recursive: true, force: true }));
 
   // A thin link (300 kbit/s), so that the thin-minutes line names the record minute the run began at.
-  const samples = [5, 10, 15, 20].map((s) => at(s * 1000, { t: s, ahead: 30, kbps: 300 }));
+  const samples = [5, 10, 15, 20, 60].map((s) => at(s * 1000, { t: s, ahead: 30, kbps: 300 }));
   const requests = [{ kind: 'segment', rung: '480p', ms: 0, firstByteMs: 10, doneMs: 500, sent: 1000, aborted: false }];
   const report = {
     stallCount: 0, stallMs: 0, longestStallMs: 0, watchedMs: 20000, stepsDown: 0, stepsUp: 0, timeouts: 0,
