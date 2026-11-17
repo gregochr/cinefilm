@@ -366,6 +366,33 @@ describe('Admin: the Fix match dialog', () => {
   });
 });
 
+describe('Admin: leaving during the fade after an apply', () => {
+  it('still reads the lists again, because the match was saved', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    let summaryReads = 0;
+    installFetch((m, url) => {
+      if (url === '/api/admin/summary') summaryReads += 1;
+      return isApply(m, url) ? respond({ filmId: 31, joined: false }) : null;
+    });
+    const dialog = await openPanel();
+    await userEvent.click((await within(dialog).findAllByRole('radio'))[0]);
+    const before = summaryReads;
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Use this match' }));
+    // Back to another section while the dialog still fades out.
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Admin sections' })).getByRole('link', {
+        name: 'Library',
+      }),
+    );
+
+    await screen.findByRole('heading', { level: 1, name: 'Library' });
+    expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument();
+    // The summary behind the rail counts is read again by the shell, not by the To do list.
+    await waitFor(() => expect(summaryReads).toBeGreaterThan(before));
+  });
+});
+
 describe('Admin: a slow apply for a film that is no longer on screen', () => {
   it('refreshes the lists but leaves the newer panel open with its search and selection', async () => {
     const second = {

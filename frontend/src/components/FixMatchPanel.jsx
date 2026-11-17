@@ -77,33 +77,25 @@ function Results({ search, picked, onPick }) {
 
 /**
  * The Fix match dialog (a full-screen sheet on phones): search TMDB for a film that needs a match and pick the right
- * one. Focus opens in the search box and goes back to `opener` on close. `onCancel` runs on Cancel, the close button
- * or Esc (also while an apply is running); `onApplied(result, stale)` runs once the match is applied, after the
- * dialog has faded out. An apply that finishes after the dialog was dismissed is still reported at once, so the
- * lists are read again, and `stale` is then true because the film is no longer on screen.
+ * one. Focus opens in the search box and goes back to `opener` on close. `onApplied(result)` reports a saved match
+ * at once, whatever the dialog is doing (even after it was dismissed or unmounted), so the lists are always read
+ * again; `onClose` then closes the dialog: on Cancel, the close button or Esc (also while an apply is running), and
+ * after an apply while the dialog is still open, once the fade has run.
  */
-export default function FixMatchPanel({ item, opener, onApplied, onCancel }) {
+export default function FixMatchPanel({ item, opener, onApplied, onClose }) {
   const base = useId();
   const titleId = `${base}-title`;
   const subId = `${base}-sub`;
   const searchRef = useRef(null);
   // `useDialog.close` runs only its first `after`, so Cancel, ×, Esc and a successful apply close once, and the
-  // buttons are disabled while `closing`. `dismissed` is set by Cancel, × and Esc only and decides how an apply that
-  // finishes is reported: after a dismissal the unmount that ends the fade would drop a second fade's timer, so the
-  // result is reported at once (the lists must still be read again); otherwise it fades first.
-  const dismissed = useRef(false);
-  const dismiss = () => {
-    dismissed.current = true;
-    dialog.close(onCancel);
-  };
+  // buttons are disabled while `closing`. The report does not wait for the fade (which an unmount cancels).
+  const dismiss = () => dialog.close(onClose);
   const dialog = useDialog({ onEscape: dismiss, opener });
   const { dialogRef, closing, close } = dialog;
   const fix = useFixMatch(item.filmId, item.title, (result, stale) => {
-    if (stale || dismissed.current) {
-      onApplied(result, stale);
-      return;
-    }
-    close(() => onApplied(result, false));
+    onApplied(result);
+    // A stale result means the dialog is gone: there is nothing of its own to close.
+    if (!stale) close(onClose);
   });
   const { search } = fix;
 

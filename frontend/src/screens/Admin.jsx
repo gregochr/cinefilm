@@ -55,9 +55,9 @@ function AdminShell() {
   const { fixing, editing, picking, toast } = shell;
 
   // The dialog hands focus back to its opener itself (useDialog) when it unmounts, if the opener is still there.
-  const applied = (result, stale) => {
-    if (!stale) shell.closeFixMatch();
-    // Stale or not, the row it opened from goes: focus must not be left on the body.
+  // The match is saved whatever the dialog is doing: read the lists again, and the row it opened from goes, so focus
+  // must not be left on the body. Closing the dialog is its own business (`onClose`).
+  const applied = () => {
     shell.armFocusFallback();
     shell.markChanged();
   };
@@ -83,7 +83,7 @@ function AdminShell() {
               item={fixing.item}
               opener={fixing.opener}
               onApplied={applied}
-              onCancel={shell.closeFixMatch}
+              onClose={shell.closeFixMatch}
             />
           ) : null}
           {picking ? (

@@ -22,30 +22,45 @@ afterEach(() => {
 async function open(route) {
   installFetch(route);
   const onApplied = vi.fn();
-  const onCancel = vi.fn();
+  const onClose = vi.fn();
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-  render(<FixMatchPanel item={item} onApplied={onApplied} onCancel={onCancel} />);
+  const view = render(<FixMatchPanel item={item} onApplied={onApplied} onClose={onClose} />);
   const dialog = screen.getByRole('dialog', { name: 'Fix match' });
   await user.click((await within(dialog).findAllByRole('radio'))[0]);
-  return { dialog, user, onApplied, onCancel };
+  return { dialog, user, onApplied, onClose, unmount: view.unmount };
 }
 
 const settle = () => act(async () => vi.advanceTimersByTimeAsync(FADE_MS * 3));
 
 describe('FixMatchPanel reports once', () => {
-  it('an apply, then Esc and the close button during the fade: onApplied once, onCancel never', async () => {
-    const { dialog, user, onApplied, onCancel } = await open((m, url) =>
+  it('reports an apply at once, and Esc and the close button during the fade change nothing', async () => {
+    const { dialog, user, onApplied, onClose } = await open((m, url) =>
       isApply(m, url) ? respond(applied) : null,
     );
 
     await user.click(within(dialog).getByRole('button', { name: 'Use this match' }));
+    expect(onApplied).toHaveBeenCalledTimes(1);
+    expect(onApplied).toHaveBeenCalledWith(applied);
+    expect(onClose).not.toHaveBeenCalled();
     await user.keyboard('{Escape}');
     await user.click(within(dialog).getByRole('button', { name: 'Close' }));
     await settle();
 
     expect(onApplied).toHaveBeenCalledTimes(1);
-    expect(onApplied).toHaveBeenCalledWith(applied, false);
-    expect(onCancel).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('an unmount during the fade still leaves the apply reported once and never closes', async () => {
+    const { dialog, user, onApplied, onClose, unmount } = await open((m, url) =>
+      isApply(m, url) ? respond(applied) : null,
+    );
+
+    await user.click(within(dialog).getByRole('button', { name: 'Use this match' }));
+    unmount();
+    await settle();
+
+    expect(onApplied).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('Cancel, then Esc during the fade, then the apply lands: each runs once', async () => {
@@ -53,7 +68,7 @@ describe('FixMatchPanel reports once', () => {
     const slow = new Promise((resolve) => {
       release = resolve;
     });
-    const { dialog, user, onApplied, onCancel } = await open((m, url) =>
+    const { dialog, user, onApplied, onClose } = await open((m, url) =>
       isApply(m, url) ? slow : null,
     );
     await user.click(within(dialog).getByRole('button', { name: 'Use this match' }));
@@ -61,13 +76,31 @@ describe('FixMatchPanel reports once', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     await user.keyboard('{Escape}');
     await act(async () => release(respond(applied)));
-    // Reported at once, still mounted so not stale; the Cancel waits for the end of the fade.
+    // Reported at once; the close waits for the end of the fade.
     expect(onApplied).toHaveBeenCalledTimes(1);
-    expect(onApplied).toHaveBeenCalledWith(applied, false);
-    expect(onCancel).not.toHaveBeenCalled();
+    expect(onApplied).toHaveBeenCalledWith(applied);
+    expect(onClose).not.toHaveBeenCalled();
     await settle();
 
-    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
     expect(onApplied).toHaveBeenCalledTimes(1);
+  });
+
+  it('an apply that lands after the dialog unmounted is still reported, and nothing is closed', async () => {
+    let release;
+    const slow = new Promise((resolve) => {
+      release = resolve;
+    });
+    const { dialog, user, onApplied, onClose, unmount } = await open((m, url) =>
+      isApply(m, url) ? slow : null,
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Use this match' }));
+
+    unmount();
+    await act(async () => release(respond(applied)));
+    await settle();
+
+    expect(onApplied).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
