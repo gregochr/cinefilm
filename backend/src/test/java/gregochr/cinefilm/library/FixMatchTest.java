@@ -65,7 +65,8 @@ class FixMatchTest extends ApiTestBase {
     void setUp() {
         tmdb = mock(TmdbApi.class);
         lock = new LibraryLock();
-        fix = new FixMatch(tmdb, films, ingest, join, groupingChanges, lock, transactions, CLOCK, events);
+        fix = new FixMatch(tmdb, films, preferences, ingest, join, groupingChanges, lock, transactions, CLOCK,
+            events);
     }
 
     private static MovieDetails movie(long id, String title, int year) {
@@ -93,7 +94,7 @@ class FixMatchTest extends ApiTestBase {
         when(tmdb.search("The Wicker Man", 1973)).thenReturn(hits);
         Film film = unmatched("The Wicker Man", "The Wicker Man.m4v");
 
-        List<MatchResultDto> results = fix.search(film.getId(), "  The Wicker Man ", 1973);
+        List<MatchResultDto> results = fix.search(film.getId(), "  The Wicker Man ", 1973).results();
 
         assertThat(results).hasSize(8);
         assertThat(results.get(0)).isEqualTo(new MatchResultDto(1, "Wicker 1", 1973, 93, "/p1.jpg", "Robin Hardy",
@@ -110,7 +111,8 @@ class FixMatchTest extends ApiTestBase {
         when(tmdb.movie(2)).thenReturn(Optional.of(movie(2, "B", 2021)));
         Film film = unmatched("Dune", "Dune.m4v");
 
-        assertThat(fix.search(film.getId(), "Dune", null)).extracting(MatchResultDto::tmdbId).containsExactly(2L);
+        assertThat(fix.search(film.getId(), "Dune", null).results()).extracting(MatchResultDto::tmdbId)
+            .containsExactly(2L);
     }
 
     @Test
@@ -120,7 +122,7 @@ class FixMatchTest extends ApiTestBase {
             null, 1, List.of(), List.of(), null)));
         Film film = unmatched("X", "X.m4v");
 
-        assertThat(fix.search(film.getId(), "X", null)).singleElement().satisfies(r -> {
+        assertThat(fix.search(film.getId(), "X", null).results()).singleElement().satisfies(r -> {
             assertThat(r.director()).isNull();
             assertThat(r.cast()).isEmpty();
             assertThat(r.runtimeMinutes()).isNull();
@@ -147,7 +149,7 @@ class FixMatchTest extends ApiTestBase {
         Film film = unmatched("Dune", "Dune.m4v");
         lock.tryAcquire(LibraryLock.SCAN);
 
-        assertThat(fix.search(film.getId(), "Dune", null)).hasSize(1);
+        assertThat(fix.search(film.getId(), "Dune", null).results()).hasSize(1);
         assertThat(lock.holder()).as("the scan keeps its lock").isEqualTo(LibraryLock.SCAN);
     }
 

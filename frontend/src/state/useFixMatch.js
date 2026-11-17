@@ -3,14 +3,23 @@ import { announceLibraryChanged } from '../api/client.js';
 import { adminApi } from '../api/resources.js';
 import { matchProblem, parseYear } from './fixMatch.js';
 
+const IDLE = {
+  status: 'loading',
+  results: [],
+  problem: null,
+  fileRuntimeMs: null,
+  suggestedTmdbId: null,
+  suggestedBecause: null,
+};
+
 /**
  * The Fix match panel for one film: searches TMDB (once on open with the film's title, then on demand), keeps the
- * picked result and applies it. `onApplied` runs after a successful apply.
+ * picked result (the server's suggestion until the person picks another) and applies it. `onApplied` runs after a successful apply.
  */
 export function useFixMatch(filmId, initialQuery, onApplied) {
   const [query, setQuery] = useState(initialQuery);
   const [year, setYear] = useState('');
-  const [search, setSearch] = useState({ status: 'loading', results: [], problem: null });
+  const [search, setSearch] = useState(IDLE);
   const [picked, setPicked] = useState(null);
   const [applying, setApplying] = useState(false);
   const [applyProblem, setApplyProblem] = useState(null);
@@ -24,19 +33,30 @@ export function useFixMatch(filmId, initialQuery, onApplied) {
       controller.current?.abort();
       const mine = new AbortController();
       controller.current = mine;
-      setSearch({ status: 'loading', results: [], problem: null });
+      setSearch(IDLE);
       setPicked(null);
       setApplyProblem(null);
       try {
-        const results = await adminApi.matchSearch(
+        const answer = await adminApi.matchSearch(
           filmId,
           { query: text.trim(), year: parseYear(yearText) },
           { signal: mine.signal },
         );
-        if (ticket === latest.current) setSearch({ status: 'ready', results, problem: null });
+        if (ticket === latest.current) {
+          // Only the newest answer sets the default; a stale or aborted one never touches `picked`.
+          setSearch({
+            status: 'ready',
+            results: answer.results,
+            problem: null,
+            fileRuntimeMs: answer.fileRuntimeMs ?? null,
+            suggestedTmdbId: answer.suggestedTmdbId ?? null,
+            suggestedBecause: answer.suggestedBecause ?? null,
+          });
+          setPicked(answer.suggestedTmdbId ?? null);
+        }
       } catch (failure) {
         if (ticket === latest.current) {
-          setSearch({ status: 'error', results: [], problem: matchProblem(failure) });
+          setSearch({ ...IDLE, status: 'error', problem: matchProblem(failure) });
         }
       }
     },

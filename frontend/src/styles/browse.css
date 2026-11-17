@@ -1022,6 +1022,11 @@
 .fixmatch__runtime {
   color: var(--cf-text-muted);
 }
+/* The suggestion note: muted, never amber. */
+.fixmatch__note {
+  color: var(--cf-text-muted);
+  font-style: italic;
+}
 
 /* Phone */
 @media (max-width: 600px) {

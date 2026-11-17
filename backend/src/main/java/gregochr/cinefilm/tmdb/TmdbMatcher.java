@@ -216,10 +216,22 @@ public class TmdbMatcher {
     }
 
     private static double runtimeScore(Integer runtimeMinutes, long durationMs) {
+        return runtimeMatches(runtimeMinutes, durationMs) ? RUNTIME_MATCH : 0;
+    }
+
+    /**
+     * Whether a film's TMDB runtime agrees with a file's length: within eight minutes, and false when either is
+     * unknown. The one rule the scanner and Fix match share.
+     *
+     * @param runtimeMinutes TMDB's runtime in minutes, or null when unknown
+     * @param durationMs the file's length in milliseconds (0 or less when unknown)
+     * @return true when both are known and within the tolerance
+     */
+    public static boolean runtimeMatches(Integer runtimeMinutes, long durationMs) {
         if (runtimeMinutes == null || durationMs <= 0) {
-            return 0;
+            return false;
         }
-        return Math.abs(runtimeMinutes * 60_000L - durationMs) <= RUNTIME_TOLERANCE_MS ? RUNTIME_MATCH : 0;
+        return Math.abs(runtimeMinutes * 60_000L - durationMs) <= RUNTIME_TOLERANCE_MS;
     }
 
     /** Under one point: it can only separate candidates that are otherwise level. */

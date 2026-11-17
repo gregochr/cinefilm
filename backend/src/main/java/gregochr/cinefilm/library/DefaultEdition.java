@@ -33,6 +33,24 @@ public final class DefaultEdition {
         return pool.stream().max(Comparator.comparingLong(Edition::getRuntimeMs));
     }
 
+    /**
+     * The edition a film opens on: the owner's stored default while it is still one of the editions, else the pick of
+     * {@link #choose(List)}.
+     *
+     * @param editions the film's editions (in id order)
+     * @param storedDefaultId the stored default edition id, or null
+     * @return the edition, or empty when there are none
+     */
+    public static Optional<Edition> current(List<Edition> editions, Long storedDefaultId) {
+        if (storedDefaultId != null) {
+            Optional<Edition> stored = editions.stream().filter(e -> e.getId().equals(storedDefaultId)).findFirst();
+            if (stored.isPresent()) {
+                return stored;
+            }
+        }
+        return choose(editions);
+    }
+
     private static boolean isPlain(Edition edition) {
         String name = edition.getName().toLowerCase(Locale.ROOT);
         return name.startsWith(UNTAGGED) || name.contains("theatrical");

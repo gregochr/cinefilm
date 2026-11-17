@@ -2,7 +2,13 @@ import { useId, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { imageUrl } from '../api/images.js';
 import { useFixMatch } from '../state/useFixMatch.js';
-import { resultPeople, resultRuntime, resultTitle } from '../state/fixMatch.js';
+import {
+  fileLine,
+  resultPeople,
+  resultRuntime,
+  resultTitle,
+  suggestionNote,
+} from '../state/fixMatch.js';
 import { Button } from './Button.jsx';
 import { SkeletonBlock } from './Skeleton.jsx';
 import { useDialog } from './useDialog.js';
@@ -47,6 +53,8 @@ function Results({ search, picked, onPick }) {
       {search.results.map((result) => {
         const poster = imageUrl(result.posterPath);
         const runtime = resultRuntime(result);
+        const note =
+          result.tmdbId === search.suggestedTmdbId ? suggestionNote(search.suggestedBecause) : '';
         return (
           <label
             key={result.tmdbId}
@@ -66,6 +74,7 @@ function Results({ search, picked, onPick }) {
             <span className="fixmatch__text">
               <span className="fixmatch__name">{resultTitle(result)}</span>
               <span className="admin__text">{resultPeople(result)}</span>
+              {note ? <span className="admin__text fixmatch__note">{note}</span> : null}
             </span>
             {runtime ? <span className="admin__mono fixmatch__runtime">{runtime}</span> : null}
           </label>
@@ -117,7 +126,7 @@ export default function FixMatchPanel({ item, opener, onApplied, onClose }) {
         <header className="ee__header">
           <div className="ee__heading">
             <span id={subId} className="ee__eyebrow admin__mono">
-              File: {item.files.join(' · ')}
+              {fileLine(item.files, search.fileRuntimeMs)}
             </span>
             <h2 id={titleId} className="ee__title">
               Fix match

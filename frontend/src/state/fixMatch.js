@@ -35,3 +35,17 @@ export function resultPeople(result) {
 export function resultRuntime(result) {
   return result.runtimeMinutes ? formatRuntime(result.runtimeMinutes * 60000) : '';
 }
+
+/** "File: Enchanted.m4v · 1h 47m": the file names, then the file's length when the server knows it. */
+export function fileLine(files, fileRuntimeMs) {
+  const parts = [...files];
+  if (fileRuntimeMs) parts.push(formatRuntime(fileRuntimeMs));
+  return `File: ${parts.join(' · ')}`;
+}
+
+/** The note under the suggested result, or an empty string for any other result. */
+export function suggestionNote(because) {
+  if (because === 'runtime') return 'Same length as your file';
+  if (because === 'guess') return 'CineFilm’s best guess';
+  return '';
+}

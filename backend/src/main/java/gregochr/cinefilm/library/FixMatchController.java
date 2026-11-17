@@ -2,8 +2,7 @@ package gregochr.cinefilm.library;
 
 import gregochr.cinefilm.library.AdminDtos.MatchApplied;
 import gregochr.cinefilm.library.AdminDtos.MatchRequest;
-import gregochr.cinefilm.library.AdminDtos.MatchResultDto;
-import java.util.List;
+import gregochr.cinefilm.library.AdminDtos.MatchSearchDto;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,8 +22,8 @@ public class FixMatchController {
     }
 
     @GetMapping("/api/admin/films/{id}/match")
-    List<MatchResultDto> search(@PathVariable Long id, @RequestParam(required = false) String query,
-                                @RequestParam(required = false) Integer year) {
+    MatchSearchDto search(@PathVariable Long id, @RequestParam(required = false) String query,
+                          @RequestParam(required = false) Integer year) {
         return fixMatch.search(id, query, year);
     }
 

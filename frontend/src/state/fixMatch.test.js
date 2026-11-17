@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '../api/client.js';
-import { matchProblem, parseYear, resultPeople, resultRuntime, resultTitle } from './fixMatch.js';
+import {
+  fileLine,
+  matchProblem,
+  parseYear,
+  resultPeople,
+  resultRuntime,
+  resultTitle,
+  suggestionNote,
+} from './fixMatch.js';
 import { changeLabel } from './scanFormat.js';
 
 describe('fixMatch helpers', () => {
@@ -53,5 +61,19 @@ describe('fixMatch helpers', () => {
     expect(changeLabel('join')).toBe('Joined');
     expect(changeLabel('flag')).toBe('Check');
     expect(changeLabel('other')).toBe('other');
+  });
+
+  it('puts the file length after the names, and leaves it out when unknown', () => {
+    expect(fileLine(['Enchanted.m4v'], 6420000)).toBe('File: Enchanted.m4v · 1h 47m');
+    expect(fileLine(['A.m4v', 'B.m4v'], 3300000)).toBe('File: A.m4v · B.m4v · 55m');
+    expect(fileLine(['Enchanted.m4v'], null)).toBe('File: Enchanted.m4v');
+    expect(fileLine(['Enchanted.m4v'], 0)).toBe('File: Enchanted.m4v');
+  });
+
+  it('words the suggestion note for each reason and gives none otherwise', () => {
+    expect(suggestionNote('runtime')).toBe('Same length as your file');
+    expect(suggestionNote('guess')).toBe('CineFilm’s best guess');
+    expect(suggestionNote(null)).toBe('');
+    expect(suggestionNote(undefined)).toBe('');
   });
 });

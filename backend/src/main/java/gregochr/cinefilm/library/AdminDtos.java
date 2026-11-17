@@ -141,6 +141,19 @@ public final class AdminDtos {
     }
 
     /**
+     * The answer to a Fix match search.
+     *
+     * @param fileRuntimeMs the length of the film's default edition, or null when unknown
+     * @param suggestedTmdbId the result to pick first, or null when there is no sensible default
+     * @param suggestedBecause {@code "runtime"} when it is the only result of the file's length, {@code "guess"}
+     *     when it is the scan's best candidate and the length does not contradict it; null with no suggestion
+     * @param results up to eight results, in TMDB's order
+     */
+    public record MatchSearchDto(Long fileRuntimeMs, Long suggestedTmdbId, String suggestedBecause,
+                                 List<MatchResultDto> results) {
+    }
+
+    /**
      * The body of a Fix match apply.
      *
      * @param tmdbId the TMDB film the owner picked

@@ -17,6 +17,15 @@ const deferred = () => {
   return { promise, resolve };
 };
 
+const answer = (results, extra = {}) =>
+  respond({
+    fileRuntimeMs: null,
+    suggestedTmdbId: null,
+    suggestedBecause: null,
+    results,
+    ...extra,
+  });
+
 const isSearch = (m, url) => m === 'GET' && url.startsWith('/api/admin/films/7/match?');
 const isApply = (m, url) => m === 'POST' && url === '/api/admin/films/7/match';
 
@@ -36,9 +45,76 @@ describe('useFixMatch', () => {
     });
     expect(fetchMock.mock.calls[1][0]).toBe('/api/admin/films/7/match?query=Dune+2021&year=2021');
 
-    await act(async () => second.resolve(respond([{ tmdbId: 2 }])));
-    await act(async () => first.resolve(respond([{ tmdbId: 1 }])));
+    await act(async () => second.resolve(answer([{ tmdbId: 2 }])));
+    await act(async () => first.resolve(answer([{ tmdbId: 1 }])));
     expect(result.current.search.results).toEqual([{ tmdbId: 2 }]);
+  });
+
+  it('picks the suggested result when the answer arrives, and the person can pick another', async () => {
+    installFetch((m, url) =>
+      isSearch(m, url)
+        ? answer([{ tmdbId: 1 }, { tmdbId: 2 }], {
+            fileRuntimeMs: 6420000,
+            suggestedTmdbId: 2,
+            suggestedBecause: 'runtime',
+          })
+        : null,
+    );
+    const { result } = renderHook(() => useFixMatch(7, 'Dune', vi.fn()));
+    expect(result.current.picked).toBeNull();
+    await waitFor(() => expect(result.current.search.status).toBe('ready'));
+
+    expect(result.current.picked).toBe(2);
+    expect(result.current.search.fileRuntimeMs).toBe(6420000);
+    expect(result.current.search.suggestedTmdbId).toBe(2);
+    expect(result.current.search.suggestedBecause).toBe('runtime');
+    act(() => result.current.setPicked(1));
+    expect(result.current.picked).toBe(1);
+  });
+
+  it('picks nothing when the answer has no suggestion', async () => {
+    installFetch((m, url) => (isSearch(m, url) ? answer([{ tmdbId: 1 }]) : null));
+    const { result } = renderHook(() => useFixMatch(7, 'Dune', vi.fn()));
+    await waitFor(() => expect(result.current.search.status).toBe('ready'));
+
+    expect(result.current.picked).toBeNull();
+    expect(result.current.search.suggestedTmdbId).toBeNull();
+  });
+
+  it('a newer search replaces the default, and clears the pick while it is in flight', async () => {
+    const second = deferred();
+    const pending = [
+      Promise.resolve(answer([{ tmdbId: 1 }, { tmdbId: 2 }], { suggestedTmdbId: 1 })),
+      second.promise,
+    ];
+    installFetch((m, url) => (isSearch(m, url) ? pending.shift() : null));
+    const { result } = renderHook(() => useFixMatch(7, 'Dune', vi.fn()));
+    await waitFor(() => expect(result.current.picked).toBe(1));
+
+    act(() => {
+      result.current.submit();
+    });
+    expect(result.current.picked).toBeNull();
+    await act(async () => second.resolve(answer([{ tmdbId: 3 }], { suggestedTmdbId: 3 })));
+
+    expect(result.current.picked).toBe(3);
+  });
+
+  it('a stale answer never sets the pick', async () => {
+    const first = deferred();
+    const second = deferred();
+    const pending = [first, second];
+    installFetch((m, url) => (isSearch(m, url) ? pending.shift().promise : null));
+    const { result } = renderHook(() => useFixMatch(7, 'Dune', vi.fn()));
+    act(() => {
+      result.current.submit();
+    });
+
+    await act(async () => second.resolve(answer([{ tmdbId: 2 }])));
+    await act(async () => first.resolve(answer([{ tmdbId: 1 }], { suggestedTmdbId: 1 })));
+
+    expect(result.current.search.results).toEqual([{ tmdbId: 2 }]);
+    expect(result.current.picked).toBeNull();
   });
 
   it('ignores a failure of a search that is no longer the newest', async () => {
@@ -51,14 +127,14 @@ describe('useFixMatch', () => {
       result.current.submit();
     });
 
-    await act(async () => second.resolve(respond([])));
+    await act(async () => second.resolve(answer([])));
     await act(async () => first.resolve(respond({ error: 'x' }, 503)));
     expect(result.current.search.status).toBe('ready');
   });
 
   it('under StrictMode the replayed mount effect keeps the answer to the search that counts', async () => {
     // The first search of the replayed pair gets a 409 (as it once did from the library lock): it must not win.
-    const answers = [respond(null, 409), respond([{ tmdbId: 5 }])];
+    const answers = [respond(null, 409), answer([{ tmdbId: 5 }])];
     const fetchMock = installFetch((m, url) => (isSearch(m, url) ? answers.shift() : null));
     const { result } = renderHook(() => useFixMatch(7, 'Dune', vi.fn()), { wrapper: StrictMode });
 
@@ -69,7 +145,7 @@ describe('useFixMatch', () => {
 
   it('applies nothing until a result is picked, then posts it and reports the outcome', async () => {
     const fetchMock = installFetch((m, url) => {
-      if (isSearch(m, url)) return respond([{ tmdbId: 5 }]);
+      if (isSearch(m, url)) return answer([{ tmdbId: 5 }]);
       if (isApply(m, url)) return respond({ filmId: 7, joined: true });
       return null;
     });
@@ -90,7 +166,7 @@ describe('useFixMatch', () => {
 
   it('shows the apply problem and does not report success when the apply fails', async () => {
     installFetch((m, url) => {
-      if (isSearch(m, url)) return respond([{ tmdbId: 5 }]);
+      if (isSearch(m, url)) return answer([{ tmdbId: 5 }]);
       if (isApply(m, url)) return respond(null, 409);
       return null;
     });
@@ -107,7 +183,7 @@ describe('useFixMatch', () => {
   it('reports an apply that ends after the panel closed as stale, and one that ends after the film changed', async () => {
     const slow = deferred();
     installFetch((m, url) => {
-      if (isSearch(m, url)) return respond([{ tmdbId: 5 }]);
+      if (isSearch(m, url)) return answer([{ tmdbId: 5 }]);
       if (isApply(m, url)) return slow.promise;
       return null;
     });
@@ -131,9 +207,9 @@ describe('useFixMatch', () => {
   it('reports an apply for a film the hook has since moved off as stale', async () => {
     const slow = deferred();
     installFetch((m, url) => {
-      if (isSearch(m, url)) return respond([{ tmdbId: 5 }]);
+      if (isSearch(m, url)) return answer([{ tmdbId: 5 }]);
       if (isApply(m, url)) return slow.promise;
-      return respond([]);
+      return answer([]);
     });
     const onApplied = vi.fn();
     const { result, rerender } = renderHook(({ id }) => useFixMatch(id, 'Dune', onApplied), {
@@ -156,7 +232,7 @@ describe('useFixMatch', () => {
 
   it('announces a library change once a match was applied', async () => {
     installFetch((m, url) => {
-      if (isSearch(m, url)) return respond([{ tmdbId: 5 }]);
+      if (isSearch(m, url)) return answer([{ tmdbId: 5 }]);
       if (isApply(m, url)) return respond({ filmId: 7, joined: false });
       return null;
     });

@@ -72,6 +72,23 @@ class DefaultEditionTest {
     }
 
     @Test
+    void currentIsTheStoredDefaultWhileItIsStillOneOfTheEditions() {
+        Edition extended = edition(1, "Extended Cut", 175);
+        Edition plain = edition(2, "Original", 155);
+
+        assertThat(DefaultEdition.current(List.of(extended, plain), 1L)).contains(extended);
+    }
+
+    @Test
+    void currentFallsBackToTheScansPickWhenTheStoredDefaultIsGoneOrNull() {
+        Edition extended = edition(1, "Extended Cut", 175);
+        Edition plain = edition(2, "Original", 155);
+
+        assertThat(DefaultEdition.current(List.of(extended, plain), 99L)).contains(plain);
+        assertThat(DefaultEdition.current(List.of(extended, plain), null)).contains(plain);
+    }
+
+    @Test
     void noEditionsGivesNothing() {
         assertThat(DefaultEdition.choose(List.of())).isEmpty();
     }
