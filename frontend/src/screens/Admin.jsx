@@ -94,6 +94,7 @@ function AdminShell() {
   // as stale too, so "still mounted" is read from the open `editing` through a ref: a due fallback is armed only once
   // the dialog is gone, and one that lands after it is gone is armed at once.
   const editingRef = useRef(editing);
+  // A latest-value mirror, read only from async callbacks (as `openPicker.current` in useAdminShell.js).
   editingRef.current = editing;
   // The id of the film whose save landed while a dialog for that film was open (null when none). The effect below
   // drops it as soon as the open dialog is not that film's, so at close it is null or the closing film's.
@@ -117,6 +118,8 @@ function AdminShell() {
       editCheckFocus.current = true;
     }
     editFallbackDue.current = null;
+    // React may not have rendered yet when a held save lands: it must see the dialog as gone and arm at once.
+    editingRef.current = null;
     shell.closeEditEditions();
   };
   useEffect(() => {
