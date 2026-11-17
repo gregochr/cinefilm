@@ -1,9 +1,11 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { FADE_MS } from '../components/useDialog.js';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -402,10 +404,12 @@ describe('Admin: the heading does not take focus behind the fading dialog', () =
   it('keeps focus off the heading until the dialog is gone, without any Tab', async () => {
     vi.stubGlobal('matchMedia', () => ({ matches: false }));
     let applied = false;
+    let landReread;
+    const reread = new Promise((resolve) => {
+      landReread = resolve;
+    });
     installFetch((m, url) => {
-      if (url === '/api/admin/attention' && applied) {
-        return respond({ items: fixtures.adminAttention.items.slice(1) });
-      }
+      if (url === '/api/admin/attention' && applied) return reread;
       if (isApply(m, url)) {
         applied = true;
         return respond({ filmId: 31, joined: false });
@@ -415,22 +419,32 @@ describe('Admin: the heading does not take focus behind the fading dialog', () =
     const dialog = await openPanel();
     await userEvent.click((await within(dialog).findAllByRole('radio'))[0]);
 
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Use this match' }));
-    // The re-read has landed and the row is gone, while the dialog is still fading out.
-    // (A short poll interval: the fade is only 150 ms long.)
-    await waitFor(
-      () => expect(screen.getAllByRole('button', { name: 'Find the film…' })).toHaveLength(1),
-      { interval: 5 },
-    );
-    expect(screen.getByRole('dialog', { name: 'Fix match' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 1, name: 'To do' })).not.toHaveFocus();
+    // From here the clock is held, so the 150 ms fade only ends when the test says so.
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    // Testing Library finds a held clock through the `jest` global; point it at Vitest's.
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms) => vi.advanceTimersByTime(ms) });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const rows = () => screen.getAllByRole('button', { name: 'Find the film…' });
+    const heading = () => screen.getByRole('heading', { level: 1, name: 'To do' });
+    await user.click(within(dialog).getByRole('button', { name: 'Use this match' }));
+    // The apply has answered and the dialog is fading out, its button disabled; the re-read is still on its way.
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(within(dialog).getByRole('button', { name: 'Use this match' })).toBeDisabled();
+    expect(rows()).toHaveLength(2);
 
-    await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument(),
-    );
-    await waitFor(() =>
-      expect(screen.getByRole('heading', { level: 1, name: 'To do' })).toHaveFocus(),
-    );
+    // The re-read lands: the row is gone while the dialog is still on screen, and focus is on the page body.
+    landReread(respond({ items: fixtures.adminAttention.items.slice(1) }));
+    for (let i = 0; i < 30 && rows().length > 1; i++) {
+      await act(async () => vi.advanceTimersByTimeAsync(0));
+    }
+    expect(rows()).toHaveLength(1);
+    expect(screen.getByRole('dialog', { name: 'Fix match' })).toBeInTheDocument();
+    expect(heading()).not.toHaveFocus();
+
+    await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+
+    expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument();
+    expect(heading()).toHaveFocus();
   });
 });
 
