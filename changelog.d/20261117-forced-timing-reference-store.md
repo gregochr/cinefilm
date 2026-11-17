@@ -6,8 +6,9 @@ file's own) and keeps the best fit: an aligned one first, then the larger share 
 typical error, then the lower file id. The result is stored with the file it was made against, and Admin's subtitle list
 now carries `alignment.source` (`EMBEDDED` or `OPENSUBTITLES`) and `alignment.referenceRelease`.
 
-The fit is shown but never counts as proof: it does not make a file trusted, does not change which subtitle plays, does
-not set an offset, and a file of 300 lines or more (or with more than half the full file's lines) is flagged as looking
-like full subtitles. A new stored full file makes the fit be made again. The 1 second limit for an aligned fit is
-provisional until the measurement lines from the last release are read. References stored before this release have
-no last-cue end, so they are not used until a follow-up fills it in.
+A film the owner marked as having no English subtitles never gets this fit. The fit is shown but never counts as proof:
+it does not make a file trusted, does not change which subtitle plays, does not set an offset, and a file of 300 lines
+or more (or with more than half the full file's lines) is flagged as looking like full subtitles. A new stored full
+file makes the fit be made again. The 1 second limit for an aligned fit is provisional until the measurement lines from
+the last release are read. References stored before this release have no last-cue end, so they are not used until a
+follow-up fills it in.

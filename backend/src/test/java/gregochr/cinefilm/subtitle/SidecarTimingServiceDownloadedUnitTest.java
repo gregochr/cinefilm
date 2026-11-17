@@ -220,12 +220,15 @@ class SidecarTimingServiceDownloadedUnitTest {
     @Test
     void aFilmTheOwnerMarkedAsHavingNoEnglishSubtitlesIsNotFittedToAnyOpenSubtitlesFile() {
         read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        // Usable files are stored, so only the owner's choice keeps the film out of the fit.
+        stored(reference(5012, 300, IMDB), reference(5013, 300, IMDB));
         edition.getFilm().setFullNeedOwner(FullNeedChoice.NONE_EXIST);
 
         FitJob job = onlyJob();
 
         assertThat(job.osReferences()).isEmpty();
         assertThat(job.referenceKey()).isEqualTo(BASE_KEY);
+        assertThat(job.noReference()).isEqualTo("The film has no English subtitle track");
     }
 
     @Test

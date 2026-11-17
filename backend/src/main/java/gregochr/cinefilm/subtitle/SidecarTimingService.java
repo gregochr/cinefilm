@@ -506,7 +506,6 @@ public class SidecarTimingService {
             Film film = e.getFilm();
             List<MediaFile> parts = e.originalParts();
             if (parts.size() == 1 && e.getRuntimeMs() > 0 && film.getImdbId() != null
-                && film.getFullNeedOwner() != FullNeedChoice.NONE_EXIST
                 && film.getOsFullCandidates() != null && film.getImdbId().equals(film.getOsFullSearchedImdbId())
                 && isRead(parts.get(0), reads)
                 && reads.get(parts.get(0).getId()).getStatus() == EmbeddedCueStarts.Status.NO_REFERENCE) {
@@ -525,6 +524,9 @@ public class SidecarTimingService {
         Map<Long, OsRefs> found = new HashMap<>();
         for (Edition e : wanted.values()) {
             Film film = e.getFilm();
+            if (film.getFullNeedOwner() == FullNeedChoice.NONE_EXIST) {
+                continue;
+            }
             Map<Long, ReferenceFacts> stored = new HashMap<>();
             storedByFilm.getOrDefault(film.getId(), List.of()).stream()
                 .filter(r -> film.getImdbId().equals(r.imdbId())).forEach(r -> stored.put(r.osFileId(), r));
