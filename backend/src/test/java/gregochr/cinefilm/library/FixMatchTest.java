@@ -27,6 +27,7 @@ import gregochr.cinefilm.film.GroupingChanges;
 import gregochr.cinefilm.film.MatchStatus;
 import gregochr.cinefilm.library.AdminDtos.MatchApplied;
 import gregochr.cinefilm.library.AdminDtos.MatchResultDto;
+import gregochr.cinefilm.library.AdminDtos.MatchSearchDto;
 import gregochr.cinefilm.tmdb.TmdbApi;
 import gregochr.cinefilm.tmdb.TmdbModels.Credit;
 import gregochr.cinefilm.tmdb.TmdbModels.MovieDetails;
@@ -40,6 +41,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /** Fix match over real repositories and a fake TMDB. */
 class FixMatchTest extends ApiTestBase {
@@ -65,7 +68,8 @@ class FixMatchTest extends ApiTestBase {
     void setUp() {
         tmdb = mock(TmdbApi.class);
         lock = new LibraryLock();
-        fix = new FixMatch(tmdb, films, ingest, join, groupingChanges, lock, transactions, CLOCK, events);
+        fix = new FixMatch(tmdb, films, preferences, ingest, join, groupingChanges, lock, transactions, CLOCK,
+            events);
     }
 
     private static MovieDetails movie(long id, String title, int year) {
@@ -93,7 +97,7 @@ class FixMatchTest extends ApiTestBase {
         when(tmdb.search("The Wicker Man", 1973)).thenReturn(hits);
         Film film = unmatched("The Wicker Man", "The Wicker Man.m4v");
 
-        List<MatchResultDto> results = fix.search(film.getId(), "  The Wicker Man ", 1973);
+        List<MatchResultDto> results = fix.search(film.getId(), "  The Wicker Man ", 1973).results();
 
         assertThat(results).hasSize(8);
         assertThat(results.get(0)).isEqualTo(new MatchResultDto(1, "Wicker 1", 1973, 93, "/p1.jpg", "Robin Hardy",
@@ -110,7 +114,8 @@ class FixMatchTest extends ApiTestBase {
         when(tmdb.movie(2)).thenReturn(Optional.of(movie(2, "B", 2021)));
         Film film = unmatched("Dune", "Dune.m4v");
 
-        assertThat(fix.search(film.getId(), "Dune", null)).extracting(MatchResultDto::tmdbId).containsExactly(2L);
+        assertThat(fix.search(film.getId(), "Dune", null).results()).extracting(MatchResultDto::tmdbId)
+            .containsExactly(2L);
     }
 
     @Test
@@ -120,7 +125,7 @@ class FixMatchTest extends ApiTestBase {
             null, 1, List.of(), List.of(), null)));
         Film film = unmatched("X", "X.m4v");
 
-        assertThat(fix.search(film.getId(), "X", null)).singleElement().satisfies(r -> {
+        assertThat(fix.search(film.getId(), "X", null).results()).singleElement().satisfies(r -> {
             assertThat(r.director()).isNull();
             assertThat(r.cast()).isEmpty();
             assertThat(r.runtimeMinutes()).isNull();
@@ -135,9 +140,32 @@ class FixMatchTest extends ApiTestBase {
     }
 
     @Test
-    void searchForAnUnknownFilmIs404() {
-        assertThatThrownBy(() -> fix.search(9999L, "Dune", null)).isInstanceOf(NotFoundException.class);
+    void searchForAnUnknownFilmIs404BeforeTmdbIsAsked() {
+        assertThatThrownBy(() -> fix.search(9999L, "Dune", null)).isInstanceOf(NotFoundException.class)
+            .hasMessage("No film 9999");
+        verifyNoInteractions(tmdb);
         assertThat(lock.holder()).isNull();
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void searchReadsTheFilesLengthInItsOwnTransactionWhenTheCallerHasNone() {
+        // Outside the base class's rollback transaction: the lazy editions are only readable inside the search's own.
+        when(tmdb.search("Dune", null)).thenReturn(List.of(new SearchHit(1, "A", "A", 2021, 1, null),
+            new SearchHit(2, "B", "B", 2021, 1, null)));
+        when(tmdb.movie(1)).thenReturn(Optional.of(movie(1, "A", 2021)));
+        when(tmdb.movie(2)).thenReturn(Optional.of(new MovieDetails(2, "B", "B", 2021, "About B", 120, List.of(),
+            "/p2.jpg", "/b2.jpg", 5.0, List.of(), List.of(), null)));
+        Film film = unmatched("Dune", "Dune.m4v");
+        try {
+            MatchSearchDto answer = fix.search(film.getId(), "Dune", null);
+
+            assertThat(answer.fileRuntimeMs()).isEqualTo(93 * MIN);
+            assertThat(answer.suggestedTmdbId()).isEqualTo(1L);
+            assertThat(answer.suggestedBecause()).isEqualTo("runtime");
+        } finally {
+            films.deleteById(film.getId());
+        }
     }
 
     @Test
@@ -147,7 +175,7 @@ class FixMatchTest extends ApiTestBase {
         Film film = unmatched("Dune", "Dune.m4v");
         lock.tryAcquire(LibraryLock.SCAN);
 
-        assertThat(fix.search(film.getId(), "Dune", null)).hasSize(1);
+        assertThat(fix.search(film.getId(), "Dune", null).results()).hasSize(1);
         assertThat(lock.holder()).as("the scan keeps its lock").isEqualTo(LibraryLock.SCAN);
     }
 

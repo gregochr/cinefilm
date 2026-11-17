@@ -95,7 +95,7 @@ export const adminApi = {
   /** The rail and To do strip's figures, read fresh each time (the server does not cache). */
   summary: (options) => get('/api/admin/summary', options),
   groupingReport: (options) => get('/api/admin/grouping-report', options),
-  /** TMDB results (at most 8, with details) for the Fix match panel. `year` is optional. */
+  /** TMDB results (at most 8, with details), the file length and the suggested pick, for Fix match. `year` is optional. */
   matchSearch: (filmId, { query, year }, options) => {
     const params = new URLSearchParams({ query });
     if (year) params.set('year', String(year));
