@@ -329,7 +329,7 @@ describe('Admin: Edit editions, cancelled while it saves', () => {
       expect(heading()).toHaveFocus();
     });
 
-    it('arms the focus fallback when the dialog goes, for a re-read that lands after it', async () => {
+    it('a re-read that lands after the dialog has gone puts focus on the heading', async () => {
       vi.stubGlobal('matchMedia', () => ({ matches: false }));
       const w = world();
       renderApp('/admin');
@@ -349,7 +349,7 @@ describe('Admin: Edit editions, cancelled while it saves', () => {
       expect(heading()).toHaveFocus();
     });
 
-    it('forgets a due fallback when the dialog goes with the section, so a later Cancel arms nothing', async () => {
+    it('after leaving the section mid-fade, a later Cancel and list change leave focus where it is', async () => {
       vi.stubGlobal('matchMedia', () => ({ matches: false }));
       const w = world();
       renderApp('/admin');
@@ -381,6 +381,8 @@ describe('Admin: Edit editions, cancelled while it saves', () => {
     });
 
     it('does not hand a due fallback on to the next film’s dialog', async () => {
+      // Reachable only in jsdom: in a browser the fixed, focus-trapped dialog covers the rows, so another film's
+      // dialog cannot open while one fades. Kept as a defence for the effect that clears the due id.
       vi.stubGlobal('matchMedia', () => ({ matches: false }));
       const w = world();
       renderApp('/admin');

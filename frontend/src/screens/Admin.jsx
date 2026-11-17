@@ -94,11 +94,9 @@ function AdminShell() {
   // as stale too, so "still mounted" is read from the open `editing` through a ref: a due fallback is armed only once
   // the dialog is gone, and one that lands after it is gone is armed at once.
   const editingRef = useRef(editing);
-  useEffect(() => {
-    editingRef.current = editing;
-  }, [editing]);
-  // The id of the film whose dialog is fading with a save that has already landed; null when none: a due fallback
-  // belongs to that one dialog.
+  editingRef.current = editing;
+  // The id of the film whose save landed while a dialog for that film was open (null when none). The effect below
+  // drops it as soon as the open dialog is not that film's, so at close it is null or the closing film's.
   const editFallbackDue = useRef(null);
   const editCheckFocus = useRef(false);
   const edited = (result, stale) => {
@@ -114,7 +112,7 @@ function AdminShell() {
     shell.markChanged();
   };
   const closeEditEditions = () => {
-    if (editFallbackDue.current === editingRef.current?.film.id) {
+    if (editFallbackDue.current !== null) {
       shell.armFocusFallback();
       editCheckFocus.current = true;
     }
