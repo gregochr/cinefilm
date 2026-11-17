@@ -13,6 +13,8 @@ import gregochr.cinefilm.credits.CreditsDetectionRepository;
 import gregochr.cinefilm.credits.CreditsVerdict;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.MediaFile;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -80,6 +82,20 @@ class CreditsStartsTest {
         when(credits.findById(10L)).thenReturn(Optional.of(detection(CreditsVerdict.FOUND, 50 * MIN)));
 
         assertThat(CreditsStarts.of(edition, credits)).isNull();
+    }
+
+    @Test
+    void theCreditsStartsOfSeveralEditionsAreReadInOneQuery() {
+        Edition other = edition(film(2L, "Alien", 1979, NOW), 41L, "Original", 90 * MIN, null);
+        MediaFile otherFile = file(other, "Alien.m4v");
+        otherFile.setId(11L);
+        CreditsDetection found = detection(CreditsVerdict.FOUND, 80 * MIN);
+        found.setMediaFileId(10L);
+        when(credits.findAllById(List.of(10L, 11L))).thenReturn(List.of(found));
+
+        Map<Long, Long> starts = CreditsStarts.ofAll(List.of(edition, other), credits);
+
+        assertThat(starts).containsExactly(Map.entry(40L, 80 * MIN));
     }
 
     private void first(long durationMs) {

@@ -7,6 +7,7 @@ import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.credits.CreditsDetectionRepository;
@@ -18,6 +19,7 @@ import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository.ReferenceFacts;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.subtitle.SidecarTimingService.FitJob;
 import gregochr.cinefilm.subtitle.SidecarTimingService.SaveOutcome;
@@ -26,6 +28,7 @@ import gregochr.cinefilm.subtitle.TimingFit.Result;
 import gregochr.cinefilm.subtitle.TimingFit.Verdict;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -121,9 +124,11 @@ class SidecarTimingServiceDownloadedUnitTest {
             list.add(new SubtitleCue(i * 10_000L, i * 10_000L + 1_000, "line " + i));
         }
         OpenSubtitlesReference reference = new OpenSubtitlesReference();
+        reference.setId(fileId);
         reference.setFilmId(1L);
         reference.setImdbId(imdbId);
         reference.setOsFileId(fileId);
+        reference.setLastCueEndMs(cues * 10_000L + 1_000);
         reference.setRelease("Release " + fileId);
         reference.setCuesText(SrtParser.format(list));
         reference.setCueCount(cues);
@@ -140,16 +145,32 @@ class SidecarTimingServiceDownloadedUnitTest {
         when(cache.findAllById(Set.of(10L))).thenReturn(List.of(read));
     }
 
+    /** What the timing check reads on the playback path: the facts of the stored files, never their cue text. */
     private void stored(OpenSubtitlesReference... stored) {
-        when(references.findByFilmIdIn(Set.of(1L))).thenReturn(List.of(stored));
+        when(references.findFactsByFilmIdIn(Set.of(1L))).thenReturn(Arrays.stream(stored)
+            .map(r -> new ReferenceFacts(r.getId(), r.getFilmId(), r.getImdbId(), r.getOsFileId(), r.getRelease(),
+                r.getCueCount(), r.getLastCueEndMs())).toList());
     }
 
-    private FitJob onlyJob() {
+    /** The job reads the cue text of the files it fits to, and only those. */
+    private FitJob onlyJob(Long... textsOf) {
+        if (textsOf.length > 0) {
+            when(references.findAllById(List.of(textsOf))).thenReturn(Arrays.stream(textsOf)
+                .map(id -> reference(id, 300, IMDB)).toList());
+        }
         served();
         when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of());
         List<FitJob> jobs = service.fitJobs(1L);
         assertThat(jobs).hasSize(1);
         return jobs.get(0);
+    }
+
+    /** A job that fitted to the given files (the key of the first only: tests that need a stale key add files). */
+    private FitJob jobFitting(Long... fileIds) {
+        List<DownloadedFit.Reference> fitTo = Arrays.stream(fileIds)
+            .map(id -> new DownloadedFit.Reference(id, "Release " + id, 300, List.of(1L))).toList();
+        return new FitJob(1L, 5L, TimingKeys.identity(sidecar), BASE_KEY + "|os:" + IMDB + ":5012", STARTS, List.of(),
+            null, fitTo);
     }
 
     private ForcedSubtitleAlignment row(String key) {
@@ -173,7 +194,7 @@ class SidecarTimingServiceDownloadedUnitTest {
         read(EmbeddedCueStarts.Status.NO_REFERENCE);
         stored(reference(5013, 300, IMDB), reference(5012, 300, IMDB));
 
-        FitJob job = onlyJob();
+        FitJob job = onlyJob(5012L, 5013L);
 
         assertThat(job.noReference()).isNull();
         assertThat(job.referenceStarts()).isEmpty();
@@ -205,7 +226,7 @@ class SidecarTimingServiceDownloadedUnitTest {
         read(EmbeddedCueStarts.Status.NO_REFERENCE);
         stored(reference(5012, 300, IMDB), reference(5013, 300, IMDB));
 
-        FitJob job = onlyJob();
+        FitJob job = onlyJob(5013L);
 
         assertThat(job.osReferences()).extracting(DownloadedFit.Reference::osFileId).containsExactly(5013L);
         assertThat(job.referenceKey()).endsWith("|os:" + IMDB + ":5013");
@@ -250,8 +271,7 @@ class SidecarTimingServiceDownloadedUnitTest {
         stored(reference(5012, 300, IMDB));
         served();
         when(alignments.findBySidecarId(5L)).thenReturn(Optional.empty());
-        FitJob job = new FitJob(1L, 5L, TimingKeys.identity(sidecar), BASE_KEY + "|os:" + IMDB + ":5012", STARTS,
-            List.of(), null);
+        FitJob job = jobFitting(5012L);
 
         SaveOutcome outcome = service.save(job, aligned(900), 5012L, LATER);
 
@@ -271,10 +291,94 @@ class SidecarTimingServiceDownloadedUnitTest {
         read(EmbeddedCueStarts.Status.NO_REFERENCE);
         stored(reference(5012, 300, IMDB), reference(5013, 300, IMDB));
         served();
-        FitJob job = new FitJob(1L, 5L, TimingKeys.identity(sidecar), BASE_KEY + "|os:" + IMDB + ":5012", STARTS,
-            List.of(), null);
+        FitJob job = jobFitting(5012L);
 
         assertThat(service.save(job, aligned(0), 5012L, LATER)).isEqualTo(SaveOutcome.DROPPED);
+    }
+
+    @Test
+    void aSaveWhoseSourceDoesNotMatchTheJobIsDropped() {
+        served();
+
+        assertThat(service.save(jobFitting(), aligned(0), 5012L, LATER)).isEqualTo(SaveOutcome.DROPPED);
+        assertThat(service.save(jobFitting(5013L), aligned(0), 5012L, LATER)).isEqualTo(SaveOutcome.DROPPED);
+        assertThat(service.save(jobFitting(5012L), aligned(0), null, LATER)).isEqualTo(SaveOutcome.DROPPED);
+    }
+
+    @Test
+    void aFileStoredBeforeItsLastCueEndWasKeptIsNotUsableAndMakesTheFilmDueToBeFilledIn() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        served();
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L));
+        OpenSubtitlesReference old = reference(5012, 300, IMDB);
+        old.setLastCueEndMs(null);
+        stored(old);
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(row(BASE_KEY)));
+
+        assertThat(service.dueFilmIds()).containsExactly(1L);
+        assertThat(service.fitJobs(1L)).isEmpty();
+    }
+
+    @Test
+    void theLastCueEndOfAFileStoredEarlierIsFilledInOnceUnderTheLibraryLock() {
+        OpenSubtitlesReference old = reference(5012, 300, IMDB);
+        old.setLastCueEndMs(null);
+        when(references.findByFilmIdAndLastCueEndMsIsNullAndCueCountGreaterThan(1L, 0)).thenReturn(List.of(old));
+
+        assertThat(service.backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.SAVED);
+
+        assertThat(old.getLastCueEndMs()).isEqualTo(3_001_000L);
+        verify(references).save(old);
+    }
+
+    @Test
+    void theBackfillWaitsWhileAScanOrAnEditHoldsTheLibraryLock() {
+        LibraryLock busy = new LibraryLock();
+        assertThat(busy.tryAcquire(LibraryLock.SCAN)).isTrue();
+        SidecarTimingService locked = new SidecarTimingService(sidecars, editions, files, cache, alignments,
+            references, credits, busy, transactions);
+
+        assertThat(locked.backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.BUSY);
+    }
+
+    @Test
+    void theCreditsOfEveryEligibleEditionAreReadInOneQuery() {
+        Film other = film(2L, "Alien", 1979, NOW);
+        other.setImdbId(IMDB);
+        other.setOsFullSearchedImdbId(IMDB);
+        other.setOsFullCandidates(edition.getFilm().getOsFullCandidates());
+        Edition second = edition(other, 41L, "Original", 90 * MIN, null);
+        MediaFile secondPart = file(second, "Alien.m4v");
+        secondPart.setId(11L);
+        secondPart.setSizeBytes(1_000L);
+        secondPart.setModifiedAt(NOW);
+        SubtitleSidecar secondSidecar = new SubtitleSidecar();
+        secondSidecar.setId(6L);
+        secondSidecar.setPath("Alien.en.forced.srt");
+        secondSidecar.setMediaFileId(11L);
+        secondSidecar.setCuesText(sidecar.getCuesText());
+        secondSidecar.setCueCount(STARTS.size());
+        secondSidecar.setUpdatedAt(NOW);
+        EmbeddedCueStarts firstRead = new EmbeddedCueStarts();
+        firstRead.setMediaFileId(10L);
+        firstRead.setFingerprint(TimingKeys.fingerprint(part));
+        firstRead.setStatus(EmbeddedCueStarts.Status.NO_REFERENCE);
+        EmbeddedCueStarts secondRead = new EmbeddedCueStarts();
+        secondRead.setMediaFileId(11L);
+        secondRead.setFingerprint(TimingKeys.fingerprint(secondPart));
+        secondRead.setStatus(EmbeddedCueStarts.Status.NO_REFERENCE);
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L, 2L));
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L, 2L))).thenReturn(List.of(edition, second));
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L, 11L), SubtitleKind.FORCED))
+            .thenReturn(List.of(sidecar, secondSidecar));
+        when(cache.findAllById(Set.of(10L, 11L))).thenReturn(List.of(firstRead, secondRead));
+        when(alignments.findBySidecarIdIn(List.of(5L, 6L))).thenReturn(List.of());
+        when(references.findFactsByFilmIdIn(Set.of(1L, 2L))).thenReturn(List.of());
+
+        assertThat(service.dueFilmIds()).containsExactly(1L, 2L);
+
+        verify(credits).findAllById(List.of(10L, 11L));
+        verifyNoMoreInteractions(credits);
     }
 
     @Test

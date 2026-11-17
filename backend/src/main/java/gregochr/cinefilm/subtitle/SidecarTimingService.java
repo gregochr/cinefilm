@@ -11,6 +11,7 @@ import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository.ReferenceFacts;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Pick;
 import gregochr.cinefilm.subtitle.SidecarPrecedence.Slot;
@@ -93,8 +94,12 @@ public class SidecarTimingService {
         }
     }
 
-    /** The usable stored OpenSubtitles files among an edition's candidates, and the IMDb id they were fetched for. */
-    private record OsRefs(String imdbId, List<OpenSubtitlesReference> usable) {
+    /**
+     * The usable stored OpenSubtitles files among an edition's candidates (their facts, never their cue text), the
+     * IMDb id they were fetched for, and whether a candidate that could be usable does not know where its last cue
+     * ends yet (stored before that was kept): the film is then due, so it is filled in.
+     */
+    private record OsRefs(String imdbId, List<ReferenceFacts> usable, boolean needsBackfill) {
     }
 
     /** What {@link #save} did. */
@@ -150,6 +155,10 @@ public class SidecarTimingService {
         for (Served s : served) {
             ForcedSubtitleAlignment fit = fits.get(s.sidecar().getId());
             State state = state(s, reads, os, fit);
+            OsRefs refs = os.get(s.edition().getId());
+            if (state == State.CURRENT && refs != null && refs.needsBackfill()) {
+                due.computeIfAbsent(s.edition().getFilm().getId(), k -> new boolean[2]);
+            }
             if (state == State.NEEDS_READ || state == State.NEEDS_FIT) {
                 boolean[] flags = due.computeIfAbsent(s.edition().getFilm().getId(), k -> new boolean[2]);
                 flags[0] |= !s.sidecar().isVerifiedFor(s.partIds());
@@ -254,12 +263,16 @@ public class SidecarTimingService {
     private FitJob job(Long filmId, Served s, Map<Long, EmbeddedCueStarts> reads, Map<Long, OsRefs> os) {
         SubtitleSidecar sidecar = s.sidecar();
         List<Long> starts = SrtParser.cues(sidecar.getCuesText()).stream().map(SubtitleCue::startMs).toList();
-        List<OpenSubtitlesReference> downloaded = downloadedFor(s, os);
+        List<ReferenceFacts> downloaded = downloadedFor(s, os);
         if (!downloaded.isEmpty()) {
-            // The film has no English track of its own: fit to the stored OpenSubtitles files instead.
-            List<DownloadedFit.Reference> fitTo = downloaded.stream().map(r -> new DownloadedFit.Reference(
-                r.getOsFileId(), r.getRelease(), r.getCueCount(),
-                SrtParser.cues(r.getCuesText()).stream().map(SubtitleCue::startMs).toList())).toList();
+            // The film has no English track of its own: fit to the stored OpenSubtitles files instead. Only here is
+            // their cue text read.
+            Map<Long, OpenSubtitlesReference> texts = new HashMap<>();
+            references.findAllById(downloaded.stream().map(ReferenceFacts::id).toList())
+                .forEach(r -> texts.put(r.getOsFileId(), r));
+            List<DownloadedFit.Reference> fitTo = downloaded.stream().map(f -> new DownloadedFit.Reference(
+                f.osFileId(), f.release(), f.cueCount(), SrtParser.cues(texts.get(f.osFileId()).getCuesText()).stream()
+                .map(SubtitleCue::startMs).toList())).toList();
             return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar), referenceKey(s, reads, os),
                 List.copyOf(starts), List.of(), null, fitTo);
         }
@@ -279,6 +292,32 @@ public class SidecarTimingService {
         return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar),
             referenceKey(s, reads, os), List.copyOf(starts),
             noReference == null ? List.copyOf(reference) : List.of(), noReference);
+    }
+
+    /**
+     * Fills in where the last cue ends for a film's stored OpenSubtitles files that were stored before that was kept
+     * (parsing each file's cues once), so they can count as references. Takes the library lock for the write, as the
+     * other saves do.
+     *
+     * @param filmId the film
+     * @return {@code SAVED} (nothing left to fill in is also {@code SAVED}) or {@code BUSY} when a scan or an edit
+     *     holds the lock
+     */
+    public SaveOutcome backfillLastCueEnds(Long filmId) {
+        if (!lock.tryAcquire(LibraryLock.SUBTITLE)) {
+            return SaveOutcome.BUSY;
+        }
+        try {
+            tx.executeWithoutResult(status -> references
+                .findByFilmIdAndLastCueEndMsIsNullAndCueCountGreaterThan(filmId, 0).forEach(r -> {
+                    r.setLastCueEndMs(SrtParser.cues(r.getCuesText()).stream().mapToLong(SubtitleCue::endMs).max()
+                        .orElse(0));
+                    references.save(r);
+                }));
+            return SaveOutcome.SAVED;
+        } finally {
+            lock.release();
+        }
     }
 
     /**
@@ -324,6 +363,12 @@ public class SidecarTimingService {
             return SaveOutcome.DROPPED;
         }
         SubtitleSidecar sidecar = current.sidecar();
+        // The source must match the job: a fit to an OpenSubtitles file names one of the files the job fitted to, and a
+        // fit to the film's own track comes from a job that fitted to none.
+        if (osFileId == null ? !job.osReferences().isEmpty()
+            : job.osReferences().stream().noneMatch(r -> r.osFileId() == osFileId)) {
+            return SaveOutcome.DROPPED;
+        }
         Map<Long, EmbeddedCueStarts> currentReads = reads(List.of(current));
         String key = referenceKey(current, currentReads, osRefs(List.of(current), currentReads));
         if (!TimingKeys.identity(sidecar).equals(job.identity()) || key == null || !key.equals(job.referenceKey())) {
@@ -455,31 +500,33 @@ public class SidecarTimingService {
      */
     private static String referenceKey(Served s, Map<Long, EmbeddedCueStarts> reads, Map<Long, OsRefs> os) {
         String key = TimingKeys.referenceKey(s.edition(), s.sidecar(), reads);
-        List<OpenSubtitlesReference> downloaded = key == null ? List.of() : downloadedFor(s, os);
+        List<ReferenceFacts> downloaded = key == null ? List.of() : downloadedFor(s, os);
         if (downloaded.isEmpty()) {
             return key;
         }
         return key + "|os:" + os.get(s.edition().getId()).imdbId() + ":" + downloaded.stream()
-            .map(OpenSubtitlesReference::getOsFileId).sorted().map(String::valueOf).collect(Collectors.joining(","));
+            .map(ReferenceFacts::osFileId).sorted().map(String::valueOf).collect(Collectors.joining(","));
     }
 
     /** The usable stored OpenSubtitles files for a sidecar: never its own file (it cannot vouch for itself). */
-    private static List<OpenSubtitlesReference> downloadedFor(Served s, Map<Long, OsRefs> os) {
+    private static List<ReferenceFacts> downloadedFor(Served s, Map<Long, OsRefs> os) {
         OsRefs refs = os.get(s.edition().getId());
         return refs == null ? List.of() : refs.usable().stream()
-            .filter(r -> !Objects.equals(r.getOsFileId(), s.sidecar().getOpenSubtitlesFileId())).toList();
+            .filter(r -> !Objects.equals(r.osFileId(), s.sidecar().getOpenSubtitlesFileId())).toList();
     }
 
     private static String release(Served s, Map<Long, OsRefs> os, Long osFileId) {
-        return downloadedFor(s, os).stream().filter(r -> Objects.equals(r.getOsFileId(), osFileId)).findFirst()
-            .map(OpenSubtitlesReference::getRelease).orElse(null);
+        return downloadedFor(s, os).stream().filter(r -> Objects.equals(r.osFileId(), osFileId)).findFirst()
+            .map(ReferenceFacts::release).orElse(null);
     }
 
     /**
      * For each served edition the timing check fits to OpenSubtitles files (a single file whose embedded read found no
      * English track, of a film searched for full subtitles under its current IMDb id), the usable stored files among
      * its candidates: the same selection as {@link TimingReferenceService}, through {@link TimingReferenceRule} and
-     * {@link CreditsStarts}. Two bulk reads however many editions; the credits are read only for those editions.
+     * {@link CreditsStarts}. This runs on the playback path ({@link #current}), so it reads facts only (no cue text,
+     * nothing parsed) and the credits of all those editions in one query; a reference with no kept last-cue end is not
+     * usable until {@link #backfillLastCueEnds} fills it in.
      */
     private Map<Long, OsRefs> osRefs(List<Served> served, Map<Long, EmbeddedCueStarts> reads) {
         Map<Long, Edition> wanted = new LinkedHashMap<>();
@@ -497,21 +544,26 @@ public class SidecarTimingService {
         if (wanted.isEmpty()) {
             return Map.of();
         }
-        Map<Long, List<OpenSubtitlesReference>> storedByFilm = new HashMap<>();
-        references.findByFilmIdIn(wanted.values().stream().map(e -> e.getFilm().getId()).collect(Collectors.toSet()))
-            .forEach(r -> storedByFilm.computeIfAbsent(r.getFilmId(), k -> new ArrayList<>()).add(r));
+        Map<Long, List<ReferenceFacts>> storedByFilm = new HashMap<>();
+        Set<Long> filmIds = wanted.values().stream().map(e -> e.getFilm().getId()).collect(Collectors.toSet());
+        for (ReferenceFacts r : references.findFactsByFilmIdIn(filmIds)) {
+            storedByFilm.computeIfAbsent(r.filmId(), k -> new ArrayList<>()).add(r);
+        }
+        Map<Long, Long> creditsStarts = CreditsStarts.ofAll(wanted.values(), credits);
         Map<Long, OsRefs> found = new HashMap<>();
         for (Edition e : wanted.values()) {
             Film film = e.getFilm();
-            Map<Long, OpenSubtitlesReference> stored = new HashMap<>();
+            Map<Long, ReferenceFacts> stored = new HashMap<>();
             storedByFilm.getOrDefault(film.getId(), List.of()).stream()
-                .filter(r -> film.getImdbId().equals(r.getImdbId())).forEach(r -> stored.put(r.getOsFileId(), r));
+                .filter(r -> film.getImdbId().equals(r.imdbId())).forEach(r -> stored.put(r.osFileId(), r));
             List<OpenSubtitlesResult> candidates = TimingReferenceRule.candidates(film.getOsFullCandidates(),
                 e.getName());
-            List<OpenSubtitlesReference> usable = TimingReferenceRule.usableReferences(candidates, stored,
-                e.getRuntimeMs(), CreditsStarts.of(e, credits));
-            if (!usable.isEmpty()) {
-                found.put(e.getId(), new OsRefs(film.getImdbId(), usable));
+            List<ReferenceFacts> usable = TimingReferenceRule.usableReferences(candidates, stored, e.getRuntimeMs(),
+                creditsStarts.get(e.getId()));
+            boolean backfill = candidates.stream().map(c -> stored.get(c.fileId())).anyMatch(
+                r -> r != null && r.lastCueEndMs() == null && r.cueCount() >= TimingReferenceRule.FULL_LINES);
+            if (!usable.isEmpty() || backfill) {
+                found.put(e.getId(), new OsRefs(film.getImdbId(), usable, backfill));
             }
         }
         return found;

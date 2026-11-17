@@ -3,6 +3,7 @@ package gregochr.cinefilm.subtitle;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesRanking;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository.ReferenceFacts;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -101,19 +102,22 @@ final class TimingReferenceRule {
     }
 
     /**
-     * The usable stored references among an edition's candidates ({@link #usable}), in candidate order.
+     * The usable stored references among an edition's candidates ({@link #usable}), in candidate order. A reference
+     * that does not know where its last cue ends (stored before that was kept) is not usable here: this is for the
+     * playback path, which never parses cue text.
      *
      * @param candidates the edition's candidates in order
-     * @param stored the film's stored references for its current IMDb id by OpenSubtitles file id
+     * @param stored the film's stored references' facts for its current IMDb id by OpenSubtitles file id
      * @param runtimeMs the edition's runtime
      * @param creditsStartMs where credits detection put the credits start, or null
-     * @return the usable references
+     * @return the usable references' facts
      */
-    static List<OpenSubtitlesReference> usableReferences(List<OpenSubtitlesResult> candidates,
-                                                         Map<Long, OpenSubtitlesReference> stored, long runtimeMs,
-                                                         Long creditsStartMs) {
+    static List<ReferenceFacts> usableReferences(List<OpenSubtitlesResult> candidates,
+                                                 Map<Long, ReferenceFacts> stored, long runtimeMs,
+                                                 Long creditsStartMs) {
         return candidates.stream().map(c -> stored.get(c.fileId()))
-            .filter(r -> r != null && usable(r, runtimeMs, creditsStartMs)).toList();
+            .filter(r -> r != null && r.lastCueEndMs() != null
+                && usable(r.cueCount(), r.lastCueEndMs(), runtimeMs, creditsStartMs)).toList();
     }
 
     /** True when the file's stated frame rate is unknown or about 23.976 (the library's rate). */

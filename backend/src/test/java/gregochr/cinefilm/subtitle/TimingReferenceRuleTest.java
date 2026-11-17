@@ -3,6 +3,7 @@ package gregochr.cinefilm.subtitle;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository.ReferenceFacts;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.subtitle.TimingReferenceRule.FileFacts;
 import java.util.List;
@@ -163,23 +164,19 @@ class TimingReferenceRuleTest {
             .containsExactly(1002L, 1001L);
     }
 
-    private static OpenSubtitlesReference stored(long fileId, int cues) {
-        OpenSubtitlesReference reference = new OpenSubtitlesReference();
-        reference.setOsFileId(fileId);
-        reference.setCueCount(cues);
-        reference.setLastCueEndMs(90_000L);
-        return reference;
+    private static ReferenceFacts facts(long fileId, int cues, Long lastCueEndMs) {
+        return new ReferenceFacts(fileId, 1L, "tt1", fileId, "Release " + fileId, cues, lastCueEndMs);
     }
 
     @Test
-    void theUsableReferencesAreTheStoredUsableOnesInCandidateOrder() {
+    void theUsableReferencesAreTheStoredUsableOnesInCandidateOrderAndOneWithNoLastCueEndIsNever() {
         List<OpenSubtitlesResult> candidates = List.of(result(1001, false), result(1002, false), result(1003, false),
-            result(1004, false));
-        Map<Long, OpenSubtitlesReference> stored = Map.of(1001L, stored(1001, 299), 1003L, stored(1003, 300),
-            1004L, stored(1004, 400));
+            result(1004, false), result(1005, false));
+        Map<Long, ReferenceFacts> stored = Map.of(1001L, facts(1001, 299, 90_000L), 1003L, facts(1003, 300, 90_000L),
+            1004L, facts(1004, 400, 90_000L), 1005L, facts(1005, 400, null));
 
         assertThat(TimingReferenceRule.usableReferences(candidates, stored, 90_000L, null))
-            .extracting(OpenSubtitlesReference::getOsFileId).containsExactly(1003L, 1004L);
+            .extracting(ReferenceFacts::osFileId).containsExactly(1003L, 1004L);
         assertThat(TimingReferenceRule.usableReferences(candidates, stored, 20_000L, null)).isEmpty();
     }
 

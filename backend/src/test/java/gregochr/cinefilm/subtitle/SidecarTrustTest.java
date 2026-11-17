@@ -126,6 +126,19 @@ class SidecarTrustTest {
             .isEqualTo(ForcedChoice.Step.REPLACED_BY_DOWNLOAD);
     }
 
+    @Test
+    void anOwnerFileThatFailedItsComparisonStaysFailedKeptOrDroppedWhateverAnOpenSubtitlesFitSays() {
+        boolean aligned = SidecarTrust.isAligned(openSubtitlesAligned());
+        SidecarTrust.Assessment failed = SidecarTrust.assess(false, "CHECK", aligned);
+
+        assertThat(failed.trust()).isEqualTo(SidecarTrust.Trust.FAILED);
+        assertThat(SidecarTrust.assess(false, false, "CHECK", aligned).trust()).isEqualTo(SidecarTrust.Trust.FAILED);
+        assertThat(ForcedChoice.decide(new ForcedChoice.Input(new ForcedChoice.FileSide(failed, 12), List.of(), false))
+            .step()).isEqualTo(ForcedChoice.Step.FAILED_FILE_KEPT);
+        assertThat(ForcedChoice.decide(new ForcedChoice.Input(new ForcedChoice.FileSide(failed, 300), List.of(),
+            false)).step()).isEqualTo(ForcedChoice.Step.FAILED_FILE_DROPPED);
+    }
+
     /** Whether any one proof holds, through the production {@code assess} the resolver uses. */
     private static boolean proven(boolean ownerVerified, CheckDto check, AlignmentDto alignment) {
         return SidecarTrust.assess(ownerVerified, check == null ? null : check.verdict(),

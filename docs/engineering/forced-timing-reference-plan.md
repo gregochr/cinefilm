@@ -151,8 +151,10 @@ references, the search columns, and new reference metadata.
 The owner chose to build 3c-2 before 3c-1's lines exist, with provisional rules that the lines then adjust. Trust and
 playback stay untouched, so a wrong provisional rule can only mislabel a row in Admin.
 
-- **Scope:** the single-file editions `TimingReferenceService` already picks (the embedded read is `NO_REFERENCE`).
-  Their served sidecars are fitted against the stored references instead of saving `NO_REFERENCE`.
+- **Scope:** every single-file edition whose embedded read is `NO_REFERENCE` and whose film was searched for full
+  subtitles under its current IMDb id. This is wider than `TimingReferenceService`'s (no line-count, verified or
+  plays-embedded test, which would need `ForcedResolver` inside `current()`). The extra rows are display only. Their
+  served sidecars are fitted against the stored references instead of saving `NO_REFERENCE`.
 - **The chosen reference (provisional):** fit against every usable stored reference among the edition's candidates
   (never the sidecar's own OpenSubtitles file) and keep the best: an `ALIGNED` fit first, then the larger matched
   share (integer cross-multiplication), then the smaller median residual, then the lower OpenSubtitles file id. The
