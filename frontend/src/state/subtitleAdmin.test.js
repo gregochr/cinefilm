@@ -540,14 +540,59 @@ describe('timing against the film’s English track', () => {
     }
   });
 
-  it('reads a fit to an OpenSubtitles file as not checked whatever its verdict, and an embedded one as before', () => {
-    for (const verdict of ['ALIGNED', 'CHECK']) {
-      const alignment = fitOf({
-        verdict,
-        source: 'OPENSUBTITLES',
-        reasons: ['why'],
-        applied: false,
-      });
+  it('shows a matching fit to an OpenSubtitles file as a reference, never as aligned, with what it was checked against', () => {
+    const alignment = fitOf({
+      source: 'OPENSUBTITLES',
+      referenceRelease: 'Taken.2008.BluRay',
+      reasons: ['Lines match a full English file from OpenSubtitles (Taken.2008.BluRay)'],
+      applied: false,
+    });
+    expect(alignmentSummary(file({ alignment }))).toEqual({
+      kind: 'reference',
+      label: 'Lines match a full English file from OpenSubtitles',
+      lines: [],
+      note: null,
+      source:
+        'Checked against a full English file from OpenSubtitles (Taken.2008.BluRay), not yet against the film',
+    });
+    const unnamed = alignmentSummary(
+      file({
+        alignment: {
+          ...alignment,
+          referenceRelease: null,
+          reasons: ['Lines match a full English file from OpenSubtitles (file 5012)'],
+        },
+      }),
+    );
+    expect(unnamed.source).toBe(
+      'Checked against a full English file from OpenSubtitles, not yet against the film',
+    );
+    // With no release the server's sentence names the file: the only place the owner sees which one matched.
+    expect(unnamed.lines).toEqual([
+      'Lines match a full English file from OpenSubtitles (file 5012)',
+    ]);
+  });
+
+  it('shows an OpenSubtitles fit that does not line up as needing a check, with the server’s reasons', () => {
+    const alignment = fitOf({
+      verdict: 'CHECK',
+      source: 'OPENSUBTITLES',
+      referenceRelease: 'Taken.2008.BluRay',
+      reasons: ['Looks like full subtitles, not forced'],
+    });
+    expect(alignmentSummary(file({ alignment }))).toEqual({
+      kind: 'check',
+      label: 'Timing needs checking',
+      lines: ['Looks like full subtitles, not forced'],
+      note: null,
+      source:
+        'Checked against a full English file from OpenSubtitles (Taken.2008.BluRay), not yet against the film',
+    });
+  });
+
+  it('reads any other verdict of an OpenSubtitles fit as not checked, with no source line, and an embedded one as before', () => {
+    for (const verdict of ['TOO_FEW', 'NO_REFERENCE']) {
+      const alignment = fitOf({ verdict, source: 'OPENSUBTITLES', reasons: ['why'] });
       expect(alignmentSummary(file({ alignment }))).toEqual({
         kind: 'unchecked',
         label: 'Timing not checked',

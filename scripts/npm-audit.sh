@@ -43,6 +43,13 @@
 #      on the first attempt — retrying a vulnerability finding would be a gate
 #      that gets quieter the more it is asked, which is the opposite of a gate.
 #
+#   3. A narrow, dated allow list (ALLOWED_ADVISORIES below). npm has no ignore list, and an advisory with no
+#      patched version would otherwise keep every PR red. When the audit fails on findings, the script asks npm 11
+#      for the same report as JSON and ignores a finding only if EVERY advisory behind it (following the
+#      "depends on vulnerable versions of" chain) is on the list and not yet expired (UTC date). Each ignored
+#      advisory and its expiry is printed. Any other advisory, or an expired one, fails exactly as before.
+#      Each entry: id|expiry YYYY-MM-DD|reason. Tests inject today's date with NPM_AUDIT_TODAY.
+#
 # npm 11 is fetched per-run rather than installed globally so that `npm ci`,
 # the lint, the tests and the build all keep running under the runner's own
 # npm. This repo has a recorded sensitivity to npm 11 writing lockfile
@@ -57,6 +64,11 @@ readonly AUDIT_DIR="${1:-frontend}"
 readonly AUDIT_LEVEL="${2:-high}"
 readonly NPM_SPEC="npm@11"
 readonly MAX_ATTEMPTS=3
+
+# Advisories allowed until a date, because no patched version exists. Remove an entry as soon as a fix ships.
+readonly ALLOWED_ADVISORIES=(
+    "GHSA-fc5q-39xc-vjpf|2026-12-31|picomatch ReDoS (<=4.0.7), no patched release; dev tooling only (vite, vitest)"
+)
 
 cd "$AUDIT_DIR" || {
     echo "npm-audit: no such directory: $AUDIT_DIR" >&2
@@ -77,6 +89,41 @@ is_transport_error() {
         *"429 Too Many Requests"*)            return 0 ;;
         *) return 1 ;;
     esac
+}
+
+# Reads the JSON report ($1) and decides whether every finding at or above the audit level is covered by the
+# allow list. Prints what it ignored. Returns 0 only if all findings are allowed; anything unparseable returns 1.
+allowed_only() {
+    local report="$1" today ids id entry ok line
+    today="${NPM_AUDIT_TODAY:-$(date -u +%F)}"
+    command -v jq >/dev/null 2>&1 || return 1
+    ids=$(printf '%s' "$report" | jq -r --arg level "$AUDIT_LEVEL" '
+        {low:1, moderate:2, high:3, critical:4} as $rank
+        | .vulnerabilities as $v
+        | def reach($k): [$k] | until(
+            . as $a | (([.[] | $v[.].via[]? | strings] + $a) | unique) == ($a | unique);
+            . as $a | ([.[] | $v[.].via[]? | strings] + $a) | unique);
+        [ $v | to_entries[]
+          | select(($rank[.value.severity] // 4) >= ($rank[$level] // 3))
+          | .key as $k
+          | (reach($k) | map($v[.].via[]? | objects | (.url // "") | sub(".*/"; "")) | if length == 0 then [""] else . end)[]
+        ] | unique | .[]' 2>/dev/null) || return 1
+    [ -n "$ids" ] || return 1
+    while IFS= read -r id; do
+        ok=""
+        for entry in "${ALLOWED_ADVISORIES[@]}"; do
+            [ "${entry%%|*}" = "$id" ] || continue
+            line="${entry#*|}"
+            if [[ "$today" > "${line%%|*}" ]]; then
+                echo "npm-audit: allowance for ${id} expired on ${line%%|*}; failing." >&2
+                return 1
+            fi
+            echo "npm-audit: ignoring ${id} until ${line%%|*} (${line#*|})"
+            ok="yes"
+        done
+        [ -n "$ok" ] || return 1
+    done <<< "$ids"
+    return 0
 }
 
 # ⚠️ STATE WHICH npm ACTUALLY RAN, rather than trusting that `npx npm@11` did what it looks like.
@@ -107,6 +154,14 @@ while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
     if ! is_transport_error "$output"; then
         # A real finding, or a genuinely broken tree. Fail now: this is the
         # gate doing its job, and repeating it would only delay the same answer.
+        # The one exception: every finding is on the dated allow list.
+        if report=$(npx --yes "$NPM_SPEC" audit --audit-level="$AUDIT_LEVEL" --json --fetch-timeout=90000 2>/dev/null) \
+            || [ -n "$report" ]; then
+            if allowed_only "$report"; then
+                echo "npm-audit: every finding is on the dated allow list — passing."
+                exit 0
+            fi
+        fi
         echo "npm-audit: audit reported findings — failing without retry." >&2
         exit 1
     fi

@@ -450,6 +450,48 @@ describe('Admin: Subtitles panel, read-only', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('says what an OpenSubtitles fit was checked against and nothing of the kind for the film’s own track', async () => {
+    const fit = {
+      reasons: [],
+      fittedOffsetMs: 0,
+      applied: false,
+      checkedAt: '2026-11-12T06:31:00Z',
+    };
+    const { panel } = await openPanel({
+      items: [
+        file({
+          id: 1,
+          path: 'A/Matched.en.forced.srt',
+          alignment: {
+            ...fit,
+            verdict: 'ALIGNED',
+            source: 'OPENSUBTITLES',
+            referenceRelease: 'Taken.2008.BluRay',
+          },
+        }),
+        file({
+          id: 2,
+          path: 'B/Own.en.forced.srt',
+          alignment: { ...fit, verdict: 'ALIGNED', source: 'EMBEDDED', referenceRelease: null },
+        }),
+      ],
+    });
+
+    const matched = await itemOf(panel, 'A/Matched.en.forced.srt');
+    expect(
+      within(matched).getByText(
+        'Checked against a full English file from OpenSubtitles (Taken.2008.BluRay), not yet against the film',
+      ),
+    ).toBeVisible();
+    expect(
+      within(matched).getByText('Lines match a full English file from OpenSubtitles'),
+    ).toBeVisible();
+    expect(within(matched).queryByText(/Lines up with the film/)).not.toBeInTheDocument();
+    const own = await itemOf(panel, 'B/Own.en.forced.srt');
+    expect(within(own).getByText("Lines up with the film's English track")).toBeVisible();
+    expect(within(own).queryByText(/Checked against/)).not.toBeInTheDocument();
+  });
+
   it('sends nothing but a read of the list', async () => {
     const { requests, panel } = await openPanel();
     await within(panel).findByText('Heat (1995)/Heat.en.forced.srt');
