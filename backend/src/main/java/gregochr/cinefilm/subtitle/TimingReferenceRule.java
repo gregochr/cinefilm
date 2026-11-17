@@ -2,7 +2,10 @@ package gregochr.cinefilm.subtitle;
 
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesRanking;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The rules of phase 3c-1 (forced-timing-reference-plan.md): which editions get a full English reference to measure
@@ -80,6 +83,37 @@ final class TimingReferenceRule {
         return fit.servedCount() >= TimingFit.MIN_CUES && fit.verdict() != TimingFit.Verdict.TOO_FEW
             && fit.matchedCount() * 100 >= fit.servedCount() * MIN_SHARE_PERCENT
             && Math.abs(fit.fittedOffsetMs()) <= MAX_OFFSET_MS;
+    }
+
+    /**
+     * The film's full English candidates a reference may come from, in the order to try them for an edition: single
+     * files of a plausible frame rate, best for the edition's cut first, a hearing-impaired file strictly last (a
+     * stable sort after {@link OpenSubtitlesRanking#rankForFull}, so that ranking is unchanged for its other callers).
+     *
+     * @param osFullCandidatesJson the film's stored full candidates
+     * @param editionName the edition's name (its cut tags order the candidates)
+     * @return the candidates in order
+     */
+    static List<OpenSubtitlesResult> candidates(String osFullCandidatesJson, String editionName) {
+        return OpenSubtitlesRanking.rankForFull(OpenSubtitlesResult.listFromJson(osFullCandidatesJson).stream()
+            .filter(c -> c.isSingleFile() && plausibleFps(c)).toList(), editionName)
+            .stream().sorted(Comparator.comparing(OpenSubtitlesResult::hearingImpaired)).toList();
+    }
+
+    /**
+     * The usable stored references among an edition's candidates ({@link #usable}), in candidate order.
+     *
+     * @param candidates the edition's candidates in order
+     * @param stored the film's stored references for its current IMDb id by OpenSubtitles file id
+     * @param runtimeMs the edition's runtime
+     * @param creditsStartMs where credits detection put the credits start, or null
+     * @return the usable references
+     */
+    static List<OpenSubtitlesReference> usableReferences(List<OpenSubtitlesResult> candidates,
+                                                         Map<Long, OpenSubtitlesReference> stored, long runtimeMs,
+                                                         Long creditsStartMs) {
+        return candidates.stream().map(c -> stored.get(c.fileId()))
+            .filter(r -> r != null && usable(r, runtimeMs, creditsStartMs)).toList();
     }
 
     /** True when the file's stated frame rate is unknown or about 23.976 (the library's rate). */

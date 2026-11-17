@@ -19,6 +19,7 @@ import gregochr.cinefilm.subtitle.ForcedChoice.Source;
 import gregochr.cinefilm.subtitle.ForcedChoice.Step;
 import gregochr.cinefilm.subtitle.ForcedResolver.Resolution;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -119,6 +120,21 @@ class ForcedResolverUnitTest {
         assertThat(resolution.reasons()).containsEntry(5L, "Plays: nothing says it is wrong, but it is not proven yet");
         assertThat(resolution.chosen().slots()).hasSize(1);
         assertThat(resolution.fileConflict()).isFalse();
+    }
+
+    @Test
+    void anOwnerFileFittedToAnOpenSubtitlesFileIsStillOnlyUnchecked() {
+        SubtitleSidecar owner = row(5, false);
+        when(sidecars.findByMediaFileIdInAndKind(List.of(10L), SubtitleKind.FORCED)).thenReturn(List.of(owner));
+        when(timing.current(Map.of(5L, edition), List.of(owner))).thenReturn(Map.of(5L,
+            new SubtitleDtos.AlignmentDto("ALIGNED", List.of(), 0, 1.0, 12, 12, false, NOW, "OPENSUBTITLES",
+                "Taken.2008")));
+
+        Resolution resolution = resolve();
+
+        assertThat(resolution.fileAssessment().trust()).isEqualTo(SidecarTrust.Trust.UNCHECKED);
+        assertThat(resolution.decision().step()).isEqualTo(Step.UNCHECKED_FILE);
+        assertThat(resolution.alignments().get(5L).source()).isEqualTo("OPENSUBTITLES");
     }
 
     @Test

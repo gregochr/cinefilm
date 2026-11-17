@@ -7,7 +7,6 @@ import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.OsFullRef;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.Presence;
-import gregochr.cinefilm.opensubtitles.OpenSubtitlesRanking;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
@@ -147,12 +146,9 @@ public class TimingReferenceService {
     private Target target(Qualified q, OsFullRef ref, Map<Long, OpenSubtitlesReference> stored) {
         Edition edition = q.edition();
         List<OpenSubtitlesResult> all = OpenSubtitlesResult.listFromJson(ref.osFullCandidates());
+        List<OpenSubtitlesResult> ranked = TimingReferenceRule.candidates(ref.osFullCandidates(), edition.getName());
         Set<Long> currentIds = all.stream().map(OpenSubtitlesResult::fileId).collect(Collectors.toSet());
         int kept = (int) stored.keySet().stream().filter(currentIds::contains).count();
-        // A hearing-impaired file is fetched only when no other is left, ahead of cut affinity (a stable sort).
-        List<OpenSubtitlesResult> ranked = OpenSubtitlesRanking.rankForFull(all.stream()
-            .filter(c -> c.isSingleFile() && TimingReferenceRule.plausibleFps(c)).toList(), edition.getName())
-            .stream().sorted(Comparator.comparing(OpenSubtitlesResult::hearingImpaired)).toList();
         return new Target(ref.id(), edition.getId(), edition.getName(), ref.imdbId(), edition.getRuntimeMs(),
             CreditsStarts.of(edition, credits), q.ownerPick(), q.files(), ranked, kept, stored);
     }

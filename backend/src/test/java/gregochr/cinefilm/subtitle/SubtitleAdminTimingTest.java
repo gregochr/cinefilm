@@ -120,7 +120,8 @@ class SubtitleAdminTimingTest extends SubtitleTestBase {
         assertThat(dto.offsetMs()).isEqualTo(900);
         assertThat(dto.offsetSource()).isEqualTo("AUTO");
         assertThat(dto.version()).isEqualTo(LATER.toEpochMilli());
-        assertThat(dto.alignment()).isEqualTo(new AlignmentDto("ALIGNED", List.of(), 900, 0.92, 11, 12, true, LATER));
+        assertThat(dto.alignment()).isEqualTo(new AlignmentDto("ALIGNED", List.of(), 900, 0.92, 11, 12, true, LATER,
+            "EMBEDDED", null));
     }
 
     @Test

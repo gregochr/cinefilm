@@ -279,14 +279,14 @@ class SubtitleAdminControllerTest {
     @Test
     void aFileCarriesWhoSetItsOffsetAndItsTimingFitAndOtherFilesCarryNull() throws Exception {
         SubtitleDtos.AlignmentDto alignment = new SubtitleDtos.AlignmentDto("ALIGNED", List.of(), 900, 0.92, 11, 12,
-            true, Instant.parse("2024-04-01T02:30:00Z"));
+            true, Instant.parse("2024-04-01T02:30:00Z"), "EMBEDDED", null);
         SidecarDto fitted = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L, "Taken", 70L,
             "Original", 1, 1, false, true, 12, "No problems found", 900, false, false, 1700000000000L, true, null,
             "AUTO", alignment, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet", false,
             "FORCED");
         SubtitleDtos.AlignmentDto doubtful = new SubtitleDtos.AlignmentDto("CHECK",
             List.of("Only 4 of 12 lines line up with the film's English track"), 600, 0.33, 4, 12, false,
-            Instant.parse("2024-04-01T02:30:00Z"));
+            Instant.parse("2024-04-01T02:30:00Z"), "EMBEDDED", null);
         SidecarDto checked = new SidecarDto(6L, "Alien.en.forced.srt", "PRESENT", "matched", 8L, "Alien", 80L,
             "Original", 1, 1, false, true, 12, "No problems found", 0, false, false, 1700000000000L, true, null,
             null, doubtful, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet", false,

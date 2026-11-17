@@ -241,10 +241,17 @@ public class SidecarTimingRefresher {
             }
         }
         for (FitJob job : service.fitJobs(filmId)) {
-            TimingFit.Result result = job.noReference() != null
-                ? TimingFit.noReference(job.servedStarts().size(), job.noReference())
-                : TimingFit.fit(job.servedStarts(), job.referenceStarts());
-            SaveOutcome outcome = service.save(job, result, clock.instant());
+            SaveOutcome outcome;
+            if (!job.osReferences().isEmpty()) {
+                // No track of its own: the best fit to the stored OpenSubtitles files, shown but never proof.
+                DownloadedFit.Choice choice = DownloadedFit.choose(job.servedStarts(), job.osReferences());
+                outcome = service.save(job, choice.result(), choice.reference().osFileId(), clock.instant());
+            } else {
+                TimingFit.Result result = job.noReference() != null
+                    ? TimingFit.noReference(job.servedStarts().size(), job.noReference())
+                    : TimingFit.fit(job.servedStarts(), job.referenceStarts());
+                outcome = service.save(job, result, clock.instant());
+            }
             if (outcome == SaveOutcome.BUSY) {
                 throw new Wait("a scan or an edit is using the library");
             }

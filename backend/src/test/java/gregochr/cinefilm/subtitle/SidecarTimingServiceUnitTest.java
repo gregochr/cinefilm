@@ -10,11 +10,13 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import gregochr.cinefilm.credits.CreditsDetectionRepository;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.library.LibraryLock;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
 import gregochr.cinefilm.subtitle.SidecarTimingService.FitJob;
 import gregochr.cinefilm.subtitle.SidecarTimingService.ReferenceRead;
 import gregochr.cinefilm.subtitle.SidecarTimingService.SaveOutcome;
@@ -64,6 +66,12 @@ class SidecarTimingServiceUnitTest {
     private ForcedSubtitleAlignmentRepository alignments;
 
     @Mock
+    private OpenSubtitlesReferenceRepository references;
+
+    @Mock
+    private CreditsDetectionRepository credits;
+
+    @Mock
     private PlatformTransactionManager transactions;
 
     private final LibraryLock lock = new LibraryLock();
@@ -74,7 +82,8 @@ class SidecarTimingServiceUnitTest {
 
     @BeforeEach
     void setUp() {
-        service = new SidecarTimingService(sidecars, editions, files, cache, alignments, lock, transactions);
+        service = new SidecarTimingService(sidecars, editions, files, cache, alignments, references, credits, lock,
+            transactions);
         edition = edition(film(1L, "Taken", 2008, NOW), 40L, "Original", 90 * MIN, null);
         film1 = file(edition, "Taken.m4v");
         film1.setId(10L);

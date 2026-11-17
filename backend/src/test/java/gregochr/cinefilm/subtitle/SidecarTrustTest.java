@@ -18,7 +18,7 @@ class SidecarTrustTest {
     }
 
     private static AlignmentDto alignment(String verdict) {
-        return new AlignmentDto(verdict, List.of(), 0, 1.0, 12, 12, false, AT);
+        return new AlignmentDto(verdict, List.of(), 0, 1.0, 12, 12, false, AT, "EMBEDDED", null);
     }
 
     @Test
@@ -87,6 +87,43 @@ class SidecarTrustTest {
         assertThat(SidecarTrust.isAligned(null)).isFalse();
         assertThat(SidecarTrust.isAligned(alignment("CHECK"))).isFalse();
         assertThat(SidecarTrust.isAligned(alignment("ALIGNED"))).isTrue();
+    }
+
+    private static AlignmentDto openSubtitlesAligned() {
+        return new AlignmentDto("ALIGNED", List.of(), 0, 1.0, 12, 12, false, AT, "OPENSUBTITLES", "Taken.2008");
+    }
+
+    @Test
+    void aFitToAnOpenSubtitlesFileNeverCountsAsAlignedWhateverItsVerdict() {
+        assertThat(SidecarTrust.isAligned(openSubtitlesAligned())).isFalse();
+    }
+
+    @Test
+    void anOpenSubtitlesFitLeavesAFailedComparisonFailedAndAnUncheckedFileUnproven() {
+        boolean aligned = SidecarTrust.isAligned(openSubtitlesAligned());
+
+        assertThat(SidecarTrust.assess(false, "CHECK", aligned))
+            .isEqualTo(new SidecarTrust.Assessment(SidecarTrust.Trust.FAILED, SidecarTrust.Proof.NONE));
+        assertThat(SidecarTrust.assess(false, null, aligned))
+            .isEqualTo(new SidecarTrust.Assessment(SidecarTrust.Trust.UNCHECKED, SidecarTrust.Proof.NONE));
+    }
+
+    @Test
+    void anOpenSubtitlesFitDoesNotMakeADownloadBeatTheEmbeddedForcedTrackOrChangeAnyStepOfTheChoice() {
+        SidecarTrust.Assessment withFit = SidecarTrust.assess(false, false, null,
+            SidecarTrust.isAligned(openSubtitlesAligned()));
+        SidecarTrust.Assessment without = SidecarTrust.assess(false, false, null, false);
+        List<ForcedChoice.DownloadSide> downloads = List.of(new ForcedChoice.DownloadSide(7L, withFit));
+        ForcedChoice.FileSide failedFile = new ForcedChoice.FileSide(
+            new SidecarTrust.Assessment(SidecarTrust.Trust.FAILED, SidecarTrust.Proof.NONE), 12);
+
+        assertThat(withFit).isEqualTo(without);
+        assertThat(ForcedChoice.decide(new ForcedChoice.Input(null, downloads, true)).step())
+            .isEqualTo(ForcedChoice.Step.EMBEDDED);
+        assertThat(ForcedChoice.decide(new ForcedChoice.Input(null, downloads, false)).step())
+            .isEqualTo(ForcedChoice.Step.UNCHECKED_DOWNLOAD);
+        assertThat(ForcedChoice.decide(new ForcedChoice.Input(failedFile, downloads, false)).step())
+            .isEqualTo(ForcedChoice.Step.REPLACED_BY_DOWNLOAD);
     }
 
     /** Whether any one proof holds, through the production {@code assess} the resolver uses. */

@@ -6,6 +6,7 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.subtitle.TimingReferenceRule.FileFacts;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /** The rules of phase 3c-1, row by row: which editions qualify, which files may be a reference, when it is usable. */
@@ -145,6 +146,41 @@ class TimingReferenceRuleTest {
         assertThat(TimingReferenceRule.matches(fit(10, 10, -30_000))).isTrue();
         assertThat(TimingReferenceRule.matches(fit(10, 10, 30_001))).isFalse();
         assertThat(TimingReferenceRule.matches(fit(10, 10, -30_001))).isFalse();
+    }
+
+    private static OpenSubtitlesResult result(long fileId, boolean impaired) {
+        return new OpenSubtitlesResult(fileId - 1000, fileId, "Film.Extended." + fileId, 23.976, 10, false, impaired,
+            null, null);
+    }
+
+    @Test
+    void theCandidatesAreSingleFilesOfAPlausibleRateWithAHearingImpairedFileStrictlyLast() {
+        String json = OpenSubtitlesResult.listToJson(List.of(result(1001, true), result(1002, false),
+            new OpenSubtitlesResult(3, 1003, "Fast", 25.0, 10, false, false, null, null),
+            new OpenSubtitlesResult(4, 1004, "Discs", 23.976, 10, false, false, null, null, 2)));
+
+        assertThat(TimingReferenceRule.candidates(json, "Extended Edition")).extracting(OpenSubtitlesResult::fileId)
+            .containsExactly(1002L, 1001L);
+    }
+
+    private static OpenSubtitlesReference stored(long fileId, int cues) {
+        OpenSubtitlesReference reference = new OpenSubtitlesReference();
+        reference.setOsFileId(fileId);
+        reference.setCueCount(cues);
+        reference.setLastCueEndMs(90_000L);
+        return reference;
+    }
+
+    @Test
+    void theUsableReferencesAreTheStoredUsableOnesInCandidateOrder() {
+        List<OpenSubtitlesResult> candidates = List.of(result(1001, false), result(1002, false), result(1003, false),
+            result(1004, false));
+        Map<Long, OpenSubtitlesReference> stored = Map.of(1001L, stored(1001, 299), 1003L, stored(1003, 300),
+            1004L, stored(1004, 400));
+
+        assertThat(TimingReferenceRule.usableReferences(candidates, stored, 90_000L, null))
+            .extracting(OpenSubtitlesReference::getOsFileId).containsExactly(1003L, 1004L);
+        assertThat(TimingReferenceRule.usableReferences(candidates, stored, 20_000L, null)).isEmpty();
     }
 
     private static OpenSubtitlesReference reference(int cues, Long lastCueEndMs) {

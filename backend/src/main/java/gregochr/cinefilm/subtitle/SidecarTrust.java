@@ -91,8 +91,13 @@ public final class SidecarTrust {
         return new Assessment("CHECK".equals(checkVerdict) ? Trust.FAILED : Trust.UNCHECKED, Proof.NONE);
     }
 
-    /** True when the alignment is present (current) and {@code ALIGNED}. */
+    /**
+     * True when the alignment is present (current), {@code ALIGNED} and against the film's own track. A fit against an
+     * OpenSubtitles file never proves anything: it would let a download the 2d comparison failed play, stop its
+     * replacement, and beat the embedded forced track.
+     */
     static boolean isAligned(AlignmentDto alignment) {
-        return alignment != null && TimingFit.Verdict.ALIGNED.name().equals(alignment.verdict());
+        return alignment != null && TimingFit.Verdict.ALIGNED.name().equals(alignment.verdict())
+            && ReferenceSource.EMBEDDED.name().equals(alignment.source());
     }
 }

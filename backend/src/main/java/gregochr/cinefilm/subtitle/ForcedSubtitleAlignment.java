@@ -42,6 +42,14 @@ public class ForcedSubtitleAlignment {
     @Column(nullable = false, length = 1000)
     private String referenceKey;
 
+    /** What it was fitted to: the film's own track, or a full English file from OpenSubtitles (never proof). */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 14)
+    private ReferenceSource referenceSource = ReferenceSource.EMBEDDED;
+
+    /** The OpenSubtitles file id fitted to; null for {@link ReferenceSource#EMBEDDED}. */
+    private Long referenceOsFileId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 12)
     private TimingFit.Verdict verdict;

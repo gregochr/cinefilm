@@ -95,9 +95,13 @@ public final class SubtitleDtos {
      * @param applied true while this file's offset is the one the check set from this result (derived now: the offset
      *     source is {@code AUTO} and the offset equals {@code fittedOffsetMs}, so an owner's nudge or reset clears it)
      * @param checkedAt when the fit was made
+     * @param source {@code EMBEDDED} (the film's own English track) or {@code OPENSUBTITLES} (a stored full English
+     *     file: shown, never proof, never applied)
+     * @param referenceRelease the OpenSubtitles file's release name for {@code OPENSUBTITLES}, else null
      */
     public record AlignmentDto(String verdict, List<String> reasons, int fittedOffsetMs, double matchedShare,
-                               int matchedCount, int servedCount, boolean applied, Instant checkedAt) {
+                               int matchedCount, int servedCount, boolean applied, Instant checkedAt, String source,
+                               String referenceRelease) {
     }
 
     /**
