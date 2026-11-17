@@ -140,6 +140,17 @@ class ForcedDownloadFullTest extends ForcedDownloadTestBase {
     }
 
     @Test
+    void anEnglishFilmWithFullCandidatesFromATimingReferenceSearchIsNotDueAFullDownload() {
+        // Phase 3c-1 stores full candidates for films whose full need is not NEEDED (here: an English original).
+        Film film = fullFilm("Taken");
+        film.setFullNeedOwner(null);
+        film.setOriginalLanguage("en");
+        films.saveAndFlush(film);
+
+        assertThat(service.due()).isEmpty();
+    }
+
+    @Test
     void aFilmWithoutUsableFullCandidatesIsNotDue() {
         Film none = fullFilm("None");
         none.setOsFullCandidates("[]");

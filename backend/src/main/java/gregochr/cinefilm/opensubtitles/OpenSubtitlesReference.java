@@ -48,6 +48,9 @@ public class OpenSubtitlesReference {
     @Column(nullable = false)
     private int cueCount;
 
+    /** Where the last cue ends, in milliseconds; null for a file stored before it was kept, and for an unusable one. */
+    private Long lastCueEndMs;
+
     /** Downloads that were charged but gave no usable file; {@link #MAX_FAILED_DOWNLOADS} makes it final. */
     @Column(nullable = false)
     private int failedDownloads;
