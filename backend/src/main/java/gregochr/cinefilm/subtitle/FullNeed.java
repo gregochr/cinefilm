@@ -38,6 +38,8 @@ public final class FullNeed {
     public enum Reason {
         /** The owner chose. */
         OWNER,
+        /** The owner said no English subtitles exist for the film. */
+        NONE_EXIST,
         /** TMDB has not been asked, or has no film. */
         NO_LANGUAGES,
         /** The film was made in English. */
@@ -81,6 +83,9 @@ public final class FullNeed {
      * @return the verdict and its reason
      */
     public static Decision decide(FullNeedChoice owner, Languages languages, List<String> editionsAudio) {
+        if (owner == FullNeedChoice.NONE_EXIST) {
+            return new Decision(Need.NEEDED, Reason.NONE_EXIST);
+        }
         if (owner != null) {
             return new Decision(owner == FullNeedChoice.NEEDED ? Need.NEEDED : Need.NOT_NEEDED, Reason.OWNER);
         }

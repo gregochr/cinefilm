@@ -529,6 +529,8 @@ function subtitleCues(id) {
 }
 
 const CHOICES = new Set(['NEEDED', 'NOT_NEEDED']);
+/** The full-subtitles choices: the owner can also say no English subtitles exist. */
+const FULL_CHOICES = new Set([...CHOICES, 'NONE_EXIST']);
 /**
  * The owner's choice per film, kept in memory: absent means the fixture as loaded, NEEDED or NOT_NEEDED an explicit
  * choice, null an explicit "Automatic" (the baseline below, with no owner choice).
@@ -663,6 +665,16 @@ function fullRow(row) {
 function fullRowOfChoice(loaded) {
   if (!fullChoices.has(loaded.filmId)) return loaded;
   const choice = fullChoices.get(loaded.filmId);
+  if (choice === 'NONE_EXIST') {
+    // Needed, but done: never unresolved or being checked.
+    return {
+      ...loaded,
+      need: 'NEEDED',
+      reason: 'NONE_EXIST',
+      ownerChoice: choice,
+      ...NOT_IN_PLAY,
+    };
+  }
   if (choice) {
     const flags = choice === 'NEEDED' ? FULL_IF_NEEDED[loaded.filmId] : NOT_IN_PLAY;
     return { ...loaded, need: choice, reason: 'OWNER', ownerChoice: choice, ...flags };
@@ -692,8 +704,8 @@ function setFullNeed(filmId, body) {
   const loaded = adminFullNeed.films.find((f) => f.filmId === filmId);
   if (!loaded) throw new ApiError(404, 'No such film');
   const choice = body?.choice ?? null;
-  if (choice !== null && !CHOICES.has(choice))
-    throw new ApiError(400, 'The choice must be NEEDED, NOT_NEEDED or null');
+  if (choice !== null && !FULL_CHOICES.has(choice))
+    throw new ApiError(400, 'The choice must be NEEDED, NOT_NEEDED, NONE_EXIST or null');
   fullChoices.set(filmId, choice);
   return fullRow(loaded);
 }

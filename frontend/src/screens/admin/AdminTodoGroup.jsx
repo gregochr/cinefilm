@@ -10,12 +10,7 @@ import {
   todoGroups,
   todoRow,
 } from '../../state/adminCopy.js';
-import {
-  forcedRowLine,
-  foreignLine,
-  pickerAction,
-  pickerButton,
-} from '../../state/adminSubtitles.js';
+import { forcedRowLine, pickerAction, pickerButton } from '../../state/adminSubtitles.js';
 import {
   bestGuess,
   filesLine,
@@ -25,6 +20,7 @@ import {
   visibleRows,
 } from '../../state/adminTodo.js';
 import RowText from './AdminRowText.jsx';
+import SubtitleNeedRow from './SubtitleNeedRow.jsx';
 
 // The group keys of `adminTodo.js` (they follow the summary's `todo` figures) and their entries in `todoGroups`.
 const COPY_KEY = {
@@ -108,9 +104,10 @@ function FilesRow({ item, onSortOut }) {
 }
 
 /**
- * A subtitle row: the group's footer leads to Subtitles, where the other fixing happens, but the search button is
- * here too (the same one the Subtitles tab shows) and opens the OpenSubtitles picker for the row's film. A row with
- * no `editionId` has nothing to search for and no button.
+ * A forced-subtitles row: the group's footer leads to Subtitles, where the other fixing happens, but the search button
+ * is here too (the same one the Subtitles tab shows) and opens the OpenSubtitles picker for the row's film. A row with
+ * no `editionId` has nothing to search for and no button. (A full-subtitles row is a {@link SubtitleNeedRow}, with
+ * every action the Subtitles tab offers.)
  */
 function SubtitleRow({ row, line, kind, onFindSubtitles }) {
   const action = pickerAction(row, kind);
@@ -158,12 +155,15 @@ function renderRow(group, row, props) {
       );
     case 'fullMissing':
       return (
-        <SubtitleRow
+        <SubtitleNeedRow
           key={row.filmId}
           row={row}
-          line={foreignLine(row)}
-          kind="full"
-          onFindSubtitles={props.onFindSubtitles}
+          kind="foreign"
+          saving={Boolean(props.fullSaving[row.filmId])}
+          problem={props.fullProblems[row.filmId]}
+          onChoose={props.onChooseFull}
+          onAttached={props.onAttachedFull}
+          onFind={(found, opener) => props.onFindSubtitles(found, 'full', opener)}
         />
       );
     default:
@@ -183,7 +183,9 @@ function renderRow(group, row, props) {
  * One To do group: a card with its heading and why-line, up to five rows and a footer. The two film groups expand in
  * place ("Show all {n}", then "Show fewer", on the same button so focus stays put); the two subtitle groups link to
  * Subtitles. `group` is `{ key, rows, total }` from `buildTodoGroups`. `onFindSubtitles(row, kind, opener)` opens the
- * OpenSubtitles picker from a subtitle row (`kind` is `full` or `forced`).
+ * OpenSubtitles picker from a subtitle row (`kind` is `full` or `forced`). The full-subtitles rows take the full list's
+ * save state: `fullSaving` and `fullProblems` by film id, `onChooseFull(row, choice)` saves an owner choice and
+ * `onAttachedFull(row)` runs after "Add my own file…" attached one.
  */
 export default function AdminTodoGroup({
   group,
@@ -193,6 +195,10 @@ export default function AdminTodoGroup({
   onFindFilm,
   onSortOut,
   onFindSubtitles,
+  fullSaving,
+  fullProblems,
+  onChooseFull,
+  onAttachedFull,
 }) {
   const [open, setOpen] = useState(false);
   // A group that has shrunk to the cap or below has nothing to fold: the next time it grows it starts folded.
@@ -224,6 +230,10 @@ export default function AdminTodoGroup({
             onFindFilm,
             onSortOut,
             onFindSubtitles,
+            fullSaving,
+            fullProblems,
+            onChooseFull,
+            onAttachedFull,
           }),
         )}
       </ul>

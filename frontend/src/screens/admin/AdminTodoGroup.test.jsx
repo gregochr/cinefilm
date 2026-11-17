@@ -18,6 +18,10 @@ function renderGroup(group, props = {}) {
     onFindFilm: vi.fn(),
     onSortOut: vi.fn(),
     onFindSubtitles: vi.fn(),
+    onChooseFull: vi.fn(),
+    onAttachedFull: vi.fn(),
+    fullSaving: {},
+    fullProblems: {},
   };
   const view = render(
     <MemoryRouter>
@@ -275,12 +279,50 @@ describe('AdminTodoGroup: the subtitle groups', () => {
       within(region)
         .getAllByRole('button')
         .map((b) => b.textContent),
-    ).toEqual(['Search for English subtitles…']);
+    ).toEqual(['Search for English subtitles…', 'Add my own file…', 'No English subtitles exist']);
     expect(within(region).queryByRole('button', { name: /Show all/ })).not.toBeInTheDocument();
     expect(within(region).getByText('Showing 1 of 1')).toBeInTheDocument();
     expect(within(region).getByRole('link', { name: 'All in Subtitles →' })).toHaveAttribute(
       'href',
       '/admin/subtitles',
+    );
+  });
+
+  it('saves a full row’s owner choice through onChooseFull with the row and the choice', async () => {
+    const { onChooseFull } = renderGroup(find(subtitles, 'fullMissing'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'No English subtitles exist' }));
+
+    expect(onChooseFull).toHaveBeenCalledWith(fullNeed.films[3], 'NONE_EXIST');
+  });
+
+  it('offers "It’s English" only for unlabelled audio, as the Subtitles tab does', () => {
+    const unlabelled = { ...structuredClone(fullNeed.films[3]), reason: 'ORIGINAL_AUDIO_ASSUMED' };
+    renderGroup(find(groups({ attention: [], full: [unlabelled] }), 'fullMissing'));
+
+    expect(screen.getByRole('button', { name: 'It’s English' })).toBeInTheDocument();
+  });
+
+  it('dims a full row that is saving and shows its failure', () => {
+    renderGroup(find(subtitles, 'fullMissing'), {
+      fullSaving: { 6: true },
+      fullProblems: { 6: 'Couldn’t save: try again' },
+    });
+
+    expect(screen.getByRole('button', { name: 'No English subtitles exist' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t save: try again');
+  });
+
+  it('opens the add-a-file form from a full row', async () => {
+    renderGroup(find(subtitles, 'fullMissing'));
+    await userEvent.click(screen.getByRole('button', { name: 'Add my own file…' }));
+
+    expect(screen.getByRole('button', { name: 'Add my own file…' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
     );
   });
 

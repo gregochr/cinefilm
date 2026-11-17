@@ -74,7 +74,7 @@ class AdminTodoRulesTest {
 
     /** Needed, nothing playing, an IMDb id, searched, and the scheduler would download something: being checked. */
     private static FullFacts full(boolean needed, boolean plays, boolean imdb, boolean searched, boolean due) {
-        return new FullFacts(needed, plays, imdb, searched, due, true, true);
+        return new FullFacts(needed, false, plays, imdb, searched, due, true, true);
     }
 
     @Test
@@ -282,8 +282,8 @@ class AdminTodoRulesTest {
 
     @Test
     void aFullRowNotSearchedIsBeingCheckedOnlyWhileSearchingIsOn() {
-        FullFacts on = new FullFacts(true, false, true, false, false, true, true);
-        FullFacts searchOff = new FullFacts(true, false, true, false, false, false, true);
+        FullFacts on = new FullFacts(true, false, false, true, false, false, true, true);
+        FullFacts searchOff = new FullFacts(true, false, false, true, false, false, false, true);
 
         assertThat(AdminTodoRules.beingCheckedFull(on)).isTrue();
         assertThat(AdminTodoRules.beingCheckedFull(searchOff)).isFalse();
@@ -292,8 +292,8 @@ class AdminTodoRulesTest {
 
     @Test
     void aFullDownloadDueCountsOnlyWhileDownloadsAreOn() {
-        FullFacts on = new FullFacts(true, false, true, true, true, true, true);
-        FullFacts downloadsOff = new FullFacts(true, false, true, true, true, true, false);
+        FullFacts on = new FullFacts(true, false, false, true, true, true, true, true);
+        FullFacts downloadsOff = new FullFacts(true, false, false, true, true, true, true, false);
 
         assertThat(AdminTodoRules.beingCheckedFull(on)).isTrue();
         assertThat(AdminTodoRules.beingCheckedFull(downloadsOff)).isFalse();
@@ -302,7 +302,7 @@ class AdminTodoRulesTest {
 
     @Test
     void aFullRowNotSearchedStaysBeingCheckedWithDownloadsOffButSearchOn() {
-        assertThat(AdminTodoRules.beingCheckedFull(new FullFacts(true, false, true, false, false, true, false)))
+        assertThat(AdminTodoRules.beingCheckedFull(new FullFacts(true, false, false, true, false, false, true, false)))
             .isTrue();
     }
 
@@ -327,6 +327,22 @@ class AdminTodoRulesTest {
     }
 
     @Test
+    void aNoneExistFilmIsNeitherInPlayNorUnresolvedNorBeingChecked() {
+        FullFacts none = new FullFacts(true, true, false, true, true, true, true, true);
+        assertThat(AdminTodoRules.inPlayFull(none)).isFalse();
+        assertThat(AdminTodoRules.beingCheckedFull(none)).isFalse();
+        assertThat(AdminTodoRules.unresolvedFull(none)).isFalse();
+        assertThat(AdminTodoRules.subtitledFull(none)).isFalse();
+    }
+
+    @Test
+    void aNoneExistFilmWithASubtitlePlayingIsSubtitled() {
+        FullFacts played = new FullFacts(true, true, true, true, true, false, true, true);
+        assertThat(AdminTodoRules.subtitledFull(played)).isTrue();
+        assertThat(AdminTodoRules.unresolvedFull(played)).isFalse();
+    }
+
+    @Test
     void everyFullCombinationMatchesTheDocumentedTruthTable() {
         boolean[] both = {true, false};
         for (boolean needed : both) {
@@ -336,7 +352,7 @@ class AdminTodoRulesTest {
                         for (boolean due : both) {
                             for (boolean search : both) {
                                 for (boolean downloads : both) {
-                                    FullFacts f = new FullFacts(needed, plays, imdb, searched, due, search,
+                                    FullFacts f = new FullFacts(needed, false, plays, imdb, searched, due, search,
                                         downloads);
                                     // The documented rule, written out: in play when needed with nothing playing;
                                     // being checked when it has an IMDb id and either the search is still to come

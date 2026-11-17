@@ -93,6 +93,11 @@ export const buttons = {
     hint: '“It’s English” marks it done and stops asking',
     source: 'AR2',
   },
+  noneExist: {
+    label: 'No English subtitles exist',
+    hint: 'Marks it done and stops searching',
+    source: 'owner 2026-11-17',
+  },
   // Owner's answer Q3 replaces 07's "Yes, find forced subtitles…" (the forced list now holds films with none found).
   findForced: {
     label: 'Find forced subtitles…',
@@ -460,6 +465,13 @@ export const libraryPage = {
 };
 
 /** The Subtitles section (AR2), with the wording AR2 does not show marked "planner, 4a". */
+// How an owner choice reads in "Your choices"; NOT_NEEDED is the default wording.
+const CHOICE_WORDS = {
+  NEEDED: 'needed',
+  NOT_NEEDED: 'not needed',
+  NONE_EXIST: 'no English subtitles exist',
+};
+
 export const subtitlesPage = {
   // AR2's lead; `bold` parts are <b> on the board.
   lead: [
@@ -539,7 +551,7 @@ export const subtitlesPage = {
     yourChoices: (n) => `Your choices (${n})`,
     yourChoicesList: 'Your choices',
     choiceLine: (kind, choice) =>
-      `${kind === 'full' ? 'Full subtitles' : 'Forced subtitles'}: you said ${choice === 'NEEDED' ? 'needed' : 'not needed'}`,
+      `${kind === 'full' ? 'Full subtitles' : 'Forced subtitles'}: you said ${CHOICE_WORDS[choice] ?? 'not needed'}`,
     letDecideLabel: buttons.letCineFilmDecide.label, // 07
     letDecide: (title, kind) =>
       `${buttons.letCineFilmDecide.label}: ${title}, ${kind === 'full' ? 'full' : 'forced'} subtitles`,

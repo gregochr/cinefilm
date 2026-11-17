@@ -69,6 +69,20 @@ describe('SubtitleYourChoices', () => {
     expect(screen.getByText(/Full subtitles: you said needed/)).toBeInTheDocument();
   });
 
+  it('words a NONE_EXIST choice and gives it back with null', async () => {
+    const { full } = renderChoices({ full: state([chosenFull({ ownerChoice: 'NONE_EXIST' })]) });
+    await userEvent.click(screen.getByRole('button', { name: 'Your choices (1)' }));
+
+    expect(
+      screen.getByText(/Full subtitles: you said no English subtitles exist/),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Let CineFilm decide: Downfall (2004), full subtitles' }),
+    );
+
+    expect(full.choose).toHaveBeenCalledWith(8, null);
+  });
+
   it('gives a choice back with null through that list’s own save, and nothing else', async () => {
     const { full, forced } = renderChoices({
       full: state([chosenFull()]),

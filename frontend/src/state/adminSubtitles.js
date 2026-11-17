@@ -46,7 +46,11 @@ export function foreignLine(row) {
   if (isUnlabelled(row)) return subtitlesPage.unlabelled(language);
   const spoken = language ? todoRow.spoken(language) : todoRow.languageUnknown;
   const found = row.fullSubtitle ? fullSubtitleLine(row) : todoRow.noneFound;
-  const parts = [spoken, row.reason === 'OWNER' ? fullNeedReason(row) : null, found];
+  const parts = [
+    spoken,
+    row.reason === 'OWNER' || row.reason === 'NONE_EXIST' ? fullNeedReason(row) : null,
+    found,
+  ];
   return parts.filter(Boolean).join(' · ');
 }
 
@@ -91,11 +95,11 @@ export function pickerTarget(row, kind) {
 
 /**
  * The actions a foreign-language row offers, in order: the picker's button first (when the row has an edition),
- * "Add my own file…", and "It's English" for unlabelled audio.
+ * "Add my own file…", "It's English" for unlabelled audio, and "No English subtitles exist" for every row.
  */
 export function foreignActions(row) {
   const find = pickerAction(row, 'full');
-  const own = isUnlabelled(row) ? ['addFile', 'itsEnglish'] : ['addFile'];
+  const own = isUnlabelled(row) ? ['addFile', 'itsEnglish', 'noneExist'] : ['addFile', 'noneExist'];
   return find ? [find, ...own] : own;
 }
 

@@ -42,11 +42,11 @@ export default function SubtitleNeedPanel({ kind, active, need, rows, onChanged,
     if (!active || active === document.body || !active.isConnected) panelRef.current?.focus();
   }, [rows, need.saving]);
 
-  const choose = (row) => {
+  const choose = (row, choice) => {
     if (sent.current.has(row.filmId) || need.saving[row.filmId]) return;
     sent.current.add(row.filmId);
     leaving.current.add(row.filmId);
-    need.choose(row.filmId, 'NOT_NEEDED').finally(() => sent.current.delete(row.filmId));
+    need.choose(row.filmId, choice).finally(() => sent.current.delete(row.filmId));
   };
   // The picked file settles the row, so the focus rule above covers it too, once the download succeeded: the marker is
   // set then (not when the picker opens, a re-read while it is open would clear it), also if the picker was closed.

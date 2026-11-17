@@ -77,6 +77,7 @@ Plan this as a multi-phase change with a plan doc in `docs/engineering/admin-red
     - "Add my own file…": the existing attach flow, scoped to this film.
     - When a download exists that the checker distrusts: "Use it anyway" plus "Search again…".
     - When the audio is unlabelled and CineFilm guessed: "It's in {language} — find subtitles" and "It's English". "It's English" saves `NOT_NEEDED` as the owner's choice.
+    - "No English subtitles exist" (owner decision 2026-11-17): saves `NONE_EXIST`, the owner's word that no English subtitles exist anywhere. The row is marked done and automatic searching stops; "Search for English subtitles…" and "Add my own file…" still work, and a subtitle that plays later counts as subtitled. Shown on every foreign row (and on the To do card's rows).
   - **Forced tab:**
     - "Yes, find forced subtitles…": saves `NEEDED`, then the same picker filtered to foreign-parts-only files.
     - "No foreign scenes": saves `NOT_NEEDED`. It's marked done and never asked again.

@@ -260,7 +260,7 @@ class FullNeedApiTest extends SubtitleTestBase {
             .andExpect(jsonPath("$.error").value("No such film"));
         mvc.perform(put("/api/admin/films/{id}/full-need", film.getId()).content("{\"choice\":\"MAYBE\"}"))
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.error").value("The choice must be NEEDED, NOT_NEEDED or null"));
+            .andExpect(jsonPath("$.error").value("The choice must be NEEDED, NOT_NEEDED, NONE_EXIST or null"));
         assertThat(lock.tryAcquire(LibraryLock.SCAN)).isTrue();
         try {
             mvc.perform(put("/api/admin/films/{id}/full-need", film.getId()).content("{\"choice\":\"NEEDED\"}"))

@@ -26,6 +26,7 @@ describe('SubtitleNeedRow: a foreign-language film', () => {
     expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual([
       'Search for English subtitles…',
       'Add my own file…',
+      'No English subtitles exist',
     ]);
     expect(screen.getByRole('button', { name: 'Add my own file…' })).toHaveAccessibleDescription(
       expect.stringContaining('Picks one of your subtitle files for this film'),
@@ -66,7 +67,10 @@ describe('SubtitleNeedRow: a foreign-language film', () => {
   it('offers no search for a film with no edition to search', () => {
     renderRow({ row: fullRow({ editionId: null }), kind: 'foreign' });
 
-    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Add my own file…']);
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Add my own file…',
+      'No English subtitles exist',
+    ]);
   });
 
   it('names the language on the search for unlabelled audio and has no plain search', () => {
@@ -76,6 +80,7 @@ describe('SubtitleNeedRow: a foreign-language film', () => {
       'It’s in German — find subtitles',
       'Add my own file…',
       'It’s English',
+      'No English subtitles exist',
     ]);
   });
 
@@ -93,7 +98,30 @@ describe('SubtitleNeedRow: a foreign-language film', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'It’s English' }));
 
-    expect(onChoose).toHaveBeenCalledWith(row);
+    expect(onChoose).toHaveBeenCalledWith(row, 'NOT_NEEDED');
+  });
+
+  it('saves NONE_EXIST through onChoose from "No English subtitles exist", with its hint', async () => {
+    const row = fullRow();
+    const { onChoose } = renderRow({ row, kind: 'foreign' });
+    const button = screen.getByRole('button', { name: 'No English subtitles exist' });
+
+    expect(button).toHaveAccessibleDescription(
+      expect.stringContaining('Marks it done and stops searching'),
+    );
+    await userEvent.click(button);
+
+    expect(onChoose).toHaveBeenCalledWith(row, 'NONE_EXIST');
+  });
+
+  it('ignores a click on "No English subtitles exist" while the choice is saving', async () => {
+    const { onChoose } = renderRow({ row: fullRow(), kind: 'foreign', saving: true });
+    const button = screen.getByRole('button', { name: 'No English subtitles exist' });
+
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(button);
+
+    expect(onChoose).not.toHaveBeenCalled();
   });
 
   it('ignores a click on "It’s English" while the choice is saving, and keeps the button focusable', async () => {
@@ -199,7 +227,7 @@ describe('SubtitleNeedRow: an English film with foreign scenes', () => {
     ]);
     await userEvent.click(screen.getByRole('button', { name: 'No foreign scenes' }));
 
-    expect(onChoose).toHaveBeenCalledWith(row);
+    expect(onChoose).toHaveBeenCalledWith(row, 'NOT_NEEDED');
     expect(onFind).not.toHaveBeenCalled();
   });
 

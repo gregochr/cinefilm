@@ -183,7 +183,8 @@ public class FullNeedService {
      * has committed.
      *
      * @param filmId the film
-     * @param request the choice: {@code NEEDED}, {@code NOT_NEEDED}, or null for automatic
+     * @param request the choice: {@code NEEDED}, {@code NOT_NEEDED}, {@code NONE_EXIST}, or null for
+     *     automatic
      * @return the film's row afterwards
      * @throws ConflictException when a scan or another change holds the library lock
      * @throws NotFoundException when there is no such film
@@ -216,7 +217,8 @@ public class FullNeedService {
     }
 
     /**
-     * The ids of the films whose full-subtitle need is {@code NEEDED} (the films in {@link #list}'s scope: the rest
+     * The ids of the films whose full-subtitle need is {@code NEEDED}, except those the owner marked {@code NONE_EXIST}
+     * (nothing searches or downloads for them automatically) (the films in {@link #list}'s scope: the rest
      * are never needed), for the download scheduler. It reads only what the need depends on: not what each film plays,
      * not the search state, and nothing from {@link PendingDownloads} (the scheduler uses none of the flags). The
      * caller may change the set.
@@ -228,7 +230,8 @@ public class FullNeedService {
             : editionAudio(files.findAudioRows(inScope.stream().map(FullNeedRow::id).toList()));
         Set<Long> ids = new HashSet<>();
         for (FullNeedRow row : inScope) {
-            if (decide(row, audio.getOrDefault(row.id(), List.of())).need() == Need.NEEDED) {
+            if (row.owner() != FullNeedChoice.NONE_EXIST
+                && decide(row, audio.getOrDefault(row.id(), List.of())).need() == Need.NEEDED) {
                 ids.add(row.id());
             }
         }
@@ -240,12 +243,14 @@ public class FullNeedService {
      * added, so an owner's "not needed" that landed meanwhile is seen).
      *
      * @param filmId the film
-     * @return true when needed; false for any other need and for a film that is gone
+     * @return true when needed and not marked {@code NONE_EXIST}; false for any other need and for a film that is
+     *     gone
      */
     @Transactional(readOnly = true)
     public boolean isNeeded(Long filmId) {
         Film film = films.findById(filmId).orElse(null);
-        return film != null && Need.NEEDED.name().equals(needOf(film));
+        return film != null && film.getFullNeedOwner() != FullNeedChoice.NONE_EXIST
+            && Need.NEEDED.name().equals(needOf(film));
     }
 
     private FullNeedFilmDto chooseLocked(Long filmId, FullNeedChoice choice) {
@@ -335,7 +340,7 @@ public class FullNeedService {
         try {
             return FullNeedChoice.valueOf(request.choice());
         } catch (IllegalArgumentException e) {
-            throw new BadRequestException("The choice must be NEEDED, NOT_NEEDED or null");
+            throw new BadRequestException("The choice must be NEEDED, NOT_NEEDED, NONE_EXIST or null");
         }
     }
 
@@ -355,6 +360,10 @@ public class FullNeedService {
 
         boolean needed() {
             return decision.need() == Need.NEEDED;
+        }
+
+        boolean noneExist() {
+            return row.owner() == FullNeedChoice.NONE_EXIST;
         }
 
         boolean hasImdbId() {
@@ -378,7 +387,7 @@ public class FullNeedService {
     private Pending pendingFor(List<Eval> evals) {
         Map<Long, String> imdbIds = new LinkedHashMap<>();
         for (Eval eval : evals) {
-            if (eval.needed() && eval.playing() == null && eval.searched()) {
+            if (eval.needed() && !eval.noneExist() && eval.playing() == null && eval.searched()) {
                 imdbIds.put(eval.row().id(), eval.search().imdbId());
             }
         }
@@ -386,8 +395,8 @@ public class FullNeedService {
     }
 
     private FullFacts facts(Eval eval, Pending due) {
-        return new FullFacts(eval.needed(), eval.playing() != null, eval.hasImdbId(), eval.searched(),
-            due.due().contains(eval.row().id()), api.enabled(), api.downloadsEnabled());
+        return new FullFacts(eval.needed(), eval.noneExist(), eval.playing() != null, eval.hasImdbId(),
+            eval.searched(), due.due().contains(eval.row().id()), api.enabled(), api.downloadsEnabled());
     }
 
     private FullNeedFilmDto dto(Eval eval, Pending due, boolean browsable) {

@@ -79,6 +79,17 @@ class FullNeedIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    void theNoneExistChoiceRoundTripsThroughTheCheckConstraint() {
+        Film film = saved("Full Need None Exist", "zh", "Chinese");
+        film.setFullNeedOwner(FullNeedChoice.NONE_EXIST);
+        films.saveAndFlush(film);
+        entityManager.clear();
+
+        assertThat(films.findById(film.getId()).orElseThrow().getFullNeedOwner())
+            .isEqualTo(FullNeedChoice.NONE_EXIST);
+    }
+
+    @Test
     void theNeedRowsAndTheAudioRowsRunOnPostgres() {
         Film film = saved("Full Need Queries", "fr", "English", "French");
         entityManager.clear();
