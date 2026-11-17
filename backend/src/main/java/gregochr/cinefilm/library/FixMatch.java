@@ -4,14 +4,20 @@ import gregochr.cinefilm.config.BadRequestException;
 import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.config.ServiceUnavailableException;
+import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.FilmPreference;
+import gregochr.cinefilm.film.FilmPreferenceRepository;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.GroupingChange;
 import gregochr.cinefilm.film.GroupingChangeRepository;
 import gregochr.cinefilm.library.AdminDtos.MatchApplied;
 import gregochr.cinefilm.library.AdminDtos.MatchResultDto;
+import gregochr.cinefilm.library.AdminDtos.MatchSearchDto;
 import gregochr.cinefilm.search.LibraryChanged;
+import gregochr.cinefilm.tmdb.MatchOutcome.Candidate;
 import gregochr.cinefilm.tmdb.TmdbApi;
+import gregochr.cinefilm.tmdb.TmdbMatcher;
 import gregochr.cinefilm.tmdb.TmdbModels.Credit;
 import gregochr.cinefilm.tmdb.TmdbModels.MovieDetails;
 import gregochr.cinefilm.tmdb.TmdbModels.SearchHit;
@@ -42,25 +48,34 @@ public class FixMatch {
 
     private final TmdbApi tmdb;
     private final FilmRepository films;
+    private final FilmPreferenceRepository preferences;
     private final LibraryIngest ingest;
     private final EditionJoin join;
     private final GroupingChangeRepository changes;
     private final LibraryLock lock;
     private final TransactionTemplate tx;
+    private final TransactionTemplate readTx;
     private final Clock clock;
     private final ApplicationEventPublisher events;
 
-    /** Creates the service over TMDB, the films, the ingest (for {@code applyMovie}), the join and the lock. */
-    public FixMatch(TmdbApi tmdb, FilmRepository films, LibraryIngest ingest, EditionJoin join,
+    /**
+     * Creates the service over TMDB, the films, their preferences, the ingest (for {@code applyMovie}), the join and
+     * the lock.
+     */
+    public FixMatch(TmdbApi tmdb, FilmRepository films, FilmPreferenceRepository preferences,
+                    LibraryIngest ingest, EditionJoin join,
                     GroupingChangeRepository changes, LibraryLock lock, PlatformTransactionManager transactions,
                     Clock clock, ApplicationEventPublisher events) {
         this.tmdb = tmdb;
         this.films = films;
+        this.preferences = preferences;
         this.ingest = ingest;
         this.join = join;
         this.changes = changes;
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
+        this.readTx = new TransactionTemplate(transactions);
+        this.readTx.setReadOnly(true);
         this.clock = clock;
         this.events = events;
     }
@@ -73,16 +88,17 @@ public class FixMatch {
      * @param filmId the film being matched
      * @param query the title to search for
      * @param year the release year to narrow by, or null
-     * @return the results in TMDB's order
+     * @return the results in TMDB's order, the file's length, and the result to pick first, if any (see
+     *     {@link #suggest})
      * @throws BadRequestException when the query is blank
      * @throws NotFoundException when there is no such film
      * @throws ServiceUnavailableException when TMDB cannot answer
      */
-    public List<MatchResultDto> search(Long filmId, String query, Integer year) {
+    public MatchSearchDto search(Long filmId, String query, Integer year) {
         if (query == null || query.isBlank()) {
             throw new BadRequestException("A title to search for is needed");
         }
-        requireFilm(filmId);
+        FilmFacts facts = readTx.execute(status -> facts(filmId));
         try {
             List<MatchResultDto> results = new ArrayList<>();
             for (SearchHit hit : tmdb.search(query.strip(), year)) {
@@ -91,10 +107,47 @@ public class FixMatch {
                 }
                 tmdb.movie(hit.id()).ifPresent(movie -> results.add(result(movie)));
             }
-            return results;
+            return suggest(facts, results);
         } catch (TmdbUnavailableException e) {
             throw new ServiceUnavailableException(TMDB_DOWN, e);
         }
+    }
+
+    /**
+     * Chooses the result to pick first. If the file's length is known and exactly one result matches it, that one
+     * ("runtime"). Otherwise the scan's best stored candidate, when it is among the results and the length does not
+     * contradict it ("guess"). Otherwise nothing.
+     */
+    static MatchSearchDto suggest(FilmFacts facts, List<MatchResultDto> results) {
+        Long fileMs = facts.fileRuntimeMs();
+        long length = fileMs == null ? 0 : fileMs;
+        List<MatchResultDto> sameLength = results.stream()
+            .filter(r -> TmdbMatcher.runtimeMatches(r.runtimeMinutes(), length)).toList();
+        if (sameLength.size() == 1) {
+            return new MatchSearchDto(fileMs, sameLength.get(0).tmdbId(), "runtime", results);
+        }
+        Long guessId = facts.guessTmdbId();
+        if (guessId != null) {
+            MatchResultDto guess = results.stream().filter(r -> r.tmdbId() == guessId).findFirst().orElse(null);
+            if (guess != null && (length <= 0 || guess.runtimeMinutes() == null
+                || TmdbMatcher.runtimeMatches(guess.runtimeMinutes(), length))) {
+                return new MatchSearchDto(fileMs, guessId, "guess", results);
+            }
+        }
+        return new MatchSearchDto(fileMs, null, null, results);
+    }
+
+    /** What search needs from the film, read in one transaction: the default edition's length and the best guess. */
+    record FilmFacts(Long fileRuntimeMs, Long guessTmdbId) {
+    }
+
+    private FilmFacts facts(Long filmId) {
+        Film film = films.findById(filmId).orElseThrow(() -> new NotFoundException("No film " + filmId));
+        Long stored = preferences.findById(filmId).map(FilmPreference::getDefaultEditionId).orElse(null);
+        Long runtime = DefaultEdition.current(film.getEditions(), stored).map(Edition::getRuntimeMs)
+            .filter(ms -> ms > 0).orElse(null);
+        Long guess = StoredCandidates.of(film).stream().findFirst().map(Candidate::tmdbId).orElse(null);
+        return new FilmFacts(runtime, guess);
     }
 
     /**

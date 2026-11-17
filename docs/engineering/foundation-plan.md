@@ -364,9 +364,16 @@ Plan: `library-scan-plan.md`. What the API and the model now carry:
   match button; `multiple-files` only for genuine ambiguity in a film that is not `editions_confirmed` (the detail
   says which case); `parts-mismatch` is a multi-part edition that fails `PartsMatch` (it will transcode).
 - **Fix match** (`FixMatch`, owner-only like every `/api/admin` route; mutating calls need `X-CineFilm`):
-  - `GET /api/admin/films/{id}/match?query=&year=` searches TMDB: at most 8 results, each `{ tmdbId, title, year |
-    null, runtimeMinutes | null, posterPath | null, director | null, cast: string[] }`, details fetched through the
-    TMDB pacer. It only reads TMDB, takes no library lock and works during a scan. `year` is optional.
+  - `GET /api/admin/films/{id}/match?query=&year=` searches TMDB and answers `MatchSearchDto { fileRuntimeMs | null,
+    suggestedTmdbId | null, suggestedBecause: "runtime"|"guess" | null, results }`: `results` is at most 8 in TMDB's
+    order, each `{ tmdbId, title, year | null, runtimeMinutes | null, posterPath | null, director | null, cast: string[]
+    }`, details fetched through the TMDB pacer. `fileRuntimeMs` is the runtime of the film's default edition (the
+    stored default while it is still an edition, else `DefaultEdition.choose`), null when none or 0. The server picks
+    the default so every client agrees: (1) if the file's length is known and exactly one result's runtime matches it
+    (`TmdbMatcher.runtimeMatches`, the scanner's own 8 minute tolerance) suggest it, `"runtime"`; (2) else the film's
+    first stored `matchCandidates` entry, when it is among the results and the length does not contradict it (the
+    runtimes match, or either is unknown), `"guess"`; (3) else nothing. It only reads TMDB, takes no library lock and
+    works during a scan. `year` is optional.
   - `POST /api/admin/films/{id}/match { tmdbId }` applies `applyMovie` and sets `editions_confirmed`, answering `{
     filmId, joined }`. If another film already has that TMDB id, this film is joined into it (the lowest id; the owner's
     explicit choice, so the different-film guard is not applied), the survivor is confirmed, `filmId` is the survivor's

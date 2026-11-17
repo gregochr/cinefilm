@@ -26,7 +26,6 @@ import gregochr.cinefilm.opensubtitles.OpenSubtitlesRefresher;
 import gregochr.cinefilm.plex.RuntimeSignal;
 import gregochr.cinefilm.subtitle.SidecarCheckRefresher;
 import gregochr.cinefilm.ratings.RatingsRefresher;
-import gregochr.cinefilm.tmdb.MatchOutcome.Candidate;
 import gregochr.cinefilm.todo.AdminTodoRules;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -43,15 +42,10 @@ import java.util.Set;
 import java.util.TreeSet;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.core.JacksonException;
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.json.JsonMapper;
 
 /** What the Admin panels show: the scan status and the films needing attention. */
 @Service
 public class AdminService {
-
-    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final ScanService scans;
     private final ScanRunRepository runs;
@@ -377,15 +371,7 @@ public class AdminService {
     }
 
     private static List<CandidateDto> candidates(Film film) {
-        if (film.getMatchCandidates() == null) {
-            return List.of();
-        }
-        try {
-            List<Candidate> stored = JSON.readValue(film.getMatchCandidates(), new TypeReference<>() { });
-            return stored.stream().map(c -> new CandidateDto(c.tmdbId(), c.title(), c.year(), c.runtimeMinutes(),
-                c.posterPath(), c.score())).toList();
-        } catch (JacksonException e) {
-            return List.of();
-        }
+        return StoredCandidates.of(film).stream().map(c -> new CandidateDto(c.tmdbId(), c.title(), c.year(),
+            c.runtimeMinutes(), c.posterPath(), c.score())).toList();
     }
 }

@@ -14,6 +14,7 @@ import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.config.ServiceUnavailableException;
 import gregochr.cinefilm.library.AdminDtos.MatchApplied;
 import gregochr.cinefilm.library.AdminDtos.MatchResultDto;
+import gregochr.cinefilm.library.AdminDtos.MatchSearchDto;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,27 +34,33 @@ class FixMatchControllerTest {
     private FixMatch fixMatch;
 
     @Test
-    void searchReturnsTheResultsAsAList() throws Exception {
-        when(fixMatch.search(7L, "The Wicker Man", 1973)).thenReturn(List.of(
-            new MatchResultDto(16307, "The Wicker Man", 1973, 93, "/p.jpg", "Robin Hardy",
-                List.of("Edward Woodward"))));
+    void searchReturnsTheResultsTheFileLengthAndTheSuggestion() throws Exception {
+        when(fixMatch.search(7L, "The Wicker Man", 1973)).thenReturn(new MatchSearchDto(5_580_000L, 16307L,
+            "runtime", List.of(new MatchResultDto(16307, "The Wicker Man", 1973, 93, "/p.jpg", "Robin Hardy",
+                List.of("Edward Woodward")))));
 
         mvc.perform(get("/api/admin/films/7/match").param("query", "The Wicker Man").param("year", "1973")
                 .with(user("owner")))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$[0].tmdbId").value(16307))
-            .andExpect(jsonPath("$[0].runtimeMinutes").value(93))
-            .andExpect(jsonPath("$[0].director").value("Robin Hardy"))
-            .andExpect(jsonPath("$[0].cast[0]").value("Edward Woodward"));
+            .andExpect(jsonPath("$.fileRuntimeMs").value(5_580_000))
+            .andExpect(jsonPath("$.suggestedTmdbId").value(16307))
+            .andExpect(jsonPath("$.suggestedBecause").value("runtime"))
+            .andExpect(jsonPath("$.results[0].tmdbId").value(16307))
+            .andExpect(jsonPath("$.results[0].runtimeMinutes").value(93))
+            .andExpect(jsonPath("$.results[0].director").value("Robin Hardy"))
+            .andExpect(jsonPath("$.results[0].cast[0]").value("Edward Woodward"));
     }
 
     @Test
     void searchWithNoYearAsksWithNull() throws Exception {
-        when(fixMatch.search(7L, "Dune", null)).thenReturn(List.of());
+        when(fixMatch.search(7L, "Dune", null)).thenReturn(new MatchSearchDto(null, null, null, List.of()));
 
         mvc.perform(get("/api/admin/films/7/match").param("query", "Dune").with(user("owner")))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.length()").value(0));
+            .andExpect(jsonPath("$.results.length()").value(0))
+            .andExpect(jsonPath("$.fileRuntimeMs").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.suggestedTmdbId").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.suggestedBecause").value(org.hamcrest.Matchers.nullValue()));
     }
 
     @Test

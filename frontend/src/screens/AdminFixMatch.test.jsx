@@ -55,6 +55,62 @@ describe('Admin: Fix match', () => {
     expect(search).toBe('/api/admin/films/31/match?query=The+Wicker+Man');
   });
 
+  it('with no suggestion and no length nothing is checked and the header has only the file name', async () => {
+    installFetch();
+    const panel = await openPanel();
+    for (const radio of await within(panel).findAllByRole('radio')) {
+      expect(radio).not.toBeChecked();
+    }
+    expect(within(panel).getByText('File: The Wicker Man.m4v')).toBeInTheDocument();
+    expect(within(panel).queryByText('Same length as your file')).not.toBeInTheDocument();
+    expect(within(panel).queryByText('CineFilm’s best guess')).not.toBeInTheDocument();
+  });
+
+  it('opens with the suggested result checked, its note and the file length, and applies it only on request', async () => {
+    const fetchMock = installFetch((m, url) =>
+      isSearch(m, url)
+        ? respond({
+            ...fixtures.adminMatch,
+            fileRuntimeMs: 5280000,
+            suggestedTmdbId: 16307,
+            suggestedBecause: 'runtime',
+          })
+        : null,
+    );
+    const panel = await openPanel();
+    const radios = await within(panel).findAllByRole('radio');
+
+    // The note sits inside its row's label, so it names that row's radio.
+    const suggested = within(panel).getByRole('radio', { name: /Same length as your file/ });
+    expect(suggested).toBe(radios[0]);
+    expect(suggested).toBeChecked();
+    expect(radios[1]).not.toBeChecked();
+    expect(within(panel).getByText('File: The Wicker Man.m4v (1h 28m)')).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: 'Use this match' })).toBeEnabled();
+    expect(fetchMock.mock.calls.some((c) => c[1]?.method === 'POST')).toBe(false);
+
+    await userEvent.click(radios[1]);
+    expect(radios[1]).toBeChecked();
+    expect(radios[0]).not.toBeChecked();
+    // The note stays with the suggested row; it does not follow the pick.
+    expect(within(panel).getByRole('radio', { name: /Same length as your file/ })).toBe(radios[0]);
+    expect(radios[1]).toHaveAccessibleName(expect.not.stringContaining('Same length as your file'));
+  });
+
+  it('shows the best-guess note when the server suggests the scan’s guess', async () => {
+    installFetch((m, url) =>
+      isSearch(m, url)
+        ? respond({ ...fixtures.adminMatch, suggestedTmdbId: 9708, suggestedBecause: 'guess' })
+        : null,
+    );
+    const panel = await openPanel();
+    const radios = await within(panel).findAllByRole('radio');
+
+    expect(radios[1]).toBeChecked();
+    expect(within(panel).getByRole('radio', { name: /CineFilm’s best guess/ })).toBe(radios[1]);
+    expect(radios[0]).toHaveAccessibleName(expect.not.stringContaining('CineFilm’s best guess'));
+  });
+
   it('searches again with the typed title and a four-digit year, ignoring a bad year', async () => {
     const fetchMock = installFetch();
     const panel = await openPanel();
@@ -114,7 +170,9 @@ describe('Admin: Fix match', () => {
   });
 
   it('says so when TMDB has nothing', async () => {
-    installFetch((m, url) => (isSearch(m, url) ? respond([]) : null));
+    installFetch((m, url) =>
+      isSearch(m, url) ? respond({ ...fixtures.adminMatch, results: [] }) : null,
+    );
     const panel = await openPanel();
     expect(await within(panel).findByText(/TMDB has nothing for that/)).toBeInTheDocument();
     expect(within(panel).queryByRole('radio')).not.toBeInTheDocument();
@@ -155,17 +213,20 @@ describe('Admin: Fix match', () => {
   it('lists a result with no poster, people or runtime without breaking', async () => {
     installFetch((m, url) =>
       isSearch(m, url)
-        ? respond([
-            {
-              tmdbId: 5,
-              title: 'Bare',
-              year: null,
-              runtimeMinutes: null,
-              posterPath: null,
-              director: null,
-              cast: [],
-            },
-          ])
+        ? respond({
+            ...fixtures.adminMatch,
+            results: [
+              {
+                tmdbId: 5,
+                title: 'Bare',
+                year: null,
+                runtimeMinutes: null,
+                posterPath: null,
+                director: null,
+                cast: [],
+              },
+            ],
+          })
         : null,
     );
     const panel = await openPanel();
@@ -612,5 +673,5 @@ describe('Admin: grouping report', () => {
 });
 
 it('keeps the fixtures honest', () => {
-  expect(fixtures.adminMatch).toHaveLength(2);
+  expect(fixtures.adminMatch.results).toHaveLength(2);
 });
