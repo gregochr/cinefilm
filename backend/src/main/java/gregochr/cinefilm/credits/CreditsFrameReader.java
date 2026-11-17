@@ -61,11 +61,12 @@ public class CreditsFrameReader {
     /** A seek never goes closer than this to the end of the file, where there may be no frame left to decode. */
     static final long END_MARGIN_MS = 1_000;
     /**
-     * Some files have no decodable picture in their last few seconds (measured: a 7,261.8 s file wrote no frame for
-     * seeks from 7,259 s on), so a coarse seek in this last stretch that exits 0 and writes no file ends the coarse
-     * pass instead of failing the file. A seek at exactly this long before the end counts as inside it (inclusive).
+     * Some files have no decodable picture in their last stretch (measured: a 7,261.8 s file wrote no frame for seeks
+     * from 7,259 s on; a second film, 7,198 s long, had about 21 s with no picture), so a coarse seek in this last
+     * stretch that exits 0 and writes no file ends the coarse pass instead of failing the file. 30 s leaves margin
+     * over the longest gap seen. A seek at exactly this long before the end counts as inside it (inclusive).
      */
-    static final long TAIL_GRACE_MS = 10_000;
+    static final long TAIL_GRACE_MS = 30_000;
 
     /** The ffmpeg filter every frame goes through: un-squeeze a non-square pixel aspect, then scale to the width. */
     public static final String FILTER = "scale='trunc(iw*sar/2)*2':ih,setsar=1,scale=" + OUTPUT_WIDTH + ":-2";

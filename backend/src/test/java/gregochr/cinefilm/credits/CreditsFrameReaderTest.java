@@ -795,7 +795,7 @@ class CreditsFrameReaderTest {
     }
 
     @Test
-    void aSeekInTheLastTenSecondsThatWritesNothingEndsTheCoarsePassWithTheFramesSoFar() {
+    void aSeekInTheLastThirtySecondsThatWritesNothingEndsTheCoarsePassWithTheFramesSoFar() {
         ffmpeg.writesNothingAt = ms -> ms >= 595_000;
         List<TimedFrame> frames;
         try (Job job = reader().open(FILM, 600_000, () -> { })) {
@@ -808,26 +808,38 @@ class CreditsFrameReaderTest {
     }
 
     @Test
-    void theTailBeginsExactlyTenSecondsBeforeTheEndAndThatSeekIsInsideIt() {
-        ffmpeg.writesNothingAt = ms -> ms >= 590_000;
+    void theTailBeginsExactlyThirtySecondsBeforeTheEndAndThatSeekIsInsideIt() {
+        ffmpeg.writesNothingAt = ms -> ms >= 570_000;
         List<TimedFrame> frames;
         try (Job job = reader().open(FILM, 600_000, () -> { })) {
             frames = job.coarseFrames();
         }
 
-        assertThat(frames.getLast().offsetMs()).isEqualTo(585_000);
-        assertThat(offsets(frames)).isEqualTo(coarseOffsetsBefore(600_000, 590_000));
+        assertThat(frames.getLast().offsetMs()).isEqualTo(565_000);
+        assertThat(offsets(frames)).isEqualTo(coarseOffsetsBefore(600_000, 570_000));
+    }
+
+    @Test
+    void aFilmWithAboutTwentyOneSecondsOfNoPictureEndsTheCoarsePassWithoutFailing() {
+        ffmpeg.writesNothingAt = ms -> ms >= 600_000 - 21_000;
+        List<TimedFrame> frames;
+        try (Job job = reader().open(FILM, 600_000, () -> { })) {
+            frames = job.coarseFrames();
+        }
+
+        assertThat(offsets(frames)).isEqualTo(coarseOffsetsBefore(600_000, 579_000));
+        assertThat(frames.getLast().offsetMs()).isEqualTo(575_000);
     }
 
     @Test
     void aMissingOutputJustOutsideTheTailStillAbandonsTheFile() {
-        ffmpeg.writesNothingAt = ms -> ms == 585_000;
+        ffmpeg.writesNothingAt = ms -> ms == 565_000;
         try (Job job = reader().open(FILM, 600_000, () -> { })) {
             assertThatThrownBy(job::coarseFrames).isInstanceOf(ReadException.class)
                 .hasMessageStartingWith("ffmpeg wrote no readable frame");
         }
 
-        assertThat(ffmpeg.commands).hasSize(CreditsFrameReader.coarseOffsets(600_000).indexOf(585_000L) + 1);
+        assertThat(ffmpeg.commands).hasSize(CreditsFrameReader.coarseOffsets(600_000).indexOf(565_000L) + 1);
     }
 
     @Test
@@ -877,9 +889,9 @@ class CreditsFrameReaderTest {
     }
 
     @Test
-    void aMissingOutputTenThousandAndOneMillisecondsBeforeTheEndStillAbandonsTheFile() {
+    void aMissingOutputThirtyThousandAndOneMillisecondsBeforeTheEndStillAbandonsTheFile() {
         long duration = 600_003;
-        long offset = duration - 10_001;
+        long offset = duration - 30_001;
         assertThat(CreditsFrameReader.coarseOffsets(duration)).contains(offset);
         ffmpeg.writesNothingAt = ms -> ms == offset;
         try (Job job = reader().open(FILM, duration, () -> { })) {
@@ -891,9 +903,9 @@ class CreditsFrameReaderTest {
     }
 
     @Test
-    void aMissingOutputNineThousandNineHundredAndNinetyNineMillisecondsBeforeTheEndEndsThePass() {
+    void aMissingOutputTwentyNineThousandNineHundredAndNinetyNineMillisecondsBeforeTheEndEndsThePass() {
         long duration = 599_998;
-        long offset = duration - 9_999;
+        long offset = duration - 29_999;
         assertThat(CreditsFrameReader.coarseOffsets(duration)).contains(offset);
         ffmpeg.writesNothingAt = ms -> ms >= offset;
         List<TimedFrame> frames;
