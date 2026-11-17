@@ -377,14 +377,14 @@ class TimingReferenceFetchTest {
     void aReferenceEndingBeforeTheCreditsLessTenMinutesIsNotMeasuredAndOneEndingAfterItIs() {
         Map<Long, OpenSubtitlesReference> both = Map.of(5012L, stored(5012, full(300)),
             5013L, stored(5013, full(330)));
-        // The credits start at 1:03:20: a reference must end after 0:53:20; 5012 ends 0:50:01, 5013 ends 0:55:01.
-        when(service.targets()).thenReturn(List.of(new Target(1L, 10L, "Original", "tt1", 3_400_000, 3_800_000L,
+        // The credits start at 1:00:50: a reference must end after 0:50:50; 5012 ends 0:50:01, 5013 ends 0:55:01.
+        when(service.targets()).thenReturn(List.of(new Target(1L, 10L, "Original", "tt1", 3_700_000, 3_650_000L,
             false, List.of(forced(7, Origin.OWNER)), List.of(candidate(5012), candidate(5013)), 2, both)));
 
         fetch.run(CHECK_LIMIT, true);
 
         assertThat(lines(Level.INFO)).singleElement().satisfies(line -> assertThat(line)
-            .contains("against OpenSubtitles file 5013").contains("credits start 1:03:20"));
+            .contains("against OpenSubtitles file 5013").contains("credits start 1:00:50"));
         verifyNoInteractions(api, budget);
     }
 

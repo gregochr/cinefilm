@@ -149,7 +149,8 @@ final class TimingReferenceFetch {
                 try {
                     reference = fetcher.fetch(target.filmId(), target.imdbId(), candidate, checkLimit);
                 } catch (OpenSubtitlesChargedException e) {
-                    // The account was charged: the download counts against the day (the run ends here anyway).
+                    // The account was charged: the download counts against the day (it is an
+                    // OpenSubtitlesUnavailableException, so run() stops fetching).
                     counted();
                     throw e;
                 }
@@ -178,7 +179,7 @@ final class TimingReferenceFetch {
         return TimingReferenceRule.usable(reference, target.runtimeMs(), target.creditsStartMs());
     }
 
-    /** Whether a forced file of 8 to 299 lines matches a usable reference; the best share of such a file. */
+    /** Whether a forced file under 300 lines (one under 8 is TOO_FEW and never matches) matches; the best share. */
     private static Judgement judge(Target target, OpenSubtitlesReference reference) {
         if (!isUsable(target, reference)) {
             return new Judgement(false, 0);

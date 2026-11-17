@@ -5,4 +5,4 @@ least one file of 8 to 299 lines; no embedded forced track played) have no Engli
 against, the OpenSubtitles search now also looks for full English subtitles, on the same rules as for films that need
 them. It changes nothing in playback, downloads or Admin: no full subtitle is downloaded for these films and the
 measurement of full downloads keeps its old scope. Stored OpenSubtitles files now also keep where their last cue ends
-(`last_cue_end_ms`), for the next step, which fetches one and measures the forced files against it.
+(`last_cue_end_ms`), for the next step, which fetches full files and measures the forced files against them.
