@@ -6,6 +6,7 @@ import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.edition;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -41,6 +42,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 
 /** {@link FixMatch} on its own: mocked collaborators, no Spring context and no database. */
 class FixMatchUnitTest {
@@ -53,6 +55,7 @@ class FixMatchUnitTest {
     private EditionJoin join;
     private FilmPreferenceRepository preferences;
     private GroupingChangeRepository changes;
+    private PlatformTransactionManager transactions;
     private LibraryLock lock;
     private ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
     private FixMatch fix;
@@ -65,10 +68,10 @@ class FixMatchUnitTest {
         join = mock(EditionJoin.class);
         preferences = mock(FilmPreferenceRepository.class);
         changes = mock(GroupingChangeRepository.class);
+        transactions = mock(PlatformTransactionManager.class);
         lock = new LibraryLock();
         fix = new FixMatch(tmdb, films, preferences, ingest, join, changes, lock,
-            mock(PlatformTransactionManager.class), CLOCK, events);
-        when(films.existsById(FILM_ID)).thenReturn(true);
+            transactions, CLOCK, events);
     }
 
     private static MovieDetails movie(long id, String title, Integer year, Integer runtime, List<Credit> directors,
@@ -97,6 +100,8 @@ class FixMatchUnitTest {
 
         assertThat(results).containsExactly(new MatchResultDto(5, "The Wicker Man", 1973, 88, "/p5.jpg",
             "Robin Hardy, Second Director", List.of("A", "B", "C", "D")));
+        // Searching only reads: its transaction is read-only.
+        verify(transactions).getTransaction(argThat(TransactionDefinition::isReadOnly));
     }
 
     private static final long FILE_MS = 107 * MIN;
@@ -319,6 +324,7 @@ class FixMatchUnitTest {
 
     @Test
     void applyWithoutATmdbIdIs400AndATmdbIdTmdbDoesNotKnowIs404() {
+        when(films.existsById(FILM_ID)).thenReturn(true);
         when(tmdb.movie(5)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> fix.apply(FILM_ID, null)).isInstanceOf(BadRequestException.class);
@@ -328,6 +334,7 @@ class FixMatchUnitTest {
 
     @Test
     void applyWhenTmdbIsUnavailableIs503AndReleasesTheLock() {
+        when(films.existsById(FILM_ID)).thenReturn(true);
         when(tmdb.movie(5)).thenThrow(new TmdbUnavailableException("down", null));
 
         assertThatThrownBy(() -> fix.apply(FILM_ID, 5L)).isInstanceOf(ServiceUnavailableException.class);
@@ -337,6 +344,7 @@ class FixMatchUnitTest {
 
     @Test
     void applyWhileTheLibraryLockIsHeldIs409AndDoesNotReleaseSomeoneElsesLock() {
+        when(films.existsById(FILM_ID)).thenReturn(true);
         lock.tryAcquire(LibraryLock.IMPORT);
 
         assertThatThrownBy(() -> fix.apply(FILM_ID, 5L)).isInstanceOf(ConflictException.class)
@@ -347,6 +355,7 @@ class FixMatchUnitTest {
 
     @Test
     void applyWithNoOtherFilmSettlesTheFilmAndReleasesTheLock() {
+        when(films.existsById(FILM_ID)).thenReturn(true);
         Film target = film(FILM_ID, "Wicker Man");
         MovieDetails movie = movie(16307, "The Wicker Man", 1973, 88, List.of(), List.of());
         when(tmdb.movie(16307)).thenReturn(Optional.of(movie));
@@ -362,10 +371,13 @@ class FixMatchUnitTest {
         verify(join, never()).joinFilms(FILM_ID, FILM_ID);
         verify(events).publishEvent(new LibraryChanged());
         assertThat(lock.holder()).isNull();
+        // Applying writes: its transaction is not read-only.
+        verify(transactions).getTransaction(argThat(definition -> !definition.isReadOnly()));
     }
 
     @Test
     void applyWhenAnotherFilmHasTheIdJoinsIntoItConfirmsItAndLogsTheJoin() {
+        when(films.existsById(FILM_ID)).thenReturn(true);
         Film mine = film(FILM_ID, "Summerisle");
         Film existing = film(3L, "The Wicker Man");
         when(tmdb.movie(16307)).thenReturn(Optional.of(movie(16307, "The Wicker Man", 1973, 88, List.of(),
@@ -393,6 +405,7 @@ class FixMatchUnitTest {
 
     @Test
     void aFailureWhileSettlingStillReleasesTheLock() {
+        when(films.existsById(FILM_ID)).thenReturn(true);
         Film mine = film(FILM_ID, "Summerisle");
         when(tmdb.movie(5)).thenReturn(Optional.of(movie(5, "X", 2000, 90, List.of(), List.of())));
         when(films.findById(FILM_ID)).thenReturn(Optional.of(mine));

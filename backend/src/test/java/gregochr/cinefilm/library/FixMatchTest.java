@@ -149,7 +149,7 @@ class FixMatchTest extends ApiTestBase {
 
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    void searchReadsTheFilmsEditionsInItsOwnTransactionAndSuggestsTheResultOfTheFilesLength() {
+    void searchReadsTheFilesLengthInItsOwnTransactionWhenTheCallerHasNone() {
         // Outside the base class's rollback transaction: the lazy editions are only readable inside the search's own.
         when(tmdb.search("Dune", null)).thenReturn(List.of(new SearchHit(1, "A", "A", 2021, 1, null),
             new SearchHit(2, "B", "B", 2021, 1, null)));

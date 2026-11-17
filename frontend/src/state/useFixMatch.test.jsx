@@ -135,22 +135,24 @@ describe('useFixMatch', () => {
     expect(result.current.search.fileRuntimeMs).toBe(6420000);
     expect(result.current.search.suggestedTmdbId).toBeNull();
     expect(result.current.picked).toBeNull();
-    await act(async () => second.resolve(answer([{ tmdbId: 2 }], { fileRuntimeMs: 6420000 })));
+    await act(async () => second.resolve(answer([{ tmdbId: 2 }], { fileRuntimeMs: 6480000 })));
+    expect(result.current.search.fileRuntimeMs).toBe(6480000);
 
     act(() => {
       result.current.submit();
     });
     await waitFor(() => expect(result.current.search.status).toBe('error'));
-    expect(result.current.search.fileRuntimeMs).toBe(6420000);
+    expect(result.current.search.fileRuntimeMs).toBe(6480000);
     expect(result.current.search.results).toEqual([]);
   });
 
   it('does not carry the file length over to another film', async () => {
-    installFetch((m, url) =>
-      isSearch(m, url)
-        ? answer([{ tmdbId: 1 }], { fileRuntimeMs: 6420000 })
-        : new Promise(() => {}),
-    );
+    const eight = deferred();
+    installFetch((m, url) => {
+      if (isSearch(m, url)) return answer([{ tmdbId: 1 }], { fileRuntimeMs: 6420000 });
+      if (m === 'GET' && url.startsWith('/api/admin/films/8/match?')) return eight.promise;
+      return null;
+    });
     const { result, rerender } = renderHook(({ id }) => useFixMatch(id, 'Dune', vi.fn()), {
       initialProps: { id: 7 },
     });
@@ -160,6 +162,8 @@ describe('useFixMatch', () => {
 
     expect(result.current.search.status).toBe('loading');
     expect(result.current.search.fileRuntimeMs).toBeNull();
+    await act(async () => eight.resolve(answer([{ tmdbId: 9 }], { fileRuntimeMs: 7200000 })));
+    expect(result.current.search.fileRuntimeMs).toBe(7200000);
   });
 
   it('ignores a failure of a search that is no longer the newest', async () => {
