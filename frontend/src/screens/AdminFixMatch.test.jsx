@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FADE_MS } from '../components/useDialog.js';
+import { SCAN_IDLE_POLL_MS } from '../state/useAdmin.js';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
 
 afterEach(() => {
@@ -400,6 +401,22 @@ describe('Admin: focus after an apply with motion on', () => {
   });
 });
 
+/**
+ * Holds the clock (setTimeout only) so a 150 ms fade ends only when the test advances it. Testing Library finds a held
+ * clock through the `jest` global, so that is pointed at Vitest's. Call it after the dialog is open: opening waits on
+ * real timers.
+ */
+function holdClock() {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  vi.stubGlobal('jest', { advanceTimersByTime: (ms) => vi.advanceTimersByTime(ms) });
+  return userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+}
+const flush = () => act(async () => vi.advanceTimersByTimeAsync(0));
+const heading = () => screen.getByRole('heading', { level: 1, name: 'To do' });
+const rows = () => screen.getAllByRole('button', { name: 'Find the film…' });
+const railLink = (name) =>
+  within(screen.getByRole('navigation', { name: 'Admin sections' })).getByRole('link', { name });
+
 describe('Admin: the heading does not take focus behind the fading dialog', () => {
   it('keeps focus off the heading until the dialog is gone, without any Tab', async () => {
     vi.stubGlobal('matchMedia', () => ({ matches: false }));
@@ -418,26 +435,17 @@ describe('Admin: the heading does not take focus behind the fading dialog', () =
     });
     const dialog = await openPanel();
     await userEvent.click((await within(dialog).findAllByRole('radio'))[0]);
+    const user = holdClock();
 
-    // From here the clock is held, so the 150 ms fade only ends when the test says so.
-    vi.useFakeTimers({ shouldAdvanceTime: false });
-    // Testing Library finds a held clock through the `jest` global; point it at Vitest's.
-    vi.stubGlobal('jest', { advanceTimersByTime: (ms) => vi.advanceTimersByTime(ms) });
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const rows = () => screen.getAllByRole('button', { name: 'Find the film…' });
-    const heading = () => screen.getByRole('heading', { level: 1, name: 'To do' });
     await user.click(within(dialog).getByRole('button', { name: 'Use this match' }));
     // The apply has answered and the dialog is fading out, its button disabled; the re-read is still on its way.
-    await act(async () => vi.advanceTimersByTimeAsync(0));
+    await flush();
     expect(within(dialog).getByRole('button', { name: 'Use this match' })).toBeDisabled();
     expect(rows()).toHaveLength(2);
 
     // The re-read lands: the row is gone while the dialog is still on screen, and focus is on the page body.
     landReread(respond({ items: fixtures.adminAttention.items.slice(1) }));
-    for (let i = 0; i < 30 && rows().length > 1; i++) {
-      await act(async () => vi.advanceTimersByTimeAsync(0));
-    }
-    expect(rows()).toHaveLength(1);
+    await vi.waitFor(() => expect(rows()).toHaveLength(1));
     expect(screen.getByRole('dialog', { name: 'Fix match' })).toBeInTheDocument();
     expect(heading()).not.toHaveFocus();
 
@@ -445,6 +453,47 @@ describe('Admin: the heading does not take focus behind the fading dialog', () =
 
     expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument();
     expect(heading()).toHaveFocus();
+  });
+
+  it('forgets a due fallback when the dialog goes with the section, so a later Cancel arms nothing', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    let scanFinished = false;
+    installFetch((m, url) => {
+      if (isApply(m, url)) return respond({ filmId: 31, joined: false });
+      if (url === '/api/admin/attention' && scanFinished) {
+        return respond({ items: fixtures.adminAttention.items.slice(1) });
+      }
+      if (url === '/api/admin/scan' && scanFinished) {
+        return respond({ ...fixtures.adminScan, lastScan: { finishedAt: '2026-11-17T09:00:00Z' } });
+      }
+      return null;
+    });
+    const dialog = await openPanel();
+    await userEvent.click((await within(dialog).findAllByRole('radio'))[0]);
+    const user = holdClock();
+
+    // Apply, then leave for another section while the dialog fades: it unmounts without closing itself.
+    await user.click(within(dialog).getByRole('button', { name: 'Use this match' }));
+    await user.click(railLink('Library'));
+    await vi.waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1, name: 'Library' })).toBeInTheDocument(),
+    );
+    await user.click(railLink(/^To do/));
+    await vi.waitFor(() => expect(rows()).toHaveLength(2));
+
+    // A plain Cancel on a new dialog, then focus rests on the page body.
+    await user.click(rows()[0]);
+    const again = screen.getByRole('dialog', { name: 'Fix match' });
+    await user.click(within(again).getByRole('button', { name: 'Cancel' }));
+    await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+    expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument();
+    act(() => document.activeElement.blur());
+
+    // A scan finishing later changes the To do list: the row goes, and nothing sends focus to the heading.
+    scanFinished = true;
+    await act(async () => vi.advanceTimersByTimeAsync(SCAN_IDLE_POLL_MS));
+    await vi.waitFor(() => expect(rows()).toHaveLength(1));
+    expect(heading()).not.toHaveFocus();
   });
 });
 
@@ -459,19 +508,19 @@ describe('Admin: leaving during the fade after an apply', () => {
     const dialog = await openPanel();
     await userEvent.click((await within(dialog).findAllByRole('radio'))[0]);
     const before = summaryReads;
+    const user = holdClock();
 
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Use this match' }));
-    // Back to another section while the dialog still fades out.
-    await userEvent.click(
-      within(screen.getByRole('navigation', { name: 'Admin sections' })).getByRole('link', {
-        name: 'Library',
-      }),
+    await user.click(within(dialog).getByRole('button', { name: 'Use this match' }));
+    // The clock is held, so the dialog is certainly still fading when the section changes.
+    expect(screen.getByRole('dialog', { name: 'Fix match' })).toBeInTheDocument();
+    await user.click(railLink('Library'));
+
+    await vi.waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1, name: 'Library' })).toBeInTheDocument(),
     );
-
-    await screen.findByRole('heading', { level: 1, name: 'Library' });
     expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument();
     // The summary behind the rail counts is read again by the shell, not by the To do list.
-    await waitFor(() => expect(summaryReads).toBeGreaterThan(before));
+    await vi.waitFor(() => expect(summaryReads).toBeGreaterThan(before));
   });
 });
 

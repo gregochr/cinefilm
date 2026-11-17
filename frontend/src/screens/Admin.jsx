@@ -78,7 +78,10 @@ function AdminShell() {
     shell.closeFixMatch();
   };
   useEffect(() => {
-    if (fixing || !checkFocus.current) return;
+    if (fixing) return;
+    // Gone by any road (Cancel, an apply, a change of section): a due fallback belongs to that dialog only.
+    fallbackDue.current = false;
+    if (!checkFocus.current) return;
     checkFocus.current = false;
     const active = document.activeElement;
     if (!active || active === document.body || !active.isConnected) {
