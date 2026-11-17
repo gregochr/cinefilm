@@ -23,6 +23,22 @@ describe('Admin Settings section', () => {
     expect(screen.getByRole('img', { name: 'TMDB' })).toBeInTheDocument();
   });
 
+  it.each([
+    ['OpenSubtitles.com', 'https://www.opensubtitles.com'],
+    ['OMDb', 'https://www.omdbapi.com'],
+    ['CC BY-NC 4.0', 'https://creativecommons.org/licenses/by-nc/4.0/'],
+    ['IPinfo', 'https://ipinfo.io'],
+  ])('credits %s with a link that opens safely in a new tab', async (name, href) => {
+    installFetch();
+    renderApp('/admin/settings');
+    await screen.findByRole('region', { name: 'Continue watching' });
+    const link = screen.getByRole('link', { name });
+    expect(link).toHaveAttribute('href', href);
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link.getAttribute('rel')).toContain('noopener');
+    expect(link.getAttribute('rel')).toContain('noreferrer');
+  });
+
   it('has no switches, and its one setting and Sign out are described by their hints', async () => {
     installFetch();
     renderApp('/admin/settings');

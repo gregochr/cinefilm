@@ -922,6 +922,21 @@
 .admin__tmdb {
   flex: none;
 }
+.admin__credits {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 86px; /* the TMDB mark (74px) and its gap (12px), so the lines share the TMDB text's left edge */
+  color: var(--cf-text-muted);
+  font-size: var(--cf-size-label);
+}
+.admin__credit-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--cf-text-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 
 /* Admin: Fix match */
 .admin__link {

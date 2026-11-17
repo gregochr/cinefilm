@@ -155,7 +155,7 @@ function SignedInCard() {
   );
 }
 
-/** Settings: the Continue watching minimum and the session, with the TMDB credit at the bottom. */
+/** Settings: the Continue watching minimum and the session, with the TMDB credit and the data credits (OpenSubtitles, OMDb, IPinfo) at the bottom. */
 export default function AdminSettings() {
   return (
     <>
@@ -168,6 +168,27 @@ export default function AdminSettings() {
         <TmdbMark />
         <span>{settingsPage.credit}</span>
       </p>
+      <ul className="admin__credits">
+        {settingsPage.dataCredits.map((line) => (
+          <li key={line.key}>
+            {line.parts.map((part) =>
+              part.href ? (
+                <a
+                  key={part.text}
+                  className="admin__credit-link"
+                  href={part.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {part.text}
+                </a>
+              ) : (
+                <span key={part.text}>{part.text}</span>
+              ),
+            )}
+          </li>
+        ))}
+      </ul>
     </>
   );
 }

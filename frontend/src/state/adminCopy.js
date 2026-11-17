@@ -584,6 +584,35 @@ export const settingsPage = {
   saveError: 'Could not save the setting.', // planner, 7 (existing; used when the server sent no message)
   saved: 'Saved', // planner, 7 (existing)
   credit: 'This product uses the TMDB API but is not endorsed or certified by TMDB.', // AR5
+  // planner, settings credits (the other outside services; each line is text around linked parts)
+  dataCredits: [
+    {
+      key: 'opensubtitles',
+      parts: [
+        { text: 'Subtitles from ' },
+        { text: 'OpenSubtitles.com', href: 'https://www.opensubtitles.com' },
+        { text: '.' },
+      ],
+    },
+    {
+      key: 'omdb',
+      parts: [
+        { text: 'IMDb and Rotten Tomatoes ratings from ' },
+        { text: 'OMDb', href: 'https://www.omdbapi.com' },
+        { text: ', licensed ' },
+        { text: 'CC BY-NC 4.0', href: 'https://creativecommons.org/licenses/by-nc/4.0/' },
+        { text: '.' },
+      ],
+    },
+    {
+      key: 'ipinfo',
+      parts: [
+        { text: 'Network lookup by ' },
+        { text: 'IPinfo', href: 'https://ipinfo.io' },
+        { text: '.' },
+      ],
+    },
+  ], // planner, settings credits
 };
 
 /**
