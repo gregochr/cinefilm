@@ -159,7 +159,7 @@ function world(script = {}) {
   };
   return { deps, log, said, home, page, listeners, cancel, held, run: async () => {
     const code = await viewing(deps);
-    if (overran) throw new Error(`the run did not end: the fake page was waited on more than ${MAX_WAITS} times`);
+    if (overran) throw new Error(`the run did not end: the fake page was waited on more than ${script.maxWaits ?? MAX_WAITS} times`);
     return code;
   } };
 }
@@ -832,7 +832,7 @@ describe('a file written whole, and forced to the disk', () => {
     });
     const { dir } = write(RUN);
     const first = readFileSync(join(dir, 'samples.json'), 'utf8');
-    const io = { write: writeSynced, rename: () => {
+    const io = { write: writeSynced, remove: (file) => rmSync(file, { force: true }), rename: () => {
       throw new Error('power cut');
     } };
     assert.throws(() => write({ ...RUN, samples: [{ t: 1 }, { t: 2 }] }, io), /power cut/);

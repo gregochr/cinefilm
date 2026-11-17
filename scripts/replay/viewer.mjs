@@ -95,7 +95,7 @@ function takeOption(argv, i, given) {
 function wholeOption(given, name, { digits, least, most }) {
   const text = given.get(name);
   if (text === undefined) return null;
-  const value = /^\d+$/.test(text) && text.length <= digits ? Number(text) : NaN;
+  const value = /^\d+$/.test(text) && text.length <= digits ? Number(text) : Number.NaN;
   if (!(value >= least && value <= most)) {
     throw new Error(`--${name} must be a whole number from ${least} to ${most}`);
   }
