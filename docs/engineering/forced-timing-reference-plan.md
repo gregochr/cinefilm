@@ -146,6 +146,25 @@ references, the search columns, and new reference metadata.
   `isAligned` false for `OPENSUBTITLES`, `ForcedChoice` unchanged with such a fit (one test per step it could have
   moved), staleness on each key part, the DTO JSON (integration), and the frontend source line.
 
+#### Built ahead of 3c-1's lines (owner, 2026-11-17)
+
+The owner chose to build 3c-2 before 3c-1's lines exist, with provisional rules that the lines then adjust. Trust and
+playback stay untouched, so a wrong provisional rule can only mislabel a row in Admin.
+
+- **Scope:** the single-file editions `TimingReferenceService` already picks (the embedded read is `NO_REFERENCE`).
+  Their served sidecars are fitted against the stored references instead of saving `NO_REFERENCE`.
+- **The chosen reference (provisional):** fit against every usable stored reference among the edition's candidates
+  (never the sidecar's own OpenSubtitles file) and keep the best: an `ALIGNED` fit first, then the larger matched
+  share (integer cross-multiplication), then the smaller median residual, then the lower OpenSubtitles file id. The
+  row stores `reference_os_file_id`.
+- **Key:** the embedded key + `|os:<imdbId>:<every usable reference's file id, sorted>`, so a newly stored reference
+  makes the fit stale and the choice is made again.
+- **Offset limit for `ALIGNED`:** 1 s, as above, in one named constant marked provisional.
+- **Split:** 3c-2a is the backend (migration, fit, key, verdicts, `isAligned`, DTO `source` and `referenceRelease`).
+  3c-2b is the copy (`proofText`, `downloadProof`, `TimingFit`'s reasons) and the Admin source line.
+- **After the lines:** a small follow-up changes the choice rule or the 1 s limit if the lines say so. The
+  owner question on trust (above) is still asked then.
+
 ### 3d — tie the full file to the film's speech (`alass`)
 
 Built after 3c-1's lines. If forced and full files nearly always agree, 3d is the missing proof. If they often disagree,
