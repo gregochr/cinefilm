@@ -10,6 +10,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import gregochr.cinefilm.TestData;
@@ -68,7 +69,6 @@ class FixMatchUnitTest {
         fix = new FixMatch(tmdb, films, preferences, ingest, join, changes, lock,
             mock(PlatformTransactionManager.class), CLOCK, events);
         when(films.existsById(FILM_ID)).thenReturn(true);
-        when(films.findById(FILM_ID)).thenReturn(Optional.of(film(FILM_ID, "Enchanted")));
     }
 
     private static MovieDetails movie(long id, String title, Integer year, Integer runtime, List<Credit> directors,
@@ -87,6 +87,7 @@ class FixMatchUnitTest {
 
     @Test
     void searchShapesEachResultFromTheMovieDetails() {
+        givenFilm(-1, null);
         when(tmdb.search("Wicker Man", 1973)).thenReturn(List.of(new SearchHit(5, "x", "x", 1973, 1, null)));
         when(tmdb.movie(5)).thenReturn(Optional.of(movie(5, "The Wicker Man", 1973, 88,
             List.of(person("Robin Hardy"), person("Second Director")),
@@ -243,6 +244,7 @@ class FixMatchUnitTest {
 
     @Test
     void searchWithoutYearPassesNullAndALackOfDirectorsGivesNull() {
+        givenFilm(-1, null);
         when(tmdb.search("Dune", null)).thenReturn(List.of(new SearchHit(6, "Dune", "Dune", null, 1, null)));
         when(tmdb.movie(6)).thenReturn(Optional.of(movie(6, "Dune", null, null, List.of(), List.of())));
 
@@ -256,6 +258,7 @@ class FixMatchUnitTest {
 
     @Test
     void searchStopsAtEightResultsAndNeverAsksForTheNinth() {
+        givenFilm(-1, null);
         List<SearchHit> hits = new ArrayList<>();
         for (long id = 1; id <= 10; id++) {
             hits.add(new SearchHit(id, "T", "T", 2000, 1, null));
@@ -272,6 +275,7 @@ class FixMatchUnitTest {
 
     @Test
     void searchSkipsAHitWithNoDetails() {
+        givenFilm(-1, null);
         when(tmdb.search("X", null)).thenReturn(List.of(new SearchHit(1, "a", "a", 1, 1, null),
             new SearchHit(2, "b", "b", 1, 1, null)));
         when(tmdb.movie(1)).thenReturn(Optional.empty());
@@ -282,6 +286,7 @@ class FixMatchUnitTest {
 
     @Test
     void searchTakesNoLibraryLock() {
+        givenFilm(-1, null);
         when(tmdb.search("X", null)).thenReturn(List.of());
         lock.tryAcquire(LibraryLock.SCAN);
 
@@ -297,13 +302,16 @@ class FixMatchUnitTest {
 
     @Test
     void searchAndApplyForAnUnknownFilmAre404() {
-        assertThatThrownBy(() -> fix.search(99L, "X", null)).isInstanceOf(NotFoundException.class);
+        assertThatThrownBy(() -> fix.search(99L, "X", null)).isInstanceOf(NotFoundException.class)
+            .hasMessage("No film 99");
+        verifyNoInteractions(tmdb);
         assertThatThrownBy(() -> fix.apply(99L, 5L)).isInstanceOf(NotFoundException.class);
         assertThat(lock.holder()).isNull();
     }
 
     @Test
     void searchWhenTmdbIsUnavailableIs503() {
+        givenFilm(-1, null);
         when(tmdb.search("X", null)).thenThrow(new TmdbUnavailableException("down", null));
 
         assertThatThrownBy(() -> fix.search(FILM_ID, "X", null)).isInstanceOf(ServiceUnavailableException.class);

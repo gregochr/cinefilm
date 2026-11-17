@@ -14,7 +14,8 @@ const IDLE = {
 
 /**
  * The Fix match panel for one film: searches TMDB (once on open with the film's title, then on demand), keeps the
- * picked result (the server's suggestion until the person picks another) and applies it. `onApplied` runs after a successful apply.
+ * picked result (the server's suggestion until the person picks another) and applies it. `onApplied` runs after a
+ * successful apply.
  */
 export function useFixMatch(filmId, initialQuery, onApplied) {
   const [query, setQuery] = useState(initialQuery);
@@ -26,6 +27,8 @@ export function useFixMatch(filmId, initialQuery, onApplied) {
   const latest = useRef(0);
   const controller = useRef(null);
   const shown = useRef(filmId);
+  // The file's length is about the film, not the search: the last answer's value stays through a new or failed search.
+  const known = useRef({ filmId, ms: null });
 
   const run = useCallback(
     async (text, yearText) => {
@@ -33,7 +36,8 @@ export function useFixMatch(filmId, initialQuery, onApplied) {
       controller.current?.abort();
       const mine = new AbortController();
       controller.current = mine;
-      setSearch(IDLE);
+      const keep = known.current.filmId === filmId ? known.current.ms : null;
+      setSearch({ ...IDLE, fileRuntimeMs: keep });
       setPicked(null);
       setApplyProblem(null);
       try {
@@ -52,11 +56,17 @@ export function useFixMatch(filmId, initialQuery, onApplied) {
             suggestedTmdbId: answer.suggestedTmdbId ?? null,
             suggestedBecause: answer.suggestedBecause ?? null,
           });
+          known.current = { filmId, ms: answer.fileRuntimeMs ?? null };
           setPicked(answer.suggestedTmdbId ?? null);
         }
       } catch (failure) {
         if (ticket === latest.current) {
-          setSearch({ ...IDLE, status: 'error', problem: matchProblem(failure) });
+          setSearch({
+            ...IDLE,
+            status: 'error',
+            fileRuntimeMs: keep,
+            problem: matchProblem(failure),
+          });
         }
       }
     },

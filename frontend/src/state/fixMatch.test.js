@@ -64,8 +64,8 @@ describe('fixMatch helpers', () => {
   });
 
   it('puts the file length after the names, and leaves it out when unknown', () => {
-    expect(fileLine(['Enchanted.m4v'], 6420000)).toBe('File: Enchanted.m4v · 1h 47m');
-    expect(fileLine(['A.m4v', 'B.m4v'], 3300000)).toBe('File: A.m4v · B.m4v · 55m');
+    expect(fileLine(['Enchanted.m4v'], 6420000)).toBe('File: Enchanted.m4v (1h 47m)');
+    expect(fileLine(['A.m4v', 'B.m4v'], 3300000)).toBe('File: A.m4v · B.m4v (55m)');
     expect(fileLine(['Enchanted.m4v'], null)).toBe('File: Enchanted.m4v');
     expect(fileLine(['Enchanted.m4v'], 0)).toBe('File: Enchanted.m4v');
   });

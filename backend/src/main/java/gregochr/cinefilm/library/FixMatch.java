@@ -54,6 +54,7 @@ public class FixMatch {
     private final GroupingChangeRepository changes;
     private final LibraryLock lock;
     private final TransactionTemplate tx;
+    private final TransactionTemplate readTx;
     private final Clock clock;
     private final ApplicationEventPublisher events;
 
@@ -73,6 +74,8 @@ public class FixMatch {
         this.changes = changes;
         this.lock = lock;
         this.tx = new TransactionTemplate(transactions);
+        this.readTx = new TransactionTemplate(transactions);
+        this.readTx.setReadOnly(true);
         this.clock = clock;
         this.events = events;
     }
@@ -95,7 +98,7 @@ public class FixMatch {
         if (query == null || query.isBlank()) {
             throw new BadRequestException("A title to search for is needed");
         }
-        FilmFacts facts = tx.execute(status -> facts(filmId));
+        FilmFacts facts = readTx.execute(status -> facts(filmId));
         try {
             List<MatchResultDto> results = new ArrayList<>();
             for (SearchHit hit : tmdb.search(query.strip(), year)) {

@@ -117,6 +117,51 @@ describe('useFixMatch', () => {
     expect(result.current.picked).toBeNull();
   });
 
+  it('keeps the file length through a new search and a failed one', async () => {
+    const second = deferred();
+    const pending = [
+      Promise.resolve(answer([{ tmdbId: 1 }], { fileRuntimeMs: 6420000, suggestedTmdbId: 1 })),
+      second.promise,
+      Promise.resolve(respond({ error: 'x' }, 503)),
+    ];
+    installFetch((m, url) => (isSearch(m, url) ? pending.shift() : null));
+    const { result } = renderHook(() => useFixMatch(7, 'Dune', vi.fn()));
+    await waitFor(() => expect(result.current.search.fileRuntimeMs).toBe(6420000));
+
+    act(() => {
+      result.current.submit();
+    });
+    expect(result.current.search.status).toBe('loading');
+    expect(result.current.search.fileRuntimeMs).toBe(6420000);
+    expect(result.current.search.suggestedTmdbId).toBeNull();
+    expect(result.current.picked).toBeNull();
+    await act(async () => second.resolve(answer([{ tmdbId: 2 }], { fileRuntimeMs: 6420000 })));
+
+    act(() => {
+      result.current.submit();
+    });
+    await waitFor(() => expect(result.current.search.status).toBe('error'));
+    expect(result.current.search.fileRuntimeMs).toBe(6420000);
+    expect(result.current.search.results).toEqual([]);
+  });
+
+  it('does not carry the file length over to another film', async () => {
+    installFetch((m, url) =>
+      isSearch(m, url)
+        ? answer([{ tmdbId: 1 }], { fileRuntimeMs: 6420000 })
+        : new Promise(() => {}),
+    );
+    const { result, rerender } = renderHook(({ id }) => useFixMatch(id, 'Dune', vi.fn()), {
+      initialProps: { id: 7 },
+    });
+    await waitFor(() => expect(result.current.search.fileRuntimeMs).toBe(6420000));
+
+    rerender({ id: 8 });
+
+    expect(result.current.search.status).toBe('loading');
+    expect(result.current.search.fileRuntimeMs).toBeNull();
+  });
+
   it('ignores a failure of a search that is no longer the newest', async () => {
     const first = deferred();
     const second = deferred();

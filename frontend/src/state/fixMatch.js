@@ -36,11 +36,10 @@ export function resultRuntime(result) {
   return result.runtimeMinutes ? formatRuntime(result.runtimeMinutes * 60000) : '';
 }
 
-/** "File: Enchanted.m4v · 1h 47m": the file names, then the file's length when the server knows it. */
+/** "File: Enchanted.m4v (1h 47m)": the file names, then the file's length in brackets when the server knows it. */
 export function fileLine(files, fileRuntimeMs) {
-  const parts = [...files];
-  if (fileRuntimeMs) parts.push(formatRuntime(fileRuntimeMs));
-  return `File: ${parts.join(' · ')}`;
+  const length = fileRuntimeMs ? ` (${formatRuntime(fileRuntimeMs)})` : '';
+  return `File: ${files.join(' · ')}${length}`;
 }
 
 /** The note under the suggested result, or an empty string for any other result. */

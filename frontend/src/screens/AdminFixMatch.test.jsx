@@ -80,16 +80,21 @@ describe('Admin: Fix match', () => {
     const panel = await openPanel();
     const radios = await within(panel).findAllByRole('radio');
 
-    expect(radios[0]).toBeChecked();
+    // The note sits inside its row's label, so it names that row's radio.
+    const suggested = within(panel).getByRole('radio', { name: /Same length as your file/ });
+    expect(suggested).toBe(radios[0]);
+    expect(suggested).toBeChecked();
     expect(radios[1]).not.toBeChecked();
-    expect(within(panel).getByText('Same length as your file')).toBeInTheDocument();
-    expect(within(panel).getByText('File: The Wicker Man.m4v · 1h 28m')).toBeInTheDocument();
+    expect(within(panel).getByText('File: The Wicker Man.m4v (1h 28m)')).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: 'Use this match' })).toBeEnabled();
     expect(fetchMock.mock.calls.some((c) => c[1]?.method === 'POST')).toBe(false);
 
     await userEvent.click(radios[1]);
     expect(radios[1]).toBeChecked();
     expect(radios[0]).not.toBeChecked();
+    // The note stays with the suggested row; it does not follow the pick.
+    expect(within(panel).getByRole('radio', { name: /Same length as your file/ })).toBe(radios[0]);
+    expect(radios[1]).toHaveAccessibleName(expect.not.stringContaining('Same length as your file'));
   });
 
   it('shows the best-guess note when the server suggests the scan’s guess', async () => {
@@ -102,7 +107,8 @@ describe('Admin: Fix match', () => {
     const radios = await within(panel).findAllByRole('radio');
 
     expect(radios[1]).toBeChecked();
-    expect(within(panel).getByText('CineFilm’s best guess')).toBeInTheDocument();
+    expect(within(panel).getByRole('radio', { name: /CineFilm’s best guess/ })).toBe(radios[1]);
+    expect(radios[0]).toHaveAccessibleName(expect.not.stringContaining('CineFilm’s best guess'));
   });
 
   it('searches again with the typed title and a four-digit year, ignoring a bad year', async () => {
