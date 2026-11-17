@@ -398,6 +398,42 @@ describe('Admin: focus after an apply with motion on', () => {
   });
 });
 
+describe('Admin: the heading does not take focus behind the fading dialog', () => {
+  it('keeps focus off the heading until the dialog is gone, without any Tab', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    let applied = false;
+    installFetch((m, url) => {
+      if (url === '/api/admin/attention' && applied) {
+        return respond({ items: fixtures.adminAttention.items.slice(1) });
+      }
+      if (isApply(m, url)) {
+        applied = true;
+        return respond({ filmId: 31, joined: false });
+      }
+      return null;
+    });
+    const dialog = await openPanel();
+    await userEvent.click((await within(dialog).findAllByRole('radio'))[0]);
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Use this match' }));
+    // The re-read has landed and the row is gone, while the dialog is still fading out.
+    // (A short poll interval: the fade is only 150 ms long.)
+    await waitFor(
+      () => expect(screen.getAllByRole('button', { name: 'Find the film…' })).toHaveLength(1),
+      { interval: 5 },
+    );
+    expect(screen.getByRole('dialog', { name: 'Fix match' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'To do' })).not.toHaveFocus();
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1, name: 'To do' })).toHaveFocus(),
+    );
+  });
+});
+
 describe('Admin: leaving during the fade after an apply', () => {
   it('still reads the lists again, because the match was saved', async () => {
     vi.stubGlobal('matchMedia', () => ({ matches: false }));
