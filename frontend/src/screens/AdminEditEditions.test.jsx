@@ -199,4 +199,32 @@ describe('Admin: Edit editions', () => {
     expect(screen.queryByText('Editions saved')).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1);
   });
+
+  it('a save that lands while the dialog fades out after Cancel still reads the lists again, once, with no toast', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    let release;
+    let attentionCalls = 0;
+    installFetch((m, url) => {
+      if (url === '/api/admin/attention') attentionCalls += 1;
+      if (isSave(m, url)) {
+        return new Promise((resolve) => {
+          release = () => resolve(respond({ filmId: 6, newFilmIds: [] }));
+        });
+      }
+      return null;
+    });
+    await openFromTheRow();
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByRole('button', { name: 'Saving…' });
+    const before = attentionCalls;
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await act(async () => release());
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(attentionCalls).toBe(before + 1));
+    await act(async () => {}); // let anything still pending land before the exact count
+    expect(attentionCalls).toBe(before + 1);
+    expect(screen.queryByText('Editions saved')).not.toBeInTheDocument();
+  });
 });

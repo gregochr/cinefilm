@@ -760,3 +760,55 @@ describe('Edit editions: motion', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('Edit editions: a save that lands while the dialog fades out', () => {
+  const dismissals = {
+    Cancel: (user) => user.click(screen.getByRole('button', { name: 'Cancel' })),
+    Close: (user) => user.click(screen.getByRole('button', { name: 'Close' })),
+    Esc: (user) => user.keyboard('{Escape}'),
+  };
+
+  it.each(Object.keys(dismissals))(
+    'is still reported, at once and as stale, once, after %s; the dialog then finishes its own fade',
+    async (how) => {
+      vi.stubGlobal('matchMedia', () => ({ matches: false }));
+      let release;
+      installFetch((m, url) =>
+        isPut(m, url)
+          ? new Promise((resolve) => {
+              release = () => resolve(respond({ filmId: 40, newFilmIds: [] }));
+            })
+          : null,
+      );
+      const { user, onClose, onSaved } = await open();
+      await user.click(saveButton());
+      await screen.findByRole('button', { name: 'Saving…' });
+
+      await dismissals[how](user);
+      await act(async () => release());
+
+      expect(onSaved).toHaveBeenCalledTimes(1);
+      expect(onSaved).toHaveBeenCalledWith({ filmId: 40, newFilmIds: [] }, true);
+      expect(onClose).not.toHaveBeenCalled();
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+      await act(async () => {}); // let anything still pending land before the exact count
+      expect(onSaved).toHaveBeenCalledTimes(1);
+      expect(onClose).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('disables Save during the fade, so a new save cannot start', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    const fetchMock = installFetch();
+    const { user, onClose } = await open();
+    expect(saveButton()).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(saveButton()).toBeDisabled();
+    await user.click(saveButton());
+    expect(putOf(fetchMock)).toBeUndefined();
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+});

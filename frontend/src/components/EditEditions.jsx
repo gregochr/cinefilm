@@ -287,18 +287,27 @@ function Body({ edit, ids }) {
 /**
  * The Edit editions dialog (a full-screen sheet on phones): arrange a film's files into editions and parts, pick the
  * default, or split off files that are not this film. `onSaved` runs once the save went through; `onClose` on
- * Cancel, ×, or Esc (there is no confirm prompt: this is a single-user app). `opener` is the element focus goes back
- * to when the dialog closes (else whatever had it when it opened).
+ * Cancel, ×, or Esc (there is no confirm prompt: this is a single-user app). A save that lands after the dialog was
+ * dismissed (during its fade-out) or once it has gone is reported at once with `stale` true, so the parent only reads
+ * the lists again and the dialog finishes its own fade. `opener` is the element focus goes back to when the dialog
+ * closes (else whatever had it when it opened).
  */
 export default function EditEditions({ film, opener, onClose, onSaved }) {
   const base = useId();
   const titleId = `${base}-title`;
   const subId = `${base}-sub`;
   const ids = { base, defaultError: `${base}-default-error` };
-  const dialog = useDialog({ onEscape: () => dialog.close(onClose), opener });
+  // Set when Cancel, × or Esc starts the fade-out: close is once-only, so a save that lands in that window could not
+  // close the dialog itself, and its report would be lost. It is reported at once as stale instead.
+  const dismissed = useRef(false);
+  const dismiss = () => {
+    dismissed.current = true;
+    dialog.close(onClose);
+  };
+  const dialog = useDialog({ onEscape: dismiss, opener });
   const { dialogRef, closing, close } = dialog;
   const edit = useEditEditions(film.id, (result, stale) =>
-    stale ? onSaved(result, true) : close(() => onSaved(result, false)),
+    stale || dismissed.current ? onSaved(result, true) : close(() => onSaved(result, false)),
   );
   const loading = edit.status === 'loading';
 
@@ -327,7 +336,7 @@ export default function EditEditions({ film, opener, onClose, onSaved }) {
   });
 
   const errors = edit.view?.errorCount ?? 0;
-  const saveDisabled = loading || edit.status === 'error' || errors > 0 || edit.saving;
+  const saveDisabled = loading || edit.status === 'error' || errors > 0 || edit.saving || closing;
 
   return createPortal(
     <div className={`ee${closing ? ' ee--closing' : ''}`}>
@@ -358,12 +367,7 @@ export default function EditEditions({ film, opener, onClose, onSaved }) {
               ) : null}
             </h2>
           </div>
-          <button
-            type="button"
-            className="ee__close"
-            aria-label="Close"
-            onClick={() => close(onClose)}
-          >
+          <button type="button" className="ee__close" aria-label="Close" onClick={dismiss}>
             <svg
               width="16"
               height="16"
@@ -387,7 +391,7 @@ export default function EditEditions({ film, opener, onClose, onSaved }) {
         <footer className="ee__footer">
           <span className="ee__foot-note">{footNote(loading, errors)}</span>
           <div className="ee__foot-buttons">
-            <Button className="ee__cancel" onClick={() => close(onClose)}>
+            <Button className="ee__cancel" onClick={dismiss}>
               Cancel
             </Button>
             <Button
