@@ -235,6 +235,11 @@ export function alignmentSummary(item) {
   const fit = item.alignment;
   if (!fit) return null;
   const lines = fit.reasons ?? [];
+  // A fit to an OpenSubtitles file is not a check against the film (it never counts as proof): until the copy changes
+  // (phase 3c-2b), it reads as "not checked", whatever its verdict.
+  if (fit.source === 'OPENSUBTITLES') {
+    return { kind: 'unchecked', label: 'Timing not checked', lines, note: null };
+  }
   if (fit.verdict === 'ALIGNED') {
     const note = fit.applied
       ? `Timing set automatically (${formatFittedOffset(fit.fittedOffsetMs)})`

@@ -146,6 +146,20 @@ references, the search columns, and new reference metadata.
   `isAligned` false for `OPENSUBTITLES`, `ForcedChoice` unchanged with such a fit (one test per step it could have
   moved), staleness on each key part, the DTO JSON (integration), and the frontend source line.
 
+#### Built ahead of 3c-1's lines (owner, 2026-11-17)
+
+Built before 3c-1's lines exist, with provisional rules the lines then adjust (owner). Trust and playback stay
+untouched, so a wrong provisional rule can only mislabel a row in Admin.
+
+- **Scope:** single-file editions with a `NO_REFERENCE` embedded read, searched under the film's current IMDb id, not
+  marked `NONE_EXIST`. Wider than `TimingReferenceService`'s (its line-count, verified and plays-embedded conditions
+  would need `ForcedResolver` in `current()`); display only. References stored before V30 lack a last-cue end and wait.
+- **Choice (provisional):** fit to every usable stored reference (never the sidecar's own file); keep `ALIGNED` first,
+  then the larger share, the smaller median residual, the lower file id. Key: the embedded key +
+  `|os:<imdbId>:<usable file ids, sorted>`. `ALIGNED` within 1 s, one constant marked provisional.
+- **Split:** 3c-2a is the backend; 3c-2b the copy (`proofText`, `downloadProof`, reasons) and the Admin source line.
+  A follow-up adjusts the choice or the 1 s limit from the lines; the trust question above is asked then.
+
 ### 3d — tie the full file to the film's speech (`alass`)
 
 Built after 3c-1's lines. If forced and full files nearly always agree, 3d is the missing proof. If they often disagree,

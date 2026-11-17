@@ -689,7 +689,7 @@ class SidecarTimingServiceTest extends SubtitleTestBase {
 
         assertThat(current).containsOnlyKeys(sidecar.getId());
         assertThat(current.get(sidecar.getId())).isEqualTo(new AlignmentDto("ALIGNED", List.of(), 900, 0.92, 11, 12,
-            true, LATER));
+            true, LATER, "EMBEDDED", null));
 
         MediaFile changed = file(film, 1);
         changed.setModifiedAt(NOW.plusSeconds(5));

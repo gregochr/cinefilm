@@ -279,14 +279,14 @@ class SubtitleAdminControllerTest {
     @Test
     void aFileCarriesWhoSetItsOffsetAndItsTimingFitAndOtherFilesCarryNull() throws Exception {
         SubtitleDtos.AlignmentDto alignment = new SubtitleDtos.AlignmentDto("ALIGNED", List.of(), 900, 0.92, 11, 12,
-            true, Instant.parse("2024-04-01T02:30:00Z"));
+            true, Instant.parse("2024-04-01T02:30:00Z"), "EMBEDDED", null);
         SidecarDto fitted = new SidecarDto(5L, "Taken.en.forced.srt", "PRESENT", "matched", 7L, "Taken", 70L,
             "Original", 1, 1, false, true, 12, "No problems found", 900, false, false, 1700000000000L, true, null,
             "AUTO", alignment, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet", false,
             "FORCED");
         SubtitleDtos.AlignmentDto doubtful = new SubtitleDtos.AlignmentDto("CHECK",
             List.of("Only 4 of 12 lines line up with the film's English track"), 600, 0.33, 4, 12, false,
-            Instant.parse("2024-04-01T02:30:00Z"));
+            Instant.parse("2024-04-01T02:30:00Z"), "OPENSUBTITLES", "Alien.1979.BluRay");
         SidecarDto checked = new SidecarDto(6L, "Alien.en.forced.srt", "PRESENT", "matched", 8L, "Alien", 80L,
             "Original", 1, 1, false, true, 12, "No problems found", 0, false, false, 1700000000000L, true, null,
             null, doubtful, "FILE", null, null, "Plays: nothing says it is wrong, but it is not proven yet", false,
@@ -304,11 +304,15 @@ class SubtitleAdminControllerTest {
             .andExpect(jsonPath("$[0].alignment.servedCount").value(12))
             .andExpect(jsonPath("$[0].alignment.applied").value(true))
             .andExpect(jsonPath("$[0].alignment.checkedAt").value("2024-04-01T02:30:00Z"))
+            .andExpect(jsonPath("$[0].alignment.source").value("EMBEDDED"))
+            .andExpect(jsonPath("$[0].alignment.referenceRelease").value(org.hamcrest.Matchers.nullValue()))
             .andExpect(jsonPath("$[1].offsetSource").value(org.hamcrest.Matchers.nullValue()))
             .andExpect(jsonPath("$[1].alignment.verdict").value("CHECK"))
             .andExpect(jsonPath("$[1].alignment.reasons[0]")
                 .value("Only 4 of 12 lines line up with the film's English track"))
             .andExpect(jsonPath("$[1].alignment.applied").value(false))
+            .andExpect(jsonPath("$[1].alignment.source").value("OPENSUBTITLES"))
+            .andExpect(jsonPath("$[1].alignment.referenceRelease").value("Alien.1979.BluRay"))
             .andExpect(jsonPath("$[2].offsetSource").value(org.hamcrest.Matchers.nullValue()))
             .andExpect(jsonPath("$[2].alignment").value(org.hamcrest.Matchers.nullValue()));
     }

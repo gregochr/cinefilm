@@ -540,6 +540,29 @@ describe('timing against the film’s English track', () => {
     }
   });
 
+  it('reads a fit to an OpenSubtitles file as not checked whatever its verdict, and an embedded one as before', () => {
+    for (const verdict of ['ALIGNED', 'CHECK']) {
+      const alignment = fitOf({
+        verdict,
+        source: 'OPENSUBTITLES',
+        reasons: ['why'],
+        applied: false,
+      });
+      expect(alignmentSummary(file({ alignment }))).toEqual({
+        kind: 'unchecked',
+        label: 'Timing not checked',
+        lines: ['why'],
+        note: null,
+      });
+    }
+    expect(alignmentSummary(file({ alignment: fitOf({ source: 'EMBEDDED' }) })).kind).toBe(
+      'aligned',
+    );
+    expect(
+      alignmentSummary(file({ alignment: fitOf({ source: 'EMBEDDED', verdict: 'CHECK' }) })).kind,
+    ).toBe('check');
+  });
+
   it('copes with a result that has no reasons list', () => {
     expect(
       alignmentSummary(file({ alignment: fitOf({ verdict: 'CHECK', reasons: undefined }) })).lines,

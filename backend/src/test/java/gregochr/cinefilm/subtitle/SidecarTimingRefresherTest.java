@@ -199,6 +199,23 @@ class SidecarTimingRefresherTest {
     }
 
     @Test
+    void aFileOfAFilmWithNoTrackIsFittedToItsStoredOpenSubtitlesFilesAndTheBestIsSavedWithItsFileId() {
+        when(service.dueFilmIds()).thenReturn(List.of(7L));
+        when(service.readsFor(7L)).thenReturn(List.of());
+        DownloadedFit.Reference fits = new DownloadedFit.Reference(5013, "Right cut", 400, TRACK);
+        DownloadedFit.Reference misses = new DownloadedFit.Reference(5012, "Other cut", 400,
+            TRACK.stream().map(start -> start + 3_100).toList());
+        FitJob job = new FitJob(7L, 5L, "id", "key", STARTS, List.of(), null, List.of(misses, fits));
+        when(service.fitJobs(7L)).thenReturn(List.of(job));
+        DownloadedFit.Choice best = DownloadedFit.choose(STARTS, List.of(misses, fits));
+        when(service.save(job, best.result(), best.reference().osFileId(), NOW)).thenReturn(SaveOutcome.SAVED);
+
+        startAndRun();
+
+        assertThat(messages()).containsExactly(FINISHED.formatted(0, 1, 0, 0));
+    }
+
+    @Test
     void aFileWithNoUsableTrackIsSavedAsNoReferenceWithoutFitting() {
         when(service.dueFilmIds()).thenReturn(List.of(7L));
         when(service.readsFor(7L)).thenReturn(List.of());

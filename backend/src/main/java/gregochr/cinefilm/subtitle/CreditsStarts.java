@@ -6,7 +6,10 @@ import gregochr.cinefilm.credits.CreditsVerdict;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionTimeline;
 import gregochr.cinefilm.film.MediaFile;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /** Where credits detection found an edition's credits start, on the edition's own timeline. */
 final class CreditsStarts {
@@ -23,8 +26,33 @@ final class CreditsStarts {
      */
     static Long of(Edition edition, CreditsDetectionRepository credits) {
         List<MediaFile> parts = edition.originalParts();
-        int last = parts.size() - 1;
-        CreditsDetection detection = credits.findById(parts.get(last).getId()).orElse(null);
+        return place(edition, credits.findById(parts.get(parts.size() - 1).getId()).orElse(null));
+    }
+
+    /**
+     * The credits start of each of some editions, in one query.
+     *
+     * @param editions the editions (their files loaded, each with at least one original part)
+     * @param credits where the detections are read from
+     * @return the credits start by edition id; an edition with none (or none placeable) is absent
+     */
+    static Map<Long, Long> ofAll(Collection<Edition> editions, CreditsDetectionRepository credits) {
+        Map<Long, CreditsDetection> byFile = new HashMap<>();
+        credits.findAllById(editions.stream().map(e -> e.originalParts().get(e.originalParts().size() - 1).getId())
+            .toList()).forEach(d -> byFile.put(d.getMediaFileId(), d));
+        Map<Long, Long> starts = new HashMap<>();
+        for (Edition edition : editions) {
+            List<MediaFile> parts = edition.originalParts();
+            Long start = place(edition, byFile.get(parts.get(parts.size() - 1).getId()));
+            if (start != null) {
+                starts.put(edition.getId(), start);
+            }
+        }
+        return starts;
+    }
+
+    private static Long place(Edition edition, CreditsDetection detection) {
+        int last = edition.originalParts().size() - 1;
         if (detection == null || detection.getVerdict() != CreditsVerdict.FOUND || detection.getOffsetMs() == null) {
             return null;
         }
