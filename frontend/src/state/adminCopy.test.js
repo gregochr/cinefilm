@@ -463,6 +463,15 @@ describe('settingsPage (AR5, the switches left out by Q2)', () => {
     expect(settingsPage.credit).toBe(
       'This product uses the TMDB API but is not endorsed or certified by TMDB.',
     );
+    expect(
+      settingsPage.dataCredits.map((line) =>
+        line.parts.map((part) => (part.href ? `[${part.text}](${part.href})` : part.text)).join(''),
+      ),
+    ).toEqual([
+      'Subtitles from [OpenSubtitles.com](https://www.opensubtitles.com).',
+      'IMDb and Rotten Tomatoes ratings from [OMDb](https://www.omdbapi.com), licensed [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/).',
+      'Network lookup by [IPinfo](https://ipinfo.io).',
+    ]);
     expect(buttons.signOut.hint).toBe("Signing out here doesn't affect other devices.");
   });
 
