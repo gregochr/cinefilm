@@ -67,14 +67,15 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    **The train viewer** (`scripts/replay/viewer.mjs`) is not the app: the owner runs it by hand on the laptop, and it
    is in no image. It reaches the real site, and its kept Chrome profile under `~/cinefilm-viewer/profile/` holds a
    live session cookie (the server keeps the session until it restarts, 30 days pass without use, or that browser
-   signs out), encrypted by the login keychain as in any Chrome profile, in folders only the owner can read. No start
-   of Chrome on that profile passes `--use-mock-keychain`. The sign-in window is started with no debugging port or
-   pipe, so the script cannot read the page while the password is typed, and the profile is made with Chrome's offer
-   to save passwords turned off. The check afterwards talks to a headless Chrome over a pipe, so nothing listens on
-   any port, and it opens only `/api/session`, which runs none of the app. The script never reads, prints or stores
-   the cookie or the password. A lock file keeps two viewers apart in ordinary use, and Chrome's own lock in the
-   profile is what finally stops two Chromes sharing the profile. Removing `profile/` signs that laptop's viewer out;
-   it does not end the session on the server.
+   signs out; the cookie itself ends 30 days after the sign-in, used or not), encrypted by the login keychain as in
+   any Chrome profile, in folders only the owner can read. No start of Chrome on that profile passes
+   `--use-mock-keychain`. The sign-in window is started with no debugging port or pipe, so the script cannot read
+   the page while the password is typed, and the profile is made with Chrome's offer to save passwords turned off.
+   The check afterwards talks to a headless Chrome over a pipe, so nothing listens on any port, and it opens only
+   `/api/session`, which runs none of the app. The script never reads, prints or stores the cookie or the password.
+   A lock file keeps two viewers apart in ordinary use, and Chrome's own lock in the profile is what finally stops
+   two Chromes sharing the profile. Removing `profile/` signs that laptop's viewer out; it does not end the session
+   on the server.
    The run of a film arrives in a later change.
 7. **Untrusted data in the UI.** TMDB, Plex and file metadata (titles, overviews, track names) are rendered as text,
    never with `dangerouslySetInnerHTML`. Image URLs come from the `imageUrl` helper only.

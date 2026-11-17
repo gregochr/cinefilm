@@ -296,6 +296,9 @@ describe('readAnswer', () => {
     assert.equal(readAnswer('{"signedIn":false}'), 'unknown');
   });
 
+  // The viewer reads this answer on the real site, and a script's tests cannot start the backend; on 2026-11-17 it
+  // read the wrong key and every check agreed with itself. So this reads the controller's source instead, and expects
+  // the record declared on one line, as it is today.
   test('the reader is tied to the real endpoint: the status record declares one boolean, `authenticated`', () => {
     const source = readFileSync(
       join(ROOT, 'backend', 'src', 'main', 'java', 'gregochr', 'cinefilm', 'auth', 'SessionController.java'), 'utf8',
