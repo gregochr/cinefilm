@@ -252,7 +252,7 @@ describe('makeAttempt: the session check, the film, the player\'s page', () => {
     assert.deepEqual(await w.attempt(), { kind: 'ready', film: FILM });
     assert.deepEqual(w.log, ['/api/session', 'session', 'film', '/films/42/play?start=0']);
     assert.deepEqual(w.waited, [30000, 30000], 'both pages get 30 seconds to load');
-    assert.deepEqual(w.said, [`Film 42: Heat, 2 h 50 min, on ${SITE}. Ctrl-C ends the run and writes the results.`]);
+    assert.deepEqual(w.said, [`Film 42: Heat, 2 h 50 min, on ${SITE}. Ctrl-C ends the run.`]);
   });
 
   // [what goes wrong, the steps that are reached before it, the step that is not]

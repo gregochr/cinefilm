@@ -1,10 +1,18 @@
-// The train viewer's run (docs/engineering/train-viewer-plan.md, decisions 7 to 9): what the viewer reads from the
-// player's page, what it presses in it, what it checks before it plays and what each end of a run is called. This part
-// is the pieces; the run that uses them is added to this module in the next change. Everything here is a function
-// of what it is given, so that it can be tested with no Chrome, no site and no clock.
-import { SAMPLE, cleanSample, standStillWarning } from './drive.mjs';
+// The train viewer's run (docs/engineering/train-viewer-plan.md, decisions 2, 3 and 7 to 10): the real player on the
+// real site in a headless Chrome on the viewer's signed-in profile, with the guard (guard.mjs) holding back what the
+// page would write, looked at every five seconds until the film ends, `--minutes` is up, or something ends it. What
+// is checked before it plays, what it presses, what ends it, how it is ended and the run's signals are all here; the
+// options, the sign-in, the lock and the crash handler are in viewer.mjs, which starts this. Everything the run
+// touches is passed in (`deps`), so that its order can be tested with no Chrome, no site and no clock. The run keeps
+// what it saw in memory (`held.run`); `held.writeNow`, when something sets it, is what a second signal, a crash and
+// the end call.
+import { launchChrome, sleep, within } from './cdp.mjs';
+import { SAMPLE, cleanSample, consoleText, keepAwake, notePageError, standStillWarning } from './drive.mjs';
+import { attachGuard } from './guard.mjs';
 import { printable } from './text.mjs';
-import { PAGE_TEXT, readAnswer } from './viewer.mjs';
+import {
+  PAGE_TEXT, checkProfileFree, makeFolders, processAlive, readAnswer, takeLock, viewerPaths,
+} from './viewer.mjs';
 
 export const SITE_RETRY_MS = 15000;
 export const SITE_WAIT_MS = 600000;
@@ -19,7 +27,7 @@ export const PLACE_CARD = /Where are you watching/;
 /** The label of the "Where are you watching?" card's button for each `--place` (none given: "Not now"). */
 export const PLACE_BUTTON = { train: 'On a train', away: 'Hotel or away', none: 'Not now' };
 
-/** How a run ended: the word kept in the results, the exit code (a signal is 130 before the film was opened). */
+/** How a run ended: the word kept with the run, the exit code (a signal is 130 before the film was opened). */
 export const ENDS = {
   'film-ended': { code: 0, line: 'The film ended.' },
   minutes: { code: 0, line: '--minutes was reached.' },
@@ -303,7 +311,7 @@ export function makeAttempt({ page, site, film, nextLoad, giveUpOn, say, cancel 
     if (!announced) {
       announced = true;
       say(`Film ${film}: ${facts.title ?? '(no title)'}, ${lengthOf(facts.runtimeMs)}, on ${site}. `
-        + 'Ctrl-C ends the run and writes the results.');
+        + 'Ctrl-C ends the run.');
     }
     // The page is open when it has loaded: a document that arrives and a link that dies before the app's script does
     // is a blank page, with nothing to sample and no "Try again" to press.
@@ -347,4 +355,299 @@ export function loadWaiter(page) {
   });
   next.pending = () => waiting.length;
   return next;
+}
+
+// ---- the run's constants --------------------------------------------------------------------------------------------
+
+export const SAMPLE_MS = 5000;
+export const LINE_MS = 30000;
+/** How long the page, sent away, is given for its closing sends to be dealt with before Chrome is ended. */
+export const END_WAIT_MS = 3000;
+/** A look at the page gets this long to answer; this many looks in a row that could not be read end the run. */
+export const LOOK_MS = 10000;
+export const UNREAD_LIMIT = 3;
+const NOT_AT_ALL = Number.POSITIVE_INFINITY;
+
+// ---- the end -------------------------------------------------------------------------------------------------------
+
+/**
+ * Ends Chrome (decision 3), in this order: the page, with the guard still attached, is sent to `about:blank`; the
+ * closing sends it makes are given three seconds to be dealt with; only then is Chrome closed. When the page cannot be
+ * sent away (it is closed, the send rejects or throws, or Chrome answers it with an `errorText`) Chrome is
+ * hard-stopped before anything else, then closed. Never throws.
+ */
+export async function leave({ chrome, held, pause = sleep }) {
+  const hardStop = () => {
+    try {
+      held.chromeKill?.();
+    } catch {
+      // Nothing more can be done about a Chrome that will not die.
+    }
+  };
+  if (!chrome) {
+    hardStop();
+    return;
+  }
+  let away = false;
+  try {
+    if (!chrome.page.closed) {
+      const navigation = await chrome.page.send('Page.navigate', { url: 'about:blank' });
+      // An answer with an `errorText` means the player's page is still there, and so are its closing sends.
+      away = !navigation?.errorText;
+    }
+  } catch {
+    // Not sent away: handled just below.
+  }
+  if (away) await pause(END_WAIT_MS);
+  else hardStop();
+  try {
+    await chrome.close();
+  } catch {
+    hardStop();
+  }
+  held.chromeKill = null;
+}
+
+// What a second signal does, in this order: a hard stop of Chrome, what the run saw handed to the writer when there is
+// one (`held.writeNow(word)`: `word` says how the run ended, for a run that has not), the lock let go. Each step on
+// its own, so that one failing skips none of the others.
+function stopAtOnce(held, word) {
+  for (const step of [() => held.chromeKill?.(), () => held.writeNow?.(word), () => held.release?.()]) {
+    try {
+      step();
+    } catch {
+      // The rest still run.
+    }
+  }
+}
+
+/**
+ * The signals of a run (`SIGINT`, `SIGTERM`, `SIGHUP`). The first ends the run in order (`cancel`); a second quits at
+ * once, but not before what the run has seen is kept: a hard stop of Chrome, what it saw handed to the writer when
+ * there is one (`held.writeNow('signal')`), the lock let go, then `exit(130)`. It does so whatever the run is doing,
+ * in the three seconds it gives the page's closing sends too. `exit` and `listen` are there for tests.
+ */
+export function watchRunSignals(cancel, held, say, {
+  exit = (code) => process.exit(code), listen = (name, fn) => process.on(name, fn),
+} = {}) {
+  const onSignal = () => {
+    if (cancel.cancelled) {
+      stopAtOnce(held, 'signal');
+      exit(130);
+      return;
+    }
+    try {
+      say('stopping (a second Ctrl-C quits at once)');
+    } catch {
+      // The terminal may be gone (SIGHUP): the run is still ended.
+    }
+    cancel.trigger();
+  };
+  for (const name of ['SIGINT', 'SIGTERM', 'SIGHUP']) listen(name, onSignal);
+}
+
+// ---- the run -------------------------------------------------------------------------------------------------------
+
+// Notes the page's errors as the replay does (at most 100, each through `printable`).
+function listenToPage(page, run) {
+  page.on('Runtime.exceptionThrown', (p) => {
+    notePageError(run.pageErrors, p.exceptionDetails?.exception?.description ?? p.exceptionDetails?.text);
+  });
+  page.on('Runtime.consoleAPICalled', (p) => {
+    if (p.type === 'error' || p.type === 'warning') notePageError(run.pageErrors, `${p.type}: ${consoleText(p.args)}`);
+  });
+}
+
+// One look at the page, given 10 s to answer. It reads the page itself (no request to the site), so a look that fails
+// or is not answered is a page that is not answering, never a dead link: a renderer that has crashed leaves the pipe
+// open and an `evaluate` on it is simply never answered. Gives `{ sample, read }`; a look that could not be read is a
+// sample with its error text, as in the replay.
+async function observe({ page, deps }, opened) {
+  const look = (async () => page.evaluate(VIEWER_SAMPLE))().then((value) => ({ value }), (error) => ({ error }));
+  let raw = { video: false, error: `no answer in ${LOOK_MS / 1000} s` };
+  let read = false;
+  if (await deps.within(look, LOOK_MS)) {
+    const answer = await look;
+    read = !('error' in answer);
+    raw = read ? answer.value : { video: false, error: String(answer.error?.message ?? answer.error) };
+  }
+  const sample = cleanViewerSample(raw, { sinceMs: deps.clock.mono() - opened, at: deps.clock.wall() });
+  return { sample, read };
+}
+
+// A press: true when the button was there. A page that cannot be reached is no press.
+async function press(page, expression) {
+  try {
+    return (await page.evaluate(expression)) === true;
+  } catch {
+    return false;
+  }
+}
+
+// What the viewer presses, and nothing else: the "Where are you watching?" card once (the `--place` answer, else "Not
+// now"), and a "Try again" of the two at most once a sample.
+async function pressWhatIsAsked({ page, run, opt }, sample) {
+  if (!run.placeTried && PLACE_CARD.test(sample.card ?? '')) {
+    run.placeTried = true;
+    const label = PLACE_BUTTON[opt.place ?? 'none'];
+    if (await press(page, pressPlace(label))) run.presses.place = label;
+  }
+  if (sample.retry && (await press(page, PRESS_RETRY))) run.presses.retries += 1;
+}
+
+// Looks every five seconds until something ends the run; gives the word of `ENDS`.
+async function watchFilm(ctx, opened) {
+  const { deps, run, page, opt } = ctx;
+  const { clock, wait, say, cancel } = deps;
+  const endAt = opt.minutes === null ? NOT_AT_ALL : opened + opt.minutes * 60000;
+  let lastLine = -NOT_AT_ALL;
+  let lastLoop = clock.wall();
+  for (;;) {
+    await wait(Math.min(SAMPLE_MS, Math.max(0, endAt - clock.mono())));
+    if (cancel.cancelled) return 'signal';
+    const warning = standStill(clock.wall() - lastLoop, Math.round((clock.mono() - opened) / 1000));
+    if (warning) run.warnings.push(warning);
+    lastLoop = clock.wall();
+    const { sample, read } = await observe(ctx, opened);
+    run.samples.push(sample);
+    run.unread = read ? 0 : run.unread + 1;
+    const over = page.closed ? 'chrome-gone' : endOf(sample);
+    if (over) return over;
+    // Three looks in a row that could not be read: the page has stopped answering, and the viewer does not reload it.
+    if (run.unread >= UNREAD_LIMIT) return 'page-crashed';
+    // A look can take 10 seconds: a signal that came meanwhile is not followed by one more press and line.
+    if (cancel.cancelled) return 'signal';
+    await pressWhatIsAsked(ctx, sample);
+    if (clock.mono() - lastLine >= LINE_MS) {
+      lastLine = clock.mono();
+      say(progressLine(sample));
+    }
+    if (clock.mono() >= endAt) return 'minutes';
+  }
+}
+
+// What a loop that did not end in `ready` means for the run: the word of `ENDS` (after saying why), or null to play.
+function endBeforePlaying(outcome, say) {
+  if (outcome.kind === 'ready') return null;
+  if (outcome.kind === 'cancelled') return 'signal';
+  say(outcome.kind === 'gave-up' ? 'The site did not answer in 10 minutes.' : outcome.line);
+  return 'refused';
+}
+
+// Starts Chrome and the guard (before any address is opened), then does the checks and plays. Sets `run.ended`.
+async function play(ctx) {
+  const { deps, run, opt, held } = ctx;
+  const { say, clock } = deps;
+  const chrome = await deps.launch({
+    profile: viewerPaths(deps.viewerHome).profile, channel: 'pipe', ownGroup: true,
+    onSpawn: (kill) => {
+      held.chromeKill = kill;
+    },
+  });
+  ctx.chrome = chrome;
+  ctx.page = chrome.page;
+  ctx.guard = await deps.guard(ctx.page, { site: opt.site });
+  await ctx.page.send('Page.enable');
+  await ctx.page.send('Runtime.enable');
+  listenToPage(ctx.page, run);
+  // Every round of the wait navigates, which gives a page whose renderer has died a new one: nothing special is needed.
+  const outcome = deps.cancel.cancelled ? { kind: 'cancelled' } : await waitUntilReady({
+    attempt: makeAttempt({
+      page: ctx.page, site: opt.site, film: opt.film, nextLoad: loadWaiter(ctx.page), giveUpOn: deps.within, say,
+      cancel: deps.cancel,
+    }),
+    wait: deps.wait, now: clock.mono, say, cancel: deps.cancel,
+  });
+  const stopped = endBeforePlaying(outcome, say);
+  if (stopped) {
+    run.ended = stopped;
+    return;
+  }
+  run.film = outcome.film;
+  ctx.opened = clock.mono();
+  run.ended = await watchFilm(ctx, ctx.opened);
+}
+
+/**
+ * The whole run, with what it touches passed in (`deps`): `opt` (the options), `viewerHome`, `say`, `cancel`
+ * (as `createCancel`), `held` (where what a signal or a crash must stop is kept), `clock` (`mono` and `wall`), `wait`
+ * (cut short by a signal), `pause` (not), and the steps: `launch`, `guard`, `lock`, `folders`, `free`, `awake`,
+ * `within`. Returns the exit code. Whatever happens, Chrome is ended in the order of `leave`, what was kept is handed
+ * to `held.writeNow` when one is set, and the lock is let go before it returns.
+ */
+export async function viewing(deps) {
+  const { opt, viewerHome, held, pid, isAlive = processAlive } = deps;
+  const full = withDefaults(deps);
+  const { say } = full;
+  const run = {
+    samples: [], pageErrors: [], warnings: [], presses: { place: null, retries: 0 }, placeTried: false, ended: null,
+    film: null, unread: 0,
+  };
+  const ctx = { deps: full, run, opt, held, chrome: null, page: null, guard: null, opened: null };
+  held.run = run;
+  try {
+    held.release = full.lock(viewerHome, { isAlive, pid });
+    full.folders(viewerHome);
+    full.free(viewerPaths(viewerHome).profile, { isAlive });
+    full.awake();
+    await play(ctx);
+  } catch (error) {
+    say(`The run failed: ${error?.message ?? error}`);
+    run.ended = endOfFailure(error, deps.cancel);
+  } finally {
+    await leave({ chrome: ctx.chrome, held, pause: full.pause });
+  }
+  return finish({ ctx, say });
+}
+
+// How a run that threw ended: by a signal if one had come, Chrome gone if the error says so, else failed.
+function endOfFailure(error, cancel) {
+  if (cancel.cancelled) return 'signal';
+  return error?.code === 'chrome-gone' ? 'chrome-gone' : 'failed';
+}
+
+// What a caller passes, with the real thing for what it leaves out; printing that throws is quiet.
+function withDefaults(deps) {
+  const { cancel } = deps;
+  return {
+    ...deps,
+    say: (text) => {
+      try {
+        deps.say(text);
+      } catch {
+        // The terminal may be gone: printing never stops a run.
+      }
+    },
+    clock: deps.clock ?? { mono: () => performance.now(), wall: () => Date.now() },
+    wait: deps.wait ?? ((ms) => cancel.wait(ms)),
+    within: deps.within ?? within,
+    launch: deps.launch ?? launchChrome,
+    guard: deps.guard ?? attachGuard,
+    lock: deps.lock ?? takeLock,
+    folders: deps.folders ?? makeFolders,
+    free: deps.free ?? checkProfileFree,
+    awake: deps.awake ?? keepAwake,
+    pause: deps.pause ?? sleep,
+  };
+}
+
+// After Chrome has gone: what was kept is written (`held.writeNow`, when something set it), how the run ended is said,
+// and the lock is let go, in that order. Gives the exit code.
+function finish({ ctx, say }) {
+  const { run, held } = ctx;
+  let code = exitCode(run.ended, ctx.opened !== null);
+  try {
+    held.writeNow?.();
+  } catch (error) {
+    say(`the results could not be written: ${error?.message ?? error}`);
+    code = 1;
+  }
+  say(`${(ENDS[run.ended] ?? ENDS.failed).line} ${run.samples.length} samples taken.`);
+  try {
+    held.release?.();
+  } catch {
+    // Left for the next start to take over.
+  }
+  held.release = null;
+  return code;
 }

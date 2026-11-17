@@ -2,9 +2,13 @@
 // so that a train journey gives a playback record with nobody watching. It is a measuring tool run by hand, as the
 // home replay is: not part of the app, in no image (docs/engineering/train-viewer-plan.md).
 //
-// This version only signs in; the run comes in a later change.
-//
 //   node scripts/replay/viewer.mjs --sign-in [--site https://cinefilm.chrisjgregory.dev]
+//   node scripts/replay/viewer.mjs --film <id> [--minutes <1 to 600>] [--place train|away] [--site <address>]
+//
+//   --film      watches that film: the run is in viewing.mjs (what it checks first, what it presses, what ends it).
+//               Exactly one of --sign-in and --film is given;
+//               --minutes (without it, until the film ends) and --place (the answer to "Where are you watching?")
+//               go with --film only.
 //
 //   --sign-in   opens an ordinary Chrome window on the site, on the viewer's own profile. Sign in there, come back
 //               and press Return (quitting that Chrome with Cmd-Q does the same). The viewer then keeps the sign-in
@@ -25,7 +29,9 @@
 // a cookie or a password.
 //
 // Ctrl-C (or SIGTERM, or the terminal closing) ends the sign-in: both Chromes are stopped, the lock is let go and the
-// exit code is 130. A second one quits at once, after a hard stop of both.
+// exit code is 130. A second one quits at once, after a hard stop of both. During a run (--film) the first signal
+// ends the run in order (viewing.mjs) and a second one quits at once: Chrome is hard-stopped, what the run saw is
+// handed to the writer when there is one, the lock is let go, and the exit code is 130.
 //
 // The options, the lock, the folders, the answer and the order of the steps are tested, with the window, Chrome, the
 // keyboard and the clock made up; `main`, which starts the real Chrome, cannot run in CI and is checked by hand.
@@ -68,30 +74,63 @@ export function siteOrigin(text) {
   return url.origin;
 }
 
-/** The options from the command line's arguments (without the program's own two), checked. Throws on any refusal. */
+const VALUE_OPTIONS = new Set(['site', 'film', 'minutes', 'place']);
+
+// Reads the option at argv[i] into `given` and says how many arguments it took.
+function takeOption(argv, i, given) {
+  const name = argv[i].startsWith('--') ? argv[i].slice(2) : null;
+  if (name !== 'sign-in' && !VALUE_OPTIONS.has(name)) throw new Error(`unknown option ${printable(argv[i], 40)}`);
+  if (given.has(name)) throw new Error(`--${name} was given twice`);
+  if (name === 'sign-in') {
+    given.set(name, true);
+    return 1;
+  }
+  const value = argv[i + 1];
+  if (value === undefined || value.startsWith('--')) throw new Error(`--${name} needs a value`);
+  given.set(name, value);
+  return 2;
+}
+
+// A whole number of `digits` or fewer digits, from `least` to `most`, or null when the option was not given.
+function wholeOption(given, name, { digits, least, most }) {
+  const text = given.get(name);
+  if (text === undefined) return null;
+  const value = /^\d+$/.test(text) && text.length <= digits ? Number(text) : NaN;
+  if (!(value >= least && value <= most)) {
+    throw new Error(`--${name} must be a whole number from ${least} to ${most}`);
+  }
+  return value;
+}
+
+/**
+ * The options from the command line's arguments (without the program's own two), checked. Throws on any refusal.
+ * Exactly one of `--sign-in` and `--film <id>` is given; `--minutes <1 to 600>` and `--place train|away` go with
+ * `--film` only. Without `--minutes` a run lasts until the film ends.
+ */
 export function options(argv) {
   const given = new Map();
-  for (let i = 0; i < argv.length; ) {
-    const name = argv[i].startsWith('--') ? argv[i].slice(2) : null;
-    if (name !== 'sign-in' && name !== 'site') throw new Error(`unknown option ${printable(argv[i], 40)}`);
-    if (given.has(name)) throw new Error(`--${name} was given twice`);
-    if (name === 'sign-in') {
-      given.set(name, true);
-      i += 1;
-      continue;
-    }
-    const value = argv[i + 1];
-    if (value === undefined || value.startsWith('--')) throw new Error(`--${name} needs a value`);
-    given.set(name, value);
-    i += 2;
+  for (let i = 0; i < argv.length; ) i += takeOption(argv, i, given);
+  const opt = {
+    signIn: given.has('sign-in'),
+    site: siteOrigin(given.get('site') ?? DEFAULT_SITE),
+    film: wholeOption(given, 'film', { digits: 9, least: 1, most: 999999999 }),
+    minutes: wholeOption(given, 'minutes', { digits: 3, least: 1, most: 600 }),
+    place: given.get('place') ?? null,
+  };
+  if (opt.signIn === (opt.film !== null)) throw new Error('give exactly one of --sign-in and --film <id>');
+  if (opt.film === null && (opt.minutes !== null || opt.place !== null)) {
+    throw new Error('--minutes and --place go with --film');
   }
-  return { signIn: given.has('sign-in'), site: siteOrigin(given.get('site') ?? DEFAULT_SITE) };
+  if (opt.place !== null && opt.place !== 'train' && opt.place !== 'away') {
+    throw new Error('--place must be train or away');
+  }
+  return opt;
 }
 
 // ---- the folders, the first preferences, the lock -----------------------------------------------------------------
 
 /** Makes `dir` (and what is above it), and sets it to the owner alone whatever it was before. */
-function ownerDir(dir) {
+export function ownerDir(dir) {
   mkdirSync(dir, { recursive: true, mode: OWNER_DIR });
   chmodSync(dir, OWNER_DIR);
 }
@@ -428,12 +467,16 @@ export function watchSignals(cancel, held, say, {
 }
 
 /**
- * What an `uncaughtException` or an `unhandledRejection` does: a hard stop of both Chromes and the lock let go (each
- * step on its own, so that one failing does not skip the rest), a line, then `exit(1)`. Returns the handler.
+ * What an `uncaughtException` or an `unhandledRejection` does: a hard stop of both Chromes, what a run saw handed to
+ * the writer when there is one (`held.writeNow('failed')`), the lock let go (each step on its own, so that one failing
+ * does not skip the rest), a line, then `exit(1)`. Returns the handler.
  */
 export function crashHandler(held, { say: tell, exit }) {
   return (error) => {
-    for (const step of [() => held.window?.kill(), () => held.chromeKill?.(), () => held.release?.()]) {
+    const steps = [
+      () => held.window?.kill(), () => held.chromeKill?.(), () => held.writeNow?.('failed'), () => held.release?.(),
+    ];
+    for (const step of steps) {
       try {
         step();
       } catch {
@@ -449,11 +492,47 @@ export function crashHandler(held, { say: tell, exit }) {
   };
 }
 
+// Printing never throws: when the terminal has gone (the terminal closed, SIGHUP) a line is lost, nothing else.
 function say(text) {
-  console.log(printable(text, LINE_LIMIT));
+  try {
+    console.log(printable(text, LINE_LIMIT));
+  } catch {
+    // Nobody is listening.
+  }
 }
 
-async function main(argv) {
+// The crash handler, once `main` has made it: the entry's rejection handler calls it, so that a failure in `main` does
+// the hard stop, the writer and the lock too.
+export const installed = { crash: null };
+
+/**
+ * Makes the crash handler for `held`, registers it (`on`) for `uncaughtException` and for `unhandledRejection`, and
+ * returns it: the one and the same function for both.
+ */
+export function installCrash(held, { on = (name, fn) => process.on(name, fn), say: tell, exit }) {
+  const crashed = crashHandler(held, { say: tell, exit });
+  on('uncaughtException', crashed);
+  on('unhandledRejection', crashed);
+  return crashed;
+}
+
+// The run, as `main` starts it: loaded here, not at the top, because the run's module imports this one.
+export async function startRun(args, { on, exit, load = () => import('./viewing.mjs') }) {
+  const { viewing, watchRunSignals } = await load();
+  watchRunSignals(args.cancel, args.held, args.say, { listen: on, exit });
+  return viewing(args);
+}
+
+/**
+ * The program: reads the options, makes the crash handler (`installCrash`) and then starts the sign-in or the run.
+ * What it starts and how it listens are passed in (`on` registers a listener, `signIn` and `run` start the two), with
+ * the real ones as defaults, so that a test can see what is registered when each is started. Gives the exit code.
+ */
+export async function main(argv, deps = {}) {
+  const {
+    on = (name, fn) => process.on(name, fn), exit = (code) => process.exit(code), say: tell = say,
+    signIn: startSignIn = signIn, run = startRun,
+  } = deps;
   let opt;
   try {
     opt = options(argv);
@@ -461,22 +540,40 @@ async function main(argv) {
     console.error(printable(error.message, LINE_LIMIT));
     return 1;
   }
-  if (!opt.signIn) {
-    say('This version only signs in: run it with --sign-in.');
-    return 1;
-  }
   const cancel = createCancel();
   const held = {};
-  watchSignals(cancel, held, say);
-  const crashed = crashHandler(held, { say, exit: (code) => process.exit(code) });
-  process.on('uncaughtException', crashed);
-  process.on('unhandledRejection', crashed);
-  return signIn({
-    viewerHome: join(homedir(), 'cinefilm-viewer'), site: opt.site, say, waitReturn: () => waitForReturn(process.stdin),
-    cancel, held,
-  });
+  const viewerHome = join(homedir(), 'cinefilm-viewer');
+  // Before the sign-in or the run is started (and so before the import of the run's module): nothing that goes wrong
+  // after that is left without the hard stop and the lock.
+  installed.crash = installCrash(held, { on, say: tell, exit });
+  if (opt.signIn) {
+    watchSignals(cancel, held, tell, { listen: on, exit });
+    return startSignIn({
+      viewerHome, site: opt.site, say: tell, waitReturn: () => waitForReturn(process.stdin), cancel, held,
+    });
+  }
+  return run({ opt, viewerHome, say: tell, cancel, held }, { on, exit });
 }
 
+/**
+ * What the entry does when `main` rejects: the crash handler when `main` had made it (the hard stop, the writer and
+ * the lock then all run), else one line and `exit(1)`.
+ */
+export function onMainRejected(error, { crash, say: tell, exit }) {
+  if (crash) {
+    crash(error);
+    return;
+  }
+  tell(`The viewer stopped on an unexpected error: ${error?.message ?? error}`);
+  exit(1);
+}
+
+// No top-level `await` here: `main` imports viewing.mjs, which imports this module, and a module that is still
+// waiting on its own evaluation cannot be imported by it (Node then ends the program with exit code 13).
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  process.exit(await main(process.argv.slice(2)));
+  // A write to a terminal that has gone fails later, as an event: it must not be taken for a crash.
+  process.stdout.on('error', () => undefined);
+  main(process.argv.slice(2)).then((code) => process.exit(code), (error) => {
+    onMainRejected(error, { crash: installed.crash, say, exit: (code) => process.exit(code) });
+  });
 }
