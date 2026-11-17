@@ -37,6 +37,7 @@ function TimingLine({ item }) {
       {summary ? (
         <>
           <span className="subs__check-label">{summary.label}</span>
+          {summary.source ? <p className="subs__check-note">{summary.source}</p> : null}
           {summary.note ? <p className="subs__check-note">{summary.note}</p> : null}
           {summary.lines.length > 0 ? (
             <ul className="subs__check-reasons" aria-label={`${summary.label}: details`}>
