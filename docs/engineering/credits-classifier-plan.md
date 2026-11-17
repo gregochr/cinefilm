@@ -100,7 +100,10 @@ figures replace the table above, which used limited-range luma, a centre crop an
   - at least 90% within ±10 s for dark and light-plate openings;
   - at least 97% within ±60 s, or not found, for dark and light-plate openings;
   - lit openings are reported as they come out, and are late by design (see "Labels").
-- **The baseline**, version 2, is scored the same way on the same films, at L5. It is not scored before then
+- **The baseline**, version 2, is scored on the same films, at L5, from its stored `offset_ms` for both its early
+  and goal errors. Version 3's early figure is worst case (`t − 5 s`), so the early comparison favours version 2 by
+  `f − (t − 5 s)`: 5 s when the dense step falls back to `t`, up to about 30 s when it finds an `f`. Version 3's
+  real dense earliness is measured only at the gate. It is not scored before then
   ("Not looked at before L5").
 - **Nothing is installed** on the Mac, the server or in CI. Anything new is a Maven dependency or a file. Training and
   the product share one implementation of features, preprocessing and inference.
@@ -256,9 +259,11 @@ path:
   1. after the comparison (L5);
   2. at the version 3 gate.
 - **The test rule is pre-registered.** An early result on the test split turns `AUTO` off for that opening type and
-  margin band. It is never retuned and scored again. Test films are never relabelled, so a Plex mistake on a test
+  margin band. Early means more than 15 s before the target, the gate's threshold: scored on `earlyError`
+  (`t − 5 s`) offline at L5, and on the product's rows at the gate. It is never retuned and scored again. Test films are never relabelled, so a Plex mistake on a test
   film can switch `AUTO` off for its band. That cost is accepted, and is put to the owner with the L5 report.
-- **Thresholds keep a safety margin:** the earliest out-of-fold error must be at least −5 s.
+- **Thresholds keep a safety margin:** the earliest out-of-fold error must be at least −5 s. Offline it is scored
+  at `t − 5 s` ("How a film is scored"), so it amounts to `t ≥ target` on every development film the evaluation scores `FOUND`.
 
 ## Frames: the dataset job (L2)
 
@@ -364,12 +369,20 @@ through **offline evaluation**: the shipping model and segmenter code, run on th
 - **How a film is scored** (`CreditsEvaluateMain`, L3c-eval). The dense search is simulated on the stored dense
   frames that have time features (`[target − 25 s, target + 25 s)`) and that also lie in the product's own range
   with time features, `[t − 10 s, t + 30 s)`.
-  - **The result is exact, to within one 0.5 s step,** when `t − 5 s ≥ target − 25 s` and the search stops at an `f`
-    with `f + 5 s < min(target + 25 s, t + 30 s)`. The stored frames sit on a grid set by Plex's target, and the
-    product's on a grid set by `t`, so the two are different decoded frames.
-  - **Otherwise,** the film is scored at **`t − 5 s`** for every early metric, and at `t` for the ±10 s and ±60 s
-    goals. `t − 5 s` is the earliest the dense step could ever return, so the early check is worst-case and never
-    favourable.
+  - **The search is covered** when `t − 5 s ≥ target − 25 s` and it stops at an `f` with
+    `f + 5 s < min(target + 25 s, t + 30 s)`.
+  - **The stored grid is not the product's.** The stored dense frames sit on a 0.5 s grid set by Plex's target, the
+    product's on one set by `t`, and `t` is on the 5 s coarse grid while the target is in ms: the two are the same
+    decoded frames almost never. A brief low frame seen by only one grid can move
+    the result either way. So the simulated `f` is an estimate, never a safe bound.
+  - **Early metrics** (the −5 s margin, the early counts) always use **`t − 5 s`**, the earliest the dense step could
+    ever return: worst case, never favourable, with no exception.
+  - **The ±10 s and ±60 s goals** use the simulated `f` when the search is covered (an estimate), and `t` otherwise.
+    `θ_d` is tuned through these goals.
+  - **So offline, the −5 s margin is a rule on the coarse step:** `t − 5 s − target ≥ −5 s`, that is `t ≥ target`,
+    on every `FOUND` film (`UNSURE` counts as `NOT_FOUND`). It is stricter than the product needs and pushes calibration later, which "a late overlay is
+    better than an early one" accepts. The dense step's own earliness is measured only at the gate ("The gate,
+    revised"), on the product's version 3 rows.
 - **Neither model has a position feature.** Nothing tells a model how far into the film a frame is. That is a rule.
 
 ### A. Gradient-boosted trees on measured features
@@ -473,7 +486,8 @@ as film.
    The margin shown is the raw `S(t, u*)` that the margin band uses.
 
 **Calibration.** `λ`, `δ`, `G`, `σ`, `θ` and `θ_d` are chosen together in cross-validation: first meet the −5 s
-margin, then maximise the ±10 s share.
+margin (scored at `t − 5 s`, so it constrains the coarse step only), then maximise the ±10 s share (where `θ_d`
+acts, through the simulated `f`).
 
 - **Negatives come from real films.** Each labelled film's window is cut off at the target start − 5 s, and that
   must give `NOT_FOUND` or `UNSURE`.
@@ -482,7 +496,8 @@ margin, then maximise the ±10 s share.
 - Negatives follow the same folds.
 
 **Epilogue cards** that Plex itself counts as credits can't be seen by the Plex gate. The development films whose
-result lands more than 10 s before the first credits-on-plain frame are looked at as stills and reported.
+worst-case start, `t − 5 s` (as every early check), lands more than 10 s before the first credits-on-plain
+frame are looked at as stills and reported.
 
 ## The model file
 
@@ -640,15 +655,19 @@ Each phase is its own small PR, built by Sonnet and reviewed by the planner (`CL
     that did not train on it (its fold's out-of-fold ensemble) with that fold's calibration, never by the shipping
     ensemble; and the items below.
   - It refuses test films unless `--look=L5` is passed, and writes `look.json`, both as in L3b-look.
-  - Tests cover both scoring branches under "Two model types": an exact result, and one scored at `t − 5 s`. One
-    more test has `t` well before the target, where the stored frames alone would give a late `f` that the product
+  - Tests cover the branches under "Two model types": a covered search (early metrics at `t − 5 s`, goals at
+    the simulated `f`), including one on aligned grids, scored the same way; and a search not covered (early at
+    `t − 5 s`, goals at `t`). One more test has `t` well before the target, where the stored frames alone would give a late `f` that the product
     could not reach.
   - **Its output,** `evaluation.csv`, has one row per film:
     - `mediaFileId`, `side`, `fold`;
-    - `verdict` (`FOUND`, `UNSURE` or `NOT_FOUND`), `t`, and the scored start;
-    - `exact` (true, or false when scored at `t − 5 s`); `earlyError` (the scored start against the target) and
-      `goalError` (for the ±10 s and ±60 s goals: the scored start against the target when `exact`, else `t`
-      against the target);
+    - `verdict` (`FOUND`, `UNSURE` or `NOT_FOUND`), `t` (empty when there is none), and the simulated `f` (empty
+      when not covered);
+    - `covered`, and `aligned` (for reporting only: `(t − offset₀) mod 500 ms = 0`, where `offset₀` is the first
+      stored dense offset in `complete.json`); `earlyError` (`t − 5 s` against the target, always) and `goalError`
+      (`f` against the target when covered, else `t`). `f`, `covered`, `aligned`, `earlyError` and `goalError` are
+      empty unless the verdict is `FOUND`; an empty `goalError` counts as not found for the ±60 s goal and as outside
+      ±10 s for the ±10 s goal. Each share's denominator is every film of that opening type (Plex's);
     - the opening type at `t` (from `OpeningType.of(coarse, t)`), the margin band, and Plex's opening type for the
       goals;
     - version 2's verdict and error against the same target, from `--baseline <the v2 snapshot csv>`, whose columns
