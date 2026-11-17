@@ -439,7 +439,7 @@ function writePrivate(file, text, io) {
     io.rename(temporary, file);
   } catch (error) {
     try {
-      rmSync(temporary, { force: true });
+      io.remove(temporary);
     } catch {
       // The first error is the one to report.
     }
@@ -496,7 +496,7 @@ function resultFiles({ run, report, facts, final }) {
  * them (the guard's copy), what was held, the presses, the page's errors, the warnings and how the run ended: `ended`
  * is null until the last write (`final`), which also writes `summary.txt`. No header, no cookie, nothing of any other
  * request. Synchronous. Returns `{ dir, lines }` (the folder, and the summary's lines when final); throws when it
- * cannot be written. `io` (`write(file, text)`, `rename(from, to)`) is for tests.
+ * cannot be written. `io` (`write(file, text)`, `rename(from, to)`, `remove(file)`) is for tests.
  */
 export function writeResults({ runsDir, began, run, report, facts, final = true, io = realIo }) {
   const dir = join(runsDir, runName(began));
