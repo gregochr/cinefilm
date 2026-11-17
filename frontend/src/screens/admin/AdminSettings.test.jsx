@@ -31,9 +31,9 @@ describe('Admin Settings section', () => {
       'listitem',
     );
     expect(items.map((item) => item.textContent)).toEqual([
-      'Subtitles from OpenSubtitles.com (opens in a new tab).',
-      'IMDb and Rotten Tomatoes ratings from OMDb (opens in a new tab), licensed CC BY-NC 4.0 (opens in a new tab).',
-      'Network lookup by IPinfo (opens in a new tab).',
+      'Subtitles from OpenSubtitles.com.',
+      'IMDb and Rotten Tomatoes ratings from OMDb, licensed CC BY-NC 4.0.',
+      'Network lookup by IPinfo.',
     ]);
   });
 
@@ -46,11 +46,7 @@ describe('Admin Settings section', () => {
     installFetch();
     renderApp('/admin/settings');
     await screen.findByRole('region', { name: 'Continue watching' });
-    // jsdom trims the hidden span's leading space out of the accessible name (browsers keep it), so compare without spaces.
-    const squash = (text) => text.replace(/\s+/g, '');
-    const link = screen.getByRole('link', {
-      name: (accessibleName) => squash(accessibleName) === squash(name),
-    });
+    const link = screen.getByRole('link', { name });
     expect(link).toHaveAttribute('href', href);
     expect(link).toHaveAttribute('target', '_blank');
     expect(link.getAttribute('rel')).toContain('noopener');

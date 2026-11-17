@@ -182,9 +182,9 @@ export default function AdminSettings() {
                   href={part.href}
                   target="_blank"
                   rel="noopener noreferrer"
+                  aria-label={`${part.text}${settingsPage.opensInNewTab}`}
                 >
                   {part.text}
-                  <span className="sr-only">{settingsPage.opensInNewTab}</span>
                 </a>
               ) : (
                 <span key={part.text}>{part.text}</span>
