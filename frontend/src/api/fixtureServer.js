@@ -616,7 +616,10 @@ function setForcedNeed(filmId, body) {
 /** English-original films outside the full-need list in the fixture library (they count as "in English"). */
 const ENGLISH_OUT_OF_SCOPE = 530;
 
-/** The owner's choice per film on full subtitles, kept in memory; a film without one has the fixture's own row. */
+/**
+ * The owner's choice per film on full subtitles (NEEDED, NOT_NEEDED or NONE_EXIST; null is an explicit Automatic), kept in
+ * memory; a film without one has the fixture's own row.
+ */
 const fullChoices = new Map();
 
 /** What the automatic rule says for a fixture film that is loaded with an owner choice (it is `OWNER` as loaded). */

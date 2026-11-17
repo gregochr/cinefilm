@@ -346,22 +346,32 @@ class AdminTodoRulesTest {
     void everyFullCombinationMatchesTheDocumentedTruthTable() {
         boolean[] both = {true, false};
         for (boolean needed : both) {
-            for (boolean plays : both) {
-                for (boolean imdb : both) {
-                    for (boolean searched : both) {
-                        for (boolean due : both) {
-                            for (boolean search : both) {
-                                for (boolean downloads : both) {
-                                    FullFacts f = new FullFacts(needed, false, plays, imdb, searched, due, search,
-                                        downloads);
-                                    // The documented rule, written out: in play when needed with nothing playing;
-                                    // being checked when it has an IMDb id and either the search is still to come
-                                    // (and on) or a download is due (and on); unresolved is the rest of in play.
-                                    boolean inPlay = needed && !plays;
-                                    boolean checked = inPlay && imdb && (!searched && search || due && downloads);
-                                    assertThat(AdminTodoRules.beingCheckedFull(f)).isEqualTo(checked);
-                                    assertThat(AdminTodoRules.unresolvedFull(f)).isEqualTo(inPlay && !checked);
-                                }
+            for (boolean noneExist : both) {
+                assertFullTable(needed, noneExist);
+            }
+        }
+    }
+
+    private static void assertFullTable(boolean needed, boolean noneExist) {
+        boolean[] both = {true, false};
+        for (boolean plays : both) {
+            for (boolean imdb : both) {
+                for (boolean searched : both) {
+                    for (boolean due : both) {
+                        for (boolean search : both) {
+                            for (boolean downloads : both) {
+                                FullFacts f = new FullFacts(needed, noneExist, plays, imdb, searched, due, search,
+                                    downloads);
+                                // The documented rule, written out: in play when needed, not marked NONE_EXIST and
+                                // with nothing playing; being checked when it has an IMDb id and either the search is
+                                // still to come (and on) or a download is due (and on); unresolved is the rest of in
+                                // play; subtitled is needed with a subtitle playing, NONE_EXIST or not.
+                                boolean inPlay = needed && !noneExist && !plays;
+                                boolean checked = inPlay && imdb && (!searched && search || due && downloads);
+                                assertThat(AdminTodoRules.inPlayFull(f)).isEqualTo(inPlay);
+                                assertThat(AdminTodoRules.beingCheckedFull(f)).isEqualTo(checked);
+                                assertThat(AdminTodoRules.unresolvedFull(f)).isEqualTo(inPlay && !checked);
+                                assertThat(AdminTodoRules.subtitledFull(f)).isEqualTo(needed && plays);
                             }
                         }
                     }

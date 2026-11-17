@@ -538,6 +538,45 @@ class FullNeedServiceTest {
         verify(pending).full(Map.of(3L, "tt3", 4L, "tt4"));
     }
 
+    private void twoNoneExistFilms() {
+        when(films.findFullNeedRows()).thenReturn(List.of(row(1, "Quiet", "zh", FullNeedChoice.NONE_EXIST),
+            row(2, "Played", "zh", FullNeedChoice.NONE_EXIST)));
+        when(files.findAudioRows(List.of(1L, 2L))).thenReturn(List.of());
+        when(films.findOpenSubtitlesFullStates()).thenReturn(List.of(
+            new OsFullState(1L, "tt1", "tt1", true), new OsFullState(2L, "tt2", "tt2", true)));
+        Edition playing = edition(film(2L, "Played", 2000, NOW), 20L, "Original", 100, null);
+        when(editions.findWithFilesByFilmIdIn(List.of(1L, 2L))).thenReturn(List.of(playing));
+        when(fullSubtitles.forEditions(List.of(playing)))
+            .thenReturn(Map.of(20L, new FullSubtitleDto("DOWNLOAD", 1, List.of(), List.of())));
+    }
+
+    @Test
+    void noneExistFilmsAreNeededButNeverUnresolvedOrBeingCheckedAndOnlyThePlayingOneIsSubtitled() {
+        twoNoneExistFilms();
+
+        FullNeedListDto list = service.list();
+
+        assertThat(list.films()).extracting(FullNeedFilmDto::need).containsExactly("NEEDED", "NEEDED");
+        assertThat(list.films()).extracting(FullNeedFilmDto::reason).containsExactly("NONE_EXIST", "NONE_EXIST");
+        assertThat(list.films()).extracting(FullNeedFilmDto::unresolved).containsExactly(false, false);
+        assertThat(list.films()).extracting(FullNeedFilmDto::beingChecked).containsExactly(false, false);
+        assertThat(list.films()).extracting(FullNeedFilmDto::subtitled).containsExactly(false, true);
+        assertThat(list.counts().needed()).isEqualTo(2);
+        assertThat(list.counts().unresolved()).isZero();
+        assertThat(list.counts().beingChecked()).isZero();
+        assertThat(list.counts().subtitled()).isEqualTo(1);
+        // The download pipeline is never asked about a NONE_EXIST film, searched or not.
+        verifyNoInteractions(pending);
+    }
+
+    @Test
+    void noneExistFilmsAreNotCountedAsUnresolved() {
+        twoNoneExistFilms();
+
+        assertThat(service.unresolvedCount()).isZero();
+        verifyNoInteractions(pending);
+    }
+
     @Test
     void aSearchedFilmTheSchedulerWouldNotDownloadForIsUnresolved() {
         sixFilmsInEveryState();

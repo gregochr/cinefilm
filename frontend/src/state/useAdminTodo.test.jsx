@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LIBRARY_CHANGED_EVENT } from '../api/client.js';
 import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
+import { fullRow, serveNeeds } from '../test/needRoutes.js';
 import { useAdminTodo } from './useAdminTodo.js';
 
 afterEach(() => {
@@ -374,5 +375,53 @@ describe('useAdminTodo: confirm', () => {
 
     expect(posts(fetchMock)).toHaveLength(0);
     expect(onChanged).not.toHaveBeenCalled();
+  });
+});
+
+describe('useAdminTodo: the full list’s owner choices', () => {
+  it('holds the full list’s rows as full.data, with saving and problems from the need hook', async () => {
+    installFetch(serveNeeds({ full: [fullRow()] }).route);
+    const { result } = mount();
+
+    await waitFor(() => expect(result.current.full.data).not.toBeNull());
+
+    expect(result.current.full.data).toEqual([fullRow()]);
+    expect(result.current.fullNeed.saving).toEqual({});
+    expect(result.current.fullNeed.problems).toEqual({});
+  });
+
+  it('calls onFullSaved and then onChanged once when a choice is saved, and the row leaves the group', async () => {
+    const needs = serveNeeds({ full: [fullRow()] });
+    installFetch(needs.route);
+    const onFullSaved = vi.fn();
+    const { result, onChanged } = mount({ onFullSaved });
+    await waitFor(() => expect(result.current.full.data).not.toBeNull());
+
+    await act(async () => {
+      await result.current.fullNeed.choose(6, 'NONE_EXIST');
+    });
+
+    expect(needs.calls).toEqual([{ filmId: 6, kind: 'full', body: { choice: 'NONE_EXIST' } }]);
+    expect(onChanged).toHaveBeenCalledTimes(1);
+    expect(onFullSaved).toHaveBeenCalledTimes(1);
+    expect(result.current.full.data[0]).toMatchObject({ need: 'NEEDED', reason: 'NONE_EXIST' });
+    expect(result.current.groups.find((g) => g.key === 'fullMissing')).toBeUndefined();
+  });
+
+  it('calls neither onFullSaved nor onChanged when the save fails, and keeps the row and the problem', async () => {
+    const needs = serveNeeds({ full: [fullRow()], fail: () => respond({ error: 'boom' }, 500) });
+    installFetch(needs.route);
+    const onFullSaved = vi.fn();
+    const { result, onChanged } = mount({ onFullSaved });
+    await waitFor(() => expect(result.current.full.data).not.toBeNull());
+
+    await act(async () => {
+      await result.current.fullNeed.choose(6, 'NONE_EXIST');
+    });
+
+    expect(onChanged).not.toHaveBeenCalled();
+    expect(onFullSaved).not.toHaveBeenCalled();
+    expect(result.current.fullNeed.problems[6]).toBe("Couldn't save: try again");
+    expect(result.current.groups.find((g) => g.key === 'fullMissing').rows).toHaveLength(1);
   });
 });

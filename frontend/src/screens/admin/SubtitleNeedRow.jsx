@@ -31,7 +31,8 @@ const ENTRY_OF = {
  * foreign scenes". The search buttons open the OpenSubtitles picker through `onFind(row, opener)` and are left out
  * when the row has no `editionId` (no edition to search for). The owner choices save through `onChoose(row, choice)`
  * (`NOT_NEEDED` for "It's English" and "No foreign scenes", `NONE_EXIST` for "No English subtitles exist"); while a
- * row's choice is saving its buttons are `aria-disabled` (still focusable) and a click does nothing. `problem` is what a failed save says.
+ * row's choice is saving its buttons are `aria-disabled` (still focusable) and a click does nothing. `problem` is
+ * what a failed save says.
  */
 export default function SubtitleNeedRow({
   row,

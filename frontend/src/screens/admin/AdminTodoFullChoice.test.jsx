@@ -87,6 +87,8 @@ describe('Admin To do: the English-subtitles rows offer the Subtitles tab’s ac
     expect(await within(region).findByRole('alert')).toHaveTextContent("Couldn't save: try again");
     expect(within(region).getByText('Rashomon')).toBeInTheDocument();
     expect(button).not.toHaveAttribute('aria-disabled');
+    // The row keeps its button and focus: a failed save does not arm the focus fallback.
+    expect(button).toHaveFocus();
     // A failed save changes nothing, so the summary is not read again.
     expect(server.summaryReads()).toBe(1);
 
