@@ -153,7 +153,7 @@ untouched, so a wrong provisional rule can only mislabel a row in Admin.
 
 - **Scope:** single-file editions with a `NO_REFERENCE` embedded read, searched under the film's current IMDb id, not
   marked `NONE_EXIST`. Wider than `TimingReferenceService`'s (its line-count, verified and plays-embedded conditions
-  would need `ForcedResolver` in `current()`); display only. References stored before V30 lack a last-cue end and wait.
+  would need `ForcedResolver` in `current()`); display only. The background check fills in pre-V30 last-cue ends.
 - **Choice (provisional):** fit to every usable stored reference (never the sidecar's own file); keep `ALIGNED` first,
   then the larger share, the smaller median residual, the lower file id. Key: the embedded key +
   `|os:<imdbId>:<usable file ids, sorted>`. `ALIGNED` within 1 s, one constant marked provisional.

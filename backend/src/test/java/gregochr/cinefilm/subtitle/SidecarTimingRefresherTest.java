@@ -320,6 +320,33 @@ class SidecarTimingRefresherTest {
     }
 
     @Test
+    void aFilmsOlderStoredFilesAreFilledInBeforeItsFitsAreMade() {
+        when(service.dueFilmIds()).thenReturn(List.of(7L));
+        when(service.readsFor(7L)).thenReturn(List.of());
+        when(service.backfillLastCueEnds(7L)).thenReturn(SaveOutcome.SAVED);
+        when(service.fitJobs(7L)).thenReturn(List.of());
+
+        startAndRun();
+
+        InOrder order = inOrder(service);
+        order.verify(service).backfillLastCueEnds(7L);
+        order.verify(service).fitJobs(7L);
+    }
+
+    @Test
+    void aBackfillThatCannotRunBecauseTheLibraryIsLockedStopsTheRunForLater() {
+        when(service.dueFilmIds()).thenReturn(List.of(7L));
+        when(service.readsFor(7L)).thenReturn(List.of());
+        when(service.backfillLastCueEnds(7L)).thenReturn(SaveOutcome.BUSY);
+
+        startAndRun();
+
+        verify(service, never()).fitJobs(any());
+        assertThat(messages()).containsExactly("Subtitle timing checks wait: a scan or an edit is using the library",
+            FINISHED.formatted(0, 0, 0, 0));
+    }
+
+    @Test
     void aReadThatCannotBeSavedBecauseTheLibraryIsLockedStopsTheRunForLater() {
         when(service.dueFilmIds()).thenReturn(List.of(7L));
         when(service.readsFor(7L)).thenReturn(List.of(read(70L)));
