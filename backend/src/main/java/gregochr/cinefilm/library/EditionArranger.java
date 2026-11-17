@@ -388,10 +388,7 @@ public class EditionArranger {
     /** The edition the film opens on: the stored default while it is there, else the scan's pick. */
     private Long currentDefault(Film film) {
         Long stored = preferences.findById(film.getId()).map(FilmPreference::getDefaultEditionId).orElse(null);
-        if (stored != null && film.getEditions().stream().anyMatch(e -> e.getId().equals(stored))) {
-            return stored;
-        }
-        return DefaultEdition.choose(film.getEditions()).map(Edition::getId).orElse(null);
+        return DefaultEdition.current(film.getEditions(), stored).map(Edition::getId).orElse(null);
     }
 
     private static String fileName(String path) {

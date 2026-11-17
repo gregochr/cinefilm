@@ -604,17 +604,19 @@ describe('Edit editions: saving', () => {
 });
 
 describe('Edit editions: closing, focus and the keyboard', () => {
-  it('Cancel, the close button and Esc all close it, with no confirm prompt', async () => {
+  it.each([
+    ['Cancel', async (user) => user.click(screen.getByRole('button', { name: 'Cancel' }))],
+    ['the close button', async (user) => user.click(screen.getByRole('button', { name: 'Close' }))],
+    ['Esc', async (user) => user.keyboard('{Escape}')],
+  ])('%s closes it once, with no confirm prompt', async (name, dismiss) => {
     installFetch();
     const confirm = vi.spyOn(window, 'confirm');
     const { user, onClose } = await open();
     await user.selectOptions(partSelect(PT2), 'Part 3');
 
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
-    await user.click(screen.getByRole('button', { name: 'Close' }));
-    await user.keyboard('{Escape}');
+    await dismiss(user);
 
-    expect(onClose).toHaveBeenCalledTimes(3);
+    expect(onClose).toHaveBeenCalledTimes(1);
     expect(confirm).not.toHaveBeenCalled();
     confirm.mockRestore();
   });

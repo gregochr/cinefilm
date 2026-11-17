@@ -1,9 +1,16 @@
 // scripts/replay/cdp.mjs: how Chrome's messages are matched to the requests and listeners waiting for them, with
-// made-up messages and no socket. Launching Chrome and the socket itself are checked by hand.
+// made-up messages and no socket; Chrome's argument lists, the pipe's framing and page, and `launchChrome` and
+// `openWindow` with a made-up spawn and made-up streams. The real Chrome and the real socket are checked by hand.
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { PassThrough, Writable } from 'node:stream';
 import { describe, test } from 'node:test';
 import {
-  failAll, pageSocketUrl, parseActivePort, routeMessage, stopChrome, track,
+  CHROME, MAX_MESSAGE_BYTES, chromeArgs, failAll, forSession, launchChrome, openPipe, openWindow, pageSocketUrl,
+  parseActivePort, routeMessage, splitFrames, stopChrome, track,
 } from '../../replay/cdp.mjs';
 
 // A request that is waiting, as `track` and the socket code make it; `log` records how it ended.
@@ -367,5 +374,590 @@ describe('stopChrome', () => {
     }
     await soon(stopping);
     assert.deepEqual(calls, ['kill', 'remove']);
+  });
+
+  test('with no removeProfile (a kept profile) it still stops the process and removes nothing', async () => {
+    const p = fake({ goesOn: 'SIGTERM' });
+    await stopChrome({ kill: p.kill, exited: p.exited, graceMs: WAIT });
+    assert.deepEqual(p.calls, ['kill SIGTERM']);
+  });
+});
+
+describe('chromeArgs', () => {
+  const PROFILE = '/tmp/p';
+  // The list the replay passed to Chrome before the viewer existed, written out: a change to it is a change to every
+  // replay already recorded.
+  const REPLAY = [
+    '--headless=new', '--no-first-run', '--no-default-browser-check', '--disable-background-networking',
+    '--disable-component-update', '--disable-sync', '--mute-audio',
+    '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
+    '--disable-backgrounding-occluded-windows',
+    '--autoplay-policy=no-user-gesture-required',
+    '--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1 , EXCLUDE localhost',
+    '--window-size=1280,800',
+    '--user-data-dir=/tmp/p', '--remote-debugging-port=0',
+    '--extra', 'about:blank',
+  ];
+
+  test('the replay\'s list is word for word what it always was, in the same order', () => {
+    assert.deepEqual(chromeArgs('replay', { profile: PROFILE, extraArgs: ['--extra'] }), REPLAY);
+  });
+
+  test('the viewer\'s list is the replay\'s with every host resolving and the pipe in place of the port', () => {
+    const expected = REPLAY.filter((arg) => !arg.startsWith('--host-resolver-rules'))
+      .map((arg) => (arg === '--remote-debugging-port=0' ? '--remote-debugging-pipe' : arg));
+    assert.deepEqual(chromeArgs('viewer', { profile: PROFILE, extraArgs: ['--extra'] }), expected);
+  });
+
+  test('the sign-in window\'s list has no headless, debugging or muting switch and ends with the address', () => {
+    const args = chromeArgs('window', { profile: PROFILE, address: 'https://site.example' });
+    assert.deepEqual(args, [
+      '--no-first-run', '--no-default-browser-check', '--disable-sync', '--user-data-dir=/tmp/p',
+      'https://site.example',
+    ]);
+    assert.equal(args.some((arg) => arg.startsWith('--headless') || arg.startsWith('--remote-debugging')), false);
+    assert.equal(args.includes('--mute-audio'), false);
+  });
+
+  test('no list ever holds --use-mock-keychain', () => {
+    for (const kind of ['replay', 'viewer', 'window']) {
+      const args = chromeArgs(kind, { profile: PROFILE, address: 'https://a.example', extraArgs: [] });
+      assert.equal(args.includes('--use-mock-keychain'), false, kind);
+    }
+  });
+
+  test('a way of starting that does not exist is refused', () => {
+    assert.throws(() => chromeArgs('other', { profile: PROFILE }), /unknown way of starting Chrome/);
+  });
+});
+
+describe('splitFrames', () => {
+  const buf = (text) => Buffer.from(text, 'utf8');
+  const EMPTY = Buffer.alloc(0);
+
+  test('one message ending with its NUL is complete, and nothing is left', () => {
+    const { messages, rest } = splitFrames(EMPTY, buf('{"a":1}\0'));
+    assert.deepEqual(messages, ['{"a":1}']);
+    assert.equal(rest.length, 0);
+  });
+
+  test('a message split across chunks is given only when its NUL has come', () => {
+    const first = splitFrames(EMPTY, buf('{"id"'));
+    assert.deepEqual(first.messages, []);
+    const second = splitFrames(first.rest, buf(':1}\0'));
+    assert.deepEqual(second.messages, ['{"id":1}']);
+  });
+
+  test('two messages in one chunk are both given, in order; what follows the last NUL is kept', () => {
+    const { messages, rest } = splitFrames(EMPTY, buf('one\0two\0thr'));
+    assert.deepEqual(messages, ['one', 'two']);
+    assert.equal(rest.toString(), 'thr');
+  });
+
+  test('an empty chunk changes nothing: what was held is still held', () => {
+    const { messages, rest } = splitFrames(buf('half'), EMPTY);
+    assert.deepEqual(messages, []);
+    assert.equal(rest.toString(), 'half');
+  });
+
+  test('a multi-byte character cut between two chunks is whole in the message', () => {
+    const bytes = buf('"é"\0');
+    const first = splitFrames(EMPTY, bytes.subarray(0, 2));
+    assert.deepEqual(splitFrames(first.rest, bytes.subarray(2)).messages, ['"é"']);
+  });
+
+  test('a message over the limit, with no NUL yet, throws; one at the limit does not', () => {
+    assert.throws(() => splitFrames(EMPTY, Buffer.alloc(11, 0x61), 10), /too long/);
+    assert.equal(splitFrames(EMPTY, Buffer.alloc(10, 0x61), 10).rest.length, 10);
+  });
+
+  test('a complete message over the limit throws too, and the limit is 16 MB', () => {
+    assert.throws(() => splitFrames(EMPTY, Buffer.concat([Buffer.alloc(11, 0x61), Buffer.alloc(1)]), 10), /too long/);
+    assert.equal(MAX_MESSAGE_BYTES, 16 * 1024 * 1024);
+  });
+});
+
+// A fake Chrome at the far end of a pipe: it reads commands, answers what `reply` makes of them (nothing when it
+// returns undefined), and can send anything on its own.
+function fakeChrome(reply) {
+  const fromChrome = new PassThrough();
+  const sent = [];
+  const toChrome = new Writable({
+    write(chunk, _encoding, done) {
+      for (const text of chunk.toString().split('\0').filter(Boolean)) {
+        const command = JSON.parse(text);
+        sent.push(command);
+        const answer = reply(command);
+        if (answer !== undefined) fromChrome.write(`${JSON.stringify({ id: command.id, ...answer })}\0`);
+      }
+      done();
+    },
+  });
+  return { toChrome, fromChrome, sent, say: (message) => fromChrome.write(`${JSON.stringify(message)}\0`) };
+}
+
+const PAGE_TARGET = { targetId: 'T1', type: 'page' };
+const TARGETS = { targetInfos: [{ targetId: 'B', type: 'browser' }, PAGE_TARGET] };
+function standardReply(command) {
+  if (command.method === 'Target.getTargets') return { result: TARGETS };
+  if (command.method === 'Target.attachToTarget') return { result: { sessionId: 'S1' } };
+  return { result: { echoed: command.method } };
+}
+// As `standardReply`, but a command of `silent`'s method is never answered (it stays waiting).
+const silentOn = (method) => (command) => (command.method === method ? undefined : standardReply(command));
+
+describe('openPipe', () => {
+  test('attaches to the first page target with flatten; every command after that carries the session id', async () => {
+    const chrome = fakeChrome(standardReply);
+    const page = await openPipe(chrome.toChrome, chrome.fromChrome);
+    assert.deepEqual(chrome.sent.map((c) => c.method), ['Target.getTargets', 'Target.attachToTarget']);
+    assert.deepEqual(chrome.sent[1].params, { targetId: 'T1', flatten: true });
+    assert.equal(chrome.sent[0].sessionId, undefined, 'the browser is asked without a session');
+    assert.deepEqual(await page.send('Page.enable'), { echoed: 'Page.enable' });
+    assert.equal(chrome.sent.at(-1).sessionId, 'S1');
+    page.close();
+  });
+
+  test('keeps asking for a page until one is there, and gives up after the tries it was given', async () => {
+    let asks = 0;
+    const late = fakeChrome((command) => {
+      if (command.method !== 'Target.getTargets') return standardReply(command);
+      asks += 1;
+      return { result: { targetInfos: asks < 3 ? [] : [PAGE_TARGET] } };
+    });
+    const page = await openPipe(late.toChrome, late.fromChrome, { tries: 5, delayMs: 1 });
+    assert.equal(asks, 3);
+    page.close();
+    const never = fakeChrome(() => ({ result: { targetInfos: [] } }));
+    await assert.rejects(openPipe(never.toChrome, never.fromChrome, { tries: 2, delayMs: 1 }), /did not start/);
+    assert.equal(never.sent.length, 2, 'it asked once for each try');
+  });
+
+  test('an event with the session\'s id reaches a listener; one with another id, or none, does not', async () => {
+    const chrome = fakeChrome(standardReply);
+    const page = await openPipe(chrome.toChrome, chrome.fromChrome);
+    const heard = [];
+    page.on('Fetch.requestPaused', (params) => heard.push(params.n));
+    chrome.say({ method: 'Fetch.requestPaused', params: { n: 1 }, sessionId: 'S1' });
+    chrome.say({ method: 'Fetch.requestPaused', params: { n: 2 }, sessionId: 'OTHER' });
+    chrome.say({ method: 'Fetch.requestPaused', params: { n: 3 } });
+    chrome.say({ method: 'Fetch.requestPaused', params: { n: 4 }, sessionId: 'S1' });
+    await flush();
+    assert.deepEqual(heard, [1, 4]);
+    page.close();
+  });
+
+  test('text that is not JSON is skipped, and the pipe goes on working', async () => {
+    const chrome = fakeChrome(standardReply);
+    const page = await openPipe(chrome.toChrome, chrome.fromChrome);
+    chrome.fromChrome.write('not json\0');
+    assert.deepEqual(await page.send('Runtime.enable'), { echoed: 'Runtime.enable' });
+    assert.equal(page.closed, false);
+    page.close();
+  });
+
+  test('evaluate returns the value, and throws what the page threw', async () => {
+    const chrome = fakeChrome((command) => {
+      if (command.method !== 'Runtime.evaluate') return standardReply(command);
+      return command.params.expression === 'bad'
+        ? { result: { exceptionDetails: { exception: { description: 'ReferenceError: x' } } } }
+        : { result: { result: { value: 42 } } };
+    });
+    const page = await openPipe(chrome.toChrome, chrome.fromChrome);
+    assert.equal(await page.evaluate('6*7'), 42);
+    await assert.rejects(page.evaluate('bad'), /page: "ReferenceError: x"/);
+    page.close();
+  });
+
+  test('a pipe that ends rejects every waiting request and sets closed; a later command is refused', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const chrome = fakeChrome(silentOn('Runtime.enable'));
+    const page = await openPipe(chrome.toChrome, chrome.fromChrome);
+    const first = page.send('Runtime.enable');
+    const second = page.send('Runtime.enable');
+    assert.equal(page.closed, false);
+    chrome.fromChrome.end();
+    await assert.rejects(soon(first), { message: 'Chrome closed the connection' });
+    await assert.rejects(soon(second), { message: 'Chrome closed the connection' });
+    assert.equal(page.closed, true);
+    await assert.rejects(page.send('Page.enable'), /Chrome is not connected/);
+  });
+
+  test('a message over 16 MB with no NUL fails the channel: the waiting request is rejected', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const chrome = fakeChrome(silentOn('Runtime.enable'));
+    const page = await openPipe(chrome.toChrome, chrome.fromChrome);
+    const waiting = page.send('Runtime.enable');
+    chrome.fromChrome.write(Buffer.alloc(MAX_MESSAGE_BYTES + 1, 0x61));
+    await assert.rejects(soon(waiting), /too long/);
+    assert.equal(page.closed, true);
+  });
+
+  test('close() rejects what is waiting and closes the page', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const chrome = fakeChrome(silentOn('Runtime.enable'));
+    const page = await openPipe(chrome.toChrome, chrome.fromChrome);
+    const waiting = page.send('Runtime.enable');
+    page.close();
+    await assert.rejects(soon(waiting), { message: 'Chrome closed the connection' });
+    assert.equal(page.closed, true);
+  });
+});
+
+// A stand-in for a spawned Chrome: it records how it was started and what it was sent.
+// `reply` is what its pipe's Chrome answers; with `exitOnKill` the process ends when it is signalled, as Chrome does.
+function fakeSpawn({ pipe = false, reply = standardReply, exitOnKill = false } = {}) {
+  const made = { calls: [], proc: null, chrome: null };
+  const spawnProcess = (file, args, spawnOptions) => {
+    const proc = new EventEmitter();
+    proc.pid = 4242;
+    proc.signals = [];
+    proc.kill = (signal) => {
+      proc.signals.push(signal);
+      if (exitOnKill) setImmediate(() => proc.emit('exit'));
+    };
+    if (pipe) {
+      made.chrome = fakeChrome(reply);
+      proc.stdio = [null, null, null, made.chrome.toChrome, made.chrome.fromChrome];
+    }
+    made.calls.push({ file, args, spawnOptions });
+    made.proc = proc;
+    return proc;
+  };
+  return { made, spawnProcess };
+}
+
+describe('launchChrome: the pipe, a kept profile and its own group', () => {
+  const KEPT = '/kept/profile';
+
+  test('the viewer\'s way: pipe arguments, five descriptors, the kept profile, not detached unless asked', async () => {
+    const { made, spawnProcess } = fakeSpawn({ pipe: true });
+    const chrome = await launchChrome({ profile: KEPT, channel: 'pipe', spawnProcess });
+    const [call] = made.calls;
+    assert.equal(call.file, CHROME);
+    assert.deepEqual(call.args, chromeArgs('viewer', { profile: KEPT }));
+    assert.deepEqual(call.spawnOptions, { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'], detached: false });
+    assert.deepEqual(await chrome.page.send('Page.enable'), { echoed: 'Page.enable' });
+    chrome.page.close();
+  });
+
+  test('called as the replay calls it, it starts with the replay\'s arguments and a port', async () => {
+    const { made, spawnProcess } = fakeSpawn();
+    const root = mkdtempSync(join(tmpdir(), 'cdp-'));
+    try {
+      const starting = launchChrome({ profileRoot: root, spawnProcess });
+      const [call] = made.calls;
+      assert.equal(call.args.includes('--remote-debugging-port=0'), true);
+      assert.equal(call.args.some((arg) => arg.startsWith('--host-resolver-rules=')), true);
+      assert.deepEqual(call.spawnOptions, { stdio: 'ignore', detached: false });
+      made.proc.emit('exit');
+      await assert.rejects(starting, /did not start/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('a kept profile is not removed by close() or by the hard stop; a throwaway one is', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'cdp-'));
+    try {
+      const kept = join(root, 'kept');
+      mkdirSync(kept);
+      const first = fakeSpawn({ pipe: true });
+      let hardStop;
+      const chrome = await launchChrome({
+        profile: kept, channel: 'pipe', spawnProcess: first.spawnProcess, onSpawn: (kill) => {
+          hardStop = kill;
+        },
+      });
+      hardStop();
+      assert.equal(existsSync(kept), true, 'the hard stop left it');
+      first.made.proc.emit('exit');
+      await chrome.close();
+      assert.equal(existsSync(kept), true, 'close() left it');
+
+      const second = fakeSpawn();
+      let kill;
+      const starting = launchChrome({
+        profileRoot: root, spawnProcess: second.spawnProcess, onSpawn: (k) => {
+          kill = k;
+        },
+      });
+      const made = second.made.calls[0].args.find((arg) => arg.startsWith('--user-data-dir=')).slice(16);
+      assert.equal(existsSync(made), true);
+      kill();
+      assert.equal(existsSync(made), false, 'a throwaway profile is removed by the hard stop');
+      second.made.proc.emit('exit');
+      await assert.rejects(starting);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('ownGroup spawns detached and the hard stop signals the group; a group that has gone is no error', async () => {
+    const { made, spawnProcess } = fakeSpawn({ pipe: true });
+    const signalled = [];
+    let hardStop;
+    const chrome = await launchChrome({
+      profile: KEPT, channel: 'pipe', ownGroup: true, spawnProcess,
+      signalProcess: (pid, signal) => signalled.push([pid, signal]),
+      onSpawn: (kill) => {
+        hardStop = kill;
+      },
+    });
+    assert.equal(made.calls[0].spawnOptions.detached, true);
+    hardStop();
+    assert.deepEqual(signalled, [[-4242, 'SIGKILL']]);
+    assert.deepEqual(made.proc.signals, [], 'the process itself was not signalled on its own');
+    chrome.page.close();
+
+    const gone = fakeSpawn({ pipe: true });
+    let stopGone;
+    const second = await launchChrome({
+      profile: KEPT, channel: 'pipe', ownGroup: true, spawnProcess: gone.spawnProcess,
+      signalProcess: () => {
+        throw Object.assign(new Error('no such process'), { code: 'ESRCH' });
+      },
+      onSpawn: (kill) => {
+        stopGone = kill;
+      },
+    });
+    assert.doesNotThrow(() => stopGone());
+    second.page.close();
+  });
+});
+
+describe('openWindow', () => {
+  test('starts a normal window: the window\'s arguments, no output read, nothing detached', () => {
+    const { made, spawnProcess } = fakeSpawn();
+    openWindow({ profile: '/kept', address: 'https://site.example', spawnProcess });
+    assert.equal(made.calls[0].file, CHROME);
+    assert.deepEqual(made.calls[0].args, chromeArgs('window', { profile: '/kept', address: 'https://site.example' }));
+    assert.deepEqual(made.calls[0].spawnOptions, { stdio: 'ignore' });
+  });
+
+  test('exited settles when that Chrome has gone, by exit or by error, and not before', async () => {
+    for (const event of ['exit', 'error']) {
+      const { made, spawnProcess } = fakeSpawn();
+      const win = openWindow({ profile: '/kept', address: 'a', spawnProcess });
+      let settled = false;
+      win.exited.then(() => {
+        settled = true;
+      });
+      await flush();
+      assert.equal(settled, false, `${event}: not before`);
+      made.proc.emit(event);
+      await soon(win.exited);
+      assert.equal(settled, true, event);
+    }
+  });
+
+  test('stop() ends it with SIGTERM and waits for it to go; kill() is a SIGKILL', async () => {
+    const { made, spawnProcess } = fakeSpawn();
+    const win = openWindow({ profile: '/kept', address: 'a', spawnProcess });
+    const stopping = win.stop();
+    await flush();
+    assert.deepEqual(made.proc.signals, ['SIGTERM']);
+    made.proc.emit('exit');
+    await soon(stopping);
+    win.kill();
+    assert.deepEqual(made.proc.signals, ['SIGTERM', 'SIGKILL']);
+  });
+
+  test('a window with no address is refused, not started with "undefined" in its arguments', () => {
+    const { made, spawnProcess } = fakeSpawn();
+    assert.throws(() => openWindow({ profile: '/kept', spawnProcess }), /needs an address/);
+    assert.throws(() => chromeArgs('window', { profile: '/kept', address: '' }), /needs an address/);
+    assert.equal(made.calls.length, 0);
+  });
+});
+
+describe('launchChrome: stopping', () => {
+  const KEPT = '/kept/profile';
+
+  test('without ownGroup the hard stop kills the process itself and signals no group', async () => {
+    const { made, spawnProcess } = fakeSpawn({ pipe: true });
+    const signalled = [];
+    let hardStop;
+    const chrome = await launchChrome({
+      profile: KEPT, channel: 'pipe', spawnProcess, signalProcess: (...args) => signalled.push(args),
+      onSpawn: (kill) => {
+        hardStop = kill;
+      },
+    });
+    hardStop();
+    assert.deepEqual(made.proc.signals, ['SIGKILL']);
+    assert.deepEqual(signalled, []);
+    chrome.page.close();
+  });
+
+  test('with ownGroup, SIGTERM goes to the process alone: only the hard kill goes to the group', async () => {
+    const { made, spawnProcess } = fakeSpawn({ pipe: true, exitOnKill: true });
+    const signalled = [];
+    const chrome = await launchChrome({
+      profile: KEPT, channel: 'pipe', ownGroup: true, spawnProcess, signalProcess: (...args) => signalled.push(args),
+    });
+    await chrome.close();
+    assert.deepEqual(made.proc.signals, ['SIGTERM']);
+    assert.deepEqual(signalled, []);
+  });
+
+  test('a pipe that never lists a page fails the launch, and the Chrome that was started is stopped', async () => {
+    const { made, spawnProcess } = fakeSpawn({
+      pipe: true, exitOnKill: true, reply: (command) => (command.method === 'Target.getTargets'
+        ? { result: { targetInfos: [] } } : standardReply(command)),
+    });
+    await assert.rejects(
+      launchChrome({
+        profile: KEPT, channel: 'pipe', spawnProcess, pipeOptions: { tries: 2, delayMs: 1 },
+      }),
+      /did not start/,
+    );
+    assert.deepEqual(made.proc.signals, ['SIGTERM']);
+    const asked = made.chrome.sent.filter((command) => command.method === 'Target.getTargets').length;
+    assert.equal(asked, 2, 'it asked once for each try it was given (pipeOptions reached the pipe)');
+  });
+
+  test('a pipe that ends before it answers fails the launch, and the Chrome that was started is stopped', async () => {
+    const { made, spawnProcess } = fakeSpawn({ pipe: true, exitOnKill: true, reply: () => undefined });
+    const starting = launchChrome({ profile: KEPT, channel: 'pipe', spawnProcess });
+    await flush();
+    made.chrome.fromChrome.end();
+    await assert.rejects(starting, { message: 'Chrome closed the connection' });
+    assert.deepEqual(made.proc.signals, ['SIGTERM']);
+  });
+});
+
+describe('launchChrome: what it refuses before it starts anything', () => {
+  // The launch is asked and the spawn looked at straight away: a launch that did not refuse would have started Chrome.
+  async function refused(settings, message) {
+    const { made, spawnProcess } = fakeSpawn({ pipe: true, exitOnKill: true });
+    const starting = launchChrome({ ...settings, spawnProcess, pipeOptions: { tries: 1, delayMs: 1 } });
+    starting.catch(() => undefined);
+    await flush();
+    made.proc?.emit('exit'); // a launch that wrongly went ahead ends at once, so the test fails now, not in 30 s
+    assert.equal(made.calls.length, 0, 'nothing was spawned');
+    await assert.rejects(starting, message);
+  }
+
+  test('a channel that is neither port nor pipe', async () => {
+    await refused({ profileRoot: tmpdir(), channel: 'socket' }, /unknown channel: socket/);
+    await refused({ profile: '/kept', channel: 'Pipe' }, /unknown channel: Pipe/);
+  });
+
+  test('a kept profile without the pipe: it is a signed-in one and never gets a debugging port', async () => {
+    await refused({ profile: '/kept' }, /kept profile is a signed-in one/);
+    await refused({ profile: '/kept', channel: 'port' }, /kept profile is a signed-in one/);
+  });
+
+  test('a kept profile that is an empty string, or not a string, is refused, not taken for none', async () => {
+    for (const profile of ['', null, 42, {}]) {
+      await refused({ profile, profileRoot: tmpdir() }, /must be the name of a folder/);
+      await refused({ profile, channel: 'pipe' }, /must be the name of a folder/);
+    }
+  });
+});
+
+describe('forSession', () => {
+  test('before the page is attached no event is for it, whatever session id it carries', () => {
+    assert.equal(forSession('{"method":"X.y","sessionId":null}', null), false);
+    assert.equal(forSession('{"method":"X.y"}', null), false);
+    assert.equal(forSession('{"method":"X.y","sessionId":"S1"}', null), false);
+  });
+
+  test('after it, only an event with the session id; a reply, or text that is not JSON, always', () => {
+    assert.equal(forSession('{"method":"X.y","sessionId":"S1"}', 'S1'), true);
+    assert.equal(forSession('{"method":"X.y","sessionId":"S2"}', 'S1'), false);
+    assert.equal(forSession('{"method":"X.y"}', 'S1'), false);
+    assert.equal(forSession('{"id":3,"result":{}}', null), true);
+    assert.equal(forSession('not json', 'S1'), true);
+  });
+});
+
+describe('openPipe: how it fails, and what it does when it is closed', () => {
+  // A pipe that is open, a request that waits on it, and the way to break it.
+  async function waiting(t, makeToChrome) {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const chrome = fakeChrome(silentOn('Page.enable'));
+    const toChrome = makeToChrome ? makeToChrome(chrome) : chrome.toChrome;
+    const page = await openPipe(toChrome, chrome.fromChrome);
+    return { chrome, page, request: page.send('Page.enable') };
+  }
+
+  test('fromChrome emitting an error rejects a waiting request and sets closed', async (t) => {
+    const { chrome, page, request } = await waiting(t);
+    chrome.fromChrome.emit('error', new Error('EIO'));
+    await assert.rejects(soon(request), { message: 'Chrome closed the connection' });
+    assert.equal(page.closed, true);
+  });
+
+  test('fromChrome closing rejects a waiting request and sets closed', async (t) => {
+    const { chrome, page, request } = await waiting(t);
+    chrome.fromChrome.emit('close');
+    await assert.rejects(soon(request), { message: 'Chrome closed the connection' });
+    assert.equal(page.closed, true);
+  });
+
+  test('toChrome emitting an error rejects a waiting request and sets closed', async (t) => {
+    const { chrome, page, request } = await waiting(t);
+    chrome.toChrome.emit('error', new Error('EPIPE'));
+    await assert.rejects(soon(request), { message: 'Chrome closed the connection' });
+    assert.equal(page.closed, true);
+  });
+
+  test('a write that reports an error rejects what waits, and the command that was being written', async (t) => {
+    // A writer that takes the first commands and fails the next one, through the write's own callback.
+    let writes = 0;
+    const failing = (chrome) => ({
+      on: () => undefined,
+      destroy: () => undefined,
+      write: (text, done) => {
+        writes += 1;
+        if (writes <= 3) chrome.toChrome.write(text, done);
+        else done(new Error('EPIPE'));
+      },
+    });
+    const { page, request } = await waiting(t, failing);
+    const second = page.send('Runtime.enable');
+    await assert.rejects(soon(second), { message: 'EPIPE' });
+    await assert.rejects(soon(request), { message: 'EPIPE' });
+    assert.equal(page.closed, true);
+  });
+
+  test('close() destroys both streams', async () => {
+    const chrome = fakeChrome(standardReply);
+    const page = await openPipe(chrome.toChrome, chrome.fromChrome);
+    assert.equal(chrome.toChrome.destroyed, false);
+    assert.equal(chrome.fromChrome.destroyed, false);
+    page.close();
+    assert.equal(chrome.toChrome.destroyed, true);
+    assert.equal(chrome.fromChrome.destroyed, true);
+  });
+
+  test('once the channel has failed, nothing more is read: no listener hears what follows', async () => {
+    const chrome = fakeChrome(standardReply);
+    const page = await openPipe(chrome.toChrome, chrome.fromChrome);
+    const heard = [];
+    page.on('X.y', () => heard.push('heard'));
+    chrome.fromChrome.write(Buffer.alloc(MAX_MESSAGE_BYTES + 1, 0x61));
+    await flush();
+    assert.equal(page.closed, true);
+    chrome.fromChrome.write('{"method":"X.y","sessionId":"S1","params":{}}\0');
+    await flush();
+    assert.deepEqual(heard, []);
+  });
+});
+
+describe('splitFrames: the limit\'s edge', () => {
+  const EMPTY = Buffer.alloc(0);
+  const message = (length, withNul) => Buffer.concat([Buffer.alloc(length, 0x61), Buffer.alloc(withNul ? 1 : 0)]);
+
+  test('a message of exactly the limit is accepted, with its NUL and without', () => {
+    assert.equal(splitFrames(EMPTY, message(10, true), 10).messages[0].length, 10);
+    assert.equal(splitFrames(EMPTY, message(10, false), 10).rest.length, 10);
+  });
+
+  test('a message one byte over the limit is refused, with its NUL and without', () => {
+    assert.throws(() => splitFrames(EMPTY, message(11, true), 10), /too long/);
+    assert.throws(() => splitFrames(EMPTY, message(11, false), 10), /too long/);
   });
 });

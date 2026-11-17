@@ -460,6 +460,18 @@
 .sp {
   width: 720px;
 }
+/* Fix match: the same frame; the file line is a name, not an eyebrow word, and the buttons sit on the right. */
+.fixmatch {
+  width: 720px;
+}
+.fixmatch .ee__eyebrow {
+  text-transform: none;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+.fixmatch .ee__footer {
+  justify-content: flex-end;
+}
 .sp__lead {
   margin: 0;
   font-size: 14px;
