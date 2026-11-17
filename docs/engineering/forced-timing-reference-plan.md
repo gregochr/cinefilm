@@ -148,25 +148,17 @@ references, the search columns, and new reference metadata.
 
 #### Built ahead of 3c-1's lines (owner, 2026-11-17)
 
-The owner chose to build 3c-2 before 3c-1's lines exist, with provisional rules that the lines then adjust. Trust and
-playback stay untouched, so a wrong provisional rule can only mislabel a row in Admin.
+Built before 3c-1's lines exist, with provisional rules the lines then adjust (owner). Trust and playback stay
+untouched, so a wrong provisional rule can only mislabel a row in Admin.
 
-- **Scope:** every single-file edition whose embedded read is `NO_REFERENCE` and whose film was searched for full
-  subtitles under its current IMDb id. This is wider than `TimingReferenceService`'s (no line-count, verified or
-  plays-embedded test, which would need `ForcedResolver` inside `current()`). The extra rows are display only. Their
-  served sidecars are fitted against the stored references instead of saving `NO_REFERENCE`.
-  References stored before V30 have no last-cue end, so they are not used until a follow-up fills it in.
-- **The chosen reference (provisional):** fit against every usable stored reference among the edition's candidates
-  (never the sidecar's own OpenSubtitles file) and keep the best: an `ALIGNED` fit first, then the larger matched
-  share (integer cross-multiplication), then the smaller median residual, then the lower OpenSubtitles file id. The
-  row stores `reference_os_file_id`.
-- **Key:** the embedded key + `|os:<imdbId>:<every usable reference's file id, sorted>`, so a newly stored reference
-  makes the fit stale and the choice is made again.
-- **Offset limit for `ALIGNED`:** 1 s, as above, in one named constant marked provisional.
-- **Split:** 3c-2a is the backend (migration, fit, key, verdicts, `isAligned`, DTO `source` and `referenceRelease`).
-  3c-2b is the copy (`proofText`, `downloadProof`, `TimingFit`'s reasons) and the Admin source line.
-- **After the lines:** a small follow-up changes the choice rule or the 1 s limit if the lines say so. The
-  owner question on trust (above) is still asked then.
+- **Scope:** single-file editions with a `NO_REFERENCE` embedded read, searched under the film's current IMDb id, not
+  marked `NONE_EXIST`. Wider than `TimingReferenceService`'s (its tests would need `ForcedResolver` in `current()`);
+  the extra rows are display only. References stored before V30 lack a last-cue end and wait for a follow-up.
+- **Choice (provisional):** fit to every usable stored reference (never the sidecar's own file); keep `ALIGNED` first,
+  then the larger share, the smaller median residual, the lower file id. Key: the embedded key +
+  `|os:<imdbId>:<usable file ids, sorted>`. `ALIGNED` within 1 s, one constant marked provisional.
+- **Split:** 3c-2a is the backend; 3c-2b the copy (`proofText`, `downloadProof`, reasons) and the Admin source line.
+  A follow-up adjusts the choice or the 1 s limit from the lines; the trust question above is asked then.
 
 ### 3d — tie the full file to the film's speech (`alass`)
 
