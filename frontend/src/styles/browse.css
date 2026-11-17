@@ -930,12 +930,15 @@
   font-size: var(--cf-size-label);
 }
 .admin__credits li {
-  line-height: 44px; /* matches the links' 44px targets, so wrapped lines sit evenly */
+  line-height: 1.5; /* 18px at 12px */
+}
+.admin__credits li + li {
+  margin-top: 8px;
 }
 .admin__credit-link {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
+  display: inline-block;
+  padding-block: 13px; /* 18px line + 2 x 13px = a 44px target ... */
+  margin-block: -13px; /* ... that takes no room, so wrapped lines keep their 18px spacing */
   color: var(--cf-text-muted);
   text-decoration: underline;
   text-underline-offset: 3px;

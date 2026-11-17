@@ -171,7 +171,7 @@ export default function AdminSettings() {
         <TmdbMark />
         <span>{settingsPage.credit}</span>
       </p>
-      <ul className="admin__credits">
+      <ul className="admin__credits" aria-label={settingsPage.dataCreditsLabel}>
         {settingsPage.dataCredits.map((line) => (
           <li key={line.key}>
             {line.parts.map((part) =>
