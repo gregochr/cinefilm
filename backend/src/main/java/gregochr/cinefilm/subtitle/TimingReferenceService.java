@@ -102,8 +102,8 @@ public class TimingReferenceService {
     }
 
     /**
-     * The films with an edition that qualifies: they are searched for full English subtitles as well (never one the owner
-     * marked {@code NONE_EXIST}).
+     * The films with an edition that qualifies: they are searched for full English subtitles as well (never one the
+     * owner marked {@code NONE_EXIST}).
      *
      * @return the film ids (those with an IMDb id), empty while the timing check is off
      */
