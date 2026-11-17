@@ -1,10 +1,14 @@
-// A small client for Chrome's debugging protocol: start a headless Chrome with its own throwaway profile, and
-// talk to one page. Node has WebSocket and fetch built in, so nothing is installed.
+// A small client for Chrome's debugging protocol: start a headless Chrome (with its own throwaway profile, or a kept
+// one), or a plain window, and talk to one page over a port or a pipe. Node has WebSocket and fetch built in, so
+// nothing is installed.
 //
-// Launching Chrome and the socket need the installed Chrome and cannot run in CI; they are checked by hand
-// (docs/engineering/home-replay.md). The matching of replies to requests and of events to listeners is `routeMessage`,
+// Starting the real Chrome and the real socket need the installed Chrome and cannot run in CI; they are checked by
+// hand (docs/engineering/home-replay.md). `launchChrome` and `openWindow` are tested with a made-up spawn and
+// made-up streams. The matching of replies to requests and of events to listeners is `routeMessage`,
 // and the bookkeeping of requests that are waiting is `track` and `failAll`: all three take plain values, so they are
-// tested with made-up messages.
+// tested with made-up messages. The same goes for Chrome's three argument lists (`chromeArgs`) and the cutting of the
+// debugging pipe's bytes into messages (`splitFrames`); the pipe's page (`openPipe`) is tested over fake streams.
+// The pipe is the viewer's channel (docs/engineering/train-viewer-plan.md): nothing listens on any port.
 import { spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -141,7 +145,7 @@ async function waitForPage(profile, chromeGone) {
 }
 
 // Whether `promise` settles within `ms`; the timer does not outlive the answer.
-async function within(promise, ms) {
+export async function within(promise, ms) {
   let timer;
   const timeout = new Promise((resolve) => {
     timer = setTimeout(resolve, ms, false);
@@ -157,7 +161,7 @@ async function within(promise, ms) {
  * Stops a process and removes its profile. `kill(signal)` sends a signal, `exited` is a promise that settles when
  * the process has gone. The order: a first kill; a wait of `graceMs` for it to go; if it has not, `SIGKILL` and a
  * wait of `hardMs`; then `removeProfile()`, whose failure is not passed on (a profile still being written to may be
- * left behind).
+ * left behind). With no `removeProfile` (a kept profile) nothing is removed.
  */
 export async function stopChrome({ kill, exited, removeProfile, graceMs = 3000, hardMs = 3000 }) {
   kill('SIGTERM');
@@ -166,7 +170,7 @@ export async function stopChrome({ kill, exited, removeProfile, graceMs = 3000, 
     await within(exited, hardMs);
   }
   try {
-    removeProfile();
+    removeProfile?.();
   } catch {
     // Left behind: the temporary folder is cleared by the system in time.
   }
@@ -182,27 +186,55 @@ export async function stopChrome({ kill, exited, removeProfile, graceMs = 3000, 
  * synchronous function that kills it for good and removes the profile as best it can, so that whoever starts Chrome
  * can stop it during its start-up too, and after it. The result has `page` and `close()` (stops Chrome with a grace
  * period, see `stopChrome`).
+ *
+ * Three options, all off by default (the replay uses none):
+ *  - `profile`: a kept profile folder, used as it is and never removed, not by `close()` and not by the hard stop;
+ *    `profileRoot` is then not used.
+ *  - `channel: 'pipe'`: the viewer's arguments, and the page is talked to over `--remote-debugging-pipe` (no port,
+ *    no `DevToolsActivePort`, no `/json`).
+ *  - `ownGroup: true`: Chrome leads its own process group, so a Ctrl-C in the terminal does not reach it, and the
+ *    hard stop kills the whole group.
+ * A `channel` that is neither `'port'` nor `'pipe'` is refused, and so is a kept profile without the pipe (it is a
+ * signed-in profile and never gets a debugging port), before anything is started.
+ * `spawnProcess`, `signalProcess` (`process.kill`'s shape) and `pipeOptions` (`openPipe`'s tries) are for tests.
  */
-export async function launchChrome({ profileRoot, extraArgs = [], onSpawn }) {
-  const profile = mkdtempSync(join(profileRoot, 'replay-chrome-'));
-  const removeProfile = () => rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-  const proc = spawn(CHROME, [
-    '--headless=new', '--no-first-run', '--no-default-browser-check', '--disable-background-networking',
-    '--disable-component-update', '--disable-sync', '--mute-audio',
-    // A page nobody is looking at has its timers slowed to once a second; hls.js runs on timers.
-    '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
-    '--disable-backgrounding-occluded-windows',
-    '--autoplay-policy=no-user-gesture-required',
-    '--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1 , EXCLUDE localhost',
-    '--window-size=1280,800',
-    `--user-data-dir=${profile}`, '--remote-debugging-port=0',
-    ...extraArgs, 'about:blank',
-  ], { stdio: 'ignore' });
+export async function launchChrome({
+  profileRoot, extraArgs = [], onSpawn, profile: kept, channel = 'port', ownGroup = false,
+  spawnProcess = spawn, signalProcess = process.kill, pipeOptions,
+}) {
+  if (channel !== 'port' && channel !== 'pipe') throw new Error(`unknown channel: ${String(channel)}`);
+  if (kept !== undefined && (typeof kept !== 'string' || kept === '')) {
+    throw new Error('a kept profile must be the name of a folder');
+  }
+  if (kept !== undefined && channel !== 'pipe') {
+    throw new Error('a kept profile is a signed-in one: it is only started with the pipe');
+  }
+  const profile = kept ?? mkdtempSync(join(profileRoot, 'replay-chrome-'));
+  const removeProfile = kept
+    ? undefined
+    : () => rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  const piped = channel === 'pipe';
+  const proc = spawnProcess(CHROME, chromeArgs(piped ? 'viewer' : 'replay', { profile, extraArgs }), {
+    stdio: piped ? ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'] : 'ignore',
+    detached: ownGroup,
+  });
+  // A group is killed as a whole, so Chrome's helpers go with it; a process that has already gone is not an error.
+  const kill = (signal) => {
+    if (!ownGroup || signal !== 'SIGKILL' || !proc.pid) {
+      proc.kill(signal);
+      return;
+    }
+    try {
+      signalProcess(-proc.pid, signal);
+    } catch {
+      // Already gone.
+    }
+  };
   // Chrome may still be writing to its profile after SIGKILL (its child processes), so the profile may be left.
   const hardStop = () => {
-    proc.kill('SIGKILL');
+    kill('SIGKILL');
     try {
-      removeProfile();
+      removeProfile?.();
     } catch {
       // Left behind.
     }
@@ -217,12 +249,12 @@ export async function launchChrome({ profileRoot, extraArgs = [], onSpawn }) {
     proc.on('error', onGone);
     proc.on('exit', onGone);
   });
-  const stop = () => stopChrome({ kill: (signal) => proc.kill(signal), exited, removeProfile });
+  const stop = () => stopChrome({ kill, exited, removeProfile });
   let page = null;
   try {
-    const wsUrl = await waitForPage(profile, () => gone);
-    if (!wsUrl) throw new Error('Chrome did not start');
-    page = await connect(wsUrl);
+    page = piped
+      ? await openPipe(proc.stdio[3], proc.stdio[4], pipeOptions)
+      : await connectToPort(profile, () => gone);
   } catch (error) {
     await stop();
     throw error;
@@ -234,6 +266,185 @@ export async function launchChrome({ profileRoot, extraArgs = [], onSpawn }) {
       await stop();
     },
   };
+}
+
+/**
+ * Chrome's argument list for one of three ways of starting it (`kind`):
+ *  - `replay`: headless, a throwaway `profile`, `--remote-debugging-port=0`, and no host name but `localhost`
+ *    resolving; `extraArgs` and `about:blank` come last.
+ *  - `viewer`: the same, but every host resolves and the channel is `--remote-debugging-pipe` (nothing listens).
+ *  - `window`: a normal window on `address` with a kept `profile`: no `--headless`, no debugging port or pipe, no
+ *    muting. Nothing in it lets a program read the page.
+ * No list holds `--use-mock-keychain`: with it a cookie in a kept profile is as good as plain text, and a start
+ * with the other setting would delete it.
+ */
+export function chromeArgs(kind, { profile, extraArgs = [], address } = {}) {
+  if (kind === 'window') {
+    if (typeof address !== 'string' || address === '') throw new Error('the window needs an address to open');
+    return ['--no-first-run', '--no-default-browser-check', '--disable-sync', `--user-data-dir=${profile}`, address];
+  }
+  if (kind !== 'replay' && kind !== 'viewer') throw new Error(`unknown way of starting Chrome: ${kind}`);
+  const replay = kind === 'replay';
+  return [
+    '--headless=new', '--no-first-run', '--no-default-browser-check', '--disable-background-networking',
+    '--disable-component-update', '--disable-sync', '--mute-audio',
+    // A page nobody is looking at has its timers slowed to once a second; hls.js runs on timers.
+    '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
+    '--disable-backgrounding-occluded-windows',
+    '--autoplay-policy=no-user-gesture-required',
+    ...(replay ? ['--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1 , EXCLUDE localhost'] : []),
+    '--window-size=1280,800',
+    `--user-data-dir=${profile}`, replay ? '--remote-debugging-port=0' : '--remote-debugging-pipe',
+    ...extraArgs, 'about:blank',
+  ];
+}
+
+async function connectToPort(profile, chromeGone) {
+  const wsUrl = await waitForPage(profile, chromeGone);
+  if (!wsUrl) throw new Error('Chrome did not start');
+  return connect(wsUrl);
+}
+
+/**
+ * Starts Chrome as a normal window, for a person to use: `address` opens in it, `profile` is kept as it is. Nothing
+ * is attached to it: no debugging port or pipe, no output read. Returns `{ exited, stop, kill }`: `exited` settles
+ * when that Chrome has gone, `stop()` ends it (`SIGTERM`, then `SIGKILL` if it lingers) and never removes the
+ * profile, `kill()` is the synchronous hard stop.
+ */
+export function openWindow({ profile, address, spawnProcess = spawn }) {
+  const proc = spawnProcess(CHROME, chromeArgs('window', { profile, address }), { stdio: 'ignore' });
+  const exited = new Promise((resolve) => {
+    proc.on('error', resolve);
+    proc.on('exit', resolve);
+  });
+  return {
+    exited,
+    stop: () => stopChrome({ kill: (signal) => proc.kill(signal), exited }),
+    kill: () => {
+      proc.kill('SIGKILL');
+    },
+  };
+}
+
+// ---- the debugging pipe ------------------------------------------------------------------------------------------
+
+/** The most a single message may hold before its NUL: a channel that sends more is failed, not buffered for ever. */
+export const MAX_MESSAGE_BYTES = 16 * 1024 * 1024;
+
+/**
+ * Cuts the bytes Chrome writes to the pipe into messages (each ends with one NUL byte). `held` is what was left
+ * of the earlier chunks, `chunk` the bytes that just arrived. Returns `{ messages, rest }`: the complete messages, as
+ * text (an empty one between two NULs is dropped), and the part that has no NUL yet, to be passed as `held` next
+ * time. Throws when a message is over `limit` bytes, with or without its NUL.
+ */
+export function splitFrames(held, chunk, limit = MAX_MESSAGE_BYTES) {
+  let rest = chunk.length === 0 ? held : Buffer.concat([held, chunk]);
+  const messages = [];
+  for (let end = rest.indexOf(0); end !== -1; end = rest.indexOf(0)) {
+    if (end > limit) throw new Error('Chrome sent a message that is too long');
+    if (end > 0) messages.push(rest.subarray(0, end).toString('utf8'));
+    rest = rest.subarray(end + 1);
+  }
+  if (rest.length > limit) throw new Error('Chrome sent a message that is too long');
+  return { messages, rest };
+}
+
+// Whether a message is for this page: a reply (it has an id) always, an event only when it carries the session's id.
+export function forSession(raw, sessionId) {
+  try {
+    const message = JSON.parse(raw);
+    return message === null || typeof message !== 'object' || message.id !== undefined
+      || (sessionId !== null && message.sessionId === sessionId);
+  } catch {
+    return true; // Not JSON: `routeMessage` skips it.
+  }
+}
+
+/**
+ * The page behind a debugging pipe. `toChrome` is the stream Chrome reads commands from (its descriptor 3),
+ * `fromChrome` the one it writes answers and events to (descriptor 4). Over the pipe one talks to the browser, not to
+ * a page: this asks `Target.getTargets` (`tries` times, `delayMs` apart) until a page is there, attaches to it, and
+ * from then on every command carries the session's id and a listener hears only the events of that session. The
+ * result has the socket page's `send`, `on`, `evaluate`, `closed` and `close`.
+ */
+export async function openPipe(toChrome, fromChrome, { tries = 100, delayMs = 100 } = {}) {
+  let nextId = 1;
+  let closed = false;
+  let sessionId = null;
+  let held = Buffer.alloc(0);
+  const pending = new Map();
+  const listeners = new Map();
+  const fail = (error) => {
+    closed = true;
+    failAll(pending, error);
+  };
+  const post = (method, params, session) => {
+    if (closed) return Promise.reject(new Error(`${method}: Chrome is not connected`));
+    const id = nextId;
+    nextId += 1;
+    const reply = track(pending, id, method, REQUEST_TIMEOUT_MS);
+    const message = { id, method, params, ...(session ? { sessionId: session } : {}) };
+    toChrome.write(`${JSON.stringify(message)}\0`, (error) => {
+      if (error) fail(error);
+    });
+    return reply;
+  };
+  fromChrome.on('data', (chunk) => {
+    if (closed) return; // A failed channel is not read any more: the rest of a too long message is not a message.
+    try {
+      const framed = splitFrames(held, chunk);
+      held = framed.rest;
+      for (const raw of framed.messages) {
+        if (forSession(raw, sessionId)) routeMessage(raw, pending, listeners);
+      }
+    } catch (error) {
+      held = Buffer.alloc(0);
+      fail(error);
+    }
+  });
+  const ended = () => fail(new Error('Chrome closed the connection'));
+  for (const event of ['end', 'close', 'error']) fromChrome.on(event, ended);
+  toChrome.on('error', ended);
+  const send = (method, params = {}) => post(method, params, sessionId);
+  const target = await findPage((method) => post(method, {}, null), tries, delayMs);
+  ({ sessionId } = await post('Target.attachToTarget', { targetId: target.targetId, flatten: true }, null));
+  return {
+    send,
+    /** True once the pipe has ended or failed (Chrome went away, or `close` was called). */
+    get closed() {
+      return closed;
+    },
+    on(method, fn) {
+      if (!listeners.has(method)) listeners.set(method, []);
+      listeners.get(method).push(fn);
+    },
+    evaluate: (expression) => evaluateIn(send, expression),
+    close() {
+      fail(new Error('Chrome closed the connection'));
+      toChrome.destroy();
+      fromChrome.destroy();
+    },
+  };
+}
+
+// Asks the browser for its targets until one is a page; throws when none came in `tries` tries.
+async function findPage(ask, tries, delayMs) {
+  for (let i = 0; i < tries; i += 1) {
+    const { targetInfos } = await ask('Target.getTargets');
+    const page = Array.isArray(targetInfos) ? targetInfos.find((info) => info?.type === 'page') : null;
+    if (typeof page?.targetId === 'string') return page;
+    await sleep(delayMs);
+  }
+  throw new Error('Chrome did not start');
+}
+
+async function evaluateIn(send, expression) {
+  const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
+  if (r.exceptionDetails) {
+    const what = r.exceptionDetails.exception?.description ?? r.exceptionDetails;
+    throw new Error(`page: ${JSON.stringify(what).slice(0, 600)}`);
+  }
+  return r.result.value;
 }
 
 async function connect(wsUrl) {
@@ -272,13 +483,7 @@ async function connect(wsUrl) {
       listeners.get(method).push(fn);
     },
     /** Runs an expression in the page and returns its value (promises are awaited). */
-    async evaluate(expression) {
-      const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-      if (r.exceptionDetails) {
-        throw new Error(`page: ${JSON.stringify(r.exceptionDetails.exception?.description ?? r.exceptionDetails).slice(0, 600)}`);
-      }
-      return r.result.value;
-    },
+    evaluate: (expression) => evaluateIn(send, expression),
     close() {
       ws.close();
     },
