@@ -149,7 +149,8 @@ end, else `UNSURE`. The same guard applies to an imported Plex marker (phase 2c)
   1. source `OWNER`: left alone;
   2. a `plex_credits_marker` row whose fingerprint matches the file and that passes the edition guard: that marker,
      source `PLEX`;
-  3. once the gate in phase 2b has passed, a `FOUND` row of the current `ANALYSIS_VERSION` whose fingerprint matches
+  3. once `credits-classifier-plan.md`'s gate has passed, for the opening types and margin bands it cleared, a
+     `FOUND` row of the current `ANALYSIS_VERSION` whose fingerprint matches
      and that passes the guard: its offset **plus 20 s** (never past the guard's 60 s before the end), source `AUTO`;
   4. otherwise the marker and source are cleared (the 97% fallback).
   So a `PLEX` marker whose file changed falls back to the detector's answer for the new file, then to nothing.
@@ -279,7 +280,7 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
      stop-start headlights can look like changing cards of text to this classifier, and synthetic scenes of them
      still give `FOUND` early, some only under the 0.70 / 0.30 thresholds above, some on phase 1 as well. No
      pixel-share rule separates them from real cards in general, so they are not chased in synthetic tests. The
-     gate below measures them on the library, split by kind (the stored reasons start "Text on a dark screen moves
+     gate below (historical: superseded by `credits-classifier-plan.md`'s gate) measured them on the library, split by kind (the stored reasons start "Text on a dark screen moves
      up steadily" for a crawl and "Cards of text on a dark screen change" for cards).
    - Unit tests with synthetic frames for each measured failure: anti-aliased white text scoring only 0.6–0.8 of the
      text-like share; thin grey text far below the window's peak; dense columns leaving only 75% of the frame dark;
@@ -293,7 +294,9 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
        onto a neighbouring line and read as a crawl. That is real moving text, so it is late or right, never early.
      Negatives added: a slow tilt over lit windows, a figure that moves or steps across a lit night scene, and a
      window that switches on and off. No frames from real films go into the repository.
-   - **The gate before phase 3** (after 2b's release and 2c's import, once the backfill has run): a read-only query
+   - **The gate before phase 3. Superseded, and never run:** `credits-classifier-plan.md`'s gate replaces it,
+     because this query covers that plan's test films. As first written (after 2b's release and 2c's import, once
+     the backfill has run), it was a read-only query
      joining `credits_detection` (`FOUND`, the current `ANALYSIS_VERSION`) to `plex_credits_marker` on the same file
      and fingerprint must return **zero rows** with `offset_ms < start_ms − 15000`. Any such row is a defect fixed in
      a further 2b round first. That measures the detector on films Plex could read; `AUTO` will only ever be used on
@@ -306,8 +309,8 @@ film". Actions: **Set** (owner time, `OWNER`), **Use detected** (back to `AUTO`)
 3. **Apply, source column, Admin.** `credits_marker_source` and its carrying, applying (the watched rule is unchanged:
    watched at the marker, decided 2026-11-13), the Admin list and overrides. Precedence per edition: `OWNER`; then
    `PLEX` (the last part's `plex_credits_marker` row, fingerprint still matching); then the detector's `FOUND` plus a
-   **20 s margin** (`AUTO`), applied only after the gate above and only for the kinds it cleared (crawls, and cards
-   only if they had no early row); then the 97% fallback. Every marker goes through the
+   **20 s margin** (`AUTO`), applied only once `credits-classifier-plan.md`'s gate has passed, and only for the
+   opening types and margin bands it cleared; then the 97% fallback. Every marker goes through the
    edition guard. **A late overlay is better than an early one** (owner, 2026-11-13).
 
 ## Phase 2: what the server showed (2026-11-13)
@@ -383,8 +386,8 @@ marker; the 7 without a candidate are endings the picture cannot read (*Return o
 grey parchment texture; *Jaws*: credits over the sea; *Goldfinger* and *A Close Shave*: almost no credits; *Psycho*;
 *The Batman*: grey text on a lifted, grainy black). Plex has markers for *The Batman*, *Jaws* and *A Close Shave*,
 which the import covers; neither source has *Return of the King* extended, *Goldfinger* or *Psycho*. **These 30
-films are also the ones the thresholds were tuned on (no hold-out set), so the library comparison in phase 2b's gate
-is the real test.** *Contagion*'s first candidate was 89 s early because the black before the crawl counted as
+films are also the ones the thresholds were tuned on (no hold-out set), so the library comparison
+is the real test.** (Historical: that comparison is now `credits-classifier-plan.md`'s gate.) *Contagion*'s first candidate was 89 s early because the black before the crawl counted as
 credits-like; the motion anchor, given a dense window that reaches the crawl, puts it at −1 s.
 
 ### The motion check
@@ -419,7 +422,7 @@ against its first, which starts the cast montage over picture). Each change was 
 but sits exactly at *The Dark Knight*'s smallest change, so 0.001 leaves margin.
 
 **Remaining risk, accepted and measured:** a story that ends in moving text on black (an epilogue crawl) before the
-credits would be marked at the epilogue. Phase 2b's run against the 864 Plex markers counts these; the 20 s margin
+credits would be marked at the epilogue. `credits-classifier-plan.md`'s gate counts these (it superseded phase 2b's run against the Plex markers); the 20 s margin
 and Plex's precedence limit the damage.
 
 **Time per film:** 127–221 s on the server for the five files analysed by v0.6.1.
