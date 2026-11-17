@@ -47,9 +47,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  * the cap has room. Nothing here deletes a download.
  *
  * <p>A <em>full</em> English subtitle ({@link Kind#FULL}) is downloaded the same way, from its own due source: films
- * whose full need ({@link FullNeedService}) is {@code NEEDED} and that have full candidates
- * ({@code film.os_full_candidates}). Its blocks, ledger and downloads are read with {@link SubtitleKind#FULL}, so the
- * two kinds never count against each other's cap.
+ * whose full need ({@link FullNeedService}) is {@code NEEDED} (but not those the owner marked {@code NONE_EXIST})
+ * and that have full candidates ({@code film.os_full_candidates}). Its blocks, ledger and downloads are read with
+ * {@link SubtitleKind#FULL}, so the two kinds never count against each other's cap.
  */
 @Service
 public class ForcedDownloadService {
@@ -125,10 +125,11 @@ public class ForcedDownloadService {
      * replacements (the owner's file failed every check, so the film shows nothing now), then forced missing ones, each
      * group by film and edition. A forced edition is considered when its need is shown ({@code NEEDED}) and its film
      * has single-file results from a search of its current IMDb id (the candidates stored); per edition see
-     * {@link DownloadPlan#kind}. A full edition is considered when its film's full need is {@code NEEDED} and it has
-     * full candidates from a search of its current IMDb id; it is due when it has no present owner's full file and no
-     * full download ({@link DownloadPlan#fullDue}). An edition that already has {@value DownloadPlan#MAX_DOWNLOADS}
-     * downloads of the kind (removed ones included) is left alone, and so is one with nothing left to try.
+     * {@link DownloadPlan#kind}. A full edition is considered when its film's full need is {@code NEEDED} (and not
+     * {@code NONE_EXIST}) and it has full candidates from a search of its current IMDb id; it is due when it has no
+     * present owner's full file and no full download ({@link DownloadPlan#fullDue}). An edition that already has
+     * {@value DownloadPlan#MAX_DOWNLOADS} downloads of the kind (removed ones included) is left alone,
+     * and so is one with nothing left to try.
      *
      * @return the due editions in the order to work on them
      */
@@ -202,9 +203,12 @@ public class ForcedDownloadService {
         return storedByFilm;
     }
 
-    /** The editions due a full English subtitle: the film's need is {@code NEEDED} and it has full candidates. */
+    /**
+     * The editions due a full English subtitle: the film's need is {@code NEEDED} (the owner's {@code NONE_EXIST} films
+     * are left out) and it has full candidates.
+     */
     private List<DueDownload> fullDue() {
-        Set<Long> neededFilmIds = fullNeed.neededFilmIds();
+        Set<Long> neededFilmIds = fullNeed.searchFilmIds();
         Map<Long, OsFullRef> candidates = new HashMap<>();
         for (OsFullRef ref : films.findOpenSubtitlesFull()) {
             candidates.put(ref.id(), ref);

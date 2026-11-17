@@ -12,13 +12,27 @@ import {
 import AddOwnFile from './AddOwnFile.jsx';
 import RowText from './AdminRowText.jsx';
 
+// The owner's choice each choosing button saves.
+const CHOICE_OF = {
+  itsEnglish: 'NOT_NEEDED',
+  noForeignScenes: 'NOT_NEEDED',
+  noneExist: 'NONE_EXIST',
+};
+const ENTRY_OF = {
+  itsEnglish: buttons.itsEnglish,
+  noForeignScenes: buttons.noForeignScenes,
+  noneExist: buttons.noneExist,
+};
+
 /**
  * One film the server could not settle. The foreign tab offers "Search for English subtitles…" (or, for unlabelled
  * audio, "It's in {language} — find subtitles"), "Add my own file…" (the attach flow for this film) and, for unlabelled
- * audio, "It's English"; the forced tab offers "Find forced subtitles…" and "No foreign scenes". The search buttons
- * open the OpenSubtitles picker through `onFind(row, opener)` and are left out when the row has no `editionId` (no
- * edition to search for). Both owner choices save `NOT_NEEDED` through `onChoose(row)`; while a row's choice is saving
- * its buttons are `aria-disabled` (still focusable) and a click does nothing. `problem` is what a failed save says.
+ * audio, "It's English", and "No English subtitles exist"; the forced tab offers "Find forced subtitles…" and "No
+ * foreign scenes". The search buttons open the OpenSubtitles picker through `onFind(row, opener)` and are left out
+ * when the row has no `editionId` (no edition to search for). The owner choices save through `onChoose(row, choice)`
+ * (`NOT_NEEDED` for "It's English" and "No foreign scenes", `NONE_EXIST` for "No English subtitles exist"); while a
+ * row's choice is saving its buttons are `aria-disabled` (still focusable) and a click does nothing. `problem` is
+ * what a failed save says.
  */
 export default function SubtitleNeedRow({
   row,
@@ -36,8 +50,8 @@ export default function SubtitleNeedRow({
   // The row's title describes every button, so each names its film (the visible label stays the start of the name).
   const titleId = useId();
   const busy = { 'aria-disabled': saving || undefined };
-  const choose = () => {
-    if (!saving) onChoose(row);
+  const choose = (choice) => {
+    if (!saving) onChoose(row, choice);
   };
   const closeForm = () => {
     setAdding(false);
@@ -76,7 +90,7 @@ export default function SubtitleNeedRow({
               </ActionWithHint>
             );
           }
-          if (action !== 'itsEnglish' && action !== 'noForeignScenes') {
+          if (!(action in CHOICE_OF)) {
             const { label, hint } = pickerButton(action, row);
             return (
               <ActionWithHint
@@ -91,14 +105,14 @@ export default function SubtitleNeedRow({
               </ActionWithHint>
             );
           }
-          const entry = action === 'itsEnglish' ? buttons.itsEnglish : buttons.noForeignScenes;
+          const entry = ENTRY_OF[action];
           return (
             <ActionWithHint
               key={action}
               hint={entry.hint}
               describedBy={titleId}
               {...busy}
-              onClick={choose}
+              onClick={() => choose(CHOICE_OF[action])}
             >
               {entry.label}
             </ActionWithHint>

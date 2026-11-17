@@ -84,6 +84,12 @@ describe('foreignLine', () => {
     );
   });
 
+  it('says so when the owner said no English subtitles exist', () => {
+    expect(foreignLine(full({ reason: 'NONE_EXIST' }))).toBe(
+      'Spoken: Japanese · No English subtitles exist (set by you) · nothing found automatically on OpenSubtitles',
+    );
+  });
+
   it('says the language is not known when TMDB gave none', () => {
     expect(foreignLine(full({ originalLanguage: null }))).toBe(
       'Language not known yet · nothing found automatically on OpenSubtitles',
@@ -164,20 +170,22 @@ describe('pickerTarget', () => {
 describe('foreignActions', () => {
   it('offers the search then "Add my own file…", and "It’s English" too for unlabelled audio', () => {
     expect(isUnlabelled(full())).toBe(false);
-    expect(foreignActions(full())).toEqual(['search', 'addFile']);
+    expect(foreignActions(full())).toEqual(['search', 'addFile', 'noneExist']);
     expect(isUnlabelled(full({ reason: 'ORIGINAL_AUDIO_ASSUMED' }))).toBe(true);
     expect(foreignActions(full({ reason: 'ORIGINAL_AUDIO_ASSUMED' }))).toEqual([
       'itsInLanguage',
       'addFile',
       'itsEnglish',
+      'noneExist',
     ]);
   });
 
   it('leaves the search out of a row with no edition', () => {
-    expect(foreignActions(full({ editionId: null }))).toEqual(['addFile']);
+    expect(foreignActions(full({ editionId: null }))).toEqual(['addFile', 'noneExist']);
     expect(foreignActions(full({ editionId: null, reason: 'ORIGINAL_AUDIO_ASSUMED' }))).toEqual([
       'addFile',
       'itsEnglish',
+      'noneExist',
     ]);
   });
 });
@@ -257,6 +265,14 @@ describe('ownerChoices', () => {
       ['full', 1],
       ['full', 3],
       ['forced', 9],
+    ]);
+  });
+
+  it('includes a NONE_EXIST choice', () => {
+    const fullRows = [full({ filmId: 1, ownerChoice: 'NONE_EXIST' })];
+
+    expect(ownerChoices({ fullRows, forcedRows: [] }).map((c) => [c.kind, c.row.filmId])).toEqual([
+      ['full', 1],
     ]);
   });
 

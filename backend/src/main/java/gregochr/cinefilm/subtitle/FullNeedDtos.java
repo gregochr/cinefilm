@@ -34,7 +34,7 @@ public final class FullNeedDtos {
      * @param year its year, or null
      * @param need {@code NEEDED}, {@code NOT_NEEDED}, {@code UNSURE} or {@code UNKNOWN}
      * @param reason why (see {@link FullNeed.Reason})
-     * @param ownerChoice {@code NEEDED}, {@code NOT_NEEDED} or null for automatic
+     * @param ownerChoice {@code NEEDED}, {@code NOT_NEEDED}, {@code NONE_EXIST} or null for automatic
      * @param editions the film's present editions and their audio labels
      * @param fullSubtitle what the film plays as full English subtitles on some edition (the owner's file when any
      *     edition plays one, else a download), or null when no edition plays one

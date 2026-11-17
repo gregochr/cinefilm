@@ -225,6 +225,13 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
     List<OsFullRef> findOpenSubtitlesFull();
 
     /**
+     * The ids of the films the owner gave this full-subtitles choice (the timing-reference check leaves out the
+     * {@code NONE_EXIST} ones: nothing searches or downloads for them automatically).
+     */
+    @org.springframework.data.jpa.repository.Query("select f.id from Film f where f.fullNeedOwner = :owner")
+    List<Long> findIdsByFullNeedOwner(@org.springframework.data.repository.query.Param("owner") FullNeedChoice owner);
+
+    /**
      * Forgets what OpenSubtitles said about a film, straight on the row. A change of IMDb id uses it in its own
      * transaction after the id change has been flushed (the flush is automatic): the entity (with
      * {@code @DynamicUpdate}) skips a column it loaded as null and sets to null, so a search that committed the old

@@ -23,6 +23,36 @@ describe('Admin Settings section', () => {
     expect(screen.getByRole('img', { name: 'TMDB' })).toBeInTheDocument();
   });
 
+  it('reads each data credit as a whole sentence', async () => {
+    installFetch();
+    renderApp('/admin/settings');
+    await screen.findByRole('region', { name: 'Continue watching' });
+    const items = within(screen.getByRole('list', { name: 'Data credits' })).getAllByRole(
+      'listitem',
+    );
+    expect(items.map((item) => item.textContent)).toEqual([
+      'Subtitles from OpenSubtitles.com.',
+      'IMDb and Rotten Tomatoes ratings from OMDb, licensed CC BY-NC 4.0.',
+      'Network lookup by IPinfo.',
+    ]);
+  });
+
+  it.each([
+    ['OpenSubtitles.com (opens in a new tab)', 'https://www.opensubtitles.com'],
+    ['OMDb (opens in a new tab)', 'https://www.omdbapi.com'],
+    ['CC BY-NC 4.0 (opens in a new tab)', 'https://creativecommons.org/licenses/by-nc/4.0/'],
+    ['IPinfo (opens in a new tab)', 'https://ipinfo.io'],
+  ])('credits %s with a link that opens safely in a new tab', async (name, href) => {
+    installFetch();
+    renderApp('/admin/settings');
+    await screen.findByRole('region', { name: 'Continue watching' });
+    const link = screen.getByRole('link', { name });
+    expect(link).toHaveAttribute('href', href);
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link.getAttribute('rel')).toContain('noopener');
+    expect(link.getAttribute('rel')).toContain('noreferrer');
+  });
+
   it('has no switches, and its one setting and Sign out are described by their hints', async () => {
     installFetch();
     renderApp('/admin/settings');

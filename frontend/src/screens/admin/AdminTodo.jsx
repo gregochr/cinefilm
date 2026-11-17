@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { todo, todoRow } from '../../state/adminCopy.js';
 import { todoHeadingCount } from '../../state/adminSummaryFormat.js';
 import { useAdminContext } from '../../state/adminContext.js';
@@ -48,12 +49,23 @@ export default function AdminTodo() {
     subtitlesVersion,
     changed,
     onChanged: markChanged,
+    // A saved choice settles the row: if focus falls to the page with it, it goes to the section title. A failed
+    // save keeps the row and its focus, so nothing is armed for it.
+    onFullSaved: armFocusFallback,
   });
-  const { attention, full, forced } = lists;
+  const { attention, full, fullNeed, forced } = lists;
   // The rows on screen, so the fallback runs once a picked file's row has left (the opener goes with it).
   useFallbackFocus(
     lists.groups.map((g) => `${g.key}:${g.rows.map((r) => r.filmId).join(',')}`).join('|'),
   );
+
+  // A second click on a film before its save has settled does nothing (nothing is queued).
+  const sent = useRef(new Set());
+  const chooseFull = (row, choice) => {
+    if (sent.current.has(row.filmId)) return;
+    sent.current.add(row.filmId);
+    fullNeed.choose(row.filmId, choice).finally(() => sent.current.delete(row.filmId));
+  };
 
   const openEditions = (item, opener) =>
     openEditEditions({ id: item.filmId, title: item.title, year: item.year }, opener);
@@ -64,6 +76,13 @@ export default function AdminTodo() {
     onFindFilm: openFixMatch,
     onSortOut: openEditions,
     // A picked file settles the row: if focus falls to the page with it, it goes to the section title.
+    fullSaving: fullNeed.saving,
+    fullProblems: fullNeed.problems,
+    onChooseFull: chooseFull,
+    onAttachedFull: () => {
+      armFocusFallback();
+      markChanged();
+    },
     onFindSubtitles: (row, kind, opener) =>
       openSubtitlePicker(pickerTarget(row, kind), opener, { onPicked: armFocusFallback }),
   };

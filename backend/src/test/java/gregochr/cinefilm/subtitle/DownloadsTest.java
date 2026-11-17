@@ -9,6 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.FullNeedChoice;
 import gregochr.cinefilm.film.MediaFile;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -79,5 +80,19 @@ class DownloadsTest {
         List<SubtitleSidecar> counted = Downloads.of(edition, partIds, found, SubtitleKind.FULL);
 
         assertThat(counted).extracting(SubtitleSidecar::getId).containsExactly(3L, 9L);
+    }
+
+    @Test
+    void aNotNeededFilmCountsNoDownloadsButANoneExistFilmStillCountsTheOnesItHas() {
+        List<SubtitleSidecar> found = List.of(download(3, 103, true));
+
+        edition.getFilm().setFullNeedOwner(FullNeedChoice.NOT_NEEDED);
+        assertThat(Downloads.of(edition, partIds, found, SubtitleKind.FULL)).isEmpty();
+        assertThat(Downloads.isNotNeeded(edition, SubtitleKind.FULL)).isTrue();
+
+        edition.getFilm().setFullNeedOwner(FullNeedChoice.NONE_EXIST);
+        assertThat(Downloads.isNotNeeded(edition, SubtitleKind.FULL)).isFalse();
+        assertThat(Downloads.of(edition, partIds, found, SubtitleKind.FULL))
+            .extracting(SubtitleSidecar::getId).containsExactly(3L);
     }
 }

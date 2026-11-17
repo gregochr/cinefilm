@@ -28,6 +28,7 @@ public final class AdminTodoRules {
      * The facts a full-subtitles row is judged on.
      *
      * @param needed true when the film's full-subtitle need is {@code NEEDED}
+     * @param noneExist true when the owner said no English subtitles exist (the row is done, not in play)
      * @param playsFullSubtitle true when some edition plays a full English subtitle already
      * @param hasImdbId true when the film has an IMDb id (OpenSubtitles is searched by it)
      * @param searched true when OpenSubtitles was searched for full candidates under the film's current IMDb id
@@ -35,8 +36,8 @@ public final class AdminTodoRules {
      * @param searchEnabled true when OpenSubtitles searches run at all (an API key is set)
      * @param downloadsEnabled true when downloads run at all (key, username and password are set)
      */
-    public record FullFacts(boolean needed, boolean playsFullSubtitle, boolean hasImdbId, boolean searched,
-                            boolean downloadDue, boolean searchEnabled, boolean downloadsEnabled) {
+    public record FullFacts(boolean needed, boolean noneExist, boolean playsFullSubtitle, boolean hasImdbId,
+                            boolean searched, boolean downloadDue, boolean searchEnabled, boolean downloadsEnabled) {
     }
 
     /**
@@ -86,14 +87,14 @@ public final class AdminTodoRules {
         return ranked.size() == 1 || best - ranked.get(1) >= TmdbMatcher.MARGIN + 1;
     }
 
-    /** A full row is in play: {@code NEEDED} and no full English subtitle plays. */
+    /** A full row is in play: {@code NEEDED}, not marked {@code NONE_EXIST}, and no full English subtitle plays. */
     public static boolean inPlayFull(FullFacts facts) {
-        return facts.needed() && !facts.playsFullSubtitle();
+        return facts.needed() && !facts.noneExist() && !facts.playsFullSubtitle();
     }
 
-    /** A full row is settled: {@code NEEDED} and a full English subtitle plays (the complement of in play). */
+    /** A full row is settled: {@code NEEDED} and a full English subtitle plays (a {@code NONE_EXIST} film is not). */
     public static boolean subtitledFull(FullFacts facts) {
-        return facts.needed() && !inPlayFull(facts);
+        return facts.needed() && facts.playsFullSubtitle();
     }
 
     /** An in-play full row with an automatic download still to come. */

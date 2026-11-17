@@ -11,8 +11,9 @@ import { fileURLToPath } from 'node:url';
 import { PassThrough } from 'node:stream';
 import { after, describe, test } from 'node:test';
 import {
-  DEFAULT_SITE, PAGE_TEXT, SETTLE_MS, checkProfileFree, checkSession, crashHandler, createCancel, makeFolders,
-  options, readAnswer, resultOf, signIn, siteOrigin, takeLock, viewerPaths, waitForReturn, watchSignals,
+  DEFAULT_SITE, PAGE_TEXT, SETTLE_MS, checkProfileFree, checkSession, crashHandler, createCancel, installCrash,
+  installed, main, makeFolders, onMainRejected, options, readAnswer, resultOf, signIn, siteOrigin, startRun,
+  takeLock, viewerPaths, waitForReturn, watchSignals,
 } from '../../replay/viewer.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -29,23 +30,60 @@ const soon = (promise) => Promise.race([
 ]);
 
 describe('options', () => {
-  test('with nothing given: no sign-in and the real site', () => {
-    assert.deepEqual(options([]), { signIn: false, site: DEFAULT_SITE });
-  });
-
-  test('--sign-in and --site are read', () => {
-    assert.deepEqual(options(['--sign-in', '--site', 'http://127.0.0.1:5301']), {
-      signIn: true, site: 'http://127.0.0.1:5301',
+  test('--sign-in alone is the sign-in on the real site', () => {
+    assert.deepEqual(options(['--sign-in']), {
+      signIn: true, site: DEFAULT_SITE, film: null, minutes: null, place: null,
     });
   });
 
+  test('--film alone is a run until the film ends, with no place', () => {
+    assert.deepEqual(options(['--film', '42']), {
+      signIn: false, site: DEFAULT_SITE, film: 42, minutes: null, place: null,
+    });
+  });
+
+  test('every option of a run is read, in any order', () => {
+    const argv = ['--place', 'train', '--site', 'http://127.0.0.1:5301', '--minutes', '90', '--film', '7'];
+    assert.deepEqual(options(argv), {
+      signIn: false, site: 'http://127.0.0.1:5301', film: 7, minutes: 90, place: 'train',
+    });
+    assert.equal(options(['--film', '7', '--place', 'away']).place, 'away');
+  });
+
+  test('--film is 1 to 9 digits from 1, --minutes a whole number from 1 to 600, --place train or away', () => {
+    const refused = [
+      [['--film', '1234567890'], /--film must be/], [['--film', 'x'], /--film must be/],
+      [['--film', '0'], /--film must be a whole number from 1 to/], [['--film', '-3'], /--film must be/],
+      [['--film', '1.5'], /--film must be/], [['--film', ''], /--film must be/],
+      [['--film', '3', '--minutes', '0'], /--minutes must be/],
+      [['--film', '3', '--minutes', '601'], /--minutes must be/],
+      [['--film', '3', '--minutes', '1.5'], /--minutes must be/], [['--film', '3', '--minutes', '1000'], /--minutes/],
+      [['--film', '3', '--place', 'home'], /--place must be train or away/],
+      [['--film', '3', '--place', 'Train'], /--place must be/],
+    ];
+    for (const [argv, message] of refused) assert.throws(() => options(argv), message, argv.join(' '));
+    assert.equal(options(['--film', '3', '--minutes', '600']).minutes, 600);
+    assert.equal(options(['--film', '999999999']).film, 999999999);
+    assert.equal(options(['--film', '1']).film, 1);
+  });
+
+  test('exactly one of --sign-in and --film is given, and --minutes and --place go with --film only', () => {
+    assert.throws(() => options([]), /exactly one of --sign-in and --film/);
+    assert.throws(() => options(['--site', 'https://a.example']), /exactly one/);
+    assert.throws(() => options(['--sign-in', '--film', '3']), /exactly one/);
+    assert.throws(() => options(['--sign-in', '--minutes', '5']), /--minutes and --place go with --film/);
+    assert.throws(() => options(['--sign-in', '--place', 'train']), /go with --film/);
+  });
+
   test('an unknown option, a repeat and a missing value are refused', () => {
-    assert.throws(() => options(['--film', '3']), /unknown option --film/);
+    assert.throws(() => options(['--sign-in', '--video', '3']), /unknown option --video/);
     assert.throws(() => options(['site']), /unknown option site/);
     assert.throws(() => options(['--sign-in', '--sign-in']), /--sign-in was given twice/);
+    assert.throws(() => options(['--film', '3', '--film', '4']), /--film was given twice/);
     assert.throws(() => options(['--site', 'https://a.example', '--site', 'https://b.example']), /given twice/);
     assert.throws(() => options(['--site']), /--site needs a value/);
-    assert.throws(() => options(['--site', '--sign-in']), /--site needs a value/);
+    assert.throws(() => options(['--film']), /--film needs a value/);
+    assert.throws(() => options(['--film', '--sign-in']), /--film needs a value/);
   });
 
   test('an unknown option is printed as printable text, cut short', () => {
@@ -908,9 +946,125 @@ describe('crashHandler', () => {
     assert.deepEqual(log, ['chrome', 'lock', 'exit 1']);
   });
 
+  test('a run\'s writer is called with failed: after the hard stop, before the lock goes', () => {
+    const log = [];
+    const held = {
+      chromeKill: () => log.push('chrome'), writeNow: (word) => log.push(`write ${word}`),
+      release: () => log.push('lock'),
+    };
+    crashHandler(held, { say: () => log.push('say'), exit: (code) => log.push(`exit ${code}`) })(new Error('x'));
+    assert.deepEqual(log, ['chrome', 'write failed', 'lock', 'say', 'exit 1']);
+  });
+
   test('with nothing started it only says so and exits', () => {
     const { log, handler } = crash({});
     handler(new Error('early'));
     assert.deepEqual(log, ['say The viewer stopped on an unexpected error: early', 'exit 1']);
+  });
+});
+
+describe('onMainRejected', () => {
+  test('with the crash handler made, it is the one that acts: the hard stop, the writer and the lock all run', () => {
+    const log = [];
+    onMainRejected(new Error('late'), {
+      crash: (error) => log.push(`crash ${error.message}`), say: () => log.push('say'), exit: () => log.push('exit'),
+    });
+    assert.deepEqual(log, ['crash late']);
+  });
+
+  test('before it is made, it says one line and exits 1', () => {
+    const log = [];
+    onMainRejected(new Error('early'), {
+      crash: null, say: (text) => log.push(text), exit: (code) => log.push(`exit ${code}`),
+    });
+    assert.deepEqual(log, ['The viewer stopped on an unexpected error: early', 'exit 1']);
+    onMainRejected('plain', { crash: null, say: (text) => log.push(text), exit: () => undefined });
+    assert.equal(log.at(-1), 'The viewer stopped on an unexpected error: plain');
+  });
+});
+
+describe('main installs the crash handler before it starts anything', () => {
+  // What `main` is given in place of the real things: records what is registered, and what was registered at the
+  // moment the sign-in or the run was started. No Chrome, no folder: the stand-ins give a code at once.
+  function standIns() {
+    const registered = new Map();
+    const started = [];
+    const log = [];
+    const snapshot = (what) => started.push({ what, handlers: new Map(registered) });
+    return {
+      registered, started, log,
+      deps: {
+        on: (name, fn) => registered.set(name, fn), exit: (code) => log.push(`exit ${code}`),
+        say: (text) => log.push(`say ${text}`),
+        signIn: async () => {
+          snapshot('sign-in');
+          return 0;
+        },
+        run: async () => {
+          snapshot('run');
+          return 0;
+        },
+      },
+    };
+  }
+
+  for (const [argv, what] of [[['--film', '1'], 'run'], [['--sign-in'], 'sign-in']]) {
+    test(`with ${argv[0]}: one handler for both events before the ${what} starts, the one the entry uses`,
+      async () => {
+        const { started, log, deps } = standIns();
+        installed.crash = null;
+        assert.equal(await main(argv, deps), 0);
+        assert.equal(started.length, 1);
+        assert.equal(started[0].what, what);
+        const { handlers } = started[0];
+        const crash = handlers.get('uncaughtException');
+        assert.equal(typeof crash, 'function', 'registered for uncaughtException');
+        assert.equal(handlers.get('unhandledRejection'), crash, 'and for unhandledRejection, the same function');
+        assert.equal(installed.crash, crash, 'the entry\'s rejection handler is given this function');
+        onMainRejected(new Error('late'), {
+          crash: installed.crash, say: () => log.push('own say'), exit: () => log.push('own exit'),
+        });
+        assert.deepEqual(log, ['say The viewer stopped on an unexpected error: late', 'exit 1'], 'it acts');
+      });
+  }
+
+  test('installCrash registers the function it returns for both events, and it acts as the crash handler', () => {
+    const registered = [];
+    const log = [];
+    const held = { chromeKill: () => log.push('hard stop'), release: () => log.push('lock') };
+    const crash = installCrash(held, {
+      on: (name, fn) => registered.push([name, fn]), say: () => log.push('say'),
+      exit: (code) => log.push(`exit ${code}`),
+    });
+    assert.deepEqual(registered, [['uncaughtException', crash], ['unhandledRejection', crash]]);
+    crash(new Error('boom'));
+    assert.deepEqual(log, ['hard stop', 'lock', 'say', 'exit 1']);
+  });
+});
+
+describe('startRun', () => {
+  test('the run\'s signals are registered before it starts, through the given listener; a second quits', async () => {
+    const registered = new Map();
+    const exits = [];
+    let seen = null;
+    const args = { cancel: createCancel(), held: {}, say: () => undefined, opt: { film: 1 } };
+    const viewing = async (given) => {
+      seen = { given, names: [...registered.keys()] };
+      return 7;
+    };
+    // The real module, with only the run itself replaced.
+    const load = async () => ({ ...(await import('../../replay/viewing.mjs')), viewing });
+    const code = await startRun(args, { on: (name, fn) => registered.set(name, fn), exit: (c) => exits.push(c), load });
+    assert.equal(code, 7, 'it gives back the run\'s code');
+    assert.equal(seen.given, args, 'the run gets the very arguments');
+    assert.deepEqual(seen.names, ['SIGINT', 'SIGTERM', 'SIGHUP'], 'all three registered before the run was called');
+    const handler = registered.get('SIGINT');
+    assert.equal(registered.get('SIGTERM'), handler);
+    assert.equal(registered.get('SIGHUP'), handler);
+    handler();
+    assert.equal(args.cancel.cancelled, true, 'the first signal asks the run to end');
+    assert.deepEqual(exits, []);
+    handler();
+    assert.deepEqual(exits, [130], 'the second quits through the given exit');
   });
 });

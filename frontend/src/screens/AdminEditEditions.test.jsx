@@ -2,10 +2,13 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SESSION_EXPIRED_EVENT } from '../api/client.js';
+import { FADE_MS } from '../components/useDialog.js';
+import { SCAN_IDLE_POLL_MS } from '../state/useAdmin.js';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 const isEditions = (m, url) => m === 'GET' && url === '/api/admin/films/6/editions';
@@ -198,5 +201,247 @@ describe('Admin: Edit editions', () => {
     expect(screen.getAllByRole('combobox', { name: 'Part' })[1]).toHaveValue('3');
     expect(screen.queryByText('Editions saved')).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1);
+  });
+});
+
+describe('Admin: Edit editions, cancelled while it saves', () => {
+  // The fade is held on a fake clock, so "during the fade" does not depend on real time passing.
+  function holdClock() {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms) => vi.advanceTimersByTime(ms) });
+    return userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  }
+  const heading = () => screen.getByRole('heading', { level: 1, name: 'To do' });
+  const sortOut = () => screen.queryAllByRole('button', { name: 'Sort out editions…' });
+  const railLink = (name) =>
+    within(screen.getByRole('navigation', { name: 'Admin sections' })).getByRole('link', { name });
+  const second = { ...fixtures.adminAttention.items[3], filmId: 7, title: 'Alien', year: 1979 };
+  const BOTH = [fixtures.adminAttention.items[3], second];
+  const GONE = fixtures.adminAttention.items.filter(
+    (i) => !['multiple-files', 'parts-mismatch'].includes(i.kind),
+  );
+
+  // Every save is held until released; the To do list reads as BOTH until `removed`, which a scan that finishes
+  // or `landReread()` sets; a re-read can be held until `landReread()`.
+  function world() {
+    const w = { attention: 0, removed: false, scanFinished: false, release: {}, gate: null };
+    installFetch((m, url) => {
+      const save = /^\/api\/admin\/films\/(\d+)\/editions$/.exec(url);
+      if (m === 'PUT' && save) {
+        return new Promise((resolve) => {
+          w.release[save[1]] = () => resolve(respond({ filmId: Number(save[1]), newFilmIds: [] }));
+        });
+      }
+      if (url === '/api/admin/attention') {
+        w.attention += 1;
+        const answer = () => respond({ items: w.removed ? GONE : BOTH });
+        return w.gate ? w.gate.promise.then(answer) : answer();
+      }
+      if (url === '/api/admin/scan' && w.scanFinished) {
+        return respond({ ...fixtures.adminScan, lastScan: { finishedAt: '2026-11-17T09:00:00Z' } });
+      }
+      return null;
+    });
+    w.holdReread = () => {
+      w.gate = {};
+      w.gate.promise = new Promise((resolve) => {
+        w.gate.open = resolve;
+      });
+    };
+    w.landReread = async () => {
+      w.removed = true;
+      await act(async () => w.gate.open());
+    };
+    w.finishScan = () => {
+      w.removed = true;
+      w.scanFinished = true;
+    };
+    return w;
+  }
+
+  async function openRow(index, name) {
+    const attention = await screen.findByRole('region', { name: 'Sort out several files' });
+    await userEvent.click(
+      (await within(attention).findAllByRole('button', { name: 'Sort out editions…' }))[index],
+    );
+    await screen.findByRole('dialog', { name });
+    await screen.findByRole('region', { name: 'Edition Extended Edition' });
+  }
+  const startSave = async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByRole('button', { name: 'Saving…' });
+  };
+
+  describe('with the fade running', () => {
+    async function cancelledThenSaved() {
+      vi.stubGlobal('matchMedia', () => ({ matches: false }));
+      const w = world();
+      renderApp('/admin');
+      await openRow(0, 'Blade Runner · 1982');
+      await startSave();
+      const before = w.attention;
+      const user = holdClock();
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      await act(async () => w.release[6]());
+      return { w, user, before };
+    }
+
+    it('reads the lists again, once', async () => {
+      const { w, before } = await cancelledThenSaved();
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      await vi.waitFor(() => expect(w.attention).toBe(before + 1));
+
+      await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      await act(async () => {}); // let anything still pending land before the exact count
+      expect(w.attention).toBe(before + 1);
+    });
+
+    it('says nothing, because the person cancelled', async () => {
+      const { w, before } = await cancelledThenSaved();
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      await vi.waitFor(() => expect(w.attention).toBe(before + 1));
+
+      await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+
+      expect(screen.queryByText('Editions saved')).not.toBeInTheDocument();
+    });
+
+    it('keeps focus off the heading until the dialog is gone, then puts it there', async () => {
+      vi.stubGlobal('matchMedia', () => ({ matches: false }));
+      const w = world();
+      renderApp('/admin');
+      await openRow(0, 'Blade Runner · 1982');
+      await startSave();
+      w.holdReread();
+      const user = holdClock();
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      await act(async () => w.release[6]());
+      await w.landReread();
+      await vi.waitFor(() => expect(sortOut()).toHaveLength(0));
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      expect(heading()).not.toHaveFocus();
+
+      await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(heading()).toHaveFocus();
+    });
+
+    it('a re-read that lands after the dialog has gone puts focus on the heading', async () => {
+      vi.stubGlobal('matchMedia', () => ({ matches: false }));
+      const w = world();
+      renderApp('/admin');
+      await openRow(0, 'Blade Runner · 1982');
+      await startSave();
+      w.holdReread();
+      const user = holdClock();
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      await act(async () => w.release[6]());
+      await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(sortOut()[0]).toHaveFocus();
+
+      await w.landReread();
+
+      await vi.waitFor(() => expect(sortOut()).toHaveLength(0));
+      expect(heading()).toHaveFocus();
+    });
+
+    it('a fallback due when the section is left mid-fade is not armed by a later dialog’s Cancel', async () => {
+      vi.stubGlobal('matchMedia', () => ({ matches: false }));
+      const w = world();
+      renderApp('/admin');
+      await openRow(0, 'Blade Runner · 1982');
+      await startSave();
+      const user = holdClock();
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      await act(async () => w.release[6]());
+
+      // Leave for another section while the dialog fades, then come back and Cancel a fresh dialog.
+      await user.click(railLink('Library'));
+      await vi.waitFor(() =>
+        expect(screen.getByRole('heading', { level: 1, name: 'Library' })).toBeInTheDocument(),
+      );
+      await user.click(railLink(/^To do/));
+      await vi.waitFor(() => expect(sortOut()).toHaveLength(2));
+      await user.click(sortOut()[0]);
+      await act(async () => vi.advanceTimersByTimeAsync(0));
+      await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+      await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      act(() => document.activeElement.blur());
+
+      // A scan finishing later changes the list: the rows go, and nothing sends focus to the heading.
+      w.finishScan();
+      await act(async () => vi.advanceTimersByTimeAsync(SCAN_IDLE_POLL_MS));
+      await vi.waitFor(() => expect(sortOut()).toHaveLength(0));
+      expect(heading()).not.toHaveFocus();
+    });
+
+    it('does not hand a due fallback on to the next film’s dialog', async () => {
+      // Not reachable through the UI in a browser: the fixed, focus-trapped dialog covers the rows, so another
+      // film's dialog cannot open while one fades. Kept as a defence for the effect that clears the due id.
+      vi.stubGlobal('matchMedia', () => ({ matches: false }));
+      const w = world();
+      renderApp('/admin');
+      await openRow(0, 'Blade Runner · 1982');
+      await startSave();
+      const user = holdClock();
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      await act(async () => w.release[6]());
+
+      // Another film's dialog replaces the fading one without the dialog ever being closed in between.
+      await user.click(sortOut()[1]);
+      await screen.findByRole('dialog', { name: 'Alien · 1979' });
+      await act(async () => vi.advanceTimersByTimeAsync(0));
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      act(() => document.activeElement.blur());
+
+      w.finishScan();
+      await act(async () => vi.advanceTimersByTimeAsync(SCAN_IDLE_POLL_MS));
+      await vi.waitFor(() => expect(sortOut()).toHaveLength(0));
+      expect(heading()).not.toHaveFocus();
+    });
+  });
+
+  describe('with reduced motion', () => {
+    async function cancelledBeforeTheSaveLands() {
+      vi.stubGlobal('matchMedia', () => ({ matches: true }));
+      const w = world();
+      renderApp('/admin');
+      await openRow(0, 'Blade Runner · 1982');
+      await startSave();
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      return w;
+    }
+
+    it('a save that lands after Cancel and the row going leaves focus on the heading', async () => {
+      const w = await cancelledBeforeTheSaveLands();
+      w.removed = true;
+
+      await act(async () => w.release[6]());
+
+      await waitFor(() => expect(sortOut()).toHaveLength(0));
+      await waitFor(() => expect(heading()).toHaveFocus());
+    });
+
+    it('a save for another film’s dialog is not mistaken for the open one’s', async () => {
+      const w = await cancelledBeforeTheSaveLands();
+      await openRow(1, 'Alien · 1979');
+      w.holdReread();
+
+      await act(async () => w.release[6]());
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      await w.landReread();
+
+      await waitFor(() => expect(sortOut()).toHaveLength(0));
+      await waitFor(() => expect(heading()).toHaveFocus());
+    });
   });
 });

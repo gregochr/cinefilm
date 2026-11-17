@@ -93,6 +93,11 @@ export const buttons = {
     hint: '“It’s English” marks it done and stops asking',
     source: 'AR2',
   },
+  noneExist: {
+    label: 'No English subtitles exist',
+    hint: 'Marks it done and stops searching',
+    source: 'owner 2026-11-17',
+  },
   // Owner's answer Q3 replaces 07's "Yes, find forced subtitles…" (the forced list now holds films with none found).
   findForced: {
     label: 'Find forced subtitles…',
@@ -459,6 +464,13 @@ export const libraryPage = {
   source: 'README 3 and AR3; planner 6 for the rest (see comments)',
 };
 
+// How an owner choice reads in "Your choices"; NOT_NEEDED is the default wording.
+const CHOICE_WORDS = {
+  NEEDED: 'needed',
+  NOT_NEEDED: 'not needed',
+  NONE_EXIST: 'no English subtitles exist',
+};
+
 /** The Subtitles section (AR2), with the wording AR2 does not show marked "planner, 4a". */
 export const subtitlesPage = {
   // AR2's lead; `bold` parts are <b> on the board.
@@ -539,7 +551,7 @@ export const subtitlesPage = {
     yourChoices: (n) => `Your choices (${n})`,
     yourChoicesList: 'Your choices',
     choiceLine: (kind, choice) =>
-      `${kind === 'full' ? 'Full subtitles' : 'Forced subtitles'}: you said ${choice === 'NEEDED' ? 'needed' : 'not needed'}`,
+      `${kind === 'full' ? 'Full subtitles' : 'Forced subtitles'}: you said ${CHOICE_WORDS[choice] ?? 'not needed'}`,
     letDecideLabel: buttons.letCineFilmDecide.label, // 07
     letDecide: (title, kind) =>
       `${buttons.letCineFilmDecide.label}: ${title}, ${kind === 'full' ? 'full' : 'forced'} subtitles`,
@@ -572,6 +584,37 @@ export const settingsPage = {
   saveError: 'Could not save the setting.', // planner, 7 (existing; used when the server sent no message)
   saved: 'Saved', // planner, 7 (existing)
   credit: 'This product uses the TMDB API but is not endorsed or certified by TMDB.', // AR5
+  // planner, settings credits (the other outside services; each line is text around linked parts)
+  opensInNewTab: ' (opens in a new tab)', // planner, settings credits (appended to each credit link's name in its aria-label; the leading space keeps the two apart)
+  dataCreditsLabel: 'Data credits', // planner, settings credits (names the list)
+  dataCredits: [
+    {
+      key: 'opensubtitles',
+      parts: [
+        { text: 'Subtitles from ' },
+        { text: 'OpenSubtitles.com', href: 'https://www.opensubtitles.com' },
+        { text: '.' },
+      ],
+    },
+    {
+      key: 'omdb',
+      parts: [
+        { text: 'IMDb and Rotten Tomatoes ratings from ' },
+        { text: 'OMDb', href: 'https://www.omdbapi.com' },
+        { text: ', licensed ' },
+        { text: 'CC BY-NC 4.0', href: 'https://creativecommons.org/licenses/by-nc/4.0/' },
+        { text: '.' },
+      ],
+    },
+    {
+      key: 'ipinfo',
+      parts: [
+        { text: 'Network lookup by ' },
+        { text: 'IPinfo', href: 'https://ipinfo.io' },
+        { text: '.' },
+      ],
+    },
+  ], // planner, settings credits
 };
 
 /**

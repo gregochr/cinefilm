@@ -132,7 +132,7 @@ describe('adminCopy buttons', () => {
 
   it('gives every entry a known source', () => {
     for (const entry of Object.values(buttons)) {
-      expect(entry.source).toMatch(/^(07|AR[1-7]|README|plan|planner, 4a)$/);
+      expect(entry.source).toMatch(/^(07|AR[1-7]|README|plan|planner, 4a|owner 2026-11-17)$/);
     }
   });
 });
@@ -234,6 +234,14 @@ describe('adminCopy: the Subtitles section', () => {
     });
   });
 
+  it('words the owner’s "No English subtitles exist" button', () => {
+    expect(buttons.noneExist).toEqual({
+      label: 'No English subtitles exist',
+      hint: 'Marks it done and stops searching',
+      source: 'owner 2026-11-17',
+    });
+  });
+
   it("words AR2's two unlabelled-audio buttons and the owner's Q3 button", () => {
     expect(buttons.itsInLanguage.label('German')).toBe('It’s in German — find subtitles');
     expect(buttons.itsEnglish).toMatchObject({
@@ -260,6 +268,9 @@ describe('adminCopy: the Subtitles section', () => {
     const copy = subtitlesPage.else;
     expect(copy.choiceLine('full', 'NOT_NEEDED')).toBe('Full subtitles: you said not needed');
     expect(copy.choiceLine('forced', 'NEEDED')).toBe('Forced subtitles: you said needed');
+    expect(copy.choiceLine('full', 'NONE_EXIST')).toBe(
+      'Full subtitles: you said no English subtitles exist',
+    );
     expect(copy.letDecideLabel).toBe('Let CineFilm decide');
     expect(copy.letDecide('Heat (1995)', 'forced')).toBe(
       'Let CineFilm decide: Heat (1995), forced subtitles',
@@ -452,6 +463,15 @@ describe('settingsPage (AR5, the switches left out by Q2)', () => {
     expect(settingsPage.credit).toBe(
       'This product uses the TMDB API but is not endorsed or certified by TMDB.',
     );
+    expect(
+      settingsPage.dataCredits.map((line) =>
+        line.parts.map((part) => (part.href ? `[${part.text}](${part.href})` : part.text)).join(''),
+      ),
+    ).toEqual([
+      'Subtitles from [OpenSubtitles.com](https://www.opensubtitles.com).',
+      'IMDb and Rotten Tomatoes ratings from [OMDb](https://www.omdbapi.com), licensed [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/).',
+      'Network lookup by [IPinfo](https://ipinfo.io).',
+    ]);
     expect(buttons.signOut.hint).toBe("Signing out here doesn't affect other devices.");
   });
 

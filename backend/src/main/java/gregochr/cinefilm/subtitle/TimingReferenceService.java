@@ -5,6 +5,7 @@ import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.OsFullRef;
+import gregochr.cinefilm.film.FullNeedChoice;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
@@ -100,7 +101,8 @@ public class TimingReferenceService {
     }
 
     /**
-     * The films with an edition that qualifies: they are searched for full English subtitles as well.
+     * The films with an edition that qualifies: they are searched for full English subtitles as well (never one the
+     * owner marked {@code NONE_EXIST}).
      *
      * @return the film ids (those with an IMDb id), empty while the timing check is off
      */
@@ -153,12 +155,20 @@ public class TimingReferenceService {
             CreditsStarts.of(edition, credits), q.ownerPick(), q.files(), ranked, kept, stored);
     }
 
-    /** The editions that qualify, owner's picks first, then by film and edition; empty while the check is off. */
+    /**
+     * The editions that qualify, owner's picks first, then by film and edition; empty while the check is off. Films the
+     * owner marked {@code NONE_EXIST} (no English subtitles exist) never qualify.
+     */
     private List<Qualified> qualified() {
         if (!enabled) {
             return List.of();
         }
         Set<Long> filmIds = new HashSet<>(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED));
+        if (filmIds.isEmpty()) {
+            return List.of();
+        }
+        // The owner said no English subtitles exist: no reference is searched for or fetched for these films either.
+        filmIds.removeAll(films.findIdsByFullNeedOwner(FullNeedChoice.NONE_EXIST));
         if (filmIds.isEmpty()) {
             return List.of();
         }

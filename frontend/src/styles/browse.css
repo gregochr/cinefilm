@@ -922,6 +922,37 @@
 .admin__tmdb {
   flex: none;
 }
+.admin__credits {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 86px; /* the TMDB mark (74px) and its gap (12px), so the lines share the TMDB text's left edge */
+  color: var(--cf-text-muted);
+  font-size: var(--cf-size-label);
+}
+.admin__credits li {
+  line-height: 1.5; /* 18px at 12px */
+}
+.admin__credits li + li {
+  margin-top: 8px;
+}
+.admin__credit-link {
+  position: relative; /* anchors the hit area below */
+  white-space: nowrap; /* a link that wrapped would split its hit area */
+  color: var(--cf-text-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+/* The 44px target: an invisible box centred on the link, at least 44 x 44 and never smaller than the text, so a short
+   label is still 44px wide and neither the text nor the 18px line spacing moves. */
+.admin__credit-link::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+}
 
 /* Admin: Fix match */
 .admin__link {

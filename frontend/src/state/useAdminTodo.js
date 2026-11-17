@@ -3,11 +3,14 @@ import { announceLibraryChanged } from '../api/client.js';
 import { adminApi } from '../api/resources.js';
 import { bestGuess, buildTodoGroups, confirmProblem } from './adminTodo.js';
 import { useAttention } from './useAdmin.js';
+import { useFullNeed } from './useFullNeed.js';
 import { useResource } from './useResource.js';
 
 /**
  * The three lists behind the To do groups, each read on its own request so one failing leaves the others on screen:
  * the attention list (pick the right film, several files), the full-subtitles need list and the forced need list.
+ * `fullNeed` is the full list's {@link useFullNeed} state (`saving`, `problems`, `choose`), which the rows' owner
+ * choices use. `onFullSaved(row)` runs just before `onChanged()` when such a choice was saved (not when it failed).
  * They are read again when `settledAt` (a scan or import finished), `subtitlesVersion` (a subtitle job finished) or
  * `changed` (a fix was applied) changes; a newer read aborts the older one (`useResource`).
  *
@@ -20,11 +23,15 @@ import { useResource } from './useResource.js';
  * and a read that fails leaves the answer, and so the hiding, as it was. On failure the row stays with `problems[filmId]`
  * (a 404, the film gone, also reads the lists again).
  */
-export function useAdminTodo({ settledAt, subtitlesVersion, changed, onChanged }) {
+export function useAdminTodo({ settledAt, subtitlesVersion, changed, onChanged, onFullSaved }) {
   const attention = useAttention(`${settledAt}|${changed}`);
-  const full = useResource(`admin-todo-full:${subtitlesVersion}|${changed}`, (options) =>
-    adminApi.fullNeed(options),
-  );
+  // The full list is the Subtitles page's own hook, so a row's owner choice saves, shows and fails the same way here.
+  const fullNeed = useFullNeed(`todo:${subtitlesVersion}|${changed}`, {
+    onSaved: (row) => {
+      onFullSaved?.(row);
+      onChanged();
+    },
+  });
   const forced = useResource(`admin-todo-forced:${subtitlesVersion}|${changed}`, (options) =>
     adminApi.forcedNeed(options),
   );
@@ -90,11 +97,12 @@ export function useAdminTodo({ settledAt, subtitlesVersion, changed, onChanged }
         (item) => !(item.kind === 'needs-match' && hiddenIds.includes(item.filmId)),
       )
     : null;
-  const fullRows = full.data?.films ?? null;
+  const fullRows = fullNeed.rows;
+  const full = { data: fullRows, error: fullNeed.error, reload: fullNeed.reload };
   const forcedRows = forced.data?.films ?? null;
   const groups = buildTodoGroups({ attention: attentionItems, full: fullRows, forced: forcedRows });
   // "Nothing to do." only once every list has been read: a list that failed or has not answered says nothing.
   const allRead = attentionItems !== null && fullRows !== null && forcedRows !== null;
 
-  return { attention, full, forced, groups, allRead, confirm, confirming, problems };
+  return { attention, full, fullNeed, forced, groups, allRead, confirm, confirming, problems };
 }

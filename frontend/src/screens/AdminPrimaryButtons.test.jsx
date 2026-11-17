@@ -32,6 +32,7 @@ const replaced = {
 const SUBTITLE_TABS = [
   'Search for English subtitles…',
   'Add my own file…',
+  'No English subtitles exist',
   'Show the 1 film',
   'Hide the subtitle files',
   'Your choices (2)',
@@ -63,6 +64,8 @@ const CASES = [
       'Sort out editions…',
       'Sort out editions…',
       'Search for English subtitles…',
+      'Add my own file…',
+      'No English subtitles exist',
       'Find forced subtitles…',
     ],
   },
