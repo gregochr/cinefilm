@@ -155,6 +155,7 @@ playback stay untouched, so a wrong provisional rule can only mislabel a row in 
   subtitles under its current IMDb id. This is wider than `TimingReferenceService`'s (no line-count, verified or
   plays-embedded test, which would need `ForcedResolver` inside `current()`). The extra rows are display only. Their
   served sidecars are fitted against the stored references instead of saving `NO_REFERENCE`.
+  References stored before V30 have no last-cue end, so they are not used until a follow-up fills it in.
 - **The chosen reference (provisional):** fit against every usable stored reference among the edition's candidates
   (never the sidecar's own OpenSubtitles file) and keep the best: an `ALIGNED` fit first, then the larger matched
   share (integer cross-multiplication), then the smaller median residual, then the lower OpenSubtitles file id. The

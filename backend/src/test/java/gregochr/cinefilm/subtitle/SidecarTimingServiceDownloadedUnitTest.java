@@ -306,39 +306,16 @@ class SidecarTimingServiceDownloadedUnitTest {
     }
 
     @Test
-    void aFileStoredBeforeItsLastCueEndWasKeptIsNotUsableAndMakesTheFilmDueToBeFilledIn() {
+    void aFileStoredBeforeItsLastCueEndWasKeptIsNotUsedAndNothingIsParsed() {
         read(EmbeddedCueStarts.Status.NO_REFERENCE);
-        served();
-        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L));
         OpenSubtitlesReference old = reference(5012, 300, IMDB);
         old.setLastCueEndMs(null);
         stored(old);
-        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(row(BASE_KEY)));
 
-        assertThat(service.dueFilmIds()).containsExactly(1L);
-        assertThat(service.fitJobs(1L)).isEmpty();
-    }
+        FitJob job = onlyJob();
 
-    @Test
-    void theLastCueEndOfAFileStoredEarlierIsFilledInOnceUnderTheLibraryLock() {
-        OpenSubtitlesReference old = reference(5012, 300, IMDB);
-        old.setLastCueEndMs(null);
-        when(references.findByFilmIdAndLastCueEndMsIsNullAndCueCountGreaterThan(1L, 0)).thenReturn(List.of(old));
-
-        assertThat(service.backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.SAVED);
-
-        assertThat(old.getLastCueEndMs()).isEqualTo(3_001_000L);
-        verify(references).save(old);
-    }
-
-    @Test
-    void theBackfillWaitsWhileAScanOrAnEditHoldsTheLibraryLock() {
-        LibraryLock busy = new LibraryLock();
-        assertThat(busy.tryAcquire(LibraryLock.SCAN)).isTrue();
-        SidecarTimingService locked = new SidecarTimingService(sidecars, editions, files, cache, alignments,
-            references, credits, busy, transactions);
-
-        assertThat(locked.backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.BUSY);
+        assertThat(job.osReferences()).isEmpty();
+        assertThat(job.referenceKey()).isEqualTo(BASE_KEY);
     }
 
     @Test

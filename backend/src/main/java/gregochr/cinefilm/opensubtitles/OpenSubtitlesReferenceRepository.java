@@ -34,9 +34,6 @@ public interface OpenSubtitlesReferenceRepository extends JpaRepository<OpenSubt
         + "where r.filmId in :filmIds")
     List<ReferenceFacts> findFactsByFilmIdIn(@Param("filmIds") Collection<Long> filmIds);
 
-    /** A film's readable references that do not know where their last cue ends yet (stored before it was kept). */
-    List<OpenSubtitlesReference> findByFilmIdAndLastCueEndMsIsNullAndCueCountGreaterThan(Long filmId, int cueCount);
-
     /** Every reference stored for some films (any IMDb id; the caller keeps those for the film's current one). */
     List<OpenSubtitlesReference> findByFilmIdIn(Collection<Long> filmIds);
 }
