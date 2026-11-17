@@ -468,9 +468,15 @@ describe('createCancel and waitForReturn', () => {
 
   test('the end of the input counts as Return', async () => {
     const input = new PassThrough();
-    const returned = waitForReturn(input);
+    let done = false;
+    const returned = waitForReturn(input).then(() => {
+      done = true;
+    });
+    await flush();
+    assert.equal(done, false, 'nothing resolves it before the input ends');
     input.end();
     await soon(returned);
+    assert.equal(done, true);
   });
 });
 
