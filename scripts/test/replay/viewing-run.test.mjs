@@ -3,14 +3,17 @@
 // page sent away before Chrome is ended, the results after) is asserted as an order. Folders are made under a
 // temporary folder that is removed after. `main`, which starts the real Chrome, is checked by hand.
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync,
+} from 'node:fs';
+import fsp from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, test } from 'node:test';
-import { PAGE_TEXT, createCancel, takeLock, viewerPaths } from '../../replay/viewer.mjs';
+import { PAGE_TEXT, crashHandler, createCancel, takeLock, viewerPaths } from '../../replay/viewer.mjs';
 import {
-  END_WAIT_MS, ENDS, LOOK_MS, PRESS_RETRY, SITE_RETRY_MS, SITE_WAIT_MS, STATUS_EXPRESSION, leave, viewing,
-  watchRunSignals,
+  END_WAIT_MS, ENDS, KEEP_MS, LOOK_MS, PRESS_RETRY, SITE_RETRY_MS, SITE_WAIT_MS, STATUS_EXPRESSION, leave, runName,
+  viewing, resultsWriter, watchRunSignals, writeResults, writeResultsAsync, writeSynced, writeSyncedAsync,
 } from '../../replay/viewing.mjs';
 
 const SITE = 'http://127.0.0.1:5301';
@@ -20,6 +23,8 @@ const UUID = '3f2b8c1e-5a4d-4e6f-9b7a-1c2d3e4f5a6b';
 const tmp = mkdtempSync(join(tmpdir(), 'viewing-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
 let counter = 0;
+const modeOf = (path) => statSync(path).mode & 0o777;
+const realAsyncFs = { open: fsp.open, rename: fsp.rename, rm: fsp.rm };
 // 17 November 2026, 14:05:09 where the test runs: the time of day and the folder name are local time.
 const BEGAN = new Date(2026, 10, 17, 14, 5, 9).getTime();
 const FILM = { status: 200, title: 'Heat', runtimeMs: 10200000, quality: 'auto' };
@@ -182,7 +187,7 @@ describe('a run to the film\'s end', () => {
   test('says the film, its length and the site, and that Ctrl-C ends the run', async () => {
     const w = world();
     await w.run();
-    assert.equal(w.said[0], `Film 42: Heat, 2 h 50 min, on ${SITE}. Ctrl-C ends the run.`);
+    assert.equal(w.said[0], `Film 42: Heat, 2 h 50 min, on ${SITE}. Ctrl-C ends the run and writes the results.`);
   });
 
   test('ends in order: the page sent away, the three seconds, Chrome closed; then how it ended is said', async () => {
@@ -415,7 +420,7 @@ describe('the checks before it plays, in a run', () => {
 describe('the end of a run: what is kept, said and let go', () => {
   test('what was kept is written first, then how it ended is said, then the lock is let go', async () => {
     const w = world();
-    w.held.writeNow = () => w.log.push('write');
+    w.deps.writeNow = () => w.log.push('write');
     w.deps.lock = () => () => w.log.push('lock');
     w.deps.say = (text) => w.log.push(`say ${text}`);
     await w.run();
@@ -426,7 +431,7 @@ describe('the end of a run: what is kept, said and let go', () => {
 
   test('a writer that throws is one line and exit 1, and the lock is still let go', async () => {
     const w = world();
-    w.held.writeNow = () => {
+    w.deps.writeNow = () => {
       throw new Error('disk full');
     };
     w.deps.lock = () => () => w.log.push('lock');
@@ -571,7 +576,7 @@ describe('the signals of a run', () => {
   test('a second signal in the three seconds of the end still writes what there is, before it exits', async () => {
     const w = world({ onWait: (n) => n === 2 && handlers.get('SIGINT')() });
     const handlers = new Map();
-    w.held.writeNow = (word) => w.log.push(`write ${word}`);
+    w.deps.writeNow = (word) => w.log.push(`write ${word}`);
     const state = () => `lock ${existsSync(viewerPaths(w.home).lock)}`;
     watchRunSignals(w.cancel, w.held, w.deps.say, {
       exit: (code) => w.log.push(`exit ${code} with ${state()}`),
@@ -596,7 +601,7 @@ describe('the signals of a run', () => {
       handlers.get('SIGINT')();
       handlers.get('SIGINT')();
     } });
-    w.held.writeNow = (word) => w.log.push(`write ${word} after ${w.held.run.samples.length} samples`);
+    w.deps.writeNow = (word) => w.log.push(`write ${word} after ${w.held.run.samples.length} samples`);
     watchRunSignals(w.cancel, w.held, w.deps.say, {
       exit: (code) => w.log.push(`exit ${code} lock ${existsSync(viewerPaths(w.home).lock)}`),
       listen: (name, fn) => handlers.set(name, fn),
@@ -691,11 +696,545 @@ describe('the line every 30 seconds, the warnings and the page\'s errors, in a r
   });
 });
 
-describe('printing that fails', () => {
-  test('printing that throws does not stop the run: the samples are taken and Chrome is ended in order', async () => {
+// The folder of the run that was written (there is at most one), as the files in it.
+function results(w) {
+  const runs = join(w.home, 'runs');
+  const [name] = readdirSync(runs);
+  if (!name) return null;
+  const dir = join(runs, name);
+  const read = (file) => JSON.parse(readFileSync(join(dir, file), 'utf8'));
+  return { dir, name, samples: read('samples.json'), health: read('health.json'), held: read('held.json') };
+}
+
+// What is on disk in the run's folder now: the file names, how many samples, what `ended` says; null with no folder.
+function onDisk(w) {
+  const runs = join(w.home, 'runs');
+  if (!existsSync(runs) || readdirSync(runs).length === 0) return null;
+  const out = results(w);
+  return { files: readdirSync(out.dir).sort(), samples: out.samples.length, ended: out.held.run.ended };
+}
+
+const REPORT = { held: [], heldDropped: 0, records: [], notRead: 0, failed: 0, rejected: 0 };
+const RUN = { samples: [{ t: 1 }], pageErrors: [], warnings: [], presses: { place: null, retries: 0 }, ended: null };
+
+describe('what is written', () => {
+  test('the folder is named from the time the run began, by local time, with the right modes', async () => {
+    const w = world();
+    await w.run();
+    const out = results(w);
+    assert.equal(out.name, '20261117-140509');
+    assert.equal(modeOf(join(w.home, 'runs')), 0o700);
+    assert.equal(modeOf(out.dir), 0o700);
+    for (const file of ['samples.json', 'health.json', 'held.json', 'summary.txt']) {
+      assert.equal(modeOf(join(out.dir, file)), 0o600);
+    }
+    assert.equal(runName(new Date(2026, 0, 5, 3, 4, 9).getTime()), '20260105-030409');
+  });
+
+  test('health.json holds the records as sent, held.json what was held and how it ended, nothing else', async () => {
+    const fire = (listeners, requestId, method, path, extra = {}) => listeners.get('Fetch.requestPaused')({
+      requestId, request: { method, url: `${SITE}${path}`, ...extra },
+    });
+    const w = world({ onWait: (n, { listeners }) => {
+      if (n !== 1) return;
+      const headers = { Cookie: 'cinefilm=sekret-cookie', Authorization: 'Bearer sekret-header' };
+      fire(listeners, 'a', 'PUT', `/api/playback-health/${UUID}`, { postData: '{"seq":1,"operator":"Acme"}', headers });
+      fire(listeners, 'b', 'PUT', `/api/playback-health/${UUID}`, { postData: '{"seq":2,"operator":"Acme"}', headers });
+      fire(listeners, 'c', 'PUT', `/api/playback-health/${UUID}`, { postData: 'not json', headers });
+      const body = { postData: '{"p":"sekret-body"}', headers };
+      fire(listeners, 'd', 'POST', '/api/editions/12/watched?x=sekret-query', body);
+      fire(listeners, 'e', 'PUT', '/api/editions/12/progress', { postData: '{"positionMs":5}', headers });
+    } });
+    await w.run();
+    const out = results(w);
+    const latest = { seq: 2, operator: 'Acme' };
+    assert.deepEqual(out.health, { sent: 3, notRead: 1, viewings: [{ id: UUID, count: 2, latest }] });
+    assert.deepEqual(out.held.held, [
+      { method: 'POST', shape: '/api/editions/N/watched', count: 1 },
+      { method: 'PUT', shape: '/api/editions/N/progress', count: 1 },
+    ]);
+    assert.deepEqual([out.held.failed, out.held.rejected, out.held.heldDropped], [0, 0, 0]);
+    assert.deepEqual(out.held.run, {
+      film: 42, title: 'Heat', runtimeMs: 10200000, site: SITE, beganAt: BEGAN, runMs: 15000, ended: 'film-ended',
+    });
+    for (const file of ['samples.json', 'health.json', 'held.json', 'summary.txt']) {
+      const text = readFileSync(join(out.dir, file), 'utf8');
+      for (const secret of ['sekret', 'Cookie', 'Authorization']) {
+        assert.equal(text.includes(secret), false, `${file} ${secret}`);
+      }
+    }
+  });
+
+  test('the summary is printed at the end, line for line what summary.txt holds', async () => {
+    const w = world();
+    await w.run();
+    const { dir } = results(w);
+    const printed = w.said.slice(w.said.indexOf('Film 42 Heat'), -2);
+    assert.deepEqual(printed, readFileSync(join(dir, 'summary.txt'), 'utf8').trimEnd().split('\n'));
+    assert.equal(w.said.at(-2), `results: ${dir}`);
+  });
+
+  test('a run that took no sample writes nothing and says so', async () => {
+    const w = world({ noAnswer: () => true });
+    assert.equal(await w.run(), 1);
+    assert.equal(onDisk(w), null);
+    assert.equal(w.said.some((line) => line === 'nothing was written: no sample was taken'), true);
+  });
+
+  test('a folder that cannot be made is one line, exit 1, and the lock is still let go', async () => {
+    const w = world();
+    mkdirSync(join(w.home, 'runs'), { recursive: true });
+    writeFileSync(join(w.home, 'runs', '20261117-140509'), 'a file in the way');
+    assert.equal(await w.run(), 1);
+    assert.match(w.said.join('\n'), /the results could not be written/);
+    assert.equal(existsSync(viewerPaths(w.home).lock), false);
+  });
+
+  test('printing that throws does not stop the run or the writing of the results', async () => {
     const w = world({ sayThrows: true });
     assert.equal(await w.run(), 0);
-    assert.equal(w.held.run.samples.length, 3);
+    assert.equal(results(w).samples.length, 3);
     assert.deepEqual(tail(w.log, 3), END_ORDER);
+  });
+
+  test('writeResults gives the folder and the summary\'s lines, the file holding the same lines', () => {
+    const runsDir = join(tmp, 'direct-runs');
+    const run = { ...RUN, pageErrors: ['e'], warnings: ['w'], ended: 'minutes' };
+    const report = { ...REPORT, heldDropped: 2, failed: 1, rejected: 3 };
+    const { dir, lines } = writeResults({ runsDir, began: BEGAN, run, report, facts: { film: 1 } });
+    assert.equal(dir, join(runsDir, '20261117-140509'));
+    assert.deepEqual(readdirSync(dir).sort(), ['health.json', 'held.json', 'samples.json', 'summary.txt']);
+    assert.equal(readFileSync(join(dir, 'summary.txt'), 'utf8'), `${lines.join('\n')}\n`);
+    const held = JSON.parse(readFileSync(join(dir, 'held.json'), 'utf8'));
+    assert.deepEqual(Object.keys(held).sort(), [
+      'failed', 'held', 'heldDropped', 'pageErrors', 'presses', 'rejected', 'run', 'warnings',
+    ]);
+    assert.deepEqual([held.heldDropped, held.failed, held.rejected], [2, 1, 3]);
+    assert.equal(held.run.ended, 'minutes');
+  });
+
+  test('a write that is not the last says the run has not ended and writes no summary', () => {
+    const runsDir = join(tmp, 'mid-runs');
+    const { dir, lines } = writeResults({
+      runsDir, began: BEGAN, run: { ...RUN, ended: 'x' }, report: REPORT, facts: { film: 1 }, final: false,
+    });
+    assert.deepEqual(readdirSync(dir).sort(), ['health.json', 'held.json', 'samples.json']);
+    assert.equal(JSON.parse(readFileSync(join(dir, 'held.json'), 'utf8')).run.ended, null);
+    assert.deepEqual(lines, []);
+  });
+});
+
+describe('a file written whole, and forced to the disk', () => {
+  test('a write that fails at the rename leaves the last good file as it was, and no temporary file', () => {
+    const runsDir = join(tmp, 'whole-runs');
+    const write = (run, io) => writeResults({
+      runsDir, began: BEGAN, run, report: REPORT, facts: {}, final: false, io,
+    });
+    const { dir } = write(RUN);
+    const first = readFileSync(join(dir, 'samples.json'), 'utf8');
+    const io = { write: writeSynced, rename: () => {
+      throw new Error('power cut');
+    } };
+    assert.throws(() => write({ ...RUN, samples: [{ t: 1 }, { t: 2 }] }, io), /power cut/);
+    assert.equal(readFileSync(join(dir, 'samples.json'), 'utf8'), first, 'the last good file stands');
+    assert.deepEqual(readdirSync(dir).sort(), ['health.json', 'held.json', 'samples.json']);
+  });
+
+  test('each file is written to its temporary name and renamed onto the real one, one after the other', () => {
+    const log = [];
+    const io = {
+      write: (file) => {
+        log.push(`write ${file.split('/').at(-1)}`);
+        writeFileSync(file, '');
+      },
+      rename: (from, to) => {
+        log.push(`rename ${to.split('/').at(-1)}`);
+        renameSync(from, to);
+      },
+    };
+    writeResults({
+      runsDir: join(tmp, 'order-runs'), began: BEGAN, run: RUN, report: REPORT, facts: {}, final: false, io,
+    });
+    assert.deepEqual(log, [
+      'write samples.json.tmp', 'rename samples.json', 'write health.json.tmp', 'rename health.json',
+      'write held.json.tmp', 'rename held.json',
+    ]);
+  });
+
+  // A made-up `fs` that logs what it is asked; `take(length)` says how many bytes each write takes.
+  const madeUpFs = (log, take = (length) => length) => ({
+    openSync: (file, flags, mode) => {
+      log.push(`open ${flags} ${mode.toString(8)}`);
+      return 7;
+    },
+    writeSync: (descriptor, bytes, offset, length) => {
+      const taken = take(length);
+      log.push(`write ${bytes.subarray(offset, offset + taken).toString()}`);
+      return taken;
+    },
+    fsyncSync: () => log.push('fsync'),
+    closeSync: () => log.push('close'),
+  });
+
+  test('the data is forced to the disk before the file is closed', () => {
+    const log = [];
+    writeSynced('x', 'data', madeUpFs(log));
+    assert.deepEqual(log, ['open w 600', 'write data', 'fsync', 'close']);
+  });
+
+  test('a write that takes only part of the bytes is made again until every byte is written', () => {
+    const log = [];
+    writeSynced('x', 'abcdefgh', madeUpFs(log, (length) => Math.min(3, length)));
+    assert.deepEqual(log, ['open w 600', 'write abc', 'write def', 'write gh', 'fsync', 'close']);
+    const stuck = [];
+    assert.throws(() => writeSynced('x', 'abc', madeUpFs(stuck, () => 0)), /no progress/);
+    assert.deepEqual(stuck, ['open w 600', 'write ', 'close'], 'a write that takes nothing is an error, and closes');
+  });
+
+  test('the file is closed when the write fails, and an error from the close does not hide it', () => {
+    const log = [];
+    const fs = madeUpFs(log);
+    fs.writeSync = () => {
+      throw new Error('disk full');
+    };
+    fs.closeSync = () => {
+      log.push('close');
+      throw new Error('close failed');
+    };
+    assert.throws(() => writeSynced('x', 'data', fs), /disk full/);
+    assert.deepEqual(log, ['open w 600', 'close']);
+    const closing = madeUpFs([]);
+    closing.closeSync = () => {
+      throw new Error('close failed');
+    };
+    assert.throws(() => writeSynced('x', 'data', closing), /close failed/, 'a close that fails after a good write');
+  });
+
+  test('a temporary file that cannot be removed does not hide the error that came first', () => {
+    const runsDir = join(tmp, 'stuck-runs');
+    const io = {
+      write: (file) => {
+        mkdirSync(file);
+        writeFileSync(join(file, 'inside'), 'x');
+        throw new Error('first error');
+      },
+      rename: renameSync,
+    };
+    const attempt = () => writeResults({ runsDir, began: BEGAN, run: RUN, report: REPORT, facts: {}, io });
+    assert.throws(attempt, /first error/);
+  });
+});
+
+describe('what is written as the run goes', () => {
+  test('with the first sample, then each minute, then at the end; whole, no temporary file left', async () => {
+    assert.equal(KEEP_MS, 60000);
+    const seen = [];
+    const w = world({ minutes: 3, samples: [playing(1)], onWait: () => seen.push(onDisk(w)) });
+    assert.equal(await w.run(), 0);
+    const counts = seen.map((disk) => disk?.samples ?? 0);
+    // a write at the 1st, 13th and 25th sample (the clock moves 5 s a sample); one at the end, the 36th
+    assert.deepEqual(counts, [0, ...new Array(12).fill(1), ...new Array(12).fill(13), ...new Array(11).fill(25)]);
+    for (const disk of seen.slice(1)) {
+      assert.deepEqual(disk.files, ['health.json', 'held.json', 'samples.json'], 'no summary and no temporary file');
+      assert.equal(disk.ended, null, 'while it goes, the run has not ended');
+    }
+    const last = results(w);
+    assert.equal(last.samples.length, 36);
+    assert.equal(last.held.run.ended, 'minutes');
+    assert.equal(readdirSync(last.dir).includes('summary.txt'), true);
+    assert.equal(readdirSync(last.dir).some((name) => name.endsWith('.tmp')), false);
+  });
+
+  test('a write that fails while the run goes is one warning, kept, and the run goes on to the end', async () => {
+    let failing = true;
+    const afs = { ...realAsyncFs, open: async (...args) => {
+      if (failing) throw new Error('disk full');
+      return realAsyncFs.open(...args);
+    } };
+    const w = world({ minutes: 3, samples: [playing(1)], deps: { afs }, onWait: (n) => {
+      if (n === 30) failing = false;
+    } });
+    assert.equal(await w.run(), 0);
+    const out = results(w);
+    assert.equal(out.samples.length, 36, 'the last write wins');
+    assert.equal(out.held.warnings.filter((line) => /could not be written: disk full/.test(line)).length, 1);
+    assert.equal(readdirSync(out.dir).some((name) => name.endsWith('.tmp')), false);
+  });
+
+  test('a warning for something that is not an Error says what it was, not "undefined"', async () => {
+    let failing = true;
+    const afs = { ...realAsyncFs, open: async (...args) => {
+      if (failing) throw 'a plain string';
+      return realAsyncFs.open(...args);
+    } };
+    const w = world({ deps: { afs }, onWait: (n) => {
+      if (n === 2) failing = false;
+    } });
+    await w.run();
+    assert.equal(results(w).held.warnings[0], 'the results could not be written: a plain string');
+  });
+
+  test('a last write that fails is the error it is: one line and exit 1', async () => {
+    const io = { write: () => {
+      throw new Error('disk full');
+    }, rename: renameSync };
+    const w = world({ deps: { io } });
+    assert.equal(await w.run(), 1);
+    assert.match(w.said.join('\n'), /the results could not be written: disk full/);
+  });
+
+  test('the last write is made once, however many call it; the word counts before the run has ended', async () => {
+    const w = world({ onWait: (n) => n === 2 && w.held.writeNow('failed') });
+    await w.run();
+    const out = results(w);
+    assert.equal(out.held.run.ended, 'failed', 'the word given before the run had ended');
+    assert.equal(out.samples.length, 1, 'what the crash wrote is what stays');
+    assert.equal(w.held.writeNow('signal'), null);
+    const done = world();
+    await done.run();
+    assert.equal(done.held.writeNow('failed'), null, 'nothing is written twice');
+    assert.equal(results(done).held.run.ended, 'film-ended');
+    const none = world({ noAnswer: () => true });
+    await none.run();
+    assert.equal(none.held.writeNow('failed'), null, 'nothing without a sample');
+  });
+
+  test('a crash while the page is being sent away does not change how the run ended', async () => {
+    const w = world();
+    w.deps.pause = async () => {
+      w.held.writeNow('failed');
+    };
+    await w.run();
+    assert.equal(results(w).held.run.ended, 'film-ended');
+  });
+
+  test('the last write says how the run ended, whichever way: a second signal, a crash', async () => {
+    const handlers = new Map();
+    const signalled = world({ onLook: (n) => {
+      if (n !== 2) return;
+      handlers.get('SIGINT')();
+      handlers.get('SIGINT')();
+    } });
+    watchRunSignals(signalled.cancel, signalled.held, signalled.deps.say, {
+      exit: () => undefined, listen: (name, fn) => handlers.set(name, fn),
+    });
+    await signalled.run();
+    assert.equal(results(signalled).held.run.ended, 'signal');
+    const crashed = world({ onWait: (n) => n === 3 && crashHandler(crashed.held, {
+      say: () => undefined, exit: () => undefined,
+    })(new Error('boom')) });
+    await crashed.run();
+    const out = results(crashed);
+    assert.equal(out.held.run.ended, 'failed');
+    assert.equal(out.samples.length, 2, 'what the crash wrote is what stays');
+  });
+});
+
+describe('the writes made while the run goes', () => {
+  // A made-up asynchronous fs: logs what it is asked, in order; `gate` (a promise) holds the write of the text.
+  const asyncFs = (log, gate = Promise.resolve()) => ({
+    open: async (file, flags, mode) => {
+      log.push(`open ${file.split('/').at(-1)} ${flags} ${mode.toString(8)}`);
+      return {
+        writeFile: async () => {
+          await gate;
+          log.push('write');
+        },
+        sync: async () => log.push('sync'),
+        close: async () => log.push('close'),
+      };
+    },
+    rename: async (from, to) => log.push(`rename ${to.split('/').at(-1)}`),
+    rm: async () => log.push('rm'),
+  });
+
+  test('each file is opened, written whole, synced, closed and only then renamed', async () => {
+    const log = [];
+    await writeSyncedAsync('x', 'data', asyncFs(log));
+    assert.deepEqual(log, ['open x w 600', 'write', 'sync', 'close']);
+    log.length = 0;
+    await writeResultsAsync({
+      runsDir: join(tmp, 'async-order'), began: BEGAN, run: RUN, report: REPORT, facts: {}, afs: asyncFs(log),
+    });
+    const each = (name) => [`open ${name}.async.tmp w 600`, 'write', 'sync', 'close', `rename ${name}`];
+    assert.deepEqual(log, [...each('samples.json'), ...each('health.json'), ...each('held.json')]);
+  });
+
+  test('a write that fails leaves no temporary file behind, and the error goes on', async () => {
+    const log = [];
+    const afs = asyncFs(log);
+    afs.rename = async () => {
+      throw new Error('no rename');
+    };
+    await assert.rejects(writeResultsAsync({
+      runsDir: join(tmp, 'async-fail'), began: BEGAN, run: RUN, report: REPORT, facts: {}, afs,
+    }), /no rename/);
+    assert.equal(log.at(-1), 'rm');
+  });
+
+  // The writer on its own, with a clock and a gated asynchronous fs.
+  function writerWith(afs, io) {
+    let now = 0;
+    const ctx = {
+      run: { ...RUN, ended: null }, opt: { film: 1, site: SITE }, opened: 0, guard: null,
+      deps: { clock: { mono: () => now }, afs, io },
+    };
+    const writer = resultsWriter(ctx, { began: BEGAN, runsDir: join(tmp, `writer-${counter += 1}`) });
+    return { writer, ctx, at: (ms) => {
+      now = ms;
+    } };
+  }
+  const opens = (log) => log.filter((entry) => entry.startsWith('open')).length;
+
+  test('one write at a time: while one is out another is not started, however long it has been', async () => {
+    const log = [];
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const { writer, at } = writerWith(asyncFs(log, gate));
+    const first = writer.keep();
+    await new Promise((resolve) => setImmediate(resolve));
+    at(10 * KEEP_MS);
+    const second = writer.keep();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(opens(log), 1, 'no second write while the first is out');
+    release();
+    await Promise.all([first, second]);
+    at(20 * KEEP_MS);
+    await writer.keep();
+    assert.equal(opens(log) > 1, true, 'once it has settled, a later write is made');
+  });
+
+  test('a write that is out when the crash handler writes never lands over what the handler wrote', async () => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const real = {
+      ...realAsyncFs,
+      open: async (...args) => {
+        const handle = await realAsyncFs.open(...args);
+        return {
+          writeFile: async (text) => {
+            await gate;
+            return handle.writeFile(text);
+          },
+          sync: () => handle.sync(),
+          close: () => handle.close(),
+        };
+      },
+    };
+    const { writer, ctx } = writerWith(real);
+    const runsDir = join(tmp, `writer-${counter}`);
+    ctx.run.samples = [{ t: 1 }];
+    const out = writer.keep();
+    await new Promise((resolve) => setImmediate(resolve));
+    ctx.run.samples = [{ t: 1 }, { t: 2 }];
+    const handler = crashHandler({ writeNow: writer.final }, { say: () => undefined, exit: () => undefined });
+    handler(new Error('boom'));
+    release();
+    await out;
+    const dir = join(runsDir, readdirSync(runsDir)[0]);
+    assert.equal(JSON.parse(readFileSync(join(dir, 'samples.json'), 'utf8')).length, 2, 'the handler\'s file stands');
+    assert.equal(JSON.parse(readFileSync(join(dir, 'held.json'), 'utf8')).run.ended, 'failed');
+    assert.deepEqual(readdirSync(dir).sort(), ['health.json', 'held.json', 'samples.json', 'summary.txt']);
+  });
+
+  test('the last write clears the mid-run temporary files before it writes, and again after', () => {
+    const log = [];
+    const name = (file) => file.split('/').at(-1);
+    const io = {
+      write: (file) => log.push(`write ${name(file)}`),
+      rename: (from, to) => log.push(`rename ${name(to)}`),
+      remove: (file) => log.push(`remove ${name(file)}`),
+    };
+    const { writer, ctx } = writerWith(undefined, io);
+    ctx.run.samples = [{ t: 1 }];
+    writer.final('failed');
+    const removals = ['samples', 'health', 'held'].map((file) => `remove ${file}.json.async.tmp`);
+    const writes = ['samples.json', 'health.json', 'held.json', 'summary.txt'].flatMap((file) => [
+      `write ${file}.tmp`, `rename ${file}`,
+    ]);
+    assert.deepEqual(log, [...removals, ...writes, ...removals]);
+  });
+
+  test('a removal that fails does not stop the others, or the last write', () => {
+    const attempts = [];
+    const written = [];
+    const io = {
+      write: (file) => written.push(file),
+      rename: (from, to) => written.push(to),
+      remove: (file) => {
+        attempts.push(file);
+        throw new Error('cannot remove');
+      },
+    };
+    const { writer, ctx } = writerWith(undefined, io);
+    ctx.run.samples = [{ t: 1 }];
+    assert.equal(typeof writer.final('failed').dir, 'string');
+    assert.equal(attempts.length, 6, 'all three, before and after');
+    assert.equal(written.length, 8, 'the last write was made');
+  });
+
+  test('a mid-run write held just before its rename never lands over the last write, and leaves nothing', async () => {
+    let reached;
+    const atRename = new Promise((resolve) => {
+      reached = resolve;
+    });
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const held = { ...realAsyncFs, rename: async (...args) => {
+      reached();
+      await gate;
+      return realAsyncFs.rename(...args);
+    } };
+    const { writer, ctx } = writerWith(held);
+    const runsDir = join(tmp, `writer-${counter}`);
+    ctx.run.samples = [{ t: 1 }];
+    const out = writer.keep();
+    await atRename;
+    ctx.run.samples = [{ t: 1 }, { t: 2 }];
+    writer.final('failed');
+    release();
+    await out;
+    const dir = join(runsDir, readdirSync(runsDir)[0]);
+    assert.equal(JSON.parse(readFileSync(join(dir, 'samples.json'), 'utf8')).length, 2, 'the last write stands');
+    assert.equal(JSON.parse(readFileSync(join(dir, 'held.json'), 'utf8')).run.ended, 'failed');
+    assert.deepEqual(readdirSync(dir).sort(), ['health.json', 'held.json', 'samples.json', 'summary.txt']);
+  });
+
+  test('while a slow write is out, a request the page paused is still answered by the guard', async () => {
+    const order = [];
+    let w;
+    const slow = {
+      ...realAsyncFs,
+      open: async (...args) => {
+        const handle = await realAsyncFs.open(...args);
+        return {
+          writeFile: async (text) => {
+            // A request the page makes while the write is out (a macrotask later, as Chrome's event would arrive).
+            setImmediate(() => w.listeners.get('Fetch.requestPaused')({
+              requestId: 'segment', request: { method: 'GET', url: `${SITE}/api/editions/1/segment.ts` },
+            }));
+            await new Promise((resolve) => setTimeout(resolve, 40));
+            order.push('write settles');
+            return handle.writeFile(text);
+          },
+          sync: () => handle.sync(),
+          close: () => handle.close(),
+        };
+      },
+    };
+    w = world({ samples: [{ ...playing(1), ended: true }], deps: { afs: slow } });
+    const send = w.page.send;
+    w.page.send = async (method, params) => {
+      if (method === 'Fetch.continueRequest') order.push('request continued');
+      return send(method, params);
+    };
+    await w.run();
+    assert.deepEqual(order.slice(0, 2), ['request continued', 'write settles']);
   });
 });

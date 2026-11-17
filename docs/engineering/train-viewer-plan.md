@@ -101,8 +101,8 @@ no change to the app and no release.
 
 ## What was tried first
 
-Three scratch scripts on 2026-11-17, the real player against the home replay's stand-in unless said otherwise. Each
-case ran once.
+Scratch scripts on 2026-11-17, the real player against the home replay's stand-in unless said otherwise. Each case
+of the first three ran once.
 
 - **Holding back.** In 75 seconds all nine progress saves were answered inside Chrome and none reached the stand-in;
   the four health reports were read whole on their way out and all arrived; the sends the page makes as it closes
@@ -116,6 +116,14 @@ case ran once.
   driver had died, Chrome ended by itself in 0.3 seconds, and the page's closing save and report reached the
   stand-in. (With the built viewer killed outright while a film played, Chrome took nine seconds to go, removed its
   own lock, and in one try of two the closing save got out; a second viewer started afterwards ran.)
+- **A made-up home folder is not a way to try it.** To keep clear of the real `~/cinefilm-viewer`, the built viewer
+  was first started with `HOME` set to a scratch folder. Chrome inherits that, finds no login keychain there and
+  asks macOS to make one (sampled: `SecItemAdd` waiting in `AuthorizationCopyRights`). While that prompt is up
+  Chrome asks the site for nothing, and the viewer says the site is not answering; when macOS refuses the request
+  at once, Chrome goes on with no key and a cookie set then cannot be read back. The by-hand starter now gives only
+  Node the scratch home and starts Chrome with the real one: the built viewer then reached the film in 6 seconds
+  and ended on `SIGHUP` as designed. So the viewer is run from Terminal by the owner as themself; over SSH or from
+  a scheduled job it is untried.
 
 ## Six pull requests, each under 1,500 changed lines
 
