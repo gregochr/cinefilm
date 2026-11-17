@@ -89,15 +89,52 @@ function AdminShell() {
       takeFocusFallback();
     }
   }, [fixing, takeFocusFallback]);
-  // A saved arrangement settles the row it was opened from, so the lists are read again.
+  // A saved arrangement settles the row it was opened from, so the lists are read again. Same focus rule as Fix match
+  // (mirrored here, not shared: the two read differently). EditEditions reports a save that lands during its fade-out
+  // as stale too, so "still mounted" is read from the open `editing` through a ref: a due fallback is armed only once
+  // the dialog is gone, and one that lands after it is gone is armed at once.
+  const editingRef = useRef(editing);
+  // A latest-value mirror, read only from async callbacks (as `openPicker.current` in useAdminShell.js).
+  editingRef.current = editing;
+  // The id of the film whose save landed while a dialog for that film was open (null when none). The effect below
+  // drops it as soon as the open dialog is not that film's, so at close it is null or the closing film's.
+  const editFallbackDue = useRef(null);
+  const editCheckFocus = useRef(false);
   const edited = (result, stale) => {
     if (!stale) {
       shell.closeEditEditions();
       shell.armFocusFallback();
       toast.show('Editions saved');
+    } else if (editingRef.current?.film.id === result.filmId) {
+      editFallbackDue.current = result.filmId;
+    } else {
+      shell.armFocusFallback();
     }
     shell.markChanged();
   };
+  const closeEditEditions = () => {
+    if (editFallbackDue.current !== null) {
+      shell.armFocusFallback();
+      editCheckFocus.current = true;
+    }
+    editFallbackDue.current = null;
+    // React may not have rendered yet when a held save lands: it must see the dialog as gone and arm at once.
+    editingRef.current = null;
+    shell.closeEditEditions();
+  };
+  useEffect(() => {
+    // Gone by any road (Cancel, a save, a change of section) or replaced by another film's dialog: a due fallback
+    // belongs to that dialog only.
+    if (editFallbackDue.current !== editing?.film.id) editFallbackDue.current = null;
+    if (editing) return;
+    if (!editCheckFocus.current) return;
+    editCheckFocus.current = false;
+    const active = document.activeElement;
+    if (!active || active === document.body || !active.isConnected) {
+      document.getElementById('admin-section-title')?.focus();
+      takeFocusFallback();
+    }
+  }, [editing, takeFocusFallback]);
 
   return (
     <AdminContext.Provider value={shell.value}>
@@ -131,7 +168,7 @@ function AdminShell() {
               key={editing.film.id}
               film={editing.film}
               opener={editing.opener}
-              onClose={shell.closeEditEditions}
+              onClose={closeEditEditions}
               onSaved={edited}
             />
           ) : null}
