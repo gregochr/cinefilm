@@ -585,6 +585,7 @@ export const settingsPage = {
   saved: 'Saved', // planner, 7 (existing)
   credit: 'This product uses the TMDB API but is not endorsed or certified by TMDB.', // AR5
   // planner, settings credits (the other outside services; each line is text around linked parts)
+  opensInNewTab: '(opens in a new tab)', // planner, settings credits (read after each credit link's name)
   dataCredits: [
     {
       key: 'opensubtitles',

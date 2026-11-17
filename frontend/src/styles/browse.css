@@ -929,6 +929,9 @@
   color: var(--cf-text-muted);
   font-size: var(--cf-size-label);
 }
+.admin__credits li {
+  line-height: 44px; /* matches the links' 44px targets, so wrapped lines sit evenly */
+}
 .admin__credit-link {
   display: inline-flex;
   align-items: center;

@@ -155,7 +155,10 @@ function SignedInCard() {
   );
 }
 
-/** Settings: the Continue watching minimum and the session, with the TMDB credit and the data credits (OpenSubtitles, OMDb, IPinfo) at the bottom. */
+/**
+ * Settings: the Continue watching minimum and the session, with the TMDB credit and the data credits (OpenSubtitles,
+ * OMDb, IPinfo) at the bottom.
+ */
 export default function AdminSettings() {
   return (
     <>
@@ -180,7 +183,7 @@ export default function AdminSettings() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  {part.text}
+                  {part.text} <span className="sr-only">{settingsPage.opensInNewTab}</span>
                 </a>
               ) : (
                 <span key={part.text}>{part.text}</span>

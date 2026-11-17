@@ -23,11 +23,23 @@ describe('Admin Settings section', () => {
     expect(screen.getByRole('img', { name: 'TMDB' })).toBeInTheDocument();
   });
 
+  it('reads each data credit as a whole sentence', async () => {
+    installFetch();
+    renderApp('/admin/settings');
+    await screen.findByRole('region', { name: 'Continue watching' });
+    const items = within(screen.getByRole('list')).getAllByRole('listitem');
+    expect(items.map((item) => item.textContent)).toEqual([
+      'Subtitles from OpenSubtitles.com (opens in a new tab).',
+      'IMDb and Rotten Tomatoes ratings from OMDb (opens in a new tab), licensed CC BY-NC 4.0 (opens in a new tab).',
+      'Network lookup by IPinfo (opens in a new tab).',
+    ]);
+  });
+
   it.each([
-    ['OpenSubtitles.com', 'https://www.opensubtitles.com'],
-    ['OMDb', 'https://www.omdbapi.com'],
-    ['CC BY-NC 4.0', 'https://creativecommons.org/licenses/by-nc/4.0/'],
-    ['IPinfo', 'https://ipinfo.io'],
+    ['OpenSubtitles.com (opens in a new tab)', 'https://www.opensubtitles.com'],
+    ['OMDb (opens in a new tab)', 'https://www.omdbapi.com'],
+    ['CC BY-NC 4.0 (opens in a new tab)', 'https://creativecommons.org/licenses/by-nc/4.0/'],
+    ['IPinfo (opens in a new tab)', 'https://ipinfo.io'],
   ])('credits %s with a link that opens safely in a new tab', async (name, href) => {
     installFetch();
     renderApp('/admin/settings');
