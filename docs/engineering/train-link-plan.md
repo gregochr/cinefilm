@@ -277,11 +277,23 @@ against a public five-level test stream, from a throwaway page that is not in th
 How it was done, for the next time: the estimate must be driven by feeding the estimator slow samples. Setting
 `hls.bandwidthEstimate` resets it, after which hls.js cannot estimate and falls back to its first level.
 
+## Replayed at home in a real browser (2026-11-16)
+
+The home replay (`home-replay.md`) ran the whole journey twice in Chrome: the player as merged here, against a
+stand-in server that delivered a stand-in film at the record's pace. It stalled for 5 s on the kinder reading of
+the link and 206 s on the harsher, where the day stalled for 2,011 s. On both, every stall came before the bank
+was first full, 41 to 42 minutes in. The replays also showed that film banked at 240p is watched after the link
+is back, that a step up to 720p stops the fetching while the bank runs down from eight minutes to about four,
+and that D spent the bank holding 360p in the worst spell. `home-replay.md` has the figures and the limits of
+the method. Nothing here was changed on the strength of them: the next journey runs the same rules for real.
+
 ## What nobody has verified
 
-- **A link that is really slow or dead.** The browser run drove the estimate by hand and could not throttle or cut
-  the network, so the timeout paths (the cap coming down, the hold letting go, the fall to 240p) rest on the reading
-  of the hls.js source and on the tests.
+- **A link that is really slow or dead.** The browser run drove the estimate by hand and could not throttle or cut the
+  network, so the timeout paths (the cap coming down, the hold letting go, the fall to 240p) rest on the reading of
+  the hls.js source and on the tests. The home replay has since run them in Chrome on a stand-in link (above): the
+  fetch fell to 240p inside the first bad minute and the hold let go at 240 s. That is still not the real server, and
+  not a train.
 - **The encoder at 240p:** picture, speed with one more rung, real bitrate against the declared peak, AAC at
   64 kbit/s. CI encodes the rung in software only.
 - **Other browsers:** Safari on the Mac (hls.js), Firefox, and whether WebKit evicts ahead of the playhead. The

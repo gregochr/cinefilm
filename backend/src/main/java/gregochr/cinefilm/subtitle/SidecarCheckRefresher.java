@@ -68,6 +68,7 @@ public class SidecarCheckRefresher {
     private final ReferenceFetcher fetcher;
     private final SidecarCheckService service;
     private final FullFitProbe probe;
+    private final TimingReferenceFetch timingReference;
     private final Clock clock;
     private final Executor executor;
     private final DailyDownloadLimit limits;
@@ -81,7 +82,7 @@ public class SidecarCheckRefresher {
     /** Creates the service; the executor is {@code sidecarCheckExecutor}. */
     public SidecarCheckRefresher(OpenSubtitlesApi api, OpenSubtitlesBudget budget,
                                  OpenSubtitlesReferenceRepository references, SidecarCheckService service,
-                                 FullFitService fullFit, Clock clock,
+                                 FullFitService fullFit, TimingReferenceService timingReferences, Clock clock,
                                  @Qualifier("sidecarCheckExecutor") Executor executor,
                                  DailyDownloadLimit limits,
                                  ApplicationEventPublisher events) {
@@ -90,6 +91,7 @@ public class SidecarCheckRefresher {
         this.fetcher = new ReferenceFetcher(api, budget, references, clock, limits);
         this.service = service;
         this.probe = new FullFitProbe(fetcher, fullFit);
+        this.timingReference = new TimingReferenceFetch(fetcher, timingReferences, clock);
         this.clock = clock;
         this.executor = executor;
         // The comparisons may bring the day's total only to their share, so downloads of missing and replacement
@@ -198,6 +200,7 @@ public class SidecarCheckRefresher {
         int unusable = 0;
         int multiPart = 0;
         int failed = 0;
+        boolean stopped = false;
         try {
             Instant blockedUntil = budget.blockedUntil(clock.instant());
             if (blockedUntil != null) {
@@ -225,9 +228,11 @@ public class SidecarCheckRefresher {
                     }
                 } catch (ReferenceFetcher.Stop e) {
                     LOG.info("Subtitle file checks stopped: {}", e.getMessage());
+                    stopped = true;
                     break;
                 } catch (OpenSubtitlesUnavailableException e) {
                     LOG.warn("Subtitle file checks stopped: {}", e.getMessage());
+                    stopped = true;
                     break;
                 } catch (RuntimeException e) {
                     failed++;
@@ -235,6 +240,7 @@ public class SidecarCheckRefresher {
                         e.getClass().getSimpleName());
                 }
             }
+            measureTimingReferences(!stopped);
             LOG.info("Subtitle file checks finished: {} saved, {} changed meanwhile, {} unusable references, "
                 + "{} failed", saved, dropped, unusable, failed);
             if (saved > 0) {
@@ -256,6 +262,22 @@ public class SidecarCheckRefresher {
             probe.measure(checkLimit);
         } catch (RuntimeException e) {
             LOG.warn("Full subtitle measurement failed: {}", e.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * The timing reference of phase 3c-1: a full English file fetched for the editions whose forced files have no
+     * English track in the film, and one log line per forced file measured against it. It runs after the checks of the
+     * owner's files, so those are compared first, with the same fetcher and ceiling (at most two fetches a run). It
+     * stores no fit and acts on nothing; a failure of it never harms the run.
+     *
+     * @param mayFetch false when the checks above met a spent budget, a limit or an outage
+     */
+    private void measureTimingReferences(boolean mayFetch) {
+        try {
+            timingReference.run(checkLimit, mayFetch);
+        } catch (RuntimeException e) {
+            LOG.warn("Timing reference measurement failed: {}", e.getClass().getSimpleName());
         }
     }
 

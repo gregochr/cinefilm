@@ -17,6 +17,7 @@ import ch.qos.logback.core.read.ListAppender;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.ImdbRef;
 import gregochr.cinefilm.subtitle.FullNeedService;
+import gregochr.cinefilm.subtitle.TimingReferenceService;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -49,6 +50,9 @@ class OpenSubtitlesRefresherFullTest {
     private FullNeedService fullNeed;
 
     @Mock
+    private TimingReferenceService timingReference;
+
+    @Mock
     private ApplicationEventPublisher events;
 
     private final Logger refresherLog = (Logger) LoggerFactory.getLogger(OpenSubtitlesRefresher.class);
@@ -57,7 +61,7 @@ class OpenSubtitlesRefresherFullTest {
 
     @BeforeEach
     void setUp() {
-        refresher = new OpenSubtitlesRefresher(api, films, fullNeed, CLOCK, Runnable::run, events);
+        refresher = new OpenSubtitlesRefresher(api, films, fullNeed, timingReference, CLOCK, Runnable::run, events);
         logged.start();
         refresherLog.addAppender(logged);
     }
@@ -103,6 +107,55 @@ class OpenSubtitlesRefresherFullTest {
             NOW);
         verify(films).saveOpenSubtitlesFull(3L, "tt1029234", "[]", NOW);
         assertThat(messages()).contains("Full subtitle search finished: 2 saved, 0 failed");
+    }
+
+    @Test
+    void aFilmWithATimingReferenceEditionIsSearchedAlongsideTheOnesThatNeedFullSubtitlesOnTheSameRules() {
+        when(fullNeed.neededFilmIds()).thenReturn(Set.of(1L));
+        when(timingReference.filmIds()).thenReturn(Set.of(2L));
+        when(films.findOpenSubtitlesFullDue(CUTOFF)).thenReturn(List.of(OLDBOY, TAKEN, MARTYRS));
+        OpenSubtitlesResult plain = result(7, false);
+        when(api.searchFull("tt0364569")).thenReturn(new OpenSubtitlesSearch(1, plain, List.of(plain)));
+        when(api.searchFull("tt0936501")).thenReturn(new OpenSubtitlesSearch(1, plain, List.of(plain)));
+        when(films.saveOpenSubtitlesFull(1L, "tt0364569", OpenSubtitlesResult.listToJson(List.of(plain)), NOW))
+            .thenReturn(1);
+        when(films.saveOpenSubtitlesFull(2L, "tt0936501", OpenSubtitlesResult.listToJson(List.of(plain)), NOW))
+            .thenReturn(1);
+
+        run();
+
+        verify(api).searchFull("tt0364569");
+        verify(api).searchFull("tt0936501");
+        verify(api, never()).searchFull("tt1029234");
+        assertThat(messages()).contains("Full subtitle search finished: 2 saved, 0 failed");
+    }
+
+    @Test
+    void aFilmWithOnlyATimingReferenceEditionIsSearchedWhenNoFilmNeedsFullSubtitles() {
+        when(fullNeed.neededFilmIds()).thenReturn(Set.of());
+        when(timingReference.filmIds()).thenReturn(Set.of(2L));
+        when(films.findOpenSubtitlesFullDue(CUTOFF)).thenReturn(List.of(TAKEN));
+        when(api.searchFull("tt0936501")).thenReturn(new OpenSubtitlesSearch(0, null));
+        when(films.saveOpenSubtitlesFull(2L, "tt0936501", "[]", NOW)).thenReturn(1);
+
+        run();
+
+        verify(films).saveOpenSubtitlesFull(2L, "tt0936501", "[]", NOW);
+    }
+
+    @Test
+    void aFailureFindingTheTimingReferenceFilmsDoesNotStopTheSearchOfTheFilmsThatNeedFullSubtitles() {
+        when(fullNeed.neededFilmIds()).thenReturn(Set.of(1L));
+        when(timingReference.filmIds()).thenThrow(new IllegalStateException("database down: secret"));
+        when(films.findOpenSubtitlesFullDue(CUTOFF)).thenReturn(List.of(OLDBOY));
+        when(api.searchFull("tt0364569")).thenReturn(new OpenSubtitlesSearch(0, null));
+        when(films.saveOpenSubtitlesFull(1L, "tt0364569", "[]", NOW)).thenReturn(1);
+
+        run();
+
+        verify(films).saveOpenSubtitlesFull(1L, "tt0364569", "[]", NOW);
+        assertThat(messages()).contains("Could not find the films that want a timing reference: "
+            + "IllegalStateException", "Full subtitle search finished: 1 saved, 0 failed");
     }
 
     @Test

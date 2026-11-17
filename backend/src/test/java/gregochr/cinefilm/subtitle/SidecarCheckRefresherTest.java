@@ -89,6 +89,9 @@ class SidecarCheckRefresherTest {
     @Mock
     private FullFitService fullFit;
 
+    @Mock
+    private TimingReferenceService timingReference;
+
     private final List<Runnable> queued = new ArrayList<>();
     private final Logger refresherLog = (Logger) LoggerFactory.getLogger(SidecarCheckRefresher.class);
     private final ListAppender<ILoggingEvent> logged = new ListAppender<>();
@@ -97,7 +100,8 @@ class SidecarCheckRefresherTest {
 
     @BeforeEach
     void setUp() {
-        refresher = new SidecarCheckRefresher(api, budget, references, service, fullFit, CLOCK, queued::add, limits,
+        refresher = new SidecarCheckRefresher(api, budget, references, service, fullFit,
+            timingReference, CLOCK, queued::add, limits,
             events);
         logged.start();
         refresherLog.addAppender(logged);
@@ -224,7 +228,8 @@ class SidecarCheckRefresherTest {
 
     @Test
     void anExecutorThatRefusesTheRunDoesNotLeaveTheServiceStuckRunning() {
-        SidecarCheckRefresher refusing = new SidecarCheckRefresher(api, budget, references, service, fullFit, CLOCK,
+        SidecarCheckRefresher refusing = new SidecarCheckRefresher(api, budget, references, service, fullFit,
+            timingReference, CLOCK,
             command -> {
                 throw new RejectedExecutionException("full");
             }, limits, events);
@@ -236,7 +241,8 @@ class SidecarCheckRefresherTest {
 
     /** The refresher on an executor that runs the work at once, so a trigger can arrive from inside a run. */
     private SidecarCheckRefresher synchronous() {
-        return new SidecarCheckRefresher(api, budget, references, service, fullFit, CLOCK, Runnable::run, limits,
+        return new SidecarCheckRefresher(api, budget, references, service, fullFit,
+            timingReference, CLOCK, Runnable::run, limits,
             events);
     }
 
@@ -528,8 +534,8 @@ class SidecarCheckRefresherTest {
             when(api.downloadsEnabled()).thenReturn(true);
             queued.clear();
 
-            SidecarCheckRefresher fresh = new SidecarCheckRefresher(api, budget, references, service, fullFit, CLOCK,
-                queued::add, limits, events);
+            SidecarCheckRefresher fresh = new SidecarCheckRefresher(api, budget, references, service, fullFit,
+                timingReference, CLOCK, queued::add, limits, events);
             fresh.startDue();
             queued.get(0).run();
 
@@ -594,8 +600,8 @@ class SidecarCheckRefresherTest {
             when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
             org.mockito.Mockito.doThrow(new OpenSubtitlesQuotaException(reset)).when(api).download(5011);
             when(api.downloadsEnabled()).thenReturn(true);
-            SidecarCheckRefresher fresh = new SidecarCheckRefresher(api, budget, references, service, fullFit, CLOCK,
-                queued::add, limits, events);
+            SidecarCheckRefresher fresh = new SidecarCheckRefresher(api, budget, references, service, fullFit,
+                timingReference, CLOCK, queued::add, limits, events);
 
             fresh.startDue();
             queued.get(0).run();
@@ -682,6 +688,25 @@ class SidecarCheckRefresherTest {
     }
 
     @Test
+    void aFetchedReferenceKeepsTheLatestCueEndNotTheLastCuesEnd() {
+        DueCheck due = due(1, 10, 5011);
+        when(service.due()).thenReturn(List.of(due));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5011)).thenReturn(Optional.empty());
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
+        when(api.download(5011)).thenReturn(downloaded(List.of(new SubtitleCue(10_000, 90_000, "a"),
+            new SubtitleCue(20_000, 21_000, "b")), 50, null));
+        storingReferences();
+        savingEverything();
+        ArgumentCaptor<OpenSubtitlesReference> saved = ArgumentCaptor.forClass(OpenSubtitlesReference.class);
+
+        startAndRun();
+
+        verify(references).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getCueCount()).isEqualTo(2);
+        assertThat(saved.getValue().getLastCueEndMs()).isEqualTo(90_000L);
+    }
+
+    @Test
     void aDownloadThatHasNoCuesIsStoredAsUnusableAndNothingIsComparedOrSaved() {
         DueCheck due = due(1, 10, 5011);
         when(service.due()).thenReturn(List.of(due));
@@ -696,6 +721,7 @@ class SidecarCheckRefresherTest {
         verify(references).saveAndFlush(saved.capture());
         assertThat(saved.getValue().isUsable()).isFalse();
         assertThat(saved.getValue().getCueCount()).isZero();
+        assertThat(saved.getValue().getLastCueEndMs()).isNull();
         assertThat(saved.getValue().getCuesText()).isEmpty();
         assertThat(saved.getValue().getOsFileId()).isEqualTo(5011L);
         verifyNoMoreInteractions(service);
@@ -740,6 +766,7 @@ class SidecarCheckRefresherTest {
         startAndRun();
 
         verify(references).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getLastCueEndMs()).isNull();
         assertThat(saved.getValue().isUsable()).isFalse();
         assertThat(saved.getValue().getCuesText()).isEmpty();
         assertThat(SidecarCheckRefresher.MAX_REFERENCE_CHARS).isEqualTo(1024 * 1024);
@@ -962,6 +989,7 @@ class SidecarCheckRefresherTest {
         verify(references).saveAndFlush(saved.capture());
         assertThat(saved.getValue().getOsFileId()).isEqualTo(5011L);
         assertThat(saved.getValue().getCueCount()).isZero();
+        assertThat(saved.getValue().getLastCueEndMs()).isNull();
         assertThat(saved.getValue().getCuesText()).isEmpty();
         assertThat(saved.getValue().getFailedDownloads()).isEqualTo(3);
         assertThat(saved.getValue().isFinal()).isTrue();
@@ -977,6 +1005,7 @@ class SidecarCheckRefresherTest {
         assertThat(saved.getValue().getFailedDownloads()).isEqualTo(1);
         assertThat(saved.getValue().isFinal()).isFalse();
         assertThat(saved.getValue().getCueCount()).isZero();
+        assertThat(saved.getValue().getLastCueEndMs()).isNull();
         assertThat(messages()).containsExactly("Subtitle file checks stopped: OpenSubtitles file refused",
             NOTHING_DONE);
     }

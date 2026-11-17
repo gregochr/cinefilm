@@ -781,6 +781,8 @@ is still a list of sentences; the Admin file row shows them as sent). Decisions 
 
 ### Phase 3 — automatic timing check
 
+**Films with no English track inside (2026-11-16):** planned in `forced-timing-reference-plan.md` (3c-1, 3c-2, 3d).
+
 - **Reference first, speech second:**
   - About 25 films have a full English track (pictures). Their cue **times** can be read without OCR (ffprobe packet
     times), turned into a timing-only reference, and the forced file aligned to it subtitle-to-subtitle. Hundreds of
