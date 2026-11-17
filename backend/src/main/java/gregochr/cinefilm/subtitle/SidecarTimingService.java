@@ -305,18 +305,21 @@ public class SidecarTimingService {
      * as the other saves do.
      *
      * @param filmId the film
-     * @return {@code SAVED} (nothing to fill in is also {@code SAVED}) or {@code BUSY} when a scan or an edit holds
-     *     the lock, in which case nothing is stored
+     * @return {@code SAVED} (nothing to fill in is also {@code SAVED}, without taking the lock) or {@code BUSY} when
+     *     a scan or an edit holds the lock and there is something to fill in, in which case nothing is stored
      */
     public SaveOutcome backfillLastCueEnds(Long filmId) {
+        // A read-only look first: most films have nothing to fill in, and must not take the lock or make a run wait.
+        if (tx.execute(status -> unfilled(filmId)).isEmpty()) {
+            return SaveOutcome.SAVED;
+        }
         if (!lock.tryAcquire(LibraryLock.SUBTITLE)) {
             return SaveOutcome.BUSY;
         }
         try {
             tx.executeWithoutResult(status -> {
-                List<Served> served = served(Set.of(filmId));
-                Set<Long> unfilled = new HashSet<>();
-                osRefs(served, reads(served)).values().forEach(refs -> unfilled.addAll(refs.unfilled()));
+                // Looked at again under the lock: a scan or an edit may have changed what is there.
+                Set<Long> unfilled = unfilled(filmId);
                 if (unfilled.isEmpty()) {
                     return;
                 }
@@ -330,6 +333,14 @@ public class SidecarTimingService {
         } finally {
             lock.release();
         }
+    }
+
+    /** The row ids of a film's stored files that could be references but do not know their last cue end yet. */
+    private Set<Long> unfilled(Long filmId) {
+        List<Served> served = served(Set.of(filmId));
+        Set<Long> unfilled = new HashSet<>();
+        osRefs(served, reads(served)).values().forEach(refs -> unfilled.addAll(refs.unfilled()));
+        return unfilled;
     }
 
     /**

@@ -363,8 +363,17 @@ class SidecarTimingServiceDownloadedUnitTest {
     void aFileStoredBeforeItsLastCueEndWasKeptIsNotUsedUntilItIsFilledInAndThenTheKeyGainsIt() {
         read(EmbeddedCueStarts.Status.NO_REFERENCE);
         OpenSubtitlesReference old = storedBeforeV30(5012);
+        // The longest cue comes first: the saved value is the maximum end, not the last cue's end.
+        List<SubtitleCue> cues = new ArrayList<>(List.of(new SubtitleCue(10_000, 3_500_000, "long")));
+        for (int i = 2; i <= 300; i++) {
+            cues.add(new SubtitleCue(i * 10_000L, i * 10_000L + 1_000, "line " + i));
+        }
+        old.setCuesText(SrtParser.format(cues));
+        OpenSubtitlesReference filled = reference(5012, 300, IMDB);
+        filled.setLastCueEndMs(3_500_000L);
+        // Looked at by the first job, the read-only look, the look under the lock, then the second job.
         when(references.findFactsByFilmIdIn(Set.of(1L))).thenReturn(List.of(factsOf(old)), List.of(factsOf(old)),
-            List.of(factsOf(reference(5012, 300, IMDB))));
+            List.of(factsOf(old)), List.of(factsOf(filled)));
         when(references.findAllById(Set.of(5012L))).thenReturn(List.of(old));
 
         FitJob before = onlyJob();
@@ -374,7 +383,7 @@ class SidecarTimingServiceDownloadedUnitTest {
         assertThat(before.osReferences()).isEmpty();
         assertThat(before.referenceKey()).isEqualTo(BASE_KEY);
         assertThat(outcome).isEqualTo(SaveOutcome.SAVED);
-        assertThat(old.getLastCueEndMs()).isEqualTo(3_001_000L);
+        assertThat(old.getLastCueEndMs()).isEqualTo(3_500_000L);
         assertThat(after.osReferences()).extracting(DownloadedFit.Reference::osFileId).containsExactly(5012L);
         assertThat(after.referenceKey()).isEqualTo(BASE_KEY + "|os:" + IMDB + ":5012");
     }
@@ -409,19 +418,36 @@ class SidecarTimingServiceDownloadedUnitTest {
 
         assertThat(service.dueFilmIds()).isEmpty();
         assertThat(service.backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.SAVED);
-        assertThat(old.getLastCueEndMs()).isNull();
+        // Skipping the exclusion would load the row to fill it in: only the facts read happens.
+        verifyNoMoreInteractions(references);
     }
 
     @Test
-    void theBackfillStoresNothingWhileAScanOrAnEditHoldsTheLibraryLock() {
-        OpenSubtitlesReference old = storedBeforeV30(5012);
+    void theBackfillStoresNothingWhileAScanOrAnEditHoldsTheLibraryLockButAFilmWithNothingToFillInNeverWaits() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        served();
         LibraryLock busy = new LibraryLock();
         assertThat(busy.tryAcquire(LibraryLock.SCAN)).isTrue();
         SidecarTimingService locked = new SidecarTimingService(sidecars, editions, files, cache, alignments,
             references, credits, busy, transactions);
-
+        stored(storedBeforeV30(5012));
         assertThat(locked.backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.BUSY);
-        assertThat(old.getLastCueEndMs()).isNull();
+
+        stored(reference(5012, 300, IMDB));
+        assertThat(locked.backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.SAVED);
+    }
+
+    @Test
+    void aFileOfFewerThanThreeHundredLinesIsNeverFilledInBecauseItCannotBeUsedAnyway() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        currentFit();
+        OpenSubtitlesReference short299 = reference(5012, 299, IMDB);
+        short299.setLastCueEndMs(null);
+        stored(short299);
+
+        assertThat(service.dueFilmIds()).isEmpty();
+        assertThat(service.backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.SAVED);
+        verifyNoMoreInteractions(references);
     }
 
     @Test
