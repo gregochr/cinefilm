@@ -608,7 +608,10 @@ diff-cover /tmp/lcov-root.info --compare-branch=origin/main --fail-under=90
 ```
 
 **Frontend audit.** `scripts/npm-audit.sh frontend high` is `npm audit --audit-level=high` run under npm 11 with
-retries on registry transport errors only (never on a finding). Run it locally the same way.
+retries on registry transport errors only (never on a finding). Run it locally the same way. A short dated allow list in the
+script (`ALLOWED_ADVISORIES`: id, expiry, reason) lets a finding pass only when every advisory behind it is listed and
+not yet expired (UTC); the log names each ignored advisory. Today it holds the unpatched picomatch one until 2026-12-31:
+remove the entry once a fix ships, and never extend a date without asking the owner.
 
 ### `ci-failure-issue.yml` — CI failure issue
 

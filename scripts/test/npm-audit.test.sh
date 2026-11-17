@@ -41,7 +41,7 @@ respond() {
 }
 
 run_audit() {
-    OUTPUT=$(cd "$STUB_DIR" && PATH="$STUB_DIR/bin:$PATH" bash "$SCRIPT" frontend high 2>&1)
+    OUTPUT=$(cd "$STUB_DIR" && PATH="$STUB_DIR/bin:$PATH" NPM_AUDIT_TODAY="${TODAY:-2026-11-17}" bash "$SCRIPT" frontend high 2>&1)
     RC=$?
     CALLS=$(cat "$STUB_DIR/count" 2>/dev/null || echo 0)
 }
@@ -66,9 +66,89 @@ respond 1 1 "lodash  <4.17.21  Severity: high
 1 high severity vulnerability"
 run_audit
 assert_eq "exits 1" 1 "$RC"
-assert_eq "audits once only" 1 "$CALLS"
+assert_eq "audits once, then one JSON look for allowed advisories" 2 "$CALLS"
 assert_file_missing "never sleeps" "$STUB_DIR/sleeps"
 assert_contains "says it failed on findings" "$OUTPUT" "failing without retry"
+rm -rf "$STUB_DIR"
+
+# JSON reports as `npm audit --json` shapes them: a package's "via" holds advisory objects, or the names of
+# packages it depends on.
+PICO_JSON='{"vulnerabilities":{
+ "picomatch":{"severity":"high","via":[{"source":1,"name":"picomatch","url":"https://github.com/advisories/GHSA-fc5q-39xc-vjpf","severity":"high"}]},
+ "fdir":{"severity":"high","via":["picomatch"]},
+ "vite":{"severity":"high","via":["picomatch","fdir"]}}}'
+OTHER_JSON='{"vulnerabilities":{
+ "picomatch":{"severity":"high","via":[{"source":1,"name":"picomatch","url":"https://github.com/advisories/GHSA-fc5q-39xc-vjpf","severity":"high"}]},
+ "lodash":{"severity":"high","via":[{"source":2,"name":"lodash","url":"https://github.com/advisories/GHSA-aaaa-bbbb-cccc","severity":"high"}]}}}'
+MIXED_JSON='{"vulnerabilities":{
+ "fdir":{"severity":"high","via":["picomatch",{"source":3,"name":"fdir","url":"https://github.com/advisories/GHSA-dddd-eeee-ffff","severity":"moderate"}]},
+ "picomatch":{"severity":"high","via":[{"source":1,"name":"picomatch","url":"https://github.com/advisories/GHSA-fc5q-39xc-vjpf","severity":"high"}]}}}'
+
+REAL_TREE_JSON='{"vulnerabilities":{
+ "picomatch":{"severity":"high","via":[{"source":1,"name":"picomatch","url":"https://github.com/advisories/GHSA-fc5q-39xc-vjpf","severity":"high"}]},
+ "minimatch":{"severity":"moderate","via":[{"source":4,"name":"minimatch","url":"https://github.com/advisories/GHSA-g3hv-75wg-m249","severity":"moderate"}]},
+ "@stryker-mutator/core":{"severity":"moderate","via":["minimatch"]}}}'
+
+echo "moderate findings below the audit level are not held against the run"
+make_stubs
+respond 1 1 "picomatch  *  Severity: high"
+respond 2 1 "$REAL_TREE_JSON"
+run_audit
+assert_eq "exits 0" 0 "$RC"
+assert_contains "ignores the picomatch advisory" "$OUTPUT" "ignoring GHSA-fc5q-39xc-vjpf until 2026-12-31"
+rm -rf "$STUB_DIR"
+
+echo "findings that are all allowed pass, and say what was ignored"
+make_stubs
+respond 1 1 "picomatch  *  Severity: high"
+respond 2 1 "$PICO_JSON"
+run_audit
+assert_eq "exits 0" 0 "$RC"
+assert_eq "audits then asks for the JSON report" 2 "$CALLS"
+assert_contains "names the ignored advisory and its expiry" "$OUTPUT" "ignoring GHSA-fc5q-39xc-vjpf until 2026-12-31"
+assert_file_missing "never sleeps" "$STUB_DIR/sleeps"
+rm -rf "$STUB_DIR"
+
+echo "an allowed advisory beside another high one still fails"
+make_stubs
+respond 1 1 "2 high severity vulnerabilities"
+respond 2 1 "$OTHER_JSON"
+run_audit
+assert_eq "exits 1" 1 "$RC"
+assert_contains "says it failed on findings" "$OUTPUT" "failing without retry"
+rm -rf "$STUB_DIR"
+
+echo "an advisory hidden under an allowed one in the same package still fails"
+make_stubs
+respond 1 1 "findings"
+respond 2 1 "$MIXED_JSON"
+run_audit
+assert_eq "exits 1" 1 "$RC"
+rm -rf "$STUB_DIR"
+
+echo "the allowed advisory fails after its expiry"
+make_stubs
+respond 1 1 "picomatch  *  Severity: high"
+respond 2 1 "$PICO_JSON"
+TODAY=2027-01-01 run_audit
+assert_eq "exits 1" 1 "$RC"
+assert_contains "says the allowance expired" "$OUTPUT" "expired on 2026-12-31"
+rm -rf "$STUB_DIR"
+
+echo "the allowed advisory still passes on its expiry date"
+make_stubs
+respond 1 1 "picomatch  *  Severity: high"
+respond 2 1 "$PICO_JSON"
+TODAY=2026-12-31 run_audit
+assert_eq "exits 0" 0 "$RC"
+rm -rf "$STUB_DIR"
+
+echo "an unreadable JSON report fails"
+make_stubs
+respond 1 1 "1 high severity vulnerability"
+respond 2 1 "not json"
+run_audit
+assert_eq "exits 1" 1 "$RC"
 rm -rf "$STUB_DIR"
 
 echo "transient transport errors retry with backoff"
@@ -89,7 +169,7 @@ respond 1 1 "npm error ECONNRESET"
 respond 2 1 "1 high severity vulnerability"
 run_audit
 assert_eq "exits 1" 1 "$RC"
-assert_eq "audits twice" 2 "$CALLS"
+assert_eq "audits twice, then one JSON look" 3 "$CALLS"
 assert_eq "slept once" "15" "$(sleeps)"
 rm -rf "$STUB_DIR"
 
