@@ -183,7 +183,8 @@ export default function AdminSettings() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  {part.text} <span className="sr-only">{settingsPage.opensInNewTab}</span>
+                  {part.text}
+                  <span className="sr-only">{settingsPage.opensInNewTab}</span>
                 </a>
               ) : (
                 <span key={part.text}>{part.text}</span>

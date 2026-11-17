@@ -937,6 +937,7 @@
 }
 .admin__credit-link {
   position: relative; /* anchors the hit area below */
+  white-space: nowrap; /* a link that wrapped would split its hit area */
   color: var(--cf-text-muted);
   text-decoration: underline;
   text-underline-offset: 3px;

@@ -46,7 +46,11 @@ describe('Admin Settings section', () => {
     installFetch();
     renderApp('/admin/settings');
     await screen.findByRole('region', { name: 'Continue watching' });
-    const link = screen.getByRole('link', { name });
+    // jsdom trims the hidden span's leading space out of the accessible name (browsers keep it), so compare without spaces.
+    const squash = (text) => text.replace(/\s+/g, '');
+    const link = screen.getByRole('link', {
+      name: (accessibleName) => squash(accessibleName) === squash(name),
+    });
     expect(link).toHaveAttribute('href', href);
     expect(link).toHaveAttribute('target', '_blank');
     expect(link.getAttribute('rel')).toContain('noopener');
