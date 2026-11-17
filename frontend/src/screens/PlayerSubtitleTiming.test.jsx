@@ -1,4 +1,5 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { failTrack, loadTrack } from '../test/trackEvents.js';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ADMIN_TIMEOUT_MS } from '../api/timeout.js';
@@ -115,7 +116,7 @@ describe('the player’s subtitle timing', () => {
   // The pending track of a kind, which the browser would have loaded: its load event lets it take over.
   const settle = async (kind = 'full') => {
     const element = await screen.findByTestId(`${kind}-subtitle-track-pending`);
-    fireEvent.load(element);
+    loadTrack(element);
     return element;
   };
   const noListRead = (requests) =>
@@ -250,14 +251,14 @@ describe('the player’s subtitle timing', () => {
       const button = which === 'later' ? later : earlier;
 
       await userEvent.click(button());
-      fireEvent.error(await screen.findByTestId('full-subtitle-track-pending'));
+      failTrack(await screen.findByTestId('full-subtitle-track-pending'));
       await screen.findByRole('alert');
 
       // The server is at the limit, the screen is not: the press is a retry, not a no-op.
       expect(button()).not.toHaveAttribute('aria-disabled');
       await userEvent.click(button());
       const retried = await screen.findByTestId('full-subtitle-track-pending');
-      fireEvent.load(retried);
+      loadTrack(retried);
 
       expect(puts(requests)).toEqual([`/api/admin/subtitles/70/offset {"offsetMs":${limit}}`]);
       await waitFor(() => expect(button()).toHaveAttribute('aria-disabled', 'true'));
@@ -335,7 +336,7 @@ describe('the player’s subtitle timing', () => {
 
       // The readout says the new timing is still being loaded.
       expect(panelStatus()).toHaveTextContent('Saving…');
-      fireEvent.load(incoming);
+      loadTrack(incoming);
 
       // Now it takes over: one track of the kind, showing, at the new address; the old one is gone.
       await waitFor(() => expect(track).not.toBeInTheDocument());
@@ -363,7 +364,7 @@ describe('the player’s subtitle timing', () => {
       await readout('Saving…');
       const incoming = pendingFull();
 
-      fireEvent.error(incoming);
+      failTrack(incoming);
 
       expect(await screen.findByRole('alert')).toHaveTextContent(
         'The new timing is saved but hasn’t loaded. Press again to retry.',
@@ -389,9 +390,9 @@ describe('the player’s subtitle timing', () => {
       const second = pendingFull();
       expect(second.getAttribute('src')).toContain('5002_500');
       // A load event of the dropped one is not heard.
-      fireEvent.load(first);
+      loadTrack(first);
       expect(screen.getByTestId('full-subtitle-track')).toBe(track);
-      fireEvent.load(second);
+      loadTrack(second);
 
       await waitFor(() => expect(screen.getByTestId('full-subtitle-track')).toBe(second));
       expect(track).not.toBeInTheDocument();
@@ -432,7 +433,7 @@ describe('the player’s subtitle timing', () => {
       expect(again.getAttribute('src')).toBe(incoming.getAttribute('src'));
       expect(track.track.mode).toBe('showing');
       expect(again.track.mode).toBe('hidden');
-      fireEvent.error(again);
+      failTrack(again);
       expect(await screen.findByRole('alert')).toHaveTextContent(
         'The new timing is saved but hasn’t loaded. Press again to retry.',
       );
@@ -455,7 +456,7 @@ describe('the player’s subtitle timing', () => {
       await userEvent.click(
         within(subtitlesMenu()).getByRole('menuitemradio', { name: 'English (full)' }),
       );
-      fireEvent.load(await screen.findByTestId('full-subtitle-track-pending'));
+      loadTrack(await screen.findByTestId('full-subtitle-track-pending'));
 
       await waitFor(() => expect(track).not.toBeInTheDocument());
       const taken = screen.getByTestId('full-subtitle-track');
@@ -513,7 +514,7 @@ describe('the player’s subtitle timing', () => {
       await openPanel();
       await userEvent.click(reset());
       const failing = await screen.findByTestId('full-subtitle-track-pending');
-      fireEvent.error(failing);
+      failTrack(failing);
       await screen.findByRole('alert');
       await readout('Timing: +0.5 s');
       expect(puts(requests)).toHaveLength(1);
@@ -525,7 +526,7 @@ describe('the player’s subtitle timing', () => {
       expect(retry.getAttribute('src')).toBe(failing.getAttribute('src'));
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       expect(puts(requests)).toHaveLength(1);
-      fireEvent.load(retry);
+      loadTrack(retry);
       await readout('Timing: No timing change');
     });
 
@@ -533,7 +534,7 @@ describe('the player’s subtitle timing', () => {
       const { requests } = await openPlayer({ mutate: fullOn(SIDECAR([70], [500])) });
       await openPanel();
       await userEvent.click(later());
-      fireEvent.error(await screen.findByTestId('full-subtitle-track-pending'));
+      failTrack(await screen.findByTestId('full-subtitle-track-pending'));
       expect(await screen.findByRole('alert')).toHaveTextContent(
         'The new timing is saved but hasn’t loaded. Press again to retry.',
       );
@@ -546,7 +547,7 @@ describe('the player’s subtitle timing', () => {
       expect(reloaded.getAttribute('src')).toContain('_750');
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       expect(puts(requests)).toHaveLength(1);
-      fireEvent.load(reloaded);
+      loadTrack(reloaded);
       await readout('Timing: +0.75 s');
 
       await userEvent.click(earlier());
@@ -562,7 +563,7 @@ describe('the player’s subtitle timing', () => {
       const { requests } = await openPlayer({ mutate: fullOn(SIDECAR([70], [500])) });
       await openPanel();
       await userEvent.click(later());
-      fireEvent.error(await screen.findByTestId('full-subtitle-track-pending'));
+      failTrack(await screen.findByTestId('full-subtitle-track-pending'));
       await screen.findByRole('alert');
 
       act(() => {
@@ -572,7 +573,7 @@ describe('the player’s subtitle timing', () => {
       const reloaded = await screen.findByTestId('full-subtitle-track-pending');
       expect(reloaded.getAttribute('src')).toContain('_750');
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-      fireEvent.load(reloaded);
+      loadTrack(reloaded);
       await readout('Timing: +0.75 s');
       act(() => {
         window.dispatchEvent(new Event('online'));
@@ -749,7 +750,7 @@ describe('the player’s subtitle timing', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('This subtitle has changed');
     await waitFor(() => expect(first).not.toBeInTheDocument());
     expect(pendingFull()).not.toBeInTheDocument();
-    fireEvent.load(first);
+    loadTrack(first);
     expect(screen.getByTestId('full-subtitle-track')).toBe(track);
     expect(track.track.mode).toBe('showing');
     expect(screen.getByRole('alert')).toHaveTextContent('This subtitle has changed');
@@ -805,7 +806,7 @@ describe('the player’s subtitle timing', () => {
     release();
 
     await waitFor(() => expect(pendingFull()).toBeInTheDocument());
-    fireEvent.load(pendingFull());
+    loadTrack(pendingFull());
     await waitFor(() => expect(track).not.toBeInTheDocument());
     expect(fullUrl()).toContain('5001_250');
     expect(video).toHaveAttribute('src', src);

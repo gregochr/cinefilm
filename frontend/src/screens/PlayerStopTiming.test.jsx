@@ -1,4 +1,5 @@
-import { act, fireEvent, screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
+import { loadTrack } from '../test/trackEvents.js';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { measureThroughput } from '../player/probe.js';
@@ -228,7 +229,7 @@ describe('Admin stops the playback', () => {
     await stop();
     expect(pendingTrack()).toBe(incoming);
 
-    fireEvent.load(incoming);
+    loadTrack(incoming);
 
     await vi.waitFor(() => expect(pendingTrack()).not.toBeInTheDocument());
     expect(screen.getByTestId('full-subtitle-track')).toBe(incoming);
@@ -250,7 +251,7 @@ describe('Admin stops the playback', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Play again' }));
     await vi.waitFor(() => expect(FakeHls.instances).toHaveLength(2));
 
-    fireEvent.load(incoming);
+    loadTrack(incoming);
 
     await vi.waitFor(() => expect(pendingTrack()).not.toBeInTheDocument());
     await openPanel();
