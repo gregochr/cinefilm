@@ -73,12 +73,16 @@ class TimingReferenceRuleTest {
         assertThat(TimingReferenceRule.plausibleFps(withFps(23.976))).isTrue();
         assertThat(TimingReferenceRule.plausibleFps(withFps(23.98))).isTrue();
         assertThat(TimingReferenceRule.plausibleFps(withFps(23.967))).isTrue();
+        assertThat(TimingReferenceRule.plausibleFps(withFps(23.966))).isTrue();
+        assertThat(TimingReferenceRule.plausibleFps(withFps(23.986))).isTrue();
         assertThat(TimingReferenceRule.plausibleFps(withFps(23.985))).isTrue();
     }
 
     @Test
     void aFileOfAnyOtherKnownFrameRateIsLeftOut() {
         assertThat(TimingReferenceRule.plausibleFps(withFps(23.96))).isFalse();
+        assertThat(TimingReferenceRule.plausibleFps(withFps(23.965))).isFalse();
+        assertThat(TimingReferenceRule.plausibleFps(withFps(23.987))).isFalse();
         assertThat(TimingReferenceRule.plausibleFps(withFps(23.99))).isFalse();
         assertThat(TimingReferenceRule.plausibleFps(withFps(24.0))).isFalse();
         assertThat(TimingReferenceRule.plausibleFps(withFps(25.0))).isFalse();

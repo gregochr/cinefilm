@@ -25,9 +25,9 @@ final class TimingReferenceRule {
     static final int MAX_REFERENCES = 3;
     /** Reference files fetched in one check run. */
     static final int MAX_FETCHES_PER_RUN = 2;
-    /** The frame rate of the library's films, and how far from it a file's stated rate may be. */
+    /** The frame rate of the library's films, and how far from it a stated rate may be (in thousandths). */
     static final double TARGET_FPS = 23.976;
-    static final double FPS_TOLERANCE = 0.01;
+    static final int FPS_TOLERANCE_MILLI = 10;
 
     private TimingReferenceRule() {
     }
@@ -66,7 +66,8 @@ final class TimingReferenceRule {
 
     /** True when the file's stated frame rate is unknown or about 23.976 (the library's rate). */
     static boolean plausibleFps(OpenSubtitlesResult candidate) {
-        return candidate.fps() == null || Math.abs(candidate.fps() - TARGET_FPS) <= FPS_TOLERANCE;
+        return candidate.fps() == null
+            || Math.round(Math.abs(candidate.fps() - TARGET_FPS) * 1000) <= FPS_TOLERANCE_MILLI;
     }
 
     /**
