@@ -314,7 +314,7 @@ export function summarise({
 // ---- what is read from the page ----------------------------------------------------------------------------------
 
 // What is read from the page every five seconds. It only looks: the player is not touched.
-const SAMPLE = `(() => {
+export const SAMPLE = `(() => {
   const v = document.querySelector('video');
   const text = (selector) => document.querySelector(selector)?.textContent?.trim() ?? null;
   if (!v) return { video: false, body: document.body.innerText.slice(0, 160) };
@@ -508,7 +508,7 @@ export async function templateFor({ path, make, load = loadTemplate, log = say }
 }
 
 // A replay runs on the wall clock, so the Mac must not doze off part-way: caffeinate ends by itself with this process.
-function keepAwake() {
+export function keepAwake() {
   const awake = spawn('/usr/bin/caffeinate', ['-i', '-w', String(process.pid)], { stdio: 'ignore' });
   awake.on('error', () => {
     // No caffeinate here: a sleep is still noticed by the warning in the summary.
