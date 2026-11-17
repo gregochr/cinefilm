@@ -9,7 +9,8 @@ import { useResource } from './useResource.js';
 /**
  * The three lists behind the To do groups, each read on its own request so one failing leaves the others on screen:
  * the attention list (pick the right film, several files), the full-subtitles need list and the forced need list.
- * `fullNeed` is the full list's {@link useFullNeed} state (`saving`, `problems`, `choose`), which the rows' owner choices use.
+ * `fullNeed` is the full list's {@link useFullNeed} state (`saving`, `problems`, `choose`), which the rows' owner
+ * choices use.
  * They are read again when `settledAt` (a scan or import finished), `subtitlesVersion` (a subtitle job finished) or
  * `changed` (a fix was applied) changes; a newer read aborts the older one (`useResource`).
  *

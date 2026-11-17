@@ -27,11 +27,11 @@ const ENTRY_OF = {
 /**
  * One film the server could not settle. The foreign tab offers "Search for English subtitles…" (or, for unlabelled
  * audio, "It's in {language} — find subtitles"), "Add my own file…" (the attach flow for this film) and, for unlabelled
- * audio, "It's English", and "No English subtitles exist"; the forced tab offers "Find forced subtitles…" and "No foreign scenes". The search buttons
- * open the OpenSubtitles picker through `onFind(row, opener)` and are left out when the row has no `editionId` (no
- * edition to search for). The owner choices save through `onChoose(row, choice)` (`NOT_NEEDED` for "It's English" and "No foreign scenes",
- * `NONE_EXIST` for "No English subtitles exist"); while a row's choice is saving
- * its buttons are `aria-disabled` (still focusable) and a click does nothing. `problem` is what a failed save says.
+ * audio, "It's English", and "No English subtitles exist"; the forced tab offers "Find forced subtitles…" and "No
+ * foreign scenes". The search buttons open the OpenSubtitles picker through `onFind(row, opener)` and are left out
+ * when the row has no `editionId` (no edition to search for). The owner choices save through `onChoose(row, choice)`
+ * (`NOT_NEEDED` for "It's English" and "No foreign scenes", `NONE_EXIST` for "No English subtitles exist"); while a
+ * row's choice is saving its buttons are `aria-disabled` (still focusable) and a click does nothing. `problem` is what a failed save says.
  */
 export default function SubtitleNeedRow({
   row,

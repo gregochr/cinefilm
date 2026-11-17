@@ -217,20 +217,33 @@ public class FullNeedService {
     }
 
     /**
-     * The ids of the films whose full-subtitle need is {@code NEEDED}, except those the owner marked {@code NONE_EXIST}
-     * (nothing searches or downloads for them automatically) (the films in {@link #list}'s scope: the rest
-     * are never needed), for the download scheduler. It reads only what the need depends on: not what each film plays,
-     * not the search state, and nothing from {@link PendingDownloads} (the scheduler uses none of the flags). The
-     * caller may change the set.
+     * The ids of the films whose full-subtitle need is {@code NEEDED} (the films in {@link #list}'s scope: the rest
+     * are never needed), the owner's {@code NONE_EXIST} films included. It reads only what the need depends on: not
+     * what each film plays, not the search state, and nothing from {@link PendingDownloads}. The caller may change
+     * the set.
      */
     @Transactional(readOnly = true)
     public Set<Long> neededFilmIds() {
+        return neededIds(false);
+    }
+
+    /**
+     * The ids of the films to search and download full subtitles for automatically: {@link #neededFilmIds} without
+     * the films the owner marked {@code NONE_EXIST}. The owner's own searches and files are not affected. The caller
+     * may change the set.
+     */
+    @Transactional(readOnly = true)
+    public Set<Long> searchFilmIds() {
+        return neededIds(true);
+    }
+
+    private Set<Long> neededIds(boolean skipNoneExist) {
         List<FullNeedRow> inScope = films.findFullNeedRows().stream().filter(FullNeedService::inScope).toList();
         Map<Long, List<EditionAudio>> audio = inScope.isEmpty() ? Map.of()
             : editionAudio(files.findAudioRows(inScope.stream().map(FullNeedRow::id).toList()));
         Set<Long> ids = new HashSet<>();
         for (FullNeedRow row : inScope) {
-            if (row.owner() != FullNeedChoice.NONE_EXIST
+            if (!(skipNoneExist && row.owner() == FullNeedChoice.NONE_EXIST)
                 && decide(row, audio.getOrDefault(row.id(), List.of())).need() == Need.NEEDED) {
                 ids.add(row.id());
             }
@@ -239,7 +252,8 @@ public class FullNeedService {
     }
 
     /**
-     * Whether a film's full-subtitle need is {@code NEEDED} right now (read under the library lock before a download is
+     * Whether the scheduler may add an automatic full download for a film: its need is {@code NEEDED} and the owner
+     * has not marked it {@code NONE_EXIST} (read under the library lock before a download is
      * added, so an owner's "not needed" that landed meanwhile is seen).
      *
      * @param filmId the film

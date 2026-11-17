@@ -355,7 +355,7 @@ class FullNeedServiceTest {
     }
 
     @Test
-    void noneExistFilmsAreNeverSearchedOrDownloadedAutomatically() {
+    void noneExistFilmsAreStillNeededButNeverSearchedOrDownloadedAutomatically() {
         when(films.findFullNeedRows()).thenReturn(List.of(
             row(1, "Amelie", "fr", null),
             row(2, "Lantern", "zh", FullNeedChoice.NONE_EXIST)));
@@ -364,7 +364,8 @@ class FullNeedServiceTest {
         Film lantern = stored(2L, "zh", FullNeedChoice.NONE_EXIST);
         when(films.findById(2L)).thenReturn(Optional.of(lantern));
 
-        assertThat(service.neededFilmIds()).containsExactly(1L);
+        assertThat(service.neededFilmIds()).containsExactlyInAnyOrder(1L, 2L);
+        assertThat(service.searchFilmIds()).containsExactly(1L);
         assertThat(service.isNeeded(2L)).isFalse();
         assertThat(service.needOf(lantern)).isEqualTo("NEEDED");
     }

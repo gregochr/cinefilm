@@ -189,7 +189,7 @@ class ForcedDownloadServiceUnitTest {
         // Phase 3c-1 stores full candidates for films searched only as a timing reference: they are never downloaded.
         needed(false);
         when(films.findOpenSubtitlesBest()).thenReturn(List.of());
-        when(fullNeed.neededFilmIds()).thenReturn(new HashSet<>());
+        when(fullNeed.searchFilmIds()).thenReturn(new HashSet<>());
         when(films.findOpenSubtitlesFull()).thenReturn(List.of(new FilmRepository.OsFullRef(1L, IMDB,
             OpenSubtitlesResult.listToJson(List.of(candidate(5011), candidate(5012))))));
 

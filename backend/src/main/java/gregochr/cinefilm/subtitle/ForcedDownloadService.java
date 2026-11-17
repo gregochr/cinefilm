@@ -204,7 +204,7 @@ public class ForcedDownloadService {
 
     /** The editions due a full English subtitle: the film's need is {@code NEEDED} and it has full candidates. */
     private List<DueDownload> fullDue() {
-        Set<Long> neededFilmIds = fullNeed.neededFilmIds();
+        Set<Long> neededFilmIds = fullNeed.searchFilmIds();
         Map<Long, OsFullRef> candidates = new HashMap<>();
         for (OsFullRef ref : films.findOpenSubtitlesFull()) {
             candidates.put(ref.id(), ref);

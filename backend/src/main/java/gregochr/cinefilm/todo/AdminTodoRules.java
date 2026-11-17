@@ -36,8 +36,8 @@ public final class AdminTodoRules {
      * @param searchEnabled true when OpenSubtitles searches run at all (an API key is set)
      * @param downloadsEnabled true when downloads run at all (key, username and password are set)
      */
-    public record FullFacts(boolean needed, boolean noneExist, boolean playsFullSubtitle, boolean hasImdbId, boolean searched,
-                            boolean downloadDue, boolean searchEnabled, boolean downloadsEnabled) {
+    public record FullFacts(boolean needed, boolean noneExist, boolean playsFullSubtitle, boolean hasImdbId,
+                            boolean searched, boolean downloadDue, boolean searchEnabled, boolean downloadsEnabled) {
     }
 
     /**

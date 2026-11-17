@@ -194,7 +194,7 @@ public class OpenSubtitlesRefresher {
         int saved = 0;
         int failed = 0;
         try {
-            Set<Long> needed = new HashSet<>(fullNeed.neededFilmIds());
+            Set<Long> needed = new HashSet<>(fullNeed.searchFilmIds());
             needed.addAll(timingReferenceFilms());
             if (needed.isEmpty()) {
                 return new int[] {0, 0};

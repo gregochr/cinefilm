@@ -464,7 +464,6 @@ export const libraryPage = {
   source: 'README 3 and AR3; planner 6 for the rest (see comments)',
 };
 
-/** The Subtitles section (AR2), with the wording AR2 does not show marked "planner, 4a". */
 // How an owner choice reads in "Your choices"; NOT_NEEDED is the default wording.
 const CHOICE_WORDS = {
   NEEDED: 'needed',
@@ -472,6 +471,7 @@ const CHOICE_WORDS = {
   NONE_EXIST: 'no English subtitles exist',
 };
 
+/** The Subtitles section (AR2), with the wording AR2 does not show marked "planner, 4a". */
 export const subtitlesPage = {
   // AR2's lead; `bold` parts are <b> on the board.
   lead: [
