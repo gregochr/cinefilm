@@ -240,6 +240,10 @@ public class SidecarTimingRefresher {
                     e.getMessage());
             }
         }
+        // References stored before their last-cue end was kept cannot count until it is filled in (once per file).
+        if (service.backfillLastCueEnds(filmId) == SaveOutcome.BUSY) {
+            throw new Wait("a scan or an edit is using the library");
+        }
         for (FitJob job : service.fitJobs(filmId)) {
             SaveOutcome outcome;
             if (!job.osReferences().isEmpty()) {

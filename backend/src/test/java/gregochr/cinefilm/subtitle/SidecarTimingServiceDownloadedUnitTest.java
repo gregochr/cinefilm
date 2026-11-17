@@ -341,17 +341,87 @@ class SidecarTimingServiceDownloadedUnitTest {
         assertThat(service.save(jobFitting(5012L), aligned(0), null, LATER)).isEqualTo(SaveOutcome.DROPPED);
     }
 
-    @Test
-    void aFileStoredBeforeItsLastCueEndWasKeptIsNotUsedAndNothingIsParsed() {
-        read(EmbeddedCueStarts.Status.NO_REFERENCE);
-        OpenSubtitlesReference old = reference(5012, 300, IMDB);
+    private static ReferenceFacts factsOf(OpenSubtitlesReference r) {
+        return new ReferenceFacts(r.getId(), r.getFilmId(), r.getImdbId(), r.getOsFileId(), r.getRelease(),
+            r.getCueCount(), r.getLastCueEndMs());
+    }
+
+    private static OpenSubtitlesReference storedBeforeV30(long fileId) {
+        OpenSubtitlesReference old = reference(fileId, 300, IMDB);
         old.setLastCueEndMs(null);
+        return old;
+    }
+
+    /** The fit is current (as made without the file), so only a backfill can make the film due. */
+    private void currentFit() {
+        served();
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L));
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(row(BASE_KEY)));
+    }
+
+    @Test
+    void aFileStoredBeforeItsLastCueEndWasKeptIsNotUsedUntilItIsFilledInAndThenTheKeyGainsIt() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        OpenSubtitlesReference old = storedBeforeV30(5012);
+        when(references.findFactsByFilmIdIn(Set.of(1L))).thenReturn(List.of(factsOf(old)), List.of(factsOf(old)),
+            List.of(factsOf(reference(5012, 300, IMDB))));
+        when(references.findAllById(Set.of(5012L))).thenReturn(List.of(old));
+
+        FitJob before = onlyJob();
+        SaveOutcome outcome = service.backfillLastCueEnds(1L);
+        FitJob after = onlyJob(5012L);
+
+        assertThat(before.osReferences()).isEmpty();
+        assertThat(before.referenceKey()).isEqualTo(BASE_KEY);
+        assertThat(outcome).isEqualTo(SaveOutcome.SAVED);
+        assertThat(old.getLastCueEndMs()).isEqualTo(3_001_000L);
+        assertThat(after.osReferences()).extracting(DownloadedFit.Reference::osFileId).containsExactly(5012L);
+        assertThat(after.referenceKey()).isEqualTo(BASE_KEY + "|os:" + IMDB + ":5012");
+    }
+
+    @Test
+    void aFileStoredBeforeItsLastCueEndWasKeptMakesTheFilmDueEvenWhenItsFitIsCurrent() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        currentFit();
+        stored(storedBeforeV30(5012));
+
+        assertThat(service.dueFilmIds()).containsExactly(1L);
+    }
+
+    @Test
+    void aFileThatAlreadyKnowsItsLastCueEndOrIsNotACandidateIsNeitherDueNorFilledIn() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        currentFit();
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(row(BASE_KEY + "|os:" + IMDB + ":5012")));
+        stored(reference(5012, 300, IMDB), storedBeforeV30(9999));
+
+        assertThat(service.dueFilmIds()).isEmpty();
+        assertThat(service.backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.SAVED);
+    }
+
+    @Test
+    void aFilmTheOwnerMarkedAsHavingNoEnglishSubtitlesIsNeitherFilledInNorDue() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        currentFit();
+        OpenSubtitlesReference old = storedBeforeV30(5012);
         stored(old);
+        edition.getFilm().setFullNeedOwner(FullNeedChoice.NONE_EXIST);
 
-        FitJob job = onlyJob();
+        assertThat(service.dueFilmIds()).isEmpty();
+        assertThat(service.backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.SAVED);
+        assertThat(old.getLastCueEndMs()).isNull();
+    }
 
-        assertThat(job.osReferences()).isEmpty();
-        assertThat(job.referenceKey()).isEqualTo(BASE_KEY);
+    @Test
+    void theBackfillStoresNothingWhileAScanOrAnEditHoldsTheLibraryLock() {
+        OpenSubtitlesReference old = storedBeforeV30(5012);
+        LibraryLock busy = new LibraryLock();
+        assertThat(busy.tryAcquire(LibraryLock.SCAN)).isTrue();
+        SidecarTimingService locked = new SidecarTimingService(sidecars, editions, files, cache, alignments,
+            references, credits, busy, transactions);
+
+        assertThat(locked.backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.BUSY);
+        assertThat(old.getLastCueEndMs()).isNull();
     }
 
     @Test

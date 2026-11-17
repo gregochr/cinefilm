@@ -96,10 +96,11 @@ public class SidecarTimingService {
     }
 
     /**
-     * The usable stored OpenSubtitles files among an edition's candidates (their facts, never their cue text) and the
-     * IMDb id they were fetched for.
+     * The usable stored OpenSubtitles files among an edition's candidates (their facts, never their cue text), the
+     * IMDb id they were fetched for, and the row ids of candidates that could be usable but do not know where their
+     * last cue ends yet (stored before that was kept): the film is then due, so they are filled in.
      */
-    private record OsRefs(String imdbId, List<ReferenceFacts> usable) {
+    private record OsRefs(String imdbId, List<ReferenceFacts> usable, Set<Long> unfilled) {
     }
 
     /** What {@link #save} did. */
@@ -155,6 +156,10 @@ public class SidecarTimingService {
         for (Served s : served) {
             ForcedSubtitleAlignment fit = fits.get(s.sidecar().getId());
             State state = state(s, reads, os, fit);
+            OsRefs refs = os.get(s.edition().getId());
+            if (state == State.CURRENT && refs != null && !refs.unfilled().isEmpty()) {
+                due.computeIfAbsent(s.edition().getFilm().getId(), k -> new boolean[2]);
+            }
             if (state == State.NEEDS_READ || state == State.NEEDS_FIT) {
                 boolean[] flags = due.computeIfAbsent(s.edition().getFilm().getId(), k -> new boolean[2]);
                 flags[0] |= !s.sidecar().isVerifiedFor(s.partIds());
@@ -288,6 +293,43 @@ public class SidecarTimingService {
         return new FitJob(filmId, sidecar.getId(), TimingKeys.identity(sidecar),
             referenceKey(s, reads, os), List.copyOf(starts),
             noReference == null ? List.copyOf(reference) : List.of(), noReference);
+    }
+
+    /**
+     * Fills in where the last cue ends for a film's stored OpenSubtitles files that were stored before that was kept,
+     * so they can count as references. Only the files among the candidates of an edition the timing check fits to
+     * OpenSubtitles files are filled in (the same selection as {@link #osRefs}, so a film the owner marked
+     * {@code NONE_EXIST} is left alone), and only those that do not have it: each file's cues are parsed once and the
+     * maximum cue end saved, as {@link ReferenceFetcher} does for a new one. This is the only place old cue text is
+     * parsed; it is called by the background check, never on the playback path. Takes the library lock for the write,
+     * as the other saves do.
+     *
+     * @param filmId the film
+     * @return {@code SAVED} (nothing to fill in is also {@code SAVED}) or {@code BUSY} when a scan or an edit holds
+     *     the lock, in which case nothing is stored
+     */
+    public SaveOutcome backfillLastCueEnds(Long filmId) {
+        if (!lock.tryAcquire(LibraryLock.SUBTITLE)) {
+            return SaveOutcome.BUSY;
+        }
+        try {
+            tx.executeWithoutResult(status -> {
+                List<Served> served = served(Set.of(filmId));
+                Set<Long> unfilled = new HashSet<>();
+                osRefs(served, reads(served)).values().forEach(refs -> unfilled.addAll(refs.unfilled()));
+                if (unfilled.isEmpty()) {
+                    return;
+                }
+                for (OpenSubtitlesReference r : references.findAllById(unfilled)) {
+                    r.setLastCueEndMs(SrtParser.cues(r.getCuesText()).stream().mapToLong(SubtitleCue::endMs).max()
+                        .orElse(0));
+                    references.save(r);
+                }
+            });
+            return SaveOutcome.SAVED;
+        } finally {
+            lock.release();
+        }
     }
 
     /**
@@ -496,8 +538,8 @@ public class SidecarTimingService {
      * {@code NONE_EXIST}, as {@link TimingReferenceService} does), the usable stored files among
      * its candidates: the same selection as {@link TimingReferenceService}, through {@link TimingReferenceRule} and
      * {@link CreditsStarts}. This runs on the playback path ({@link #current}), so it reads facts only (no cue text,
-     * nothing parsed) and the credits of all those editions in one query; a reference with no kept last-cue end (stored
-     * before V30) is not used.
+     * nothing parsed) and the credits of all those editions in one query; a reference with no kept last-cue end is not
+     * usable until {@link #backfillLastCueEnds} fills it in.
      */
     private Map<Long, OsRefs> osRefs(List<Served> served, Map<Long, EmbeddedCueStarts> reads) {
         Map<Long, Edition> wanted = new LinkedHashMap<>();
@@ -536,8 +578,11 @@ public class SidecarTimingService {
                 e.getName());
             List<ReferenceFacts> usable = TimingReferenceRule.usableReferences(candidates, stored, e.getRuntimeMs(),
                 creditsStarts.get(e.getId()));
-            if (!usable.isEmpty()) {
-                found.put(e.getId(), new OsRefs(film.getImdbId(), usable));
+            Set<Long> unfilled = candidates.stream().map(c -> stored.get(c.fileId())).filter(
+                r -> r != null && r.lastCueEndMs() == null && r.cueCount() >= TimingReferenceRule.FULL_LINES)
+                .map(ReferenceFacts::id).collect(Collectors.toSet());
+            if (!usable.isEmpty() || !unfilled.isEmpty()) {
+                found.put(e.getId(), new OsRefs(film.getImdbId(), usable, unfilled));
             }
         }
         return found;
