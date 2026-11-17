@@ -40,10 +40,11 @@ describe('FixMatchPanel reports once', () => {
 
     await user.click(within(dialog).getByRole('button', { name: 'Use this match' }));
     expect(onApplied).toHaveBeenCalledTimes(1);
-    expect(onApplied).toHaveBeenCalledWith(applied);
+    expect(onApplied).toHaveBeenCalledWith(applied, false);
     expect(onClose).not.toHaveBeenCalled();
     await user.keyboard('{Escape}');
     await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(onClose).not.toHaveBeenCalled(); // the fade is still running
     await settle();
 
     expect(onApplied).toHaveBeenCalledTimes(1);
@@ -78,7 +79,7 @@ describe('FixMatchPanel reports once', () => {
     await act(async () => release(respond(applied)));
     // Reported at once; the close waits for the end of the fade.
     expect(onApplied).toHaveBeenCalledTimes(1);
-    expect(onApplied).toHaveBeenCalledWith(applied);
+    expect(onApplied).toHaveBeenCalledWith(applied, false);
     expect(onClose).not.toHaveBeenCalled();
     await settle();
 

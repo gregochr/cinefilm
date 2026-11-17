@@ -77,10 +77,10 @@ function Results({ search, picked, onPick }) {
 
 /**
  * The Fix match dialog (a full-screen sheet on phones): search TMDB for a film that needs a match and pick the right
- * one. Focus opens in the search box and goes back to `opener` on close. `onApplied(result)` reports a saved match
- * at once, whatever the dialog is doing (even after it was dismissed or unmounted), so the lists are always read
- * again; `onClose` then closes the dialog: on Cancel, the close button or Esc (also while an apply is running), and
- * after an apply while the dialog is still open, once the fade has run.
+ * one. Focus opens in the search box and goes back to `opener` on close. `onApplied(result, stale)` reports a saved
+ * match at once, whatever the dialog is doing (even after it was dismissed or unmounted, then `stale` is true), so
+ * the lists are always read again; `onClose` closes the dialog once the fade has run: on Cancel, the close button or
+ * Esc (also while an apply is running), and after an apply unless a close has already begun or the dialog has gone.
  */
 export default function FixMatchPanel({ item, opener, onApplied, onClose }) {
   const base = useId();
@@ -93,7 +93,7 @@ export default function FixMatchPanel({ item, opener, onApplied, onClose }) {
   const dialog = useDialog({ onEscape: dismiss, opener });
   const { dialogRef, closing, close } = dialog;
   const fix = useFixMatch(item.filmId, item.title, (result, stale) => {
-    onApplied(result);
+    onApplied(result, stale);
     // A stale result means the dialog is gone: there is nothing of its own to close.
     if (!stale) close(onClose);
   });

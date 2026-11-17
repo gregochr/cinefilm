@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router-dom';
 import EditEditions from '../components/EditEditions.jsx';
 import FixMatchPanel from '../components/FixMatchPanel.jsx';
@@ -55,12 +56,36 @@ function AdminShell() {
   const { fixing, editing, picking, toast } = shell;
 
   // The dialog hands focus back to its opener itself (useDialog) when it unmounts, if the opener is still there.
-  // The match is saved whatever the dialog is doing: read the lists again, and the row it opened from goes, so focus
-  // must not be left on the body. Closing the dialog is its own business (`onClose`).
-  const applied = () => {
-    shell.armFocusFallback();
+  // The match is saved whatever the dialog is doing, so the lists are read again at once. The row it opened from goes,
+  // and focus must not be left on the body, but the fallback is armed only once the dialog is gone: armed during the
+  // fade it would be spent on a heading behind the still-open dialog.
+  const fallbackDue = useRef(false);
+  const applied = (result, stale) => {
+    if (stale) shell.armFocusFallback();
+    else fallbackDue.current = true;
     shell.markChanged();
   };
+  // Once it is gone: arm the fallback for a re-read still to come, and, when the row went during the fade, settle focus
+  // now (the re-read that would have used the fallback has already happened).
+  const checkFocus = useRef(false);
+  const { takeFocusFallback } = shell.value;
+  const closeFixMatch = () => {
+    if (fallbackDue.current) {
+      shell.armFocusFallback();
+      checkFocus.current = true;
+    }
+    fallbackDue.current = false;
+    shell.closeFixMatch();
+  };
+  useEffect(() => {
+    if (fixing || !checkFocus.current) return;
+    checkFocus.current = false;
+    const active = document.activeElement;
+    if (!active || active === document.body || !active.isConnected) {
+      document.getElementById('admin-section-title')?.focus();
+      takeFocusFallback();
+    }
+  }, [fixing, takeFocusFallback]);
   // A saved arrangement settles the row it was opened from, so the lists are read again.
   const edited = (result, stale) => {
     if (!stale) {
@@ -83,7 +108,7 @@ function AdminShell() {
               item={fixing.item}
               opener={fixing.opener}
               onApplied={applied}
-              onClose={shell.closeFixMatch}
+              onClose={closeFixMatch}
             />
           ) : null}
           {picking ? (
