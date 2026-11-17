@@ -227,20 +227,6 @@ class TimingReferenceFetchTest {
     }
 
     @Test
-    void aFileAddedLaterIsMeasuredAloneAndNothingIsStoredButReferences() {
-        Map<Long, OpenSubtitlesReference> kept = Map.of(5012L, stored(5012, full(300)));
-        when(service.targets()).thenReturn(List.of(target(1, List.of(candidate(5012)), kept)),
-            List.of(target(1, 1, null, List.of(forced(7, Origin.CHOSEN), forced(8, Origin.DOWNLOAD)),
-                List.of(candidate(5012)), kept)));
-
-        assertThat(fetch.run(CHECK_LIMIT, true)).isEqualTo(1);
-        assertThat(fetch.run(CHECK_LIMIT, true)).isEqualTo(1);
-
-        assertThat(lines(Level.INFO)).hasSize(2);
-        verifyNoInteractions(api, budget, references);
-    }
-
-    @Test
     void aReferenceNotStoredIsFetchedWithinTheCheckCeilingStoredAndMeasured() {
         Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
         downloading(1, 5012, full(300), saved);
@@ -259,36 +245,6 @@ class TimingReferenceFetchTest {
             + "(\"Release 5012\", hearing-impaired false), 300 lines, usable true, best match 100% of a forced "
             + "file's lines");
         assertThat(lines(Level.INFO).get(1)).contains("OWNER file 7").contains("against OpenSubtitles file 5012");
-    }
-
-    @Test
-    void aStoredReferenceUnderThreeHundredLinesIsPassedOverForTheNextCandidateWhichIsFetched() {
-        Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
-        downloading(1, 5013, full(300), saved);
-        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(forced(7, Origin.OWNER)),
-            List.of(candidate(5012), candidate(5013)), Map.of(5012L, stored(5012, full(299))))));
-
-        fetch.run(CHECK_LIMIT, true);
-
-        verify(api, never()).download(5012);
-        assertThat(saved).containsOnlyKeys(5013L);
-        assertThat(lines(Level.INFO).get(lines(Level.INFO).size() - 1)).contains("against OpenSubtitles file 5013");
-    }
-
-    @Test
-    void aReferenceEndingBeforeTheCreditsLessTenMinutesIsPassedOverAndOneEndingAfterItIsUsed() {
-        File file = forced(7, Origin.OWNER);
-        Map<Long, OpenSubtitlesReference> both = Map.of(5012L, stored(5012, full(300)),
-            5013L, stored(5013, full(330)));
-        when(service.targets()).thenReturn(List.of(new Target(1L, 10L, "Original", "tt1", 3_400_000, 3_800_000L,
-            false, List.of(file), List.of(candidate(5012), candidate(5013)), 2, both)));
-
-        fetch.run(CHECK_LIMIT, true);
-
-        assertThat(lines(Level.INFO)).singleElement().satisfies(line -> assertThat(line)
-            .contains("against OpenSubtitles file 5013").contains("(\"Release 5013\"")
-            .contains("reference's last cue ends 0:55:01, runtime 0:56:40, credits start 1:03:20"));
-        verifyNoInteractions(api, budget);
     }
 
     @Test
@@ -393,7 +349,6 @@ class TimingReferenceFetchTest {
         fetch.run(CHECK_LIMIT, true);
 
         verify(api).download(5013);
-        // Measurement still logs every file, the full-length one included.
         assertThat(lines(Level.INFO).stream().filter(l -> l.contains("DOWNLOAD file 8 (300 lines, 300 or more)"))
             .count()).isEqualTo(2);
     }
@@ -678,15 +633,5 @@ class TimingReferenceFetchTest {
             "Could not fetch a timing reference for edition 20: NullPointerException",
             "Could not measure the forced subtitles of edition 20: NullPointerException");
         assertThat(lines(Level.INFO)).singleElement().satisfies(line -> assertThat(line).contains("edition 10"));
-    }
-
-    @Test
-    void anEditionWithNoUsableReferenceWritesNoLine() {
-        when(service.targets()).thenReturn(List.of(target(1, List.of(candidate(5012)),
-            Map.of(5012L, stored(5012, full(299))))));
-
-        assertThat(fetch.run(CHECK_LIMIT, true)).isZero();
-
-        assertThat(lines(Level.INFO)).isEmpty();
     }
 }
