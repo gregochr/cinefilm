@@ -87,6 +87,7 @@ class FullNeedIntegrationTest extends IntegrationTestBase {
 
         assertThat(films.findById(film.getId()).orElseThrow().getFullNeedOwner())
             .isEqualTo(FullNeedChoice.NONE_EXIST);
+        assertThat(films.findIdsByFullNeedOwner(FullNeedChoice.NONE_EXIST)).contains(film.getId());
     }
 
     @Test

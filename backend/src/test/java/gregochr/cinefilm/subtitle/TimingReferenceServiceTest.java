@@ -18,6 +18,7 @@ import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.FilmRepository.OsFullRef;
+import gregochr.cinefilm.film.FullNeedChoice;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
@@ -239,6 +240,33 @@ class TimingReferenceServiceTest {
         when(references.findByFilmIdIn(Set.of(1L, 2L))).thenReturn(List.of());
 
         assertThat(service.targets()).extracting(Target::filmId).containsExactly(1L, 2L);
+    }
+
+    @Test
+    void aFilmTheOwnerSaidNoSubtitlesExistForNeverQualifiesWhileAnotherFilmStillDoes() {
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(1L, 2L));
+        when(films.findIdsByFullNeedOwner(FullNeedChoice.NONE_EXIST)).thenReturn(List.of(2L));
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
+        when(reads.findAllById(List.of(10L))).thenReturn(List.of(read(part, EmbeddedCueStarts.Status.NO_REFERENCE)));
+        when(resolver.resolve(List.of(edition))).thenReturn(Map.of(
+            40L, resolution(edition, Source.FILE, List.of(sidecar(5, 10L, 20, false)), List.of())));
+        when(films.findOpenSubtitlesFull()).thenReturn(List.of(
+            new OsFullRef(1L, IMDB, OpenSubtitlesResult.listToJson(List.of(result(1, null, false, 1)))),
+            new OsFullRef(2L, IMDB, OpenSubtitlesResult.listToJson(List.of(result(2, null, false, 1))))));
+        when(references.findByFilmIdIn(Set.of(1L))).thenReturn(List.of());
+
+        assertThat(service.filmIds()).containsExactly(1L);
+        assertThat(service.targets()).extracting(Target::filmId).containsExactly(1L);
+    }
+
+    @Test
+    void whenEveryForcedFilmIsNoneExistNothingIsLookedAtAfterThat() {
+        when(sidecars.findFilmIdsWithPresentSubtitle(SubtitleKind.FORCED)).thenReturn(List.of(2L));
+        when(films.findIdsByFullNeedOwner(FullNeedChoice.NONE_EXIST)).thenReturn(List.of(2L));
+
+        assertThat(service.filmIds()).isEmpty();
+        assertThat(service.targets()).isEmpty();
+        verifyNoInteractions(editions, reads, resolver);
     }
 
     @Test
