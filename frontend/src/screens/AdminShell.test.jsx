@@ -161,11 +161,11 @@ describe('Admin shell: dialogs hosted by the layout', () => {
     renderApp('/admin');
     const opener = (await screen.findAllByRole('button', { name: 'Find the film…' }))[0];
     await userEvent.click(opener);
-    const panel = await screen.findByRole('region', { name: 'Fix match' });
+    const panel = await screen.findByRole('dialog', { name: 'Fix match' });
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }));
 
-    expect(screen.queryByRole('region', { name: 'Fix match' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument();
     expect(opener).toHaveFocus();
   });
 
@@ -178,13 +178,13 @@ describe('Admin shell: dialogs hosted by the layout', () => {
     renderApp('/admin');
     const opener = (await screen.findAllByRole('button', { name: 'Find the film…' }))[0];
     await userEvent.click(opener);
-    const panel = await screen.findByRole('region', { name: 'Fix match' });
+    const panel = await screen.findByRole('dialog', { name: 'Fix match' });
     await userEvent.click((await within(panel).findAllByRole('radio'))[0]);
 
     await userEvent.click(within(panel).getByRole('button', { name: 'Use this match' }));
 
     await waitFor(() =>
-      expect(screen.queryByRole('region', { name: 'Fix match' })).not.toBeInTheDocument(),
+      expect(screen.queryByRole('dialog', { name: 'Fix match' })).not.toBeInTheDocument(),
     );
     expect(opener).toHaveFocus();
   });

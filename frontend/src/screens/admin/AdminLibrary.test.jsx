@@ -96,7 +96,7 @@ describe('Admin Library section', () => {
     renderApp('/admin');
     const opener = (await screen.findAllByRole('button', { name: 'Find the film…' }))[0];
     await userEvent.click(opener);
-    const panel = await screen.findByRole('region', { name: 'Fix match' });
+    const panel = await screen.findByRole('dialog', { name: 'Fix match' });
     await userEvent.click((await within(panel).findAllByRole('radio'))[0]);
     await userEvent.click(within(panel).getByRole('button', { name: 'Use this match' }));
     await userEvent.click(

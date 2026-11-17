@@ -933,22 +933,6 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.fixmatch {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-.fixmatch__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 16px;
-}
-.fixmatch__title {
-  font-family: var(--cf-font-display);
-  font-weight: 400;
-  font-size: 32px;
-}
 .fixmatch__form {
   display: flex;
   flex-wrap: wrap;
