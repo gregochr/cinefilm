@@ -936,12 +936,21 @@
   margin-top: 8px;
 }
 .admin__credit-link {
-  display: inline-block;
-  padding-block: 13px; /* 18px line + 2 x 13px = a 44px target ... */
-  margin-block: -13px; /* ... that takes no room, so wrapped lines keep their 18px spacing */
+  position: relative; /* anchors the hit area below */
   color: var(--cf-text-muted);
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+/* The 44px target: an invisible box centred on the link, at least 44 x 44 and never smaller than the text, so a short
+   label is still 44px wide and neither the text nor the 18px line spacing moves. */
+.admin__credit-link::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
 }
 
 /* Admin: Fix match */
