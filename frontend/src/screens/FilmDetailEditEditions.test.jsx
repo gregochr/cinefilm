@@ -71,13 +71,16 @@ describe('Film detail: Edit editions…', () => {
 
     expect(await screen.findByRole('link', { name: /^Resume/ })).toBeInTheDocument();
   });
+});
 
-  it('a save that lands during the fade after Cancel reads the film once, with no toast, and the dialog then closes', async () => {
+describe('Film detail: Edit editions… cancelled while it saves', () => {
+  // The fade is held on a fake clock, so "during the fade" does not depend on real time passing.
+  async function cancelledThenSaved() {
     vi.stubGlobal('matchMedia', () => ({ matches: false }));
-    let filmCalls = 0;
+    const film = { reads: 0 };
     let release;
     installFetch((m, url) => {
-      if (url === '/api/films/1') filmCalls += 1;
+      if (url === '/api/films/1') film.reads += 1;
       if (m === 'PUT' && url === '/api/admin/films/1/editions') {
         return new Promise((resolve) => {
           release = () => resolve(respond({ filmId: 1, newFilmIds: [] }));
@@ -88,20 +91,42 @@ describe('Film detail: Edit editions…', () => {
     await openFromFilmDetail();
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await screen.findByRole('button', { name: 'Saving…' });
-    const before = filmCalls;
+    film.before = film.reads;
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     vi.stubGlobal('jest', { advanceTimersByTime: (ms) => vi.advanceTimersByTime(ms) });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     await act(async () => release());
+    return film;
+  }
+
+  it('a save that lands during the fade reads the film once', async () => {
+    const film = await cancelledThenSaved();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    await vi.waitFor(() => expect(filmCalls).toBe(before + 1));
+    await vi.waitFor(() => expect(film.reads).toBe(film.before + 1));
+
+    await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+    await act(async () => {}); // let anything still pending land before the exact count
+
+    expect(film.reads).toBe(film.before + 1);
+  });
+
+  it('a save that lands during the fade says nothing, because the person cancelled', async () => {
+    await cancelledThenSaved();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+
+    expect(screen.queryByText('Editions saved')).not.toBeInTheDocument();
+  });
+
+  it('the dialog still closes when its fade ends', async () => {
+    await cancelledThenSaved();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
     await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    await act(async () => {}); // let anything still pending land before the exact count
-    expect(filmCalls).toBe(before + 1);
-    expect(screen.queryByText('Editions saved')).not.toBeInTheDocument();
   });
 });

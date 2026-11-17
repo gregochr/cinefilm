@@ -97,7 +97,9 @@ function AdminShell() {
   useEffect(() => {
     editingRef.current = editing;
   }, [editing]);
-  const editFallbackDue = useRef(false);
+  // The id of the film whose dialog is fading with a save that has already landed; null when none: a due fallback
+  // belongs to that one dialog.
+  const editFallbackDue = useRef(null);
   const editCheckFocus = useRef(false);
   const edited = (result, stale) => {
     if (!stale) {
@@ -105,24 +107,25 @@ function AdminShell() {
       shell.armFocusFallback();
       toast.show('Editions saved');
     } else if (editingRef.current?.film.id === result.filmId) {
-      editFallbackDue.current = true;
+      editFallbackDue.current = result.filmId;
     } else {
       shell.armFocusFallback();
     }
     shell.markChanged();
   };
   const closeEditEditions = () => {
-    if (editFallbackDue.current) {
+    if (editFallbackDue.current === editingRef.current?.film.id) {
       shell.armFocusFallback();
       editCheckFocus.current = true;
     }
-    editFallbackDue.current = false;
+    editFallbackDue.current = null;
     shell.closeEditEditions();
   };
   useEffect(() => {
+    // Gone by any road (Cancel, a save, a change of section) or replaced by another film's dialog: a due fallback
+    // belongs to that dialog only.
+    if (editFallbackDue.current !== editing?.film.id) editFallbackDue.current = null;
     if (editing) return;
-    // Gone by any road (Cancel, a save, a change of section): a due fallback belongs to that dialog only.
-    editFallbackDue.current = false;
     if (!editCheckFocus.current) return;
     editCheckFocus.current = false;
     const active = document.activeElement;
