@@ -344,7 +344,6 @@ class FixMatchUnitTest {
 
     @Test
     void applyWhileTheLibraryLockIsHeldIs409AndDoesNotReleaseSomeoneElsesLock() {
-        when(films.existsById(FILM_ID)).thenReturn(true);
         lock.tryAcquire(LibraryLock.IMPORT);
 
         assertThatThrownBy(() -> fix.apply(FILM_ID, 5L)).isInstanceOf(ConflictException.class)
