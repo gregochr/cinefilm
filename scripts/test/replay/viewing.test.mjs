@@ -7,9 +7,9 @@ import { describe, test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { PAGE_TEXT, createCancel } from '../../replay/viewer.mjs';
 import {
-  ENDS, LOAD_MS, PLACE_BUTTON, PLACE_CARD, PRESS_RETRY, SITE_RETRY_MS, SITE_WAIT_MS, VIEWER_SAMPLE, cleanFilm,
-  cleanViewerSample, endOf, exitCode, filmExpression, lengthOf, loadWaiter, makeAttempt, pressPlace, progressLine,
-  standStill, timeOfDay, waitUntilReady,
+  ENDS, LOAD_MS, PLACE_BUTTON, PLACE_CARD, PRESS_RETRY, SITE_RETRY_MS, SITE_WAIT_MS, STATUS_EXPRESSION, VIEWER_SAMPLE,
+  cleanFilm, cleanStatus, cleanViewerSample, endOf, exitCode, filmExpression, lengthOf, loadWaiter, makeAttempt,
+  pressPlace, progressLine, standStill, timeOfDay, waitUntilReady,
 } from '../../replay/viewing.mjs';
 
 const SITE = 'http://127.0.0.1:5301';
@@ -204,10 +204,12 @@ describe('makeAttempt: the session check, the film, the player\'s page', () => {
       if (script.closes) page.closed = true;
       throw new Error(what);
     };
+    let current = 'session';
     const page = {
       closed: false,
       async send(method, params) {
         log.push(params.url.replace(SITE, ''));
+        current = params.url.endsWith('/api/session') ? 'session' : 'player';
         if (params.url.endsWith('/api/session')) {
           if (fails('navigate-session')) gone('no reply within 30000 ms');
           return fails('error-session') ? { errorText: 'net::ERR_INTERNET_DISCONNECTED' } : {};
@@ -216,6 +218,11 @@ describe('makeAttempt: the session check, the film, the player\'s page', () => {
         return fails('error-open') ? { errorText: 'net::ERR_TIMED_OUT' } : {};
       },
       async evaluate(expression) {
+        if (expression === STATUS_EXPRESSION) {
+          if (script.statusFails === current) gone('no reply');
+          const status = script.status?.[current];
+          return typeof status === 'function' ? status() : status ?? null;
+        }
         if (expression === PAGE_TEXT) {
           log.push('session');
           if (fails('read-session')) gone('no reply');
@@ -299,6 +306,67 @@ describe('makeAttempt: the session check, the film, the player\'s page', () => {
     });
   }
 
+  // What the loaded document's status does on each page (a gateway that answers with a body is a page that loads).
+  for (const status of [502, 503, 504]) {
+    test(`the session's page answered ${status} with a body is no answer, and the film is not asked for`, async () => {
+      const w = pageWorld({ status: { session: status }, session: 'Bad Gateway' });
+      assert.deepEqual(await w.attempt(), { kind: 'no-answer' });
+      assert.equal(w.log.includes('film'), false);
+    });
+
+    test(`the player's page answered ${status} is no answer`, async () => {
+      const w = pageWorld({ status: { player: status } });
+      assert.deepEqual(await w.attempt(), { kind: 'no-answer' });
+    });
+  }
+
+  test('the session\'s page with another status is read as before: 500 is real, 200 and none go on', async () => {
+    const refused = await pageWorld({ status: { session: 500 }, session: '<html>' }).attempt();
+    assert.equal(refused.kind, 'refused');
+    assert.match(refused.line, /not understood/);
+    for (const status of [200, 304, null, undefined]) {
+      assert.equal((await pageWorld({ status: { session: status } }).attempt()).kind, 'ready', String(status));
+    }
+  });
+
+  test('the player\'s page answered 404 or 500 is refused, with the status in the line', async () => {
+    for (const status of [404, 500, 403]) {
+      const outcome = await pageWorld({ status: { player: status } }).attempt();
+      assert.equal(outcome.kind, 'refused');
+      assert.equal(outcome.line, `The site would not open the player's page (status ${status}).`);
+    }
+  });
+
+  test('the player\'s page answered 200, 304 or no status is ready', async () => {
+    for (const status of [200, 304, 399, null, undefined]) {
+      assert.equal((await pageWorld({ status: { player: status } }).attempt()).kind, 'ready', String(status));
+    }
+  });
+
+  test('a status that cannot be read is a miss on either page; with the page closed, Chrome gone', async () => {
+    for (const statusFails of ['session', 'player']) {
+      assert.deepEqual(await pageWorld({ statusFails }).attempt(), { kind: 'no-answer' }, statusFails);
+      await assert.rejects(pageWorld({ statusFails, closes: true }).attempt(), (error) => error.code === 'chrome-gone');
+    }
+  });
+
+  test('a gateway error on the session page once, then an answer: said once, then ready', async () => {
+    let calls = 0;
+    const w = pageWorld({ status: { session: () => ((calls += 1) === 1 ? 503 : 200) } });
+    let now = 0;
+    const say = [];
+    const outcome = await waitUntilReady({
+      attempt: w.attempt, cancel: w.cancel, now: () => now, say: (text) => say.push(text),
+      wait: async (ms) => {
+        now += ms;
+      },
+    });
+    assert.equal(outcome.kind, 'ready');
+    assert.equal(say.length, 1);
+    assert.match(say[0], /not answering/);
+    assert.equal(calls, 2);
+  });
+
   test('a quality of auto, or none, is let through', async () => {
     for (const quality of ['auto', null, undefined]) {
       assert.equal((await pageWorld({ film: { ...FILM, quality } }).attempt()).kind, 'ready', String(quality));
@@ -357,6 +425,26 @@ describe('makeAttempt: the session check, the film, the player\'s page', () => {
     await w.attempt();
     await w.attempt();
     assert.equal(w.said.length, 1);
+  });
+});
+
+describe('STATUS_EXPRESSION', () => {
+  test('gives the status of the first navigation entry, and null when the page has none', () => {
+    const run = (entries) => runInNewContext(STATUS_EXPRESSION, {
+      performance: { getEntriesByType: (type) => (type === 'navigation' ? entries : [{ responseStatus: 200 }]) },
+    });
+    assert.equal(run([{ responseStatus: 503 }, { responseStatus: 200 }]), 503);
+    assert.equal(run([]), null);
+    assert.equal(run([{}]), null);
+  });
+});
+
+describe('cleanStatus', () => {
+  test('is a whole number from 100 to 599, else null', () => {
+    for (const status of [100, 200, 304, 404, 502, 599]) assert.equal(cleanStatus(status), status);
+    for (const raw of [99, 600, 200.5, '502', null, undefined, {}, [502], Number.NaN, Infinity, -1, true]) {
+      assert.equal(cleanStatus(raw), null, String(raw));
+    }
   });
 });
 

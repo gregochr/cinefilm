@@ -237,8 +237,20 @@ export async function waitUntilReady({ attempt, wait, now, say, cancel }) {
 }
 
 const MISS = { kind: 'no-answer' };
-/** A server that is restarting (bad gateway, unavailable, gateway timeout) is waited for, not refused. */
+/**
+ * A server that is restarting (bad gateway, unavailable, gateway timeout) is waited for, not refused: on the film's
+ * fetch, and on the two pages, whose loaded document is read for its status (a gateway that answers with a body is a
+ * document that loads, with no `errorText`; with no body it is an `errorText`, already a miss).
+ */
 const RESTARTING = new Set([502, 503, 504]);
+
+/** The HTTP status of the document the page has loaded (what Chrome keeps for its navigation), or null. */
+export const STATUS_EXPRESSION = '(performance.getEntriesByType("navigation")[0]?.responseStatus ?? null)';
+
+/** What the page said its status was, rebuilt: a whole number from 100 to 599, else null (it gave none). */
+export function cleanStatus(raw) {
+  return Number.isInteger(raw) && raw >= 100 && raw <= 599 ? raw : null;
+}
 
 // A step that gets no answer on a dead link (the navigation fails, or Chrome does not answer in time, which rejects)
 // is a miss, null. When the page is closed it is Chrome that has gone: that is a failure at once.
@@ -259,6 +271,8 @@ async function askSession({ page, site, nextLoad, giveUpOn, cancel }) {
   const navigation = await page.send('Page.navigate', { url: `${site}/api/session` });
   if (navigation?.errorText) return null;
   if (!(await giveUpOn(loaded, LOAD_MS))) return null;
+  // A gateway's error page loads like any other: a restarting server is no answer, whatever its text says.
+  if (RESTARTING.has(cleanStatus(await page.evaluate(STATUS_EXPRESSION)))) return null;
   return readAnswer(await page.evaluate(PAGE_TEXT));
 }
 
@@ -268,7 +282,9 @@ async function askSession({ page, site, nextLoad, giveUpOn, cancel }) {
  * often the loop goes round). `nextLoad()` gives a promise for the page's next load event, `giveUpOn(promise, ms)`
  * says whether it settled in time (both pages, the session's and the player's, must load in 30 s). A page that is
  * closed is a failure with `code: 'chrome-gone'`; a film that is not a number throws, whatever the page is doing; it
- * throws at once without `cancel`. An attempt that a signal (`cancel`) has given up on goes on to its next await at
+ * throws at once without `cancel`. Both pages count as answered only when the loaded document's status says so: a
+ * restarting server (502, 503, 504: `RESTARTING`) is no answer on either, and the player's page with another status
+ * of 400 or more is a refusal. An attempt that a signal (`cancel`) has given up on goes on to its next await at
  * most: it says nothing and sends no navigation once the signal is set (it is checked straight before each).
  */
 export function makeAttempt({ page, site, film, nextLoad, giveUpOn, say, cancel }) {
@@ -296,9 +312,17 @@ export function makeAttempt({ page, site, film, nextLoad, giveUpOn, say, cancel 
       const loaded = nextLoad();
       const navigation = await page.send('Page.navigate', { url: `${site}/films/${film}/play?start=0` });
       if (navigation?.errorText) return null;
-      return (await giveUpOn(loaded, LOAD_MS)) ? true : null;
+      if (!(await giveUpOn(loaded, LOAD_MS))) return null;
+      // What loaded may be a gateway's error page: a restarting server is no answer, another error is a refusal.
+      const status = cleanStatus(await page.evaluate(STATUS_EXPRESSION));
+      if (RESTARTING.has(status)) return null;
+      if (status !== null && status >= 400) {
+        return { line: `The site would not open the player's page (status ${status}).` };
+      }
+      return {};
     });
-    return opened === null ? MISS : { kind: 'ready', film: facts };
+    if (opened === null) return MISS;
+    return opened.line ? { kind: 'refused', line: opened.line } : { kind: 'ready', film: facts };
   };
 }
 

@@ -4,4 +4,5 @@ The train viewer's module `scripts/replay/viewing.mjs` now holds what it will re
 seconds (whether the film plays directly, the "Signed out" card, "Playback was stopped from Admin", a "Try again"), the
 buttons it will press and only those, what it checks before it plays (the site answers, signed in, the film exists and
 is on Auto, with a dead link waited out for up to ten minutes), and the words and exit codes of each way a run ends.
-Nothing uses it yet: the run comes in a later change.
+A gateway error page (502, 503, 504) on the session check or the player's page is waited out like a dead link, and
+another error status on the player's page is refused. Nothing uses it yet: the run comes in a later change.
