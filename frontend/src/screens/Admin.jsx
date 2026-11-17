@@ -89,15 +89,48 @@ function AdminShell() {
       takeFocusFallback();
     }
   }, [fixing, takeFocusFallback]);
-  // A saved arrangement settles the row it was opened from, so the lists are read again.
+  // A saved arrangement settles the row it was opened from, so the lists are read again. Same focus rule as Fix match
+  // (mirrored here, not shared: the two read differently). EditEditions reports a save that lands during its fade-out
+  // as stale too, so "still mounted" is read from the open `editing` through a ref: a due fallback is armed only once
+  // the dialog is gone, and one that lands after it is gone is armed at once.
+  const editingRef = useRef(editing);
+  useEffect(() => {
+    editingRef.current = editing;
+  }, [editing]);
+  const editFallbackDue = useRef(false);
+  const editCheckFocus = useRef(false);
   const edited = (result, stale) => {
     if (!stale) {
       shell.closeEditEditions();
       shell.armFocusFallback();
       toast.show('Editions saved');
+    } else if (editingRef.current?.film.id === result.filmId) {
+      editFallbackDue.current = true;
+    } else {
+      shell.armFocusFallback();
     }
     shell.markChanged();
   };
+  const closeEditEditions = () => {
+    if (editFallbackDue.current) {
+      shell.armFocusFallback();
+      editCheckFocus.current = true;
+    }
+    editFallbackDue.current = false;
+    shell.closeEditEditions();
+  };
+  useEffect(() => {
+    if (editing) return;
+    // Gone by any road (Cancel, a save, a change of section): a due fallback belongs to that dialog only.
+    editFallbackDue.current = false;
+    if (!editCheckFocus.current) return;
+    editCheckFocus.current = false;
+    const active = document.activeElement;
+    if (!active || active === document.body || !active.isConnected) {
+      document.getElementById('admin-section-title')?.focus();
+      takeFocusFallback();
+    }
+  }, [editing, takeFocusFallback]);
 
   return (
     <AdminContext.Provider value={shell.value}>
@@ -131,7 +164,7 @@ function AdminShell() {
               key={editing.film.id}
               film={editing.film}
               opener={editing.opener}
-              onClose={shell.closeEditEditions}
+              onClose={closeEditEditions}
               onSaved={edited}
             />
           ) : null}

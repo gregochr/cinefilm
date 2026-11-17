@@ -1,10 +1,12 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { FADE_MS } from '../components/useDialog.js';
 import { installFetch, renderApp, respond } from '../test/mockApi.jsx';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 async function openFromFilmDetail() {
@@ -68,5 +70,38 @@ describe('Film detail: Edit editions…', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(await screen.findByRole('link', { name: /^Resume/ })).toBeInTheDocument();
+  });
+
+  it('a save that lands during the fade after Cancel reads the film once, with no toast, and the dialog then closes', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    let filmCalls = 0;
+    let release;
+    installFetch((m, url) => {
+      if (url === '/api/films/1') filmCalls += 1;
+      if (m === 'PUT' && url === '/api/admin/films/1/editions') {
+        return new Promise((resolve) => {
+          release = () => resolve(respond({ filmId: 1, newFilmIds: [] }));
+        });
+      }
+      return null;
+    });
+    await openFromFilmDetail();
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByRole('button', { name: 'Saving…' });
+    const before = filmCalls;
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms) => vi.advanceTimersByTime(ms) });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await act(async () => release());
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await vi.waitFor(() => expect(filmCalls).toBe(before + 1));
+    await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await act(async () => {}); // let anything still pending land before the exact count
+    expect(filmCalls).toBe(before + 1);
+    expect(screen.queryByText('Editions saved')).not.toBeInTheDocument();
   });
 });

@@ -2,10 +2,12 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SESSION_EXPIRED_EVENT } from '../api/client.js';
+import { FADE_MS } from '../components/useDialog.js';
 import { fixtures, installFetch, renderApp, respond } from '../test/mockApi.jsx';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 const isEditions = (m, url) => m === 'GET' && url === '/api/admin/films/6/editions';
@@ -199,32 +201,100 @@ describe('Admin: Edit editions', () => {
     expect(screen.queryByText('Editions saved')).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1);
   });
+});
 
-  it('a save that lands while the dialog fades out after Cancel still reads the lists again, once, with no toast', async () => {
-    vi.stubGlobal('matchMedia', () => ({ matches: false }));
-    let release;
-    let attentionCalls = 0;
+describe('Admin: Edit editions, cancelled while it saves', () => {
+  // The fade is held on a fake clock, so "during the fade" does not depend on real time passing.
+  function holdClock() {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms) => vi.advanceTimersByTime(ms) });
+    return userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  }
+  const heading = () => screen.getByRole('heading', { level: 1, name: 'To do' });
+  const sortOut = () => screen.queryAllByRole('button', { name: 'Sort out editions…' });
+
+  // The save is held; once released the re-read answers without the rows the dialog was opened from.
+  function holdSave() {
+    const held = { saved: false, attention: 0 };
     installFetch((m, url) => {
-      if (url === '/api/admin/attention') attentionCalls += 1;
+      if (url === '/api/admin/attention') {
+        held.attention += 1;
+        return respond(
+          held.saved
+            ? {
+                items: fixtures.adminAttention.items.filter(
+                  (i) => !['multiple-files', 'parts-mismatch'].includes(i.kind),
+                ),
+              }
+            : fixtures.adminAttention,
+        );
+      }
       if (isSave(m, url)) {
         return new Promise((resolve) => {
-          release = () => resolve(respond({ filmId: 6, newFilmIds: [] }));
+          held.release = () => {
+            held.saved = true;
+            resolve(respond({ filmId: 6, newFilmIds: [] }));
+          };
         });
       }
       return null;
     });
+    return held;
+  }
+
+  it('a save that lands during the fade still reads the lists again, once, with no toast', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    const held = holdSave();
     await openFromTheRow();
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await screen.findByRole('button', { name: 'Saving…' });
-    const before = attentionCalls;
+    const before = held.attention;
+    const user = holdClock();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await act(async () => held.release());
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await vi.waitFor(() => expect(held.attention).toBe(before + 1));
+    await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await act(async () => {}); // let anything still pending land before the exact count
+    expect(held.attention).toBe(before + 1);
+    expect(screen.queryByText('Editions saved')).not.toBeInTheDocument();
+  });
+
+  it('keeps focus off the heading until the dialog is gone, then puts it there', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    const held = holdSave();
+    await openFromTheRow();
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByRole('button', { name: 'Saving…' });
+    const user = holdClock();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await act(async () => held.release());
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await vi.waitFor(() => expect(sortOut()).toHaveLength(0));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(heading()).not.toHaveFocus();
+
+    await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(heading()).toHaveFocus();
+  });
+
+  it('with reduced motion, a save that lands after Cancel and the row going leaves focus on the heading', async () => {
+    const held = holdSave();
+    await openFromTheRow();
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByRole('button', { name: 'Saving…' });
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    await act(async () => release());
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await act(async () => held.release());
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    await waitFor(() => expect(attentionCalls).toBe(before + 1));
-    await act(async () => {}); // let anything still pending land before the exact count
-    expect(attentionCalls).toBe(before + 1);
-    expect(screen.queryByText('Editions saved')).not.toBeInTheDocument();
+    await waitFor(() => expect(sortOut()).toHaveLength(0));
+    await waitFor(() => expect(heading()).toHaveFocus());
   });
 });

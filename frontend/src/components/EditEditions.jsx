@@ -288,9 +288,9 @@ function Body({ edit, ids }) {
  * The Edit editions dialog (a full-screen sheet on phones): arrange a film's files into editions and parts, pick the
  * default, or split off files that are not this film. `onSaved` runs once the save went through; `onClose` on
  * Cancel, ×, or Esc (there is no confirm prompt: this is a single-user app). A save that lands after the dialog was
- * dismissed (during its fade-out) or once it has gone is reported at once with `stale` true, so the parent only reads
- * the lists again and the dialog finishes its own fade. `opener` is the element focus goes back to when the dialog
- * closes (else whatever had it when it opened).
+ * dismissed, or once it has gone, is reported at once with `stale` true; if the dialog is still fading, the fade then
+ * ends with `onClose`. `opener` is the element focus goes back to when the dialog closes (else whatever had it when it
+ * opened).
  */
 export default function EditEditions({ film, opener, onClose, onSaved }) {
   const base = useId();
