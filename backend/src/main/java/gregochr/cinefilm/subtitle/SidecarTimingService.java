@@ -8,6 +8,7 @@ import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.FullNeedChoice;
 import gregochr.cinefilm.library.LibraryLock;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
@@ -491,7 +492,8 @@ public class SidecarTimingService {
 
     /**
      * For each served edition the timing check fits to OpenSubtitles files (a single file whose embedded read found no
-     * English track, of a film searched for full subtitles under its current IMDb id), the usable stored files among
+     * English track, of a film searched for full subtitles under its current IMDb id that the owner has not marked
+     * {@code NONE_EXIST}, as {@link TimingReferenceService} does), the usable stored files among
      * its candidates: the same selection as {@link TimingReferenceService}, through {@link TimingReferenceRule} and
      * {@link CreditsStarts}. This runs on the playback path ({@link #current}), so it reads facts only (no cue text,
      * nothing parsed) and the credits of all those editions in one query; a reference with no kept last-cue end (stored
@@ -504,6 +506,7 @@ public class SidecarTimingService {
             Film film = e.getFilm();
             List<MediaFile> parts = e.originalParts();
             if (parts.size() == 1 && e.getRuntimeMs() > 0 && film.getImdbId() != null
+                && film.getFullNeedOwner() != FullNeedChoice.NONE_EXIST
                 && film.getOsFullCandidates() != null && film.getImdbId().equals(film.getOsFullSearchedImdbId())
                 && isRead(parts.get(0), reads)
                 && reads.get(parts.get(0).getId()).getStatus() == EmbeddedCueStarts.Status.NO_REFERENCE) {

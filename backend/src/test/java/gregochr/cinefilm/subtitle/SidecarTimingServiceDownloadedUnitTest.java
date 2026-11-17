@@ -14,6 +14,7 @@ import gregochr.cinefilm.credits.CreditsDetectionRepository;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.EditionRepository;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.FullNeedChoice;
 import gregochr.cinefilm.film.MediaFile;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.library.LibraryLock;
@@ -213,6 +214,17 @@ class SidecarTimingServiceDownloadedUnitTest {
 
         assertThat(job.osReferences()).isEmpty();
         assertThat(job.noReference()).isEqualTo("The film has no English subtitle track");
+        assertThat(job.referenceKey()).isEqualTo(BASE_KEY);
+    }
+
+    @Test
+    void aFilmTheOwnerMarkedAsHavingNoEnglishSubtitlesIsNotFittedToAnyOpenSubtitlesFile() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        edition.getFilm().setFullNeedOwner(FullNeedChoice.NONE_EXIST);
+
+        FitJob job = onlyJob();
+
+        assertThat(job.osReferences()).isEmpty();
         assertThat(job.referenceKey()).isEqualTo(BASE_KEY);
     }
 

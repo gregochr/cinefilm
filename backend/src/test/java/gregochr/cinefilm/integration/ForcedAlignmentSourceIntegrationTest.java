@@ -43,7 +43,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * V31 on PostgreSQL: {@code reference_source} defaults to {@code EMBEDDED} and refuses any other value, and a fit to a
+ * V32 on PostgreSQL: {@code reference_source} defaults to {@code EMBEDDED} and refuses any other value, and a fit to a
  * stored OpenSubtitles file goes through the real service: it is chosen from the stored files, saved with the file's
  * id, never sets an offset, and the Admin list shows its source and release as JSON.
  */
