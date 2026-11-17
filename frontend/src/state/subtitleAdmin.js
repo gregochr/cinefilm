@@ -226,17 +226,39 @@ export function formatFittedOffset(ms) {
   return `${ms < 0 ? '−' : '+'}${(Math.abs(ms) / 1000).toFixed(1)} s`;
 }
 
+/** The label of a fit to a full English file from OpenSubtitles that lines up (it is not proof, so not "aligned"). */
+export const REFERENCE_MATCH_LABEL = 'Lines match a full English file from OpenSubtitles';
+
+/** What a fit to an OpenSubtitles file was checked against, and that it was not the film itself. */
+export function referenceSourceLine(release) {
+  const file = release
+    ? `a full English file from OpenSubtitles (${release})`
+    : 'a full English file from OpenSubtitles';
+  return `Checked against ${file}, not yet against the film`;
+}
+
 /**
- * What fitting the file to the film's own English track says, in words: `{ kind, label, lines, note }` or null when
- * there is no result. `kind` is `aligned`, `check` or `unchecked`; `lines` are the server's reasons; `note` is the
- * "Timing set automatically (+1.2 s)" line of an applied fit. The verdict itself is the server's; nothing is derived.
+ * What fitting the file to the film's own English track, or to a full English file from OpenSubtitles when the film
+ * has none, says in words: `{ kind, label, lines, note, source? }` or null when there is no result. `kind` is `aligned`
+ * (the film's own track only), `reference` (lines match an OpenSubtitles file: shown, not proof), `check` or
+ * `unchecked`; `lines` are the server's reasons; `note` is the "Timing set automatically (+1.2 s)" line of an applied
+ * fit; `source` is the line saying what an OpenSubtitles fit was checked against. The verdict itself is the server's;
+ * nothing is derived.
  */
 export function alignmentSummary(item) {
   const fit = item.alignment;
   if (!fit) return null;
   const lines = fit.reasons ?? [];
-  // A fit to an OpenSubtitles file is not a check against the film (it never counts as proof): until the copy changes
-  // (phase 3c-2b), it reads as "not checked", whatever its verdict.
+  // A fit to an OpenSubtitles file is not a check against the film (it never counts as proof): it is shown with what
+  // it was checked against, never as "aligned" (the green kind).
+  if (fit.source === 'OPENSUBTITLES' && (fit.verdict === 'ALIGNED' || fit.verdict === 'CHECK')) {
+    const source = referenceSourceLine(fit.referenceRelease);
+    if (fit.verdict === 'ALIGNED') {
+      // The server's one sentence repeats the label and the release, which the source line already tells.
+      return { kind: 'reference', label: REFERENCE_MATCH_LABEL, lines: [], note: null, source };
+    }
+    return { kind: 'check', label: 'Timing needs checking', lines, note: null, source };
+  }
   if (fit.source === 'OPENSUBTITLES') {
     return { kind: 'unchecked', label: 'Timing not checked', lines, note: null };
   }

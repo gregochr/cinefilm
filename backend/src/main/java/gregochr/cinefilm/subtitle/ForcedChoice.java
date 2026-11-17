@@ -173,6 +173,7 @@ public final class ForcedChoice {
                 .thenComparing(DownloadSide::id)).orElse(null);
     }
 
+    // ALIGNED is only ever an embedded fit (SidecarTrust.isAligned): revisit this text if trust ever counts another.
     private static String proofText(Proof proof) {
         return proof == Proof.CHOSEN ? "you picked it"
             : proof == Proof.VERIFIED ? "you checked it"
@@ -200,6 +201,7 @@ public final class ForcedChoice {
         };
     }
 
+    // ALIGNED is only ever an embedded fit (SidecarTrust.isAligned): revisit this text if trust ever counts another.
     private static String downloadProof(Proof proof) {
         return proof == Proof.CHOSEN ? "you picked"
             : proof == Proof.VERIFIED ? "you checked"
