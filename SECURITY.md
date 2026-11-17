@@ -76,7 +76,18 @@ the owner's tailnet (Caddy at https://cinefilm.chrisjgregory.dev, bound to the t
    A lock file keeps two viewers apart in ordinary use, and Chrome's own lock in the profile is what finally stops
    two Chromes sharing the profile. Removing `profile/` signs that laptop's viewer out; it does not end the session
    on the server.
-   The run of a film arrives in a later change.
+   During a run (`--film`) the signed-in Chrome is headless and is talked to over the pipe only. Every request the
+   page makes to the site that would change something is answered inside Chrome and never sent, except starting a
+   stream, ending it and the playback record; requests to other hosts are not held, and the page only reads from
+   them. That keeps the owner's watch history as it was; it is not a security boundary. If the driver itself is killed
+   outright, Chrome ends by itself and the page's closing save may get out (`docs/engineering/train-viewer-plan.md`,
+   decision 3, says what that changes). A run writes its results as it goes (with the first sample, every minute and at
+   the end) to `~/cinefilm-viewer/runs/<time>/`, readable by the owner alone and never in a checkout. They hold the
+   playback records as the app sends them (which include the network operator's name, the browser's name and the
+   screen size), the samples, the film's title and number and the site, what was held back (the method and the
+   address's shape, with a count), the page's own errors and warnings (free text from the page, each through
+   `printable`, at most 100), the presses and the viewer's own warnings; never a cookie, a header or a password, and no
+   body but the playback records' own. Everything the viewer prints passes `printable`.
 7. **Untrusted data in the UI.** TMDB, Plex and file metadata (titles, overviews, track names) are rendered as text,
    never with `dangerouslySetInnerHTML`. Image URLs come from the `imageUrl` helper only.
    **The operator lookup** is the browser's one request to a host other than CineFilm and TMDB's images: when the

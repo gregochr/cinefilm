@@ -38,16 +38,20 @@ no change to the app and no release.
    page is sent to `about:blank` (its closing sends are paused and dealt with like any other) and three seconds are
    given for them to settle; only then is the channel closed and Chrome ended (`SIGTERM`, then `SIGKILL` if it
    lingers). Every way out takes that path: the film's end, `--minutes`, Ctrl-C, `SIGTERM`, `SIGHUP` (the terminal
-   closed) and an error. When the page cannot be sent away (the channel has failed, Chrome does not answer), and on
-   an exception or a rejected promise that nothing caught, Chrome's whole process group is killed with `SIGKILL`
-   before anything else: a Chrome killed so sends nothing. Chrome is started in its own process group, so a Ctrl-C in
-   the terminal reaches the driver alone. **One way out is not covered:** if the driver itself is killed outright
-   (`kill -9`, a crash of Node), the pipe closes, Chrome ends by itself within a third of a second, and as it does
-   the page's closing save gets out. That film's resume point moves to where the viewer was, the film appears in
-   Continue watching, and past its credits it is marked watched; all three can be put back from the film's page. The
-   manual says so. Closing this needs either relays between the driver and Chrome or a second guard inside the page;
-   neither is worth its risk to the run itself in a first version. (A wrapper that only held Chrome's ends of the
-   pipe open would not do it: Chrome sees the pipe end when the driver's ends close, whoever else holds its own.)
+   closed) and an error. When the page cannot be sent away (the channel has failed, Chrome does not answer), and on an
+   exception or a rejected promise that nothing caught, Chrome's whole process group is killed with `SIGKILL` before
+   anything else: a Chrome killed so sends nothing. Chrome is started in its own process group, so a Ctrl-C in the
+   terminal reaches the driver alone. **One way out is not covered:** if the driver itself is killed outright (`kill
+   -9`, or Node itself dying; an error in the script is not this case, it is caught), the pipe closes, Chrome ends by
+   itself within about ten seconds, and as it does the page's closing save may get out (it did in one of two tries by
+   hand). That film's resume point then moves to where the viewer was, the film appears in Continue watching, and past
+   its credits it is marked watched. Marking the film watched or unwatched on its page clears the resume point, and
+   the menu on its Continue watching card takes it out of there. The results on disk are then those of the last write,
+   about a minute old, and say the run had not ended (they are written with the first sample, every minute after, and
+   at the end). The manual says so. Closing this needs either relays between the driver and Chrome or a second guard
+   inside the page; neither is worth its risk to the run itself in a first version. (A wrapper that only held Chrome's
+   ends of the pipe open would not do it: Chrome sees the pipe end when the driver's ends close, whoever else holds
+   its own.)
 4. **The channel is a pipe, not a port.** The viewer's Chrome is signed in, and a debugging port on `127.0.0.1` would
    let any program on the laptop read its cookie or drive it. Chrome is started with `--remote-debugging-pipe`:
    nothing listens, and only the driver holds the pipe. The replay keeps its port: its Chrome is signed in to nothing.
@@ -82,9 +86,10 @@ no change to the app and no release.
    card. Nothing else: it never picks a quality, seeks or pauses.
 9. **What ends a run, and what a run says.** The film's end, `--minutes`, a signal, the "Signed out" card (a release
    or restart of the server signs every browser out: one line says to run `--sign-in`), "Playback was stopped from
-   Admin", or Chrome going away. The line printed every 30 seconds and the summary say whether the film is being
-   streamed or has fallen back to playing the original file directly, which is what the player does when streaming
-   fails and is no measure of the rules.
+   Admin", Chrome going away, or the player's page no longer answering (three looks in a row unread: the viewer does
+   not reload it). The line printed every 30 seconds and the summary say whether the film is being streamed or has
+   fallen back to playing the original file directly, which is what the player does when streaming fails and is no
+   measure of the rules.
 10. **What it changes on the server.** A stream session started and ended (which may save a film's keyframe index,
     and at the limit of three sessions pushes out the one least recently used), and one playback record. Admin shows
     that record like any other, with `HeadlessChrome` as its browser, and counts it in its figures.
@@ -96,8 +101,8 @@ no change to the app and no release.
 
 ## What was tried first
 
-Three scratch scripts on 2026-11-17, the real player against the home replay's stand-in unless said otherwise. Each
-case ran once.
+Scratch scripts on 2026-11-17, the real player against the home replay's stand-in unless said otherwise. Each case
+of the first three ran once.
 
 - **Holding back.** In 75 seconds all nine progress saves were answered inside Chrome and none reached the stand-in;
   the four health reports were read whole on their way out and all arrived; the sends the page makes as it closes
@@ -109,15 +114,25 @@ case ran once.
   guard goes with the driver. A Chrome ended by `SIGTERM` or `SIGKILL` sent nothing as it went, guard or no guard.
   Over the pipe the guard worked as over the port and Chrome wrote no port file. When the pipe was closed as if the
   driver had died, Chrome ended by itself in 0.3 seconds, and the page's closing save and report reached the
-  stand-in.
+  stand-in. (With the built viewer killed outright while a film played, Chrome took nine seconds to go, removed its
+  own lock, and in one try of two the closing save got out; a second viewer started afterwards ran.)
+- **A made-up home folder is not a way to try it.** To keep clear of the real `~/cinefilm-viewer`, the built viewer
+  was first started with `HOME` set to a scratch folder. Chrome inherits that, finds no login keychain there and
+  asks macOS to make one (sampled: `SecItemAdd` waiting in `AuthorizationCopyRights`). While that prompt is up
+  Chrome asks the site for nothing, and the viewer says the site is not answering; when macOS refuses the request
+  at once, Chrome goes on with no key and a cookie set then cannot be read back. The by-hand starter now gives only
+  Node the scratch home and starts Chrome with the real one: the built viewer then reached the film in 6 seconds
+  and ended on `SIGHUP` as designed. So the viewer is run from Terminal by the owner as themself; over SSH or from
+  a scheduled job it is untried.
 
-## Four pull requests, each under 1,500 changed lines
+## Six pull requests, each under 1,500 changed lines
 
-The first estimate was two pull requests of about 950 and 1,050 lines. Built, the first came to 2,000, so each is
-split again. Each is built on the one before and pushed only once that one is merged.
+The first estimate was two pull requests of about 950 and 1,050 lines. Built, the work came to some 5,500 lines,
+two thirds of them tests, so it goes in as six. Each is built on the one before and pushed only once that one is
+merged.
 
 **1. The sign-in and the kept profile.** No behaviour of the replay changes. It goes in as two: **1a**, `cdp.mjs`
-with its tests and this plan (about 1,050 lines); **1b**, `viewer.mjs` with its tests and `SECURITY.md` (about 1,400).
+with its tests and this plan (#200); **1b**, `viewer.mjs` with its tests and `SECURITY.md` (#201).
 
 - `scripts/replay/cdp.mjs`: Chrome's arguments built by a pure function for each way of starting (the replay's, word
   for word what they were; the viewer's; the sign-in window's). A second channel, the pipe, with the same `send`,
@@ -135,16 +150,17 @@ with its tests and this plan (about 1,050 lines); **1b**, `viewer.mjs` with its 
 - `SECURITY.md` (the kept profile and its cookie, the window, the pipe, what is never kept), this plan, the changelog
   entry, the new file's line in `sonar-project.properties`.
 
-**2. The run and its guard.** It goes in as two: **2a**, `guard.mjs` with its tests (about 600 lines, a doubled
-estimate); **2b**, the run (about 1,300, likewise), from which the results and the manual are split off again if it
-will not fit.
+**2. The run and its guard.** It goes in as four: **2a**, `guard.mjs` with its tests; **2b**, what the viewer reads
+from the player's page, presses and checks before it plays (`viewing.mjs`, not yet used); **2c**, the run itself,
+with the options and `SECURITY.md`; **2d**, the summary and the manual.
 
 - `scripts/replay/guard.mjs` (new): decision 2 as a pure function of method, address and site; the canned answers;
   the keeping of reports (the latest by `seq` per viewing, how many were sent; one that cannot be read or is over
   64 KB is let through uncopied and counted); the handler that wires them to a page.
-- `scripts/replay/viewer.mjs`: `--film`, `--minutes`, `--place`; the checks of decision 7; the run (each sample has
-  a clock since the film opened and the time of day, so a run lays beside the logger's log); the presses; decisions
-  3 and 9; `health.json`, `samples.json`, `held.json` and `summary.txt` in the run's folder. `drive.mjs`: exports.
+- `scripts/replay/viewing.mjs` (new) and `viewer.mjs`: `--film`, `--minutes`, `--place`; the checks of decision 7 (a
+  dead link at any of them is waited out, not a failure); the run (each sample has a clock since the film opened and
+  the time of day, so a run lays beside the logger's log); the presses; decisions 3 and 9; `health.json`,
+  `samples.json`, `held.json` and `summary.txt` in the run's folder. `drive.mjs`: exports.
 - Tests: every write in `frontend/src/api/resources.js` by name, held or let through as decision 2 says; `PATCH` and
   `OPTIONS` held; look-alike addresses held (another host or port, a user name, a longer path, a trailing slash,
   `//`, a percent-encoded segment, a query, upper case); a request paused again after a redirect is judged by the

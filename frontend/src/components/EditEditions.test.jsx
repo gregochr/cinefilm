@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixtures, installFetch, respond } from '../test/mockApi.jsx';
 import EditEditions from './EditEditions.jsx';
+import { FADE_MS } from './useDialog.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -757,6 +758,89 @@ describe('Edit editions: motion', () => {
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Edit editions: a save that lands while the dialog fades out', () => {
+  // The fade is held on a fake clock, so "during the fade" does not depend on real time passing.
+  function holdClock() {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms) => vi.advanceTimersByTime(ms) });
+    return userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  }
+  const dismissals = {
+    Cancel: (user) => user.click(screen.getByRole('button', { name: 'Cancel' })),
+    Close: (user) => user.click(screen.getByRole('button', { name: 'Close' })),
+    Esc: (user) => user.keyboard('{Escape}'),
+  };
+  const ways = Object.keys(dismissals);
+
+  async function dismissedMidSave(how) {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    let release;
+    installFetch((m, url) =>
+      isPut(m, url)
+        ? new Promise((resolve) => {
+            release = () => resolve(respond({ filmId: 40, newFilmIds: [] }));
+          })
+        : null,
+    );
+    const { user: first, onClose, onSaved } = await open();
+    await first.click(saveButton());
+    await screen.findByRole('button', { name: 'Saving…' });
+    const user = holdClock();
+    await dismissals[how](user);
+    await act(async () => release());
+    return { onClose, onSaved };
+  }
+
+  it.each(ways)('reports it at once, as stale, once (%s)', async (how) => {
+    const { onClose, onSaved } = await dismissedMidSave(how);
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(onSaved).toHaveBeenCalledWith({ filmId: 40, newFilmIds: [] }, true);
+    await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+    expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(ways)('still closes once after the fade (%s)', async (how) => {
+    const { onClose } = await dismissedMidSave(how);
+
+    expect(onClose).not.toHaveBeenCalled();
+    await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('a second dismissal during the fade changes nothing', async () => {
+    const { onClose, onSaved } = await dismissedMidSave('Cancel');
+
+    await dismissals.Esc(userEvent.setup({ advanceTimers: vi.advanceTimersByTime }));
+    await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables Save during the fade, so a new save cannot start', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    const fetchMock = installFetch();
+    const { onClose } = await open();
+    const user = holdClock();
+    expect(saveButton()).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(saveButton()).toBeDisabled();
+    await user.click(saveButton());
+    expect(putOf(fetchMock)).toBeUndefined();
+    await act(async () => vi.advanceTimersByTimeAsync(FADE_MS));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
