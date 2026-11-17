@@ -374,24 +374,18 @@ class TimingReferenceFetchTest {
     }
 
     @Test
-    void aReferenceAnotherWriterStoredSinceTheRunBeganIsNotCountedOrLoggedAsAFetch() {
-        OpenSubtitlesReference theirs = stored(1012, full(300));
-        theirs.setFetchedAt(NOW.minus(Duration.ofHours(1)));
-        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 1012)).thenReturn(Optional.of(theirs));
-        Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
-        downloading(2, 2012, full(300), saved);
-        when(references.findByFilmIdAndImdbIdAndOsFileId(3L, "tt3", 3012)).thenReturn(Optional.empty());
-        when(api.download(3012)).thenReturn(downloaded(full(300)));
-        when(service.targets()).thenReturn(needingAFetch(1, 2, 3));
+    void aReferenceEndingBeforeTheCreditsLessTenMinutesIsNotMeasuredAndOneEndingAfterItIs() {
+        Map<Long, OpenSubtitlesReference> both = Map.of(5012L, stored(5012, full(300)),
+            5013L, stored(5013, full(330)));
+        // The credits start at 1:03:20: a reference must end after 0:53:20; 5012 ends 0:50:01, 5013 ends 0:55:01.
+        when(service.targets()).thenReturn(List.of(new Target(1L, 10L, "Original", "tt1", 3_400_000, 3_800_000L,
+            false, List.of(forced(7, Origin.OWNER)), List.of(candidate(5012), candidate(5013)), 2, both)));
 
         fetch.run(CHECK_LIMIT, true);
 
-        verify(api).download(2012);
-        verify(api).download(3012);
-        verify(api, never()).download(1012);
-        assertThat(lines(Level.INFO).stream().filter(l -> l.startsWith("Timing reference for edition 10"))).isEmpty();
-        assertThat(lines(Level.INFO).stream().filter(l -> l.contains("against OpenSubtitles file 1012")).count())
-            .isEqualTo(1);
+        assertThat(lines(Level.INFO)).singleElement().satisfies(line -> assertThat(line)
+            .contains("against OpenSubtitles file 5013").contains("credits start 1:03:20"));
+        verifyNoInteractions(api, budget);
     }
 
     /** Ten cues, the first {@code onGrid} on the full file's 10 s grid, the rest each off it by a different second. */

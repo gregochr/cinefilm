@@ -10,7 +10,6 @@ import gregochr.cinefilm.subtitle.TimingReferenceService.Target;
 import gregochr.cinefilm.web.JsonEtag;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.HashMap;
@@ -105,7 +104,6 @@ final class TimingReferenceFetch {
     int run(int checkLimit, boolean mayFetch) {
         int[] fetchesLeft = {mayFetch ? allowance() : 0};
         boolean stopped = !mayFetch;
-        Instant runStart = clock.instant();
         Map<List<Object>, Shared> films = new HashMap<>();
         int written = 0;
         for (Target target : service.targets()) {
@@ -113,7 +111,7 @@ final class TimingReferenceFetch {
                 key -> new Shared(target));
             try {
                 if (!stopped) {
-                    fetchFor(target, shared, checkLimit, fetchesLeft, runStart);
+                    fetchFor(target, shared, checkLimit, fetchesLeft);
                 }
             } catch (ReferenceFetcher.Stop e) {
                 LOG.info("Timing reference fetching stopped: {}", e.getMessage());
@@ -139,7 +137,7 @@ final class TimingReferenceFetch {
      * Walks the candidates in order, fetching those not stored while the run, the day and the film's cap allow, until
      * one is usable and matches. A reference fetched joins the film's shared map; one already stored costs nothing.
      */
-    private void fetchFor(Target target, Shared shared, int checkLimit, int[] fetchesLeft, Instant runStart) {
+    private void fetchFor(Target target, Shared shared, int checkLimit, int[] fetchesLeft) {
         for (OpenSubtitlesResult candidate : target.candidates()) {
             OpenSubtitlesReference reference = shared.stored.get(candidate.fileId());
             boolean fetched = reference == null || !reference.isFinal();
@@ -151,17 +149,14 @@ final class TimingReferenceFetch {
                 try {
                     reference = fetcher.fetch(target.filmId(), target.imdbId(), candidate, checkLimit);
                 } catch (OpenSubtitlesChargedException e) {
-                    // The account was charged: the download counts against the run and the day, whatever came back.
-                    fetchesLeft[0]--;
+                    // The account was charged: the download counts against the day (the run ends here anyway).
                     counted();
                     throw e;
                 }
-                // A file another writer stored since this run began came back free: it is not our fetch.
-                fetched = !reference.getFetchedAt().isBefore(runStart);
-                if (fetched) {
-                    fetchesLeft[0]--;
-                    counted();
-                }
+                // A reference another writer stored mid-run is counted against the timing allowance too, on purpose:
+                // ReferenceFetcher does not say whether it spent a download.
+                fetchesLeft[0]--;
+                counted();
                 shared.kept += added ? 1 : 0;
                 shared.stored.put(candidate.fileId(), reference);
             }
@@ -192,8 +187,8 @@ final class TimingReferenceFetch {
         boolean matches = false;
         double best = 0;
         for (File file : target.files()) {
-            // Only a file of 8 to 299 lines decides the walk: a full-length one would match any full reference.
-            if (file.lines() < TimingReferenceRule.MIN_FORCED_CUES || file.lines() >= TimingReferenceRule.FULL_LINES) {
+            // Only a file under 300 lines decides the walk: a full-length one would match any full reference.
+            if (file.lines() >= TimingReferenceRule.FULL_LINES) {
                 continue;
             }
             Result fit = TimingFit.fit(starts(SrtParser.cues(file.cuesText())), referenceStarts);

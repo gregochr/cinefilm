@@ -5,7 +5,7 @@ for the films the search just found (see the entry on the search): at most 2 fil
 so a restart may allow 2 more), at most 3 stored per film, within the comparison share of the daily download budget. It
 tries the best candidate for the edition's cut first, a hearing-impaired file only when no other is left, and leaves out
 a file whose frame rate is not about 23.976 (within 0.01). It moves on to the next candidate when a file is under 300
-lines, ends more than 60 seconds after the runtime (a longer cut) or more than 10 minutes before the detected credits
+lines, ends 60 seconds or more after the runtime (a longer cut) or 10 minutes or more before the detected credits
 start, matches under 30% of the forced file's lines, or fits best more than 30 seconds out (another cut).
 
 Every forced file (the owner's, a download, or a pick) is then measured against every usable stored file, and one log
