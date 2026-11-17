@@ -4,14 +4,18 @@
 // is checked before it plays, what it presses, what ends it, how it is ended and the run's signals are all here; the
 // options, the sign-in, the lock and the crash handler are in viewer.mjs, which starts this. Everything the run
 // touches is passed in (`deps`), so that its order can be tested with no Chrome, no site and no clock. The run keeps
-// what it saw in memory (`held.run`); `held.writeNow`, when something sets it, is what a second signal, a crash and
-// the end call.
+// what it saw in memory (`held.run`) and writes it to ~/cinefilm-viewer/runs/ as it goes; `held.writeNow(word)` is the
+// last write, which a second signal, a crash and the end call.
+import { closeSync, fsyncSync, openSync, renameSync, rmSync, writeSync } from 'node:fs';
+import { open, rename, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import { launchChrome, sleep, within } from './cdp.mjs';
 import { SAMPLE, cleanSample, consoleText, keepAwake, notePageError, standStillWarning } from './drive.mjs';
 import { attachGuard } from './guard.mjs';
+import { summarise } from './summary.mjs';
 import { printable } from './text.mjs';
 import {
-  PAGE_TEXT, checkProfileFree, makeFolders, processAlive, readAnswer, takeLock, viewerPaths,
+  PAGE_TEXT, checkProfileFree, makeFolders, ownerDir, processAlive, readAnswer, takeLock, viewerPaths,
 } from './viewer.mjs';
 
 export const SITE_RETRY_MS = 15000;
@@ -27,7 +31,7 @@ export const PLACE_CARD = /Where are you watching/;
 /** The label of the "Where are you watching?" card's button for each `--place` (none given: "Not now"). */
 export const PLACE_BUTTON = { train: 'On a train', away: 'Hotel or away', none: 'Not now' };
 
-/** How a run ended: the word kept with the run, the exit code (a signal is 130 before the film was opened). */
+/** How a run ended: the word kept in the results, the exit code (a signal is 130 before the film was opened). */
 export const ENDS = {
   'film-ended': { code: 0, line: 'The film ended.' },
   minutes: { code: 0, line: '--minutes was reached.' },
@@ -311,7 +315,7 @@ export function makeAttempt({ page, site, film, nextLoad, giveUpOn, say, cancel 
     if (!announced) {
       announced = true;
       say(`Film ${film}: ${facts.title ?? '(no title)'}, ${lengthOf(facts.runtimeMs)}, on ${site}. `
-        + 'Ctrl-C ends the run.');
+        + 'Ctrl-C ends the run and writes the results.');
     }
     // The page is open when it has loaded: a document that arrives and a link that dies before the app's script does
     // is a blank page, with nothing to sample and no "Try again" to press.
@@ -367,6 +371,224 @@ export const END_WAIT_MS = 3000;
 export const LOOK_MS = 10000;
 export const UNREAD_LIMIT = 3;
 const NOT_AT_ALL = Number.POSITIVE_INFINITY;
+const OWNER_FILE = 0o600;
+/** The results are written again when this long has passed since the last write (by the run's own clock). */
+export const KEEP_MS = 60000;
+
+// ---- the results ---------------------------------------------------------------------------------------------------
+
+const realFs = { openSync, writeSync, fsyncSync, closeSync };
+const realAsyncFs = { open, rename, rm };
+
+/**
+ * Writes `text` to `file` and forces it to the disk before the file is closed (open, write until every byte is
+ * written, fsync, close): a rename that reaches the disk before the data, or a write that stopped short, would leave
+ * a bad file where the last good one stood. An error while closing does not hide the error that came first. `fs` is
+ * for tests.
+ */
+export function writeSynced(file, text, fs = realFs) {
+  const bytes = Buffer.from(text);
+  const descriptor = fs.openSync(file, 'w', OWNER_FILE);
+  try {
+    let done = 0;
+    while (done < bytes.length) {
+      const wrote = fs.writeSync(descriptor, bytes, done, bytes.length - done);
+      if (!(wrote > 0)) throw new Error('a write made no progress');
+      done += wrote;
+    }
+    fs.fsyncSync(descriptor);
+  } catch (error) {
+    try {
+      fs.closeSync(descriptor);
+    } catch {
+      // The first error is the one to report.
+    }
+    throw error;
+  }
+  fs.closeSync(descriptor);
+}
+
+/** The same without holding the process up (open, write the whole text, sync, close). `afs` is for tests. */
+export async function writeSyncedAsync(file, text, afs = realAsyncFs) {
+  const handle = await afs.open(file, 'w', OWNER_FILE);
+  try {
+    await handle.writeFile(text);
+    await handle.sync();
+  } catch (error) {
+    await handle.close().catch(() => undefined);
+    throw error;
+  }
+  await handle.close();
+}
+
+const realIo = { write: writeSynced, rename: renameSync, remove: (file) => rmSync(file, { force: true }) };
+
+/** The folder name of a run: the local time it began, `YYYYMMDD-HHMMSS` (the form the logger's file name uses). */
+export function runName(at) {
+  const d = new Date(at);
+  return `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}`
+    + two(d.getSeconds());
+}
+
+// A file written whole: to a temporary name beside it (forced to the disk), then renamed onto the real one, so that a
+// death in the middle of a write leaves the last good file. No temporary file is left when it fails.
+function writePrivate(file, text, io) {
+  const temporary = `${file}.tmp`;
+  try {
+    io.write(temporary, text);
+    io.rename(temporary, file);
+  } catch (error) {
+    try {
+      rmSync(temporary, { force: true });
+    } catch {
+      // The first error is the one to report.
+    }
+    throw error;
+  }
+}
+
+// The same, without holding the process up, with a temporary name of its own (a write made at the end, or by a second
+// signal or a crash, cannot collide with one that is out). `superseded()` says the last write has been made: this one
+// then renames nothing, so that an older file never lands over the last one.
+async function writePrivateAsync(file, text, afs, superseded) {
+  const temporary = `${file}.async.tmp`;
+  try {
+    await writeSyncedAsync(temporary, text, afs);
+    if (superseded()) {
+      await afs.rm(temporary, { force: true });
+      return;
+    }
+    await afs.rename(temporary, file);
+  } catch (error) {
+    await afs.rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+// What a write holds: the three files' text (built whole before anything is written), and the summary's lines.
+function resultFiles({ run, report, facts, final }) {
+  const readable = report.records.reduce((sum, viewing) => sum + viewing.count, 0);
+  const files = {
+    samples: run.samples,
+    health: {
+      sent: readable + report.notRead,
+      notRead: report.notRead,
+      viewings: report.records.map(({ id, count, latest }) => ({ id, count, latest })),
+    },
+    held: {
+      run: { ...facts, ended: final ? run.ended : null },
+      held: report.held,
+      heldDropped: report.heldDropped,
+      failed: report.failed,
+      rejected: report.rejected,
+      presses: run.presses,
+      pageErrors: run.pageErrors,
+      warnings: run.warnings,
+    },
+  };
+  const texts = Object.entries(files).map(([name, data]) => [`${name}.json`, JSON.stringify(data, null, 1)]);
+  return { texts, lines: final ? summarise(files) : [] };
+}
+
+/**
+ * Writes `samples.json`, `health.json` and `held.json` (each whole) in a folder of `runs/` named from the time the run
+ * began (never from an option): folder 700, files 600. They hold the samples, the playback records as the app sent
+ * them (the guard's copy), what was held, the presses, the page's errors, the warnings and how the run ended: `ended`
+ * is null until the last write (`final`), which also writes `summary.txt`. No header, no cookie, nothing of any other
+ * request. Synchronous. Returns `{ dir, lines }` (the folder, and the summary's lines when final); throws when it
+ * cannot be written. `io` (`write(file, text)`, `rename(from, to)`) is for tests.
+ */
+export function writeResults({ runsDir, began, run, report, facts, final = true, io = realIo }) {
+  const dir = join(runsDir, runName(began));
+  ownerDir(dir);
+  const { texts, lines } = resultFiles({ run, report, facts, final });
+  for (const [name, text] of texts) writePrivate(join(dir, name), text, io);
+  if (final) writePrivate(join(dir, 'summary.txt'), `${lines.join('\n')}\n`, io);
+  return { dir, lines };
+}
+
+/**
+ * The write made while the run goes: the same three files (not the last write), written without holding the process
+ * up, so that the guard goes on answering the page's paused requests meanwhile. `superseded()` says the last write has
+ * been made (see `writePrivateAsync`). `afs` is for tests.
+ */
+export async function writeResultsAsync({
+  runsDir, began, run, report, facts, afs = realAsyncFs, superseded = () => false,
+}) {
+  const dir = join(runsDir, runName(began));
+  ownerDir(dir);
+  const { texts } = resultFiles({ run, report, facts, final: false });
+  for (const [name, text] of texts) await writePrivateAsync(join(dir, name), text, afs, superseded);
+  return { dir, lines: [] };
+}
+
+const NO_REPORT = { held: [], heldDropped: 0, records: [], notRead: 0, failed: 0, rejected: 0 };
+
+/**
+ * The writing of the results as the run goes. `keep()` is awaited after each sample: it writes (asynchronously, one at
+ * a time, never a second while one is out) with the first sample, then whenever a minute has passed since the last
+ * write; a write that fails is one warning kept with the run (not one a minute) and the run goes on. `final(word)` is
+ * the last write: synchronous (it must finish before the process ends), once however many of the crash handler, a
+ * second signal and the end call it, and only when there is at least one sample (`word` says how the run ended, used
+ * only while it has no ending yet); its failure is thrown.
+ */
+export function resultsWriter(ctx, { began, runsDir }) {
+  const state = { last: null, done: false, warned: false, busy: false };
+  const parts = () => {
+    const { run, opt, deps } = ctx;
+    const facts = {
+      film: opt.film, title: run.film?.title ?? null, runtimeMs: run.film?.runtimeMs ?? null, site: opt.site,
+      beganAt: began, runMs: ctx.opened === null ? null : Math.round(deps.clock.mono() - ctx.opened),
+    };
+    return { runsDir, began, run, report: ctx.guard?.report() ?? NO_REPORT, facts };
+  };
+  return {
+    async keep() {
+      const now = ctx.deps.clock.mono();
+      if (state.done || state.busy || (state.last !== null && now - state.last < KEEP_MS)) return;
+      state.last = now;
+      state.busy = true;
+      try {
+        await writeResultsAsync({ ...parts(), afs: ctx.deps.afs, superseded: () => state.done });
+      } catch (error) {
+        if (!state.warned) {
+          ctx.run.warnings.push(printable(`the results could not be written: ${error?.message ?? error}`, 300));
+        }
+        state.warned = true;
+      } finally {
+        state.busy = false;
+      }
+    },
+    // The last write also clears the temporary files of a mid-run write that may be out, and clears them BEFORE it
+    // writes: a rename and a removal cannot interleave, so an out write's rename either came before the removal (the
+    // last write then lands over it) or comes after (it finds no file and fails, and its own catch tidies up). Each
+    // removal is best effort. Still possible: an out write whose `open` runs after both removals, in a process that
+    // ends before that write tidies up, leaves one `.async.tmp` behind; it is harmless.
+    final(word) {
+      const { run } = ctx;
+      if (state.done) return null;
+      if (run.ended === null && word) run.ended = word;
+      if (run.samples.length === 0) return null;
+      state.done = true;
+      const io = { ...realIo, ...ctx.deps.io };
+      const sweep = () => {
+        for (const name of ['samples', 'health', 'held']) {
+          try {
+            io.remove(join(runsDir, runName(began), `${name}.json.async.tmp`));
+          } catch {
+            // Best effort: the others, and the last write, go on.
+          }
+        }
+      };
+      sweep();
+      try {
+        return writeResults({ ...parts(), final: true, io });
+      } finally {
+        sweep();
+      }
+    },
+  };
+}
 
 // ---- the end -------------------------------------------------------------------------------------------------------
 
@@ -408,9 +630,9 @@ export async function leave({ chrome, held, pause = sleep }) {
   held.chromeKill = null;
 }
 
-// What a second signal does, in this order: a hard stop of Chrome, what the run saw handed to the writer when there is
-// one (`held.writeNow(word)`: `word` says how the run ended, for a run that has not), the lock let go. Each step on
-// its own, so that one failing skips none of the others.
+// What a second signal does, in this order: a hard stop of Chrome, the results written as far as there are any
+// (`held.writeNow(word)`: `word` says how the run ended, for a run that has not), the lock let go. Each step on its
+// own, so that one failing skips none of the others.
 function stopAtOnce(held, word) {
   for (const step of [() => held.chromeKill?.(), () => held.writeNow?.(word), () => held.release?.()]) {
     try {
@@ -423,8 +645,8 @@ function stopAtOnce(held, word) {
 
 /**
  * The signals of a run (`SIGINT`, `SIGTERM`, `SIGHUP`). The first ends the run in order (`cancel`); a second quits at
- * once, but not before what the run has seen is kept: a hard stop of Chrome, what it saw handed to the writer when
- * there is one (`held.writeNow('signal')`), the lock let go, then `exit(130)`. It does so whatever the run is doing,
+ * once, but not before what the run has seen is kept: a hard stop of Chrome, the results written as far as there are
+ * any (`held.writeNow('signal')`), the lock let go, then `exit(130)`. It does so whatever the run is doing,
  * in the three seconds it gives the page's closing sends too. `exit` and `listen` are there for tests.
  */
 export function watchRunSignals(cancel, held, say, {
@@ -510,6 +732,7 @@ async function watchFilm(ctx, opened) {
     lastLoop = clock.wall();
     const { sample, read } = await observe(ctx, opened);
     run.samples.push(sample);
+    await ctx.keep?.();
     run.unread = read ? 0 : run.unread + 1;
     const over = page.closed ? 'chrome-gone' : endOf(sample);
     if (over) return over;
@@ -572,8 +795,8 @@ async function play(ctx) {
  * The whole run, with what it touches passed in (`deps`): `opt` (the options), `viewerHome`, `say`, `cancel`
  * (as `createCancel`), `held` (where what a signal or a crash must stop is kept), `clock` (`mono` and `wall`), `wait`
  * (cut short by a signal), `pause` (not), and the steps: `launch`, `guard`, `lock`, `folders`, `free`, `awake`,
- * `within`. Returns the exit code. Whatever happens, Chrome is ended in the order of `leave`, what was kept is handed
- * to `held.writeNow` when one is set, and the lock is let go before it returns.
+ * `within`, `writeNow`, `io`. Returns the exit code. Whatever happens, Chrome is ended in the order of `leave`, the
+ * results are written (when there is at least one sample) and the lock is let go before it returns.
  */
 export async function viewing(deps) {
   const { opt, viewerHome, held, pid, isAlive = processAlive } = deps;
@@ -585,9 +808,13 @@ export async function viewing(deps) {
   };
   const ctx = { deps: full, run, opt, held, chrome: null, page: null, guard: null, opened: null };
   held.run = run;
+  const writer = resultsWriter(ctx, { began: full.clock.wall(), runsDir: join(viewerHome, 'runs') });
+  held.writeNow = deps.writeNow ?? writer.final; // (`deps.writeNow` is a test's own writer)
+  ctx.keep = deps.writeNow ? undefined : writer.keep;
   try {
     held.release = full.lock(viewerHome, { isAlive, pid });
     full.folders(viewerHome);
+    ownerDir(join(viewerHome, 'runs'));
     full.free(viewerPaths(viewerHome).profile, { isAlive });
     full.awake();
     await play(ctx);
@@ -631,13 +858,19 @@ function withDefaults(deps) {
   };
 }
 
-// After Chrome has gone: what was kept is written (`held.writeNow`, when something set it), how the run ended is said,
-// and the lock is let go, in that order. Gives the exit code.
+// After Chrome has gone: the last write (`held.writeNow`), how the run ended, and the lock let go, in that order.
+// Gives the exit code.
 function finish({ ctx, say }) {
   const { run, held } = ctx;
   let code = exitCode(run.ended, ctx.opened !== null);
   try {
-    held.writeNow?.();
+    const written = held.writeNow?.();
+    if (written?.dir) {
+      for (const line of written.lines) say(line);
+      say(`results: ${written.dir}`);
+    } else if (run.samples.length === 0) {
+      say('nothing was written: no sample was taken');
+    }
   } catch (error) {
     say(`the results could not be written: ${error?.message ?? error}`);
     code = 1;

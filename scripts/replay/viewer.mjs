@@ -5,8 +5,8 @@
 //   node scripts/replay/viewer.mjs --sign-in [--site https://cinefilm.chrisjgregory.dev]
 //   node scripts/replay/viewer.mjs --film <id> [--minutes <1 to 600>] [--place train|away] [--site <address>]
 //
-//   --film      watches that film: the run is in viewing.mjs (what it checks first, what it presses, what ends it).
-//               Exactly one of --sign-in and --film is given;
+//   --film      watches that film: the run is in viewing.mjs (what it checks first, what it presses, what ends it,
+//               what it keeps in ~/cinefilm-viewer/runs/). Exactly one of --sign-in and --film is given;
 //               --minutes (without it, until the film ends) and --place (the answer to "Where are you watching?")
 //               go with --film only.
 //
@@ -30,8 +30,8 @@
 //
 // Ctrl-C (or SIGTERM, or the terminal closing) ends the sign-in: both Chromes are stopped, the lock is let go and the
 // exit code is 130. A second one quits at once, after a hard stop of both. During a run (--film) the first signal
-// ends the run in order (viewing.mjs) and a second one quits at once: Chrome is hard-stopped, what the run saw is
-// handed to the writer when there is one, the lock is let go, and the exit code is 130.
+// ends the run in order (viewing.mjs) and a second one quits at once: Chrome is hard-stopped, the results are written
+// as far as there are any, the lock is let go, and the exit code is 130.
 //
 // The options, the lock, the folders, the answer and the order of the steps are tested, with the window, Chrome, the
 // keyboard and the clock made up; `main`, which starts the real Chrome, cannot run in CI and is checked by hand.
@@ -467,9 +467,9 @@ export function watchSignals(cancel, held, say, {
 }
 
 /**
- * What an `uncaughtException` or an `unhandledRejection` does: a hard stop of both Chromes, what a run saw handed to
- * the writer when there is one (`held.writeNow('failed')`), the lock let go (each step on its own, so that one failing
- * does not skip the rest), a line, then `exit(1)`. Returns the handler.
+ * What an `uncaughtException` or an `unhandledRejection` does: a hard stop of both Chromes, a run's results written as
+ * far as there are any (`held.writeNow('failed')`), the lock let go (each step on its own, so that one failing does
+ * not skip the rest), a line, then `exit(1)`. Returns the handler.
  */
 export function crashHandler(held, { say: tell, exit }) {
   return (error) => {
