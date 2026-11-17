@@ -27,7 +27,9 @@ describe('Admin Settings section', () => {
     installFetch();
     renderApp('/admin/settings');
     await screen.findByRole('region', { name: 'Continue watching' });
-    const items = within(screen.getByRole('list', { name: 'Data credits' })).getAllByRole('listitem');
+    const items = within(screen.getByRole('list', { name: 'Data credits' })).getAllByRole(
+      'listitem',
+    );
     expect(items.map((item) => item.textContent)).toEqual([
       'Subtitles from OpenSubtitles.com (opens in a new tab).',
       'IMDb and Rotten Tomatoes ratings from OMDb (opens in a new tab), licensed CC BY-NC 4.0 (opens in a new tab).',
