@@ -310,7 +310,7 @@ public class SidecarTimingService {
      */
     public SaveOutcome backfillLastCueEnds(Long filmId) {
         // A read-only look first: most films have nothing to fill in, and must not take the lock or make a run wait.
-        if (tx.execute(status -> unfilled(filmId)).isEmpty()) {
+        if (Boolean.TRUE.equals(tx.execute(status -> unfilled(filmId).isEmpty()))) {
             return SaveOutcome.SAVED;
         }
         if (!lock.tryAcquire(LibraryLock.SUBTITLE)) {

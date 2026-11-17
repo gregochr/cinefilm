@@ -352,6 +352,14 @@ class SidecarTimingServiceDownloadedUnitTest {
         return old;
     }
 
+    /** A service whose library lock a scan already holds: it can only answer a backfill that needs no lock. */
+    private SidecarTimingService lockedService() {
+        LibraryLock busy = new LibraryLock();
+        assertThat(busy.tryAcquire(LibraryLock.SCAN)).isTrue();
+        return new SidecarTimingService(sidecars, editions, files, cache, alignments, references, credits, busy,
+            transactions);
+    }
+
     /** The fit is current (as made without the file), so only a backfill can make the film due. */
     private void currentFit() {
         served();
@@ -369,11 +377,8 @@ class SidecarTimingServiceDownloadedUnitTest {
             cues.add(new SubtitleCue(i * 10_000L, i * 10_000L + 1_000, "line " + i));
         }
         old.setCuesText(SrtParser.format(cues));
-        OpenSubtitlesReference filled = reference(5012, 300, IMDB);
-        filled.setLastCueEndMs(3_500_000L);
-        // Looked at by the first job, the read-only look, the look under the lock, then the second job.
-        when(references.findFactsByFilmIdIn(Set.of(1L))).thenReturn(List.of(factsOf(old)), List.of(factsOf(old)),
-            List.of(factsOf(old)), List.of(factsOf(filled)));
+        // The facts are whatever the row holds now, so they reflect what the backfill wrote.
+        when(references.findFactsByFilmIdIn(Set.of(1L))).thenAnswer(call -> List.of(factsOf(old)));
         when(references.findAllById(Set.of(5012L))).thenReturn(List.of(old));
 
         FitJob before = onlyJob();
@@ -384,6 +389,7 @@ class SidecarTimingServiceDownloadedUnitTest {
         assertThat(before.referenceKey()).isEqualTo(BASE_KEY);
         assertThat(outcome).isEqualTo(SaveOutcome.SAVED);
         assertThat(old.getLastCueEndMs()).isEqualTo(3_500_000L);
+        verify(references).save(old);
         assertThat(after.osReferences()).extracting(DownloadedFit.Reference::osFileId).containsExactly(5012L);
         assertThat(after.referenceKey()).isEqualTo(BASE_KEY + "|os:" + IMDB + ":5012");
     }
@@ -405,31 +411,26 @@ class SidecarTimingServiceDownloadedUnitTest {
         stored(reference(5012, 300, IMDB), storedBeforeV30(9999));
 
         assertThat(service.dueFilmIds()).isEmpty();
-        assertThat(service.backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.SAVED);
+        assertThat(lockedService().backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.SAVED);
     }
 
     @Test
     void aFilmTheOwnerMarkedAsHavingNoEnglishSubtitlesIsNeitherFilledInNorDue() {
         read(EmbeddedCueStarts.Status.NO_REFERENCE);
         currentFit();
-        OpenSubtitlesReference old = storedBeforeV30(5012);
-        stored(old);
+        stored(storedBeforeV30(5012));
         edition.getFilm().setFullNeedOwner(FullNeedChoice.NONE_EXIST);
 
         assertThat(service.dueFilmIds()).isEmpty();
-        assertThat(service.backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.SAVED);
-        // Skipping the exclusion would load the row to fill it in: only the facts read happens.
-        verifyNoMoreInteractions(references);
+        // Nothing to fill in, so it needs no lock: were the film fillable, the held lock would make this BUSY.
+        assertThat(lockedService().backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.SAVED);
     }
 
     @Test
     void theBackfillStoresNothingWhileAScanOrAnEditHoldsTheLibraryLockButAFilmWithNothingToFillInNeverWaits() {
         read(EmbeddedCueStarts.Status.NO_REFERENCE);
         served();
-        LibraryLock busy = new LibraryLock();
-        assertThat(busy.tryAcquire(LibraryLock.SCAN)).isTrue();
-        SidecarTimingService locked = new SidecarTimingService(sidecars, editions, files, cache, alignments,
-            references, credits, busy, transactions);
+        SidecarTimingService locked = lockedService();
         stored(storedBeforeV30(5012));
         assertThat(locked.backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.BUSY);
 
@@ -446,8 +447,7 @@ class SidecarTimingServiceDownloadedUnitTest {
         stored(short299);
 
         assertThat(service.dueFilmIds()).isEmpty();
-        assertThat(service.backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.SAVED);
-        verifyNoMoreInteractions(references);
+        assertThat(lockedService().backfillLastCueEnds(1L)).isEqualTo(SaveOutcome.SAVED);
     }
 
     @Test
