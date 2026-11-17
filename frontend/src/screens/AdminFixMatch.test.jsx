@@ -481,7 +481,7 @@ describe('Admin: the heading does not take focus behind the fading dialog', () =
     await user.click(railLink(/^To do/));
     await vi.waitFor(() => expect(rows()).toHaveLength(2));
 
-    // A plain Cancel on a new dialog, then focus rests on the page body.
+    // A plain Cancel on a new dialog, then drop focus to the page body (as a click elsewhere would).
     await user.click(rows()[0]);
     const again = screen.getByRole('dialog', { name: 'Fix match' });
     await user.click(within(again).getByRole('button', { name: 'Cancel' }));
@@ -491,6 +491,7 @@ describe('Admin: the heading does not take focus behind the fading dialog', () =
 
     // A scan finishing later changes the To do list: the row goes, and nothing sends focus to the heading.
     scanFinished = true;
+    // The scan poll runs on the held clock: a status read after holdClock() re-arms its timer (useAdmin.js).
     await act(async () => vi.advanceTimersByTimeAsync(SCAN_IDLE_POLL_MS));
     await vi.waitFor(() => expect(rows()).toHaveLength(1));
     expect(heading()).not.toHaveFocus();
