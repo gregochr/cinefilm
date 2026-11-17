@@ -209,7 +209,11 @@ export function checkProfileFree(profile, { isAlive = processAlive } = {}) {
 
 // ---- the check ----------------------------------------------------------------------------------------------------
 
-/** What `<site>/api/session` said, as text: `signed-in`, `signed-out` or `unknown` (not what the server answers). */
+/**
+ * What `<site>/api/session` said, read from its text: the server answers `{"authenticated":true}` or
+ * `{"authenticated":false}` (the `Status` record of `SessionController`). An object whose one key is `authenticated`,
+ * a boolean, is `signed-in` or `signed-out`; anything else is `unknown`, the old `signedIn` shape included.
+ */
 export function readAnswer(text) {
   let answer;
   try {
@@ -218,8 +222,10 @@ export function readAnswer(text) {
     return 'unknown';
   }
   const keys = answer !== null && typeof answer === 'object' ? Object.keys(answer) : [];
-  if (keys.length !== 1 || keys[0] !== 'signedIn' || typeof answer.signedIn !== 'boolean') return 'unknown';
-  return answer.signedIn ? 'signed-in' : 'signed-out';
+  if (keys.length !== 1 || keys[0] !== 'authenticated' || typeof answer.authenticated !== 'boolean') {
+    return 'unknown';
+  }
+  return answer.authenticated ? 'signed-in' : 'signed-out';
 }
 
 /** The plain line to say and the exit code for each answer (`no-answer` is a failed navigation). */

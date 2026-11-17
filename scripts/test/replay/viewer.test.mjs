@@ -6,7 +6,8 @@ import {
   chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { PassThrough } from 'node:stream';
 import { after, describe, test } from 'node:test';
 import {
@@ -14,6 +15,7 @@ import {
   options, readAnswer, resultOf, signIn, siteOrigin, takeLock, viewerPaths, waitForReturn, watchSignals,
 } from '../../replay/viewer.mjs';
 
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const tmp = mkdtempSync(join(tmpdir(), 'viewer-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
 let counter = 0;
@@ -274,22 +276,38 @@ describe('Chrome\'s own lock in the profile', () => {
 });
 
 describe('readAnswer', () => {
-  test('{"signedIn":true} is signed in and {"signedIn":false} is not, with spaces or a newline round them', () => {
-    assert.equal(readAnswer('{"signedIn":true}'), 'signed-in');
-    assert.equal(readAnswer('{"signedIn":false}'), 'signed-out');
-    assert.equal(readAnswer('  \n{ "signedIn" : true }\n '), 'signed-in');
-    assert.equal(readAnswer('\n{"signedIn":false}\n'), 'signed-out');
+  test('{"authenticated":true} is signed in and {"authenticated":false} is not, even with spaces or a newline', () => {
+    assert.equal(readAnswer('{"authenticated":true}'), 'signed-in');
+    assert.equal(readAnswer('{"authenticated":false}'), 'signed-out');
+    assert.equal(readAnswer('  \n{ "authenticated" : true }\n '), 'signed-in');
+    assert.equal(readAnswer('\n{"authenticated":false}\n'), 'signed-out');
   });
 
   test('other JSON is not understood', () => {
     for (const text of [
-      '{}', '{"signedIn":"true"}', '{"signedIn":1}', '{"signedIn":null}', '{"signedIn":true,"admin":true}',
-      '{"signed":true}', '[]', 'null', 'true', '"signedIn"', '[{"signedIn":true}]',
+      '{}', '{"authenticated":"true"}', '{"authenticated":1}', '{"authenticated":null}',
+      '{"authenticated":true,"admin":true}', '{"authenticated":false,"signedIn":false}',
+      '{"signed":true}', '[]', 'null', 'true', '"authenticated"', '[{"authenticated":true}]',
     ]) assert.equal(readAnswer(text), 'unknown', text);
   });
 
+  test('the old shape, {"signedIn":true}, is not understood: it is not what the server answers', () => {
+    assert.equal(readAnswer('{"signedIn":true}'), 'unknown');
+    assert.equal(readAnswer('{"signedIn":false}'), 'unknown');
+  });
+
+  test('the reader is tied to the real endpoint: the status record declares one boolean, `authenticated`', () => {
+    const source = readFileSync(
+      join(ROOT, 'backend', 'src', 'main', 'java', 'gregochr', 'cinefilm', 'auth', 'SessionController.java'), 'utf8',
+    );
+    const record = /\brecord\s+Status\s*\(([^)]*)\)/.exec(source);
+    assert.ok(record, 'SessionController declares a record named Status');
+    const components = record[1].split(',').map((part) => part.trim().split(/\s+/));
+    assert.deepEqual(components, [['boolean', 'authenticated']]);
+  });
+
   test('text that is not JSON, and nothing, are not understood', () => {
-    for (const text of ['<html>Sign in</html>', '{"signedIn":tru', '', '   ', undefined, null]) {
+    for (const text of ['<html>Sign in</html>', '{"authenticated":tru', '', '   ', undefined, null]) {
       assert.equal(readAnswer(text), 'unknown', String(text));
     }
   });
@@ -314,7 +332,7 @@ describe('resultOf', () => {
 });
 
 // A fake page and a fake launch for the check: what Chrome was asked for, and what the page says.
-function fakeLaunch({ navigation = {}, text = '{"signedIn":true}', fires = true, evaluateFails = false } = {}) {
+function fakeLaunch({ navigation = {}, text = '{"authenticated":true}', fires = true, evaluateFails = false } = {}) {
   const log = { launched: null, sent: [], closed: 0, spawned: null };
   const listeners = new Map();
   const page = {
@@ -362,19 +380,20 @@ describe('checkSession', () => {
     const withPre = {
       querySelector: (selector) => {
         asked.push(selector);
-        return pre('{"signedIn":true}');
+        return pre('{"authenticated":true}');
       },
-      body: { innerText: 'JSON viewer: Pretty print {"signedIn":true}' },
+      body: { innerText: 'JSON viewer: Pretty print {"authenticated":true}' },
     };
-    assert.equal(read(withPre), '{"signedIn":true}');
+    assert.equal(read(withPre), '{"authenticated":true}');
     assert.deepEqual(asked, ['body > pre']);
-    assert.equal(read({ querySelector: () => null, body: { innerText: '{"signedIn":false}' } }), '{"signedIn":false}');
+    const plain = { querySelector: () => null, body: { innerText: '{"authenticated":false}' } };
+    assert.equal(read(plain), '{"authenticated":false}');
     assert.equal(read({ querySelector: () => null, body: null }), '');
   });
 
   test('each of the server\'s answers gives its own result', async () => {
     const expected = new Map([
-      ['{"signedIn":false}', 'signed-out'], ['<html></html>', 'unknown'], ['', 'unknown'],
+      ['{"authenticated":false}', 'signed-out'], ['<html></html>', 'unknown'], ['', 'unknown'],
     ]);
     for (const [text, answer] of expected) {
       const { launch } = fakeLaunch({ text });
