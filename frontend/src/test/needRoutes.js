@@ -137,8 +137,9 @@ export function serveNeeds({
           ? { ...original[kind][at], ownerChoice: null }
           : {
               ...rows[at],
-              need: body.choice,
-              reason: 'OWNER',
+              // The owner's NONE_EXIST means the film needs subtitles that do not exist: needed, and done.
+              need: body.choice === 'NONE_EXIST' ? 'NEEDED' : body.choice,
+              reason: body.choice === 'NONE_EXIST' ? 'NONE_EXIST' : 'OWNER',
               ownerChoice: body.choice,
               unresolved: false,
               beingChecked: false,

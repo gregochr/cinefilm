@@ -30,6 +30,16 @@ class FullNeedTest {
     }
 
     @Test
+    void noneExistIsNeededForItsOwnReason() {
+        assertThat(FullNeed.decide(FullNeedChoice.NONE_EXIST, FRENCH_FILM, List.of("French")))
+            .isEqualTo(decision(Need.NEEDED, Reason.NONE_EXIST));
+        assertThat(FullNeed.decide(FullNeedChoice.NONE_EXIST, ENGLISH_FILM, List.of("English")))
+            .isEqualTo(decision(Need.NEEDED, Reason.NONE_EXIST));
+        assertThat(FullNeed.decide(FullNeedChoice.NONE_EXIST, null, List.of()))
+            .isEqualTo(decision(Need.NEEDED, Reason.NONE_EXIST));
+    }
+
+    @Test
     void ruleOneTheOwnersChoiceBeatsEverything() {
         assertThat(FullNeed.decide(FullNeedChoice.NEEDED, null, List.of()))
             .isEqualTo(decision(Need.NEEDED, Reason.OWNER));

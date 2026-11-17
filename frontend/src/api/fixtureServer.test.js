@@ -615,6 +615,28 @@ describe('fixture server: Admin settings', () => {
     await call('PUT', '/api/admin/films/4/full-need', { choice: null });
   });
 
+  it('answers NONE_EXIST as needed, done and never unresolved, and Automatic restores the row', async () => {
+    const before = (await call('GET', '/api/admin/subtitles/full-need')).films.find(
+      (f) => f.filmId === 6,
+    );
+    expect(before).toMatchObject({ unresolved: true });
+
+    expect(
+      await call('PUT', '/api/admin/films/6/full-need', { choice: 'NONE_EXIST' }),
+    ).toMatchObject({
+      need: 'NEEDED',
+      reason: 'NONE_EXIST',
+      ownerChoice: 'NONE_EXIST',
+      unresolved: false,
+      beingChecked: false,
+      subtitled: false,
+    });
+    expect(await call('PUT', '/api/admin/films/6/full-need', { choice: null })).toMatchObject({
+      ownerChoice: null,
+      unresolved: true,
+    });
+  });
+
   it('refuses a full-subtitles choice for an unknown film (404) or a bad value (400)', async () => {
     const refused = async (path, body) => {
       const pending = handle('PUT', path, body).catch((error) => error);

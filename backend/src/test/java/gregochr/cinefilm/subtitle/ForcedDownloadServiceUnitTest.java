@@ -189,12 +189,42 @@ class ForcedDownloadServiceUnitTest {
         // Phase 3c-1 stores full candidates for films searched only as a timing reference: they are never downloaded.
         needed(false);
         when(films.findOpenSubtitlesBest()).thenReturn(List.of());
-        when(fullNeed.neededFilmIds()).thenReturn(new HashSet<>());
+        when(fullNeed.searchFilmIds()).thenReturn(new HashSet<>());
         when(films.findOpenSubtitlesFull()).thenReturn(List.of(new FilmRepository.OsFullRef(1L, IMDB,
             OpenSubtitlesResult.listToJson(List.of(candidate(5011), candidate(5012))))));
 
         assertThat(service.due()).isEmpty();
         verifyNoInteractions(editions, resolver);
+    }
+
+    private void fullCandidatesStored() {
+        when(films.findOpenSubtitlesBest()).thenReturn(List.of());
+        when(films.findOpenSubtitlesFull()).thenReturn(List.of(new FilmRepository.OsFullRef(1L, IMDB,
+            OpenSubtitlesResult.listToJson(List.of(candidate(5011), candidate(5012))))));
+    }
+
+    @Test
+    void aFilmTheOwnerSaidNoSubtitlesExistForIsNotDueAFullDownloadEvenThoughItsNeedIsNeeded() {
+        needed(false);
+        fullCandidatesStored();
+        // A NONE_EXIST film is NEEDED but is not in searchFilmIds, which is what the scheduler reads.
+        when(fullNeed.searchFilmIds()).thenReturn(new HashSet<>());
+
+        assertThat(service.due()).isEmpty();
+        verifyNoInteractions(editions, resolver);
+    }
+
+    @Test
+    void aFilmInTheSearchSetWithFullCandidatesAndNothingPlayingIsDueAFullDownload() {
+        needed(false);
+        fullCandidatesStored();
+        when(fullNeed.searchFilmIds()).thenReturn(new HashSet<>(Set.of(1L)));
+        when(editions.findWithFilesByFilmIdIn(Set.of(1L))).thenReturn(List.of(edition));
+
+        List<DueDownload> due = service.due();
+
+        assertThat(due).extracting(DueDownload::kind).containsExactly(Kind.FULL);
+        assertThat(due.get(0).filmId()).isEqualTo(1L);
     }
 
     @Test

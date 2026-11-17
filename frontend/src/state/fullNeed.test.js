@@ -20,6 +20,7 @@ describe('wording', () => {
     expect(words('ORIGINAL_AUDIO_ASSUMED')).toBe('Audio not labelled: original language assumed');
     expect(words('ENGLISH_FILM')).toBe('English-language film');
     expect(words('OWNER')).toBe('Set by you');
+    expect(words('NONE_EXIST')).toBe('No English subtitles exist (set by you)');
     expect(words('NO_LANGUAGES')).toBe('Waiting for TMDB');
     expect(words('SOMETHING_NEW')).toBe('');
   });

@@ -35,7 +35,8 @@ import org.springframework.stereotype.Service;
  * listens). Nothing here throws to its caller.
  *
  * <p>The same run also searches for <em>full</em> English subtitles ({@link OpenSubtitlesApi#searchFull}), but only for
- * films whose full-subtitle need is {@code NEEDED} ({@link FullNeedService}) and for films with an edition whose
+ * films whose full-subtitle need is {@code NEEDED} ({@link FullNeedService}; not those the owner marked
+ * {@code NONE_EXIST}) and for films with an edition whose
  * forced subtitles are timed against a full English file ({@link TimingReferenceService}), on the same rules: due
  * when never searched, searched under another IMDb id, or searched with no result more than 30 days ago. The result
  * is saved with one statement that only matches while the film still has the IMDb id it was searched for. An outage
@@ -194,7 +195,7 @@ public class OpenSubtitlesRefresher {
         int saved = 0;
         int failed = 0;
         try {
-            Set<Long> needed = new HashSet<>(fullNeed.neededFilmIds());
+            Set<Long> needed = new HashSet<>(fullNeed.searchFilmIds());
             needed.addAll(timingReferenceFilms());
             if (needed.isEmpty()) {
                 return new int[] {0, 0};

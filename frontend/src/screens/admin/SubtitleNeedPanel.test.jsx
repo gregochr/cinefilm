@@ -108,6 +108,25 @@ describe('SubtitleNeedPanel', () => {
     finish();
   });
 
+  it('sends NONE_EXIST once for the film from "No English subtitles exist"', async () => {
+    let finish;
+    const choose = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    renderPanel({ rows: [fullRow()], need: { choose } });
+    const button = screen.getByRole('button', { name: 'No English subtitles exist' });
+
+    await userEvent.click(button);
+    await userEvent.click(button);
+
+    expect(choose).toHaveBeenCalledTimes(1);
+    expect(choose).toHaveBeenCalledWith(6, 'NONE_EXIST');
+    finish();
+  });
+
   it('does not send for a film whose choice the hook says is saving', async () => {
     const { need: shared } = renderPanel({
       rows: [unlabelledRow()],

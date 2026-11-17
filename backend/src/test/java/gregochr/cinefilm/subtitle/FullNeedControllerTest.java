@@ -99,11 +99,26 @@ class FullNeedControllerTest {
     }
 
     @Test
+    void theNoneExistChoicePassesToTheServiceAndItsReasonComesBack() throws Exception {
+        FullNeedFilmDto none = new FullNeedFilmDto(7L, "Amelie", 2001, "NEEDED", "NONE_EXIST", "NONE_EXIST",
+            List.of(), null, "fr", false, false, false, null, null);
+        when(service.choose(7L, new ChoiceRequest("NONE_EXIST"))).thenReturn(none);
+
+        mvc.perform(signedIn(put("/api/admin/films/7/full-need")).content("{\"choice\":\"NONE_EXIST\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.need").value("NEEDED"))
+            .andExpect(jsonPath("$.reason").value("NONE_EXIST"))
+            .andExpect(jsonPath("$.ownerChoice").value("NONE_EXIST"))
+            .andExpect(jsonPath("$.unresolved").value(false));
+        verify(service).choose(7L, new ChoiceRequest("NONE_EXIST"));
+    }
+
+    @Test
     void errorsMapTo404ConflictAnd400WithTheirMessages() throws Exception {
         when(service.choose(9L, new ChoiceRequest("NEEDED"))).thenThrow(new NotFoundException("No such film"));
         when(service.choose(7L, new ChoiceRequest("NEEDED"))).thenThrow(new ConflictException("A scan is running"));
         when(service.choose(7L, new ChoiceRequest("MAYBE")))
-            .thenThrow(new BadRequestException("The choice must be NEEDED, NOT_NEEDED or null"));
+            .thenThrow(new BadRequestException("The choice must be NEEDED, NOT_NEEDED, NONE_EXIST or null"));
 
         mvc.perform(signedIn(put("/api/admin/films/9/full-need")).content("{\"choice\":\"NEEDED\"}"))
             .andExpect(status().isNotFound())
@@ -113,7 +128,7 @@ class FullNeedControllerTest {
             .andExpect(jsonPath("$.error").value("A scan is running"));
         mvc.perform(signedIn(put("/api/admin/films/7/full-need")).content("{\"choice\":\"MAYBE\"}"))
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.error").value("The choice must be NEEDED, NOT_NEEDED or null"));
+            .andExpect(jsonPath("$.error").value("The choice must be NEEDED, NOT_NEEDED, NONE_EXIST or null"));
     }
 
     @Test

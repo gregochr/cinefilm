@@ -7,6 +7,7 @@ const REASON_WORDS = {
   ORIGINAL_AUDIO_ASSUMED: 'Audio not labelled: original language assumed',
   ENGLISH_FILM: 'English-language film',
   OWNER: 'Set by you',
+  NONE_EXIST: 'No English subtitles exist (set by you)',
   NO_LANGUAGES: 'Waiting for TMDB',
 };
 

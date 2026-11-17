@@ -88,7 +88,7 @@ class OpenSubtitlesRefresherFullTest {
 
     @Test
     void onlyTheFilmsThatNeedFullSubtitlesAreSearchedAndTheirCandidatesAreSaved() {
-        when(fullNeed.neededFilmIds()).thenReturn(Set.of(1L, 3L));
+        when(fullNeed.searchFilmIds()).thenReturn(Set.of(1L, 3L));
         when(films.findOpenSubtitlesFullDue(CUTOFF)).thenReturn(List.of(OLDBOY, TAKEN, MARTYRS));
         OpenSubtitlesResult plain = result(7, false);
         OpenSubtitlesResult impaired = result(8, true);
@@ -111,7 +111,7 @@ class OpenSubtitlesRefresherFullTest {
 
     @Test
     void aFilmWithATimingReferenceEditionIsSearchedAlongsideTheOnesThatNeedFullSubtitlesOnTheSameRules() {
-        when(fullNeed.neededFilmIds()).thenReturn(Set.of(1L));
+        when(fullNeed.searchFilmIds()).thenReturn(Set.of(1L));
         when(timingReference.filmIds()).thenReturn(Set.of(2L));
         when(films.findOpenSubtitlesFullDue(CUTOFF)).thenReturn(List.of(OLDBOY, TAKEN, MARTYRS));
         OpenSubtitlesResult plain = result(7, false);
@@ -132,7 +132,7 @@ class OpenSubtitlesRefresherFullTest {
 
     @Test
     void aFilmWithOnlyATimingReferenceEditionIsSearchedWhenNoFilmNeedsFullSubtitles() {
-        when(fullNeed.neededFilmIds()).thenReturn(Set.of());
+        when(fullNeed.searchFilmIds()).thenReturn(Set.of());
         when(timingReference.filmIds()).thenReturn(Set.of(2L));
         when(films.findOpenSubtitlesFullDue(CUTOFF)).thenReturn(List.of(TAKEN));
         when(api.searchFull("tt0936501")).thenReturn(new OpenSubtitlesSearch(0, null));
@@ -145,7 +145,7 @@ class OpenSubtitlesRefresherFullTest {
 
     @Test
     void aFailureFindingTheTimingReferenceFilmsDoesNotStopTheSearchOfTheFilmsThatNeedFullSubtitles() {
-        when(fullNeed.neededFilmIds()).thenReturn(Set.of(1L));
+        when(fullNeed.searchFilmIds()).thenReturn(Set.of(1L));
         when(timingReference.filmIds()).thenThrow(new IllegalStateException("database down: secret"));
         when(films.findOpenSubtitlesFullDue(CUTOFF)).thenReturn(List.of(OLDBOY));
         when(api.searchFull("tt0364569")).thenReturn(new OpenSubtitlesSearch(0, null));
@@ -160,7 +160,7 @@ class OpenSubtitlesRefresherFullTest {
 
     @Test
     void theFullSearchUsesTheSameThirtyDayCutoffAsTheForcedOne() {
-        when(fullNeed.neededFilmIds()).thenReturn(Set.of(1L));
+        when(fullNeed.searchFilmIds()).thenReturn(Set.of(1L));
         when(films.findOpenSubtitlesFullDue(CUTOFF)).thenReturn(List.of());
 
         run();
@@ -171,7 +171,7 @@ class OpenSubtitlesRefresherFullTest {
 
     @Test
     void whenNoFilmNeedsFullSubtitlesNothingIsAskedOrQueried() {
-        when(fullNeed.neededFilmIds()).thenReturn(Set.of());
+        when(fullNeed.searchFilmIds()).thenReturn(Set.of());
 
         run();
 
@@ -181,7 +181,7 @@ class OpenSubtitlesRefresherFullTest {
 
     @Test
     void aSaveThatMatchesNothingBecauseTheImdbIdChangedIsNotCounted() {
-        when(fullNeed.neededFilmIds()).thenReturn(Set.of(1L));
+        when(fullNeed.searchFilmIds()).thenReturn(Set.of(1L));
         when(films.findOpenSubtitlesFullDue(CUTOFF)).thenReturn(List.of(OLDBOY));
         when(api.searchFull("tt0364569")).thenReturn(new OpenSubtitlesSearch(0, null));
         when(films.saveOpenSubtitlesFull(1L, "tt0364569", "[]", NOW)).thenReturn(0);
@@ -194,7 +194,7 @@ class OpenSubtitlesRefresherFullTest {
 
     @Test
     void anOutageDuringTheFullSearchStopsItWithoutSavingAnything() {
-        when(fullNeed.neededFilmIds()).thenReturn(Set.of(1L, 3L));
+        when(fullNeed.searchFilmIds()).thenReturn(Set.of(1L, 3L));
         when(films.findOpenSubtitlesFullDue(CUTOFF)).thenReturn(List.of(OLDBOY, MARTYRS));
         when(api.searchFull("tt0364569")).thenThrow(new OpenSubtitlesUnavailableException("down"));
 
@@ -207,7 +207,7 @@ class OpenSubtitlesRefresherFullTest {
 
     @Test
     void aFailureOnOneFilmIsCountedAndTheNextIsStillSearched() {
-        when(fullNeed.neededFilmIds()).thenReturn(Set.of(1L, 3L));
+        when(fullNeed.searchFilmIds()).thenReturn(Set.of(1L, 3L));
         when(films.findOpenSubtitlesFullDue(CUTOFF)).thenReturn(List.of(OLDBOY, MARTYRS));
         when(api.searchFull("tt0364569")).thenThrow(new IllegalStateException("boom"));
         when(api.searchFull("tt1029234")).thenReturn(new OpenSubtitlesSearch(0, null));
@@ -233,7 +233,7 @@ class OpenSubtitlesRefresherFullTest {
 
     @Test
     void aFailureReadingTheFullNeedIsLoggedAndTheRunStillEnds() {
-        when(fullNeed.neededFilmIds()).thenThrow(new IllegalStateException("database down"));
+        when(fullNeed.searchFilmIds()).thenThrow(new IllegalStateException("database down"));
 
         run();
 

@@ -111,13 +111,18 @@ describe('Admin Subtitles section: the page', () => {
       within(rashomonRow)
         .getAllByRole('button')
         .map((b) => b.textContent),
-    ).toEqual(['Search for English subtitles…', 'Add my own file…']);
+    ).toEqual(['Search for English subtitles…', 'Add my own file…', 'No English subtitles exist']);
     const downfallRow = rowOf('Downfall');
     expect(
       within(downfallRow)
         .getAllByRole('button')
         .map((b) => b.textContent),
-    ).toEqual(['It’s in German — find subtitles', 'Add my own file…', 'It’s English']);
+    ).toEqual([
+      'It’s in German — find subtitles',
+      'Add my own file…',
+      'It’s English',
+      'No English subtitles exist',
+    ]);
     expect(
       within(downfallRow).getByRole('button', { name: 'It’s English' }),
     ).toHaveAccessibleDescription(
@@ -218,6 +223,31 @@ describe('Admin Subtitles section: owner choices', () => {
     renderApp('/admin/subtitles');
     await tab('Foreign-language films 1');
     expect(screen.queryByText('Downfall')).not.toBeInTheDocument();
+  });
+
+  it('"No English subtitles exist" saves NONE_EXIST, the row leaves, Your choices words it, and giving it back restores the row', async () => {
+    const server = serve();
+    renderApp('/admin/subtitles');
+    await tab('Foreign-language films 2');
+    await screen.findByText('Downfall');
+
+    await userEvent.click(
+      within(rowOf('Downfall')).getByRole('button', { name: 'No English subtitles exist' }),
+    );
+
+    await waitFor(() => expect(screen.queryByText('Downfall')).not.toBeInTheDocument());
+    expect(server.calls).toEqual([{ filmId: 8, kind: 'full', body: { choice: 'NONE_EXIST' } }]);
+    await userEvent.click(await screen.findByRole('button', { name: 'Your choices (2)' }));
+    expect(
+      screen.getByText(/Full subtitles: you said no English subtitles exist/),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Let CineFilm decide: Downfall (2004), full subtitles' }),
+    );
+
+    expect(await screen.findByText('Downfall')).toBeInTheDocument();
+    expect(server.calls[1]).toEqual({ filmId: 8, kind: 'full', body: { choice: null } });
   });
 
   it('"No foreign scenes" saves NOT_NEEDED for the film, the row leaves, and it stays gone after a reload', async () => {
