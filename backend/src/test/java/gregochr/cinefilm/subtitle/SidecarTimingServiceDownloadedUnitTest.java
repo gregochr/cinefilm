@@ -232,6 +232,24 @@ class SidecarTimingServiceDownloadedUnitTest {
     }
 
     @Test
+    void aFilmTheOwnerMarkedAsHavingNoEnglishSubtitlesKeepsItsFitToItsOwnTrackInAdmin() {
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        stored(reference(5012, 300, IMDB), reference(5013, 300, IMDB));
+        edition.getFilm().setFullNeedOwner(FullNeedChoice.NONE_EXIST);
+        ForcedSubtitleAlignment row = row(BASE_KEY);
+        row.setReferenceSource(ReferenceSource.EMBEDDED);
+        row.setReferenceOsFileId(null);
+        row.setVerdict(Verdict.NO_REFERENCE);
+        when(alignments.findBySidecarIdIn(List.of(5L))).thenReturn(List.of(row));
+
+        Map<Long, AlignmentDto> current = service.current(Map.of(5L, edition), List.of(sidecar));
+
+        assertThat(current).containsOnlyKeys(5L);
+        assertThat(current.get(5L).source()).isEqualTo("EMBEDDED");
+        assertThat(current.get(5L).referenceRelease()).isNull();
+    }
+
+    @Test
     void aDownloadIsNeverFittedToItsOwnOpenSubtitlesFile() {
         sidecar.setOrigin(SubtitleSidecar.Origin.OPENSUBTITLES);
         sidecar.setOpenSubtitlesFileId(5012L);

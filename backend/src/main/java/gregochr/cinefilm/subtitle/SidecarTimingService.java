@@ -524,6 +524,8 @@ public class SidecarTimingService {
         Map<Long, OsRefs> found = new HashMap<>();
         for (Edition e : wanted.values()) {
             Film film = e.getFilm();
+            // After the bulk reads on purpose: this costs at most two batched reads, and only for films searched before
+            // the owner chose NONE_EXIST, so the check is not worth a second pass over the editions.
             if (film.getFullNeedOwner() == FullNeedChoice.NONE_EXIST) {
                 continue;
             }
