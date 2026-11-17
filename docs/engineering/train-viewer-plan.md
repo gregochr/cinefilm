@@ -36,8 +36,8 @@ no change to the app and no release.
 3. **The end is ordered so that nothing gets out.** The guard works only while the driver is attached, and the page
    sends a progress save, the record and the end of the stream as it closes. So, with the guard still attached, the
    page is sent to `about:blank` (its closing sends are paused and dealt with like any other) and three seconds are
-   given for them to settle; only then is Chrome ended (`SIGTERM`, then `SIGKILL` if it lingers) and the channel
-   closed. Every way out takes that path: the film's end, `--minutes`, Ctrl-C, `SIGTERM`, `SIGHUP` (the terminal
+   given for them to settle; only then is the channel closed and Chrome ended (`SIGTERM`, then `SIGKILL` if it
+   lingers). Every way out takes that path: the film's end, `--minutes`, Ctrl-C, `SIGTERM`, `SIGHUP` (the terminal
    closed) and an error. When the page cannot be sent away (the channel has failed, Chrome does not answer), and on
    an exception or a rejected promise that nothing caught, Chrome's whole process group is killed with `SIGKILL`
    before anything else: a Chrome killed so sends nothing. Chrome is started in its own process group, so a Ctrl-C in
@@ -140,8 +140,8 @@ estimate); **2b**, the run (about 1,300, likewise), from which the results and t
 will not fit.
 
 - `scripts/replay/guard.mjs` (new): decision 2 as a pure function of method, address and site; the canned answers;
-  the keeping of reports (the last per viewing, how many were sent; one that cannot be read or is over 64 KB is let
-  through uncopied and counted); the handler that wires them to a page.
+  the keeping of reports (the latest by `seq` per viewing, how many were sent; one that cannot be read or is over
+  64 KB is let through uncopied and counted); the handler that wires them to a page.
 - `scripts/replay/viewer.mjs`: `--film`, `--minutes`, `--place`; the checks of decision 7; the run (each sample has
   a clock since the film opened and the time of day, so a run lays beside the logger's log); the presses; decisions
   3 and 9; `health.json`, `samples.json`, `held.json` and `summary.txt` in the run's folder. `drive.mjs`: exports.
