@@ -16,6 +16,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesApi;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesBudget;
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesChargedException;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesDownload;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReferenceRepository;
@@ -336,26 +337,106 @@ class TimingReferenceFetchTest {
     }
 
     @Test
-    void aTransientlyFailedStoredReferenceIsFetchedAgainWithoutCountingTwice() {
+    void aTransientlyFailedStoredReferenceIsFetchedAgainWithoutCountingTwiceSoTheNextCandidateStillFits() {
         OpenSubtitlesReference retryable = stored(5012, List.of());
         retryable.setFailedDownloads(1);
         Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
         when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5012)).thenReturn(Optional.of(retryable));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 5013)).thenReturn(Optional.empty());
         when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
-        when(api.download(5012)).thenReturn(downloaded(full(300)));
+        when(api.download(5012)).thenReturn(downloaded(full(299)));
+        when(api.download(5013)).thenReturn(downloaded(full(300)));
         when(references.saveAndFlush(any(OpenSubtitlesReference.class))).thenAnswer(call -> {
             OpenSubtitlesReference reference = call.getArgument(0);
             saved.put(reference.getOsFileId(), reference);
             return reference;
         });
-        when(service.targets()).thenReturn(List.of(target(1, 3, null, List.of(forced(7, Origin.OWNER)),
-            List.of(candidate(5012)), Map.of(5012L, retryable))));
+        // Two references are kept already: the retry of 5012 adds none, so 5013 may still be fetched (the third).
+        when(service.targets()).thenReturn(List.of(target(1, 2, null, List.of(forced(7, Origin.OWNER)),
+            List.of(candidate(5012), candidate(5013)), Map.of(5012L, retryable))));
 
         fetch.run(CHECK_LIMIT, true);
 
         verify(api).download(5012);
-        assertThat(saved).containsOnlyKeys(5012L);
-        assertThat(lines(Level.INFO).get(0)).contains("usable true, best match 100%");
+        verify(api).download(5013);
+        assertThat(saved).containsOnlyKeys(5012L, 5013L);
+        assertThat(lines(Level.INFO).get(0)).contains("fetched file 5012").contains("299 lines, usable false");
+        assertThat(lines(Level.INFO).get(1)).contains("fetched file 5013").contains("usable true, best match 100%");
+    }
+
+    @Test
+    void aChargedFailureCountsAsAFetchOfTheDaySoALaterRunMakesOnlyOneMore() {
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 1012)).thenReturn(Optional.empty());
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
+        when(api.download(1012)).thenThrow(new OpenSubtitlesChargedException("timed out", false));
+        when(references.saveAndFlush(any(OpenSubtitlesReference.class))).thenAnswer(call -> call.getArgument(0));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(2L, "tt2", 2012)).thenReturn(Optional.empty());
+        when(api.download(2012)).thenReturn(downloaded(full(300)));
+        when(service.targets()).thenReturn(needingAFetch(1), needingAFetch(2, 3));
+
+        fetch.run(CHECK_LIMIT, true);
+        fetch.run(CHECK_LIMIT, true);
+
+        verify(api).download(1012);
+        verify(api).download(2012);
+        verify(api, never()).download(3012);
+    }
+
+    @Test
+    void aFullLengthForcedFileDoesNotStopTheWalkWhileTheShortOneDoesNotMatch() {
+        File bigFile = new File(8L, Origin.DOWNLOAD, 300, SrtParser.format(scatteredReference()));
+        Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
+        downloading(1, 5013, full(300), saved);
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(forced(7, Origin.OWNER), bigFile),
+            List.of(candidate(5012), candidate(5013)), Map.of(5012L, stored(5012, scatteredReference())))));
+
+        fetch.run(CHECK_LIMIT, true);
+
+        verify(api).download(5013);
+        // Measurement still logs every file, the full-length one included.
+        assertThat(lines(Level.INFO).stream().filter(l -> l.contains("DOWNLOAD file 8 (300 lines, 300 or more)"))
+            .count()).isEqualTo(2);
+    }
+
+    @Test
+    void aRunThatCrossesMidnightBooksItsFetchesOnTheNewDay() {
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 1012)).thenReturn(Optional.empty());
+        when(budget.take(DAY, CHECK_LIMIT)).thenReturn(true);
+        when(references.saveAndFlush(any(OpenSubtitlesReference.class))).thenAnswer(call -> call.getArgument(0));
+        when(api.download(1012)).thenAnswer(call -> {
+            clock.now = Instant.parse("2024-04-01T00:00:01Z");
+            return downloaded(full(300));
+        });
+        when(references.findByFilmIdAndImdbIdAndOsFileId(2L, "tt2", 2012)).thenReturn(Optional.empty());
+        when(api.download(2012)).thenReturn(downloaded(full(300)));
+        when(service.targets()).thenReturn(needingAFetch(1, 2), needingAFetch(3));
+
+        fetch.run(CHECK_LIMIT, true);
+        fetch.run(CHECK_LIMIT, true);
+
+        verify(api).download(2012);
+        verify(api, never()).download(3012);
+    }
+
+    @Test
+    void aReferenceAnotherWriterStoredSinceTheRunBeganIsNotCountedOrLoggedAsAFetch() {
+        OpenSubtitlesReference theirs = stored(1012, full(300));
+        theirs.setFetchedAt(NOW.minus(Duration.ofHours(1)));
+        when(references.findByFilmIdAndImdbIdAndOsFileId(1L, "tt1", 1012)).thenReturn(Optional.of(theirs));
+        Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
+        downloading(2, 2012, full(300), saved);
+        when(references.findByFilmIdAndImdbIdAndOsFileId(3L, "tt3", 3012)).thenReturn(Optional.empty());
+        when(api.download(3012)).thenReturn(downloaded(full(300)));
+        when(service.targets()).thenReturn(needingAFetch(1, 2, 3));
+
+        fetch.run(CHECK_LIMIT, true);
+
+        verify(api).download(2012);
+        verify(api).download(3012);
+        verify(api, never()).download(1012);
+        assertThat(lines(Level.INFO).stream().filter(l -> l.startsWith("Timing reference for edition 10"))).isEmpty();
+        assertThat(lines(Level.INFO).stream().filter(l -> l.contains("against OpenSubtitles file 1012")).count())
+            .isEqualTo(1);
     }
 
     /** Ten cues, the first {@code onGrid} on the full file's 10 s grid, the rest each off it by a different second. */

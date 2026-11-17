@@ -131,6 +131,15 @@ class TimingReferenceRuleTest {
     }
 
     @Test
+    void aFileTooShortToFitNeverMatches() {
+        assertThat(TimingReferenceRule.matches(fit(0, 0, 0))).isFalse();
+        assertThat(TimingReferenceRule.matches(fit(7, 7, 0))).isFalse();
+        assertThat(TimingReferenceRule.matches(fit(8, 8, 0))).isTrue();
+        assertThat(TimingReferenceRule.matches(new TimingFit.Result(TimingFit.Verdict.TOO_FEW, 0, 1, 10, 10, 0,
+            List.of()))).isFalse();
+    }
+
+    @Test
     void aBestOffsetFurtherThanThirtySecondsEitherWayIsAnotherCutAndDoesNotStopTheWalk() {
         assertThat(TimingReferenceRule.matches(fit(10, 10, 30_000))).isTrue();
         assertThat(TimingReferenceRule.matches(fit(10, 10, -30_000))).isTrue();

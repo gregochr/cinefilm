@@ -70,13 +70,15 @@ final class TimingReferenceRule {
 
     /**
      * Whether a reference fits a forced file well enough to stop looking: at least 30% of the file's lines matched
-     * (integer arithmetic, {@code matched * 100 >= served * 30}) and the best offset is 30 s or less either way.
+     * (integer arithmetic, {@code matched * 100 >= served * 30}) and the best offset is 30 s or less either way. A
+     * file with too few lines to fit never matches.
      *
      * @param fit the file's fit against the reference
      * @return true when the walk may stop at this reference
      */
     static boolean matches(TimingFit.Result fit) {
-        return fit.matchedCount() * 100 >= fit.servedCount() * MIN_SHARE_PERCENT
+        return fit.servedCount() >= TimingFit.MIN_CUES && fit.verdict() != TimingFit.Verdict.TOO_FEW
+            && fit.matchedCount() * 100 >= fit.servedCount() * MIN_SHARE_PERCENT
             && Math.abs(fit.fittedOffsetMs()) <= MAX_OFFSET_MS;
     }
 

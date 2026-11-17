@@ -1,5 +1,6 @@
 package gregochr.cinefilm.subtitle;
 
+import gregochr.cinefilm.opensubtitles.OpenSubtitlesChargedException;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesReference;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesResult;
 import gregochr.cinefilm.opensubtitles.OpenSubtitlesUnavailableException;
@@ -9,6 +10,7 @@ import gregochr.cinefilm.subtitle.TimingReferenceService.Target;
 import gregochr.cinefilm.web.JsonEtag;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.HashMap;
@@ -83,7 +85,13 @@ final class TimingReferenceFetch {
             TimingReferenceRule.MAX_FETCHES_PER_DAY - fetchedToday));
     }
 
+    /** Books one fetch against the UTC day it happened in (a run may cross midnight). */
     private synchronized void counted() {
+        LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
+        if (!today.equals(day)) {
+            day = today;
+            fetchedToday = 0;
+        }
         fetchedToday++;
     }
 
@@ -97,6 +105,7 @@ final class TimingReferenceFetch {
     int run(int checkLimit, boolean mayFetch) {
         int[] fetchesLeft = {mayFetch ? allowance() : 0};
         boolean stopped = !mayFetch;
+        Instant runStart = clock.instant();
         Map<List<Object>, Shared> films = new HashMap<>();
         int written = 0;
         for (Target target : service.targets()) {
@@ -104,7 +113,7 @@ final class TimingReferenceFetch {
                 key -> new Shared(target));
             try {
                 if (!stopped) {
-                    fetchFor(target, shared, checkLimit, fetchesLeft);
+                    fetchFor(target, shared, checkLimit, fetchesLeft, runStart);
                 }
             } catch (ReferenceFetcher.Stop e) {
                 LOG.info("Timing reference fetching stopped: {}", e.getMessage());
@@ -130,7 +139,7 @@ final class TimingReferenceFetch {
      * Walks the candidates in order, fetching those not stored while the run, the day and the film's cap allow, until
      * one is usable and matches. A reference fetched joins the film's shared map; one already stored costs nothing.
      */
-    private void fetchFor(Target target, Shared shared, int checkLimit, int[] fetchesLeft) {
+    private void fetchFor(Target target, Shared shared, int checkLimit, int[] fetchesLeft, Instant runStart) {
         for (OpenSubtitlesResult candidate : target.candidates()) {
             OpenSubtitlesReference reference = shared.stored.get(candidate.fileId());
             boolean fetched = reference == null || !reference.isFinal();
@@ -139,9 +148,20 @@ final class TimingReferenceFetch {
                     return;
                 }
                 boolean added = reference == null;
-                reference = fetcher.fetch(target.filmId(), target.imdbId(), candidate, checkLimit);
-                fetchesLeft[0]--;
-                counted();
+                try {
+                    reference = fetcher.fetch(target.filmId(), target.imdbId(), candidate, checkLimit);
+                } catch (OpenSubtitlesChargedException e) {
+                    // The account was charged: the download counts against the run and the day, whatever came back.
+                    fetchesLeft[0]--;
+                    counted();
+                    throw e;
+                }
+                // A file another writer stored since this run began came back free: it is not our fetch.
+                fetched = !reference.getFetchedAt().isBefore(runStart);
+                if (fetched) {
+                    fetchesLeft[0]--;
+                    counted();
+                }
                 shared.kept += added ? 1 : 0;
                 shared.stored.put(candidate.fileId(), reference);
             }
@@ -163,7 +183,7 @@ final class TimingReferenceFetch {
         return TimingReferenceRule.usable(reference, target.runtimeMs(), target.creditsStartMs());
     }
 
-    /** Whether some forced file matches a usable reference ({@link TimingReferenceRule#matches}); the best share. */
+    /** Whether a forced file of 8 to 299 lines matches a usable reference; the best share of such a file. */
     private static Judgement judge(Target target, OpenSubtitlesReference reference) {
         if (!isUsable(target, reference)) {
             return new Judgement(false, 0);
@@ -172,6 +192,10 @@ final class TimingReferenceFetch {
         boolean matches = false;
         double best = 0;
         for (File file : target.files()) {
+            // Only a file of 8 to 299 lines decides the walk: a full-length one would match any full reference.
+            if (file.lines() < TimingReferenceRule.MIN_FORCED_CUES || file.lines() >= TimingReferenceRule.FULL_LINES) {
+                continue;
+            }
             Result fit = TimingFit.fit(starts(SrtParser.cues(file.cuesText())), referenceStarts);
             matches |= TimingReferenceRule.matches(fit);
             best = Math.max(best, fit.matchedShare());
