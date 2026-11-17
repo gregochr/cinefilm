@@ -555,9 +555,22 @@ describe('timing against the film’s English track', () => {
       source:
         'Checked against a full English file from OpenSubtitles (Taken.2008.BluRay), not yet against the film',
     });
-    expect(
-      alignmentSummary(file({ alignment: { ...alignment, referenceRelease: null } })).source,
-    ).toBe('Checked against a full English file from OpenSubtitles, not yet against the film');
+    const unnamed = alignmentSummary(
+      file({
+        alignment: {
+          ...alignment,
+          referenceRelease: null,
+          reasons: ['Lines match a full English file from OpenSubtitles (file 5012)'],
+        },
+      }),
+    );
+    expect(unnamed.source).toBe(
+      'Checked against a full English file from OpenSubtitles, not yet against the film',
+    );
+    // With no release the server's sentence names the file: the only place the owner sees which one matched.
+    expect(unnamed.lines).toEqual([
+      'Lines match a full English file from OpenSubtitles (file 5012)',
+    ]);
   });
 
   it('shows an OpenSubtitles fit that does not line up as needing a check, with the server’s reasons', () => {

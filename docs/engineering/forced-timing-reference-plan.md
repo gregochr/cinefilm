@@ -140,8 +140,8 @@ references, the search columns, and new reference metadata.
   answer is not clear.
 - **Display.** `AlignmentDto` gains `source` (`foundation-plan.md` updated). `ForcedChoice.proofText` /
   `downloadProof` and `TimingFit`'s reasons stop hard-coding "film's own English track". Admin shows a source line:
-  "Checked against a full English file from OpenSubtitles (not yet against the film)". An owner's pick that does not
-  match shows its `CHECK` there, and still plays. Built (3c-2b): `proofText`/`downloadProof` and `TimingFit`'s reasons
+  "Checked against a full English file from OpenSubtitles (<release>), not yet against the film". An owner's pick that
+  does not match shows its `CHECK` there, and still plays. Built (3c-2b): `proofText`/`downloadProof` and `TimingFit`'s reasons
   were left as they are, because an `ALIGNED` proof is only ever an embedded one until trust changes.
 - **Tests.** The verdict boundaries (1 s / 1.001 s, a share of 0.80, 7 / 8 cues, 299 / 300 lines, half the reference),
   `isAligned` false for `OPENSUBTITLES`, `ForcedChoice` unchanged with such a fit (one test per step it could have

@@ -250,12 +250,20 @@ export function alignmentSummary(item) {
   if (!fit) return null;
   const lines = fit.reasons ?? [];
   // A fit to an OpenSubtitles file is not a check against the film (it never counts as proof): it is shown with what
-  // it was checked against, never as "aligned" (the green kind).
+  // it was checked against, never as "aligned".
   if (fit.source === 'OPENSUBTITLES' && (fit.verdict === 'ALIGNED' || fit.verdict === 'CHECK')) {
     const source = referenceSourceLine(fit.referenceRelease);
     if (fit.verdict === 'ALIGNED') {
-      // The server's one sentence repeats the label and the release, which the source line already tells.
-      return { kind: 'reference', label: REFERENCE_MATCH_LABEL, lines: [], note: null, source };
+      // With a release the server's sentence repeats the label and the release, which the source line already
+      // tells; without one it names "file <id>", the only place the owner sees which file matched.
+      const reasons = fit.referenceRelease ? [] : lines;
+      return {
+        kind: 'reference',
+        label: REFERENCE_MATCH_LABEL,
+        lines: reasons,
+        note: null,
+        source,
+      };
     }
     return { kind: 'check', label: 'Timing needs checking', lines, note: null, source };
   }
