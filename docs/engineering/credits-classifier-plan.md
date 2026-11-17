@@ -37,6 +37,10 @@ ffmpeg `signalstats` on the server, read-only:
 
 The bigger gap is credits over picture, not white backgrounds. "Labels" says how those are treated.
 
+**Recomputed on development films (2026-11-17)** with L3a's definition ("L3a specification"), on the stored
+full-range frames inside the crop: of the 609 development films, 368 (60%) open dark, 17 (3%) on a plate and 224 (37%) lit. These
+figures replace the table above, which used limited-range luma, a centre crop and all films.
+
 ## What is captured, and what must happen before Plex is retired
 
 - **`plex_credits_marker`** (V24): 849 rows, one per media file, covering **849 editions of 842 films**. Each holds the
@@ -96,7 +100,11 @@ The bigger gap is credits over picture, not white backgrounds. "Labels" says how
   - at least 90% within ±10 s for dark and light-plate openings;
   - at least 97% within ±60 s, or not found, for dark and light-plate openings;
   - lit openings are reported as they come out, and are late by design (see "Labels").
-- **The baseline**, version 2, is scored the same way on the same films.
+- **The baseline**, version 2, is scored on the same films, at L5, from its stored `offset_ms` for both its early
+  and goal errors. Version 3's early figure is worst case (`t − 5 s`), so the early comparison favours version 2 by
+  `f − (t − 5 s)`: 5 s when the dense step falls back to `t`, up to about 30 s when it finds an `f`. Version 3's
+  real dense earliness is measured only at the gate. It is not scored before then
+  ("Not looked at before L5").
 - **Nothing is installed** on the Mac, the server or in CI. Anything new is a Maven dependency or a file. Training and
   the product share one implementation of features, preprocessing and inference.
 
@@ -196,19 +204,24 @@ The bigger gap is credits over picture, not white backgrounds. "Labels" says how
 ### Opening type (`OpeningType`, pure, L3a)
 
 This is one definition, used the same way by labels, reports, the product's reasons text and the gate. It is
-computed on the product's 240 px grey frames, inside the active area:
+computed on `FramePrep.grey` frames (full range) inside `ActiveCrop`, never on the product's `format=gray` frames
+(limited range, where `P50 < 4` never fires). L6a tests that the stored `opening_type` comes from the `FramePrep`
+path:
 
-- **`frameKind(frame)`:**
-  - `DARK` when the mean luma is below 35;
-  - `PLATE` when the mean is at least 120 and the 10th–90th percentile spread is at most 40;
+- **`frameKind(frame)`** ("L3a specification"). `DARK` was re-derived on development frames, replacing P0's mean
+  with a median. `PLATE` was mapped from P0 and confirmed on development frames:
+  - `DARK` when the median luma is below 4;
+  - `PLATE` when the mean is at least 121 and the 10th–90th percentile spread is at most 47;
   - `LIT` otherwise.
 - **`OpeningType.of(start)`** uses the coarse frames nearest to `start` + 5, 20 and 45 s:
   - `DARK` if the +5 s frame is `DARK`;
   - otherwise `PLATE` if any of the three is `PLATE`;
   - otherwise `LIT`.
-- The P0 table was measured with ffmpeg on the centre crop. L3 recomputes it with this definition, on development
-  films only, and the recomputed figures replace the P0 table.
-- **Margin bands**, in units of the calibrated `σ`: `[σ, 2σ)` is `low`, `≥ 2σ` is `high`.
+- The P0 table was measured with ffmpeg on the centre crop. L3a recomputed it with this definition, on development
+  films only (above, under the P0 table).
+- **Margin bands** band `S(t, u*)` at the coarse `t` from steps 2–4 of "Finding the start", before the dense step,
+  in units of the calibrated `σ`: `[σ, 2σ)` is
+  `low`, and `≥ 2σ` is `high`.
 
 ### The split
 
@@ -246,9 +259,11 @@ computed on the product's 240 px grey frames, inside the active area:
   1. after the comparison (L5);
   2. at the version 3 gate.
 - **The test rule is pre-registered.** An early result on the test split turns `AUTO` off for that opening type and
-  margin band. It is never retuned and scored again. Test films are never relabelled, so a Plex mistake on a test
+  margin band. Early means more than 15 s before the target, the gate's threshold: scored on `earlyError`
+  (`t − 5 s`) offline at L5, and on the product's rows at the gate. It is never retuned and scored again. Test films are never relabelled, so a Plex mistake on a test
   film can switch `AUTO` off for its band. That cost is accepted, and is put to the owner with the L5 report.
-- **Thresholds keep a safety margin:** the earliest out-of-fold error must be at least −5 s.
+- **Thresholds keep a safety margin:** the earliest out-of-fold error must be at least −5 s. Offline it is scored
+  at `t − 5 s` ("How a film is scored"), so it amounts to `t ≥ target` on every development film the evaluation scores `FOUND`.
 
 ## Frames: the dataset job (L2)
 
@@ -321,7 +336,8 @@ arguments are `--data /data --labels /labels/labels-<date>.json --out /out [--id
   row. `summary.json` holds only counts of them by reason (`skipped`: `test`, `excluded`, `unlabelled`): **no skipped
   id of any kind is written anywhere**, because an unlabelled directory may belong to a test film and an exclusion
   may sit in a test unit. `--ids` narrows within the development films, and an id of another kind is counted the
-  same way. The L5 and gate looks (`--look`) belong to the evaluation tools, which log them in the manifest.
+  same way. The L5 look (`--look=L5`) belongs to the evaluation tool, and the gate's look is a database query. The plan's looks log, under "Phases",
+  records them.
 - **It reads only `--data` and `--labels`** (`--data` mounted `:ro`) and writes one directory of its own,
   `<out>/measure-<yyyyMMdd'T'HHmmss'Z'>/` (made with `createDirectory`; a run never overwrites or deletes another, and
   never leaves stale stills). `--out` must not be inside `--data`. No network, no database.
@@ -350,9 +366,23 @@ arguments are `--data /data --labels /labels/labels-<date>.json --out /out [--id
 Both produce `p(credits)` for each frame, and both feed the same segmenter. They are compared on development
 through **offline evaluation**: the shipping model and segmenter code, run on the stored frames.
 
-- When the product's dense range for a predicted `t` (`[t − 15 s, t + 35 s]`) is **not fully** stored, the film is
-  scored at **`t − 5 s`** for every early metric. That is the earliest the dense step could ever return, so the early
-  check is worst-case and never favourable. For the ±10 s and ±60 s goals it is scored at `t`.
+- **How a film is scored** (`CreditsEvaluateMain`, L3c-eval). The dense search is simulated on the stored dense
+  frames that have time features (`[target − 25 s, target + 25 s)`) and that also lie in the product's own range
+  with time features, `[t − 10 s, t + 30 s)`.
+  - **The search is covered** when `t − 5 s ≥ target − 25 s` and it stops at an `f` with
+    `f + 5 s < min(target + 25 s, t + 30 s)`.
+  - **The stored grid is not the product's.** The stored dense frames sit on a 0.5 s grid set by Plex's target, the
+    product's on one set by `t`, and `t` is on the 5 s coarse grid while the target is in ms: the two are the same
+    decoded frames almost never. A brief low frame seen by only one grid can move
+    the result either way. So the simulated `f` is an estimate, never a safe bound.
+  - **Early metrics** (the −5 s margin, the early counts) always use **`t − 5 s`**, the earliest the dense step could
+    ever return: worst case, never favourable, with no exception.
+  - **The ±10 s and ±60 s goals** use the simulated `f` when the search is covered (an estimate), and `t` otherwise.
+    `θ_d` is tuned through these goals.
+  - **So offline, the −5 s margin is a rule on the coarse step:** `t − 5 s − target ≥ −5 s`, that is `t ≥ target`,
+    on every `FOUND` film (`UNSURE` counts as `NOT_FOUND`). It is stricter than the product needs and pushes calibration later, which "a late overlay is
+    better than an early one" accepts. The dense step's own earliness is measured only at the gate ("The gate,
+    revised"), on the product's version 3 rows.
 - **Neither model has a position feature.** Nothing tells a model how far into the film a frame is. That is a rule.
 
 ### A. Gradient-boosted trees on measured features
@@ -364,12 +394,14 @@ through **offline evaluation**: the shipping model and segmenter code, run on th
   - thin sharp runs, text rows, central and bottom-band shares, line spacing;
   - edge energy, and a 4×4 layout grid;
   - two time features against the frames ±5 s away: mean absolute difference and changed-ink share. At the window's
-    ends, the one neighbour is used for both. There is no crawl-shift feature, because at a 5 s spacing it aliases.
+    ends, a coarse frame uses the one neighbour for both. A dense frame has no time features without both
+    neighbours ("L3a specification"). There is no crawl-shift feature, because at a 5 s spacing it aliases.
 - **The planner owns the exact feature list and formulas.** It is written into L3a's brief after measuring 10
   films; Sonnet implements it and does not design it.
 - **Trees (`GradientBoostedTrees`).** Logistic loss, shallow trees, quantile bins, unweighted classes.
-  - Depth, count and learning rate are chosen in cross-validation.
-  - **Deterministic:** single-threaded; inputs sorted by (file, offset); ties broken by the lowest feature index,
+  - Depth, count and learning rate are arguments of L3b's training `main`. Before L3c exists they are chosen by
+    out-of-fold log loss on coarse rows; the earliest out-of-fold error takes over once L3c-eval can compute it.
+  - **Deterministic:** single-threaded; inputs sorted by `(mediaFileId, kind, offsetMs)`; ties broken by the lowest feature index,
     then the lowest threshold; quantiles from sorted values. A test trains twice and compares the JSON byte for
     byte.
 - **Where it is computed:** features and training run in a **throwaway container** on the server, from the released
@@ -441,16 +473,21 @@ as film.
    - every coarse frame in the first 15 s from `t` (three frames) has `p ≥ θ`.
 5. **Dense.** Decode 2 fps from `t − 15 s` to `t + 35 s` (100 frames).
    - The start is the first dense frame `f ≥ t − 5 s` such that **every** dense frame in `[f, f + 5 s]` has `p ≥ θ_d`.
-   - If there is none, the start is the coarse `t`, never earlier.
+   - A dense frame without time features has no `p`. This holds for both models, so that A and B search the same
+     frames, although B's `p` needs no time features. An `f` is considered only when every dense frame in
+     `[f, f + 5 s]` has a `p`.
+   - If no `f` qualifies, the start is the coarse `t`, never earlier.
    - This `CreditsFrameReader` change (from 300 s to 50 s, with `DENSE_TIMEOUT` scaled down) belongs to L6a.
 6. **Vetoes:**
    - the edition guard;
    - the dialogue check, where cue times are already known; it moves out of `CreditsFinder` in L6a;
    - only the last original part is analysed.
 7. **Reasons text:** `Credits model v1 (A|B): credits from 2:18:47, <opening> (margin 41.2, min p 0.97 over 15 s)`.
+   The margin shown is the raw `S(t, u*)` that the margin band uses.
 
 **Calibration.** `λ`, `δ`, `G`, `σ`, `θ` and `θ_d` are chosen together in cross-validation: first meet the −5 s
-margin, then maximise the ±10 s share.
+margin (scored at `t − 5 s`, so it constrains the coarse step only), then maximise the ±10 s share (where `θ_d`
+acts, through the simulated `f`).
 
 - **Negatives come from real films.** Each labelled film's window is cut off at the target start − 5 s, and that
   must give `NOT_FOUND` or `UNSURE`.
@@ -459,7 +496,8 @@ margin, then maximise the ±10 s share.
 - Negatives follow the same folds.
 
 **Epilogue cards** that Plex itself counts as credits can't be seen by the Plex gate. The development films whose
-result lands more than 10 s before the first credits-on-plain frame are looked at as stills and reported.
+worst-case start, `t − 5 s` (as every early check), lands more than 10 s before the first credits-on-plain
+frame are looked at as stills and reported.
 
 ## The model file
 
@@ -497,7 +535,7 @@ result lands more than 10 s before the first credits-on-plain frame are looked a
   - The image runs as uid 1001. The output directory `credits-dataset-out` is created by the server (uid 1001)
     beside the dataset, and the planner copies results from it into `~/cinefilm-labels`.
   - **Every tool run needs a released image with that phase's code**, and only the owner tags releases. The owner
-    releases after L1, L2b, L3c and L4b.
+    releases after L1, L2b, L3b-look (the features tool and training), L3c and L4b.
 
   - It has its own memory limit, separate from the server's, and one CPU at the lowest priority.
   - It reads only local files, never the share.
@@ -506,7 +544,17 @@ result lands more than 10 s before the first credits-on-plain frame are looked a
 
 ## The gate, revised
 
-The phase 2b gate runs after the version 3 backfill:
+This plan's gate (it replaces phase 2b's gate, which is never run) runs after the version 3 backfill.
+- **It is a read-only database query**, of `credits_detection` against `plex_credits_marker`, not a tool run.
+  - The database holds no side. So the planner exports the joined rows read-only (with `edition.film_id`) and joins
+    them offline to `split-<date>.json`.
+  - Test and development rows are reported separately, grouped by the stored `opening_type` and `margin_band`.
+  - The planner logs the look by hand in the looks log: the date, the git SHA and the count of test files.
+- **Until the gate,** no error of the product's version 3 rows (`credits_detection`, the backfill) against Plex is
+  computed over test files, mirroring the v2 rule in "Not looked at before L5". L5's single offline look is the only
+  earlier use of the test split.
+
+The gate:
 
 - **Against Plex:** zero `FOUND` rows more than 15 s before `plex_credits_marker` on the same file and fingerprint.
   - The figures for the **test split** decide. This is the second and last time the test split is looked at.
@@ -533,9 +581,61 @@ Each phase is its own small PR, built by Sonnet and reviewed by the planner (`CL
 - **L2b — the dataset job.** `PlaybackGuard` (extracted), `CreditsDatasetJob`, the endpoints, the disk floor, resume,
   and the yield to `dueFiles()`. **The planner then runs it on 10 films, measures, and runs the rest** (about 2–3
   days).
-- **L3a — `OpeningType`, the end-title flag and `CreditsFeatures`**, to the planner's exact list. Synthetic frames: text on black, text on white, white on
-  light grey, a card change, a burned-in subtitle, a bright textured scene, a dark picture.
+- **L3a — `OpeningType`, the end-title flag and `CreditsFeatures`**, to the planner's exact list ("L3a
+  specification"), in four PRs, each done at merge:
+  - **L3a-1a:** `ActiveCrop` and `OpeningType`, pure. Done when these tests pass:
+    - the `ActiveCrop` tests: an odd left, an odd width, the 8 px throw, each input check at its boundary (a negative
+      left or top, a zero width or height, an area one px past the frame), and a grey frame of the wrong size;
+    - the `frameKind` boundary tests: one below, at and one above each threshold;
+    - the nearest-frame tie tests.
+  - **L3a-1b:** `CreditsFeatures`, pure. Done when every feature's exact-value tests and both property tests pass.
+    Synthetic frames: text on black, text on white, white on light grey, a card change, a burned-in subtitle, a bright
+    textured scene, a dark picture.
+  - **L3a-2a:** `FrameLabels`, plus `LeftOutReason`'s `LIT_OPENING` and `LIT_RUN`. Done when the listed fixtures
+    pass and L1's `LabelsJob` output is unchanged.
+  - **L3a-2b:** the `CreditsFeaturesMain` tool. Done when a smoke test runs it on a fixture dataset. The fixture holds
+    one `ok`, one `damaged` (wrong grey height), one `stale` (fingerprint differs from the label's), one
+    `incomplete`, one `mismatched` and one `noDirectory` development film, and one test, one excluded (test-side) and one unlabelled directory. The run's
+    `--ids` names all nine ids, so `noDirectory` is counted, and
+    the excluded test-side record counts as `excluded`. The test proves that only the `ok` film reaches pass 2 (rows
+    and a record are written for it alone), that the damaged film is opened only by the check, that no frame of the `stale` film is decoded, and that the test,
+    excluded, unlabelled and `noDirectory` ids are never opened and never written. It asserts every count in
+    `skippedByStatus`.
+  - **The tool first runs after the L3b-look release,** before L3c is planned. That run must reproduce the planner's Python counts in "L3a
+    specification" exactly: the openings, the coarse `LIT_OPENING`, `LIT_RUN` and kept counts, and the intervals
+    left out whole. This is the check that the Java and the prototype agree.
+    - **A mismatch blocks L5.** The planner diffs the results film by film, and a fix PR follows before any training
+      run is used.
 - **L3b — `GradientBoostedTrees`**, the model JSON, the determinism test and the feature-version test.
+  - **Training rows:**
+    - Rows are sorted by `(mediaFileId, kind, offsetMs)` everywhere: in the CSV, in training and in the determinism
+      test.
+    - Rows labelled with a `left_out` reason, or with empty time features, are dropped.
+    - **The base model trains on coarse rows only.** L3b's training `main` only exposes the variants, off by
+      default: `--with-dense` (dense rows added) and `--lit-text-variant` ("lit frames that show text"). They are
+      judged after L3c-eval exists, by the rule for all variants: kept only if the earliest out-of-fold error does
+      not get worse.
+  - **What the training `main` trains:** for each fold `k`, one model on development minus `k` (the five shipping
+    models), and for each pair of folds `k ≠ j`, one model on development minus `k` and `j` (the out-of-fold
+    ensembles: fold `k`'s prediction is the mean of the four models without `k`). It writes `oof-logloss.json`:
+    the coarse-row log loss of each fold's out-of-fold ensemble on that fold, and pooled over all development rows.
+    A test proves that no model used for fold `k`'s predictions saw a row of fold `k`.
+  - **The model file's hashes:** `summary.json` supplies the dataset and labels hashes. The training `main` takes the
+    split manifest as an argument and records its SHA-256.
+  - **Test rows are refused:** the training `main` has no `--look`, rejects it as an unknown flag, and exits
+    non-zero, writing no model, on the first row whose `side` is not `dev` or whose `fold` is empty. So L5 trains
+    only on a run without `--look`. Its tests cover both.
+- **L3b-look — `--look=L5` on `CreditsFeaturesMain`.** Its own small PR, merged
+  before the L3b-look release (the release after it). Done when tests show:
+  - without the flag, test directories are skipped and counted, never opened, exactly as in L3a-2b;
+  - with it, test films are included: their rows have `side` `test` and an empty `fold`, their records go into
+    `frame-labels.json`, and `summary.json` counts them separately;
+  - excluded and unlabelled directories are never opened, with or without the flag. Exclusion is still checked before
+    side (L3a-2b), and a fixture holds an excluded test-side record that is never opened under `--look=L5`;
+  - `look.json` holds the flag, the UTC time, the git SHA and the count of test films, and no ids.
+- **The looks log** (the planner fills it in from each `look.json`): none yet.
+  - Two looks count: `CreditsEvaluateMain`'s run with `--look=L5`, and the gate's database query ("The gate,
+    revised").
 - **L3c — `CreditsSegmenter`.** Tests:
   - a clean step;
   - a short `p ≈ 0.5` stretch early in the window before the real credits;
@@ -545,11 +645,45 @@ Each phase is its own small PR, built by Sonnet and reviewed by the planner (`CL
   - one card, then picture, then credits;
   - epilogue cards running into the credits;
   - no credits;
-  - the dense fallback.
+  - the dense fallback;
+  - a dense range cut short at the file's end, so that no `f` has a `p` throughout `[f, f + 5 s]`.
+- **L3c-eval — `CreditsEvaluateMain`,** the offline evaluation (the shipping model and segmenter code run on stored
+  features, as "Two model types" describes). Its own small PR, merged before the L3c release.
+  - **Specified in full when L3c is planned,** after the L3b-look release and L3b's training runs, and before any L3c code: its argument
+    list, the phase that owns the calibration and nested cross-validation (`λ`, `δ`, `G`, `σ`, `θ`, `θ_d`), and
+    where each fold's calibrated values are stored. What is settled now: a development film is scored only by models
+    that did not train on it (its fold's out-of-fold ensemble) with that fold's calibration, never by the shipping
+    ensemble; and the items below.
+  - It refuses test films unless `--look=L5` is passed, and writes `look.json`, both as in L3b-look.
+  - Tests cover the branches under "Two model types": a covered search (early metrics at `t − 5 s`, goals at
+    the simulated `f`), including one on aligned grids, scored the same way; and a search not covered (early at
+    `t − 5 s`, goals at `t`). One more test has `t` well before the target, where the stored frames alone would give a late `f` that the product
+    could not reach.
+  - **Its output,** `evaluation.csv`, has one row per film:
+    - `mediaFileId`, `side`, `fold`;
+    - `verdict` (`FOUND`, `UNSURE` or `NOT_FOUND`), `t` (empty when there is none), and the simulated `f` (empty
+      when not covered);
+    - `covered`, and `aligned` (for reporting only: `(t − offset₀) mod 500 ms = 0`, where `offset₀` is the first
+      stored dense offset in `complete.json`); `earlyError` (`t − 5 s` against the target, always) and `goalError`
+      (`f` against the target when covered, else `t`). `f`, `covered`, `aligned`, `earlyError` and `goalError` are
+      empty unless the verdict is `FOUND`; an empty `goalError` counts as not found for the ±60 s goal and as outside
+      ±10 s for the ±10 s goal. Each share's denominator is every film of that opening type (Plex's);
+    - the opening type at `t` (from `OpeningType.of(coarse, t)`), the margin band, and Plex's opening type for the
+      goals;
+    - version 2's verdict and error against the same target, from `--baseline <the v2 snapshot csv>`, whose columns
+      are `media_file_id, fingerprint, verdict, offset_ms, reasons, checked_at, analysis_version`. A row joins on
+      `media_file_id` and `fingerprint`; with no matching row, both are empty. `--baseline` is refused (exit non-zero,
+      nothing written) unless `--look=L5` is also passed, with a test. So the one `--look=L5` run scores the baseline
+      too; v2 is never scored by hand, nor on development films as a set before L5.
+
+    Its tests include a film whose opening type at `t` differs from the one at Plex's start.
+  - Its run with `--look` is the one that counts as a look.
 - **L4a — the encoder check (planner, no PR, after L4b is released):** CPU and RSS for each candidate, measured with
   L4b's benchmark in a tool run.
 - **L4b — model B's tool code:** ONNX Runtime, the embeddings, logistic regression and the benchmark `main` (CPU
   time and peak RSS), with a tiny ONNX fixture. No product wiring.
+  - Its `main`s that read stored frames refuse test films unless `--look=L5` is passed, and write `look.json`,
+    as in L3b-look.
 - **L5 — the comparison (planner).** Tool runs, nested cross-validation, the choice, then the first look at the test
   split. The results go into this file as "L5: what the models showed".
 - **L6a — the model in the product.**
@@ -651,8 +785,9 @@ L1's brief copies this section as written.
 - **The manifest file** `split-<date>.json`, **per film**:
   - `{ "date", "films": [{ "film_id", "unit_key", "side", "fold" }], "looks": [] }`;
   - every exported film is listed, excluded ones included;
-  - `looks` records each use of the test split (`--look=L5`, `--look=gate`) and is copied unchanged from the previous
-    manifest.
+  - `looks` stays an empty array, copied unchanged from the previous manifest. Tool runs mount `/labels`
+    read-only, so the record of each use of the test split is the plan's looks log, under "Phases"
+    ("Settled for later phases").
 - **Carry-over rules, applied in order:**
   1. A film with a previous entry keeps its side and fold. **It wins over the pre-seed**, and the run reports the
      conflict.
@@ -706,8 +841,24 @@ L1's brief copies this section as written.
 
 ### Not looked at before L5
 
-- **The v2 detector's results on test films.** The v2 backfill is running now. Until L5, its results are compared
-  with Plex on development films only. The baseline is scored on the test split only within L5's single look.
+- **The v2 detector's results on test films.** The v2 backfill finished on 2026-11-15; its rows were snapshotted on
+  2026-11-17 (`credits-detection-v2-2026-11-17.csv` in `~/cinefilm-labels/`).
+  - **Until L5, no v2-against-Plex error is computed over development films as a set:** no count, share,
+    histogram, ranking or list, in any bins. Finer bins would sum back to the breach's.
+  - A per-film comparison is allowed only for a film chosen without reference to v2's errors.
+  - The baseline is scored on the test split only within L5's single look.
+  - **2b's "gate before phase 3" query** (`credits-detection-plan.md`) runs over every file with a marker, test files
+    included. It is superseded by this plan's gate, and is never run.
+- **A breach, recorded (2026-11-15).** When the v2 backfill finished, the planner compared v2 with Plex as one
+  blended count over all 847 files with both a marker and a result, test files included.
+  - No split, film or opening type was broken out, and nothing has been tuned on it. The new model is unaffected,
+    because none of its choices come from the v2 results.
+  - **The counts are kept off this public file**, in `~/cinefilm-labels/breach-2026-11-15.txt`. Development counts
+    in the same bins, subtracted from them, would give the test split's.
+  - The bins were: within −15 s…+60 s, more than 60 s late, more than 15 s early, and not found or unsure. Together
+    they cover every outcome, hence the rule above.
+  - L5's report scores the baseline on the test split as planned, and names this earlier blended look beside it.
+    It is recorded here, not in the looks log ("Settled for later phases").
 
 ### Re-import
 
@@ -715,12 +866,348 @@ L1's brief copies this section as written.
   After Plex re-analyses a film, a row can outlive its marker. Taking the archive and the export in one sitting
   mostly covers this, and L1's shift check catches a changed earliest marker.
 
+## L3a specification (measured 2026-11-17)
+
+### What was measured
+
+All on development films only, read-only, on the server:
+
+- **The full dataset run** finished on 2026-11-16: 847 of 849 files. The two missing files have no decodable picture
+  in their last seconds (fixed for the product in #170; the dataset's colour reads still stop there).
+- **`DatasetMeasureMain`** ran on every development film (`measure-20261117T153142Z` in `~/cinefilm-labels/`):
+  - 609 films, all `ok`; 238 test directories were skipped and never opened;
+  - 253,159 coarse frames.
+- **The planner's standard-library Python** decoded the stored grey PNGs and applied this section's exact definitions:
+  the `ActiveCrop` crop, nearest-rank percentiles, and the nearest-frame tie rule. It read the L1 labels and wrote
+  nothing to the dataset.
+  - By L1's labels, 42,082 of the coarse frames are credits and 208,915 are film.
+  - Every table below is over **coarse frames only**: every credits frame, plus a random 20,000 of the film frames.
+
+All luma is `FramePrep`'s full-range grey (black 0, white 255), inside the crop.
+
+**Dark background.** The median is a much cleaner test than the mean, because text raises the mean but not the
+median:
+
+| Rule | Credits frames | Film frames |
+|---|---|---|
+| `P50 < 2` | 77.7% | 1.6% |
+| **`P50 < 4` (chosen)** | **79.9%** | **3.2%** |
+| `P50 < 8` | 82.1% | 7.4% |
+| `mean < 22` (P0's 35, mapped to full range) | 77.9% | 14.9% |
+
+- Going from 4 to 8 adds 2.2 points of credits frames for 4.2 points of film frames.
+- On openings, `P50 < 8` turns 22 more films from lit to dark (390 against 368).
+- **Why frame-level film share decides it.** Inside a credits interval, a film frame wrongly called plain keeps lit
+  picture labelled as credits. That is the error the lit rules exist to prevent. A lower threshold only leaves more
+  credits frames out, which costs training data, not correctness.
+  - `frameKind` also sets `OpeningType`, which decides which goals a film is held to and which `AUTO` band it falls
+    in. So a threshold that moves films from dark to lit also moves them out of the ±10 s goals. That is what the
+    review below checks.
+- **The cost, checked at the first tool run.** Before L5's first training run, the planner reviews development stills of the 22
+  films that `P50 < 8` would turn dark, and of 20 of the 124 intervals left out whole ("With the chosen rules"). The
+  outcome is recorded here.
+- **A threshold change** is a one-constant PR. In the same change, the planner re-runs the prototype and replaces
+  every count recorded from it: this section's tables, the openings under the P0 table, and the counts the Java
+  check reproduces. A change made after the L3b-look release needs a new release before the Java check runs.
+
+**Light plate.** Among bright frames (crop mean ≥ 121: 1,897 credits frames, 1,113 film frames in the sample):
+
+| `P90 − P10` at most | Credits (share of bright) | Film (share of bright) | Plate openings |
+|---|---|---|---|
+| 35 | 320 (16.9%) | 39 (3.5%) | — |
+| **47 (chosen)** | **568 (29.9%)** | **49 (4.4%)** | **17** |
+| 60 | 809 (42.6%) | 76 (6.8%) | 21 |
+
+- **At a spread of 47:**
+  - a mean of at least 100 gives 23.0% of credits frames and 2.5% of film frames;
+  - a mean of at least 140 gives 31.8% and 4.5%;
+  - each share is over the frames that are bright at that mean.
+- **Where 121 and 47 come from.** They are P0's 120 and 40, picked by eye before any split existed and mapped to full
+  range by `(Y − 16) × 255 / 219` (121.1 and 46.6), not fitted to test films.
+  - The development figures above support keeping them.
+  - Moving to 60 changes 4 openings, and raises the film share about 1.5 times (4.4% to 6.8%).
+  - **Read the 4.4% with care.** The film side is a sample of about 9.6% of the window's film frames. Scaled up,
+    about 510 film frames are `PLATE`, against 568 credits frames.
+- **The 10th–90th spread is kept, not the 5th–95th.** On a white card, text often covers more than 5% of the pixels,
+  so the 5th percentile lands on the text.
+
+**With the chosen rules:**
+
+- **Openings:** of 609 films, 368 dark (60%), 17 plate (3%) and 224 lit (37%).
+- **The lit rules ("`FrameLabels`" below):**
+  - they leave out 5,880 coarse credits frames as `LIT_OPENING` and 1,646 as `LIT_RUN`, and keep 34,556 (82.1%);
+  - 124 credits intervals have no two consecutive plain coarse frames, and are left out whole. This includes the
+    intervals holding fewer than two coarse frames.
+- **These counts are the reference for the Java check.** They come from `labels-2026-11-13.json` and the dataset as
+  read on 2026-11-16 (the 609 development films in `measure-20261117T153142Z`).
+  - Their `datasetSha256`, by the definition under `CreditsFeaturesMain`, is
+    `a6068949c657f06fc2f83a90cac5574700a565b0ceca8a78426eea51c7fbed8a`.
+  - The Java run must use the same labels file, and its `datasetSha256` must match this hash before the counts are
+    compared.
+  - If the dataset has changed since (a film added, or re-read after a fingerprint change), the planner restricts
+    the Java run with `--ids` to the unchanged films. It first re-runs the Python prototype on the same id list, and
+    compares the hash and the counts against that run.
+
+**A prototype of the text-shape features**, on the crop. It used this spec's definitions of `B`, ink, edges and thin
+runs. Its text-row test compared a floating-point share with 0.02 and 0.6, not the integer test below, so the
+`bands` row is approximate. These are quartiles (25 / 50 / 75) over 600 random credits
+frames and 600 film frames from the five minutes before the target:
+
+| Feature (below) | Credits | Film |
+|---|---|---|
+| `plain` | 0.78 / 0.86 / 0.91 | 0.20 / 0.30 / 0.51 |
+| `hEdge` | 0.020 / 0.040 / 0.069 | 0.004 / 0.010 / 0.022 |
+| `thinPerK` | 9.3 / 18.8 / 29.5 | 3.5 / 7.3 / 13.4 |
+| `thinShare` | 0.78 / 0.90 / 0.97 | 0.53 / 0.67 / 0.79 |
+| `bands` | 2 / 8 / 14 | 0 / 1 / 2 |
+
+The raw report, the labels and the scripts stay in `~/cinefilm-labels/`. They are library data and are never
+committed.
+
+### Conventions for all of L3a
+
+- **Integer arithmetic is Java's.** Each formula below is given as the Java expression to use: `w / 4` rounds down,
+  and `(a + 1) / 2` is `ceil(a / 2)` for `a >= 0`, which `ActiveCrop` checks first.
+- **A `double` share or ratio** is `(double) numerator / denominator`, and is 0 when the denominator is 0.
+- **Percentiles are nearest-rank**, as in `FrameStats`. Over the `n` crop values sorted ascending, `P(p)` is the
+  value at the 1-based rank `(p * n + 99) / 100`.
+- **The mean** is `(double) sum / n`, where `sum` is a `long`.
+- **The 33 features form one `double[]`,** in the order below. Integer-valued features such as `p10` and `bands` are
+  stored as doubles, so `12` is written `12.0`.
+
+### `ActiveCrop` (pure, L3a-1a)
+
+`ActiveCrop.of(int left, int top, int width, int height, int greyWidth, int greyHeight)`:
+- the first four are the area in 480 px coordinates;
+- the last two are the grey frame's size: `complete.json`'s `frame` width and height divided by 2.
+
+`GreyFrame apply(GreyFrame grey)` returns the cropped frame. It throws when `grey`'s size is not `greyWidth` ×
+`greyHeight`. Every function below takes the cropped `GreyFrame`.
+
+**It first throws `IllegalArgumentException`** unless all of these hold:
+- `left >= 0` and `top >= 0`;
+- `width >= 1` and `height >= 1`;
+- `left + width <= 2 * greyWidth` and `top + height <= 2 * greyHeight`.
+
+Then it computes the crop.
+
+- The active area is in 480 px coordinates (`complete.json`'s `activeArea`, and `ActiveArea.of` in the product). The
+  240 px grey frame's pixel `X` covers 480 px columns `2X` and `2X + 1`.
+- **The crop keeps whole 2×2 boxes only:**
+  - `x0 = (left + 1) / 2` and `x1 = (left + width) / 2`; `y0` and `y1` the same way;
+  - columns `[x0, x1)` and rows `[y0, y1)`.
+- **It then throws** unless `x1 - x0 >= 8` and `y1 - y0 >= 8`. `ActiveArea.of` guarantees at least half the frame, so neither happens on real files.
+
+### `OpeningType` (pure, L3a-1a)
+
+- **`FrameKind frameKind(double mean, int p10, int p50, int p90)`,** and `frameKind(GreyFrame crop)`, which
+  computes the four stats and delegates to it. The boundary tests go through the stats version, and the "lit frames
+  that show text" variant reuses it, so the thresholds live in one place:
+  - `DARK` when `P(50) < 4`;
+  - else `PLATE` when `mean >= 121` and `P(90) - P(10) <= 47`;
+  - else `LIT`.
+
+  The constants are named, and their Javadoc cites this section.
+- **`OpeningType.of(List<KindAt> coarse, long startMs)`.** `KindAt` is `(long offsetMs, FrameKind kind)`, sorted by
+  offset.
+  - For each of `startMs + 5000`, `+ 20000` and `+ 45000`, it picks the coarse entry with the smallest
+    `|offset − time|`. On a tie, the earlier entry wins.
+  - It returns `DARK` if the +5 s entry is `DARK`, else `PLATE` if any of the three is `PLATE`, else `LIT`.
+  - It returns empty (`Optional`) when the list is empty or no entry is at or after `startMs`. That can happen when
+    a coarse pass ended early at a frameless tail (#170).
+- It takes kinds, not frames, so `FrameLabels` and the product stay pure. The caller computes the kinds.
+
+### `CreditsFeatures` (pure, `FEATURE_VERSION = 1`, L3a-1b)
+
+**Inputs.** One crop (`w × h`, `n = w * h`) and, for the two time features, its two neighbours' crops of the same
+size.
+- `B` is the crop's `P(50)`.
+- A pixel is **ink** when `Math.abs(v - B) >= 64`, so light and dark text count alike.
+
+**The 33 features, in this order** (the CSV column names are these names):
+
+1. `mean`, `p10`, `p50`, `p90`: the luma statistics.
+2. `plain`: the share of pixels with `Math.abs(v - B) <= 12`.
+3. `ink`: the share of ink pixels.
+4. `hEdge`: the horizontal edge pairs, over `(w - 1) * h`. A pair is pixels `(x, y)` and `(x + 1, y)` with
+   `Math.abs(Δ) >= 48`.
+5. `vEdge`: the same for vertical pairs, over `w * (h - 1)`.
+6. **The thin-stroke features.** An **ink run** is a maximal horizontal run of ink pixels in one row. A run is
+   **thin** when it is 1 to 6 px long.
+   - `thinPerK`: `1000.0 * thinRuns / n`.
+   - `thinShare`: thin runs over all ink runs.
+7. **The text-row features.** Row `y` is a **text row** when its count `e` of horizontal edge pairs satisfies
+   `50 * e >= w - 1` and `5 * e <= 3 * (w - 1)`. That is a share from 0.02 to 0.6, inclusive, in exact integers.
+   - `textRows`: text rows over `h`.
+   - `bands`: the number of maximal runs of consecutive text rows that are 3 to 20 rows tall, inclusive.
+   - `lineSpacingCv`: each band's centre is `(first + last) / 2.0`. Over the `k` gaps between consecutive centres,
+     it is computed in this order:
+     1. `m = sum / k`;
+     2. `var = Σ (g − m)² / k`, summed in gap order;
+     3. `Math.sqrt(var) / m`.
+
+     It is 0 with fewer than 3 bands.
+8. `centralInk`: ink pixels in columns `[w / 4, (3 * w) / 4)`, over all ink pixels.
+9. `bottomInk`: ink pixels in rows `[h - h / 5, h)`, over all ink pixels. Burned-in subtitles sit here.
+10. **The grid,** `grid00` … `grid33` (row `i`, then column `j`). Each is the ink pixels in a cell over that cell's
+    pixels, not over all ink. Cell `(i, j)` covers columns `[(j * w) / 4, ((j + 1) * w) / 4)` and rows
+    `[(i * h) / 4, ((i + 1) * h) / 4)`.
+11. **The time features:**
+    - `mad`: `(double) (s1 + s2) / (2L * n)`. `s1` and `s2` are the `long` sums of `Math.abs(v - v')` against each
+      neighbour.
+    - `inkChange`: `(double) (c1 + c2) / (2L * n)`. `c1` and `c2` count the pixels whose ink status differs from
+      each neighbour, each frame using its own `B`.
+
+    **Neighbours:**
+    - **A coarse frame** uses the entries one index either side in `complete.json`'s `coarse` list. At either end of
+      the list, the one neighbour is used for both.
+    - **A dense frame** uses the entries 10 indices either side in `complete.json`'s `dense` list.
+      - Without both neighbours, it has no time features: they are empty in the CSV, and the row is not used for
+        training.
+      - Dense frames before the window are omitted from the CSV, but still serve as neighbours.
+      - The list can be shorter than 120 entries, when the file ends inside the range or ffmpeg wrote fewer frames.
+        The rule is by index, so it still holds ("Settled for later phases").
+
+**Tests.**
+- Exact values for every feature, on small hand-made crops from 8 × 8 up to 32 × 24 (heights to 24 for the band and
+  `lineSpacingCv` boundaries; odd-by-odd sizes such as 9 × 9 and 31 × 23 for the negative property), plus the plan's
+  synthetic frames.
+- Boundary tests one below, at and one above each threshold: 64, 12, 48, the run lengths 6 and 7, the band heights 2,
+  3, 20 and 21, and both text-row inequalities. The lower one (`50 * e >= w - 1`) is at equality only when `w - 1` is
+  a multiple of 50, so its test uses a 51 × 8 crop (`e = 1` at the boundary, `e = 0` below), the one exception to the
+  size range.
+- **Two properties**, tested with examples on the hand-made crops (no property-testing dependency):
+  - **A frame and its negative** (`255 − v`, applied to the neighbours too) give equal values for every feature
+    except `mean`, `p10`, `p50` and `p90`. The test uses crops with an odd pixel count, where the nearest-rank median
+    of the negative is exactly `255 − B`.
+  - **A frame compared with itself** gives `mad = 0` and `inkChange = 0`.
+
+### `FrameLabels` and `CreditsFeaturesMain` (L3a-2)
+
+**`FrameLabels` (pure)** takes one L1 `LabelRecord` and the film's coarse `List<KindAt>`.
+
+- **The rules work on each interval of the record's `credits` list**, which L1 has already trimmed by `BOUNDARY`.
+  - Membership is half-open: a coarse frame at `t` is inside `[from, to)` when `from <= t < to`.
+  - "Consecutive" means adjacent entries in `complete.json`'s `coarse` list.
+- **`LIT_OPENING`:**
+  - Find the first two consecutive coarse frames inside the interval that are both plain (`DARK` or `PLATE`).
+  - If that pair starts at the interval's first coarse frame, nothing is left out, and the stretch from `from` to
+    that frame stays credits.
+  - Otherwise, the left-out interval is `[from, the offset of the pair's first frame)`. A lone plain frame before
+    the pair doesn't end it.
+  - If no such pair exists, including when the interval holds fewer than two coarse frames, the whole interval
+    becomes `LIT_OPENING`.
+- **`LIT_RUN`:** after that pair, each run of 3 or more consecutive `LIT` coarse frames inside `[from, to)` (frames
+  past `to` never extend a run; a fixture has a run of 2 at the interval's end that continues as `LIT` past `to`, and
+  is kept) becomes
+  `[first's offset, min(last's offset + 5000, to))`. A run of 2 is kept.
+- **The record afterwards:**
+  - `LeftOutReason` gains `LIT_OPENING` and `LIT_RUN`. L1's `LabelsMain` output is unchanged by this.
+  - The `credits` intervals shrink to what is left, and empty fragments are dropped, as in L1.
+  - The three lists stay disjoint and still cover `[windowStart, duration)`.
+  - `left_out` is sorted by `from_ms`.
+- **`FrameLabels.labelAt(FrameLabelRecord, long offsetMs)`** is pure and gives any frame's label, coarse or dense:
+  `credits`, `film`, or the `left_out` reason of the interval holding it, by half-open membership. The bounds are the
+  union of the three lists (the first `from`, the last `to`); an offset outside them, or any offset on an excluded
+  record (empty lists), is an `IllegalArgumentException`. `CreditsFeaturesMain` writes `features.csv`'s `label`
+  with it.
+- **The end-title flag:**
+  - `opening_type = OpeningType.of(coarse, target_start_ms)`, and `lit_opening = (opening_type == LIT)`.
+  - When `OpeningType.of` is empty, both are null. The film's frames are still labelled, and `summary.json` counts it
+    under `noOpeningFrame`, with no id.
+  - Inside the pure class, an excluded record gets both as null and keeps its empty lists. The tool never writes
+    excluded records (below).
+- **The output record is a new `FrameLabelRecord`,** not a change to `LabelRecord`, so L1's output is unchanged. It
+  holds `LabelRecord`'s fields in their order, then `opening_type` (`"DARK"`, `"PLATE"`, `"LIT"` or null) and
+  `lit_opening` (a boolean or null), with the same snake_case naming.
+- **Fixtures** (the excluded record is tested inside the pure class only):
+  - a *Civil War*-like plate film, whose plate frames stay credits;
+  - a lit opening;
+  - an interval with no plain pair;
+  - a `LIT_RUN` that ends at the interval's end;
+  - a run of exactly 2 `LIT` frames, which is kept;
+  - `labelAt` for dense offsets on both sides of a boundary (`to − 500` and `to`);
+  - an excluded record;
+  - a credits interval holding one coarse frame;
+  - a lone plain frame before the first plain pair;
+  - a film with no coarse frame at or after its target.
+
+**`CreditsFeaturesMain`** is a thin `main`. Its arguments are `--data /data --labels /labels/labels-<date>.json
+--out /out [--ids …]`. It has no `--stills` and no `--project`.
+
+- **Development films only, with no way to include test films.** Otherwise it follows `DatasetMeasureMain`'s rules,
+  with one difference:
+  - test, excluded and unlabelled directories are never opened;
+  - a record's exclusion is checked before its side, so an excluded test-side record counts as `excluded`
+    (`DatasetMeasureJob.classify` checks side first and counts it as `test`);
+  - `summary.json` counts them, and no skipped id of any kind is written;
+  - it writes a fresh `<out>/features-<stamp>/` per run.
+- **Only `ok` films are read, in two passes per film.**
+  1. **Check,** in this order: `DatasetComplete.read` (empty is `incomplete`); the directory's id against
+     `complete.json`'s `mediaFileId` (a difference is `mismatched`); `complete.json`'s `fingerprint` against the
+     label's (a difference is `stale`, with no frame decoded; L3b-look and L3c-eval apply the same rule). Then
+     `FilmCheck.check`, which reads `complete.json` again (expected), with a sink that ignores each frame except to check its grey height against
+     `complete.json`'s `frame.height / 2`. A wrong height makes the film `damaged` before pass 2 starts, so nothing
+     is written for a film that turns out not `ok`. `FilmCheck` is unchanged, so `DatasetMeasureMain`'s
+     output is too.
+  2. **Read.** Only for an `ok` film. It first computes every coarse frame's features and kind and keeps those rows
+     (about 420 × 33 doubles), runs `FrameLabels`, and writes the coarse rows. Then it streams the dense frames in
+     list order through a bounded buffer (21 frames) for the ±10-index neighbours.
+
+  The smoke test's damaged film is one whose grey frame has the right width and the wrong height, so `FilmCheck`
+  returns `OK` and only this check makes it `damaged`.
+  - A film that is `incomplete`, `mismatched` or `damaged` is skipped. A development label with no directory is
+    considered only when `--ids` names it (without `--ids` only directories are enumerated). `DatasetMeasureJob`
+    folds it into `incomplete`; this tool counts it apart, as `noDirectory`.
+  - Skipped films are counted in `summary.json` under `skippedByStatus: {incomplete, mismatched, damaged,
+    noDirectory, stale}`, with no ids, beside the `test`, `excluded` and `unlabelled` counts.
+- L3b-look adds `--look=L5` ("Phases"); there is no `gate` value.
+- **`features.csv`:** one row per stored grey frame (coarse and dense) inside the window.
+  - Rows are in `(mediaFileId, kind, offsetMs)` order. `kind` is `coarse` or `dense`, and `coarse` sorts first.
+  - Columns: `mediaFileId`, `fold`, `side`, `kind`, `offsetMs`, `label`, then the 33 features. Without `--look`,
+    `side` is always `dev`.
+  - `label` is `credits`, `film`, or a `left_out` reason written as its enum name: `BOUNDARY`,
+    `AFTER_LAST_CREDITS`, `LIT_OPENING` or `LIT_RUN`.
+  - Dense frames before the window, possible when the target is within 30 s of the window's start, are omitted, and
+    counted in `summary.json`.
+  - Every `double` is written with `Double.toString`, so the CSV round-trips exactly. L3b trains on these values, and
+    the product computes the same doubles in memory.
+- **`frame-labels.json`:** a top-level array of `FrameLabelRecord`, in `media_file_id` order.
+  - It holds only the development records whose film was read.
+  - Excluded records, and development films skipped as not `ok` or missing, are omitted and counted in
+    `summary.json`. A `SPLIT_CONFLICT` exclusion can sit in a test unit, so no excluded id is written.
+  - It never overwrites L1's labels file.
+- **`summary.json`:**
+  - counts by `(kind, label)`, by opening type, and of the intervals left out whole;
+  - the skipped counts by reason and status, and the omitted dense frames;
+  - `FEATURE_VERSION` and the git SHA;
+  - the SHA-256 of the labels file;
+  - `datasetSha256`: one SHA-256 over the `complete.json` bytes of the development films that reached pass 2
+    (`ok`), concatenated in ascending numeric `mediaFileId` order. Test films never enter it, with or without
+    `--look`; the reference check uses a run without `--look`.
+
+**The "lit frames that show text" variant** ("Labels").
+- It relabels as `credits` the rows labelled `LIT_OPENING` or `LIT_RUN` that meet both conditions:
+  - their `frameKind`, recomputed from the row's `mean`, `p10`, `p50` and `p90`, is `LIT`;
+  - their `bands >= 3`.
+- It applies to coarse and dense rows alike.
+- The relabel happens before `left_out` rows are dropped for training.
+- It is an option of L3b's training `main` (`--lit-text-variant`), judged once L3c-eval exists. It is adopted only if
+  the earliest out-of-fold error does not get worse.
+
 ## Settled for later phases (from review round 4)
 
 - **L3a, plain frames.** The "first 10 s run of plain frames" rule is evaluated on **coarse** frames (two consecutive
   plain coarse frames make one 10 s run). The labels it produces apply to dense frames too.
-- **L2/L3, dense time features.** These are computed only for dense frames that have ±5 s neighbours inside **both**
-  the dataset's range and the product's. That is the part the two ranges share.
+- **L2/L3, dense time features.** Superseded by L3a's rule ("`CreditsFeatures`", time features). A dense frame
+  has time features only when both its ±10-frame neighbours exist in its own decoded list. Neighbours are counted by
+  index, with no clamping.
+  - **In the dataset,** a full range (target ± 30 s, 120 frames) gives indices 10–109: `[target − 25 s,
+    target + 25 s)`. A list cut short, at the file's end or by ffmpeg writing fewer frames, covers less.
+  - **In the product** (`[t − 15 s, t + 35 s)`), a full range covers `[t − 10 s, t + 30 s)`. That includes the
+    segmenter's dense search (`f ≥ t − 5 s`, over `[f, f + 5 s]`).
+  - **L6a must handle the cut-short case:** a range clamped at the file's end, where the search has fewer frames
+    with time features.
 
 These go into each phase's brief as written:
 
@@ -728,24 +1215,38 @@ These go into each phase's brief as written:
   limited range (black 16).
   - `FramePrep` produces full-range luma.
   - `ActiveArea.of` keeps getting the product's existing `format=gray` frames, unchanged.
-  - Every threshold in this plan that applies to `FramePrep` frames (`OpeningType`'s 35, 120 and 40) is a
-    placeholder. L3a re-derives it on development frames before use. The P0 table was measured on limited-range Y.
+  - Every threshold in this plan that applies to `FramePrep` frames (`OpeningType`'s 35, 120 and 40) was a
+    placeholder. L3a re-derived them on development frames ("L3a specification"). The P0 table was measured on
+    limited-range Y.
 - **L2a/L2b, one command shape for dense frames.** The dataset decodes dense frames exactly as the product does:
   one `fps=2` sequential decode per range, not one seek per frame. The dataset's dense range is the target ± 30 s.
-- **The time features** of a dense frame use dense neighbours ±10 frames (±5 s), clamped at the range ends, in both
-  training and the product. Coarse frames use coarse neighbours.
+- **The time features** of a dense frame use dense neighbours ±10 frames (±5 s), in both training and the product.
+  There is no clamping: see the L2/L3 item above. Coarse frames use coarse neighbours, and at a window end the one
+  neighbour is used for both.
 - **L2b creates the directories** `credits-dataset` and `credits-dataset-out` as uid 1001 at the job's first start.
 - **L2b ships a stills and measurement `main`.** The planner's 10-film measurement before L3a (grey and colour
   statistics, stills) runs on released code. Nothing is installed.
 - **L6a checks ffmpeg drift.** It compares the runtime ffmpeg version with `complete.json`'s. If they differ, it
   re-scores 20 development films through the product before the backfill.
-- **Protecting the test split in code (L3b onwards).** The training and evaluation `main`s refuse rows with
-  `side = test` unless an explicit `--look=L5` or `--look=gate` flag is passed. Each use is logged in the manifest.
-  The P0 opening thresholds, measured on all films, are only placeholders (above).
+- **Protecting the test split in code (L3b onwards).**
+  - The training `main` always refuses test rows (L3b: any `side` other than `dev`, or an empty `fold`).
+  - The features, embedding and evaluation `main`s refuse them unless an explicit `--look=L5` is passed.
+  - The gate's look is a database query, logged by hand ("The gate, revised").
+  - **Where a look is logged.** Tool runs mount `/labels` read-only, so a tool never edits the manifest. Each run
+    with `--look` writes `look.json` into its own output directory: the flag, the time, the git SHA and the count of
+    test films. The planner copies each one into this file's looks log, under "Phases".
+  - **What counts as a look.** Only `CreditsEvaluateMain`'s run with `--look=L5`, and the gate's query. Extracting
+    test features or embeddings under `--look` is logged, but it is not a separate look: such runs happen only after
+    L5's choice is recorded, as part of its single look.
+  - **The opening thresholds.** P0's were picked by eye on all 849 films, test films included. L3a mapped them to
+    full range and confirmed them on development films (`PLATE`), or replaced them from development data (`DARK`).
+    Nothing was fitted to test films, and P0's by-eye choice is accepted as a prior.
 - **The model file is public.** `credits-model-v1.json` holds no titles, paths or media ids, only weights,
   thresholds and hashes.
 - **L6a stores two new columns.** It adds `credits_detection.opening_type` and `margin_band` (an expand-only
-  migration). Both are computed at the product's own start `t`. The gate's per-band test rule groups the test rows by
+  migration). Both are computed at the coarse `t` from steps 2–4 of "Finding the start", before the dense step: the
+  margin band from `S(t, u*)`, and the opening type from `OpeningType.of(coarse, t)`. The reasons text's `<opening>`
+  is that same value. The gate's per-band test rule groups the test rows by
   those stored values, the same values `AUTO` will be switched by. Plex's start is used only for the "opening" column
   in reports.
 
