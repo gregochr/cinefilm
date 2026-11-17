@@ -339,20 +339,22 @@ Plan: `library-scan-plan.md`. What the API and the model now carry:
   now, rounded in older rows), so asking one more point of each means neither can claim more than the matcher would; an
   exact boundary may be declined, the safe side. A tagged (`{imdb-tt…}`) match the guard refused is one candidate at
   `REFUSED_SCORE` (100), while a refused title-search match keeps the matcher's candidates and is judged like any other.
-  *Full row in play:* `need == NEEDED`, the owner choice is not `NONE_EXIST`, and no full English subtitle plays. *Forced row in play:* `need == NEEDED` and
-  `hasForcedSubtitle` is false (today's `needed-missing`; a film's embedded forced track counts as a subtitle that
-  plays). An in-play row is **being checked** when the film has an IMDb id and either OpenSubtitles has not been
-  searched for its current IMDb id (full: no stored full search for that id; forced: `openSubtitlesForcedCount` is
-  null, or the film has no stored candidates, which the search scheduler fills in: `os_candidates` null, the same
-  predicate as `findOpenSubtitlesDue`) **and searching is enabled** (an API key is set), or the **download scheduler would download for some
-  edition** and downloads are enabled (key, username and password are set; with downloads off `PendingDownloads` reads
-  nothing and returns none): full, `ForcedDownloadService.fullDueFor` is
-  non-null for an edition; forced, the count is above 0 and `ForcedDownloadService.dueFor` is non-null for an edition.
-  Those are the scheduler's own decisions (due, a candidate left after blocks, the ledger and spent references, under
-  `MAX_DOWNLOADS`), run by `PendingDownloads` over the scheduler's own edition set (editions whose files are missing
-  included). Otherwise the row is **unresolved**. The daily download limit is never looked at, so a deferred download
-  is still being checked. Rows that are not in play are neither. Only Admin's lists and the owner's choice compute the
-  flags; the scheduler does not (its automatic search and download use `searchFilmIds()`: the `NEEDED` films minus the owner's `NONE_EXIST`; timing-fit uses `neededFilmIds()`, all `NEEDED` films).
+  *Full row in play:* `need == NEEDED`, the owner choice is not `NONE_EXIST`, and no full English subtitle plays.
+  *Forced row in play:* `need == NEEDED` and `hasForcedSubtitle` is false (today's `needed-missing`; a film's embedded
+  forced track counts as a subtitle that plays). An in-play row is **being checked** when the film has an IMDb id and
+  either OpenSubtitles has not been searched for its current IMDb id (full: no stored full search for that id; forced:
+  `openSubtitlesForcedCount` is null, or the film has no stored candidates, which the search scheduler fills in:
+  `os_candidates` null, the same predicate as `findOpenSubtitlesDue`) **and searching is enabled** (an API key is set),
+  or the **download scheduler would download for some edition** and downloads are enabled (key, username and password
+  are set; with downloads off `PendingDownloads` reads nothing and returns none): full,
+  `ForcedDownloadService.fullDueFor` is non-null for an edition; forced, the count is above 0 and
+  `ForcedDownloadService.dueFor` is non-null for an edition. Those are the scheduler's own decisions (due, a candidate
+  left after blocks, the ledger and spent references, under `MAX_DOWNLOADS`), run by `PendingDownloads` over the
+  scheduler's own edition set (editions whose files are missing included). Otherwise the row is **unresolved**. The
+  daily download limit is never looked at, so a deferred download is still being checked. Rows that are not in play are
+  neither. Only Admin's lists and the owner's choice compute the flags; the scheduler does not (its automatic search and
+  download use `searchFilmIds()`: the `NEEDED` films minus the owner's `NONE_EXIST`; timing-fit uses `neededFilmIds()`,
+  all `NEEDED` films).
 - **`ScanStatus`:** `{ running, folder, progress: { processed, total, current } | null, lastScan: { startedAt,
   finishedAt, trigger: "startup"|"nightly"|"admin", filesSeen, newFiles, missingFiles, error } | null, counts: {
   films, newFiles, missing, protectedFiles, needsConversion, needsMatch, unreadable, filmsWithCredits } }`.

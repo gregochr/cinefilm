@@ -59,7 +59,7 @@ export default function AdminTodo() {
     lists.groups.map((g) => `${g.key}:${g.rows.map((r) => r.filmId).join(',')}`).join('|'),
   );
 
-  // One save per film at a time: a click on a row whose save is in flight does nothing (the hook queues the newest).
+  // A second click on a film before its save has settled does nothing (nothing is queued).
   const sent = useRef(new Set());
   const chooseFull = (row, choice) => {
     if (sent.current.has(row.filmId)) return;

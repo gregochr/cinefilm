@@ -75,6 +75,21 @@ describe('Admin To do: the English-subtitles rows offer the Subtitles tab’s ac
     expect(server.calls).toHaveLength(1);
   });
 
+  it('sends one save for two clicks in the same tick, before the row shows it is saving', async () => {
+    const server = serve();
+    renderApp('/admin');
+    const region = await fullRegion();
+    const button = within(region).getByRole('button', { name: NONE_EXIST });
+
+    act(() => {
+      button.click();
+      button.click();
+    });
+
+    await waitFor(() => expect(screen.queryByText('Rashomon')).not.toBeInTheDocument());
+    expect(server.calls).toHaveLength(1);
+  });
+
   it('keeps the row and says so when the save fails, and the next click tries again', async () => {
     let failing = true;
     const server = serve({ fail: () => (failing ? respond({ error: 'boom' }, 500) : null) });

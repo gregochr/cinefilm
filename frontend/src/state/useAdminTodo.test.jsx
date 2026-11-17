@@ -404,6 +404,9 @@ describe('useAdminTodo: the full list’s owner choices', () => {
     expect(needs.calls).toEqual([{ filmId: 6, kind: 'full', body: { choice: 'NONE_EXIST' } }]);
     expect(onChanged).toHaveBeenCalledTimes(1);
     expect(onFullSaved).toHaveBeenCalledTimes(1);
+    expect(onFullSaved.mock.invocationCallOrder[0]).toBeLessThan(
+      onChanged.mock.invocationCallOrder[0],
+    );
     expect(result.current.full.data[0]).toMatchObject({ need: 'NEEDED', reason: 'NONE_EXIST' });
     expect(result.current.groups.find((g) => g.key === 'fullMissing')).toBeUndefined();
   });
