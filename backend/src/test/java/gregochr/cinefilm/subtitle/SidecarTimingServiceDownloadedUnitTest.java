@@ -297,7 +297,10 @@ class SidecarTimingServiceDownloadedUnitTest {
     }
 
     @Test
-    void aSaveWhoseSourceDoesNotMatchTheJobIsDropped() {
+    void aSaveWhoseSourceDoesNotMatchTheJobIsDroppedEvenWhenTheKeyStillMatches() {
+        // The file and the stored reference are as the job saw them, so only the source guard can drop these.
+        read(EmbeddedCueStarts.Status.NO_REFERENCE);
+        stored(reference(5012, 300, IMDB));
         served();
 
         assertThat(service.save(jobFitting(), aligned(0), 5012L, LATER)).isEqualTo(SaveOutcome.DROPPED);

@@ -332,15 +332,15 @@ public class SidecarTimingService {
             return SaveOutcome.DROPPED;
         }
         SubtitleSidecar sidecar = current.sidecar();
+        Map<Long, EmbeddedCueStarts> currentReads = reads(List.of(current));
+        String key = referenceKey(current, currentReads, osRefs(List.of(current), currentReads));
+        if (!TimingKeys.identity(sidecar).equals(job.identity()) || key == null || !key.equals(job.referenceKey())) {
+            return SaveOutcome.DROPPED;
+        }
         // The source must match the job: a fit to an OpenSubtitles file names one of the files the job fitted to, and a
         // fit to the film's own track comes from a job that fitted to none.
         if (osFileId == null ? !job.osReferences().isEmpty()
             : job.osReferences().stream().noneMatch(r -> r.osFileId() == osFileId)) {
-            return SaveOutcome.DROPPED;
-        }
-        Map<Long, EmbeddedCueStarts> currentReads = reads(List.of(current));
-        String key = referenceKey(current, currentReads, osRefs(List.of(current), currentReads));
-        if (!TimingKeys.identity(sidecar).equals(job.identity()) || key == null || !key.equals(job.referenceKey())) {
             return SaveOutcome.DROPPED;
         }
         ReferenceSource source = osFileId == null ? ReferenceSource.EMBEDDED : ReferenceSource.OPENSUBTITLES;
