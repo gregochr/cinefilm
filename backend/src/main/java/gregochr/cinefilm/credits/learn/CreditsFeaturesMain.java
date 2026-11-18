@@ -12,7 +12,8 @@ import tools.jackson.core.JacksonException;
  * Entry point of the credits features tool, run on the server as a throwaway container from the released image with
  * {@code -Dloader.main=gregochr.cinefilm.credits.learn.CreditsFeaturesMain} through {@code PropertiesLauncher}
  * ({@code docs/engineering/credits-classifier-plan.md}, "{@code FrameLabels} and {@code CreditsFeaturesMain}"). A plain
- * class, not a Spring bean. It reads {@code --data} and {@code --labels} and writes only {@code --out}.
+ * class, not a Spring bean. It reads {@code --data} and {@code --labels} and writes only {@code --out}. Test films
+ * are read only with {@code --look=L5}.
  *
  * <p>Exit codes: 0 when it ran, 1 on a bad flag, an unreadable input or an inconsistent film, 2 when
  * {@code frames/} is missing or holds no film directory.
@@ -25,7 +26,7 @@ public final class CreditsFeaturesMain {
     /**
      * Runs the tool and exits non-zero, with a one-line message, when it could not run.
      *
-     * @param args {@code --data --labels --out [--ids]}
+     * @param args {@code --data --labels --out [--ids] [--look=L5]}
      */
     public static void main(String[] args) {
         CreditsFeaturesJob job = new CreditsFeaturesJob(Clock.system(ZoneOffset.UTC), new GitCommit(),

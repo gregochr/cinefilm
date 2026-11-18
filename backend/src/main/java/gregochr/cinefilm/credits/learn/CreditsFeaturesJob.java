@@ -1,5 +1,6 @@
 package gregochr.cinefilm.credits.learn;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import gregochr.cinefilm.credits.GreyFrame;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -34,10 +35,15 @@ import tools.jackson.databind.json.JsonMapper;
  * {@code <out>/features-<yyyyMMdd'T'HHmmss'Z'>/} (made with {@code createDirectory}, so a run never overwrites an
  * earlier one). It reads only the dataset directory and the labels file; no database, no network, never a Spring bean.
  *
- * <p><strong>Only development films are opened.</strong> A record's exclusion is checked before its side (unlike
- * {@link DatasetMeasureJob}, which checks the side first), so an excluded test-side record counts as {@code excluded}.
- * Test, excluded and unlabelled directories are counted and never opened, and no skipped id of any kind is written.
- * Every access to a film directory goes through the {@link FilmSource}.
+ * <p><strong>Only development films are opened, unless {@code --look=L5} is given.</strong> A record's exclusion is
+ * checked before its side (unlike {@link DatasetMeasureJob}, which checks the side first), so an excluded test-side
+ * record counts as {@code excluded}. Excluded and unlabelled directories are counted and never opened, with or without
+ * the flag, and no skipped id of any kind is written. Without the flag test directories are counted and never opened
+ * too. With it test films are checked and read like development films, their rows have side {@code test} and no fold,
+ * their records join {@code frame-labels.json}, and their counts, kept apart from the development ones, are
+ * {@code summary.json}'s {@code test} block; the run also writes {@code look.json}. {@code datasetSha256} covers
+ * development films only, with or without the flag. Every access to a film directory goes through the
+ * {@link FilmSource}.
  *
  * <p>Check, in order: {@code complete.json} is usable ({@code incomplete}); its {@code mediaFileId} is the directory's
  * ({@code mismatched}); its fingerprint is the label's ({@code stale}, with no frame decoded); {@link FilmCheck} finds
@@ -83,18 +89,48 @@ final class CreditsFeaturesJob {
      * @param omittedDenseFrames the dense frames before the window, not written
      * @param skipped the directories and ids never opened, by reason
      * @param skippedByStatus the development films not read, by status
+     * @param test the counts of the test films, apart from all the above; absent without {@code --look=L5}
      */
     record Summary(int featureVersion, String toolGitCommit, String generatedAt, String labelsSha256,
                    String datasetSha256, int films, Map<String, Map<String, Integer>> rows,
                    Map<String, Integer> openingTypes, int noOpeningFrame, int intervalsLeftOutWhole,
-                   int omittedDenseFrames, Skipped skipped, SkippedByStatus skippedByStatus) {
+                   int omittedDenseFrames, Skipped skipped, SkippedByStatus skippedByStatus,
+                   @JsonInclude(JsonInclude.Include.NON_NULL) TestSummary test) {
+    }
+
+    /**
+     * The test films of a run with {@code --look=L5}, counted as the development films are, and kept apart from them
+     * so that a run without the flag can be reproduced from the development counts alone.
+     *
+     * @param films how many test films were read
+     * @param rows the test rows written, by kind and label
+     * @param openingTypes the test films read, by opening type
+     * @param noOpeningFrame the test films read that have no coarse frame at or after their target
+     * @param intervalsLeftOutWhole the test credits intervals left out whole as {@code LIT_OPENING}
+     * @param omittedDenseFrames the test dense frames before the window, not written
+     * @param skippedByStatus the test films not read, by status
+     */
+    record TestSummary(int films, Map<String, Map<String, Integer>> rows, Map<String, Integer> openingTypes,
+                       int noOpeningFrame, int intervalsLeftOutWhole, int omittedDenseFrames,
+                       SkippedByStatus skippedByStatus) {
+    }
+
+    /**
+     * What {@code look.json} holds: the flag, when, with what tool, and how many test films were read. No ids.
+     *
+     * @param look the flag's value
+     * @param generatedAt when the run was made (ISO instant)
+     * @param toolGitCommit the commit of this tool
+     * @param testFilms how many test films were read
+     */
+    record LookLog(String look, String generatedAt, String toolGitCommit, int testFilms) {
     }
 
     /**
      * What was never opened. Counts only: an unlabelled directory may belong to a test film and an exclusion may sit
      * in a test unit, so no id is written.
      *
-     * @param test the directories of test films with no exclusion
+     * @param test the directories of test films with no exclusion; always 0 with {@code --look=L5}, which reads them
      * @param excluded the directories whose labels carry an exclusion
      * @param unlabelled the directories the labels do not list
      */
@@ -172,8 +208,8 @@ final class CreditsFeaturesJob {
      * Runs the tool.
      *
      * @param options the command line
-     * @return what was written: the run directory, {@code features.csv}, {@code frame-labels.json} and
-     *     {@code summary.json}
+     * @return what was written: the run directory, {@code features.csv}, {@code frame-labels.json},
+     *     {@code summary.json} and, with {@code --look=L5}, {@code look.json}
      * @throws IOException when the dataset cannot be read or the output cannot be written
      * @throws DatasetMeasureJob.NoFilmsException when {@code frames/} is missing or holds no film directory (nothing
      *     is written)
@@ -196,7 +232,7 @@ final class CreditsFeaturesJob {
         if (found.isEmpty()) {
             throw new DatasetMeasureJob.NoFilmsException("no film directories under " + framesRoot);
         }
-        Plan plan = plan(found, options, labels);
+        Plan plan = plan(found, options, labels, options.look());
 
         Instant now = clock.instant();
         Files.createDirectories(out);
@@ -207,6 +243,7 @@ final class CreditsFeaturesJob {
             throw new IllegalArgumentException("this run's directory already exists: " + runDir, e);
         }
         Totals totals = new Totals();
+        Totals test = new Totals();
         List<FrameLabelRecord> records = new ArrayList<>();
         MessageDigest dataset = digest();
         Path featuresCsv = runDir.resolve("features.csv");
@@ -216,23 +253,34 @@ final class CreditsFeaturesJob {
                 LabelRecord label = labels.get(entry.id());
                 Checked checked = check(entry, label);
                 Read read = checked.status() == Status.OK ? read(entry, label, checked) : null;
+                boolean development = label.side() == Side.DEV;
+                Totals side = development ? totals : test;
                 if (read == null) {
-                    totals.statuses.merge(checked.status() == Status.OK ? Status.DAMAGED : checked.status(), 1,
+                    side.statuses.merge(checked.status() == Status.OK ? Status.DAMAGED : checked.status(), 1,
                         Integer::sum);
                 } else {
                     csv.write(read.rows());
                     records.add(read.record());
-                    dataset.update(checked.bytes());
-                    totals.add(read.totals());
+                    if (development) {
+                        dataset.update(checked.bytes());
+                    }
+                    side.add(read.totals());
                 }
             }
         }
         Path frameLabels = runDir.resolve("frame-labels.json");
         Files.write(frameLabels, MAPPER.writeValueAsBytes(records));
         Path summary = runDir.resolve("summary.json");
-        Files.write(summary, MAPPER.writeValueAsBytes(summarise(totals, plan.skipped(), now,
-            hex(digest().digest(labelsBytes)), hex(dataset.digest()))));
-        return List.of(runDir, featuresCsv, frameLabels, summary);
+        Files.write(summary, MAPPER.writeValueAsBytes(summarise(totals, options.look() ? test : null, plan.skipped(),
+            now, hex(digest().digest(labelsBytes)), hex(dataset.digest()))));
+        List<Path> written = new ArrayList<>(List.of(runDir, featuresCsv, frameLabels, summary));
+        if (options.look()) {
+            Path lookJson = runDir.resolve("look.json");
+            Files.write(lookJson, MAPPER.writeValueAsBytes(new LookLog("L5", now.toString(), gitCommit.commit(),
+                test.films)));
+            written.add(lookJson);
+        }
+        return written;
     }
 
     // ---- Which films ---------------------------------------------------------------------------------------------
@@ -240,10 +288,11 @@ final class CreditsFeaturesJob {
     /**
      * Chooses what to read. The candidates are the directories (only those whose ids {@code --ids} names, when it is
      * given) plus each wanted id that has no directory, in ascending id order. A candidate is read only when the
-     * labels list it, it has no exclusion, and it is on the development side; every other candidate is counted and
-     * never opened.
+     * labels list it, it has no exclusion, and it is on the development side (or the test side, with the look); every
+     * other candidate is counted and never opened.
      */
-    private static Plan plan(List<Path> found, CreditsFeaturesOptions options, Map<Long, LabelRecord> labels) {
+    private static Plan plan(List<Path> found, CreditsFeaturesOptions options, Map<Long, LabelRecord> labels,
+                             boolean look) {
         Map<Long, Path> candidates = new TreeMap<>();
         int[] counts = new int[Skip.values().length];
         for (Path dir : found) {
@@ -261,7 +310,7 @@ final class CreditsFeaturesJob {
         }
         List<Entry> entries = new ArrayList<>();
         for (Map.Entry<Long, Path> candidate : candidates.entrySet()) {
-            Skip skip = classify(labels.get(candidate.getKey()));
+            Skip skip = classify(labels.get(candidate.getKey()), look);
             if (skip == null) {
                 entries.add(new Entry(candidate.getKey(), candidate.getValue()));
             } else {
@@ -272,15 +321,18 @@ final class CreditsFeaturesJob {
             counts[Skip.UNLABELLED.ordinal()]));
     }
 
-    /** Null to read, else why not. An exclusion is checked before the side, so an excluded test film is excluded. */
-    private static Skip classify(LabelRecord label) {
+    /**
+     * Null to read, else why not. An exclusion is checked before the side, so an excluded test film is excluded, with
+     * the look or without it. A test film is read only with the look.
+     */
+    private static Skip classify(LabelRecord label, boolean look) {
         if (label == null || label.side() == null) {
             return Skip.UNLABELLED;
         }
         if (label.excluded() != null) {
             return Skip.EXCLUDED;
         }
-        return label.side() == Side.TEST ? Skip.TEST : null;
+        return label.side() == Side.TEST && !look ? Skip.TEST : null;
     }
 
     // ---- Pass 1: the check ---------------------------------------------------------------------------------------
@@ -449,13 +501,18 @@ final class CreditsFeaturesJob {
 
     // ---- Summary -------------------------------------------------------------------------------------------------
 
-    private Summary summarise(Totals totals, Skipped skipped, Instant now, String labelsSha256,
+    private Summary summarise(Totals totals, Totals test, Skipped skipped, Instant now, String labelsSha256,
                               String datasetSha256) {
         return new Summary(CreditsFeatures.FEATURE_VERSION, gitCommit.commit(), now.toString(), labelsSha256,
             datasetSha256, totals.films, totals.rows, totals.openingTypes, totals.noOpeningFrame,
-            totals.wholeLeftOut, totals.omittedDense, skipped,
-            new SkippedByStatus(totals.status(Status.INCOMPLETE), totals.status(Status.MISMATCHED),
-                totals.status(Status.DAMAGED), totals.status(Status.NO_DIRECTORY), totals.status(Status.STALE)));
+            totals.wholeLeftOut, totals.omittedDense, skipped, byStatus(totals),
+            test == null ? null : new TestSummary(test.films, test.rows, test.openingTypes, test.noOpeningFrame,
+                test.wholeLeftOut, test.omittedDense, byStatus(test)));
+    }
+
+    private static SkippedByStatus byStatus(Totals totals) {
+        return new SkippedByStatus(totals.status(Status.INCOMPLETE), totals.status(Status.MISMATCHED),
+            totals.status(Status.DAMAGED), totals.status(Status.NO_DIRECTORY), totals.status(Status.STALE));
     }
 
     private static MessageDigest digest() {

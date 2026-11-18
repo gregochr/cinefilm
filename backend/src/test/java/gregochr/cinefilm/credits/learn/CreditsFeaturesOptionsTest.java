@@ -34,8 +34,52 @@ class CreditsFeaturesOptionsTest {
     }
 
     @Test
-    void aLookFlagIsAnUnknownArgument() {
-        assertRefused("unknown argument --look=L5", "--data", "/d", "--labels", "/l", "--out", "/o", "--look=L5");
+    void withoutTheLookFlagTheLookIsOff() {
+        assertThat(parse("--data", "/d", "--labels", "/l", "--out", "/o").look()).isFalse();
+    }
+
+    @Test
+    void theLookFlagWithL5TurnsTheLookOnWhereverItStands() {
+        CreditsFeaturesOptions options = parse("--look=L5", "--data", "/d", "--labels", "/l", "--out", "/o", "--ids",
+            "3");
+
+        assertThat(options.look()).isTrue();
+        assertThat(options.ids()).containsExactly(3L);
+        assertThat(options.out()).isEqualTo(Path.of("/o"));
+    }
+
+    @Test
+    void aLookValueOtherThanL5IsRefused() {
+        assertRefused("--look must be L5: --look=gate", "--data", "/d", "--labels", "/l", "--out", "/o",
+            "--look=gate");
+    }
+
+    @Test
+    void anEmptyLookValueIsRefused() {
+        assertRefused("--look must be L5: --look=", "--data", "/d", "--labels", "/l", "--out", "/o", "--look=");
+    }
+
+    @Test
+    void aBareLookFlagIsRefused() {
+        assertRefused("flag --look needs a value: --look=L5", "--data", "/d", "--labels", "/l", "--out", "/o",
+            "--look");
+    }
+
+    @Test
+    void aLookFlagWithItsValueAsTheNextWordIsRefused() {
+        assertRefused("flag --look needs a value: --look=L5", "--look", "L5", "--data", "/d", "--labels", "/l",
+            "--out", "/o");
+    }
+
+    @Test
+    void aRepeatedLookFlagIsRefused() {
+        assertRefused("flag --look given twice", "--look=L5", "--data", "/d", "--labels", "/l", "--out", "/o",
+            "--look=L5");
+    }
+
+    @Test
+    void aFlagThatOnlyStartsWithLookIsUnknown() {
+        assertRefused("unknown argument --looks", "--data", "/d", "--labels", "/l", "--out", "/o", "--looks", "L5");
     }
 
     @Test
