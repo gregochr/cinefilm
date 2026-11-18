@@ -392,6 +392,10 @@ class CreditsFeaturesTest {
             bandsAt(new int[] {0, 2}, new int[] {4, 6}, new int[] {10, 12}, new int[] {14, 16}));
 
         assertThat(of(features, "bands")).isEqualTo(4);
+        // The spec's order, gap by gap: the mean, then the squares summed in gap order, then sqrt(var) / mean.
+        double mean = (4.0 + 6.0 + 4.0) / 3;
+        double squares = (4.0 - mean) * (4.0 - mean) + (6.0 - mean) * (6.0 - mean) + (4.0 - mean) * (4.0 - mean);
+        assertThat(of(features, "lineSpacingCv")).isEqualTo(Math.sqrt(squares / 3) / mean);
         assertThat(of(features, "lineSpacingCv")).isCloseTo(Math.sqrt(8.0 / 9) / (14.0 / 3), within(1e-15));
     }
 

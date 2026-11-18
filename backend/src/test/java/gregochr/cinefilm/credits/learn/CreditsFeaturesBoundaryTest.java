@@ -64,6 +64,19 @@ class CreditsFeaturesBoundaryTest {
         assertThat(of(runOf(7), "thinPerK")).isEqualTo(1000.0 * 1 / 64);
     }
 
+    /** An 8 x 8 crop of black: an ink run of the given length ending at the right edge of row 0, one pixel in row 2. */
+    private static double[] runAtTheRightEdge(int length) {
+        return CreditsFeatures.features(
+            new Canvas(8, 8, 0).rect(8 - length, 0, length, 1, 255).pixel(0, 2, 255).build());
+    }
+
+    @Test
+    void aRunEndingAtTheRightEdgeIsThinUpToSixPixelsAndNotAtSeven() {
+        assertThat(of(runAtTheRightEdge(6), "thinShare")).isEqualTo(1.0);
+        assertThat(of(runAtTheRightEdge(7), "thinShare")).isEqualTo(0.5);
+        assertThat(of(runAtTheRightEdge(5), "thinShare")).isEqualTo(1.0);
+    }
+
     @Test
     void aRunThatFillsTheRowIsNotThinEither() {
         assertThat(of(runOf(8), "thinShare")).isEqualTo(0.5);
