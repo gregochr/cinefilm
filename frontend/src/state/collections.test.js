@@ -22,6 +22,25 @@ describe('displayName', () => {
     expect(displayName('Collection')).toBe('Collection');
     expect(displayName()).toBe('');
   });
+
+  it('needs whitespace before the suffix, and drops all of it', () => {
+    expect(displayName('Alien\u00a0\t Collection')).toBe('Alien');
+    expect(displayName('XCollection')).toBe('XCollection');
+    expect(displayName('Alien-Collection')).toBe('Alien-Collection');
+    expect(displayName(' Collection')).toBe('Collection');
+    expect(displayName('A Collection')).toBe('A');
+    expect(displayName('A collection Collection')).toBe('A collection');
+  });
+
+  it('only drops the suffix at the very end', () => {
+    expect(displayName('Alien Collection Two')).toBe('Alien Collection Two');
+    expect(displayName('Alien Collections')).toBe('Alien Collections');
+  });
+
+  it('is quick on a long run of spaces that does not end the name', () => {
+    const name = `Alien${' '.repeat(200_000)}Collection x`;
+    expect(displayName(name)).toBe(name);
+  });
 });
 
 describe('sortKey', () => {

@@ -214,6 +214,54 @@ class TmdbClientTest {
     }
 
     @Test
+    void anUnknownCollectionIsCachedAsEmptyToo() {
+        server.expect(once(), requestTo("https://api.themoviedb.org/3/collection/1"))
+            .andRespond(withStatus(HttpStatus.NOT_FOUND));
+
+        assertThat(client.collection(1)).isEmpty();
+        assertThat(client.collection(1)).isEmpty();
+        server.verify();
+    }
+
+    @Test
+    void aFailedFilmFetchIsNotCachedSoTheNextCallAsksAgain() {
+        server.expect(once(), requestTo("https://api.themoviedb.org/3/movie/949?append_to_response=credits"))
+            .andRespond(withStatus(HttpStatus.UNAUTHORIZED));
+        server.expect(once(), requestTo("https://api.themoviedb.org/3/movie/949?append_to_response=credits"))
+            .andRespond(withSuccess(json("movie-949.json"), MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.movie(949)).isInstanceOf(TmdbUnavailableException.class);
+
+        assertThat(client.movie(949)).isPresent();
+        server.verify();
+    }
+
+    @Test
+    void aFailedCollectionFetchIsNotCachedSoTheNextCallAsksAgain() {
+        server.expect(once(), requestTo("https://api.themoviedb.org/3/collection/8091"))
+            .andRespond(withStatus(HttpStatus.UNAUTHORIZED));
+        server.expect(once(), requestTo("https://api.themoviedb.org/3/collection/8091"))
+            .andRespond(withSuccess(json("collection-8091.json"), MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.collection(8091)).isInstanceOf(TmdbUnavailableException.class);
+
+        assertThat(client.collection(8091)).isPresent();
+        server.verify();
+    }
+
+    @Test
+    void filmsAndCollectionsAreCachedPerId() {
+        server.expect(once(), requestTo("https://api.themoviedb.org/3/collection/1"))
+            .andRespond(withStatus(HttpStatus.NOT_FOUND));
+        server.expect(once(), requestTo("https://api.themoviedb.org/3/collection/8091"))
+            .andRespond(withSuccess(json("collection-8091.json"), MediaType.APPLICATION_JSON));
+
+        assertThat(client.collection(1)).isEmpty();
+        assertThat(client.collection(8091)).isPresent();
+        server.verify();
+    }
+
+    @Test
     void aSearchThatAnswersNotFoundHasNoHits() {
         server.expect(once(), requestTo(SEARCH_HEAT)).andRespond(withStatus(HttpStatus.NOT_FOUND));
 

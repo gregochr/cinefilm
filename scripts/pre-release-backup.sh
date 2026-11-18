@@ -29,10 +29,10 @@ RUNNING="$(cat "${DEPLOY_HOME}/.deployed-version" 2>/dev/null || true)"
 RUNNING_CONTAINERS="$(docker ps --format '{{.Names}}')"
 if ! printf '%s\n' "$RUNNING_CONTAINERS" | grep -qx cinefilm-db; then
     existing=false
-    if [ -n "$RUNNING" ] || [ -f "${DEPLOY_HOME}/.previous-version" ] || pgdata_has_database "${CINEFILM_DATA_DIR}/postgres"; then
+    if [[ -n "$RUNNING" ]] || [[ -f "${DEPLOY_HOME}/.previous-version" ]] || pgdata_has_database "${CINEFILM_DATA_DIR}/postgres"; then
         existing=true
     fi
-    if [ "$existing" = false ]; then
+    if [[ "$existing" = false ]]; then
         echo "pre-release backup: first deployment (no previous version, no database); nothing to dump."
         exit 0
     fi
@@ -54,7 +54,7 @@ if ! docker exec cinefilm-db sh -c 'pg_dump -U "$POSTGRES_USER" -d cinefilm -Fc'
     echo "pre-release backup: pg_dump FAILED; not deploying." >&2
     exit 1
 fi
-if [ ! -s "$TMP" ]; then
+if [[ ! -s "$TMP" ]]; then
     rm -f "$TMP"
     echo "pre-release backup: the dump is empty; not deploying." >&2
     exit 1

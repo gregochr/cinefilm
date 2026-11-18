@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { leaveNativeFullscreen, pickFullscreenStrategy, toggleFullscreen } from './fullscreen.js';
+import {
+  exitFullscreen,
+  leaveNativeFullscreen,
+  pickFullscreenStrategy,
+  toggleFullscreen,
+} from './fullscreen.js';
 
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)';
 const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)';
@@ -91,5 +96,40 @@ describe('leaveNativeFullscreen', () => {
     expect(() => leaveNativeFullscreen({ webkitDisplayingFullscreen: true })).not.toThrow();
     expect(() => leaveNativeFullscreen({})).not.toThrow();
     expect(() => leaveNativeFullscreen(null)).not.toThrow();
+  });
+});
+
+describe('exitFullscreen', () => {
+  afterEach(() => {
+    delete document.exitFullscreen;
+  });
+
+  it('asks the document to exit fullscreen', () => {
+    document.exitFullscreen = vi.fn();
+
+    exitFullscreen();
+
+    expect(document.exitFullscreen).toHaveBeenCalledTimes(1);
+  });
+
+  it('copes with a browser that has no exitFullscreen', () => {
+    expect(() => exitFullscreen()).not.toThrow();
+  });
+
+  it('copes with an exitFullscreen that answers nothing, or something that is not a promise', () => {
+    document.exitFullscreen = vi.fn(() => ({}));
+    expect(() => exitFullscreen()).not.toThrow();
+    document.exitFullscreen = vi.fn(() => undefined);
+    expect(() => exitFullscreen()).not.toThrow();
+  });
+
+  it('swallows the rejection of a page that was not fullscreen after all', () => {
+    const rejection = Promise.reject(new TypeError('Document not active'));
+    const catchSpy = vi.spyOn(rejection, 'catch');
+    document.exitFullscreen = vi.fn(() => rejection);
+
+    exitFullscreen();
+
+    expect(catchSpy).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,8 +1,5 @@
 package gregochr.cinefilm.library;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 /**
  * The title and year we search TMDB for.
  *
@@ -11,7 +8,9 @@ import java.util.regex.Pattern;
  */
 public record TitleGuess(String title, Integer year) {
 
-    private static final Pattern TRAILING_YEAR = Pattern.compile("^(.*?)\\s*[(\\[](\\d{4})[)\\]]\\s*$");
+    private static final int YEAR_BRACKETS_LENGTH = 6;
+    private static final String ASCII_WHITESPACE = " \t\n\u000B\f\r";
+    private static final String LINE_TERMINATORS = "\n\r\u0085\u2028\u2029";
     private static final int FIRST_FILM_YEAR = 1888;
     private static final int LAST_YEAR = 2100;
 
@@ -56,15 +55,59 @@ public record TitleGuess(String title, Integer year) {
         return new TitleGuess(parsed.title(), parsed.year() != null ? parsed.year() : tagYear);
     }
 
+    /**
+     * Splits a title from a trailing {@code (1999)} or {@code [1999]}; the brackets need not match each other. Both
+     * callers hand it text that is already trimmed, so nothing ASCII-white follows the closing bracket.
+     */
     private static TitleGuess split(String text) {
-        Matcher matcher = TRAILING_YEAR.matcher(text);
-        if (matcher.matches()) {
-            int year = Integer.parseInt(matcher.group(2));
-            if (year >= FIRST_FILM_YEAR && year <= LAST_YEAR && !matcher.group(1).isBlank()) {
-                return new TitleGuess(matcher.group(1).trim(), year);
+        int end = text.length();
+        int open = end - YEAR_BRACKETS_LENGTH;
+        if (open >= 0 && isOpening(text.charAt(open)) && isClosing(text.charAt(end - 1))
+            && areDigits(text, open + 1, end - 1)) {
+            int titleEnd = open;
+            while (titleEnd > 0 && isAsciiSpace(text.charAt(titleEnd - 1))) {
+                titleEnd--;
+            }
+            String title = text.substring(0, titleEnd);
+            int year = Integer.parseInt(text.substring(open + 1, end - 1));
+            if (year >= FIRST_FILM_YEAR && year <= LAST_YEAR && !hasLineTerminator(title) && !title.isBlank()) {
+                return new TitleGuess(title.trim(), year);
             }
         }
         return new TitleGuess(text, null);
+    }
+
+    private static boolean areDigits(String text, int from, int to) {
+        for (int i = from; i < to; i++) {
+            char c = text.charAt(i);
+            if (c < '0' || c > '9') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isOpening(char c) {
+        return c == '(' || c == '[';
+    }
+
+    private static boolean isClosing(char c) {
+        return c == ')' || c == ']';
+    }
+
+    /** Java's regex whitespace: ASCII space, tab, line feed, vertical tab, form feed and carriage return. */
+    private static boolean isAsciiSpace(char c) {
+        return ASCII_WHITESPACE.indexOf(c) >= 0;
+    }
+
+    /** What {@code .} never matched in the pattern this replaced. */
+    private static boolean hasLineTerminator(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            if (LINE_TERMINATORS.indexOf(text.charAt(i)) >= 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** A name with no spaces but dots or underscores ("The.Wicker.Man") reads as words. */

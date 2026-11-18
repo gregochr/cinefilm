@@ -1,8 +1,10 @@
 package gregochr.cinefilm.library;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeout;
 
 import gregochr.cinefilm.library.FileNameParser.ParsedName;
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 class FileNameParserTest {
@@ -665,5 +667,86 @@ class FileNameParserTest {
     @Test
     void theCuttingOfAnEditionTagDoesNotAffectTheComparisonTitle() {
         assertThat(parse("Alien {edition-Director's Cut}.m4v").comparisonTitle()).isEqualTo("alien");
+    }
+
+    // --- trailing separators and the part cut, in one pass ---
+
+    private static final int LONG_RUN = 100_000;
+
+    @Test
+    void aLongRunOfSeparatorsThatDoesNotEndTheNameIsParsedQuickly() {
+        String hyphens = "-".repeat(LONG_RUN);
+
+        ParsedName p = assertTimeout(Duration.ofSeconds(2), () -> parse("Movie" + hyphens + "x.m4v"));
+
+        assertThat(p.title()).isEqualTo("Movie" + hyphens + "x");
+        assertThat(p.partTag()).isNull();
+    }
+
+    @Test
+    void aLongRunOfSeparatorsBeforeAPartSuffixIsCutOffWhole() {
+        String mixed = " ._-".repeat(LONG_RUN / 4);
+
+        ParsedName p = assertTimeout(Duration.ofSeconds(2), () -> parse("Movie" + mixed + "pt2.m4v"));
+
+        assertThat(p.title()).isEqualTo("Movie");
+        assertThat(p.partTag()).isEqualTo(2);
+    }
+
+    @Test
+    void aLongRunOfSeparatorsBeforeANumberThatIsNotAPartIsKept() {
+        String hyphens = "-".repeat(LONG_RUN);
+
+        ParsedName p = assertTimeout(Duration.ofSeconds(2), () -> parse("Movie" + hyphens + "pt9.m4v"));
+
+        assertThat(p.title()).isEqualTo("Movie" + hyphens + "pt9");
+        assertThat(p.partTag()).isNull();
+    }
+
+    @Test
+    void aLongRunOfSeparatorsAfterTheYearBeforeAPartSuffixIsRead() {
+        ParsedName p = assertTimeout(Duration.ofSeconds(2),
+            () -> parse("Movie (2002)" + "_".repeat(LONG_RUN) + "pt3.m4v"));
+
+        assertThat(p.title()).isEqualTo("Movie");
+        assertThat(p.year()).isEqualTo(2002);
+        assertThat(p.partTag()).isEqualTo(3);
+    }
+
+    @Test
+    void aSeparatorRunBetweenTheTitleAndThePartIsAllCutWhatEverItIsMadeOf() {
+        assertThat(parse("Movie . _- pt1.m4v").title()).isEqualTo("Movie");
+        assertThat(parse("Movie\t pt1.m4v").title()).isEqualTo("Movie");
+        assertThat(parse("A-B - pt1.m4v").title()).isEqualTo("A-B");
+    }
+
+    @Test
+    void aPartSuffixFollowedByTrailingSeparatorsAndWhitespaceIsStillTheEnd() {
+        ParsedName p = parse("Movie pt2 _.- \t.m4v");
+
+        assertThat(p.title()).isEqualTo("Movie");
+        assertThat(p.partTag()).isEqualTo(2);
+    }
+
+    @Test
+    void aFinalNextLineCharacterIsNotATrailingSeparatorButTheOnesBeforeItAre() {
+        assertThat(parse("Movie pt2_\u0085").partTag()).isEqualTo(2);
+        assertThat(parse("Movie pt2_\u0085").title()).isEqualTo("Movie");
+        assertThat(parse("Movie (2002) pt2-\u0085").partTag()).isEqualTo(2);
+        assertThat(parse("Movie_-\u0085").title()).isEqualTo("Movie\u0085");
+        assertThat(parse("Movie_\u0085\u0085").partTag()).isNull();
+    }
+
+    @Test
+    void aPartSuffixThatIsTheWholeNameAfterItsSeparatorsLeavesTheRawNameAsTheTitle() {
+        assertThat(parse("-pt2.m4v").partTag()).isEqualTo(2);
+        assertThat(parse("-pt2.m4v").title()).isEqualTo("-pt2");
+        assertThat(parse("_ pt2.m4v").title()).isEqualTo("_ pt2");
+    }
+
+    @Test
+    void aNameOfOnlySeparatorsHasNoTitle() {
+        assertThat(parse("..._---.m4v").title()).isEmpty();
+        assertThat(parse("---").title()).isEmpty();
     }
 }

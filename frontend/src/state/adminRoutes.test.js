@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ADMIN_SECTIONS, FILE_LISTS, bareOnPhone } from './adminRoutes.js';
+import { ADMIN_SECTIONS, FILE_LISTS, bareOnPhone, normalisePath } from './adminRoutes.js';
 
 describe('ADMIN_SECTIONS', () => {
   it('lists the five sections in order, with `end` only on To do', () => {
@@ -55,5 +55,18 @@ describe('FILE_LISTS', () => {
         'Files that could not be read',
       ],
     ]);
+  });
+});
+
+describe('normalisePath', () => {
+  it('drops trailing slashes and the case, and keeps a lone slash', () => {
+    expect(normalisePath('/Admin/Library//')).toBe('/admin/library');
+    expect(normalisePath('/admin')).toBe('/admin');
+    expect(normalisePath('/')).toBe('/');
+  });
+
+  it('is quick on a long run of slashes inside the path', () => {
+    const path = `/admin${'/'.repeat(200_000)}x`;
+    expect(normalisePath(path)).toBe(path);
   });
 });

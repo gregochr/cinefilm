@@ -17,7 +17,7 @@ set -uo pipefail
 
 BASE="${1:-}"
 HEAD="${2:-}"
-if [ -z "$BASE" ] || [ -z "$HEAD" ]; then
+if [[ -z "$BASE" ]] || [[ -z "$HEAD" ]]; then
     echo "usage: ci-docs-only.sh BASE_SHA HEAD_SHA" >&2
     echo "docs_only=false"
     exit 0
@@ -29,7 +29,7 @@ if ! CHANGED=$(git diff --name-only --no-renames "$BASE" "$HEAD"); then
     exit 0
 fi
 
-if [ -z "$CHANGED" ]; then
+if [[ -z "$CHANGED" ]]; then
     echo "Empty diff - running the full suite rather than guessing." >&2
     echo "docs_only=false"
     exit 0
@@ -39,7 +39,7 @@ echo "Changed files:" >&2
 printf '%s\n' "$CHANGED" | sed 's/^/  /' >&2
 
 NON_DOC=$(echo "$CHANGED" | grep -vE '(^docs/|\.md$)' || true)
-if [ -z "$NON_DOC" ]; then
+if [[ -z "$NON_DOC" ]]; then
     echo "Documentation only - the suite proves nothing here, skipping it." >&2
     echo "docs_only=true"
 else

@@ -34,7 +34,7 @@ SMOKE_ENFORCE="${SMOKE_ENFORCE:-}"
 SMOKE_SCRIPT="${SMOKE_SCRIPT:-${SCRIPT_DIR}/post-deploy-smoke.sh}"
 export SMOKE_SCRIPT
 
-if [ ! -f "${DEPLOY_HOME}/.env" ]; then
+if [[ ! -f "${DEPLOY_HOME}/.env" ]]; then
     echo "ERROR: ${DEPLOY_HOME}/.env is missing: create it from deploy/.env.example (docs/engineering/operations.md)." >&2
     exit 4
 fi
@@ -65,7 +65,7 @@ PREVIOUS="$(cat "${DEPLOY_HOME}/.deployed-version" 2>/dev/null || true)"
 
 # Guard: a previous deploy exists, so the Postgres data directory must hold a database. Pointed at an empty
 # directory Postgres silently runs initdb and the app comes up healthy against an EMPTY database.
-if [ -n "$PREVIOUS" ] && ! pgdata_has_database "${CINEFILM_DATA_DIR}/postgres"; then
+if [[ -n "$PREVIOUS" ]] && ! pgdata_has_database "${CINEFILM_DATA_DIR}/postgres"; then
     echo "ERROR: ${CINEFILM_DATA_DIR}/postgres holds no Postgres data (no PG_VERSION) but ${PREVIOUS} was deployed before." >&2
     echo "       Starting would create an EMPTY database. Find the data before deploying." >&2
     exit 1
@@ -89,7 +89,7 @@ if ! dc pull cinefilm cinefilm-proxy; then
     exit 3
 fi
 
-if [ -n "$PREVIOUS" ] && [ "$PREVIOUS" != "$VERSION" ]; then
+if [[ -n "$PREVIOUS" ]] && [[ "$PREVIOUS" != "$VERSION" ]]; then
     echo "$PREVIOUS" > "${DEPLOY_HOME}/.previous-version"
 fi
 
@@ -107,7 +107,7 @@ else
     check_rc=1
 fi
 
-if [ "$check_rc" -eq 0 ]; then
+if [[ "$check_rc" -eq 0 ]]; then
     echo "Deployed ${VERSION}."
     exit 0
 fi
@@ -119,7 +119,7 @@ case "$(rollback_decision "$check_rc" "$SMOKE_ENFORCE")" in
         rollback_rc=0
         bash "${SCRIPT_DIR}/auto-rollback.sh" "$VERSION" || rollback_rc=$?
         # 1 = rolled back, 2 = manual action needed. A stray 0 must never turn a failed release green.
-        [ "$rollback_rc" -ne 0 ] || rollback_rc=2
+        [[ "$rollback_rc" -ne 0 ]] || rollback_rc=2
         exit "$rollback_rc"
         ;;
     *)

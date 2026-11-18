@@ -50,7 +50,7 @@ export function watchedText(ms) {
 export function mainRung(report) {
   const parts = rungParts(report);
   if (parts.length === 0) return '—';
-  return parts.reduce((best, part) => (part.ms > best.ms ? part : best)).name;
+  return parts.reduce((best, part) => (part.ms > best.ms ? part : best), parts[0]).name;
 }
 
 /** The cells of one table row, as text: `stalled` is true when the stall count is above zero. */
