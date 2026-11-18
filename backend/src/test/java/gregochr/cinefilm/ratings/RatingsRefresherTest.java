@@ -246,6 +246,11 @@ class RatingsRefresherTest {
         }
 
         @Override
+        public Optional<List<String>> keywords(long id) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public Optional<Long> findMovieByImdbId(String imdbId) {
             throw new UnsupportedOperationException();
         }

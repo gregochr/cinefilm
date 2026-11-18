@@ -71,6 +71,12 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
             + "where f.tmdbId is not null and f.languagesFetchedAt is null order by f.id")
     List<TmdbRef> findWithoutLanguages();
 
+    /** Films matched to TMDB whose keywords have never been asked for, oldest first. */
+    @org.springframework.data.jpa.repository.Query(
+        "select new gregochr.cinefilm.film.FilmRepository$TmdbRef(f.id, f.tmdbId) from Film f "
+            + "where f.tmdbId is not null and f.keywordsFetchedAt is null order by f.id")
+    List<TmdbRef> findWithoutKeywords();
+
     /**
      * Stores TMDB's languages and stamps the film, in one statement that only matches while the film still has the
      * TMDB id they were fetched for: a film rematched meanwhile is left alone.

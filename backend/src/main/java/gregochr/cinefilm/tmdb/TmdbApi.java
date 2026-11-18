@@ -66,4 +66,14 @@ public interface TmdbApi {
      * @throws TmdbUnavailableException when TMDB cannot answer
      */
     Optional<Long> findMovieByImdbId(String imdbId);
+
+    /**
+     * A film's keywords from {@code /3/movie/{id}/keywords}: names lower-cased and trimmed, blanks dropped, no
+     * duplicates, in TMDB's order. Not cached: the backfill asks once per film.
+     *
+     * @param id TMDB id
+     * @return the keywords (possibly none), or empty when TMDB does not know the film
+     * @throws TmdbUnavailableException when TMDB cannot answer
+     */
+    Optional<List<String>> keywords(long id);
 }
