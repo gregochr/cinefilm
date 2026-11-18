@@ -249,7 +249,7 @@ final class CreditsTrainJob {
 
     /** The row to train on, or null when it is dropped. */
     private static TrainRow train(List<String> row, CreditsTrainOptions options, String where) {
-        int fold = (int) number(row.get(1), "fold", where);
+        long fold = number(row.get(1), "fold", where);
         if (fold < 0 || fold >= FOLDS) {
             throw new IllegalArgumentException(where + "fold must be 0 to " + (FOLDS - 1) + ": " + fold);
         }
@@ -259,7 +259,7 @@ final class CreditsTrainJob {
         if (label < 0 || !CreditsFeatures.hasTimeFeatures(features) || !coarse && !options.withDense()) {
             return null;
         }
-        return new TrainRow(fold, coarse, label, features);
+        return new TrainRow((int) fold, coarse, label, features);
     }
 
     private static double[] features(List<String> row, String where) {
