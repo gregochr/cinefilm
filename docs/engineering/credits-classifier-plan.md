@@ -606,7 +606,8 @@ Each phase is its own small PR, built by Sonnet and reviewed by the planner (`CL
     left out whole. This is the check that the Java and the prototype agree.
     - **A mismatch blocks L5.** The planner diffs the results film by film, and a fix PR follows before any training
       run is used.
-- **L3b — `GradientBoostedTrees`**, the model JSON, the determinism test and the feature-version test.
+- **L3b — `GradientBoostedTrees`**, the model JSON, the determinism test and the feature-version test. Two PRs
+  ("L3b specification"): L3b-1, the trees and the JSON; L3b-2, the training `main`.
   - **Training rows:**
     - Rows are sorted by `(mediaFileId, kind, offsetMs)` everywhere: in the CSV, in training and in the determinism
       test.
@@ -1196,6 +1197,69 @@ size.
 - The relabel happens before `left_out` rows are dropped for training.
 - It is an option of L3b's training `main` (`--lit-text-variant`), judged once L3c-eval exists. It is adopted only if
   the earliest out-of-fold error does not get worse.
+
+## L3b specification (written 2026-11-18)
+
+L3b is two PRs, to stay within 1,500 changed lines: **L3b-1**, the pure trees and the model JSON, and **L3b-2**, the
+training `main`. All code is in `credits/learn/`, under L3a's conventions.
+
+### `GradientBoostedTrees` (pure, L3b-1)
+
+- **Input.** A `double[][]` of rows (each `CreditsFeatures.COUNT` long), an `int[]` of labels (1 = credits, 0 =
+  film), in the order given; the caller sorts. A NaN or infinite value, a label other than 0 or 1, rows of the wrong
+  length, no rows, or a single class is an `IllegalArgumentException`.
+- **Parameters** (a record, `GbtParams`): `trees` (default 200), `depth` (default 3), `learningRate` (default 0.1),
+  `bins` (default 32), `minLeaf` (default 20), `lambda` (default 1.0). Each is checked: `trees`, `depth`, `minLeaf`
+  ≥ 1; `bins` 2–256; `learningRate` in (0, 1]; `lambda` finite and > 0 (at 0, a saturated leaf divides 0 by 0, so 0 is refused).
+- **Bins.** For each feature, the values sorted ascending; the candidate thresholds are the values at index
+  `(k * n) / bins` for `k = 1 … bins − 1`, de-duplicated, ascending. A row goes left when `x <= threshold`. A
+  feature with one distinct value has no threshold. Bins are computed once per fit, from all the fit's rows.
+- **Start.** `base = ln(p / (1 − p))` with `p` the share of label 1.
+- **Each tree.** Scores start at `base`. For each row, `p = 1 / (1 + e^−score)`, `g = p − y`, `h = p(1 − p)`.
+  - A node splits on the `(feature, threshold)` with the largest gain
+    `GL²/(HL + λ) + GR²/(HR + λ) − G²/(H + λ)`, over every feature and threshold where both sides hold at least
+    `minLeaf` rows. It splits only when that gain is greater than 1e-12. Ties: the lowest feature index, then the
+    lowest threshold (scan in that order, replace only on a strictly larger gain).
+  - Growth stops at `depth` (a root at depth 0 can split; a node at `depth` is a leaf).
+  - A leaf's value is `−learningRate · G / (H + λ)`.
+  - Sums are in `double`, so a fit is deterministic: a node's `G` and `H` and each bin's sums run in row order,
+    `GL` and `HL` add the bins in ascending order, and `GR = G − GL`, `HR = H − HL`.
+- **Predict.** `p = 1 / (1 + e^−(base + Σ leaf values))`, for one row.
+- **JSON.** One object: `{"featureVersion", "base", "params", "trees"}`, where a tree node is either
+  `{"feature", "threshold", "left", "right"}` or `{"leaf"}`. Doubles are written by Jackson (shortest round-trip
+  form). Reading checks `featureVersion == CreditsFeatures.FEATURE_VERSION` and refuses a mismatch with an
+  `IllegalStateException` naming both versions; a fixture model file in test resources proves it. Any other bad
+  content (a missing field, a wrong type, a `feature` outside `0 … COUNT − 1`, a non-finite number) is an
+  `IllegalArgumentException`.
+- **Tests.** Exact values on small hand-worked sets: the bins, one split's gain and tie-break, a leaf value, the base,
+  a two-tree prediction; `minLeaf` blocking a split; the JSON round trip (the read model predicts identically); the
+  feature-version refusal; and determinism: two fits of the same rows give byte-identical JSON.
+
+### `CreditsTrainMain` (L3b-2)
+
+- **Arguments:** `--features <run>/features.csv --summary <run>/summary.json --manifest <split manifest> --out /out
+  [--trees N] [--depth D] [--learning-rate R] [--bins B] [--min-leaf M] [--lambda L] [--with-dense]
+  [--lit-text-variant]`. There is no `--look`: it is an unknown flag (exit 1).
+- **Rows.** Read in file order, which `CreditsFeaturesMain` wrote as `(mediaFileId, kind, offsetMs)`; the tool
+  checks that order and refuses a file out of order.
+  - The first row whose `side` is not `dev` or whose `fold` is empty stops the run: exit 1, no model written.
+  - `--lit-text-variant` relabels as `credits` the `LIT_OPENING` and `LIT_RUN` rows whose
+    `OpeningType.frameKind(mean, p10, p50, p90)` is `LIT` and whose `bands >= 3`, before the next step.
+  - Rows with a `left_out` label, or with empty time features, are dropped.
+  - Dense rows are dropped unless `--with-dense`.
+- **Models.** For each fold `k` (0–4), one model on every kept row not in fold `k`: the five shipping models. For each
+  unordered pair `{k, j}`, one model on the rows in neither: ten pair models. Fold `k`'s out-of-fold prediction for a
+  row is the mean of the four pair models that exclude `k`.
+- **Outputs**, in a fresh `<out>/train-<stamp>/`:
+  - `model.json`: `type` `"gbt"`, the feature version, the params and variant flags, the five shipping models, the
+    git SHA, `datasetSha256` and `labelsSha256` copied from `summary.json`, and the manifest's SHA-256. No
+    thresholds yet (L3c adds them). No ids.
+  - `oof-models.json`: the ten pair models, keyed `"k,j"` with `k < j`, for L3c-eval.
+  - `oof-logloss.json`: the log loss (natural log, `p` clamped to `[1e-15, 1 − 1e-15]`) of each fold's out-of-fold
+    predictions on that fold's **coarse** kept rows, and pooled over all of them; the row counts.
+- **Tests:** a fixture CSV exercising each drop rule and each variant; the exit on a test row and on an empty fold,
+  with nothing written; `--look` refused; a test that records each model's training folds and proves no model used
+  for fold `k`'s predictions saw a row of fold `k`; the log loss on a hand-checked case.
 
 ## Settled for later phases (from review round 4)
 

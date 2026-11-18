@@ -1,0 +1,1 @@
+{"featureVersion":999,"base":0.0,"params":{"trees":1,"depth":1,"learningRate":1.0,"bins":4,"minLeaf":1,"lambda":1.0},"trees":[{"leaf":0.0}]}
