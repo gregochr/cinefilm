@@ -148,6 +148,29 @@ class GradientBoostedTreesTest {
     }
 
     @Test
+    void aGainExactlyAtTheFloorOf1eMinus12IsNotSplit() {
+        // The same fixture with lambda 1999999999999.5, where 2/(0.5 + lambda) is exactly 1e-12 in doubles.
+        // The guard below computes the gain the way bestSplit does (p = 0.5 at the base, g = p - y, h = p(1 - p),
+        // GR = G - GL, the parent term subtracted last) and proves the case sits on the floor, not beside it.
+        double lambda = 1999999999999.5;
+        double p = 0.5;
+        double h = p * (1 - p);
+        double sumG = (p - 0) + (p - 0) + (p - 1) + (p - 1);
+        double sumH = h + h + h + h;
+        double lg = (p - 0) + (p - 0);
+        double lh = h + h;
+        double rg = sumG - lg;
+        double rh = sumH - lh;
+        double gain = lg * lg / (lh + lambda) + rg * rg / (rh + lambda) - sumG * sumG / (sumH + lambda);
+        assertThat(gain).isEqualTo(1e-12);
+
+        GradientBoostedTrees model = GradientBoostedTrees.fit(oneToN(4), new int[] {0, 0, 1, 1},
+                new GbtParams(1, 1, 1.0, 4, 1, lambda));
+
+        assertThat(model.trees().get(0)).isInstanceOf(Leaf.class);
+    }
+
+    @Test
     void aGainAboveTheFloorOf1eMinus12IsSplit() {
         // lambda 1e11 gives a gain of 2e-11, above 1e-12 (and well above 0).
         GradientBoostedTrees model = GradientBoostedTrees.fit(oneToN(4), new int[] {0, 0, 1, 1},
