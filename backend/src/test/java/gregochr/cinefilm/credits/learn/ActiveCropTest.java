@@ -145,6 +145,43 @@ class ActiveCropTest {
     }
 
     @Test
+    void aGreySizeOfMaxIntegerThrowsInsteadOfOverflowing() {
+        assertThatThrownBy(() -> ActiveCrop.of(Integer.MAX_VALUE, 0, 20, 32, Integer.MAX_VALUE, 16))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("The grey frame size must be 1 to 4096 in each direction, was 2147483647x16");
+    }
+
+    @Test
+    void theGreyWidthIsCheckedAtZeroOneMaxAndMaxPlusOne() {
+        assertThatThrownBy(() -> ActiveCrop.of(0, 0, 32, 32, 0, 16))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("The grey frame size must be 1 to 4096 in each direction, was 0x16");
+        assertThatThrownBy(() -> ActiveCrop.of(0, 0, 8, 32, 1, 16))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("runs past");
+        assertThatCode(() -> ActiveCrop.of(0, 0, 8192, 32, GreyFrame.MAX_DIMENSION, 16))
+            .doesNotThrowAnyException();
+        assertThatThrownBy(() -> ActiveCrop.of(0, 0, 32, 32, GreyFrame.MAX_DIMENSION + 1, 16))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("The grey frame size must be 1 to 4096 in each direction, was 4097x16");
+    }
+
+    @Test
+    void theGreyHeightIsCheckedAtZeroOneMaxAndMaxPlusOne() {
+        assertThatThrownBy(() -> ActiveCrop.of(0, 0, 32, 32, 16, 0))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("The grey frame size must be 1 to 4096 in each direction, was 16x0");
+        assertThatThrownBy(() -> ActiveCrop.of(0, 0, 32, 8, 16, 1))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("runs past");
+        assertThatCode(() -> ActiveCrop.of(0, 0, 32, 8192, 16, GreyFrame.MAX_DIMENSION))
+            .doesNotThrowAnyException();
+        assertThatThrownBy(() -> ActiveCrop.of(0, 0, 32, 32, 16, GreyFrame.MAX_DIMENSION + 1))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("The grey frame size must be 1 to 4096 in each direction, was 16x4097");
+    }
+
+    @Test
     void applyRefusesAGreyFrameOfTheWrongSize() {
         ActiveCrop crop = crop(0, 0, 32, 32);
 

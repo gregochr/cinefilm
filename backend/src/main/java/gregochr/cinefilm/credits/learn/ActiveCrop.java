@@ -42,6 +42,13 @@ public final class ActiveCrop {
      * @throws IllegalArgumentException when the area is outside the frame, or the crop is under 8 px either way
      */
     public static ActiveCrop of(int left, int top, int width, int height, int greyWidth, int greyHeight) {
+        // With the grey size at most MAX_DIMENSION and the bounds check below passed, left + width is at most 8192,
+        // so the int arithmetic that follows cannot overflow; the bounds check itself is done in long.
+        if (greyWidth < 1 || greyWidth > GreyFrame.MAX_DIMENSION
+            || greyHeight < 1 || greyHeight > GreyFrame.MAX_DIMENSION) {
+            throw new IllegalArgumentException("The grey frame size must be 1 to " + GreyFrame.MAX_DIMENSION
+                + " in each direction, was " + greyWidth + "x" + greyHeight);
+        }
         if (left < 0 || top < 0) {
             throw new IllegalArgumentException("The area starts at (" + left + ", " + top + "), before the frame");
         }
