@@ -985,6 +985,8 @@ committed.
 `greyHeight`. Every function below takes the cropped `GreyFrame`.
 
 **It first throws `IllegalArgumentException`** unless all of these hold:
+- `1 <= greyWidth <= GreyFrame.MAX_DIMENSION` and `1 <= greyHeight <= GreyFrame.MAX_DIMENSION` (checked first, which
+  keeps the later `int` arithmetic from overflowing);
 - `left >= 0` and `top >= 0`;
 - `width >= 1` and `height >= 1`;
 - `left + width <= 2 * greyWidth` and `top + height <= 2 * greyHeight`.

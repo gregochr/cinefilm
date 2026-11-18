@@ -107,7 +107,8 @@ final class FrameStats {
         return new Colour(red / count, green / count, blue / count, chroma / count);
     }
 
-    private static int percentile(long[] histogram, long count, int percent) {
+    /** The nearest-rank percentile of a 256-level histogram over {@code count} values. */
+    static int percentile(long[] histogram, long count, int percent) {
         long rank = (percent * count + 99) / 100;
         long seen = 0;
         for (int level = 0; level < LEVELS; level++) {
