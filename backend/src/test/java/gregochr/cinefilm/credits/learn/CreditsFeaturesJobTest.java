@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import gregochr.cinefilm.TestData;
 import gregochr.cinefilm.credits.GreyFrame;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -13,9 +14,6 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HexFormat;
@@ -119,10 +117,10 @@ class CreditsFeaturesJobTest {
         data = Files.createDirectories(temp.resolve("data"));
         frames = Files.createDirectories(data.resolve("frames"));
         out = temp.resolve("out");
-        run = out.resolve("features-20261118T090000Z");
+        run = out.resolve("features-20240331T233000Z");
         GitCommit git = mock(GitCommit.class);
         when(git.commit()).thenReturn("toolsha");
-        job = new CreditsFeaturesJob(Clock.fixed(Instant.parse("2026-11-18T09:00:00Z"), ZoneOffset.UTC), git,
+        job = new CreditsFeaturesJob(TestData.CLOCK, git,
             recording);
     }
 
@@ -479,7 +477,7 @@ class CreditsFeaturesJobTest {
 
         assertThat(summary.path("featureVersion").asInt()).isEqualTo(CreditsFeatures.FEATURE_VERSION);
         assertThat(summary.path("toolGitCommit").asString()).isEqualTo("toolsha");
-        assertThat(summary.path("generatedAt").asString()).isEqualTo("2026-11-18T09:00:00Z");
+        assertThat(summary.path("generatedAt").asString()).isEqualTo("2024-03-31T23:30:00Z");
         assertThat(summary.path("films").asInt()).isEqualTo(1);
         assertThat(summary.path("rows").path("coarse").toString()).isEqualTo("{\"credits\":2,\"film\":1,"
             + "\"BOUNDARY\":0,\"AFTER_LAST_CREDITS\":0,\"LIT_OPENING\":0,\"LIT_RUN\":5}");

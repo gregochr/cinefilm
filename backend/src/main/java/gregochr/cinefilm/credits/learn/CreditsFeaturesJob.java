@@ -4,6 +4,7 @@ import gregochr.cinefilm.credits.GreyFrame;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,7 +15,6 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -285,8 +285,11 @@ final class CreditsFeaturesJob {
 
     // ---- Pass 1: the check ---------------------------------------------------------------------------------------
 
-    /** The verdict on a film and, when it is {@code ok}, the one {@code complete.json} it was judged on. */
-    private record Checked(Status status, DatasetComplete complete, byte[] bytes) {
+    /**
+     * The verdict on a film and, when it is {@code ok}, the one {@code complete.json} it was judged on, as a read-only
+     * buffer so that the record compares those bytes by content; it is read in full once, by the hash.
+     */
+    private record Checked(Status status, DatasetComplete complete, ByteBuffer bytes) {
         private static Checked of(Status status) {
             return new Checked(status, null, null);
         }
@@ -333,7 +336,8 @@ final class CreditsFeaturesJob {
         // to another version than the one the rows and the hash will come from, so the film is not sound.
         boolean sound = result.status() == FilmCheck.Status.OK && !wrongHeight[0]
             && complete.equals(result.complete());
-        return sound ? new Checked(Status.OK, complete, bytes) : Checked.of(Status.DAMAGED);
+        return sound ? new Checked(Status.OK, complete, ByteBuffer.wrap(bytes).asReadOnlyBuffer())
+            : Checked.of(Status.DAMAGED);
     }
 
     // ---- Pass 2: the read ----------------------------------------------------------------------------------------
@@ -363,7 +367,7 @@ final class CreditsFeaturesJob {
     private Read read(Entry entry, LabelRecord label, Checked checked) {
         try {
             Read read = readFilm(entry, label, checked.complete());
-            return Arrays.equals(source.completeBytes(entry.dir()), checked.bytes()) ? read : null;
+            return ByteBuffer.wrap(source.completeBytes(entry.dir())).equals(checked.bytes()) ? read : null;
         } catch (IOException e) {
             return null;
         }

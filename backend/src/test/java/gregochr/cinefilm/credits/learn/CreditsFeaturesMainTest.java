@@ -4,15 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import gregochr.cinefilm.TestData;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,7 +19,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class CreditsFeaturesMainTest {
 
-    private static final String RUN = "features-20261118T090000Z";
+    private static final String RUN = "features-20240331T233000Z";
 
     @TempDir
     Path temp;
@@ -39,7 +37,7 @@ class CreditsFeaturesMainTest {
         frames = Files.createDirectories(data.resolve("frames"));
         GitCommit git = mock(GitCommit.class);
         when(git.commit()).thenReturn("toolsha");
-        job = new CreditsFeaturesJob(Clock.fixed(Instant.parse("2026-11-18T09:00:00Z"), ZoneOffset.UTC), git,
+        job = new CreditsFeaturesJob(TestData.CLOCK, git,
             FilmSource.disk());
         labels = MeasureFixtures.labelsFile(temp.resolve("labels.json"),
             FeaturesFixtures.label(1, FeaturesFixtures.FINGERPRINT));
