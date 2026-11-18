@@ -20,6 +20,7 @@ import gregochr.cinefilm.config.ConflictException;
 import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.config.ServiceUnavailableException;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.FilmMatchFixed;
 import gregochr.cinefilm.film.FilmPreference;
 import gregochr.cinefilm.film.FilmPreferenceRepository;
 import gregochr.cinefilm.film.FilmRepository;
@@ -369,7 +370,7 @@ class FixMatchUnitTest {
         verify(films).save(target);
         verify(join, never()).joinFilms(FILM_ID, FILM_ID);
         verify(events).publishEvent(new LibraryChanged());
-        verify(events).publishEvent(new gregochr.cinefilm.film.FilmMatchFixed());
+        verify(events).publishEvent(new FilmMatchFixed());
         assertThat(lock.holder()).isNull();
         // Applying writes: its transaction is not read-only.
         verify(transactions).getTransaction(argThat(definition -> !definition.isReadOnly()));

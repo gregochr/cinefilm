@@ -48,8 +48,11 @@ class FilmKeywordsLockIntegrationTest extends IntegrationTestBase {
     private JdbcTemplate jdbc;
 
     private boolean saveIsWaitingOnALock() {
+        // The save's guarded stamp is the statement that blocks; the probe's own backend is excluded so its query
+        // text (which names the column) can never match itself.
         Integer waiting = jdbc.queryForObject(
-            "select count(*) from pg_stat_activity where wait_event_type = 'Lock' and datname = current_database()",
+            "select count(*) from pg_stat_activity where wait_event_type = 'Lock' and pid <> pg_backend_pid() "
+                + "and datname = current_database() and query like '%keywords_fetched_at%'",
             Integer.class);
         return waiting != null && waiting > 0;
     }
@@ -82,11 +85,16 @@ class FilmKeywordsLockIntegrationTest extends IntegrationTestBase {
                     Thread.currentThread().interrupt();
                     throw new IllegalStateException(e);
                 }
-                // Give the save a bounded chance to reach the lock, spinning on the database's own view of it.
-                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-                while (!saveIsWaitingOnALock() && System.nanoTime() < deadline && !save.isDone()) {
+                // Wait, spinning on the database's own view, until the save is blocked on this transaction's row
+                // lock. Asserted before this transaction commits: a timing miss fails the test instead of passing
+                // without the race ever having happened.
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(WAIT_SECONDS);
+                boolean reached = saveIsWaitingOnALock();
+                while (!reached && System.nanoTime() < deadline) {
                     Thread.onSpinWait();
+                    reached = saveIsWaitingOnALock();
                 }
+                assertThat(reached).as("the save waited on the rematch's row lock").isTrue();
             });
 
             assertThat(save.get(WAIT_SECONDS, TimeUnit.SECONDS)).as("a save for the old id after the rematch")
