@@ -66,7 +66,7 @@ record DatasetMeasureOptions(Path data, Path out, Path labels, Set<Long> ids, bo
             Path.of(flags.get("labels")), ids(flags.get("ids")), stills, project(flags.get("project")));
     }
 
-    private static Set<Long> ids(String value) {
+    static Set<Long> ids(String value) {
         Set<Long> ids = new TreeSet<>();
         if (value == null) {
             return ids;
