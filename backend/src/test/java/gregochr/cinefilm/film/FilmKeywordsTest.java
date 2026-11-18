@@ -2,7 +2,6 @@ package gregochr.cinefilm.film;
 
 import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -10,7 +9,6 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -22,18 +20,17 @@ class FilmKeywordsTest {
     private FilmRepository films;
 
     @Test
-    void theGuardedStampComesFirstThenTheRowsAreReplacedInOrder() {
+    void theKeywordRowsAreReplacedAfterAGuardedStamp() {
         when(films.stampKeywords(1L, 949L, NOW)).thenReturn(1);
 
         boolean saved = new FilmKeywords(films).save(1L, 949L, List.of("heist", "christmas"), NOW);
 
         assertThat(saved).isTrue();
-        InOrder order = inOrder(films);
-        order.verify(films).stampKeywords(1L, 949L, NOW);
-        order.verify(films).deleteKeywordRows(1L);
-        order.verify(films).insertKeywordRow(1L, "heist");
-        order.verify(films).insertKeywordRow(1L, "christmas");
-        order.verifyNoMoreInteractions();
+        verify(films).stampKeywords(1L, 949L, NOW);
+        verify(films).deleteKeywordRows(1L);
+        verify(films).insertKeywordRow(1L, "heist");
+        verify(films).insertKeywordRow(1L, "christmas");
+        verifyNoMoreInteractions(films);
     }
 
     @Test

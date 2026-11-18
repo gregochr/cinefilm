@@ -369,6 +369,7 @@ class FixMatchUnitTest {
         verify(films).save(target);
         verify(join, never()).joinFilms(FILM_ID, FILM_ID);
         verify(events).publishEvent(new LibraryChanged());
+        verify(events).publishEvent(new gregochr.cinefilm.film.FilmMatchFixed());
         assertThat(lock.holder()).isNull();
         // Applying writes: its transaction is not read-only.
         verify(transactions).getTransaction(argThat(definition -> !definition.isReadOnly()));

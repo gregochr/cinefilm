@@ -176,6 +176,7 @@ public class FixMatch {
             }
             MatchApplied applied = tx.execute(status -> settle(filmId, movie));
             events.publishEvent(new LibraryChanged());
+            events.publishEvent(new gregochr.cinefilm.film.FilmMatchFixed());
             return applied;
         });
     }

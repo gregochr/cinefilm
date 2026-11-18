@@ -14,7 +14,6 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import gregochr.cinefilm.film.FilmRepository.TmdbRef;
 import gregochr.cinefilm.library.ScanFinished;
-import gregochr.cinefilm.search.LibraryChanged;
 import gregochr.cinefilm.plex.PlexImportFinished;
 import gregochr.cinefilm.tmdb.TmdbApi;
 import gregochr.cinefilm.tmdb.TmdbUnavailableException;
@@ -166,7 +165,7 @@ class KeywordsRefresherTest {
         refresher.onScanFinished(new ScanFinished("admin"));
         assertThat(refresher.startDue()).isFalse();
         refresher.onPlexImportFinished(new PlexImportFinished());
-        refresher.onLibraryChanged(new LibraryChanged());
+        refresher.onFilmMatchFixed(new FilmMatchFixed());
 
         assertThat(queued).hasSize(1);
         when(films.findWithoutKeywords()).thenReturn(List.of());

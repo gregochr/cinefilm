@@ -3,7 +3,6 @@ package gregochr.cinefilm.film;
 import gregochr.cinefilm.film.FilmRepository.TmdbRef;
 import gregochr.cinefilm.library.ScanFinished;
 import gregochr.cinefilm.plex.PlexImportFinished;
-import gregochr.cinefilm.search.LibraryChanged;
 import gregochr.cinefilm.tmdb.TmdbApi;
 import gregochr.cinefilm.tmdb.TmdbUnavailableException;
 import java.time.Clock;
@@ -69,9 +68,9 @@ public class KeywordsRefresher {
         startDue();
     }
 
-    /** Backfills after the library changed (a match fix gives a film a new TMDB id). */
+    /** Backfills after a Fix match (it can give a film a new TMDB id, whose keywords are not yet known). */
     @EventListener
-    public void onLibraryChanged(LibraryChanged event) {
+    public void onFilmMatchFixed(FilmMatchFixed event) {
         startDue();
     }
 

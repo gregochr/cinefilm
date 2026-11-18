@@ -53,6 +53,9 @@ class FilmKeywordsInterleavingIntegrationTest extends IntegrationTestBase {
 
         rematch.executeWithoutResult(status -> {
             Film loaded = films.findById(id).orElseThrow();
+            // Initialise the lazy keywords now, so Hibernate has no reason to reload and delete them after the
+            // backfill commits: only the explicit row delete can remove what the backfill wrote.
+            assertThat(loaded.getKeywords()).isEmpty();
             Boolean saved = backfill.execute(inner -> keywords.save(id, 881_001L, List.of("christmas"), NOW));
             assertThat(saved).isTrue();
 

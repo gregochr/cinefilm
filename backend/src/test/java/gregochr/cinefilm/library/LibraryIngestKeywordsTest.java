@@ -1,5 +1,6 @@
 package gregochr.cinefilm.library;
 
+import static gregochr.cinefilm.TestData.CLOCK;
 import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.film;
 import static org.mockito.Mockito.verify;
@@ -14,8 +15,6 @@ import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.MediaFileRepository;
 import gregochr.cinefilm.person.PersonRepository;
 import gregochr.cinefilm.tmdb.TmdbApi;
-import java.time.Clock;
-import java.time.ZoneOffset;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -55,7 +54,7 @@ class LibraryIngestKeywordsTest {
     @BeforeEach
     void setUp() {
         ingest = new LibraryIngest(films, editions, files, people, preferences, collections, runs, tmdb,
-            Clock.fixed(NOW, ZoneOffset.UTC));
+            CLOCK);
     }
 
     @Test
