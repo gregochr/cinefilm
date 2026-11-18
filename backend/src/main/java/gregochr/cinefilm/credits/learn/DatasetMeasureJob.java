@@ -205,7 +205,7 @@ final class DatasetMeasureJob {
      * The path with every symbolic link resolved: the real path of its nearest existing ancestor, then the part that
      * does not exist yet, so that an output directory not made yet is still compared by where it would really be.
      */
-    private static Path resolved(Path path) throws IOException {
+    static Path resolved(Path path) throws IOException {
         Path existing = path;
         while (!Files.exists(existing)) {
             existing = existing.getParent();
@@ -215,7 +215,7 @@ final class DatasetMeasureJob {
 
     // ---- Which films ---------------------------------------------------------------------------------------------
 
-    private static List<Path> directories(Path framesRoot) throws IOException {
+    static List<Path> directories(Path framesRoot) throws IOException {
         if (!Files.isDirectory(framesRoot)) {
             return List.of();
         }
@@ -269,7 +269,7 @@ final class DatasetMeasureJob {
     }
 
     /** The id a directory name stands for, when the name is exactly that id written out; else null. */
-    private static Long canonicalId(String name) {
+    static Long canonicalId(String name) {
         try {
             long id = Long.parseLong(name);
             return name.equals(Long.toString(id)) ? id : null;

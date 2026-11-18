@@ -291,4 +291,25 @@ class DatasetCompleteTest {
             assertThat(DatasetComplete.read(dir)).as("null in " + part).isEmpty();
         }
     }
+
+    @Test
+    void parseReturnsTheRecordOfTheBytesItIsGiven() {
+        byte[] bytes = MAPPER.writeValueAsBytes(complete("1000:1"));
+
+        assertThat(DatasetComplete.parse(bytes)).contains(complete("1000:1"));
+    }
+
+    @Test
+    void parseRefusesUnparseableBytesAndOtherFormats() {
+        assertThat(DatasetComplete.parse("{not json".getBytes(java.nio.charset.StandardCharsets.UTF_8))).isEmpty();
+        assertThat(DatasetComplete.parse("null".getBytes(java.nio.charset.StandardCharsets.UTF_8))).isEmpty();
+        assertThat(DatasetComplete.parse(json().put("format", 2).toString()
+            .getBytes(java.nio.charset.StandardCharsets.UTF_8))).isEmpty();
+    }
+
+    @Test
+    void parseRefusesBytesThatLackAPart() {
+        assertThat(DatasetComplete.parse(json().without("window").toString()
+            .getBytes(java.nio.charset.StandardCharsets.UTF_8))).isEmpty();
+    }
 }

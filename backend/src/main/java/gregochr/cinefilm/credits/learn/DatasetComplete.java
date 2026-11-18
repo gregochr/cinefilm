@@ -122,13 +122,26 @@ public record DatasetComplete(int format, long mediaFileId, String fingerprint, 
      */
     public static Optional<DatasetComplete> read(Path dir) {
         try {
-            DatasetComplete complete = MAPPER.readValue(Files.readAllBytes(dir.resolve(FILE_NAME)),
-                DatasetComplete.class);
+            return parse(Files.readAllBytes(dir.resolve(FILE_NAME)));
+        } catch (IOException e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * A {@code complete.json} already in memory, with the same rules as {@link #read(Path)}.
+     *
+     * @param json the file's bytes
+     * @return the file; empty when it is unparseable, of another format or lacks a part
+     */
+    public static Optional<DatasetComplete> parse(byte[] json) {
+        try {
+            DatasetComplete complete = MAPPER.readValue(json, DatasetComplete.class);
             return complete != null && complete.format() == FORMAT && complete.window() != null
                 && complete.frame() != null && complete.activeArea() != null && complete.settings() != null
                 && hasOffsets(complete.coarse()) && hasOffsets(complete.dense()) ? Optional.of(complete)
                 : Optional.empty();
-        } catch (IOException | JacksonException e) {
+        } catch (JacksonException e) {
             return Optional.empty();
         }
     }
