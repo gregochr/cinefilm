@@ -189,8 +189,8 @@ final class CreditsFeaturesJob {
         if (DatasetMeasureJob.resolved(out).startsWith(data.toRealPath())) {
             throw new IllegalArgumentException("--out must not be inside --data: " + out);
         }
-        byte[] labelsBytes = Files.readAllBytes(options.labels());
-        Map<Long, LabelRecord> labels = LabelsFile.read(options.labels());
+        byte[] labelsBytes = source.labelsBytes(options.labels());
+        Map<Long, LabelRecord> labels = LabelsFile.parse(labelsBytes);
         Path framesRoot = data.resolve("frames");
         List<Path> found = DatasetMeasureJob.directories(framesRoot);
         if (found.isEmpty()) {

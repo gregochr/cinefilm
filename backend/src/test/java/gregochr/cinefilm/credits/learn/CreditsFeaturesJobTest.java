@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.SerializationFeature;
@@ -62,6 +63,7 @@ class CreditsFeaturesJobTest {
         private String failGreyIn;
         /** When set, every grey frame read throws this, as the decoder does for a half-written PNG. */
         private RuntimeException greyThrows;
+        private byte[] labelsInstead;
         /** When set, the check throws this (checked or not), as the walk of a vanished directory does. */
         private Exception checkFails;
         /** When set, every grey frame read is this one instead of the disk's. */
@@ -80,6 +82,11 @@ class CreditsFeaturesJobTest {
             int nth = (int) calls.stream().filter(call -> call.equals(id + ":completeBytes")).count();
             byte[] given = bytes == null ? null : bytes.apply(id, nth);
             return given == null ? disk.completeBytes(dir) : given;
+        }
+
+        @Override
+        public byte[] labelsBytes(Path file) throws IOException {
+            return labelsInstead == null ? disk.labelsBytes(file) : labelsInstead;
         }
 
         @Override
@@ -136,6 +143,7 @@ class CreditsFeaturesJobTest {
         Files.createDirectories(frames.resolve("4/coarse"));
         FeaturesFixtures.film(frames, "5", FeaturesFixtures.complete(99, "9000:9", TWO_COARSE, TWO_DENSE), TWO_LEVELS,
             TWO_LEVELS, FeaturesFixtures.GREY_SIDE);
+        Files.createDirectories(frames.resolve("007")); // a name that is not an id: unlabelled, unless ids are named
         for (String id : List.of("7", "8", "9")) {
             FeaturesFixtures.okFilm(frames, id, Long.parseLong(id));
         }
@@ -232,18 +240,6 @@ class CreditsFeaturesJobTest {
     }
 
     @Test
-    void everySkippedCountIsInTheSummaryWithNoId() throws IOException, DatasetMeasureJob.NoFilmsException {
-        nineFilms();
-
-        runWith(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L);
-
-        JsonNode summary = summary();
-        assertThat(summary.path("skipped").toString()).isEqualTo("{\"test\":1,\"excluded\":1,\"unlabelled\":1}");
-        assertThat(summary.path("skippedByStatus").toString()).isEqualTo(
-            "{\"incomplete\":1,\"mismatched\":1,\"damaged\":1,\"noDirectory\":1,\"stale\":1}");
-    }
-
-    @Test
     void anExcludedDevelopmentRecordIsCountedAsExcluded() throws IOException, DatasetMeasureJob.NoFilmsException {
         FeaturesFixtures.okFilm(frames, "1", 1);
         labels = MeasureFixtures.labelsFile(temp.resolve("labels.json"),
@@ -256,55 +252,24 @@ class CreditsFeaturesJobTest {
         assertThat(recording.of("1")).isEmpty();
     }
 
-    @Test
-    void withoutIdsEveryDirectoryIsEnumeratedAndNoDirectoryIsNeverCounted() throws IOException,
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+        "1,2,3,4,5,6,7,8,9|1,1,1|1,1,1,1,1", // every id named: noDirectory is counted
+        "|1,1,2|1,1,1,0,1", // no ids: every directory counts (007 too), noDirectory never
+        "1,7|1,0,0|0,0,0,0,0", // a directory that is not named is not counted
+        "1,50|0,0,1|0,0,0,0,0"}) // a named id with no label is unlabelled
+    void theSkippedCountsFollowTheIdsNamed(String ids, String skipped, String byStatus) throws IOException,
         DatasetMeasureJob.NoFilmsException {
         nineFilms();
 
-        runWith();
+        runWith(ids == null ? new Long[0] : java.util.Arrays.stream(ids.split(",")).map(Long::valueOf)
+            .toArray(Long[]::new));
 
-        assertThat(summary().path("skipped").toString()).isEqualTo("{\"test\":1,\"excluded\":1,\"unlabelled\":1}");
-        assertThat(summary().path("skippedByStatus").toString()).isEqualTo(
-            "{\"incomplete\":1,\"mismatched\":1,\"damaged\":1,\"noDirectory\":0,\"stale\":1}");
-    }
-
-    @Test
-    void idsLeaveEveryDirectoryTheyDoNotNameUncounted() throws IOException, DatasetMeasureJob.NoFilmsException {
-        nineFilms();
-
-        runWith(1L, 7L);
-
-        assertThat(summary().path("skipped").toString()).isEqualTo("{\"test\":1,\"excluded\":0,\"unlabelled\":0}");
-        assertThat(summary().path("skippedByStatus").toString()).isEqualTo(
-            "{\"incomplete\":0,\"mismatched\":0,\"damaged\":0,\"noDirectory\":0,\"stale\":0}");
-        assertThat(summary().path("films").asInt()).isEqualTo(1);
-    }
-
-    @Test
-    void anIdThatIsNamedButNotLabelledIsCountedUnlabelled() throws IOException, DatasetMeasureJob.NoFilmsException {
-        nineFilms();
-
-        runWith(1L, 50L);
-
-        assertThat(summary().path("skipped").toString()).isEqualTo("{\"test\":0,\"excluded\":0,\"unlabelled\":1}");
-        assertThat(summary().path("skippedByStatus").path("noDirectory").asInt()).isZero();
-    }
-
-    @Test
-    void aDirectoryNamedOtherThanItsIdIsUnlabelledWithoutIdsAndIgnoredWithThem() throws IOException,
-        DatasetMeasureJob.NoFilmsException {
-        nineFilms();
-        Files.createDirectories(frames.resolve("007"));
-
-        runWith();
-        assertThat(summary().path("skipped").path("unlabelled").asInt()).isEqualTo(2);
-        Files.delete(run.resolve("summary.json"));
-        Files.delete(run.resolve("features.csv"));
-        Files.delete(run.resolve("frame-labels.json"));
-        Files.delete(run);
-        runWith(1L);
-
-        assertThat(summary().path("skipped").path("unlabelled").asInt()).isZero();
+        assertThat(summary().path("skipped").toString())
+            .isEqualTo(String.format("{\"test\":%s,\"excluded\":%s,\"unlabelled\":%s}", (Object[]) skipped.split(",")));
+        assertThat(summary().path("skippedByStatus").toString()).isEqualTo(String.format(
+            "{\"incomplete\":%s,\"mismatched\":%s,\"damaged\":%s,\"noDirectory\":%s,\"stale\":%s}",
+            (Object[]) byStatus.split(",")));
     }
 
     private void oneOkFilm() throws IOException, DatasetMeasureJob.NoFilmsException {
@@ -620,6 +585,22 @@ class CreditsFeaturesJobTest {
 
         assertThat(summary().path("datasetSha256").asString()).isEqualTo(sha(fetched)).isNotEqualTo(sha(disk));
         assertThat(summary().path("films").asInt()).isEqualTo(1);
+    }
+
+    @Test
+    void theLabelsAreParsedFromTheSameBytesTheirHashIsOf() throws IOException, NoSuchAlgorithmException,
+        DatasetMeasureJob.NoFilmsException {
+        FeaturesFixtures.okFilm(frames, "1", 1);
+        labels = MeasureFixtures.labelsFile(temp.resolve("labels.json"));
+        byte[] fetched = Files.readAllBytes(MeasureFixtures.labelsFile(temp.resolve("other.json"),
+            FeaturesFixtures.label(1, FeaturesFixtures.FINGERPRINT)));
+        recording.labelsInstead = fetched;
+
+        runWith();
+
+        assertThat(summary().path("films").asInt()).isEqualTo(1);
+        assertThat(summary().path("labelsSha256").asString()).isEqualTo(sha(fetched))
+            .isNotEqualTo(sha(Files.readAllBytes(labels)));
     }
 
     @Test

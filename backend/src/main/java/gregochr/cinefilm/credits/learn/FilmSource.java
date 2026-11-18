@@ -22,6 +22,15 @@ interface FilmSource {
     byte[] completeBytes(Path dir) throws IOException;
 
     /**
+     * The raw bytes of the labels file.
+     *
+     * @param file the labels file
+     * @return the bytes
+     * @throws IOException when the file cannot be read
+     */
+    byte[] labelsBytes(Path file) throws IOException;
+
+    /**
      * Checks the directory ({@link FilmCheck#check}).
      *
      * @param dir the film's directory
@@ -52,6 +61,11 @@ interface FilmSource {
             @Override
             public byte[] completeBytes(Path dir) throws IOException {
                 return Files.readAllBytes(dir.resolve(DatasetComplete.FILE_NAME));
+            }
+
+            @Override
+            public byte[] labelsBytes(Path file) throws IOException {
+                return Files.readAllBytes(file);
             }
 
             @Override
