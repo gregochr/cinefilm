@@ -1,3 +1,5 @@
+import { trimTrailingSlashes } from './paths.js';
+
 /** The five Admin sections, in the order the rail and the phone row list them. `end` keeps To do from matching all. */
 export const ADMIN_SECTIONS = [
   { key: 'todo', to: '/admin', label: 'To do', end: true },
@@ -40,7 +42,7 @@ export const SCAN_ROUTE = '/admin/library#scan';
 
 /** A path as the router matches it: no trailing slash and no case. */
 export function normalisePath(pathname) {
-  const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  const path = pathname.length > 1 ? trimTrailingSlashes(pathname) : pathname;
   return path.toLowerCase();
 }
 

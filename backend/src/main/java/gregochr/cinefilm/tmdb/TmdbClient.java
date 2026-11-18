@@ -95,9 +95,9 @@ public class TmdbClient implements TmdbApi {
 
     @Override
     public Optional<MovieDetails> movie(long id) {
-        Optional<MovieDetails> cached = movies.get(id);
-        if (cached != null) {
-            return cached;
+        if (movies.containsKey(id)) {
+            // Entries are only ever added, never removed, so a key seen here is still there for the get.
+            return movies.get(id);
         }
         Optional<MovieDetails> fetched = get(b -> b.path("/3/movie/{id}")
             .queryParam("append_to_response", "credits").build(id)).map(TmdbClient::movieOf);
@@ -127,9 +127,9 @@ public class TmdbClient implements TmdbApi {
 
     @Override
     public Optional<CollectionDetails> collection(long id) {
-        Optional<CollectionDetails> cached = collections.get(id);
-        if (cached != null) {
-            return cached;
+        if (collections.containsKey(id)) {
+            // Entries are only ever added, never removed, so a key seen here is still there for the get.
+            return collections.get(id);
         }
         Optional<CollectionDetails> fetched = get(b -> b.path("/3/collection/{id}").build(id))
             .map(TmdbClient::collectionOf);

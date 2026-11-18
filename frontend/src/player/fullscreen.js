@@ -7,10 +7,19 @@ export function pickFullscreenStrategy({ userAgent = '', hasWebkitEnter, hasRequ
   return 'none';
 }
 
+/**
+ * Leaves fullscreen when the browser can. `exitFullscreen` is missing on some browsers and answers a promise on others
+ * (it rejects when the page is not fullscreen any more): neither is the caller's business.
+ */
+export function exitFullscreen() {
+  const result = document.exitFullscreen?.();
+  if (typeof result?.catch === 'function') result.catch(() => {});
+}
+
 /** Toggles fullscreen using the right strategy. DOM access lives here in the player layer. */
 export function toggleFullscreen(container, video) {
   if (document.fullscreenElement) {
-    document.exitFullscreen?.();
+    exitFullscreen();
     return;
   }
   const strategy = pickFullscreenStrategy({

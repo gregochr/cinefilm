@@ -108,11 +108,11 @@ allowed_only() {
           | .key as $k
           | (reach($k) | map($v[.].via[]? | objects | (.url // "") | sub(".*/"; "")) | if length == 0 then [""] else . end)[]
         ] | unique | .[]' 2>/dev/null) || return 1
-    [ -n "$ids" ] || return 1
+    [[ -n "$ids" ]] || return 1
     while IFS= read -r id; do
         ok=""
         for entry in "${ALLOWED_ADVISORIES[@]}"; do
-            [ "${entry%%|*}" = "$id" ] || continue
+            [[ "${entry%%|*}" = "$id" ]] || continue
             line="${entry#*|}"
             if [[ "$today" > "${line%%|*}" ]]; then
                 echo "npm-audit: allowance for ${id} expired on ${line%%|*}; failing." >&2
@@ -121,7 +121,7 @@ allowed_only() {
             echo "npm-audit: ignoring ${id} until ${line%%|*} (${line#*|})"
             ok="yes"
         done
-        [ -n "$ok" ] || return 1
+        [[ -n "$ok" ]] || return 1
     done <<< "$ids"
     return 0
 }
@@ -134,7 +134,7 @@ audit_npm_version=$(npx --yes "$NPM_SPEC" --version 2>/dev/null || echo "unknown
 echo "npm-audit: auditing with npm ${audit_npm_version} (runner default: $(npm --version 2>/dev/null || echo unknown))"
 
 attempt=1
-while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
+while [[ "$attempt" -le "$MAX_ATTEMPTS" ]]; do
     # `--yes` so a cold npx cache does not sit waiting on a prompt no one can
     # answer. stderr is folded into stdout because npm puts the interesting
     # part (the endpoint, the status code) on stderr and the finding summary on
@@ -156,7 +156,7 @@ while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
         # gate doing its job, and repeating it would only delay the same answer.
         # The one exception: every finding is on the dated allow list.
         if report=$(npx --yes "$NPM_SPEC" audit --audit-level="$AUDIT_LEVEL" --json --fetch-timeout=90000 2>/dev/null) \
-            || [ -n "$report" ]; then
+            || [[ -n "$report" ]]; then
             if allowed_only "$report"; then
                 echo "npm-audit: every finding is on the dated allow list — passing."
                 exit 0
@@ -166,7 +166,7 @@ while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
         exit 1
     fi
 
-    if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+    if [[ "$attempt" -lt "$MAX_ATTEMPTS" ]]; then
         backoff=$(( attempt * 15 ))
         echo "::warning::npm audit could not reach the registry (attempt ${attempt}/${MAX_ATTEMPTS}); retrying in ${backoff}s"
         sleep "$backoff"

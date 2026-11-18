@@ -1,7 +1,9 @@
 package gregochr.cinefilm.plex;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 /** The parts of Plex's responses CineFilm uses. Plex text is untrusted: it is only ever stored and shown as text. */
 public final class PlexModels {
@@ -55,6 +57,22 @@ public final class PlexModels {
      * @param contentType the response content type
      */
     public record PlexImage(byte[] bytes, String contentType) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof PlexImage image
+                && Arrays.equals(bytes, image.bytes) && Objects.equals(contentType, image.contentType);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * Arrays.hashCode(bytes) + Objects.hashCode(contentType);
+        }
+
+        @Override
+        public String toString() {
+            return "PlexImage[" + (bytes == null ? "no bytes" : bytes.length + " bytes") + ", " + contentType + "]";
+        }
     }
 
     /**

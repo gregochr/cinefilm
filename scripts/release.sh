@@ -18,20 +18,20 @@ die() { echo "release: $*" >&2; exit 1; }
 
 VERSION="${1:-}"
 
-[ "$(git rev-parse --abbrev-ref HEAD)" = "main" ] || die "must be on main"
-[ -z "$(git status --porcelain)" ] || die "working tree is not clean"
+[[ "$(git rev-parse --abbrev-ref HEAD)" = "main" ]] || die "must be on main"
+[[ -z "$(git status --porcelain)" ]] || die "working tree is not clean"
 git fetch origin main --tags --quiet
 LOCAL="$(git rev-parse HEAD)"
 REMOTE="$(git rev-parse origin/main)"
-[ "$LOCAL" = "$REMOTE" ] || die "local main differs from origin/main (pull, or push your commits through a PR first)"
+[[ "$LOCAL" = "$REMOTE" ]] || die "local main differs from origin/main (pull, or push your commits through a PR first)"
 
 LAST="$(git tag --list 'v*' | sort -V | tail -n 1)"
 echo "Last release: ${LAST:-none}"
 echo "Commits since:"
-if [ -n "$LAST" ]; then git log --oneline "${LAST}..HEAD"; else git log --oneline -n 20; fi
+if [[ -n "$LAST" ]]; then git log --oneline "${LAST}..HEAD"; else git log --oneline -n 20; fi
 echo ""
 
-if [ -z "$VERSION" ]; then
+if [[ -z "$VERSION" ]]; then
     echo "1) $(next_version "$LAST" patch)  2) $(next_version "$LAST" minor)  3) $(next_version "$LAST" major)"
     read -r -p "Release which? [1] " choice
     case "${choice:-1}" in
@@ -43,7 +43,7 @@ if [ -z "$VERSION" ]; then
 fi
 
 is_valid_version "$VERSION" || die "'${VERSION}' is not a version like v0.1.0"
-if [ -n "$LAST" ]; then
+if [[ -n "$LAST" ]]; then
     version_gt "$VERSION" "$LAST" || die "${VERSION} is not newer than ${LAST}"
 fi
 git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null && die "tag ${VERSION} already exists"
@@ -59,7 +59,7 @@ if command -v gh >/dev/null 2>&1; then
     echo "Waiting for the Deploy run..."
     sleep 10
     RUN_ID="$(gh run list --workflow deploy.yml --branch "$VERSION" --limit 1 --json databaseId --jq '.[0].databaseId' || true)"
-    if [ -n "$RUN_ID" ]; then
+    if [[ -n "$RUN_ID" ]]; then
         if gh run watch "$RUN_ID" --exit-status; then
             echo "Deployed ${VERSION}."
         else

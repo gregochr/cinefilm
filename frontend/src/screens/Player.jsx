@@ -31,7 +31,7 @@ import Scrubber from '../components/Scrubber.jsx';
 import { ErrorState } from '../components/StateMessages.jsx';
 import { bankedAhead } from '../player/buffered.js';
 import { useAutoHide } from '../player/autohide.js';
-import { toggleFullscreen } from '../player/fullscreen.js';
+import { exitFullscreen, toggleFullscreen } from '../player/fullscreen.js';
 import { QUESTION, questionText } from '../player/environment.js';
 import { clampVolume, keyToAction, resolveEscape } from '../player/keymap.js';
 import { indicatorModel } from '../player/indicator.js';
@@ -547,7 +547,7 @@ function PlayerView({ film, edition, startAtZero, startAtMs, openedAt }) {
         });
         if (step === 'closeMenu') closeMenu();
         else if (step === 'dismissQuestion') dismissQuestion();
-        else if (step === 'exitFullscreen') document.exitFullscreen?.();
+        else if (step === 'exitFullscreen') exitFullscreen();
         else if (step === 'dismissEnd') setEndDismissed(true);
         break;
       }

@@ -10,7 +10,7 @@ is_valid_version() {
 # next_version CURRENT KIND: prints the next version. KIND is major, minor or patch. No CURRENT (empty) means v0.0.0.
 next_version() {
     local current="${1:-}" kind="${2:-patch}"
-    [ -n "$current" ] || current="v0.0.0"
+    [[ -n "$current" ]] || current="v0.0.0"
     is_valid_version "$current" || return 1
     local nums="${current#v}"
     local major="${nums%%.*}"
@@ -28,7 +28,7 @@ next_version() {
 # version_gt A B: true when version A is strictly newer than B.
 version_gt() {
     local a="${1#v}" b="${2#v}"
-    [ "$a" != "$b" ] && [ "$(printf '%s\n%s\n' "$a" "$b" | sort -V | tail -n 1)" = "$a" ]
+    [[ "$a" != "$b" ]] && [[ "$(printf '%s\n%s\n' "$a" "$b" | sort -V | tail -n 1)" = "$a" ]]
 }
 
 # token_is_wellformed VALUE: 0 when it is 40 to 200 characters of A-Z a-z 0-9 _ - only (no whitespace, newline, quotes or
@@ -38,7 +38,7 @@ token_is_wellformed() {
     case "$t" in
         *[!A-Za-z0-9_-]*) return 1 ;;
     esac
-    [ "${#t}" -ge 40 ] && [ "${#t}" -le 200 ]
+    [[ "${#t}" -ge 40 ]] && [[ "${#t}" -le 200 ]]
 }
 
 # rollback_decision SMOKE_EXIT ENFORCE: prints "rollback", "report-only" or "none".
@@ -46,9 +46,9 @@ token_is_wellformed() {
 # infrastructure, 4 the smoke is misconfigured. ONLY 1 can roll back, and only when ENFORCE is exactly "true".
 rollback_decision() {
     local rc="${1:-}" enforce="${2:-}"
-    if [ "$rc" = "0" ]; then
+    if [[ "$rc" = "0" ]]; then
         echo none
-    elif [ "$rc" = "1" ] && [ "$enforce" = "true" ]; then
+    elif [[ "$rc" = "1" ]] && [[ "$enforce" = "true" ]]; then
         echo rollback
     else
         echo report-only
@@ -76,7 +76,7 @@ dc() {
 # wait_healthy CONTAINER TIMEOUT_SECONDS: 0 when Docker reports healthy, 1 when unhealthy or timed out.
 wait_healthy() {
     local container="$1" timeout="${2:-180}" waited=0 status
-    while [ "$waited" -lt "$timeout" ]; do
+    while [[ "$waited" -lt "$timeout" ]]; do
         status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container" 2>/dev/null || echo missing)"
         case "$status" in
             healthy) return 0 ;;

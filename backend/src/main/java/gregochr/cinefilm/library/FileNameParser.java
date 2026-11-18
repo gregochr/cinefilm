@@ -21,6 +21,10 @@ public final class FileNameParser {
     private static final int FIRST_FILM_YEAR = 1888;
     private static final int LAST_YEAR = 2100;
 
+    private static final String SEPARATORS = " ._-";
+    /** The separators plus Java's regex whitespace (ASCII space, tab, line feed, vertical tab, form feed, return). */
+    private static final String TRIMMABLE = " ._-\t\n\u000B\f\r";
+    private static final String UNICODE_LINE_ENDS = "\u0085\u2028\u2029";
     private static final Pattern VIDEO_EXTENSION = Pattern.compile("^(.+)\\.(?:m4v|mp4|mov|avi|mkv)$",
         Pattern.CASE_INSENSITIVE);
     private static final Pattern TMDB_TAG = Pattern.compile("\\{tmdb-(\\d{1,18})}", Pattern.CASE_INSENSITIVE);
@@ -30,7 +34,7 @@ public final class FileNameParser {
     private static final Pattern BRACKET_YEAR = Pattern.compile("[(\\[](\\d{4})[)\\]]");
     private static final Pattern BARE_YEAR = Pattern.compile("(?<![A-Za-z0-9])(\\d{4})(?![A-Za-z0-9])");
     private static final Pattern PART_SUFFIX = Pattern.compile(
-        "[ ._-]+(?:(?:pt|cd|disc|disk|dvd)[ ._-]?|part)([1-8])$", Pattern.CASE_INSENSITIVE);
+        "(?<=[ ._-])(?:(?:pt|cd|disc|disk|dvd)[ ._-]?|part)([1-8])$", Pattern.CASE_INSENSITIVE);
     private static final Pattern QUALITY = Pattern.compile("(?<![A-Za-z0-9])(?:"
         + "Blu-ray|BluRay|BRRip|BDRip|WEB-DL|WEBRip|DVDRip|HDR10|2160p|1080p|1080i|720p|576p|480p|Remux|HEVC|H\\.264"
         + "|H264|x264|x265|HDR|UHD|AAC|AC3|DTS|4K|HD|SD)(?![A-Za-z0-9])", Pattern.CASE_INSENSITIVE);
@@ -145,13 +149,13 @@ public final class FileNameParser {
 
         // 5. Part suffix (before the year, else after it: "Title (2002) - pt2").
         Integer partTag = null;
-        stem = stem.replaceAll("[\\s._-]+$", "");
+        stem = stripTrailingSeparators(stem);
         Matcher part = PART_SUFFIX.matcher(stem);
         if (part.find()) {
             partTag = Integer.parseInt(part.group(1));
-            stem = stem.substring(0, part.start());
+            stem = stem.substring(0, separatorRunStart(stem, part.start()));
         } else {
-            Matcher afterYear = PART_SUFFIX.matcher(tail.replaceAll("[\\s._-]+$", ""));
+            Matcher afterYear = PART_SUFFIX.matcher(stripTrailingSeparators(tail));
             if (afterYear.find()) {
                 partTag = Integer.parseInt(afterYear.group(1));
             }
@@ -274,11 +278,37 @@ public final class FileNameParser {
 
     /** Trailing separators trimmed; a name with no spaces but dots or underscores reads as words. */
     private static String tidy(String text) {
-        String trimmed = text.replaceAll("[\\s._-]+$", "").strip();
+        String trimmed = stripTrailingSeparators(text).strip();
         if (!trimmed.contains(" ")) {
             trimmed = trimmed.replaceAll("[._]+", " ").strip();
         }
         return collapse(trimmed);
+    }
+
+    /**
+     * Drops the run of whitespace, dots, underscores and hyphens at the end of {@code text}, in one pass back from the
+     * end. It does what {@code replaceAll("[\\s._-]+$", "")} did: the whitespace is the ASCII set, and {@code $} also
+     * stood before one final NEL, line separator or paragraph separator, which is then left in place.
+     */
+    private static String stripTrailingSeparators(String text) {
+        int end = text.length();
+        if (end > 0 && UNICODE_LINE_ENDS.indexOf(text.charAt(end - 1)) >= 0) {
+            end--;
+        }
+        int start = end;
+        while (start > 0 && TRIMMABLE.indexOf(text.charAt(start - 1)) >= 0) {
+            start--;
+        }
+        return start == end ? text : text.substring(0, start) + text.substring(end);
+    }
+
+    /** The start of the run of separators that ends just before {@code index}. */
+    private static int separatorRunStart(String text, int index) {
+        int start = index;
+        while (start > 0 && SEPARATORS.indexOf(text.charAt(start - 1)) >= 0) {
+            start--;
+        }
+        return start;
     }
 
     private static String collapse(String text) {

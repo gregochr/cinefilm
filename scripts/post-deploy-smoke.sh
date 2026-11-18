@@ -24,6 +24,23 @@ set -uo pipefail
 BASE_URL="${1:-http://127.0.0.1:8090}"
 ATTEMPTS="${SMOKE_ATTEMPTS:-3}"
 RETRY_SLEEP="${SMOKE_RETRY_SLEEP:-3}"
+# These reach arithmetic (-le, sleep): inside [[ ]] a word like a[$(cmd)] would be evaluated, so only digits pass.
+whole_number() {
+    case "$2" in
+        '' | *[!0-9]*) echo "smoke: $1 must be a whole number (got '$2')" >&2; exit 4 ;;
+    esac
+}
+# A count of tries starts at 1: with none the probe loop never runs and there is no answer to report.
+at_least_one() {
+    whole_number "$1" "$2"
+    case "$2" in
+        *[1-9]*) ;;
+        *) echo "smoke: $1 must be at least 1 (got '$2')" >&2; exit 4 ;;
+    esac
+}
+at_least_one SMOKE_ATTEMPTS "$ATTEMPTS"
+whole_number SMOKE_RETRY_SLEEP "$RETRY_SLEEP"
+ATTEMPTS=$((10#$ATTEMPTS)) # 08 is not octal
 
 if ! command -v curl >/dev/null 2>&1; then
     echo "smoke: curl is not installed" >&2
@@ -37,7 +54,10 @@ esac
 PROXY_URL="${SMOKE_PROXY_URL:-}"
 PROXY_ATTEMPTS="${SMOKE_PROXY_ATTEMPTS:-24}"
 PROXY_SLEEP="${SMOKE_PROXY_SLEEP:-5}"
-if [ -n "$PROXY_URL" ]; then
+at_least_one SMOKE_PROXY_ATTEMPTS "$PROXY_ATTEMPTS"
+whole_number SMOKE_PROXY_SLEEP "$PROXY_SLEEP"
+PROXY_ATTEMPTS=$((10#$PROXY_ATTEMPTS))
+if [[ -n "$PROXY_URL" ]]; then
     case "$PROXY_URL" in
         https://*) PROXY_URL="${PROXY_URL%/}" ;;
         *) echo "smoke: SMOKE_PROXY_URL must start with https:// (got '$PROXY_URL')" >&2; exit 4 ;;
@@ -53,17 +73,17 @@ proxy_failures=0
 probe() {
     local name="$1" path="$2" want_code="$3" needle="$4" ctype_needle="${5:-}" base="${PROBE_BASE:-$BASE_URL}"
     local attempt=1 result code ctype
-    while [ "$attempt" -le "$ATTEMPTS" ]; do
+    while [[ "$attempt" -le "$ATTEMPTS" ]]; do
         result="$(curl -sS --max-time 10 -o "$TMP/body" -w '%{http_code} %{content_type}' "${base}${path}" 2>/dev/null)" || result="000 "
         code="${result%% *}"
         ctype="${result#* }"
-        if [ "$code" = "$want_code" ] && grep -qF -- "$needle" "$TMP/body" \
-            && { [ -z "$ctype_needle" ] || printf '%s' "$ctype" | grep -qiF -- "$ctype_needle"; }; then
+        if [[ "$code" = "$want_code" ]] && grep -qF -- "$needle" "$TMP/body" \
+            && { [[ -z "$ctype_needle" ]] || printf '%s' "$ctype" | grep -qiF -- "$ctype_needle"; }; then
             echo "smoke ok   ${name}: ${path} -> ${code}"
             return 0
         fi
         attempt=$((attempt + 1))
-        [ "$attempt" -le "$ATTEMPTS" ] && sleep "$RETRY_SLEEP"
+        [[ "$attempt" -le "$ATTEMPTS" ]] && sleep "$RETRY_SLEEP"
     done
     echo "smoke FAIL ${name}: ${path} -> ${code} (${ctype}), wanted ${want_code} containing '${needle}'" >&2
     return 1
@@ -73,23 +93,23 @@ probe "health" "/actuator/health" 200 '"UP"' || failures=$((failures + 1))
 probe "spa index" "/" 200 '<div id="root">' "text/html" || failures=$((failures + 1))
 probe "auth boundary" "/api/home" 401 '"error"' "json" || failures=$((failures + 1))
 # The running build is the release: /actuator/info reports the commit the image was built from (git.properties baked from GIT_COMMIT_SHA).
-if [ -n "${EXPECT_COMMIT:-}" ]; then
+if [[ -n "${EXPECT_COMMIT:-}" ]]; then
     probe "running build" "/actuator/info" 200 "\"full\":\"${EXPECT_COMMIT}\"" || failures=$((failures + 1))
 fi
 
 # Through the Caddy proxy (tailnet only; the runner is on the tailnet). Proves DNS, the certificate and the proxy hop.
-if [ -n "$PROXY_URL" ]; then
+if [[ -n "$PROXY_URL" ]]; then
     export PROBE_BASE="$PROXY_URL"
     export ATTEMPTS="$PROXY_ATTEMPTS" RETRY_SLEEP="$PROXY_SLEEP"
     probe "proxy spa index" "/" 200 '<div id="root">' "text/html" || proxy_failures=$((proxy_failures + 1))
     probe "proxy auth boundary" "/api/home" 401 '"error"' "json" || proxy_failures=$((proxy_failures + 1))
 fi
 
-if [ "$failures" -gt 0 ]; then
+if [[ "$failures" -gt 0 ]]; then
     echo "smoke: ${failures} probe(s) failed" >&2
     exit 1
 fi
-if [ "$proxy_failures" -gt 0 ]; then
+if [[ "$proxy_failures" -gt 0 ]]; then
     echo "smoke: the app is fine but ${proxy_failures} probe(s) through the proxy (${PROXY_URL}) failed: inconclusive (docs/engineering/operations.md, Custom domain)" >&2
     exit 3
 fi

@@ -109,4 +109,42 @@ assert_eq "empty SMOKE_PROXY_URL: the proxy is not checked" "0" "$rc"
 out="$(SMOKE_PROXY_URL=http://proxy.test run http://x)"; rc=$?
 assert_eq "proxy URL that is not https: exit 4" "4" "$rc"
 
+# A bad number in the environment is a misconfiguration (4), never a failed release: [[ ]] would read it as arithmetic.
+# `run_env VAR=value...` runs the script with those values in place of the defaults of `run`.
+run_env() { STUB="$TMP/stub" PATH="$TMP/bin:$PATH" env SMOKE_ATTEMPTS=1 SMOKE_RETRY_SLEEP=0 SMOKE_PROXY_ATTEMPTS=1 SMOKE_PROXY_SLEEP=0 "$@" bash "${HERE}/../post-deploy-smoke.sh" http://x 2>&1; }
+
+good
+out="$(run_env SMOKE_ATTEMPTS=abc)"; rc=$?
+assert_eq "SMOKE_ATTEMPTS that is not a number: exit 4" "4" "$rc"
+assert_contains "names SMOKE_ATTEMPTS" "$out" "smoke: SMOKE_ATTEMPTS must be a whole number (got 'abc')"
+
+out="$(run_env SMOKE_ATTEMPTS=)"; rc=$?
+assert_eq "SMOKE_ATTEMPTS that is empty: the default applies, exit 0" "0" "$rc"
+
+out="$(run_env SMOKE_ATTEMPTS=08)"; rc=$?
+assert_eq "SMOKE_ATTEMPTS=08 is eight, not a bad octal: exit 0" "0" "$rc"
+
+rm -f "$TMP/marker"
+# shellcheck disable=SC2016 # the command substitution must reach the script unexpanded
+out="$(run_env 'SMOKE_PROXY_ATTEMPTS=a[$(touch '"$TMP"'/marker)]')"; rc=$?
+assert_eq "SMOKE_PROXY_ATTEMPTS with a command inside: exit 4" "4" "$rc"
+assert_contains "names SMOKE_PROXY_ATTEMPTS" "$out" "smoke: SMOKE_PROXY_ATTEMPTS must be a whole number"
+assert_file_missing "the command in SMOKE_PROXY_ATTEMPTS did not run" "$TMP/marker"
+
+out="$(run_env SMOKE_RETRY_SLEEP=1.5)"; rc=$?
+assert_eq "SMOKE_RETRY_SLEEP that is not whole: exit 4" "4" "$rc"
+assert_contains "names SMOKE_RETRY_SLEEP" "$out" "smoke: SMOKE_RETRY_SLEEP must be a whole number (got '1.5')"
+
+out="$(run_env SMOKE_PROXY_SLEEP=-1)"; rc=$?
+assert_eq "SMOKE_PROXY_SLEEP that is negative: exit 4" "4" "$rc"
+assert_contains "names SMOKE_PROXY_SLEEP" "$out" "smoke: SMOKE_PROXY_SLEEP must be a whole number (got '-1')"
+
+out="$(run_env SMOKE_ATTEMPTS=0)"; rc=$?
+assert_eq "SMOKE_ATTEMPTS=0 (no probe would run): exit 4" "4" "$rc"
+assert_contains "says it must be at least 1" "$out" "smoke: SMOKE_ATTEMPTS must be at least 1 (got '0')"
+
+out="$(run_env SMOKE_PROXY_ATTEMPTS=00)"; rc=$?
+assert_eq "SMOKE_PROXY_ATTEMPTS=00: exit 4" "4" "$rc"
+assert_contains "says it must be at least 1" "$out" "smoke: SMOKE_PROXY_ATTEMPTS must be at least 1 (got '00')"
+
 finish_tests

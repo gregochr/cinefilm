@@ -1,8 +1,15 @@
 // Collection display rules shared by the Collections tab, the grouped Films grid and the detail screens.
 
+const COLLECTION_SUFFIX = 'collection';
+
 /** TMDB names its collections "Harry Potter Collection"; we show "Harry Potter". */
 export function displayName(name = '') {
-  return name.trim().replace(/\s+collection$/i, '');
+  const trimmed = name.trim();
+  if (trimmed.length <= COLLECTION_SUFFIX.length) return trimmed;
+  if (trimmed.slice(-COLLECTION_SUFFIX.length).toLowerCase() !== COLLECTION_SUFFIX) return trimmed;
+  const head = trimmed.slice(0, -COLLECTION_SUFFIX.length);
+  const stripped = head.trimEnd();
+  return stripped.length < head.length ? stripped : trimmed;
 }
 
 /** Lower-case, leading "the " dropped: how titles and collection names sort (as the server's SortTitles). */

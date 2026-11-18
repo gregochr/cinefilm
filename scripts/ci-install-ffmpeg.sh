@@ -31,15 +31,15 @@ timeout_error() {
 run_apt() {
     local sub="$1" remaining rc
     remaining=$(( limit - SECONDS ))
-    if [ "$remaining" -le 0 ]; then
+    if [[ "$remaining" -le 0 ]]; then
         timeout_error
     fi
     timeout --kill-after=10 "$remaining" sudo apt-get "${opts[@]}" "$@"
     rc=$?
     # 124: timeout's TERM stopped it. 137 (128+9): it ignored TERM and --kill-after's KILL had to end it.
-    if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+    if [[ "$rc" -eq 124 ]] || [[ "$rc" -eq 137 ]]; then
         timeout_error
-    elif [ "$rc" -ne 0 ]; then
+    elif [[ "$rc" -ne 0 ]]; then
         echo "::error::apt-get ${sub} failed with exit ${rc} while installing ffmpeg. Re-run the job; if it persists, check the Ubuntu mirrors."
         exit 1
     fi

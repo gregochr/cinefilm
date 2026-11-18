@@ -116,7 +116,9 @@ export function useStream({
       resumeRef.current = { play: !video.paused, held: true };
     };
     const currentPosition = () => Math.round(latest.current.getPositionMs());
-    const dropSession = (id) => sessionsApi.remove(id).catch(() => {});
+    const dropSession = (id) => {
+      sessionsApi.remove(id).catch(() => {});
+    };
     const forget = () => {
       if (session) dropSession(session.sessionId);
       session = null;

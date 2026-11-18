@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import LibraryTabs, { COLLECTIONS_PATH } from '../components/LibraryTabs.jsx';
+import { trimTrailingSlashes } from '../state/paths.js';
 import { useCollections } from '../state/usePeopleAndCollections.js';
 
 /**
@@ -9,7 +10,7 @@ import { useCollections } from '../state/usePeopleAndCollections.js';
  */
 export default function Library() {
   const { pathname } = useLocation();
-  const active = pathname.replace(/\/+$/, '') === COLLECTIONS_PATH ? 'collections' : 'films';
+  const active = trimTrailingSlashes(pathname) === COLLECTIONS_PATH ? 'collections' : 'films';
   const { data } = useCollections();
   const [countLabel, setCountLabel] = useState('');
   return (

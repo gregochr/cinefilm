@@ -24,7 +24,7 @@ if ! is_valid_version "$PREVIOUS"; then
     echo "ROLLBACK: no previous version recorded in ${DEPLOY_HOME}/.previous-version (first release?). Manual action needed." >&2
     exit 2
 fi
-if [ "$PREVIOUS" = "$FAILED" ]; then
+if [[ "$PREVIOUS" = "$FAILED" ]]; then
     echo "ROLLBACK: the previous version is the failed one (${FAILED}). Manual action needed." >&2
     exit 2
 fi
