@@ -56,6 +56,13 @@ class LabelsFileTest {
     }
 
     @Test
+    void parseReadsTheBytesItIsGivenAsReadReadsAFile() throws IOException {
+        Path file = MeasureFixtures.labelsFile(temp.resolve("l.json"), MeasureFixtures.label(7, Side.DEV, null));
+
+        assertThat(LabelsFile.parse(Files.readAllBytes(file))).isEqualTo(LabelsFile.read(file));
+    }
+
+    @Test
     void anEmptyArrayIsNoLabels() throws IOException {
         assertThat(LabelsFile.read(MeasureFixtures.labelsFile(temp.resolve("l.json")))).isEmpty();
     }

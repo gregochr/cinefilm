@@ -31,7 +31,17 @@ final class LabelsFile {
      * @throws IllegalArgumentException when it holds a null entry or a media file twice
      */
     static Map<Long, LabelRecord> read(Path file) throws IOException {
-        List<LabelRecord> records = MAPPER.readValue(Files.readAllBytes(file), new TypeReference<List<LabelRecord>>() {
+        return parse(Files.readAllBytes(file));
+    }
+
+    /**
+     * Parses a labels file already in memory.
+     *
+     * @param json the file's bytes
+     * @return the labels by media file id, in id order; it refuses what {@link #read} refuses
+     */
+    static Map<Long, LabelRecord> parse(byte[] json) {
+        List<LabelRecord> records = MAPPER.readValue(json, new TypeReference<List<LabelRecord>>() {
         });
         if (records == null) {
             throw new IllegalArgumentException("labels file is not a JSON array");

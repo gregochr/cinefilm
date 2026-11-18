@@ -4,21 +4,13 @@ import gregochr.cinefilm.credits.GreyFrame;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Optional;
 
 /**
  * Everything {@code CreditsFeaturesJob} opens inside a film's directory, in one place, so that a test can record which
- * directories were asked for. Nothing else of the job touches a film directory.
+ * directories were asked for. Nothing else of the job touches a film directory. {@code complete.json} comes as bytes,
+ * which the job parses itself so that the record it uses and the bytes it hashes are the same.
  */
 interface FilmSource {
-
-    /**
-     * The directory's {@code complete.json}.
-     *
-     * @param dir the film's directory
-     * @return the file; empty when it is missing, unusable or of another format
-     */
-    Optional<DatasetComplete> complete(Path dir);
 
     /**
      * The raw bytes of the directory's {@code complete.json}.
@@ -28,6 +20,15 @@ interface FilmSource {
      * @throws IOException when the file cannot be read
      */
     byte[] completeBytes(Path dir) throws IOException;
+
+    /**
+     * The raw bytes of the labels file.
+     *
+     * @param file the labels file
+     * @return the bytes
+     * @throws IOException when the file cannot be read
+     */
+    byte[] labelsBytes(Path file) throws IOException;
 
     /**
      * Checks the directory ({@link FilmCheck#check}).
@@ -58,13 +59,13 @@ interface FilmSource {
     static FilmSource disk() {
         return new FilmSource() {
             @Override
-            public Optional<DatasetComplete> complete(Path dir) {
-                return DatasetComplete.read(dir);
+            public byte[] completeBytes(Path dir) throws IOException {
+                return Files.readAllBytes(dir.resolve(DatasetComplete.FILE_NAME));
             }
 
             @Override
-            public byte[] completeBytes(Path dir) throws IOException {
-                return Files.readAllBytes(dir.resolve(DatasetComplete.FILE_NAME));
+            public byte[] labelsBytes(Path file) throws IOException {
+                return Files.readAllBytes(file);
             }
 
             @Override

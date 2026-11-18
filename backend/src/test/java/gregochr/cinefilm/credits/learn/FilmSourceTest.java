@@ -26,19 +26,6 @@ class FilmSourceTest {
     }
 
     @Test
-    void completeIsTheDirectorysCompleteJson() {
-        assertThat(source.complete(dir)).hasValueSatisfying(complete -> {
-            assertThat(complete.mediaFileId()).isEqualTo(1);
-            assertThat(complete.fingerprint()).isEqualTo(FeaturesFixtures.FINGERPRINT);
-        });
-    }
-
-    @Test
-    void completeIsEmptyForADirectoryWithoutOne() throws IOException {
-        assertThat(source.complete(Files.createDirectories(temp.resolve("2")))).isEmpty();
-    }
-
-    @Test
     void completeBytesAreTheFilesBytes() throws IOException {
         assertThat(source.completeBytes(dir)).isEqualTo(Files.readAllBytes(dir.resolve("complete.json")));
     }
