@@ -131,11 +131,29 @@ class GradientBoostedTreesTest {
 
     @Test
     void lambdaShrinksTheLeaves() {
-        // lambda 0: left -1/0.5 = -2.
+        // lambda 0.5: left -1/(0.5 + 0.5) = -1 (with lambda 1 it is -2/3).
         GradientBoostedTrees model = GradientBoostedTrees.fit(oneToN(4), new int[] {0, 0, 1, 1},
-                new GbtParams(1, 1, 1.0, 4, 1, 0.0));
+                new GbtParams(1, 1, 1.0, 4, 1, 0.5));
 
-        assertThat(leaf(root(model, 0).left())).isCloseTo(-2.0, within(EPS));
+        assertThat(leaf(root(model, 0).left())).isCloseTo(-1.0, within(EPS));
+    }
+
+    @Test
+    void aGainBelowTheFloorOf1eMinus12IsNotSplit() {
+        // x = 1..4, labels 0 0 1 1: the gain at v=2 is 2/(0.5 + lambda). lambda 1e13 gives 2e-13, below 1e-12.
+        GradientBoostedTrees model = GradientBoostedTrees.fit(oneToN(4), new int[] {0, 0, 1, 1},
+                new GbtParams(1, 1, 1.0, 4, 1, 1e13));
+
+        assertThat(model.trees().get(0)).isInstanceOf(Leaf.class);
+    }
+
+    @Test
+    void aGainAboveTheFloorOf1eMinus12IsSplit() {
+        // lambda 1e11 gives a gain of 2e-11, above 1e-12 (and well above 0).
+        GradientBoostedTrees model = GradientBoostedTrees.fit(oneToN(4), new int[] {0, 0, 1, 1},
+                new GbtParams(1, 1, 1.0, 4, 1, 1e11));
+
+        assertThat(model.trees().get(0)).isInstanceOf(Split.class);
     }
 
     @Test
@@ -455,6 +473,129 @@ class GradientBoostedTreesTest {
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("trees");
     }
 
+    private static String modelWithTree(String tree) {
+        return "{\"featureVersion\":1,\"base\":0.0,\"params\":{\"trees\":1,\"depth\":1,\"learningRate\":1.0,"
+                + "\"bins\":4,\"minLeaf\":1,\"lambda\":1.0},\"trees\":[" + tree + "]}";
+    }
+
+    @Test
+    void aValidHandWrittenModelIsRead() {
+        GradientBoostedTrees model = GradientBoostedTrees.fromJson(modelWithTree(
+                "{\"feature\":32,\"threshold\":1.5,\"left\":{\"leaf\":-1.0},\"right\":{\"leaf\":1.0}}"));
+
+        double[] row = new double[CreditsFeatures.COUNT];
+        row[32] = 2.0;
+        assertThat(model.predict(row)).isCloseTo(1 / (1 + Math.exp(-1.0)), within(EPS));
+    }
+
+    @Test
+    void aNegativeFeatureIsRefused() {
+        String json = modelWithTree(
+                "{\"feature\":-1,\"threshold\":1.5,\"left\":{\"leaf\":-1.0},\"right\":{\"leaf\":1.0}}");
+
+        assertThatThrownBy(() -> GradientBoostedTrees.fromJson(json))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("feature");
+    }
+
+    @Test
+    void aFeatureAtCountIsRefused() {
+        String json = modelWithTree("{\"feature\":" + CreditsFeatures.COUNT
+                + ",\"threshold\":1.5,\"left\":{\"leaf\":-1.0},\"right\":{\"leaf\":1.0}}");
+
+        assertThatThrownBy(() -> GradientBoostedTrees.fromJson(json))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("feature");
+    }
+
+    @Test
+    void aLeafWrittenAsAStringIsRefused() {
+        String json = modelWithTree("{\"leaf\":\"NaN\"}");
+
+        assertThatThrownBy(() -> GradientBoostedTrees.fromJson(json))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("leaf");
+    }
+
+    @Test
+    void aFeatureWrittenAsAStringIsRefused() {
+        String json = modelWithTree(
+                "{\"feature\":\"0\",\"threshold\":1.5,\"left\":{\"leaf\":-1.0},\"right\":{\"leaf\":1.0}}");
+
+        assertThatThrownBy(() -> GradientBoostedTrees.fromJson(json))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("feature");
+    }
+
+    @Test
+    void aFeatureWrittenAsAFractionIsRefused() {
+        String json = modelWithTree(
+                "{\"feature\":0.5,\"threshold\":1.5,\"left\":{\"leaf\":-1.0},\"right\":{\"leaf\":1.0}}");
+
+        assertThatThrownBy(() -> GradientBoostedTrees.fromJson(json))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("feature");
+    }
+
+    @Test
+    void aFeatureTooBigForAnIntIsRefused() {
+        String json = modelWithTree(
+                "{\"feature\":99999999999,\"threshold\":1.5,\"left\":{\"leaf\":-1.0},\"right\":{\"leaf\":1.0}}");
+
+        assertThatThrownBy(() -> GradientBoostedTrees.fromJson(json))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("feature");
+    }
+
+    @Test
+    void aLeafTooBigForADoubleIsRefused() {
+        String json = modelWithTree("{\"leaf\":1e999}");
+
+        assertThatThrownBy(() -> GradientBoostedTrees.fromJson(json))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("leaf");
+    }
+
+    @Test
+    void aThresholdWrittenAsAStringIsRefused() {
+        String json = modelWithTree(
+                "{\"feature\":0,\"threshold\":\"Infinity\",\"left\":{\"leaf\":-1.0},\"right\":{\"leaf\":1.0}}");
+
+        assertThatThrownBy(() -> GradientBoostedTrees.fromJson(json))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("threshold");
+    }
+
+    @Test
+    void aSplitWithoutARightIsRefused() {
+        String json = modelWithTree("{\"feature\":0,\"threshold\":1.5,\"left\":{\"leaf\":-1.0}}");
+
+        assertThatThrownBy(() -> GradientBoostedTrees.fromJson(json))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("right");
+    }
+
+    @Test
+    void aBaseWrittenAsAStringIsRefused() {
+        String json = "{\"featureVersion\":1,\"base\":\"NaN\",\"params\":{\"trees\":1,\"depth\":1,"
+                + "\"learningRate\":1.0,\"bins\":4,\"minLeaf\":1,\"lambda\":1.0},\"trees\":[]}";
+
+        assertThatThrownBy(() -> GradientBoostedTrees.fromJson(json))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("base");
+    }
+
+    @Test
+    void aTreesFieldThatIsNotAnArrayIsRefused() {
+        String json = "{\"featureVersion\":1,\"base\":0.0,\"params\":{\"trees\":1,\"depth\":1,"
+                + "\"learningRate\":1.0,\"bins\":4,\"minLeaf\":1,\"lambda\":1.0},\"trees\":{}}";
+
+        assertThatThrownBy(() -> GradientBoostedTrees.fromJson(json))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("array");
+    }
+
+    @Test
+    void textThatIsNotJsonIsRefused() {
+        assertThatThrownBy(() -> GradientBoostedTrees.fromJson("{not json"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("cannot be read");
+    }
+
+    @Test
+    void aFeatureVersionOfTheWrongTypeIsRefusedAsBadContent() {
+        assertThatThrownBy(() -> GradientBoostedTrees.fromJson("{\"featureVersion\":\"1\"}"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("featureVersion");
+    }
+
     // ---- determinism ----
 
     // ---- the whole tree against a plain reference ----
@@ -478,22 +619,19 @@ class GradientBoostedTreesTest {
             for (double t : GradientBoostedTrees.thresholds(column, p.bins())) {
                 double lg = 0;
                 double lh = 0;
-                double rg = 0;
-                double rh = 0;
                 int left = 0;
                 for (int i : idx) {
                     if (rows[i][f] <= t) {
                         lg += g[i];
                         lh += h[i];
                         left++;
-                    } else {
-                        rg += g[i];
-                        rh += h[i];
                     }
                 }
                 if (left < p.minLeaf() || idx.length - left < p.minLeaf()) {
                     continue;
                 }
+                double rg = sumG - lg;
+                double rh = sumH - lh;
                 double gain = lg * lg / (lh + p.lambda()) + rg * rg / (rh + p.lambda())
                         - sumG * sumG / (sumH + p.lambda());
                 if (gain > bestGain) {

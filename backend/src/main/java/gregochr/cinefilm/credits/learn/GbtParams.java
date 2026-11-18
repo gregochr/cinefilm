@@ -8,7 +8,7 @@ package gregochr.cinefilm.credits.learn;
  * @param learningRate the shrinkage of each leaf, in (0, 1]
  * @param bins the number of quantile bins of each feature, 2 to 256
  * @param minLeaf the fewest rows either side of a split may hold, at least 1
- * @param lambda the L2 term on leaf values, finite and at least 0
+ * @param lambda the L2 term on leaf values, finite and above 0
  */
 record GbtParams(int trees, int depth, double learningRate, int bins, int minLeaf, double lambda) {
 
@@ -36,8 +36,8 @@ record GbtParams(int trees, int depth, double learningRate, int bins, int minLea
         if (minLeaf < 1) {
             throw new IllegalArgumentException("minLeaf must be at least 1: " + minLeaf);
         }
-        if (!(lambda >= 0 && Double.isFinite(lambda))) {
-            throw new IllegalArgumentException("lambda must be finite and at least 0: " + lambda);
+        if (!(lambda > 0 && Double.isFinite(lambda))) {
+            throw new IllegalArgumentException("lambda must be finite and above 0: " + lambda);
         }
     }
 

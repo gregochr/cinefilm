@@ -1210,7 +1210,7 @@ training `main`. All code is in `credits/learn/`, under L3a's conventions.
   length, no rows, or a single class is an `IllegalArgumentException`.
 - **Parameters** (a record, `GbtParams`): `trees` (default 200), `depth` (default 3), `learningRate` (default 0.1),
   `bins` (default 32), `minLeaf` (default 20), `lambda` (default 1.0). Each is checked: `trees`, `depth`, `minLeaf`
-  ≥ 1; `bins` 2–256; `learningRate` in (0, 1]; `lambda` ≥ 0.
+  ≥ 1; `bins` 2–256; `learningRate` in (0, 1]; `lambda` finite and > 0 (at 0, a saturated leaf divides 0 by 0, so 0 is refused).
 - **Bins.** For each feature, the values sorted ascending; the candidate thresholds are the values at index
   `(k * n) / bins` for `k = 1 … bins − 1`, de-duplicated, ascending. A row goes left when `x <= threshold`. A
   feature with one distinct value has no threshold. Bins are computed once per fit, from all the fit's rows.
@@ -1222,12 +1222,15 @@ training `main`. All code is in `credits/learn/`, under L3a's conventions.
     lowest threshold (scan in that order, replace only on a strictly larger gain).
   - Growth stops at `depth` (a root at depth 0 can split; a node at `depth` is a leaf).
   - A leaf's value is `−learningRate · G / (H + λ)`.
-  - All sums run in row order, in `double`, so a fit is deterministic.
+  - Sums are in `double`, so a fit is deterministic: a node's `G` and `H` and each bin's sums run in row order,
+    `GL` and `HL` add the bins in ascending order, and `GR = G − GL`, `HR = H − HL`.
 - **Predict.** `p = 1 / (1 + e^−(base + Σ leaf values))`, for one row.
 - **JSON.** One object: `{"featureVersion", "base", "params", "trees"}`, where a tree node is either
   `{"feature", "threshold", "left", "right"}` or `{"leaf"}`. Doubles are written by Jackson (shortest round-trip
   form). Reading checks `featureVersion == CreditsFeatures.FEATURE_VERSION` and refuses a mismatch with an
-  `IllegalStateException` naming both versions; a fixture model file in test resources proves it.
+  `IllegalStateException` naming both versions; a fixture model file in test resources proves it. Any other bad
+  content (a missing field, a wrong type, a `feature` outside `0 … COUNT − 1`, a non-finite number) is an
+  `IllegalArgumentException`.
 - **Tests.** Exact values on small hand-worked sets: the bins, one split's gain and tie-break, a leaf value, the base,
   a two-tree prediction; `minLeaf` blocking a split; the JSON round trip (the read model predicts identically); the
   feature-version refusal; and determinism: two fits of the same rows give byte-identical JSON.

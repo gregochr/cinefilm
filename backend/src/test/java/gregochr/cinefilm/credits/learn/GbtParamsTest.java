@@ -22,7 +22,7 @@ class GbtParamsTest {
 
     @Test
     void theEdgesOfEachRangeAreAccepted() {
-        assertThatCode(() -> new GbtParams(1, 1, 1.0, 2, 1, 0.0)).doesNotThrowAnyException();
+        assertThatCode(() -> new GbtParams(1, 1, 1.0, 2, 1, Double.MIN_VALUE)).doesNotThrowAnyException();
         assertThatCode(() -> new GbtParams(1, 1, Double.MIN_VALUE, 256, 1, 5.0)).doesNotThrowAnyException();
     }
 
@@ -72,6 +72,12 @@ class GbtParamsTest {
     void aMinLeafOfZeroIsRefused() {
         assertThatThrownBy(() -> new GbtParams(1, 1, 0.1, 32, 0, 1.0))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("minLeaf");
+    }
+
+    @Test
+    void aLambdaOfZeroIsRefused() {
+        assertThatThrownBy(() -> new GbtParams(1, 1, 0.1, 32, 20, 0.0))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("lambda");
     }
 
     @Test

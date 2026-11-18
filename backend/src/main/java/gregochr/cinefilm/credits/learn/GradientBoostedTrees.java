@@ -3,6 +3,7 @@ package gregochr.cinefilm.credits.learn;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ArrayNode;
@@ -362,32 +363,46 @@ final class GradientBoostedTrees {
      * @param json the JSON text
      * @return the model
      * @throws IllegalStateException when the file's feature version is not {@link CreditsFeatures#FEATURE_VERSION}
-     * @throws IllegalArgumentException when the settings are out of range, or a field is missing
+     * @throws IllegalArgumentException for any other bad content: text that is not JSON, a missing field, a field of
+     *     the wrong type, settings out of range, a feature outside the row, or a number that is not finite
      */
     static GradientBoostedTrees fromJson(String json) {
-        JsonNode root = MAPPER.readTree(json);
-        int version = field(root, "featureVersion").intValue();
+        JsonNode root;
+        try {
+            root = MAPPER.readTree(json);
+        } catch (JacksonException e) {
+            throw new IllegalArgumentException("the model JSON cannot be read: " + e.getOriginalMessage(), e);
+        }
+        int version = intField(root, "featureVersion");
         if (version != CreditsFeatures.FEATURE_VERSION) {
             throw new IllegalStateException("the model has feature version " + version
                     + ", the code has " + CreditsFeatures.FEATURE_VERSION);
         }
         JsonNode p = field(root, "params");
-        GbtParams params = new GbtParams(field(p, "trees").intValue(), field(p, "depth").intValue(),
-                field(p, "learningRate").doubleValue(), field(p, "bins").intValue(),
-                field(p, "minLeaf").intValue(), field(p, "lambda").doubleValue());
+        GbtParams params = new GbtParams(intField(p, "trees"), intField(p, "depth"),
+                doubleField(p, "learningRate"), intField(p, "bins"), intField(p, "minLeaf"),
+                doubleField(p, "lambda"));
+        JsonNode array = field(root, "trees");
+        if (!array.isArray()) {
+            throw new IllegalArgumentException("the model JSON's trees is not an array");
+        }
         List<Node> trees = new ArrayList<>();
-        for (JsonNode tree : field(root, "trees")) {
+        for (JsonNode tree : array) {
             trees.add(fromNode(tree));
         }
-        return new GradientBoostedTrees(field(root, "base").doubleValue(), params, trees);
+        return new GradientBoostedTrees(doubleField(root, "base"), params, trees);
     }
 
     private static Node fromNode(JsonNode node) {
         if (node.has("leaf")) {
-            return new Leaf(node.get("leaf").doubleValue());
+            return new Leaf(doubleField(node, "leaf"));
         }
-        return new Split(field(node, "feature").intValue(), field(node, "threshold").doubleValue(),
-                fromNode(field(node, "left")), fromNode(field(node, "right")));
+        int feature = intField(node, "feature");
+        if (feature < 0 || feature >= CreditsFeatures.COUNT) {
+            throw new IllegalArgumentException("the model JSON has a feature outside the row: " + feature);
+        }
+        return new Split(feature, doubleField(node, "threshold"), fromNode(field(node, "left")),
+                fromNode(field(node, "right")));
     }
 
     private static JsonNode field(JsonNode node, String name) {
@@ -396,5 +411,21 @@ final class GradientBoostedTrees {
             throw new IllegalArgumentException("the model JSON has no " + name);
         }
         return value;
+    }
+
+    private static int intField(JsonNode node, String name) {
+        JsonNode value = field(node, name);
+        if (!value.isIntegralNumber() || !value.canConvertToInt()) {
+            throw new IllegalArgumentException("the model JSON's " + name + " is not an integer");
+        }
+        return value.intValue();
+    }
+
+    private static double doubleField(JsonNode node, String name) {
+        JsonNode value = field(node, name);
+        if (!value.isNumber() || !Double.isFinite(value.doubleValue())) {
+            throw new IllegalArgumentException("the model JSON's " + name + " is not a finite number");
+        }
+        return value.doubleValue();
     }
 }
