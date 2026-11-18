@@ -24,6 +24,15 @@ set -uo pipefail
 BASE_URL="${1:-http://127.0.0.1:8090}"
 ATTEMPTS="${SMOKE_ATTEMPTS:-3}"
 RETRY_SLEEP="${SMOKE_RETRY_SLEEP:-3}"
+# These reach arithmetic (-le, sleep): inside [[ ]] a word like a[$(cmd)] would be evaluated, so only digits pass.
+whole_number() {
+    case "$2" in
+        '' | *[!0-9]*) echo "smoke: $1 must be a whole number (got '$2')" >&2; exit 4 ;;
+    esac
+}
+whole_number SMOKE_ATTEMPTS "$ATTEMPTS"
+whole_number SMOKE_RETRY_SLEEP "$RETRY_SLEEP"
+ATTEMPTS=$((10#$ATTEMPTS)) # 08 is not octal
 
 if ! command -v curl >/dev/null 2>&1; then
     echo "smoke: curl is not installed" >&2
@@ -37,6 +46,9 @@ esac
 PROXY_URL="${SMOKE_PROXY_URL:-}"
 PROXY_ATTEMPTS="${SMOKE_PROXY_ATTEMPTS:-24}"
 PROXY_SLEEP="${SMOKE_PROXY_SLEEP:-5}"
+whole_number SMOKE_PROXY_ATTEMPTS "$PROXY_ATTEMPTS"
+whole_number SMOKE_PROXY_SLEEP "$PROXY_SLEEP"
+PROXY_ATTEMPTS=$((10#$PROXY_ATTEMPTS))
 if [[ -n "$PROXY_URL" ]]; then
     case "$PROXY_URL" in
         https://*) PROXY_URL="${PROXY_URL%/}" ;;
