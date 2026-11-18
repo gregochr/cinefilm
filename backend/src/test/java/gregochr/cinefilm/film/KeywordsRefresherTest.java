@@ -14,6 +14,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import gregochr.cinefilm.film.FilmRepository.TmdbRef;
 import gregochr.cinefilm.library.ScanFinished;
+import gregochr.cinefilm.search.LibraryChanged;
 import gregochr.cinefilm.plex.PlexImportFinished;
 import gregochr.cinefilm.tmdb.TmdbApi;
 import gregochr.cinefilm.tmdb.TmdbUnavailableException;
@@ -165,6 +166,7 @@ class KeywordsRefresherTest {
         refresher.onScanFinished(new ScanFinished("admin"));
         assertThat(refresher.startDue()).isFalse();
         refresher.onPlexImportFinished(new PlexImportFinished());
+        refresher.onLibraryChanged(new LibraryChanged());
 
         assertThat(queued).hasSize(1);
         when(films.findWithoutKeywords()).thenReturn(List.of());
@@ -177,7 +179,9 @@ class KeywordsRefresherTest {
         KeywordsRefresher inline = synchronous();
         when(tmdb.enabled()).thenReturn(true);
         List<Boolean> started = new ArrayList<>();
+        List<Integer> calls = new ArrayList<>();
         when(films.findWithoutKeywords()).thenAnswer(call -> {
+            calls.add(calls.size());
             if (started.isEmpty()) {
                 started.add(inline.startDue());
             }
@@ -187,7 +191,7 @@ class KeywordsRefresherTest {
         assertThat(inline.startDue()).isTrue();
 
         assertThat(started).containsExactly(false);
-        verify(films, org.mockito.Mockito.times(2)).findWithoutKeywords();
+        assertThat(calls).hasSize(2);
         assertThat(inline.isRunning()).isFalse();
     }
 

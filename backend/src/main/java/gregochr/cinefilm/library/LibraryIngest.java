@@ -449,6 +449,13 @@ public class LibraryIngest {
         if (film.getId() != null) {
             films.writeLanguages(film.getId(), film.getOriginalLanguage(), film.getSpokenLanguages(),
                 film.getLanguagesFetchedAt());
+            if (film.getKeywordsFetchedAt() == null) {
+                // The setter forgot the old film's keywords in the entity (or none were fetched yet); the same
+                // reasoning as for the languages applies to the row, so a backfill that committed them meanwhile
+                // is overwritten, and one still waiting finds the TMDB id gone.
+                films.deleteKeywordRows(film.getId());
+                films.clearKeywordsStamp(film.getId());
+            }
         }
     }
 

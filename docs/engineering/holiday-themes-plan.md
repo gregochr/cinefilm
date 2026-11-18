@@ -35,8 +35,8 @@ Horror needs no new data: the `Horror` genre already exists on `Film.genres`.
 - Flyway `V33__film_keywords.sql`: new nullable `keywords_fetched_at` and a `film_keyword(film_id, keyword)` element
   table, mirroring `genres`. Store only the keyword names (small), so the same data can later drive other themes.
 - Fetch from TMDB `/movie/{id}/keywords` alongside the existing languages fetch pattern
-  (`languagesFetchedAt` in `LibraryIngest`, `FilmRepository` "not yet fetched" queries): ingest sets it for new films,
-  and a one-off backfill walks films with `keywords_fetched_at is null`. Reuse the existing TMDB client, rate limit and
+  (`languagesFetchedAt` in `LibraryIngest`, `FilmRepository` "not yet fetched" queries): new films get their keywords from the
+  backfill that runs after every scan, import and match fix, which walks films with `keywords_fetched_at is null`. Reuse the existing TMDB client, rate limit and
   failure handling; a failed fetch leaves the timestamp null so it is retried.
 - Override list in config: `cinefilm.holiday.christmas.include` / `.exclude`, comma-separated TMDB ids
   (`application.properties`, bound by a `@ConfigurationProperties` record). Exclude beats include beats keyword.

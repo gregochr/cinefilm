@@ -78,6 +78,37 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
     List<TmdbRef> findWithoutKeywords();
 
     /**
+     * Stamps a film's keywords as fetched, only while it still has the TMDB id they were fetched for. The update takes
+     * the row lock, so a rematch committing meanwhile cannot slip between this check and the keyword rows.
+     *
+     * @return the rows changed: 1, or 0 when the film has gone or now has another TMDB id
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query(
+        "update Film f set f.keywordsFetchedAt = :at where f.id = :id and f.tmdbId = :tmdbId")
+    int stampKeywords(@org.springframework.data.repository.query.Param("id") Long id,
+                      @org.springframework.data.repository.query.Param("tmdbId") Long tmdbId,
+                      @org.springframework.data.repository.query.Param("at") java.time.Instant at);
+
+    /** Deletes every keyword row of a film, straight from the table. */
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query(
+        value = "delete from film_keyword where film_id = :id", nativeQuery = true)
+    int deleteKeywordRows(@org.springframework.data.repository.query.Param("id") Long id);
+
+    /** Inserts one keyword row for a film, straight into the table. */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query(
+        value = "insert into film_keyword (film_id, keyword) values (:id, :keyword)", nativeQuery = true)
+    int insertKeywordRow(@org.springframework.data.repository.query.Param("id") Long id,
+                         @org.springframework.data.repository.query.Param("keyword") String keyword);
+
+    /** Forgets a film's keyword stamp, straight on the row (a rematch: the keywords belonged to the old film). */
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query("update Film f set f.keywordsFetchedAt = null where f.id = :id")
+    int clearKeywordsStamp(@org.springframework.data.repository.query.Param("id") Long id);
+
+    /**
      * Stores TMDB's languages and stamps the film, in one statement that only matches while the film still has the
      * TMDB id they were fetched for: a film rematched meanwhile is left alone.
      *

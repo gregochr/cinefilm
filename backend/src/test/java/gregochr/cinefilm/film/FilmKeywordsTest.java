@@ -1,82 +1,80 @@
 package gregochr.cinefilm.film;
 
 import static gregochr.cinefilm.TestData.NOW;
-import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-/** Saving a film's keywords: replaced and stamped for its TMDB id, and refused for a gone or rematched film. */
+/** Saving a film's keywords: stamp first (the guard), then replace the rows; refused for a gone or rematched film. */
 @ExtendWith(MockitoExtension.class)
 class FilmKeywordsTest {
 
     @Mock
     private FilmRepository films;
 
-    private Film heat() {
-        Film film = film(1L, "Heat", 1995, NOW);
-        film.setTmdbId(949L);
-        return film;
-    }
-
     @Test
-    void theKeywordsReplaceTheOldOnesAndTheFilmIsStamped() {
-        Film film = heat();
-        film.getKeywords().add("old");
-        when(films.findById(1L)).thenReturn(Optional.of(film));
+    void theGuardedStampComesFirstThenTheRowsAreReplacedInOrder() {
+        when(films.stampKeywords(1L, 949L, NOW)).thenReturn(1);
 
         boolean saved = new FilmKeywords(films).save(1L, 949L, List.of("heist", "christmas"), NOW);
 
         assertThat(saved).isTrue();
-        assertThat(film.getKeywords()).containsExactly("heist", "christmas");
-        assertThat(film.getKeywordsFetchedAt()).isEqualTo(NOW);
+        InOrder order = inOrder(films);
+        order.verify(films).stampKeywords(1L, 949L, NOW);
+        order.verify(films).deleteKeywordRows(1L);
+        order.verify(films).insertKeywordRow(1L, "heist");
+        order.verify(films).insertKeywordRow(1L, "christmas");
+        order.verifyNoMoreInteractions();
     }
 
     @Test
-    void noKeywordsStillStampsTheFilm() {
-        Film film = heat();
-        when(films.findById(1L)).thenReturn(Optional.of(film));
+    void noKeywordsStillStampsTheFilmAndClearsTheRows() {
+        when(films.stampKeywords(1L, 949L, NOW)).thenReturn(1);
 
         boolean saved = new FilmKeywords(films).save(1L, 949L, List.of(), NOW);
 
         assertThat(saved).isTrue();
-        assertThat(film.getKeywords()).isEmpty();
-        assertThat(film.getKeywordsFetchedAt()).isEqualTo(NOW);
+        verify(films).stampKeywords(1L, 949L, NOW);
+        verify(films).deleteKeywordRows(1L);
+        verifyNoMoreInteractions(films);
     }
 
     @Test
-    void aKeywordLongerThanTheColumnIsCut() {
-        Film film = heat();
-        when(films.findById(1L)).thenReturn(Optional.of(film));
+    void aKeywordLongerThanTheColumnIsCutAndDuplicatesAfterCuttingAreInsertedOnce() {
+        when(films.stampKeywords(1L, 949L, NOW)).thenReturn(1);
 
-        new FilmKeywords(films).save(1L, 949L, List.of("x".repeat(150)), NOW);
+        new FilmKeywords(films).save(1L, 949L, List.of("x".repeat(150), "x".repeat(120)), NOW);
 
-        assertThat(film.getKeywords()).containsExactly("x".repeat(100));
+        verify(films).insertKeywordRow(1L, "x".repeat(100));
     }
 
     @Test
-    void aFilmRematchedMeanwhileIsLeftAlone() {
-        Film film = heat();
-        film.getKeywords().add("kept");
-        when(films.findById(1L)).thenReturn(Optional.of(film));
+    void theCutNeverSplitsASurrogatePair() {
+        when(films.stampKeywords(1L, 949L, NOW)).thenReturn(1);
+        String emoji = "🎄";
+
+        new FilmKeywords(films).save(1L, 949L, List.of("x".repeat(99) + emoji), NOW);
+
+        verify(films).insertKeywordRow(1L, "x".repeat(99));
+    }
+
+    @Test
+    void aFilmRematchedMeanwhileOrGoneIsRefusedAndNothingElseIsWritten() {
+        when(films.stampKeywords(1L, 111L, NOW)).thenReturn(0);
 
         boolean saved = new FilmKeywords(films).save(1L, 111L, List.of("heist"), NOW);
 
         assertThat(saved).isFalse();
-        assertThat(film.getKeywords()).containsExactly("kept");
-        assertThat(film.getKeywordsFetchedAt()).isNull();
-    }
-
-    @Test
-    void aFilmThatHasGoneIsRefused() {
-        when(films.findById(1L)).thenReturn(Optional.empty());
-
-        assertThat(new FilmKeywords(films).save(1L, 949L, List.of("heist"), NOW)).isFalse();
+        verify(films).stampKeywords(1L, 111L, NOW);
+        verifyNoMoreInteractions(films);
     }
 }
