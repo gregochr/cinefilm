@@ -97,4 +97,11 @@ final class FeaturesFixtures {
             List.of(new Span(TARGET_MS, DURATION_MS)), List.of(new Span(WINDOW_START_MS, TARGET_MS)), List.of(), null,
             null);
     }
+
+    /** {@link #label} for a test film: side {@code test} and no fold. */
+    static LabelRecord testLabel(long id, String fingerprint) {
+        LabelRecord dev = label(id, fingerprint);
+        return new LabelRecord(id, fingerprint, dev.unitKey(), Side.TEST, null, TARGET_MS, 0L, false, dev.credits(),
+            dev.film(), List.of(), null, null);
+    }
 }

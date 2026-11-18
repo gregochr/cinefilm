@@ -92,11 +92,35 @@ class CreditsFeaturesMainTest {
 
     @Test
     void aBadFlagExitsOneWithAOneLineMessage() {
-        int code = run("--data", data.toString(), "--look=L5", "--out", temp.resolve("out").toString());
+        int code = run("--data", data.toString(), "--stills", "--out", temp.resolve("out").toString());
 
         assertThat(code).isEqualTo(1);
-        assertThat(err()).isEqualTo("features: IllegalArgumentException: unknown argument --look=L5\n");
+        assertThat(err()).isEqualTo("features: IllegalArgumentException: unknown argument --stills\n");
         assertThat(out()).isEmpty();
+    }
+
+    @Test
+    void aWrongLookValueExitsOneAndWritesNothing() {
+        Path out = temp.resolve("out");
+
+        int code = run("--data", data.toString(), "--look=gate", "--out", out.toString());
+
+        assertThat(code).isEqualTo(1);
+        assertThat(err()).isEqualTo("features: IllegalArgumentException: --look must be L5: --look=gate\n");
+        assertThat(out).doesNotExist();
+    }
+
+    @Test
+    void aRunWithTheLookPrintsLookJsonAsTheLastPath() throws IOException {
+        FeaturesFixtures.okFilm(frames, "1", 1);
+        Path out = temp.resolve("out");
+
+        int code = run("--data", data.toString(), "--look=L5", "--out", out.toString());
+
+        Path runDir = out.toAbsolutePath().normalize().resolve(RUN);
+        assertThat(code).isZero();
+        assertThat(out()).endsWith("wrote " + runDir.resolve("summary.json") + "\nwrote " + runDir.resolve("look.json")
+            + "\n");
     }
 
     @Test

@@ -151,12 +151,16 @@ class CreditsFeaturesJobTest {
             FeaturesFixtures.label(1, FeaturesFixtures.FINGERPRINT),
             MeasureFixtures.label(2, Side.DEV, null), MeasureFixtures.label(3, Side.DEV, null),
             MeasureFixtures.label(4, Side.DEV, null), MeasureFixtures.label(5, Side.DEV, null),
-            MeasureFixtures.label(6, Side.DEV, null), MeasureFixtures.label(7, Side.TEST, null),
+            MeasureFixtures.label(6, Side.DEV, null), FeaturesFixtures.testLabel(7, FeaturesFixtures.FINGERPRINT),
             MeasureFixtures.label(8, Side.TEST, ExcludeReason.SPLIT_CONFLICT));
     }
 
     private List<Path> runWith(Long... ids) throws IOException, DatasetMeasureJob.NoFilmsException {
-        return job.run(new CreditsFeaturesOptions(data, labels, out, new TreeSet<>(List.of(ids))));
+        return job.run(new CreditsFeaturesOptions(data, labels, out, new TreeSet<>(List.of(ids)), false));
+    }
+
+    private List<Path> runLookingAt(Long... ids) throws IOException, DatasetMeasureJob.NoFilmsException {
+        return job.run(new CreditsFeaturesOptions(data, labels, out, new TreeSet<>(List.of(ids)), true));
     }
 
     private static List<Map<String, String>> rows(Path csvFile) throws IOException {
@@ -698,7 +702,7 @@ class CreditsFeaturesJobTest {
         labels = MeasureFixtures.labelsFile(temp.resolve("labels.json"));
         Path file = Files.writeString(temp.resolve("file"), "x");
 
-        assertThatThrownBy(() -> job.run(new CreditsFeaturesOptions(file, labels, out, new TreeSet<>())))
+        assertThatThrownBy(() -> job.run(new CreditsFeaturesOptions(file, labels, out, new TreeSet<>(), false)))
             .isInstanceOf(IllegalArgumentException.class).hasMessage("--data is not a directory: " + file);
     }
 
@@ -707,7 +711,7 @@ class CreditsFeaturesJobTest {
         labels = MeasureFixtures.labelsFile(temp.resolve("labels.json"));
         Path inside = data.resolve("out");
 
-        assertThatThrownBy(() -> job.run(new CreditsFeaturesOptions(data, labels, inside, new TreeSet<>())))
+        assertThatThrownBy(() -> job.run(new CreditsFeaturesOptions(data, labels, inside, new TreeSet<>(), false)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("--out must not be inside --data: " + inside.toAbsolutePath().normalize());
     }
@@ -718,5 +722,259 @@ class CreditsFeaturesJobTest {
 
         assertThatThrownBy(this::runWith).isInstanceOf(IllegalArgumentException.class)
             .hasMessage("this run's directory already exists: " + run.toAbsolutePath().normalize());
+    }
+
+    // ---- --look=L5 -----------------------------------------------------------------------------------------------
+
+    private List<Map<String, String>> rowsOf(String id) throws IOException {
+        return featureRows().stream().filter(row -> row.get("mediaFileId").equals(id)).toList();
+    }
+
+    @Test
+    void withTheLookATestFilmIsReadAndItsRowsHaveSideTestAndNoFold() throws IOException,
+        DatasetMeasureJob.NoFilmsException {
+        nineFilms();
+
+        runLookingAt(1L, 7L);
+
+        assertThat(rowsOf("7")).hasSize(29).allSatisfy(row -> {
+            assertThat(row.get("side")).isEqualTo("test");
+            assertThat(row.get("fold")).isEmpty();
+        });
+        assertThat(rowsOf("1")).hasSize(29).allSatisfy(row -> {
+            assertThat(row.get("side")).isEqualTo("dev");
+            assertThat(row.get("fold")).isEqualTo("2");
+        });
+    }
+
+    @Test
+    void withTheLookATestFilmGoesThroughTheSameTwoPassesAsADevelopmentFilm() throws IOException,
+        DatasetMeasureJob.NoFilmsException {
+        nineFilms();
+
+        runLookingAt(7L);
+
+        assertThat(recording.of("7")).containsExactly("completeBytes", "check", "grey");
+        assertThat(recording.calls.stream().filter(call -> call.equals("7:completeBytes")).count()).isEqualTo(2);
+    }
+
+    @Test
+    void withTheLookATestFilmsRecordIsInFrameLabelsInIdOrder() throws IOException,
+        DatasetMeasureJob.NoFilmsException {
+        nineFilms();
+
+        runLookingAt(7L, 1L);
+
+        JsonNode records = MAPPER.readTree(Files.readAllBytes(run.resolve("frame-labels.json")));
+        assertThat(records.size()).isEqualTo(2);
+        assertThat(records.get(0).path("media_file_id").asLong()).isEqualTo(1);
+        assertThat(records.get(0).path("side").asString()).isEqualTo("dev");
+        assertThat(records.get(1).path("media_file_id").asLong()).isEqualTo(7);
+        assertThat(records.get(1).path("side").asString()).isEqualTo("test");
+        assertThat(records.get(1).path("fold").isNull()).isTrue();
+    }
+
+    @Test
+    void withTheLookTheTestFilmsAreCountedApartFromTheDevelopmentFilms() throws IOException,
+        DatasetMeasureJob.NoFilmsException {
+        nineFilms();
+
+        runLookingAt(1L, 7L);
+
+        JsonNode summary = summary();
+        String coarse = "{\"credits\":2,\"film\":1,\"BOUNDARY\":0,\"AFTER_LAST_CREDITS\":0,\"LIT_OPENING\":0,"
+            + "\"LIT_RUN\":5}";
+        assertThat(summary.path("films").asInt()).isEqualTo(1);
+        assertThat(summary.path("rows").path("coarse").toString()).isEqualTo(coarse);
+        JsonNode test = summary.path("test");
+        assertThat(test.path("films").asInt()).isEqualTo(1);
+        assertThat(test.path("rows").path("coarse").toString()).isEqualTo(coarse);
+        assertThat(test.path("rows").path("dense").toString()).isEqualTo("{\"credits\":13,\"film\":8,"
+            + "\"BOUNDARY\":0,\"AFTER_LAST_CREDITS\":0,\"LIT_OPENING\":0,\"LIT_RUN\":0}");
+        assertThat(test.path("openingTypes").toString()).isEqualTo("{\"DARK\":1,\"PLATE\":0,\"LIT\":0}");
+        assertThat(test.path("noOpeningFrame").asInt()).isZero();
+        assertThat(test.path("intervalsLeftOutWhole").asInt()).isZero();
+        assertThat(test.path("omittedDenseFrames").asInt()).isEqualTo(4);
+        assertThat(test.path("skippedByStatus").toString())
+            .isEqualTo("{\"incomplete\":0,\"mismatched\":0,\"damaged\":0,\"noDirectory\":0,\"stale\":0}");
+    }
+
+    @Test
+    void withTheLookTheTestFilmsAreNotCountedAsSkipped() throws IOException, DatasetMeasureJob.NoFilmsException {
+        nineFilms();
+
+        runLookingAt(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L);
+
+        assertThat(summary().path("skipped").toString())
+            .isEqualTo("{\"test\":0,\"excluded\":1,\"unlabelled\":1}");
+    }
+
+    @Test
+    void withTheLookTheDevelopmentSkippedCountsAreWhatTheyAreWithoutIt() throws IOException,
+        DatasetMeasureJob.NoFilmsException {
+        nineFilms();
+
+        runLookingAt(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L);
+
+        assertThat(summary().path("skippedByStatus").toString()).isEqualTo(
+            "{\"incomplete\":1,\"mismatched\":1,\"damaged\":1,\"noDirectory\":1,\"stale\":1}");
+        assertThat(summary().path("test").path("skippedByStatus").toString())
+            .isEqualTo("{\"incomplete\":0,\"mismatched\":0,\"damaged\":0,\"noDirectory\":0,\"stale\":0}");
+    }
+
+    @Test
+    void aStaleTestFilmIsCountedUnderTheTestStatusesAndNeverUnderTheDevelopmentOnes() throws IOException,
+        DatasetMeasureJob.NoFilmsException {
+        FeaturesFixtures.okFilm(frames, "7", 7);
+        labels = MeasureFixtures.labelsFile(temp.resolve("labels.json"), FeaturesFixtures.testLabel(7, "9000:9"));
+
+        runLookingAt();
+
+        assertThat(summary().path("skippedByStatus").path("stale").asInt()).isZero();
+        assertThat(summary().path("test").path("skippedByStatus").path("stale").asInt()).isEqualTo(1);
+        assertThat(summary().path("test").path("films").asInt()).isZero();
+        assertThat(featureRows()).isEmpty();
+    }
+
+    @Test
+    void aDamagedTestFilmIsCountedUnderTheTestStatusesAndContributesNothing() throws IOException,
+        DatasetMeasureJob.NoFilmsException {
+        FeaturesFixtures.film(frames, "7", FeaturesFixtures.complete(7, FeaturesFixtures.FINGERPRINT, TWO_COARSE,
+            TWO_DENSE), TWO_LEVELS, TWO_LEVELS, 4);
+        labels = MeasureFixtures.labelsFile(temp.resolve("labels.json"),
+            FeaturesFixtures.testLabel(7, FeaturesFixtures.FINGERPRINT));
+
+        runLookingAt();
+
+        assertThat(summary().path("skippedByStatus").path("damaged").asInt()).isZero();
+        assertThat(summary().path("test").path("skippedByStatus").path("damaged").asInt()).isEqualTo(1);
+        assertThat(featureRows()).isEmpty();
+        assertThat(MAPPER.readTree(Files.readAllBytes(run.resolve("frame-labels.json"))).size()).isZero();
+    }
+
+    @Test
+    void aTestFilmNamedByIdWithNoDirectoryIsCountedAsATestNoDirectory() throws IOException,
+        DatasetMeasureJob.NoFilmsException {
+        FeaturesFixtures.okFilm(frames, "1", 1);
+        labels = MeasureFixtures.labelsFile(temp.resolve("labels.json"),
+            FeaturesFixtures.label(1, FeaturesFixtures.FINGERPRINT),
+            FeaturesFixtures.testLabel(7, FeaturesFixtures.FINGERPRINT));
+
+        runLookingAt(1L, 7L);
+
+        assertThat(summary().path("skippedByStatus").path("noDirectory").asInt()).isZero();
+        assertThat(summary().path("test").path("skippedByStatus").path("noDirectory").asInt()).isEqualTo(1);
+    }
+
+    @Test
+    void withTheLookAnExcludedTestRecordIsCountedAsExcludedAndNeverOpened() throws IOException,
+        DatasetMeasureJob.NoFilmsException {
+        nineFilms();
+
+        runLookingAt(1L, 7L, 8L);
+
+        assertThat(recording.of("8")).isEmpty();
+        assertThat(summary().path("skipped").path("excluded").asInt()).isEqualTo(1);
+        assertThat(rowsOf("8")).isEmpty();
+    }
+
+    @Test
+    void withTheLookAnUnlabelledDirectoryIsNeverOpened() throws IOException, DatasetMeasureJob.NoFilmsException {
+        nineFilms();
+
+        runLookingAt();
+
+        assertThat(recording.of("9")).isEmpty();
+        assertThat(recording.of("007")).isEmpty();
+        assertThat(summary().path("skipped").path("unlabelled").asInt()).isEqualTo(2);
+    }
+
+    @Test
+    void withTheLookTheDatasetHashStillCoversTheDevelopmentFilmsOnly() throws IOException,
+        NoSuchAlgorithmException, DatasetMeasureJob.NoFilmsException {
+        nineFilms();
+
+        runLookingAt(1L, 7L);
+
+        assertThat(summary().path("datasetSha256").asString())
+            .isEqualTo(sha(Files.readAllBytes(frames.resolve("1/complete.json"))));
+    }
+
+    @Test
+    void withTheLookTheDevelopmentCountsAndHashesAreThoseOfARunWithoutIt() throws IOException,
+        DatasetMeasureJob.NoFilmsException {
+        nineFilms();
+        runWith(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L);
+        JsonNode without = summary();
+        Files.delete(run.resolve("summary.json"));
+
+        Files.delete(run.resolve("features.csv"));
+        Files.delete(run.resolve("frame-labels.json"));
+        Files.delete(run);
+        runLookingAt(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L);
+        JsonNode with = summary();
+
+        for (String field : List.of("films", "rows", "openingTypes", "noOpeningFrame", "intervalsLeftOutWhole",
+            "omittedDenseFrames", "skippedByStatus", "datasetSha256", "labelsSha256")) {
+            assertThat(with.path(field)).as(field).isEqualTo(without.path(field));
+        }
+    }
+
+    @Test
+    void withoutTheLookTheSummaryHasNoTestBlock() throws IOException, DatasetMeasureJob.NoFilmsException {
+        oneOkFilm();
+
+        assertThat(summary().has("test")).isFalse();
+    }
+
+    @Test
+    void withTheLookLookJsonHoldsTheFlagTheTimeTheShaAndTheCountOfTestFilmsAndNothingElse() throws IOException,
+        DatasetMeasureJob.NoFilmsException {
+        nineFilms();
+
+        List<Path> written = runLookingAt(1L, 7L);
+
+        assertThat(written).containsExactly(run, run.resolve("features.csv"), run.resolve("frame-labels.json"),
+            run.resolve("summary.json"), run.resolve("look.json"));
+        assertThat(MAPPER.readTree(Files.readAllBytes(run.resolve("look.json"))).toString()).isEqualTo(
+            "{\"look\":\"L5\",\"generatedAt\":\"2024-03-31T23:30:00Z\",\"toolGitCommit\":\"toolsha\","
+                + "\"testFilms\":1}");
+    }
+
+    @Test
+    void lookJsonCountsOnlyTheTestFilmsThatWereRead() throws IOException, DatasetMeasureJob.NoFilmsException {
+        FeaturesFixtures.okFilm(frames, "1", 1);
+        FeaturesFixtures.okFilm(frames, "7", 7);
+        FeaturesFixtures.okFilm(frames, "8", 8);
+        labels = MeasureFixtures.labelsFile(temp.resolve("labels.json"),
+            FeaturesFixtures.label(1, FeaturesFixtures.FINGERPRINT),
+            FeaturesFixtures.testLabel(7, FeaturesFixtures.FINGERPRINT),
+            FeaturesFixtures.testLabel(8, "9000:9"));
+
+        runLookingAt();
+
+        assertThat(MAPPER.readTree(Files.readAllBytes(run.resolve("look.json"))).path("testFilms").asInt())
+            .isEqualTo(1);
+    }
+
+    @Test
+    void withoutTheLookNoLookJsonIsWritten() throws IOException, DatasetMeasureJob.NoFilmsException {
+        nineFilms();
+
+        runWith(1L, 7L);
+
+        assertThat(run.resolve("look.json")).doesNotExist();
+    }
+
+    @Test
+    void withoutTheLookATestFilmIsStillSkippedCountedAndNeverOpened() throws IOException,
+        DatasetMeasureJob.NoFilmsException {
+        nineFilms();
+
+        runWith(1L, 7L);
+
+        assertThat(recording.of("7")).isEmpty();
+        assertThat(summary().path("skipped").path("test").asInt()).isEqualTo(1);
+        assertThat(featureRows()).allSatisfy(row -> assertThat(row.get("side")).isEqualTo("dev"));
     }
 }
