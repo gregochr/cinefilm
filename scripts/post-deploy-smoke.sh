@@ -30,7 +30,15 @@ whole_number() {
         '' | *[!0-9]*) echo "smoke: $1 must be a whole number (got '$2')" >&2; exit 4 ;;
     esac
 }
-whole_number SMOKE_ATTEMPTS "$ATTEMPTS"
+# A count of tries starts at 1: with none the probe loop never runs and there is no answer to report.
+at_least_one() {
+    whole_number "$1" "$2"
+    case "$2" in
+        *[1-9]*) ;;
+        *) echo "smoke: $1 must be at least 1 (got '$2')" >&2; exit 4 ;;
+    esac
+}
+at_least_one SMOKE_ATTEMPTS "$ATTEMPTS"
 whole_number SMOKE_RETRY_SLEEP "$RETRY_SLEEP"
 ATTEMPTS=$((10#$ATTEMPTS)) # 08 is not octal
 
@@ -46,7 +54,7 @@ esac
 PROXY_URL="${SMOKE_PROXY_URL:-}"
 PROXY_ATTEMPTS="${SMOKE_PROXY_ATTEMPTS:-24}"
 PROXY_SLEEP="${SMOKE_PROXY_SLEEP:-5}"
-whole_number SMOKE_PROXY_ATTEMPTS "$PROXY_ATTEMPTS"
+at_least_one SMOKE_PROXY_ATTEMPTS "$PROXY_ATTEMPTS"
 whole_number SMOKE_PROXY_SLEEP "$PROXY_SLEEP"
 PROXY_ATTEMPTS=$((10#$PROXY_ATTEMPTS))
 if [[ -n "$PROXY_URL" ]]; then

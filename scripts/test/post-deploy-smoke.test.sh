@@ -139,4 +139,12 @@ out="$(run_env SMOKE_PROXY_SLEEP=-1)"; rc=$?
 assert_eq "SMOKE_PROXY_SLEEP that is negative: exit 4" "4" "$rc"
 assert_contains "names SMOKE_PROXY_SLEEP" "$out" "smoke: SMOKE_PROXY_SLEEP must be a whole number (got '-1')"
 
+out="$(run_env SMOKE_ATTEMPTS=0)"; rc=$?
+assert_eq "SMOKE_ATTEMPTS=0 (no probe would run): exit 4" "4" "$rc"
+assert_contains "says it must be at least 1" "$out" "smoke: SMOKE_ATTEMPTS must be at least 1 (got '0')"
+
+out="$(run_env SMOKE_PROXY_ATTEMPTS=00)"; rc=$?
+assert_eq "SMOKE_PROXY_ATTEMPTS=00: exit 4" "4" "$rc"
+assert_contains "says it must be at least 1" "$out" "smoke: SMOKE_PROXY_ATTEMPTS must be at least 1 (got '00')"
+
 finish_tests

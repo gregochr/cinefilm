@@ -105,21 +105,27 @@ describe('creating the session and attaching the stream', () => {
     expect(hook.health.rung).toHaveBeenCalledWith('original', 1080);
   });
 
-  it('sends the chosen audio track and the viewing id, and leaves them out when there are none', async () => {
+  it('sends the chosen audio track and the viewing id', async () => {
     const calls = serve();
-    const withBoth = mount({ audioStreamId: 3, health: { ...makeHealth(), id: 'viewing-1' } });
-    await hlsReady(withBoth);
+    const hook = mount({ audioStreamId: 3, health: { ...makeHealth(), id: 'viewing-1' } });
+
+    await hlsReady(hook);
+
     expect(calls.posted[0]).toEqual({
       quality: '720p',
       startMs: 0,
       playbackId: 'viewing-1',
       audioStreamId: 3,
     });
-    withBoth.unmount();
+  });
 
-    const bare = mount({ audioStreamId: undefined });
-    await hlsReady(bare);
-    expect(calls.posted[1]).toEqual({ quality: '720p', startMs: 0 });
+  it('leaves the audio track and viewing id out when there are none', async () => {
+    const calls = serve();
+    const hook = mount({ audioStreamId: undefined });
+
+    await hlsReady(hook);
+
+    expect(calls.posted[0]).toEqual({ quality: '720p', startMs: 0 });
   });
 
   it('measures the link first on Auto and starts on the rung the measurement allows', async () => {
@@ -404,18 +410,22 @@ describe('what the running engine reports', () => {
     expect(hook.onToast).toHaveBeenLastCalledWith('Back to Original');
   });
 
-  it('keeps quiet about the first level, and about any level on a fixed quality', async () => {
-    const auto = await running({ quality: AUTO });
-    act(() => handlersOf().onLevel('720p', { initial: true }));
-    expect(auto.hook.result.current.rung).toBe('720p');
-    expect(auto.hook.onToast).not.toHaveBeenCalled();
-    auto.hook.unmount();
+  it('keeps quiet about the first level on Auto', async () => {
+    const { hook } = await running({ quality: AUTO });
 
-    startStream.mockClear();
-    const fixed = await running({ quality: '720p' });
-    act(() => handlersOf(0).onLevel('480p', { initial: false }));
-    expect(fixed.hook.result.current.rung).toBe('480p');
-    expect(fixed.hook.onToast).not.toHaveBeenCalled();
+    act(() => handlersOf().onLevel('720p', { initial: true }));
+
+    expect(hook.result.current.rung).toBe('720p');
+    expect(hook.onToast).not.toHaveBeenCalled();
+  });
+
+  it('keeps quiet about any level change on a fixed quality', async () => {
+    const { hook } = await running({ quality: '720p' });
+
+    act(() => handlersOf().onLevel('480p', { initial: false }));
+
+    expect(hook.result.current.rung).toBe('480p');
+    expect(hook.onToast).not.toHaveBeenCalled();
   });
 
   it('passes on what is being fetched and the network errors', async () => {
