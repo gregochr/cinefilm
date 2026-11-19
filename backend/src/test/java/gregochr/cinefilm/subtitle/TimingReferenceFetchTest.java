@@ -290,6 +290,22 @@ class TimingReferenceFetchTest {
     }
 
     @Test
+    void aDownloadsOwnOpenSubtitlesFileDoesNotStopTheWalkAsAMatch() {
+        File owner = forced(7, Origin.OWNER);
+        File download = new File(8L, Origin.DOWNLOAD, owner.lines(), owner.cuesText(), 5012L);
+        Map<Long, OpenSubtitlesReference> saved = new HashMap<>();
+        downloading(1, 5013, full(300), saved);
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(download),
+            List.of(candidate(5012), candidate(5013)), Map.of(5012L, stored(5012, full(300))))));
+
+        fetch.run(CHECK_LIMIT, true);
+
+        // The download matches file 5012 only because it came from it: the walk goes on to 5013.
+        verify(api).download(5013L);
+        assertThat(saved).containsOnlyKeys(5013L);
+    }
+
+    @Test
     void aReferenceMatchingUnderThirtyPercentOfTheLinesTriesTheNextCandidateAndEveryUsableReferenceIsMeasured() {
         File file = forced(7, Origin.OWNER);
         assertThat(TimingFit.fit(starts(SrtParser.cues(file.cuesText())), starts(scatteredReference()))
