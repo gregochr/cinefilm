@@ -1,7 +1,16 @@
 import Art from '../../components/Art.jsx';
-import { chipFor, cutIndex, cutText, rowNote, titleLine } from '../../state/christmas.js';
+import { Button } from '../../components/Button.jsx';
+import {
+  chipFor,
+  cutIndex,
+  cutText,
+  rowAction,
+  rowNote,
+  titleLine,
+} from '../../state/christmas.js';
 
-function ChristmasRow({ row, number, cut, tab }) {
+function ChristmasRow({ row, number, cut, tab, busy, onAct, buttonRef }) {
+  const action = rowAction(row);
   const chip = chipFor(row);
   const note = rowNote(row, tab);
   return (
@@ -27,15 +36,25 @@ function ChristmasRow({ row, number, cut, tab }) {
         {note ? <p className="xmas-row__note">{note}</p> : null}
       </div>
       <span className={`xmas-chip xmas-chip--${chip.variant}`}>{chip.label}</span>
+      <Button
+        ref={buttonRef}
+        className="xmas-row__action"
+        aria-label={`${action.label} ${row.title}`}
+        aria-disabled={busy || undefined}
+        onClick={busy ? undefined : () => onAct(row)}
+      >
+        {action.label}
+      </Button>
     </li>
   );
 }
 
 /**
  * One tab's rows. In the In tab the rows are numbered and, when more than `max` are in, a cut line follows row `max`
- * and the rows below it are dimmed.
+ * and the rows below it are dimmed (they still work). `registerButton(filmId)` returns the ref callback for a row's
+ * action button, so the screen can put focus back on it.
  */
-export default function ChristmasList({ rows, tab, max }) {
+export default function ChristmasList({ rows, tab, max, busy, onAct, registerButton }) {
   const numbered = tab === 'inWeek';
   const cutAt = numbered ? cutIndex(rows, max) : rows.length;
   const cutCount = rows.length - cutAt;
@@ -56,6 +75,9 @@ export default function ChristmasList({ rows, tab, max }) {
         number={numbered ? i + 1 : null}
         cut={numbered && i >= cutAt}
         tab={tab}
+        busy={busy.has(row.tmdbId)}
+        onAct={onAct}
+        buttonRef={registerButton(row.filmId)}
       />,
     );
   });

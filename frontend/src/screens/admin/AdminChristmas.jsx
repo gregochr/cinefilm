@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '../../components/Button.jsx';
 import { SkeletonBlock } from '../../components/Skeleton.jsx';
 import {
@@ -15,6 +15,7 @@ import { useChristmas } from '../../state/useChristmas.js';
 import ChristmasList from './ChristmasList.jsx';
 import ChristmasStatusCard from './ChristmasStatusCard.jsx';
 import ChristmasTabs, { panelDomId, tabDomId } from './ChristmasTabs.jsx';
+import ChristmasToast from './ChristmasToast.jsx';
 import SectionTitle from './SectionTitle.jsx';
 
 function ChristmasSkeleton() {
@@ -62,13 +63,41 @@ function EmptyPanel({ kind, keywords }) {
 }
 
 /**
- * Christmas films: what Home's Christmas week will show. Adding a film and the Home-row preview arrive with the search
- * (a later slice); their place is between the status card and the tabs.
+ * Christmas films: what Home's Christmas week will show, with a way to leave a film out, put it back or remove one the
+ * owner added. Adding a film and the Home-row preview arrive with the search (a later slice); their place is between
+ * the status card and the tabs.
  */
 export default function AdminChristmas() {
   const state = useChristmas();
-  const { data, loading, error } = state;
+  const { data, loading, error, busy, toast, focusRequest } = state;
   const [tab, setTab] = useState('inWeek');
+  const buttons = useRef(new Map());
+  const panel = useRef(null);
+  const undoButton = useRef(null);
+
+  const registerButton = (filmId) => (node) => {
+    if (node) buttons.current.set(filmId, node);
+    else buttons.current.delete(filmId);
+  };
+
+  // After a change lands: onto the toast's Undo button (the row's button is gone, and the toast sits after the whole
+  // list, so a keyboard user could not reach Undo within its 8 seconds; the toast waits while it has focus), back onto
+  // the row's button (after an Undo), or, when focus was lost with a row or the toast, onto the list so the keyboard is
+  // not left on the page body.
+  useEffect(() => {
+    if (!focusRequest) return;
+    if (focusRequest.undo && undoButton.current) {
+      undoButton.current.focus();
+      return;
+    }
+    const button = focusRequest.filmId === null ? null : buttons.current.get(focusRequest.filmId);
+    if (button) {
+      button.focus();
+      return;
+    }
+    const active = document.activeElement;
+    if (!active || active === document.body || !active.isConnected) panel.current?.focus();
+  }, [focusRequest]);
 
   let body;
   if (data) {
@@ -82,6 +111,7 @@ export default function AdminChristmas() {
           <ChristmasStatusCard data={data} />
           <ChristmasTabs counts={tabCounts(data)} selected={tab} onSelect={setTab} />
           <div
+            ref={panel}
             id={panelDomId(tab)}
             role="tabpanel"
             aria-labelledby={tabDomId(tab)}
@@ -89,7 +119,14 @@ export default function AdminChristmas() {
             className="xmas-panel"
           >
             {rows.length > 0 ? (
-              <ChristmasList rows={rows} tab={tab} max={data.limits.max} />
+              <ChristmasList
+                rows={rows}
+                tab={tab}
+                max={data.limits.max}
+                busy={busy}
+                onAct={state.change}
+                registerButton={registerButton}
+              />
             ) : (
               <p className="xmas-panel__empty">{EMPTY_TAB_TEXT[tab]}</p>
             )}
@@ -128,6 +165,13 @@ export default function AdminChristmas() {
         </p>
       </header>
       {body}
+      <ChristmasToast
+        toast={toast}
+        undoRef={undoButton}
+        onUndo={state.undo}
+        onHold={state.holdToast}
+        onRelease={state.releaseToast}
+      />
     </>
   );
 }
