@@ -6,6 +6,7 @@ import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -114,7 +115,7 @@ final class CreditsEncoderBenchJob {
     List<Path> run(CreditsEncoderBenchOptions options) throws IOException {
         Path dir = options.encoder().toAbsolutePath().normalize();
         Path out = options.out().toAbsolutePath().normalize();
-        if (out.startsWith(dir)) {
+        if (DatasetMeasureJob.resolved(out).startsWith(dir.toRealPath())) {
             throw new IllegalArgumentException("--out must not be inside the encoder's directory: " + out);
         }
         EncoderSpec spec = EncoderSpec.read(dir);
@@ -132,7 +133,8 @@ final class CreditsEncoderBenchJob {
         OptionalLong peakRssKb = PeakRss.read(statusFile);
 
         Files.createDirectories(out);
-        Path runDir = out.resolve("bench-" + STAMP.format(clock.instant()));
+        Instant now = clock.instant();
+        Path runDir = out.resolve("bench-" + STAMP.format(now));
         try {
             Files.createDirectory(runDir);
         } catch (FileAlreadyExistsException e) {
@@ -142,7 +144,7 @@ final class CreditsEncoderBenchJob {
         double wallMsPerFrame = wallNanos / NANOS_PER_MS / options.frames();
         ObjectNode json = MAPPER.createObjectNode();
         json.put("toolGitCommit", gitCommit.commit());
-        json.put("generatedAt", clock.instant().toString());
+        json.put("generatedAt", now.toString());
         ObjectNode encoderJson = json.putObject("encoder");
         encoderJson.put("name", spec.name());
         encoderJson.put("sha256", spec.sha256());

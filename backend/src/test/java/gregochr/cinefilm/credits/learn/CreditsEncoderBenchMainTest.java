@@ -94,6 +94,20 @@ class CreditsEncoderBenchMainTest {
     }
 
     @Test
+    void aSymlinkedOutputIntoTheEncodersDirectoryExitsOneAndWritesNothing() throws IOException {
+        Path encoderDir = TinyFixture.withJson(Files.createDirectory(temp.resolve("enc")),
+            Files.readString(TinyFixture.dir().resolve("encoder.json")));
+        Path link = Files.createSymbolicLink(temp.resolve("link"), encoderDir);
+
+        int code = run("--encoder", encoderDir.toString(), "--out", link.resolve("o").toString());
+
+        assertThat(code).isEqualTo(1);
+        assertThat(err()).startsWith("bench: IllegalArgumentException: --out must not be inside the encoder's "
+            + "directory: ");
+        assertThat(encoderDir.resolve("o")).doesNotExist();
+    }
+
+    @Test
     void anEncoderThatFailsToOpenExitsOneWithOneLine() {
         CreditsEncoderBenchJob failing = new CreditsEncoderBenchJob(TestData.CLOCK, mock(GitCommit.class),
             (spec, dir) -> {
@@ -152,12 +166,32 @@ class CreditsEncoderBenchMainTest {
     }
 
     @Test
-    void theRealJobIsWiredWithoutOpeningTheEncoder() {
-        assertThat(CreditsEncoderBenchMain.job()).isNotNull();
+    void theRealJobRefusesABadEncoderDescriptionBeforeItTouchesTheNativeLibrary() throws IOException {
+        Path bad = Files.createDirectory(temp.resolve("bad"));
+        TinyFixture.withJson(bad, TinyFixture.json(TinyFixture.SHA256, "0".repeat(64)));
+
+        int code = CreditsEncoderBenchMain.run(new String[] {"--encoder", bad.toString(), "--out",
+            temp.resolve("out").toString()}, new PrintStream(outBytes, true, StandardCharsets.UTF_8),
+            new PrintStream(errBytes, true, StandardCharsets.UTF_8), CreditsEncoderBenchMain.job());
+
+        assertThat(code).isEqualTo(1);
+        assertThat(err()).startsWith("bench: IllegalArgumentException: tiny.onnx has SHA-256 ");
+        assertThat(temp.resolve("out")).doesNotExist();
     }
 
     @Test
-    void mainWithHelpWiresTheRealJobAndReturnsNormally() {
-        CreditsEncoderBenchMain.main(new String[] {"--help"});
+    void mainWithHelpPrintsTheUsageLineToStandardOutAndDoesNotExit() {
+        PrintStream original = System.out;
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(captured, true, StandardCharsets.UTF_8));
+        try {
+            CreditsEncoderBenchMain.main(new String[] {"--help"});
+        } finally {
+            System.setOut(original);
+        }
+
+        assertThat(captured.toString(StandardCharsets.UTF_8)).isEqualTo(
+            "usage: CreditsEncoderBenchMain --encoder <dir> --out <dir> [--frames 1-10000, default 520] "
+                + "[--warmup 0-1000, default 16]" + System.lineSeparator());
     }
 }

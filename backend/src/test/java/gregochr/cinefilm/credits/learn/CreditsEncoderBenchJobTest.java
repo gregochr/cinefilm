@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.SplittableRandom;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongSupplier;
 import org.junit.jupiter.api.BeforeEach;
@@ -133,8 +134,25 @@ class CreditsEncoderBenchJobTest {
         // before and after each counted batch and never during the warm-up.
         assertThat(batchesSeenAtEachCpuReading).containsExactly(2, 3, 3, 4, 4, 5);
         assertThat(encoder.batches).containsExactly(16, 4, 16, 16, 8);
-        assertThat(MAPPER.readTree(Files.readString(out.resolve(RUN).resolve("bench.json"))).get("warmup").asInt())
-            .isEqualTo(20);
+        var json = MAPPER.readTree(Files.readString(out.resolve(RUN).resolve("bench.json")));
+        assertThat(json.get("warmup").asInt()).isEqualTo(20);
+        // Three counted batches of one second each (readings 1..6 s) over 40 frames: 3 s / 40 = 75 ms a frame, and
+        // 75 ms * 520 = 39 s. Only summing every batch's span gives this; keeping the last span gives 25 and 13.
+        assertThat(json.get("cpuMsPerFrame").asDouble()).isEqualTo(75.0);
+        assertThat(json.get("film520CpuSeconds").asDouble()).isEqualTo(39.0);
+    }
+
+    @Test
+    void theFirstFrameTheEncoderGetsIsTheSeededNoiseAfterTheJpegRoundTrip() throws IOException {
+        StubEncoder encoder = new StubEncoder(3);
+        byte[] pixels = new byte[224 * 224 * 3];
+        new SplittableRandom(20261119L).nextBytes(pixels);
+        RgbFrame expected = FramePrep.decodeJpeg(FramePrep.jpeg(new RgbFrame(224, 224, pixels)));
+
+        job(encoder, exactProbe()).run(options(2, 0));
+
+        assertThat(rgb(encoder.frames.get(0))).isEqualTo(rgb(expected));
+        assertThat(rgb(expected)).isNotEqualTo(rgb(new RgbFrame(224, 224, pixels)));
     }
 
     @Test
@@ -233,6 +251,39 @@ class CreditsEncoderBenchJobTest {
             1, 0);
 
         assertThatThrownBy(() -> job(encoder, exactProbe()).run(inside))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageStartingWith("--out must not be inside the encoder's directory: ");
+        assertThat(encoderDir.resolve("results")).doesNotExist();
+        assertThat(encoder.batches).isEmpty();
+    }
+
+    @Test
+    void aSymlinkedOutputDirectoryIntoTheEncodersIsRefusedAndNothingIsWritten() throws IOException {
+        StubEncoder encoder = new StubEncoder(3);
+        Path encoderDir = TinyFixture.withJson(Files.createDirectory(temp.resolve("enc")),
+            Files.readString(TinyFixture.dir().resolve("encoder.json")));
+        Path link = Files.createSymbolicLink(temp.resolve("link"), encoderDir);
+        CreditsEncoderBenchOptions viaLink = new CreditsEncoderBenchOptions(encoderDir, link.resolve("results"), 1, 0);
+
+        assertThatThrownBy(() -> job(encoder, exactProbe()).run(viaLink))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageStartingWith("--out must not be inside the encoder's directory: ");
+        assertThat(encoderDir.resolve("results")).doesNotExist();
+        assertThat(encoder.batches).isEmpty();
+    }
+
+    @Test
+    void aRelativeOutputWithDotDotThatResolvesInsideTheEncodersIsRefused() throws IOException {
+        StubEncoder encoder = new StubEncoder(3);
+        Path encoderDir = TinyFixture.withJson(Files.createDirectory(temp.resolve("enc")),
+            Files.readString(TinyFixture.dir().resolve("encoder.json")));
+        Path relative = Path.of("").toAbsolutePath().relativize(encoderDir.resolve("other").resolve("..")
+            .resolve("results"));
+        assertThat(relative.isAbsolute()).isFalse();
+        assertThat(relative.toString()).contains("..");
+
+        assertThatThrownBy(() -> job(encoder, exactProbe())
+            .run(new CreditsEncoderBenchOptions(encoderDir, relative, 1, 0)))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageStartingWith("--out must not be inside the encoder's directory: ");
         assertThat(encoderDir.resolve("results")).doesNotExist();
