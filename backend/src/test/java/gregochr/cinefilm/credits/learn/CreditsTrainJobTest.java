@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -95,6 +96,14 @@ class CreditsTrainJobTest {
             trained(call).keySet().forEach(id -> folds.add(id / 100));
             return folds;
         }
+    }
+
+    /** The triple models are fitted in this order, after the pair models. */
+    private static final int[][] TRIPLES = {{0, 1, 2}, {0, 1, 3}, {0, 1, 4}, {0, 2, 3}, {0, 2, 4}, {0, 3, 4},
+        {1, 2, 3}, {1, 2, 4}, {1, 3, 4}, {2, 3, 4}};
+
+    private static int tripleCall(int index) {
+        return CreditsTrainJob.FOLDS + PAIRS.length + index;
     }
 
     private static int pairCall(int a, int b) {
@@ -372,7 +381,7 @@ class CreditsTrainJobTest {
 
         run(recorder, folded(true), "--with-dense");
 
-        assertThat(recorder.rows).hasSize(15);
+        assertThat(recorder.rows).hasSize(25);
         for (int k = 0; k < CreditsTrainJob.FOLDS; k++) {
             assertThat(recorder.foldsOf(k)).as("shipping model %d", k)
                 .isEqualTo(foldsExcept(k));
@@ -380,6 +389,10 @@ class CreditsTrainJobTest {
         for (int[] pair : PAIRS) {
             assertThat(recorder.foldsOf(pairCall(pair[0], pair[1]))).as("pair %s", List.of(pair[0], pair[1]))
                 .isEqualTo(foldsExcept(pair[0], pair[1]));
+        }
+        for (int i = 0; i < TRIPLES.length; i++) {
+            assertThat(recorder.foldsOf(tripleCall(i))).as("triple %s", Arrays.toString(TRIPLES[i]))
+                .isEqualTo(foldsExcept(TRIPLES[i]));
         }
         Map<Integer, Set<Integer>> modelsByFold = new HashMap<>();
         for (double[] prediction : recorder.predictions) {
@@ -407,6 +420,24 @@ class CreditsTrainJobTest {
             folds.remove(h);
         }
         return folds;
+    }
+
+    @Test
+    void eachNestedModelIsWrittenUnderItsFoldTripleAndEachPairUnderItsPair() throws IOException {
+        List<Path> written = run(new Recorder(), folded(false));
+
+        JsonNode pairs = MAPPER.readTree(Files.readAllBytes(written.get(2)));
+        JsonNode triples = MAPPER.readTree(Files.readAllBytes(written.get(4)));
+        for (int[] pair : PAIRS) {
+            assertThat(pairs.get(pair[0] + "," + pair[1]).get("call").intValue())
+                .isEqualTo(pairCall(pair[0], pair[1]));
+        }
+        for (int i = 0; i < TRIPLES.length; i++) {
+            int[] triple = TRIPLES[i];
+            assertThat(triples.get(triple[0] + "," + triple[1] + "," + triple[2]).get("call").intValue())
+                .as("triple %s", Arrays.toString(triple)).isEqualTo(tripleCall(i));
+        }
+        assertThat(triples.size()).isEqualTo(10);
     }
 
     @Test
@@ -481,7 +512,7 @@ class CreditsTrainJobTest {
 
         Path runDir = temp.resolve("out").toAbsolutePath().normalize().resolve(RUN);
         assertThat(written).containsExactly(runDir, runDir.resolve("model.json"), runDir.resolve("oof-models.json"),
-            runDir.resolve("oof-logloss.json"));
+            runDir.resolve("oof-logloss.json"), runDir.resolve("nested-models.json"));
         JsonNode model = MAPPER.readTree(Files.readAllBytes(written.get(1)));
         assertThat(model.propertyNames()).containsExactly("type", "featureVersion", "params",
             "withDense", "litTextVariant", "models", "toolGitCommit", "datasetSha256", "labelsSha256",
@@ -506,6 +537,13 @@ class CreditsTrainJobTest {
         assertThat(pairs.propertyNames()).containsExactly("0,1", "0,2", "0,3", "0,4", "1,2", "1,3",
             "1,4", "2,3", "2,4", "3,4");
         assertThat(pairs.get("2,4").get("trees")).hasSize(2);
+
+        JsonNode triples = MAPPER.readTree(Files.readAllBytes(written.get(4)));
+        assertThat(triples.propertyNames()).containsExactly("0,1,2", "0,1,3", "0,1,4", "0,2,3", "0,2,4", "0,3,4",
+            "1,2,3", "1,2,4", "1,3,4", "2,3,4");
+        assertThat(triples.get("2,3,4").propertyNames()).containsExactly("featureVersion", "base", "params",
+            "trees");
+        assertThat(triples.get("2,3,4").get("trees")).hasSize(2);
     }
 
     @Test
@@ -558,6 +596,6 @@ class CreditsTrainJobTest {
 
         run(recorder, folded(false).replace("\n", "\n\n"));
 
-        assertThat(recorder.rows).hasSize(15);
+        assertThat(recorder.rows).hasSize(25);
     }
 }

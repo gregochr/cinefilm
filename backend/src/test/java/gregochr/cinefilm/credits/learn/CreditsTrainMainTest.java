@@ -76,7 +76,7 @@ class CreditsTrainMainTest {
         assertThat(err()).isEmpty();
         assertThat(out()).isEqualTo("wrote " + runDir + "\nwrote " + runDir.resolve("model.json")
             + "\nwrote " + runDir.resolve("oof-models.json") + "\nwrote " + runDir.resolve("oof-logloss.json")
-            + "\n");
+            + "\nwrote " + runDir.resolve("nested-models.json") + "\n");
     }
 
     @Test
