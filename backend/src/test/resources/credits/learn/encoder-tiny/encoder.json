@@ -1,0 +1,11 @@
+{
+  "name": "tiny",
+  "file": "tiny.onnx",
+  "sha256": "92b1c24252cb0492554d2ff99742f5b7c218cc1a64bfec136a6810732d7687a6",
+  "input": "pixel_values",
+  "output": "image_embeds",
+  "size": 224,
+  "mean": [0.25, 0.5, 0.75],
+  "std": [0.5, 0.25, 2.0],
+  "dimension": 3
+}

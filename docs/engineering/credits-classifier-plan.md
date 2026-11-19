@@ -1875,8 +1875,11 @@ each with its own nested selection over the same grid and segmenter, and compare
   it checks each file's SHA-256.
 - **Long tool runs:** any time, at niceness 19 on one CPU, with no overnight-only scheduling.
 - **Releases:** after L4b-2 (for L4a), and again after L4b-6b.
-- **Still open, only if the jar has no `osx-x64` natives:** approve `OnnxImageEncoder`'s exception to the local
-  coverage floor, its tests running in CI only (already in "B. Pretrained image embedding…").
+- **No `osx-x64` natives (L4b-1's check, 2026-11-19):** `onnxruntime` 1.31.1 (pinned), 1.31.0 and 1.30.0 ship
+  `linux-x64` but no `osx-x64`, and the dev Mac is Intel. The owner approved the CI-only branch:
+  `OnnxImageEncoderTest` is `@EnabledOnOs(LINUX)`, and a Maven profile active only on macOS
+  (`mac-no-onnx-natives`) leaves `OnnxImageEncoder` out of the JaCoCo `check`; on Linux CI the class is under both
+  floors. The jar is about 49 MB (all platforms' natives); the owner accepted that growth of the image.
 
 ## Settled for later phases (from review round 4)
 
