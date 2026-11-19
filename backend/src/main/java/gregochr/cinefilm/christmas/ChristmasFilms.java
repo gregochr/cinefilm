@@ -98,16 +98,18 @@ public class ChristmasFilms {
                 throw new ConflictException(lock.heldBy(LibraryLock.SCAN) ? SCAN_RUNNING : lock.busyText());
             }
             try {
-                return write(tmdbId, choice);
+                write(tmdbId, choice);
             } finally {
                 lock.release();
             }
+            // Built after the library lock is given back, so a scan or import is not refused while the library loads.
+            return view();
         } finally {
             writes.unlock();
         }
     }
 
-    private ChristmasView write(long tmdbId, ChristmasChoice choice) {
+    private void write(long tmdbId, ChristmasChoice choice) {
         // Browsable only, like Home and the lists: a hidden film cannot show, so there is nothing to override.
         boolean known = Boolean.TRUE.equals(readTx.execute(status ->
             films.findByTmdbIdOrderByIdAsc(tmdbId).stream().anyMatch(Film::browsable)));
@@ -122,7 +124,6 @@ public class ChristmasFilms {
             }
             dropRedundantIncludes();
         });
-        return view();
     }
 
     /**
