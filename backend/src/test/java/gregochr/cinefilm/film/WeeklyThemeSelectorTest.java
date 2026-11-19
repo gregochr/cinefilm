@@ -325,6 +325,19 @@ class WeeklyThemeSelectorTest {
     }
 
     @Test
+    void filmsOfTheSameYearAndTitleAreOrderedByIdWhateverOrderTheLibraryIsIn() {
+        Film later = film(9L, "Twin", 1990, NOW);
+        Film earlier = film(3L, "Twin", 1990, NOW);
+        later.getKeywords().add("christmas");
+        earlier.getKeywords().add("christmas");
+
+        assertThat(WeeklyThemeSelector.christmasFilms(List.of(later, earlier), Set.of(), Set.of()))
+            .containsExactly(earlier, later);
+        assertThat(WeeklyThemeSelector.christmasFilms(List.of(earlier, later), Set.of(), Set.of()))
+            .containsExactly(earlier, later);
+    }
+
+    @Test
     void theIncludeListAddsFilmsTheKeywordMisses() {
         List<Film> library = christmasLibrary(4);
         library.add(christmas(1988, 700L));

@@ -27,10 +27,11 @@ public final class WeeklyThemeSelector {
     /** TMDB's keyword that marks a Christmas film. */
     public static final String CHRISTMAS_KEYWORD = "christmas";
 
-    /** The order films appear in a themed row: year (unknown last), then sort title. */
+    /** The order films appear in a themed row: year (unknown last), then sort title, then id (a total order). */
     public static final Comparator<Film> ROW_ORDER =
         Comparator.comparing(Film::getYear, Comparator.nullsLast(Comparator.<Integer>naturalOrder()))
-            .thenComparing(Film::getSortTitle);
+            .thenComparing(Film::getSortTitle)
+            .thenComparing(Film::getId, Comparator.nullsLast(Comparator.<Long>naturalOrder()));
 
     private WeeklyThemeSelector() {
     }

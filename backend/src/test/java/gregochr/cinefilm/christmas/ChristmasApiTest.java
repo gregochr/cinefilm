@@ -3,6 +3,7 @@ package gregochr.cinefilm.christmas;
 import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.edition;
+import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -16,6 +17,7 @@ import gregochr.cinefilm.ApiTestBase;
 import gregochr.cinefilm.film.ChristmasChoice;
 import gregochr.cinefilm.film.ChristmasOverrides;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.library.LibraryLock;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
@@ -161,6 +163,53 @@ class ChristmasApiTest extends ApiTestBase {
         putChoice(6L, "\"INCLUDE\"");
 
         assertThat(overrides.includes()).containsExactly(6L);
+    }
+
+    @Test
+    void includingAFilmTmdbTagsLeavesNoRowAndItShowsAsAKeywordFilm() throws Exception {
+        add("Tagged", 1970, 5L, "christmas");
+
+        mvc.perform(put("/api/admin/christmas/5").content("{\"choice\":\"INCLUDE\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.inWeek[0].reason").value("KEYWORD"))
+            .andExpect(jsonPath("$.added", hasSize(0)));
+        reload();
+
+        assertThat(overrides.includes()).isEmpty();
+        assertThat(overrides.excludes()).isEmpty();
+    }
+
+    @Test
+    void puttingBackAnExcludedTaggedFilmWithIncludeLeavesNoRow() throws Exception {
+        add("Tagged", 1970, 5L, "christmas");
+        putChoice(5L, "\"EXCLUDE\"");
+        assertThat(overrides.excludes()).containsExactly(5L);
+
+        mvc.perform(put("/api/admin/christmas/5").content("{\"choice\":\"INCLUDE\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.leftOut", hasSize(0)))
+            .andExpect(jsonPath("$.inWeek[0].reason").value("KEYWORD"));
+        reload();
+
+        assertThat(overrides.includes()).isEmpty();
+        assertThat(overrides.excludes()).isEmpty();
+    }
+
+    @Test
+    void aHiddenFilmHasNoStateAndItsTmdbIdIs404() throws Exception {
+        Film hidden = film(null, "Hidden", 1970, NOW, "Comedy");
+        hidden.setTmdbId(5L);
+        hidden.getKeywords().add("christmas");
+        file(edition(hidden, null, "Original", 100 * MIN, null), "/gone.m4v").setPresence(Presence.MISSING);
+        save(hidden);
+        reload();
+
+        mvc.perform(get("/api/admin/christmas/states?filmIds=" + hidden.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", hasSize(0)));
+        mvc.perform(put("/api/admin/christmas/5").content("{\"choice\":\"INCLUDE\"}"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.error").value("No film with TMDB id 5"));
     }
 
     @Test

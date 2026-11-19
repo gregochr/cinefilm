@@ -91,7 +91,10 @@ public class ChristmasFilms {
         if (lock.heldBy(LibraryLock.SCAN)) {
             throw new ConflictException(SCAN_RUNNING);
         }
-        if (films.findByTmdbIdOrderByIdAsc(tmdbId).isEmpty()) {
+        // Browsable only, like Home and the lists: a hidden film cannot show, so there is nothing to override.
+        boolean known = Boolean.TRUE.equals(readTx.execute(status ->
+            films.findByTmdbIdOrderByIdAsc(tmdbId).stream().anyMatch(Film::browsable)));
+        if (!known) {
             throw new NotFoundException("No film with TMDB id " + tmdbId);
         }
         writes.lock();
@@ -124,7 +127,7 @@ public class ChristmasFilms {
             Set<Long> include = overrides.includes();
             Set<Long> exclude = overrides.excludes();
             Map<Long, Film> byId = new HashMap<>();
-            films.findAllById(ids).forEach(f -> byId.put(f.getId(), f));
+            films.findAllById(ids).stream().filter(Film::browsable).forEach(f -> byId.put(f.getId(), f));
             return ids.stream().map(byId::get).filter(Objects::nonNull)
                 .map(f -> new FilmState(f.getId(), f.getTmdbId(), stateOf(f, include, exclude))).toList();
         });

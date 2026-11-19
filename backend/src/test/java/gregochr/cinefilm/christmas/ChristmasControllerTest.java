@@ -195,6 +195,7 @@ class ChristmasControllerTest {
     @Test
     void statesSignedOutIs401() throws Exception {
         mvc.perform(get("/api/admin/christmas/states").param("filmIds", "1"))
-            .andExpect(status().isUnauthorized());
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error").value("Authentication required"));
     }
 }

@@ -1,8 +1,11 @@
 package gregochr.cinefilm.christmas;
 
 import static gregochr.cinefilm.TestData.CLOCK;
+import static gregochr.cinefilm.TestData.MIN;
 import static gregochr.cinefilm.TestData.NOW;
 import static gregochr.cinefilm.TestData.ZONE;
+import static gregochr.cinefilm.TestData.edition;
+import static gregochr.cinefilm.TestData.file;
 import static gregochr.cinefilm.TestData.film;
 import static gregochr.cinefilm.TestData.view;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,6 +34,7 @@ import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmRepository;
 import gregochr.cinefilm.film.KeywordsRefresher;
 import gregochr.cinefilm.film.LibraryLoader;
+import gregochr.cinefilm.film.Presence;
 import gregochr.cinefilm.library.LibraryLock;
 import java.time.Clock;
 import java.time.Instant;
@@ -38,6 +42,8 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.LongStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -303,7 +309,7 @@ class ChristmasFilmsTest {
     }
 
     @Test
-    void aFailedWriteGivesTheWriteSlotBackSoTheNextChangeIsNotBlocked() {
+    void aFailedWriteGivesTheWriteSlotBackSoTheNextChangeIsNotBlocked() throws Exception {
         Film film = mk(1, "Film", 1999, 11L);
         when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(film));
         doThrow(new IllegalStateException("db down")).doNothing().when(overrides).set(11L, ChristmasChoice.INCLUDE);
@@ -313,7 +319,45 @@ class ChristmasFilmsTest {
 
         assertThatThrownBy(() -> service.choose(11L, ChristmasChoice.INCLUDE))
             .isInstanceOf(IllegalStateException.class);
-        assertThat(service.choose(11L, ChristmasChoice.INCLUDE).added()).hasSize(1);
+        // Another thread: a lock the failed call kept would block it, and the bound makes that a failure. (The same
+        // thread would pass anyway, the lock being reentrant.)
+        ChristmasView next = CompletableFuture.supplyAsync(() -> service.choose(11L, ChristmasChoice.INCLUDE))
+            .get(5, TimeUnit.SECONDS);
+        assertThat(next.added()).hasSize(1);
+    }
+
+    private static Film hidden(long id, String title, Long tmdbId, String... keywords) {
+        Film film = mk(id, title, 1980, tmdbId, keywords);
+        file(edition(film, id, "Original", 100 * MIN, null), "/missing/" + id + ".m4v").setPresence(Presence.MISSING);
+        return film;
+    }
+
+    @Test
+    void aFilmWhoseEveryFileIsMissingHasNoStateAndCannotBeOverridden() {
+        Film hiddenFilm = hidden(1, "Hidden", 11L, "christmas");
+        Film shown = mk(2, "Shown", 1980, 12L, "christmas");
+        when(overrides.includes()).thenReturn(Set.of());
+        when(overrides.excludes()).thenReturn(Set.of());
+        when(films.findAllById(Set.of(1L, 2L))).thenReturn(List.of(hiddenFilm, shown));
+        when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(hiddenFilm));
+
+        assertThat(service.states(List.of(1L, 2L))).containsExactly(new FilmState(2L, 12L, State.IN_KEYWORD));
+        assertThatThrownBy(() -> service.choose(11L, ChristmasChoice.INCLUDE))
+            .isInstanceOf(NotFoundException.class).hasMessage("No film with TMDB id 11");
+        verify(overrides, never()).set(11L, ChristmasChoice.INCLUDE);
+        verify(overrides, never()).remove(11L);
+    }
+
+    @Test
+    void aTmdbIdOneBrowsableFilmHoldsCanBeOverriddenEvenIfAnotherFilmWithItIsHidden() {
+        Film hiddenFilm = hidden(1, "Hidden", 11L);
+        Film shown = mk(2, "Shown", 1980, 11L);
+        when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(hiddenFilm, shown));
+        library(shown);
+        overrides(Set.of(), Set.of(11L));
+
+        assertThat(service.choose(11L, ChristmasChoice.EXCLUDE).leftOut()).hasSize(1);
+        verify(overrides).set(11L, ChristmasChoice.EXCLUDE);
     }
 
     @Test
