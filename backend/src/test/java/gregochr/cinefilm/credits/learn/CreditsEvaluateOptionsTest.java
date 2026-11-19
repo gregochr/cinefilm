@@ -20,18 +20,12 @@ class CreditsEvaluateOptionsTest {
 
     @Test
     void everyFlagIsRead() {
-        CreditsEvaluateOptions options = CreditsEvaluateOptions.parse(with("--train", "b/", "--look=L5"));
+        CreditsEvaluateOptions options = CreditsEvaluateOptions.parse(with("--train", "b/"));
 
         assertThat(options.features()).isEqualTo(Path.of("f"));
         assertThat(options.out()).isEqualTo(Path.of("o"));
         assertThat(options.train()).containsExactly(Path.of("a").toAbsolutePath().normalize(),
             Path.of("b").toAbsolutePath().normalize());
-        assertThat(options.look()).isTrue();
-    }
-
-    @Test
-    void theLookIsOffByDefault() {
-        assertThat(CreditsEvaluateOptions.parse(BASE).look()).isFalse();
     }
 
     static Stream<Arguments> refusals() {
@@ -43,11 +37,9 @@ class CreditsEvaluateOptionsTest {
             Arguments.of(with("features", "f"), "unknown argument features"),
             Arguments.of(with("--out", "p"), "flag --out given twice"),
             Arguments.of(new String[] {"--features", "f", "--train", "a", "--out"}, "flag --out needs a value"),
-            Arguments.of(with("--look"), "flag --look needs a value: --look=L5"),
-            Arguments.of(with("--look=L6"), "--look must be L5: --look=L6"),
-            Arguments.of(with("--look=L5", "--look=L5"), "flag --look given twice"),
+            Arguments.of(with("--look"), "--look is not supported yet"),
+            Arguments.of(with("--look=L5"), "--look is not supported yet"),
             Arguments.of(with("--baseline", "v2.csv"), "--baseline is not supported yet"),
-            Arguments.of(with("--look=L5", "--baseline", "v2.csv"), "--baseline is not supported yet"),
             Arguments.of(with("--train", "x/a"), "the same training run is given twice: a"));
     }
 

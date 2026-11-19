@@ -28,16 +28,12 @@ final class EvaluationReport {
     private EvaluationReport() {
     }
 
-    /**
-     * One film's row.
-     */
+    /** One film's row. */
     record Row(long id, Side side, Integer fold, Result result, Optional<FrameKind> plexOpening,
                Boolean leadingIsland, String run) {
     }
 
-    /**
-     * {@code evaluation.csv}: the header, then one line per row, in the order given.
-     */
+    /** {@code evaluation.csv}: the header, then one line per row, in the order given. */
     static String csv(List<Row> rows) {
         StringBuilder csv = new StringBuilder(HEADER);
         for (Row row : rows) {
@@ -69,9 +65,7 @@ final class EvaluationReport {
         return value.isPresent() ? Long.toString(value.getAsLong()) : null;
     }
 
-    /**
-     * {@code calibration.json}: where each fold's calibrated values are stored.
-     */
+    /** {@code calibration.json}: where each fold's calibrated values are stored. */
     static ObjectNode calibration(List<String> runs, List<Choice> outer, Choice last, String toolGitCommit,
                                   CreditsTrainJob.Hashes hashes) {
         ObjectNode root = MAPPER.createObjectNode();

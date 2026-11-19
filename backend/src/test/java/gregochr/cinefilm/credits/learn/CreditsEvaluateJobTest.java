@@ -101,36 +101,6 @@ class CreditsEvaluateJobTest {
     }
 
     @Test
-    void theLookScoresTestFilmsWithTheFinalChoiceAndWritesLookJson() throws IOException {
-        Path features = EvaluateFixtures.featuresRun(temp, true);
-
-        List<Path> written = run(features, "--train", trainA.toString(), "--look=L5");
-
-        assertThat(written).hasSize(4).last().isEqualTo(out().resolve(RUN).resolve("look.json"));
-        assertThat(evaluation()).contains("\n10,dev,4,FOUND").endsWith(
-            "\n11,test,,FOUND,120000,120000,true,true,-5000,0,LIT,low,LIT,,,train-a,false\n"
-            + "12,test,,FOUND,120000,120000,true,true,-5000,0,LIT,low,LIT,,,train-a,false\n");
-        assertThat(json("look.json").toString()).isEqualTo("{\"look\":\"L5\",\"generatedAt\":"
-            + "\"2024-03-31T23:30:00Z\",\"toolGitCommit\":\"toolsha\",\"testFilms\":2}");
-    }
-
-    @Test
-    void theSameInputsGiveByteIdenticalFiles() throws IOException {
-        Path features = EvaluateFixtures.featuresRun(temp, true);
-        Path trainB = EvaluateFixtures.trainRun(temp, "train-b");
-        run(features, "--train", trainA.toString(), "--train", trainB.toString(), "--look=L5");
-        Path second = temp.resolve("second");
-        job.run(CreditsEvaluateOptions.parse(new String[] {"--features", features.toString(), "--out",
-            second.toString(), "--train", trainA.toString(), "--train", trainB.toString(), "--look=L5"}));
-
-        for (String name : List.of("evaluation.csv", "calibration.json", "look.json")) {
-            assertThat(Files.readAllBytes(second.resolve(RUN).resolve(name)))
-                .isEqualTo(Files.readAllBytes(out().resolve(RUN).resolve(name)));
-        }
-        assertThat(json("calibration.json").get("final").get("run").stringValue()).isEqualTo("train-a");
-    }
-
-    @Test
     void aSecondRunInTheSameSecondIsRefusedAndTheFirstIsKept() throws IOException {
         Path features = EvaluateFixtures.featuresRun(temp, false);
         run(features, "--train", trainA.toString());
@@ -143,14 +113,6 @@ class CreditsEvaluateJobTest {
     @Test
     void aTestRowWithoutTheLookIsRefusedAndNothingIsWritten() throws IOException {
         refused(EvaluateFixtures.featuresRun(temp, true), "a test row is refused without --look=L5");
-    }
-
-    @Test
-    void theLookOnAFeaturesRunWithNoLookJsonIsRefusedAndNothingIsWritten() throws IOException {
-        Path features = EvaluateFixtures.featuresRun(temp, true);
-        Files.delete(features.resolve("look.json"));
-
-        refused(features, "no look.json", "--look=L5");
     }
 
     @Test
@@ -206,8 +168,45 @@ class CreditsEvaluateJobTest {
     }
 
     @Test
-    void theBaselineIsRefusedAndNothingIsWritten() throws IOException {
-        refused(EvaluateFixtures.featuresRun(temp, true), "--baseline is not supported yet", "--look=L5",
-            "--baseline", "v2.csv");
+    void theLookAndTheBaselineAreRefusedAndNothingIsWritten() throws IOException {
+        Path features = EvaluateFixtures.featuresRun(temp, false);
+        refused(features, "--look is not supported yet", "--look=L5");
+        refused(features, "--baseline is not supported yet", "--baseline", "v2.csv");
+    }
+
+    @Test
+    void aFilmOfOneCoarseFrameWithNoTimeFeaturesIsNotFound() throws IOException {
+        Path features = EvaluateFixtures.featuresRun(temp, false);
+        Files.writeString(features.resolve("features.csv"), FeatureRows.header() + EvaluateFixtures.lonely()
+            + EvaluateFixtures.development());
+
+        run(features, "--train", trainA.toString());
+
+        assertThat(evaluation().lines().skip(1).findFirst().orElseThrow())
+            .isEqualTo("0,dev,4,NOT_FOUND,,,,,,,,,DARK,,,train-a,false");
+    }
+
+    @Test
+    void eachFilmIsScoredByItsOwnFoldsOutOfFoldModelsWithItsOwnFoldsChoice() throws IOException {
+        Path features = EvaluateFixtures.featuresRun(temp, false);
+        Path inverted = EvaluateFixtures.trainRun(temp, "train-inv", true);
+        EvaluateFixtures.mixIn(trainA, inverted, "0,");
+
+        run(features, "--train", inverted.toString(), "--train", trainA.toString());
+
+        JsonNode outer = json("calibration.json").get("outer");
+        List<String> lines = evaluation().lines().skip(1).toList();
+        assertThat(lines).hasSize(10);
+        for (String line : lines) {
+            String[] fields = line.split(",", -1);
+            assertThat(fields[15]).isEqualTo(outer.get(fields[2]).get("run").stringValue()).isEqualTo("train-a");
+            assertThat(fields[3]).isEqualTo(fields[2].equals("0") ? "FOUND" : "NOT_FOUND");
+        }
+        int[][] within = {{5, 5}, {1, 5}, {1, 5}, {1, 4}, {1, 5}};
+        for (int k = 0; k < within.length; k++) {
+            assertThat(outer.get(Integer.toString(k)).get("counts").toString()).isEqualTo(
+                "{\"early15\":0,\"early5\":0,\"violations\":0,\"within10\":" + within[k][0] + ",\"within60\":"
+                    + within[k][1] + ",\"films\":8}");
+        }
     }
 }

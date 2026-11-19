@@ -22,9 +22,7 @@ public final class CreditsEvaluateMain {
     private CreditsEvaluateMain() {
     }
 
-    /**
-     * Runs the tool and exits non-zero, with a one-line message, when it could not run.
-     */
+    /** Runs the tool and exits non-zero, with a one-line message, when it could not run. */
     public static void main(String[] args) {
         CreditsEvaluateJob job = new CreditsEvaluateJob(Clock.system(ZoneOffset.UTC), new GitCommit());
         exitOnFailure(run(args, System.out, System.err, job), System::exit);
@@ -37,9 +35,7 @@ public final class CreditsEvaluateMain {
         }
     }
 
-    /**
-     * Runs the tool.
-     */
+    /** Runs the tool. */
     static int run(String[] args, PrintStream out, PrintStream err, CreditsEvaluateJob job) {
         try {
             job.run(CreditsEvaluateOptions.parse(args)).forEach(path -> out.println("wrote " + path));

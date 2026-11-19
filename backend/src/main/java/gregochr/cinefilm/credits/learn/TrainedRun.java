@@ -21,9 +21,7 @@ record TrainedRun(String name, String manifestSha256, List<GradientBoostedTrees>
 
     private static final JsonMapper MAPPER = JsonMapper.builder().build();
 
-    /**
-     * Reads a run.
-     */
+    /** Reads a run. */
     static TrainedRun load(Path dir, Hashes expected) throws IOException {
         String name = dir.getFileName().toString();
         JsonNode model = MAPPER.readTree(Files.readAllBytes(dir.resolve("model.json")));

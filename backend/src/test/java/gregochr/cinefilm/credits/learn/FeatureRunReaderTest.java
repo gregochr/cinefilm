@@ -68,8 +68,6 @@ class FeatureRunReaderTest {
             Arguments.of(dev(1, 0, "coarse", 0)
                 + FeatureRows.row(1, null, Side.TEST, "coarse", 5, "film", TrainFixtures.lit(1, 0)), true,
                 "line 3: film 1 changes side or fold"),
-            Arguments.of(TrainFixtures.row(1, 0, "coarse", 0, "film", TrainFixtures.noTime(TrainFixtures.lit(1, 0))),
-                false, "line 2: a coarse row has no time features"),
             Arguments.of("1,0,dev\n", false, "line 2: expected 39 fields, found 3"));
     }
 
@@ -89,6 +87,15 @@ class FeatureRunReaderTest {
     }
 
     @Test
+    void aFilmOfOneCoarseFrameWithNoTimeFeaturesIsRead() throws IOException {
+        List<FilmRows> films = read(EvaluateFixtures.lonely(), false);
+
+        assertThat(films).hasSize(1);
+        assertThat(films.getFirst().coarseOffsets()).containsExactly(100_000L);
+        assertThat(CreditsFeatures.hasTimeFeatures(films.getFirst().coarse().getFirst())).isFalse();
+    }
+
+    @Test
     void blankLinesAreSkippedAndAnEmptyFileGivesNoFilms() throws IOException {
         assertThat(read("\n" + dev(1, 0, "coarse", 0) + "\n", false)).hasSize(1);
         assertThat(read("", false)).isEmpty();
@@ -100,7 +107,7 @@ class FeatureRunReaderTest {
 
         Map<Long, FrameLabelRecord> labels = FeatureRunReader.labels(file);
 
-        assertThat(labels).containsOnlyKeys(1L, 2L);
+        assertThat(labels).containsOnlyKeys(0L, 1L, 2L);
         assertThat(labels.get(1L).openingType()).isEqualTo(FrameKind.DARK);
         Path twice = Files.writeString(temp.resolve("twice.json"), "[null]");
         assertThatThrownBy(() -> FeatureRunReader.labels(twice)).isInstanceOf(IllegalArgumentException.class)

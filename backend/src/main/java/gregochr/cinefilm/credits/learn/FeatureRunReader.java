@@ -29,9 +29,7 @@ final class FeatureRunReader {
     private FeatureRunReader() {
     }
 
-    /**
-     * One film's rows, filled in as they are read.
-     */
+    /** One film's rows, filled in as they are read. */
     record FilmRows(long id, Side side, Integer fold, List<Long> coarseOffsets, List<FrameKind> kinds,
                     List<double[]> coarse, List<Long> denseOffsets, List<double[]> dense) {
 
@@ -48,9 +46,7 @@ final class FeatureRunReader {
         }
     }
 
-    /**
-     * Reads {@code features.csv}, one line at a time, and groups its rows by film.
-     */
+    /** Reads {@code features.csv}, one line at a time, and groups its rows by film. */
     static List<FilmRows> read(Path features, boolean look) throws IOException {
         List<FilmRows> films = new ArrayList<>();
         try (BufferedReader reader = Files.newBufferedReader(features)) {
@@ -79,7 +75,7 @@ final class FeatureRunReader {
                 } else if (films.getLast().side() != side || !Objects.equals(films.getLast().fold(), fold)) {
                     throw new IllegalArgumentException(where + "film " + previous[0] + " changes side or fold");
                 }
-                add(films.getLast(), row.get(3), previous[2], CreditsTrainJob.features(row, where), where);
+                add(films.getLast(), row.get(3), previous[2], CreditsTrainJob.features(row, where));
             }
         }
         return films;
@@ -116,14 +112,11 @@ final class FeatureRunReader {
         return (int) fold;
     }
 
-    private static void add(FilmRows film, String kind, long offset, double[] features, String where) {
+    private static void add(FilmRows film, String kind, long offset, double[] features) {
         if (kind.equals(FilmCheck.DENSE)) {
             film.denseOffsets().add(offset);
             film.dense().add(features);
             return;
-        }
-        if (!CreditsFeatures.hasTimeFeatures(features)) {
-            throw new IllegalArgumentException(where + "a coarse row has no time features");
         }
         film.coarseOffsets().add(offset);
         film.kinds().add(OpeningType.frameKind(features[0], (int) features[P10], (int) features[P50],
@@ -131,9 +124,7 @@ final class FeatureRunReader {
         film.coarse().add(features);
     }
 
-    /**
-     * Reads {@code frame-labels.json}.
-     */
+    /** Reads {@code frame-labels.json}. */
     static Map<Long, FrameLabelRecord> labels(Path file) throws IOException {
         List<FrameLabelRecord> records = MAPPER.readValue(Files.readAllBytes(file),
             new TypeReference<List<FrameLabelRecord>>() {

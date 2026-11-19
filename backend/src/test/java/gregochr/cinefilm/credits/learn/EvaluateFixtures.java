@@ -7,8 +7,11 @@ import gregochr.cinefilm.TestData;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * A fixture features run and training runs for the evaluation tool: films 1 to 10 are development films, two in each
@@ -53,9 +56,20 @@ final class EvaluateFixtures {
         return film <= 6 ? FrameKind.LIT : null;
     }
 
+    /** A development film's fold: two films in each. */
+    static int fold(long id) {
+        return (int) Math.floorMod(id - 1, 5);
+    }
+
+    /** Film 0: one coarse frame, with no time features. */
+    static String lonely() {
+        return FeatureRows.row(0, fold(0), Side.DEV, "coarse", 100_000, "film",
+            TrainFixtures.noTime(TrainFixtures.lit(1, 10, 0)));
+    }
+
     /** One film's rows, every one labelled by its side of 120000. */
     static String film(long id, Side side) {
-        Integer fold = side == Side.DEV ? (int) (id - 1) % 5 : null;
+        Integer fold = side == Side.DEV ? fold(id) : null;
         StringBuilder rows = new StringBuilder();
         for (int i = 0; i < 12; i++) {
             boolean credits = i >= 4;
@@ -86,14 +100,14 @@ final class EvaluateFixtures {
     /** The label record of a film: target 120000, Plex's opening, a leading island on film 3 and none known for 4. */
     static FrameLabelRecord label(long id) {
         Side side = id <= 10 ? Side.DEV : Side.TEST;
-        return new FrameLabelRecord(id, "fp" + id, "unit" + id, side, side == Side.DEV ? (int) (id - 1) % 5 : null,
+        return new FrameLabelRecord(id, "fp" + id, "unit" + id, side, side == Side.DEV ? fold(id) : null,
             TARGET, 0L, id == 4 ? null : id == 3, List.of(), List.of(), List.of(), null, null,
             id <= 10 ? plex(id) : FrameKind.LIT, null);
     }
 
-    /** A features run's {@code frame-labels.json}: the records of films 1 to {@code last}. */
+    /** A features run's {@code frame-labels.json}: the records of films 0 to {@code last}. */
     static String labels(int last) {
-        return MAPPER.writeValueAsString(java.util.stream.LongStream.rangeClosed(1, last)
+        return MAPPER.writeValueAsString(java.util.stream.LongStream.rangeClosed(0, last)
             .mapToObj(EvaluateFixtures::label).toList());
     }
 
@@ -116,12 +130,36 @@ final class EvaluateFixtures {
 
     /** Trains a run on the development films with {@link #FAST} settings and gives its directory the name given. */
     static Path trainRun(Path parent, String name) throws IOException {
+        return trainRun(parent, name, false);
+    }
+
+    /** As {@link #trainRun(Path, String)}; {@code inverted} swaps every label, so the run predicts the opposite. */
+    static Path trainRun(Path parent, String name, boolean inverted) throws IOException {
         Path inputs = Files.createDirectories(parent.resolve("inputs-" + name));
-        Path[] files = TrainFixtures.inputs(inputs, FeatureRows.header() + development());
+        String csv = FeatureRows.header() + development();
+        Path[] files = TrainFixtures.inputs(inputs, inverted
+            ? csv.replace(",credits,", ",x,").replace(",film,", ",credits,").replace(",x,", ",film,") : csv);
         GitCommit git = mock(GitCommit.class);
         when(git.commit()).thenReturn("trainsha");
         List<Path> written = new CreditsTrainJob(TestData.CLOCK, git)
             .run(CreditsTrainOptions.parse(TrainFixtures.args(files, parent.resolve("train-out-" + name), FAST)));
         return Files.move(written.getFirst(), written.getFirst().resolveSibling(name));
+    }
+
+    /**
+     * Replaces every model of {@code run}'s {@code oof-models.json} and {@code nested-models.json} whose key does not
+     * start with {@code prefix} by {@code other}'s model of that key.
+     */
+    static void mixIn(Path run, Path other, String prefix) throws IOException {
+        for (String file : new String[] {"oof-models.json", "nested-models.json"}) {
+            ObjectNode own = (ObjectNode) MAPPER.readTree(Files.readAllBytes(run.resolve(file)));
+            JsonNode theirs = MAPPER.readTree(Files.readAllBytes(other.resolve(file)));
+            for (String key : new ArrayList<>(own.propertyNames())) {
+                if (!key.startsWith(prefix)) {
+                    own.set(key, theirs.get(key));
+                }
+            }
+            Files.write(run.resolve(file), MAPPER.writeValueAsBytes(own));
+        }
     }
 }

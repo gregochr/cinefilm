@@ -10,40 +10,22 @@ import java.util.Set;
 
 /**
  * The command line of the credits evaluation tool ({@code docs/engineering/credits-classifier-plan.md}, "L3c
- * specification", {@code CreditsEvaluateMain}). The only flag for test films is {@code --look=L5}. {@code --baseline}
- * is refused until L3c-eval-2b.
+ * specification", {@code CreditsEvaluateMain}). {@code --look} and {@code --baseline}
+ * are refused until L3c-eval-2b.
  */
-record CreditsEvaluateOptions(Path features, List<Path> train, Path out, boolean look) {
+record CreditsEvaluateOptions(Path features, List<Path> train, Path out) {
 
-    private static final String LOOK = "--look";
-    private static final String LOOK_VALUE = "L5";
     private static final List<String> SINGLE = List.of("features", "out");
     private static final String TRAIN = "train";
 
-    /**
-     * Parses {@code --flag value} pairs ({@code --train} may repeat) and {@code --look=L5}.
-     */
+    /** Parses {@code --flag value} pairs ({@code --train} may repeat). */
     static CreditsEvaluateOptions parse(String[] args) {
         Map<String, String> flags = new HashMap<>();
         List<Path> train = new ArrayList<>();
-        boolean look = false;
         for (int i = 0; i < args.length; i++) {
             String name = args[i];
-            if (name.equals(LOOK)) {
-                throw new IllegalArgumentException("flag --look needs a value: --look=" + LOOK_VALUE);
-            }
-            if (name.startsWith(LOOK + "=")) {
-                if (!name.equals(LOOK + "=" + LOOK_VALUE)) {
-                    throw new IllegalArgumentException("--look must be " + LOOK_VALUE + ": " + name);
-                }
-                if (look) {
-                    throw new IllegalArgumentException("flag --look given twice");
-                }
-                look = true;
-                continue;
-            }
-            if (name.equals("--baseline")) {
-                throw new IllegalArgumentException("--baseline is not supported yet");
+            if (name.startsWith("--look") || name.equals("--baseline")) {
+                throw new IllegalArgumentException(name.split("=")[0] + " is not supported yet");
             }
             String flag = name.startsWith("--") ? name.substring(2) : name;
             if (flag.equals(name) || !SINGLE.contains(flag) && !TRAIN.equals(flag)) {
@@ -74,6 +56,6 @@ record CreditsEvaluateOptions(Path features, List<Path> train, Path out, boolean
             }
         }
         return new CreditsEvaluateOptions(Path.of(flags.get("features")), List.copyOf(train),
-            Path.of(flags.get("out")), look);
+            Path.of(flags.get("out")));
     }
 }

@@ -60,8 +60,8 @@ class CreditsEvaluateMainTest {
         int code = run(look.toArray(String[]::new));
 
         assertThat(code).isEqualTo(1);
-        assertThat(errBytes.toString(StandardCharsets.UTF_8)).startsWith("evaluate: IllegalArgumentException: "
-            + "--look=L5 needs a features run made with --look=L5: no look.json in ").hasLineCount(1);
+        assertThat(errBytes.toString(StandardCharsets.UTF_8))
+            .isEqualTo("evaluate: IllegalArgumentException: --look is not supported yet\n");
         assertThat(outBytes.toString(StandardCharsets.UTF_8)).isEmpty();
         assertThat(temp.resolve("out")).doesNotExist();
     }

@@ -43,7 +43,6 @@ final class CreditsEvaluateJob {
     private static final JsonMapper MAPPER = JsonMapper.builder().enable(SerializationFeature.INDENT_OUTPUT).build();
     private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
         .withZone(ZoneOffset.UTC);
-    private static final String LOOK = "L5";
 
     private final Clock clock;
     private final GitCommit gitCommit;
@@ -57,30 +56,19 @@ final class CreditsEvaluateJob {
     private record Scene(FilmRows rows, FrameLabelRecord label, Film film) {
     }
 
-    /**
-     * Runs the tool.
-     */
+    /** Runs the tool. */
     List<Path> run(CreditsEvaluateOptions options) throws IOException {
         Path dir = options.features();
         CreditsTrainJob.Hashes hashes = CreditsTrainJob.readSummary(dir.resolve("summary.json"));
-        if (options.look() && !Files.isRegularFile(dir.resolve("look.json"))) {
-            throw new IllegalArgumentException("--look=L5 needs a features run made with --look=L5: no look.json in "
-                + dir);
-        }
         Map<Long, FrameLabelRecord> labels = FeatureRunReader.labels(dir.resolve("frame-labels.json"));
         List<TrainedRun> runs = runs(options.train(), hashes);
         List<DevFilm> development = new ArrayList<>();
-        List<Scene> test = new ArrayList<>();
         Map<DevFilm, Scene> scenes = new IdentityHashMap<>();
-        for (FilmRows rows : FeatureRunReader.read(dir.resolve("features.csv"), options.look())) {
+        for (FilmRows rows : FeatureRunReader.read(dir.resolve("features.csv"), false)) {
             Scene scene = scene(rows, labels.get(rows.id()));
-            if (rows.side() == Side.DEV) {
-                DevFilm film = devFilm(rows, scene.film(), runs);
-                development.add(film);
-                scenes.put(film, scene);
-            } else {
-                test.add(scene);
-            }
+            DevFilm film = devFilm(rows, scene.film(), runs);
+            development.add(film);
+            scenes.put(film, scene);
         }
         List<String> names = runs.stream().map(TrainedRun::name).toList();
         List<Choice> outer = new ArrayList<>();
@@ -96,14 +84,7 @@ final class CreditsEvaluateJob {
             }
         }
         Choice last = CreditsCalibration.chooseFinal(development, runs.size());
-        List<Row> testRows = new ArrayList<>();
-        TrainedRun shipping = runs.get(last.run());
-        for (Scene scene : test) {
-            Prediction prediction = Prediction.ensemble(shipping.shipping().stream()
-                .map(model -> predict(model, scene.rows())).toList());
-            testRows.add(row(scene, FilmScore.of(scene.film(), prediction, last.params()), shipping.name()));
-        }
-        return write(options, hashes, names, outer, last, devRows, testRows);
+        return write(options, hashes, names, outer, last, devRows);
     }
 
     // ---- Reading ------------------------------------------------------------------------------------------------
@@ -165,11 +146,14 @@ final class CreditsEvaluateJob {
 
     /** One model's {@code p} at every frame; NaN at a dense frame with no time features. */
     private static Prediction predict(GradientBoostedTrees model, FilmRows rows) {
-        double[] coarse = rows.coarse().stream().mapToDouble(model::predict).toArray();
-        double[] dense = rows.dense().stream()
-            .mapToDouble(features -> CreditsFeatures.hasTimeFeatures(features) ? model.predict(features)
-                : Double.NaN).toArray();
+        double[] coarse = rows.coarse().stream().mapToDouble(features -> p(model, features)).toArray();
+        double[] dense = rows.dense().stream().mapToDouble(features -> p(model, features)).toArray();
         return new Prediction(coarse, dense, model.base());
+    }
+
+    /** {@code p} of a frame, NaN for a frame with no time features (a film of one coarse frame has one). */
+    private static double p(GradientBoostedTrees model, double[] features) {
+        return CreditsFeatures.hasTimeFeatures(features) ? model.predict(features) : Double.NaN;
     }
 
     private static Row row(Scene scene, Result result, String run) {
@@ -182,11 +166,9 @@ final class CreditsEvaluateJob {
     // ---- Writing ------------------------------------------------------------------------------------------------
 
     private List<Path> write(CreditsEvaluateOptions options, CreditsTrainJob.Hashes hashes, List<String> names,
-                             List<Choice> outer, Choice last, List<Row> devRows, List<Row> testRows)
+                             List<Choice> outer, Choice last, List<Row> devRows)
         throws IOException {
-        List<Row> all = new ArrayList<>(devRows);
-        all.addAll(testRows);
-        all.sort(Comparator.comparingLong(Row::id));
+        devRows.sort(Comparator.comparingLong(Row::id));
         Instant now = clock.instant();
         Path out = options.out().toAbsolutePath().normalize();
         Files.createDirectories(out);
@@ -197,13 +179,9 @@ final class CreditsEvaluateJob {
             throw new IllegalArgumentException("this run's directory already exists: " + runDir, e);
         }
         List<Path> written = new ArrayList<>(List.of(runDir));
-        written.add(Files.writeString(runDir.resolve("evaluation.csv"), EvaluationReport.csv(all)));
+        written.add(Files.writeString(runDir.resolve("evaluation.csv"), EvaluationReport.csv(devRows)));
         written.add(Files.write(runDir.resolve("calibration.json"), MAPPER.writeValueAsBytes(
             EvaluationReport.calibration(names, outer, last, gitCommit.commit(), hashes))));
-        if (options.look()) {
-            written.add(Files.write(runDir.resolve("look.json"), MAPPER.writeValueAsBytes(
-                new CreditsFeaturesJob.LookLog(LOOK, now.toString(), gitCommit.commit(), testRows.size()))));
-        }
         return written;
     }
 }
