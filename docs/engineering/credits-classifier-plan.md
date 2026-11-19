@@ -400,7 +400,8 @@ through **offline evaluation**: the shipping model and segmenter code, run on th
   films; Sonnet implements it and does not design it.
 - **Trees (`GradientBoostedTrees`).** Logistic loss, shallow trees, quantile bins, unweighted classes.
   - Depth, count and learning rate are arguments of L3b's training `main`. Before L3c exists they are chosen by
-    out-of-fold log loss on coarse rows; the earliest out-of-fold error takes over once L3c-eval can compute it.
+    out-of-fold log loss on coarse rows; once L3c-eval exists, its nested selection ("Calibration and nested
+    selection") chooses among training runs instead.
   - **Deterministic:** single-threaded; inputs sorted by `(mediaFileId, kind, offsetMs)`; ties broken by the lowest feature index,
     then the lowest threshold; quantiles from sorted values. A test trains twice and compares the JSON byte for
     byte.
@@ -614,8 +615,8 @@ Each phase is its own small PR, built by Sonnet and reviewed by the planner (`CL
     - Rows labelled with a `left_out` reason, or with empty time features, are dropped.
     - **The base model trains on coarse rows only.** L3b's training `main` only exposes the variants, off by
       default: `--with-dense` (dense rows added) and `--lit-text-variant` ("lit frames that show text"). They are
-      judged after L3c-eval exists, by the rule for all variants: kept only if the earliest out-of-fold error does
-      not get worse.
+      judged after L3c-eval exists, as training runs among which its nested selection chooses ("Calibration and
+      nested selection").
   - **What the training `main` trains:** for each fold `k`, one model on development minus `k` (the five shipping
     models), and for each pair of folds `k ≠ j`, one model on development minus `k` and `j` (the out-of-fold
     ensembles: fold `k`'s prediction is the mean of the four models without `k`). It writes `oof-logloss.json`:
@@ -664,8 +665,8 @@ Each phase is its own small PR, built by Sonnet and reviewed by the planner (`CL
     - `mediaFileId`, `side`, `fold`;
     - `verdict` (`FOUND`, `UNSURE` or `NOT_FOUND`), `t` (empty when there is none), and the simulated `f` (empty
       when not covered);
-    - `covered`, and `aligned` (for reporting only: `(t − offset₀) mod 500 ms = 0`, where `offset₀` is the first
-      stored dense offset in `complete.json`); `earlyError` (`t − 5 s` against the target, always) and `goalError`
+    - `covered`, and `aligned` (for reporting only: `(t − offset₀) mod 500 ms = 0`, where `offset₀` is the film's first
+      dense offset in `features.csv`; see "Scoring one film"); `earlyError` (`t − 5 s` against the target, always) and `goalError`
       (`f` against the target when covered, else `t`). `f`, `covered`, `aligned`, `earlyError` and `goalError` are
       empty unless the verdict is `FOUND`; an empty `goalError` counts as not found for the ±60 s goal and as outside
       ±10 s for the ±10 s goal. Each share's denominator is every film of that opening type (Plex's);
@@ -1195,8 +1196,8 @@ size.
   - their `bands >= 3`.
 - It applies to coarse and dense rows alike.
 - The relabel happens before `left_out` rows are dropped for training.
-- It is an option of L3b's training `main` (`--lit-text-variant`), judged once L3c-eval exists. It is adopted only if
-  the earliest out-of-fold error does not get worse.
+- It is an option of L3b's training `main` (`--lit-text-variant`), judged once L3c-eval exists, by its nested
+  selection ("Calibration and nested selection").
 
 ## L3b specification (written 2026-11-18)
 
@@ -1277,8 +1278,8 @@ selection, never by these figures.
 
 ## L3c specification (written 2026-11-19)
 
-Three PRs, each at most 1,500 changed lines: **L3c-1**, the segmenter; **L3c-eval-1**, the per-film scoring and the
-calibration, both pure; **L3c-eval-2**, the training `main`'s nested models and `CreditsEvaluateMain`. The release
+Three PRs, each at most 1,500 changed lines: **L3c-1**, the segmenter and the training `main`'s nested models;
+**L3c-eval-1**, the per-film scoring and the calibration, both pure; **L3c-eval-2**, `CreditsEvaluateMain`. The release
 after L3c-eval-2 is the "L3c" release. All code is in `credits/learn/`, under L3a's conventions.
 
 ### `CreditsSegmenter` (pure, L3c-1)
@@ -1300,8 +1301,8 @@ This turns "Finding the start" into code. Vetoes (step 6) and the reasons text (
     `a`. With fewer than 6 frames, the verdict is `NOT_FOUND`.
   - **Step 2.** With `u* = b` fixed, `t` is the largest `a` with `u* − a ≥ 6` and `S(a, u*) ≥ S* − delta`.
   - **Step 3.** Look for the first run of at least `gapFrames` consecutive frames with `ℓ < 0` inside `[t, u*)`. If
-    there is none, or the frames before it (from `t`) number 12 or more, stop. Otherwise the new start `s` is the
-    frame after the run. If `u* − s < 6`, the verdict is `NOT_FOUND`. Else `t` becomes the largest `a ≥ s` with
+    there is none, or the frames before it (from `t`) number 12 or more, stop. Otherwise the run is taken whole
+    (extended while `ℓ < 0`, up to `u*`), and the new start `s` is the index after its last frame. If `u* − s < 6`, the verdict is `NOT_FOUND`. Else `t` becomes the largest `a ≥ s` with
     `u* − a ≥ 6` and `S(a, u*) ≥ S(s, u*) − delta`, and step 3 repeats from the new `t`.
   - **Step 4.** `FOUND` when `S(t, u*) ≥ sigma` and the three frames `t`, `t + 1`, `t + 2` all have `p ≥ theta`;
     otherwise `UNSURE`.
@@ -1314,11 +1315,18 @@ This turns "Finding the start" into code. Vetoes (step 6) and the reasons text (
 - **`double bestStretch(double[] p, int end, double logitPi, double lambda)`:** `S*` over frames `[0, end)`
   only, or negative infinity when `end < 6`. The calibration's negatives use it.
 - **Tests:** the ten under "Phases", L3c, each with exact `t`, `f` and verdict; and boundaries one below, at and one
-  above: 5, 6 and 7 frames; a run of `gapFrames − 1` and `gapFrames`; 11 and 12 frames before a run; `S(t, u*)`
+  above: 5, 6 and 7 frames; a run of `gapFrames − 1` and `gapFrames`; a run longer than `gapFrames` that ends
+  fewer than 6 frames before `u*` (`NOT_FOUND`); 11 and 12 frames before a run; `S(t, u*)`
   against `sigma`; each of the three `p` against `theta`; a dense window with 10 and 11 offsets; `f` at
   `t − 5500` and `t − 5000`; both tie rules of step 1.
 
 ### Scoring one film (`FilmScore`, pure, L3c-eval-1)
+
+It is computed in two parts, so a grid runs fast: **`coarsePart`**, per film, prediction set, `λ`, `δ` and `G`
+(the segmenter's steps 1–3 and, per `λ`, the negative's `bestStretch`); and **`finish`**, per `σ`, `θ` and `θ_d`,
+which applies step 4, the dense step (cached per `t` and `θ_d`) and the fields below. A test proves the two parts
+equal one `FilmScore.of` call with all six params on every fixture film. The calibration keeps running counts per
+grid point and stores no per-film result.
 
 It takes one film: the coarse offsets, each coarse frame's kind (`OpeningType.frameKind` of its row's `mean`,
 `p10`, `p50`, `p90`), the coarse `p`, the dense offsets and `p` (every stored dense row, NaN without time
@@ -1379,7 +1387,7 @@ a grid point together, so both are chosen by the nested rule.
 
 ### `CreditsEvaluateMain` (L3c-eval-2)
 
-- **Training first.** `CreditsTrainMain` also writes `nested-models.json`: ten triple models keyed `"k,j,m"` with
+- **Training first (in L3c-1).** `CreditsTrainMain` also writes `nested-models.json`: ten triple models keyed `"k,j,m"` with
   `k < j < m`, each trained on the kept rows in none of the three folds. A test proves no triple model saw a row of
   its folds. Runs made before this (all of 2026-11-19's) lack the file and are refused, so they are run again.
 - **Arguments:** `--features <features run> --train <train run> [--train <train run> …] --out /out [--look=L5]
@@ -1395,14 +1403,21 @@ a grid point together, so both are chosen by the nested rule.
   Single-threaded and deterministic: the same inputs give byte-identical files apart from the stamp and
   `generatedAt`.
 - **Outputs**, in a fresh `<out>/eval-<stamp>/`:
-  - `evaluation.csv`: the columns under "Phases", L3c-eval, in that order, then `run` (the chosen training run's
-    directory name) and `leadingIsland`. Rows are in `mediaFileId` order. Test rows appear only under `--look=L5`.
+  - `evaluation.csv`, the columns under "Phases", L3c-eval, with exactly this header:
+    `mediaFileId,side,fold,verdict,t,f,covered,aligned,earlyError,goalError,openingAtT,marginBand,plexOpening,v2Verdict,v2Error,run,leadingIsland`.
+    Times and errors are in ms. `openingAtT` and `plexOpening` are `DARK`, `PLATE`, `LIT` or empty. `v2Error` is
+    `offset_ms − target`, empty unless v2's verdict is `FOUND`; both v2 columns are empty without `--baseline`.
+    `run` is the chosen training run's directory name. `leadingIsland` is the film's `leading_island` from
+    `frame-labels.json` (L1's flag), so L5 can report those films apart. Rows are in `mediaFileId` order. Test rows appear only under `--look=L5`.
   - `calibration.json`: **where each fold's calibrated values are stored.** `{"grid", "outer": {"0" … "4": {"run",
     "params", "counts"}}, "final": {"run", "params", "counts"}, "toolGitCommit", "datasetSha256", "labelsSha256"}`,
     where `counts` holds the ranking's levels 1–5 and the number of films. L6a copies `final` into the model file.
-  - `summary.json`: for the development rows and, under `--look`, the test rows apart, by Plex opening type and by
-    margin band: films, `FOUND`, `earlyError < −15 s` and `< −5 s`, and the ±10 s and ±60 s shares, each over every
-    film of that opening type.
+  - `summary.json`, for the development rows and, under `--look`, the test rows apart:
+    - **early counts**, by the cross of the opening at `t` and the margin band (the groups the pre-registered test
+      rule and `AUTO` use), over `FOUND` films: `FOUND`, `earlyError < −15 s`, `earlyError < −5 s`;
+    - **goal shares**, by Plex's opening type, each over every film of that type: within ±10 s, and within ±60 s or
+      not found. A film with no Plex opening type (`noOpeningFrame`) is its own `none` group, and is in no ranking
+      level 4 or 5 count.
   - `look.json` under `--look=L5`, as in L3b-look.
 - **Tests:** a smoke test on a fixture features run and a fixture training run (two small folds of hand-made films)
   checking every output file; each refusal with nothing written; the baseline join on `media_file_id` and
