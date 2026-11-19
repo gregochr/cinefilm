@@ -77,7 +77,7 @@ jobs:
     needs: changes
     name: Backend — Build, Test & Coverage
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v7
@@ -99,12 +99,47 @@ jobs:
       # install must be here for it to count.
       # On 2026-11-11 the runners could not resolve the Ubuntu mirrors; one `apt-get update` took ~6 minutes of 20 s
       # DNS waits (apt's own timeouts do not cover them), so retries cannot help and the step hung until the job's
-      # 20-minute timeout. scripts/ci-install-ffmpeg.sh has its own 5-minute budget so a clear error prints first;
+      # 20-minute timeout. scripts/ci-install-ffmpeg.sh has its own 12-minute budget so a clear error prints first;
       # the step timeout is only a backstop above it.
-      - name: Install ffmpeg
+      # On 2026-11-19 one slow mirror stalled single packages of the install four runs in a row. The script keeps the
+      # downloaded .debs in ${{ runner.temp }}/ffmpeg-debs (`--download-only`, capped and retried once, ending 2
+      # minutes before the script's budget) and then runs the install once, never retried, in that reserved share; the .debs are cached here (the *.deb glob leaves out apt's root-owned lock file and partial/).
+      # Cache keys are immutable, so the key carries the run id AND attempt: a re-run keeps the run id, and its save
+      # would otherwise be refused. restore-keys finds the newest earlier cache, and apt re-fetches only what changed.
+      # The save runs even when the install failed (completed .debs are whole files), but only when the script
+      # reported that the set of .debs changed, so a run with a full cache does not store a copy; !cancelled() keeps
+      # a cancelled run from delaying its cancellation. The restore is only an optimisation, so it may fail or hang
+      # for at most 3 minutes without failing the job. The job's 25 minutes cover the worst-case 12-minute install
+      # plus the verify.
+      - name: Restore ffmpeg debs
+        id: ffmpeg-cache
         if: needs.changes.outputs.docs_only != 'true'
-        timeout-minutes: 7
+        timeout-minutes: 3
+        continue-on-error: true
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/ffmpeg-debs/*.deb
+          key: ffmpeg-debs-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ffmpeg-debs-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install ffmpeg
+        id: ffmpeg-install
+        if: needs.changes.outputs.docs_only != 'true'
+        timeout-minutes: 14
+        env:
+          FFMPEG_DEB_DIR: ${{ runner.temp }}/ffmpeg-debs
+          FFMPEG_CACHE_MATCHED: ${{ steps.ffmpeg-cache.outputs.cache-matched-key }}
         run: bash scripts/ci-install-ffmpeg.sh
+
+      - name: Save ffmpeg debs
+        if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' && steps.ffmpeg-install.outputs.debs_changed == 'true' }}
+        timeout-minutes: 3
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/ffmpeg-debs/*.deb
+          key: ffmpeg-debs-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       # The full verify includes the integration package (Testcontainers Postgres 17; ubuntu runners
       # ship Docker), plus Checkstyle, JaCoCo per-class and bundle checks, and SpotBugs + FindSecBugs.
