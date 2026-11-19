@@ -97,7 +97,7 @@ final class CreditsTrainJob {
     }
 
     /** The two hashes {@code summary.json} carries. */
-    private record Hashes(String datasetSha256, String labelsSha256) {
+    record Hashes(String datasetSha256, String labelsSha256) {
     }
 
     /**
@@ -161,7 +161,7 @@ final class CreditsTrainJob {
 
     // ---- Reading ------------------------------------------------------------------------------------------------
 
-    private static Hashes readSummary(Path summary) throws IOException {
+    static Hashes readSummary(Path summary) throws IOException {
         JsonNode root = MAPPER.readTree(Files.readAllBytes(summary));
         JsonNode version = root.get("featureVersion");
         if (version == null || !version.isInt() || version.intValue() != CreditsFeatures.FEATURE_VERSION) {
@@ -219,13 +219,13 @@ final class CreditsTrainJob {
         return kept;
     }
 
-    private static List<String> fields(String line) {
+    static List<String> fields(String line) {
         List<List<String>> parsed = line == null ? List.of() : CsvReader.parse(line);
         return parsed.isEmpty() ? List.of() : parsed.getFirst();
     }
 
     /** The row's {@code (mediaFileId, kind, offsetMs)}, which must be strictly after the previous row's. */
-    private static long[] checkOrder(List<String> row, long[] previous, String where) {
+    static long[] checkOrder(List<String> row, long[] previous, String where) {
         String kind = row.get(3);
         if (!kind.equals(COARSE) && !kind.equals(DENSE)) {
             throw new IllegalArgumentException(where + "kind must be coarse or dense: " + kind);
@@ -249,7 +249,7 @@ final class CreditsTrainJob {
         return 0;
     }
 
-    private static long number(String text, String name, String where) {
+    static long number(String text, String name, String where) {
         try {
             return Long.parseLong(text);
         } catch (NumberFormatException e) {
@@ -272,7 +272,7 @@ final class CreditsTrainJob {
         return new TrainRow((int) fold, coarse, label, features);
     }
 
-    private static double[] features(List<String> row, String where) {
+    static double[] features(List<String> row, String where) {
         double[] features = new double[CreditsFeatures.COUNT];
         for (int i = 0; i < features.length; i++) {
             String text = row.get(FeatureRows.COLUMNS.size() - features.length + i);
