@@ -573,6 +573,21 @@ cancels superseded runs of the same ref.
 | `docker` | `Docker — image builds` | Builds the production `Dockerfile` (SPA, jar, ffmpeg runtime) without pushing, then checks it runs as uid 1001 with `ffmpeg`, `ffprobe` and `vainfo` present. The Mac has no Docker, so this is the only proof the image builds. 20 min timeout. |
 | `sonar` | `SonarQube Cloud — Analysis` | Needs `backend` and `frontend`. Downloads their artifacts (`backend-sonar-inputs`: classes, test classes and dependency jars; `jacoco-report`; `frontend-lcov`), rewrites the lcov `SF:` paths, and runs the pinned `sonarqube-scan-action` with `sonar.qualitygate.wait=true`, so the job fails when the quality gate on **new code** fails. Config: `sonar-project.properties` (backend, frontend, `scripts/`, Dockerfiles, `deploy/`, `.github/`). **Advisory, not a required check** (see `code-quality-plan.md` phase 4). Skips and reports success when `SONAR_TOKEN` is empty: fork PRs, and `deploy.yml`'s reuse of this workflow. 15 min timeout. |
 
+**The backend job's ffmpeg install** (`scripts/ci-install-ffmpeg.sh`, tests in `scripts/test/ci-install-ffmpeg.test.sh`).
+`RealToolsTest` needs ffmpeg, and two outages shaped the step. 2026-11-11, DNS: `apt-get update` alone took six minutes,
+so `update` is capped on its own (300 s) and fails fast with an `::error::`. 2026-11-19, a slow mirror: `update`
+worked but single packages of the 66 MB install stalled and four runs in a row timed out. Now apt writes its `.deb`
+files to `$RUNNER_TEMP/ffmpeg-debs` (`Dir::Cache::archives`, no sudo needed for the dir), `actions/cache/restore`
+fills it before the install (key `ffmpeg-debs-<os>-<arch>-<run id>`, `restore-keys` prefix finds the newest earlier
+one; apt re-fetches only what changed) and `actions/cache/save` stores it after, **only** when the script wrote
+`new_debs` other than `0` to its step output, and also when the install failed (completed `.deb` files are whole;
+in-flight ones stay in `partial/`, and the `*.deb` glob leaves out `partial/` and apt's root-owned lock). A first
+install that times out (240 s) or fails to fetch (apt exit 100) is retried once with the rest of the 720 s total;
+the step's `timeout-minutes: 14` is only the backstop. Reading a run: a `::notice::` at the start says "cache hit
+(<key>)" or "cache miss" with how many `.deb` files were already present; a `::warning::` says the first attempt
+did not finish and a retry started; the closing notice says how many new `.deb` files were downloaded. A cache
+miss is not an error (only slower); `::error::` still means the budget ran out or apt failed for another reason.
+
 **SonarQube Cloud** project `gregochr_cinefilm`, organization `gregochr`, Automatic Analysis off. `SONAR_TOKEN` is an
 Actions secret and a Dependabot secret (the owner's personal token; when it expires the job fails at the scan step).
 Results are public at `https://sonarcloud.io/project/overview?id=gregochr_cinefilm` and the same API serves
