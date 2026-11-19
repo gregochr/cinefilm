@@ -309,6 +309,159 @@
   color: #f7cabb;
 }
 
+.xmas-empty .xmas-empty__add {
+  margin: 20px 0 0;
+}
+.xmas-chip--pending {
+  border-color: transparent;
+  background: var(--cf-surface-3);
+}
+
+/* Controls row: the tabs, and the "Add a film" search at the right */
+.xmas-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.xmas-add {
+  position: relative;
+  margin-left: auto;
+  width: 340px;
+  max-width: 100%;
+}
+.xmas-add__field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--cf-line-strong);
+  border-radius: var(--cf-radius-pill);
+  background: var(--cf-surface-2);
+  color: var(--cf-text-muted);
+}
+.xmas-add__field:focus-within {
+  outline: none;
+  box-shadow: var(--cf-focus-ring);
+}
+.xmas-add__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--cf-text);
+  font: inherit;
+  font-size: 15px;
+}
+.xmas-add__input:focus-visible {
+  outline: 0;
+  box-shadow: none; /* the ring is drawn on the wrapping field */
+}
+.xmas-add__input::placeholder {
+  color: var(--cf-text-muted);
+}
+.xmas-add__panel {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 440px;
+  max-width: calc(100vw - 32px);
+  max-height: min(640px, calc(100vh - 160px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--cf-line);
+  border-radius: var(--cf-radius-panel);
+  background: var(--cf-surface-2);
+  box-shadow: var(--cf-shadow-panel);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .xmas-add__panel {
+    animation: xmas-toast-in 150ms ease-out;
+  }
+}
+.xmas-add__head {
+  margin: 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--cf-line);
+  font-size: 13px;
+  color: var(--cf-text-muted);
+}
+.xmas-add__failed {
+  margin: 0;
+  padding: 10px 16px;
+  font-size: 13px;
+  color: #f3b4a2;
+}
+.xmas-add__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.xmas-add-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 8px 12px 8px 16px;
+  border-top: 1px solid var(--cf-line);
+}
+.xmas-add-row:first-child {
+  border-top: 0;
+}
+.xmas-add-row__poster {
+  flex: none;
+  width: 36px;
+  border-radius: 3px;
+}
+.xmas-add-row__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.xmas-add-row__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+/* A long chip ("Keywords not fetched yet") shortens with an ellipsis rather than push the button out of the row. */
+.xmas-add-row .xmas-chip {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  line-height: 22px;
+  text-overflow: ellipsis;
+}
+.xmas-add-row__line {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cf-text-muted);
+}
+.xmas-add-row .xmas-row__action {
+  flex: none;
+}
+/* The narrowest phones: the action goes under the text, full width, so the title keeps the whole row. */
+@media (max-width: 360px) {
+  .xmas-add-row {
+    flex-wrap: wrap;
+  }
+  .xmas-add-row__text {
+    flex: 1 1 calc(100% - 60px);
+  }
+  .xmas-add-row .xmas-row__action {
+    flex: 1 0 100%;
+    min-width: 0;
+  }
+}
+
 /* Toast */
 .xmas-toast-region {
   position: fixed;
@@ -409,5 +562,12 @@
   .xmas-toast {
     width: 100%;
     justify-content: space-between;
+  }
+  .xmas-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .xmas-add {
+    width: 100%;
   }
 }
