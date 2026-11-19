@@ -200,6 +200,20 @@ class TimingReferenceFetchTest {
     }
 
     @Test
+    void aDownloadIsNeverMeasuredAgainstTheOpenSubtitlesFileItCameFrom() {
+        File owner = forced(7, Origin.OWNER);
+        File download = new File(8L, Origin.DOWNLOAD, owner.lines(), owner.cuesText(), 5012L);
+        when(service.targets()).thenReturn(List.of(target(1, 1, null, List.of(owner, download),
+            List.of(candidate(5012)), Map.of(5012L, stored(5012, full(300))))));
+
+        int written = fetch.run(CHECK_LIMIT, true);
+
+        assertThat(written).isEqualTo(1);
+        assertThat(lines(Level.INFO)).singleElement().asString().contains("OWNER file 7 ");
+        verifyNoInteractions(api, budget);
+    }
+
+    @Test
     void aFilmWithNoCandidatesAtAllIsMeasuredAgainstItsStoredFullFile() {
         when(service.targets()).thenReturn(List.of(target(1, List.of(), Map.of(4000L, stored(4000, full(300))))));
 

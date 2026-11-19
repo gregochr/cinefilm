@@ -194,6 +194,7 @@ class TimingReferenceServiceTest {
                 .containsExactly(tuple(5L, Origin.OWNER, 20),
                     tuple(6L, Origin.DOWNLOAD, 30),
                     tuple(7L, Origin.CHOSEN, 40));
+            assertThat(target.files()).extracting(f -> f.osFileId()).containsExactly(null, 5006L, 5007L);
             assertThat(target.runtimeMs()).isEqualTo(90 * MIN);
             assertThat(target.imdbId()).isEqualTo(IMDB);
             assertThat(target.editionName()).isEqualTo("Original");

@@ -96,9 +96,11 @@ public class SidecarTimingService {
     }
 
     /**
-     * The usable stored OpenSubtitles files among an edition's candidates (their facts, never their cue text), the
-     * IMDb id they were fetched for, and the row ids of candidates that could be usable but do not know where their
-     * last cue ends yet (stored before that was kept): the film is then due, so they are filled in.
+     * The usable stored OpenSubtitles files of an edition (their facts, never their cue text): the stored candidates
+     * first, then any other stored file of 300 lines or more under the film's current IMDb id (a current full search
+     * is not required). Also the IMDb id they were fetched for, and the row ids of such files that could be usable but
+     * do not know where their last cue ends yet (stored before that was kept): the film is then due, so they are
+     * filled in.
      */
     private record OsRefs(String imdbId, List<ReferenceFacts> usable, Set<Long> unfilled) {
     }
@@ -297,12 +299,13 @@ public class SidecarTimingService {
 
     /**
      * Fills in where the last cue ends for a film's stored OpenSubtitles files that were stored before that was kept,
-     * so they can count as references. Only the files among the candidates of an edition the timing check fits to
-     * OpenSubtitles files are filled in (the same selection as {@link #osRefs}, so a film the owner marked
-     * {@code NONE_EXIST} is left alone), and only those that do not have it: each file's cues are parsed once and the
-     * maximum cue end saved, as {@link ReferenceFetcher} does for a new one. This is the only place old cue text is
-     * parsed; it is called by the background check, never on the playback path. Takes the library lock for the write,
-     * as the other saves do.
+     * so they can count as references. Only the files that are references of an edition the timing check fits to
+     * OpenSubtitles files (the stored candidates and any other stored file of 300 lines or more under the film's
+     * current IMDb id; no current full search is needed) are filled in (the same selection as {@link #osRefs}, so a
+     * film the owner marked {@code NONE_EXIST} is left alone), and only those that do not have it: each file's cues
+     * are parsed once and the maximum cue end saved, as {@link ReferenceFetcher} does for a new one. This is the only
+     * place old cue text is parsed; it is called by the background check, never on the playback path. Takes the
+     * library lock for the write, as the other saves do.
      *
      * @param filmId the film
      * @return {@code SAVED} (nothing to fill in is also {@code SAVED}, without taking the lock) or {@code BUSY} when

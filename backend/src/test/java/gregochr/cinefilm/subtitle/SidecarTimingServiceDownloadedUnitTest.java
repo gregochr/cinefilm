@@ -446,11 +446,14 @@ class SidecarTimingServiceDownloadedUnitTest {
     void aSearchUnderAnotherImdbIdGivesNoCandidatesButTheStoredFileUnderTheCurrentOneStillCounts() {
         read(EmbeddedCueStarts.Status.NO_REFERENCE);
         edition.getFilm().setOsFullSearchedImdbId("tt0000002");
-        stored(reference(5012, 300, IMDB));
+        edition.getFilm().setOsFullCandidates(OpenSubtitlesResult.listToJson(List.of(candidate(5013),
+            candidate(5012))));
+        stored(reference(5013, 300, IMDB), reference(5012, 300, IMDB));
 
-        FitJob job = onlyJob(5012L);
+        FitJob job = onlyJob(5012L, 5013L);
 
-        assertThat(job.osReferences()).extracting(DownloadedFit.Reference::osFileId).containsExactly(5012L);
+        // The stale search's candidate order (5013, 5012) is ignored: the files come in file-id order.
+        assertThat(job.osReferences()).extracting(DownloadedFit.Reference::osFileId).containsExactly(5012L, 5013L);
     }
 
     @Test

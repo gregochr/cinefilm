@@ -73,8 +73,14 @@ public class TimingReferenceService {
      * @param origin where it came from
      * @param lines its cue count
      * @param cuesText its cues as stored (the raw file: no owner offset)
+     * @param osFileId the OpenSubtitles file it was downloaded from, or null for an owner's file
      */
-    record File(Long sidecarId, Origin origin, int lines, String cuesText) {
+    record File(Long sidecarId, Origin origin, int lines, String cuesText, Long osFileId) {
+
+        /** A file with no known OpenSubtitles origin. */
+        File(Long sidecarId, Origin origin, int lines, String cuesText) {
+            this(sidecarId, origin, lines, cuesText, null);
+        }
     }
 
     /**
@@ -83,13 +89,15 @@ public class TimingReferenceService {
      * @param filmId the film
      * @param editionId the edition
      * @param editionName the edition's name (its cut tags order the candidates)
-     * @param imdbId the film's current IMDb id, which the full candidates were searched for
+     * @param imdbId the film's current IMDb id: the full candidates (when there are any) were searched for it, and
+     *     the stored references are those stored under it
      * @param runtimeMs the edition's runtime
      * @param creditsStartMs where credits detection found the credits start on the edition's timeline, or null
      * @param ownerPick true when the owner picked one of its files
      * @param files its forced files
      * @param candidates the film's single-file full candidates with a plausible frame rate, a hearing-impaired file
-     *     strictly last (whatever its cut), the rest in the order for this edition's cut
+     *     strictly last (whatever its cut), the rest in the order for this edition's cut; empty when the film has no
+     *     current full search (it is then a target only for its stored files, with nothing to fetch)
      * @param referencesKept how many of the film's stored references are among its current full candidates
      * @param stored the film's stored references for this IMDb id by OpenSubtitles file id
      */
@@ -115,7 +123,8 @@ public class TimingReferenceService {
 
     /**
      * The editions to find and measure a reference for, owner's picks first, then by film and edition: those whose
-     * film has full candidates from a search of its current IMDb id.
+     * film has full candidates from a search of its current IMDb id, or, with no current search, a stored reference
+     * of 300 lines or more under its current IMDb id (the references are then the stored ones, nothing is fetched).
      *
      * @return the targets
      */
@@ -221,7 +230,7 @@ public class TimingReferenceService {
             if (TimingReferenceRule.qualifies(facts, resolution.decision().source() == Source.EMBEDDED,
                 edition.getRuntimeMs(), edition.originalParts().size())) {
                 List<File> files = served.stream().map(s -> new File(s.getId(), origin(s), s.getCueCount(),
-                    s.getCuesText())).toList();
+                    s.getCuesText(), s.getOpenSubtitlesFileId())).toList();
                 qualified.add(new Qualified(edition, files, files.stream().anyMatch(f -> f.origin() == Origin.CHOSEN)));
             }
         }

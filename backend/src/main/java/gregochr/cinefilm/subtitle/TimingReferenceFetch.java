@@ -175,6 +175,11 @@ final class TimingReferenceFetch {
         }
     }
 
+    /** A download is never measured against the OpenSubtitles file it came from: it would match itself. */
+    private static boolean isOwnFile(File file, OpenSubtitlesReference reference) {
+        return file.osFileId() != null && file.osFileId() == reference.getOsFileId();
+    }
+
     private static boolean isUsable(Target target, OpenSubtitlesReference reference) {
         return TimingReferenceRule.usable(reference, target.runtimeMs(), target.creditsStartMs());
     }
@@ -188,6 +193,9 @@ final class TimingReferenceFetch {
         boolean matches = false;
         double best = 0;
         for (File file : target.files()) {
+            if (isOwnFile(file, reference)) {
+                continue;
+            }
             // Only a file under 300 lines decides the walk: a full-length one would match any full reference.
             if (file.lines() >= TimingReferenceRule.FULL_LINES) {
                 continue;
@@ -222,6 +230,9 @@ final class TimingReferenceFetch {
         List<Long> referenceStarts = null;
         int written = 0;
         for (File file : target.files()) {
+            if (isOwnFile(file, reference)) {
+                continue;
+            }
             String cues = JsonEtag.etag(file.cuesText().getBytes(StandardCharsets.UTF_8));
             if (!done.add(file.sidecarId() + ":" + cues + ":" + reference.getOsFileId())) {
                 continue;
