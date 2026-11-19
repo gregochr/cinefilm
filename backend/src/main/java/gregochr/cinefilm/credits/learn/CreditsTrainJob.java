@@ -24,8 +24,9 @@ import tools.jackson.databind.node.ObjectNode;
 
 /**
  * One run of the credits training tool ({@code docs/engineering/credits-classifier-plan.md}, "L3b specification",
- * {@code CreditsTrainMain}): it reads a features run's {@code features.csv}, fits the five shipping models and the ten
- * pair models, and writes {@code model.json}, {@code oof-models.json} and {@code oof-logloss.json} into
+ * {@code CreditsTrainMain}): it reads a features run's {@code features.csv}, fits the five shipping models, the ten
+ * pair models and the ten triple models, and writes {@code model.json}, {@code oof-models.json},
+ * {@code oof-logloss.json} and {@code nested-models.json} into
  * {@code <out>/train-<yyyyMMdd'T'HHmmss'Z'>/} (made with {@code createDirectory}, so a run never overwrites an
  * earlier one). Everything is computed before anything is written, so a refused run leaves no file. No database, no
  * network, never a Spring bean.
@@ -36,7 +37,8 @@ import tools.jackson.databind.node.ObjectNode;
  * file was assembled.
  *
  * <p>Fold {@code k}'s out-of-fold prediction for a row is the mean of the four pair models {@code {k, j}}, none of
- * which saw a row of fold {@code k}.
+ * which saw a row of fold {@code k}. The triple model {@code {k, j, m}} is trained on the rows in none of the three
+ * folds; {@code CreditsEvaluateMain} scores a fold's films with the mean of the triples that skip it.
  */
 final class CreditsTrainJob {
 
@@ -102,8 +104,8 @@ final class CreditsTrainJob {
      * Runs the tool.
      *
      * @param options the command line
-     * @return what was written: the run directory, {@code model.json}, {@code oof-models.json} and
-     *     {@code oof-logloss.json}
+     * @return what was written: the run directory, {@code model.json}, {@code oof-models.json},
+     *     {@code oof-logloss.json} and {@code nested-models.json}
      * @throws IOException when an input cannot be read or the output cannot be written
      * @throws IllegalArgumentException when a file is not what a features run writes, a row is a test row or has no
      *     fold, rows are out of order, a fold has no coarse row left or a model cannot be fitted (nothing is written)
@@ -128,6 +130,14 @@ final class CreditsTrainJob {
                 pairs.put(k + "," + j, fit(rows, Set.of(k, j), options.params()));
             }
         }
+        Map<String, GradientBoostedTrees> triples = new LinkedHashMap<>();
+        for (int k = 0; k < FOLDS; k++) {
+            for (int j = k + 1; j < FOLDS; j++) {
+                for (int m = j + 1; m < FOLDS; m++) {
+                    triples.put(k + "," + j + "," + m, fit(rows, Set.of(k, j, m), options.params()));
+                }
+            }
+        }
         ObjectNode logLoss = outOfFold(rows, pairs);
 
         Path out = options.out().toAbsolutePath().normalize();
@@ -141,12 +151,12 @@ final class CreditsTrainJob {
         Path model = runDir.resolve("model.json");
         Files.write(model, MAPPER.writeValueAsBytes(modelJson(options, hashes, manifestSha, shipping)));
         Path oofModels = runDir.resolve("oof-models.json");
-        ObjectNode pairJson = MAPPER.createObjectNode();
-        pairs.forEach((key, value) -> pairJson.set(key, MAPPER.readTree(value.toJson())));
-        Files.write(oofModels, MAPPER.writeValueAsBytes(pairJson));
+        Files.write(oofModels, MAPPER.writeValueAsBytes(modelsJson(pairs)));
         Path oofLogLoss = runDir.resolve("oof-logloss.json");
         Files.write(oofLogLoss, MAPPER.writeValueAsBytes(logLoss));
-        return List.of(runDir, model, oofModels, oofLogLoss);
+        Path nestedModels = runDir.resolve("nested-models.json");
+        Files.write(nestedModels, MAPPER.writeValueAsBytes(modelsJson(triples)));
+        return List.of(runDir, model, oofModels, oofLogLoss, nestedModels);
     }
 
     // ---- Reading ------------------------------------------------------------------------------------------------
@@ -376,6 +386,13 @@ final class CreditsTrainJob {
     }
 
     // ---- Writing ------------------------------------------------------------------------------------------------
+
+    /** The models as one object, each under its key ({@code "k,j"} or {@code "k,j,m"}), in the order given. */
+    private static ObjectNode modelsJson(Map<String, GradientBoostedTrees> models) {
+        ObjectNode json = MAPPER.createObjectNode();
+        models.forEach((key, value) -> json.set(key, MAPPER.readTree(value.toJson())));
+        return json;
+    }
 
     private ObjectNode modelJson(CreditsTrainOptions options, Hashes hashes, String manifestSha,
                                  GradientBoostedTrees[] shipping) {
