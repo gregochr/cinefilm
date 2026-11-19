@@ -28,8 +28,7 @@ import tools.jackson.databind.node.ObjectNode;
 /**
  * One run of the embeddings tool ({@code docs/engineering/credits-classifier-plan.md}, "{@code CreditsEmbedMain}"):
  * it embeds exactly the rows of a features run, in the run's order, and writes {@code embeddings.bin},
- * {@code embeddings.json} and, with {@code --look=L5}, {@code look.json} into
- * {@code <out>/embed-<yyyyMMdd'T'HHmmss'Z'>/} (made with {@code createDirectory}). No Spring, no database.
+ * {@code embeddings.json} and, with {@code --look=L5}, {@code look.json} into a fresh {@code <out>/embed-<stamp>/}.
  *
  * <p><strong>Pass 1 opens no frame.</strong> It checks the summary, reads all of {@code features.csv} (a test row
  * without the look stops the run there), then each film's record, {@code complete.json} and every JPEG its rows name,
@@ -101,8 +100,7 @@ final class CreditsEmbedJob {
         Path out = options.out().toAbsolutePath().normalize();
         Plan plan = check(data, features, encoderDir, out, options.look());
 
-        // Opened before the run's directory exists, so a failure to open (even a native library that will not load)
-        // leaves nothing to discard.
+        // Opened first: a failure to open, even an Error, leaves no run directory to discard.
         try (ImageEncoder encoder = factory.open(plan.spec(), encoderDir)) {
             return write(plan, encoder, features, out, options.look(), cpuStart);
         }

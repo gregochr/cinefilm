@@ -11,9 +11,8 @@ import tools.jackson.core.JacksonException;
 /**
  * Entry point of the embeddings tool, run on the server as a throwaway container from the released image with
  * {@code -Dloader.main=gregochr.cinefilm.credits.learn.CreditsEmbedMain} through {@code PropertiesLauncher}
- * ({@code docs/engineering/credits-classifier-plan.md}, "{@code CreditsEmbedMain}"). A plain class, not a Spring
- * bean. It reads {@code --data}, {@code --features} and {@code --encoder} and writes only {@code --out}. Test films
- * are embedded only with {@code --look=L5}.
+ * ({@code docs/engineering/credits-classifier-plan.md}, "{@code CreditsEmbedMain}"). Not a Spring bean. It writes
+ * only {@code --out}; test films are embedded only with {@code --look=L5}.
  *
  * <p>Exit codes: 0 when it ran, 1 on a bad flag, a refused input or an encoder that fails; nothing is left behind.
  */

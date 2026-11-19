@@ -5,8 +5,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Everything {@code CreditsEmbedJob} opens inside a film's directory, in one place, so that a test can record that no
- * JPEG was opened before every check passed. A check that a frame exists does not open it.
+ * Everything {@code CreditsEmbedJob} opens in a film's directory, so a test can record that no JPEG was opened before
+ * every check passed. Checking that a frame exists does not open it.
  */
 interface FrameSource {
 
