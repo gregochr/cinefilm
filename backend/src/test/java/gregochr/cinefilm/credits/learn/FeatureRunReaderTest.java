@@ -78,6 +78,66 @@ class FeatureRunReaderTest {
             .hasMessageContaining("features.csv " + message);
     }
 
+    @ParameterizedTest
+    @MethodSource("refusals")
+    void forEachFilmRefusesWhatReadRefusesWithTheSameMessage(String rows, boolean look, String message) {
+        assertThatThrownBy(() -> FeatureRunReader.forEachFilm(
+            write(rows), look, film -> {
+            })).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("features.csv " + message);
+    }
+
+    private Path write(String rows) throws IOException {
+        return Files.writeString(temp.resolve("features.csv"), FeatureRows.header() + rows);
+    }
+
+    @Test
+    void forEachFilmHandsEachFilmOverOnceInFileOrderWithTheRowsThatReadGives() throws IOException {
+        String test = FeatureRows.row(3, null, Side.TEST, "coarse", 0, "film", TrainFixtures.plate(1, 0));
+        String rows = dev(1, 2, "coarse", 0) + dev(1, 2, "coarse", 5) + dev(1, 2, "dense", 1)
+            + dev(2, 4, "coarse", 0) + test;
+        List<FilmRows> seen = new java.util.ArrayList<>();
+
+        FeatureRunReader.forEachFilm(write(rows), true, seen::add);
+
+        assertThat(seen).extracting(FilmRows::id).containsExactly(1L, 2L, 3L);
+        List<FilmRows> read = FeatureRunReader.read(write(rows), true);
+        assertThat(read).extracting(FilmRows::coarseOffsets).isEqualTo(seen.stream().map(FilmRows::coarseOffsets)
+            .toList());
+        assertThat(read).extracting(FilmRows::denseOffsets).isEqualTo(seen.stream().map(FilmRows::denseOffsets)
+            .toList());
+        assertThat(seen).extracting(FilmRows::side).containsExactly(Side.DEV, Side.DEV, Side.TEST);
+        assertThat(seen.getFirst().coarseOffsets()).containsExactly(0L, 5L);
+        assertThat(seen.getFirst().denseOffsets()).containsExactly(1L);
+    }
+
+    @Test
+    void forEachFilmHandsAFilmOverBeforeTheNextFilmsLaterRowsAreRead() throws IOException {
+        // Film 2's second row is malformed. If the sink were called only once the whole file was read, the film 1
+        // delivery would never happen and the malformed row's message would surface instead of the sink's.
+        String rows = dev(1, 0, "coarse", 0) + dev(2, 1, "coarse", 0) + "2,1,dev\n";
+        List<Long> seen = new java.util.ArrayList<>();
+
+        assertThatThrownBy(() -> FeatureRunReader.forEachFilm(write(rows), false, film -> {
+            seen.add(film.id());
+            throw new IOException("sink stopped at film " + film.id());
+        })).isInstanceOf(IOException.class).hasMessage("sink stopped at film 1");
+        assertThat(seen).containsExactly(1L);
+        assertThatThrownBy(() -> FeatureRunReader.forEachFilm(write(rows), false, film -> {
+        })).isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("features.csv line 4: expected 39 fields, found 3");
+    }
+
+    @Test
+    void forEachFilmHandsTheLastFilmOverAtTheEndOfTheFileAndAnEmptyFileHandsNothing() throws IOException {
+        List<Long> seen = new java.util.ArrayList<>();
+
+        FeatureRunReader.forEachFilm(write(dev(1, 0, "coarse", 0) + dev(2, 1, "coarse", 0)), false,
+            film -> seen.add(film.id()));
+        FeatureRunReader.forEachFilm(write(""), false, film -> seen.add(-1L));
+
+        assertThat(seen).containsExactly(1L, 2L);
+    }
+
     @Test
     void aFileThatDoesNotStartWithTheFeaturesHeaderIsRefused() throws IOException {
         Path file = Files.writeString(temp.resolve("bad.csv"), "a,b\n");
