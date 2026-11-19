@@ -14,6 +14,7 @@ import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmDtos.FilmCard;
 import gregochr.cinefilm.film.FilmView;
+import gregochr.cinefilm.film.HolidayOverrides;
 import gregochr.cinefilm.film.LibraryLoader;
 import gregochr.cinefilm.settings.ServerSettingsService;
 import gregochr.cinefilm.film.WeeklyTheme;
@@ -42,7 +43,11 @@ class HomeServiceTest {
     private ServerSettingsService settings;
 
     private HomeService service(Clock clock) {
-        return new HomeService(loader, clock, settings);
+        return new HomeService(loader, clock, settings, HolidayOverrides.NONE);
+    }
+
+    private static Clock at(String instant) {
+        return Clock.fixed(Instant.parse(instant), CLOCK.getZone());
     }
 
     private long nextId = 1;
@@ -132,6 +137,62 @@ class HomeServiceTest {
         assertThat(home.continueWatching()).isEmpty();
         assertThat(home.recentlyAdded()).isEmpty();
         assertThat(home.notWatchedInYears()).isEmpty();
+    }
+
+    // holiday weeks
+
+    private List<FilmView> libraryWithSix(String genre, String keyword) {
+        List<FilmView> library = themedLibrary();
+        for (int i = 0; i < 6; i++) {
+            FilmView view = unwatched("Holiday " + i, 1980 + i, NOW.minus(Duration.ofDays(500)), genre);
+            view.film().setTmdbId(1000L + i);
+            if (keyword != null) {
+                view.film().getKeywords().add(keyword);
+            }
+            library.add(view);
+        }
+        return library;
+    }
+
+    @Test
+    void inHalloweenWeekTheThemeIsHorror() {
+        libraryIs(libraryWithSix("Horror", null));
+
+        // 2026-10-21 12:00 UTC is Wednesday of Halloween week in London.
+        Home home = service(at("2026-10-21T12:00:00Z")).home();
+
+        assertThat(home.weeklyTheme().kind()).isEqualTo("holiday");
+        assertThat(home.weeklyTheme().value()).isEqualTo("halloween");
+        assertThat(home.weeklyTheme().title()).isEqualTo("This week: Halloween");
+        assertThat(home.weeklyTheme().caption()).isEqualTo("A new theme every Monday");
+        assertThat(home.weeklyTheme().films()).extracting(FilmCard::title)
+            .containsExactly("Holiday 0", "Holiday 1", "Holiday 2", "Holiday 3", "Holiday 4", "Holiday 5");
+    }
+
+    @Test
+    void inChristmasWeekTheThemeIsChristmasFilmsAndTheExcludeListApplies() {
+        libraryIs(libraryWithSix("Comedy", "christmas"));
+        HomeService excluding = new HomeService(loader, at("2026-12-14T00:30:00Z"), settings,
+            new HolidayOverrides(List.of(), List.of(1000L)));
+
+        Home withKeyword = service(at("2026-12-14T00:30:00Z")).home();
+        Home withExclude = excluding.home();
+
+        assertThat(withKeyword.weeklyTheme().value()).isEqualTo("christmas");
+        assertThat(withKeyword.weeklyTheme().title()).isEqualTo("This week: Christmas");
+        assertThat(withKeyword.weeklyTheme().films()).hasSize(6);
+        assertThat(withExclude.weeklyTheme().kind()).as("five films left, so still the holiday").isEqualTo("holiday");
+        assertThat(withExclude.weeklyTheme().films()).extracting(FilmCard::title).doesNotContain("Holiday 0")
+            .hasSize(5);
+    }
+
+    @Test
+    void theHolidayWeekFollowsTheApplicationZoneDate() {
+        libraryIs(libraryWithSix("Horror", null));
+
+        // London is on BST until 25 October: Monday 19 October begins at 23:00 UTC on Sunday the 18th.
+        assertThat(service(at("2026-10-18T22:59:00Z")).home().weeklyTheme().kind()).isNotEqualTo("holiday");
+        assertThat(service(at("2026-10-18T23:00:00Z")).home().weeklyTheme().value()).isEqualTo("halloween");
     }
 
     // hero and continue watching

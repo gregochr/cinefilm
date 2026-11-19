@@ -6,12 +6,15 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Predicate;
 
 /**
  * Chooses the weekly theme (decision 4): a decade, a genre or a director with at least five films, picked
- * deterministically from the ISO week (Monday start) and the library contents.
+ * deterministically from the ISO week (Monday start) and the library contents; in Halloween and Christmas week,
+ * that holiday's films.
  */
 public final class WeeklyThemeSelector {
 
@@ -29,8 +32,22 @@ public final class WeeklyThemeSelector {
         return date.get(IsoFields.WEEK_BASED_YEAR) * 100 + date.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR);
     }
 
-    /** Picks the theme for the ISO week containing {@code date}. */
+    /** Picks the theme for the ISO week containing {@code date}, with no Christmas overrides. */
     public static WeeklyTheme choose(LocalDate date, List<Film> library) {
+        return choose(date, library, HolidayOverrides.NONE);
+    }
+
+    /**
+     * Picks the theme for the ISO week containing {@code date}. In a holiday week ({@link HolidayWeeks}) the theme is
+     * that holiday's films, unless fewer than {@link #MIN_FILMS} match, when the normal rotation applies.
+     */
+    public static WeeklyTheme choose(LocalDate date, List<Film> library, HolidayOverrides overrides) {
+        Optional<WeeklyTheme> holiday = HolidayWeeks.holidayFor(date)
+            .map(h -> holidayTheme(h, library, overrides))
+            .filter(t -> t.films().size() >= MIN_FILMS);
+        if (holiday.isPresent()) {
+            return holiday.get();
+        }
         List<Candidate> candidates = candidates(library);
         if (candidates.isEmpty()) {
             return new WeeklyTheme("library", "all", "This week: your library", WeeklyTheme.STANDING_CAPTION,
@@ -41,10 +58,34 @@ public final class WeeklyThemeSelector {
             pick(library, chosen.matches));
     }
 
+    private static WeeklyTheme holidayTheme(HolidayWeeks.Holiday holiday, List<Film> library,
+                                            HolidayOverrides overrides) {
+        return switch (holiday) {
+            case HALLOWEEN -> new WeeklyTheme("holiday", "halloween", "This week: Halloween",
+                WeeklyTheme.STANDING_CAPTION, pick(library, f -> f.getGenres().contains("Horror")));
+            case CHRISTMAS -> {
+                Set<Long> include = overrides.includeSet();
+                Set<Long> exclude = overrides.excludeSet();
+                yield new WeeklyTheme("holiday", "christmas", "This week: Christmas",
+                    WeeklyTheme.STANDING_CAPTION, pick(library, f -> isChristmas(f, include, exclude)));
+            }
+        };
+    }
+
+    /** Not excluded, and either included or tagged with TMDB's {@code christmas} keyword. */
+    private static boolean isChristmas(Film film, Set<Long> include, Set<Long> exclude) {
+        Long tmdbId = film.getTmdbId();
+        if (tmdbId != null && exclude.contains(tmdbId)) {
+            return false;
+        }
+        return tmdbId != null && include.contains(tmdbId) || film.getKeywords().contains("christmas");
+    }
+
     private static List<Film> pick(List<Film> library, Predicate<Film> matches) {
         return library.stream()
             .filter(matches)
-            .sorted(Comparator.comparingInt(Film::getYear).thenComparing(Film::getSortTitle))
+            .sorted(Comparator.comparing(Film::getYear, Comparator.nullsLast(Comparator.<Integer>naturalOrder()))
+                .thenComparing(Film::getSortTitle))
             .limit(MAX_FILMS)
             .toList();
     }

@@ -5,6 +5,7 @@ import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmDtos.FilmCard;
 import gregochr.cinefilm.film.FilmMapper;
 import gregochr.cinefilm.film.FilmView;
+import gregochr.cinefilm.film.HolidayOverrides;
 import gregochr.cinefilm.film.LibraryLoader;
 import gregochr.cinefilm.film.WeeklyTheme;
 import gregochr.cinefilm.film.WeeklyThemeSelector;
@@ -30,18 +31,26 @@ public class HomeService {
     private final LibraryLoader loader;
     private final Clock clock;
     private final ServerSettingsService settings;
+    private final HolidayOverrides holidayOverrides;
 
-    /** Creates the service over the library loader, the application clock and the server settings. */
-    public HomeService(LibraryLoader loader, Clock clock, ServerSettingsService settings) {
+    /**
+     * Creates the service over the library loader, the application clock, the server settings and the owner's
+     * Christmas overrides.
+     */
+    public HomeService(LibraryLoader loader, Clock clock, ServerSettingsService settings,
+                       HolidayOverrides holidayOverrides) {
         this.loader = loader;
         this.clock = clock;
         this.settings = settings;
+        this.holidayOverrides = holidayOverrides;
     }
 
     /**
      * Builds the hero, the rows, the weekly theme. The hero is the newest film in progress and Continue watching is
      * the next {@link #CONTINUE_WATCHING_ROW} after it (4 are shown, the rest are spares for backfill); the total
-     * counts the hero and leaves out films removed from Continue watching.
+     * counts the hero and leaves out films removed from Continue watching. The films' lazy genres and keywords load
+     * inside this transaction (in batches: {@code hibernate.default_batch_fetch_size}), keywords only in Christmas
+     * week.
      */
     @Transactional(readOnly = true)
     public Home home() {
@@ -49,7 +58,7 @@ public class HomeService {
         long minMs = settings.minWatchMs();
         List<FilmCard> continueWatching = cards(BrowseRules.continueWatching(library, minMs), minMs);
         WeeklyTheme theme = WeeklyThemeSelector.choose(LocalDate.now(clock),
-            library.stream().map(FilmView::film).toList());
+            library.stream().map(FilmView::film).toList(), holidayOverrides);
         Map<Long, FilmView> byId = library.stream()
             .collect(Collectors.toMap(v -> v.film().getId(), Function.identity()));
         List<FilmCard> themeFilms = theme.films().stream().map(Film::getId).map(byId::get)

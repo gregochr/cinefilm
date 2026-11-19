@@ -140,6 +140,23 @@ describe('Home rows', () => {
     expect(screen.queryByRole('region', { name: heading })).not.toBeInTheDocument();
   });
 
+  it('shows a holiday theme like any other: its title as the row heading and its films', async () => {
+    const home = structuredClone(fixtures.home);
+    home.weeklyTheme = {
+      title: 'This week: Christmas',
+      caption: 'A new theme every Monday',
+      kind: 'holiday',
+      value: 'christmas',
+      films: [film(21, 'Die Hard'), film(22, 'Gremlins')],
+    };
+    installFetch((m, url) => (url === '/api/home' ? respond(home) : null));
+    renderApp('/');
+    const row = await screen.findByRole('region', { name: 'This week: Christmas' });
+    expect(within(row).getByText('A new theme every Monday')).toBeInTheDocument();
+    expect(within(row).getByRole('link', { name: /Die Hard/ })).toBeInTheDocument();
+    expect(within(row).getByRole('link', { name: /Gremlins/ })).toBeInTheDocument();
+  });
+
   it('omits the theme row when the theme has no films', async () => {
     homeWith({
       hero: film(5, 'Zodiac'),

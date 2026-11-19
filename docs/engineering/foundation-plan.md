@@ -75,7 +75,11 @@ cache only changes that helper.
 - **Recently added:** `addedAt` within 30 days, newest first. **Not watched in years:** watched, `lastPlayedAt`
   more than 5 years ago (or never played but imported as watched long ago), oldest first.
 - **Weekly theme (decision 4):** chosen deterministically from the ISO week (Monday start) and the library
-  contents: a decade, a genre or a director with at least 5 films. Same input ⇒ same theme all week.
+  contents: a decade, a genre or a director with at least 5 films. Same input ⇒ same theme all week. In Halloween
+  week (Monday on or before 24 Oct) and Christmas week (Monday on or before 18 Dec), Monday to Sunday, the theme is
+  `kind: "holiday"`, `value: "halloween"` (genre Horror) or `"christmas"` (TMDB keyword `christmas`, overridden by
+  `cinefilm.holiday.christmas.include` / `.exclude`, TMDB ids; exclude beats include beats the keyword), with the
+  usual oldest-first 12; fewer than 5 matching films falls back to the normal rotation.
 - **Search (decision 5):** word-prefix on title, cast names, director names and the collection name: every query word must start a different word of one name, ignoring case, accents, apostrophes and punctuation (`SearchText`, shared test vectors in `docs/design/search/vectors.json`); no typo matching on the server.
 - **Sort:** `title` (by sortTitle), `year`, `added` (default, newest first).
 - **Preferences (decision 2, 12):** quality, audio and subtitle choices and the last edition are remembered per film.
