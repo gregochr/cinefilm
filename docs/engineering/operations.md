@@ -82,11 +82,6 @@ allowance, read from the login reply (20 on a free account, 1000 on VIP; 20 unti
 reached. Each file is downloaded once and kept (`opensubtitles_reference`). Checks run after each search run and scan,
 at start-up and daily at 06:30 (London).
 
-**Christmas week overrides** (optional): Home's Christmas week shows films TMDB tags `christmas`. To add films it misses or
-drop ones it wrongly catches, add comma-separated TMDB ids to `~/cinefilm/.env` as `CINEFILM_HOLIDAY_CHRISTMAS_INCLUDE=` and
-`CINEFILM_HOLIDAY_CHRISTMAS_EXCLUDE=` (exclude beats include beats the keyword), then recreate the container
-(`cd ~/cinefilm && export CINEFILM_VERSION=$(cat .deployed-version) && docker compose up -d`); a restart alone does not re-read `.env`.
-
 **IMDb and Rotten Tomatoes ratings** come from OMDb and are off while `OMDB_API_KEY` is blank (Admin then says
 *Ratings need an OMDb API key*). Get a free key at https://www.omdbapi.com/apikey.aspx (1,000 requests a day) and put
 it in `~/cinefilm/.env` by editing the `OMDB_API_KEY=` line; do not paste it into chat or a commit. OMDb takes the key

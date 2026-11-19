@@ -14,7 +14,7 @@ import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmDtos.FilmCard;
 import gregochr.cinefilm.film.FilmView;
-import gregochr.cinefilm.film.HolidayOverrides;
+import gregochr.cinefilm.film.ChristmasOverrides;
 import gregochr.cinefilm.film.LibraryLoader;
 import gregochr.cinefilm.settings.ServerSettingsService;
 import gregochr.cinefilm.film.WeeklyTheme;
@@ -26,6 +26,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -42,8 +43,11 @@ class HomeServiceTest {
     @Mock
     private ServerSettingsService settings;
 
+    @Mock
+    private ChristmasOverrides christmasOverrides;
+
     private HomeService service(Clock clock) {
-        return new HomeService(loader, clock, settings, HolidayOverrides.NONE);
+        return new HomeService(loader, clock, settings, christmasOverrides);
     }
 
     private static Clock at(String instant) {
@@ -172,11 +176,10 @@ class HomeServiceTest {
     @Test
     void inChristmasWeekTheThemeIsChristmasFilmsAndTheExcludeListApplies() {
         libraryIs(libraryWithSix("Comedy", "christmas"));
-        HomeService excluding = new HomeService(loader, at("2026-12-14T00:30:00Z"), settings,
-            new HolidayOverrides(List.of(), List.of(1000L)));
 
         Home withKeyword = service(at("2026-12-14T00:30:00Z")).home();
-        Home withExclude = excluding.home();
+        when(christmasOverrides.excludes()).thenReturn(Set.of(1000L));
+        Home withExclude = service(at("2026-12-14T00:30:00Z")).home();
 
         assertThat(withKeyword.weeklyTheme().value()).isEqualTo("christmas");
         assertThat(withKeyword.weeklyTheme().title()).isEqualTo("This week: Christmas");

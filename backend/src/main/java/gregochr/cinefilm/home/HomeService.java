@@ -5,7 +5,7 @@ import gregochr.cinefilm.film.Film;
 import gregochr.cinefilm.film.FilmDtos.FilmCard;
 import gregochr.cinefilm.film.FilmMapper;
 import gregochr.cinefilm.film.FilmView;
-import gregochr.cinefilm.film.HolidayOverrides;
+import gregochr.cinefilm.film.ChristmasOverrides;
 import gregochr.cinefilm.film.LibraryLoader;
 import gregochr.cinefilm.film.WeeklyTheme;
 import gregochr.cinefilm.film.WeeklyThemeSelector;
@@ -31,18 +31,18 @@ public class HomeService {
     private final LibraryLoader loader;
     private final Clock clock;
     private final ServerSettingsService settings;
-    private final HolidayOverrides holidayOverrides;
+    private final ChristmasOverrides christmasOverrides;
 
     /**
      * Creates the service over the library loader, the application clock, the server settings and the owner's
      * Christmas overrides.
      */
     public HomeService(LibraryLoader loader, Clock clock, ServerSettingsService settings,
-                       HolidayOverrides holidayOverrides) {
+                       ChristmasOverrides christmasOverrides) {
         this.loader = loader;
         this.clock = clock;
         this.settings = settings;
-        this.holidayOverrides = holidayOverrides;
+        this.christmasOverrides = christmasOverrides;
     }
 
     /**
@@ -58,7 +58,8 @@ public class HomeService {
         long minMs = settings.minWatchMs();
         List<FilmCard> continueWatching = cards(BrowseRules.continueWatching(library, minMs), minMs);
         WeeklyTheme theme = WeeklyThemeSelector.choose(LocalDate.now(clock),
-            library.stream().map(FilmView::film).toList(), holidayOverrides);
+            library.stream().map(FilmView::film).toList(), christmasOverrides.includes(),
+            christmasOverrides.excludes());
         Map<Long, FilmView> byId = library.stream()
             .collect(Collectors.toMap(v -> v.film().getId(), Function.identity()));
         List<FilmCard> themeFilms = theme.films().stream().map(Film::getId).map(byId::get)
