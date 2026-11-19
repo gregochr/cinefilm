@@ -35,10 +35,14 @@ public class ChristmasOverrides {
         return ids(ChristmasChoice.EXCLUDE);
     }
 
-    /** Records the choice for a film, replacing an earlier one (so a film never has both). */
+    /**
+     * Records the choice for a film, changing an earlier one in place (so a film never has both, and the row keeps
+     * the time it was first made).
+     */
     @Transactional
     public void set(long tmdbId, ChristmasChoice choice) {
-        repository.save(new ChristmasOverride(tmdbId, choice, clock.instant()));
+        repository.findById(tmdbId).ifPresentOrElse(row -> row.setChoice(choice),
+            () -> repository.save(new ChristmasOverride(tmdbId, choice, clock.instant())));
     }
 
     /** Forgets the owner's choice for a film, so the keyword decides again. A film with none is left alone. */

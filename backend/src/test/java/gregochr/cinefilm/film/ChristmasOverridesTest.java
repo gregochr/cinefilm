@@ -1,18 +1,16 @@
 package gregochr.cinefilm.film;
 
+import static gregochr.cinefilm.TestData.CLOCK;
+import static gregochr.cinefilm.TestData.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,13 +20,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class ChristmasOverridesTest {
 
-    private static final Instant NOW = Instant.parse("2026-11-19T10:00:00Z");
+    private static final Instant EARLIER = NOW.minusSeconds(86_400);
 
     @Mock
     private ChristmasOverrideRepository repository;
 
     private ChristmasOverrides service() {
-        return new ChristmasOverrides(repository, Clock.fixed(NOW, ZoneOffset.UTC));
+        return new ChristmasOverrides(repository, CLOCK);
     }
 
     @Test
@@ -64,7 +62,9 @@ class ChristmasOverridesTest {
     }
 
     @Test
-    void setSavesOneRowWithTheChoiceAndTheClocksStamp() {
+    void aFilmWithNoRowGetsANewOneStampedWithTheClock() {
+        when(repository.findById(1572L)).thenReturn(Optional.empty());
+
         service().set(1572L, ChristmasChoice.INCLUDE);
 
         verify(repository).save(argThat((ChristmasOverride row) -> row.getTmdbId() == 1572L
@@ -72,24 +72,26 @@ class ChristmasOverridesTest {
     }
 
     @Test
-    void flippingAnIncludeToAnExcludeReplacesTheOneRowForTheFilm() {
-        Map<Long, ChristmasOverride> table = new HashMap<>();
-        when(repository.save(any(ChristmasOverride.class))).thenAnswer(call -> {
-            ChristmasOverride row = call.getArgument(0);
-            table.put(row.getTmdbId(), row);
-            return row;
-        });
-        when(repository.findByChoice(ChristmasChoice.INCLUDE)).thenAnswer(call -> rows(table, ChristmasChoice.INCLUDE));
-        when(repository.findByChoice(ChristmasChoice.EXCLUDE)).thenAnswer(call -> rows(table, ChristmasChoice.EXCLUDE));
-        ChristmasOverrides service = service();
+    void aFilmWithARowHasItsChoiceChangedInPlaceAndKeepsItsCreatedAt() {
+        ChristmasOverride existing = new ChristmasOverride(700L, ChristmasChoice.INCLUDE, EARLIER);
+        when(repository.findById(700L)).thenReturn(Optional.of(existing));
 
-        service.set(700L, ChristmasChoice.INCLUDE);
-        assertThat(service.includes()).containsExactly(700L);
-        service.set(700L, ChristmasChoice.EXCLUDE);
+        service().set(700L, ChristmasChoice.EXCLUDE);
 
-        assertThat(table).hasSize(1);
-        assertThat(service.includes()).isEmpty();
-        assertThat(service.excludes()).containsExactly(700L);
+        assertThat(existing.getChoice()).isEqualTo(ChristmasChoice.EXCLUDE);
+        assertThat(existing.getCreatedAt()).isEqualTo(EARLIER);
+        assertThat(existing.getTmdbId()).isEqualTo(700L);
+    }
+
+    @Test
+    void settingTheSameChoiceAgainChangesNothing() {
+        ChristmasOverride existing = new ChristmasOverride(700L, ChristmasChoice.EXCLUDE, EARLIER);
+        when(repository.findById(700L)).thenReturn(Optional.of(existing));
+
+        service().set(700L, ChristmasChoice.EXCLUDE);
+
+        assertThat(existing.getChoice()).isEqualTo(ChristmasChoice.EXCLUDE);
+        assertThat(existing.getCreatedAt()).isEqualTo(EARLIER);
     }
 
     @Test
@@ -97,9 +99,5 @@ class ChristmasOverridesTest {
         service().remove(700L);
 
         verify(repository).deleteById(700L);
-    }
-
-    private static List<ChristmasOverride> rows(Map<Long, ChristmasOverride> table, ChristmasChoice choice) {
-        return table.values().stream().filter(r -> r.getChoice() == choice).toList();
     }
 }
