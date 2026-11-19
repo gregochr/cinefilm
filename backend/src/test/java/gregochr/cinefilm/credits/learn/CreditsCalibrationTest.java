@@ -74,10 +74,10 @@ class CreditsCalibrationTest {
     }
 
     @Test
-    void theGridHasTwentyThousandPointsInANestedOrderAndEachDecodesToItsNumbers() {
+    void theGridHasFortyTwoThousandPointsInANestedOrderAndEachDecodesToItsNumbers() {
         int expected = 0;
-        for (int l = 0; l < 5; l++) {
-            for (int d = 0; d < 4; d++) {
+        for (int l = 0; l < 7; l++) {
+            for (int d = 0; d < 6; d++) {
                 for (int g = 0; g < 4; g++) {
                     for (int t = 0; t < 5; t++) {
                         for (int s = 0; s < 10; s++) {
@@ -94,15 +94,28 @@ class CreditsCalibrationTest {
                 }
             }
         }
-        assertThat(expected).isEqualTo(CreditsCalibration.POINTS).isEqualTo(20_000);
+        assertThat(expected).isEqualTo(CreditsCalibration.POINTS).isEqualTo(42_000);
         assertThat(CreditsCalibration.params(0)).isEqualTo(new SegmenterParams(0, 0, 2, 5, 0.5, 0.5));
-        assertThat(CreditsCalibration.params(19_999)).isEqualTo(new SegmenterParams(3, 10, 6, 160, 0.95, 0.95));
+        assertThat(CreditsCalibration.params(41_999)).isEqualTo(new SegmenterParams(5, 20, 6, 160, 0.95, 0.95));
         assertThat(CreditsCalibration.GAP_FRAMES).containsExactly(2, 3, 4, 6);
-        assertThat(CreditsCalibration.LAMBDAS).containsExactly(0, 0.5, 1, 2, 3);
-        assertThat(CreditsCalibration.DELTAS).containsExactly(0, 2, 5, 10);
+        assertThat(CreditsCalibration.LAMBDAS).containsExactly(0, 0.5, 1, 2, 3, 4, 5);
+        assertThat(CreditsCalibration.DELTAS).containsExactly(0, 2, 5, 10, 15, 20);
         assertThat(CreditsCalibration.THETAS).containsExactly(0.5, 0.7, 0.8, 0.9, 0.95);
         assertThat(CreditsCalibration.SIGMAS).containsExactly(5, 10, 15, 20, 30, 40, 60, 80, 120, 160);
         assertThat(CreditsCalibration.THETA_DENSES).containsExactly(0.5, 0.7, 0.8, 0.9, 0.95);
+    }
+
+    @Test
+    void theFirstAndLastPointsRoundTripThroughTheirIndices() {
+        assertThat(CreditsCalibration.POINTS).isEqualTo(42_000);
+        assertThat(CreditsCalibration.point(0, 0, 0, 0, 0, 0)).isZero();
+        assertThat(CreditsCalibration.point(6, 5, 3, 4, 9, 4)).isEqualTo(41_999);
+        assertThat(CreditsCalibration.params(0)).isEqualTo(new SegmenterParams(0, 0, 2, 5, 0.5, 0.5));
+        assertThat(CreditsCalibration.params(41_999)).isEqualTo(new SegmenterParams(5, 20, 6, 160, 0.95, 0.95));
+        assertThat(CreditsCalibration.point(CreditsCalibration.LAMBDAS.length - 1,
+            CreditsCalibration.DELTAS.length - 1, CreditsCalibration.GAP_FRAMES.length - 1,
+            CreditsCalibration.THETAS.length - 1, CreditsCalibration.SIGMAS.length - 1,
+            CreditsCalibration.THETA_DENSES.length - 1)).isEqualTo(CreditsCalibration.POINTS - 1);
     }
 
     @Test
@@ -233,14 +246,14 @@ class CreditsCalibrationTest {
     @Test
     void whenEveryPointTiesTheMostConservativeCornerIsChosen() {
         // No credits at all (p 0.01 everywhere): every point is NOT_FOUND (the one run is an island) with no
-        // violation, so the counts are the same at all 20000 points and the tie rules pick lambda 3, delta 10,
+        // violation, so the counts are the same at all 42000 points and the tie rules pick lambda 5, delta 20,
         // G 2 frames, sigma 160, theta 0.95, theta_d 0.95.
         Film film = film(40, BASE + 20 * STEP, Optional.of(FrameKind.PLATE));
         Map<Integer, Prediction> sets = everySet(prediction(constant(0.01, 40)));
 
         Choice choice = CreditsCalibration.chooseFinal(List.of(dev(0, film, sets)), 1);
 
-        assertThat(choice.params()).isEqualTo(new SegmenterParams(3, 10, 2, 160, 0.95, 0.95));
+        assertThat(choice.params()).isEqualTo(new SegmenterParams(5, 20, 2, 160, 0.95, 0.95));
         assertThat(choice.counts()).isEqualTo(new Counts(0, 0, 0, 0, 1, 1));
     }
 
@@ -255,16 +268,16 @@ class CreditsCalibrationTest {
 
     @Test
     void earlyFoundFilmsAndViolationsAreCountedWhenNoPointAvoidsThem() {
-        // 40 frames of 0.9999 (ln 9999 = 9.21): FOUND at every point (S >= 39 * 6.2 = 242 >= 160) with t at or
+        // 40 frames of 0.999999 (ln 999999 = 13.8): FOUND at every point (S >= 39 * 8.8 = 343 >= 160) with t at or
         // near index 0, far before the target at 245000 (earlyError about -150000), and the 28 negative frames
-        // before 240000 score 28 * 6.2 = 174 >= 0.8 * 160 = 128 at every point. Plex DARK, goal about -145000: no
+        // before 240000 score 28 * 8.8 = 246 >= 0.8 * 160 = 128 at every point. Plex DARK, goal about -145000: no
         // goal count but the not-found one is also 0. All points tie: the conservative corner.
         Film film = film(40, BASE + 29 * STEP, Optional.of(FrameKind.DARK));
-        Map<Integer, Prediction> sets = everySet(prediction(constant(0.9999, 40)));
+        Map<Integer, Prediction> sets = everySet(prediction(constant(0.999999, 40)));
 
         Choice choice = CreditsCalibration.chooseFinal(List.of(dev(0, film, sets)), 1);
 
-        assertThat(choice.params()).isEqualTo(new SegmenterParams(3, 10, 2, 160, 0.95, 0.95));
+        assertThat(choice.params()).isEqualTo(new SegmenterParams(5, 20, 2, 160, 0.95, 0.95));
         assertThat(choice.counts()).isEqualTo(new Counts(1, 1, 1, 0, 0, 1));
     }
 

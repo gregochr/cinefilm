@@ -103,17 +103,18 @@ class EvaluationReportTest {
             new CreditsTrainJob.Hashes("d", "l"));
 
         assertThat(json.get("grid").get("gapFrames").toString()).isEqualTo("[2,3,4,6]");
-        assertThat(json.get("grid").get("lambda").toString()).isEqualTo("[0.0,0.5,1.0,2.0,3.0]");
-        assertThat(json.get("grid").get("delta").toString()).isEqualTo("[0.0,2.0,5.0,10.0]");
+        assertThat(json.get("grid").get("lambda").toString()).isEqualTo("[0.0,0.5,1.0,2.0,3.0,4.0,5.0]");
+        assertThat(json.get("grid").get("delta").toString()).isEqualTo("[0.0,2.0,5.0,10.0,15.0,20.0]");
         assertThat(json.get("grid").get("theta").toString()).isEqualTo("[0.5,0.7,0.8,0.9,0.95]");
         assertThat(json.get("grid").get("sigma").toString())
             .isEqualTo("[5.0,10.0,15.0,20.0,30.0,40.0,60.0,80.0,120.0,160.0]");
         assertThat(json.get("grid").get("thetaDense").toString()).isEqualTo("[0.5,0.7,0.8,0.9,0.95]");
+        assertThat(json.get("grid").get("points").intValue()).isEqualTo(42_000);
         assertThat(json.get("outer").get("3").get("run").stringValue()).isEqualTo("b");
         assertThat(json.get("outer").get("4").get("run").stringValue()).isEqualTo("a");
         assertThat(json.get("outer").get("0").get("params").toString()).isEqualTo("{\"lambda\":0.0,\"delta\":0.0,"
             + "\"gapFrames\":2,\"sigma\":5.0,\"theta\":0.5,\"thetaDense\":0.5}");
-        assertThat(json.get("final").get("params").toString()).isEqualTo("{\"lambda\":3.0,\"delta\":10.0,"
+        assertThat(json.get("final").get("params").toString()).isEqualTo("{\"lambda\":5.0,\"delta\":20.0,"
             + "\"gapFrames\":6,\"sigma\":160.0,\"theta\":0.95,\"thetaDense\":0.95}");
         assertThat(json.get("final").get("counts").toString()).isEqualTo("{\"early15\":1,\"early5\":2,"
             + "\"violations\":3,\"within10\":4,\"within60\":5,\"films\":6}");

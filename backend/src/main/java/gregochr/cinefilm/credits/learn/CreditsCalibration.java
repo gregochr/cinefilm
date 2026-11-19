@@ -15,7 +15,7 @@ import java.util.function.ToIntFunction;
  * Pure: it takes records, loads no model and reads no file.
  *
  * <p>The grid has {@value #POINTS} points. Steps 1 to 3 depend on {@code lambda}, {@code delta} and {@code G}
- * only, so {@link FilmScore#coarsePart} runs 80 times per film and prediction set, and {@link FilmScore#finish} for
+ * only, so {@link FilmScore#coarsePart} runs 168 times per film and prediction set, and {@link FilmScore#finish} for
  * the other 250 numbers under each. Running counts are kept per grid point; no film's result is stored.
  *
  * <p><strong>Prediction sets.</strong> An ensemble is identified by the folds all its models exclude, as a bit mask
@@ -29,16 +29,16 @@ final class CreditsCalibration {
     /** The development folds. */
     static final int FOLDS = 5;
 
-    static final double[] LAMBDAS = {0, 0.5, 1, 2, 3};
-    static final double[] DELTAS = {0, 2, 5, 10};
+    static final double[] LAMBDAS = {0, 0.5, 1, 2, 3, 4, 5};
+    static final double[] DELTAS = {0, 2, 5, 10, 15, 20};
     /** {@code G} of 10, 15, 20 and 30 s, in coarse frames. */
     static final int[] GAP_FRAMES = {2, 3, 4, 6};
     static final double[] THETAS = {0.5, 0.7, 0.8, 0.9, 0.95};
     static final double[] SIGMAS = {5, 10, 15, 20, 30, 40, 60, 80, 120, 160};
     static final double[] THETA_DENSES = {0.5, 0.7, 0.8, 0.9, 0.95};
 
-    /** The grid's size: 5 x 4 x 4 x 5 x 10 x 5. */
-    static final int POINTS = 20_000;
+    /** The grid's size: 7 x 6 x 4 x 5 x 10 x 5. */
+    static final int POINTS = 42_000;
 
     /** The early limit of ranking level 1, in ms. */
     static final long EARLY_FAR_MS = -15_000;
