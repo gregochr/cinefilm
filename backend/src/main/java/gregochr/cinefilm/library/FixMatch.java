@@ -6,6 +6,7 @@ import gregochr.cinefilm.config.NotFoundException;
 import gregochr.cinefilm.config.ServiceUnavailableException;
 import gregochr.cinefilm.film.Edition;
 import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.FilmMatchFixed;
 import gregochr.cinefilm.film.FilmPreference;
 import gregochr.cinefilm.film.FilmPreferenceRepository;
 import gregochr.cinefilm.film.FilmRepository;
@@ -176,6 +177,7 @@ public class FixMatch {
             }
             MatchApplied applied = tx.execute(status -> settle(filmId, movie));
             events.publishEvent(new LibraryChanged());
+            events.publishEvent(new FilmMatchFixed());
             return applied;
         });
     }

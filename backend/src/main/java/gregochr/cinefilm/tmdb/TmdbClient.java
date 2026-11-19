@@ -12,9 +12,12 @@ import java.time.Duration;
 import gregochr.cinefilm.film.SpokenLanguages;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import org.slf4j.Logger;
@@ -140,6 +143,20 @@ public class TmdbClient implements TmdbApi {
     @Override
     public Optional<String> imdbId(long id) {
         return get(b -> b.path("/3/movie/{id}/external_ids").build(id)).map(body -> text(body, "imdb_id"));
+    }
+
+    @Override
+    public Optional<List<String>> keywords(long id) {
+        return get(b -> b.path("/3/movie/{id}/keywords").build(id)).map(body -> {
+            Set<String> names = new LinkedHashSet<>();
+            for (JsonNode k : body.path("keywords")) {
+                String name = text(k, "name");
+                if (name != null) {
+                    names.add(name.strip().toLowerCase(Locale.ROOT));
+                }
+            }
+            return List.copyOf(names);
+        });
     }
 
     @Override

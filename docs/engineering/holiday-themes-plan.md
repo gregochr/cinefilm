@@ -1,0 +1,66 @@
+# Holiday themes plan (Halloween and Christmas weeks)
+
+Status: plan, owner answers 2026-11-18. Not built.
+
+## What the owner wants
+
+Home's "This week" row (`WeeklyThemeSelector`, decision 4) is a decade, genre or director chosen from the ISO week.
+Two weeks a year it must instead be **horror** (Halloween) and **Christmas films** (Christmas). Which films count as
+Christmas is the hard part (Die Hard, Gremlins, Trading Places, Home Alone...).
+
+## Decisions (owner, 2026-11-18)
+
+1. **Christmas rule: TMDB keyword plus an override list.** A film is Christmas if TMDB tags it with the `christmas`
+   keyword (id 207317), unless the owner excludes it, or it is on the owner's include list. Die Hard carries the tag.
+2. **Weeks: the Monday on or before 24 Oct (Halloween) and 18 Dec (Christmas)**, each running Monday to Sunday.
+   In 2026: Mon 19 Oct and Mon 14 Dec. Both are ordinary ISO weeks, so the Monday rollover and the caption stay true.
+   Rationale: the theme shows before the day, so there is time to watch.
+
+Horror needs no new data: the `Horror` genre already exists on `Film.genres`.
+
+## Design
+
+### Selector (backend, `film` package)
+
+- `WeeklyThemeSelector.choose(date, library)` first asks `HolidayWeeks.holidayFor(date)` -> `HALLOWEEN`, `CHRISTMAS` or
+  empty. Pure function of the date: the Monday on or before 24 Oct / 18 Dec of that year, week = that Monday + 6 days.
+- Holiday week: kind `holiday`, value `halloween` / `christmas`, titles "This week: Halloween" /
+  "This week: Christmas", caption stays the standing one. Films: Halloween = genre Horror; Christmas = `isChristmas`.
+- Same `pick` (oldest first, 12 max). **Fallback:** fewer than `MIN_FILMS` (5) matching films -> use the normal
+  rotation, so a small library never gets an empty or thin row.
+- Frontend needs no change if it renders `kind`/`value` generically (check `ThemeDto` use; add a test either way).
+
+### Christmas data
+
+- Flyway `V33__film_keywords.sql`: new nullable `keywords_fetched_at` and a `film_keyword(film_id, keyword)` element
+  table, mirroring `genres`. Store only the keyword names (small), so the same data can later drive other themes.
+- Fetch from TMDB `/movie/{id}/keywords` alongside the existing languages fetch pattern
+  (`languagesFetchedAt` in `LibraryIngest`, `FilmRepository` "not yet fetched" queries): new films get their keywords from the
+  backfill that runs after every scan, import and match fix, which walks films with `keywords_fetched_at is null`. Reuse the existing TMDB client, rate limit and
+  failure handling; a failed fetch leaves the timestamp null so it is retried.
+- Override list in config: `cinefilm.holiday.christmas.include` / `.exclude`, comma-separated TMDB ids
+  (`application.properties`, bound by a `@ConfigurationProperties` record). Exclude beats include beats keyword.
+- `isChristmas(film)` = not excluded and (included or keywords contain `christmas`). Keywords are read lazily, so the
+  home query must fetch them (fetch join or batch) to avoid N+1; check how `HomeService` loads genres and do the same.
+
+## Slices (each <= 1,500 changed lines, Sonnet builds, gates per CLAUDE.md)
+
+1. **Keywords data**: migration, entity field, TMDB fetch, ingest + backfill, tests (incl. the integration package for
+   the migration). Changelog entry. Merges alone, changes no behaviour.
+2. **Holiday weeks**: `HolidayWeeks`, override config, selector changes, `HomeService` loading, tests (both holiday
+   weeks, week boundaries, year edges, fallback under 5 films, include/exclude precedence), frontend test, changelog,
+   handover README decision 4 gets one line.
+
+## Tests that matter
+
+- Date edges: 18 Dec on each weekday (the Monday-on-or-before shifts); 24 Oct likewise; Sun 13 Dec is not Christmas,
+  Mon 14 Dec is; Sun 20 Dec is the last Christmas day.
+- A film with only the keyword, only on the include list, on both include and exclude, and with horror genre in
+  Halloween week; the 12-film cap and ordering.
+- `TestClockConfig` already pins the clock; the selector takes a date so no new clock plumbing.
+
+## Open points for the review
+
+- TMDB keyword coverage is uneven for older or obscure films; the override list is the safety valve. Decide after the
+  backfill whether to print the Christmas matches in the admin/log for a sanity check.
+- Whether the keywords table should be shared with a later "theme by keyword" feature (not in scope).

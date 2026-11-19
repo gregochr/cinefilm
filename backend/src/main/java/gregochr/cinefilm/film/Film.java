@@ -77,6 +77,15 @@ public class Film {
     @Column(name = "genre")
     private Set<String> genres = new LinkedHashSet<>();
 
+    /** TMDB's keywords for the film, lower case and trimmed (for example {@code christmas}). */
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "film_keyword", joinColumns = @JoinColumn(name = "film_id"))
+    @Column(name = "keyword", length = 100)
+    private Set<String> keywords = new LinkedHashSet<>();
+
+    /** When TMDB was last asked for the keywords (a film TMDB no longer has is stamped too); null = not yet. */
+    private Instant keywordsFetchedAt;
+
     @OneToMany(mappedBy = "film", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("id")
     private List<Edition> editions = new ArrayList<>();
@@ -211,6 +220,9 @@ public class Film {
             originalLanguage = null;
             spokenLanguages = null;
             languagesFetchedAt = null;
+            // The keywords belong to the old TMDB film too: forget them so the backfill asks again.
+            keywords.clear();
+            keywordsFetchedAt = null;
         }
         this.tmdbId = newTmdbId;
     }
