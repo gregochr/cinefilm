@@ -13,6 +13,7 @@ import adminAttention from './fixtures/admin-attention.json';
 import adminAttentionMany from './fixtures/admin-attention-many.json';
 import adminFullNeedMany from './fixtures/admin-full-need-many.json';
 import adminForcedNeedMany from './fixtures/admin-forced-need-many.json';
+import { christmasFixture } from './christmasFixture.js';
 import adminSummary from './fixtures/admin-summary.json';
 import adminScan from './fixtures/admin-scan.json';
 import adminGrouping from './fixtures/admin-grouping.json';
@@ -42,6 +43,7 @@ export const fixtures = {
   person,
   collection,
   collections,
+  christmas: christmasFixture(),
   adminScan,
   adminAttention,
   adminAttentionMany,
@@ -152,6 +154,7 @@ export function defaultRoute(method, url, init = {}) {
   // Empty on purpose: a served chart would add a column button and a record read to every Admin Playback test that
   // lists the page's buttons; the chart's own tests serve `fixtures.adminPlaybackChart`.
   if (path === '/api/admin/playback-health/chart') return json({ sessions: [] });
+  if (path === '/api/admin/christmas') return json(christmasFixture());
   if (path === '/api/admin/subtitles') return json(adminSubtitles);
   // The per-file routes of an Admin or Film detail subtitle row, shaped as the server answers them.
   const subtitleRoute = path.match(/^\/api\/admin\/subtitles\/(\d+)(\/\w+)?$/);

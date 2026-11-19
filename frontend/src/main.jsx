@@ -16,6 +16,7 @@ import './styles/player.css';
 import './styles/search.css';
 import './styles/editeditions.css';
 import './styles/subtitles.css';
+import './styles/christmas.css';
 import App from './App.jsx';
 
 createRoot(document.getElementById('root')).render(

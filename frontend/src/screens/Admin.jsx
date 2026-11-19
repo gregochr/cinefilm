@@ -42,8 +42,8 @@ function AdminNav() {
         ))}
       </nav>
       <p className="admin__note">
-        Each section has its own address: /admin, /admin/subtitles, /admin/library, /admin/playback,
-        /admin/settings.
+        Each section has its own address: /admin, /admin/subtitles, /admin/library,
+        /admin/christmas, /admin/playback, /admin/settings.
       </p>
     </div>
   );
