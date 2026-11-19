@@ -78,10 +78,11 @@ final class CreditsSegmenter {
      * @param params the calibrated numbers
      * @return the result; {@code NOT_FOUND} when there are fewer than {@value #MIN_FRAMES} frames, or when dropping
      *     islands leaves fewer than {@value #MIN_FRAMES} frames
-     * @throws IllegalArgumentException when the arrays differ in length, offsets are not strictly ascending or a
-     *     {@code p} is NaN
+     * @throws IllegalArgumentException when {@code logitPi} is not finite, the arrays differ in length, offsets are
+     *     not strictly ascending or a {@code p} is NaN
      */
     static Coarse coarse(long[] offsets, double[] p, double logitPi, SegmenterParams params) {
+        checkFinite(logitPi);
         if (offsets.length != p.length) {
             throw new IllegalArgumentException("offsets and p differ in length: " + offsets.length + ", " + p.length);
         }
@@ -177,10 +178,11 @@ final class CreditsSegmenter {
      * @param lambda the per-frame penalty
      * @return the largest {@code S(a, b)} with {@code b - a >= 6} and {@code b <= end}, or negative infinity when
      *     {@code end < 6}
-     * @throws IllegalArgumentException when {@code end} is above the length of {@code p}, or a {@code p} in range is
-     *     NaN
+     * @throws IllegalArgumentException when {@code logitPi} is not finite, {@code end} is above the length of
+     *     {@code p}, or a {@code p} in range is NaN
      */
     static double bestStretch(double[] p, int end, double logitPi, double lambda) {
+        checkFinite(logitPi);
         if (end > p.length) {
             throw new IllegalArgumentException("end is past the last frame: " + end + " of " + p.length);
         }
@@ -190,6 +192,12 @@ final class CreditsSegmenter {
         double[] prefix = prefix(scores(p, end, logitPi, lambda));
         int[] best = best(prefix, end);
         return prefix[best[1]] - prefix[best[0]];
+    }
+
+    private static void checkFinite(double logitPi) {
+        if (!Double.isFinite(logitPi)) {
+            throw new IllegalArgumentException("logitPi must be finite: " + logitPi);
+        }
     }
 
     /** {@code logit(clamp(p_i)) - logitPi - lambda} for the first {@code end} frames. */

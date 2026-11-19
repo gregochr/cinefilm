@@ -82,6 +82,18 @@ class CreditsSegmenterTest {
         assertThat(c.margin()).isCloseTo(margin, within(TOLERANCE));
     }
 
+    /**
+     * Runs the dense step from the coarse start on a grid from {@code t - 15 s} to {@code t + 35 s} that is high from
+     * {@code t + highFrom} on, and checks {@code f = t + expected}.
+     */
+    private static void assertDenseStart(Coarse c, long highFrom, long expected) {
+        long t = c.t().getAsLong();
+        long[] offs = grid(t - 15_000, t + 35_000);
+        double[] p = denseP(offs, o -> o >= t + highFrom);
+
+        assertThat(CreditsSegmenter.dense(t, offs, p, PARAMS.thetaDense())).hasValue(t + expected);
+    }
+
     private static void assertNotFound(Coarse c) {
         assertThat(c.verdict()).isEqualTo(Verdict.NOT_FOUND);
         assertThat(c.t()).isEmpty();
@@ -109,6 +121,8 @@ class CreditsSegmenterTest {
         assertFound(c, 10, 30, 80);
         assertThat(c.bestScore()).isCloseTo(80, within(TOLERANCE));
         assertThat(c.minP()).isEqualTo(P_A);
+        // t = 150000; the dense frames are high from t - 2000: f = 148000.
+        assertDenseStart(c, -2_000, -2_000);
     }
 
     @Test
@@ -121,12 +135,18 @@ class CreditsSegmenterTest {
 
         assertFound(c, 24, 44, 80);
         assertThat(c.bestScore()).isCloseTo(80, within(TOLERANCE));
+        // The dense frames are high from t exactly: f = t.
+        assertDenseStart(c, 0, 0);
     }
 
     @Test
     void aMidCreditsGapShorterThanGIsBridged() {
         // A x20, F x2, A x20 after F x10: S(10, 52) = 80 - 8 + 80 = 152; the run of 2 is below G = 3.
-        assertFound(coarse(seq(F, 10, A, 20, F, 2, A, 20)), 10, 52, 152);
+        Coarse c = coarse(seq(F, 10, A, 20, F, 2, A, 20));
+
+        assertFound(c, 10, 52, 152);
+        // High from t - 6000: f is held at t - 5000.
+        assertDenseStart(c, -6_000, -5_000);
     }
 
     @Test
@@ -138,7 +158,10 @@ class CreditsSegmenterTest {
     @Test
     void aGapTooLongToBridgeLeavesTheLaterStretch() {
         // S(60, 85) = 100 beats S(10, 85) = 80 - 120 + 100 = 60 and S(10, 30) = 80.
-        assertFound(coarse(seq(F, 10, A, 20, F, 30, A, 25)), 60, 85, 100);
+        Coarse c = coarse(seq(F, 10, A, 20, F, 30, A, 25));
+
+        assertFound(c, 60, 85, 100);
+        assertDenseStart(c, -1_000, -1_000);
     }
 
     @Test
@@ -148,12 +171,18 @@ class CreditsSegmenterTest {
 
         assertFound(c, 10, 30, 80);
         assertThat(c.bestScore()).isCloseTo(80, within(TOLERANCE));
+        // High from t - 500: f = t - 500.
+        assertDenseStart(c, -500, -500);
     }
 
     @Test
     void anIsolatedFalsePositiveBeforeTheCreditsIsLeftOut() {
         // F x5, A, F x5, A x20: S(11, 31) = 80, and joining the lone frame costs 4 - 20 more than it gives.
-        assertFound(coarse(seq(F, 5, A, 1, F, 5, A, 20)), 11, 31, 80);
+        Coarse c = coarse(seq(F, 5, A, 1, F, 5, A, 20));
+
+        assertFound(c, 11, 31, 80);
+        // High from t + 1000: f = t + 1000.
+        assertDenseStart(c, 1_000, 1_000);
     }
 
     @Test
@@ -171,6 +200,8 @@ class CreditsSegmenterTest {
 
         assertFound(c, 14, 34, 80);
         assertThat(c.bestScore()).isCloseTo(88, within(TOLERANCE));
+        // The credits' text starts 2 s after the coarse frame: f = t + 2000.
+        assertDenseStart(c, 2_000, 2_000);
     }
 
     @Test
@@ -193,7 +224,11 @@ class CreditsSegmenterTest {
     @Test
     void epilogueCardsRunningIntoTheCreditsStartAtTheCards() {
         // F x10, cards A x8, F x2 (below G), A x20: S(10, 40) = 32 - 8 + 80 = 104.
-        assertFound(coarse(seq(F, 10, A, 8, F, 2, A, 20)), 10, 40, 104);
+        Coarse c = coarse(seq(F, 10, A, 8, F, 2, A, 20));
+
+        assertFound(c, 10, 40, 104);
+        // High from t - 3000: f = t - 3000.
+        assertDenseStart(c, -3_000, -3_000);
     }
 
     @Test
@@ -406,6 +441,22 @@ class CreditsSegmenterTest {
     }
 
     // ---- input checks of the coarse step ----
+
+    @Test
+    void aLogitPiThatIsNotFiniteIsRefused() {
+        double[] p = seq(A, 8);
+        for (double bad : new double[] {Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
+            String message = "logitPi must be finite: " + bad;
+            assertThatThrownBy(() -> CreditsSegmenter.coarse(offsets(8), p, bad, PARAMS))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage(message);
+            assertThatThrownBy(() -> CreditsSegmenter.coarse(offsets(3), new double[3], bad, PARAMS))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage(message);
+            assertThatThrownBy(() -> CreditsSegmenter.bestStretch(p, 8, bad, 0))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage(message);
+            assertThatThrownBy(() -> CreditsSegmenter.bestStretch(p, 3, bad, 0))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage(message);
+        }
+    }
 
     @Test
     void offsetsAndProbabilitiesMustBeTheSameLength() {
@@ -639,6 +690,35 @@ class CreditsSegmenterTest {
         double[] p = denseP(offsets, o -> o >= T - 3_000 && o <= T + 2_000);
 
         assertThat(CreditsSegmenter.dense(T, offsets, p, 0.9)).hasValue(T - 3_000);
+    }
+
+    @Test
+    void theDenseFallbackLeavesTheCoarseStartWhenNoWindowQualifies() {
+        // From the clean step: every dense frame is 0.5, below theta_d, so dense is empty and the start stays t.
+        Coarse c = coarse(seq(F, 10, A, 20));
+        long t = c.t().getAsLong();
+        long[] offs = grid(t - 15_000, t + 35_000);
+        double[] p = new double[offs.length];
+        Arrays.fill(p, 0.5);
+
+        assertFound(c, 10, 30, 80);
+        OptionalLong f = CreditsSegmenter.dense(t, offs, p, PARAMS.thetaDense());
+        assertThat(f).isEmpty();
+        assertThat(f.orElse(t)).isEqualTo(150_000);
+    }
+
+    @Test
+    void aDenseRangeCutShortAtTheFilesEndKeepsTheCoarseStart() {
+        // From the clean step: the file ends at t + 4500, so only ten frames [t, t + 4500] are high.
+        Coarse c = coarse(seq(F, 10, A, 20));
+        long t = c.t().getAsLong();
+        long[] offs = grid(t - 15_000, t + 4_500);
+        double[] p = denseP(offs, o -> o >= t);
+
+        assertFound(c, 10, 30, 80);
+        OptionalLong f = CreditsSegmenter.dense(t, offs, p, PARAMS.thetaDense());
+        assertThat(f).isEmpty();
+        assertThat(f.orElse(t)).isEqualTo(150_000);
     }
 
     @Test
