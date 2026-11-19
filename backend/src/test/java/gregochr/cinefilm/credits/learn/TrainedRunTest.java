@@ -58,6 +58,86 @@ class TrainedRunTest {
     }
 
     @Test
+    void aModelARunKeepsItsTypeAndHasNoEncoder() throws IOException {
+        TrainedRun loaded = TrainedRun.load(run, HASHES);
+
+        assertThat(loaded.type()).isEqualTo("gbt");
+        assertThat(loaded.encoder()).isNull();
+        assertThat(loaded.embeddingsDevSha256()).isNull();
+        assertThat(loaded.shipping()).allMatch(model -> model instanceof GradientBoostedTrees);
+        assertThat(loaded.pairs().values()).allMatch(model -> model instanceof GradientBoostedTrees);
+    }
+
+    @Test
+    void aLogregRunLoadsItsLogisticRegressionsAndKeepsTheEncoderAndTheEmbeddingsDevSha() throws IOException {
+        Path logreg = EvaluateFixtures.logregRun(temp, "train-lr");
+
+        TrainedRun loaded = TrainedRun.load(logreg, HASHES);
+
+        assertThat(loaded.name()).isEqualTo("train-lr");
+        assertThat(loaded.type()).isEqualTo("logreg");
+        assertThat(loaded.manifestSha256()).isEqualTo(TrainFixtures.manifestSha());
+        assertThat(loaded.encoder()).isEqualTo(new TrainedRun.Encoder("enc-sha", 2));
+        assertThat(loaded.embeddingsDevSha256()).isEqualTo("dev-sha");
+        assertThat(loaded.shipping()).hasSize(5).allMatch(model -> model instanceof LogisticRegression);
+        assertThat(loaded.pairs()).hasSize(10);
+        assertThat(loaded.triples()).hasSize(10).containsKeys("0,1,2", "2,3,4");
+        assertThat(loaded.pairs().values()).allMatch(model -> model instanceof LogisticRegression);
+        assertThat(loaded.triples().values()).allMatch(model -> model instanceof LogisticRegression);
+        assertThat(loaded.shipping().getFirst().base()).isEqualTo(Math.log(0.5 / 0.5));
+        assertThat(((LogisticRegression) loaded.shipping().getFirst()).dimension()).isEqualTo(2);
+    }
+
+    /** Changes the {@code logreg} run's {@code model.json} and checks that loading is refused with the message. */
+    private void logregRefusedAfter(Consumer<ObjectNode> change, String message) throws IOException {
+        Path logreg = EvaluateFixtures.logregRun(temp, "train-lr");
+        ObjectNode model = (ObjectNode) MAPPER.readTree(Files.readAllBytes(logreg.resolve("model.json")));
+        change.accept(model);
+        Files.write(logreg.resolve("model.json"), MAPPER.writeValueAsBytes(model));
+        assertThatThrownBy(() -> TrainedRun.load(logreg, HASHES)).isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("train-lr: " + message);
+    }
+
+    @Test
+    void aLogregRunMissingItsEncoderOrItsEmbeddingsDevShaIsRefused() throws IOException {
+        logregRefusedAfter(model -> model.remove("encoder"), "model.json has no encoder object");
+        logregRefusedAfter(model -> model.put("encoder", "x"), "model.json has no encoder object");
+        logregRefusedAfter(model -> ((ObjectNode) model.get("encoder")).remove("dimension"),
+            "model.json's encoder has no dimension of at least 1");
+        logregRefusedAfter(model -> ((ObjectNode) model.get("encoder")).put("dimension", 0),
+            "model.json's encoder has no dimension of at least 1");
+        logregRefusedAfter(model -> ((ObjectNode) model.get("encoder")).put("dimension", "2"),
+            "model.json's encoder has no dimension of at least 1");
+        logregRefusedAfter(model -> ((ObjectNode) model.get("encoder")).remove("sha256"),
+            "model.json has no text field sha256");
+        logregRefusedAfter(model -> model.remove("embeddingsDevSha256"),
+            "model.json has no text field embeddingsDevSha256");
+    }
+
+    @Test
+    void anEncoderDimensionOfOneIsAccepted() throws IOException {
+        Path logreg = EvaluateFixtures.logregRun(temp, "train-lr");
+        ObjectNode model = (ObjectNode) MAPPER.readTree(Files.readAllBytes(logreg.resolve("model.json")));
+        ((ObjectNode) model.get("encoder")).put("dimension", 1);
+        Files.write(logreg.resolve("model.json"), MAPPER.writeValueAsBytes(model));
+
+        assertThat(TrainedRun.load(logreg, HASHES).encoder()).isEqualTo(new TrainedRun.Encoder("enc-sha", 1));
+    }
+
+    @Test
+    void aLogregModelThatCannotBeReadIsRefusedByRunName() throws IOException {
+        logregRefusedAfter(model -> ((ObjectNode) model.get("models").get(0)).remove("weights"),
+            "the model JSON has no weights");
+    }
+
+    @Test
+    void anUnknownTypeIsRefusedAndAMissingOrNonTextTypeIsRefused() throws IOException {
+        refusedAfter(model -> model.put("type", "svm"), "model.json type must be gbt or logreg: svm");
+        refusedAfter(model -> model.remove("type"), "model.json has no text field type");
+        refusedAfter(model -> model.put("type", 5), "model.json has no text field type");
+    }
+
+    @Test
     void aDifferentHashIsRefusedByName() {
         assertThatThrownBy(() -> TrainedRun.load(run, new Hashes("x", "labels-hash")))
             .isInstanceOf(IllegalArgumentException.class)

@@ -53,27 +53,67 @@ final class FeatureRunReader {
     /** Receives what {@link #scan} finds, in file order. */
     private interface Visitor {
         /** A row of a film that has not been seen yet in this file. */
-        void film(long id, Side side, Integer fold);
+        void film(long id, Side side, Integer fold) throws IOException;
 
         /** A row of the current film. */
-        void row(String kind, long offset, List<String> fields, String where);
+        void row(String kind, long offset, List<String> fields, String where) throws IOException;
+
+        /** The end of the file, after the last row of the last film. */
+        default void end() throws IOException {
+        }
+    }
+
+    /** Takes one film's rows. */
+    @FunctionalInterface
+    interface FilmSink {
+        /**
+         * Takes a film whose last row has been read.
+         *
+         * @param film the film's rows
+         * @throws IOException when the sink fails
+         */
+        void accept(FilmRows film) throws IOException;
     }
 
     /** Reads {@code features.csv}, one line at a time, and groups its rows by film. */
     static List<FilmRows> read(Path features, boolean look) throws IOException {
         List<FilmRows> films = new ArrayList<>();
+        forEachFilm(features, look, films::add);
+        return films;
+    }
+
+    /**
+     * Reads {@code features.csv} under {@link #read}'s checks and hands each film to the sink as soon as its last row
+     * is read, so only one film's rows are held at a time.
+     */
+    static void forEachFilm(Path features, boolean look, FilmSink sink) throws IOException {
         scan(features, look, new Visitor() {
+            private FilmRows current;
+
             @Override
-            public void film(long id, Side side, Integer fold) {
-                films.add(FilmRows.start(id, side, fold));
+            public void film(long id, Side side, Integer fold) throws IOException {
+                hand();
+                current = FilmRows.start(id, side, fold);
             }
 
             @Override
             public void row(String kind, long offset, List<String> fields, String where) {
-                add(films.getLast(), kind, offset, TrainRows.features(fields, where));
+                add(current, kind, offset, TrainRows.features(fields, where));
+            }
+
+            @Override
+            public void end() throws IOException {
+                hand();
+            }
+
+            private void hand() throws IOException {
+                FilmRows done = current;
+                current = null;
+                if (done != null) {
+                    sink.accept(done);
+                }
             }
         });
-        return films;
     }
 
     /** Reads only each row's key, under {@link #read}'s checks, so hundreds of thousands of rows hold just offsets. */
@@ -131,6 +171,7 @@ final class FeatureRunReader {
                 }
                 visitor.row(row.get(3), previous[2], row, where);
             }
+            visitor.end();
         }
     }
 

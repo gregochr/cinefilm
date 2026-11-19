@@ -147,6 +147,53 @@ final class EvaluateFixtures {
     }
 
     /**
+     * A hand-made model B run as the model B trainer writes it: five shipping models, ten pair models and ten triple
+     * models, each a {@link LogisticRegression} fitted on four rows of two values.
+     */
+    static Path logregRun(Path parent, String name) throws IOException {
+        Path dir = Files.createDirectories(parent.resolve(name));
+        float[][] rows = {{0, 0}, {0, 1}, {1, 0}, {1, 1}};
+        JsonNode lr = MAPPER.readTree(LogisticRegression.fit(rows, new int[] {0, 0, 1, 1},
+            new LrParams(1.0, 300, 1e-6)).toJson());
+        ObjectNode model = MAPPER.createObjectNode();
+        model.put("type", "logreg");
+        model.put("featureVersion", CreditsFeatures.FEATURE_VERSION);
+        ObjectNode encoder = model.putObject("encoder");
+        encoder.put("name", "stub");
+        encoder.put("sha256", "enc-sha");
+        encoder.put("dimension", 2);
+        ObjectNode params = model.putObject("params");
+        params.put("l2", 1.0);
+        params.put("maxIterations", 300);
+        params.put("tolerance", 1e-6);
+        model.put("withDense", false);
+        model.put("litTextVariant", false);
+        for (int i = 0; i < 5; i++) {
+            model.withArray("models").add(lr);
+        }
+        model.put("toolGitCommit", "trainsha");
+        model.put("datasetSha256", "ds-hash");
+        model.put("labelsSha256", "labels-hash");
+        model.put("manifestSha256", TrainFixtures.manifestSha());
+        model.put("embeddingsRun", "embeddings-20240331T233000Z");
+        model.put("embeddingsDevSha256", "dev-sha");
+        Files.write(dir.resolve("model.json"), MAPPER.writeValueAsBytes(model));
+        ObjectNode pairs = MAPPER.createObjectNode();
+        ObjectNode triples = MAPPER.createObjectNode();
+        for (int a = 0; a < 5; a++) {
+            for (int b = a + 1; b < 5; b++) {
+                pairs.set(a + "," + b, lr);
+                for (int c = b + 1; c < 5; c++) {
+                    triples.set(a + "," + b + "," + c, lr);
+                }
+            }
+        }
+        Files.write(dir.resolve("oof-models.json"), MAPPER.writeValueAsBytes(pairs));
+        Files.write(dir.resolve("nested-models.json"), MAPPER.writeValueAsBytes(triples));
+        return dir;
+    }
+
+    /**
      * Replaces every model of {@code run}'s {@code oof-models.json} and {@code nested-models.json} whose key does not
      * hold {@code fold} by {@code other}'s model of that key.
      */

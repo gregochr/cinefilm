@@ -15,7 +15,7 @@ import tools.jackson.databind.node.ObjectNode;
  *
  * <p>Labels are 1 for credits and 0 for film; {@link #predict} gives the probability of credits.
  */
-final class GradientBoostedTrees {
+final class GradientBoostedTrees implements FrameModel {
 
     /** The smallest gain a node's best split must exceed. */
     private static final double MIN_GAIN = 1e-12;
@@ -299,7 +299,8 @@ final class GradientBoostedTrees {
      *
      * @return the base
      */
-    double base() {
+    @Override
+    public double base() {
         return base;
     }
 

@@ -15,7 +15,7 @@ import tools.jackson.databind.node.ObjectNode;
  *
  * <p>Labels are 1 for credits and 0 for film; {@link #predict} gives the probability of credits.
  */
-final class LogisticRegression {
+final class LogisticRegression implements FrameModel {
 
     /** The stop reason when the largest {@code |gradient| / rows} reached the tolerance. */
     static final String STOP_GRADIENT = "gradient";
@@ -402,7 +402,8 @@ final class LogisticRegression {
      *
      * @return the base
      */
-    double base() {
+    @Override
+    public double base() {
         return base;
     }
 
