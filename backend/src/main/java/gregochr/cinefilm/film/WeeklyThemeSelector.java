@@ -34,16 +34,17 @@ public final class WeeklyThemeSelector {
 
     /** Picks the theme for the ISO week containing {@code date}, with no Christmas overrides. */
     public static WeeklyTheme choose(LocalDate date, List<Film> library) {
-        return choose(date, library, HolidayOverrides.NONE);
+        return choose(date, library, Set.of(), Set.of());
     }
 
     /**
      * Picks the theme for the ISO week containing {@code date}. In a holiday week ({@link HolidayWeeks}) the theme is
-     * that holiday's films, unless fewer than {@link #MIN_FILMS} match, when the normal rotation applies.
+     * that holiday's films, unless fewer than {@link #MIN_FILMS} match, when the normal rotation applies. In Christmas
+     * week {@code include} and {@code exclude} are the owner's TMDB ids ({@link ChristmasOverrides}).
      */
-    public static WeeklyTheme choose(LocalDate date, List<Film> library, HolidayOverrides overrides) {
+    public static WeeklyTheme choose(LocalDate date, List<Film> library, Set<Long> include, Set<Long> exclude) {
         Optional<WeeklyTheme> holiday = HolidayWeeks.holidayFor(date)
-            .map(h -> holidayTheme(h, library, overrides))
+            .map(h -> holidayTheme(h, library, include, exclude))
             .filter(t -> t.films().size() >= MIN_FILMS);
         if (holiday.isPresent()) {
             return holiday.get();
@@ -59,16 +60,12 @@ public final class WeeklyThemeSelector {
     }
 
     private static WeeklyTheme holidayTheme(HolidayWeeks.Holiday holiday, List<Film> library,
-                                            HolidayOverrides overrides) {
+                                            Set<Long> include, Set<Long> exclude) {
         return switch (holiday) {
             case HALLOWEEN -> new WeeklyTheme("holiday", "halloween", "This week: Halloween",
                 WeeklyTheme.STANDING_CAPTION, pick(library, f -> f.getGenres().contains("Horror")));
-            case CHRISTMAS -> {
-                Set<Long> include = overrides.includeSet();
-                Set<Long> exclude = overrides.excludeSet();
-                yield new WeeklyTheme("holiday", "christmas", "This week: Christmas",
-                    WeeklyTheme.STANDING_CAPTION, pick(library, f -> isChristmas(f, include, exclude)));
-            }
+            case CHRISTMAS -> new WeeklyTheme("holiday", "christmas", "This week: Christmas",
+                WeeklyTheme.STANDING_CAPTION, pick(library, f -> isChristmas(f, include, exclude)));
         };
     }
 

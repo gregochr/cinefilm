@@ -317,9 +317,8 @@ class WeeklyThemeSelectorTest {
     void theIncludeListAddsFilmsTheKeywordMisses() {
         List<Film> library = christmasLibrary(4);
         library.add(christmas(1988, 700L));
-        HolidayOverrides overrides = new HolidayOverrides(List.of(700L), List.of());
 
-        WeeklyTheme theme = WeeklyThemeSelector.choose(CHRISTMAS_WEEK, library, overrides);
+        WeeklyTheme theme = WeeklyThemeSelector.choose(CHRISTMAS_WEEK, library, Set.of(700L), Set.of());
 
         assertThat(theme.value()).isEqualTo("christmas");
         assertThat(theme.films()).extracting(Film::getTmdbId).contains(700L).hasSize(5);
@@ -330,9 +329,8 @@ class WeeklyThemeSelectorTest {
     @Test
     void theExcludeListRemovesATaggedFilm() {
         List<Film> library = christmasLibrary(6);
-        HolidayOverrides overrides = new HolidayOverrides(List.of(), List.of(100L));
 
-        WeeklyTheme theme = WeeklyThemeSelector.choose(CHRISTMAS_WEEK, library, overrides);
+        WeeklyTheme theme = WeeklyThemeSelector.choose(CHRISTMAS_WEEK, library, Set.of(), Set.of(100L));
 
         assertThat(theme.films()).extracting(Film::getTmdbId).doesNotContain(100L).hasSize(5);
     }
@@ -344,13 +342,13 @@ class WeeklyThemeSelectorTest {
         Film excludedAndIncluded = christmas(1971, 801L);
         library.add(both);
         library.add(excludedAndIncluded);
-        HolidayOverrides overrides = new HolidayOverrides(List.of(801L, 800L), List.of(801L, 800L));
+        Set<Long> both801And800 = Set.of(801L, 800L);
 
-        WeeklyTheme theme = WeeklyThemeSelector.choose(CHRISTMAS_WEEK, library, overrides);
+        WeeklyTheme theme = WeeklyThemeSelector.choose(CHRISTMAS_WEEK, library, both801And800, both801And800);
 
         assertThat(theme.kind()).as("only four films are left, so the rotation applies").isNotEqualTo("holiday");
         library.add(christmas(1972, 802L, "christmas"));
-        assertThat(WeeklyThemeSelector.choose(CHRISTMAS_WEEK, library, overrides).films())
+        assertThat(WeeklyThemeSelector.choose(CHRISTMAS_WEEK, library, both801And800, both801And800).films())
             .extracting(Film::getTmdbId).doesNotContain(800L, 801L).hasSize(5);
     }
 
@@ -363,8 +361,7 @@ class WeeklyThemeSelectorTest {
         library.add(untagged);
         library.add(tagged);
 
-        WeeklyTheme theme = WeeklyThemeSelector.choose(CHRISTMAS_WEEK, library,
-            new HolidayOverrides(List.of(1L), List.of(2L)));
+        WeeklyTheme theme = WeeklyThemeSelector.choose(CHRISTMAS_WEEK, library, Set.of(1L), Set.of(2L));
 
         assertThat(theme.films()).contains(tagged).doesNotContain(untagged).hasSize(5);
     }

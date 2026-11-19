@@ -11,21 +11,24 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import gregochr.cinefilm.ApiTestBase;
+import gregochr.cinefilm.film.ChristmasChoice;
+import gregochr.cinefilm.film.ChristmasOverrides;
 import gregochr.cinefilm.film.Film;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
-/** Home in the holiday weeks through the whole application, with the override properties bound. */
-@TestPropertySource(properties = {"cinefilm.holiday.christmas.include=901", "cinefilm.holiday.christmas.exclude=902"})
+/** Home in the holiday weeks through the whole application, with the owner's overrides in the table. */
 class HomeHolidayApiTest extends ApiTestBase {
 
     @MockitoSpyBean
     private Clock clock;
+
+    @Autowired
+    private ChristmasOverrides overrides;
 
     @Autowired
     private EntityManager entityManager;
@@ -57,6 +60,8 @@ class HomeHolidayApiTest extends ApiTestBase {
         add("Tagged D", 2003, 4L, "Comedy", "christmas");
         add("Excluded", 1980, 902L, "Comedy", "christmas");
         add("Plain", 1970, 5L, "Drama", "heist");
+        overrides.set(901L, ChristmasChoice.INCLUDE);
+        overrides.set(902L, ChristmasChoice.EXCLUDE);
         reload();
         today("2026-12-14T09:00:00Z");
 
@@ -68,6 +73,36 @@ class HomeHolidayApiTest extends ApiTestBase {
             .andExpect(jsonPath("$.weeklyTheme.caption").value("A new theme every Monday"))
             .andExpect(jsonPath("$.weeklyTheme.films[*].title",
                 contains("Included", "Tagged C", "Tagged A", "Tagged B", "Tagged D")));
+    }
+
+    @Test
+    void homeFollowsTheTableOnEveryLoad() throws Exception {
+        add("Tagged A", 1988, 1L, "Action", "christmas");
+        add("Tagged B", 1990, 2L, "Comedy", "christmas");
+        add("Tagged C", 1984, 3L, "Comedy", "christmas");
+        add("Tagged D", 2003, 4L, "Comedy", "christmas");
+        add("Tagged E", 2005, 6L, "Comedy", "christmas");
+        add("Extra", 1950, 901L, "Drama");
+        reload();
+        today("2026-12-14T09:00:00Z");
+
+        mvc.perform(get("/api/home"))
+            .andExpect(jsonPath("$.weeklyTheme.films[*].title", contains("Tagged C", "Tagged A", "Tagged B",
+                "Tagged D", "Tagged E")));
+
+        overrides.set(901L, ChristmasChoice.INCLUDE);
+        overrides.set(3L, ChristmasChoice.EXCLUDE);
+        reload();
+        mvc.perform(get("/api/home"))
+            .andExpect(jsonPath("$.weeklyTheme.films[*].title", contains("Extra", "Tagged A", "Tagged B",
+                "Tagged D", "Tagged E")));
+
+        overrides.set(901L, ChristmasChoice.EXCLUDE);
+        overrides.remove(3L);
+        reload();
+        mvc.perform(get("/api/home"))
+            .andExpect(jsonPath("$.weeklyTheme.films[*].title", contains("Tagged C", "Tagged A", "Tagged B",
+                "Tagged D", "Tagged E")));
     }
 
     @Test
