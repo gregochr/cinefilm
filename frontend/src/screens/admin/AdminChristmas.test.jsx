@@ -1,6 +1,7 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SIGNED_IN_EVENT } from '../../api/client.js';
 import { fixtures, installFetch, renderApp, respond } from '../../test/mockApi.jsx';
 
 afterEach(() => {
@@ -251,6 +252,21 @@ describe('Christmas films: states', () => {
 
     fail = false;
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('tablist', { name: 'Christmas lists' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([url]) => url === URL_BASE)).toHaveLength(2);
+  });
+
+  it('reads again by itself once the owner has signed in after a 401', async () => {
+    let status = 401;
+    const fetchMock = serve({ get: () => (status === 401 ? respond(null, 401) : fresh()) });
+    renderApp('/admin/christmas');
+    await screen.findByRole('alert');
+
+    status = 200;
+    act(() => {
+      window.dispatchEvent(new CustomEvent(SIGNED_IN_EVENT));
+    });
     expect(await screen.findByRole('tablist', { name: 'Christmas lists' })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.filter(([url]) => url === URL_BASE)).toHaveLength(2);

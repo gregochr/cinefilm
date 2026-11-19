@@ -52,7 +52,8 @@ export default function ChristmasStatusCard({ data }) {
               style={{ width: `${keywordPercent(data.keywords)}%` }}
             />
           </span>
-          <p>{keywordLine(data.keywords)}</p>
+          {/* Polite: the 30-second polls change this sentence only when more keywords have arrived. */}
+          <p role="status">{keywordLine(data.keywords)}</p>
         </div>
       ) : null}
     </section>

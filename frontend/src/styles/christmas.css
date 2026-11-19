@@ -268,11 +268,15 @@
 }
 .xmas-empty__progress {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
+  gap: 8px 14px;
 }
+/* Up to 280px, shrinking on a phone so the count stays inside the card. */
 .xmas-empty__progress .xmas-progress {
-  width: 280px;
+  flex: 0 1 280px;
+  min-width: 0;
+  max-width: 100%;
 }
 .xmas-empty__count {
   font-family: var(--cf-font-mono);

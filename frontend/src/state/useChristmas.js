@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getChristmas } from '../api/christmas.js';
+import { SIGNED_IN_EVENT } from '../api/client.js';
 import { POLL_MS } from './christmas.js';
 
 /**
@@ -37,6 +38,13 @@ export function useChristmas() {
 
   useEffect(() => {
     read(false);
+  }, [read]);
+
+  // A 401 shows the sign-in card over this page, which stays mounted: read again once signed in.
+  useEffect(() => {
+    const onSignedIn = () => read(false);
+    window.addEventListener(SIGNED_IN_EVENT, onSignedIn);
+    return () => window.removeEventListener(SIGNED_IN_EVENT, onSignedIn);
   }, [read]);
 
   const running = data?.keywords.running === true;

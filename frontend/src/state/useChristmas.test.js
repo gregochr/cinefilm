@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SIGNED_IN_EVENT } from '../api/client.js';
 import { christmasFixture } from '../test/christmasFixture.js';
 import { useChristmas } from './useChristmas.js';
 
@@ -73,6 +74,30 @@ describe('useChristmas: reading', () => {
     await waitFor(() => expect(result.current.data.inWeek).toHaveLength(5));
     await act(async () => first.resolve(reply(200, christmasFixture())));
     expect(result.current.data.inWeek).toHaveLength(5);
+  });
+});
+
+describe('useChristmas: signing in', () => {
+  it('reads again when a sign-in succeeds, and stops listening on unmount', async () => {
+    let status = 401;
+    const fetchMock = vi.fn(async () =>
+      status === 401 ? reply(401, null) : reply(200, christmasFixture()),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { result, unmount } = renderHook(() => useChristmas());
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+
+    status = 200;
+    act(() => {
+      window.dispatchEvent(new CustomEvent(SIGNED_IN_EVENT));
+    });
+    await waitFor(() => expect(result.current.data).not.toBeNull());
+    expect(result.current.error).toBeNull();
+    expect(reads(fetchMock)).toBe(2);
+
+    unmount();
+    window.dispatchEvent(new CustomEvent(SIGNED_IN_EVENT));
+    expect(reads(fetchMock)).toBe(2);
   });
 });
 

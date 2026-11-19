@@ -51,7 +51,7 @@ export default function ChristmasList({ rows, tab, max }) {
     }
     items.push(
       <ChristmasRow
-        key={row.tmdbId}
+        key={row.filmId}
         row={row}
         number={numbered ? i + 1 : null}
         cut={numbered && i >= cutAt}

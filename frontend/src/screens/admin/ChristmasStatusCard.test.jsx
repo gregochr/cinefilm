@@ -42,11 +42,17 @@ describe('ChristmasStatusCard', () => {
     expect(screen.getByTestId('keyword-fill')).toHaveStyle({ width: '97%' });
   });
 
+  it('announces keyword progress politely, as a status message', () => {
+    render(<ChristmasStatusCard data={christmasFixture()} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Keywords fetched for 1,374 of 1,412');
+  });
+
   it('hides the keyword strip once every film has its keywords', () => {
     const data = christmasFixture();
     data.keywords = { fetched: 1412, total: 1412, running: false };
     render(<ChristmasStatusCard data={data} />);
     expect(screen.queryByTestId('keyword-fill')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(card()).not.toHaveTextContent('Keywords fetched');
   });
 

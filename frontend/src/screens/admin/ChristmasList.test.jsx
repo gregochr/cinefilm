@@ -1,5 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { christmasFixture } from '../../test/christmasFixture.js';
 import ChristmasList from './ChristmasList.jsx';
 
@@ -26,6 +26,19 @@ describe('ChristmasList: the In tab', () => {
       '/api/art/abc123.jpg?w=342',
     );
     expect(within(row('White Christmas')).queryByAltText('')).not.toBeInTheDocument();
+  });
+
+  it('keys rows by film, so two films sharing a TMDB id both show and React warns of nothing', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const [first] = christmasFixture().inWeek;
+    const sibling = { ...first, filmId: 999, title: 'Same TMDB id', reason: 'ADDED' };
+    const { rerender } = render(<ChristmasList rows={[first, sibling]} tab="inWeek" max={12} />);
+    expect(row(first.title)).toBeInTheDocument();
+    expect(row('Same TMDB id')).toBeInTheDocument();
+    rerender(<ChristmasList rows={[sibling, first]} tab="inWeek" max={12} />);
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
   });
 
   it('has no cut line at exactly 12 rows', () => {
