@@ -20,7 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
-/** Home in the holiday weeks through the whole application: the keywords are lazy and the overrides are bound. */
+/** Home in the holiday weeks through the whole application, with the override properties bound. */
 @TestPropertySource(properties = {"cinefilm.holiday.christmas.include=901", "cinefilm.holiday.christmas.exclude=902"})
 class HomeHolidayApiTest extends ApiTestBase {
 
@@ -42,14 +42,14 @@ class HomeHolidayApiTest extends ApiTestBase {
         save(film);
     }
 
-    /** Writes everything and empties the persistence context, so the request reads the lazy collections afresh. */
+    /** Writes everything and empties the persistence context, so the request reads the films afresh. */
     private void reload() {
         entityManager.flush();
         entityManager.clear();
     }
 
     @Test
-    void christmasWeekShowsTaggedAndIncludedFilmsAndNotExcludedOnesWithKeywordsLoadedLazily() throws Exception {
+    void christmasWeekShowsTaggedAndIncludedFilmsAndNotExcludedOnes() throws Exception {
         add("Tagged A", 1988, 1L, "Action", "christmas", "terrorism");
         add("Tagged B", 1990, 2L, "Comedy", "christmas");
         add("Tagged C", 1984, 3L, "Comedy", "christmas");

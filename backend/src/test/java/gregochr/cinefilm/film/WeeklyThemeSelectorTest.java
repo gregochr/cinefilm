@@ -218,6 +218,21 @@ class WeeklyThemeSelectorTest {
     }
 
     @Test
+    void aHorrorFilmWithNoYearComesLastInHalloweenWeek() {
+        List<Film> library = library();
+        for (int i = 0; i < 5; i++) {
+            library.add(horror(1970 + i));
+        }
+        library.add(mk(1999, null, "Horror"));
+        library.get(library.size() - 1).setYear(null);
+
+        WeeklyTheme theme = WeeklyThemeSelector.choose(HALLOWEEN_WEEK, library);
+
+        assertThat(theme.value()).isEqualTo("halloween");
+        assertThat(theme.films()).extracting(Film::getYear).containsExactly(1970, 1971, 1972, 1973, 1974, null);
+    }
+
+    @Test
     void halloweenWeekIsTheSameFromMondayToSunday() {
         List<Film> library = library();
         for (int i = 0; i < 6; i++) {

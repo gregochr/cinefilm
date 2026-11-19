@@ -84,7 +84,8 @@ public final class WeeklyThemeSelector {
     private static List<Film> pick(List<Film> library, Predicate<Film> matches) {
         return library.stream()
             .filter(matches)
-            .sorted(Comparator.comparingInt(Film::getYear).thenComparing(Film::getSortTitle))
+            .sorted(Comparator.comparing(Film::getYear, Comparator.nullsLast(Comparator.<Integer>naturalOrder()))
+                .thenComparing(Film::getSortTitle))
             .limit(MAX_FILMS)
             .toList();
     }

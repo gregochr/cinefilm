@@ -29,6 +29,16 @@ class HolidayOverridesTest {
     }
 
     @Test
+    void aTrailingOrDoubledCommaDropsTheEmptyEntry() {
+        HolidayOverrides overrides = bind(Map.of(
+            "cinefilm.holiday.christmas.include", "1572,",
+            "cinefilm.holiday.christmas.exclude", "1572,,5555"));
+
+        assertThat(overrides.include()).containsExactly(1572L);
+        assertThat(overrides.exclude()).containsExactly(1572L, 5555L);
+    }
+
+    @Test
     void emptyValuesBindToEmptyLists() {
         HolidayOverrides overrides = bind(Map.of(
             "cinefilm.holiday.christmas.include", "",

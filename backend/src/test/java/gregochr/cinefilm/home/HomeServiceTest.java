@@ -170,7 +170,7 @@ class HomeServiceTest {
     }
 
     @Test
-    void inChristmasWeekTheThemeIsChristmasFilmsAndTheOverridesComeFromTheConfiguration() {
+    void inChristmasWeekTheThemeIsChristmasFilmsAndTheExcludeListApplies() {
         libraryIs(libraryWithSix("Comedy", "christmas"));
         HomeService excluding = new HomeService(loader, at("2026-12-14T00:30:00Z"), settings,
             new HolidayOverrides(List.of(), List.of(1000L)));

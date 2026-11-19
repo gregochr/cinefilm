@@ -15,10 +15,14 @@ public record HolidayOverrides(List<Long> include, List<Long> exclude) {
     /** No overrides: the keyword alone decides. */
     public static final HolidayOverrides NONE = new HolidayOverrides(List.of(), List.of());
 
-    /** Treats an unset list as empty and keeps the lists unmodifiable. */
+    /** Treats an unset list as empty, drops the nulls a stray comma binds, and keeps the lists unmodifiable. */
     public HolidayOverrides {
-        include = include == null ? List.of() : List.copyOf(include);
-        exclude = exclude == null ? List.of() : List.copyOf(exclude);
+        include = clean(include);
+        exclude = clean(exclude);
+    }
+
+    private static List<Long> clean(List<Long> ids) {
+        return ids == null ? List.of() : ids.stream().filter(java.util.Objects::nonNull).toList();
     }
 
     /** The included TMDB ids as a set. */
