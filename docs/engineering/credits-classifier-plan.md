@@ -1719,7 +1719,7 @@ L4a's measurement ("B. Pretrained image embedding…"), on released code.
   - Long runs are fine (owner, 2026-11-19): any time of day, at niceness 19 on one CPU, with no overnight-only
     scheduling.
 - **No reuse of an earlier run's records, decided.** An option to embed only the rows missing from a prior run
-  would cut L5's run to the test rows (about 3.5 hours at 0.1 s), but then `devSha256` would be equal by
+  would cut L5's run to the test rows (about an hour at L4a's 32 ms), but then `devSha256` would be equal by
   construction. Embedding the development rows again is what checks that the encoder is deterministic on the host,
   which model B's evaluation (L4b-6b) and the product (L6a) rely on; and the owner accepts long runs.
 - **Tests:**
@@ -1788,7 +1788,8 @@ first, in their own PR, with no change to its output:
   length is not `dimension`, a non-finite number, and an unknown `stopped`.
 - **Cost, estimated.** One evaluation of `J` and its gradient is about 2 × rows × `dimension` multiply-adds: about
   250 million for 243,000 rows at 512, well under a second. At up to 300 iterations, a fit takes a few minutes, so a
-  training run's 25 fits take about an hour on one CPU. The first run's time is recorded and replaces this.
+  training run's 25 fits take about an hour on one CPU. **At MobileNet's 1,000 dimensions (L4a)** an evaluation is
+  about 486 million, so a training run takes about 2 hours. The first run's time is recorded and replaces this.
 - **Tests:** exact standardisation, including a constant column; `J` and the gradient on a 3-row, 2-dimension set;
   the gradient against central finite differences; a 1-dimension, 4-row set whose optimum the test finds by
   Newton's method, matched to 1e-6; each stop reason; each refusal; the JSON round trip (the read model predicts
@@ -1809,8 +1810,8 @@ first, in their own PR, with no change to its output:
   - **Memory:** before any float is held, kept rows × `dimension` × 4 bytes must be at most 70% of
     `Runtime.maxMemory()`, or the run is refused with the bytes it needs. The base run at 512 dimensions needs about
     500 MB, within `-Xmx2g`. **With MobileNet's 1,000 dimensions (L4a)** the base rows need about 1 GB and the
-    `--with-dense` rows about 1.3 GB, which `-Xmx2g`'s 70% may refuse. The planner's model-B training runs therefore
-    use `java -Xmx2560m` inside the same `--memory 3g` container; the refusal stays the guard.
+    `--with-dense` rows at most about 1.3 GB, both under `-Xmx2g`'s 70% (about 1.5 GB), so the standard tool-run
+    command is kept.
 - **Models:** `FoldModels` with `LogisticRegression.fit` and `LrParams`.
 - **Outputs**, in a fresh `<out>/train-lr-<stamp>/`, the same four files as model A's run, so `CreditsEvaluateMain`
   takes a model-B run with `--train`:
@@ -1858,7 +1859,8 @@ each with its own nested selection over the same grid and segmenter, and compare
 - **`--embeddings <embeddings run>`** is a new single flag.
 - **`EmbeddingCursor`** reads `embeddings.bin` in step with `forEachFilm`: for each film it returns that film's
   coarse and dense embeddings, checking each record's key against the film's rows. Only one film's embeddings is
-  held at a time; all films' would take about 900 MB with the test films.
+  held at a time; all films' would take about 1.8 GB with the test films (1,000 dimensions), more than `-Xmx2g`
+  leaves.
 - **Refused** (exit 1, nothing written), beside L3c's refusals:
   - `"logreg"` runs without `--embeddings`, and `--embeddings` with `"gbt"` runs;
   - `embeddings.json`'s `featuresCsvSha256` not the SHA-256 of the features run's `features.csv`; its
@@ -1896,7 +1898,7 @@ each with its own nested selection over the same grid and segmenter, and compare
   each candidate (the owner runs the planner's download command first).
 - **After the L4b-6b release:** the embeddings run on the chosen encoder, then **at most seven model-B training
   runs**: `l2` ∈ {0.1, 1, 10} on the base rows and with `--with-dense`, and `--lit-text-variant` at `l2` 1. At about
-  an hour each, about seven hours in all. Then one B-only evaluation over them (estimated at under an hour: the grid
+  2 hours each at MobileNet's 1,000 dimensions, about 14 hours in all. Then one B-only evaluation over them (estimated at under an hour: the grid
   doubled, and there are more runs). Its choices and figures are recorded here before L5's look, beside model A's.
 
 ### Settled by the owner (2026-11-19)
