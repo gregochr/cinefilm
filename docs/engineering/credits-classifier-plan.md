@@ -422,6 +422,19 @@ through **offline evaluation**: the shipping model and segmenter code, run on th
   1. CLIP ViT-B/32's image tower, quantised, from the `Xenova/clip-vit-base-patch32` ONNX export (MIT, about
      90 MB, outputs `image_embeds`);
   2. a smaller MobileNet-class ONNX model from the ONNX Model Zoo (Apache 2.0), if CLIP is too slow or too large.
+
+  **Chosen at L4a (2026-11-19, v0.9.1): MobileNet v2-12, fp32** (ONNX Model Zoo, `mobilenetv2-12.onnx`, SHA-256
+  `c0c3f76d93fa3fd6580652a45618618a220fced18babf65774ed169de0432ad5`). Its output is the 1,000 ImageNet logits
+  (tensor names `input` and `output`), normalised with mean [0.485, 0.456, 0.406] and standard deviation
+  [0.229, 0.224, 0.225]. Measured with `CreditsEncoderBenchMain` in the tool-run container at `-Xmx512m`:
+
+  | Candidate | Per frame | 520 frames | Peak RSS | Result |
+  |---|---|---|---|---|
+  | CLIP ViT-B/32 image tower, quantised | 294 ms | 153 s | 650 MB | rejected: over the 2-minute limit |
+  | MobileNet v2-12, fp32 | 32 ms | 16.7 s | 459 MB | **chosen** |
+  | MobileNet v2-12, int8 | 39 ms | 20.1 s | 339 MB | the fallback, if memory is tight at L6a |
+
+  The int8 model is slower than fp32 on this CPU, so it is kept only for its smaller RSS.
 - **L4a measures each candidate in a throwaway container on the server:**
   - the per-frame CPU time with one intra-op and one inter-op thread, and the arena off;
   - peak RSS.
@@ -1344,6 +1357,22 @@ What it shows:
   Only `--lit-text-variant` touches it (fold 1 chose it). Plate openings keep their credits frames in training
   ("Labels"), so they, and the dark shortfall, are where a different model can help.
 
+### Model A on the widened grid (2026-11-19, v0.9.1)
+
+The same three runs, evaluated again on L3c-grid's 42,000 points: `eval-20261119T213020Z` (`toolGitCommit`
+`6b1b236`), same dataset and labels hashes. Development films only, with no look.
+
+- **The final choice is unchanged:** `--with-dense`, `λ` 3, `δ` 10, `G` 4, `σ` 60, `θ` 0.9, `θ_d` 0.5, with the same
+  counts (188 within ±10 s, 333 within ±60 s or not found, no early film, no violation).
+- **The outer choices now sit inside the grid:** `λ` is 1, 3, 3, 2 and 3; `δ` is 15 once and 10 four times. None
+  chose the new top values (`λ` 4 or 5, `δ` 20). So the earlier top-of-grid values were not a grid edge holding the
+  model back.
+- **Held out, almost the same:** dark 209 of 368 within ±10 s (56.8%, was 56.5%) and 325 within ±60 s or not found
+  (88.3%, was 87.2%); plate 0 of 17 and 8 (47.1%); lit 1 of 224 and 127 (56.7%). The early films are the same as
+  before: one dark film in the high band early by more than 15 s, and two by more than 5 s.
+- **What follows:** model A's tuning is settled. The dark and plate shortfall is left to model B and the L5
+  comparison.
+
 ## L3c specification (written 2026-11-19)
 
 Three PRs, each at most 1,500 changed lines: **L3c-1**, the segmenter and the training `main`'s nested models;
@@ -1682,10 +1711,11 @@ L4a's measurement ("B. Pretrained image embedding…"), on released code.
 - **Where it lives and how long it takes.** `embeddings.bin` is library data (it holds media file ids), never
   committed. It stays in `credits-dataset-out` and later tools read it from `/out`; the planner copies only
   `embeddings.json` into `~/cinefilm-labels`. There are about 320,000 development rows (253,159 coarse frames, plus
-  the dense ones), so about 660 MB at 512 dimensions. L4a's measured time replaces these estimates:
-  - **the development run:** about 9 hours at 0.1 s a frame, about 20 hours at the cost limit's 0.23 s;
-  - **L5's run with `--look=L5`, only if B won the development comparison,** embeds every row again, development and test, about 440,000: about 12 hours at
-    0.1 s a frame and about 28 hours at 0.23 s.
+  the dense ones). With MobileNet's 1,000 dimensions (L4a), a record is 4,017 bytes, so about 1.3 GB. At L4a's
+  measured 32 ms a frame:
+  - **the development run:** about 3 hours;
+  - **L5's run with `--look=L5`, only if B won the development comparison,** embeds every row again, development and
+    test, about 440,000: about 4 hours.
   - Long runs are fine (owner, 2026-11-19): any time of day, at niceness 19 on one CPU, with no overnight-only
     scheduling.
 - **No reuse of an earlier run's records, decided.** An option to embed only the rows missing from a prior run
@@ -1778,7 +1808,9 @@ first, in their own PR, with no change to its output:
   - Only the kept rows' embeddings are held, as `float[]`; the others are checked and skipped.
   - **Memory:** before any float is held, kept rows × `dimension` × 4 bytes must be at most 70% of
     `Runtime.maxMemory()`, or the run is refused with the bytes it needs. The base run at 512 dimensions needs about
-    500 MB, within `-Xmx2g`.
+    500 MB, within `-Xmx2g`. **With MobileNet's 1,000 dimensions (L4a)** the base rows need about 1 GB and the
+    `--with-dense` rows about 1.3 GB, which `-Xmx2g`'s 70% may refuse. The planner's model-B training runs therefore
+    use `java -Xmx2560m` inside the same `--memory 3g` container; the refusal stays the guard.
 - **Models:** `FoldModels` with `LogisticRegression.fit` and `LrParams`.
 - **Outputs**, in a fresh `<out>/train-lr-<stamp>/`, the same four files as model A's run, so `CreditsEvaluateMain`
   takes a model-B run with `--train`:
