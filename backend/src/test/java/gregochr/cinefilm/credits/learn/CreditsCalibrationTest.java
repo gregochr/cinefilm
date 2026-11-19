@@ -45,10 +45,8 @@ class CreditsCalibrationTest {
     @Test
     void eachRankingLevelDecidesEvenWhenEveryLaterLevelFavoursTheOther() {
         int p = pointOf(MIDDLE);
-        // Level 1: fewer early by more than 15 s, though worse on all later levels.
         assertFirst(counts(0, 9, 9, 0, 0), p, 1, counts(1, 0, 0, 5, 5), p, 0);
         assertFirst(counts(0, 0, 9, 0, 0), p, 1, counts(0, 1, 0, 5, 5), p, 0);
-        // Level 3: fewer violations.
         assertFirst(counts(0, 0, 0, 0, 0), p, 1, counts(0, 0, 1, 5, 5), p, 0);
         assertFirst(counts(0, 0, 0, 6, 0), p, 1, counts(0, 0, 0, 5, 9), p, 0);
         assertFirst(counts(0, 0, 0, 5, 6), p, 1, counts(0, 0, 0, 5, 5), p, 0);
@@ -198,7 +196,6 @@ class CreditsCalibrationTest {
         assertThat(added(found(-15_001, 99_999, false), false)).isEqualTo(new Counts(1, 1, 0, 0, 0, 1));
         assertThat(added(found(-5_000, 99_999, false), false)).isEqualTo(new Counts(0, 0, 0, 0, 0, 1));
         assertThat(added(found(-5_001, 99_999, false), false)).isEqualTo(new Counts(0, 1, 0, 0, 0, 1));
-        // A violation, found or not.
         assertThat(added(found(0, 99_999, true), false)).isEqualTo(new Counts(0, 0, 1, 0, 0, 1));
         assertThat(added(unsure(true), false)).isEqualTo(new Counts(0, 0, 1, 0, 0, 1));
         // Levels 4 and 5, for a Plex DARK or PLATE film: |goalError| within 10 s, within 60 s.
@@ -209,23 +206,19 @@ class CreditsCalibrationTest {
         assertThat(added(found(0, 60_000, false), true)).isEqualTo(new Counts(0, 0, 0, 0, 1, 1));
         assertThat(added(found(0, 60_001, false), true)).isEqualTo(new Counts(0, 0, 0, 0, 0, 1));
         assertThat(added(found(0, -60_001, false), true)).isEqualTo(new Counts(0, 0, 0, 0, 0, 1));
-        // Not found counts toward 60 s, never 10 s.
         assertThat(added(unsure(false), true)).isEqualTo(new Counts(0, 0, 0, 0, 1, 1));
-        // Any other film is in neither goal count.
         assertThat(added(found(0, 0, false), false)).isEqualTo(new Counts(0, 0, 0, 0, 0, 1));
         assertThat(added(unsure(false), false)).isEqualTo(new Counts(0, 0, 0, 0, 0, 1));
     }
 
     @Test
     void theChoiceIsTheLexicographicBestOverTheWholeGridWorkedByHand() {
-        // Credits from index 20 = 200000 = Plex's target, DARK. Scores: 0.99 is 4.5951 - lambda, so S* =
-        // 20 * (4.5951 - lambda), and leaning late by m frames costs m * (4.5951 - lambda). Levels 1 to 3 are 0 at
-        // every point (t >= 200000 gives earlyError >= -5000, and the negative window is all -4.6 - lambda). Level
-        // 4 is 1 where FOUND and the shift is at most two frames (goalError = 5000 m, no dense frames, so at t);
-        // level 5 is 1 everywhere. Among those points: sigma 80 is the largest reachable (m = 0, lambda 0: 91.9);
-        // theta 0.95 (minP 0.99); lambda 0.5 (20 * 4.0951 = 81.9 >= 80, but lambda 1 gives 71.9); delta 2 (shift 0;
-        // delta 5 shifts one frame, 19 * 4.0951 = 77.8 < 80, UNSURE); G the smallest, 2 frames (no run below 0);
-        // theta_d 0.95 (no dense frames).
+        // Credits from index 20 = 200000 = Plex's target, DARK. 0.99 scores 4.5951 - lambda, so S* = 20 * that, and
+        // leaning late by m frames costs m * that. Levels 1 to 3 are 0 everywhere (t >= target; the negative window
+        // is all negative). Level 4 is 1 where FOUND with a shift of at most two frames (no dense frames: goal at
+        // t), level 5 is 1 everywhere. Then: sigma 80 (m = 0, lambda 0: 91.9); theta 0.95; lambda 0.5 (81.9 >= 80,
+        // lambda 1 gives 71.9); delta 2 (delta 5 shifts a frame: 19 * 4.0951 = 77.8 < 80, UNSURE); G 2 and theta_d
+        // 0.95 as the smallest and largest, nothing deciding them.
         Film film = film(40, BASE + 20 * STEP, Optional.of(FrameKind.DARK));
         Map<Integer, Prediction> sets = everySet(prediction(creditsAt20()));
 
@@ -258,6 +251,21 @@ class CreditsCalibrationTest {
             Choice choice = CreditsCalibration.chooseFinal(List.of(dev(0, film(40, BASE + 20 * STEP, plex), sets)), 1);
             assertThat(choice.counts()).isEqualTo(new Counts(0, 0, 0, 0, 0, 1));
         }
+    }
+
+    @Test
+    void earlyFoundFilmsAndViolationsAreCountedWhenNoPointAvoidsThem() {
+        // 40 frames of 0.9999 (ln 9999 = 9.21): FOUND at every point (S >= 39 * 6.2 = 242 >= 160) with t at or
+        // near index 0, far before the target at 245000 (earlyError about -150000), and the 28 negative frames
+        // before 240000 score 28 * 6.2 = 174 >= 0.8 * 160 = 128 at every point. Plex DARK, goal about -145000: no
+        // goal count but the not-found one is also 0. All points tie: the conservative corner.
+        Film film = film(40, BASE + 29 * STEP, Optional.of(FrameKind.DARK));
+        Map<Integer, Prediction> sets = everySet(prediction(constant(0.9999, 40)));
+
+        Choice choice = CreditsCalibration.chooseFinal(List.of(dev(0, film, sets)), 1);
+
+        assertThat(choice.params()).isEqualTo(new SegmenterParams(3, 10, 2, 160, 0.95, 0.95));
+        assertThat(choice.counts()).isEqualTo(new Counts(1, 1, 1, 0, 0, 1));
     }
 
     @Test

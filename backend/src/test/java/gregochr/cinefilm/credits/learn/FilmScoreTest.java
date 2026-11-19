@@ -129,8 +129,7 @@ class FilmScoreTest {
 
     @Test
     void aSearchWithNoWindowIsNotCoveredAndTheGoalIsAtT() {
-        // High only from 184000, and the last dense frame (187500) has no time features: 184000..187000 is 7
-        // frames, no window of 11. No f: not covered, goalError = t - target = 160000 - 163000.
+        // High from 184000, but the last frame (187500) is NaN: 7 frames, no window of 11. No f: goal at t.
         double[] p = creditsAt12();
         long[] dense = denseOffsets(138_000, 100);
         Result r = score(film(p, 163_000, dense), prediction(p, denseP(dense, 184_000)));
@@ -144,9 +143,8 @@ class FilmScoreTest {
 
     @Test
     void anFIsCoveredOnlyWhenItsWindowEndsBeforeTheStoredRangesEnd() {
-        // Dense 138000..207500, past target + 25 s = 188000. A window of 5 s from f ends at f + 5000: f = 182500
-        // ends at 187500 < 188000, covered; f = 183000 ends at 188000, not before it; f = 184500 ends at 189500 <
-        // t + 30 s = 190000 but past 188000. An uncovered f is not reported and the goal is at t (-3000).
+        // Dense 138000..207500. A window ends at f + 5000: f = 182500 ends at 187500 < target + 25 s = 188000,
+        // covered; 183000 ends at 188000 and 184500 at 189500: not covered, f not reported, goal at t (-3000).
         double[] p = creditsAt12();
         long[] dense = denseOffsets(138_000, 140);
         Result inside = score(film(p, 163_000, dense), prediction(p, denseP(dense, 182_500)));
@@ -163,8 +161,7 @@ class FilmScoreTest {
 
     @Test
     void alignmentIsTMinusTheFirstDenseOffsetOnTheFiveHundredMsGrid() {
-        // Coarse offsets 100100 + 5000 i: t = 160100. First dense offset 138100: t - d0 = 22000, aligned (t + d0 =
-        // 298200 would not be); 138200 gives 21900 = 43 * 500 + 400, not aligned.
+        // t = 160100. d0 = 138100: t - d0 = 22000, aligned (t + d0 = 298200 would not be); 138200: 21900, not.
         long[] shifted = new long[30];
         for (int i = 0; i < 30; i++) {
             shifted[i] = BASE + 100 + STEP * i;
@@ -179,9 +176,8 @@ class FilmScoreTest {
 
     @Test
     void aStartWellBeforeTheTargetIsNotCoveredEvenWhereStoredFramesWouldGiveAnF() {
-        // Target 200000: t - 5 s = 155000 < target - 25 s = 175000. Stored 175000..224500, high but the NaN ends:
-        // without the guard the search in [150000, 190000) gives f = 175500 and covered. Guarded: not covered,
-        // goalError = 160000 - 200000 = -40000, earlyError = 160000 - 5000 - 200000 = -45000.
+        // Target 200000: t - 5 s = 155000 < target - 25 s = 175000. Unguarded, the search gives f = 175500 and
+        // covered. Guarded: goalError = 160000 - 200000 = -40000, earlyError = 160000 - 5000 - 200000 = -45000.
         double[] p = creditsAt12();
         long[] dense = denseOffsets(175_000, 100);
         Film film = film(p, 200_000, dense);
@@ -194,8 +190,7 @@ class FilmScoreTest {
         assertThat(r.covered()).contains(false);
         assertThat(r.goalError()).hasValue(-40_000);
         assertThat(r.earlyError()).hasValue(-45_000);
-        // At the edge (target 180000, dense from 155000, first frame NaN): covered, f = 155500. One ms below
-        // (target 180001, dense from 155001): not covered.
+        // At the edge (target 180000, dense from 155000, first NaN): covered, f = 155500. One ms below: not.
         long[] edge = denseOffsets(155_000, 100);
         Result at = score(film(p, 180_000, edge), prediction(p, denseP(edge, 155_000)));
         assertThat(at.f()).hasValue(155_500);
@@ -229,7 +224,6 @@ class FilmScoreTest {
         // Six frames of p 0.5 with logitPi -2 score exactly +2: S* = 12, t = index 0, margin 12.
         Film exact = exactFilm();
         Prediction prediction = exactPrediction();
-        // Without stored dense frames a FOUND start is neither covered nor aligned.
         Result none = FilmScore.of(exact, prediction, new SegmenterParams(0, 0, 3, 12, 0.5, 0.5));
         assertThat(none.covered()).isEqualTo(none.aligned()).contains(false);
         assertThat(band(exact, prediction, 6)).contains(Band.HIGH);
@@ -394,8 +388,7 @@ class FilmScoreTest {
         // theta_d 0.5: the 0.6 frames count too, so the window from 156000 (inside [t - 5 s, ...)) qualifies.
         assertThat(cache.search(160_000, 0.5)).hasValue(156_000);
         assertThat(cache.search(160_000, 0.9)).hasValue(161_500);
-        // A start 3 s later looks from 158000 on: 0.6 frames from there, high from 161500: window from 158000 at
-        // theta_d 0.5 and from 161500 at 0.9.
+        // A start 3 s later looks from 158000 on: window from 158000 at theta_d 0.5, from 161500 at 0.9.
         assertThat(cache.search(163_000, 0.5)).hasValue(158_000);
         assertThat(cache.search(163_000, 0.9)).hasValue(161_500);
         // A start at 120000 reads [110000, 150000) only: the stored 138000..149500 are all 0.1.
@@ -404,8 +397,8 @@ class FilmScoreTest {
 
     @Test
     void theDenseSearchReadsOnlyFramesFromTMinus10sToBeforeTPlus30s() {
-        // t = 160000, range [150000, 190000). High from 185000: its window needs the frame at 190000, out of range.
-        // High from 189500 is out of reach too; at t = 165000 the range reaches 195000 and 189500..194500 is one.
+        // t = 160000, range [150000, 190000): high from 185000 needs the frame at 190000, out; from 189500 too. At
+        // t = 165000 the range reaches 195000 and 189500..194500 is a window.
         long[] dense = denseOffsets(138_000, 140);
         double[] from185 = new double[140];
         double[] from1895 = new double[140];
