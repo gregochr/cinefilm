@@ -446,7 +446,9 @@ class SidecarTimingServiceDownloadedUnitTest {
     void aSearchUnderAnotherImdbIdGivesNoCandidatesButTheStoredFileUnderTheCurrentOneStillCounts() {
         read(EmbeddedCueStarts.Status.NO_REFERENCE);
         edition.getFilm().setOsFullSearchedImdbId("tt0000002");
-        edition.getFilm().setOsFullCandidates(OpenSubtitlesResult.listToJson(List.of(candidate(5013),
+        // The stale search ranks 5013 first (more downloads), the opposite of file-id order.
+        edition.getFilm().setOsFullCandidates(OpenSubtitlesResult.listToJson(List.of(
+            new OpenSubtitlesResult(4013, 5013, "Release 5013", 23.976, 99, true, false, null, null),
             candidate(5012))));
         stored(reference(5013, 300, IMDB), reference(5012, 300, IMDB));
 
