@@ -185,8 +185,8 @@ figures replace the table above, which used limited-range luma, a centre crop an
     what makes a climax score as credits;
   - this flag needs frames, so it is computed in L3 from the stored frames, not in L1;
   - a fixture covers a plate film (*Civil War*-like), whose plate frames must stay labelled credits;
-  - **one variant is tested in cross-validation**: including the lit frames that also show text. It is adopted only
-    if the earliest out-of-fold error does not get worse.
+  - **one variant is tested in cross-validation**: including the lit frames that also show text. It is a training run
+    judged by L3c-eval's nested selection ("Calibration and nested selection").
 - **Plex errors.** The development films with the largest errors are looked at as stills. A clear Plex error is left
   out through the exclusions file (its reason lands in the labels' `excluded_note` when `OWNER_EXCLUDED` is the
   recorded reason, and always in the report), and is never relabelled by guesswork.
@@ -264,6 +264,9 @@ path:
   film can switch `AUTO` off for its band. That cost is accepted, and is put to the owner with the L5 report.
 - **Thresholds keep a safety margin:** the earliest out-of-fold error must be at least −5 s. Offline it is scored
   at `t − 5 s` ("How a film is scored"), so it amounts to `t ≥ target` on every development film the evaluation scores `FOUND`.
+  The calibration ranks this margin first (L3c's ranking, levels 1–2), so it always makes a choice. A choice that
+  misses the margin on any development film is not shipped: it is reported to the owner with the L5 report, and
+  the owner decides.
 
 ## Frames: the dataset job (L2)
 
