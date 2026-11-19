@@ -459,6 +459,9 @@ through **offline evaluation**: the shipping model and segmenter code, run on th
 - **One evaluation per model type.** L5 runs `CreditsEvaluateMain` once over model A's runs and once over model B's,
   and compares the two held-out summaries (each film scored with its fold's choice) by this ranking. One mixed
   selection would let the type come from the final choice, which is not nested, and mix types across outer folds.
+  **Both of these are development-only runs (no `--look`).** Once the comparison is recorded, L5's single look is one
+  more `CreditsEvaluateMain` run with `--look=L5 --baseline`, over the **winning type's runs alone**. The losing type
+  is never scored on test films.
 - **A tie goes to A**, which needs no encoder file in the image and no download.
 - The loser's code is deleted in L6b.
 
@@ -702,7 +705,9 @@ Each phase is its own small PR, built by Sonnet and reviewed by the planner (`CL
   - **Specified in full in "L4b specification"** (2026-11-19), in nine PRs, L3c-grid and L4b-1 to L4b-6b. The
     owner releases after L4b-2 (L4a runs on it) and after L4b-6b.
 - **L5 — the comparison (planner).** Tool runs, nested cross-validation, the choice, then the first look at the test
-  split. One evaluation per model type, compared on their held-out summaries ("Choosing"). The results go into this file as "L5: what the models showed".
+  split. One development-only evaluation per model type, compared on their held-out summaries ("Choosing"); then the
+  single look, one `--look=L5 --baseline` evaluation of the winner alone (the `CreditsEmbedMain --look=L5` run only
+  if B won). The results go into this file as "L5: what the models showed".
 - **L6a — the model in the product.**
   - The winner and the segmenter go in `CreditsDetectionService`.
   - The dense reader becomes 50 s, and the cue check moves.
@@ -1679,7 +1684,7 @@ L4a's measurement ("B. Pretrained image embedding…"), on released code.
   `embeddings.json` into `~/cinefilm-labels`. There are about 320,000 development rows (253,159 coarse frames, plus
   the dense ones), so about 660 MB at 512 dimensions. L4a's measured time replaces these estimates:
   - **the development run:** about 9 hours at 0.1 s a frame, about 20 hours at the cost limit's 0.23 s;
-  - **L5's run with `--look=L5`** embeds every row again, development and test, about 440,000: about 12 hours at
+  - **L5's run with `--look=L5`, only if B won the development comparison,** embeds every row again, development and test, about 440,000: about 12 hours at
     0.1 s a frame and about 28 hours at 0.23 s.
   - Long runs are fine (owner, 2026-11-19): any time of day, at niceness 19 on one CPU, with no overnight-only
     scheduling.
