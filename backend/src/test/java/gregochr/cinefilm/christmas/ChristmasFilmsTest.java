@@ -10,6 +10,7 @@ import static gregochr.cinefilm.TestData.film;
 import static gregochr.cinefilm.TestData.view;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -233,7 +234,7 @@ class ChristmasFilmsTest {
     void choosingSavesTheChoiceAndAnswersTheScreen() {
         Film film = mk(1, "Added", 1999, 11L);
         when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(film));
-        when(films.findTmdbIdsWithKeyword(Set.of(11L), "christmas")).thenReturn(List.of());
+        when(films.findByTmdbIdIn(Set.of(11L))).thenReturn(List.of(film));
         library(film);
         overrides(Set.of(11L), Set.of());
 
@@ -265,13 +266,97 @@ class ChristmasFilmsTest {
         when(films.findByTmdbIdOrderByIdAsc(12L)).thenReturn(List.of(other));
         when(overrides.includes()).thenReturn(Set.of(11L, 12L));
         when(overrides.excludes()).thenReturn(Set.of());
-        when(films.findTmdbIdsWithKeyword(Set.of(11L, 12L), "christmas")).thenReturn(List.of(11L));
+        when(films.findByTmdbIdIn(Set.of(11L, 12L))).thenReturn(List.of(tagged, other));
         library(tagged, other);
 
         service.choose(12L, ChristmasChoice.INCLUDE);
 
         verify(overrides).remove(11L);
         verify(overrides, never()).remove(12L);
+    }
+
+    @Test
+    void twoFilmRowsWithOneTmdbIdKeepTheIncludeWhenOnlyOneIsTagged() {
+        Film tagged = mk(1, "Tagged twin", 1980, 11L, "christmas");
+        Film untagged = mk(2, "Untagged twin", 1981, 11L);
+        when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(tagged, untagged));
+        when(films.findByTmdbIdIn(Set.of(11L))).thenReturn(List.of(tagged, untagged));
+        library(tagged, untagged);
+        overrides(Set.of(11L), Set.of());
+
+        ChristmasView view = service.choose(11L, ChristmasChoice.INCLUDE);
+
+        verify(overrides, never()).remove(11L);
+        assertThat(view.inWeek()).extracting(Item::filmId, Item::reason)
+            .containsExactly(org.assertj.core.groups.Tuple.tuple(1L, Reason.KEYWORD),
+                org.assertj.core.groups.Tuple.tuple(2L, Reason.ADDED));
+    }
+
+    @Test
+    void twoFilmRowsWithOneTmdbIdLoseTheIncludeWhenBothAreTagged() {
+        Film one = mk(1, "Twin one", 1980, 11L, "christmas");
+        Film two = mk(2, "Twin two", 1981, 11L, "christmas");
+        when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(one, two));
+        when(films.findByTmdbIdIn(Set.of(11L))).thenReturn(List.of(one, two));
+        library(one, two);
+        overrides(Set.of(11L), Set.of());
+
+        service.choose(11L, ChristmasChoice.INCLUDE);
+
+        verify(overrides).remove(11L);
+    }
+
+    @Test
+    void theLibraryLockIsHeldForTheWholeWriteAndGivenBackAfterSuccess() throws Exception {
+        Film film = mk(1, "Film", 1999, 11L);
+        when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(film));
+        when(films.findByTmdbIdIn(Set.of(11L))).thenReturn(List.of(film));
+        library(film);
+        overrides(Set.of(11L), Set.of());
+        List<String> heldDuringWrite = new ArrayList<>();
+        doAnswer(call -> heldDuringWrite.add(lock.holder())).when(overrides).set(11L, ChristmasChoice.INCLUDE);
+
+        service.choose(11L, ChristmasChoice.INCLUDE);
+
+        assertThat(heldDuringWrite).containsExactly(LibraryLock.CHRISTMAS);
+        assertThat(CompletableFuture.supplyAsync(lock::holder).get(5, TimeUnit.SECONDS)).isNull();
+    }
+
+    @Test
+    void theLibraryLockIsGivenBackAfterAFailedWriteAndAfterANotFound() throws Exception {
+        Film film = mk(1, "Film", 1999, 11L);
+        when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(film));
+        when(films.findByTmdbIdOrderByIdAsc(99L)).thenReturn(List.of());
+        doThrow(new IllegalStateException("db down")).when(overrides).set(11L, ChristmasChoice.INCLUDE);
+
+        assertThatThrownBy(() -> service.choose(11L, ChristmasChoice.INCLUDE))
+            .isInstanceOf(IllegalStateException.class);
+        assertThat(CompletableFuture.supplyAsync(lock::holder).get(5, TimeUnit.SECONDS)).isNull();
+        assertThatThrownBy(() -> service.choose(99L, ChristmasChoice.INCLUDE))
+            .isInstanceOf(NotFoundException.class);
+        assertThat(CompletableFuture.supplyAsync(lock::holder).get(5, TimeUnit.SECONDS)).isNull();
+    }
+
+    @Test
+    void aScanHoldingTheLibraryLockRefusesFromAnotherThreadAndKeepsItsLock() throws Exception {
+        lock.tryAcquire(LibraryLock.SCAN);
+
+        assertThatThrownBy(() -> CompletableFuture.supplyAsync(() -> service.choose(11L, ChristmasChoice.INCLUDE))
+            .get(5, TimeUnit.SECONDS))
+            .hasRootCauseInstanceOf(ConflictException.class)
+            .hasRootCauseMessage("A scan is running — try again when it finishes");
+        assertThat(lock.holder()).as("the scan's lock is not released by the refused change")
+            .isEqualTo(LibraryLock.SCAN);
+        verifyNoInteractions(overrides, films);
+    }
+
+    @Test
+    void anotherLibraryWriterHoldingTheLockRefusesWithItsOwnWords() {
+        lock.tryAcquire(LibraryLock.IMPORT);
+
+        assertThatThrownBy(() -> service.choose(11L, ChristmasChoice.INCLUDE))
+            .isInstanceOf(ConflictException.class).hasMessage("A Plex import is running");
+        verifyNoInteractions(overrides, films);
     }
 
     @Test
@@ -313,7 +398,7 @@ class ChristmasFilmsTest {
         Film film = mk(1, "Film", 1999, 11L);
         when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(film));
         doThrow(new IllegalStateException("db down")).doNothing().when(overrides).set(11L, ChristmasChoice.INCLUDE);
-        when(films.findTmdbIdsWithKeyword(Set.of(11L), "christmas")).thenReturn(List.of());
+        when(films.findByTmdbIdIn(Set.of(11L))).thenReturn(List.of(film));
         library(film);
         overrides(Set.of(11L), Set.of());
 

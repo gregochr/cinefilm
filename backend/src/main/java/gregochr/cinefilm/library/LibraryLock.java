@@ -31,6 +31,9 @@ public class LibraryLock {
     /** Holder name of the credits import writing its rows (taken only for that short write). */
     public static final String PLEX_CREDITS = "plex-credits";
 
+    /** Holder name of an Admin change to the Christmas films (taken only for that short write). */
+    public static final String CHRISTMAS = "christmas";
+
     private static final String BUSY = "The library is busy; try again in a moment";
 
     private final AtomicReference<String> holder = new AtomicReference<>();
@@ -77,6 +80,7 @@ public class LibraryLock {
             case SUBTITLE -> "Subtitles are being changed or checked; try again in a moment";
             case CREDITS -> "Credits are being saved; try again in a moment";
             case PLEX_CREDITS -> "Plex credits are being imported; try again in a moment";
+            case CHRISTMAS -> "Christmas films are being changed; try again in a moment";
             default -> BUSY;
         };
     }

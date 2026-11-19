@@ -177,6 +177,8 @@ class LibraryLockTest {
             .isEqualTo("Credits are being saved; try again in a moment");
         assertThat(busyTextWhenHeldBy(LibraryLock.PLEX_CREDITS))
             .isEqualTo("Plex credits are being imported; try again in a moment");
+        assertThat(busyTextWhenHeldBy(LibraryLock.CHRISTMAS))
+            .isEqualTo("Christmas films are being changed; try again in a moment");
     }
 
     @Test

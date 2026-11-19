@@ -196,6 +196,22 @@ class ChristmasApiTest extends ApiTestBase {
     }
 
     @Test
+    void twoFilmsSharingATmdbIdKeepTheIncludeForTheUntaggedOne() throws Exception {
+        add("Tagged twin", 1970, 5L, "christmas");
+        add("Untagged twin", 1971, 5L);
+
+        mvc.perform(put("/api/admin/christmas/5").content("{\"choice\":\"INCLUDE\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.inWeek[*].title", contains("Tagged twin", "Untagged twin")))
+            .andExpect(jsonPath("$.inWeek[0].reason").value("KEYWORD"))
+            .andExpect(jsonPath("$.inWeek[1].reason").value("ADDED"))
+            .andExpect(jsonPath("$.added[*].title", contains("Untagged twin")));
+        reload();
+
+        assertThat(overrides.includes()).containsExactly(5L);
+    }
+
+    @Test
     void aHiddenFilmHasNoStateAndItsTmdbIdIs404() throws Exception {
         Film hidden = film(null, "Hidden", 1970, NOW, "Comedy");
         hidden.setTmdbId(5L);

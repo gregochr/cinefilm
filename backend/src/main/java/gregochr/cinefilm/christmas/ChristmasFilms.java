@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -88,29 +89,40 @@ public class ChristmasFilms {
      * @throws NotFoundException when no film in the library has that TMDB id
      */
     public ChristmasView choose(long tmdbId, ChristmasChoice choice) {
-        if (lock.heldBy(LibraryLock.SCAN)) {
-            throw new ConflictException(SCAN_RUNNING);
+        // Lock order: this service's own write lock first (waited for, but only ever held for one short write), then
+        // the shared library lock (never waited for: tried once, so nothing can deadlock). A scan that starts later
+        // is refused by the library lock while this write runs, and a scan already running refuses this change.
+        writes.lock();
+        try {
+            if (!lock.tryAcquire(LibraryLock.CHRISTMAS)) {
+                throw new ConflictException(lock.heldBy(LibraryLock.SCAN) ? SCAN_RUNNING : lock.busyText());
+            }
+            try {
+                return write(tmdbId, choice);
+            } finally {
+                lock.release();
+            }
+        } finally {
+            writes.unlock();
         }
+    }
+
+    private ChristmasView write(long tmdbId, ChristmasChoice choice) {
         // Browsable only, like Home and the lists: a hidden film cannot show, so there is nothing to override.
         boolean known = Boolean.TRUE.equals(readTx.execute(status ->
             films.findByTmdbIdOrderByIdAsc(tmdbId).stream().anyMatch(Film::browsable)));
         if (!known) {
             throw new NotFoundException("No film with TMDB id " + tmdbId);
         }
-        writes.lock();
-        try {
-            writeTx.executeWithoutResult(status -> {
-                if (choice == null) {
-                    overrides.remove(tmdbId);
-                } else {
-                    overrides.set(tmdbId, choice);
-                }
-                dropRedundantIncludes();
-            });
-            return view();
-        } finally {
-            writes.unlock();
-        }
+        writeTx.executeWithoutResult(status -> {
+            if (choice == null) {
+                overrides.remove(tmdbId);
+            } else {
+                overrides.set(tmdbId, choice);
+            }
+            dropRedundantIncludes();
+        });
+        return view();
     }
 
     /**
@@ -150,13 +162,22 @@ public class ChristmasFilms {
         return film.getKeywordsFetchedAt() == null ? State.KEYWORDS_PENDING : State.NOT_IN;
     }
 
-    /** An INCLUDE row is redundant once TMDB tags the film: the keyword counts it, so the row goes. */
+    /**
+     * An INCLUDE row is redundant once TMDB tags the film: the keyword counts it, so the row goes. Two film rows can
+     * share a TMDB id (a refused merge), and the keyword is fetched per row, so the row goes only when every film
+     * holding the id carries the keyword; otherwise the untagged one still needs it.
+     */
     private void dropRedundantIncludes() {
         Set<Long> included = overrides.includes();
         if (included.isEmpty()) {
             return;
         }
-        films.findTmdbIdsWithKeyword(included, WeeklyThemeSelector.CHRISTMAS_KEYWORD).forEach(overrides::remove);
+        films.findByTmdbIdIn(included).stream().collect(Collectors.groupingBy(Film::getTmdbId)).forEach(
+            (id, rows) -> {
+                if (rows.stream().allMatch(ChristmasFilms::tagged)) {
+                    overrides.remove(id);
+                }
+            });
     }
 
     private ChristmasView build() {
