@@ -20,12 +20,23 @@ class CreditsEvaluateOptionsTest {
 
     @Test
     void everyFlagIsRead() {
-        CreditsEvaluateOptions options = CreditsEvaluateOptions.parse(with("--train", "b/"));
+        CreditsEvaluateOptions options = CreditsEvaluateOptions.parse(with("--train", "b/", "--look=L5",
+            "--baseline", "v2.csv"));
 
         assertThat(options.features()).isEqualTo(Path.of("f"));
         assertThat(options.out()).isEqualTo(Path.of("o"));
         assertThat(options.train()).containsExactly(Path.of("a").toAbsolutePath().normalize(),
             Path.of("b").toAbsolutePath().normalize());
+        assertThat(options.look()).isTrue();
+        assertThat(options.baseline()).isEqualTo(Path.of("v2.csv"));
+    }
+
+    @Test
+    void theLookAndTheBaselineAreOffByDefault() {
+        CreditsEvaluateOptions options = CreditsEvaluateOptions.parse(BASE);
+
+        assertThat(options.look()).isFalse();
+        assertThat(options.baseline()).isNull();
     }
 
     static Stream<Arguments> refusals() {
@@ -37,9 +48,11 @@ class CreditsEvaluateOptionsTest {
             Arguments.of(with("features", "f"), "unknown argument features"),
             Arguments.of(with("--out", "p"), "flag --out given twice"),
             Arguments.of(new String[] {"--features", "f", "--train", "a", "--out"}, "flag --out needs a value"),
-            Arguments.of(with("--look"), "--look is not supported yet"),
-            Arguments.of(with("--look=L5"), "--look is not supported yet"),
-            Arguments.of(with("--baseline", "v2.csv"), "--baseline is not supported yet"),
+            Arguments.of(with("--look"), "flag --look needs a value: --look=L5"),
+            Arguments.of(with("--look=L6"), "--look must be L5: --look=L6"),
+            Arguments.of(with("--look=L5", "--look=L5"), "flag --look given twice"),
+            Arguments.of(with("--baseline"), "flag --baseline needs a value"),
+            Arguments.of(with("--baseline", "v2.csv"), "--baseline needs --look=L5"),
             Arguments.of(with("--train", "x/a"), "the same training run is given twice: a"));
     }
 

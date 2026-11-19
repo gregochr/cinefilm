@@ -162,4 +162,11 @@ final class EvaluateFixtures {
             Files.write(run.resolve(file), MAPPER.writeValueAsBytes(own));
         }
     }
+
+    /** Gives {@code run} {@code other}'s five shipping models. */
+    static void shipWith(Path run, Path other) throws IOException {
+        ObjectNode own = (ObjectNode) MAPPER.readTree(Files.readAllBytes(run.resolve("model.json")));
+        own.set("models", MAPPER.readTree(Files.readAllBytes(other.resolve("model.json"))).get("models"));
+        Files.write(run.resolve("model.json"), MAPPER.writeValueAsBytes(own));
+    }
 }

@@ -1,0 +1,3 @@
+### Added — credits classifier: the look, the evaluation summary and the version 2 baseline
+
+`CreditsEvaluateMain` now accepts `--look=L5` (it needs a features run made with `--look=L5`): test films are scored with the final choice and that run's five shipping models, and `look.json` is written. It also writes `summary.json`: for the development rows and, under `--look=L5`, the test rows apart, the early counts by the opening at `t` and the margin band over `FOUND` films, and the goal shares by Plex's opening type with a `none` group. `--baseline <v2 snapshot csv>` (only with `--look=L5`) joins on `media_file_id` and `fingerprint` and fills `v2Verdict` and `v2Error` in `evaluation.csv`. Nothing in the server calls the tool.

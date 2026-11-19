@@ -66,13 +66,14 @@ class CreditsEvaluateJobTest {
     }
 
     @Test
-    void aRunWithoutTheLookScoresEveryDevelopmentFilmAndWritesTwoFiles() throws IOException {
+    void aRunWithoutTheLookScoresEveryDevelopmentFilmAndWritesThreeFiles() throws IOException {
         Path features = EvaluateFixtures.featuresRun(temp, false);
 
         List<Path> written = run(features, "--train", trainA.toString());
 
         Path dir = out().resolve(RUN);
-        assertThat(written).containsExactly(dir, dir.resolve("evaluation.csv"), dir.resolve("calibration.json"));
+        assertThat(written).containsExactly(dir, dir.resolve("evaluation.csv"), dir.resolve("calibration.json"),
+            dir.resolve("summary.json"));
         assertThat(evaluation()).isEqualTo(HEADER
             + "1,dev,0,FOUND,120000,120000,true,true,-5000,0,DARK,low,DARK,,,train-a,false\n"
             + "2,dev,1,FOUND,120000,120000,true,true,-5000,0,DARK,low,DARK,,,train-a,false\n"
@@ -98,6 +99,46 @@ class CreditsEvaluateJobTest {
         assertThat(calibration.get("toolGitCommit").stringValue()).isEqualTo("toolsha");
         assertThat(calibration.get("datasetSha256").stringValue()).isEqualTo("ds-hash");
         assertThat(calibration.get("labelsSha256").stringValue()).isEqualTo("labels-hash");
+        JsonNode summary = json("summary.json");
+        assertThat(summary.get("generatedAt").stringValue()).isEqualTo("2024-03-31T23:30:00Z");
+        assertThat(summary.has("test")).isFalse();
+        assertThat(summary.get("development").get("films").intValue()).isEqualTo(10);
+        assertThat(summary.get("development").get("early").get("LIT").get("low").get("found").intValue())
+            .isEqualTo(6);
+        assertThat(summary.get("development").get("goals").get("none").get("films").intValue()).isEqualTo(2);
+    }
+
+    @Test
+    void theLookScoresTestFilmsWithTheFinalChoiceAndWritesLookJson() throws IOException {
+        Path features = EvaluateFixtures.featuresRun(temp, true);
+
+        List<Path> written = run(features, "--train", trainA.toString(), "--look=L5");
+
+        assertThat(written).hasSize(5).last().isEqualTo(out().resolve(RUN).resolve("look.json"));
+        assertThat(evaluation()).contains("\n10,dev,4,FOUND").endsWith(
+            "\n11,test,,FOUND,120000,120000,true,true,-5000,0,LIT,low,LIT,,,train-a,false\n"
+            + "12,test,,FOUND,120000,120000,true,true,-5000,0,LIT,low,LIT,,,train-a,false\n");
+        assertThat(json("look.json").toString()).isEqualTo("{\"look\":\"L5\",\"generatedAt\":"
+            + "\"2024-03-31T23:30:00Z\",\"toolGitCommit\":\"toolsha\",\"testFilms\":2}");
+        assertThat(json("summary.json").get("test").get("films").intValue()).isEqualTo(2);
+        assertThat(json("summary.json").get("test").get("goals").get("LIT").get("films").intValue()).isEqualTo(2);
+        assertThat(json("summary.json").get("development").get("films").intValue()).isEqualTo(10);
+    }
+
+    @Test
+    void theSameInputsGiveByteIdenticalFiles() throws IOException {
+        Path features = EvaluateFixtures.featuresRun(temp, true);
+        Path trainB = EvaluateFixtures.trainRun(temp, "train-b");
+        run(features, "--train", trainA.toString(), "--train", trainB.toString(), "--look=L5");
+        Path second = temp.resolve("second");
+        job.run(CreditsEvaluateOptions.parse(new String[] {"--features", features.toString(), "--out",
+            second.toString(), "--train", trainA.toString(), "--train", trainB.toString(), "--look=L5"}));
+
+        for (String name : List.of("evaluation.csv", "calibration.json", "summary.json", "look.json")) {
+            assertThat(Files.readAllBytes(second.resolve(RUN).resolve(name)))
+                .isEqualTo(Files.readAllBytes(out().resolve(RUN).resolve(name)));
+        }
+        assertThat(json("calibration.json").get("final").get("run").stringValue()).isEqualTo("train-a");
     }
 
     @Test
@@ -113,6 +154,14 @@ class CreditsEvaluateJobTest {
     @Test
     void aTestRowWithoutTheLookIsRefusedAndNothingIsWritten() throws IOException {
         refused(EvaluateFixtures.featuresRun(temp, true), "a test row is refused without --look=L5");
+    }
+
+    @Test
+    void theLookOnAFeaturesRunWithNoLookJsonIsRefusedAndNothingIsWritten() throws IOException {
+        Path features = EvaluateFixtures.featuresRun(temp, true);
+        Files.delete(features.resolve("look.json"));
+
+        refused(features, "no look.json", "--look=L5");
     }
 
     @Test
@@ -168,10 +217,62 @@ class CreditsEvaluateJobTest {
     }
 
     @Test
-    void theLookAndTheBaselineAreRefusedAndNothingIsWritten() throws IOException {
-        Path features = EvaluateFixtures.featuresRun(temp, false);
-        refused(features, "--look is not supported yet", "--look=L5");
-        refused(features, "--baseline is not supported yet", "--baseline", "v2.csv");
+    void testFilmsAreScoredByTheShippingModelsOfTheFinalChoicesRun() throws IOException {
+        Path features = EvaluateFixtures.featuresRun(temp, true);
+        Path inverted = EvaluateFixtures.trainRun(temp, "train-inv", true);
+        run(features, "--train", inverted.toString(), "--train", trainA.toString(), "--look=L5");
+        List<String> before = evaluation().lines().skip(1).toList();
+        EvaluateFixtures.shipWith(trainA, inverted);
+        Path second = temp.resolve("second");
+
+        job.run(CreditsEvaluateOptions.parse(new String[] {"--features", features.toString(), "--out",
+            second.toString(), "--train", inverted.toString(), "--train", trainA.toString(), "--look=L5"}));
+
+        List<String> after = Files.readAllLines(second.resolve(RUN).resolve("evaluation.csv")).stream().skip(1)
+            .toList();
+        assertThat(after.subList(0, 10)).isEqualTo(before.subList(0, 10));
+        assertThat(MAPPER.readTree(Files.readAllBytes(second.resolve(RUN).resolve("calibration.json")))
+            .get("final").get("run").stringValue()).isEqualTo("train-a");
+        assertThat(before.subList(10, 12)).allMatch(line -> line.contains(",FOUND,120000,")
+            && line.endsWith(",train-a,false"));
+        assertThat(after.subList(10, 12)).containsExactly("11,test,,NOT_FOUND,,,,,,,,,LIT,,,train-a,false",
+            "12,test,,NOT_FOUND,,,,,,,,,LIT,,,train-a,false");
+    }
+
+    @Test
+    void theBaselineJoinsOnMediaFileIdAndFingerprintAndScoresV2ByItsOffset() throws IOException {
+        Path features = EvaluateFixtures.featuresRun(temp, true);
+        Path baseline = Files.writeString(temp.resolve("v2.csv"),
+            "media_file_id,fingerprint,verdict,offset_ms,reasons,checked_at,analysis_version\n"
+                + "1,fp1,FOUND,131500,,2024-01-01,2\n"
+                + "2,wrong,FOUND,125000,,2024-01-01,2\n"
+                + "3,fp3,UNSURE,,\"a,b\",2024-01-01,2\n"
+                + "11,fp11,FOUND,100000,,2024-01-01,2\n");
+
+        run(features, "--train", trainA.toString(), "--look=L5", "--baseline", baseline.toString());
+
+        List<String> lines = evaluation().lines().toList();
+        List<String> v2 = new ArrayList<>();
+        for (int id : List.of(1, 2, 3, 4, 11)) {
+            String[] fields = lines.get(id).split(",", -1);
+            v2.add(fields[13] + "/" + fields[14]);
+        }
+        assertThat(v2).containsExactly("FOUND/11500", "/", "UNSURE/", "/", "FOUND/-20000");
+    }
+
+    @Test
+    void aBaselineProblemIsRefused() throws IOException {
+        Path features = EvaluateFixtures.featuresRun(temp, true);
+        Path baseline = Files.writeString(temp.resolve("v2.csv"), "media_file_id,fingerprint,verdict\n");
+        refused(features, "the baseline has no column offset_ms", "--look=L5", "--baseline", baseline.toString());
+        Files.writeString(baseline, "media_file_id,fingerprint,verdict,offset_ms\n1,fp1,UNSURE,\n1,fp1,UNSURE,\n");
+        refused(features, "the baseline repeats media file 1", "--look=L5", "--baseline", baseline.toString());
+        Files.writeString(baseline, "media_file_id,fingerprint,verdict,offset_ms\n1,fp1\n");
+        refused(features, "the baseline has a row of 2 fields, not 4", "--look=L5", "--baseline",
+            baseline.toString());
+        Files.writeString(baseline, "");
+        refused(features, "the baseline has no column media_file_id", "--look=L5", "--baseline",
+            baseline.toString());
     }
 
     @Test

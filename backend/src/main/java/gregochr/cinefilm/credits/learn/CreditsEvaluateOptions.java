@@ -10,22 +10,35 @@ import java.util.Set;
 
 /**
  * The command line of the credits evaluation tool ({@code docs/engineering/credits-classifier-plan.md}, "L3c
- * specification", {@code CreditsEvaluateMain}). {@code --look} and {@code --baseline}
- * are refused until L3c-eval-2b.
+ * specification", {@code CreditsEvaluateMain}). The only flag for test films is
+ * {@code --look=L5}, and {@code --baseline} needs it.
  */
-record CreditsEvaluateOptions(Path features, List<Path> train, Path out) {
+record CreditsEvaluateOptions(Path features, List<Path> train, Path out, boolean look, Path baseline) {
 
-    private static final List<String> SINGLE = List.of("features", "out");
+    private static final String LOOK = "--look";
+    private static final String LOOK_VALUE = "L5";
+    private static final List<String> SINGLE = List.of("features", "out", "baseline");
     private static final String TRAIN = "train";
 
-    /** Parses {@code --flag value} pairs ({@code --train} may repeat). */
+    /** Parses {@code --flag value} pairs ({@code --train} may repeat) and {@code --look=L5}. */
     static CreditsEvaluateOptions parse(String[] args) {
         Map<String, String> flags = new HashMap<>();
         List<Path> train = new ArrayList<>();
+        boolean look = false;
         for (int i = 0; i < args.length; i++) {
             String name = args[i];
-            if (name.startsWith("--look") || name.equals("--baseline")) {
-                throw new IllegalArgumentException(name.split("=")[0] + " is not supported yet");
+            if (name.equals(LOOK)) {
+                throw new IllegalArgumentException("flag --look needs a value: --look=" + LOOK_VALUE);
+            }
+            if (name.startsWith(LOOK + "=")) {
+                if (!name.equals(LOOK + "=" + LOOK_VALUE)) {
+                    throw new IllegalArgumentException("--look must be " + LOOK_VALUE + ": " + name);
+                }
+                if (look) {
+                    throw new IllegalArgumentException("flag --look given twice");
+                }
+                look = true;
+                continue;
             }
             String flag = name.startsWith("--") ? name.substring(2) : name;
             if (flag.equals(name) || !SINGLE.contains(flag) && !TRAIN.equals(flag)) {
@@ -49,13 +62,17 @@ record CreditsEvaluateOptions(Path features, List<Path> train, Path out) {
         if (train.isEmpty()) {
             throw new IllegalArgumentException("missing required flag --" + TRAIN);
         }
+        if (flags.containsKey("baseline") && !look) {
+            throw new IllegalArgumentException("--baseline needs --look=" + LOOK_VALUE);
+        }
         Set<Path> names = new HashSet<>();
         for (Path run : train) {
             if (!names.add(run.getFileName())) {
                 throw new IllegalArgumentException("the same training run is given twice: " + run.getFileName());
             }
         }
+        String baseline = flags.get("baseline");
         return new CreditsEvaluateOptions(Path.of(flags.get("features")), List.copyOf(train),
-            Path.of(flags.get("out")));
+            Path.of(flags.get("out")), look, baseline == null ? null : Path.of(baseline));
     }
 }

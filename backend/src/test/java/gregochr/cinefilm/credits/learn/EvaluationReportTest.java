@@ -28,15 +28,19 @@ class EvaluationReportTest {
             Double.NaN, 0, false);
     }
 
+    private static Row row(long id, Result result, FrameKind plex) {
+        return new Row(id, Side.DEV, 3, result, Optional.ofNullable(plex), null, null, OptionalLong.empty(), "r");
+    }
+
     @Test
     void aFoundRowWritesEveryColumnAndAnUnfoundRowLeavesTheFoundOnlyColumnsEmpty() {
         Row full = new Row(7, Side.TEST, null, found(-5001, -300, FrameKind.PLATE, Band.HIGH),
-            Optional.of(FrameKind.DARK), true, "train-x");
+            Optional.of(FrameKind.DARK), true, "FOUND", OptionalLong.of(-40), "train-x");
         Row unsure = new Row(8, Side.DEV, 0, other(Verdict.UNSURE, OptionalLong.of(900)), Optional.empty(), false,
-            "train-x");
+            null, OptionalLong.empty(), "train-x");
 
         assertThat(EvaluationReport.csv(List.of(full, unsure))).isEqualTo(EvaluationReport.HEADER
-            + "7,test,,FOUND,1000,2000,true,false,-5001,-300,PLATE,high,DARK,,,train-x,true\n"
+            + "7,test,,FOUND,1000,2000,true,false,-5001,-300,PLATE,high,DARK,FOUND,-40,train-x,true\n"
             + "8,dev,0,UNSURE,900,,,,,,LIT,,,,,train-x,false\n");
     }
 
@@ -44,6 +48,47 @@ class EvaluationReportTest {
     void theHeaderIsExactlyTheSpecifiedColumns() {
         assertThat(EvaluationReport.HEADER).isEqualTo("mediaFileId,side,fold,verdict,t,f,covered,aligned,earlyError,"
             + "goalError,openingAtT,marginBand,plexOpening,v2Verdict,v2Error,run,leadingIsland\n");
+    }
+
+    @Test
+    void earlyCountsAreByTheOpeningAtTAndTheBandOverFoundFilmsAtTheirBoundaries() {
+        JsonNode block = EvaluationReport.block(List.of(
+            row(1, found(-15_001, 0, FrameKind.DARK, Band.LOW), null),
+            row(2, found(-15_000, 0, FrameKind.DARK, Band.LOW), null),
+            row(3, found(-5_001, 0, FrameKind.DARK, Band.LOW), null),
+            row(4, found(-5_000, 0, FrameKind.DARK, Band.HIGH), null),
+            row(5, found(-20_000, 0, FrameKind.LIT, Band.HIGH), null),
+            row(6, other(Verdict.UNSURE, OptionalLong.of(5)), null),
+            row(7, other(Verdict.NOT_FOUND, OptionalLong.empty()), null)));
+
+        assertThat(block.get("films").intValue()).isEqualTo(7);
+        assertThat(block.get("early").get("DARK").get("low").toString())
+            .isEqualTo("{\"found\":3,\"earlyBelow15s\":1,\"earlyBelow5s\":3}");
+        assertThat(block.get("early").get("DARK").get("high").toString())
+            .isEqualTo("{\"found\":1,\"earlyBelow15s\":0,\"earlyBelow5s\":0}");
+        assertThat(block.get("early").get("LIT").get("high").toString())
+            .isEqualTo("{\"found\":1,\"earlyBelow15s\":1,\"earlyBelow5s\":1}");
+        assertThat(block.get("early").get("PLATE").get("low").toString())
+            .isEqualTo("{\"found\":0,\"earlyBelow15s\":0,\"earlyBelow5s\":0}");
+    }
+
+    @Test
+    void goalSharesAreByPlexsOpeningTypeWithANoneGroupAndNullSharesForAnEmptyGroup() {
+        JsonNode goals = EvaluationReport.block(List.of(
+            row(1, found(0, 10_000, FrameKind.LIT, Band.LOW), FrameKind.DARK),
+            row(2, found(0, -10_001, FrameKind.LIT, Band.LOW), FrameKind.DARK),
+            row(3, found(0, 60_000, FrameKind.LIT, Band.LOW), FrameKind.DARK),
+            row(4, found(0, -60_001, FrameKind.LIT, Band.LOW), FrameKind.DARK),
+            row(5, other(Verdict.UNSURE, OptionalLong.of(5)), FrameKind.DARK),
+            row(6, found(0, 0, FrameKind.LIT, Band.LOW), null),
+            row(7, other(Verdict.NOT_FOUND, OptionalLong.empty()), null))).get("goals");
+
+        assertThat(goals.get("DARK").toString()).isEqualTo("{\"films\":5,\"within10s\":1,"
+            + "\"within60sOrNotFound\":4,\"share10s\":0.2,\"share60sOrNotFound\":0.8}");
+        assertThat(goals.get("none").toString()).isEqualTo("{\"films\":2,\"within10s\":1,"
+            + "\"within60sOrNotFound\":2,\"share10s\":0.5,\"share60sOrNotFound\":1.0}");
+        assertThat(goals.get("PLATE").toString()).isEqualTo("{\"films\":0,\"within10s\":0,"
+            + "\"within60sOrNotFound\":0,\"share10s\":null,\"share60sOrNotFound\":null}");
     }
 
     @Test
