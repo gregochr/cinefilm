@@ -51,6 +51,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- ONNX Runtime, CPU build, for the credits image encoder (L4b). Nothing in the server loads it before L6a;
+             the tool runs use it. About 49 MB in the image. The jar has linux-x64 natives but none for macOS x86-64. -->
+        <dependency>
+            <groupId>com.microsoft.onnxruntime</groupId>
+            <artifactId>onnxruntime</artifactId>
+            <version>1.31.1</version>
+        </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
@@ -406,4 +413,38 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- The dev Mac only. ONNX Runtime 1.30 and later ship no macOS x86-64 natives (the dev Mac is Intel), so
+             OnnxImageEncoder's tests (OnnxImageEncoderTest, @EnabledOnOs(LINUX)) cannot run there, and the class
+             (41 of 17,164 lines) would sink the JaCoCo floors. On the Mac it is left out of the `check` execution,
+             per-class and bundle. On Linux (CI) this profile is inactive: the class is under both floors as normal.
+             The `report` execution and CI's diff-cover are untouched everywhere. Owner approved 2026-11-19. -->
+        <profile>
+            <id>mac-no-onnx-natives</id>
+            <activation>
+                <os>
+                    <family>mac</family>
+                </os>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>check</id>
+                                <configuration>
+                                    <excludes>
+                                        <exclude>gregochr/cinefilm/credits/learn/OnnxImageEncoder.class</exclude>
+                                    </excludes>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
