@@ -368,6 +368,35 @@ describe('Christmas films: changes and undo', () => {
     expect(screen.getByRole('tabpanel')).toHaveFocus();
   });
 
+  it('puts focus on the empty state when the last film goes and a failed Undo removes the focused button', async () => {
+    const original = fresh();
+    original.inWeek = original.inWeek.filter((f) => f.tmdbId === 104);
+    original.leftOut = [];
+    original.fallsBack = true;
+    original.keywords = { fetched: 1412, total: 1412, running: false };
+    const emptied = { ...original, inWeek: [], added: [] };
+    let fail = false;
+    serve({
+      get: () => original,
+      put: () =>
+        fail
+          ? respond({ error: 'A scan is running — try again when it finishes' }, 409)
+          : respond(emptied),
+    });
+    await open();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Trading Places' }));
+    const undo = await within(toast()).findByRole('button', { name: 'Undo' });
+    const empty = screen.getByRole('region', { name: 'No Christmas films' });
+    expect(screen.queryByRole('tabpanel')).not.toBeInTheDocument();
+    expect(undo).toHaveFocus();
+
+    fail = true;
+    await userEvent.click(undo);
+    await waitFor(() => expect(toast()).toHaveTextContent('A scan is running'));
+    expect(empty).toHaveFocus();
+  });
+
   it('puts focus on Undo after a change and keeps the toast while it holds focus, then counts 8 seconds from when focus leaves', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const original = fresh();

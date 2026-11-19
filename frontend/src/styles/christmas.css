@@ -142,7 +142,8 @@
 }
 
 /* List */
-.xmas-panel:focus-visible {
+.xmas-panel:focus-visible,
+.xmas-empty:focus-visible {
   outline: none;
   box-shadow: var(--cf-focus-ring);
 }

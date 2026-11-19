@@ -36,17 +36,18 @@ function ChristmasSkeleton() {
   );
 }
 
-function EmptyPanel({ kind, keywords }) {
+/** `panelRef` makes the panel the place focus falls back to when the list empties under a focused button. */
+function EmptyPanel({ kind, keywords, panelRef }) {
   if (kind === 'none') {
     return (
-      <section className="xmas-empty" aria-label="No Christmas films">
+      <section ref={panelRef} tabIndex={-1} className="xmas-empty" aria-label="No Christmas films">
         <h2 className="xmas-empty__title">No Christmas films yet</h2>
         <p>{EMPTY_NONE_TEXT}</p>
       </section>
     );
   }
   return (
-    <section className="xmas-empty" aria-label="No Christmas films">
+    <section ref={panelRef} tabIndex={-1} className="xmas-empty" aria-label="No Christmas films">
       <h2 className="xmas-empty__title">No Christmas films yet</h2>
       {/* Polite: the 30-second polls change these numbers as keywords arrive. */}
       <p role="status">{emptyPendingText(keywords)}</p>
@@ -103,7 +104,7 @@ export default function AdminChristmas() {
   if (data) {
     const empty = emptyKind(data);
     if (empty) {
-      body = <EmptyPanel kind={empty} keywords={data.keywords} />;
+      body = <EmptyPanel kind={empty} keywords={data.keywords} panelRef={panel} />;
     } else {
       const rows = tabRows(data, tab);
       body = (
