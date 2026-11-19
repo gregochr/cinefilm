@@ -134,10 +134,13 @@ final class EmbeddingFile {
         if (rows < 0) {
             throw new IllegalArgumentException("rows must not be negative: " + rows);
         }
+        if (dimension > MAX_DIMENSION) {
+            throw new IllegalArgumentException("dimension " + dimension + " makes a record of "
+                + recordBytes(dimension) + " bytes, more than " + MAX_RECORD_BYTES);
+        }
+        int record = (int) recordBytes(dimension);
         long expected;
-        int record;
         try {
-            record = Math.toIntExact(recordBytes(dimension));
             expected = Math.addExact(HEADER_BYTES, Math.multiplyExact(rows, (long) record));
         } catch (ArithmeticException e) {
             throw new IllegalArgumentException("the header's dimension " + dimension + " and rows " + rows

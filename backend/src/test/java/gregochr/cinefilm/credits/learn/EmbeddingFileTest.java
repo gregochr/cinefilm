@@ -311,8 +311,28 @@ class EmbeddingFileTest {
     void aHeaderWhoseSizesOverflowIsRefusedNotWrappedAround() throws IOException {
         refused(file("CFEMB001", 1, Long.MAX_VALUE, new byte[0]),
             "the header's dimension 1 and rows 9223372036854775807 are larger than any file");
+        refused(file("CFEMB001", EmbeddingFile.MAX_DIMENSION, Long.MAX_VALUE / 1_000_000, new byte[0]),
+            "the header's dimension 262139 and rows 9223372036854 are larger than any file");
+    }
+
+    @Test
+    void aDimensionAboveTheLimitIsRefusedBeforeAnythingIsAllocatedFromIt() throws IOException {
+        refused(file("CFEMB001", EmbeddingFile.MAX_DIMENSION + 1, 0, new byte[0]),
+            "dimension 262140 makes a record of 1048577 bytes, more than 1048576");
+        refused(file("CFEMB001", 10_000_000, 0, new byte[0]),
+            "dimension 10000000 makes a record of 40000017 bytes, more than 1048576");
         refused(file("CFEMB001", Integer.MAX_VALUE, 1, new byte[0]),
-            "the header's dimension 2147483647 and rows 1 are larger than any file");
+            "dimension 2147483647 makes a record of 8589934605 bytes, more than 1048576");
+    }
+
+    @Test
+    void theLargestAllowedDimensionStillOpens() throws IOException {
+        Path path = write(file("CFEMB001", EmbeddingFile.MAX_DIMENSION, 0, new byte[0]));
+
+        try (EmbeddingFile.Reader reader = EmbeddingFile.open(path)) {
+            assertThat(reader.dimension()).isEqualTo(EmbeddingFile.MAX_DIMENSION);
+            assertThat(reader.next()).isFalse();
+        }
     }
 
     @Test
