@@ -1,10 +1,11 @@
 import { trimTrailingSlashes } from './paths.js';
 
-/** The five Admin sections, in the order the rail and the phone row list them. `end` keeps To do from matching all. */
+/** The six Admin sections, in the order the rail and the phone row list them. `end` keeps To do from matching all. */
 export const ADMIN_SECTIONS = [
   { key: 'todo', to: '/admin', label: 'To do', end: true },
   { key: 'subtitles', to: '/admin/subtitles', label: 'Subtitles', end: false },
   { key: 'library', to: '/admin/library', label: 'Library', end: false },
+  { key: 'christmas', to: '/admin/christmas', label: 'Christmas films', end: false },
   { key: 'playback', to: '/admin/playback', label: 'Playback', end: false },
   { key: 'settings', to: '/admin/settings', label: 'Settings', end: false },
 ];

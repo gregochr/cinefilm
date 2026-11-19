@@ -8,12 +8,13 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const SECTIONS = ['To do', 'Subtitles', 'Library', 'Playback', 'Settings'];
+const SECTIONS = ['To do', 'Subtitles', 'Library', 'Christmas films', 'Playback', 'Settings'];
 // The fixture summary: 6 To do things, 2 unresolved subtitles, 1 live stream. Library and Settings carry no count.
 const NAMES = {
   'To do': 'To do, 6 things',
   Subtitles: 'Subtitles, 2 unresolved',
   Library: 'Library',
+  'Christmas films': 'Christmas films',
   Playback: 'Playback, 1 live',
   Settings: 'Settings',
 };
@@ -23,6 +24,7 @@ describe('Admin shell: routes and navigation', () => {
     ['/admin', 'To do'],
     ['/admin/subtitles', 'Subtitles'],
     ['/admin/library', 'Library'],
+    ['/admin/christmas', 'Christmas films'],
     ['/admin/playback', 'Playback'],
     ['/admin/settings', 'Settings'],
   ])('%s shows its section and marks only its own link current', async (path, name) => {
@@ -61,6 +63,7 @@ describe('Admin shell: routes and navigation', () => {
       '/admin',
       '/admin/subtitles',
       '/admin/library',
+      '/admin/christmas',
       '/admin/playback',
       '/admin/settings',
     ]);

@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { ADMIN_SECTIONS, FILE_LISTS, bareOnPhone, normalisePath } from './adminRoutes.js';
 
 describe('ADMIN_SECTIONS', () => {
-  it('lists the five sections in order, with `end` only on To do', () => {
+  it('lists the six sections in order, with `end` only on To do', () => {
     expect(ADMIN_SECTIONS.map((s) => [s.label, s.to, s.end])).toEqual([
       ['To do', '/admin', true],
       ['Subtitles', '/admin/subtitles', false],
       ['Library', '/admin/library', false],
+      ['Christmas films', '/admin/christmas', false],
       ['Playback', '/admin/playback', false],
       ['Settings', '/admin/settings', false],
     ]);
@@ -19,6 +20,7 @@ describe('bareOnPhone', () => {
     '/admin/',
     '/admin/subtitles',
     '/admin/library',
+    '/admin/christmas',
     '/admin/playback',
     '/admin/settings',
     '/Admin',
