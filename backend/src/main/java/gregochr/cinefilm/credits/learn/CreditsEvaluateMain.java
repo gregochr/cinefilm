@@ -12,8 +12,8 @@ import tools.jackson.core.JacksonException;
  * Entry point of the credits evaluation tool, run on the server as a throwaway container from the released image with
  * {@code -Dloader.main=gregochr.cinefilm.credits.learn.CreditsEvaluateMain} through {@code PropertiesLauncher}
  * ({@code docs/engineering/credits-classifier-plan.md}, "L3c specification"). A plain class, not a Spring bean. It
- * reads a features run and one or more training runs, and writes only {@code --out}. It refuses test rows;
- * {@code --look} and {@code --baseline} are not supported yet (L3c-eval-2b).
+ * reads a features run and one or more training runs, and writes only {@code --out}. Test films are scored only with
+ * {@code --look=L5}.
  *
  * <p>Exit codes: 0 when it ran, 1 on a bad flag, an unreadable input or a refused one (nothing is written).
  */
