@@ -86,7 +86,7 @@ class CreditsEvaluateJobTest {
             + "9,dev,3,FOUND,120000,120000,true,true,-5000,0,LIT,low,PLATE,,,train-a,false\n"
             + "10,dev,4,FOUND,120000,120000,true,true,-5000,0,LIT,low,PLATE,,,train-a,false\n");
         JsonNode calibration = json("calibration.json");
-        assertThat(calibration.get("grid").get("points").intValue()).isEqualTo(20_000);
+        assertThat(calibration.get("grid").get("points").intValue()).isEqualTo(42_000);
         assertThat(calibration.get("outer").propertyNames()).containsExactly("0", "1", "2", "3", "4");
         JsonNode fold2 = calibration.get("outer").get("2");
         assertThat(fold2.get("run").stringValue()).isEqualTo("train-a");
