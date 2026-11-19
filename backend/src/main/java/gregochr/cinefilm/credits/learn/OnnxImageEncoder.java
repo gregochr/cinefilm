@@ -12,6 +12,8 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +30,7 @@ final class OnnxImageEncoder implements ImageEncoder {
     private final EncoderSpec spec;
     private final OrtEnvironment environment;
     private final OrtSession session;
+    private boolean closed;
 
     /**
      * Opens the session.
@@ -49,10 +52,13 @@ final class OnnxImageEncoder implements ImageEncoder {
         } catch (OrtException e) {
             throw new IllegalStateException("cannot open " + spec.file() + ": " + e.getMessage(), e);
         }
-        if (!session.getInputNames().contains(spec.input()) || !session.getOutputNames().contains(spec.output())) {
+        Set<String> inputs = new TreeSet<>(session.getInputNames());
+        Set<String> outputs = new TreeSet<>(session.getOutputNames());
+        if (!inputs.contains(spec.input()) || !outputs.contains(spec.output())) {
+            String message = spec.file() + " has no input " + spec.input() + " and output " + spec.output()
+                + ": it has " + inputs + " and " + outputs;
             close();
-            throw new IllegalArgumentException(spec.file() + " has no input " + spec.input() + " and output "
-                + spec.output() + ": it has " + session.getInputNames() + " and " + session.getOutputNames());
+            throw new IllegalArgumentException(message);
         }
     }
 
@@ -89,6 +95,10 @@ final class OnnxImageEncoder implements ImageEncoder {
 
     @Override
     public void close() {
+        if (closed) {
+            return;
+        }
+        closed = true;
         try {
             session.close();
         } catch (OrtException e) {
