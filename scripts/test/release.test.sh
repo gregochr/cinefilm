@@ -62,12 +62,40 @@ assert_contains "not on main says why" "$OUT" "must be on main"
 new_world; (cd "$W/work" && echo b > b && git add b && git commit -q -m local-only)
 release v0.1.0
 assert_rejected "main ahead of origin"
+assert_contains "main ahead of origin says why" "$OUT" "local main differs from origin/main"
 
+# behind only: fast-forwarded, then released at the new head
 new_world
 git clone -q "$W/origin.git" "$W/other" 2>/dev/null
 (cd "$W/other" && echo c > c && git add c && git commit -q -m remote-only && git push -q origin main)
 release v0.1.0
-assert_rejected "main behind origin"
+assert_eq "main behind origin: exit 0" "0" "$RC"
+assert_contains "main behind origin: says it fast-forwards" "$OUT" "fast-forwarding"
+assert_eq "main behind origin: work HEAD is origin's main" "$(git -C "$W/origin.git" rev-parse main)" "$(git -C "$W/work" rev-parse HEAD)"
+assert_eq "main behind origin: tag on origin" "v0.1.0 " "$(remote_tags)"
+assert_eq "main behind origin: tag points at the remote-only commit" "$(git -C "$W/other" rev-parse HEAD)" "$(git -C "$W/origin.git" rev-parse 'v0.1.0^{commit}')"
+
+# diverged: a local commit and a different remote one
+new_world
+git clone -q "$W/origin.git" "$W/other" 2>/dev/null
+(cd "$W/other" && echo c > c && git add c && git commit -q -m remote-only && git push -q origin main)
+(cd "$W/work" && echo b > b && git add b && git commit -q -m local-only)
+before_head="$(git -C "$W/work" rev-parse HEAD)"
+release v0.1.0
+assert_rejected "main diverged from origin"
+assert_contains "main diverged says why" "$OUT" "local main differs from origin/main"
+assert_eq "main diverged: local HEAD unchanged" "$before_head" "$(git -C "$W/work" rev-parse HEAD)"
+
+# behind and dirty: rejected before any fast-forward
+new_world
+git clone -q "$W/origin.git" "$W/other" 2>/dev/null
+(cd "$W/other" && echo c > c && git add c && git commit -q -m remote-only && git push -q origin main)
+echo dirty > "$W/work/a"
+before_head="$(git -C "$W/work" rev-parse HEAD)"
+release v0.1.0
+assert_rejected "behind with a dirty tree"
+assert_contains "behind with a dirty tree says why" "$OUT" "not clean"
+assert_eq "behind with a dirty tree: HEAD not moved" "$before_head" "$(git -C "$W/work" rev-parse HEAD)"
 
 for v in 1.0.0 v1.0 v1.0.0-rc1 vx "v1.0.0 "; do
     new_world

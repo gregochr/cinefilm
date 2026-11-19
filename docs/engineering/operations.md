@@ -360,11 +360,12 @@ if the GHCR package is private (the default) nothing more is needed: the deploy 
 The owner runs this; sessions never tag.
 
 ```bash
-git checkout main && git pull
+git checkout main
 scripts/release.sh v0.1.0      # or without an argument for a 1/2/3 patch/minor/major menu
 ```
 
-It checks you are on a clean, in-sync `main`, tags, pushes the tag and watches the **Deploy** workflow:
+It checks you are on a clean `main`, fast-forwards it if it is only behind `origin/main` (no `git pull` needed), and
+refuses a `main` that is ahead of or diverged from `origin/main`. Then it tags, pushes the tag and watches the **Deploy** workflow:
 CI (reused, includes `Docker — image builds`), build and push to GHCR, then on dockermacmini `scripts/deploy.sh`:
 
 1. guards (a database must exist at `$CINEFILM_DATA_DIR/postgres`, default `/home/gregochr/cinefilm-data`, once something was deployed before);

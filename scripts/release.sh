@@ -5,8 +5,9 @@
 # Usage: scripts/release.sh [vX.Y.Z]
 #   No version: prints the commits since the last tag and offers 1) patch 2) minor 3) major (Enter takes patch).
 #
-# Checks: on main, clean tree, in sync with origin/main (not ahead, not behind), version valid, newer than the latest
-# tag, tag not already present. Then tags, pushes the tag, and watches the Deploy run (needs the gh CLI).
+# Checks: on main, clean tree, then origin/main is fetched: a local main only BEHIND origin/main is fast-forwarded
+# (--ff-only) and released at the new head; one AHEAD of or DIVERGED from origin/main is refused. Version valid, newer
+# than the latest tag, tag not already present. Then tags, pushes the tag, and watches the Deploy run (needs the gh CLI).
 
 set -euo pipefail
 
@@ -23,7 +24,15 @@ VERSION="${1:-}"
 git fetch origin main --tags --quiet
 LOCAL="$(git rev-parse HEAD)"
 REMOTE="$(git rev-parse origin/main)"
-[[ "$LOCAL" = "$REMOTE" ]] || die "local main differs from origin/main (pull, or push your commits through a PR first)"
+if [[ "$LOCAL" != "$REMOTE" ]]; then
+    if git merge-base --is-ancestor HEAD origin/main; then
+        BEHIND="$(git rev-list --count HEAD..origin/main)"
+        echo "Local main is ${BEHIND} commits behind origin/main; fast-forwarding."
+        git merge --ff-only --quiet origin/main || die "could not fast-forward local main to origin/main"
+    else
+        die "local main differs from origin/main: it has commits not on origin/main (push them through a PR first)"
+    fi
+fi
 
 LAST="$(git tag --list 'v*' | sort -V | tail -n 1)"
 echo "Last release: ${LAST:-none}"
