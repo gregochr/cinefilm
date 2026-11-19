@@ -83,6 +83,16 @@ class HolidayWeeksTest {
         assertThat(on(date)).isEmpty();
     }
 
+    @ParameterizedTest
+    @CsvSource({"2026-01-01, 2026-12-14, 2026-12-20", "2026-12-14, 2026-12-14, 2026-12-20",
+        "2026-12-20, 2026-12-14, 2026-12-20", "2026-12-21, 2027-12-13, 2027-12-19",
+        "2023-12-18, 2023-12-18, 2023-12-24", "2023-12-24, 2023-12-18, 2023-12-24",
+        "2023-12-25, 2024-12-16, 2024-12-22", "2026-12-31, 2027-12-13, 2027-12-19"})
+    void christmasWeekFromGivesThisYearsWeekUntilItsSundayEndsThenNextYears(String today, String start, String end) {
+        assertThat(HolidayWeeks.christmasWeekFrom(LocalDate.parse(today)))
+            .isEqualTo(new HolidayWeeks.Week(LocalDate.parse(start), LocalDate.parse(end)));
+    }
+
     @Test
     void theNewYearEdgeIsNotAHolidayInEitherYear() {
         assertThat(on("2025-12-31")).isEmpty();

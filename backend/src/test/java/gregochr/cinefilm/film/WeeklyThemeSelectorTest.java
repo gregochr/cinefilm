@@ -314,6 +314,17 @@ class WeeklyThemeSelectorTest {
     }
 
     @Test
+    void christmasFilmsHasNoCapAndHomesRowIsItsFirstTwelve() {
+        List<Film> library = christmasLibrary(15);
+
+        List<Film> all = WeeklyThemeSelector.christmasFilms(library, Set.of(), Set.of());
+
+        assertThat(all).hasSize(15);
+        assertThat(WeeklyThemeSelector.choose(CHRISTMAS_WEEK, library).films())
+            .containsExactlyElementsOf(all.subList(0, WeeklyThemeSelector.MAX_FILMS));
+    }
+
+    @Test
     void theIncludeListAddsFilmsTheKeywordMisses() {
         List<Film> library = christmasLibrary(4);
         library.add(christmas(1988, 700L));

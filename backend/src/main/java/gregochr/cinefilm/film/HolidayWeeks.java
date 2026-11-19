@@ -21,7 +21,20 @@ public final class HolidayWeeks {
         CHRISTMAS
     }
 
+    /** A holiday week: Monday to Sunday, both ends included. */
+    public record Week(LocalDate start, LocalDate end) {
+    }
+
     private HolidayWeeks() {
+    }
+
+    /**
+     * Christmas week of {@code today}'s year, or, once that week has ended (today is after its Sunday), the next
+     * year's.
+     */
+    public static Week christmasWeekFrom(LocalDate today) {
+        Week thisYear = weekOf(today.getYear(), Month.DECEMBER, 18);
+        return today.isAfter(thisYear.end()) ? weekOf(today.getYear() + 1, Month.DECEMBER, 18) : thisYear;
     }
 
     /** The holiday whose week contains {@code date}, or empty in every other week. */
@@ -36,8 +49,12 @@ public final class HolidayWeeks {
     }
 
     private static boolean inWeekOf(LocalDate date, Month month, int day) {
-        LocalDate start = LocalDate.of(date.getYear(), month, day)
-            .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-        return !date.isBefore(start) && !date.isAfter(start.plusDays(6));
+        Week week = weekOf(date.getYear(), month, day);
+        return !date.isBefore(week.start()) && !date.isAfter(week.end());
+    }
+
+    private static Week weekOf(int year, Month month, int day) {
+        LocalDate start = LocalDate.of(year, month, day).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        return new Week(start, start.plusDays(6));
     }
 }

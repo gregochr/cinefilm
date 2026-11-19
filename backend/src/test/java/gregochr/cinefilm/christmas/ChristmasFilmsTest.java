@@ -1,0 +1,379 @@
+package gregochr.cinefilm.christmas;
+
+import static gregochr.cinefilm.TestData.CLOCK;
+import static gregochr.cinefilm.TestData.NOW;
+import static gregochr.cinefilm.TestData.ZONE;
+import static gregochr.cinefilm.TestData.film;
+import static gregochr.cinefilm.TestData.view;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+import gregochr.cinefilm.christmas.ChristmasDtos.ChristmasView;
+import gregochr.cinefilm.christmas.ChristmasDtos.FilmState;
+import gregochr.cinefilm.christmas.ChristmasDtos.Item;
+import gregochr.cinefilm.christmas.ChristmasDtos.Keywords;
+import gregochr.cinefilm.christmas.ChristmasDtos.LeftOutItem;
+import gregochr.cinefilm.christmas.ChristmasDtos.Limits;
+import gregochr.cinefilm.christmas.ChristmasDtos.Reason;
+import gregochr.cinefilm.christmas.ChristmasDtos.State;
+import gregochr.cinefilm.christmas.ChristmasDtos.WeekDto;
+import gregochr.cinefilm.config.BadRequestException;
+import gregochr.cinefilm.config.ConflictException;
+import gregochr.cinefilm.config.NotFoundException;
+import gregochr.cinefilm.film.ChristmasChoice;
+import gregochr.cinefilm.film.ChristmasOverrides;
+import gregochr.cinefilm.film.Film;
+import gregochr.cinefilm.film.FilmRepository;
+import gregochr.cinefilm.film.KeywordsRefresher;
+import gregochr.cinefilm.film.LibraryLoader;
+import gregochr.cinefilm.library.LibraryLock;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.LongStream;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
+
+@ExtendWith(MockitoExtension.class)
+class ChristmasFilmsTest {
+
+    @Mock
+    private LibraryLoader loader;
+
+    @Mock
+    private ChristmasOverrides overrides;
+
+    @Mock
+    private FilmRepository films;
+
+    @Mock
+    private KeywordsRefresher keywords;
+
+    @Mock
+    private PlatformTransactionManager transactions;
+
+    private LibraryLock lock;
+    private ChristmasFilms service;
+
+    @BeforeEach
+    void setUp() {
+        lock = new LibraryLock();
+        service = serviceAt(CLOCK);
+    }
+
+    private ChristmasFilms serviceAt(Clock clock) {
+        return new ChristmasFilms(loader, overrides, films, keywords, lock, clock, transactions);
+    }
+
+    private static Clock on(String date) {
+        return Clock.fixed(Instant.parse(date + "T12:00:00Z"), ZONE);
+    }
+
+    private static Film mk(long id, String title, Integer year, Long tmdbId, String... keywords) {
+        Film film = film(id, title, year, NOW, "Comedy");
+        film.setTmdbId(tmdbId);
+        film.getKeywords().addAll(List.of(keywords));
+        return film;
+    }
+
+    private void library(Film... library) {
+        when(loader.loadAll()).thenReturn(java.util.Arrays.stream(library).map(f -> view(f)).toList());
+    }
+
+    private void overrides(Set<Long> include, Set<Long> exclude) {
+        when(overrides.includes()).thenReturn(include);
+        when(overrides.excludes()).thenReturn(exclude);
+    }
+
+    @Test
+    void excludeBeatsIncludeBeatsTheKeywordAndTheOrderIsYearThenSortTitle() {
+        Film excludedAndTagged = mk(1, "Excluded", 1950, 11L, "christmas");
+        Film excludedAndIncluded = mk(2, "Both", 1951, 12L);
+        Film includedAndTagged = mk(3, "Included tagged", 1980, 13L, "christmas");
+        Film laterTitle = mk(4, "B title", 1990, 14L, "christmas");
+        Film earlierTitle = mk(5, "A title", 1990, 15L, "christmas");
+        Film noYear = mk(6, "No year", null, 16L);
+        Film untagged = mk(7, "Untagged", 1960, 17L);
+        library(excludedAndTagged, excludedAndIncluded, includedAndTagged, laterTitle, earlierTitle, noYear,
+            untagged);
+        overrides(Set.of(12L, 13L, 16L), Set.of(11L, 12L));
+
+        ChristmasView view = service.view();
+
+        assertThat(view.inWeek()).extracting(Item::filmId).containsExactly(3L, 5L, 4L, 6L);
+        assertThat(view.inWeek()).extracting(Item::reason)
+            .containsExactly(Reason.KEYWORD, Reason.KEYWORD, Reason.KEYWORD, Reason.ADDED);
+        assertThat(view.inWeek().get(0)).isEqualTo(new Item(3L, 13L, "Included tagged", 1980, null, Reason.KEYWORD));
+    }
+
+    @Test
+    void addedHoldsIncludedFilmsTmdbDoesNotTagAndLeftOutHoldsExcludedOnesWithWhetherTmdbTagsThem() {
+        Film added = mk(1, "Added", 1999, 11L);
+        Film includedAndTagged = mk(2, "Redundant", 1980, 12L, "christmas");
+        Film leftOutTagged = mk(3, "Tagged out", 1990, 13L, "christmas");
+        Film leftOutPlain = mk(4, "Plain out", 1970, 14L);
+        Film leftOutNoYear = mk(5, "Unknown year out", null, 15L);
+        Film noTmdbId = mk(6, "No id", 1985, null);
+        library(added, includedAndTagged, leftOutTagged, leftOutPlain, leftOutNoYear, noTmdbId);
+        overrides(Set.of(11L, 12L, 777L), Set.of(13L, 14L, 15L, 888L));
+
+        ChristmasView view = service.view();
+
+        assertThat(view.added()).containsExactly(new Item(1L, 11L, "Added", 1999, null, Reason.ADDED));
+        assertThat(view.leftOut()).containsExactly(
+            new LeftOutItem(4L, 14L, "Plain out", 1970, null, false),
+            new LeftOutItem(3L, 13L, "Tagged out", 1990, null, true),
+            new LeftOutItem(5L, 15L, "Unknown year out", null, null, false));
+        assertThat(view.inWeek()).as("overrides for no library film are ignored")
+            .extracting(Item::tmdbId).doesNotContain(777L, 888L);
+    }
+
+    @Test
+    void aFilmWithNoTmdbIdAndTheKeywordStillCountsAsHomeCountsIt() {
+        library(mk(1, "Legacy", 1970, null, "christmas"));
+        overrides(Set.of(), Set.of());
+
+        assertThat(service.view().inWeek()).containsExactly(new Item(1L, null, "Legacy", 1970, null, Reason.KEYWORD));
+    }
+
+    @Test
+    void posterPathIsPassedThrough() {
+        Film film = mk(1, "Poster", 1970, 1L, "christmas");
+        film.setPosterPath("/p.jpg");
+        library(film);
+        overrides(Set.of(), Set.of());
+
+        assertThat(service.view().inWeek().get(0).posterUrl()).isEqualTo("/p.jpg");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"0,true", "4,true", "5,false", "6,false"})
+    void fallsBackBelowFiveFilmsAndNotAtFive(int count, boolean fallsBack) {
+        Film[] all = LongStream.rangeClosed(1, count).mapToObj(i -> mk(i, "Film " + i, 1980 + (int) i, i, "christmas"))
+            .toArray(Film[]::new);
+        library(all);
+        overrides(Set.of(), Set.of());
+
+        ChristmasView view = service.view();
+
+        assertThat(view.inWeek()).hasSize(count);
+        assertThat(view.fallsBack()).isEqualTo(fallsBack);
+        assertThat(view.limits()).isEqualTo(new Limits(12, 5));
+    }
+
+    @Test
+    void inWeekIsNotCappedAtTwelve() {
+        List<Film> all = new ArrayList<>();
+        for (long i = 1; i <= 14; i++) {
+            all.add(mk(i, "Film " + i, 1950 + (int) i, i, "christmas"));
+        }
+        library(all.toArray(Film[]::new));
+        overrides(Set.of(), Set.of());
+
+        assertThat(service.view().inWeek()).hasSize(14);
+    }
+
+    @Test
+    void keywordsReportFetchedTotalAndWhetherARunIsGoing() {
+        library();
+        overrides(Set.of(), Set.of());
+        when(films.countByTmdbIdIsNotNullAndKeywordsFetchedAtIsNotNull()).thenReturn(7L);
+        when(films.countByTmdbIdIsNotNull()).thenReturn(9L);
+        when(keywords.isRunning()).thenReturn(true);
+
+        assertThat(service.view().keywords()).isEqualTo(new Keywords(7, 9, true));
+    }
+
+    @Test
+    void theWeekIsThisYearsUntilItsSundayEndsThenNextYears() {
+        library();
+        overrides(Set.of(), Set.of());
+
+        assertThat(serviceAt(CLOCK).view().week()).as("2024-03-31: this year's")
+            .isEqualTo(new WeekDto(LocalDate.of(2024, 12, 16), LocalDate.of(2024, 12, 22)));
+        assertThat(serviceAt(on("2026-12-20")).view().week()).as("the Sunday it ends")
+            .isEqualTo(new WeekDto(LocalDate.of(2026, 12, 14), LocalDate.of(2026, 12, 20)));
+        assertThat(serviceAt(on("2026-12-21")).view().week()).as("the Monday after")
+            .isEqualTo(new WeekDto(LocalDate.of(2027, 12, 13), LocalDate.of(2027, 12, 19)));
+    }
+
+    @Test
+    void inTheYearEighteenDecemberIsAMondayTheWeekStartsOnItAndRollsOverAfterTheTwentyFourth() {
+        library();
+        overrides(Set.of(), Set.of());
+
+        assertThat(serviceAt(on("2023-12-01")).view().week())
+            .isEqualTo(new WeekDto(LocalDate.of(2023, 12, 18), LocalDate.of(2023, 12, 24)));
+        assertThat(serviceAt(on("2023-12-24")).view().week().end()).isEqualTo(LocalDate.of(2023, 12, 24));
+        assertThat(serviceAt(on("2023-12-25")).view().week())
+            .isEqualTo(new WeekDto(LocalDate.of(2024, 12, 16), LocalDate.of(2024, 12, 22)));
+    }
+
+    @Test
+    void choosingSavesTheChoiceAndAnswersTheScreen() {
+        Film film = mk(1, "Added", 1999, 11L);
+        when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(film));
+        when(films.findTmdbIdsWithKeyword(Set.of(11L), "christmas")).thenReturn(List.of());
+        library(film);
+        overrides(Set.of(11L), Set.of());
+
+        ChristmasView view = service.choose(11L, ChristmasChoice.INCLUDE);
+
+        verify(overrides).set(11L, ChristmasChoice.INCLUDE);
+        verify(overrides, never()).remove(11L);
+        assertThat(view.added()).extracting(Item::filmId).containsExactly(1L);
+    }
+
+    @Test
+    void aNullChoiceForgetsTheOverride() {
+        Film film = mk(1, "Film", 1999, 11L);
+        when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(film));
+        library(film);
+        overrides(Set.of(), Set.of());
+
+        service.choose(11L, null);
+
+        verify(overrides).remove(11L);
+        verify(overrides, never()).set(11L, ChristmasChoice.INCLUDE);
+        verify(overrides, never()).set(11L, ChristmasChoice.EXCLUDE);
+    }
+
+    @Test
+    void anIncludeRowForAFilmTmdbTagsIsDeletedOnTheNextWrite() {
+        Film tagged = mk(1, "Tagged", 1980, 11L, "christmas");
+        Film other = mk(2, "Other", 1990, 12L);
+        when(films.findByTmdbIdOrderByIdAsc(12L)).thenReturn(List.of(other));
+        when(overrides.includes()).thenReturn(Set.of(11L, 12L));
+        when(overrides.excludes()).thenReturn(Set.of());
+        when(films.findTmdbIdsWithKeyword(Set.of(11L, 12L), "christmas")).thenReturn(List.of(11L));
+        library(tagged, other);
+
+        service.choose(12L, ChristmasChoice.INCLUDE);
+
+        verify(overrides).remove(11L);
+        verify(overrides, never()).remove(12L);
+    }
+
+    @Test
+    void anExcludeRowForATaggedFilmIsKept() {
+        Film tagged = mk(1, "Tagged", 1980, 11L, "christmas");
+        when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(tagged));
+        when(overrides.includes()).thenReturn(Set.of());
+        when(overrides.excludes()).thenReturn(Set.of(11L));
+        library(tagged);
+
+        ChristmasView view = service.choose(11L, ChristmasChoice.EXCLUDE);
+
+        verify(overrides).set(11L, ChristmasChoice.EXCLUDE);
+        verify(overrides, never()).remove(11L);
+        assertThat(view.leftOut()).extracting(LeftOutItem::taggedByTmdb).containsExactly(true);
+    }
+
+    @Test
+    void choosingForATmdbIdNoFilmHasIs404AndChangesNothing() {
+        when(films.findByTmdbIdOrderByIdAsc(99L)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.choose(99L, ChristmasChoice.INCLUDE))
+            .isInstanceOf(NotFoundException.class).hasMessage("No film with TMDB id 99");
+        verifyNoInteractions(overrides);
+    }
+
+    @Test
+    void aScanRunningRefusesAChangeWithTheOwnersWordsAndChangesNothing() {
+        lock.tryAcquire(LibraryLock.SCAN);
+
+        assertThatThrownBy(() -> service.choose(11L, ChristmasChoice.INCLUDE))
+            .isInstanceOf(ConflictException.class)
+            .hasMessage("A scan is running — try again when it finishes");
+        verifyNoInteractions(overrides, films);
+    }
+
+    @Test
+    void aFailedWriteGivesTheWriteSlotBackSoTheNextChangeIsNotBlocked() {
+        Film film = mk(1, "Film", 1999, 11L);
+        when(films.findByTmdbIdOrderByIdAsc(11L)).thenReturn(List.of(film));
+        doThrow(new IllegalStateException("db down")).doNothing().when(overrides).set(11L, ChristmasChoice.INCLUDE);
+        when(films.findTmdbIdsWithKeyword(Set.of(11L), "christmas")).thenReturn(List.of());
+        library(film);
+        overrides(Set.of(11L), Set.of());
+
+        assertThatThrownBy(() -> service.choose(11L, ChristmasChoice.INCLUDE))
+            .isInstanceOf(IllegalStateException.class);
+        assertThat(service.choose(11L, ChristmasChoice.INCLUDE).added()).hasSize(1);
+    }
+
+    @Test
+    void statesNameEachFilmsPlaceInTheAskedOrderAndSkipUnknownIds() {
+        Film keyword = mk(1, "Keyword", 1980, 11L, "christmas");
+        Film added = mk(2, "Added", 1980, 12L);
+        Film leftOut = mk(3, "Left out", 1980, 13L, "christmas");
+        Film notIn = mk(4, "Not in", 1980, 14L);
+        notIn.setKeywordsFetchedAt(NOW);
+        Film pending = mk(5, "Pending", 1980, 15L);
+        Film noId = mk(6, "No id", 1980, null);
+        Film includedPending = mk(7, "Included pending", 1980, 17L);
+        when(overrides.includes()).thenReturn(Set.of(12L, 13L, 17L));
+        when(overrides.excludes()).thenReturn(Set.of(13L));
+        when(films.findAllById(Set.of(6L, 5L, 4L, 3L, 2L, 1L, 7L, 404L)))
+            .thenReturn(List.of(keyword, added, leftOut, notIn, pending, noId, includedPending));
+
+        List<FilmState> states = service.states(List.of(6L, 5L, 4L, 3L, 2L, 1L, 7L, 404L, 6L));
+
+        assertThat(states).containsExactly(
+            new FilmState(6L, null, State.NO_TMDB_ID),
+            new FilmState(5L, 15L, State.KEYWORDS_PENDING),
+            new FilmState(4L, 14L, State.NOT_IN),
+            new FilmState(3L, 13L, State.LEFT_OUT),
+            new FilmState(2L, 12L, State.IN_ADDED),
+            new FilmState(1L, 11L, State.IN_KEYWORD),
+            new FilmState(7L, 17L, State.IN_ADDED));
+    }
+
+    @Test
+    void anIncludedFilmTmdbAlsoTagsIsInKeywordNotInAdded() {
+        Film both = mk(1, "Both", 1980, 11L, "christmas");
+        when(overrides.includes()).thenReturn(Set.of(11L));
+        when(overrides.excludes()).thenReturn(Set.of());
+        when(films.findAllById(Set.of(1L))).thenReturn(List.of(both));
+
+        assertThat(service.states(List.of(1L))).containsExactly(new FilmState(1L, 11L, State.IN_KEYWORD));
+    }
+
+    @Test
+    void statesAcceptFiftyIdsAndRefuseFiftyOne() {
+        List<Long> fifty = LongStream.rangeClosed(1, 50).boxed().toList();
+        when(overrides.includes()).thenReturn(Set.of());
+        when(overrides.excludes()).thenReturn(Set.of());
+        when(films.findAllById(Set.copyOf(fifty))).thenReturn(List.of());
+
+        assertThat(service.states(fifty)).isEmpty();
+        List<Long> fiftyOne = LongStream.rangeClosed(1, 51).boxed().toList();
+        assertThatThrownBy(() -> service.states(fiftyOne))
+            .isInstanceOf(BadRequestException.class).hasMessage("Ask for at most 50 films at a time");
+    }
+
+    @Test
+    void fiftyOneIdsThatAreMostlyDuplicatesAreStillWithinTheCap() {
+        List<Long> ids = new ArrayList<>(LongStream.rangeClosed(1, 50).boxed().toList());
+        ids.add(1L);
+        when(overrides.includes()).thenReturn(Set.of());
+        when(overrides.excludes()).thenReturn(Set.of());
+        when(films.findAllById(Set.copyOf(ids))).thenReturn(List.of());
+
+        assertThat(service.states(ids)).isEmpty();
+    }
+}

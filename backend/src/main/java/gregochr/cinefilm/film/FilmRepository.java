@@ -34,6 +34,19 @@ public interface FilmRepository extends JpaRepository<Film, Long> {
     /** Every film matched to a TMDB id, oldest first. */
     List<Film> findByTmdbIdOrderByIdAsc(Long tmdbId);
 
+    /** How many films have a TMDB id. */
+    long countByTmdbIdIsNotNull();
+
+    /** How many films with a TMDB id have had their keywords fetched. */
+    long countByTmdbIdIsNotNullAndKeywordsFetchedAtIsNotNull();
+
+    /** Of these TMDB ids, the ones some film holding that id has the keyword for. */
+    @org.springframework.data.jpa.repository.Query(
+        "select distinct f.tmdbId from Film f join f.keywords k where k = :keyword and f.tmdbId in :tmdbIds")
+    List<Long> findTmdbIdsWithKeyword(
+        @org.springframework.data.repository.query.Param("tmdbIds") java.util.Collection<Long> tmdbIds,
+        @org.springframework.data.repository.query.Param("keyword") String keyword);
+
     /** Films with more than one edition (the ones that have a default to choose). */
     @org.springframework.data.jpa.repository.Query("select f from Film f where size(f.editions) > 1 order by f.id")
     List<Film> findWithSeveralEditions();
